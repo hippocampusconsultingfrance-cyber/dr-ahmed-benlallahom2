@@ -22,3 +22,10 @@
 - [x] Silhouettes placeholder pour chaque membre (remplaçables par vraies photos)
 - [x] Remplacer les silhouettes par les photos LinkedIn de chaque membre (Lotfi et Monia restent en silhouette - pas de profil LinkedIn public)
 - [x] Ajouter les liens vers les sites web des sociétés (Laska: laskacorp.com, Octopus: octopustalent.io, Sawa4You: sawayou.com)
+- [x] Mettre à jour la section Formation avec les 15 diplômes exacts (2006-2024)
+- [x] Ajouter section Direction sur Laska Corporate et Appel Médical Tunisie (Amine, Sonia, Ahmed)
+- [x] Ajouter section Direction sur Sawa4You (Wafa, Amine, Sonia, Ahmed)
+- [x] Ajouter section Direction sur Octopus Talent (Ahmed, Sonia, Amine, Ines)
+- [x] Corriger toutes les photos des membres de direction (Ines, Amine, Wafa, Sonia, Youssef, Omar, Monia, Lotfi, Ahmed)
+- [x] Remplacer la photo de la section À Propos par un portrait professionnel médical généré par IA
+- [x] Remplacer l'image hero par une photo cinématique générée par IA (Dr. Ahmed en tenue médicale dans un ICU high-tech)

@@ -18,7 +18,7 @@ export default function HeroSection() {
       {/* Background Image */}
       <div className="absolute inset-0">
         <img
-          src="/manus-storage/hero-medical_dabfcdcf.png"
+          src="/manus-storage/hero-bg-ahmed_156f3568.png"
           alt=""
           className="w-full h-full object-cover"
         />
