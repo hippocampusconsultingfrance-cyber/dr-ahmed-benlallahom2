@@ -187,6 +187,28 @@ export const venturesEn: VentureDetail[] = [
       "International strategy",
     ],
     tags: ["International Consulting", "Business Advisory", "Coaching"],
+    team: [
+      {
+        name: "Wafa Dahmeni",
+        role: "CEO",
+        linkedin: "https://www.linkedin.com/in/wafadahmeni/",
+      },
+      {
+        name: "Amine Hachicha",
+        role: "Consultant",
+        linkedin: "https://www.linkedin.com/in/amine-hachicha-66904683/",
+      },
+      {
+        name: "Sonia Siala",
+        role: "Consultant",
+        linkedin: "https://www.linkedin.com/in/sonia-siala-3412251b8/",
+      },
+      {
+        name: "Dr. Ahmed Ben Lallahom",
+        role: "Consultant",
+        linkedin: "https://www.linkedin.com/in/ahmed-ben-lallahom/",
+      },
+    ],
   },
   {
     slug: "pratique-clinique",
