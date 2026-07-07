@@ -2,7 +2,7 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { venturesFr } from "@/data/ventures-fr";
 import { venturesEn } from "@/data/ventures-en";
 import { useParams, Link } from "wouter";
-import { ArrowLeft, ExternalLink, ChevronRight } from "lucide-react";
+import { ArrowLeft, ExternalLink, ChevronRight, Linkedin, User } from "lucide-react";
 import Navigation from "@/components/Navigation";
 import Footer from "@/components/Footer";
 
@@ -78,6 +78,61 @@ export default function VenturePage() {
                   </p>
                 ))}
               </div>
+
+              {/* Team Section */}
+              {venture.team && venture.team.length > 0 && (
+                <div className="mb-12">
+                  <h3 className="font-display text-2xl font-bold text-foreground mb-8">
+                    {language === "fr" ? "Direction" : "Leadership Team"}
+                  </h3>
+                  <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {venture.team.map((member, i) => (
+                      <div
+                        key={i}
+                        className="group relative p-6 rounded-2xl bg-card/50 border border-border/30 hover:border-primary/40 transition-all duration-300 text-center"
+                      >
+                        {/* Photo / Silhouette */}
+                        <div className="w-24 h-24 mx-auto mb-4 rounded-full overflow-hidden border-2 border-border/40 group-hover:border-primary/50 transition-colors">
+                          {member.photo ? (
+                            <img
+                              src={member.photo}
+                              alt={member.name}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <div className="w-full h-full bg-gradient-to-br from-slate-700 to-slate-900 flex items-center justify-center">
+                              <User className="w-10 h-10 text-slate-400" />
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Name */}
+                        <h4 className="font-semibold text-foreground text-sm mb-1">
+                          {member.name}
+                        </h4>
+
+                        {/* Role */}
+                        <p className="text-xs text-primary font-medium mb-3">
+                          {member.role}
+                        </p>
+
+                        {/* LinkedIn link */}
+                        {member.linkedin && (
+                          <a
+                            href={member.linkedin}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary transition-colors"
+                          >
+                            <Linkedin className="w-3.5 h-3.5" />
+                            LinkedIn
+                          </a>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Services */}
               <div className="p-8 rounded-2xl bg-card/50 border border-border/30">

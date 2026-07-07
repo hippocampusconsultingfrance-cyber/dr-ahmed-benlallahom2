@@ -17,3 +17,6 @@
 - [x] Créer des sous-pages dédiées pour chaque société (Hippocampus, Laska, Appel Médical Tunisie, Octopus Talent, Sawa4You, Pratique Clinique)
 - [x] Ajouter le routing vers les sous-pages depuis la section Leadership
 - [x] Contenu bilingue FR/EN pour chaque sous-page société
+- [x] Ajouter section Direction sur la page Hippocampus Consulting
+- [x] Inclure les 5 membres : Ahmed, Youssef, Omar, Lotfi, Monia Ben Lallahom
+- [x] Silhouettes placeholder pour chaque membre (remplaçables par vraies photos)

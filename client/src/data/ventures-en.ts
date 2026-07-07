@@ -30,6 +30,31 @@ export const venturesEn: VentureDetail[] = [
       "Strategic and operational audit",
     ],
     tags: ["Strategy", "Digital Transformation", "Growth", "Export"],
+    team: [
+      {
+        name: "Dr. Ahmed Ben Lallahom",
+        role: "CEO & Founder",
+        linkedin: "https://www.linkedin.com/in/ahmed-ben-lallahom/",
+      },
+      {
+        name: "Youssef Ben Lallahom",
+        role: "AI Consultant",
+        linkedin: "https://www.linkedin.com/in/youssef-ben-lallahom/",
+      },
+      {
+        name: "Omar Ben Lallahom",
+        role: "Data & AI Consultant",
+        linkedin: "https://www.linkedin.com/in/omar-ben-lallahom/",
+      },
+      {
+        name: "Lotfi Ben Lallahom",
+        role: "Healthcare Consultant",
+      },
+      {
+        name: "Monia Ben Lallahom",
+        role: "Healthcare Consultant",
+      },
+    ],
   },
   {
     slug: "laska-corporate",

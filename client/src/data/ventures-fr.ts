@@ -3,6 +3,13 @@
 // Modifiez ce fichier pour changer les textes des sous-pages entreprises.
 // ============================================================
 
+export interface TeamMember {
+  name: string;
+  role: string;
+  linkedin?: string;
+  photo?: string; // URL de la photo — laissez vide pour afficher une silhouette
+}
+
 export interface VentureDetail {
   slug: string;
   company: string;
@@ -12,6 +19,7 @@ export interface VentureDetail {
   highlights: { label: string; value: string }[];
   services: string[];
   tags: string[];
+  team?: TeamMember[];
 }
 
 export const venturesFr: VentureDetail[] = [
@@ -39,6 +47,31 @@ export const venturesFr: VentureDetail[] = [
       "Audit stratégique et opérationnel",
     ],
     tags: ["Stratégie", "Transformation Digitale", "Croissance", "Export"],
+    team: [
+      {
+        name: "Dr. Ahmed Ben Lallahom",
+        role: "CEO & Fondateur",
+        linkedin: "https://www.linkedin.com/in/ahmed-ben-lallahom/",
+      },
+      {
+        name: "Youssef Ben Lallahom",
+        role: "Consultant IA",
+        linkedin: "https://www.linkedin.com/in/youssef-ben-lallahom/",
+      },
+      {
+        name: "Omar Ben Lallahom",
+        role: "Consultant Data & IA",
+        linkedin: "https://www.linkedin.com/in/omar-ben-lallahom/",
+      },
+      {
+        name: "Lotfi Ben Lallahom",
+        role: "Consultant Santé",
+      },
+      {
+        name: "Monia Ben Lallahom",
+        role: "Consultante Santé",
+      },
+    ],
   },
   {
     slug: "laska-corporate",
