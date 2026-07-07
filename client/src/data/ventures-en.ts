@@ -80,6 +80,23 @@ export const venturesEn: VentureDetail[] = [
       "International medical talent sourcing",
     ],
     tags: ["Medical Recruitment", "Interim", "Healthcare HR"],
+    team: [
+      {
+        name: "Amine Hachicha",
+        role: "President",
+        linkedin: "https://www.linkedin.com/in/amine-hachicha-66904683/",
+      },
+      {
+        name: "Sonia Siala",
+        role: "General Manager",
+        linkedin: "https://www.linkedin.com/in/sonia-siala-3412251b8/",
+      },
+      {
+        name: "Dr. Ahmed Ben Lallahom",
+        role: "Medical Director",
+        linkedin: "https://www.linkedin.com/in/ahmed-ben-lallahom/",
+      },
+    ],
   },
   {
     slug: "appel-medical-tunisie",
@@ -104,6 +121,23 @@ export const venturesEn: VentureDetail[] = [
       "Healthcare organization consulting",
     ],
     tags: ["Recruitment", "Tunisia", "Staffing"],
+    team: [
+      {
+        name: "Amine Hachicha",
+        role: "President",
+        linkedin: "https://www.linkedin.com/in/amine-hachicha-66904683/",
+      },
+      {
+        name: "Sonia Siala",
+        role: "General Manager",
+        linkedin: "https://www.linkedin.com/in/sonia-siala-3412251b8/",
+      },
+      {
+        name: "Dr. Ahmed Ben Lallahom",
+        role: "Medical Director",
+        linkedin: "https://www.linkedin.com/in/ahmed-ben-lallahom/",
+      },
+    ],
   },
   {
     slug: "octopus-talent",
