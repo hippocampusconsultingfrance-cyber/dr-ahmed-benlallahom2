@@ -20,3 +20,5 @@
 - [x] Ajouter section Direction sur la page Hippocampus Consulting
 - [x] Inclure les 5 membres : Ahmed, Youssef, Omar, Lotfi, Monia Ben Lallahom
 - [x] Silhouettes placeholder pour chaque membre (remplaçables par vraies photos)
+- [x] Remplacer les silhouettes par les photos LinkedIn de chaque membre (Lotfi et Monia restent en silhouette - pas de profil LinkedIn public)
+- [x] Ajouter les liens vers les sites web des sociétés (Laska: laskacorp.com, Octopus: octopustalent.io, Sawa4You: sawayou.com)

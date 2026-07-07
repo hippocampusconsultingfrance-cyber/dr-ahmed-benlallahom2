@@ -20,6 +20,7 @@ export interface VentureDetail {
   services: string[];
   tags: string[];
   team?: TeamMember[];
+  website?: string; // URL du site web de la société
 }
 
 export const venturesFr: VentureDetail[] = [
@@ -52,16 +53,19 @@ export const venturesFr: VentureDetail[] = [
         name: "Dr. Ahmed Ben Lallahom",
         role: "CEO & Fondateur",
         linkedin: "https://www.linkedin.com/in/ahmed-ben-lallahom/",
+        photo: "/manus-storage/photo-ahmed_75ed100c.jpg",
       },
       {
         name: "Youssef Ben Lallahom",
         role: "Consultant IA",
         linkedin: "https://www.linkedin.com/in/youssef-ben-lallahom/",
+        photo: "/manus-storage/photo-youssef_50630c9d.jpg",
       },
       {
         name: "Omar Ben Lallahom",
         role: "Consultant Data & IA",
         linkedin: "https://www.linkedin.com/in/omar-ben-lallahom/",
+        photo: "/manus-storage/photo-omar_9e135307.jpg",
       },
       {
         name: "Lotfi Ben Lallahom",
@@ -78,6 +82,7 @@ export const venturesFr: VentureDetail[] = [
     company: "Laska Corporate",
     role: "Co-Fondateur",
     tagline: "Recrutement médical et paramédical spécialisé",
+    website: "https://laskacorp.com/home",
     description: [
       "Laska Corporate est une entreprise spécialisée dans le recrutement médical et paramédical, co-fondée par le Dr. Ahmed Ben Lallahom. Elle connecte les établissements de santé avec des professionnels qualifiés pour des postes permanents, des remplacements et des missions intérimaires.",
       "Grâce à une connaissance approfondie du terrain médical et des besoins réels des établissements, Laska Corporate propose un service de recrutement sur mesure qui garantit l'adéquation entre les compétences des candidats et les exigences des postes.",
@@ -102,16 +107,19 @@ export const venturesFr: VentureDetail[] = [
         name: "Amine Hachicha",
         role: "Président",
         linkedin: "https://www.linkedin.com/in/amine-hachicha-66904683/",
+        photo: "/manus-storage/photo-amine_9c36e8b4.jpg",
       },
       {
         name: "Sonia Siala",
         role: "Directrice Générale",
         linkedin: "https://www.linkedin.com/in/sonia-siala-3412251b8/",
+        photo: "/manus-storage/photo-sonia_59f7f976.jpg",
       },
       {
         name: "Dr. Ahmed Ben Lallahom",
         role: "Directeur Médical",
         linkedin: "https://www.linkedin.com/in/ahmed-ben-lallahom/",
+        photo: "/manus-storage/photo-ahmed_75ed100c.jpg",
       },
     ],
   },
@@ -143,16 +151,19 @@ export const venturesFr: VentureDetail[] = [
         name: "Amine Hachicha",
         role: "Président",
         linkedin: "https://www.linkedin.com/in/amine-hachicha-66904683/",
+        photo: "/manus-storage/photo-amine_9c36e8b4.jpg",
       },
       {
         name: "Sonia Siala",
         role: "Directrice Générale",
         linkedin: "https://www.linkedin.com/in/sonia-siala-3412251b8/",
+        photo: "/manus-storage/photo-sonia_59f7f976.jpg",
       },
       {
         name: "Dr. Ahmed Ben Lallahom",
         role: "Directeur Médical",
         linkedin: "https://www.linkedin.com/in/ahmed-ben-lallahom/",
+        photo: "/manus-storage/photo-ahmed_75ed100c.jpg",
       },
     ],
   },
@@ -161,6 +172,7 @@ export const venturesFr: VentureDetail[] = [
     company: "Octopus Talent",
     role: "Co-Fondateur",
     tagline: "Conseil en IT, Data, IA et Cybersécurité",
+    website: "https://www.octopustalent.io/",
     description: [
       "Octopus Talent est un cabinet de conseil en IT, Data, IA et cybersécurité basé à Paris, co-fondé par le Dr. Ahmed Ben Lallahom. L'entreprise accompagne la transformation digitale des organisations avec des solutions technologiques sur mesure.",
       "Dans un monde où la technologie est devenue un levier stratégique incontournable, Octopus Talent aide les entreprises à exploiter le plein potentiel de l'intelligence artificielle, du big data et de la cybersécurité pour accélérer leur croissance.",
@@ -185,21 +197,25 @@ export const venturesFr: VentureDetail[] = [
         name: "Dr. Ahmed Ben Lallahom",
         role: "Consultant",
         linkedin: "https://www.linkedin.com/in/ahmed-ben-lallahom/",
+        photo: "/manus-storage/photo-ahmed_75ed100c.jpg",
       },
       {
         name: "Sonia Siala",
         role: "Consultante",
         linkedin: "https://www.linkedin.com/in/sonia-siala-3412251b8/",
+        photo: "/manus-storage/photo-sonia_59f7f976.jpg",
       },
       {
         name: "Amine Hachicha",
         role: "Consultant",
         linkedin: "https://www.linkedin.com/in/amine-hachicha-66904683/",
+        photo: "/manus-storage/photo-amine_9c36e8b4.jpg",
       },
       {
         name: "Ines Dhaouadi",
         role: "Consultante",
         linkedin: "https://www.linkedin.com/in/ines-dhaouadi/",
+        photo: "/manus-storage/photo-ines_db24aed3.jpg",
       },
     ],
   },
@@ -208,6 +224,7 @@ export const venturesFr: VentureDetail[] = [
     company: "Sawa4You",
     role: "Co-Fondateur",
     tagline: "Conseil international en business et accompagnement humain",
+    website: "https://sawayou.com/",
     description: [
       "Sawa4You est une entreprise de conseil international en business et accompagnement humain, co-fondée par le Dr. Ahmed Ben Lallahom. Elle propose un accompagnement global aux entrepreneurs et aux entreprises dans leur développement.",
       "L'approche de Sawa4You se distingue par sa dimension humaine : au-delà du conseil business traditionnel, l'entreprise intègre une dimension d'accompagnement personnel pour aider les dirigeants à atteindre leurs objectifs professionnels et personnels.",
@@ -231,21 +248,25 @@ export const venturesFr: VentureDetail[] = [
         name: "Wafa Dahmeni",
         role: "CEO",
         linkedin: "https://www.linkedin.com/in/wafadahmeni/",
+        photo: "/manus-storage/photo-wafa_3b85deb6.jpg",
       },
       {
         name: "Amine Hachicha",
         role: "Consultant",
         linkedin: "https://www.linkedin.com/in/amine-hachicha-66904683/",
+        photo: "/manus-storage/photo-amine_9c36e8b4.jpg",
       },
       {
         name: "Sonia Siala",
         role: "Consultante",
         linkedin: "https://www.linkedin.com/in/sonia-siala-3412251b8/",
+        photo: "/manus-storage/photo-sonia_59f7f976.jpg",
       },
       {
         name: "Dr. Ahmed Ben Lallahom",
         role: "Consultant",
         linkedin: "https://www.linkedin.com/in/ahmed-ben-lallahom/",
+        photo: "/manus-storage/photo-ahmed_75ed100c.jpg",
       },
     ],
   },

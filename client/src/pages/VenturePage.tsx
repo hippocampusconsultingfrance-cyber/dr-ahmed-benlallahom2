@@ -62,6 +62,17 @@ export default function VenturePage() {
             <p className="text-xl sm:text-2xl text-primary font-medium mb-6">
               {venture.tagline}
             </p>
+            {venture.website && (
+              <a
+                href={venture.website}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-primary/10 text-primary border border-primary/30 hover:bg-primary/20 transition-all text-sm font-medium"
+              >
+                <ExternalLink className="w-4 h-4" />
+                {language === "fr" ? "Visiter le site web" : "Visit website"}
+              </a>
+            )}
           </div>
         </div>
 
