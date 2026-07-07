@@ -89,7 +89,7 @@ export const venturesEn: VentureDetail[] = [
         name: "Amine Hachicha",
         role: "President",
         linkedin: "https://www.linkedin.com/in/amine-hachicha-66904683/",
-        photo: "/manus-storage/photo-amine_9c36e8b4.jpg",
+        photo: "/manus-storage/photo-amine-corrected_5ec26887.png",
       },
       {
         name: "Sonia Siala",
@@ -133,7 +133,7 @@ export const venturesEn: VentureDetail[] = [
         name: "Amine Hachicha",
         role: "President",
         linkedin: "https://www.linkedin.com/in/amine-hachicha-66904683/",
-        photo: "/manus-storage/photo-amine_9c36e8b4.jpg",
+        photo: "/manus-storage/photo-amine-corrected_5ec26887.png",
       },
       {
         name: "Sonia Siala",
@@ -191,13 +191,13 @@ export const venturesEn: VentureDetail[] = [
         name: "Amine Hachicha",
         role: "Consultant",
         linkedin: "https://www.linkedin.com/in/amine-hachicha-66904683/",
-        photo: "/manus-storage/photo-amine_9c36e8b4.jpg",
+        photo: "/manus-storage/photo-amine-corrected_5ec26887.png",
       },
       {
         name: "Ines Dhaouadi",
         role: "Consultant",
         linkedin: "https://www.linkedin.com/in/ines-dhaouadi/",
-        photo: "/manus-storage/photo-ines_db24aed3.jpg",
+        photo: "/manus-storage/photo-ines-corrected_b56c31ee.png",
       },
     ],
   },
@@ -236,7 +236,7 @@ export const venturesEn: VentureDetail[] = [
         name: "Amine Hachicha",
         role: "Consultant",
         linkedin: "https://www.linkedin.com/in/amine-hachicha-66904683/",
-        photo: "/manus-storage/photo-amine_9c36e8b4.jpg",
+        photo: "/manus-storage/photo-amine-corrected_5ec26887.png",
       },
       {
         name: "Sonia Siala",
