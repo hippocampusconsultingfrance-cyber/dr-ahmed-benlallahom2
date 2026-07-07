@@ -59,21 +59,23 @@ export const venturesFr: VentureDetail[] = [
         name: "Youssef Ben Lallahom",
         role: "Consultant IA",
         linkedin: "https://www.linkedin.com/in/youssef-ben-lallahom/",
-        photo: "/manus-storage/photo-youssef_50630c9d.jpg",
+        photo: "/manus-storage/photo-youssef-new_dc020979.png",
       },
       {
         name: "Omar Ben Lallahom",
         role: "Consultant Data & IA",
         linkedin: "https://www.linkedin.com/in/omar-ben-lallahom/",
-        photo: "/manus-storage/photo-omar_9e135307.jpg",
+        photo: "/manus-storage/photo-omar-new_805e25bc.png",
       },
       {
         name: "Lotfi Ben Lallahom",
         role: "Consultant Santé",
+        photo: "/manus-storage/photo-lotfi-new_044020b2.png",
       },
       {
         name: "Monia Ben Lallahom",
         role: "Consultante Santé",
+        photo: "/manus-storage/photo-monia-new_5b1a3785.png",
       },
     ],
   },
@@ -113,7 +115,7 @@ export const venturesFr: VentureDetail[] = [
         name: "Sonia Siala",
         role: "Directrice Générale",
         linkedin: "https://www.linkedin.com/in/sonia-siala-3412251b8/",
-        photo: "/manus-storage/photo-sonia_59f7f976.jpg",
+        photo: "/manus-storage/photo-sonia-new_cbb12509.png",
       },
       {
         name: "Dr. Ahmed Ben Lallahom",
@@ -157,7 +159,7 @@ export const venturesFr: VentureDetail[] = [
         name: "Sonia Siala",
         role: "Directrice Générale",
         linkedin: "https://www.linkedin.com/in/sonia-siala-3412251b8/",
-        photo: "/manus-storage/photo-sonia_59f7f976.jpg",
+        photo: "/manus-storage/photo-sonia-new_cbb12509.png",
       },
       {
         name: "Dr. Ahmed Ben Lallahom",
@@ -203,7 +205,7 @@ export const venturesFr: VentureDetail[] = [
         name: "Sonia Siala",
         role: "Consultante",
         linkedin: "https://www.linkedin.com/in/sonia-siala-3412251b8/",
-        photo: "/manus-storage/photo-sonia_59f7f976.jpg",
+        photo: "/manus-storage/photo-sonia-new_cbb12509.png",
       },
       {
         name: "Amine Hachicha",
@@ -248,7 +250,7 @@ export const venturesFr: VentureDetail[] = [
         name: "Wafa Dahmeni",
         role: "CEO",
         linkedin: "https://www.linkedin.com/in/wafadahmeni/",
-        photo: "/manus-storage/photo-wafa_3b85deb6.jpg",
+        photo: "/manus-storage/photo-wafa-clean_fe6f20ad.png",
       },
       {
         name: "Amine Hachicha",
@@ -260,7 +262,7 @@ export const venturesFr: VentureDetail[] = [
         name: "Sonia Siala",
         role: "Consultante",
         linkedin: "https://www.linkedin.com/in/sonia-siala-3412251b8/",
-        photo: "/manus-storage/photo-sonia_59f7f976.jpg",
+        photo: "/manus-storage/photo-sonia-new_cbb12509.png",
       },
       {
         name: "Dr. Ahmed Ben Lallahom",
