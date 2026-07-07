@@ -1,26 +1,48 @@
 import { useLanguage } from "@/contexts/LanguageContext";
 import { siteConfig } from "@/data/site-config";
-import { Phone, Mail, Linkedin, Send } from "lucide-react";
+import { trpc } from "@/lib/trpc";
+import { Phone, Mail, Linkedin, Send, CheckCircle, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
 export default function ContactSection() {
-  const { content } = useLanguage();
+  const { content, language } = useLanguage();
   const [formData, setFormData] = useState({
     name: "",
     phone: "",
     email: "",
     message: "",
   });
+  const [submitted, setSubmitted] = useState(false);
+
+  const submitMutation = trpc.contact.submit.useMutation({
+    onSuccess: () => {
+      setSubmitted(true);
+      setFormData({ name: "", phone: "", email: "", message: "" });
+      toast.success(
+        language === "fr"
+          ? "Message envoyé avec succès !"
+          : "Message sent successfully!"
+      );
+    },
+    onError: (error) => {
+      toast.error(
+        language === "fr"
+          ? "Erreur lors de l'envoi. Veuillez réessayer."
+          : "Error sending message. Please try again."
+      );
+      console.error("Contact form error:", error);
+    },
+  });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const subject = encodeURIComponent(`Contact from ${formData.name}`);
-    const body = encodeURIComponent(
-      `Name: ${formData.name}\nPhone: ${formData.phone}\nEmail: ${formData.email}\n\nMessage:\n${formData.message}`
-    );
-    window.location.href = `mailto:${siteConfig.email}?subject=${subject}&body=${body}`;
-    toast.success(content.contact.form.send + " ✓");
+    submitMutation.mutate({
+      name: formData.name,
+      email: formData.email,
+      phone: formData.phone || undefined,
+      message: formData.message,
+    });
   };
 
   return (
@@ -96,71 +118,101 @@ export default function ContactSection() {
 
           {/* Right: Form — 7 cols */}
           <div className="lg:col-span-7">
-            <form onSubmit={handleSubmit} className="p-8 sm:p-10 rounded-2xl bg-card/60 backdrop-blur-sm border border-border/30 space-y-5">
-              <div className="grid sm:grid-cols-2 gap-5">
+            {submitted ? (
+              <div className="p-8 sm:p-10 rounded-2xl bg-card/60 backdrop-blur-sm border border-border/30 flex flex-col items-center justify-center min-h-[400px] text-center">
+                <CheckCircle className="w-16 h-16 text-primary mb-6" />
+                <h3 className="font-display text-2xl font-bold text-foreground mb-3">
+                  {language === "fr" ? "Message envoyé !" : "Message sent!"}
+                </h3>
+                <p className="text-muted-foreground max-w-sm mb-8">
+                  {language === "fr"
+                    ? "Merci pour votre message. Je vous répondrai dans les meilleurs délais."
+                    : "Thank you for your message. I will get back to you as soon as possible."}
+                </p>
+                <button
+                  onClick={() => setSubmitted(false)}
+                  className="px-6 py-3 rounded-lg border border-border text-foreground font-medium hover:border-primary/50 transition-all"
+                >
+                  {language === "fr" ? "Envoyer un autre message" : "Send another message"}
+                </button>
+              </div>
+            ) : (
+              <form onSubmit={handleSubmit} className="p-8 sm:p-10 rounded-2xl bg-card/60 backdrop-blur-sm border border-border/30 space-y-5">
+                <div className="grid sm:grid-cols-2 gap-5">
+                  <div>
+                    <label className="block text-sm font-medium text-foreground mb-2">
+                      {content.contact.form.name}
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder={content.contact.form.namePlaceholder}
+                      value={formData.name}
+                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                      className="w-full px-4 py-3 rounded-lg bg-input/50 border border-border/50 text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/40 transition-all"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-foreground mb-2">
+                      {content.contact.form.phone}
+                    </label>
+                    <input
+                      type="tel"
+                      placeholder={content.contact.form.phonePlaceholder}
+                      value={formData.phone}
+                      onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                      className="w-full px-4 py-3 rounded-lg bg-input/50 border border-border/50 text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/40 transition-all"
+                    />
+                  </div>
+                </div>
+
                 <div>
                   <label className="block text-sm font-medium text-foreground mb-2">
-                    {content.contact.form.name}
+                    {content.contact.form.email}
                   </label>
                   <input
-                    type="text"
+                    type="email"
                     required
-                    placeholder={content.contact.form.namePlaceholder}
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    placeholder={content.contact.form.emailPlaceholder}
+                    value={formData.email}
+                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                     className="w-full px-4 py-3 rounded-lg bg-input/50 border border-border/50 text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/40 transition-all"
                   />
                 </div>
+
                 <div>
                   <label className="block text-sm font-medium text-foreground mb-2">
-                    {content.contact.form.phone}
+                    {content.contact.form.message}
                   </label>
-                  <input
-                    type="tel"
-                    placeholder={content.contact.form.phonePlaceholder}
-                    value={formData.phone}
-                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                    className="w-full px-4 py-3 rounded-lg bg-input/50 border border-border/50 text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/40 transition-all"
+                  <textarea
+                    required
+                    rows={5}
+                    placeholder={content.contact.form.messagePlaceholder}
+                    value={formData.message}
+                    onChange={(e) => setFormData({ ...formData, message: e.target.value })}
+                    className="w-full px-4 py-3 rounded-lg bg-input/50 border border-border/50 text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/40 transition-all resize-none"
                   />
                 </div>
-              </div>
 
-              <div>
-                <label className="block text-sm font-medium text-foreground mb-2">
-                  {content.contact.form.email}
-                </label>
-                <input
-                  type="email"
-                  required
-                  placeholder={content.contact.form.emailPlaceholder}
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  className="w-full px-4 py-3 rounded-lg bg-input/50 border border-border/50 text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/40 transition-all"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-foreground mb-2">
-                  {content.contact.form.message}
-                </label>
-                <textarea
-                  required
-                  rows={5}
-                  placeholder={content.contact.form.messagePlaceholder}
-                  value={formData.message}
-                  onChange={(e) => setFormData({ ...formData, message: e.target.value })}
-                  className="w-full px-4 py-3 rounded-lg bg-input/50 border border-border/50 text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/40 transition-all resize-none"
-                />
-              </div>
-
-              <button
-                type="submit"
-                className="w-full flex items-center justify-center gap-2 px-7 py-4 rounded-lg bg-primary text-primary-foreground font-semibold hover:bg-primary/90 transition-all duration-200 active:scale-[0.97] shadow-lg shadow-primary/20"
-              >
-                <Send className="w-4 h-4" />
-                {content.contact.form.send}
-              </button>
-            </form>
+                <button
+                  type="submit"
+                  disabled={submitMutation.isPending}
+                  className="w-full flex items-center justify-center gap-2 px-7 py-4 rounded-lg bg-primary text-primary-foreground font-semibold hover:bg-primary/90 transition-all duration-200 active:scale-[0.97] shadow-lg shadow-primary/20 disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  {submitMutation.isPending ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      {language === "fr" ? "Envoi en cours..." : "Sending..."}
+                    </>
+                  ) : (
+                    <>
+                      <Send className="w-4 h-4" />
+                      {content.contact.form.send}
+                    </>
+                  )}
+                </button>
+              </form>
+            )}
           </div>
         </div>
       </div>
