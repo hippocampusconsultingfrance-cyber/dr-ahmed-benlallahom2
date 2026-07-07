@@ -6,7 +6,7 @@
 export const contentEn = {
   // Navigation
   nav: {
-    experience: "Experience",
+    experience: "Leadership",
     services: "Services",
     education: "Education",
     contact: "Contact",
@@ -47,8 +47,8 @@ export const contentEn = {
 
   // Experience Section
   experiences: {
-    title: "Experience & Ventures",
-    subtitle: "A career at the intersection of medicine and entrepreneurship",
+    title: "Leadership & Ventures",
+    subtitle: "CEO, co-founder and practitioner — a career at the intersection of medicine and entrepreneurship",
     items: [
       {
         company: "Hippocampus Consulting",
@@ -59,7 +59,7 @@ export const contentEn = {
       },
       {
         company: "Laska Corporate",
-        role: "Co-Founder & Medical Director",
+        role: "Co-Founder",
         description:
           "Specialist medical and paramedical recruitment connecting healthcare institutions with qualified professionals for permanent roles, temporary cover, and interim assignments.",
         tags: ["Medical Recruitment", "Interim", "Healthcare HR"],

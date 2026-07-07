@@ -1,10 +1,14 @@
 import { useLanguage } from "@/contexts/LanguageContext";
-import { Briefcase, Stethoscope, Building2, Globe, Brain, HeartPulse } from "lucide-react";
+import { venturesFr } from "@/data/ventures-fr";
+import { venturesEn } from "@/data/ventures-en";
+import { Briefcase, Stethoscope, Building2, Globe, Brain, HeartPulse, ArrowRight } from "lucide-react";
+import { Link } from "wouter";
 
 const experienceIcons = [Building2, HeartPulse, Globe, Brain, Briefcase, Stethoscope];
 
 export default function ExperienceSection() {
-  const { content } = useLanguage();
+  const { content, language } = useLanguage();
+  const ventures = language === "fr" ? venturesFr : venturesEn;
 
   return (
     <section id="experience" className="py-28 sm:py-36 relative">
@@ -24,21 +28,28 @@ export default function ExperienceSection() {
         <div className="grid md:grid-cols-2 gap-6 lg:gap-8">
           {content.experiences.items.map((exp, i) => {
             const Icon = experienceIcons[i] || Briefcase;
+            const venture = ventures[i];
+            const slug = venture?.slug;
+
             return (
-              <div
+              <Link
                 key={i}
-                className={`card-glow group p-7 sm:p-8 rounded-xl bg-card border border-border/30 ${
+                href={slug ? `/venture/${slug}` : "#"}
+                className={`card-glow group p-7 sm:p-8 rounded-xl bg-card border border-border/30 cursor-pointer hover:border-primary/40 transition-all duration-300 ${
                   i % 2 === 0 ? "md:translate-y-0" : "md:translate-y-6"
                 }`}
               >
-                <div className="flex items-start gap-4 mb-5">
-                  <div className="w-11 h-11 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 group-hover:bg-primary/20 transition-colors border border-primary/20">
-                    <Icon className="w-5 h-5 text-primary" />
+                <div className="flex items-start justify-between mb-5">
+                  <div className="flex items-start gap-4">
+                    <div className="w-11 h-11 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 group-hover:bg-primary/20 transition-colors border border-primary/20">
+                      <Icon className="w-5 h-5 text-primary" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-lg text-foreground leading-tight group-hover:text-primary transition-colors">{exp.company}</h3>
+                      <p className="text-sm font-semibold mt-0.5" style={{ color: "oklch(0.72 0.1 75)" }}>{exp.role}</p>
+                    </div>
                   </div>
-                  <div>
-                    <h3 className="font-semibold text-lg text-foreground leading-tight">{exp.company}</h3>
-                    <p className="text-sm font-semibold mt-0.5" style={{ color: "oklch(0.72 0.1 75)" }}>{exp.role}</p>
-                  </div>
+                  <ArrowRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 group-hover:translate-x-1 transition-all duration-200 shrink-0 mt-2" />
                 </div>
                 <p className="text-muted-foreground text-sm leading-relaxed mb-5">
                   {exp.description}
@@ -53,7 +64,7 @@ export default function ExperienceSection() {
                     </span>
                   ))}
                 </div>
-              </div>
+              </Link>
             );
           })}
         </div>
