@@ -180,6 +180,28 @@ export const venturesFr: VentureDetail[] = [
       "Recrutement de talents tech",
     ],
     tags: ["IT", "IA", "Cybersécurité", "Data"],
+    team: [
+      {
+        name: "Dr. Ahmed Ben Lallahom",
+        role: "Consultant",
+        linkedin: "https://www.linkedin.com/in/ahmed-ben-lallahom/",
+      },
+      {
+        name: "Sonia Siala",
+        role: "Consultante",
+        linkedin: "https://www.linkedin.com/in/sonia-siala-3412251b8/",
+      },
+      {
+        name: "Amine Hachicha",
+        role: "Consultant",
+        linkedin: "https://www.linkedin.com/in/amine-hachicha-66904683/",
+      },
+      {
+        name: "Ines Dhaouadi",
+        role: "Consultante",
+        linkedin: "https://www.linkedin.com/in/ines-dhaouadi/",
+      },
+    ],
   },
   {
     slug: "sawa4you",
