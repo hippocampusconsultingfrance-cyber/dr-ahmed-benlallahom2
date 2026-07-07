@@ -1,25 +1,42 @@
-import { Button } from "@/components/ui/button";
-import { Loader2 } from "lucide-react";
-import { Streamdown } from 'streamdown';
+import Navigation from "@/components/Navigation";
+import HeroSection from "@/components/HeroSection";
+import AboutSection from "@/components/AboutSection";
+import ValuesSection from "@/components/ValuesSection";
+import ExperienceSection from "@/components/ExperienceSection";
+import ServicesSection from "@/components/ServicesSection";
+import EducationSection from "@/components/EducationSection";
+import ContactSection from "@/components/ContactSection";
+import Footer from "@/components/Footer";
+import { useScrollReveal } from "@/hooks/useScrollReveal";
 
-/**
- * All content in this page are only for example, replace with your own feature implementation
- * When building pages, remember your instructions in Frontend Best Practices, Design Guide and Common Pitfalls
- */
 export default function Home() {
-  // If theme is switchable in App.tsx, we can implement theme toggling like this:
-  // const { theme, toggleTheme } = useTheme();
+  const revealRef = useScrollReveal();
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div ref={revealRef} className="min-h-screen bg-background">
+      <Navigation />
       <main>
-        {/* Example: lucide-react for icons */}
-        <Loader2 className="animate-spin" />
-        Example Page
-        {/* Example: Streamdown for markdown rendering */}
-        <Streamdown>Any **markdown** content</Streamdown>
-        <Button variant="default">Example Button</Button>
+        <HeroSection />
+        <div className="fade-in-up">
+          <AboutSection />
+        </div>
+        <div className="fade-in-up">
+          <ValuesSection />
+        </div>
+        <div className="fade-in-up">
+          <ExperienceSection />
+        </div>
+        <div className="fade-in-up">
+          <ServicesSection />
+        </div>
+        <div className="fade-in-up">
+          <EducationSection />
+        </div>
+        <div className="fade-in-up">
+          <ContactSection />
+        </div>
       </main>
+      <Footer />
     </div>
   );
 }
