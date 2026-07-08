@@ -19,7 +19,7 @@ export const siteConfig = {
   stats: {
     yearsClinical: "10+",
     ventures: "5+",
-    certifications: "15+",
+    certifications: "16+",
     languages: "3",
   },
 
