@@ -51,6 +51,15 @@ export default function VenturePage() {
         {/* Hero */}
         <div className="container mb-16">
           <div className="max-w-4xl">
+            {venture.logo && (
+              <div className="mb-6">
+                <img
+                  src={venture.logo}
+                  alt={`${venture.company} logo`}
+                  className="h-16 sm:h-20 w-auto object-contain"
+                />
+              </div>
+            )}
             <div className="flex items-center gap-3 mb-4">
               <span className="px-3 py-1 text-xs font-semibold uppercase tracking-wider rounded-full bg-primary/10 text-primary border border-primary/20">
                 {venture.role}

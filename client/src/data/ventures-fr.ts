@@ -21,6 +21,7 @@ export interface VentureDetail {
   tags: string[];
   team?: TeamMember[];
   website?: string; // URL du site web de la société
+  logo?: string; // URL du logo de la société
 }
 
 export const venturesFr: VentureDetail[] = [
@@ -175,6 +176,7 @@ export const venturesFr: VentureDetail[] = [
     role: "Co-Fondateur",
     tagline: "Conseil en IT, Data, IA et Cybersécurité",
     website: "https://www.octopustalent.io/",
+    logo: "/manus-storage/logo-octopus-talent_27d723c7.png",
     description: [
       "Octopus Talent est un cabinet de conseil en IT, Data, IA et cybersécurité basé à Paris, co-fondé par le Dr. Ahmed Ben Lallahom. L'entreprise accompagne la transformation digitale des organisations avec des solutions technologiques sur mesure.",
       "Dans un monde où la technologie est devenue un levier stratégique incontournable, Octopus Talent aide les entreprises à exploiter le plein potentiel de l'intelligence artificielle, du big data et de la cybersécurité pour accélérer leur croissance.",

@@ -157,6 +157,7 @@ export const venturesEn: VentureDetail[] = [
     role: "Co-Founder",
     tagline: "IT, Data, AI and Cybersecurity consulting",
     website: "https://www.octopustalent.io/",
+    logo: "/manus-storage/logo-octopus-talent_27d723c7.png",
     description: [
       "Octopus Talent is an IT, Data, AI, and cybersecurity consulting firm based in Paris, co-founded by Dr. Ahmed Ben Lallahom. The company supports organizations' digital transformation with tailor-made technological solutions.",
       "In a world where technology has become an essential strategic lever, Octopus Talent helps companies harness the full potential of artificial intelligence, big data, and cybersecurity to accelerate their growth.",
