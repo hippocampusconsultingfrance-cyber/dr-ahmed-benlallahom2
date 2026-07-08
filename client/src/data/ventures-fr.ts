@@ -30,6 +30,7 @@ export const venturesFr: VentureDetail[] = [
     company: "Hippocampus Consulting",
     role: "CEO & Fondateur",
     tagline: "Conseil en stratégie et management orienté export",
+    logo: "/manus-storage/logo-hippocampus-consulting_0f90baeb.png",
     description: [
       "Hippocampus Consulting est un cabinet de conseil en stratégie et management entièrement orienté export, fondé et dirigé par le Dr. Ahmed Ben Lallahom. Le cabinet accompagne les entreprises dans leur transformation digitale, leur développement international et leur croissance durable.",
       "Fort d'une approche unique mêlant rigueur médicale et vision entrepreneuriale, Hippocampus Consulting propose des solutions sur mesure pour les organisations qui souhaitent se développer à l'international tout en maintenant l'excellence opérationnelle.",
@@ -86,6 +87,7 @@ export const venturesFr: VentureDetail[] = [
     role: "Co-Fondateur",
     tagline: "Recrutement médical et paramédical spécialisé",
     website: "https://laskacorp.com/home",
+    logo: "/manus-storage/logo-laska-corporate_35bcff90.png",
     description: [
       "Laska Corporate est une entreprise spécialisée dans le recrutement médical et paramédical, co-fondée par le Dr. Ahmed Ben Lallahom. Elle connecte les établissements de santé avec des professionnels qualifiés pour des postes permanents, des remplacements et des missions intérimaires.",
       "Grâce à une connaissance approfondie du terrain médical et des besoins réels des établissements, Laska Corporate propose un service de recrutement sur mesure qui garantit l'adéquation entre les compétences des candidats et les exigences des postes.",
@@ -131,6 +133,7 @@ export const venturesFr: VentureDetail[] = [
     company: "Appel Médical Tunisie",
     role: "Co-Fondateur",
     tagline: "Recrutement et staffing médical en Tunisie",
+    logo: "/manus-storage/logo-appel-medical-tunisie_9b8e3246.png",
     description: [
       "Appel Médical Tunisie est une venture de recrutement et de staffing médical co-fondée par le Dr. Ahmed Ben Lallahom, connectant les professionnels de santé qualifiés avec les hôpitaux et cliniques qui en ont besoin.",
       "L'entreprise répond à un besoin critique du marché tunisien en matière de ressources humaines médicales, en facilitant la mise en relation entre les établissements de santé et les praticiens disponibles.",

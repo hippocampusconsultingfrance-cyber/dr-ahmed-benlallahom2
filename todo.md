@@ -31,3 +31,4 @@
 - [x] Remplacer l'image hero par une photo cinématique générée par IA (Dr. Ahmed en tenue médicale dans un ICU high-tech)
 - [x] Mettre à jour la section Formation avec les intitulés complets des diplômes (16 entrées, 2006-2026) en FR et EN
 - [x] Ajouter le logo Octopus Talent sur la sous-page entreprise
+- [x] Ajouter les logos Hippocampus Consulting, Laska Corporate et Appel Médical Tunisie
