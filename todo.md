@@ -34,3 +34,4 @@
 - [x] Ajouter les logos Hippocampus Consulting, Laska Corporate et Appel Médical Tunisie
 - [x] Ajouter une page Mentions Légales (FR/EN) avec RGPD, conditions d'utilisation, hébergeur
 - [x] Optimiser le SEO : balises meta, Open Graph, Twitter Card, canonical URLs
+- [x] Ajouter robots.txt et sitemap.xml pour l'indexation par les moteurs de recherche
