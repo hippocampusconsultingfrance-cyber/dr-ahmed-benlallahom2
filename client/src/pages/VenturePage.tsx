@@ -5,6 +5,7 @@ import { useParams, Link } from "wouter";
 import { ArrowLeft, ExternalLink, ChevronRight, Linkedin, User } from "lucide-react";
 import Navigation from "@/components/Navigation";
 import Footer from "@/components/Footer";
+import { SEOHead } from "@/components/SEOHead";
 
 export default function VenturePage() {
   const { language, content } = useLanguage();
@@ -31,6 +32,11 @@ export default function VenturePage() {
 
   return (
     <div className="min-h-screen bg-background">
+      <SEOHead
+        title={`${venture.company} — ${venture.role} | Dr. Ahmed Ben Lallahom`}
+        description={Array.isArray(venture.description) ? venture.description.join(' ') : venture.description}
+        ogUrl={`https://drahmedbenlallahom.com/venture/${venture.slug}`}
+      />
       <Navigation />
       <main className="pt-24 pb-20">
         {/* Breadcrumb */}

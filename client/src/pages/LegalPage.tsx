@@ -3,6 +3,7 @@ import Footer from "@/components/Footer";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { ArrowLeft } from "lucide-react";
 import { Link } from "wouter";
+import { SEOHead } from "@/components/SEOHead";
 
 export default function LegalPage() {
   const { language } = useLanguage();
@@ -17,6 +18,11 @@ export default function LegalPage() {
 function LegalPageFr() {
   return (
     <div className="min-h-screen bg-background">
+      <SEOHead
+        title="Mentions Légales | Dr. Ahmed Ben Lallahom"
+        description="Mentions légales, RGPD, conditions d'utilisation et informations légales du site Dr. Ahmed Ben Lallahom."
+        ogUrl="https://drahmedbenlallahom.com/legal"
+      />
       <Navigation />
       <main className="pt-24 pb-20">
         {/* Back Button */}
@@ -182,6 +188,11 @@ function LegalPageFr() {
 function LegalPageEn() {
   return (
     <div className="min-h-screen bg-background">
+      <SEOHead
+        title="Legal Notice | Dr. Ahmed Ben Lallahom"
+        description="Legal notice, GDPR, terms of use and legal information for Dr. Ahmed Ben Lallahom's website."
+        ogUrl="https://drahmedbenlallahom.com/legal"
+      />
       <Navigation />
       <main className="pt-24 pb-20">
         {/* Back Button */}
