@@ -32,3 +32,4 @@
 - [x] Mettre à jour la section Formation avec les intitulés complets des diplômes (16 entrées, 2006-2026) en FR et EN
 - [x] Ajouter le logo Octopus Talent sur la sous-page entreprise
 - [x] Ajouter les logos Hippocampus Consulting, Laska Corporate et Appel Médical Tunisie
+- [x] Ajouter une page Mentions Légales (FR/EN) avec RGPD, conditions d'utilisation, hébergeur

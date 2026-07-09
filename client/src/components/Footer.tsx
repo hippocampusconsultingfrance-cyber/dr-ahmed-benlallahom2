@@ -1,5 +1,6 @@
 import { useLanguage } from "@/contexts/LanguageContext";
 import { siteConfig } from "@/data/site-config";
+import { Link } from "wouter";
 
 export default function Footer() {
   const { content } = useLanguage();
@@ -63,6 +64,9 @@ export default function Footer() {
           <div>
             <h4 className="font-semibold text-foreground mb-4 text-sm uppercase tracking-wide">{content.footer.legal}</h4>
             <nav className="space-y-2.5">
+              <Link href="/legal" className="block text-sm text-muted-foreground hover:text-primary transition-colors">
+                {content.footer.legal}
+              </Link>
               <p className="text-sm text-muted-foreground">{content.footer.privacy}</p>
               <p className="text-sm text-muted-foreground">{content.footer.terms}</p>
             </nav>
