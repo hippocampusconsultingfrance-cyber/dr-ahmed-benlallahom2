@@ -1,7 +1,7 @@
 import { MessageCircle } from "lucide-react";
 
 export default function WhatsAppButton() {
-  const phoneNumber = "33612345678"; // Remplacez par votre numéro WhatsApp (format international sans +)
+  const phoneNumber = "33972152413"; // Numéro WhatsApp du Dr. Ahmed Ben Lallahom
   const message = encodeURIComponent(
     "Bonjour Dr. Ahmed Ben Lallahom, je souhaiterais vous contacter."
   );
