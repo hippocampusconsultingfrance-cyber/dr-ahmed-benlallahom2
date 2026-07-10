@@ -3,7 +3,7 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { Globe, Menu, X } from "lucide-react";
 
 export default function Navigation() {
-  const { content, toggleLanguage } = useLanguage();
+  const { content, language, toggleLanguage } = useLanguage();
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -69,9 +69,15 @@ export default function Navigation() {
         <div className="flex items-center gap-3">
           <button
             onClick={toggleLanguage}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-border/50 text-sm font-medium text-muted-foreground hover:text-foreground hover:border-primary/40 transition-all duration-200"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-border/50 text-sm font-medium text-muted-foreground hover:text-foreground hover:border-primary/40 transition-all duration-200 hover:bg-background/50"
+            title="Change language"
           >
-            <Globe className="w-3.5 h-3.5" />
+            <span className="text-base">
+              {language === "fr" ? "🇫🇷" :
+               language === "en" ? "🇬🇧" :
+               language === "de" ? "🇩🇪" :
+               "🇨🇳"}
+            </span>
             {content.nav.switchLang}
           </button>
 

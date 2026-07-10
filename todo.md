@@ -36,3 +36,4 @@
 - [x] Optimiser le SEO : balises meta, Open Graph, Twitter Card, canonical URLs
 - [x] Ajouter robots.txt et sitemap.xml pour l'indexation par les moteurs de recherche
 - [x] Ajouter un bouton WhatsApp flottant en bas à droite
+- [x] Ajouter l'allemand et le chinois avec drapeaux pour chaque langue
