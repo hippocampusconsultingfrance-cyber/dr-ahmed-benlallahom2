@@ -8,6 +8,7 @@ import { LanguageProvider } from "./contexts/LanguageContext";
 import Home from "./pages/Home";
 import VenturePage from "./pages/VenturePage";
 import LegalPage from "./pages/LegalPage";
+import WhatsAppButton from "./components/WhatsAppButton";
 
 function Router() {
   return (
@@ -29,6 +30,7 @@ function App() {
           <TooltipProvider>
             <Toaster />
             <Router />
+            <WhatsAppButton />
           </TooltipProvider>
         </LanguageProvider>
       </ThemeProvider>
