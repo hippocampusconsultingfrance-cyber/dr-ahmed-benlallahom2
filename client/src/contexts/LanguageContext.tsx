@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, type ReactNode } from "react";
+import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from "react";
 import { contentFr } from "@/data/content-fr";
 import { contentEn } from "@/data/content-en";
 import { contentDe } from "@/data/content-de";
@@ -17,14 +17,29 @@ interface LanguageContextType {
 const LanguageContext = createContext<LanguageContextType | undefined>(undefined);
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
-  const [language, setLanguage] = useState<Language>(siteConfig.defaultLanguage);
+  const [language, setLanguage] = useState<Language>(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("language");
+      if (saved === "fr" || saved === "en" || saved === "de" || saved === "zh") {
+        return saved;
+      }
+    }
+    return siteConfig.defaultLanguage;
+  });
+
+  // Sauvegarder la langue dans localStorage quand elle change
+  useEffect(() => {
+    localStorage.setItem("language", language);
+  }, [language]);
 
   const toggleLanguage = useCallback(() => {
     setLanguage((prev) => {
       const languages: Language[] = ["fr", "en", "de", "zh"];
       const currentIndex = languages.indexOf(prev);
       const nextIndex = (currentIndex + 1) % languages.length;
-      return languages[nextIndex];
+      const nextLang = languages[nextIndex];
+      localStorage.setItem("language", nextLang);
+      return nextLang;
     });
   }, []);
 

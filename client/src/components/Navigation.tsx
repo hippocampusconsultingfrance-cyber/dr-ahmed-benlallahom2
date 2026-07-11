@@ -1,37 +1,46 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { Globe, Menu, X } from "lucide-react";
+import { Menu, X, ChevronDown } from "lucide-react";
 
 export default function Navigation() {
-  const { content, language, toggleLanguage } = useLanguage();
-  
-  // Déterminer la prochaine langue
-  const getNextLanguageInfo = () => {
-    const languages = ["fr", "en", "de", "zh"];
-    const currentIndex = languages.indexOf(language);
-    const nextIndex = (currentIndex + 1) % languages.length;
-    const nextLang = languages[nextIndex];
-    
-    const flags: Record<string, string> = {
-      fr: "🇫🇷",
-      en: "🇬🇧",
-      de: "🇩🇪",
-      zh: "🇨🇳",
-    };
-    
-    const codes: Record<string, string> = {
-      fr: "FR",
-      en: "EN",
-      de: "DE",
-      zh: "中文",
-    };
-    
-    return { flag: flags[nextLang], code: codes[nextLang] };
-  };
-  
-  const nextLangInfo = getNextLanguageInfo();
+  const { content, language } = useLanguage();
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const languages = [
+    { code: "fr", name: "Français", flag: "🇫🇷" },
+    { code: "en", name: "English", flag: "🇬🇧" },
+    { code: "de", name: "Deutsch", flag: "🇩🇪" },
+    { code: "zh", name: "中文", flag: "🇨🇳" },
+  ];
+
+  const currentLang = languages.find((l) => l.code === language);
+
+  const handleLanguageChange = (code: string) => {
+    if (code !== language) {
+      // Changer la langue en mettant à jour le localStorage
+      localStorage.setItem("language", code);
+      // Recharger la page pour appliquer la nouvelle langue
+      window.location.reload();
+    }
+    setDropdownOpen(false);
+  };
+
+  // Fermer le dropdown quand on clique ailleurs
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setDropdownOpen(false);
+      }
+    };
+
+    if (dropdownOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+      return () => document.removeEventListener("mousedown", handleClickOutside);
+    }
+  }, [dropdownOpen]);
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 50);
@@ -93,16 +102,40 @@ export default function Navigation() {
 
         {/* Actions */}
         <div className="flex items-center gap-3">
-          <button
-            onClick={toggleLanguage}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-border/50 text-sm font-medium text-muted-foreground hover:text-foreground hover:border-primary/40 transition-all duration-200 hover:bg-background/50"
-            title="Change language"
-          >
-            <span className="text-base">
-              {nextLangInfo.flag}
-            </span>
-            {nextLangInfo.code}
-          </button>
+          {/* Language Dropdown */}
+          <div ref={dropdownRef} className="relative">
+            <button
+              onClick={() => setDropdownOpen(!dropdownOpen)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-border/50 text-sm font-medium text-muted-foreground hover:text-foreground hover:border-primary/40 transition-all duration-200 hover:bg-background/50"
+              title="Change language"
+            >
+              <span className="text-base">{currentLang?.flag}</span>
+              <span>{currentLang?.code.toUpperCase()}</span>
+              <ChevronDown
+                className="w-3.5 h-3.5 transition-transform"
+                style={{ transform: dropdownOpen ? "rotate(180deg)" : "rotate(0deg)" }}
+              />
+            </button>
+
+            {dropdownOpen && (
+              <div className="absolute right-0 mt-2 w-48 bg-background border border-border/50 rounded-lg shadow-lg z-50 overflow-hidden">
+                {languages.map((lang) => (
+                  <button
+                    key={lang.code}
+                    onClick={() => handleLanguageChange(lang.code)}
+                    className={`w-full px-4 py-3 text-left text-sm font-medium transition-colors ${
+                      language === lang.code
+                        ? "bg-primary text-primary-foreground"
+                        : "text-foreground hover:bg-background/50"
+                    }`}
+                  >
+                    <span className="text-base mr-2">{lang.flag}</span>
+                    {lang.name}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
 
           <button
             onClick={() => scrollTo("contact")}
