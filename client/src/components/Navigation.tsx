@@ -4,6 +4,32 @@ import { Globe, Menu, X } from "lucide-react";
 
 export default function Navigation() {
   const { content, language, toggleLanguage } = useLanguage();
+  
+  // Déterminer la prochaine langue
+  const getNextLanguageInfo = () => {
+    const languages = ["fr", "en", "de", "zh"];
+    const currentIndex = languages.indexOf(language);
+    const nextIndex = (currentIndex + 1) % languages.length;
+    const nextLang = languages[nextIndex];
+    
+    const flags: Record<string, string> = {
+      fr: "🇫🇷",
+      en: "🇬🇧",
+      de: "🇩🇪",
+      zh: "🇨🇳",
+    };
+    
+    const codes: Record<string, string> = {
+      fr: "FR",
+      en: "EN",
+      de: "DE",
+      zh: "中文",
+    };
+    
+    return { flag: flags[nextLang], code: codes[nextLang] };
+  };
+  
+  const nextLangInfo = getNextLanguageInfo();
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -73,12 +99,9 @@ export default function Navigation() {
             title="Change language"
           >
             <span className="text-base">
-              {language === "fr" ? "🇫🇷" :
-               language === "en" ? "🇬🇧" :
-               language === "de" ? "🇩🇪" :
-               "🇨🇳"}
+              {nextLangInfo.flag}
             </span>
-            {content.nav.switchLang}
+            {nextLangInfo.code}
           </button>
 
           <button
