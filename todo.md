@@ -37,3 +37,5 @@
 - [x] Ajouter robots.txt et sitemap.xml pour l'indexation par les moteurs de recherche
 - [x] Ajouter un bouton WhatsApp flottant en bas à droite
 - [x] Ajouter l'allemand et le chinois avec drapeaux pour chaque langue
+- [x] Ajouter un favicon personnalisé avec monogramme AB
+- [x] Remplacer le bouton de changement de langue par une liste déroulante
