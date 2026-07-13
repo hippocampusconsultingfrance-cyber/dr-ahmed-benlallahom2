@@ -1,3 +1,4 @@
+@import "tailwindcss";
 @import "tw-animate-css";
 
 @custom-variant dark (&:is(.dark *));
@@ -196,66 +197,6 @@
     transform: translateY(0);
   }
 
-  /* Enhanced entrance animations */
-  .fade-in-left {
-    opacity: 0;
-    transform: translateX(-30px);
-    transition: opacity 0.8s cubic-bezier(0.23, 1, 0.32, 1), transform 0.8s cubic-bezier(0.23, 1, 0.32, 1);
-  }
-  .fade-in-left.visible {
-    opacity: 1;
-    transform: translateX(0);
-  }
-
-  .fade-in-right {
-    opacity: 0;
-    transform: translateX(30px);
-    transition: opacity 0.8s cubic-bezier(0.23, 1, 0.32, 1), transform 0.8s cubic-bezier(0.23, 1, 0.32, 1);
-  }
-  .fade-in-right.visible {
-    opacity: 1;
-    transform: translateX(0);
-  }
-
-  .fade-in-down {
-    opacity: 0;
-    transform: translateY(-20px);
-    transition: opacity 0.8s cubic-bezier(0.23, 1, 0.32, 1), transform 0.8s cubic-bezier(0.23, 1, 0.32, 1);
-  }
-  .fade-in-down.visible {
-    opacity: 1;
-    transform: translateY(0);
-  }
-
-  .scale-in {
-    opacity: 0;
-    transform: scale(0.95);
-    transition: opacity 0.8s cubic-bezier(0.23, 1, 0.32, 1), transform 0.8s cubic-bezier(0.23, 1, 0.32, 1);
-  }
-  .scale-in.visible {
-    opacity: 1;
-    transform: scale(1);
-  }
-
-  /* Staggered animations for list items */
-  .stagger-item {
-    opacity: 0;
-    transform: translateY(20px);
-    transition: opacity 0.6s cubic-bezier(0.23, 1, 0.32, 1), transform 0.6s cubic-bezier(0.23, 1, 0.32, 1);
-  }
-  .stagger-item.visible {
-    opacity: 1;
-    transform: translateY(0);
-  }
-
-  /* Parallax effect for hero background */
-  .parallax-bg {
-    background-attachment: fixed;
-    background-position: center;
-    background-repeat: no-repeat;
-    background-size: cover;
-  }
-
   /* Pulse dot for timeline */
   .pulse-dot {
     position: relative;
@@ -268,75 +209,8 @@
     background: oklch(0.75 0.15 220 / 0.3);
     animation: pulse-ring 2s ease-out infinite;
   }
-
-  /* Glow pulse animation */
-  @keyframes glow-pulse {
-    0%, 100% {
-      box-shadow: 0 0 20px oklch(0.75 0.15 220 / 0.3);
-    }
-    50% {
-      box-shadow: 0 0 40px oklch(0.75 0.15 220 / 0.6);
-    }
-  }
-  .glow-pulse {
-    animation: glow-pulse 3s ease-in-out infinite;
-  }
-
-  /* Pulse ring */
   @keyframes pulse-ring {
     0% { transform: scale(1); opacity: 0.6; }
     100% { transform: scale(2.5); opacity: 0; }
-  }
-
-  /* Slide in from left */
-  @keyframes slide-in-left {
-    from {
-      opacity: 0;
-      transform: translateX(-100%);
-    }
-    to {
-      opacity: 1;
-      transform: translateX(0);
-    }
-  }
-
-  /* Slide in from right */
-  @keyframes slide-in-right {
-    from {
-      opacity: 0;
-      transform: translateX(100%);
-    }
-    to {
-      opacity: 1;
-      transform: translateX(0);
-    }
-  }
-
-  /* Bounce in */
-  @keyframes bounce-in {
-    0% {
-      opacity: 0;
-      transform: scale(0.3);
-    }
-    50% {
-      opacity: 1;
-      transform: scale(1.05);
-    }
-    70% {
-      transform: scale(0.9);
-    }
-    100% {
-      transform: scale(1);
-    }
-  }
-  .bounce-in {
-    animation: bounce-in 0.6s cubic-bezier(0.23, 1, 0.32, 1);
-  }
-
-  @media (prefers-reduced-motion: no-preference) {
-    /* Smooth scroll behavior */
-    html {
-      scroll-behavior: smooth;
-    }
   }
 }

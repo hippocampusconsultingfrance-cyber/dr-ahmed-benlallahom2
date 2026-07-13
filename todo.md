@@ -39,4 +39,3 @@
 - [x] Ajouter l'allemand et le chinois avec drapeaux pour chaque langue
 - [x] Ajouter un favicon personnalisé avec monogramme AB
 - [x] Remplacer le bouton de changement de langue par une liste déroulante
-- [x] Ajouter des animations d'entrée améliorées (fade-in-left, fade-in-right, scale-in, stagger, parallax, bounce-in)
