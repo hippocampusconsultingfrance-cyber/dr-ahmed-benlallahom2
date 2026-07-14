@@ -20,9 +20,12 @@ export default function HeroSection() {
         <img
           src="/manus-storage/hero-bg-ahmed_156f3568.png"
           alt=""
-          className="w-full h-full object-cover"
+          className="w-full h-full object-cover sm:object-right"
+          style={{
+            objectPosition: window.innerWidth < 640 ? 'center 20%' : 'right center'
+          }}
         />
-        <div className="absolute inset-0 bg-gradient-to-r from-background via-background/90 to-background/30" />
+        <div className="absolute inset-0 bg-gradient-to-r from-background via-background/90 to-background/40 sm:to-background/30" />
         <div className="absolute inset-0 bg-gradient-to-t from-background via-transparent to-background/20" />
         {/* Diagnostic grid overlay */}
         <div className="absolute inset-0 diagnostic-grid opacity-40" />
