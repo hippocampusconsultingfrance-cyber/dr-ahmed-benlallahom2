@@ -40,3 +40,7 @@
 - [x] Ajouter un favicon personnalisé avec monogramme AB
 - [x] Remplacer le bouton de changement de langue par une liste déroulante
 - [x] Ajouter les métadonnées structurées Schema.org (Person, Organization, LocalBusiness, WebSite)
+- [x] Développer complètement la Politique de Confidentialité (9 sections) avec détails RGPD
+- [x] Développer complètement les Conditions Générales d'Utilisation (10 sections) en FR et EN
+- [x] Ajouter versions simplifiées en allemand et chinois pour la page Mentions Légales
+- [x] Vérifier que la page Mentions Légales s'affiche correctement sur le site en direct
