@@ -39,3 +39,4 @@
 - [x] Ajouter l'allemand et le chinois avec drapeaux pour chaque langue
 - [x] Ajouter un favicon personnalisé avec monogramme AB
 - [x] Remplacer le bouton de changement de langue par une liste déroulante
+- [x] Ajouter les métadonnées structurées Schema.org (Person, Organization, LocalBusiness, WebSite)
