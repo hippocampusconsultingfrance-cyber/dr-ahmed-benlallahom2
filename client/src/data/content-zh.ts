@@ -157,7 +157,35 @@ export const contentZh = {
       emailPlaceholder: "您的电子邮件地址",
       message: "消息",
       messagePlaceholder: "我如何帮助您？",
+      gdprConsent: "我接受隐私政策并授权处理我的个人数据",
       send: "发送",
+    },
+  },
+
+  // GDPR Request Form
+  gdpr: {
+    title: "GDPR请求",
+    subtitle: "行使您的数据保护权",
+    description: "您有权访问、更正、删除您的个人数据或反对其处理。填写此表格以提交您的请求。",
+    form: {
+      name: "全名",
+      namePlaceholder: "您的全名",
+      email: "电子邮件地址",
+      emailPlaceholder: "您的电子邮件地址",
+      phone: "电话（可选）",
+      phonePlaceholder: "+33 9 XX XX XX XX",
+      requestType: "请求类型",
+      requestTypes: {
+        access: "访问我的数据",
+        rectification: "更正我的数据",
+        deletion: "删除我的数据（被遗忘权）",
+        portability: "数据可携带性",
+        objection: "反对处理",
+      },
+      description: "您的请求描述",
+      descriptionPlaceholder: "详细描述您的GDPR请求...",
+      send: "提交请求",
+      successMessage: "您的GDPR请求已收到。我们将在30天内处理您的请求。",
     },
   },
 

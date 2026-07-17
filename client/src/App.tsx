@@ -8,6 +8,7 @@ import { LanguageProvider } from "./contexts/LanguageContext";
 import Home from "./pages/Home";
 import VenturePage from "./pages/VenturePage";
 import LegalPage from "./pages/LegalPage";
+import GDPRPage from "./pages/GDPRPage";
 import WhatsAppButton from "./components/WhatsAppButton";
 
 function Router() {
@@ -16,6 +17,7 @@ function Router() {
       <Route path="/" component={Home} />
       <Route path="/venture/:slug" component={VenturePage} />
       <Route path="/legal" component={LegalPage} />
+      <Route path="/gdpr" component={GDPRPage} />
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
     </Switch>

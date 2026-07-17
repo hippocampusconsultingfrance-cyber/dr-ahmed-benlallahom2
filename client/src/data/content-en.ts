@@ -182,7 +182,35 @@ export const contentEn = {
       emailPlaceholder: "Your email address",
       message: "Message",
       messagePlaceholder: "How can I help you?",
+      gdprConsent: "I accept the Privacy Policy and authorize the processing of my personal data",
       send: "Send",
+    },
+  },
+
+  // GDPR Request Form
+  gdpr: {
+    title: "GDPR Request",
+    subtitle: "Exercise your data protection rights",
+    description: "You have the right to access, rectify, delete your personal data or object to its processing. Fill out this form to submit your request.",
+    form: {
+      name: "Full Name",
+      namePlaceholder: "Your full name",
+      email: "Email Address",
+      emailPlaceholder: "Your email address",
+      phone: "Phone (optional)",
+      phonePlaceholder: "+33 9 XX XX XX XX",
+      requestType: "Request Type",
+      requestTypes: {
+        access: "Access to my data",
+        rectification: "Rectification of my data",
+        deletion: "Deletion of my data (right to be forgotten)",
+        portability: "Data portability",
+        objection: "Object to processing",
+      },
+      description: "Description of your request",
+      descriptionPlaceholder: "Describe your GDPR request in detail...",
+      send: "Submit Request",
+      successMessage: "Your GDPR request has been received. We will process your request within 30 days.",
     },
   },
 

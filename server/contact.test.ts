@@ -38,6 +38,7 @@ describe("contact.submit", () => {
       email: "jean@example.com",
       phone: "+33 6 12 34 56 78",
       message: "Bonjour, je souhaite prendre rendez-vous.",
+      gdprConsent: 1,
     });
 
     expect(result).toEqual({ success: true });
@@ -51,6 +52,7 @@ describe("contact.submit", () => {
       name: "Marie Martin",
       email: "marie@example.com",
       message: "Question about your consulting services.",
+      gdprConsent: 1,
     });
 
     expect(result).toEqual({ success: true });
@@ -65,6 +67,7 @@ describe("contact.submit", () => {
         name: "Test",
         email: "not-an-email",
         message: "Hello",
+        gdprConsent: 1,
       })
     ).rejects.toThrow();
   });
@@ -78,6 +81,7 @@ describe("contact.submit", () => {
         name: "",
         email: "test@example.com",
         message: "Hello",
+        gdprConsent: 1,
       })
     ).rejects.toThrow();
   });
@@ -91,7 +95,164 @@ describe("contact.submit", () => {
         name: "Test",
         email: "test@example.com",
         message: "",
+        gdprConsent: 1,
       })
     ).rejects.toThrow();
+  });
+
+  it("accepts submission with GDPR consent", async () => {
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+
+    const result = await caller.contact.submit({
+      name: "Pierre Leclerc",
+      email: "pierre@example.com",
+      message: "I accept the privacy policy.",
+      gdprConsent: 1,
+    });
+
+    expect(result).toEqual({ success: true });
+  });
+
+  it("accepts submission with GDPR consent declined", async () => {
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+
+    const result = await caller.contact.submit({
+      name: "Sophie Renault",
+      email: "sophie@example.com",
+      message: "I do not accept the privacy policy.",
+      gdprConsent: 0,
+    });
+
+    expect(result).toEqual({ success: true });
+  });
+});
+
+describe("gdpr.submit", () => {
+  it("accepts a valid GDPR access request", async () => {
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+
+    const result = await caller.gdpr.submit({
+      name: "Jane Smith",
+      email: "jane@example.com",
+      phone: "+33 6 12 34 56 78",
+      requestType: "access",
+      description: "I want to access my personal data.",
+    });
+
+    expect(result).toEqual({ success: true });
+  });
+
+  it("accepts a GDPR deletion request", async () => {
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+
+    const result = await caller.gdpr.submit({
+      name: "Jane Smith",
+      email: "jane@example.com",
+      requestType: "deletion",
+      description: "I want to delete my personal data.",
+    });
+
+    expect(result).toEqual({ success: true });
+  });
+
+  it("accepts a GDPR rectification request", async () => {
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+
+    const result = await caller.gdpr.submit({
+      name: "Jane Smith",
+      email: "jane@example.com",
+      requestType: "rectification",
+      description: "I want to correct my personal data.",
+    });
+
+    expect(result).toEqual({ success: true });
+  });
+
+  it("accepts a GDPR portability request", async () => {
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+
+    const result = await caller.gdpr.submit({
+      name: "Jane Smith",
+      email: "jane@example.com",
+      requestType: "portability",
+      description: "I want to export my personal data.",
+    });
+
+    expect(result).toEqual({ success: true });
+  });
+
+  it("accepts a GDPR objection request", async () => {
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+
+    const result = await caller.gdpr.submit({
+      name: "Jane Smith",
+      email: "jane@example.com",
+      requestType: "objection",
+      description: "I object to the processing of my personal data.",
+    });
+
+    expect(result).toEqual({ success: true });
+  });
+
+  it("rejects GDPR request with invalid email", async () => {
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+
+    await expect(
+      caller.gdpr.submit({
+        name: "Test",
+        email: "not-an-email",
+        requestType: "access",
+        description: "Test request",
+      })
+    ).rejects.toThrow();
+  });
+
+  it("rejects GDPR request with empty name", async () => {
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+
+    await expect(
+      caller.gdpr.submit({
+        name: "",
+        email: "test@example.com",
+        requestType: "access",
+        description: "Test request",
+      })
+    ).rejects.toThrow();
+  });
+
+  it("accepts GDPR request without phone number", async () => {
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+
+    const result = await caller.gdpr.submit({
+      name: "John Doe",
+      email: "john@example.com",
+      requestType: "access",
+      description: "I want to access my personal data.",
+    });
+
+    expect(result).toEqual({ success: true });
+  });
+
+  it("accepts GDPR request without description", async () => {
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+
+    const result = await caller.gdpr.submit({
+      name: "John Doe",
+      email: "john@example.com",
+      requestType: "access",
+    });
+
+    expect(result).toEqual({ success: true });
   });
 });

@@ -153,7 +153,7 @@ export const contentDe = {
   // Contact Section
   contact: {
     title: "Kontakt",
-    subtitle: "Lassen Sie uns zusammenarbeiten",
+    subtitle: "Lassen Sie uns über Ihr Projekt sprechen",
     form: {
       name: "Name",
       namePlaceholder: "Ihr Name",
@@ -162,8 +162,36 @@ export const contentDe = {
       email: "E-Mail",
       emailPlaceholder: "Ihre E-Mail-Adresse",
       message: "Nachricht",
-      messagePlaceholder: "Wie kann ich Ihnen helfen?",
+      messagePlaceholder: "Wie kann ich dir helfen?",
+      gdprConsent: "Ich akzeptiere die Datenschutzrichtlinie und autorisiere die Verarbeitung meiner persönlichen Daten",
       send: "Senden",
+    },
+  },
+
+  // GDPR Request Form
+  gdpr: {
+    title: "DSGVO-Anfrage",
+    subtitle: "Üben Sie Ihre Datenschutzrechte aus",
+    description: "Sie haben das Recht, auf Ihre persönlichen Daten zuzugreifen, diese zu berichtigen, zu löschen oder der Verarbeitung zu widersprechen. Füllen Sie dieses Formular aus, um Ihre Anfrage einzureichen.",
+    form: {
+      name: "Vollständiger Name",
+      namePlaceholder: "Ihr vollständiger Name",
+      email: "E-Mail-Adresse",
+      emailPlaceholder: "Ihre E-Mail-Adresse",
+      phone: "Telefon (optional)",
+      phonePlaceholder: "+33 9 XX XX XX XX",
+      requestType: "Anfrageart",
+      requestTypes: {
+        access: "Zugriff auf meine Daten",
+        rectification: "Berichtigung meiner Daten",
+        deletion: "Löschung meiner Daten (Recht auf Vergessenwerden)",
+        portability: "Datenportabilität",
+        objection: "Widerspruch gegen Verarbeitung",
+      },
+      description: "Beschreibung Ihrer Anfrage",
+      descriptionPlaceholder: "Beschreiben Sie Ihre DSGVO-Anfrage detailliert...",
+      send: "Anfrage einreichen",
+      successMessage: "Ihre DSGVO-Anfrage wurde empfangen. Wir werden Ihre Anfrage innerhalb von 30 Tagen bearbeiten.",
     },
   },
 

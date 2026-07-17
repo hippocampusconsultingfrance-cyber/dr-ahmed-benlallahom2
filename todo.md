@@ -44,3 +44,16 @@
 - [x] Développer complètement les Conditions Générales d'Utilisation (10 sections) en FR et EN
 - [x] Ajouter versions simplifiées en allemand et chinois pour la page Mentions Légales
 - [x] Vérifier que la page Mentions Légales s'affiche correctement sur le site en direct
+- [x] Ajouter champ gdprConsent au schéma de base de données (table contact_messages)
+- [x] Créer table gdpr_requests pour gérer les demandes RGPD
+- [x] Mettre à jour le formulaire de contact avec case à cocher "J'accepte la Politique de Confidentialité"
+- [x] Créer formulaire GDPR dédié pour les demandes d'accès, rectification, suppression, portabilité, opposition
+- [x] Ajouter procédure tRPC contact.submit avec validation du consentement RGPD
+- [x] Ajouter procédure tRPC gdpr.submit pour traiter les demandes RGPD
+- [x] Créer composant GDPRRequestForm pour le formulaire GDPR
+- [x] Créer page GDPRPage avec route /gdpr
+- [x] Ajouter contenu multilingue pour le formulaire GDPR (FR, EN, DE, ZH)
+- [x] Écrire tests vitest pour validation des schémas GDPR et contact (38 tests)
+- [x] Tous les tests passent avec succès
+- [x] Vérifier que le formulaire de contact affiche correctement la case à cocher RGPD
+- [x] Vérifier que la page GDPR est accessible et affiche le formulaire complet

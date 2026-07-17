@@ -12,13 +12,14 @@ export default function ContactSection() {
     phone: "",
     email: "",
     message: "",
+    gdprConsent: false,
   });
   const [submitted, setSubmitted] = useState(false);
 
   const submitMutation = trpc.contact.submit.useMutation({
     onSuccess: () => {
       setSubmitted(true);
-      setFormData({ name: "", phone: "", email: "", message: "" });
+      setFormData({ name: "", phone: "", email: "", message: "", gdprConsent: false });
       toast.success(
         language === "fr"
           ? "Message envoyé avec succès !"
@@ -37,11 +38,20 @@ export default function ContactSection() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!formData.gdprConsent) {
+      toast.error(
+        language === "fr"
+          ? "Veuillez accepter la Politique de Confidentialité"
+          : "Please accept the Privacy Policy"
+      );
+      return;
+    }
     submitMutation.mutate({
       name: formData.name,
       email: formData.email,
       phone: formData.phone || undefined,
       message: formData.message,
+      gdprConsent: formData.gdprConsent ? 1 : 0,
     });
   };
 
@@ -192,6 +202,20 @@ export default function ContactSection() {
                     onChange={(e) => setFormData({ ...formData, message: e.target.value })}
                     className="w-full px-4 py-3 rounded-lg bg-input/50 border border-border/50 text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/40 transition-all resize-none"
                   />
+                </div>
+
+                <div className="flex items-start gap-3 p-4 rounded-lg bg-primary/5 border border-primary/20">
+                  <input
+                    type="checkbox"
+                    id="gdprConsent"
+                    required
+                    checked={formData.gdprConsent}
+                    onChange={(e) => setFormData({ ...formData, gdprConsent: e.target.checked })}
+                    className="w-5 h-5 rounded border-border/50 text-primary focus:ring-primary/40 cursor-pointer mt-0.5 flex-shrink-0"
+                  />
+                  <label htmlFor="gdprConsent" className="text-sm text-foreground cursor-pointer flex-1">
+                    {content.contact.form.gdprConsent}
+                  </label>
                 </div>
 
                 <button

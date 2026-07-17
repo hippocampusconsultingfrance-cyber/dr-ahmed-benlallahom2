@@ -35,9 +35,32 @@ export const contactMessages = mysqlTable("contact_messages", {
   email: varchar("email", { length: 320 }).notNull(),
   phone: varchar("phone", { length: 50 }),
   message: text("message").notNull(),
+  gdprConsent: int("gdpr_consent").default(0).notNull(), // 1 = accepted, 0 = not accepted
   read: int("read").default(0).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
 export type ContactMessage = typeof contactMessages.$inferSelect;
 export type InsertContactMessage = typeof contactMessages.$inferInsert;
+
+/**
+ * GDPR Data Request submissions.
+ * Stores requests for data access, rectification, or deletion (right to be forgotten).
+ */
+export const gdprRequests = mysqlTable("gdpr_requests", {
+  id: int("id").autoincrement().primaryKey(),
+  name: varchar("name", { length: 255 }).notNull(),
+  email: varchar("email", { length: 320 }).notNull(),
+  phone: varchar("phone", { length: 50 }),
+  requestType: mysqlEnum("request_type", ["access", "rectification", "deletion", "portability", "objection"]).notNull(),
+  description: text("description"),
+  status: mysqlEnum("status", ["pending", "in_progress", "completed", "rejected"]).default("pending").notNull(),
+  responseDate: timestamp("response_date"),
+  notes: text("notes"),
+  read: int("read").default(0).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type GdprRequest = typeof gdprRequests.$inferSelect;
+export type InsertGdprRequest = typeof gdprRequests.$inferInsert;

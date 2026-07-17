@@ -182,7 +182,35 @@ export const contentFr = {
       emailPlaceholder: "Votre adresse email",
       message: "Message",
       messagePlaceholder: "Comment puis-je vous aider ?",
+      gdprConsent: "J'accepte la Politique de Confidentialité et autorise le traitement de mes données personnelles",
       send: "Envoyer",
+    },
+  },
+
+  // Formulaire RGPD
+  gdpr: {
+    title: "Demande RGPD",
+    subtitle: "Exercez vos droits en matière de protection des données",
+    description: "Vous avez le droit d'accéder, de rectifier, de supprimer vos données personnelles ou de vous opposer à leur traitement. Remplissez ce formulaire pour soumettre votre demande.",
+    form: {
+      name: "Nom complet",
+      namePlaceholder: "Votre nom complet",
+      email: "Adresse email",
+      emailPlaceholder: "Votre adresse email",
+      phone: "Téléphone (optionnel)",
+      phonePlaceholder: "+33 9 XX XX XX XX",
+      requestType: "Type de demande",
+      requestTypes: {
+        access: "Accès à mes données",
+        rectification: "Rectification de mes données",
+        deletion: "Suppression de mes données (droit à l'oubli)",
+        portability: "Portabilité de mes données",
+        objection: "Opposition au traitement",
+      },
+      description: "Description de votre demande",
+      descriptionPlaceholder: "Décrivez précisément votre demande RGPD...",
+      send: "Soumettre la demande",
+      successMessage: "Votre demande RGPD a été reçue. Nous traiterons votre demande dans les 30 jours.",
     },
   },
 
