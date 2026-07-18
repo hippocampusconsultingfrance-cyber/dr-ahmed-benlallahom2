@@ -57,3 +57,4 @@
 - [x] Tous les tests passent avec succès
 - [x] Vérifier que le formulaire de contact affiche correctement la case à cocher RGPD
 - [x] Vérifier que la page GDPR est accessible et affiche le formulaire complet
+- [x] Ajouter système d'onglets interactifs sur la page Mentions Légales (Politique de Confidentialité, Conditions Générales)
