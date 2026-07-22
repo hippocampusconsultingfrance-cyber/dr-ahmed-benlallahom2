@@ -23,7 +23,7 @@ export default function LegalPage() {
 }
 
 function LegalPageFr() {
-  const [activeTab, setActiveTab] = useState<"privacy" | "terms">("privacy");
+  const [activeTab, setActiveTab] = useState<"legal" | "privacy" | "terms">("legal");
 
   return (
     <div className="min-h-screen bg-background">
@@ -46,47 +46,22 @@ function LegalPageFr() {
             Mentions Légales
           </h1>
 
-          {/* Éditeur du site */}
-          <section className="mb-12">
-            <h2 className="text-2xl font-bold text-foreground mb-4">Éditeur du site</h2>
-            <div className="text-muted-foreground space-y-2">
-              <p><strong>Nom :</strong> Dr. Ahmed Ben Lallahom</p>
-              <p><strong>Statut :</strong> Professionnel de santé indépendant</p>
-              <p><strong>Adresse :</strong> France</p>
-              <p><strong>Téléphone :</strong> +33 9 72 15 24 13</p>
-              <p><strong>Email :</strong> Disponible via le formulaire de contact</p>
-            </div>
-          </section>
-
-          {/* Hébergeur */}
-          <section className="mb-12">
-            <h2 className="text-2xl font-bold text-foreground mb-4">Hébergeur</h2>
-            <div className="text-muted-foreground space-y-2">
-              <p><strong>Nom :</strong> Manus</p>
-              <p><strong>Adresse :</strong> Infrastructure cloud</p>
-              <p><strong>Service :</strong> Hébergement et déploiement de sites web</p>
-            </div>
-          </section>
-
-          {/* Propriété intellectuelle */}
-          <section className="mb-12">
-            <h2 className="text-2xl font-bold text-foreground mb-4">Propriété Intellectuelle</h2>
-            <div className="text-muted-foreground space-y-4">
-              <p>
-                L'ensemble du contenu de ce site (textes, images, logos, vidéos, etc.) est protégé par les lois sur la propriété intellectuelle. Toute reproduction, distribution ou utilisation du contenu sans autorisation écrite préalable est strictement interdite.
-              </p>
-              <p>
-                Les logos des entreprises partenaires sont la propriété de leurs propriétaires respectifs et sont utilisés avec permission.
-              </p>
-            </div>
-          </section>
-
           {/* Onglets interactifs */}
           <div className="mb-12">
-            <div className="flex gap-4 mb-8 border-b border-border">
+            <div className="flex gap-4 mb-8 border-b border-border overflow-x-auto">
+              <button
+                onClick={() => setActiveTab("legal")}
+                className={`pb-4 px-4 font-semibold transition-colors whitespace-nowrap ${
+                  activeTab === "legal"
+                    ? "text-primary border-b-2 border-primary"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                Informations Légales
+              </button>
               <button
                 onClick={() => setActiveTab("privacy")}
-                className={`pb-4 px-4 font-semibold transition-colors ${
+                className={`pb-4 px-4 font-semibold transition-colors whitespace-nowrap ${
                   activeTab === "privacy"
                     ? "text-primary border-b-2 border-primary"
                     : "text-muted-foreground hover:text-foreground"
@@ -96,15 +71,54 @@ function LegalPageFr() {
               </button>
               <button
                 onClick={() => setActiveTab("terms")}
-                className={`pb-4 px-4 font-semibold transition-colors ${
+                className={`pb-4 px-4 font-semibold transition-colors whitespace-nowrap ${
                   activeTab === "terms"
                     ? "text-primary border-b-2 border-primary"
                     : "text-muted-foreground hover:text-foreground"
                 }`}
               >
-                Conditions Générales d'Utilisation
+                Conditions Générales
               </button>
             </div>
+
+            {/* Contenu Informations Légales */}
+            {activeTab === "legal" && (
+              <section className="space-y-6 animate-in fade-in duration-300">
+                <h2 className="text-2xl font-bold text-foreground">Informations Légales</h2>
+                
+                <div className="text-muted-foreground space-y-6">
+                  <div>
+                    <h3 className="font-semibold text-foreground mb-3">Éditeur du site</h3>
+                    <div className="space-y-2">
+                      <p><strong>Nom :</strong> Dr. Ahmed Ben Lallahom</p>
+                      <p><strong>Statut :</strong> Professionnel de santé indépendant</p>
+                      <p><strong>Adresse :</strong> France</p>
+                      <p><strong>Téléphone :</strong> +33 9 72 15 24 13</p>
+                      <p><strong>Email :</strong> Disponible via le formulaire de contact</p>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h3 className="font-semibold text-foreground mb-3">Hébergeur</h3>
+                    <div className="space-y-2">
+                      <p><strong>Nom :</strong> Manus</p>
+                      <p><strong>Adresse :</strong> Infrastructure cloud</p>
+                      <p><strong>Service :</strong> Hébergement et déploiement de sites web</p>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h3 className="font-semibold text-foreground mb-3">Propriété Intellectuelle</h3>
+                    <p className="mb-4">
+                      L'ensemble du contenu de ce site (textes, images, logos, vidéos, etc.) est protégé par les lois sur la propriété intellectuelle. Toute reproduction, distribution ou utilisation du contenu sans autorisation écrite préalable est strictement interdite.
+                    </p>
+                    <p>
+                      Les logos des entreprises partenaires sont la propriété de leurs propriétaires respectifs et sont utilisés avec permission.
+                    </p>
+                  </div>
+                </div>
+              </section>
+            )}
 
             {/* Contenu Politique de Confidentialité */}
             {activeTab === "privacy" && (
@@ -257,7 +271,7 @@ function LegalPageFr() {
 }
 
 function LegalPageEn() {
-  const [activeTab, setActiveTab] = useState<"privacy" | "terms">("privacy");
+  const [activeTab, setActiveTab] = useState<"legal" | "privacy" | "terms">("legal");
 
   return (
     <div className="min-h-screen bg-background">
@@ -280,47 +294,22 @@ function LegalPageEn() {
             Legal Notice
           </h1>
 
-          {/* Website Editor */}
-          <section className="mb-12">
-            <h2 className="text-2xl font-bold text-foreground mb-4">Website Editor</h2>
-            <div className="text-muted-foreground space-y-2">
-              <p><strong>Name:</strong> Dr. Ahmed Ben Lallahom</p>
-              <p><strong>Status:</strong> Independent healthcare professional</p>
-              <p><strong>Address:</strong> France</p>
-              <p><strong>Phone:</strong> +33 9 72 15 24 13</p>
-              <p><strong>Email:</strong> Available via contact form</p>
-            </div>
-          </section>
-
-          {/* Hosting Provider */}
-          <section className="mb-12">
-            <h2 className="text-2xl font-bold text-foreground mb-4">Hosting Provider</h2>
-            <div className="text-muted-foreground space-y-2">
-              <p><strong>Name:</strong> Manus</p>
-              <p><strong>Address:</strong> Cloud infrastructure</p>
-              <p><strong>Service:</strong> Website hosting and deployment</p>
-            </div>
-          </section>
-
-          {/* Intellectual Property */}
-          <section className="mb-12">
-            <h2 className="text-2xl font-bold text-foreground mb-4">Intellectual Property</h2>
-            <div className="text-muted-foreground space-y-4">
-              <p>
-                All content on this website (texts, images, logos, videos, etc.) is protected by intellectual property laws. Any reproduction, distribution, or use of content without prior written authorization is strictly prohibited.
-              </p>
-              <p>
-                Partner company logos are the property of their respective owners and are used with permission.
-              </p>
-            </div>
-          </section>
-
           {/* Interactive Tabs */}
           <div className="mb-12">
-            <div className="flex gap-4 mb-8 border-b border-border">
+            <div className="flex gap-4 mb-8 border-b border-border overflow-x-auto">
+              <button
+                onClick={() => setActiveTab("legal")}
+                className={`pb-4 px-4 font-semibold transition-colors whitespace-nowrap ${
+                  activeTab === "legal"
+                    ? "text-primary border-b-2 border-primary"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                Legal Information
+              </button>
               <button
                 onClick={() => setActiveTab("privacy")}
-                className={`pb-4 px-4 font-semibold transition-colors ${
+                className={`pb-4 px-4 font-semibold transition-colors whitespace-nowrap ${
                   activeTab === "privacy"
                     ? "text-primary border-b-2 border-primary"
                     : "text-muted-foreground hover:text-foreground"
@@ -330,7 +319,7 @@ function LegalPageEn() {
               </button>
               <button
                 onClick={() => setActiveTab("terms")}
-                className={`pb-4 px-4 font-semibold transition-colors ${
+                className={`pb-4 px-4 font-semibold transition-colors whitespace-nowrap ${
                   activeTab === "terms"
                     ? "text-primary border-b-2 border-primary"
                     : "text-muted-foreground hover:text-foreground"
@@ -339,6 +328,45 @@ function LegalPageEn() {
                 Terms of Use
               </button>
             </div>
+
+            {/* Legal Information Content */}
+            {activeTab === "legal" && (
+              <section className="space-y-6 animate-in fade-in duration-300">
+                <h2 className="text-2xl font-bold text-foreground">Legal Information</h2>
+                
+                <div className="text-muted-foreground space-y-6">
+                  <div>
+                    <h3 className="font-semibold text-foreground mb-3">Website Editor</h3>
+                    <div className="space-y-2">
+                      <p><strong>Name:</strong> Dr. Ahmed Ben Lallahom</p>
+                      <p><strong>Status:</strong> Independent healthcare professional</p>
+                      <p><strong>Address:</strong> France</p>
+                      <p><strong>Phone:</strong> +33 9 72 15 24 13</p>
+                      <p><strong>Email:</strong> Available via contact form</p>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h3 className="font-semibold text-foreground mb-3">Hosting Provider</h3>
+                    <div className="space-y-2">
+                      <p><strong>Name:</strong> Manus</p>
+                      <p><strong>Address:</strong> Cloud infrastructure</p>
+                      <p><strong>Service:</strong> Website hosting and deployment</p>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h3 className="font-semibold text-foreground mb-3">Intellectual Property</h3>
+                    <p className="mb-4">
+                      All content on this website (texts, images, logos, videos, etc.) is protected by intellectual property laws. Any reproduction, distribution, or use of content without prior written authorization is strictly prohibited.
+                    </p>
+                    <p>
+                      Partner company logos are the property of their respective owners and are used with permission.
+                    </p>
+                  </div>
+                </div>
+              </section>
+            )}
 
             {/* Privacy Policy Content */}
             {activeTab === "privacy" && (
@@ -491,7 +519,7 @@ function LegalPageEn() {
 }
 
 function LegalPageDe() {
-  const [activeTab, setActiveTab] = useState<"privacy" | "terms">("privacy");
+  const [activeTab, setActiveTab] = useState<"legal" | "privacy" | "terms">("legal");
 
   return (
     <div className="min-h-screen bg-background">
@@ -514,47 +542,22 @@ function LegalPageDe() {
             Rechtliche Hinweise
           </h1>
 
-          {/* Website-Herausgeber */}
-          <section className="mb-12">
-            <h2 className="text-2xl font-bold text-foreground mb-4">Website-Herausgeber</h2>
-            <div className="text-muted-foreground space-y-2">
-              <p><strong>Name:</strong> Dr. Ahmed Ben Lallahom</p>
-              <p><strong>Status:</strong> Unabhängiger Gesundheitsfachmann</p>
-              <p><strong>Adresse:</strong> Frankreich</p>
-              <p><strong>Telefon:</strong> +33 9 72 15 24 13</p>
-              <p><strong>E-Mail:</strong> Verfügbar über das Kontaktformular</p>
-            </div>
-          </section>
-
-          {/* Hosting-Anbieter */}
-          <section className="mb-12">
-            <h2 className="text-2xl font-bold text-foreground mb-4">Hosting-Anbieter</h2>
-            <div className="text-muted-foreground space-y-2">
-              <p><strong>Name:</strong> Manus</p>
-              <p><strong>Adresse:</strong> Cloud-Infrastruktur</p>
-              <p><strong>Service:</strong> Website-Hosting und Bereitstellung</p>
-            </div>
-          </section>
-
-          {/* Geistiges Eigentum */}
-          <section className="mb-12">
-            <h2 className="text-2xl font-bold text-foreground mb-4">Geistiges Eigentum</h2>
-            <div className="text-muted-foreground space-y-4">
-              <p>
-                Alle Inhalte dieser Website (Texte, Bilder, Logos, Videos usw.) sind durch Gesetze zum Schutz des geistigen Eigentums geschützt. Jede Vervielfältigung, Verbreitung oder Nutzung von Inhalten ohne vorherige schriftliche Genehmigung ist streng verboten.
-              </p>
-              <p>
-                Logos von Partnerunternehmen sind Eigentum ihrer jeweiligen Besitzer und werden mit Genehmigung verwendet.
-              </p>
-            </div>
-          </section>
-
           {/* Interactive Tabs */}
           <div className="mb-12">
-            <div className="flex gap-4 mb-8 border-b border-border">
+            <div className="flex gap-4 mb-8 border-b border-border overflow-x-auto">
+              <button
+                onClick={() => setActiveTab("legal")}
+                className={`pb-4 px-4 font-semibold transition-colors whitespace-nowrap ${
+                  activeTab === "legal"
+                    ? "text-primary border-b-2 border-primary"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                Rechtliche Informationen
+              </button>
               <button
                 onClick={() => setActiveTab("privacy")}
-                className={`pb-4 px-4 font-semibold transition-colors ${
+                className={`pb-4 px-4 font-semibold transition-colors whitespace-nowrap ${
                   activeTab === "privacy"
                     ? "text-primary border-b-2 border-primary"
                     : "text-muted-foreground hover:text-foreground"
@@ -564,7 +567,7 @@ function LegalPageDe() {
               </button>
               <button
                 onClick={() => setActiveTab("terms")}
-                className={`pb-4 px-4 font-semibold transition-colors ${
+                className={`pb-4 px-4 font-semibold transition-colors whitespace-nowrap ${
                   activeTab === "terms"
                     ? "text-primary border-b-2 border-primary"
                     : "text-muted-foreground hover:text-foreground"
@@ -573,6 +576,45 @@ function LegalPageDe() {
                 Nutzungsbedingungen
               </button>
             </div>
+
+            {/* Legal Information Content */}
+            {activeTab === "legal" && (
+              <section className="space-y-6 animate-in fade-in duration-300">
+                <h2 className="text-2xl font-bold text-foreground">Rechtliche Informationen</h2>
+                
+                <div className="text-muted-foreground space-y-6">
+                  <div>
+                    <h3 className="font-semibold text-foreground mb-3">Website-Herausgeber</h3>
+                    <div className="space-y-2">
+                      <p><strong>Name:</strong> Dr. Ahmed Ben Lallahom</p>
+                      <p><strong>Status:</strong> Unabhängiger Gesundheitsfachmann</p>
+                      <p><strong>Adresse:</strong> Frankreich</p>
+                      <p><strong>Telefon:</strong> +33 9 72 15 24 13</p>
+                      <p><strong>E-Mail:</strong> Verfügbar über das Kontaktformular</p>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h3 className="font-semibold text-foreground mb-3">Hosting-Anbieter</h3>
+                    <div className="space-y-2">
+                      <p><strong>Name:</strong> Manus</p>
+                      <p><strong>Adresse:</strong> Cloud-Infrastruktur</p>
+                      <p><strong>Service:</strong> Website-Hosting und Bereitstellung</p>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h3 className="font-semibold text-foreground mb-3">Geistiges Eigentum</h3>
+                    <p className="mb-4">
+                      Alle Inhalte dieser Website (Texte, Bilder, Logos, Videos usw.) sind durch Gesetze zum Schutz des geistigen Eigentums geschützt. Jede Vervielfältigung, Verbreitung oder Nutzung von Inhalten ohne vorherige schriftliche Genehmigung ist streng verboten.
+                    </p>
+                    <p>
+                      Logos von Partnerunternehmen sind Eigentum ihrer jeweiligen Besitzer und werden mit Genehmigung verwendet.
+                    </p>
+                  </div>
+                </div>
+              </section>
+            )}
 
             {/* Privacy Policy Content */}
             {activeTab === "privacy" && (
@@ -725,7 +767,7 @@ function LegalPageDe() {
 }
 
 function LegalPageZh() {
-  const [activeTab, setActiveTab] = useState<"privacy" | "terms">("privacy");
+  const [activeTab, setActiveTab] = useState<"legal" | "privacy" | "terms">("legal");
 
   return (
     <div className="min-h-screen bg-background">
@@ -748,47 +790,22 @@ function LegalPageZh() {
             法律声明
           </h1>
 
-          {/* 网站编辑 */}
-          <section className="mb-12">
-            <h2 className="text-2xl font-bold text-foreground mb-4">网站编辑</h2>
-            <div className="text-muted-foreground space-y-2">
-              <p><strong>姓名：</strong> Dr. Ahmed Ben Lallahom</p>
-              <p><strong>身份：</strong> 独立医疗专业人士</p>
-              <p><strong>地址：</strong> 法国</p>
-              <p><strong>电话：</strong> +33 9 72 15 24 13</p>
-              <p><strong>电子邮件：</strong> 可通过联系表格获取</p>
-            </div>
-          </section>
-
-          {/* 托管服务商 */}
-          <section className="mb-12">
-            <h2 className="text-2xl font-bold text-foreground mb-4">托管服务商</h2>
-            <div className="text-muted-foreground space-y-2">
-              <p><strong>名称：</strong> Manus</p>
-              <p><strong>地址：</strong> 云基础设施</p>
-              <p><strong>服务：</strong> 网站托管和部署</p>
-            </div>
-          </section>
-
-          {/* 知识产权 */}
-          <section className="mb-12">
-            <h2 className="text-2xl font-bold text-foreground mb-4">知识产权</h2>
-            <div className="text-muted-foreground space-y-4">
-              <p>
-                本网站上的所有内容（文本、图像、徽标、视频等）均受知识产权法保护。未经事先书面授权，严禁复制、分发或使用任何内容。
-              </p>
-              <p>
-                合作公司的徽标是其各自所有者的财产，经许可使用。
-              </p>
-            </div>
-          </section>
-
           {/* Interactive Tabs */}
           <div className="mb-12">
-            <div className="flex gap-4 mb-8 border-b border-border">
+            <div className="flex gap-4 mb-8 border-b border-border overflow-x-auto">
+              <button
+                onClick={() => setActiveTab("legal")}
+                className={`pb-4 px-4 font-semibold transition-colors whitespace-nowrap ${
+                  activeTab === "legal"
+                    ? "text-primary border-b-2 border-primary"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                法律信息
+              </button>
               <button
                 onClick={() => setActiveTab("privacy")}
-                className={`pb-4 px-4 font-semibold transition-colors ${
+                className={`pb-4 px-4 font-semibold transition-colors whitespace-nowrap ${
                   activeTab === "privacy"
                     ? "text-primary border-b-2 border-primary"
                     : "text-muted-foreground hover:text-foreground"
@@ -798,7 +815,7 @@ function LegalPageZh() {
               </button>
               <button
                 onClick={() => setActiveTab("terms")}
-                className={`pb-4 px-4 font-semibold transition-colors ${
+                className={`pb-4 px-4 font-semibold transition-colors whitespace-nowrap ${
                   activeTab === "terms"
                     ? "text-primary border-b-2 border-primary"
                     : "text-muted-foreground hover:text-foreground"
@@ -807,6 +824,45 @@ function LegalPageZh() {
                 使用条款
               </button>
             </div>
+
+            {/* Legal Information Content */}
+            {activeTab === "legal" && (
+              <section className="space-y-6 animate-in fade-in duration-300">
+                <h2 className="text-2xl font-bold text-foreground">法律信息</h2>
+                
+                <div className="text-muted-foreground space-y-6">
+                  <div>
+                    <h3 className="font-semibold text-foreground mb-3">网站编辑</h3>
+                    <div className="space-y-2">
+                      <p><strong>姓名：</strong> Dr. Ahmed Ben Lallahom</p>
+                      <p><strong>身份：</strong> 独立医疗专业人士</p>
+                      <p><strong>地址：</strong> 法国</p>
+                      <p><strong>电话：</strong> +33 9 72 15 24 13</p>
+                      <p><strong>电子邮件：</strong> 可通过联系表格获取</p>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h3 className="font-semibold text-foreground mb-3">托管服务商</h3>
+                    <div className="space-y-2">
+                      <p><strong>名称：</strong> Manus</p>
+                      <p><strong>地址：</strong> 云基础设施</p>
+                      <p><strong>服务：</strong> 网站托管和部署</p>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h3 className="font-semibold text-foreground mb-3">知识产权</h3>
+                    <p className="mb-4">
+                      本网站上的所有内容（文本、图像、徽标、视频等）均受知识产权法保护。未经事先书面授权，严禁复制、分发或使用任何内容。
+                    </p>
+                    <p>
+                      合作公司的徽标是其各自所有者的财产，经许可使用。
+                    </p>
+                  </div>
+                </div>
+              </section>
+            )}
 
             {/* Privacy Policy Content */}
             {activeTab === "privacy" && (
