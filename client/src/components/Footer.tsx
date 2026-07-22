@@ -67,8 +67,12 @@ export default function Footer() {
               <Link href="/legal" className="block text-sm text-muted-foreground hover:text-primary transition-colors">
                 {content.footer.legal}
               </Link>
-              <p className="text-sm text-muted-foreground">{content.footer.privacy}</p>
-              <p className="text-sm text-muted-foreground">{content.footer.terms}</p>
+              <Link href="/legal?tab=privacy" className="block text-sm text-muted-foreground hover:text-primary transition-colors">
+                {content.footer.privacy}
+              </Link>
+              <Link href="/legal?tab=terms" className="block text-sm text-muted-foreground hover:text-primary transition-colors">
+                {content.footer.terms}
+              </Link>
             </nav>
           </div>
 

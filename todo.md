@@ -59,3 +59,4 @@
 - [x] Vérifier que la page GDPR est accessible et affiche le formulaire complet
 - [x] Ajouter système d'onglets interactifs sur la page Mentions Légales (Politique de Confidentialité, Conditions Générales)
 - [x] Restructurer les onglets avec 3 sections cliquables : Informations Légales, Politique de Confidentialité, Conditions Générales
+- [x] Rendre les liens "Politique de Confidentialité" et "Conditions Générales" cliquables dans le footer

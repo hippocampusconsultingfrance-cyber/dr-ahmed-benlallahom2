@@ -2,9 +2,9 @@ import Navigation from "@/components/Navigation";
 import Footer from "@/components/Footer";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { ArrowLeft } from "lucide-react";
-import { Link } from "wouter";
+import { Link, useSearch } from "wouter";
 import { SEOHead } from "@/components/SEOHead";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 export default function LegalPage() {
   const { language } = useLanguage();
@@ -23,7 +23,16 @@ export default function LegalPage() {
 }
 
 function LegalPageFr() {
-  const [activeTab, setActiveTab] = useState<"legal" | "privacy" | "terms">("legal");
+  const search = useSearch();
+  const params = new URLSearchParams(search);
+  const tabParam = params.get("tab") as "legal" | "privacy" | "terms" | null;
+  const [activeTab, setActiveTab] = useState<"legal" | "privacy" | "terms">(tabParam || "legal");
+
+  useEffect(() => {
+    if (tabParam) {
+      setActiveTab(tabParam);
+    }
+  }, [tabParam]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -271,7 +280,16 @@ function LegalPageFr() {
 }
 
 function LegalPageEn() {
-  const [activeTab, setActiveTab] = useState<"legal" | "privacy" | "terms">("legal");
+  const search = useSearch();
+  const params = new URLSearchParams(search);
+  const tabParam = params.get("tab") as "legal" | "privacy" | "terms" | null;
+  const [activeTab, setActiveTab] = useState<"legal" | "privacy" | "terms">(tabParam || "legal");
+
+  useEffect(() => {
+    if (tabParam) {
+      setActiveTab(tabParam);
+    }
+  }, [tabParam]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -519,7 +537,16 @@ function LegalPageEn() {
 }
 
 function LegalPageDe() {
-  const [activeTab, setActiveTab] = useState<"legal" | "privacy" | "terms">("legal");
+  const search = useSearch();
+  const params = new URLSearchParams(search);
+  const tabParam = params.get("tab") as "legal" | "privacy" | "terms" | null;
+  const [activeTab, setActiveTab] = useState<"legal" | "privacy" | "terms">(tabParam || "legal");
+
+  useEffect(() => {
+    if (tabParam) {
+      setActiveTab(tabParam);
+    }
+  }, [tabParam]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -767,7 +794,16 @@ function LegalPageDe() {
 }
 
 function LegalPageZh() {
-  const [activeTab, setActiveTab] = useState<"legal" | "privacy" | "terms">("legal");
+  const search = useSearch();
+  const params = new URLSearchParams(search);
+  const tabParam = params.get("tab") as "legal" | "privacy" | "terms" | null;
+  const [activeTab, setActiveTab] = useState<"legal" | "privacy" | "terms">(tabParam || "legal");
+
+  useEffect(() => {
+    if (tabParam) {
+      setActiveTab(tabParam);
+    }
+  }, [tabParam]);
 
   return (
     <div className="min-h-screen bg-background">
