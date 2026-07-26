@@ -71,3 +71,13 @@
 - [ ] Tester le changement de langue vers l'anglais (EN)
 - [ ] Tester le changement de langue vers l'allemand (DE)
 - [ ] Tester le changement de langue vers le chinois (ZH)
+
+## Indexation Google et Configuration des Domaines
+
+- [x] Vérifier la configuration des domaines personnalisés (www.drahmedbenlallahom.com et drahmedbenlallahom.com)
+- [x] Créer guide complet pour l'indexation Google et Google Search Console
+- [ ] Soumettre le site à Google Search Console pour l'indexation (manuel - voir guide)
+- [ ] Créer et soumettre le sitemap.xml à Google (manuel - voir guide)
+- [ ] Vérifier les redirections des domaines vers le site Manus
+- [ ] Vérifier que le site est accessible via les domaines personnalisés
+- [ ] Attendre l'indexation par Google (3-7 jours)
