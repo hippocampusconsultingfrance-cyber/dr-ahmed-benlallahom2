@@ -17,12 +17,12 @@ export const siteConfig = {
 
   // Statistiques (section About)
   stats: {
-    yearsClinical: "10+",
+    yearsClinical: "9+",
     ventures: "5+",
     certifications: "16+",
     languages: "3",
   },
 
-  // Langue par défaut ('fr' ou 'en')
-  defaultLanguage: "fr" as "fr" | "en",
+  // Langue par défaut ('fr', 'en', 'de', 'zh')
+  defaultLanguage: "fr" as "fr" | "en" | "de" | "zh",
 };

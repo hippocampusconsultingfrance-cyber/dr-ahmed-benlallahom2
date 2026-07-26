@@ -19,8 +19,9 @@ export default function HeroSection() {
       <div className="absolute inset-0">
         <img
           src="/manus-storage/hero-bg-ahmed_156f3568.png"
-          alt=""
+          alt="Dr. Ahmed Ben Lallahom - Anesthésiste-Réanimateur et Entrepreneur en Santé"
           className="w-full h-full object-cover sm:object-right"
+          loading="lazy"
           style={{
             objectPosition: window.innerWidth < 640 ? 'center 20%' : 'right center'
           }}

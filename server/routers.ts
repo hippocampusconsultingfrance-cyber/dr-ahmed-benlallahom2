@@ -32,10 +32,14 @@ export const appRouter = router({
         })
       )
       .mutation(async ({ input }) => {
+        // Generate a unique tracking ID
+        const trackingId = `CNT-${Date.now()}-${Math.random().toString(36).substring(2, 9).toUpperCase()}`;
+
         // Save the message to the database
         const db = await getDb();
         if (db) {
           await db.insert(contactMessages).values({
+            trackingId,
             name: input.name,
             email: input.email,
             phone: input.phone || null,
@@ -46,11 +50,11 @@ export const appRouter = router({
 
         // Notify the owner via Manus notification system
         await notifyOwner({
-          title: `Nouveau message de contact de ${input.name}`,
-          content: `**De:** ${input.name}\n**Email:** ${input.email}\n**Téléphone:** ${input.phone || "Non renseigné"}\n\n**Message:**\n${input.message}`,
+          title: `Nouveau message de contact de ${input.name} (${trackingId})`,
+          content: `**Numéro de suivi:** ${trackingId}\n**De:** ${input.name}\n**Email:** ${input.email}\n**Téléphone:** ${input.phone || "Non renseigné"}\n**Consentement RGPD:** ${input.gdprConsent === 1 ? "✅ Accepté" : "❌ Refusé"}\n\n**Message:**\n${input.message}`,
         });
 
-        return { success: true } as const;
+        return { success: true, trackingId } as const;
       }),
   }),
 
@@ -66,10 +70,14 @@ export const appRouter = router({
         })
       )
       .mutation(async ({ input }) => {
+        // Generate a unique tracking ID
+        const trackingId = `GDPR-${Date.now()}-${Math.random().toString(36).substring(2, 9).toUpperCase()}`;
+
         // Save the GDPR request to the database
         const db = await getDb();
         if (db) {
           await db.insert(gdprRequests).values({
+            trackingId,
             name: input.name,
             email: input.email,
             phone: input.phone || null,
@@ -89,11 +97,11 @@ export const appRouter = router({
         };
 
         await notifyOwner({
-          title: `Nouvelle demande RGPD de ${input.name}`,
-          content: `**Type de demande:** ${requestTypeLabels[input.requestType]}\n**De:** ${input.name}\n**Email:** ${input.email}\n**Téléphone:** ${input.phone || "Non renseigné"}\n\n**Description:**\n${input.description || "Aucune description fournie"}`,
+          title: `Nouvelle demande RGPD de ${input.name} (${trackingId})`,
+          content: `**Numéro de suivi:** ${trackingId}\n**Type de demande:** ${requestTypeLabels[input.requestType]}\n**De:** ${input.name}\n**Email:** ${input.email}\n**Téléphone:** ${input.phone || "Non renseigné"}\n\n**Description:**\n${input.description || "Aucune description fournie"}`,
         });
 
-        return { success: true } as const;
+        return { success: true, trackingId } as const;
       }),
   }),
 });

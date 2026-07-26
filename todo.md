@@ -60,3 +60,14 @@
 - [x] Ajouter système d'onglets interactifs sur la page Mentions Légales (Politique de Confidentialité, Conditions Générales)
 - [x] Restructurer les onglets avec 3 sections cliquables : Informations Légales, Politique de Confidentialité, Conditions Générales
 - [x] Rendre les liens "Politique de Confidentialité" et "Conditions Générales" cliquables dans le footer
+
+## Corrections et Tests Identifiés
+
+- [ ] Corriger les statistiques dans la section "À Propos" (9+ années, 5+ entreprises, 16+ certifications, 3 langues)
+- [ ] Tester la soumission du formulaire de contact sans cocher GDPR (doit être rejeté)
+- [ ] Tester la soumission du formulaire de contact avec GDPR coché (doit être accepté)
+- [ ] Vérifier la responsive design sur mobile (375x812)
+- [ ] Vérifier la responsive design sur tablet (768x1024)
+- [ ] Tester le changement de langue vers l'anglais (EN)
+- [ ] Tester le changement de langue vers l'allemand (DE)
+- [ ] Tester le changement de langue vers le chinois (ZH)

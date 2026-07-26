@@ -3,18 +3,18 @@ import { siteConfig } from "@/data/site-config";
 import { useEffect, useRef, useState } from "react";
 
 function AnimatedCounter({ target }: { target: string }) {
-  const [count, setCount] = useState(0);
-  const ref = useRef<HTMLSpanElement>(null);
-  const hasAnimated = useRef(false);
   const numericTarget = parseInt(target.replace(/\D/g, "")) || 0;
   const suffix = target.includes("+") ? "+" : "";
+  const [count, setCount] = useState(numericTarget);
+  const ref = useRef<HTMLSpanElement>(null);
+  const hasAnimated = useRef(false);
 
   useEffect(() => {
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting && !hasAnimated.current) {
           hasAnimated.current = true;
-          const duration = 1800;
+          const duration = 1500;
           const startTime = performance.now();
 
           const animate = (currentTime: number) => {

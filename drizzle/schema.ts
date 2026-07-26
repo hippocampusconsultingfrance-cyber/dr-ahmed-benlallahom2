@@ -31,6 +31,7 @@ export type InsertUser = typeof users.$inferInsert;
  */
 export const contactMessages = mysqlTable("contact_messages", {
   id: int("id").autoincrement().primaryKey(),
+  trackingId: varchar("tracking_id", { length: 20 }).notNull().unique(), // Unique tracking number for the user
   name: varchar("name", { length: 255 }).notNull(),
   email: varchar("email", { length: 320 }).notNull(),
   phone: varchar("phone", { length: 50 }),
@@ -49,6 +50,7 @@ export type InsertContactMessage = typeof contactMessages.$inferInsert;
  */
 export const gdprRequests = mysqlTable("gdpr_requests", {
   id: int("id").autoincrement().primaryKey(),
+  trackingId: varchar("tracking_id", { length: 20 }).notNull().unique(), // Unique tracking number for the user
   name: varchar("name", { length: 255 }).notNull(),
   email: varchar("email", { length: 320 }).notNull(),
   phone: varchar("phone", { length: 50 }),

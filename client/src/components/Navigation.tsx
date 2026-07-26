@@ -69,8 +69,9 @@ export default function Navigation() {
         <button onClick={() => scrollTo("hero")} className="flex items-center gap-3 group">
           <img
             src="/manus-storage/logo-abl_2afbc5e0.png"
-            alt="Dr. ABL"
+            alt="Dr. Ahmed Ben Lallahom - Logo"
             className="w-10 h-10 md:w-11 md:h-11 transition-transform group-hover:scale-105"
+            loading="lazy"
           />
           <div className="hidden sm:block">
             <span className="font-display text-lg font-bold text-foreground block leading-tight">
