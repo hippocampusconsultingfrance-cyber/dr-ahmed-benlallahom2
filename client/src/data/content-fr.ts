@@ -11,6 +11,7 @@ export const contentFr = {
     education: "Formation",
     contact: "Contact",
     getInTouch: "Me Contacter",
+    blog: "Actualités",
     switchLang: "EN",
   },
 

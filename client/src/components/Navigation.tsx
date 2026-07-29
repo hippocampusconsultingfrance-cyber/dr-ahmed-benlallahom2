@@ -99,6 +99,12 @@ export default function Navigation() {
               {item.label}
             </button>
           ))}
+          <a
+            href="/blog"
+            className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors duration-200 relative after:absolute after:bottom-[-4px] after:left-0 after:w-0 after:h-[2px] after:bg-primary after:transition-all hover:after:w-full"
+          >
+            {content.nav.blog}
+          </a>
         </nav>
 
         {/* Actions */}
@@ -173,6 +179,12 @@ export default function Navigation() {
                 {item.label}
               </button>
             ))}
+            <a
+              href="/blog"
+              className="text-left text-lg font-medium text-foreground py-2 border-b border-border/20"
+            >
+              {content.nav.blog}
+            </a>
             <button
               onClick={() => scrollTo("contact")}
               className="mt-4 px-5 py-3.5 rounded-full bg-primary text-primary-foreground text-sm font-semibold w-full"

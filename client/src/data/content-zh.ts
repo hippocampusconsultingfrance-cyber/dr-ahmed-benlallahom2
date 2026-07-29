@@ -10,6 +10,7 @@ export const contentZh = {
     education: "教育",
     contact: "联系",
     getInTouch: "联系我们",
+    blog: "新闻",
     switchLang: "中文",
   },
 

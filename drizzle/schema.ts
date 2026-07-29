@@ -123,3 +123,55 @@ export const appointments = mysqlTable("appointments", {
 
 export type Appointment = typeof appointments.$inferSelect;
 export type InsertAppointment = typeof appointments.$inferInsert;
+
+/**
+ * Blog posts / Medical news articles.
+ * Admin can publish articles, veille scientifique, etc.
+ */
+export const blogPosts = mysqlTable("blog_posts", {
+  id: int("id").autoincrement().primaryKey(),
+  slug: varchar("slug", { length: 255 }).notNull().unique(),
+  title: varchar("title", { length: 500 }).notNull(),
+  excerpt: text("excerpt"), // Short summary for cards
+  content: text("content").notNull(), // Full article content (markdown)
+  coverImage: varchar("cover_image", { length: 500 }), // URL to cover image
+  category: varchar("category", { length: 100 }).default("general").notNull(),
+  language: varchar("language", { length: 10 }).default("fr").notNull(),
+  source: varchar("source", { length: 500 }), // Source URL for veille articles
+  published: int("published").default(0).notNull(), // 1 = published, 0 = draft
+  authorId: int("author_id"), // Reference to users table
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type BlogPost = typeof blogPosts.$inferSelect;
+export type InsertBlogPost = typeof blogPosts.$inferInsert;
+
+/**
+ * Availability slots for the doctor.
+ * Defines when the doctor is available for consultations.
+ */
+export const availabilitySlots = mysqlTable("availability_slots", {
+  id: int("id").autoincrement().primaryKey(),
+  dayOfWeek: int("day_of_week").notNull(), // 0=Sunday, 1=Monday, ..., 6=Saturday
+  startTime: varchar("start_time", { length: 5 }).notNull(), // HH:MM format
+  endTime: varchar("end_time", { length: 5 }).notNull(), // HH:MM format
+  isActive: int("is_active").default(1).notNull(), // 1 = active, 0 = disabled
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type AvailabilitySlot = typeof availabilitySlots.$inferSelect;
+export type InsertAvailabilitySlot = typeof availabilitySlots.$inferInsert;
+
+/**
+ * Blocked dates (holidays, vacations, etc.)
+ */
+export const blockedDates = mysqlTable("blocked_dates", {
+  id: int("id").autoincrement().primaryKey(),
+  date: varchar("date", { length: 10 }).notNull(), // YYYY-MM-DD format
+  reason: varchar("reason", { length: 255 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type BlockedDate = typeof blockedDates.$inferSelect;
+export type InsertBlockedDate = typeof blockedDates.$inferInsert;

@@ -12,6 +12,8 @@ import GDPRPage from "./pages/GDPRPage";
 import TestimonialsPage from "./pages/TestimonialsPage";
 import BookingPage from "./pages/BookingPage";
 import AdminDashboard from "./pages/AdminDashboard";
+import BlogPage from "./pages/BlogPage";
+import BlogPostPage from "./pages/BlogPostPage";
 import WhatsAppButton from "./components/WhatsAppButton";
 
 function Router() {
@@ -24,6 +26,8 @@ function Router() {
       <Route path="/testimonials" component={TestimonialsPage} />
       <Route path="/booking" component={BookingPage} />
       <Route path="/admin" component={AdminDashboard} />
+      <Route path="/blog" component={BlogPage} />
+      <Route path="/blog/:slug" component={BlogPostPage} />
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
     </Switch>

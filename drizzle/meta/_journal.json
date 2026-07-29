@@ -43,6 +43,13 @@
       "when": 1785346807386,
       "tag": "0005_nostalgic_maximus",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1785361740801,
+      "tag": "0006_blue_victor_mancha",
+      "breakpoints": true
     }
   ]
 }

@@ -10,6 +10,7 @@ export const contentDe = {
     education: "Ausbildung",
     contact: "Kontakt",
     getInTouch: "Kontakt aufnehmen",
+    blog: "Nachrichten",
     switchLang: "DE",
   },
 

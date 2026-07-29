@@ -4,7 +4,7 @@ import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, adminProcedure, router } from "./_core/trpc";
 import { z } from "zod";
 import { getDb } from "./db";
-import { contactMessages, gdprRequests, testimonials, appointments } from "../drizzle/schema";
+import { contactMessages, gdprRequests, testimonials, appointments, blogPosts, availabilitySlots, blockedDates } from "../drizzle/schema";
 import { notifyOwner } from "./_core/notification";
 import { eq, and, sql, desc } from "drizzle-orm";
 import Stripe from "stripe";
@@ -288,6 +288,98 @@ export const appRouter = router({
       }),
   }),
 
+  // Blog / Actualités
+  blog: router({
+    list: publicProcedure
+      .input(
+        z.object({
+          language: z.string().optional().default("fr"),
+          category: z.string().optional(),
+          limit: z.number().min(1).max(50).optional().default(10),
+          offset: z.number().min(0).optional().default(0),
+        })
+      )
+      .query(async ({ input }) => {
+        const db = await getDb();
+        if (!db) return { items: [], total: 0 };
+
+        const conditions = [
+          eq(blogPosts.published, 1),
+          eq(blogPosts.language, input.language),
+        ];
+        if (input.category) {
+          conditions.push(eq(blogPosts.category, input.category));
+        }
+
+        const whereClause = and(...conditions);
+        const items = await db
+          .select()
+          .from(blogPosts)
+          .where(whereClause)
+          .orderBy(desc(blogPosts.createdAt))
+          .limit(input.limit)
+          .offset(input.offset);
+
+        const [countResult] = await db
+          .select({ count: sql<number>`COUNT(*)` })
+          .from(blogPosts)
+          .where(whereClause);
+
+        return { items, total: countResult?.count || 0 };
+      }),
+
+    getBySlug: publicProcedure
+      .input(z.object({ slug: z.string() }))
+      .query(async ({ input }) => {
+        const db = await getDb();
+        if (!db) return null;
+
+        const results = await db
+          .select()
+          .from(blogPosts)
+          .where(and(eq(blogPosts.slug, input.slug), eq(blogPosts.published, 1)))
+          .limit(1);
+
+        return results[0] || null;
+      }),
+  }),
+
+  // Availability / Calendar
+  availability: router({
+    getSlots: publicProcedure.query(async () => {
+      const db = await getDb();
+      if (!db) return [];
+      return await db.select().from(availabilitySlots).where(eq(availabilitySlots.isActive, 1));
+    }),
+
+    getBlockedDates: publicProcedure.query(async () => {
+      const db = await getDb();
+      if (!db) return [];
+      return await db.select().from(blockedDates);
+    }),
+
+    getBookedSlots: publicProcedure
+      .input(z.object({ date: z.string() })) // YYYY-MM-DD
+      .query(async ({ input }) => {
+        const db = await getDb();
+        if (!db) return [];
+
+        // Get all confirmed/pending appointments for this date
+        const results = await db
+          .select({ appointmentDate: appointments.appointmentDate })
+          .from(appointments)
+          .where(
+            and(
+              sql`DATE(appointment_date) = ${input.date}`,
+              sql`payment_status IN ('pending', 'completed')`,
+              sql`appointment_status IN ('confirmed', 'completed')`
+            )
+          );
+
+        return results.map(r => r.appointmentDate);
+      }),
+  }),
+
   // Admin Dashboard Procedures
   admin: router({
     // List all appointments with pagination
@@ -497,6 +589,136 @@ export const appRouter = router({
           if (!db) throw new Error("Database connection failed");
 
           await db.delete(testimonials).where(eq(testimonials.id, input.id));
+          return { success: true };
+        }),
+    }),
+
+    // Blog management
+    blog: router({
+      list: adminProcedure.query(async () => {
+        const db = await getDb();
+        if (!db) return [];
+        return await db.select().from(blogPosts).orderBy(desc(blogPosts.createdAt));
+      }),
+
+      create: adminProcedure
+        .input(
+          z.object({
+            title: z.string().min(1).max(500),
+            slug: z.string().min(1).max(255),
+            excerpt: z.string().optional(),
+            content: z.string().min(1),
+            coverImage: z.string().optional(),
+            category: z.string().default("general"),
+            language: z.string().default("fr"),
+            source: z.string().optional(),
+            published: z.number().default(0),
+          })
+        )
+        .mutation(async ({ input }) => {
+          const db = await getDb();
+          if (!db) throw new Error("Database connection failed");
+
+          await db.insert(blogPosts).values(input);
+          return { success: true };
+        }),
+
+      update: adminProcedure
+        .input(
+          z.object({
+            id: z.number(),
+            title: z.string().optional(),
+            excerpt: z.string().optional(),
+            content: z.string().optional(),
+            coverImage: z.string().optional(),
+            category: z.string().optional(),
+            language: z.string().optional(),
+            source: z.string().optional(),
+            published: z.number().optional(),
+          })
+        )
+        .mutation(async ({ input }) => {
+          const db = await getDb();
+          if (!db) throw new Error("Database connection failed");
+
+          const { id, ...data } = input;
+          await db.update(blogPosts).set(data).where(eq(blogPosts.id, id));
+          return { success: true };
+        }),
+
+      delete: adminProcedure
+        .input(z.object({ id: z.number() }))
+        .mutation(async ({ input }) => {
+          const db = await getDb();
+          if (!db) throw new Error("Database connection failed");
+
+          await db.delete(blogPosts).where(eq(blogPosts.id, input.id));
+          return { success: true };
+        }),
+    }),
+
+    // Availability management
+    availability: router({
+      listSlots: adminProcedure.query(async () => {
+        const db = await getDb();
+        if (!db) return [];
+        return await db.select().from(availabilitySlots);
+      }),
+
+      addSlot: adminProcedure
+        .input(
+          z.object({
+            dayOfWeek: z.number().min(0).max(6),
+            startTime: z.string().regex(/^\d{2}:\d{2}$/),
+            endTime: z.string().regex(/^\d{2}:\d{2}$/),
+          })
+        )
+        .mutation(async ({ input }) => {
+          const db = await getDb();
+          if (!db) throw new Error("Database connection failed");
+
+          await db.insert(availabilitySlots).values(input);
+          return { success: true };
+        }),
+
+      deleteSlot: adminProcedure
+        .input(z.object({ id: z.number() }))
+        .mutation(async ({ input }) => {
+          const db = await getDb();
+          if (!db) throw new Error("Database connection failed");
+
+          await db.delete(availabilitySlots).where(eq(availabilitySlots.id, input.id));
+          return { success: true };
+        }),
+
+      listBlockedDates: adminProcedure.query(async () => {
+        const db = await getDb();
+        if (!db) return [];
+        return await db.select().from(blockedDates);
+      }),
+
+      addBlockedDate: adminProcedure
+        .input(
+          z.object({
+            date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+            reason: z.string().optional(),
+          })
+        )
+        .mutation(async ({ input }) => {
+          const db = await getDb();
+          if (!db) throw new Error("Database connection failed");
+
+          await db.insert(blockedDates).values(input);
+          return { success: true };
+        }),
+
+      removeBlockedDate: adminProcedure
+        .input(z.object({ id: z.number() }))
+        .mutation(async ({ input }) => {
+          const db = await getDb();
+          if (!db) throw new Error("Database connection failed");
+
+          await db.delete(blockedDates).where(eq(blockedDates.id, input.id));
           return { success: true };
         }),
     }),
