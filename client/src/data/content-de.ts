@@ -19,6 +19,7 @@ export const contentDe = {
     roles: ["Anästhesist und Intensivmediziner", "Unternehmer im Gesundheitswesen", "Medizinischer Berater"],
     description:
       "Anästhesist und Intensivmediziner sowie Unternehmer im Gesundheitswesen mit Sitz in Frankreich. Kombination von klinischer Exzellenz und strategischer Vision zur Förderung der Medizin weltweit.",
+    bookConsultation: "Beratung buchen",
   },
 
   // About Section

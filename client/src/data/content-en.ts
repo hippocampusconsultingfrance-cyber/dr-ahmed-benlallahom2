@@ -20,6 +20,7 @@ export const contentEn = {
     roles: ["Anesthesiologist-Intensivist", "Healthcare Entrepreneur", "Medical Consultant"],
     description:
       "Anesthesiologist-intensivist and healthcare entrepreneur based in France. Combining clinical excellence with strategic vision to advance medicine worldwide.",
+    bookConsultation: "Book a Consultation",
   },
 
   // About Section

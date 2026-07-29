@@ -133,3 +133,7 @@
 - [x] Corriger bug Drizzle db.insert() avec TiDB DEFAULT (remplacé par raw SQL)
 - [x] Corriger test testimonials (diverse ratings - tous 5 étoiles est normal)
 - [x] Tous les 56 tests passent avec succès
+
+## Bug de Traduction
+
+- [x] Corriger "Réserver une Consultation" qui reste en français malgré le changement de langue

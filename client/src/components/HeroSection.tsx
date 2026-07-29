@@ -83,7 +83,7 @@ export default function HeroSection() {
               onClick={() => setLocation("/booking")}
               className="px-8 py-4 rounded-full bg-primary text-primary-foreground font-semibold hover:bg-primary/90 transition-all duration-200 active:scale-[0.97] shadow-lg shadow-primary/25"
             >
-              Réserver une Consultation
+              {content.hero.bookConsultation}
             </button>
             <button
               onClick={() => document.getElementById("contact")?.scrollIntoView({ behavior: "smooth" })}

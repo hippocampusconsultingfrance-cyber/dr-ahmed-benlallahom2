@@ -20,6 +20,7 @@ export const contentFr = {
     roles: ["Anesthésiste-Réanimateur", "Entrepreneur en Santé", "Consultant Médical"],
     description:
       "Anesthésiste-réanimateur et entrepreneur en santé basé en France. J'allie excellence clinique et vision stratégique pour faire avancer la médecine à l'échelle mondiale.",
+    bookConsultation: "Réserver une Consultation",
   },
 
   // Section About

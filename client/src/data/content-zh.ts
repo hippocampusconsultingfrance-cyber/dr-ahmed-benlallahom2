@@ -19,6 +19,7 @@ export const contentZh = {
     roles: ["麻醉学家和重症医学专家", "医疗保健企业家", "医学顾问"],
     description:
       "麻醉学家、重症医学专家和医疗保健企业家，现居法国。将临床卓越与战略眼光相结合，推动全球医学进步。",
+    bookConsultation: "预约咨询",
   },
 
   // About Section
