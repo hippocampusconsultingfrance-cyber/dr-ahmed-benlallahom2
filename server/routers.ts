@@ -143,6 +143,37 @@ export const appRouter = router({
           .from(testimonials)
           .where(and(...conditions));
       }),
+    
+    create: publicProcedure
+      .input(
+        z.object({
+          authorName: z.string().min(1).max(100),
+          rating: z.number().min(1).max(5),
+          title: z.string().min(1).max(255),
+          content: z.string().min(1).max(5000),
+          specialty: z.string().min(1).max(255),
+          language: z.string().default("fr"),
+          featured: z.number().optional().default(0),
+        })
+      )
+      .mutation(async ({ input }) => {
+        const db = await getDb();
+        if (!db) throw new Error("Database connection failed");
+
+        await db.insert(testimonials).values({
+          authorName: input.authorName,
+          rating: input.rating,
+          title: input.title,
+          content: input.content,
+          specialty: input.specialty,
+          language: input.language,
+          featured: input.featured,
+          verified: 1,
+          status: "approved",
+        });
+
+        return { success: true };
+      }),
   }),
 
   appointments: router({
