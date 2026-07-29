@@ -81,3 +81,26 @@
 - [ ] Vérifier les redirections des domaines vers le site Manus
 - [ ] Vérifier que le site est accessible via les domaines personnalisés
 - [ ] Attendre l'indexation par Google (3-7 jours)
+
+## Système d'Avis/Témoignages
+
+- [x] Créer le schéma de base de données pour les avis/témoignages
+- [x] Créer les procédures tRPC pour gérer les avis (testimonials.list)
+- [x] Créer le composant TestimonialsSection pour la page d'accueil
+- [x] Créer la page dédiée Testimonials avec tous les avis et filtrage par note
+- [x] Ajouter les avis de démonstration multilingues (FR, EN, DE, ZH) - 10 avis total
+- [x] Ajouter le Review Schema (JSON-LD) pour Google Rich Snippets
+- [x] Intégrer tRPC dans les composants frontend
+- [x] Ajouter support du schéma structuré au composant SEOHead
+- [x] Écrire et valider 15 tests vitest pour le système complet
+- [x] Tous les tests passent avec succès
+
+## Améliorations et Corrections du Système de Témoignages
+
+- [ ] Ajouter gestion des états d'erreur dans TestimonialsSection (loading, error, empty states)
+- [ ] Ajouter gestion des états d'erreur dans TestimonialsPage (loading, error, empty states)
+- [ ] Corriger le schéma Review JSON-LD pour utiliser les types Schema.org appropriés
+- [ ] Modifier SEOHead pour injecter les scripts JSON-LD sans écraser les schémas existants
+- [ ] Ajouter tests tRPC end-to-end pour les procédures testimonials.list
+- [ ] Ajouter tests UI pour les composants TestimonialsSection et TestimonialsPage
+- [ ] Valider que tous les tests vitest passent (pnpm test)

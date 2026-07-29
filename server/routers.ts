@@ -1,11 +1,12 @@
-import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
+import { COOKIE_NAME } from "../shared/const";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, router } from "./_core/trpc";
 import { z } from "zod";
 import { getDb } from "./db";
-import { contactMessages, gdprRequests } from "../drizzle/schema";
+import { contactMessages, gdprRequests, testimonials } from "../drizzle/schema";
 import { notifyOwner } from "./_core/notification";
+import { eq, and } from "drizzle-orm";
 
 export const appRouter = router({
   system: systemRouter,
@@ -102,6 +103,34 @@ export const appRouter = router({
         });
 
         return { success: true, trackingId } as const;
+      }),
+  }),
+
+  testimonials: router({
+    list: publicProcedure
+      .input(
+        z.object({
+          language: z.string().optional().default("fr"),
+          featured: z.number().optional(),
+        })
+      )
+      .query(async ({ input }) => {
+        const db = await getDb();
+        if (!db) return [];
+
+        const conditions = [
+          eq(testimonials.language, input.language),
+          eq(testimonials.status, "approved"),
+        ];
+
+        if (input.featured !== undefined) {
+          conditions.push(eq(testimonials.featured, input.featured));
+        }
+
+        return await db
+          .select()
+          .from(testimonials)
+          .where(and(...conditions));
       }),
   }),
 });

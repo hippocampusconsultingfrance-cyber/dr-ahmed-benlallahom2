@@ -7,6 +7,7 @@ interface SEOHeadProps {
   ogImage?: string;
   ogUrl?: string;
   twitterHandle?: string;
+  structuredData?: Record<string, any>;
 }
 
 export function SEOHead({
@@ -16,6 +17,7 @@ export function SEOHead({
   ogImage = "https://drahmedbenlallahom.com/manus-storage/logo-abl_2afbc5e0.png",
   ogUrl = "https://drahmedbenlallahom.com",
   twitterHandle = "@drahmedbenlallahom",
+  structuredData,
 }: SEOHeadProps) {
   useEffect(() => {
     // Update title
@@ -70,7 +72,18 @@ export function SEOHead({
       document.head.appendChild(canonical);
     }
     canonical.href = ogUrl;
-  }, [title, description, keywords, ogImage, ogUrl, twitterHandle]);
+
+    // Structured Data (JSON-LD)
+    if (structuredData) {
+      let script = document.querySelector('script[type="application/ld+json"]') as HTMLScriptElement;
+      if (!script) {
+        script = document.createElement("script");
+        script.type = "application/ld+json";
+        document.head.appendChild(script);
+      }
+      script.textContent = JSON.stringify(structuredData);
+    }
+  }, [title, description, keywords, ogImage, ogUrl, twitterHandle, structuredData]);
 
   return null;
 }

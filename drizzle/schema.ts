@@ -66,3 +66,25 @@ export const gdprRequests = mysqlTable("gdpr_requests", {
 
 export type GdprRequest = typeof gdprRequests.$inferSelect;
 export type InsertGdprRequest = typeof gdprRequests.$inferInsert;
+
+/**
+ * Testimonials/Reviews table.
+ * Stores patient testimonials and reviews with privacy protection (initials/first names only).
+ */
+export const testimonials = mysqlTable("testimonials", {
+  id: int("id").autoincrement().primaryKey(),
+  authorName: varchar("author_name", { length: 100 }).notNull(), // Initials or first name only
+  rating: int("rating").notNull(), // 1-5 stars
+  title: varchar("title", { length: 255 }).notNull(), // Short title
+  content: text("content").notNull(), // Full review text
+  specialty: varchar("specialty", { length: 100 }), // Medical specialty or treatment type
+  verified: int("verified").default(0).notNull(), // 1 = verified, 0 = not verified
+  featured: int("featured").default(0).notNull(), // 1 = homepage, 0 = testimonials page only
+  language: varchar("language", { length: 10 }).default("fr").notNull(), // Language code
+  status: mysqlEnum("status", ["pending", "approved", "rejected"]).default("pending").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type Testimonial = typeof testimonials.$inferSelect;
+export type InsertTestimonial = typeof testimonials.$inferInsert;

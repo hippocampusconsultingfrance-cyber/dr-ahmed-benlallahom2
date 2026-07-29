@@ -9,6 +9,7 @@ import Home from "./pages/Home";
 import VenturePage from "./pages/VenturePage";
 import LegalPage from "./pages/LegalPage";
 import GDPRPage from "./pages/GDPRPage";
+import TestimonialsPage from "./pages/TestimonialsPage";
 import WhatsAppButton from "./components/WhatsAppButton";
 
 function Router() {
@@ -18,6 +19,7 @@ function Router() {
       <Route path="/venture/:slug" component={VenturePage} />
       <Route path="/legal" component={LegalPage} />
       <Route path="/gdpr" component={GDPRPage} />
+      <Route path="/testimonials" component={TestimonialsPage} />
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
     </Switch>
