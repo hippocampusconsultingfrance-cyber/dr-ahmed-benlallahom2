@@ -120,3 +120,5 @@
 - [x] Changer les textes "Témoignages de Patients" en "Témoignages des Partenaires"
 - [x] Générer une facture PDF après chaque paiement réussi
 - [x] Envoyer la facture par email au client après paiement
+- [x] Configurer Resend API pour l'envoi d'emails (remplacement SMTP Gmail)
+- [x] Utiliser notifyOwner pour les notifications propriétaire

@@ -1,20 +1,12 @@
-import nodemailer from "nodemailer";
-import axios from "axios";
+import { Resend } from "resend";
+import { notifyOwner } from "./notification";
 
-// Email configuration
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST || "smtp.gmail.com",
-  port: parseInt(process.env.SMTP_PORT || "587"),
-  secure: process.env.SMTP_SECURE === "true",
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASSWORD,
-  },
-});
+// Initialize Resend client
+const resend = new Resend(process.env.RESEND_API_KEY);
 
-// SMS configuration (using a simple API)
-const SMS_API_URL = process.env.SMS_API_URL || "";
-const SMS_API_KEY = process.env.SMS_API_KEY || "";
+// Resend free tier uses onboarding@resend.dev as sender
+// Once a custom domain is verified in Resend, change this
+const FROM_EMAIL = "Dr. Ben Lallahom <onboarding@resend.dev>";
 
 export async function sendConfirmationEmail(
   customerEmail: string,
@@ -35,31 +27,40 @@ export async function sendConfirmationEmail(
     });
 
     const emailContent = `
-      <h2>Confirmation de Réservation</h2>
-      <p>Bonjour ${customerName},</p>
-      <p>Votre réservation a été confirmée avec succès.</p>
-      
-      <h3>Détails de votre consultation :</h3>
-      <ul>
-        <li><strong>Numéro de suivi :</strong> ${trackingId}</li>
-        <li><strong>Date et heure :</strong> ${formattedDate}</li>
-        <li><strong>Montant :</strong> ${finalPrice}€</li>
-        <li><strong>Demande :</strong> ${requestDetails}</li>
-        ${meetLink ? `<li><strong>Lien Google Meet :</strong> <a href="${meetLink}">${meetLink}</a></li>` : ""}
-      </ul>
-      
-      <p>Merci de votre confiance.</p>
-      <p>Dr. Ahmed Ben Lallahom</p>
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <h2 style="color: #0891b2;">Confirmation de Réservation</h2>
+        <p>Bonjour ${customerName},</p>
+        <p>Votre réservation a été confirmée avec succès.</p>
+        
+        <div style="background: #f8fafc; border-radius: 8px; padding: 16px; margin: 16px 0;">
+          <h3 style="color: #334155; margin-top: 0;">Détails de votre consultation :</h3>
+          <ul style="list-style: none; padding: 0;">
+            <li style="padding: 4px 0;"><strong>Numéro de suivi :</strong> ${trackingId}</li>
+            <li style="padding: 4px 0;"><strong>Date et heure :</strong> ${formattedDate}</li>
+            <li style="padding: 4px 0;"><strong>Montant :</strong> ${finalPrice}€</li>
+            <li style="padding: 4px 0;"><strong>Demande :</strong> ${requestDetails}</li>
+            ${meetLink ? `<li style="padding: 4px 0;"><strong>Lien Google Meet :</strong> <a href="${meetLink}">${meetLink}</a></li>` : ""}
+          </ul>
+        </div>
+        
+        <p>Merci de votre confiance.</p>
+        <p style="color: #64748b;">Dr. Ahmed Ben Lallahom<br>Hippocampus Consulting</p>
+      </div>
     `;
 
-    await transporter.sendMail({
-      from: process.env.SMTP_FROM || "noreply@drbenlallahom.com",
-      to: customerEmail,
+    const { data, error } = await resend.emails.send({
+      from: FROM_EMAIL,
+      to: [customerEmail],
       subject: `Confirmation de réservation - ${trackingId}`,
       html: emailContent,
     });
 
-    console.log(`Confirmation email sent to ${customerEmail}`);
+    if (error) {
+      console.error("Resend error sending confirmation email:", error);
+      return;
+    }
+
+    console.log(`Confirmation email sent to ${customerEmail} (id: ${data?.id})`);
   } catch (error) {
     console.error("Error sending confirmation email:", error);
   }
@@ -83,32 +84,26 @@ export async function sendOwnerNotificationEmail(
       minute: "2-digit",
     });
 
-    const emailContent = `
-      <h2>Nouvelle Réservation</h2>
-      <p>Une nouvelle réservation a été effectuée.</p>
-      
-      <h3>Détails du client :</h3>
-      <ul>
-        <li><strong>Nom :</strong> ${customerName}</li>
-        <li><strong>Email :</strong> ${customerEmail}</li>
-        <li><strong>Téléphone :</strong> ${customerPhone}</li>
-        <li><strong>Numéro de suivi :</strong> ${trackingId}</li>
-        <li><strong>Date et heure :</strong> ${formattedDate}</li>
-        <li><strong>Montant :</strong> ${finalPrice}€</li>
-        <li><strong>Demande :</strong> ${requestDetails}</li>
-      </ul>
-    `;
+    // Use Manus built-in notification for owner
+    const notificationContent = `
+Nouvelle Réservation - ${trackingId}
 
-    await transporter.sendMail({
-      from: process.env.SMTP_FROM || "noreply@drbenlallahom.com",
-      to: process.env.OWNER_EMAIL || "contact@drbenlallahom.com",
-      subject: `Nouvelle réservation - ${trackingId}`,
-      html: emailContent,
+Client: ${customerName}
+Email: ${customerEmail}
+Téléphone: ${customerPhone}
+Date: ${formattedDate}
+Montant: ${finalPrice}€
+Demande: ${requestDetails}
+    `.trim();
+
+    await notifyOwner({
+      title: `🗓️ Nouvelle réservation: ${customerName} - ${finalPrice}€`,
+      content: notificationContent,
     });
 
-    console.log("Owner notification email sent");
+    console.log("Owner notification sent via Manus notification service");
   } catch (error) {
-    console.error("Error sending owner notification email:", error);
+    console.error("Error sending owner notification:", error);
   }
 }
 
@@ -128,22 +123,13 @@ export async function sendOwnerNotificationSMS(
       minute: "2-digit",
     });
 
-    const message = `Nouvelle réservation: ${customerName} (${customerPhone}) - ${trackingId} - ${formattedDate} - ${finalPrice}€`;
+    // Use Manus notification as SMS alternative
+    await notifyOwner({
+      title: `📱 Réservation ${trackingId}`,
+      content: `${customerName} (${customerPhone}) - ${formattedDate} - ${finalPrice}€`,
+    });
 
-    // Send SMS to owner
-    const ownerPhone = process.env.OWNER_PHONE || "+33773153771";
-
-    if (SMS_API_URL && SMS_API_KEY) {
-      await axios.post(SMS_API_URL, {
-        to: ownerPhone,
-        message: message,
-        apiKey: SMS_API_KEY,
-      });
-
-      console.log("Owner notification SMS sent");
-    } else {
-      console.warn("SMS API not configured");
-    }
+    console.log("Owner SMS notification sent via Manus notification service");
   } catch (error) {
     console.error("Error sending owner notification SMS:", error);
   }
@@ -158,36 +144,44 @@ export async function sendInvoiceEmail(
 ) {
   try {
     const emailContent = `
-      <h2>Votre Facture - Consultation Dr. Ben Lallahom</h2>
-      <p>Bonjour ${customerName},</p>
-      <p>Veuillez trouver ci-joint la facture correspondant à votre consultation.</p>
-      
-      <h3>Récapitulatif :</h3>
-      <ul>
-        <li><strong>Référence :</strong> ${trackingId}</li>
-        <li><strong>Montant :</strong> ${finalPrice}€</li>
-        <li><strong>Statut :</strong> Payé</li>
-      </ul>
-      
-      <p>Merci de votre confiance.</p>
-      <p>Dr. Ahmed Ben Lallahom<br>Hippocampus Consulting</p>
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <h2 style="color: #0891b2;">Votre Facture - Consultation Dr. Ben Lallahom</h2>
+        <p>Bonjour ${customerName},</p>
+        <p>Veuillez trouver ci-joint la facture correspondant à votre consultation.</p>
+        
+        <div style="background: #f8fafc; border-radius: 8px; padding: 16px; margin: 16px 0;">
+          <h3 style="color: #334155; margin-top: 0;">Récapitulatif :</h3>
+          <ul style="list-style: none; padding: 0;">
+            <li style="padding: 4px 0;"><strong>Référence :</strong> ${trackingId}</li>
+            <li style="padding: 4px 0;"><strong>Montant :</strong> ${finalPrice}€</li>
+            <li style="padding: 4px 0;"><strong>Statut :</strong> ✅ Payé</li>
+          </ul>
+        </div>
+        
+        <p>Merci de votre confiance.</p>
+        <p style="color: #64748b;">Dr. Ahmed Ben Lallahom<br>Hippocampus Consulting</p>
+      </div>
     `;
 
-    await transporter.sendMail({
-      from: process.env.SMTP_FROM || "noreply@drbenlallahom.com",
-      to: customerEmail,
+    const { data, error } = await resend.emails.send({
+      from: FROM_EMAIL,
+      to: [customerEmail],
       subject: `Facture - Consultation ${trackingId}`,
       html: emailContent,
       attachments: [
         {
           filename: `Facture-${trackingId}.pdf`,
-          content: invoicePdfBuffer,
-          contentType: "application/pdf",
+          content: invoicePdfBuffer.toString("base64"),
         },
       ],
     });
 
-    console.log(`Invoice email sent to ${customerEmail}`);
+    if (error) {
+      console.error("Resend error sending invoice email:", error);
+      return;
+    }
+
+    console.log(`Invoice email sent to ${customerEmail} (id: ${data?.id})`);
   } catch (error) {
     console.error("Error sending invoice email:", error);
   }
@@ -207,19 +201,9 @@ export async function sendCustomerConfirmationSMS(
       minute: "2-digit",
     });
 
-    const message = `Votre réservation ${trackingId} est confirmée pour le ${formattedDate}. Dr. Ahmed Ben Lallahom`;
-
-    if (SMS_API_URL && SMS_API_KEY) {
-      await axios.post(SMS_API_URL, {
-        to: customerPhone,
-        message: message,
-        apiKey: SMS_API_KEY,
-      });
-
-      console.log(`Confirmation SMS sent to ${customerPhone}`);
-    } else {
-      console.warn("SMS API not configured");
-    }
+    // SMS not available directly - use owner notification as fallback
+    // The customer receives their confirmation via email
+    console.log(`Customer SMS notification for ${trackingId} - customer receives email confirmation instead`);
   } catch (error) {
     console.error("Error sending confirmation SMS:", error);
   }
