@@ -217,7 +217,11 @@ export const appRouter = router({
         const trackingId = `APT-${Date.now()}-${Math.random().toString(36).substring(2, 9).toUpperCase()}`;
 
         const db = await getDb();
-        if (db) {
+        if (!db) {
+          throw new Error("Database connection failed");
+        }
+
+        try {
           await db.insert(appointments).values({
             trackingId,
             customerName: input.customerName,
@@ -233,6 +237,9 @@ export const appRouter = router({
             paymentStatus: "pending",
             appointmentStatus: "confirmed",
           });
+        } catch (dbError) {
+          console.error("Database insert error:", dbError);
+          throw new Error(`Failed to create appointment: ${dbError instanceof Error ? dbError.message : "Unknown error"}`);
         }
 
         // Notifications will be sent AFTER payment confirmation via webhook
