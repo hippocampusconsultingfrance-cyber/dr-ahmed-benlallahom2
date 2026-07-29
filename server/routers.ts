@@ -270,6 +270,7 @@ export const appRouter = router({
               },
             ],
             mode: "payment",
+            allow_promotion_codes: true,
             customer_email: input.customerEmail,
             metadata: {
               trackingId: input.trackingId,
