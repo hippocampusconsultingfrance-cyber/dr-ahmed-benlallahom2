@@ -235,46 +235,13 @@ export const appRouter = router({
           });
         }
 
-        const finalPriceNum = parseFloat(finalPrice);
-        const appointmentDateObj = new Date(input.appointmentDate);
-        
-        sendConfirmationEmail(
-          input.customerEmail,
-          input.customerName,
-          trackingId,
-          appointmentDateObj,
-          finalPriceNum,
-          input.requestDetails
-        ).catch(console.error);
-
-        sendCustomerConfirmationSMS(
-          input.customerPhone,
-          trackingId,
-          appointmentDateObj
-        ).catch(console.error);
-
-        sendOwnerNotificationEmail(
-          input.customerName,
-          input.customerEmail,
-          input.customerPhone,
-          trackingId,
-          appointmentDateObj,
-          finalPriceNum,
-          input.requestDetails
-        ).catch(console.error);
-
-        sendOwnerNotificationSMS(
-          input.customerName,
-          input.customerPhone,
-          trackingId,
-          appointmentDateObj,
-          finalPriceNum
-        ).catch(console.error);
+        // Notifications will be sent AFTER payment confirmation via webhook
+        // (see webhook handler in server/_core/index.ts)
 
         return {
           success: true,
           trackingId,
-          finalPrice: finalPriceNum,
+          finalPrice: parseFloat(finalPrice),
         };
       }),
 

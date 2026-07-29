@@ -1,0 +1,28 @@
+      if (event.type === "checkout.session.completed") {
+        const session = event.data.object as any;
+        console.log("Payment successful:", session.id);
+        
+        // Update appointment payment status
+        try {
+          const { drizzle } = await import("drizzle-orm/mysql2");
+          const { appointments } = await import("../../drizzle/schema");
+          const { eq } = await import("drizzle-orm");
+          
+          const db = drizzle(process.env.DATABASE_URL!);
+          const trackingId = session.metadata?.trackingId;
+          
+          if (trackingId) {
+            await db
+              .update(appointments)
+              .set({
+                paymentStatus: "completed",
+                stripePaymentIntentId: session.payment_intent as string,
+              })
+              .where(eq(appointments.trackingId, trackingId));
+            
+            console.log(`Payment confirmed for appointment: ${trackingId}`);
+          }
+        } catch (error) {
+          console.error("Failed to update appointment after payment:", error);
+        }
+      }

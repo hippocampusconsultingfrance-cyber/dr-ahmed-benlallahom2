@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { Calendar, Clock, User, Mail, Phone, FileText } from "lucide-react";
+import { Calendar, Clock, User, Mail, Phone, FileText, CheckCircle, AlertCircle } from "lucide-react";
 
 const bookingContent = {
   fr: {
@@ -27,6 +28,9 @@ const bookingContent = {
     },
     success: "Réservation créée avec succès!",
     error: "Erreur lors de la création de la réservation",
+    paymentSuccess: "Paiement réussi! Votre consultation a été confirmée.",
+    paymentCanceled: "Paiement annulé. Votre réservation n'a pas été finalisée.",
+    trackingId: "Numéro de suivi:",
   },
   en: {
     title: "Book a Consultation",
@@ -49,6 +53,9 @@ const bookingContent = {
     },
     success: "Booking created successfully!",
     error: "Error creating booking",
+    paymentSuccess: "Payment successful! Your consultation has been confirmed.",
+    paymentCanceled: "Payment canceled. Your booking was not finalized.",
+    trackingId: "Tracking ID:",
   },
   de: {
     title: "Beratung buchen",
@@ -59,22 +66,25 @@ const bookingContent = {
       phone: "Telefonnummer",
       date: "Datum und Uhrzeit",
       details: "Anforderungsdetails",
-      detailsPlaceholder: "Beschreiben Sie kurz Ihre Situation...",
+      detailsPlaceholder: "Beschreiben Sie Ihre Situation kurz...",
       submit: "Zur Zahlung übergehen",
-      loading: "Verarbeitung läuft...",
+      loading: "Verarbeitung...",
     },
     pricing: {
       title: "Preisgestaltung",
-      dayRate: "Tagestarif (8:00-18:00)",
-      nightRate: "Nachttarif (18:00-8:00)",
+      dayRate: "Tagessatz (8:00-18:00)",
+      nightRate: "Nachtsatz (18:00-8:00)",
       eur: "€",
     },
     success: "Buchung erfolgreich erstellt!",
     error: "Fehler beim Erstellen der Buchung",
+    paymentSuccess: "Zahlung erfolgreich! Ihre Beratung wurde bestätigt.",
+    paymentCanceled: "Zahlung abgebrochen. Ihre Buchung wurde nicht abgeschlossen.",
+    trackingId: "Verfolgungsnummer:",
   },
   zh: {
     title: "预订咨询",
-    subtitle: "健康建议 - 30分钟",
+    subtitle: "健康咨询 - 30 分钟",
     form: {
       name: "全名",
       email: "电子邮件",
@@ -82,22 +92,26 @@ const bookingContent = {
       date: "日期和时间",
       details: "请求详情",
       detailsPlaceholder: "简要描述您的情况...",
-      submit: "进行支付",
+      submit: "继续付款",
       loading: "处理中...",
     },
     pricing: {
-      title: "定价",
+      title: "价格",
       dayRate: "日间费率 (8:00-18:00)",
       nightRate: "夜间费率 (18:00-8:00)",
       eur: "€",
     },
     success: "预订成功创建!",
     error: "创建预订时出错",
+    paymentSuccess: "付款成功！您的咨询已确认。",
+    paymentCanceled: "付款已取消。您的预订未最终确定。",
+    trackingId: "跟踪 ID:",
   },
 };
 
 export default function BookingPage() {
   const { language } = useLanguage();
+  const [location, setLocation] = useLocation();
   const content = bookingContent[language as keyof typeof bookingContent] || bookingContent.en;
 
   const [formData, setFormData] = useState({
@@ -109,6 +123,27 @@ export default function BookingPage() {
   });
 
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [paymentStatus, setPaymentStatus] = useState<"success" | "canceled" | null>(null);
+  const [trackingId, setTrackingId] = useState<string | null>(null);
+
+  // Handle Stripe redirect
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const success = params.get("success");
+    const canceled = params.get("canceled");
+    const tid = params.get("trackingId");
+
+    if (success === "true") {
+      setPaymentStatus("success");
+      setTrackingId(tid);
+      // Clear URL params
+      window.history.replaceState({}, document.title, window.location.pathname);
+    } else if (canceled === "true") {
+      setPaymentStatus("canceled");
+      // Clear URL params
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+  }, []);
 
   const calculatePrice = trpc.appointments.calculatePrice.useQuery(
     { appointmentDate: selectedDate?.toISOString() || "" },
@@ -124,7 +159,7 @@ export default function BookingPage() {
       }
     },
     onError: (error) => {
-      alert("Erreur paiement: " + error.message);
+      alert("Payment error: " + error.message);
     },
   });
 
@@ -149,164 +184,195 @@ export default function BookingPage() {
       return;
     }
 
-    createAppointment.mutate(
-      {
+    try {
+      const appointmentResult = await createAppointment.mutateAsync({
         customerName: formData.name,
         customerEmail: formData.email,
         customerPhone: formData.phone,
         appointmentDate: selectedDate.toISOString(),
         requestDetails: formData.details,
-      },
-      {
-        onSuccess: (appointmentData) => {
-          createCheckoutSession.mutate({
-            trackingId: appointmentData.trackingId,
-            finalPrice: appointmentData.finalPrice,
-            customerEmail: formData.email,
-            customerName: formData.name,
-          });
-        },
-        onError: (error) => {
-          alert(content.error + ": " + error.message);
-        },
+      });
+
+      if (appointmentResult.success) {
+        await createCheckoutSession.mutateAsync({
+          trackingId: appointmentResult.trackingId,
+          finalPrice: appointmentResult.finalPrice,
+          customerEmail: formData.email,
+          customerName: formData.name,
+        });
       }
-    );
+    } catch (error) {
+      console.error("Booking error:", error);
+    }
   };
 
+  const handleReset = () => {
+    setFormData({ name: "", email: "", phone: "", date: "", details: "" });
+    setSelectedDate(null);
+    setPaymentStatus(null);
+    setTrackingId(null);
+  };
+
+  const isLoading = createAppointment.isPending || createCheckoutSession.isPending;
+
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-950 pt-24 pb-16">
-      <div className="max-w-4xl mx-auto px-4">
-        {/* Header */}
-        <div className="text-center mb-12">
-          <h1 className="text-4xl md:text-5xl font-bold text-white mb-4">
-            {content.title}
-          </h1>
-          <p className="text-gray-400 text-lg">{content.subtitle}</p>
-        </div>
-
-        <div className="grid md:grid-cols-3 gap-8">
-          {/* Form */}
-          <div className="md:col-span-2">
-            <Card className="border-cyan-500/30 bg-slate-800/50 backdrop-blur p-8">
-              <form onSubmit={handleSubmit} className="space-y-6">
-                {/* Name */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    <User className="inline mr-2 w-4 h-4" />
-                    {content.form.name}
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-cyan-500"
-                  />
-                </div>
-
-                {/* Email */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    <Mail className="inline mr-2 w-4 h-4" />
-                    {content.form.email}
-                  </label>
-                  <input
-                    type="email"
-                    required
-                    value={formData.email}
-                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-cyan-500"
-                  />
-                </div>
-
-                {/* Phone */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    <Phone className="inline mr-2 w-4 h-4" />
-                    {content.form.phone}
-                  </label>
-                  <input
-                    type="tel"
-                    required
-                    value={formData.phone}
-                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                    className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-cyan-500"
-                  />
-                </div>
-
-                {/* Date & Time */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    <Calendar className="inline mr-2 w-4 h-4" />
-                    {content.form.date}
-                  </label>
-                  <input
-                    type="datetime-local"
-                    required
-                    onChange={handleDateChange}
-                    className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-cyan-500"
-                  />
-                </div>
-
-                {/* Details */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    <FileText className="inline mr-2 w-4 h-4" />
-                    {content.form.details}
-                  </label>
-                  <textarea
-                    required
-                    value={formData.details}
-                    onChange={(e) => setFormData({ ...formData, details: e.target.value })}
-                    placeholder={content.form.detailsPlaceholder}
-                    rows={4}
-                    className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-cyan-500"
-                  />
-                </div>
-
-                {/* Submit Button */}
-                <Button
-                  type="submit"
-                  disabled={createAppointment.isPending || createCheckoutSession.isPending || !selectedDate}
-                  className="w-full bg-cyan-500 hover:bg-cyan-600 text-white font-semibold py-3 rounded-lg transition"
-                >
-                  {createAppointment.isPending || createCheckoutSession.isPending ? content.form.loading : content.form.submit}
-                </Button>
-              </form>
-            </Card>
-          </div>
-
-          {/* Pricing Sidebar */}
-          <div>
-            <Card className="border-cyan-500/30 bg-slate-800/50 backdrop-blur p-6 sticky top-24">
-              <h3 className="text-lg font-bold text-white mb-6">{content.pricing.title}</h3>
-
-              <div className="space-y-4">
-                <div className="flex justify-between items-center pb-4 border-b border-slate-700">
-                  <span className="text-gray-400">{content.pricing.dayRate}</span>
-                  <span className="text-cyan-400 font-bold">100{content.pricing.eur}</span>
-                </div>
-
-                <div className="flex justify-between items-center pb-4 border-b border-slate-700">
-                  <span className="text-gray-400">{content.pricing.nightRate}</span>
-                  <span className="text-orange-400 font-bold">150{content.pricing.eur}</span>
-                </div>
-
-                {calculatePrice.data && (
-                  <div className="mt-6 p-4 bg-cyan-500/10 border border-cyan-500/30 rounded-lg">
-                    <p className="text-sm text-gray-400 mb-2">
-                      {calculatePrice.data.isNightRate ? "🌙 " : "☀️ "}
-                      {calculatePrice.data.isNightRate ? content.pricing.nightRate : content.pricing.dayRate}
-                    </p>
-                    <p className="text-2xl font-bold text-cyan-400">
-                      {calculatePrice.data.finalPrice}{content.pricing.eur}
-                    </p>
-                  </div>
+    <div className="min-h-screen bg-background py-12 px-4">
+      <div className="max-w-2xl mx-auto">
+        {/* Payment Success Message */}
+        {paymentStatus === "success" && (
+          <Card className="mb-6 p-6 border-green-500 bg-green-50">
+            <div className="flex items-start gap-4">
+              <CheckCircle className="w-6 h-6 text-green-600 flex-shrink-0 mt-1" />
+              <div>
+                <h3 className="font-semibold text-green-900 mb-2">{content.paymentSuccess}</h3>
+                {trackingId && (
+                  <p className="text-green-800">
+                    {content.trackingId} <span className="font-mono">{trackingId}</span>
+                  </p>
                 )}
               </div>
-            </Card>
-          </div>
-        </div>
+            </div>
+          </Card>
+        )}
+
+        {/* Payment Canceled Message */}
+        {paymentStatus === "canceled" && (
+          <Card className="mb-6 p-6 border-orange-500 bg-orange-50">
+            <div className="flex items-start gap-4">
+              <AlertCircle className="w-6 h-6 text-orange-600 flex-shrink-0 mt-1" />
+              <div>
+                <h3 className="font-semibold text-orange-900">{content.paymentCanceled}</h3>
+              </div>
+            </div>
+          </Card>
+        )}
+
+        <Card className="p-8">
+          <h1 className="text-3xl font-bold mb-2">{content.title}</h1>
+          <p className="text-muted-foreground mb-8">{content.subtitle}</p>
+
+          <form onSubmit={handleSubmit} className="space-y-6">
+            {/* Name */}
+            <div>
+              <label className="block text-sm font-medium mb-2 flex items-center gap-2">
+                <User className="w-4 h-4" />
+                {content.form.name}
+              </label>
+              <input
+                type="text"
+                required
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                className="w-full px-4 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+            </div>
+
+            {/* Email */}
+            <div>
+              <label className="block text-sm font-medium mb-2 flex items-center gap-2">
+                <Mail className="w-4 h-4" />
+                {content.form.email}
+              </label>
+              <input
+                type="email"
+                required
+                value={formData.email}
+                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                className="w-full px-4 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+            </div>
+
+            {/* Phone */}
+            <div>
+              <label className="block text-sm font-medium mb-2 flex items-center gap-2">
+                <Phone className="w-4 h-4" />
+                {content.form.phone}
+              </label>
+              <input
+                type="tel"
+                required
+                value={formData.phone}
+                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                className="w-full px-4 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+            </div>
+
+            {/* Date */}
+            <div>
+              <label className="block text-sm font-medium mb-2 flex items-center gap-2">
+                <Calendar className="w-4 h-4" />
+                {content.form.date}
+              </label>
+              <input
+                type="datetime-local"
+                required
+                value={formData.date}
+                onChange={(e) => {
+                  setFormData({ ...formData, date: e.target.value });
+                  handleDateChange(e);
+                }}
+                className="w-full px-4 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+            </div>
+
+            {/* Price Display */}
+            {calculatePrice.data && (
+              <Card className="p-4 bg-muted">
+                <h3 className="font-semibold mb-3">{content.pricing.title}</h3>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span>{content.pricing.dayRate}:</span>
+                    <span>100 {content.pricing.eur}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>{content.pricing.nightRate}:</span>
+                    <span>150 {content.pricing.eur}</span>
+                  </div>
+                  <div className="border-t border-border pt-2 mt-2 flex justify-between font-bold">
+                    <span>Total:</span>
+                    <span>{calculatePrice.data.finalPrice} {content.pricing.eur}</span>
+                  </div>
+                </div>
+              </Card>
+            )}
+
+            {/* Details */}
+            <div>
+              <label className="block text-sm font-medium mb-2 flex items-center gap-2">
+                <FileText className="w-4 h-4" />
+                {content.form.details}
+              </label>
+              <textarea
+                required
+                value={formData.details}
+                onChange={(e) => setFormData({ ...formData, details: e.target.value })}
+                placeholder={content.form.detailsPlaceholder}
+                rows={4}
+                className="w-full px-4 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+            </div>
+
+            {/* Submit Button */}
+            <Button
+              type="submit"
+              disabled={isLoading || !selectedDate || !calculatePrice.data}
+              className="w-full"
+              size="lg"
+            >
+              {isLoading ? content.form.loading : content.form.submit}
+            </Button>
+          </form>
+
+          {paymentStatus && (
+            <Button
+              onClick={handleReset}
+              variant="outline"
+              className="w-full mt-4"
+            >
+              Nouvelle réservation / New Booking
+            </Button>
+          )}
+        </Card>
       </div>
     </div>
   );

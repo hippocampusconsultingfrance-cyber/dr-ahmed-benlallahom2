@@ -31,13 +31,8 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
 async function startServer() {
   const app = express();
   const server = createServer(app);
-  // Configure body parser with larger size limit for file uploads
-  app.use(express.json({ limit: "50mb" }));
-  app.use(express.urlencoded({ limit: "50mb", extended: true }));
-  registerStorageProxy(app);
-  registerOAuthRoutes(app);
   
-  // Stripe Webhook (must be before express.json())
+  // Stripe Webhook (MUST be before express.json() to receive raw body)
   app.post("/api/stripe/webhook", express.raw({ type: "application/json" }), async (req, res) => {
     const sig = req.headers["stripe-signature"] as string;
     const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET || "";
@@ -55,6 +50,78 @@ async function startServer() {
       if (event.type === "checkout.session.completed") {
         const session = event.data.object as any;
         console.log("Payment successful:", session.id);
+        
+        // Update appointment payment status
+        try {
+          const { drizzle } = await import("drizzle-orm/mysql2");
+          const { appointments } = await import("../../drizzle/schema");
+          const { eq } = await import("drizzle-orm");
+          
+          const db = drizzle(process.env.DATABASE_URL!);
+          const trackingId = session.metadata?.trackingId;
+          
+          if (trackingId) {
+            await db
+              .update(appointments)
+              .set({
+                paymentStatus: "completed",
+                stripePaymentIntentId: session.payment_intent as string,
+              })
+              .where(eq(appointments.trackingId, trackingId));
+            
+            console.log(`Payment confirmed for appointment: ${trackingId}`);
+            
+            // Send notifications AFTER payment is confirmed
+            try {
+              const { sendConfirmationEmail, sendCustomerConfirmationSMS, sendOwnerNotificationEmail, sendOwnerNotificationSMS } = await import("./notifications");
+              
+              // Fetch appointment details
+              const appointmentResult = await db.select().from(appointments).where(eq(appointments.trackingId, trackingId)).limit(1);
+              const appointment = appointmentResult[0];
+              
+              if (appointment) {
+                const finalPriceNum = parseFloat(appointment.finalPrice);
+                
+                sendConfirmationEmail(
+                  appointment.customerEmail,
+                  appointment.customerName,
+                  trackingId,
+                  appointment.appointmentDate,
+                  finalPriceNum,
+                  appointment.requestDetails
+                ).catch(console.error);
+
+                sendCustomerConfirmationSMS(
+                  appointment.customerPhone,
+                  trackingId,
+                  appointment.appointmentDate
+                ).catch(console.error);
+
+                sendOwnerNotificationEmail(
+                  appointment.customerName,
+                  appointment.customerEmail,
+                  appointment.customerPhone,
+                  trackingId,
+                  appointment.appointmentDate,
+                  finalPriceNum,
+                  appointment.requestDetails
+                ).catch(console.error);
+
+                sendOwnerNotificationSMS(
+                  appointment.customerName,
+                  appointment.customerPhone,
+                  trackingId,
+                  appointment.appointmentDate,
+                  finalPriceNum
+                ).catch(console.error);
+              }
+            } catch (notificationError) {
+              console.error("Failed to send notifications after payment:", notificationError);
+            }
+          }
+        } catch (error) {
+          console.error("Failed to update appointment after payment:", error);
+        }
       }
       
       res.json({ received: true });
@@ -63,6 +130,12 @@ async function startServer() {
       res.status(400).send(`Webhook Error: ${error}`);
     }
   });
+  
+  // Configure body parser with larger size limit for file uploads (after Stripe webhook)
+  app.use(express.json({ limit: "50mb" }));
+  app.use(express.urlencoded({ limit: "50mb", extended: true }));
+  registerStorageProxy(app);
+  registerOAuthRoutes(app);
   
   // tRPC API
   app.use(
