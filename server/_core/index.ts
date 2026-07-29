@@ -181,6 +181,64 @@ async function startServer() {
       createContext,
     })
   );
+  // Scheduled task: 24h appointment reminder
+  app.post("/api/scheduled/reminder", async (req, res) => {
+    try {
+      const { sdk: sdkInstance } = await import("./sdk");
+      const user = await sdkInstance.authenticateRequest(req);
+      if (!user.isCron || !user.taskUid) {
+        return res.status(403).json({ error: "cron-only" });
+      }
+
+      const { drizzle } = await import("drizzle-orm/mysql2");
+      const { appointments } = await import("../../drizzle/schema");
+      const { and, eq, gte, lte, sql } = await import("drizzle-orm");
+
+      const db = drizzle(process.env.DATABASE_URL!);
+
+      // Find appointments in the next 22-26 hours that haven't been reminded
+      const now = new Date();
+      const from = new Date(now.getTime() + 22 * 60 * 60 * 1000);
+      const to = new Date(now.getTime() + 26 * 60 * 60 * 1000);
+
+      const upcoming = await db.select().from(appointments).where(
+        and(
+          eq(appointments.paymentStatus, "completed"),
+          eq(appointments.appointmentStatus, "confirmed"),
+          eq(appointments.reminderSent, 0),
+          gte(appointments.appointmentDate, from),
+          lte(appointments.appointmentDate, to)
+        )
+      );
+
+      console.log(`[Reminder] Found ${upcoming.length} appointments to remind`);
+
+      const { sendReminderEmail } = await import("./notifications");
+
+      for (const apt of upcoming) {
+        try {
+          await sendReminderEmail(
+            apt.customerEmail,
+            apt.customerName,
+            apt.trackingId,
+            apt.appointmentDate
+          );
+          await db.update(appointments)
+            .set({ reminderSent: 1 })
+            .where(eq(appointments.id, apt.id));
+          console.log(`[Reminder] Sent to ${apt.customerEmail} for ${apt.trackingId}`);
+        } catch (e) {
+          console.error(`[Reminder] Failed for ${apt.trackingId}:`, e);
+        }
+      }
+
+      res.json({ ok: true, reminded: upcoming.length });
+    } catch (error: any) {
+      console.error("[Reminder] Handler error:", error);
+      res.status(500).json({ error: error.message, timestamp: new Date().toISOString() });
+    }
+  });
+
   // development mode uses Vite, production mode uses static files
   if (process.env.NODE_ENV === "development") {
     await setupVite(app, server);

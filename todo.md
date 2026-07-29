@@ -160,3 +160,4 @@
 - [x] Page 404 personnalisée avec design cohérent (multilingue, ECG divider, diagnostic grid)
 - [x] Indicateur de progression sur le formulaire de réservation
 - [x] Témoignages en carrousel sur la page d'accueil (auto-play, navigation, dots)
+- [x] Mode clair/sombre avec toggle (Sun/Moon dans la navigation, variables CSS light/dark)

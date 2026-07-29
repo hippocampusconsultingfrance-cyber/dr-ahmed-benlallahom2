@@ -1,0 +1,1 @@
+ALTER TABLE `appointments` ADD `reminder_sent` int DEFAULT 0 NOT NULL;

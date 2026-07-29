@@ -1,9 +1,11 @@
 import { useState, useEffect, useRef } from "react";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { Menu, X, ChevronDown } from "lucide-react";
+import { useTheme } from "@/contexts/ThemeContext";
+import { Menu, X, ChevronDown, Sun, Moon } from "lucide-react";
 
 export default function Navigation() {
   const { content, language } = useLanguage();
+  const { theme, toggleTheme } = useTheme();
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -143,6 +145,17 @@ export default function Navigation() {
               </div>
             )}
           </div>
+
+          {/* Theme Toggle */}
+          {toggleTheme && (
+            <button
+              onClick={toggleTheme}
+              className="p-2 rounded-full border border-border/50 text-muted-foreground hover:text-foreground hover:border-primary/40 transition-all duration-200"
+              title={theme === "dark" ? "Mode clair" : "Mode sombre"}
+            >
+              {theme === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+            </button>
+          )}
 
           <button
             onClick={() => scrollTo("contact")}

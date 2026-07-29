@@ -208,3 +208,56 @@ export async function sendCustomerConfirmationSMS(
     console.error("Error sending confirmation SMS:", error);
   }
 }
+
+export async function sendReminderEmail(
+  customerEmail: string,
+  customerName: string,
+  trackingId: string,
+  appointmentDate: Date
+) {
+  try {
+    const formattedDate = appointmentDate.toLocaleString("fr-FR", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+
+    const emailContent = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <h2 style="color: #0891b2;">⏰ Rappel - Votre consultation est demain</h2>
+        <p>Bonjour ${customerName},</p>
+        <p>Nous vous rappelons que votre consultation avec le Dr. Ahmed Ben Lallahom est prévue <strong>demain</strong>.</p>
+        
+        <div style="background: #f8fafc; border-radius: 8px; padding: 16px; margin: 16px 0;">
+          <h3 style="color: #334155; margin-top: 0;">Détails :</h3>
+          <ul style="list-style: none; padding: 0;">
+            <li style="padding: 4px 0;"><strong>Référence :</strong> ${trackingId}</li>
+            <li style="padding: 4px 0;"><strong>Date et heure :</strong> ${formattedDate}</li>
+          </ul>
+        </div>
+        
+        <p>Si vous devez annuler ou reporter votre rendez-vous, veuillez nous contacter dès que possible.</p>
+        <p>À demain !</p>
+        <p style="color: #64748b;">Dr. Ahmed Ben Lallahom<br>Hippocampus Consulting</p>
+      </div>
+    `;
+
+    const { data, error } = await resend.emails.send({
+      from: FROM_EMAIL,
+      to: [customerEmail],
+      subject: `Rappel - Consultation demain (${trackingId})`,
+      html: emailContent,
+    });
+
+    if (error) {
+      console.error("Resend error sending reminder email:", error);
+      return;
+    }
+
+    console.log(`Reminder email sent to ${customerEmail} (id: ${data?.id})`);
+  } catch (error) {
+    console.error("Error sending reminder email:", error);
+  }
+}

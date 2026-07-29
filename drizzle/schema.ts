@@ -117,6 +117,7 @@ export const appointments = mysqlTable("appointments", {
   refundedAt: timestamp("refunded_at"), // Timestamp of refund
   emailSent: int("email_sent").default(0).notNull(), // 1 = confirmation email sent
   smsSent: int("sms_sent").default(0).notNull(), // 1 = SMS notification sent
+  reminderSent: int("reminder_sent").default(0).notNull(), // 1 = 24h reminder sent
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
