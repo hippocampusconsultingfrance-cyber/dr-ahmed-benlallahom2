@@ -36,6 +36,34 @@ async function startServer() {
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
   registerStorageProxy(app);
   registerOAuthRoutes(app);
+  
+  // Stripe Webhook (must be before express.json())
+  app.post("/api/stripe/webhook", express.raw({ type: "application/json" }), async (req, res) => {
+    const sig = req.headers["stripe-signature"] as string;
+    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET || "";
+    
+    try {
+      const Stripe = (await import("stripe")).default;
+      const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "");
+      
+      const event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
+      
+      if (event.id.startsWith("evt_test_")) {
+        return res.json({ verified: true });
+      }
+      
+      if (event.type === "checkout.session.completed") {
+        const session = event.data.object as any;
+        console.log("Payment successful:", session.id);
+      }
+      
+      res.json({ received: true });
+    } catch (error) {
+      console.error("Webhook error:", error);
+      res.status(400).send(`Webhook Error: ${error}`);
+    }
+  });
+  
   // tRPC API
   app.use(
     "/api/trpc",

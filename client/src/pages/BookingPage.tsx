@@ -115,13 +115,16 @@ export default function BookingPage() {
     { enabled: !!selectedDate }
   );
 
-  const createAppointment = trpc.appointments.create.useMutation({
+  const createAppointment = trpc.appointments.create.useMutation();
+
+  const createCheckoutSession = trpc.appointments.createCheckoutSession.useMutation({
     onSuccess: (data) => {
-      alert(content.success);
-      console.log("Appointment created:", data);
+      if (data.checkoutUrl) {
+        window.open(data.checkoutUrl, "_blank");
+      }
     },
     onError: (error) => {
-      alert(content.error + ": " + error.message);
+      alert("Erreur paiement: " + error.message);
     },
   });
 
@@ -141,13 +144,33 @@ export default function BookingPage() {
       return;
     }
 
-    createAppointment.mutate({
-      customerName: formData.name,
-      customerEmail: formData.email,
-      customerPhone: formData.phone,
-      appointmentDate: selectedDate.toISOString(),
-      requestDetails: formData.details,
-    });
+    if (!calculatePrice.data) {
+      alert("Unable to calculate price");
+      return;
+    }
+
+    createAppointment.mutate(
+      {
+        customerName: formData.name,
+        customerEmail: formData.email,
+        customerPhone: formData.phone,
+        appointmentDate: selectedDate.toISOString(),
+        requestDetails: formData.details,
+      },
+      {
+        onSuccess: (appointmentData) => {
+          createCheckoutSession.mutate({
+            trackingId: appointmentData.trackingId,
+            finalPrice: appointmentData.finalPrice,
+            customerEmail: formData.email,
+            customerName: formData.name,
+          });
+        },
+        onError: (error) => {
+          alert(content.error + ": " + error.message);
+        },
+      }
+    );
   };
 
   return (
@@ -244,10 +267,10 @@ export default function BookingPage() {
                 {/* Submit Button */}
                 <Button
                   type="submit"
-                  disabled={createAppointment.isPending || !selectedDate}
+                  disabled={createAppointment.isPending || createCheckoutSession.isPending || !selectedDate}
                   className="w-full bg-cyan-500 hover:bg-cyan-600 text-white font-semibold py-3 rounded-lg transition"
                 >
-                  {createAppointment.isPending ? content.form.loading : content.form.submit}
+                  {createAppointment.isPending || createCheckoutSession.isPending ? content.form.loading : content.form.submit}
                 </Button>
               </form>
             </Card>

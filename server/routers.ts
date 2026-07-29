@@ -7,6 +7,17 @@ import { getDb } from "./db";
 import { contactMessages, gdprRequests, testimonials, appointments } from "../drizzle/schema";
 import { notifyOwner } from "./_core/notification";
 import { eq, and } from "drizzle-orm";
+import Stripe from "stripe";
+import {
+  sendConfirmationEmail,
+  sendOwnerNotificationEmail,
+  sendOwnerNotificationSMS,
+  sendCustomerConfirmationSMS,
+} from "./_core/notifications";
+
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "");
+
+
 
 export const appRouter = router({
   system: systemRouter,
@@ -193,11 +204,103 @@ export const appRouter = router({
           });
         }
 
+        const finalPriceNum = parseFloat(finalPrice);
+        const appointmentDateObj = new Date(input.appointmentDate);
+        
+        sendConfirmationEmail(
+          input.customerEmail,
+          input.customerName,
+          trackingId,
+          appointmentDateObj,
+          finalPriceNum,
+          input.requestDetails
+        ).catch(console.error);
+
+        sendCustomerConfirmationSMS(
+          input.customerPhone,
+          trackingId,
+          appointmentDateObj
+        ).catch(console.error);
+
+        sendOwnerNotificationEmail(
+          input.customerName,
+          input.customerEmail,
+          input.customerPhone,
+          trackingId,
+          appointmentDateObj,
+          finalPriceNum,
+          input.requestDetails
+        ).catch(console.error);
+
+        sendOwnerNotificationSMS(
+          input.customerName,
+          input.customerPhone,
+          trackingId,
+          appointmentDateObj,
+          finalPriceNum
+        ).catch(console.error);
+
         return {
           success: true,
           trackingId,
-          finalPrice: parseFloat(finalPrice),
+          finalPrice: finalPriceNum,
         };
+      }),
+
+    createCheckoutSession: publicProcedure
+      .input(
+        z.object({
+          trackingId: z.string(),
+          finalPrice: z.number(),
+          customerEmail: z.string().email(),
+          customerName: z.string(),
+        })
+      )
+      .mutation(async ({ input, ctx }) => {
+        try {
+          const amountInCents = Math.round(input.finalPrice * 100);
+
+          const session = await stripe.checkout.sessions.create({
+            payment_method_types: ["card"],
+            line_items: [
+              {
+                price_data: {
+                  currency: "eur",
+                  product_data: {
+                    name: "Health Consultation - 30 minutes",
+                    description: `Appointment: ${input.trackingId}`,
+                  },
+                  unit_amount: amountInCents,
+                },
+                quantity: 1,
+              },
+            ],
+            mode: "payment",
+            customer_email: input.customerEmail,
+            metadata: {
+              trackingId: input.trackingId,
+              customerName: input.customerName,
+            },
+            success_url: `${ctx.req.headers.origin}/booking?success=true&trackingId=${input.trackingId}`,
+            cancel_url: `${ctx.req.headers.origin}/booking?canceled=true`,
+          });
+
+          const db = await getDb();
+          if (db && session.id) {
+            await db
+              .update(appointments)
+              .set({ stripeSessionId: session.id })
+              .where(eq(appointments.trackingId, input.trackingId));
+          }
+
+          return {
+            success: true,
+            checkoutUrl: session.url,
+          };
+        } catch (error) {
+          console.error("Stripe error:", error);
+          throw new Error("Failed to create checkout session");
+        }
       }),
   }),
 });
