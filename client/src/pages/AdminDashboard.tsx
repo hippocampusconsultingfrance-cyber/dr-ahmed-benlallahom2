@@ -2,11 +2,11 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Calendar, MessageSquare, Shield, DollarSign, Eye, CheckCircle, XCircle, Clock, ArrowLeft, Star, Trash2 } from "lucide-react";
+import { Calendar, MessageSquare, Shield, DollarSign, Eye, CheckCircle, XCircle, Clock, ArrowLeft, Star, Trash2, FileText, CalendarDays, Plus, Edit, Trash, Globe } from "lucide-react";
 import { toast } from "sonner";
 import { useLocation } from "wouter";
 
-type Tab = "overview" | "appointments" | "contacts" | "gdpr" | "testimonials";
+type Tab = "overview" | "appointments" | "contacts" | "gdpr" | "testimonials" | "blog" | "availability";
 
 export default function AdminDashboard() {
   const { user, loading } = useAuth();
@@ -42,6 +42,8 @@ export default function AdminDashboard() {
     { id: "contacts" as Tab, label: "Messages", icon: MessageSquare },
     { id: "gdpr" as Tab, label: "RGPD", icon: Shield },
     { id: "testimonials" as Tab, label: "Témoignages", icon: Star },
+    { id: "blog" as Tab, label: "Blog", icon: FileText },
+    { id: "availability" as Tab, label: "Disponibilités", icon: CalendarDays },
   ];
 
   return (
@@ -92,6 +94,8 @@ export default function AdminDashboard() {
         {activeTab === "contacts" && <ContactsTab />}
         {activeTab === "gdpr" && <GdprTab />}
         {activeTab === "testimonials" && <TestimonialsTab />}
+        {activeTab === "blog" && <BlogTab />}
+        {activeTab === "availability" && <AvailabilityTab />}
       </main>
     </div>
   );
@@ -463,6 +467,446 @@ function TestimonialsTab() {
           <p className="text-center text-muted-foreground py-8">Aucun témoignage</p>
         )}
       </div>
+    </div>
+  );
+}
+
+function BlogTab() {
+  const utils = trpc.useUtils();
+  const { data: posts, isLoading, error } = trpc.admin.blog.list.useQuery();
+  const [showForm, setShowForm] = useState(false);
+  const [editingPost, setEditingPost] = useState<any>(null);
+  const [form, setForm] = useState({ title: "", slug: "", excerpt: "", content: "", category: "anesthesie", language: "fr", source: "", coverImage: "", published: true });
+
+  const createPost = trpc.admin.blog.create.useMutation({
+    onSuccess: () => {
+      toast.success("Article créé");
+      utils.admin.blog.list.invalidate();
+      resetForm();
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
+  const updatePost = trpc.admin.blog.update.useMutation({
+    onSuccess: () => {
+      toast.success("Article mis à jour");
+      utils.admin.blog.list.invalidate();
+      resetForm();
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
+  const deletePost = trpc.admin.blog.delete.useMutation({
+    onSuccess: () => {
+      toast.success("Article supprimé");
+      utils.admin.blog.list.invalidate();
+    },
+  });
+
+  const resetForm = () => {
+    setShowForm(false);
+    setEditingPost(null);
+    setForm({ title: "", slug: "", excerpt: "", content: "", category: "anesthesie", language: "fr", source: "", coverImage: "", published: true });
+  };
+
+  const handleEdit = (post: any) => {
+    setEditingPost(post);
+    setForm({
+      title: post.title,
+      slug: post.slug,
+      excerpt: post.excerpt || "",
+      content: post.content,
+      category: post.category,
+      language: post.language || "fr",
+      source: post.source || "",
+      coverImage: post.coverImage || "",
+      published: post.published === 1,
+    });
+    setShowForm(true);
+  };
+
+  const handleSubmit = () => {
+    if (!form.title || !form.slug || !form.content) {
+      toast.error("Titre, slug et contenu sont obligatoires");
+      return;
+    }
+    if (editingPost) {
+      updatePost.mutate({ id: editingPost.id, ...form, published: form.published ? 1 : 0 });
+    } else {
+      createPost.mutate({ ...form, published: form.published ? 1 : 0 });
+    }
+  };
+
+  const generateSlug = (title: string) => {
+    return title
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "");
+  };
+
+  if (error) {
+    return <div className="text-center py-8 text-red-400">Erreur : {error.message}</div>;
+  }
+
+  if (isLoading) {
+    return <div className="space-y-4">{[1, 2, 3].map(i => <div key={i} className="h-20 bg-card rounded-lg animate-pulse" />)}</div>;
+  }
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-6">
+        <p className="text-sm text-muted-foreground">{posts?.length || 0} article(s)</p>
+        <Button onClick={() => { resetForm(); setShowForm(true); }}>
+          <Plus className="w-4 h-4 mr-2" />
+          Nouvel article
+        </Button>
+      </div>
+
+      {showForm && (
+        <div className="bg-card border border-border rounded-lg p-6 mb-6">
+          <h3 className="text-lg font-semibold text-foreground mb-4">
+            {editingPost ? "Modifier l'article" : "Nouvel article"}
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            <div>
+              <label className="text-sm text-muted-foreground block mb-1">Titre *</label>
+              <input
+                className="w-full px-3 py-2 rounded-lg bg-background border border-border text-foreground"
+                value={form.title}
+                onChange={(e) => {
+                  setForm({ ...form, title: e.target.value, slug: editingPost ? form.slug : generateSlug(e.target.value) });
+                }}
+                placeholder="Titre de l'article"
+              />
+            </div>
+            <div>
+              <label className="text-sm text-muted-foreground block mb-1">Slug *</label>
+              <input
+                className="w-full px-3 py-2 rounded-lg bg-background border border-border text-foreground"
+                value={form.slug}
+                onChange={(e) => setForm({ ...form, slug: e.target.value })}
+                placeholder="url-de-larticle"
+              />
+            </div>
+            <div>
+              <label className="text-sm text-muted-foreground block mb-1">Catégorie</label>
+              <select
+                className="w-full px-3 py-2 rounded-lg bg-background border border-border text-foreground"
+                value={form.category}
+                onChange={(e) => setForm({ ...form, category: e.target.value })}
+              >
+                <option value="anesthesie">Anesthésie</option>
+                <option value="reanimation">Réanimation</option>
+                <option value="innovation">Innovation</option>
+                <option value="recherche">Recherche</option>
+                <option value="general">Général</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-sm text-muted-foreground block mb-1">Langue</label>
+              <select
+                className="w-full px-3 py-2 rounded-lg bg-background border border-border text-foreground"
+                value={form.language}
+                onChange={(e) => setForm({ ...form, language: e.target.value })}
+              >
+                <option value="fr">Français</option>
+                <option value="en">English</option>
+                <option value="de">Deutsch</option>
+                <option value="zh">中文</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-sm text-muted-foreground block mb-1">Source (URL)</label>
+              <input
+                className="w-full px-3 py-2 rounded-lg bg-background border border-border text-foreground"
+                value={form.source}
+                onChange={(e) => setForm({ ...form, source: e.target.value })}
+                placeholder="https://..."
+              />
+            </div>
+            <div>
+              <label className="text-sm text-muted-foreground block mb-1">Image de couverture (URL)</label>
+              <input
+                className="w-full px-3 py-2 rounded-lg bg-background border border-border text-foreground"
+                value={form.coverImage}
+                onChange={(e) => setForm({ ...form, coverImage: e.target.value })}
+                placeholder="https://..."
+              />
+            </div>
+          </div>
+          <div className="mb-4">
+            <label className="text-sm text-muted-foreground block mb-1">Résumé</label>
+            <textarea
+              className="w-full px-3 py-2 rounded-lg bg-background border border-border text-foreground h-20 resize-y"
+              value={form.excerpt}
+              onChange={(e) => setForm({ ...form, excerpt: e.target.value })}
+              placeholder="Résumé court de l'article..."
+            />
+          </div>
+          <div className="mb-4">
+            <label className="text-sm text-muted-foreground block mb-1">Contenu * (Markdown)</label>
+            <textarea
+              className="w-full px-3 py-2 rounded-lg bg-background border border-border text-foreground h-48 resize-y font-mono text-sm"
+              value={form.content}
+              onChange={(e) => setForm({ ...form, content: e.target.value })}
+              placeholder="Contenu de l'article en Markdown..."
+            />
+          </div>
+          <div className="flex items-center justify-between">
+            <label className="flex items-center gap-2 text-sm text-foreground cursor-pointer">
+              <input
+                type="checkbox"
+                checked={form.published}
+                onChange={(e) => setForm({ ...form, published: e.target.checked })}
+                className="rounded"
+              />
+              Publié
+            </label>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={resetForm}>Annuler</Button>
+              <Button onClick={handleSubmit} disabled={createPost.isPending || updatePost.isPending}>
+                {editingPost ? "Mettre à jour" : "Créer"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="space-y-3">
+        {posts?.map((post) => (
+          <div key={post.id} className="bg-card border border-border rounded-lg p-4">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-3 mb-1">
+                  <span className="font-semibold text-foreground">{post.title}</span>
+                  <span className={`px-2 py-0.5 rounded text-xs font-medium ${post.published === 1 ? "bg-green-500/20 text-green-400" : "bg-yellow-500/20 text-yellow-400"}`}>
+                    {post.published === 1 ? "Publié" : "Brouillon"}
+                  </span>
+                  <span className="px-2 py-0.5 rounded text-xs font-medium bg-slate-700 text-slate-200 capitalize">{post.category}</span>
+                  <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                    <Globe className="w-3 h-3" />{post.language?.toUpperCase() || "FR"}
+                  </span>
+                </div>
+                <div className="flex gap-3 text-sm text-muted-foreground">
+                  <span>/blog/{post.slug}</span>
+                  <span>{new Date(post.createdAt).toLocaleDateString("fr-FR")}</span>
+                </div>
+                {post.excerpt && <p className="text-sm text-muted-foreground mt-1 line-clamp-1">{post.excerpt}</p>}
+              </div>
+              <div className="flex gap-2 shrink-0">
+                <Button size="sm" variant="outline" onClick={() => handleEdit(post)}>
+                  <Edit className="w-3 h-3 mr-1" />
+                  Modifier
+                </Button>
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  onClick={() => {
+                    if (confirm("Supprimer cet article ?")) {
+                      deletePost.mutate({ id: post.id });
+                    }
+                  }}
+                >
+                  <Trash className="w-3 h-3" />
+                </Button>
+              </div>
+            </div>
+          </div>
+        ))}
+        {(!posts || posts.length === 0) && (
+          <p className="text-center text-muted-foreground py-8">Aucun article. Cliquez sur "Nouvel article" pour commencer.</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function AvailabilityTab() {
+  const utils = trpc.useUtils();
+  const { data: slots, isLoading: slotsLoading } = trpc.admin.availability.listSlots.useQuery();
+  const { data: blockedDates, isLoading: blockedLoading } = trpc.admin.availability.listBlockedDates.useQuery();
+
+  const [showSlotForm, setShowSlotForm] = useState(false);
+  const [slotForm, setSlotForm] = useState({ dayOfWeek: 1, startTime: "09:00", endTime: "10:00" });
+  const [showBlockForm, setShowBlockForm] = useState(false);
+  const [blockForm, setBlockForm] = useState({ date: "", reason: "" });
+
+  const createSlot = trpc.admin.availability.addSlot.useMutation({
+    onSuccess: () => {
+      toast.success("Créneau ajouté");
+      utils.admin.availability.listSlots.invalidate();
+      setShowSlotForm(false);
+      setSlotForm({ dayOfWeek: 1, startTime: "09:00", endTime: "10:00" });
+    },
+    onError: (e: any) => toast.error(e.message),
+  });
+
+  const deleteSlot = trpc.admin.availability.deleteSlot.useMutation({
+    onSuccess: () => {
+      toast.success("Créneau supprimé");
+      utils.admin.availability.listSlots.invalidate();
+    },
+  });
+
+  const blockDate = trpc.admin.availability.addBlockedDate.useMutation({
+    onSuccess: () => {
+      toast.success("Date bloquée");
+      utils.admin.availability.listBlockedDates.invalidate();
+      setShowBlockForm(false);
+      setBlockForm({ date: "", reason: "" });
+    },
+    onError: (e: any) => toast.error(e.message),
+  });
+
+  const unblockDate = trpc.admin.availability.removeBlockedDate.useMutation({
+    onSuccess: () => {
+      toast.success("Date débloquée");
+      utils.admin.availability.listBlockedDates.invalidate();
+    },
+    onError: (e: any) => toast.error(e.message),
+  });
+
+  const dayNames = ["Dimanche", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi"];
+
+  if (slotsLoading || blockedLoading) {
+    return <div className="space-y-4">{[1, 2, 3].map(i => <div key={i} className="h-20 bg-card rounded-lg animate-pulse" />)}</div>;
+  }
+
+  return (
+    <div className="space-y-8">
+      {/* Créneaux hebdomadaires */}
+      <section>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-foreground">Créneaux hebdomadaires</h3>
+          <Button size="sm" onClick={() => setShowSlotForm(!showSlotForm)}>
+            <Plus className="w-4 h-4 mr-2" />
+            Ajouter un créneau
+          </Button>
+        </div>
+
+        {showSlotForm && (
+          <div className="bg-card border border-border rounded-lg p-4 mb-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+              <div>
+                <label className="text-sm text-muted-foreground block mb-1">Jour</label>
+                <select
+                  className="w-full px-3 py-2 rounded-lg bg-background border border-border text-foreground"
+                  value={slotForm.dayOfWeek}
+                  onChange={(e) => setSlotForm({ ...slotForm, dayOfWeek: parseInt(e.target.value) })}
+                >
+                  {dayNames.map((name, i) => (
+                    <option key={i} value={i}>{name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-sm text-muted-foreground block mb-1">Début</label>
+                <input
+                  type="time"
+                  className="w-full px-3 py-2 rounded-lg bg-background border border-border text-foreground"
+                  value={slotForm.startTime}
+                  onChange={(e) => setSlotForm({ ...slotForm, startTime: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="text-sm text-muted-foreground block mb-1">Fin</label>
+                <input
+                  type="time"
+                  className="w-full px-3 py-2 rounded-lg bg-background border border-border text-foreground"
+                  value={slotForm.endTime}
+                  onChange={(e) => setSlotForm({ ...slotForm, endTime: e.target.value })}
+                />
+              </div>
+              <Button onClick={() => createSlot.mutate(slotForm)} disabled={createSlot.isPending}>
+                Ajouter
+              </Button>
+            </div>
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+          {slots?.map((slot) => (
+            <div key={slot.id} className="bg-card border border-border rounded-lg p-3 flex items-center justify-between">
+              <div>
+                <span className="font-medium text-foreground">{dayNames[slot.dayOfWeek]}</span>
+                <span className="text-sm text-muted-foreground ml-2">{slot.startTime} - {slot.endTime}</span>
+              </div>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => deleteSlot.mutate({ id: slot.id })}
+              >
+                <Trash className="w-3 h-3 text-red-400" />
+              </Button>
+            </div>
+          ))}
+          {(!slots || slots.length === 0) && (
+            <p className="text-muted-foreground col-span-full text-center py-4">Aucun créneau configuré</p>
+          )}
+        </div>
+      </section>
+
+      {/* Dates bloquées */}
+      <section>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-foreground">Dates bloquées</h3>
+          <Button size="sm" onClick={() => setShowBlockForm(!showBlockForm)}>
+            <Plus className="w-4 h-4 mr-2" />
+            Bloquer une date
+          </Button>
+        </div>
+
+        {showBlockForm && (
+          <div className="bg-card border border-border rounded-lg p-4 mb-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+              <div>
+                <label className="text-sm text-muted-foreground block mb-1">Date</label>
+                <input
+                  type="date"
+                  className="w-full px-3 py-2 rounded-lg bg-background border border-border text-foreground"
+                  value={blockForm.date}
+                  onChange={(e) => setBlockForm({ ...blockForm, date: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="text-sm text-muted-foreground block mb-1">Raison (optionnel)</label>
+                <input
+                  className="w-full px-3 py-2 rounded-lg bg-background border border-border text-foreground"
+                  value={blockForm.reason}
+                  onChange={(e) => setBlockForm({ ...blockForm, reason: e.target.value })}
+                  placeholder="Congés, formation..."
+                />
+              </div>
+              <Button onClick={() => blockDate.mutate(blockForm)} disabled={blockDate.isPending || !blockForm.date}>
+                Bloquer
+              </Button>
+            </div>
+          </div>
+        )}
+
+        <div className="space-y-2">
+          {blockedDates?.map((bd) => (
+            <div key={bd.id} className="bg-card border border-border rounded-lg p-3 flex items-center justify-between">
+              <div>
+                <span className="font-medium text-foreground">{new Date(bd.date + "T00:00:00").toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</span>
+                {bd.reason && <span className="text-sm text-muted-foreground ml-3">{bd.reason}</span>}
+              </div>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => unblockDate.mutate({ id: bd.id })}
+              >
+                <XCircle className="w-4 h-4 text-red-400" />
+              </Button>
+            </div>
+          ))}
+          {(!blockedDates || blockedDates.length === 0) && (
+            <p className="text-muted-foreground text-center py-4">Aucune date bloquée</p>
+          )}
+        </div>
+      </section>
     </div>
   );
 }

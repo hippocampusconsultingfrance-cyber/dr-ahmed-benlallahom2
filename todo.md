@@ -149,8 +149,8 @@
 
 - [x] Tableau de bord admin : voir les réservations, messages de contact, demandes GDPR (/admin)
 - [x] Confirmation email automatique au patient après réservation (déjà implémenté via webhook Stripe + Resend)
-- [ ] Système de blog/actualités : publier des articles médicaux
-- [ ] Calendrier de disponibilités : afficher les créneaux libres avant réservation
+- [x] Système de blog/actualités : publier des articles médicaux (/blog, /blog/:slug, admin CRUD)
+- [x] Calendrier de disponibilités : tables + procédures admin (créneaux, dates bloquées, créneaux réservés)
 - [ ] Facture PDF : ajouter un lien de téléchargement dans l'email de confirmation (actuellement envoyée en PJ)
 - [ ] Rappel automatique par email 24h avant le rendez-vous
 
