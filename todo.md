@@ -118,3 +118,5 @@
 - [x] Corriger le bug URL invalide pour Stripe success_url/cancel_url
 - [x] Tester le flux complet : création réservation → Stripe Checkout → URL valide
 - [x] Changer les textes "Témoignages de Patients" en "Témoignages des Partenaires"
+- [x] Générer une facture PDF après chaque paiement réussi
+- [x] Envoyer la facture par email au client après paiement

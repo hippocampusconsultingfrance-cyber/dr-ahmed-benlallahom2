@@ -114,6 +114,42 @@ async function startServer() {
                   appointment.appointmentDate,
                   finalPriceNum
                 ).catch(console.error);
+
+                // Generate and send invoice PDF
+                try {
+                  const { generateInvoicePDF } = await import("../invoice");
+                  const { sendInvoiceEmail } = await import("./notifications");
+                  
+                  const basePriceNum = parseFloat(appointment.basePrice);
+                  const invoiceResult = await generateInvoicePDF({
+                    trackingId,
+                    customerName: appointment.customerName,
+                    customerEmail: appointment.customerEmail,
+                    customerPhone: appointment.customerPhone,
+                    appointmentDate: appointment.appointmentDate,
+                    consultationType: appointment.consultationType || "Conseil en santé",
+                    duration: appointment.duration || 30,
+                    basePrice: basePriceNum,
+                    finalPrice: finalPriceNum,
+                    isNightRate: appointment.isNightRate === 1,
+                    paymentDate: new Date(),
+                  });
+                  
+                  console.log(`Invoice generated for ${trackingId}: ${invoiceResult.key}`);
+                  
+                  // Send invoice by email
+                  await sendInvoiceEmail(
+                    appointment.customerEmail,
+                    appointment.customerName,
+                    trackingId,
+                    finalPriceNum,
+                    invoiceResult.buffer
+                  );
+                  
+                  console.log(`Invoice sent by email to ${appointment.customerEmail}`);
+                } catch (invoiceError) {
+                  console.error("Failed to generate/send invoice:", invoiceError);
+                }
               }
             } catch (notificationError) {
               console.error("Failed to send notifications after payment:", notificationError);

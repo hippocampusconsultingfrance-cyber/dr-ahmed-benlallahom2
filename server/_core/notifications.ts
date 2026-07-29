@@ -149,6 +149,50 @@ export async function sendOwnerNotificationSMS(
   }
 }
 
+export async function sendInvoiceEmail(
+  customerEmail: string,
+  customerName: string,
+  trackingId: string,
+  finalPrice: number,
+  invoicePdfBuffer: Buffer
+) {
+  try {
+    const emailContent = `
+      <h2>Votre Facture - Consultation Dr. Ben Lallahom</h2>
+      <p>Bonjour ${customerName},</p>
+      <p>Veuillez trouver ci-joint la facture correspondant à votre consultation.</p>
+      
+      <h3>Récapitulatif :</h3>
+      <ul>
+        <li><strong>Référence :</strong> ${trackingId}</li>
+        <li><strong>Montant :</strong> ${finalPrice}€</li>
+        <li><strong>Statut :</strong> Payé</li>
+      </ul>
+      
+      <p>Merci de votre confiance.</p>
+      <p>Dr. Ahmed Ben Lallahom<br>Hippocampus Consulting</p>
+    `;
+
+    await transporter.sendMail({
+      from: process.env.SMTP_FROM || "noreply@drbenlallahom.com",
+      to: customerEmail,
+      subject: `Facture - Consultation ${trackingId}`,
+      html: emailContent,
+      attachments: [
+        {
+          filename: `Facture-${trackingId}.pdf`,
+          content: invoicePdfBuffer,
+          contentType: "application/pdf",
+        },
+      ],
+    });
+
+    console.log(`Invoice email sent to ${customerEmail}`);
+  } catch (error) {
+    console.error("Error sending invoice email:", error);
+  }
+}
+
 export async function sendCustomerConfirmationSMS(
   customerPhone: string,
   trackingId: string,
