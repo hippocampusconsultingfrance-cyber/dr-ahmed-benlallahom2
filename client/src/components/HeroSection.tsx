@@ -1,10 +1,12 @@
-import { useLanguage } from "@/contexts/LanguageContext";
 import { useEffect, useState } from "react";
 import { siteConfig } from "@/data/site-config";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { useLocation } from "wouter";
 
 export default function HeroSection() {
   const { content } = useLanguage();
   const [roleIndex, setRoleIndex] = useState(0);
+  const [, setLocation] = useLocation();
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -78,16 +80,16 @@ export default function HeroSection() {
           {/* CTA */}
           <div className="flex flex-wrap gap-4">
             <button
-              onClick={() => document.getElementById("contact")?.scrollIntoView({ behavior: "smooth" })}
+              onClick={() => setLocation("/booking")}
               className="px-8 py-4 rounded-full bg-primary text-primary-foreground font-semibold hover:bg-primary/90 transition-all duration-200 active:scale-[0.97] shadow-lg shadow-primary/25"
             >
-              {content.nav.getInTouch}
+              Réserver une Consultation
             </button>
             <button
-              onClick={() => document.getElementById("experience")?.scrollIntoView({ behavior: "smooth" })}
+              onClick={() => document.getElementById("contact")?.scrollIntoView({ behavior: "smooth" })}
               className="px-8 py-4 rounded-full border border-border/60 text-foreground font-semibold hover:border-primary/50 hover:text-primary transition-all duration-200"
             >
-              {content.nav.experience}
+              {content.nav.getInTouch}
             </button>
           </div>
         </div>
