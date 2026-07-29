@@ -214,3 +214,38 @@
     100% { transform: scale(2.5); opacity: 0; }
   }
 }
+
+  /* Staggered fade-in for children */
+  .fade-in-up:nth-child(1) { transition-delay: 0ms; }
+  .fade-in-up:nth-child(2) { transition-delay: 80ms; }
+  .fade-in-up:nth-child(3) { transition-delay: 160ms; }
+  .fade-in-up:nth-child(4) { transition-delay: 240ms; }
+  .fade-in-up:nth-child(5) { transition-delay: 320ms; }
+  .fade-in-up:nth-child(6) { transition-delay: 400ms; }
+
+  /* Parallax-like subtle scale on scroll */
+  .parallax-subtle {
+    transition: transform 0.8s cubic-bezier(0.23, 1, 0.32, 1);
+  }
+  .parallax-subtle.visible {
+    transform: scale(1);
+  }
+  .parallax-subtle:not(.visible) {
+    transform: scale(0.97);
+  }
+
+  /* Smooth hover lift for interactive cards */
+  .hover-lift {
+    transition: transform 0.3s cubic-bezier(0.23, 1, 0.32, 1), box-shadow 0.3s ease;
+  }
+  .hover-lift:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 12px 40px oklch(0.75 0.15 220 / 0.12);
+  }
+
+  /* Button press feedback */
+  button:active:not(:disabled),
+  [role="button"]:active:not([aria-disabled="true"]) {
+    transform: scale(0.97);
+    transition: transform 0.16s cubic-bezier(0.23, 1, 0.32, 1);
+  }

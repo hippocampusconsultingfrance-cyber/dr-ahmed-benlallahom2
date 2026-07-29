@@ -5,6 +5,7 @@ import { ArrowLeft } from "lucide-react";
 import { Link, useSearch } from "wouter";
 import { SEOHead } from "@/components/SEOHead";
 import { useState, useEffect } from "react";
+import Breadcrumb from "@/components/Breadcrumb";
 
 export default function LegalPage() {
   const { language } = useLanguage();
@@ -44,10 +45,7 @@ function LegalPageFr() {
       <Navigation />
       <main className="pt-24 pb-20">
         <div className="container mb-8">
-          <Link href="/" className="inline-flex items-center gap-2 text-primary hover:underline">
-            <ArrowLeft className="w-4 h-4" />
-            Retour à l'accueil
-          </Link>
+          <Breadcrumb items={[{ label: "Mentions Légales" }]} />
         </div>
 
         <div className="container max-w-4xl">
@@ -301,10 +299,7 @@ function LegalPageEn() {
       <Navigation />
       <main className="pt-24 pb-20">
         <div className="container mb-8">
-          <Link href="/" className="inline-flex items-center gap-2 text-primary hover:underline">
-            <ArrowLeft className="w-4 h-4" />
-            Back to home
-          </Link>
+          <Breadcrumb items={[{ label: "Legal Notice" }]} />
         </div>
 
         <div className="container max-w-4xl">
@@ -558,10 +553,7 @@ function LegalPageDe() {
       <Navigation />
       <main className="pt-24 pb-20">
         <div className="container mb-8">
-          <Link href="/" className="inline-flex items-center gap-2 text-primary hover:underline">
-            <ArrowLeft className="w-4 h-4" />
-            Zurück zur Startseite
-          </Link>
+          <Breadcrumb items={[{ label: "Rechtliche Hinweise" }]} />
         </div>
 
         <div className="container max-w-4xl">
@@ -815,10 +807,7 @@ function LegalPageZh() {
       <Navigation />
       <main className="pt-24 pb-20">
         <div className="container mb-8">
-          <Link href="/" className="inline-flex items-center gap-2 text-primary hover:underline">
-            <ArrowLeft className="w-4 h-4" />
-            返回首页
-          </Link>
+          <Breadcrumb items={[{ label: "法律声明" }]} />
         </div>
 
         <div className="container max-w-4xl">

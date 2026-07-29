@@ -34,13 +34,13 @@ export default function Home() {
         <div className="fade-in-up">
           <ExperienceSection />
         </div>
-        <div className="fade-in-up">
+        <div className="fade-in-up parallax-subtle">
           <ServicesSection />
         </div>
         <div className="fade-in-up">
           <EducationSection />
         </div>
-        <div className="fade-in-up">
+        <div className="fade-in-up parallax-subtle">
           <TestimonialsSection />
         </div>
         <div className="fade-in-up">

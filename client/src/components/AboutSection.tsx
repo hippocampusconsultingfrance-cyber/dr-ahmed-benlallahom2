@@ -58,6 +58,7 @@ export default function AboutSection() {
             <div className="relative rounded-2xl overflow-hidden aspect-[3/4] max-w-sm mx-auto lg:mx-0 shadow-2xl shadow-primary/10">
               <img
                 src="/manus-storage/hero-ahmed-medical_4adb9653.png"
+                loading="lazy"
                 alt="Dr. Ahmed Ben Lallahom"
                 className="w-full h-full object-cover"
               />

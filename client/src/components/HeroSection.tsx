@@ -23,7 +23,8 @@ export default function HeroSection() {
           src="/manus-storage/hero-bg-ahmed_156f3568.png"
           alt="Dr. Ahmed Ben Lallahom - Anesthésiste-Réanimateur et Entrepreneur en Santé"
           className="w-full h-full object-cover sm:object-right"
-          loading="lazy"
+          loading="eager"
+          fetchPriority="high"
           style={{
             objectPosition: window.innerWidth < 640 ? 'center 20%' : 'right center'
           }}

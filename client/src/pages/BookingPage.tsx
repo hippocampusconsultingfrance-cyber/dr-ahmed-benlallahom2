@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { Calendar, Clock, User, Mail, Phone, FileText, CheckCircle, AlertCircle } from "lucide-react";
+import Breadcrumb from "@/components/Breadcrumb";
 
 const bookingContent = {
   fr: {
@@ -220,9 +221,48 @@ export default function BookingPage() {
 
   const isLoading = createAppointment.isPending || createCheckoutSession.isPending;
 
+  // Progress steps
+  const steps = [
+    { label: language === "fr" ? "Informations" : language === "de" ? "Informationen" : language === "zh" ? "信息" : "Information", icon: User },
+    { label: language === "fr" ? "Date & Heure" : language === "de" ? "Datum & Uhrzeit" : language === "zh" ? "日期和时间" : "Date & Time", icon: Calendar },
+    { label: language === "fr" ? "Paiement" : language === "de" ? "Zahlung" : language === "zh" ? "支付" : "Payment", icon: Clock },
+  ];
+
+  const currentStep = paymentStatus === "success" ? 3 : (isLoading || (selectedDate && formData.details)) ? 2 : (formData.name && formData.email && formData.phone) ? 1 : 0;
+
   return (
     <div className="min-h-screen bg-background py-12 px-4">
       <div className="max-w-2xl mx-auto">
+        {/* Breadcrumb */}
+        <Breadcrumb items={[{ label: content.title }]} />
+
+        {/* Progress Indicator */}
+        {!paymentStatus && (
+          <div className="mb-8">
+            <div className="flex items-center justify-between">
+              {steps.map((step, index) => {
+                const StepIcon = step.icon;
+                const isCompleted = index < currentStep;
+                const isCurrent = index === currentStep;
+                const isActive = isCompleted || isCurrent;
+                return (
+                  <div key={index} className="flex items-center flex-1">
+                    <div className={`flex items-center gap-2 ${isCompleted ? 'text-primary' : isCurrent ? 'text-primary' : 'text-muted-foreground'}`}>
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all duration-300 ${isCompleted ? 'bg-primary text-primary-foreground' : isCurrent ? 'bg-primary/20 text-primary border-2 border-primary' : 'bg-muted text-muted-foreground'}`}>
+                        <StepIcon size={14} />
+                      </div>
+                      <span className="text-xs font-medium hidden sm:inline">{step.label}</span>
+                    </div>
+                    {index < steps.length - 1 && (
+                      <div className={`flex-1 h-0.5 mx-2 transition-all duration-300 ${index < currentStep ? 'bg-primary' : 'bg-muted'}`} />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {/* Payment Success Message */}
         {paymentStatus === "success" && (
           <Card className="mb-6 p-6 border-green-500 bg-green-50">
@@ -374,7 +414,7 @@ export default function BookingPage() {
               variant="outline"
               className="w-full mt-4"
             >
-              Nouvelle réservation / New Booking
+              {language === "fr" ? "Nouvelle réservation" : language === "de" ? "Neue Buchung" : language === "zh" ? "新预约" : "New Booking"}
             </Button>
           )}
         </Card>

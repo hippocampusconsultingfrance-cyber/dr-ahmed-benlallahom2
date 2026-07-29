@@ -9,6 +9,7 @@ export default function ServicesSection() {
       <div className="absolute inset-0 opacity-20">
         <img
           src="/manus-storage/services-bg_a14b9c28.png"
+          loading="lazy"
           alt=""
           className="w-full h-full object-cover"
         />

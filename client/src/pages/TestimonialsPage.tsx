@@ -3,6 +3,7 @@ import { Star } from "lucide-react";
 import { useState, useMemo } from "react";
 import { trpc } from "@/lib/trpc";
 import { SEOHead } from "@/components/SEOHead";
+import Breadcrumb from "@/components/Breadcrumb";
 
 export default function TestimonialsPage() {
   const { language } = useLanguage();
@@ -128,6 +129,9 @@ export default function TestimonialsPage() {
         structuredData={reviewSchema || undefined}
       />
       <div className="max-w-4xl mx-auto px-4">
+        {/* Breadcrumb */}
+        <Breadcrumb items={[{ label: currentContent.title }]} />
+
         {/* Header */}
         <div className="text-center mb-12">
           <h1 className="text-4xl md:text-5xl font-bold text-white mb-4">

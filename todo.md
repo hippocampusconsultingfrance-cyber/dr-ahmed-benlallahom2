@@ -137,3 +137,26 @@
 ## Bug de Traduction
 
 - [x] Corriger "Réserver une Consultation" qui reste en français malgré le changement de langue
+
+## Améliorations - Performance & SEO
+
+- [x] Optimisation des images (lazy loading + eager hero + fetchPriority)
+- [x] Ajout de métadonnées Open Graph pour le partage sur les réseaux sociaux - déjà en place
+- [x] Ajout d'un fil d'Ariane (breadcrumb) pour le SEO
+- [x] Pré-chargement des polices critiques - ajouté
+
+## Améliorations - Fonctionnalités Métier
+
+- [ ] Tableau de bord admin : voir les réservations, messages de contact, demandes GDPR
+- [ ] Confirmation email automatique au patient après réservation
+- [ ] Système de blog/actualités : publier des articles médicaux
+- [ ] Calendrier de disponibilités : afficher les créneaux libres avant réservation
+- [ ] Facture PDF téléchargeable depuis un lien dans l'email de confirmation
+- [ ] Rappel automatique par email 24h avant le rendez-vous
+
+## Améliorations - Design & UX
+
+- [x] Animations de scroll plus fluides (parallax subtil, staggered, hover-lift, button press)
+- [x] Page 404 personnalisée avec design cohérent (multilingue, ECG divider, diagnostic grid)
+- [x] Indicateur de progression sur le formulaire de réservation
+- [x] Témoignages en carrousel sur la page d'accueil (auto-play, navigation, dots)

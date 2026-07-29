@@ -17,7 +17,7 @@ export function useScrollReveal() {
 
     const el = ref.current;
     if (el) {
-      const children = el.querySelectorAll(".fade-in-up");
+      const children = el.querySelectorAll(".fade-in-up, .parallax-subtle");
       children.forEach((child) => observer.observe(child));
     }
 
