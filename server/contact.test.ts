@@ -5,6 +5,7 @@ import type { TrpcContext } from "./_core/context";
 // Mock the database and notification modules
 vi.mock("./db", () => ({
   getDb: vi.fn().mockResolvedValue({
+    execute: vi.fn().mockResolvedValue(undefined),
     insert: vi.fn().mockReturnValue({
       values: vi.fn().mockResolvedValue(undefined),
     }),
@@ -41,7 +42,9 @@ describe("contact.submit", () => {
       gdprConsent: 1,
     });
 
-    expect(result).toEqual({ success: true });
+    expect(result.success).toBe(true);
+    expect(result.trackingId).toBeDefined();
+    expect(result.trackingId.length).toBeLessThanOrEqual(20);
   });
 
   it("accepts a submission without phone number", async () => {
@@ -55,7 +58,8 @@ describe("contact.submit", () => {
       gdprConsent: 1,
     });
 
-    expect(result).toEqual({ success: true });
+    expect(result.success).toBe(true);
+    expect(result.trackingId).toBeDefined();
   });
 
   it("rejects submission with invalid email", async () => {
@@ -111,7 +115,8 @@ describe("contact.submit", () => {
       gdprConsent: 1,
     });
 
-    expect(result).toEqual({ success: true });
+    expect(result.success).toBe(true);
+    expect(result.trackingId).toBeDefined();
   });
 
   it("accepts submission with GDPR consent declined", async () => {
@@ -125,7 +130,8 @@ describe("contact.submit", () => {
       gdprConsent: 0,
     });
 
-    expect(result).toEqual({ success: true });
+    expect(result.success).toBe(true);
+    expect(result.trackingId).toBeDefined();
   });
 });
 
@@ -142,7 +148,9 @@ describe("gdpr.submit", () => {
       description: "I want to access my personal data.",
     });
 
-    expect(result).toEqual({ success: true });
+    expect(result.success).toBe(true);
+    expect(result.trackingId).toBeDefined();
+    expect(result.trackingId.length).toBeLessThanOrEqual(20);
   });
 
   it("accepts a GDPR deletion request", async () => {
@@ -156,7 +164,8 @@ describe("gdpr.submit", () => {
       description: "I want to delete my personal data.",
     });
 
-    expect(result).toEqual({ success: true });
+    expect(result.success).toBe(true);
+    expect(result.trackingId).toBeDefined();
   });
 
   it("accepts a GDPR rectification request", async () => {
@@ -170,7 +179,8 @@ describe("gdpr.submit", () => {
       description: "I want to correct my personal data.",
     });
 
-    expect(result).toEqual({ success: true });
+    expect(result.success).toBe(true);
+    expect(result.trackingId).toBeDefined();
   });
 
   it("accepts a GDPR portability request", async () => {
@@ -184,7 +194,8 @@ describe("gdpr.submit", () => {
       description: "I want to export my personal data.",
     });
 
-    expect(result).toEqual({ success: true });
+    expect(result.success).toBe(true);
+    expect(result.trackingId).toBeDefined();
   });
 
   it("accepts a GDPR objection request", async () => {
@@ -198,7 +209,8 @@ describe("gdpr.submit", () => {
       description: "I object to the processing of my personal data.",
     });
 
-    expect(result).toEqual({ success: true });
+    expect(result.success).toBe(true);
+    expect(result.trackingId).toBeDefined();
   });
 
   it("rejects GDPR request with invalid email", async () => {
@@ -240,7 +252,8 @@ describe("gdpr.submit", () => {
       description: "I want to access my personal data.",
     });
 
-    expect(result).toEqual({ success: true });
+    expect(result.success).toBe(true);
+    expect(result.trackingId).toBeDefined();
   });
 
   it("accepts GDPR request without description", async () => {
@@ -253,6 +266,7 @@ describe("gdpr.submit", () => {
       requestType: "access",
     });
 
-    expect(result).toEqual({ success: true });
+    expect(result.success).toBe(true);
+    expect(result.trackingId).toBeDefined();
   });
 });

@@ -44,20 +44,15 @@ export const appRouter = router({
         })
       )
       .mutation(async ({ input }) => {
-        // Generate a unique tracking ID
-        const trackingId = `CNT-${Date.now()}-${Math.random().toString(36).substring(2, 9).toUpperCase()}`;
+        // Generate a unique tracking ID (max 20 chars for varchar(20))
+        const trackingId = `C${Math.random().toString(36).substring(2, 10).toUpperCase()}${Date.now().toString(36).slice(-4).toUpperCase()}`;
 
-        // Save the message to the database
+        // Save the message to the database using raw SQL (TiDB DEFAULT bug workaround)
         const db = await getDb();
         if (db) {
-          await db.insert(contactMessages).values({
-            trackingId,
-            name: input.name,
-            email: input.email,
-            phone: input.phone || null,
-            message: input.message,
-            gdprConsent: input.gdprConsent,
-          });
+          await db.execute(
+            sql`INSERT INTO contact_messages (tracking_id, name, email, phone, message, gdpr_consent) VALUES (${trackingId}, ${input.name}, ${input.email}, ${input.phone || null}, ${input.message}, ${input.gdprConsent})`
+          );
         }
 
         // Notify the owner via Manus notification system
@@ -82,21 +77,15 @@ export const appRouter = router({
         })
       )
       .mutation(async ({ input }) => {
-        // Generate a unique tracking ID
-        const trackingId = `GDPR-${Date.now()}-${Math.random().toString(36).substring(2, 9).toUpperCase()}`;
+        // Generate a unique tracking ID (max 20 chars for varchar(20))
+        const trackingId = `G${Math.random().toString(36).substring(2, 10).toUpperCase()}${Date.now().toString(36).slice(-4).toUpperCase()}`;
 
-        // Save the GDPR request to the database
+        // Save the GDPR request to the database using raw SQL (TiDB DEFAULT bug workaround)
         const db = await getDb();
         if (db) {
-          await db.insert(gdprRequests).values({
-            trackingId,
-            name: input.name,
-            email: input.email,
-            phone: input.phone || null,
-            requestType: input.requestType,
-            description: input.description || null,
-            status: "pending",
-          });
+          await db.execute(
+            sql`INSERT INTO gdpr_requests (tracking_id, name, email, phone, request_type, description, status) VALUES (${trackingId}, ${input.name}, ${input.email}, ${input.phone || null}, ${input.requestType}, ${input.description || null}, ${'pending'})`
+          );
         }
 
         // Notify the owner via Manus notification system
