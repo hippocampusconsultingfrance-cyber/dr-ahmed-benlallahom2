@@ -6,7 +6,7 @@ import { z } from "zod";
 import { getDb } from "./db";
 import { contactMessages, gdprRequests, testimonials, appointments } from "../drizzle/schema";
 import { notifyOwner } from "./_core/notification";
-import { eq, and } from "drizzle-orm";
+import { eq, and, sql } from "drizzle-orm";
 import Stripe from "stripe";
 import {
   sendConfirmationEmail,
@@ -214,7 +214,7 @@ export const appRouter = router({
         const isNightRate = hours >= 18 || hours < 8;
         const finalPrice = isNightRate ? "150.00" : "100.00";
 
-        const trackingId = `APT-${Date.now()}-${Math.random().toString(36).substring(2, 9).toUpperCase()}`;
+        const trackingId = `APT${Math.random().toString(36).substring(2, 10).toUpperCase()}${Date.now().toString(36).slice(-4).toUpperCase()}`;
 
         const db = await getDb();
         if (!db) {
@@ -222,21 +222,10 @@ export const appRouter = router({
         }
 
         try {
-          await db.insert(appointments).values({
-            trackingId,
-            customerName: input.customerName,
-            customerEmail: input.customerEmail,
-            customerPhone: input.customerPhone,
-            consultationType: "health_advice",
-            requestDetails: input.requestDetails,
-            appointmentDate: new Date(input.appointmentDate),
-            duration: 30,
-            basePrice,
-            finalPrice,
-            isNightRate: isNightRate ? 1 : 0,
-            paymentStatus: "pending",
-            appointmentStatus: "confirmed",
-          });
+          const appointmentDateFormatted = date.toISOString().slice(0, 19).replace('T', ' ');
+          await db.execute(
+            sql`INSERT INTO appointments (tracking_id, customer_name, customer_email, customer_phone, consultation_type, request_details, appointment_date, duration, base_price, final_price, is_night_rate, payment_status, appointment_status) VALUES (${trackingId}, ${input.customerName}, ${input.customerEmail}, ${input.customerPhone}, ${'health_advice'}, ${input.requestDetails}, ${appointmentDateFormatted}, ${30}, ${basePrice}, ${finalPrice}, ${isNightRate ? 1 : 0}, ${'pending'}, ${'confirmed'})`
+          );
         } catch (dbError) {
           console.error("Database insert error:", dbError);
           throw new Error(`Failed to create appointment: ${dbError instanceof Error ? dbError.message : "Unknown error"}`);
@@ -286,8 +275,8 @@ export const appRouter = router({
               trackingId: input.trackingId,
               customerName: input.customerName,
             },
-            success_url: `${ctx.req.headers.origin}/booking?success=true&trackingId=${input.trackingId}`,
-            cancel_url: `${ctx.req.headers.origin}/booking?canceled=true`,
+            success_url: `${ctx.req.headers.origin || ctx.req.headers.referer?.replace(/\/booking.*$/, '') || 'https://drahmedbenlallahom.com'}/booking?success=true&trackingId=${input.trackingId}`,
+            cancel_url: `${ctx.req.headers.origin || ctx.req.headers.referer?.replace(/\/booking.*$/, '') || 'https://drahmedbenlallahom.com'}/booking?canceled=true`,
           });
 
           const db = await getDb();

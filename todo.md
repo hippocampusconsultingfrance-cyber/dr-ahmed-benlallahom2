@@ -104,3 +104,17 @@
 - [ ] Ajouter tests tRPC end-to-end pour les procédures testimonials.list
 - [ ] Ajouter tests UI pour les composants TestimonialsSection et TestimonialsPage
 - [ ] Valider que tous les tests vitest passent (pnpm test)
+
+## Système de Réservation et Paiement Stripe
+
+- [x] Créer la table appointments dans la base de données
+- [x] Créer les procédures tRPC appointments.create et appointments.createCheckoutSession
+- [x] Créer le formulaire de réservation frontend (BookingPage.tsx)
+- [x] Intégrer Stripe Checkout pour le paiement
+- [x] Configurer le webhook Stripe pour la réconciliation de paiement
+- [x] Configurer les notifications email/SMS après paiement confirmé
+- [x] Ajouter le bouton "Réserver une Consultation" sur la page d'accueil
+- [x] Corriger le bug tracking_id trop long (varchar(20) vs 27 chars)
+- [x] Corriger le bug URL invalide pour Stripe success_url/cancel_url
+- [x] Tester le flux complet : création réservation → Stripe Checkout → URL valide
+- [x] Changer les textes "Témoignages de Patients" en "Témoignages des Partenaires"
