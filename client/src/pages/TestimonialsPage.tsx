@@ -18,8 +18,8 @@ export default function TestimonialsPage() {
 
   const content: Record<string, any> = {
     fr: {
-      title: "Témoignages de Patients",
-      subtitle: "Découvrez les expériences de nos patients satisfaits",
+      title: "Témoignages des Partenaires",
+      subtitle: "Découvrez les expériences de nos partenaires",
       filterAll: "Tous les avis",
       filter5Stars: "5 étoiles",
       filter4Stars: "4 étoiles et plus",
@@ -28,8 +28,8 @@ export default function TestimonialsPage() {
       specialty: "Spécialité",
     },
     en: {
-      title: "Patient Testimonials",
-      subtitle: "Discover the experiences of our satisfied patients",
+      title: "Partner Testimonials",
+      subtitle: "Discover the experiences of our partners",
       filterAll: "All reviews",
       filter5Stars: "5 stars",
       filter4Stars: "4 stars and up",
@@ -38,8 +38,8 @@ export default function TestimonialsPage() {
       specialty: "Specialty",
     },
     de: {
-      title: "Patientenbewertungen",
-      subtitle: "Entdecken Sie die Erfahrungen unserer zufriedenen Patienten",
+      title: "Partnerbewertungen",
+      subtitle: "Entdecken Sie die Erfahrungen unserer Partner",
       filterAll: "Alle Bewertungen",
       filter5Stars: "5 Sterne",
       filter4Stars: "4 Sterne und höher",
@@ -48,8 +48,8 @@ export default function TestimonialsPage() {
       specialty: "Fachgebiet",
     },
     zh: {
-      title: "患者评价",
-      subtitle: "了解我们满意患者的经历",
+      title: "合作伙伴评价",
+      subtitle: "了解我们的合作伙伴的经历",
       filterAll: "所有评价",
       filter5Stars: "5星",
       filter4Stars: "4星及以上",

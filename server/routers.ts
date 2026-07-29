@@ -4,7 +4,7 @@ import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, router } from "./_core/trpc";
 import { z } from "zod";
 import { getDb } from "./db";
-import { contactMessages, gdprRequests, testimonials } from "../drizzle/schema";
+import { contactMessages, gdprRequests, testimonials, appointments } from "../drizzle/schema";
 import { notifyOwner } from "./_core/notification";
 import { eq, and } from "drizzle-orm";
 
@@ -131,6 +131,73 @@ export const appRouter = router({
           .select()
           .from(testimonials)
           .where(and(...conditions));
+      }),
+  }),
+
+  appointments: router({
+    calculatePrice: publicProcedure
+      .input(
+        z.object({
+          appointmentDate: z.string(),
+        })
+      )
+      .query(({ input }) => {
+        const date = new Date(input.appointmentDate);
+        const hours = date.getHours();
+        const basePrice = 100;
+        const isNightRate = hours >= 18 || hours < 8;
+        const finalPrice = isNightRate ? basePrice * 1.5 : basePrice;
+
+        return {
+          basePrice,
+          finalPrice,
+          isNightRate,
+        };
+      }),
+
+    create: publicProcedure
+      .input(
+        z.object({
+          customerName: z.string().min(1).max(255),
+          customerEmail: z.string().email().max(320),
+          customerPhone: z.string().min(1).max(50),
+          appointmentDate: z.string(),
+          requestDetails: z.string().min(1).max(5000),
+        })
+      )
+      .mutation(async ({ input }) => {
+        const date = new Date(input.appointmentDate);
+        const hours = date.getHours();
+        const basePrice = "100.00";
+        const isNightRate = hours >= 18 || hours < 8;
+        const finalPrice = isNightRate ? "150.00" : "100.00";
+
+        const trackingId = `APT-${Date.now()}-${Math.random().toString(36).substring(2, 9).toUpperCase()}`;
+
+        const db = await getDb();
+        if (db) {
+          await db.insert(appointments).values({
+            trackingId,
+            customerName: input.customerName,
+            customerEmail: input.customerEmail,
+            customerPhone: input.customerPhone,
+            consultationType: "health_advice",
+            requestDetails: input.requestDetails,
+            appointmentDate: new Date(input.appointmentDate),
+            duration: 30,
+            basePrice,
+            finalPrice,
+            isNightRate: isNightRate ? 1 : 0,
+            paymentStatus: "pending",
+            appointmentStatus: "confirmed",
+          });
+        }
+
+        return {
+          success: true,
+          trackingId,
+          finalPrice: parseFloat(finalPrice),
+        };
       }),
   }),
 });

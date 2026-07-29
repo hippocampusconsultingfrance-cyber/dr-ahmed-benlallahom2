@@ -16,26 +16,26 @@ export default function TestimonialsSection() {
 
   const content: Record<string, any> = {
     fr: {
-      title: "Témoignages de Patients",
-      subtitle: "Ce que disent nos patients",
+      title: "Témoignages des Partenaires",
+      subtitle: "Ce que disent nos partenaires",
       viewAll: "Voir tous les témoignages",
       verified: "✓ Vérifié",
     },
     en: {
-      title: "Patient Testimonials",
-      subtitle: "What our patients say",
+      title: "Partner Testimonials",
+      subtitle: "What our partners say",
       viewAll: "View all testimonials",
       verified: "✓ Verified",
     },
     de: {
-      title: "Patientenbewertungen",
-      subtitle: "Was unsere Patienten sagen",
+      title: "Partnerbewertungen",
+      subtitle: "Was unsere Partner sagen",
       viewAll: "Alle Bewertungen anzeigen",
       verified: "✓ Verifiziert",
     },
     zh: {
-      title: "患者评价",
-      subtitle: "我们的患者怎么说",
+      title: "合作伙伴评价",
+      subtitle: "我们的合作伙伴怎么说",
       viewAll: "查看所有评价",
       verified: "✓ 已验证",
     },

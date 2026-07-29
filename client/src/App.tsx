@@ -10,6 +10,7 @@ import VenturePage from "./pages/VenturePage";
 import LegalPage from "./pages/LegalPage";
 import GDPRPage from "./pages/GDPRPage";
 import TestimonialsPage from "./pages/TestimonialsPage";
+import BookingPage from "./pages/BookingPage";
 import WhatsAppButton from "./components/WhatsAppButton";
 
 function Router() {
@@ -20,6 +21,7 @@ function Router() {
       <Route path="/legal" component={LegalPage} />
       <Route path="/gdpr" component={GDPRPage} />
       <Route path="/testimonials" component={TestimonialsPage} />
+      <Route path="/booking" component={BookingPage} />
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
     </Switch>

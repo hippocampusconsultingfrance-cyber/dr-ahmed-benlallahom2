@@ -36,6 +36,13 @@
       "when": 1785311512430,
       "tag": "0004_clean_killmonger",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1785346807386,
+      "tag": "0005_nostalgic_maximus",
+      "breakpoints": true
     }
   ]
 }
