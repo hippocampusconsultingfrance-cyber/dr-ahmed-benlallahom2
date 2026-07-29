@@ -147,11 +147,11 @@
 
 ## Améliorations - Fonctionnalités Métier
 
-- [ ] Tableau de bord admin : voir les réservations, messages de contact, demandes GDPR
-- [ ] Confirmation email automatique au patient après réservation
+- [x] Tableau de bord admin : voir les réservations, messages de contact, demandes GDPR (/admin)
+- [x] Confirmation email automatique au patient après réservation (déjà implémenté via webhook Stripe + Resend)
 - [ ] Système de blog/actualités : publier des articles médicaux
 - [ ] Calendrier de disponibilités : afficher les créneaux libres avant réservation
-- [ ] Facture PDF téléchargeable depuis un lien dans l'email de confirmation
+- [ ] Facture PDF : ajouter un lien de téléchargement dans l'email de confirmation (actuellement envoyée en PJ)
 - [ ] Rappel automatique par email 24h avant le rendez-vous
 
 ## Améliorations - Design & UX

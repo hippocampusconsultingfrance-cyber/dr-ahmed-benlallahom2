@@ -1,12 +1,12 @@
 import { getSessionCookieOptions } from "./_core/cookies";
 import { COOKIE_NAME } from "../shared/const";
 import { systemRouter } from "./_core/systemRouter";
-import { publicProcedure, router } from "./_core/trpc";
+import { publicProcedure, adminProcedure, router } from "./_core/trpc";
 import { z } from "zod";
 import { getDb } from "./db";
 import { contactMessages, gdprRequests, testimonials, appointments } from "../drizzle/schema";
 import { notifyOwner } from "./_core/notification";
-import { eq, and, sql } from "drizzle-orm";
+import { eq, and, sql, desc } from "drizzle-orm";
 import Stripe from "stripe";
 import {
   sendConfirmationEmail,
@@ -286,6 +286,220 @@ export const appRouter = router({
           throw new Error("Failed to create checkout session");
         }
       }),
+  }),
+
+  // Admin Dashboard Procedures
+  admin: router({
+    // List all appointments with pagination
+    appointments: router({
+      list: adminProcedure
+        .input(
+          z.object({
+            limit: z.number().min(1).max(100).optional().default(50),
+            offset: z.number().min(0).optional().default(0),
+            status: z.enum(["pending", "completed", "failed", "refunded"]).optional(),
+          })
+        )
+        .query(async ({ input }) => {
+          const db = await getDb();
+          if (!db) return { items: [], total: 0 };
+
+          const conditions = [];
+          if (input.status) {
+            conditions.push(eq(appointments.paymentStatus, input.status));
+          }
+
+          const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
+          const items = await db
+            .select()
+            .from(appointments)
+            .where(whereClause)
+            .orderBy(desc(appointments.createdAt))
+            .limit(input.limit)
+            .offset(input.offset);
+
+          const countResult = await db
+            .select({ count: sql<number>`COUNT(*)` })
+            .from(appointments)
+            .where(whereClause);
+
+          return { items, total: countResult[0]?.count || 0 };
+        }),
+
+      updateStatus: adminProcedure
+        .input(
+          z.object({
+            trackingId: z.string(),
+            appointmentStatus: z.enum(["confirmed", "cancelled", "completed", "no_show"]),
+          })
+        )
+        .mutation(async ({ input }) => {
+          const db = await getDb();
+          if (!db) throw new Error("Database connection failed");
+
+          await db
+            .update(appointments)
+            .set({ appointmentStatus: input.appointmentStatus })
+            .where(eq(appointments.trackingId, input.trackingId));
+
+          return { success: true };
+        }),
+    }),
+
+    // List all contact messages
+    contacts: router({
+      list: adminProcedure
+        .input(
+          z.object({
+            limit: z.number().min(1).max(100).optional().default(50),
+            offset: z.number().min(0).optional().default(0),
+          })
+        )
+        .query(async ({ input }) => {
+          const db = await getDb();
+          if (!db) return { items: [], total: 0 };
+
+          const items = await db
+            .select()
+            .from(contactMessages)
+            .orderBy(desc(contactMessages.createdAt))
+            .limit(input.limit)
+            .offset(input.offset);
+
+          const countResult = await db
+            .select({ count: sql<number>`COUNT(*)` })
+            .from(contactMessages);
+
+          return { items, total: countResult[0]?.count || 0 };
+        }),
+
+      markRead: adminProcedure
+        .input(z.object({ id: z.number() }))
+        .mutation(async ({ input }) => {
+          const db = await getDb();
+          if (!db) throw new Error("Database connection failed");
+
+          await db
+            .update(contactMessages)
+            .set({ read: 1 })
+            .where(eq(contactMessages.id, input.id));
+
+          return { success: true };
+        }),
+    }),
+
+    // List all GDPR requests
+    gdprRequests: router({
+      list: adminProcedure
+        .input(
+          z.object({
+            limit: z.number().min(1).max(100).optional().default(50),
+            offset: z.number().min(0).optional().default(0),
+          })
+        )
+        .query(async ({ input }) => {
+          const db = await getDb();
+          if (!db) return { items: [], total: 0 };
+
+          const items = await db
+            .select()
+            .from(gdprRequests)
+            .orderBy(desc(gdprRequests.createdAt))
+            .limit(input.limit)
+            .offset(input.offset);
+
+          const countResult = await db
+            .select({ count: sql<number>`COUNT(*)` })
+            .from(gdprRequests);
+
+          return { items, total: countResult[0]?.count || 0 };
+        }),
+
+      updateStatus: adminProcedure
+        .input(
+          z.object({
+            id: z.number(),
+            status: z.enum(["pending", "in_progress", "completed", "rejected"]),
+            notes: z.string().optional(),
+          })
+        )
+        .mutation(async ({ input }) => {
+          const db = await getDb();
+          if (!db) throw new Error("Database connection failed");
+
+          const updateData: Record<string, any> = { status: input.status };
+          if (input.notes) updateData.notes = input.notes;
+          if (input.status === "completed") updateData.responseDate = new Date();
+
+          await db
+            .update(gdprRequests)
+            .set(updateData)
+            .where(eq(gdprRequests.id, input.id));
+
+          return { success: true };
+        }),
+    }),
+
+    // Dashboard stats
+    stats: adminProcedure.query(async () => {
+      const db = await getDb();
+      if (!db) return { appointments: 0, contacts: 0, gdpr: 0, revenue: 0 };
+
+      const [aptCount] = await db.select({ count: sql<number>`COUNT(*)` }).from(appointments);
+      const [contactCount] = await db.select({ count: sql<number>`COUNT(*)` }).from(contactMessages);
+      const [gdprCount] = await db.select({ count: sql<number>`COUNT(*)` }).from(gdprRequests);
+      const [revenueResult] = await db.select({ total: sql<number>`COALESCE(SUM(CAST(final_price AS DECIMAL(10,2))), 0)` }).from(appointments).where(eq(appointments.paymentStatus, "completed"));
+
+      return {
+        appointments: aptCount?.count || 0,
+        contacts: contactCount?.count || 0,
+        gdpr: gdprCount?.count || 0,
+        revenue: revenueResult?.total || 0,
+      };
+    }),
+
+    // Manage testimonials
+    testimonials: router({
+      list: adminProcedure.query(async () => {
+        const db = await getDb();
+        if (!db) return [];
+        return await db.select().from(testimonials).orderBy(desc(testimonials.createdAt));
+      }),
+
+      updateStatus: adminProcedure
+        .input(
+          z.object({
+            id: z.number(),
+            status: z.enum(["pending", "approved", "rejected"]),
+            featured: z.number().optional(),
+          })
+        )
+        .mutation(async ({ input }) => {
+          const db = await getDb();
+          if (!db) throw new Error("Database connection failed");
+
+          const updateData: Record<string, any> = { status: input.status };
+          if (input.featured !== undefined) updateData.featured = input.featured;
+
+          await db
+            .update(testimonials)
+            .set(updateData)
+            .where(eq(testimonials.id, input.id));
+
+          return { success: true };
+        }),
+
+      delete: adminProcedure
+        .input(z.object({ id: z.number() }))
+        .mutation(async ({ input }) => {
+          const db = await getDb();
+          if (!db) throw new Error("Database connection failed");
+
+          await db.delete(testimonials).where(eq(testimonials.id, input.id));
+          return { success: true };
+        }),
+    }),
   }),
 });
 
