@@ -155,11 +155,15 @@ export default function BookingPage() {
   const createCheckoutSession = trpc.appointments.createCheckoutSession.useMutation({
     onSuccess: (data) => {
       if (data.checkoutUrl) {
-        window.open(data.checkoutUrl, "_blank");
+        // Use window.location.assign instead of window.open to avoid popup blocking
+        window.location.assign(data.checkoutUrl);
+      } else {
+        alert("Error: No checkout URL received from server");
       }
     },
     onError: (error) => {
       alert("Payment error: " + error.message);
+      console.error("Checkout session error:", error);
     },
   });
 
@@ -203,6 +207,7 @@ export default function BookingPage() {
       }
     } catch (error) {
       console.error("Booking error:", error);
+      alert("Error creating booking: " + (error instanceof Error ? error.message : "Unknown error"));
     }
   };
 
