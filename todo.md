@@ -63,14 +63,14 @@
 
 ## Corrections et Tests Identifiés
 
-- [ ] Corriger les statistiques dans la section "À Propos" (9+ années, 5+ entreprises, 16+ certifications, 3 langues)
-- [ ] Tester la soumission du formulaire de contact sans cocher GDPR (doit être rejeté)
-- [ ] Tester la soumission du formulaire de contact avec GDPR coché (doit être accepté)
-- [ ] Vérifier la responsive design sur mobile (375x812)
-- [ ] Vérifier la responsive design sur tablet (768x1024)
-- [ ] Tester le changement de langue vers l'anglais (EN)
-- [ ] Tester le changement de langue vers l'allemand (DE)
-- [ ] Tester le changement de langue vers le chinois (ZH)
+- [x] Corriger les statistiques dans la section "À Propos" (9+ années, 5+ entreprises, 16+ certifications, 3 langues) - déjà correctes
+- [x] Tester la soumission du formulaire de contact sans cocher GDPR (rejeté - validation frontend ligne 41)
+- [x] Tester la soumission du formulaire de contact avec GDPR coché (accepté - envoi normal)
+- [x] Vérifier la responsive design sur mobile (375x812)
+- [x] Vérifier la responsive design sur tablet (768x1024)
+- [x] Tester le changement de langue vers l'anglais (EN)
+- [x] Tester le changement de langue vers l'allemand (DE)
+- [x] Tester le changement de langue vers le chinois (ZH)
 
 ## Indexation Google et Configuration des Domaines
 
@@ -152,7 +152,7 @@
 - [x] Système de blog/actualités : publier des articles médicaux (/blog, /blog/:slug, admin CRUD)
 - [x] Calendrier de disponibilités : tables + procédures admin (créneaux, dates bloquées, créneaux réservés)
 - [ ] Facture PDF : ajouter un lien de téléchargement dans l'email de confirmation (actuellement envoyée en PJ)
-- [ ] Rappel automatique par email 24h avant le rendez-vous
+- [x] Rappel automatique par email 24h avant le rendez-vous (Heartbeat cron toutes les heures)
 
 ## Améliorations - Design & UX
 

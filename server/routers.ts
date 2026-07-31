@@ -2,6 +2,7 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { COOKIE_NAME } from "../shared/const";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, adminProcedure, router } from "./_core/trpc";
+import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { getDb } from "./db";
 import { contactMessages, gdprRequests, testimonials, appointments, blogPosts, availabilitySlots, blockedDates } from "../drizzle/schema";
@@ -44,6 +45,11 @@ export const appRouter = router({
         })
       )
       .mutation(async ({ input }) => {
+        // Server-side GDPR consent validation
+        if (input.gdprConsent !== 1) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Le consentement RGPD est requis' });
+        }
+
         // Generate a unique tracking ID (max 20 chars for varchar(20))
         const trackingId = `C${Math.random().toString(36).substring(2, 10).toUpperCase()}${Date.now().toString(36).slice(-4).toUpperCase()}`;
 

@@ -15,7 +15,6 @@ export default function BlogPage() {
   });
 
   const breadcrumbItems = [
-    { label: language === "fr" ? "Accueil" : language === "en" ? "Home" : language === "de" ? "Startseite" : "首页", href: "/" },
     { label: language === "fr" ? "Actualités" : language === "en" ? "News" : language === "de" ? "Nachrichten" : "新闻" },
   ];
 
