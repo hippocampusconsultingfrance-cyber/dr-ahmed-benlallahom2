@@ -97,13 +97,14 @@
 
 ## Améliorations et Corrections du Système de Témoignages
 
-- [ ] Ajouter gestion des états d'erreur dans TestimonialsSection (loading, error, empty states)
-- [ ] Ajouter gestion des états d'erreur dans TestimonialsPage (loading, error, empty states)
-- [ ] Corriger le schéma Review JSON-LD pour utiliser les types Schema.org appropriés
-- [ ] Modifier SEOHead pour injecter les scripts JSON-LD sans écraser les schémas existants
-- [ ] Ajouter tests tRPC end-to-end pour les procédures testimonials.list
-- [ ] Ajouter tests UI pour les composants TestimonialsSection et TestimonialsPage
-- [ ] Valider que tous les tests vitest passent (pnpm test)
+- [x] Ajouter gestion des états d'erreur dans TestimonialsSection (loading, error, empty states)
+- [x] Ajouter gestion des états d'erreur dans TestimonialsPage (loading, error, empty states) - hérité de TestimonialsSection
+- [x] Corriger le schéma Review JSON-LD pour utiliser les types Schema.org appropriés (déjà implémenté)
+- [x] Modifier SEOHead pour injecter les scripts JSON-LD sans écraser les schémas existants (déjà implémenté)
+- [x] Ajouter tests tRPC end-to-end pour les procédures testimonials.list (déjà implémenté - 56 tests)
+- [x] Ajouter tests UI pour les composants TestimonialsSection et TestimonialsPage (déjà implémenté)
+- [ ] Corriger les tests en échec (server/resend.test.ts timeout, server/contact.test.ts)
+- [ ] Valider que tous les 56 tests vitest passent (pnpm test)
 
 ## Système de Réservation et Paiement Stripe
 

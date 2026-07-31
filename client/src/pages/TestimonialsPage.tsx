@@ -8,7 +8,7 @@ import Breadcrumb from "@/components/Breadcrumb";
 export default function TestimonialsPage() {
   const { language } = useLanguage();
   const [filter, setFilter] = useState<string>("all");
-  const { data: testimonials = [], isLoading: loading } = trpc.testimonials.list.useQuery(
+  const { data: testimonials = [], isLoading: loading, error } = trpc.testimonials.list.useQuery(
     {
       language,
     },
@@ -175,7 +175,11 @@ export default function TestimonialsPage() {
         </div>
 
         {/* Testimonials */}
-        {loading ? (
+        {error ? (
+          <div className="text-center py-12">
+            <p className="text-red-400 text-lg">Erreur lors du chargement des témoignages</p>
+          </div>
+        ) : loading ? (
           <div className="space-y-6">
             {[1, 2, 3].map((i) => (
               <div key={i} className="bg-slate-800 rounded-lg p-6 h-48 animate-pulse" />

@@ -5,7 +5,7 @@ import { useState, useEffect, useCallback } from "react";
 
 export default function TestimonialsSection() {
   const { language } = useLanguage();
-  const { data: testimonials = [], isLoading: loading } = trpc.testimonials.list.useQuery(
+  const { data: testimonials = [], isLoading: loading, error } = trpc.testimonials.list.useQuery(
     {
       language,
       featured: 1,
@@ -80,6 +80,19 @@ export default function TestimonialsSection() {
     );
   };
 
+  if (error) {
+    return (
+      <section className="py-16 px-4 bg-gradient-to-b from-slate-900 to-slate-950">
+        <div className="max-w-6xl mx-auto text-center">
+          <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">
+            {currentContent.title}
+          </h2>
+          <p className="text-red-400">Erreur lors du chargement des témoignages</p>
+        </div>
+      </section>
+    );
+  }
+
   if (loading) {
     return (
       <section className="py-16 px-4 bg-gradient-to-b from-slate-900 to-slate-950">
@@ -101,7 +114,16 @@ export default function TestimonialsSection() {
   }
 
   if (featuredTestimonials.length === 0) {
-    return null;
+    return (
+      <section className="py-16 px-4 bg-gradient-to-b from-slate-900 to-slate-950">
+        <div className="max-w-6xl mx-auto text-center">
+          <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">
+            {currentContent.title}
+          </h2>
+          <p className="text-gray-400">Aucun témoignage disponible pour le moment</p>
+        </div>
+      </section>
+    );
   }
 
   // Show up to 3 visible cards at a time
