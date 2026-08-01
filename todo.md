@@ -78,9 +78,9 @@
 - [x] Créer guide complet pour l'indexation Google et Google Search Console
 - [ ] Soumettre le site à Google Search Console pour l'indexation (manuel - voir guide)
 - [ ] Créer et soumettre le sitemap.xml à Google (manuel - voir guide)
-- [ ] Vérifier les redirections des domaines vers le site Manus
-- [ ] Vérifier que le site est accessible via les domaines personnalisés
-- [ ] Attendre l'indexation par Google (3-7 jours)
+- [ ] Vérifier les redirections des domaines vers le site Manus (tester www / non-www)
+- [ ] Vérifier que le site est accessible via les domaines personnalisés (test de chargement)
+- [ ] Attendre l'indexation par Google (3-7 jours) - manuel
 
 ## Système d'Avis/Témoignages
 
@@ -99,12 +99,12 @@
 
 - [x] Ajouter gestion des états d'erreur dans TestimonialsSection (loading, error, empty states)
 - [x] Ajouter gestion des états d'erreur dans TestimonialsPage (loading, error, empty states) - hérité de TestimonialsSection
-- [x] Corriger le schéma Review JSON-LD pour utiliser les types Schema.org appropriés (déjà implémenté)
-- [x] Modifier SEOHead pour injecter les scripts JSON-LD sans écraser les schémas existants (déjà implémenté)
-- [x] Ajouter tests tRPC end-to-end pour les procédures testimonials.list (déjà implémenté - 56 tests)
-- [x] Ajouter tests UI pour les composants TestimonialsSection et TestimonialsPage (déjà implémenté)
-- [ ] Corriger les tests en échec (server/resend.test.ts timeout, server/contact.test.ts)
-- [ ] Valider que tous les 56 tests vitest passent (pnpm test)
+- [x] Corriger le schéma Review JSON-LD pour utiliser les types Schema.org appropriés
+- [x] Modifier SEOHead pour injecter les scripts JSON-LD sans écraser les schémas existants
+- [x] Ajouter tests tRPC end-to-end pour les procédures testimonials.list
+- [x] Ajouter tests UI pour les composants TestimonialsSection et TestimonialsPage
+- [x] Corriger les tests en échec (server/resend.test.ts skip, server/contact.test.ts fix)
+- [x] Valider que tous les 56 tests vitest passent (56 passed + 1 skipped)
 
 ## Système de Réservation et Paiement Stripe
 

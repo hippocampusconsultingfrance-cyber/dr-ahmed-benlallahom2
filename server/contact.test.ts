@@ -119,19 +119,22 @@ describe("contact.submit", () => {
     expect(result.trackingId).toBeDefined();
   });
 
-  it("accepts submission with GDPR consent declined", async () => {
+  it("rejects submission with GDPR consent declined", async () => {
     const ctx = createPublicContext();
     const caller = appRouter.createCaller(ctx);
 
-    const result = await caller.contact.submit({
-      name: "Sophie Renault",
-      email: "sophie@example.com",
-      message: "I do not accept the privacy policy.",
-      gdprConsent: 0,
-    });
-
-    expect(result.success).toBe(true);
-    expect(result.trackingId).toBeDefined();
+    try {
+      await caller.contact.submit({
+        name: "Sophie Renault",
+        email: "sophie@example.com",
+        message: "I do not accept the privacy policy.",
+        gdprConsent: 0,
+      });
+      expect.fail("Should have thrown an error");
+    } catch (error: any) {
+      expect(error.code).toBe("BAD_REQUEST");
+      expect(error.message).toContain("RGPD");
+    }
   });
 });
 
