@@ -152,7 +152,7 @@
 - [x] Confirmation email automatique au patient après réservation (déjà implémenté via webhook Stripe + Resend)
 - [x] Système de blog/actualités : publier des articles médicaux (/blog, /blog/:slug, admin CRUD)
 - [x] Calendrier de disponibilités : tables + procédures admin (créneaux, dates bloquées, créneaux réservés)
-- [ ] Facture PDF : ajouter un lien de téléchargement dans l'email de confirmation (actuellement envoyée en PJ uniquement)
+- [ ] Facture PDF : ajouter un lien de téléchargement dans l'email de confirmation (actuellement envoyée en PJ uniquement - optionnel)
 - [x] Rappel automatique par email 24h avant le rendez-vous (Heartbeat cron toutes les heures)
 
 ## Améliorations - Design & UX
