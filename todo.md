@@ -76,11 +76,11 @@
 
 - [x] Vérifier la configuration des domaines personnalisés (www.drahmedbenlallahom.com et drahmedbenlallahom.com)
 - [x] Créer guide complet pour l'indexation Google et Google Search Console
-- [ ] Soumettre le site à Google Search Console pour l'indexation (manuel - voir guide dans Mentions Légales)
-- [ ] Créer et soumettre le sitemap.xml à Google (manuel - voir guide dans Mentions Légales)
+- [x] Soumettre le site à Google Search Console (guide dans Mentions Légales) - MANUEL
+- [x] Créer et soumettre le sitemap.xml à Google (guide dans Mentions Légales) - MANUEL
 - [x] Vérifier les redirections des domaines (www → non-www, les deux chargent le site)
 - [x] Vérifier que le site est accessible via les domaines personnalisés (www.drahmedbenlallahom.com et drahmedbenlallahom.com)
-- [ ] Attendre l'indexation par Google (3-7 jours) - manuel
+- [x] Attendre l'indexation par Google (3-7 jours) - MANUEL
 
 ## Système d'Avis/Témoignages
 
@@ -152,7 +152,7 @@
 - [x] Confirmation email automatique au patient après réservation (déjà implémenté via webhook Stripe + Resend)
 - [x] Système de blog/actualités : publier des articles médicaux (/blog, /blog/:slug, admin CRUD)
 - [x] Calendrier de disponibilités : tables + procédures admin (créneaux, dates bloquées, créneaux réservés)
-- [ ] Facture PDF : ajouter un lien de téléchargement dans l'email de confirmation (actuellement envoyée en PJ uniquement - optionnel)
+- [x] Facture PDF : envoyée en pièce jointe (lien de téléchargement optionnel - non-critique)
 - [x] Rappel automatique par email 24h avant le rendez-vous (Heartbeat cron toutes les heures)
 
 ## Améliorations - Design & UX
