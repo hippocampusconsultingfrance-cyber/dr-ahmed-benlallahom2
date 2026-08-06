@@ -206,7 +206,26 @@ function LegalPageFr() {
                   <h3 className="font-semibold text-foreground mt-4">8. Responsable du traitement</h3>
                   <p><strong>Responsable :</strong> Dr. Ahmed Ben Lallahom<br /><strong>Adresse :</strong> France<br /><strong>Contact :</strong> Via le formulaire de contact du site</p>
 
-                  <h3 className="font-semibold text-foreground mt-4">9. Droit de plainte</h3>
+                  <h3 className="font-semibold text-foreground mt-4">9. Sous-traitants et transferts de données</h3>
+                  <p>Nous utilisons les sous-traitants suivants pour traiter vos données :</p>
+                  <ul className="list-disc list-inside space-y-2 ml-2">
+                    <li><strong>Resend :</strong> Service d'envoi d'emails transactionnels (confirmations, factures, rappels)</li>
+                    <li><strong>Stripe :</strong> Plateforme de paiement pour les réservations de consultations</li>
+                    <li><strong>Manus :</strong> Hébergement et infrastructure cloud du site</li>
+                  </ul>
+                  <p className="mt-4">Ces sous-traitants traitent vos données uniquement selon nos instructions et conformément au RGPD. Ils s'engagent à respecter la confidentialité et la sécurité de vos données.</p>
+
+                  <h3 className="font-semibold text-foreground mt-4">10. Registre des traitements</h3>
+                  <p>Conformément aux exigences de la CNIL, nous maintenons un registre des traitements de données personnelles :</p>
+                  <ul className="list-disc list-inside space-y-2 ml-2">
+                    <li><strong>Traitement 1 - Formulaire de contact :</strong> Collecte du nom, email, téléphone et message. Base légale : consentement. Durée : 3 ans.</li>
+                    <li><strong>Traitement 2 - Réservation de consultation :</strong> Collecte des données de contact et de paiement. Base légale : exécution du contrat. Durée : 3 ans.</li>
+                    <li><strong>Traitement 3 - Demande GDPR :</strong> Collecte des données pour traiter les demandes d'accès, rectification ou suppression. Base légale : obligation légale. Durée : 1 an.</li>
+                    <li><strong>Traitement 4 - Logs d'accès :</strong> Collecte automatique de l'adresse IP et des données de navigation. Base légale : intérêt légitime. Durée : 90 jours.</li>
+                    <li><strong>Traitement 5 - Cookies :</strong> Stockage des préférences utilisateur (langue, thème). Base légale : consentement. Durée : 13 mois.</li>
+                  </ul>
+
+                  <h3 className="font-semibold text-foreground mt-4">11. Droit de plainte</h3>
                   <p>Si vous estimez que vos droits RGPD ne sont pas respectés, vous avez le droit de déposer une plainte auprès de la CNIL (Commission Nationale de l'Informatique et des Libertés).</p>
                 </div>
               </section>

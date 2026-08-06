@@ -15,6 +15,7 @@ import AdminDashboard from "./pages/AdminDashboard";
 import BlogPage from "./pages/BlogPage";
 import BlogPostPage from "./pages/BlogPostPage";
 import WhatsAppButton from "./components/WhatsAppButton";
+import CookieConsent from "./components/CookieConsent";
 
 function Router() {
   return (
@@ -43,6 +44,7 @@ function App() {
             <Toaster />
             <Router />
             <WhatsAppButton />
+            <CookieConsent />
           </TooltipProvider>
         </LanguageProvider>
       </ThemeProvider>
