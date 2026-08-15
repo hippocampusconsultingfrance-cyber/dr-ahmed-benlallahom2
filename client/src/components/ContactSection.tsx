@@ -56,7 +56,7 @@ export default function ContactSection() {
   };
 
   return (
-    <section id="contact" className="py-28 sm:py-36 relative">
+    <section id="contact" className="contact-section py-28 sm:py-36 relative">
       {/* Background subtle */}
       <div className="absolute inset-0 opacity-10">
         <img
@@ -86,7 +86,7 @@ export default function ContactSection() {
             <div className="space-y-5">
               <a
                 href={`tel:${siteConfig.phone.replace(/\s/g, "")}`}
-                className="flex items-center gap-4 group p-4 rounded-xl bg-card/50 border border-border/20 hover:border-primary/30 transition-all"
+                className="contact-card flex items-center gap-4 group p-4 rounded-xl bg-card/50 border border-border/20 hover:border-primary/30 transition-all"
               >
                 <div className="w-11 h-11 rounded-lg bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
                   <Phone className="w-5 h-5 text-primary" />
@@ -99,7 +99,7 @@ export default function ContactSection() {
 
               <a
                 href={`mailto:${siteConfig.email}`}
-                className="flex items-center gap-4 group p-4 rounded-xl bg-card/50 border border-border/20 hover:border-primary/30 transition-all"
+                className="contact-card flex items-center gap-4 group p-4 rounded-xl bg-card/50 border border-border/20 hover:border-primary/30 transition-all"
               >
                 <div className="w-11 h-11 rounded-lg bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
                   <Mail className="w-5 h-5 text-primary" />
@@ -114,7 +114,7 @@ export default function ContactSection() {
                 href={siteConfig.linkedin}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-4 group p-4 rounded-xl bg-card/50 border border-border/20 hover:border-primary/30 transition-all"
+                className="contact-card flex items-center gap-4 group p-4 rounded-xl bg-card/50 border border-border/20 hover:border-primary/30 transition-all"
               >
                 <div className="w-11 h-11 rounded-lg bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
                   <Linkedin className="w-5 h-5 text-primary" />
@@ -130,7 +130,7 @@ export default function ContactSection() {
           {/* Right: Form — 7 cols */}
           <div className="lg:col-span-7">
             {submitted ? (
-              <div className="p-8 sm:p-10 rounded-2xl bg-card/60 backdrop-blur-sm border border-border/30 flex flex-col items-center justify-center min-h-[400px] text-center">
+              <div className="success-panel p-8 sm:p-10 rounded-2xl bg-card/60 backdrop-blur-sm border border-border/30 flex flex-col items-center justify-center min-h-[400px] text-center">
                 <CheckCircle className="w-16 h-16 text-primary mb-6" />
                 <h3 className="font-display text-2xl font-bold text-foreground mb-3">
                   {language === "fr" ? "Message envoyé !" : "Message sent!"}
@@ -148,7 +148,7 @@ export default function ContactSection() {
                 </button>
               </div>
             ) : (
-              <form onSubmit={handleSubmit} className="p-8 sm:p-10 rounded-2xl bg-card/60 backdrop-blur-sm border border-border/30 space-y-5">
+              <form onSubmit={handleSubmit} className="contact-form-card p-5 sm:p-8 rounded-2xl bg-card/60 backdrop-blur-sm border border-border/30 space-y-5" aria-busy={submitMutation.isPending}>
                 <div className="grid sm:grid-cols-2 gap-5">
                   <div>
                     <label className="block text-sm font-medium text-foreground mb-2">
@@ -160,7 +160,7 @@ export default function ContactSection() {
                       placeholder={content.contact.form.namePlaceholder}
                       value={formData.name}
                       onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                      className="w-full px-4 py-3 rounded-lg bg-input/50 border border-border/50 text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/40 transition-all"
+                      className="form-field-premium w-full px-4 py-3 border"
                     />
                   </div>
                   <div>
@@ -172,7 +172,7 @@ export default function ContactSection() {
                       placeholder={content.contact.form.phonePlaceholder}
                       value={formData.phone}
                       onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                      className="w-full px-4 py-3 rounded-lg bg-input/50 border border-border/50 text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/40 transition-all"
+                      className="form-field-premium w-full px-4 py-3 border"
                     />
                   </div>
                 </div>
@@ -201,11 +201,11 @@ export default function ContactSection() {
                     placeholder={content.contact.form.messagePlaceholder}
                     value={formData.message}
                     onChange={(e) => setFormData({ ...formData, message: e.target.value })}
-                    className="w-full px-4 py-3 rounded-lg bg-input/50 border border-border/50 text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/40 transition-all resize-none"
+                    className="form-field-premium w-full px-4 py-3 border resize-none"
                   />
                 </div>
 
-                <div className="flex items-start gap-3 p-4 rounded-lg bg-primary/5 border border-primary/20">
+                <div className="contact-consent flex items-start gap-3 p-4 rounded-lg bg-primary/5 border border-primary/20">
                   <input
                     type="checkbox"
                     id="gdprConsent"
@@ -219,15 +219,21 @@ export default function ContactSection() {
                   </label>
                 </div>
 
+                {submitMutation.error && (
+                  <p role="alert" className="form-alert text-sm text-destructive">
+                    {language === "fr" ? "Erreur lors de l'envoi. Veuillez réessayer." : "Error sending the message. Please try again."}
+                  </p>
+                )}
+
                 <button
                   type="submit"
                   disabled={submitMutation.isPending}
-                  className="w-full flex items-center justify-center gap-2 px-7 py-4 rounded-lg bg-primary text-primary-foreground font-semibold hover:bg-primary/90 transition-all duration-200 active:scale-[0.97] shadow-lg shadow-primary/20 disabled:opacity-60 disabled:cursor-not-allowed"
+                  className="cta-primary w-full disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   {submitMutation.isPending ? (
                     <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      {language === "fr" ? "Envoi en cours..." : "Sending..."}
+                      <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
+                      <span role="status">{language === "fr" ? "Envoi en cours..." : "Sending..."}</span>
                     </>
                   ) : (
                     <>

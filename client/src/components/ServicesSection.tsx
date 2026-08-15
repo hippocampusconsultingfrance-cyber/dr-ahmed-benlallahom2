@@ -4,7 +4,7 @@ export default function ServicesSection() {
   const { content } = useLanguage();
 
   return (
-    <section id="services" className="py-28 sm:py-36 relative">
+    <section id="services" className="services-section py-28 sm:py-36 relative">
       {/* Background with diagnostic grid */}
       <div className="absolute inset-0 opacity-20">
         <img
@@ -21,7 +21,7 @@ export default function ServicesSection() {
 
       <div className="container relative z-10">
         {/* Header — left-aligned with oversized number accent */}
-        <div className="flex items-end gap-6 mb-16">
+        <div className="section-heading flex items-end gap-6 mb-16">
           <span className="font-display text-8xl sm:text-9xl font-bold text-primary/10 leading-none hidden lg:block">06</span>
           <div className="max-w-xl">
             <h2 className="font-display text-3xl sm:text-4xl lg:text-5xl font-bold text-foreground mb-4">
@@ -38,12 +38,12 @@ export default function ServicesSection() {
           {content.services.items.map((service, i) => (
             <div
               key={i}
-              className={`card-glow group p-7 rounded-xl bg-card/70 backdrop-blur-sm border border-border/30 ${
+              className={`service-card card-glow group p-7 rounded-xl bg-card/70 backdrop-blur-sm border border-border/30 ${
                 i === 1 || i === 4 ? "lg:translate-y-4" : ""
               }`}
             >
               {/* Number — monumental, faded */}
-              <span className="font-display text-4xl font-bold text-primary/20 group-hover:text-primary/40 transition-colors">
+              <span className="service-number font-display text-4xl font-bold text-primary/20 group-hover:text-primary/40 transition-colors">
                 {service.number}
               </span>
 

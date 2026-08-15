@@ -2,10 +2,18 @@ import { useEffect, useState } from "react";
 import { siteConfig } from "@/data/site-config";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useLocation } from "wouter";
+import { ArrowUpRight, BadgeCheck, Clock3, Languages } from "lucide-react";
 
 export default function HeroSection() {
-  const { content } = useLanguage();
+  const { content, language } = useLanguage();
   const [roleIndex, setRoleIndex] = useState(0);
+
+  const trustCopy = {
+    fr: ["Expertise clinique certifiée", "Consultation de 30 minutes", "Accompagnement international"],
+    en: ["Certified clinical expertise", "30-minute consultation", "International support"],
+    de: ["Zertifizierte klinische Expertise", "30-minütige Beratung", "Internationale Begleitung"],
+    zh: ["专业临床经验", "30分钟咨询", "国际化支持"],
+  }[language] ?? ["Certified clinical expertise", "30-minute consultation", "International support"];
   const [, setLocation] = useLocation();
 
   useEffect(() => {
@@ -16,7 +24,7 @@ export default function HeroSection() {
   }, [content.hero.roles.length]);
 
   return (
-    <section id="hero" className="relative min-h-screen flex items-center overflow-hidden">
+    <section id="hero" className="relative min-h-screen flex items-center overflow-hidden bg-background">
       {/* Background Image */}
       <div className="absolute inset-0">
         <img
@@ -48,8 +56,11 @@ export default function HeroSection() {
       </div>
 
       {/* Content — deliberately left-aligned, asymmetric */}
-      <div className="container relative z-10 pt-32 pb-24">
-        <div className="max-w-2xl">
+      <div className="container relative z-10 pt-28 pb-16 sm:pt-32 sm:pb-24">
+        <div className="hero-panel max-w-3xl p-6 sm:p-8 lg:p-12">
+          <div className="max-w-2xl">
+            <span className="eyebrow-label mb-6">Hippocampus Consulting · France</span>
+
           {/* Credentials badge with gold */}
           <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-gold/30 bg-gold/5 mb-8">
             <span className="w-2 h-2 rounded-full bg-gold" style={{ backgroundColor: "oklch(0.72 0.1 75)" }} />
@@ -79,20 +90,34 @@ export default function HeroSection() {
           </p>
 
           {/* CTA */}
-          <div className="flex flex-wrap gap-4">
-            <button
-              onClick={() => setLocation("/booking")}
-              className="px-8 py-4 rounded-full bg-primary text-primary-foreground font-semibold hover:bg-primary/90 transition-all duration-200 active:scale-[0.97] shadow-lg shadow-primary/25"
-            >
+          <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
+            <button onClick={() => setLocation("/booking")} className="cta-primary">
               {content.hero.bookConsultation}
+              <ArrowUpRight aria-hidden="true" className="h-4 w-4" />
             </button>
             <button
               onClick={() => document.getElementById("contact")?.scrollIntoView({ behavior: "smooth" })}
-              className="px-8 py-4 rounded-full border border-border/60 text-foreground font-semibold hover:border-primary/50 hover:text-primary transition-all duration-200"
+              className="cta-secondary"
             >
               {content.nav.getInTouch}
             </button>
           </div>
+
+          <div className="trust-strip" aria-label="Professional assurances">
+            <div className="trust-strip-item">
+              <BadgeCheck aria-hidden="true" className="h-4 w-4" />
+              <span>{trustCopy[0]}</span>
+            </div>
+            <div className="trust-strip-item">
+              <Clock3 aria-hidden="true" className="h-4 w-4" />
+              <span>{trustCopy[1]}</span>
+            </div>
+            <div className="trust-strip-item">
+              <Languages aria-hidden="true" className="h-4 w-4" />
+              <span>{trustCopy[2]}</span>
+            </div>
+          </div>
+        </div>
         </div>
       </div>
     </section>

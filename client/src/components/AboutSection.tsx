@@ -46,7 +46,7 @@ export default function AboutSection() {
   const { stats } = siteConfig;
 
   return (
-    <section id="about" className="py-28 sm:py-36 relative">
+    <section id="about" className="about-section py-28 sm:py-36 relative">
       {/* ECG divider at top */}
       <div className="ecg-divider absolute top-0 left-0 right-0" />
 
@@ -55,7 +55,7 @@ export default function AboutSection() {
         <div className="grid lg:grid-cols-12 gap-12 lg:gap-8 items-start">
           {/* Image — spans 5 cols, offset */}
           <div className="lg:col-span-5 lg:-mt-12 relative">
-            <div className="relative rounded-2xl overflow-hidden aspect-[3/4] max-w-sm mx-auto lg:mx-0 shadow-2xl shadow-primary/10">
+            <div className="about-visual relative rounded-2xl overflow-hidden aspect-[3/4] max-w-sm mx-auto lg:mx-0 shadow-2xl shadow-primary/10">
               <img
                 src="/manus-storage/hero-ahmed-medical_4adb9653.png"
                 loading="lazy"
@@ -70,7 +70,8 @@ export default function AboutSection() {
           </div>
 
           {/* Content — spans 7 cols */}
-          <div className="lg:col-span-7 lg:pl-8">
+          <div className="lg:col-span-7 lg:pl-8 section-heading">
+            <span className="eyebrow-label mb-5">Clinical leadership</span>
             <h2 className="font-display text-3xl sm:text-4xl lg:text-5xl font-bold text-foreground mb-8">
               {content.about.title}
             </h2>
@@ -79,14 +80,14 @@ export default function AboutSection() {
             </p>
 
             {/* Monumental Stats — 2x2 grid with strong visual weight */}
-            <div className="grid grid-cols-2 gap-x-12 gap-y-10">
+            <div className="stat-grid grid grid-cols-2 gap-x-4 sm:gap-x-12 gap-y-4 sm:gap-y-10">
               {[
                 { value: stats.yearsClinical, label: content.about.statsLabels.yearsClinical },
                 { value: stats.ventures, label: content.about.statsLabels.ventures },
                 { value: stats.certifications, label: content.about.statsLabels.certifications },
                 { value: stats.languages, label: content.about.statsLabels.languages },
               ].map((stat) => (
-                <div key={stat.label}>
+                <div key={stat.label} className="stat-card">
                   <AnimatedCounter target={stat.value} />
                   <p className="text-sm text-muted-foreground mt-2 font-medium">{stat.label}</p>
                 </div>

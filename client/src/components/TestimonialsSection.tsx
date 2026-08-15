@@ -24,24 +24,44 @@ export default function TestimonialsSection() {
       subtitle: "Ce que disent nos partenaires",
       viewAll: "Voir tous les témoignages",
       verified: "✓ Vérifié",
+      error: "Impossible de charger les témoignages.",
+      empty: "Aucun témoignage disponible pour le moment.",
+      previous: "Témoignage précédent",
+      next: "Témoignage suivant",
+      goTo: "Aller au témoignage",
     },
     en: {
       title: "Partner Testimonials",
       subtitle: "What our partners say",
       viewAll: "View all testimonials",
       verified: "✓ Verified",
+      error: "Testimonials could not be loaded.",
+      empty: "No testimonials are available at the moment.",
+      previous: "Previous testimonial",
+      next: "Next testimonial",
+      goTo: "Go to testimonial",
     },
     de: {
       title: "Partnerbewertungen",
       subtitle: "Was unsere Partner sagen",
       viewAll: "Alle Bewertungen anzeigen",
       verified: "✓ Verifiziert",
+      error: "Die Bewertungen konnten nicht geladen werden.",
+      empty: "Derzeit sind keine Bewertungen verfügbar.",
+      previous: "Vorherige Bewertung",
+      next: "Nächste Bewertung",
+      goTo: "Zur Bewertung",
     },
     zh: {
       title: "合作伙伴评价",
       subtitle: "我们的合作伙伴怎么说",
       viewAll: "查看所有评价",
       verified: "✓ 已验证",
+      error: "暂时无法加载评价。",
+      empty: "目前暂无评价。",
+      previous: "上一条评价",
+      next: "下一条评价",
+      goTo: "前往评价",
     },
   };
 
@@ -73,7 +93,8 @@ export default function TestimonialsSection() {
           <Star
             key={i}
             size={18}
-            className={i < rating ? "fill-cyan-400 text-cyan-400" : "text-gray-600"}
+            aria-hidden="true"
+            className={i < rating ? "fill-primary text-primary" : "text-muted-foreground/40"}
           />
         ))}
       </div>
@@ -82,12 +103,12 @@ export default function TestimonialsSection() {
 
   if (error) {
     return (
-      <section className="py-16 px-4 bg-gradient-to-b from-slate-900 to-slate-950">
+      <section className="testimonials-section py-20 sm:py-28 px-4 bg-gradient-to-b from-background to-card/40">
         <div className="max-w-6xl mx-auto text-center">
-          <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">
+          <h2 className="font-display text-3xl md:text-5xl font-bold text-foreground mb-4">
             {currentContent.title}
           </h2>
-          <p className="text-red-400">Erreur lors du chargement des témoignages</p>
+          <p className="text-destructive">{currentContent.error}</p>
         </div>
       </section>
     );
@@ -95,17 +116,17 @@ export default function TestimonialsSection() {
 
   if (loading) {
     return (
-      <section className="py-16 px-4 bg-gradient-to-b from-slate-900 to-slate-950">
+      <section className="testimonials-section py-20 sm:py-28 px-4 bg-gradient-to-b from-background to-card/40">
         <div className="max-w-6xl mx-auto">
           <div className="text-center mb-12">
-            <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">
+            <h2 className="font-display text-3xl md:text-5xl font-bold text-foreground mb-4">
               {currentContent.title}
             </h2>
-            <p className="text-gray-400 text-lg">{currentContent.subtitle}</p>
+            <p className="text-muted-foreground text-lg">{currentContent.subtitle}</p>
           </div>
           <div className="grid md:grid-cols-3 gap-6">
             {[1, 2, 3].map((i) => (
-              <div key={i} className="bg-slate-800 rounded-lg p-6 h-64 animate-pulse" />
+              <div key={i} className="testimonial-skeleton rounded-2xl p-6 h-64 animate-pulse" />
             ))}
           </div>
         </div>
@@ -115,12 +136,12 @@ export default function TestimonialsSection() {
 
   if (featuredTestimonials.length === 0) {
     return (
-      <section className="py-16 px-4 bg-gradient-to-b from-slate-900 to-slate-950">
+      <section className="testimonials-section py-20 sm:py-28 px-4 bg-gradient-to-b from-background to-card/40">
         <div className="max-w-6xl mx-auto text-center">
-          <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">
+          <h2 className="font-display text-3xl md:text-5xl font-bold text-foreground mb-4">
             {currentContent.title}
           </h2>
-          <p className="text-gray-400">Aucun témoignage disponible pour le moment</p>
+          <p className="text-muted-foreground">{currentContent.empty}</p>
         </div>
       </section>
     );
@@ -138,14 +159,16 @@ export default function TestimonialsSection() {
   };
 
   return (
-    <section className="py-16 px-4 bg-gradient-to-b from-slate-900 to-slate-950">
-      <div className="max-w-6xl mx-auto">
+          <section className="testimonials-section py-20 sm:py-28 px-4 bg-gradient-to-b from-background to-card/40">
+        <div className="max-w-6xl mx-auto">
+
         {/* Header */}
-        <div className="text-center mb-12">
-          <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">
+        <div className="section-heading text-center mb-12 mx-auto">
+          <span className="eyebrow-label mb-5">Partner perspective</span>
+          <h2 className="font-display text-3xl md:text-5xl font-bold text-foreground mb-4">
             {currentContent.title}
           </h2>
-          <p className="text-gray-400 text-lg">{currentContent.subtitle}</p>
+          <p className="text-muted-foreground text-lg">{currentContent.subtitle}</p>
         </div>
 
         {/* Carousel */}
@@ -159,15 +182,15 @@ export default function TestimonialsSection() {
             <>
               <button
                 onClick={prevSlide}
-                className="absolute -left-4 top-1/2 -translate-y-1/2 z-10 w-10 h-10 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-white hover:bg-slate-700 hover:border-cyan-400/50 transition-all"
-                aria-label="Previous testimonial"
+                className="carousel-control absolute -left-4 top-1/2 -translate-y-1/2 z-10 w-10 h-10 rounded-full bg-card border border-border flex items-center justify-center text-foreground hover:border-primary/50 transition-all"
+                aria-label={currentContent.previous}
               >
                 <ChevronLeft size={20} />
               </button>
               <button
                 onClick={nextSlide}
-                className="absolute -right-4 top-1/2 -translate-y-1/2 z-10 w-10 h-10 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-white hover:bg-slate-700 hover:border-cyan-400/50 transition-all"
-                aria-label="Next testimonial"
+                className="carousel-control absolute -right-4 top-1/2 -translate-y-1/2 z-10 w-10 h-10 rounded-full bg-card border border-border flex items-center justify-center text-foreground hover:border-primary/50 transition-all"
+                aria-label={currentContent.next}
               >
                 <ChevronRight size={20} />
               </button>
@@ -179,31 +202,31 @@ export default function TestimonialsSection() {
             {getVisibleTestimonials().map((testimonial, idx) => (
               <div
                 key={`${testimonial.id}-${idx}`}
-                className="bg-slate-800 border border-slate-700 rounded-lg p-6 hover:border-cyan-400/50 transition-all duration-300"
+                className="testimonial-card card-glow bg-card/80 border border-border/50 rounded-2xl p-6 hover:border-primary/50 transition-all duration-300"
               >
                 {/* Rating */}
                 <div className="mb-4">{renderStars(testimonial.rating)}</div>
 
                 {/* Title */}
-                <h3 className="text-lg font-semibold text-white mb-2">
+                <h3 className="font-display text-lg font-semibold text-foreground mb-2">
                   {testimonial.title}
                 </h3>
 
                 {/* Content */}
-                <p className="text-gray-300 text-sm mb-4 line-clamp-4">
+                <p className="text-muted-foreground text-sm mb-4 line-clamp-4 leading-relaxed">
                   {testimonial.content}
                 </p>
 
                 {/* Author Info */}
-                <div className="flex items-center justify-between pt-4 border-t border-slate-700">
+                <div className="flex items-center justify-between pt-4 border-t border-border/50">
                   <div>
-                    <p className="text-white font-medium">{testimonial.authorName}</p>
+                    <p className="text-foreground font-medium">{testimonial.authorName}</p>
                     {testimonial.specialty && (
-                      <p className="text-gray-400 text-xs">{testimonial.specialty}</p>
+                      <p className="text-muted-foreground text-xs">{testimonial.specialty}</p>
                     )}
                   </div>
                   {testimonial.verified === 1 && (
-                    <span className="text-cyan-400 text-xs font-semibold">
+                    <span className="text-primary text-xs font-semibold">
                       {currentContent.verified}
                     </span>
                   )}
@@ -219,12 +242,12 @@ export default function TestimonialsSection() {
                 <button
                   key={idx}
                   onClick={() => setCurrentIndex(idx)}
-                  className={`w-2 h-2 rounded-full transition-all duration-300 ${
+                  className={`h-2 rounded-full transition-all duration-300 ${
                     idx === currentIndex
-                      ? "bg-cyan-400 w-6"
-                      : "bg-slate-600 hover:bg-slate-500"
+                      ? "bg-primary w-6"
+                      : "bg-muted-foreground/30 hover:bg-muted-foreground/60"
                   }`}
-                  aria-label={`Go to testimonial ${idx + 1}`}
+                  aria-label={`${currentContent.goTo} ${idx + 1}`}
                 />
               ))}
             </div>
@@ -235,7 +258,7 @@ export default function TestimonialsSection() {
         <div className="text-center mt-10">
           <a
             href="/testimonials"
-            className="inline-block px-8 py-3 bg-gradient-to-r from-cyan-400 to-cyan-500 text-slate-900 font-semibold rounded-lg hover:shadow-lg hover:shadow-cyan-400/50 transition-all"
+            className="cta-secondary"
           >
             {currentContent.viewAll}
           </a>

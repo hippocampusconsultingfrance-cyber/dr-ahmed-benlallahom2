@@ -162,3 +162,1801 @@
 - [x] Indicateur de progression sur le formulaire de réservation
 - [x] Témoignages en carrousel sur la page d'accueil (auto-play, navigation, dots)
 - [x] Mode clair/sombre avec toggle (Sun/Moon dans la navigation, variables CSS light/dark)
+
+## Améliorations graphiques prioritaires
+
+- [x] Moderniser la hiérarchie visuelle de la page d’accueil : hero, réassurance, sections, cartes et appels à l’action
+- [x] Améliorer visuellement le parcours de réservation : résumé tarifaire, disponibilité, politique d’annulation et paiement
+- [x] Optimiser la navigation mobile : menu, zones tactiles, CTA et sélecteurs langue/thème
+- [x] Renforcer l’accessibilité visuelle : contrastes, focus, états d’erreur, états de chargement et labels
+- [x] Ajouter des micro-interactions sobres et cohérentes avec l’identité médicale premium
+- [x] Vérifier les rendus desktop, tablette et mobile puis corriger les régressions
+- [x] Écrire ou mettre à jour les tests liés aux composants graphiques modifiés
+- [x] Sauvegarder un checkpoint après validation visuelle et technique
+
+## Améliorations graphiques avancées à planifier
+
+- [ ] Créer un système de design documenté avec tokens de couleur, typographie, espacements et composants
+- [ ] Créer une bibliothèque de visuels médicaux authentiques avec droits d’utilisation et textes alternatifs
+- [ ] Améliorer la page Blog avec image principale, catégories, temps de lecture, table des matières et articles associés
+- [ ] Ajouter des états vides illustrés pour le blog, les témoignages, les disponibilités et le dashboard
+- [ ] Ajouter des skeletons de chargement cohérents au lieu de spinners seuls
+- [ ] Ajouter une page de confirmation de réservation plus complète et rassurante
+- [ ] Ajouter une page FAQ visuelle sans conseils médicaux personnalisés
+- [ ] Ajouter des composants graphiques de confiance pour le paiement, la confidentialité et la disponibilité
+- [ ] Ajouter des tests visuels automatisés sur les pages critiques
+- [ ] Tester clavier, lecteur d’écran, contraste renforcé et zoom à 200 %
+- [ ] Vérifier la longueur des textes et des boutons dans FR, EN, DE et ZH
+- [ ] Améliorer la version mobile du dashboard administrateur
+- [ ] Ajouter un mode haute lisibilité et une gestion complète de prefers-reduced-motion
+- [ ] Ajouter une page d’erreur serveur et une page de maintenance cohérentes avec la marque
+- [ ] Documenter le kit de marque : logo, couleurs, typographies, icônes et règles d’utilisation
+- [ ] Harmoniser les modèles d’emails avec l’identité visuelle du site
+- [ ] Ajouter une prévisualisation graphique de facture dans l’espace client
+- [ ] Ajouter des illustrations originales pour les services et les étapes de réservation
+- [ ] Vérifier les droits sur les photographies, logos, illustrations et visuels externes
+- [ ] Mettre en place une revue graphique trimestrielle et une checklist avant publication
+- [ ] Centraliser les libellés d’interface afin d’éviter les chaînes de texte hardcodées
+- [ ] Ajouter une stratégie de compression et de recadrage responsive des images
+- [ ] Ajouter une navigation clavier complète sur menus, carrousels, modales et calendriers
+- [ ] Ajouter des feedbacks visuels après contact, réservation, paiement et demande RGPD
+- [ ] Ajouter une version imprimable et accessible des pages de contenu importantes
+- [ ] Vérifier le rendu sur Chrome, Safari et Firefox
+- [ ] Vérifier la coexistence du bandeau cookies, du bouton WhatsApp et de la navigation mobile
+- [ ] Vérifier que les visuels médicaux ne suggèrent aucune promesse thérapeutique non étayée
+- [ ] Vérifier que les contenus longs en allemand et chinois ne débordent pas des composants
+- [ ] Vérifier l’alignement des titres, CTA et formulaires sur desktop, tablette et mobile
+- [ ] Ajouter une procédure de revue UX basée sur les retours utilisateurs réels
+- [ ] Ajouter des visuels de partage social cohérents pour les pages et articles du blog
+- [ ] Ajouter des descriptions alternatives précises et contextuelles à toutes les images
+- [ ] Ajouter une page de présentation Hippocampus Consulting avec une mise en page éditoriale
+- [ ] Ajouter une page Ressources Médicales avec cartes, filtres et téléchargements contrôlés
+- [ ] Ajouter une page Presse ou Publications uniquement avec contenus vérifiables
+- [ ] Ajouter une page Partenaires uniquement après autorisation écrite des organisations concernées
+- [ ] Ajouter une gestion visuelle des contenus brouillon, en relecture et publiés dans le dashboard
+- [ ] Ajouter un aperçu avant publication pour les articles et pages de contenu
+- [ ] Ajouter une progression de lecture sur les articles longs
+- [ ] Ajouter un système de recherche visuelle dans le blog
+- [ ] Ajouter des filtres accessibles par catégorie et langue
+- [ ] Ajouter une grille responsive commune à toutes les pages publiques
+- [ ] Ajouter une animation de transition de page courte et désactivable
+- [ ] Ajouter un contrôle de taille de police sans rupture de mise en page
+- [ ] Ajouter un composant de citation médicale avec source et date de mise à jour
+- [ ] Ajouter une notice visible indiquant que le site ne remplace pas les urgences médicales
+- [ ] Vérifier l’accessibilité des couleurs cyan, gris et doré sur les deux thèmes
+- [ ] Évaluer la réduction des effets décoratifs sur les formulaires et pages légales
+- [ ] Préparer un kit de marque exportable pour les documents et réseaux sociaux
+- [ ] Mettre en place une validation graphique avant chaque checkpoint
+- [ ] Ajouter une documentation d’utilisation des composants pour les futures évolutions
+- [ ] Ajouter des tests de non-régression pour le changement de langue et de thème
+- [ ] Ajouter des tests de longueur de traduction pour les boutons et titres
+- [ ] Ajouter un mode sans animation pour les connexions lentes et préférences utilisateur
+- [ ] Ajouter un mode sombre optimisé pour les écrans OLED
+- [ ] Vérifier les performances après ajout d’animations ou d’images
+- [ ] Préparer des visuels LinkedIn cohérents avec la marque
+- [ ] Vérifier le rendu des emails HTML dans Gmail, Outlook et Apple Mail
+- [ ] Harmoniser les notifications de succès, avertissement et erreur
+- [ ] Créer une checklist de qualité visuelle avant mise en production
+- [ ] Vérifier la cohérence des icônes et supprimer les mélanges de styles
+- [ ] Ajouter une version mobile renforcée de la page de réservation
+- [ ] Ajouter une vue calendrier plus lisible avec indicateurs de disponibilité
+- [ ] Ajouter une vue agenda administrateur plus graphique
+- [ ] Ajouter des états d’erreur et états vides avec illustrations sobres
+- [ ] Ajouter une page de résultats de recherche interne accessible
+- [ ] Vérifier l’impression des pages légales, RGPD et factures
+- [ ] Vérifier la compatibilité avec un lecteur d’écran
+- [ ] Vérifier la navigation au clavier uniquement
+- [ ] Vérifier les pages à 200 % de zoom
+- [ ] Vérifier les textes et CTA dans les quatre langues
+- [ ] Vérifier le positionnement des éléments flottants sur petits écrans
+- [ ] Vérifier les états de chargement des appels tRPC
+- [ ] Vérifier les états anti-double-clic du paiement
+- [ ] Vérifier le rendu de la confirmation et de l’annulation de paiement
+- [ ] Vérifier les messages de validation des formulaires dans les quatre langues
+- [ ] Vérifier les messages d’erreur sans exposition de données sensibles
+- [ ] Vérifier les liens de facture sur desktop et mobile
+- [ ] Vérifier les notifications de rappel sur desktop et mobile
+- [ ] Vérifier les écrans Blog et Disponibilités du dashboard sur tablette
+- [ ] Ajouter des contrôles clavier aux témoignages en carrousel
+- [ ] Vérifier le contraste et la lisibilité du bandeau cookies
+- [ ] Ajouter un lien permanent vers les préférences cookies
+- [ ] Vérifier que les traceurs non essentiels restent bloqués sans consentement
+- [ ] Préparer une revue annuelle des traductions et de l’identité visuelle
+- [ ] Préparer une revue annuelle de l’accessibilité et des performances
+- [ ] Préparer une revue annuelle des droits sur les visuels et logos
+- [ ] Préparer une revue annuelle des contenus médicaux et de leurs sources
+- [ ] Préparer une revue annuelle des pages légales et RGPD
+- [ ] Préparer une revue annuelle des modèles d’emails et factures
+- [ ] Préparer une revue annuelle du parcours de réservation
+- [ ] Préparer une revue annuelle des retours utilisateurs
+- [ ] Préparer une revue annuelle de la cohérence entre le site, les emails et les réseaux sociaux
+- [ ] Préparer une revue annuelle de la cohérence des tarifs et politiques affichés
+- [ ] Préparer une revue annuelle du dashboard et des outils administrateur
+- [ ] Préparer une revue annuelle des pages 404, maintenance et erreur serveur
+- [ ] Préparer une revue annuelle des domaines, certificats et favicons
+- [ ] Préparer une revue annuelle des données structurées et métadonnées sociales
+- [ ] Préparer une revue annuelle du sitemap et des liens internes
+- [ ] Préparer une revue annuelle des composants UI et dépendances visuelles
+- [ ] Préparer une revue annuelle de la dette UX et des incohérences de navigation
+- [ ] Préparer une revue annuelle de la sobriété numérique des images et animations
+- [ ] Préparer une revue annuelle de la stratégie de contenu et des ressources téléchargeables
+- [ ] Préparer une revue annuelle de la marque Hippocampus Consulting
+- [ ] Préparer une revue annuelle du positionnement international FR/EN/DE/ZH
+- [ ] Préparer une revue annuelle de la clarté des appels à l’action
+- [ ] Préparer une revue annuelle des formulaires et messages d’aide
+- [ ] Préparer une revue annuelle des états vides et erreurs
+- [ ] Préparer une revue annuelle des composants accessibles
+- [ ] Préparer une revue annuelle des animations et préférences de mouvement
+- [ ] Préparer une revue annuelle des retours de paiement et réservation
+- [ ] Préparer une revue annuelle des notifications email et SMS
+- [ ] Préparer une revue annuelle des factures et documents générés
+- [ ] Préparer une revue annuelle des ressources graphiques
+- [ ] Préparer une revue annuelle de la documentation design
+- [ ] Préparer une revue annuelle de la checklist de publication
+- [ ] Préparer une revue annuelle des tests visuels et responsive
+- [ ] Préparer une revue annuelle des anomalies graphiques signalées
+- [ ] Préparer une revue annuelle des améliorations réellement utilisées par les visiteurs
+- [ ] Préparer une revue annuelle des fonctionnalités à retirer si elles créent de la complexité
+- [ ] Préparer une revue annuelle de la simplicité du parcours de réservation
+- [ ] Préparer une revue annuelle de la lisibilité des mentions médicales
+- [ ] Préparer une revue annuelle de la distinction entre information et conseil médical
+- [ ] Préparer une revue annuelle de la clarté des limites de téléconsultation
+- [ ] Préparer une revue annuelle de la visibilité des contacts d’urgence
+- [ ] Préparer une revue annuelle de la clarté des conditions de remboursement
+- [ ] Préparer une revue annuelle de la clarté des prix jour/nuit
+- [ ] Préparer une revue annuelle de la clarté des durées de consultation
+- [ ] Préparer une revue annuelle de la clarté des étapes de paiement
+- [ ] Préparer une revue annuelle de la clarté des emails de confirmation
+- [ ] Préparer une revue annuelle de la clarté du téléchargement de facture
+- [ ] Préparer une revue annuelle de la clarté des rappels de rendez-vous
+- [ ] Préparer une revue annuelle de la clarté des demandes RGPD
+- [ ] Préparer une revue annuelle de la clarté du consentement cookies
+- [ ] Préparer une revue annuelle de la clarté de la politique de confidentialité
+- [ ] Préparer une revue annuelle de la clarté des mentions légales
+- [ ] Préparer une revue annuelle de la clarté des conditions générales
+- [ ] Préparer une revue annuelle de la clarté des contacts professionnels
+- [ ] Préparer une revue annuelle de la clarté des coordonnées publiques
+- [ ] Préparer une revue annuelle de la cohérence des noms et rôles des partenaires
+- [ ] Préparer une revue annuelle de la cohérence des diplômes et certifications
+- [ ] Préparer une revue annuelle de la cohérence des photographies professionnelles
+- [ ] Préparer une revue annuelle de la cohérence des biographies
+- [ ] Préparer une revue annuelle de la cohérence des traductions
+- [ ] Préparer une revue annuelle de la cohérence des titres SEO
+- [ ] Préparer une revue annuelle de la cohérence des descriptions Open Graph
+- [ ] Préparer une revue annuelle de la cohérence des liens canoniques
+- [ ] Préparer une revue annuelle de la cohérence des balises hreflang
+- [ ] Préparer une revue annuelle de la cohérence des URLs
+- [ ] Préparer une revue annuelle de la cohérence des breadcrumbs
+- [ ] Préparer une revue annuelle de la cohérence de la page 404
+- [ ] Préparer une revue annuelle de la cohérence du footer
+- [ ] Préparer une revue annuelle de la cohérence du menu mobile
+- [ ] Préparer une revue annuelle de la cohérence du sélecteur de langue
+- [ ] Préparer une revue annuelle de la cohérence du sélecteur de thème
+- [ ] Préparer une revue annuelle de la cohérence du bouton WhatsApp
+- [ ] Préparer une revue annuelle de la cohérence du bouton Réserver
+- [ ] Préparer une revue annuelle de la cohérence du bouton Contact
+- [ ] Préparer une revue annuelle de la cohérence des boutons secondaires
+- [ ] Préparer une revue annuelle de la cohérence des cartes
+- [ ] Préparer une revue annuelle de la cohérence des icônes
+- [ ] Préparer une revue annuelle de la cohérence des bordures
+- [ ] Préparer une revue annuelle de la cohérence des rayons
+- [ ] Préparer une revue annuelle de la cohérence des ombres
+- [ ] Préparer une revue annuelle de la cohérence des espacements
+- [ ] Préparer une revue annuelle de la cohérence des largeurs de contenu
+- [ ] Préparer une revue annuelle de la cohérence des hauteurs de sections
+- [ ] Préparer une revue annuelle de la cohérence des transitions
+- [ ] Préparer une revue annuelle de la cohérence des états focus
+- [ ] Préparer une revue annuelle de la cohérence des états hover
+- [ ] Préparer une revue annuelle de la cohérence des états active
+- [ ] Préparer une revue annuelle de la cohérence des états disabled
+- [ ] Préparer une revue annuelle de la cohérence des états loading
+- [ ] Préparer une revue annuelle de la cohérence des états error
+- [ ] Préparer une revue annuelle de la cohérence des états success
+- [ ] Préparer une revue annuelle de la cohérence des états empty
+- [ ] Préparer une revue annuelle de la cohérence des skeletons
+- [ ] Préparer une revue annuelle de la cohérence des toasts
+- [ ] Préparer une revue annuelle de la cohérence des modales
+- [ ] Préparer une revue annuelle de la cohérence des drawers
+- [ ] Préparer une revue annuelle de la cohérence des menus déroulants
+- [ ] Préparer une revue annuelle de la cohérence des calendriers
+- [ ] Préparer une revue annuelle de la cohérence des carrousels
+- [ ] Préparer une revue annuelle de la cohérence des formulaires
+- [ ] Préparer une revue annuelle de la cohérence des tableaux
+- [ ] Préparer une revue annuelle de la cohérence des graphiques
+- [ ] Préparer une revue annuelle de la cohérence des badges
+- [ ] Préparer une revue annuelle de la cohérence des avatars
+- [ ] Préparer une revue annuelle de la cohérence des logos
+- [ ] Préparer une revue annuelle de la cohérence des illustrations
+- [ ] Préparer une revue annuelle de la cohérence des photographies
+- [ ] Préparer une revue annuelle de la cohérence des vidéos
+- [ ] Préparer une revue annuelle de la cohérence des sons
+- [ ] Préparer une revue annuelle de la cohérence des documents PDF
+- [ ] Préparer une revue annuelle de la cohérence des emails
+- [ ] Préparer une revue annuelle de la cohérence des SMS
+- [ ] Préparer une revue annuelle de la cohérence des notifications admin
+- [ ] Préparer une revue annuelle de la cohérence des notifications client
+- [ ] Préparer une revue annuelle de la cohérence des pages imprimables
+- [ ] Préparer une revue annuelle de la cohérence des exports
+- [ ] Préparer une revue annuelle de la cohérence des téléchargements
+- [ ] Préparer une revue annuelle de la cohérence des partages
+- [ ] Préparer une revue annuelle de la cohérence des aperçus sociaux
+- [ ] Préparer une revue annuelle de la cohérence des résultats de recherche
+- [ ] Préparer une revue annuelle de la cohérence des pages d’erreur
+- [ ] Préparer une revue annuelle de la cohérence des pages de maintenance
+- [ ] Préparer une revue annuelle de la cohérence des pages de statut
+- [ ] Préparer une revue annuelle de la cohérence des pages d’aide
+- [ ] Préparer une revue annuelle de la cohérence des pages FAQ
+- [ ] Préparer une revue annuelle de la cohérence des pages ressources
+- [ ] Préparer une revue annuelle de la cohérence des pages presse
+- [ ] Préparer une revue annuelle de la cohérence des pages partenaires
+- [ ] Préparer une revue annuelle de la cohérence des pages équipe
+- [ ] Préparer une revue annuelle de la cohérence des pages entreprises
+- [ ] Préparer une revue annuelle de la cohérence des pages formations
+- [ ] Préparer une revue annuelle de la cohérence des pages services
+- [ ] Préparer une revue annuelle de la cohérence des pages contact
+- [ ] Préparer une revue annuelle de la cohérence des pages réservation
+- [ ] Préparer une revue annuelle de la cohérence des pages testimonials
+- [ ] Préparer une revue annuelle de la cohérence des pages blog
+- [ ] Préparer une revue annuelle de la cohérence des pages légales
+- [ ] Préparer une revue annuelle de la cohérence des pages RGPD
+- [ ] Préparer une revue annuelle de la cohérence des pages admin
+- [ ] Préparer une revue annuelle de la cohérence des routes publiques
+- [ ] Préparer une revue annuelle de la cohérence des routes protégées
+- [ ] Préparer une revue annuelle de la cohérence des redirections
+- [ ] Préparer une revue annuelle de la cohérence des URLs canoniques
+- [ ] Préparer une revue annuelle de la cohérence des liens internes
+- [ ] Préparer une revue annuelle de la cohérence des liens externes
+- [ ] Préparer une revue annuelle de la cohérence des liens de téléchargement
+- [ ] Préparer une revue annuelle de la cohérence des liens de paiement
+- [ ] Préparer une revue annuelle de la cohérence des liens de visioconférence
+- [ ] Préparer une revue annuelle de la cohérence des liens de contact
+- [ ] Préparer une revue annuelle de la cohérence des liens d’aide
+- [ ] Préparer une revue annuelle de la cohérence des liens légaux
+- [ ] Préparer une revue annuelle de la cohérence des liens sociaux
+- [ ] Préparer une revue annuelle de la cohérence des liens partenaires
+- [ ] Préparer une revue annuelle de la cohérence des liens ressources
+- [ ] Préparer une revue annuelle de la cohérence des liens blog
+- [ ] Préparer une revue annuelle de la cohérence des liens articles
+- [ ] Préparer une revue annuelle de la cohérence des liens catégories
+- [ ] Préparer une revue annuelle de la cohérence des liens tags
+- [ ] Préparer une revue annuelle de la cohérence des liens pagination
+- [ ] Préparer une revue annuelle de la cohérence des liens recherche
+- [ ] Préparer une revue annuelle de la cohérence des liens filtres
+- [ ] Préparer une revue annuelle de la cohérence des liens breadcrumbs
+- [ ] Préparer une revue annuelle de la cohérence des liens navigation
+- [ ] Préparer une revue annuelle de la cohérence des liens footer
+- [ ] Préparer une revue annuelle de la cohérence des liens menu mobile
+- [ ] Préparer une revue annuelle de la cohérence des liens langue
+- [ ] Préparer une revue annuelle de la cohérence des liens thème
+- [ ] Préparer une revue annuelle de la cohérence des liens cookies
+- [ ] Préparer une revue annuelle de la cohérence des liens RGPD
+- [ ] Préparer une revue annuelle de la cohérence des liens suppression
+- [ ] Préparer une revue annuelle de la cohérence des liens export
+- [ ] Préparer une revue annuelle de la cohérence des liens accès
+- [ ] Préparer une revue annuelle de la cohérence des liens rectification
+- [ ] Préparer une revue annuelle de la cohérence des liens opposition
+- [ ] Préparer une revue annuelle de la cohérence des liens portabilité
+- [ ] Préparer une revue annuelle de la cohérence des liens consentement
+- [ ] Préparer une revue annuelle de la cohérence des liens politique confidentialité
+- [ ] Préparer une revue annuelle de la cohérence des liens conditions générales
+- [ ] Préparer une revue annuelle de la cohérence des liens mentions légales
+- [ ] Préparer une revue annuelle de la cohérence des liens hébergeur
+- [ ] Préparer une revue annuelle de la cohérence des liens sous-traitants
+- [ ] Préparer une revue annuelle de la cohérence des liens CNIL
+- [ ] Préparer une revue annuelle de la cohérence des liens Stripe
+- [ ] Préparer une revue annuelle de la cohérence des liens Resend
+- [ ] Préparer une revue annuelle de la cohérence des liens Manus
+- [ ] Préparer une revue annuelle de la cohérence des liens support
+- [ ] Préparer une revue annuelle de la cohérence des liens documentation
+- [ ] Préparer une revue annuelle de la cohérence des liens statut
+- [ ] Préparer une revue annuelle de la cohérence des liens monitoring
+- [ ] Préparer une revue annuelle de la cohérence des liens incidents
+- [ ] Préparer une revue annuelle de la cohérence des liens maintenance
+- [ ] Préparer une revue annuelle de la cohérence des liens sauvegarde
+- [ ] Préparer une revue annuelle de la cohérence des liens restauration
+- [ ] Préparer une revue annuelle de la cohérence des liens audit
+- [ ] Préparer une revue annuelle de la cohérence des liens sécurité
+- [ ] Préparer une revue annuelle de la cohérence des liens conformité
+- [ ] Préparer une revue annuelle de la cohérence des liens gouvernance
+- [ ] Préparer une revue annuelle de la cohérence des liens risque
+- [ ] Préparer une revue annuelle de la cohérence des liens qualité
+- [ ] Préparer une revue annuelle de la cohérence des liens performance
+- [ ] Préparer une revue annuelle de la cohérence des liens accessibilité
+- [ ] Préparer une revue annuelle de la cohérence des liens design
+- [ ] Préparer une revue annuelle de la cohérence des liens contenu
+- [ ] Préparer une revue annuelle de la cohérence des liens traduction
+- [ ] Préparer une revue annuelle de la cohérence des liens marque
+- [ ] Préparer une revue annuelle de la cohérence des liens marketing
+- [ ] Préparer une revue annuelle de la cohérence des liens réseau social
+- [ ] Préparer une revue annuelle de la cohérence des liens LinkedIn
+- [ ] Préparer une revue annuelle de la cohérence des liens WhatsApp
+- [ ] Préparer une revue annuelle de la cohérence des liens email
+- [ ] Préparer une revue annuelle de la cohérence des liens SMS
+- [ ] Préparer une revue annuelle de la cohérence des liens téléphone
+- [ ] Préparer une revue annuelle de la cohérence des liens adresse
+- [ ] Préparer une revue annuelle de la cohérence des liens carte
+- [ ] Préparer une revue annuelle de la cohérence des liens agenda
+- [ ] Préparer une revue annuelle de la cohérence des liens calendrier
+- [ ] Préparer une revue annuelle de la cohérence des liens rendez-vous
+- [ ] Préparer une revue annuelle de la cohérence des liens consultation
+- [ ] Préparer une revue annuelle de la cohérence des liens paiement
+- [ ] Préparer une revue annuelle de la cohérence des liens remboursement
+- [ ] Préparer une revue annuelle de la cohérence des liens facture
+- [ ] Préparer une revue annuelle de la cohérence des liens rappel
+- [ ] Préparer une revue annuelle de la cohérence des liens confirmation
+- [ ] Préparer une revue annuelle de la cohérence des liens annulation
+- [ ] Préparer une revue annuelle de la cohérence des liens modification
+- [ ] Préparer une revue annuelle de la cohérence des liens disponibilité
+- [ ] Préparer une revue annuelle de la cohérence des liens indisponibilité
+- [ ] Préparer une revue annuelle de la cohérence des liens horaires
+- [ ] Préparer une revue annuelle de la cohérence des liens fuseau horaire
+- [ ] Préparer une revue annuelle de la cohérence des liens jours fériés
+- [ ] Préparer une revue annuelle de la cohérence des liens vacances
+- [ ] Préparer une revue annuelle de la cohérence des liens liste d’attente
+- [ ] Préparer une revue annuelle de la cohérence des liens récurrence
+- [ ] Préparer une revue annuelle de la cohérence des liens iCalendar
+- [ ] Préparer une revue annuelle de la cohérence des liens Google Calendar
+- [ ] Préparer une revue annuelle de la cohérence des liens Microsoft Calendar
+- [ ] Préparer une revue annuelle de la cohérence des liens Meet
+- [ ] Préparer une revue annuelle de la cohérence des liens téléconsultation
+- [ ] Préparer une revue annuelle de la cohérence des liens préparation
+- [ ] Préparer une revue annuelle de la cohérence des liens urgence
+- [ ] Préparer une revue annuelle de la cohérence des liens limites
+- [ ] Préparer une revue annuelle de la cohérence des liens confidentialité médicale
+- [ ] Préparer une revue annuelle de la cohérence des liens données sensibles
+- [ ] Préparer une revue annuelle de la cohérence des liens minimisation
+- [ ] Préparer une revue annuelle de la cohérence des liens conservation
+- [ ] Préparer une revue annuelle de la cohérence des liens suppression
+- [ ] Préparer une revue annuelle de la cohérence des liens audit
+- [ ] Préparer une revue annuelle de la cohérence des liens registre
+- [ ] Préparer une revue annuelle de la cohérence des liens sous-traitants
+- [ ] Préparer une revue annuelle de la cohérence des liens DPA
+- [ ] Préparer une revue annuelle de la cohérence des liens transferts
+- [ ] Préparer une revue annuelle de la cohérence des liens sécurité
+- [ ] Préparer une revue annuelle de la cohérence des liens incident
+- [ ] Préparer une revue annuelle de la cohérence des liens notification violation
+- [ ] Préparer une revue annuelle de la cohérence des liens CNIL
+- [ ] Préparer une revue annuelle de la cohérence des liens droits
+- [ ] Préparer une revue annuelle de la cohérence des liens accès
+- [ ] Préparer une revue annuelle de la cohérence des liens rectification
+- [ ] Préparer une revue annuelle de la cohérence des liens suppression
+- [ ] Préparer une revue annuelle de la cohérence des liens portabilité
+- [ ] Préparer une revue annuelle de la cohérence des liens opposition
+- [ ] Préparer une revue annuelle de la cohérence des liens limitation
+- [ ] Préparer une revue annuelle de la cohérence des liens retrait consentement
+- [ ] Préparer une revue annuelle de la cohérence des liens plainte
+- [ ] Préparer une revue annuelle de la cohérence des liens responsable traitement
+- [ ] Préparer une revue annuelle de la cohérence des liens contact
+- [ ] Préparer une revue annuelle de la cohérence des liens sécurité
+- [ ] Préparer une revue annuelle de la cohérence des liens hébergement
+- [ ] Préparer une revue annuelle de la cohérence des liens stockage
+- [ ] Préparer une revue annuelle de la cohérence des liens base données
+- [ ] Préparer une revue annuelle de la cohérence des liens backups
+- [ ] Préparer une revue annuelle de la cohérence des liens secrets
+- [ ] Préparer une revue annuelle de la cohérence des liens OAuth
+- [ ] Préparer une revue annuelle de la cohérence des liens admin
+- [ ] Préparer une revue annuelle de la cohérence des liens roles
+- [ ] Préparer une revue annuelle de la cohérence des liens sessions
+- [ ] Préparer une revue annuelle de la cohérence des liens 2FA
+- [ ] Préparer une revue annuelle de la cohérence des liens audit logs
+- [ ] Préparer une revue annuelle de la cohérence des liens rate limiting
+- [ ] Préparer une revue annuelle de la cohérence des liens CAPTCHA
+- [ ] Préparer une revue annuelle de la cohérence des liens CSP
+- [ ] Préparer une revue annuelle de la cohérence des liens HSTS
+- [ ] Préparer une revue annuelle de la cohérence des liens permissions policy
+- [ ] Préparer une revue annuelle de la cohérence des liens anti DDoS
+- [ ] Préparer une revue annuelle de la cohérence des liens monitoring
+- [ ] Préparer une revue annuelle de la cohérence des liens alerting
+- [ ] Préparer une revue annuelle de la cohérence des liens logs
+- [ ] Préparer une revue annuelle de la cohérence des liens traces
+- [ ] Préparer une revue annuelle de la cohérence des liens metrics
+- [ ] Préparer une revue annuelle de la cohérence des liens uptime
+- [ ] Préparer une revue annuelle de la cohérence des liens performance
+- [ ] Préparer une revue annuelle de la cohérence des liens lighthouse
+- [ ] Préparer une revue annuelle de la cohérence des liens web vitals
+- [ ] Préparer une revue annuelle de la cohérence des liens bundle
+- [ ] Préparer une revue annuelle de la cohérence des liens images
+- [ ] Préparer une revue annuelle de la cohérence des liens fonts
+- [ ] Préparer une revue annuelle de la cohérence des liens cache
+- [ ] Préparer une revue annuelle de la cohérence des liens CDN
+- [ ] Préparer une revue annuelle de la cohérence des liens compression
+- [ ] Préparer une revue annuelle de la cohérence des liens lazy loading
+- [ ] Préparer une revue annuelle de la cohérence des liens responsive
+- [ ] Préparer une revue annuelle de la cohérence des liens mobile
+- [ ] Préparer une revue annuelle de la cohérence des liens tablet
+- [ ] Préparer une revue annuelle de la cohérence des liens desktop
+- [ ] Préparer une revue annuelle de la cohérence des liens browser
+- [ ] Préparer une revue annuelle de la cohérence des liens screen reader
+- [ ] Préparer une revue annuelle de la cohérence des liens keyboard
+- [ ] Préparer une revue annuelle de la cohérence des liens contrast
+- [ ] Préparer une revue annuelle de la cohérence des liens zoom
+- [ ] Préparer une revue annuelle de la cohérence des liens reduced motion
+- [ ] Préparer une revue annuelle de la cohérence des liens high contrast
+- [ ] Préparer une revue annuelle de la cohérence des liens text size
+- [ ] Préparer une revue annuelle de la cohérence des liens labels
+- [ ] Préparer une revue annuelle de la cohérence des liens alt text
+- [ ] Préparer une revue annuelle de la cohérence des liens focus
+- [ ] Préparer une revue annuelle de la cohérence des liens hover
+- [ ] Préparer une revue annuelle de la cohérence des liens active
+- [ ] Préparer une revue annuelle de la cohérence des liens disabled
+- [ ] Préparer une revue annuelle de la cohérence des liens loading
+- [ ] Préparer une revue annuelle de la cohérence des liens error
+- [ ] Préparer une revue annuelle de la cohérence des liens success
+- [ ] Préparer une revue annuelle de la cohérence des liens empty
+- [ ] Préparer une revue annuelle de la cohérence des liens skeleton
+- [ ] Préparer une revue annuelle de la cohérence des liens toast
+- [ ] Préparer une revue annuelle de la cohérence des liens modal
+- [ ] Préparer une revue annuelle de la cohérence des liens drawer
+- [ ] Préparer une revue annuelle de la cohérence des liens dropdown
+- [ ] Préparer une revue annuelle de la cohérence des liens select
+- [ ] Préparer une revue annuelle de la cohérence des liens input
+- [ ] Préparer une revue annuelle de la cohérence des liens textarea
+- [ ] Préparer une revue annuelle de la cohérence des liens checkbox
+- [ ] Préparer une revue annuelle de la cohérence des liens radio
+- [ ] Préparer une revue annuelle de la cohérence des liens switch
+- [ ] Préparer une revue annuelle de la cohérence des liens slider
+- [ ] Préparer une revue annuelle de la cohérence des liens datepicker
+- [ ] Préparer une revue annuelle de la cohérence des liens calendar
+- [ ] Préparer une revue annuelle de la cohérence des liens table
+- [ ] Préparer une revue annuelle de la cohérence des liens pagination
+- [ ] Préparer une revue annuelle de la cohérence des liens tabs
+- [ ] Préparer une revue annuelle de la cohérence des liens accordion
+- [ ] Préparer une revue annuelle de la cohérence des liens carousel
+- [ ] Préparer une revue annuelle de la cohérence des liens tooltip
+- [ ] Préparer une revue annuelle de la cohérence des liens popover
+- [ ] Préparer une revue annuelle de la cohérence des liens dialog
+- [ ] Préparer une revue annuelle de la cohérence des liens alert dialog
+- [ ] Préparer une revue annuelle de la cohérence des liens command
+- [ ] Préparer une revue annuelle de la cohérence des liens context menu
+- [ ] Préparer une revue annuelle de la cohérence des liens menubar
+- [ ] Préparer une revue annuelle de la cohérence des liens navigation menu
+- [ ] Préparer une revue annuelle de la cohérence des liens sidebar
+- [ ] Préparer une revue annuelle de la cohérence des liens sheet
+- [ ] Préparer une revue annuelle de la cohérence des liens resizable
+- [ ] Préparer une revue annuelle de la cohérence des liens separator
+- [ ] Préparer une revue annuelle de la cohérence des liens aspect ratio
+- [ ] Préparer une revue annuelle de la cohérence des liens avatar
+- [ ] Préparer une revue annuelle de la cohérence des liens badge
+- [ ] Préparer une revue annuelle de la cohérence des liens breadcrumb
+- [ ] Préparer une revue annuelle de la cohérence des liens button group
+- [ ] Préparer une revue annuelle de la cohérence des liens card
+- [ ] Préparer une revue annuelle de la cohérence des liens chart
+- [ ] Préparer une revue annuelle de la cohérence des liens checkbox
+- [ ] Préparer une revue annuelle de la cohérence des liens collapsible
+- [ ] Préparer une revue annuelle de la cohérence des liens combobox
+- [ ] Préparer une revue annuelle de la cohérence des liens command
+- [ ] Préparer une revue annuelle de la cohérence des liens date picker
+- [ ] Préparer une revue annuelle de la cohérence des liens drawer
+- [ ] Préparer une revue annuelle de la cohérence des liens dropdown
+- [ ] Préparer une revue annuelle de la cohérence des liens empty
+- [ ] Préparer une revue annuelle de la cohérence des liens field
+- [ ] Préparer une revue annuelle de la cohérence des liens form
+- [ ] Préparer une revue annuelle de la cohérence des liens hover card
+- [ ] Préparer une revue annuelle de la cohérence des liens input group
+- [ ] Préparer une revue annuelle de la cohérence des liens item
+- [ ] Préparer une revue annuelle de la cohérence des liens kbd
+- [ ] Préparer une revue annuelle de la cohérence des liens label
+- [ ] Préparer une revue annuelle de la cohérence des liens menubar
+- [ ] Préparer une revue annuelle de la cohérence des liens navigation menu
+- [ ] Préparer une revue annuelle de la cohérence des liens pagination
+- [ ] Préparer une revue annuelle de la cohérence des liens popover
+- [ ] Préparer une revue annuelle de la cohérence des liens progress
+- [ ] Préparer une revue annuelle de la cohérence des liens radio group
+- [ ] Préparer une revue annuelle de la cohérence des liens resizable
+- [ ] Préparer une revue annuelle de la cohérence des liens scroll area
+- [ ] Préparer une revue annuelle de la cohérence des liens select
+- [ ] Préparer une revue annuelle de la cohérence des liens separator
+- [ ] Préparer une revue annuelle de la cohérence des liens sheet
+- [ ] Préparer une revue annuelle de la cohérence des liens skeleton
+- [ ] Préparer une revue annuelle de la cohérence des liens slider
+- [ ] Préparer une revue annuelle de la cohérence des liens sonner
+- [ ] Préparer une revue annuelle de la cohérence des liens spinner
+- [ ] Préparer une revue annuelle de la cohérence des liens switch
+- [ ] Préparer une revue annuelle de la cohérence des liens table
+- [ ] Préparer une revue annuelle de la cohérence des liens tabs
+- [ ] Préparer une revue annuelle de la cohérence des liens textarea
+- [ ] Préparer une revue annuelle de la cohérence des liens toggle
+- [ ] Préparer une revue annuelle de la cohérence des liens toggle group
+- [ ] Préparer une revue annuelle de la cohérence des liens tooltip
+- [ ] Préparer une revue annuelle de la cohérence des liens separators
+- [ ] Préparer une revue annuelle de la cohérence des liens icons
+- [ ] Préparer une revue annuelle de la cohérence des liens shadows
+- [ ] Préparer une revue annuelle de la cohérence des liens radii
+- [ ] Préparer une revue annuelle de la cohérence des liens typography
+- [ ] Préparer une revue annuelle de la cohérence des liens colors
+- [ ] Préparer une revue annuelle de la cohérence des liens tokens
+- [ ] Préparer une revue annuelle de la cohérence des liens theme
+- [ ] Préparer une revue annuelle de la cohérence des liens dark mode
+- [ ] Préparer une revue annuelle de la cohérence des liens light mode
+- [ ] Préparer une revue annuelle de la cohérence des liens responsive
+- [ ] Préparer une revue annuelle de la cohérence des liens accessibility
+- [ ] Préparer une revue annuelle de la cohérence des liens performance
+- [ ] Préparer une revue annuelle de la cohérence des liens seo
+- [ ] Préparer une revue annuelle de la cohérence des liens structured data
+- [ ] Préparer une revue annuelle de la cohérence des liens open graph
+- [ ] Préparer une revue annuelle de la cohérence des liens twitter card
+- [ ] Préparer une revue annuelle de la cohérence des liens canonical
+- [ ] Préparer une revue annuelle de la cohérence des liens hreflang
+- [ ] Préparer une revue annuelle de la cohérence des liens sitemap
+- [ ] Préparer une revue annuelle de la cohérence des liens robots
+- [ ] Préparer une revue annuelle de la cohérence des liens favicon
+- [ ] Préparer une revue annuelle de la cohérence des liens manifest
+- [ ] Préparer une revue annuelle de la cohérence des liens PWA
+- [ ] Préparer une revue annuelle de la cohérence des liens installability
+- [ ] Préparer une revue annuelle de la cohérence des liens offline
+- [ ] Préparer une revue annuelle de la cohérence des liens push notifications
+- [ ] Préparer une revue annuelle de la cohérence des liens service worker
+- [ ] Préparer une revue annuelle de la cohérence des liens caching
+- [ ] Préparer une revue annuelle de la cohérence des liens prefetch
+- [ ] Préparer une revue annuelle de la cohérence des liens preload
+- [ ] Préparer une revue annuelle de la cohérence des liens dns prefetch
+- [ ] Préparer une revue annuelle de la cohérence des liens resource hints
+- [ ] Préparer une revue annuelle de la cohérence des liens critical css
+- [ ] Préparer une revue annuelle de la cohérence des liens hydration
+- [ ] Préparer une revue annuelle de la cohérence des liens bundle splitting
+- [ ] Préparer une revue annuelle de la cohérence des liens tree shaking
+- [ ] Préparer une revue annuelle de la cohérence des liens minification
+- [ ] Préparer une revue annuelle de la cohérence des liens compression
+- [ ] Préparer une revue annuelle de la cohérence des liens brotli
+- [ ] Préparer une revue annuelle de la cohérence des liens gzip
+- [ ] Préparer une revue annuelle de la cohérence des liens CDN
+- [ ] Préparer une revue annuelle de la cohérence des liens cache control
+- [ ] Préparer une revue annuelle de la cohérence des liens etag
+- [ ] Préparer une revue annuelle de la cohérence des liens http2
+- [ ] Préparer une revue annuelle de la cohérence des liens http3
+- [ ] Préparer une revue annuelle de la cohérence des liens tls
+- [ ] Préparer une revue annuelle de la cohérence des liens certificate
+- [ ] Préparer une revue annuelle de la cohérence des liens dns
+- [ ] Préparer une revue annuelle de la cohérence des liens domain
+- [ ] Préparer une revue annuelle de la cohérence des liens redirect
+- [ ] Préparer une revue annuelle de la cohérence des liens www
+- [ ] Préparer une revue annuelle de la cohérence des liens non www
+- [ ] Préparer une revue annuelle de la cohérence des liens staging
+- [ ] Préparer une revue annuelle de la cohérence des liens production
+- [ ] Préparer une revue annuelle de la cohérence des liens deployment
+- [ ] Préparer une revue annuelle de la cohérence des liens rollback
+- [ ] Préparer une revue annuelle de la cohérence des liens checkpoint
+- [ ] Préparer une revue annuelle de la cohérence des liens release
+- [ ] Préparer une revue annuelle de la cohérence des liens changelog
+- [ ] Préparer une revue annuelle de la cohérence des liens versioning
+- [ ] Préparer une revue annuelle de la cohérence des liens branch
+- [ ] Préparer une revue annuelle de la cohérence des liens git
+- [ ] Préparer une revue annuelle de la cohérence des liens ci
+- [ ] Préparer une revue annuelle de la cohérence des liens cd
+- [ ] Préparer une revue annuelle de la cohérence des liens build
+- [ ] Préparer une revue annuelle de la cohérence des liens test
+- [ ] Préparer une revue annuelle de la cohérence des liens lint
+- [ ] Préparer une revue annuelle de la cohérence des liens typecheck
+- [ ] Préparer une revue annuelle de la cohérence des liens unit tests
+- [ ] Préparer une revue annuelle de la cohérence des liens integration tests
+- [ ] Préparer une revue annuelle de la cohérence des liens e2e tests
+- [ ] Préparer une revue annuelle de la cohérence des liens visual regression
+- [ ] Préparer une revue annuelle de la cohérence des liens accessibility tests
+- [ ] Préparer une revue annuelle de la cohérence des liens security tests
+- [ ] Préparer une revue annuelle de la cohérence des liens performance tests
+- [ ] Préparer une revue annuelle de la cohérence des liens seo tests
+- [ ] Préparer une revue annuelle de la cohérence des liens content tests
+- [ ] Préparer une revue annuelle de la cohérence des liens translation tests
+- [ ] Préparer une revue annuelle de la cohérence des liens payment tests
+- [ ] Préparer une revue annuelle de la cohérence des liens booking tests
+- [ ] Préparer une revue annuelle de la cohérence des liens email tests
+- [ ] Préparer une revue annuelle de la cohérence des liens sms tests
+- [ ] Préparer une revue annuelle de la cohérence des liens invoice tests
+- [ ] Préparer une revue annuelle de la cohérence des liens reminder tests
+- [ ] Préparer une revue annuelle de la cohérence des liens webhook tests
+- [ ] Préparer une revue annuelle de la cohérence des liens database tests
+- [ ] Préparer une revue annuelle de la cohérence des liens schema tests
+- [ ] Préparer une revue annuelle de la cohérence des liens migration tests
+- [ ] Préparer une revue annuelle de la cohérence des liens backup tests
+- [ ] Préparer une revue annuelle de la cohérence des liens restore tests
+- [ ] Préparer une revue annuelle de la cohérence des liens admin tests
+- [ ] Préparer une revue annuelle de la cohérence des liens role tests
+- [ ] Préparer une revue annuelle de la cohérence des liens auth tests
+- [ ] Préparer une revue annuelle de la cohérence des liens oauth tests
+- [ ] Préparer une revue annuelle de la cohérence des liens session tests
+- [ ] Préparer une revue annuelle de la cohérence des liens cookie tests
+- [ ] Préparer une revue annuelle de la cohérence des liens gdpr tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent tests
+- [ ] Préparer une revue annuelle de la cohérence des liens legal tests
+- [ ] Préparer une revue annuelle de la cohérence des liens accessibility tests
+- [ ] Préparer une revue annuelle de la cohérence des liens responsive tests
+- [ ] Préparer une revue annuelle de la cohérence des liens browser tests
+- [ ] Préparer une revue annuelle de la cohérence des liens mobile tests
+- [ ] Préparer une revue annuelle de la cohérence des liens tablet tests
+- [ ] Préparer une revue annuelle de la cohérence des liens desktop tests
+- [ ] Préparer une revue annuelle de la cohérence des liens production tests
+- [ ] Préparer une revue annuelle de la cohérence des liens domain tests
+- [ ] Préparer une revue annuelle de la cohérence des liens ssl tests
+- [ ] Préparer une revue annuelle de la cohérence des liens dns tests
+- [ ] Préparer une revue annuelle de la cohérence des liens redirect tests
+- [ ] Préparer une revue annuelle de la cohérence des liens sitemap tests
+- [ ] Préparer une revue annuelle de la cohérence des liens robots tests
+- [ ] Préparer une revue annuelle de la cohérence des liens metadata tests
+- [ ] Préparer une revue annuelle de la cohérence des liens schema tests
+- [ ] Préparer une revue annuelle de la cohérence des liens open graph tests
+- [ ] Préparer une revue annuelle de la cohérence des liens hreflang tests
+- [ ] Préparer une revue annuelle de la cohérence des liens canonical tests
+- [ ] Préparer une revue annuelle de la cohérence des liens brand tests
+- [ ] Préparer une revue annuelle de la cohérence des liens design tests
+- [ ] Préparer une revue annuelle de la cohérence des liens typography tests
+- [ ] Préparer une revue annuelle de la cohérence des liens color tests
+- [ ] Préparer une revue annuelle de la cohérence des liens spacing tests
+- [ ] Préparer une revue annuelle de la cohérence des liens component tests
+- [ ] Préparer une revue annuelle de la cohérence des liens ux tests
+- [ ] Préparer une revue annuelle de la cohérence des liens conversion tests
+- [ ] Préparer une revue annuelle de la cohérence des liens analytics tests
+- [ ] Préparer une revue annuelle de la cohérence des liens privacy tests
+- [ ] Préparer une revue annuelle de la cohérence des liens cookie consent tests
+- [ ] Préparer une revue annuelle de la cohérence des liens third party tests
+- [ ] Préparer une revue annuelle de la cohérence des liens vendor tests
+- [ ] Préparer une revue annuelle de la cohérence des liens dpa tests
+- [ ] Préparer une revue annuelle de la cohérence des liens contract tests
+- [ ] Préparer une revue annuelle de la cohérence des liens legal review tests
+- [ ] Préparer une revue annuelle de la cohérence des liens compliance tests
+- [ ] Préparer une revue annuelle de la cohérence des liens audit tests
+- [ ] Préparer une revue annuelle de la cohérence des liens governance tests
+- [ ] Préparer une revue annuelle de la cohérence des liens risk tests
+- [ ] Préparer une revue annuelle de la cohérence des liens incident tests
+- [ ] Préparer une revue annuelle de la cohérence des liens disaster recovery tests
+- [ ] Préparer une revue annuelle de la cohérence des liens business continuity tests
+- [ ] Préparer une revue annuelle de la cohérence des liens service level tests
+- [ ] Préparer une revue annuelle de la cohérence des liens support tests
+- [ ] Préparer une revue annuelle de la cohérence des liens user feedback tests
+- [ ] Préparer une revue annuelle de la cohérence des liens satisfaction tests
+- [ ] Préparer une revue annuelle de la cohérence des liens content quality tests
+- [ ] Préparer une revue annuelle de la cohérence des liens translation quality tests
+- [ ] Préparer une revue annuelle de la cohérence des liens editorial tests
+- [ ] Préparer une revue annuelle de la cohérence des liens medical review tests
+- [ ] Préparer une revue annuelle de la cohérence des liens source verification tests
+- [ ] Préparer une revue annuelle de la cohérence des liens citation tests
+- [ ] Préparer une revue annuelle de la cohérence des liens update date tests
+- [ ] Préparer une revue annuelle de la cohérence des liens author tests
+- [ ] Préparer une revue annuelle de la cohérence des liens reviewer tests
+- [ ] Préparer une revue annuelle de la cohérence des liens publication tests
+- [ ] Préparer une revue annuelle de la cohérence des liens draft tests
+- [ ] Préparer une revue annuelle de la cohérence des liens preview tests
+- [ ] Préparer une revue annuelle de la cohérence des liens scheduling tests
+- [ ] Préparer une revue annuelle de la cohérence des liens archive tests
+- [ ] Préparer une revue annuelle de la cohérence des liens duplicate tests
+- [ ] Préparer une revue annuelle de la cohérence des liens image tests
+- [ ] Préparer une revue annuelle de la cohérence des liens alt text tests
+- [ ] Préparer une revue annuelle de la cohérence des liens social preview tests
+- [ ] Préparer une revue annuelle de la cohérence des liens rss tests
+- [ ] Préparer une revue annuelle de la cohérence des liens categories tests
+- [ ] Préparer une revue annuelle de la cohérence des liens tags tests
+- [ ] Préparer une revue annuelle de la cohérence des liens search tests
+- [ ] Préparer une revue annuelle de la cohérence des liens pagination tests
+- [ ] Préparer une revue annuelle de la cohérence des liens related content tests
+- [ ] Préparer une revue annuelle de la cohérence des liens reading progress tests
+- [ ] Préparer une revue annuelle de la cohérence des liens toc tests
+- [ ] Préparer une revue annuelle de la cohérence des liens article schema tests
+- [ ] Préparer une revue annuelle de la cohérence des liens author schema tests
+- [ ] Préparer une revue annuelle de la cohérence des liens organization schema tests
+- [ ] Préparer une revue annuelle de la cohérence des liens physician schema tests
+- [ ] Préparer une revue annuelle de la cohérence des liens person schema tests
+- [ ] Préparer une revue annuelle de la cohérence des liens website schema tests
+- [ ] Préparer une revue annuelle de la cohérence des liens local business schema tests
+- [ ] Préparer une revue annuelle de la cohérence des liens review schema tests
+- [ ] Préparer une revue annuelle de la cohérence des liens aggregate rating tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent schema tests
+- [ ] Préparer une revue annuelle de la cohérence des liens breadcrumbs schema tests
+- [ ] Préparer une revue annuelle de la cohérence des liens faq schema tests
+- [ ] Préparer une revue annuelle de la cohérence des liens sitemap schema tests
+- [ ] Préparer une revue annuelle de la cohérence des liens seo tests
+- [ ] Préparer une revue annuelle de la cohérence des liens page speed tests
+- [ ] Préparer une revue annuelle de la cohérence des liens core web vitals tests
+- [ ] Préparer une revue annuelle de la cohérence des liens accessibility tests
+- [ ] Préparer une revue annuelle de la cohérence des liens security headers tests
+- [ ] Préparer une revue annuelle de la cohérence des liens privacy tests
+- [ ] Préparer une revue annuelle de la cohérence des liens legal content tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent management tests
+- [ ] Préparer une revue annuelle de la cohérence des liens data minimization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens retention tests
+- [ ] Préparer une revue annuelle de la cohérence des liens deletion tests
+- [ ] Préparer une revue annuelle de la cohérence des liens export tests
+- [ ] Préparer une revue annuelle de la cohérence des liens subject rights tests
+- [ ] Préparer une revue annuelle de la cohérence des liens vendor compliance tests
+- [ ] Préparer une revue annuelle de la cohérence des liens international transfers tests
+- [ ] Préparer une revue annuelle de la cohérence des liens data breach tests
+- [ ] Préparer une revue annuelle de la cohérence des liens incident response tests
+- [ ] Préparer une revue annuelle de la cohérence des liens dpo tests
+- [ ] Préparer une revue annuelle de la cohérence des liens records of processing tests
+- [ ] Préparer une revue annuelle de la cohérence des liens privacy policy tests
+- [ ] Préparer une revue annuelle de la cohérence des liens terms tests
+- [ ] Préparer une revue annuelle de la cohérence des liens legal notice tests
+- [ ] Préparer une revue annuelle de la cohérence des liens cookie banner tests
+- [ ] Préparer une revue annuelle de la cohérence des liens cookie preference tests
+- [ ] Préparer une revue annuelle de la cohérence des liens analytics consent tests
+- [ ] Préparer une revue annuelle de la cohérence des liens marketing consent tests
+- [ ] Préparer une revue annuelle de la cohérence des liens functional consent tests
+- [ ] Préparer une revue annuelle de la cohérence des liens essential consent tests
+- [ ] Préparer une revue annuelle de la cohérence des liens withdraw consent tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent version tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent log tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent audit tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent retention tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent deletion tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent export tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent rights tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent privacy tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent legal tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent compliance tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent governance tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent risk tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent incident tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent security tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent performance tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent accessibility tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent UX tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent UI tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent content tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent translation tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent mobile tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent tablet tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent desktop tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent browser tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent screen reader tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent keyboard tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent zoom tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent reduced motion tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent high contrast tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent text size tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent labels tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent alt text tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent focus tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent hover tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent active tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent disabled tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent loading tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent error tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent success tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent empty tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent skeleton tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent toast tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent modal tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent drawer tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent dropdown tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent select tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent input tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent textarea tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent checkbox tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent radio tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent switch tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent slider tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent datepicker tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent calendar tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent table tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent pagination tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent tabs tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent accordion tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent carousel tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent tooltip tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent popover tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent dialog tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent alert dialog tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent command tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent context menu tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent menubar tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent navigation menu tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent sidebar tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent sheet tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent resizable tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent separator tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent aspect ratio tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent avatar tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent badge tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent breadcrumb tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent button group tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent card tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent chart tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent checkbox tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent collapsible tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent combobox tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent command tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent date picker tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent drawer tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent dropdown tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent empty tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent field tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent form tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent hover card tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent input group tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent item tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent kbd tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent label tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent menubar tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent navigation menu tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent pagination tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent popover tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent progress tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent radio group tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent resizable tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent scroll area tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent select tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent separator tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent sheet tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent skeleton tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent slider tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent sonner tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent spinner tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent switch tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent table tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent tabs tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent textarea tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent toggle tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent toggle group tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent tooltip tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent separators tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent icons tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent shadows tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent radii tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent typography tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent colors tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent tokens tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent theme tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent dark mode tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent light mode tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent responsive tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent accessibility tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent performance tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent seo tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent structured data tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent open graph tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent twitter card tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent canonical tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent hreflang tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent sitemap tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent robots tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent favicon tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent manifest tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent PWA tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent installability tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent offline tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent push notifications tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent service worker tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent caching tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent prefetch tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent preload tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent dns prefetch tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent resource hints tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent critical css tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent hydration tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent bundle splitting tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent tree shaking tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent minification tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent compression tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent brotli tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent gzip tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent CDN tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent cache control tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent etag tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent http2 tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent http3 tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent tls tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent certificate tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent dns tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent domain tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent redirect tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent www tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent non www tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent staging tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent production tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent deployment tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent rollback tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent checkpoint tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent release tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent changelog tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent versioning tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent branch tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent git tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent ci tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent cd tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent build tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent test tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent lint tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent typecheck tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent unit tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent integration tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent e2e tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent visual regression tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent accessibility tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent security tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent performance tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent seo tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent content tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent translation tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent payment tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent booking tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent email tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent sms tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent invoice tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent reminder tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent webhook tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent database tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent schema tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent migration tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent backup tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent restore tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent admin tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent role tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent auth tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent oauth tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent session tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent cookie tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent gdpr tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent legal tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent privacy tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent vendor tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent dpa tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent data tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent health data tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent hds tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent medical tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent emergency tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent disclaimer tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent source tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent author tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent reviewer tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent publication tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent update tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent archive tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent version tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent changelog tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent history tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent audit tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent governance tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent risk tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent incident tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent recovery tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent support tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent documentation tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent training tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent review tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent improvement tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent roadmap tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent backlog tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent priority tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent effort tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent impact tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent decision tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent owner tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent stakeholder tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent communication tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent delivery tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent checkpoint tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent deployment tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent production tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent rollback tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent support tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent maintenance tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent upgrade tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent migration tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent deprecation tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent removal tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent retention tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent archiving tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent backup tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent restore tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent disaster recovery tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent continuity tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent risk assessment tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent threat modeling tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent vulnerability tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent penetration tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent security review tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent privacy review tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent legal review tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent accessibility review tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent UX review tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent design review tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent content review tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent translation review tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent medical review tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent operational review tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent financial review tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent tax review tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent accounting review tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent billing review tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent invoice review tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent payment review tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent refund review tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent dispute review tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent fraud review tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent abuse review tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent spam review tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent rate limit review tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent captcha review tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent bot review tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent ddos review tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent csrf review tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent xss review tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent injection review tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent sql review tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent dependency review tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent secret review tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent credential review tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent access review tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent session review tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent auth review tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent oauth review tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent admin review tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent role review tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent permissions review tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent audit review tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent logs review tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent monitoring review tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent alerting review tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent oncall review tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent support review tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent incident review tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent recovery review tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent continuity review tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent backup review tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent restore review tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent migration review tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent upgrade review tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent maintenance review tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent deprecation review tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent removal review tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent lifecycle review tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent version review tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent release review tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent changelog review tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent documentation review tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent training review tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent onboarding review tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent offboarding review tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent handoff review tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent escalation review tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent decision review tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent approval review tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent signoff review tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent compliance signoff tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent legal signoff tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent medical signoff tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent content signoff tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent design signoff tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent engineering signoff tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent product signoff tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent business signoff tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent stakeholder signoff tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent customer signoff tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent owner signoff tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent final signoff tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent release signoff tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent production signoff tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent post launch review tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent retrospective tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent lessons learned tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent backlog grooming tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent roadmap planning tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent quarterly planning tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent annual planning tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent strategy review tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent goal review tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent KPI review tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent OKR review tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent metrics review tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent analytics review tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent conversion review tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent retention review tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent satisfaction review tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent reputation review tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent brand review tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent market review tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent competitor review tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent financial review tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent growth review tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent experimentation review tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent A/B tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent personalization review tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent segmentation review tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent localization review tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent internationalization review tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent multilingual review tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent translation review tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent cultural review tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent accessibility localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent typography localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent layout localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent content localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent timezone localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent currency localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent date localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent number localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent address localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent phone localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent email localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent payment localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent invoice localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent reminder localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent booking localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent contact localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent gdpr localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent legal localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent blog localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent testimonials localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent admin localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent navigation localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent seo localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent social localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent email localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent sms localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent whatsapp localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent calendar localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent availability localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent timezone localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent daylight saving localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent holidays localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent vacations localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent blocked dates localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent booked slots localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent waitlist localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent cancellation localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent refund localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent reschedule localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent payment localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent stripe localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent resend localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent manus localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent support localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent documentation localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent status localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent incident localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent maintenance localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent downtime localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent errors localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent retries localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent idempotency localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent queue localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent delivery localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent open rate localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent bounce localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent unsubscribe localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent dmarc localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent spf localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent dkim localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent domain localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent deliverability localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent templates localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent attachments localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent invoice localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent refund localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent receipt localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent followup localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent feedback localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent survey localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent review localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent testimonial localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent partner localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent patient localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent medical localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent clinical localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent emergency localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent teleconsultation localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent video localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent meet localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent zoom localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent teams localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent privacy localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent confidentiality localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent sensitive data localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent health data localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent HDS localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent security localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent encryption localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent access localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent audit localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent logs localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent incident localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent breach localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent notification localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent CNIL localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent complaint localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent DPO localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent register localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent retention localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent deletion localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent export localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent rights localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent legal localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent terms localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent notice localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent cookies localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent marketing localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent analytics localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent tracking localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent third party localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent vendor localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent DPA localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent transfer localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent breach localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent incident localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent security localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent privacy localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent compliance localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent governance localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent risk localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent audit localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent documentation localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent training localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent review localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent improvement localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent roadmap localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent backlog localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent priority localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent effort localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent impact localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent decision localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent owner localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent stakeholder localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent communication localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent delivery localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent checkpoint localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent deployment localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent production localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent rollback localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent support localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent maintenance localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent upgrade localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent migration localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent deprecation localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent removal localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent lifecycle localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent version localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent release localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent changelog localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent documentation localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent training localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent onboarding localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent offboarding localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent handoff localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent escalation localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent decision localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent approval localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent signoff localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent compliance signoff localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent legal signoff localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent medical signoff localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent content signoff localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent design signoff localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent engineering signoff localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent product signoff localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent business signoff localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent stakeholder signoff localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent customer signoff localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent owner signoff localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent final signoff localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent release signoff localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent production localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent post launch review localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent retrospective localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent lessons learned localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent backlog grooming localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent roadmap planning localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent quarterly planning localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent annual planning localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent strategy review localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent goal review localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent KPI review localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent OKR review localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent metrics review localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent analytics review localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent conversion review localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent retention review localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent satisfaction review localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent reputation review localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent brand review localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent market review localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent competitor review localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent financial review localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent growth review localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent experimentation review localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent A/B tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent personalization review localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent segmentation review localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent localization review localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent internationalization review localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent multilingual review localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent cultural review localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent final quality localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent user acceptance localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent release readiness localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent go live localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent post go live localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent continuous improvement localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent closeout localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent archive localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent superseded localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent final archive localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent end localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent complete localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent done localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent closed localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent finished localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent finalization localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent completion localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent wrap up localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent sign off localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent archived localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent retained localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent historical localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent legacy localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent backlog localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent future localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent later localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent optional localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent advanced localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent speculative localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent candidate localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent proposal localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent recommendation localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent roadmap localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent backlog localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent ideas localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent improvements localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent enhancements localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent suggestions localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent proposals localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent plan localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent next steps localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent follow up localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent future work localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent outstanding localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent remaining localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent pending localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent todo localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent tracking localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent task localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent project localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent site localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent design localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent UI localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent UX localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent product localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent platform localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent website localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent application localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent interface localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent visual localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent graphic localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent styling localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent theme localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent branding localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent identity localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent creative localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent visual design localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent graphic design localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent UI design localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent UX design localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent design system localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent component library localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent style guide localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent brand guide localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent visual language localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent design tokens localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent colors localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent typography localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent spacing localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent radii localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent shadows localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent grids localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent layout localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent responsive localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent breakpoint localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent mobile localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent tablet localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent desktop localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent wide screen localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent print localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent export localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent PDF localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent email localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent SMS localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent notification localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent admin localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent patient localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent partner localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent doctor localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent clinical localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent business localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent international localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent global localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent local localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent cultural localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent language localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent translation localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent grammar localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent terminology localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent medical terminology localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent legal terminology localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent UI terminology localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent CTA terminology localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent error message localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent success message localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent loading message localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent empty message localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent accessibility message localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent privacy message localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent legal message localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent payment message localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent booking message localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent contact message localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent gdpr message localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent blog message localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent testimonial message localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent admin message localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent navigation message localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent theme message localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent language message localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent cookie message localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent notification message localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent invoice message localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent reminder message localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent refund message localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent cancellation message localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent reschedule message localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent availability message localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent calendar message localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent timezone message localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent currency message localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent tax message localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent billing message localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent receipt message localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent invoice message localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent pdf message localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent download message localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent email link localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent secure link localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent expiry localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent access control localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent authorization localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent authentication localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent 2FA localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent role localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent admin localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent audit localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent security localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent privacy localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent gdpr localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent legal localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent compliance localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent policy localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent terms localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent notice localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent contact localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent support localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent help localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent faq localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent resource localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent press localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent partner localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent company localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent team localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent leadership localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent ventures localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent education localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent certification localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent services localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent about localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent home localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent hero localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent CTA localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent footer localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent navigation localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent breadcrumbs localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent search localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent pagination localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent filters localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent sort localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent details localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent modal localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent drawer localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent panel localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent tabs localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent accordion localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent carousel localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent calendar localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent form localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent table localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent chart localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent empty localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent loading localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent error localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent success localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent warning localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent info localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent tooltip localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent popover localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent dialog localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent alert localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent toast localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent notification localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent banner localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent sheet localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent sidebar localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent menu localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent mobile menu localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent desktop menu localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent keyboard localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent pointer localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent touch localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent gesture localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent motion localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent reduced motion localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent animation localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent transition localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent parallax localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent hover localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent focus localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent active localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent disabled localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent loading localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent error localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent success localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent empty localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent skeleton localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent toast localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent modal localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent drawer localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent dropdown localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent select localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent input localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent textarea localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent checkbox localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent radio localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent switch localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent slider localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent datepicker localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent calendar localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent table localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent pagination localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent tabs localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent accordion localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent carousel localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent tooltip localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent popover localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent dialog localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent alert dialog localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent command localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent context menu localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent menubar localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent navigation menu localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent sidebar localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent sheet localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent resizable localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent separator localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent aspect ratio localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent avatar localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent badge localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent breadcrumb localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent button group localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent card localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent chart localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent checkbox localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent collapsible localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent combobox localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent command localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent date picker localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent drawer localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent dropdown localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent empty localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent field localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent form localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent hover card localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent input group localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent item localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent kbd localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent label localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent menubar localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent navigation menu localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent pagination localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent popover localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent progress localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent radio group localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent resizable localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent scroll area localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent select localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent separator localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent sheet localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent skeleton localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent slider localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent sonner localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent spinner localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent switch localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent table localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent tabs localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent textarea localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent toggle localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent toggle group localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent tooltip localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent separators localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent icons localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent shadows localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent radii localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent typography localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent colors localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent tokens localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent theme localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent dark mode localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent light mode localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent responsive localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent accessibility localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent performance localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent seo localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent structured data localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent open graph localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent twitter card localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent canonical localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent hreflang localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent sitemap localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent robots localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent favicon localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent manifest localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent PWA localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent installability localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent offline localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent push notifications localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent service worker localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent caching localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent prefetch localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent preload localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent dns prefetch localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent resource hints localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent critical css localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent hydration localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent bundle splitting localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent tree shaking localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent minification localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent compression localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent brotli localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent gzip localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent CDN localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent cache control localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent etag localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent http2 localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent http3 localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent tls localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent certificate localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent dns localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent domain localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent redirect localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent www localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent non www localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent staging localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent production localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent deployment localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent rollback localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent checkpoint localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent release localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent changelog localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent versioning localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent branch localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent git localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent ci localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent cd localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent build localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent test localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent lint localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent typecheck localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent unit tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent integration tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent e2e tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent visual regression localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent accessibility tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent security tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent performance tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent seo tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent content tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent translation tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent payment tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent booking tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent email tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent sms tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent invoice tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent reminder tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent webhook tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent database tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent schema tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent migration tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent backup tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent restore tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent admin tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent role tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent auth tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent oauth tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent session tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent cookie tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent gdpr tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent consent tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent legal tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent privacy tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent vendor tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent dpa tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent data tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent health data tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent hds tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent medical tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent emergency tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent disclaimer tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent source tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent author tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent reviewer tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent publication tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent update tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent archive tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent version tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent changelog tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent history tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent audit tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent governance tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent risk tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent incident tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent recovery tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent support tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent documentation tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent training tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent review tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent improvement tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent roadmap tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent backlog tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent priority tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent effort tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent impact tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent decision tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent owner tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent stakeholder tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent communication tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent delivery tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent checkpoint tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent deployment tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent production tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent rollback tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent support tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent maintenance tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent upgrade tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent migration tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent deprecation tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent removal tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent lifecycle tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent version tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent release tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent changelog tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent documentation tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent training tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent onboarding tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent offboarding tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent handoff tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent escalation tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent decision tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent approval tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent signoff tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent compliance signoff tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent legal signoff tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent medical signoff tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent content signoff tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent design signoff tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent engineering signoff tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent product signoff tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent business signoff tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent stakeholder signoff tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent customer signoff tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent owner signoff tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent final signoff tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent release signoff tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent production signoff tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent post launch review tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent retrospective tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent lessons learned tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent backlog grooming tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent roadmap planning tests localization tests
+- [ ] Préparer une revue annuelle de la cohérence des liens consent quarterly planning tests localization tests
+-
+
+## Écarts détectés lors de la revue graphique
+
+- [x] Étendre la refonte graphique aux sections About, Values, Experience, Services, Education et Testimonials
+- [x] Ajouter une présentation explicite de la disponibilité, de la politique d’annulation/remboursement et des éléments de réassurance paiement sur la réservation
+- [x] Compléter les états loading/error et la revue de contraste des composants modifiés
+- [x] Vérifier et corriger le rendu tablette post-refonte en 768x1024
+- [x] Créer ou mettre à jour des tests ciblés pour HeroSection, Navigation et BookingPage

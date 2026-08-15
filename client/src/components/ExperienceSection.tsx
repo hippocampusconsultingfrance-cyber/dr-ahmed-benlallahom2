@@ -11,10 +11,11 @@ export default function ExperienceSection() {
   const ventures = language === "fr" ? venturesFr : venturesEn;
 
   return (
-    <section id="experience" className="py-28 sm:py-36 relative">
+    <section id="experience" className="experience-section py-28 sm:py-36 relative">
       <div className="container">
         {/* Header — right-aligned for asymmetry */}
-        <div className="max-w-2xl ml-auto text-right mb-16">
+        <div className="section-heading max-w-2xl ml-auto text-right mb-16">
+          <span className="eyebrow-label justify-end mb-5">Medical ventures</span>
           <h2 className="font-display text-3xl sm:text-4xl lg:text-5xl font-bold text-foreground mb-4">
             {content.experiences.title}
           </h2>
@@ -35,7 +36,7 @@ export default function ExperienceSection() {
               <Link
                 key={i}
                 href={slug ? `/venture/${slug}` : "#"}
-                className={`card-glow group p-7 sm:p-8 rounded-xl bg-card border border-border/30 cursor-pointer hover:border-primary/40 transition-all duration-300 ${
+                className={`venture-card card-glow group p-7 sm:p-8 rounded-xl bg-card border border-border/30 cursor-pointer hover:border-primary/40 transition-all duration-300 ${
                   i % 2 === 0 ? "md:translate-y-0" : "md:translate-y-6"
                 }`}
               >
@@ -49,7 +50,8 @@ export default function ExperienceSection() {
                       <p className="text-sm font-semibold mt-0.5" style={{ color: "oklch(0.72 0.1 75)" }}>{exp.role}</p>
                     </div>
                   </div>
-                  <ArrowRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 group-hover:translate-x-1 transition-all duration-200 shrink-0 mt-2" />
+                                      <ArrowRight aria-hidden="true" className="venture-arrow w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 group-hover:translate-x-1 transition-all duration-200 shrink-0 mt-2" />
+
                 </div>
                 <p className="text-muted-foreground text-sm leading-relaxed mb-5">
                   {exp.description}
