@@ -52,7 +52,12 @@ export default function CookieConsent() {
   }
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 bg-background border-t border-border shadow-lg z-50 animate-in slide-in-from-bottom duration-300">
+    <div
+      className="cookie-consent-banner fixed bottom-0 left-0 right-0 bg-background border-t border-border shadow-lg z-50 animate-in slide-in-from-bottom duration-300"
+      role="dialog"
+      aria-label="Gestion des cookies"
+      aria-live="polite"
+    >
       <div className="container max-w-4xl py-6 px-4">
         <div className="flex items-start justify-between gap-4">
           <div className="flex-1">

@@ -1088,3 +1088,25 @@ body {
     display: none !important;
   }
 }
+
+/* Cookie consent: keep the fixed dialog usable without dominating small screens. */
+.cookie-consent-banner {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+@media (max-width: 767px) {
+  .cookie-consent-banner {
+    max-height: min(46vh, 22rem);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .cookie-consent-banner .container {
+    padding-top: 1rem;
+    padding-bottom: 1rem;
+  }
+
+  .cookie-consent-banner button {
+    min-height: 2.75rem;
+  }
+}

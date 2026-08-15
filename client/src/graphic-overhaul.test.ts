@@ -66,6 +66,7 @@ describe("premium graphic overhaul contracts", () => {
     const app = readProjectFile("client/src/App.tsx");
     const routers = readProjectFile("server/routers.ts");
     const webhook = readProjectFile("server/_core/index.ts");
+    const cookieConsent = readProjectFile("client/src/components/CookieConsent.tsx");
     const css = readProjectFile("client/src/index.css");
 
     expect(hero).toContain("hero-panel");
@@ -91,5 +92,8 @@ describe("premium graphic overhaul contracts", () => {
     expect(css).toContain("payment-state");
     expect(css).toContain("confirmation-panel");
     expect(css).toContain("@media (prefers-reduced-motion: reduce)");
+    expect(cookieConsent).toContain('role="dialog"');
+    expect(cookieConsent).toContain("cookie-consent-banner");
+    expect(css).toContain("cookie-consent-banner");
   });
 });

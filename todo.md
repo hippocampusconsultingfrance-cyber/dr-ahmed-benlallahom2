@@ -2022,7 +2022,7 @@
 - [x] Échapper les données utilisateur avant injection dans les emails HTML transactionnels
 
 - [x] Rendre les onglets des mentions légales scrollables et accessibles sur 375 px sans couper les libellés
-- [ ] Vérifier que le bandeau cookies ne masque pas durablement les CTA des pages de réservation et de confirmation sur petit écran
+- [x] Vérifier que le bandeau cookies ne masque pas durablement les CTA des pages de réservation et de confirmation sur petit écran
 
 - [x] Générer le sitemap dynamiquement pour inclure les articles Blog publiés et leurs dates de mise à jour
 
