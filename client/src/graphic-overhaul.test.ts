@@ -64,6 +64,7 @@ describe("premium graphic overhaul contracts", () => {
     const confirmation = readProjectFile("client/src/pages/BookingConfirmationPage.tsx");
     const legal = readProjectFile("client/src/pages/LegalPage.tsx");
     const app = readProjectFile("client/src/App.tsx");
+    const adminDashboard = readProjectFile("client/src/pages/AdminDashboard.tsx");
     const routers = readProjectFile("server/routers.ts");
     const webhook = readProjectFile("server/_core/index.ts");
     const cookieConsent = readProjectFile("client/src/components/CookieConsent.tsx");
@@ -86,7 +87,11 @@ describe("premium graphic overhaul contracts", () => {
     expect(app).toContain("/booking/confirmation");
     expect(routers).toContain("/booking/confirmation?status=success");
     expect(routers).toContain("session_id={CHECKOUT_SESSION_ID}");
-    expect(routers).toContain("cancelPending");
+    expect(routers).toContain("cancelPending: publicProcedure");
+    expect(routers).toContain("refund: adminProcedure");
+    expect(routers).toContain("idempotencyKey: `refund_${appointment.trackingId}`");
+    expect(adminDashboard).toContain("trpc.admin.appointments.refund.useMutation");
+    expect(adminDashboard).toContain("Rembourser");
     expect(webhook).toContain('event.type === "checkout.session.expired"');
     expect(css).toContain("form-field-premium");
     expect(css).toContain("payment-state");

@@ -150,6 +150,16 @@ function AppointmentsTab() {
       utils.admin.stats.invalidate();
     },
   });
+  const refundAppointment = trpc.admin.appointments.refund.useMutation({
+    onSuccess: ({ refundAmount }) => {
+      toast.success(`Remboursement confirmé : ${refundAmount} €`);
+      utils.admin.appointments.list.invalidate();
+      utils.admin.stats.invalidate();
+    },
+    onError: (mutationError) => {
+      toast.error(mutationError.message);
+    },
+  });
 
   if (error) {
     return <div className="text-center py-8 text-red-400">Erreur de chargement : {error.message}</div>;
@@ -224,6 +234,23 @@ function AppointmentsTab() {
                   >
                     <CheckCircle className="w-3 h-3 mr-1" />
                     Terminer
+                  </Button>
+                )}
+                {apt.paymentStatus === "completed" && apt.appointmentStatus === "confirmed" && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={refundAppointment.isPending}
+                    onClick={() => {
+                      if (!window.confirm(`Confirmer le remboursement de ${apt.finalPrice} € pour ${apt.trackingId} ?`)) return;
+                      refundAppointment.mutate({
+                        trackingId: apt.trackingId,
+                        reason: "Remboursement demandé par l’administration",
+                      });
+                    }}
+                  >
+                    <DollarSign className="w-3 h-3 mr-1" />
+                    Rembourser
                   </Button>
                 )}
               </div>

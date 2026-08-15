@@ -2011,8 +2011,8 @@
 - [x] Empêcher les créneaux qui se chevauchent lorsque la durée de consultation est de 30 minutes
 - [x] Vérifier côté serveur les dates bloquées et les créneaux autorisés avant création du rendez-vous
 
-- [ ] Implémenter une procédure d’annulation et de remboursement conforme à la règle affichée de 24 heures
-- [ ] Ajouter une action administrateur de remboursement Stripe avec traçabilité et contrôles d’éligibilité
+- [x] Implémenter une procédure d’annulation et de remboursement conforme à la règle affichée de 24 heures
+- [x] Ajouter une action administrateur de remboursement Stripe avec traçabilité et contrôles d’éligibilité
 - [x] Ajouter une communication localisée expliquant la procédure de demande d’annulation après paiement
 
 - [ ] Remplacer les fallbacks notifyOwner/log par un vrai prestataire SMS si les SMS client et propriétaire sont requis

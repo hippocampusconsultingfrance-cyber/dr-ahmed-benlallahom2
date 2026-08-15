@@ -722,6 +722,84 @@ export const appRouter = router({
 
           return { success: true };
         }),
+
+      refund: adminProcedure
+        .input(
+          z.object({
+            trackingId: z.string().min(1),
+            reason: z.string().min(1).max(500),
+          })
+        )
+        .mutation(async ({ input }) => {
+          const db = await getDb();
+          if (!db) throw new Error("Database connection failed");
+
+          const [appointment] = await db
+            .select({
+              trackingId: appointments.trackingId,
+              appointmentDate: appointments.appointmentDate,
+              paymentStatus: appointments.paymentStatus,
+              appointmentStatus: appointments.appointmentStatus,
+              stripePaymentIntentId: appointments.stripePaymentIntentId,
+              finalPrice: appointments.finalPrice,
+            })
+            .from(appointments)
+            .where(eq(appointments.trackingId, input.trackingId))
+            .limit(1);
+
+          if (!appointment) {
+            throw new TRPCError({ code: "NOT_FOUND", message: "Rendez-vous introuvable" });
+          }
+          if (appointment.paymentStatus === "refunded") {
+            throw new TRPCError({ code: "CONFLICT", message: "Ce rendez-vous a déjà été remboursé" });
+          }
+          if (appointment.paymentStatus !== "completed" || !appointment.stripePaymentIntentId) {
+            throw new TRPCError({ code: "CONFLICT", message: "Le rendez-vous n’est pas éligible au remboursement" });
+          }
+
+          const hoursUntilAppointment = (new Date(appointment.appointmentDate).getTime() - Date.now()) / (60 * 60 * 1000);
+          if (hoursUntilAppointment < 24) {
+            throw new TRPCError({ code: "CONFLICT", message: "Le remboursement intégral est disponible jusqu’à 24 heures avant la consultation" });
+          }
+
+          try {
+            const refund = await stripe.refunds.create(
+              {
+                payment_intent: appointment.stripePaymentIntentId,
+                metadata: {
+                  trackingId: appointment.trackingId,
+                  reason: input.reason,
+                },
+              },
+              { idempotencyKey: `refund_${appointment.trackingId}` }
+            );
+
+            const refundAmount = ((refund.amount ?? Math.round(Number(appointment.finalPrice) * 100)) / 100).toFixed(2);
+            const now = new Date();
+            await db
+              .update(appointments)
+              .set({
+                paymentStatus: "refunded",
+                appointmentStatus: "cancelled",
+                cancellationReason: input.reason,
+                cancelledAt: now,
+                refundAmount,
+                refundedAt: now,
+              })
+              .where(
+                and(
+                  eq(appointments.trackingId, input.trackingId),
+                  eq(appointments.paymentStatus, "completed")
+                )
+              );
+
+            return { success: true, refundId: refund.id, refundAmount } as const;
+          } catch (error) {
+            console.error("Stripe refund error:", error);
+            if (error instanceof TRPCError) throw error;
+            throw new TRPCError({ code: "BAD_REQUEST", message: "Le remboursement Stripe a échoué" });
+          }
+        }),
     }),
 
     // List all contact messages
