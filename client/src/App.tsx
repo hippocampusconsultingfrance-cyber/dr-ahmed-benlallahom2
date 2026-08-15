@@ -22,8 +22,15 @@ function Router() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen bg-background text-foreground flex items-center justify-center" role="status" aria-live="polite">
-          <span className="text-sm text-muted-foreground">Chargement…</span>
+        <div className="app-loading-shell" role="status" aria-live="polite">
+          <div className="app-loading-mark" aria-hidden="true">
+            <span />
+          </div>
+          <div className="app-loading-copy">
+            <span className="app-loading-kicker">ABL / HIPPOCAMPUS</span>
+            <span className="app-loading-title">Chargement de votre espace</span>
+            <span className="app-loading-caption">Préparation de l’expérience médicale sécurisée…</span>
+          </div>
         </div>
       }
     >

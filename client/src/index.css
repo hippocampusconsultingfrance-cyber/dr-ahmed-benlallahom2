@@ -1110,3 +1110,97 @@ body {
     min-height: 2.75rem;
   }
 }
+
+/* Route-level loading state: keep lazy imports visibly responsive. */
+.app-loading-shell {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1.25rem;
+  padding: 2rem;
+  color: hsl(var(--foreground));
+  background:
+    radial-gradient(circle at 50% 42%, rgba(0, 212, 255, 0.1), transparent 24rem),
+    hsl(var(--background));
+}
+
+.app-loading-mark {
+  position: relative;
+  width: 3.25rem;
+  height: 3.25rem;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(0, 212, 255, 0.42);
+  border-radius: 999px;
+  box-shadow: 0 0 0 0.45rem rgba(0, 212, 255, 0.06), 0 0 2rem rgba(0, 212, 255, 0.18);
+}
+
+.app-loading-mark::before,
+.app-loading-mark::after,
+.app-loading-mark span {
+  content: "";
+  position: absolute;
+  height: 1px;
+  background: rgba(0, 212, 255, 0.85);
+}
+
+.app-loading-mark::before {
+  width: 2.1rem;
+  transform: rotate(32deg);
+}
+
+.app-loading-mark::after {
+  width: 2.1rem;
+  transform: rotate(-32deg);
+}
+
+.app-loading-mark span {
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 999px;
+  background: #00d4ff;
+  box-shadow: 0 0 0.8rem #00d4ff;
+}
+
+.app-loading-copy {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.app-loading-kicker {
+  color: #00d4ff;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+}
+
+.app-loading-title {
+  font-family: var(--font-display, Georgia, serif);
+  font-size: clamp(1.25rem, 2vw, 1.75rem);
+  line-height: 1.1;
+}
+
+.app-loading-caption {
+  color: hsl(var(--muted-foreground));
+  font-size: 0.85rem;
+}
+
+@media (max-width: 560px) {
+  .app-loading-shell {
+    flex-direction: column;
+    text-align: center;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .app-loading-mark {
+    animation: app-loading-pulse 1.8s ease-in-out infinite;
+  }
+}
+
+@keyframes app-loading-pulse {
+  0%, 100% { transform: scale(0.96); opacity: 0.78; }
+  50% { transform: scale(1); opacity: 1; }
+}

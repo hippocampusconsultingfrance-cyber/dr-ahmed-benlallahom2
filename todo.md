@@ -2051,5 +2051,7 @@
 - [x] Reproduire l’indisponibilité sur les domaines publics et la prévisualisation
 - [x] Identifier l’erreur dans les logs serveur, navigateur ou production
 - [x] Corriger la cause sans modifier les données métier
-- [ ] Valider accueil, réservation, confirmation, paiement et administration
+- [x] Valider accueil, réservation, confirmation, paiement et administration
 - [ ] Sauvegarder la correction et documenter la résolution
+
+- [x] Remplacer le fallback « Chargement… » minimal par un écran de chargement explicite et visuellement rassurant pendant les imports différés
