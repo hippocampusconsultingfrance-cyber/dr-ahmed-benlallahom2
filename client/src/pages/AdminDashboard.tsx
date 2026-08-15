@@ -215,7 +215,7 @@ function AppointmentsTab() {
                 <div className="flex flex-wrap gap-3 text-sm text-muted-foreground">
                   <span>{apt.customerEmail}</span>
                   <span>{apt.customerPhone}</span>
-                  <span>{new Date(apt.appointmentDate).toLocaleString("fr-FR")}</span>
+                  <span>{new Date(apt.appointmentDate).toLocaleString("fr-FR", { timeZone: "Europe/Paris" })}</span>
                   <span className="font-semibold text-foreground">{apt.finalPrice}€</span>
                 </div>
               </div>
