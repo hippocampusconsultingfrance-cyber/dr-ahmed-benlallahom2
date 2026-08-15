@@ -46,11 +46,14 @@ describe("premium graphic overhaul contracts", () => {
     const sitemap = readProjectFile("client/public/sitemap.xml");
     const robots = readProjectFile("client/public/robots.txt");
     const admin = readProjectFile("client/src/pages/AdminDashboard.tsx");
+    const app = readProjectFile("client/src/App.tsx");
 
     expect(navigation).not.toContain('href="/blog"');
     expect(navigation).not.toContain("content.nav.blog");
     expect(sitemap).not.toContain("/blog");
     expect(robots).toContain("Disallow: /blog");
+    expect(app).not.toContain('path="/blog"');
+    expect(app).not.toContain('path="/blog/:slug"');
     expect(admin).toContain("BlogTab");
   });
 

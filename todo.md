@@ -2000,16 +2000,16 @@
 
 - [x] Protéger la procédure testimonials.create par une autorisation administrateur et empêcher l’auto-approbation publique
 
-- [ ] Réduire le chunk JavaScript principal de plus de 2 Mo signalé par Vite
+- [x] Réduire le chunk JavaScript principal de plus de 2 Mo signalé par Vite
 - [x] Migrer les réglages pnpm dépréciés du champ package.json vers la configuration recommandée
 
 - [x] Masquer explicitement le CTA desktop de navigation sous 768 px afin d’éviter le débordement horizontal du header mobile
 
 - [x] Empêcher SEOHead d’écraser les schémas JSON-LD globaux lorsqu’une page fournit un structuredData local
 
-- [ ] Gérer l’expiration ou l’annulation des rendez-vous pending après un retour Stripe canceled afin de libérer les créneaux
-- [ ] Empêcher les créneaux qui se chevauchent lorsque la durée de consultation est de 30 minutes
-- [ ] Vérifier côté serveur les dates bloquées et les créneaux autorisés avant création du rendez-vous
+- [x] Gérer l’expiration ou l’annulation des rendez-vous pending après un retour Stripe canceled afin de libérer les créneaux
+- [x] Empêcher les créneaux qui se chevauchent lorsque la durée de consultation est de 30 minutes
+- [x] Vérifier côté serveur les dates bloquées et les créneaux autorisés avant création du rendez-vous
 
 - [ ] Implémenter une procédure d’annulation et de remboursement conforme à la règle affichée de 24 heures
 - [ ] Ajouter une action administrateur de remboursement Stripe avec traçabilité et contrôles d’éligibilité
