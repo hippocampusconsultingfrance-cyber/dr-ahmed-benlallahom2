@@ -31,6 +31,11 @@ const confirmationContent = {
     newBooking: "Retour à la réservation",
     email: "Un email vous sera envoyé",
     invoice: "Facture PDF incluse",
+    refund: {
+      title: "Annulation et remboursement",
+      text: "Une annulation demandée plus de 24 heures avant la consultation peut être éligible à un remboursement intégral selon les conditions applicables.",
+      contact: "Pour demander une annulation après paiement, contactez-nous avec votre référence de suivi.",
+    },
   },
   en: {
     success: {
@@ -54,6 +59,11 @@ const confirmationContent = {
     newBooking: "Return to booking",
     email: "Email confirmation sent",
     invoice: "PDF invoice included",
+    refund: {
+      title: "Cancellation and refund",
+      text: "A cancellation requested more than 24 hours before the consultation may be eligible for a full refund under the applicable terms.",
+      contact: "To request a cancellation after payment, contact us with your tracking reference.",
+    },
   },
   de: {
     success: {
@@ -77,6 +87,11 @@ const confirmationContent = {
     newBooking: "Zur Buchung zurück",
     email: "Bestätigung per E-Mail",
     invoice: "PDF-Rechnung enthalten",
+    refund: {
+      title: "Stornierung und Rückerstattung",
+      text: "Eine mehr als 24 Stunden vor der Beratung beantragte Stornierung kann nach den geltenden Bedingungen für eine vollständige Rückerstattung berechtigt sein.",
+      contact: "Für eine Stornierung nach der Zahlung kontaktieren Sie uns bitte mit Ihrer Verfolgungsnummer.",
+    },
   },
   zh: {
     success: {
@@ -100,6 +115,11 @@ const confirmationContent = {
     newBooking: "返回预约",
     email: "确认邮件将发送给您",
     invoice: "包含 PDF 发票",
+    refund: {
+      title: "取消与退款",
+      text: "如果在咨询开始前超过 24 小时提出取消请求，根据适用条款，可能符合全额退款条件。",
+      contact: "付款后如需申请取消，请携带您的跟踪编号联系我们。",
+    },
   },
 } as const;
 
@@ -193,6 +213,15 @@ export default function BookingConfirmationPage() {
           <div className="privacy-trust-card">
             <ShieldCheck className="w-6 h-6 text-primary" aria-hidden="true" />
             <p className="text-sm text-muted-foreground leading-relaxed">{copy.privacy}</p>
+          </div>
+        </section>
+
+        <section className="confirmation-next-steps mt-6" aria-labelledby="refund-policy-title">
+          <div>
+            <span className="eyebrow-label mb-3">{copy.refund.title}</span>
+            <h2 id="refund-policy-title" className="font-display text-2xl font-semibold">{copy.refund.title}</h2>
+            <p className="mt-3 text-sm text-muted-foreground leading-relaxed">{copy.refund.text}</p>
+            <p className="mt-2 text-sm text-muted-foreground leading-relaxed">{copy.refund.contact}</p>
           </div>
         </section>
       </div>

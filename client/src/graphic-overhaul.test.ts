@@ -94,6 +94,8 @@ describe("premium graphic overhaul contracts", () => {
     expect(css).toContain("@media (prefers-reduced-motion: reduce)");
     expect(cookieConsent).toContain('role="dialog"');
     expect(cookieConsent).toContain("cookie-consent-banner");
+    expect(confirmation).toContain("refund:");
+    expect(confirmation).toContain("refund-policy-title");
     expect(css).toContain("cookie-consent-banner");
   });
 });

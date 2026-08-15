@@ -2013,7 +2013,7 @@
 
 - [ ] Implémenter une procédure d’annulation et de remboursement conforme à la règle affichée de 24 heures
 - [ ] Ajouter une action administrateur de remboursement Stripe avec traçabilité et contrôles d’éligibilité
-- [ ] Ajouter une communication localisée expliquant la procédure de demande d’annulation après paiement
+- [x] Ajouter une communication localisée expliquant la procédure de demande d’annulation après paiement
 
 - [ ] Remplacer les fallbacks notifyOwner/log par un vrai prestataire SMS si les SMS client et propriétaire sont requis
 - [ ] Demander et configurer les identifiants d’un prestataire SMS avant de considérer le canal SMS fonctionnel
