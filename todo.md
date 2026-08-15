@@ -2031,3 +2031,11 @@
 - [ ] Documenter clairement les transferts et sous-traitants pour les données de santé ou de réservation
 
 - [ ] Ajouter une sémantique tablist/tab et aria-selected aux quatre variantes linguistiques des onglets légaux
+
+## Retrait de la section Actualités
+
+- [x] Retirer le lien Actualités de la navigation publique desktop et mobile
+- [x] Retirer les blocs ou appels à l’action Actualités de la page d’accueil
+- [x] Retirer les URLs Actualités du sitemap et du SEO public indexable
+- [x] Conserver les routes Blog et les outils d’administration sans suppression de données
+- [x] Vérifier les tests, le build et le rendu responsive après le retrait

@@ -41,6 +41,19 @@ describe("premium graphic overhaul contracts", () => {
     }
   });
 
+  it("hides news from public navigation and indexing while preserving admin blog management", () => {
+    const navigation = readProjectFile("client/src/components/Navigation.tsx");
+    const sitemap = readProjectFile("client/public/sitemap.xml");
+    const robots = readProjectFile("client/public/robots.txt");
+    const admin = readProjectFile("client/src/pages/AdminDashboard.tsx");
+
+    expect(navigation).not.toContain('href="/blog"');
+    expect(navigation).not.toContain("content.nav.blog");
+    expect(sitemap).not.toContain("/blog");
+    expect(robots).toContain("Disallow: /blog");
+    expect(admin).toContain("BlogTab");
+  });
+
   it("preserves the homepage premium component contracts", () => {
     const hero = readProjectFile("client/src/components/HeroSection.tsx");
     const navigation = readProjectFile("client/src/components/Navigation.tsx");

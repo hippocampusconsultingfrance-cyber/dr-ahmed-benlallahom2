@@ -227,39 +227,11 @@ async function startServer() {
       "/gdpr",
       "/testimonials",
       "/booking",
-      "/blog",
     ];
 
-    let publishedPosts: Array<{ slug: string; updatedAt: Date | null }> = [];
-    try {
-      const { getDb } = await import("../db");
-      const { blogPosts } = await import("../../drizzle/schema");
-      const { eq } = await import("drizzle-orm");
-      const db = await getDb();
-      if (db) {
-        publishedPosts = await db
-          .select({ slug: blogPosts.slug, updatedAt: blogPosts.updatedAt })
-          .from(blogPosts)
-          .where(eq(blogPosts.published, 1));
-      }
-    } catch (error) {
-      console.error("Failed to load published posts for sitemap:", error);
-    }
-
-    const escapeXml = (value: string) => value
-      .replaceAll("&", "&amp;")
-      .replaceAll("<", "&lt;")
-      .replaceAll(">", "&gt;")
-      .replaceAll('"', "&quot;")
-      .replaceAll("'", "&apos;");
-
     const staticEntries = publicPaths.map(path => `<url><loc>${origin}${path}</loc></url>`);
-    const postEntries = publishedPosts.map(post => {
-      const lastmod = post.updatedAt instanceof Date ? `<lastmod>${post.updatedAt.toISOString()}</lastmod>` : "";
-      return `<url><loc>${origin}/blog/${escapeXml(encodeURIComponent(post.slug))}</loc>${lastmod}</url>`;
-    });
 
-    res.type("application/xml").send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${[...staticEntries, ...postEntries].join("")}</urlset>`);
+    res.type("application/xml").send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${staticEntries.join("")}</urlset>`);
   });
 
   registerStorageProxy(app);

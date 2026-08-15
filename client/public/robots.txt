@@ -5,6 +5,7 @@ Allow: /
 Disallow: /admin
 Disallow: /404
 Disallow: /booking/confirmation
+Disallow: /blog
 Disallow: /api/
 
 Sitemap: https://drahmedbenlallahom.com/sitemap.xml
