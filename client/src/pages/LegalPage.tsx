@@ -224,7 +224,7 @@ function LegalPageFr() {
                     <li><strong>Stripe :</strong> Plateforme de paiement pour les réservations de consultations</li>
                     <li><strong>Manus :</strong> Hébergement et infrastructure cloud du site</li>
                   </ul>
-                  <p className="mt-4">Ces sous-traitants traitent vos données uniquement selon nos instructions et conformément au RGPD. Ils s'engagent à respecter la confidentialité et la sécurité de vos données.</p>
+                  <p className="mt-4">Ces sous-traitants traitent uniquement les catégories nécessaires : coordonnées et références de réservation pour la gestion des rendez-vous, informations de facturation et statut de paiement pour Stripe, et données techniques ou de contact pour l'hébergement, l'authentification et les communications. Selon l'infrastructure utilisée par chaque prestataire, un traitement peut avoir lieu hors de l'Espace économique européen. Les garanties applicables sont celles prévues par leurs engagements contractuels et leurs accords de traitement, y compris les clauses contractuelles types lorsqu'elles sont requises. Les données de carte bancaire ne sont pas stockées par ce site.</p>
 
                   <h3 className="font-semibold text-foreground mt-4">10. Registre des traitements</h3>
                   <p>Conformément aux exigences de la CNIL, nous maintenons un registre des traitements de données personnelles :</p>
@@ -501,7 +501,10 @@ function LegalPageEn() {
                   <h3 className="font-semibold text-foreground mt-4">8. Data controller</h3>
                   <p><strong>Controller:</strong> Dr. Ahmed Ben Lallahom<br /><strong>Address:</strong> France<br /><strong>Contact:</strong> Via the contact form on the website</p>
 
-                  <h3 className="font-semibold text-foreground mt-4">9. Right to lodge a complaint</h3>
+                  <h3 className="font-semibold text-foreground mt-4">9. Processors and international transfers</h3>
+                  <p>Resend sends transactional emails, Stripe processes consultation payments, and Manus provides hosting and technical infrastructure. Depending on the provider infrastructure, processing may take place outside the European Economic Area. The applicable safeguards are those provided by the providers' data processing agreements, including Standard Contractual Clauses where required. Only data necessary for booking, invoicing, payment status, authentication, hosting and communications is shared, and this website does not store card data.</p>
+
+                  <h3 className="font-semibold text-foreground mt-4">10. Right to lodge a complaint</h3>
                   <p>If you believe your GDPR rights are not being respected, you have the right to lodge a complaint with the competent supervisory authority.</p>
                 </div>
               </section>
@@ -766,7 +769,10 @@ function LegalPageDe() {
                   <h3 className="font-semibold text-foreground mt-4">8. Datenverantwortlicher</h3>
                   <p><strong>Verantwortlicher:</strong> Dr. Ahmed Ben Lallahom<br /><strong>Adresse:</strong> Frankreich<br /><strong>Kontakt:</strong> Über das Kontaktformular auf der Website</p>
 
-                  <h3 className="font-semibold text-foreground mt-4">9. Beschwerderecht</h3>
+                  <h3 className="font-semibold text-foreground mt-4">9. Auftragsverarbeiter und internationale Übermittlungen</h3>
+                  <p>Resend versendet Transaktions-E-Mails, Stripe verarbeitet Zahlungen für Konsultationen und Manus stellt Hosting sowie technische Infrastruktur bereit. Je nach Infrastruktur des jeweiligen Anbieters kann eine Verarbeitung außerhalb des Europäischen Wirtschaftsraums erfolgen. Die geltenden Garantien ergeben sich aus den Auftragsverarbeitungsverträgen der Anbieter, einschließlich Standardvertragsklauseln, sofern erforderlich. Es werden nur für Terminbuchung, Rechnungsstellung, Zahlungsstatus, Authentifizierung, Hosting und Kommunikation erforderliche Daten weitergegeben; diese Website speichert keine Kartendaten.</p>
+
+                  <h3 className="font-semibold text-foreground mt-4">10. Beschwerderecht</h3>
                   <p>Wenn Sie der Ansicht sind, dass Ihre DSGVO-Rechte nicht respektiert werden, haben Sie das Recht, eine Beschwerde bei der zuständigen Aufsichtsbehörde einzureichen.</p>
                 </div>
               </section>
@@ -1031,7 +1037,10 @@ function LegalPageZh() {
                   <h3 className="font-semibold text-foreground mt-4">8. 数据控制者</h3>
                   <p><strong>控制者：</strong> Dr. Ahmed Ben Lallahom<br /><strong>地址：</strong> 法国<br /><strong>联系：</strong> 通过网站上的联系表格</p>
 
-                  <h3 className="font-semibold text-foreground mt-4">9. 投诉权</h3>
+                  <h3 className="font-semibold text-foreground mt-4">9. 处理者与国际传输</h3>
+                  <p>Resend 用于发送交易邮件，Stripe 处理咨询付款，Manus 提供网站托管和技术基础设施。根据各服务商使用的基础设施，数据可能在欧洲经济区以外处理。适用的保障措施以服务商的数据处理协议为准；在需要时包括标准合同条款。仅共享预约、发票、付款状态、身份验证、托管和通信所必需的数据；本网站不保存银行卡数据。</p>
+
+                  <h3 className="font-semibold text-foreground mt-4">10. 投诉权</h3>
                   <p>如果您认为您的GDPR权利未得到尊重，您有权向主管监管机构提出投诉。</p>
                 </div>
               </section>

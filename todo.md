@@ -2028,9 +2028,9 @@
 
 - [x] Mettre à jour la politique de confidentialité pour couvrir réellement réservation, paiement Stripe, factures, rappels, emails Resend et demandes RGPD
 - [x] Harmoniser la politique de confidentialité avec REGISTRE_TRAITEMENTS_CNIL.md et les durées de conservation réellement appliquées
-- [ ] Documenter clairement les transferts et sous-traitants pour les données de santé ou de réservation
+- [x] Documenter clairement les transferts et sous-traitants pour les données de santé ou de réservation
 
-- [ ] Ajouter une sémantique tablist/tab et aria-selected aux quatre variantes linguistiques des onglets légaux
+- [x] Ajouter une sémantique tablist/tab et aria-selected aux quatre variantes linguistiques des onglets légaux
 
 ## Retrait de la section Actualités
 
