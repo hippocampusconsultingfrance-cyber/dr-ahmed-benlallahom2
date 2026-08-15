@@ -2043,3 +2043,5 @@
 - [x] Retirer les routes publiques /blog et /blog/:slug afin que la section Actualités ne reste pas accessible directement
 
 - [x] Afficher les dates de rendez-vous du dashboard administrateur en Europe/Paris de manière déterministe
+
+- [x] Envoyer un email de confirmation au client après un remboursement Stripe administrateur

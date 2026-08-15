@@ -14,6 +14,7 @@ import {
   sendOwnerNotificationEmail,
   sendOwnerNotificationSMS,
   sendCustomerConfirmationSMS,
+  sendRefundConfirmationEmail,
 } from "./_core/notifications";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "");
@@ -742,6 +743,8 @@ export const appRouter = router({
               appointmentStatus: appointments.appointmentStatus,
               stripePaymentIntentId: appointments.stripePaymentIntentId,
               finalPrice: appointments.finalPrice,
+              customerEmail: appointments.customerEmail,
+              customerName: appointments.customerName,
             })
             .from(appointments)
             .where(eq(appointments.trackingId, input.trackingId))
@@ -792,6 +795,14 @@ export const appRouter = router({
                   eq(appointments.paymentStatus, "completed")
                 )
               );
+
+            await sendRefundConfirmationEmail(
+              appointment.customerEmail,
+              appointment.customerName,
+              appointment.trackingId,
+              new Date(appointment.appointmentDate),
+              refundAmount
+            );
 
             return { success: true, refundId: refund.id, refundAmount } as const;
           } catch (error) {

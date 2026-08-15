@@ -222,6 +222,56 @@ export async function sendCustomerConfirmationSMS(
   }
 }
 
+export async function sendRefundConfirmationEmail(
+  customerEmail: string,
+  customerName: string,
+  trackingId: string,
+  appointmentDate: Date,
+  refundAmount: string
+) {
+  try {
+    const formattedDate = appointmentDate.toLocaleString("fr-FR", {
+      timeZone: "Europe/Paris",
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+
+    const emailContent = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <h2 style="color: #0891b2;">Confirmation de remboursement</h2>
+        <p>Bonjour ${escapeHtml(customerName)},</p>
+        <p>Le remboursement de votre consultation a été enregistré.</p>
+        <div style="background: #f8fafc; border-radius: 8px; padding: 16px; margin: 16px 0;">
+          <p><strong>Référence :</strong> ${escapeHtml(trackingId)}</p>
+          <p><strong>Consultation initiale :</strong> ${escapeHtml(formattedDate)}</p>
+          <p><strong>Montant remboursé :</strong> ${escapeHtml(refundAmount)}€</p>
+        </div>
+        <p>Le délai d’apparition du remboursement dépend de votre établissement bancaire.</p>
+        <p style="color: #64748b;">Dr. Ahmed Ben Lallahom<br>Hippocampus Consulting</p>
+      </div>
+    `;
+
+    const { data, error } = await resend.emails.send({
+      from: FROM_EMAIL,
+      to: [customerEmail],
+      subject: `Remboursement confirmé - ${trackingId}`,
+      html: emailContent,
+    });
+
+    if (error) {
+      console.error("Resend error sending refund email:", error);
+      return;
+    }
+
+    console.log(`Refund email sent to ${customerEmail} (id: ${data?.id})`);
+  } catch (error) {
+    console.error("Error sending refund email:", error);
+  }
+}
+
 export async function sendReminderEmail(
   customerEmail: string,
   customerName: string,

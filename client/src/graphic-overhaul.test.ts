@@ -92,6 +92,9 @@ describe("premium graphic overhaul contracts", () => {
     expect(routers).toContain("idempotencyKey: `refund_${appointment.trackingId}`");
     expect(adminDashboard).toContain("trpc.admin.appointments.refund.useMutation");
     expect(adminDashboard).toContain("Rembourser");
+    const notifications = readProjectFile("server/_core/notifications.ts");
+    expect(notifications).toContain("sendRefundConfirmationEmail");
+    expect(notifications).toContain("timeZone: \"Europe/Paris\"");
     expect(webhook).toContain('event.type === "checkout.session.expired"');
     expect(css).toContain("form-field-premium");
     expect(css).toContain("payment-state");
