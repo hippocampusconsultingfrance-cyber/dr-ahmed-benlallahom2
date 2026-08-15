@@ -37,6 +37,11 @@ export const bookingContent = {
     error: "Erreur lors de la création de la réservation",
     paymentSuccess: "Paiement réussi! Votre consultation a été confirmée.",
     paymentCanceled: "Paiement annulé. Votre réservation n'a pas été finalisée.",
+    confirmationNextSteps: "Un email de confirmation et votre facture vous seront envoyés après validation du paiement.",
+    canceledNextSteps: "Vous pouvez modifier vos informations puis relancer le paiement lorsque vous êtes prêt.",
+    restartBooking: "Nouvelle réservation",
+    paymentError: "Une erreur est survenue pendant le paiement.",
+    bookingError: "Une erreur est survenue pendant la création de la réservation.",
           trackingId: "Numéro de suivi:",
       cancellation: "Remboursement intégral au-delà de 24 h avant le rendez-vous. Après ce délai, la réservation n’est pas remboursable.",
       paymentTrust: "Paiement sécurisé par Stripe · Confirmation et facture envoyées par email",
@@ -72,6 +77,11 @@ export const bookingContent = {
     error: "Error creating booking",
     paymentSuccess: "Payment successful! Your consultation has been confirmed.",
     paymentCanceled: "Payment canceled. Your booking was not finalized.",
+    confirmationNextSteps: "A confirmation email and your invoice will be sent after the payment is validated.",
+    canceledNextSteps: "You can update your information and restart the payment whenever you are ready.",
+    restartBooking: "Start a new booking",
+    paymentError: "An error occurred during payment.",
+    bookingError: "An error occurred while creating your booking.",
           trackingId: "Tracking ID:",
       cancellation: "Full refund is available more than 24 hours before the appointment. After that deadline, the booking is non-refundable.",
       paymentTrust: "Secure payment by Stripe · Confirmation and invoice sent by email",
@@ -107,6 +117,11 @@ export const bookingContent = {
     error: "Fehler beim Erstellen der Buchung",
     paymentSuccess: "Zahlung erfolgreich! Ihre Beratung wurde bestätigt.",
     paymentCanceled: "Zahlung abgebrochen. Ihre Buchung wurde nicht abgeschlossen.",
+    confirmationNextSteps: "Nach erfolgreicher Zahlung erhalten Sie eine Bestätigungs-E-Mail und Ihre Rechnung.",
+    canceledNextSteps: "Sie können Ihre Angaben ändern und die Zahlung erneut starten, sobald Sie bereit sind.",
+    restartBooking: "Neue Buchung",
+    paymentError: "Bei der Zahlung ist ein Fehler aufgetreten.",
+    bookingError: "Bei der Erstellung der Buchung ist ein Fehler aufgetreten.",
           trackingId: "Verfolgungsnummer:",
       cancellation: "Eine vollständige Rückerstattung ist mehr als 24 Stunden vor dem Termin möglich. Danach ist die Buchung nicht erstattungsfähig.",
       paymentTrust: "Sichere Zahlung über Stripe · Bestätigung und Rechnung per E-Mail",
@@ -142,6 +157,11 @@ export const bookingContent = {
     error: "创建预订时出错",
     paymentSuccess: "付款成功！您的咨询已确认。",
     paymentCanceled: "付款已取消。您的预订未最终确定。",
+    confirmationNextSteps: "付款确认后，您将通过电子邮件收到确认信息和发票。",
+    canceledNextSteps: "您可以修改信息，并在准备好后重新开始付款。",
+    restartBooking: "新建预约",
+    paymentError: "付款过程中发生错误。",
+    bookingError: "创建预约时发生错误。",
           trackingId: "跟踪 ID:",
       cancellation: "预约前24小时以上可全额退款，超过此期限后不可退款。",
       paymentTrust: "Stripe安全支付 · 确认信息和发票将通过电子邮件发送",
@@ -229,11 +249,11 @@ export default function BookingPage() {
         // Use window.location.assign instead of window.open to avoid popup blocking
         window.location.assign(data.checkoutUrl);
       } else {
-        alert("Error: No checkout URL received from server");
+        alert(content.paymentError);
       }
     },
     onError: (error) => {
-      alert("Payment error: " + error.message);
+      alert(`${content.paymentError} ${error.message}`);
       console.error("Checkout session error:", error);
     },
   });
@@ -260,7 +280,7 @@ export default function BookingPage() {
     }
 
     if (!calculatePrice.data) {
-      alert("Unable to calculate price");
+      alert(content.error);
       return;
     }
 
@@ -283,7 +303,7 @@ export default function BookingPage() {
       }
     } catch (error) {
       console.error("Booking error:", error);
-      alert("Error creating booking: " + (error instanceof Error ? error.message : "Unknown error"));
+      alert(`${content.bookingError} ${error instanceof Error ? error.message : "Unknown error"}`);
     }
   };
 
@@ -340,16 +360,23 @@ export default function BookingPage() {
 
         {/* Payment Success Message */}
         {paymentStatus === "success" && (
-          <Card className="mb-6 p-6 border-green-500 bg-green-50">
+          <Card className="payment-state payment-state-success mb-6 p-6 sm:p-8">
             <div className="flex items-start gap-4">
-              <CheckCircle className="w-6 h-6 text-green-600 flex-shrink-0 mt-1" />
-              <div>
-                <h3 className="font-semibold text-green-900 mb-2">{content.paymentSuccess}</h3>
+              <span className="payment-state-icon" aria-hidden="true">
+                <CheckCircle className="w-6 h-6" />
+              </span>
+              <div className="min-w-0">
+                <span className="eyebrow-label mb-3">{content.pricing.total}</span>
+                <h3 className="font-display text-2xl font-bold mb-3">{content.paymentSuccess}</h3>
+                <p className="text-sm text-muted-foreground leading-relaxed">{content.confirmationNextSteps}</p>
                 {trackingId && (
-                  <p className="text-green-800">
-                    {content.trackingId} <span className="font-mono">{trackingId}</span>
+                  <p className="mt-4 text-sm text-foreground">
+                    {content.trackingId} <span className="font-mono text-primary">{trackingId}</span>
                   </p>
                 )}
+                <Button type="button" onClick={handleReset} className="cta-secondary mt-6">
+                  {content.restartBooking}
+                </Button>
               </div>
             </div>
           </Card>
@@ -357,11 +384,18 @@ export default function BookingPage() {
 
         {/* Payment Canceled Message */}
         {paymentStatus === "canceled" && (
-          <Card className="mb-6 p-6 border-orange-500 bg-orange-50">
+          <Card className="payment-state payment-state-canceled mb-6 p-6 sm:p-8">
             <div className="flex items-start gap-4">
-              <AlertCircle className="w-6 h-6 text-orange-600 flex-shrink-0 mt-1" />
-              <div>
-                <h3 className="font-semibold text-orange-900">{content.paymentCanceled}</h3>
+              <span className="payment-state-icon" aria-hidden="true">
+                <AlertCircle className="w-6 h-6" />
+              </span>
+              <div className="min-w-0">
+                <span className="eyebrow-label mb-3">{content.pricing.title}</span>
+                <h3 className="font-display text-2xl font-bold mb-3">{content.paymentCanceled}</h3>
+                <p className="text-sm text-muted-foreground leading-relaxed">{content.canceledNextSteps}</p>
+                <Button type="button" onClick={handleReset} className="cta-secondary mt-6">
+                  {content.restartBooking}
+                </Button>
               </div>
             </div>
           </Card>

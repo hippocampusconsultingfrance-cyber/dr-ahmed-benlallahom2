@@ -945,3 +945,139 @@ body {
   }
 }
 
+
+.payment-state {
+  border-color: color-mix(in oklch, var(--border) 78%, transparent);
+  background: linear-gradient(145deg, color-mix(in oklch, var(--card) 94%, transparent), color-mix(in oklch, var(--background) 22%, var(--card)));
+  box-shadow: 0 18px 50px color-mix(in oklch, var(--background) 24%, transparent);
+}
+
+.payment-state-success {
+  border-left: 3px solid oklch(0.72 0.16 155);
+}
+
+.payment-state-canceled {
+  border-left: 3px solid var(--accent);
+}
+
+.payment-state-icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  width: 2.75rem;
+  height: 2.75rem;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid color-mix(in oklch, var(--primary) 48%, transparent);
+  border-radius: 999px;
+  color: var(--primary);
+  background: color-mix(in oklch, var(--primary) 12%, transparent);
+}
+
+.payment-state-canceled .payment-state-icon {
+  border-color: color-mix(in oklch, var(--accent) 58%, transparent);
+  color: var(--accent);
+  background: color-mix(in oklch, var(--accent) 12%, transparent);
+}
+
+.confirmation-panel {
+  position: relative;
+  overflow: hidden;
+  padding: clamp(2rem, 5vw, 5rem);
+  border: 1px solid color-mix(in oklch, var(--border) 80%, transparent);
+  border-radius: 1.5rem;
+  background:
+    radial-gradient(circle at 88% 12%, color-mix(in oklch, var(--primary) 16%, transparent), transparent 34%),
+    linear-gradient(145deg, color-mix(in oklch, var(--card) 94%, transparent), color-mix(in oklch, var(--background) 20%, var(--card)));
+  box-shadow: 0 28px 80px color-mix(in oklch, var(--background) 30%, transparent);
+}
+
+.confirmation-panel::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--primary), transparent);
+  opacity: 0.7;
+}
+
+.confirmation-panel.is-canceled {
+  background:
+    radial-gradient(circle at 88% 12%, color-mix(in oklch, var(--accent) 14%, transparent), transparent 34%),
+    linear-gradient(145deg, color-mix(in oklch, var(--card) 94%, transparent), color-mix(in oklch, var(--background) 20%, var(--card)));
+}
+
+.confirmation-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 4.5rem;
+  height: 4.5rem;
+  margin-bottom: 1.5rem;
+  border: 1px solid color-mix(in oklch, var(--primary) 54%, transparent);
+  border-radius: 999px;
+  color: var(--primary);
+  background: color-mix(in oklch, var(--primary) 12%, transparent);
+  box-shadow: 0 0 0 10px color-mix(in oklch, var(--primary) 5%, transparent);
+}
+
+.is-canceled .confirmation-icon {
+  border-color: color-mix(in oklch, var(--accent) 60%, transparent);
+  color: var(--accent);
+  background: color-mix(in oklch, var(--accent) 12%, transparent);
+  box-shadow: 0 0 0 10px color-mix(in oklch, var(--accent) 5%, transparent);
+}
+
+.confirmation-reference {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  max-width: 100%;
+  padding: 0.85rem 1rem;
+  border: 1px solid color-mix(in oklch, var(--primary) 38%, transparent);
+  border-radius: 0.75rem;
+  background: color-mix(in oklch, var(--primary) 7%, transparent);
+}
+
+.trust-card-premium,
+.confirmation-next-steps,
+.privacy-trust-card {
+  border: 1px solid color-mix(in oklch, var(--border) 78%, transparent);
+  border-radius: 1rem;
+  background: color-mix(in oklch, var(--card) 86%, transparent);
+}
+
+.confirmation-next-steps {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(14rem, 0.75fr);
+  gap: 2rem;
+  padding: 1.5rem;
+}
+
+.privacy-trust-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.85rem;
+  padding: 1.25rem;
+}
+
+.step-number {
+  flex: 0 0 auto;
+  color: var(--primary);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+}
+
+@media (max-width: 767px) {
+  .confirmation-panel {
+    padding: 2rem 1.25rem;
+    border-radius: 1.15rem;
+  }
+
+  .confirmation-next-steps {
+    grid-template-columns: 1fr;
+    gap: 1.25rem;
+  }
+}

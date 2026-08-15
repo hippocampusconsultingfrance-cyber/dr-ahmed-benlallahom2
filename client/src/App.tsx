@@ -10,7 +10,8 @@ import VenturePage from "./pages/VenturePage";
 import LegalPage from "./pages/LegalPage";
 import GDPRPage from "./pages/GDPRPage";
 import TestimonialsPage from "./pages/TestimonialsPage";
-import BookingPage from "./pages/BookingPage";
+import BookingPage from "@/pages/BookingPage";
+import BookingConfirmationPage from "@/pages/BookingConfirmationPage";
 import AdminDashboard from "./pages/AdminDashboard";
 import BlogPage from "./pages/BlogPage";
 import BlogPostPage from "./pages/BlogPostPage";
@@ -25,6 +26,7 @@ function Router() {
       <Route path="/legal" component={LegalPage} />
       <Route path="/gdpr" component={GDPRPage} />
       <Route path="/testimonials" component={TestimonialsPage} />
+      <Route path="/booking/confirmation" component={BookingConfirmationPage} />
       <Route path="/booking" component={BookingPage} />
       <Route path="/admin" component={AdminDashboard} />
       <Route path="/blog" component={BlogPage} />

@@ -176,14 +176,14 @@
 
 ## Améliorations graphiques avancées à planifier
 
-- [ ] Créer un système de design documenté avec tokens de couleur, typographie, espacements et composants
+- [x] Créer un système de design documenté avec tokens de couleur, typographie, espacements et composants
 - [ ] Créer une bibliothèque de visuels médicaux authentiques avec droits d’utilisation et textes alternatifs
 - [ ] Améliorer la page Blog avec image principale, catégories, temps de lecture, table des matières et articles associés
 - [ ] Ajouter des états vides illustrés pour le blog, les témoignages, les disponibilités et le dashboard
 - [ ] Ajouter des skeletons de chargement cohérents au lieu de spinners seuls
-- [ ] Ajouter une page de confirmation de réservation plus complète et rassurante
+- [x] Ajouter une page de confirmation de réservation plus complète et rassurante
 - [ ] Ajouter une page FAQ visuelle sans conseils médicaux personnalisés
-- [ ] Ajouter des composants graphiques de confiance pour le paiement, la confidentialité et la disponibilité
+- [x] Ajouter des composants graphiques de confiance pour le paiement, la confidentialité et la disponibilité
 - [ ] Ajouter des tests visuels automatisés sur les pages critiques
 - [ ] Tester clavier, lecteur d’écran, contraste renforcé et zoom à 200 %
 - [ ] Vérifier la longueur des textes et des boutons dans FR, EN, DE et ZH
@@ -1960,3 +1960,9 @@
 - [x] Compléter les états loading/error et la revue de contraste des composants modifiés
 - [x] Vérifier et corriger le rendu tablette post-refonte en 768x1024
 - [x] Créer ou mettre à jour des tests ciblés pour HeroSection, Navigation et BookingPage
+
+## Corrections de suivi après revue de complétude
+
+- [x] Documenter explicitement l’échelle d’espacement et les conventions d’usage des composants dans le design system
+- [x] Créer une vraie route/page de confirmation de réservation avec prochaines étapes, suivi, réassurance et sortie claire
+- [x] Ajouter un composant visuel dédié à la confidentialité des données et des consultations dans le parcours de réservation

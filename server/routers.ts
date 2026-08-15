@@ -271,8 +271,8 @@ export const appRouter = router({
               trackingId: input.trackingId,
               customerName: input.customerName,
             },
-            success_url: `${ctx.req.headers.origin || ctx.req.headers.referer?.replace(/\/booking.*$/, '') || 'https://drahmedbenlallahom.com'}/booking?success=true&trackingId=${input.trackingId}`,
-            cancel_url: `${ctx.req.headers.origin || ctx.req.headers.referer?.replace(/\/booking.*$/, '') || 'https://drahmedbenlallahom.com'}/booking?canceled=true`,
+            success_url: `${ctx.req.headers.origin || ctx.req.headers.referer?.replace(/\/booking.*$/, '') || 'https://drahmedbenlallahom.com'}/booking/confirmation?status=success&trackingId=${input.trackingId}`,
+            cancel_url: `${ctx.req.headers.origin || ctx.req.headers.referer?.replace(/\/booking.*$/, '') || 'https://drahmedbenlallahom.com'}/booking/confirmation?status=canceled`,
           });
 
           const db = await getDb();
