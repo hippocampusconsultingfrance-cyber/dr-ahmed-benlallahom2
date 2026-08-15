@@ -1081,3 +1081,10 @@ body {
     gap: 1.25rem;
   }
 }
+
+/* Audit responsive: the desktop CTA must not override Tailwind's mobile visibility utility. */
+@media (max-width: 767px) {
+  .site-nav .nav-cta {
+    display: none !important;
+  }
+}

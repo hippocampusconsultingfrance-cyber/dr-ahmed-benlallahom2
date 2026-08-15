@@ -1,9 +1,12 @@
 import { AlertCircle, ArrowRight, Calendar, CheckCircle, FileText, Home, Mail, ShieldCheck } from "lucide-react";
 import { useLocation } from "wouter";
+import { useEffect } from "react";
+import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import Breadcrumb from "@/components/Breadcrumb";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { SEOHead } from "@/components/SEOHead";
 
 const confirmationContent = {
   fr: {
@@ -107,10 +110,25 @@ export default function BookingConfirmationPage() {
   const params = new URLSearchParams(window.location.search);
   const canceled = params.get("status") === "canceled";
   const trackingId = params.get("trackingId");
+  const sessionId = params.get("session_id");
+  const cancelPending = trpc.appointments.cancelPending.useMutation();
+
+  useEffect(() => {
+    if (canceled && sessionId) {
+      cancelPending.mutate({ sessionId });
+    }
+  }, [canceled, sessionId]);
+
   const state = canceled ? copy.canceled : copy.success;
+
+  const seoTitle = canceled
+    ? `${copy.canceled.title} | Dr. Ahmed Ben Lallahom`
+    : `${copy.success.title} | Dr. Ahmed Ben Lallahom`;
+  const seoDescription = canceled ? copy.canceled.description : copy.success.description;
 
   return (
     <main className="min-h-screen bg-background px-4 py-8 sm:py-12">
+      <SEOHead title={seoTitle} description={seoDescription} ogUrl="https://drahmedbenlallahom.com/booking/confirmation" />
       <div className="max-w-4xl mx-auto">
         <Breadcrumb items={[{ label: state.title }]} />
 

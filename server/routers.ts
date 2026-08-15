@@ -7,7 +7,7 @@ import { z } from "zod";
 import { getDb } from "./db";
 import { contactMessages, gdprRequests, testimonials, appointments, blogPosts, availabilitySlots, blockedDates } from "../drizzle/schema";
 import { notifyOwner } from "./_core/notification";
-import { eq, and, sql, desc } from "drizzle-orm";
+import { eq, and, sql, desc, gte, lt } from "drizzle-orm";
 import Stripe from "stripe";
 import {
   sendConfirmationEmail,
@@ -18,7 +18,178 @@ import {
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "");
 
+const DEFAULT_PUBLIC_ORIGIN = "https://drahmedbenlallahom.com";
+const TRUSTED_HOSTS = new Set([
+  "drahmedbenlallahom.com",
+  "www.drahmedbenlallahom.com",
+  "drbenlallah-esc8d3hd.manus.space",
+  "localhost",
+  "127.0.0.1",
+]);
 
+const PARIS_TIME_ZONE = "Europe/Paris";
+const PARIS_DAY_INDEX: Record<string, number> = {
+  Sun: 0,
+  Mon: 1,
+  Tue: 2,
+  Wed: 3,
+  Thu: 4,
+  Fri: 5,
+  Sat: 6,
+};
+
+function getParisParts(date: Date) {
+  const values = Object.fromEntries(
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: PARIS_TIME_ZONE,
+      weekday: "short",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hourCycle: "h23",
+    })
+      .formatToParts(date)
+      .filter(part => part.type !== "literal")
+      .map(part => [part.type, part.value])
+  );
+
+  return {
+    year: Number(values.year),
+    month: Number(values.month),
+    day: Number(values.day),
+    hour: Number(values.hour),
+    minute: Number(values.minute),
+    second: Number(values.second),
+    weekday: String(values.weekday),
+  };
+}
+
+function pad(value: number): string {
+  return String(value).padStart(2, "0");
+}
+
+export function parisDateKey(date: Date): string {
+  const parts = getParisParts(date);
+  return `${parts.year}-${pad(parts.month)}-${pad(parts.day)}`;
+}
+
+function parisWallClockToUtc(value: string): Date {
+  const match = /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2}))?)?$/.exec(value);
+  if (!match) throw new Error("Invalid Paris local date");
+
+  const [, year, month, day, hour = "00", minute = "00", second = "00"] = match;
+  const wallClockMs = Date.UTC(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute), Number(second));
+  let utcMs = wallClockMs;
+
+  // Resolve the Europe/Paris offset without relying on the server process timezone.
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const local = getParisParts(new Date(utcMs));
+    const representedWallClockMs = Date.UTC(local.year, local.month - 1, local.day, local.hour, local.minute, local.second);
+    utcMs = wallClockMs - (representedWallClockMs - wallClockMs);
+  }
+
+  return new Date(utcMs);
+}
+
+export function parseAppointmentDate(value: string): Date {
+  const hasExplicitTimeZone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(value);
+  const parsed = hasExplicitTimeZone
+    ? new Date(value)
+    : parisWallClockToUtc(value.length === 10 ? `${value}T00:00:00` : value.slice(0, 19));
+
+  if (!Number.isFinite(parsed.getTime())) {
+    throw new Error("Invalid appointment date");
+  }
+  return parsed;
+}
+
+const appointmentDateInput = z
+  .string()
+  .min(1, "La date de consultation est requise")
+  .refine(value => {
+    try {
+      parseAppointmentDate(value);
+      return true;
+    } catch {
+      return false;
+    }
+  }, "La date de consultation est invalide");
+
+const calendarDateInput = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "La date doit respecter le format YYYY-MM-DD")
+  .refine(value => {
+    const [year, month, day] = value.split("-").map(Number);
+    const candidate = new Date(Date.UTC(year, month - 1, day));
+    return candidate.getUTCFullYear() === year && candidate.getUTCMonth() === month - 1 && candidate.getUTCDate() === day;
+  }, "La date calendaire est invalide");
+
+export function isNightRateForParis(date: Date): boolean {
+  return getParisParts(date).hour >= 18 || getParisParts(date).hour < 8;
+}
+
+function getParisDateRange(dateKey: string): { start: Date; end: Date } {
+  const start = parisWallClockToUtc(`${dateKey}T00:00:00`);
+  const [year, month, day] = dateKey.split("-").map(Number);
+  const nextDay = new Date(Date.UTC(year, month - 1, day + 1));
+  const nextKey = `${nextDay.getUTCFullYear()}-${pad(nextDay.getUTCMonth() + 1)}-${pad(nextDay.getUTCDate())}`;
+  return { start, end: parisWallClockToUtc(`${nextKey}T00:00:00`) };
+}
+
+function timeToMinutes(value: string): number {
+  const match = /^(\d{2}):(\d{2})$/.exec(value);
+  if (!match) return Number.NaN;
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  return hours >= 0 && hours <= 23 && minutes >= 0 && minutes <= 59 ? hours * 60 + minutes : Number.NaN;
+}
+
+export function isWithinAvailability(
+  date: Date,
+  slots: Array<{ dayOfWeek: number; startTime: string; endTime: string }>,
+  durationMinutes = 30
+): boolean {
+  const parts = getParisParts(date);
+  const dayOfWeek = PARIS_DAY_INDEX[parts.weekday];
+  const candidateStart = parts.hour * 60 + parts.minute;
+
+  return slots.some(slot => {
+    if (slot.dayOfWeek !== dayOfWeek) return false;
+    const slotStart = timeToMinutes(slot.startTime);
+    const rawSlotEnd = timeToMinutes(slot.endTime);
+    if (!Number.isFinite(slotStart) || !Number.isFinite(rawSlotEnd)) return false;
+
+    const crossesMidnight = rawSlotEnd <= slotStart;
+    const slotEnd = crossesMidnight ? rawSlotEnd + 24 * 60 : rawSlotEnd;
+    const normalizedCandidateStart = crossesMidnight && candidateStart < slotStart
+      ? candidateStart + 24 * 60
+      : candidateStart;
+
+    return normalizedCandidateStart >= slotStart && normalizedCandidateStart + durationMinutes <= slotEnd;
+  });
+}
+
+function getSafeCheckoutOrigin(req: { headers: Record<string, string | string[] | undefined> }): string {
+  const originHeader = req.headers.origin;
+  const refererHeader = req.headers.referer;
+  const candidate = typeof originHeader === "string"
+    ? originHeader
+    : typeof refererHeader === "string"
+      ? refererHeader
+      : "";
+
+  try {
+    const url = new URL(candidate);
+    const host = url.hostname.toLowerCase();
+    const trusted = TRUSTED_HOSTS.has(host) || host.endsWith(".manus.computer");
+    return trusted ? url.origin : DEFAULT_PUBLIC_ORIGIN;
+  } catch {
+    return DEFAULT_PUBLIC_ORIGIN;
+  }
+}
 
 export const appRouter = router({
   system: systemRouter,
@@ -139,7 +310,7 @@ export const appRouter = router({
           .where(and(...conditions));
       }),
     
-    create: publicProcedure
+    create: adminProcedure
       .input(
         z.object({
           authorName: z.string().min(1).max(100),
@@ -175,14 +346,13 @@ export const appRouter = router({
     calculatePrice: publicProcedure
       .input(
         z.object({
-          appointmentDate: z.string(),
+          appointmentDate: appointmentDateInput,
         })
       )
       .query(({ input }) => {
-        const date = new Date(input.appointmentDate);
-        const hours = date.getHours();
+        const date = parseAppointmentDate(input.appointmentDate);
         const basePrice = 100;
-        const isNightRate = hours >= 18 || hours < 8;
+        const isNightRate = isNightRateForParis(date);
         const finalPrice = isNightRate ? basePrice * 1.5 : basePrice;
 
         return {
@@ -198,15 +368,18 @@ export const appRouter = router({
           customerName: z.string().min(1).max(255),
           customerEmail: z.string().email().max(320),
           customerPhone: z.string().min(1).max(50),
-          appointmentDate: z.string(),
+          appointmentDate: appointmentDateInput,
           requestDetails: z.string().min(1).max(5000),
         })
       )
       .mutation(async ({ input }) => {
-        const date = new Date(input.appointmentDate);
-        const hours = date.getHours();
+        const date = parseAppointmentDate(input.appointmentDate);
+        if (date.getTime() <= Date.now()) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "La date de consultation doit être future" });
+        }
+
         const basePrice = "100.00";
-        const isNightRate = hours >= 18 || hours < 8;
+        const isNightRate = isNightRateForParis(date);
         const finalPrice = isNightRate ? "150.00" : "100.00";
 
         const trackingId = `APT${Math.random().toString(36).substring(2, 10).toUpperCase()}${Date.now().toString(36).slice(-4).toUpperCase()}`;
@@ -217,12 +390,51 @@ export const appRouter = router({
         }
 
         try {
+          const dateKey = parisDateKey(date);
+          const blockedDate = await db
+            .select({ id: blockedDates.id })
+            .from(blockedDates)
+            .where(eq(blockedDates.date, dateKey))
+            .limit(1);
+
+          if (blockedDate.length > 0) {
+            throw new TRPCError({ code: "CONFLICT", message: "Cette date est indisponible" });
+          }
+
+          const activeSlots = await db
+            .select({ dayOfWeek: availabilitySlots.dayOfWeek, startTime: availabilitySlots.startTime, endTime: availabilitySlots.endTime })
+            .from(availabilitySlots)
+            .where(eq(availabilitySlots.isActive, 1));
+
+          if (activeSlots.length > 0 && !isWithinAvailability(date, activeSlots, 30)) {
+            throw new TRPCError({ code: "CONFLICT", message: "Ce créneau ne correspond pas aux disponibilités configurées" });
+          }
+
+          const appointmentEnd = new Date(date.getTime() + 30 * 60 * 1000);
+          const existingAppointments = await db
+            .select({ id: appointments.id })
+            .from(appointments)
+            .where(
+              and(
+                sql`appointment_date < ${appointmentEnd}`,
+                sql`DATE_ADD(appointment_date, INTERVAL duration MINUTE) > ${date}`,
+                sql`payment_status IN ('pending', 'completed')`,
+                sql`appointment_status IN ('confirmed', 'completed')`
+              )
+            )
+            .limit(1);
+
+          if (existingAppointments.length > 0) {
+            throw new TRPCError({ code: "CONFLICT", message: "Ce créneau chevauche une réservation existante" });
+          }
+
           const appointmentDateFormatted = date.toISOString().slice(0, 19).replace('T', ' ');
           await db.execute(
             sql`INSERT INTO appointments (tracking_id, customer_name, customer_email, customer_phone, consultation_type, request_details, appointment_date, duration, base_price, final_price, is_night_rate, payment_status, appointment_status) VALUES (${trackingId}, ${input.customerName}, ${input.customerEmail}, ${input.customerPhone}, ${'health_advice'}, ${input.requestDetails}, ${appointmentDateFormatted}, ${30}, ${basePrice}, ${finalPrice}, ${isNightRate ? 1 : 0}, ${'pending'}, ${'confirmed'})`
           );
         } catch (dbError) {
           console.error("Database insert error:", dbError);
+          if (dbError instanceof TRPCError) throw dbError;
           throw new Error(`Failed to create appointment: ${dbError instanceof Error ? dbError.message : "Unknown error"}`);
         }
 
@@ -247,7 +459,39 @@ export const appRouter = router({
       )
       .mutation(async ({ input, ctx }) => {
         try {
-          const amountInCents = Math.round(input.finalPrice * 100);
+          const db = await getDb();
+          if (!db) throw new Error("Database connection failed");
+
+          const appointmentResult = await db
+            .select({
+              trackingId: appointments.trackingId,
+              customerEmail: appointments.customerEmail,
+              customerName: appointments.customerName,
+              finalPrice: appointments.finalPrice,
+              paymentStatus: appointments.paymentStatus,
+              appointmentStatus: appointments.appointmentStatus,
+            })
+            .from(appointments)
+            .where(eq(appointments.trackingId, input.trackingId))
+            .limit(1);
+          const appointment = appointmentResult[0];
+
+          if (!appointment) {
+            throw new TRPCError({ code: "NOT_FOUND", message: "Rendez-vous introuvable" });
+          }
+          if (appointment.paymentStatus !== "pending" || appointment.appointmentStatus !== "confirmed") {
+            throw new TRPCError({ code: "CONFLICT", message: "Ce rendez-vous ne peut plus être payé" });
+          }
+
+          const expectedPrice = Number(appointment.finalPrice);
+          if (!Number.isFinite(expectedPrice) || Math.round(expectedPrice * 100) !== Math.round(input.finalPrice * 100)) {
+            throw new TRPCError({ code: "BAD_REQUEST", message: "Le montant du paiement ne correspond pas au rendez-vous" });
+          }
+          if (appointment.customerEmail !== input.customerEmail || appointment.customerName !== input.customerName) {
+            throw new TRPCError({ code: "BAD_REQUEST", message: "Les informations du paiement ne correspondent pas au rendez-vous" });
+          }
+
+          const amountInCents = Math.round(expectedPrice * 100);
 
           const session = await stripe.checkout.sessions.create({
             payment_method_types: ["card"],
@@ -271,12 +515,11 @@ export const appRouter = router({
               trackingId: input.trackingId,
               customerName: input.customerName,
             },
-            success_url: `${ctx.req.headers.origin || ctx.req.headers.referer?.replace(/\/booking.*$/, '') || 'https://drahmedbenlallahom.com'}/booking/confirmation?status=success&trackingId=${input.trackingId}`,
-            cancel_url: `${ctx.req.headers.origin || ctx.req.headers.referer?.replace(/\/booking.*$/, '') || 'https://drahmedbenlallahom.com'}/booking/confirmation?status=canceled`,
+            success_url: `${getSafeCheckoutOrigin(ctx.req)}/booking/confirmation?status=success&trackingId=${encodeURIComponent(input.trackingId)}`,
+            cancel_url: `${getSafeCheckoutOrigin(ctx.req)}/booking/confirmation?status=canceled&session_id={CHECKOUT_SESSION_ID}`,
           });
 
-          const db = await getDb();
-          if (db && session.id) {
+          if (session.id) {
             await db
               .update(appointments)
               .set({ stripeSessionId: session.id })
@@ -289,8 +532,42 @@ export const appRouter = router({
           };
         } catch (error) {
           console.error("Stripe error:", error);
+          if (error instanceof TRPCError) throw error;
           throw new Error("Failed to create checkout session");
         }
+      }),
+
+    cancelPending: publicProcedure
+      .input(z.object({ sessionId: z.string().min(1).max(255) }))
+      .mutation(async ({ input }) => {
+        const db = await getDb();
+        if (!db) throw new Error("Database connection failed");
+
+        let session: Stripe.Checkout.Session;
+        try {
+          session = await stripe.checkout.sessions.retrieve(input.sessionId);
+        } catch {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Session Stripe invalide" });
+        }
+
+        const trackingId = session.metadata?.trackingId;
+        if (!trackingId || session.payment_status === "paid") {
+          return { success: true, cancelled: false };
+        }
+
+        const result = await db
+          .update(appointments)
+          .set({ appointmentStatus: "cancelled" })
+          .where(
+            and(
+              eq(appointments.trackingId, trackingId),
+              eq(appointments.stripeSessionId, input.sessionId),
+              eq(appointments.paymentStatus, "pending"),
+              eq(appointments.appointmentStatus, "confirmed")
+            )
+          );
+
+        return { success: true, cancelled: Number(result[0]?.affectedRows ?? 0) > 0 };
       }),
   }),
 
@@ -365,18 +642,20 @@ export const appRouter = router({
     }),
 
     getBookedSlots: publicProcedure
-      .input(z.object({ date: z.string() })) // YYYY-MM-DD
+      .input(z.object({ date: calendarDateInput }))
       .query(async ({ input }) => {
         const db = await getDb();
         if (!db) return [];
 
-        // Get all confirmed/pending appointments for this date
+        // Interpret the requested calendar day in Europe/Paris, not in the DB server timezone.
+        const { start, end } = getParisDateRange(input.date);
         const results = await db
           .select({ appointmentDate: appointments.appointmentDate })
           .from(appointments)
           .where(
             and(
-              sql`DATE(appointment_date) = ${input.date}`,
+              gte(appointments.appointmentDate, start),
+              lt(appointments.appointmentDate, end),
               sql`payment_status IN ('pending', 'completed')`,
               sql`appointment_status IN ('confirmed', 'completed')`
             )

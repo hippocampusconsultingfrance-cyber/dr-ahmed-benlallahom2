@@ -55,10 +55,13 @@ function LegalPageFr() {
 
           {/* Onglets interactifs */}
           <div className="mb-12">
-            <div className="flex gap-4 mb-8 border-b border-border overflow-x-auto">
+            <div role="tablist" aria-label="Legal sections" className="legal-tabs flex gap-4 mb-8 border-b border-border overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
               <button
+                type="button"
+                role="tab"
+                aria-selected={activeTab === "legal"}
                 onClick={() => setActiveTab("legal")}
-                className={`pb-4 px-4 font-semibold transition-colors whitespace-nowrap ${
+                className={`shrink-0 pb-4 px-4 font-semibold transition-colors whitespace-nowrap ${
                   activeTab === "legal"
                     ? "text-primary border-b-2 border-primary"
                     : "text-muted-foreground hover:text-foreground"
@@ -67,8 +70,11 @@ function LegalPageFr() {
                 Informations Légales
               </button>
               <button
+                type="button"
+                role="tab"
+                aria-selected={activeTab === "privacy"}
                 onClick={() => setActiveTab("privacy")}
-                className={`pb-4 px-4 font-semibold transition-colors whitespace-nowrap ${
+                className={`shrink-0 pb-4 px-4 font-semibold transition-colors whitespace-nowrap ${
                   activeTab === "privacy"
                     ? "text-primary border-b-2 border-primary"
                     : "text-muted-foreground hover:text-foreground"
@@ -77,8 +83,11 @@ function LegalPageFr() {
                 Politique de Confidentialité
               </button>
               <button
+                type="button"
+                role="tab"
+                aria-selected={activeTab === "terms"}
                 onClick={() => setActiveTab("terms")}
-                className={`pb-4 px-4 font-semibold transition-colors whitespace-nowrap ${
+                className={`shrink-0 pb-4 px-4 font-semibold transition-colors whitespace-nowrap ${
                   activeTab === "terms"
                     ? "text-primary border-b-2 border-primary"
                     : "text-muted-foreground hover:text-foreground"
@@ -133,7 +142,7 @@ function LegalPageFr() {
                 <h2 className="text-2xl font-bold text-foreground">Politique de Confidentialité</h2>
                 <div className="text-muted-foreground space-y-4">
                   <h3 className="font-semibold text-foreground">1. Collecte de données personnelles</h3>
-                  <p>Ce site collecte des données personnelles uniquement via le formulaire de contact. Les données collectées incluent :</p>
+                  <p>Ce site traite des données personnelles dans le cadre du formulaire de contact, de la réservation et du paiement d’une consultation, de l’émission de factures et du traitement des demandes RGPD. Les données collectées incluent :</p>
                   <ul className="list-disc list-inside space-y-2 ml-2">
                     <li>Nom complet</li>
                     <li>Adresse email</li>
@@ -141,6 +150,8 @@ function LegalPageFr() {
                     <li>Contenu du message</li>
                     <li>Adresse IP (automatiquement collectée)</li>
                     <li>Cookies de session</li>
+                    <li>Date et heure souhaitées, demande de consultation et référence de réservation</li>
+                    <li>Informations nécessaires à la facture ; les données de carte sont traitées directement par Stripe</li>
                   </ul>
 
                   <h3 className="font-semibold text-foreground mt-4">2. Base légale du traitement</h3>
@@ -160,7 +171,7 @@ function LegalPageFr() {
                     <li>Respecter les obligations légales et réglementaires</li>
                     <li>Prévenir la fraude et les abus</li>
                   </ul>
-                  <p className="mt-4"><strong>Aucun partage avec des tiers :</strong> Vos données ne sont jamais partagées avec des tiers sans votre consentement explicite, sauf si la loi l'exige.</p>
+                  <p className="mt-4"><strong>Aucune vente ni utilisation commerciale :</strong> Vos données ne sont pas vendues ni utilisées à des fins commerciales. Elles peuvent être transmises aux sous-traitants strictement nécessaires au fonctionnement du service, conformément à la section dédiée ci-dessous.</p>
 
                   <h3 className="font-semibold text-foreground mt-4">4. Durée de conservation</h3>
                   <p>Les données personnelles sont conservées :</p>
@@ -328,10 +339,13 @@ function LegalPageEn() {
 
           {/* Interactive Tabs */}
           <div className="mb-12">
-            <div className="flex gap-4 mb-8 border-b border-border overflow-x-auto">
+            <div role="tablist" aria-label="Legal sections" className="legal-tabs flex gap-4 mb-8 border-b border-border overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
               <button
+                type="button"
+                role="tab"
+                aria-selected={activeTab === "legal"}
                 onClick={() => setActiveTab("legal")}
-                className={`pb-4 px-4 font-semibold transition-colors whitespace-nowrap ${
+                className={`shrink-0 pb-4 px-4 font-semibold transition-colors whitespace-nowrap ${
                   activeTab === "legal"
                     ? "text-primary border-b-2 border-primary"
                     : "text-muted-foreground hover:text-foreground"
@@ -340,8 +354,11 @@ function LegalPageEn() {
                 Legal Information
               </button>
               <button
+                type="button"
+                role="tab"
+                aria-selected={activeTab === "privacy"}
                 onClick={() => setActiveTab("privacy")}
-                className={`pb-4 px-4 font-semibold transition-colors whitespace-nowrap ${
+                className={`shrink-0 pb-4 px-4 font-semibold transition-colors whitespace-nowrap ${
                   activeTab === "privacy"
                     ? "text-primary border-b-2 border-primary"
                     : "text-muted-foreground hover:text-foreground"
@@ -350,8 +367,11 @@ function LegalPageEn() {
                 Privacy Policy
               </button>
               <button
+                type="button"
+                role="tab"
+                aria-selected={activeTab === "terms"}
                 onClick={() => setActiveTab("terms")}
-                className={`pb-4 px-4 font-semibold transition-colors whitespace-nowrap ${
+                className={`shrink-0 pb-4 px-4 font-semibold transition-colors whitespace-nowrap ${
                   activeTab === "terms"
                     ? "text-primary border-b-2 border-primary"
                     : "text-muted-foreground hover:text-foreground"
@@ -406,7 +426,7 @@ function LegalPageEn() {
                 <h2 className="text-2xl font-bold text-foreground">Privacy Policy</h2>
                 <div className="text-muted-foreground space-y-4">
                   <h3 className="font-semibold text-foreground">1. Collection of personal data</h3>
-                  <p>This website collects personal data only through the contact form. Collected data includes:</p>
+                  <p>This website processes personal data through the contact form, consultation booking and payment, invoice issuance, and GDPR rights requests. Collected data includes:</p>
                   <ul className="list-disc list-inside space-y-2 ml-2">
                     <li>Full name</li>
                     <li>Email address</li>
@@ -414,6 +434,8 @@ function LegalPageEn() {
                     <li>Message content</li>
                     <li>IP address (automatically collected)</li>
                     <li>Session cookies</li>
+                    <li>Requested date and time, consultation request, and booking reference</li>
+                    <li>Invoice information; card data is handled directly by Stripe</li>
                   </ul>
 
                   <h3 className="font-semibold text-foreground mt-4">2. Legal basis for processing</h3>
@@ -433,7 +455,7 @@ function LegalPageEn() {
                     <li>Complying with legal and regulatory obligations</li>
                     <li>Preventing fraud and abuse</li>
                   </ul>
-                  <p className="mt-4"><strong>No sharing with third parties:</strong> Your data is never shared with third parties without your explicit consent, unless required by law.</p>
+                  <p className="mt-4"><strong>No sale or commercial use:</strong> Your data is not sold or used for commercial purposes. It may be transmitted to the processors strictly required to operate the service, as described in the dedicated section below.</p>
 
                   <h3 className="font-semibold text-foreground mt-4">4. Data retention</h3>
                   <p>Personal data is retained for:</p>
@@ -582,10 +604,13 @@ function LegalPageDe() {
 
           {/* Interactive Tabs */}
           <div className="mb-12">
-            <div className="flex gap-4 mb-8 border-b border-border overflow-x-auto">
+            <div role="tablist" aria-label="Legal sections" className="legal-tabs flex gap-4 mb-8 border-b border-border overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
               <button
+                type="button"
+                role="tab"
+                aria-selected={activeTab === "legal"}
                 onClick={() => setActiveTab("legal")}
-                className={`pb-4 px-4 font-semibold transition-colors whitespace-nowrap ${
+                className={`shrink-0 pb-4 px-4 font-semibold transition-colors whitespace-nowrap ${
                   activeTab === "legal"
                     ? "text-primary border-b-2 border-primary"
                     : "text-muted-foreground hover:text-foreground"
@@ -594,8 +619,11 @@ function LegalPageDe() {
                 Rechtliche Informationen
               </button>
               <button
+                type="button"
+                role="tab"
+                aria-selected={activeTab === "privacy"}
                 onClick={() => setActiveTab("privacy")}
-                className={`pb-4 px-4 font-semibold transition-colors whitespace-nowrap ${
+                className={`shrink-0 pb-4 px-4 font-semibold transition-colors whitespace-nowrap ${
                   activeTab === "privacy"
                     ? "text-primary border-b-2 border-primary"
                     : "text-muted-foreground hover:text-foreground"
@@ -604,8 +632,11 @@ function LegalPageDe() {
                 Datenschutzrichtlinie
               </button>
               <button
+                type="button"
+                role="tab"
+                aria-selected={activeTab === "terms"}
                 onClick={() => setActiveTab("terms")}
-                className={`pb-4 px-4 font-semibold transition-colors whitespace-nowrap ${
+                className={`shrink-0 pb-4 px-4 font-semibold transition-colors whitespace-nowrap ${
                   activeTab === "terms"
                     ? "text-primary border-b-2 border-primary"
                     : "text-muted-foreground hover:text-foreground"
@@ -660,7 +691,7 @@ function LegalPageDe() {
                 <h2 className="text-2xl font-bold text-foreground">Datenschutzrichtlinie</h2>
                 <div className="text-muted-foreground space-y-4">
                   <h3 className="font-semibold text-foreground">1. Erfassung personenbezogener Daten</h3>
-                  <p>Diese Website erfasst personenbezogene Daten nur über das Kontaktformular. Erfasste Daten umfassen:</p>
+                  <p>Diese Website verarbeitet personenbezogene Daten über das Kontaktformular, die Buchung und Zahlung einer Konsultation, die Ausstellung von Rechnungen und die Bearbeitung von DSGVO-Anfragen. Zu den Daten gehören:</p>
                   <ul className="list-disc list-inside space-y-2 ml-2">
                     <li>Vollständiger Name</li>
                     <li>E-Mail-Adresse</li>
@@ -668,6 +699,8 @@ function LegalPageDe() {
                     <li>Nachrichteninhalt</li>
                     <li>IP-Adresse (automatisch erfasst)</li>
                     <li>Sitzungs-Cookies</li>
+                    <li>Gewünschtes Datum und Uhrzeit, Konsultationsanfrage und Buchungsreferenz</li>
+                    <li>Rechnungsdaten; Kartendaten werden direkt von Stripe verarbeitet</li>
                   </ul>
 
                   <h3 className="font-semibold text-foreground mt-4">2. Rechtsgrundlage für die Verarbeitung</h3>
@@ -687,7 +720,7 @@ function LegalPageDe() {
                     <li>Einhaltung gesetzlicher und behördlicher Verpflichtungen</li>
                     <li>Betrugsprävention und Missbrauchsbekämpfung</li>
                   </ul>
-                  <p className="mt-4"><strong>Keine Weitergabe an Dritte:</strong> Ihre Daten werden niemals ohne Ihre ausdrückliche Zustimmung an Dritte weitergegeben, es sei denn, dies ist gesetzlich erforderlich.</p>
+                  <p className="mt-4"><strong>Kein Verkauf oder keine kommerzielle Nutzung:</strong> Ihre Daten werden nicht verkauft oder für kommerzielle Zwecke genutzt. Sie können an die für den Betrieb des Dienstes unbedingt erforderlichen Auftragsverarbeiter übermittelt werden, wie im entsprechenden Abschnitt beschrieben.</p>
 
                   <h3 className="font-semibold text-foreground mt-4">4. Datenspeicherung</h3>
                   <p>Personenbezogene Daten werden gespeichert für:</p>
@@ -836,10 +869,13 @@ function LegalPageZh() {
 
           {/* Interactive Tabs */}
           <div className="mb-12">
-            <div className="flex gap-4 mb-8 border-b border-border overflow-x-auto">
+            <div role="tablist" aria-label="Legal sections" className="legal-tabs flex gap-4 mb-8 border-b border-border overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
               <button
+                type="button"
+                role="tab"
+                aria-selected={activeTab === "legal"}
                 onClick={() => setActiveTab("legal")}
-                className={`pb-4 px-4 font-semibold transition-colors whitespace-nowrap ${
+                className={`shrink-0 pb-4 px-4 font-semibold transition-colors whitespace-nowrap ${
                   activeTab === "legal"
                     ? "text-primary border-b-2 border-primary"
                     : "text-muted-foreground hover:text-foreground"
@@ -848,8 +884,11 @@ function LegalPageZh() {
                 法律信息
               </button>
               <button
+                type="button"
+                role="tab"
+                aria-selected={activeTab === "privacy"}
                 onClick={() => setActiveTab("privacy")}
-                className={`pb-4 px-4 font-semibold transition-colors whitespace-nowrap ${
+                className={`shrink-0 pb-4 px-4 font-semibold transition-colors whitespace-nowrap ${
                   activeTab === "privacy"
                     ? "text-primary border-b-2 border-primary"
                     : "text-muted-foreground hover:text-foreground"
@@ -858,8 +897,11 @@ function LegalPageZh() {
                 隐私政策
               </button>
               <button
+                type="button"
+                role="tab"
+                aria-selected={activeTab === "terms"}
                 onClick={() => setActiveTab("terms")}
-                className={`pb-4 px-4 font-semibold transition-colors whitespace-nowrap ${
+                className={`shrink-0 pb-4 px-4 font-semibold transition-colors whitespace-nowrap ${
                   activeTab === "terms"
                     ? "text-primary border-b-2 border-primary"
                     : "text-muted-foreground hover:text-foreground"
@@ -914,7 +956,7 @@ function LegalPageZh() {
                 <h2 className="text-2xl font-bold text-foreground">隐私政策</h2>
                 <div className="text-muted-foreground space-y-4">
                   <h3 className="font-semibold text-foreground">1. 个人数据收集</h3>
-                  <p>本网站仅通过联系表格收集个人数据。收集的数据包括：</p>
+                  <p>本网站会在联系表格、咨询预约与付款、发票开具以及 GDPR 权利请求的范围内处理个人数据。收集的数据包括：</p>
                   <ul className="list-disc list-inside space-y-2 ml-2">
                     <li>全名</li>
                     <li>电子邮件地址</li>
@@ -922,6 +964,8 @@ function LegalPageZh() {
                     <li>消息内容</li>
                     <li>IP地址（自动收集）</li>
                     <li>会话Cookie</li>
+                    <li>期望的日期和时间、咨询请求以及预约编号</li>
+                    <li>发票所需信息；银行卡数据由 Stripe 直接处理</li>
                   </ul>
 
                   <h3 className="font-semibold text-foreground mt-4">2. 数据处理的法律依据</h3>
@@ -941,7 +985,7 @@ function LegalPageZh() {
                     <li>遵守法律和监管义务</li>
                     <li>防止欺诈和滥用</li>
                   </ul>
-                  <p className="mt-4"><strong>不与第三方分享：</strong> 未经您的明确同意，您的数据永远不会与第三方分享，除非法律要求。</p>
+                  <p className="mt-4"><strong>不出售或商业使用：</strong>我们不会出售您的数据，也不会将其用于商业目的。为提供服务所必需的数据可能会按照下方专门章节的说明提供给相关处理者。</p>
 
                   <h3 className="font-semibold text-foreground mt-4">4. 数据保留</h3>
                   <p>个人数据保留：</p>

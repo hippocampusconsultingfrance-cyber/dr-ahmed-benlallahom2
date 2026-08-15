@@ -4,6 +4,15 @@ import { notifyOwner } from "./notification";
 // Initialize Resend client
 const resend = new Resend(process.env.RESEND_API_KEY);
 
+function escapeHtml(value: unknown): string {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
 // Resend free tier uses onboarding@resend.dev as sender
 // Once a custom domain is verified in Resend, change this
 const FROM_EMAIL = "Dr. Ben Lallahom <onboarding@resend.dev>";
@@ -19,6 +28,7 @@ export async function sendConfirmationEmail(
 ) {
   try {
     const formattedDate = appointmentDate.toLocaleString("fr-FR", {
+      timeZone: "Europe/Paris",
       year: "numeric",
       month: "long",
       day: "numeric",
@@ -29,17 +39,17 @@ export async function sendConfirmationEmail(
     const emailContent = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
         <h2 style="color: #0891b2;">Confirmation de Réservation</h2>
-        <p>Bonjour ${customerName},</p>
+        <p>Bonjour ${escapeHtml(customerName)},</p>
         <p>Votre réservation a été confirmée avec succès.</p>
         
         <div style="background: #f8fafc; border-radius: 8px; padding: 16px; margin: 16px 0;">
           <h3 style="color: #334155; margin-top: 0;">Détails de votre consultation :</h3>
           <ul style="list-style: none; padding: 0;">
-            <li style="padding: 4px 0;"><strong>Numéro de suivi :</strong> ${trackingId}</li>
+            <li style="padding: 4px 0;"><strong>Numéro de suivi :</strong> ${escapeHtml(trackingId)}</li>
             <li style="padding: 4px 0;"><strong>Date et heure :</strong> ${formattedDate}</li>
             <li style="padding: 4px 0;"><strong>Montant :</strong> ${finalPrice}€</li>
-            <li style="padding: 4px 0;"><strong>Demande :</strong> ${requestDetails}</li>
-            ${meetLink ? `<li style="padding: 4px 0;"><strong>Lien Google Meet :</strong> <a href="${meetLink}">${meetLink}</a></li>` : ""}
+            <li style="padding: 4px 0;"><strong>Demande :</strong> ${escapeHtml(requestDetails)}</li>
+            ${meetLink ? `<li style="padding: 4px 0;"><strong>Lien Google Meet :</strong> <a href="${escapeHtml(meetLink)}">${escapeHtml(meetLink)}</a></li>` : ""}
           </ul>
         </div>
         
@@ -77,6 +87,7 @@ export async function sendOwnerNotificationEmail(
 ) {
   try {
     const formattedDate = appointmentDate.toLocaleString("fr-FR", {
+      timeZone: "Europe/Paris",
       year: "numeric",
       month: "long",
       day: "numeric",
@@ -116,6 +127,7 @@ export async function sendOwnerNotificationSMS(
 ) {
   try {
     const formattedDate = appointmentDate.toLocaleString("fr-FR", {
+      timeZone: "Europe/Paris",
       year: "numeric",
       month: "long",
       day: "numeric",
@@ -146,13 +158,13 @@ export async function sendInvoiceEmail(
     const emailContent = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
         <h2 style="color: #0891b2;">Votre Facture - Consultation Dr. Ben Lallahom</h2>
-        <p>Bonjour ${customerName},</p>
+        <p>Bonjour ${escapeHtml(customerName)},</p>
         <p>Veuillez trouver ci-joint la facture correspondant à votre consultation.</p>
         
         <div style="background: #f8fafc; border-radius: 8px; padding: 16px; margin: 16px 0;">
           <h3 style="color: #334155; margin-top: 0;">Récapitulatif :</h3>
           <ul style="list-style: none; padding: 0;">
-            <li style="padding: 4px 0;"><strong>Référence :</strong> ${trackingId}</li>
+            <li style="padding: 4px 0;"><strong>Référence :</strong> ${escapeHtml(trackingId)}</li>
             <li style="padding: 4px 0;"><strong>Montant :</strong> ${finalPrice}€</li>
             <li style="padding: 4px 0;"><strong>Statut :</strong> ✅ Payé</li>
           </ul>
@@ -194,6 +206,7 @@ export async function sendCustomerConfirmationSMS(
 ) {
   try {
     const formattedDate = appointmentDate.toLocaleString("fr-FR", {
+      timeZone: "Europe/Paris",
       year: "numeric",
       month: "long",
       day: "numeric",
@@ -217,6 +230,7 @@ export async function sendReminderEmail(
 ) {
   try {
     const formattedDate = appointmentDate.toLocaleString("fr-FR", {
+      timeZone: "Europe/Paris",
       year: "numeric",
       month: "long",
       day: "numeric",
@@ -227,13 +241,13 @@ export async function sendReminderEmail(
     const emailContent = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
         <h2 style="color: #0891b2;">⏰ Rappel - Votre consultation est demain</h2>
-        <p>Bonjour ${customerName},</p>
+        <p>Bonjour ${escapeHtml(customerName)},</p>
         <p>Nous vous rappelons que votre consultation avec le Dr. Ahmed Ben Lallahom est prévue <strong>demain</strong>.</p>
         
         <div style="background: #f8fafc; border-radius: 8px; padding: 16px; margin: 16px 0;">
           <h3 style="color: #334155; margin-top: 0;">Détails :</h3>
           <ul style="list-style: none; padding: 0;">
-            <li style="padding: 4px 0;"><strong>Référence :</strong> ${trackingId}</li>
+            <li style="padding: 4px 0;"><strong>Référence :</strong> ${escapeHtml(trackingId)}</li>
             <li style="padding: 4px 0;"><strong>Date et heure :</strong> ${formattedDate}</li>
           </ul>
         </div>

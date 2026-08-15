@@ -1966,3 +1966,68 @@
 - [x] Documenter explicitement l’échelle d’espacement et les conventions d’usage des composants dans le design system
 - [x] Créer une vraie route/page de confirmation de réservation avec prochaines étapes, suivi, réassurance et sortie claire
 - [x] Ajouter un composant visuel dédié à la confidentialité des données et des consultations dans le parcours de réservation
+
+## Audit complet du site Dr. Ahmed Ben Lallahom
+
+- [x] Lancer la suite complète des tests unitaires et d’intégration (Vitest)
+- [x] Vérifier le build de production et la compilation TypeScript
+- [x] Inspecter les journaux récents du serveur de développement et de production (.manus-logs)
+- [x] Valider le routage public (Accueil, Venture, Legal, GDPR, Testimonials, Booking, Confirmation, Blog, BlogPost, Admin, 404)
+- [x] Vérifier la robustesse des formulaires (Contact avec validation serveur RGPD, Réservation, Admin CRUD)
+- [x] Tester la cohérence multilingue (FR, EN, DE, ZH) sur les sections clés et les pages de confirmation
+- [x] Contrôler le design responsive sur mobile (375x812), tablette (768x1024) et desktop (1280x720)
+- [x] Vérifier le SEO, les balises Open Graph, les sitemaps et l’accessibilité WCAG
+- [x] Produire et livrer le rapport d’audit complet en Markdown
+
+## Anomalies confirmées pendant l’audit
+
+- [x] Ajouter des métadonnées SEO dédiées aux pages Booking, BookingConfirmation, GDPR, Blog, BlogPost et NotFound
+- [x] Vérifier la cohérence des titres et descriptions SEO dans les quatre langues
+- [x] Vérifier la présence d’un balisage hreflang ou documenter son absence
+- [x] Vérifier les URLs de sitemap et la date de dernière modification
+
+- [x] Compléter le sitemap avec les routes publiques indexables et les articles réellement publiés
+- [x] Éviter le `lang="fr"` statique du document HTML et définir la langue active côté client
+- [x] Revoir robots.txt pour supprimer les directives répétées et documenter la compatibilité des Crawl-delay
+
+- [x] Corriger la clé React dupliquée dans les tags de la section Experience pour certaines traductions chinoises
+
+- [x] Relier explicitement les labels aux champs du formulaire de contact avec htmlFor et des id uniques
+
+- [x] Corriger le calcul du tarif jour/nuit pour utiliser Europe/Paris au lieu du fuseau du serveur
+- [x] Ajouter un test de non-régression pour les limites 08:00 et 18:00 heure de Paris
+- [x] Refuser côté serveur les dates invalides, passées ou déjà réservées avant de créer un rendez-vous
+
+- [x] Protéger la procédure testimonials.create par une autorisation administrateur et empêcher l’auto-approbation publique
+
+- [ ] Réduire le chunk JavaScript principal de plus de 2 Mo signalé par Vite
+- [x] Migrer les réglages pnpm dépréciés du champ package.json vers la configuration recommandée
+
+- [x] Masquer explicitement le CTA desktop de navigation sous 768 px afin d’éviter le débordement horizontal du header mobile
+
+- [x] Empêcher SEOHead d’écraser les schémas JSON-LD globaux lorsqu’une page fournit un structuredData local
+
+- [ ] Gérer l’expiration ou l’annulation des rendez-vous pending après un retour Stripe canceled afin de libérer les créneaux
+- [ ] Empêcher les créneaux qui se chevauchent lorsque la durée de consultation est de 30 minutes
+- [ ] Vérifier côté serveur les dates bloquées et les créneaux autorisés avant création du rendez-vous
+
+- [ ] Implémenter une procédure d’annulation et de remboursement conforme à la règle affichée de 24 heures
+- [ ] Ajouter une action administrateur de remboursement Stripe avec traçabilité et contrôles d’éligibilité
+- [ ] Ajouter une communication localisée expliquant la procédure de demande d’annulation après paiement
+
+- [ ] Remplacer les fallbacks notifyOwner/log par un vrai prestataire SMS si les SMS client et propriétaire sont requis
+- [ ] Demander et configurer les identifiants d’un prestataire SMS avant de considérer le canal SMS fonctionnel
+- [x] Afficher les dates des emails et rappels dans Europe/Paris au lieu du fuseau du serveur
+- [ ] Remplacer l’expéditeur Resend onboarding@resend.dev par un domaine d’envoi vérifié en production
+- [x] Échapper les données utilisateur avant injection dans les emails HTML transactionnels
+
+- [x] Rendre les onglets des mentions légales scrollables et accessibles sur 375 px sans couper les libellés
+- [ ] Vérifier que le bandeau cookies ne masque pas durablement les CTA des pages de réservation et de confirmation sur petit écran
+
+- [x] Générer le sitemap dynamiquement pour inclure les articles Blog publiés et leurs dates de mise à jour
+
+- [x] Mettre à jour la politique de confidentialité pour couvrir réellement réservation, paiement Stripe, factures, rappels, emails Resend et demandes RGPD
+- [x] Harmoniser la politique de confidentialité avec REGISTRE_TRAITEMENTS_CNIL.md et les durées de conservation réellement appliquées
+- [ ] Documenter clairement les transferts et sous-traitants pour les données de santé ou de réservation
+
+- [ ] Ajouter une sémantique tablist/tab et aria-selected aux quatre variantes linguistiques des onglets légaux

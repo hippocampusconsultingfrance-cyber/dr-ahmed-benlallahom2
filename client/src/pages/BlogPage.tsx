@@ -5,7 +5,7 @@ import Footer from "@/components/Footer";
 import Breadcrumb from "@/components/Breadcrumb";
 import { Calendar, ArrowRight, Tag } from "lucide-react";
 import { Link } from "wouter";
-import { Streamdown } from "streamdown";
+import { SEOHead } from "@/components/SEOHead";
 
 export default function BlogPage() {
   const { language } = useLanguage();
@@ -33,8 +33,11 @@ export default function BlogPage() {
     : language === "de" ? "Noch keine Artikel veröffentlicht."
     : "暂无已发布的文章。";
 
+  const seoDescription = subtitle;
+
   return (
     <div className="min-h-screen bg-background">
+      <SEOHead title={`${title} | Dr. Ahmed Ben Lallahom`} description={seoDescription} ogUrl="https://drahmedbenlallahom.com/blog" />
       <Navigation />
       <main className="pt-24 pb-16">
         <div className="container max-w-6xl mx-auto px-4">

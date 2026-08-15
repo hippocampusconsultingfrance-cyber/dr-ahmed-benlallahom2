@@ -59,8 +59,34 @@ async function startServer() {
           
           const db = drizzle(process.env.DATABASE_URL!);
           const trackingId = session.metadata?.trackingId;
-          
+
+          if (!trackingId) {
+            return res.status(400).send("Webhook Error: missing trackingId");
+          }
+
           if (trackingId) {
+            const appointmentResult = await db
+              .select()
+              .from(appointments)
+              .where(eq(appointments.trackingId, trackingId))
+              .limit(1);
+            const appointment = appointmentResult[0];
+
+            if (!appointment) {
+              return res.status(400).send("Webhook Error: appointment not found");
+            }
+
+            if (appointment.paymentStatus === "completed") {
+              return res.json({ received: true, duplicate: true });
+            }
+
+            const paidAmount = Number(session.amount_total);
+            const expectedAmount = Math.round(Number(appointment.finalPrice) * 100);
+            if (!Number.isFinite(paidAmount) || paidAmount !== expectedAmount) {
+              console.error(`Stripe amount mismatch for ${trackingId}: paid=${paidAmount}, expected=${expectedAmount}`);
+              return res.status(400).send("Webhook Error: amount mismatch");
+            }
+
             await db
               .update(appointments)
               .set({
@@ -68,16 +94,12 @@ async function startServer() {
                 stripePaymentIntentId: session.payment_intent as string,
               })
               .where(eq(appointments.trackingId, trackingId));
-            
+
             console.log(`Payment confirmed for appointment: ${trackingId}`);
             
             // Send notifications AFTER payment is confirmed
             try {
               const { sendConfirmationEmail, sendCustomerConfirmationSMS, sendOwnerNotificationEmail, sendOwnerNotificationSMS } = await import("./notifications");
-              
-              // Fetch appointment details
-              const appointmentResult = await db.select().from(appointments).where(eq(appointments.trackingId, trackingId)).limit(1);
-              const appointment = appointmentResult[0];
               
               if (appointment) {
                 const finalPriceNum = parseFloat(appointment.finalPrice);
@@ -158,6 +180,30 @@ async function startServer() {
         } catch (error) {
           console.error("Failed to update appointment after payment:", error);
         }
+      } else if (event.type === "checkout.session.expired") {
+        const session = event.data.object as any;
+        const trackingId = session.metadata?.trackingId;
+        if (trackingId) {
+          try {
+            const { drizzle } = await import("drizzle-orm/mysql2");
+            const { appointments } = await import("../../drizzle/schema");
+            const { and, eq } = await import("drizzle-orm");
+            const db = drizzle(process.env.DATABASE_URL!);
+            await db
+              .update(appointments)
+              .set({ appointmentStatus: "cancelled" })
+              .where(
+                and(
+                  eq(appointments.trackingId, trackingId),
+                  eq(appointments.stripeSessionId, session.id),
+                  eq(appointments.paymentStatus, "pending"),
+                  eq(appointments.appointmentStatus, "confirmed")
+                )
+              );
+          } catch (error) {
+            console.error("Failed to release expired appointment:", error);
+          }
+        }
       }
       
       res.json({ received: true });
@@ -170,6 +216,52 @@ async function startServer() {
   // Configure body parser with larger size limit for file uploads (after Stripe webhook)
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
+
+  app.get("/sitemap.xml", async (_req, res) => {
+    const origin = "https://drahmedbenlallahom.com";
+    const publicPaths = [
+      "/",
+      "/venture/novarena",
+      "/venture/sawa4you",
+      "/legal",
+      "/gdpr",
+      "/testimonials",
+      "/booking",
+      "/blog",
+    ];
+
+    let publishedPosts: Array<{ slug: string; updatedAt: Date | null }> = [];
+    try {
+      const { getDb } = await import("../db");
+      const { blogPosts } = await import("../../drizzle/schema");
+      const { eq } = await import("drizzle-orm");
+      const db = await getDb();
+      if (db) {
+        publishedPosts = await db
+          .select({ slug: blogPosts.slug, updatedAt: blogPosts.updatedAt })
+          .from(blogPosts)
+          .where(eq(blogPosts.published, 1));
+      }
+    } catch (error) {
+      console.error("Failed to load published posts for sitemap:", error);
+    }
+
+    const escapeXml = (value: string) => value
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&apos;");
+
+    const staticEntries = publicPaths.map(path => `<url><loc>${origin}${path}</loc></url>`);
+    const postEntries = publishedPosts.map(post => {
+      const lastmod = post.updatedAt instanceof Date ? `<lastmod>${post.updatedAt.toISOString()}</lastmod>` : "";
+      return `<url><loc>${origin}/blog/${escapeXml(encodeURIComponent(post.slug))}</loc>${lastmod}</url>`;
+    });
+
+    res.type("application/xml").send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${[...staticEntries, ...postEntries].join("")}</urlset>`);
+  });
+
   registerStorageProxy(app);
   registerOAuthRoutes(app);
   

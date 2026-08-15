@@ -73,15 +73,20 @@ export function SEOHead({
     }
     canonical.href = ogUrl;
 
-    // Structured Data (JSON-LD)
+    // Structured Data (JSON-LD): keep the document-level schemas intact and
+    // update only the page-specific schema owned by this component.
+    const structuredDataId = "seo-head-structured-data";
+    let script = document.getElementById(structuredDataId) as HTMLScriptElement | null;
     if (structuredData) {
-      let script = document.querySelector('script[type="application/ld+json"]') as HTMLScriptElement;
       if (!script) {
         script = document.createElement("script");
+        script.id = structuredDataId;
         script.type = "application/ld+json";
         document.head.appendChild(script);
       }
       script.textContent = JSON.stringify(structuredData);
+    } else if (script) {
+      script.remove();
     }
   }, [title, description, keywords, ogImage, ogUrl, twitterHandle, structuredData]);
 

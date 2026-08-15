@@ -1,25 +1,10 @@
-# Robots.txt for Dr. Ahmed Ben Lallahom
-# Optimize crawling and indexing by search engines
+# Robots.txt for Dr. Ahmed Ben Lallahom / Hippocampus Consulting
 
-# Allow all bots
 User-agent: *
 Allow: /
+Disallow: /admin
 Disallow: /404
+Disallow: /booking/confirmation
+Disallow: /api/
 
-# Specific rules for Google
-User-agent: Googlebot
-Allow: /
-Crawl-delay: 1
-
-# Specific rules for Bing
-User-agent: Bingbot
-Allow: /
-Crawl-delay: 1
-
-# Specific rules for other bots
-User-agent: *
-Allow: /
-Crawl-delay: 2
-
-# Sitemap location
 Sitemap: https://drahmedbenlallahom.com/sitemap.xml

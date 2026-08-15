@@ -2,6 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Home, ArrowLeft } from "lucide-react";
 import { useLocation } from "wouter";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { SEOHead } from "@/components/SEOHead";
 
 export default function NotFound() {
   const [, setLocation] = useLocation();
@@ -42,6 +43,7 @@ export default function NotFound() {
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center px-4">
+      <SEOHead title={`${c.subtitle} | Dr. Ahmed Ben Lallahom`} description={c.description} ogUrl="https://drahmedbenlallahom.com/404" />
       {/* Background pattern */}
       <div className="absolute inset-0 diagnostic-grid opacity-30" />
       

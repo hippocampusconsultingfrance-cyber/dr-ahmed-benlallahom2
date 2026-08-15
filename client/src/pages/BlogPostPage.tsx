@@ -6,6 +6,7 @@ import Breadcrumb from "@/components/Breadcrumb";
 import { Calendar, ExternalLink, ArrowLeft } from "lucide-react";
 import { useRoute, Link } from "wouter";
 import { Streamdown } from "streamdown";
+import { SEOHead } from "@/components/SEOHead";
 
 export default function BlogPostPage() {
   const { language } = useLanguage();
@@ -65,8 +66,31 @@ export default function BlogPostPage() {
     );
   }
 
+  const seoDescription = language === "fr"
+    ? `Article médical : ${post.title}. Veille et réflexion autour de l’anesthésie-réanimation et de la santé.`
+    : language === "de"
+      ? `Medizinischer Artikel: ${post.title}. Aktuelle Einblicke in Anästhesie, Intensivmedizin und Gesundheit.`
+      : language === "zh"
+        ? `医学文章：${post.title}。麻醉、重症监护与健康领域的专业动态。`
+        : `Medical article: ${post.title}. Insights and medical watch in anesthesia, critical care and health.`;
+
   return (
     <div className="min-h-screen bg-background">
+      <SEOHead
+        title={`${post.title} | Dr. Ahmed Ben Lallahom`}
+        description={seoDescription}
+        ogUrl={`https://drahmedbenlallahom.com/blog/${post.slug}`}
+        ogImage={post.coverImage || undefined}
+        structuredData={{
+          "@context": "https://schema.org",
+          "@type": "Article",
+          headline: post.title,
+          datePublished: new Date(post.createdAt).toISOString(),
+          dateModified: new Date(post.updatedAt || post.createdAt).toISOString(),
+          image: post.coverImage ? [post.coverImage] : undefined,
+          mainEntityOfPage: `https://drahmedbenlallahom.com/blog/${post.slug}`,
+        }}
+      />
       <Navigation />
       <main className="pt-24 pb-16">
         <div className="container max-w-4xl mx-auto px-4">

@@ -151,10 +151,12 @@ export default function ContactSection() {
               <form onSubmit={handleSubmit} className="contact-form-card p-5 sm:p-8 rounded-2xl bg-card/60 backdrop-blur-sm border border-border/30 space-y-5" aria-busy={submitMutation.isPending}>
                 <div className="grid sm:grid-cols-2 gap-5">
                   <div>
-                    <label className="block text-sm font-medium text-foreground mb-2">
+                    <label htmlFor="contact-name" className="block text-sm font-medium text-foreground mb-2">
                       {content.contact.form.name}
                     </label>
                     <input
+                      id="contact-name"
+                      name="name"
                       type="text"
                       required
                       placeholder={content.contact.form.namePlaceholder}
@@ -164,10 +166,12 @@ export default function ContactSection() {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-foreground mb-2">
+                    <label htmlFor="contact-phone" className="block text-sm font-medium text-foreground mb-2">
                       {content.contact.form.phone}
                     </label>
                     <input
+                      id="contact-phone"
+                      name="phone"
                       type="tel"
                       placeholder={content.contact.form.phonePlaceholder}
                       value={formData.phone}
@@ -178,11 +182,14 @@ export default function ContactSection() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-foreground mb-2">
-                    {content.contact.form.email}
-                  </label>
-                  <input
-                    type="email"
+                  <label htmlFor="contact-email" className="block text-sm font-medium text-foreground mb-2">
+                      {content.contact.form.email}
+                    </label>
+                    <input
+                      id="contact-email"
+                      name="email"
+                      type="email"
+
                     required
                     placeholder={content.contact.form.emailPlaceholder}
                     value={formData.email}
@@ -192,11 +199,14 @@ export default function ContactSection() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-foreground mb-2">
-                    {content.contact.form.message}
-                  </label>
-                  <textarea
-                    required
+                  <label htmlFor="contact-message" className="block text-sm font-medium text-foreground mb-2">
+                      {content.contact.form.message}
+                    </label>
+                    <textarea
+                      id="contact-message"
+                      name="message"
+                      required
+
                     rows={5}
                     placeholder={content.contact.form.messagePlaceholder}
                     value={formData.message}

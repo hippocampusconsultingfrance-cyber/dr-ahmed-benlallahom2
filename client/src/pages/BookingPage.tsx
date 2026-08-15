@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/card";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { Calendar, Clock, User, Mail, Phone, FileText, CheckCircle, AlertCircle } from "lucide-react";
 import Breadcrumb from "@/components/Breadcrumb";
+import { SEOHead } from "@/components/SEOHead";
 
 export const bookingContent = {
   fr: {
@@ -325,8 +326,20 @@ export default function BookingPage() {
 
   const currentStep = paymentStatus === "success" ? 3 : (isLoading || (selectedDate && formData.details)) ? 2 : (formData.name && formData.email && formData.phone) ? 1 : 0;
 
+  const seoDescription = {
+    fr: "Réservez une consultation de conseil en santé de 30 minutes avec le Dr. Ahmed Ben Lallahom, avec paiement Stripe sécurisé.",
+    en: "Book a 30-minute health consultation with Dr. Ahmed Ben Lallahom using secure Stripe payment.",
+    de: "Buchen Sie eine 30-minütige Gesundheitsberatung bei Dr. Ahmed Ben Lallahom mit sicherer Stripe-Zahlung.",
+    zh: "预约 Ahmed Ben Lallahom 医生的 30 分钟健康咨询，并使用 Stripe 安全付款。",
+  }[language];
+
   return (
     <div className="min-h-screen bg-background py-8 sm:py-12 px-4">
+      <SEOHead
+        title={`${content.title} | Dr. Ahmed Ben Lallahom`}
+        description={seoDescription}
+        ogUrl="https://drahmedbenlallahom.com/booking"
+      />
       <div className="max-w-3xl mx-auto">
         {/* Breadcrumb */}
         <Breadcrumb items={[{ label: content.title }]} />

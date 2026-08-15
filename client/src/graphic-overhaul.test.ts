@@ -23,13 +23,33 @@ describe("premium graphic overhaul contracts", () => {
     }
   });
 
+  it("covers public route SEO and preserves document-level structured data", () => {
+    const seoHead = readProjectFile("client/src/components/SEOHead.tsx");
+    const publicPages = [
+      "client/src/pages/BookingPage.tsx",
+      "client/src/pages/BookingConfirmationPage.tsx",
+      "client/src/pages/GDPRPage.tsx",
+      "client/src/pages/BlogPage.tsx",
+      "client/src/pages/BlogPostPage.tsx",
+      "client/src/pages/NotFound.tsx",
+    ];
+
+    expect(seoHead).toContain("seo-head-structured-data");
+    expect(seoHead).toContain("script.remove()");
+    for (const page of publicPages) {
+      expect(readProjectFile(page)).toContain("SEOHead");
+    }
+  });
+
   it("preserves the homepage premium component contracts", () => {
     const hero = readProjectFile("client/src/components/HeroSection.tsx");
     const navigation = readProjectFile("client/src/components/Navigation.tsx");
     const booking = readProjectFile("client/src/pages/BookingPage.tsx");
     const confirmation = readProjectFile("client/src/pages/BookingConfirmationPage.tsx");
+    const legal = readProjectFile("client/src/pages/LegalPage.tsx");
     const app = readProjectFile("client/src/App.tsx");
     const routers = readProjectFile("server/routers.ts");
+    const webhook = readProjectFile("server/_core/index.ts");
     const css = readProjectFile("client/src/index.css");
 
     expect(hero).toContain("hero-panel");
@@ -43,8 +63,14 @@ describe("premium graphic overhaul contracts", () => {
     expect(booking).toContain("confirmationNextSteps");
     expect(confirmation).toContain("confirmation-panel");
     expect(confirmation).toContain("privacy-trust-card");
+    expect(confirmation).toContain("cancelPending.mutate");
+    expect(legal).toContain('role="tablist"');
+    expect(legal).toContain('aria-selected={activeTab === "privacy"}');
     expect(app).toContain("/booking/confirmation");
     expect(routers).toContain("/booking/confirmation?status=success");
+    expect(routers).toContain("session_id={CHECKOUT_SESSION_ID}");
+    expect(routers).toContain("cancelPending");
+    expect(webhook).toContain('event.type === "checkout.session.expired"');
     expect(css).toContain("form-field-premium");
     expect(css).toContain("payment-state");
     expect(css).toContain("confirmation-panel");

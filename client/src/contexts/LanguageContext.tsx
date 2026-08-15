@@ -27,9 +27,10 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
     return siteConfig.defaultLanguage;
   });
 
-  // Sauvegarder la langue dans localStorage quand elle change
+  // Persister la langue et synchroniser les métadonnées documentaires pour le SEO et l’accessibilité
   useEffect(() => {
     localStorage.setItem("language", language);
+    document.documentElement.lang = language;
   }, [language]);
 
   const toggleLanguage = useCallback(() => {
