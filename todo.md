@@ -2045,3 +2045,11 @@
 - [x] Afficher les dates de rendez-vous du dashboard administrateur en Europe/Paris de manière déterministe
 
 - [x] Envoyer un email de confirmation au client après un remboursement Stripe administrateur
+
+## Incident site indisponible
+
+- [x] Reproduire l’indisponibilité sur les domaines publics et la prévisualisation
+- [x] Identifier l’erreur dans les logs serveur, navigateur ou production
+- [x] Corriger la cause sans modifier les données métier
+- [ ] Valider accueil, réservation, confirmation, paiement et administration
+- [ ] Sauvegarder la correction et documenter la résolution

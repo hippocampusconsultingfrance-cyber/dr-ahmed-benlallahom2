@@ -21,3 +21,11 @@ Les messages `Auth Missing session cookie` surviennent uniquement lors d’appel
 Le warning `baseline-browser-mapping` indique des données d’outil de build anciennes. Il est non bloquant et peut être traité lors d’une maintenance des dépendances.
 
 Les erreurs Vite de pré-transformation et les warnings de clés React relevés dans l’historique ne sont plus reproduits après les corrections CSS et `ExperienceSection`.
+
+## Incident écran blanc en production — diagnostic confirmé
+
+La production `https://drahmedbenlallahom.com` répond avec un document HTML 200 mais le conteneur React reste vide. La prévisualisation locale fonctionne correctement sur `/`, `/booking` et `/legal`.
+
+Le chargement manuel du bundle publié a reproduit l’erreur suivante : `TypeError: Cannot read properties of undefined (reading 'forwardRef')`, dans `assets/radix-CqMEKgsV.js`, lors de l’appel `s.forwardRef`.
+
+La cause confirmée est le découpage manuel Vite des dépendances : `framework-CJaM11TD.js` importait `radix-CqMEKgsV.js`, tandis que Radix importait à son tour React depuis `framework`, créant une boucle de dépendances produisant un export React indéfini en production. La correction consiste à retirer `manualChunks` et à laisser Rollup conserver un graphe cohérent. Le typecheck, les tests et le build local passent après cette correction ; la production doit être revalidée après publication du checkpoint.

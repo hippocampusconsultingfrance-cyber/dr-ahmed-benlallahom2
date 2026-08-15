@@ -167,20 +167,10 @@ export default defineConfig({
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
-    rollupOptions: {
-      output: {
-        manualChunks(id) {
-          if (!id.includes("node_modules")) return undefined;
-          if (id.includes("/react/") || id.includes("react-dom") || id.includes("scheduler") || id.includes("wouter")) {
-            return "framework";
-          }
-          if (id.includes("lucide-react")) return "icons";
-          if (id.includes("@radix-ui")) return "radix";
-          if (id.includes("@tanstack") || id.includes("@trpc")) return "data-client";
-          return "vendor";
-        },
-      },
-    },
+    // Let Rollup keep React, Radix and their shared primitives in a coherent
+    // dependency graph. Manual vendor chunks created a framework↔Radix cycle
+    // in production, leaving React undefined before the root could render.
+    rollupOptions: {},
   },
   server: {
     host: true,
