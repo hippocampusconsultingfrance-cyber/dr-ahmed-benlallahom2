@@ -2037,5 +2037,7 @@
 - [x] Retirer le lien Actualités de la navigation publique desktop et mobile
 - [x] Retirer les blocs ou appels à l’action Actualités de la page d’accueil
 - [x] Retirer les URLs Actualités du sitemap et du SEO public indexable
-- [x] Conserver les routes Blog et les outils d’administration sans suppression de données
+- [x] Conserver les outils d’administration et les données Blog sans conserver les routes publiques
 - [x] Vérifier les tests, le build et le rendu responsive après le retrait
+
+- [x] Retirer les routes publiques /blog et /blog/:slug afin que la section Actualités ne reste pas accessible directement

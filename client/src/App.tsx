@@ -13,8 +13,6 @@ import TestimonialsPage from "./pages/TestimonialsPage";
 import BookingPage from "@/pages/BookingPage";
 import BookingConfirmationPage from "@/pages/BookingConfirmationPage";
 import AdminDashboard from "./pages/AdminDashboard";
-import BlogPage from "./pages/BlogPage";
-import BlogPostPage from "./pages/BlogPostPage";
 import WhatsAppButton from "./components/WhatsAppButton";
 import CookieConsent from "./components/CookieConsent";
 
@@ -29,8 +27,6 @@ function Router() {
       <Route path="/booking/confirmation" component={BookingConfirmationPage} />
       <Route path="/booking" component={BookingPage} />
       <Route path="/admin" component={AdminDashboard} />
-      <Route path="/blog" component={BlogPage} />
-      <Route path="/blog/:slug" component={BlogPostPage} />
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
     </Switch>
