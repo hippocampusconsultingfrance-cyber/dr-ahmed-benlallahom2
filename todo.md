@@ -2093,3 +2093,13 @@
 - [x] Corriger le chemin d’import du service `recruitmentAnalysis` dans l’endpoint multipart
 - [x] Corriger les erreurs de compilation héritées du schéma et du serveur après redémarrage
 - [x] Ajouter la prise en charge native des anciens fichiers DOC, sans binaire système externe
+
+## Améliorations recrutement intelligent — audit priorisé
+
+- [x] Ajouter un audit trail des téléchargements de CV et relances d’analyse IA avec administrateur, action et horodatage
+- [x] Ajouter le callback Heartbeat idempotent de purge des candidatures arrivées à retentionUntil avec notification propriétaire
+- [x] Ajouter un fallback vision/OCR pour les PDF sans texte exploitable
+- [x] Normaliser dans l’analyse IA les expériences, stages, remplacements et dates professionnelles
+- [x] Ajouter un matching multicritère configurable par pays, spécialité, langues et seuil de score
+- [x] Ajouter des modèles de réponse email pré-rédigés depuis la fiche candidature
+- [x] Ajouter les tests et la documentation opérationnelle de ces améliorations

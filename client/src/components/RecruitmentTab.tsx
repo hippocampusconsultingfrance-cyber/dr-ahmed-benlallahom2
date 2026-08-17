@@ -22,6 +22,7 @@ type ExtractedProfile = {
   languages?: string[];
   countriesOfInterest?: string[];
   yearsExperience?: number | null;
+  normalizedExperiences?: Array<{ role?: string; organization?: string; startDate?: string | null; endDate?: string | null; employmentType?: string; durationMonths?: number | null }>;
 };
 
 function parseJsonList(value: string | null): string[] {
@@ -62,13 +63,24 @@ export default function RecruitmentTab() {
   const [statusFilter, setStatusFilter] = useState<Status | "">("");
   const [countryFilter, setCountryFilter] = useState("");
   const [specialtyFilter, setSpecialtyFilter] = useState("");
+  const [minimumScore, setMinimumScore] = useState("");
+  const [selectedProfileId, setSelectedProfileId] = useState("");
   const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [profileName, setProfileName] = useState("");
+  const [profileCountry, setProfileCountry] = useState("");
+  const [profileSpecialty, setProfileSpecialty] = useState("");
+  const [profileScore, setProfileScore] = useState("80");
+  const [profileLanguages, setProfileLanguages] = useState("");
+  const [profileSkills, setProfileSkills] = useState("");
   const utils = trpc.useUtils();
+  const profilesQuery = trpc.admin.recruitment.profiles.list.useQuery();
 
   const { data, isLoading, error, refetch } = trpc.admin.recruitment.list.useQuery({
     status: statusFilter || undefined,
     country: countryFilter.trim() || undefined,
     specialty: specialtyFilter.trim() || undefined,
+    minimumScore: minimumScore ? Number(minimumScore) : undefined,
+    profileId: selectedProfileId ? Number(selectedProfileId) : undefined,
   });
 
   const updateStatus = trpc.admin.recruitment.updateStatus.useMutation({
@@ -96,6 +108,20 @@ export default function RecruitmentTab() {
       toast.success(`Analyse IA terminée — score ${score}/100`);
       utils.admin.recruitment.list.invalidate();
     },
+    onError: mutationError => toast.error(mutationError.message),
+  });
+
+  const createProfile = trpc.admin.recruitment.profiles.create.useMutation({
+    onSuccess: () => {
+      toast.success("Profil de matching enregistré");
+      setProfileName("");
+      profilesQuery.refetch();
+    },
+    onError: mutationError => toast.error(mutationError.message),
+  });
+
+  const sendTemplateEmail = trpc.admin.recruitment.sendTemplateEmail.useMutation({
+    onSuccess: () => toast.success("Email envoyé au candidat"),
     onError: mutationError => toast.error(mutationError.message),
   });
 
@@ -144,6 +170,37 @@ export default function RecruitmentTab() {
           <span>Pays ciblé</span>
           <input value={countryFilter} onChange={event => setCountryFilter(event.target.value)} placeholder="Ex. Allemagne" className="h-10 w-full rounded-md border border-border bg-background px-3 text-foreground placeholder:text-muted-foreground" />
         </label>
+        <label className="space-y-1 text-sm text-muted-foreground">
+          <span>Score IA minimum</span>
+          <input type="number" min="0" max="100" value={minimumScore} onChange={event => setMinimumScore(event.target.value)} placeholder="Ex. 80" className="h-10 w-full rounded-md border border-border bg-background px-3 text-foreground placeholder:text-muted-foreground" />
+        </label>
+        <label className="space-y-1 text-sm text-muted-foreground">
+          <span>Profil de matching</span>
+          <select value={selectedProfileId} onChange={event => setSelectedProfileId(event.target.value)} className="h-10 w-full rounded-md border border-border bg-background px-3 text-foreground">
+            <option value="">Tous les profils</option>
+            {profilesQuery.data?.map(profile => <option key={profile.id} value={profile.id}>{profile.name} · {profile.minimumScore}+</option>)}
+          </select>
+        </label>
+      </div>
+
+      <div className="rounded-xl border border-primary/20 bg-primary/5 p-4">
+        <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h3 className="font-semibold text-foreground">Profils de matching</h3>
+            <p className="text-xs text-muted-foreground">Les profils servent à prioriser la revue humaine ; ils ne décident jamais d’un recrutement.</p>
+          </div>
+        </div>
+        <div className="grid gap-2 md:grid-cols-6">
+          <input value={profileName} onChange={event => setProfileName(event.target.value)} placeholder="Nom du profil" className="h-10 rounded-md border border-border bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground md:col-span-2" />
+          <input value={profileCountry} onChange={event => setProfileCountry(event.target.value)} placeholder="Pays" className="h-10 rounded-md border border-border bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground" />
+          <input value={profileSpecialty} onChange={event => setProfileSpecialty(event.target.value)} placeholder="Spécialité" className="h-10 rounded-md border border-border bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground" />
+          <input type="number" min="0" max="100" value={profileScore} onChange={event => setProfileScore(event.target.value)} placeholder="Score min." className="h-10 rounded-md border border-border bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground" />
+          <Button disabled={!profileName.trim() || createProfile.isPending} onClick={() => createProfile.mutate({ name: profileName.trim(), targetCountry: profileCountry.trim() || undefined, specialty: profileSpecialty.trim() || undefined, minimumScore: Number(profileScore) || 0, requiredLanguages: profileLanguages.split(",").map(value => value.trim()).filter(Boolean), requiredSkills: profileSkills.split(",").map(value => value.trim()).filter(Boolean) })}>
+            {createProfile.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null} Enregistrer
+          </Button>
+          <input value={profileLanguages} onChange={event => setProfileLanguages(event.target.value)} placeholder="Langues requises, séparées par virgule" className="h-10 rounded-md border border-border bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground md:col-span-3" />
+          <input value={profileSkills} onChange={event => setProfileSkills(event.target.value)} placeholder="Compétences requises, séparées par virgule" className="h-10 rounded-md border border-border bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground md:col-span-3" />
+        </div>
       </div>
 
       {isLoading ? (
@@ -211,6 +268,12 @@ export default function RecruitmentTab() {
                           <Button size="sm" variant="outline" onClick={() => reanalyze.mutate({ id: application.id })} disabled={reanalyze.isPending || eraseApplication.isPending}>
                             {reanalyze.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
                             {application.aiAnalyzedAt ? "Relancer l’analyse" : "Analyser le CV"}
+                          </Button>
+                          <Button size="sm" variant="outline" onClick={() => sendTemplateEmail.mutate({ id: application.id, template: "profile_interest" })} disabled={sendTemplateEmail.isPending || eraseApplication.isPending || reanalyze.isPending}>
+                            {sendTemplateEmail.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null} Proposer un échange
+                          </Button>
+                          <Button size="sm" variant="outline" onClick={() => sendTemplateEmail.mutate({ id: application.id, template: "additional_information" })} disabled={sendTemplateEmail.isPending || eraseApplication.isPending || reanalyze.isPending}>
+                            Demander un complément
                           </Button>
                           <Button size="sm" variant="outline" className="text-destructive hover:text-destructive" onClick={() => { if (window.confirm("Confirmer l’effacement définitif du dossier candidat et de ses résultats IA ?")) eraseApplication.mutate({ id: application.id }); }} disabled={eraseApplication.isPending || reanalyze.isPending}>
                             {eraseApplication.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}

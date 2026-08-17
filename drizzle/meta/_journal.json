@@ -71,6 +71,13 @@
       "when": 1786956637703,
       "tag": "0009_steep_lord_tyger",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "5",
+      "when": 1786958003325,
+      "tag": "0010_chunky_killer_shrike",
+      "breakpoints": true
     }
   ]
 }

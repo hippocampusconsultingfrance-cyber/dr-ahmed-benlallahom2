@@ -5,7 +5,7 @@ import { publicProcedure, adminProcedure, router } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { getDb } from "./db";
-import { contactMessages, gdprRequests, testimonials, appointments, blogPosts, availabilitySlots, blockedDates, cvApplications } from "../drizzle/schema";
+import { contactMessages, gdprRequests, testimonials, appointments, blogPosts, availabilitySlots, blockedDates, cvApplications, recruitmentAuditLogs, recruitmentMatchProfiles } from "../drizzle/schema";
 import { notifyOwner } from "./_core/notification";
 import { storageGetSignedUrl } from "./storage";
 import { eq, and, sql, desc, gte, lt } from "drizzle-orm";
@@ -16,7 +16,10 @@ import {
   sendOwnerNotificationSMS,
   sendCustomerConfirmationSMS,
   sendRefundConfirmationEmail,
+  sendRecruitmentTemplateEmail,
+  type RecruitmentEmailTemplate,
 } from "./_core/notifications";
+import { logRecruitmentAction, matchesRecruitmentProfile, parseRecruitmentJsonArray } from "./recruitmentAudit";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "");
 
@@ -825,6 +828,8 @@ export const appRouter = router({
             status: z.enum(CV_APPLICATION_STATUSES).optional(),
             specialty: z.string().trim().max(160).optional(),
             country: z.string().trim().max(80).optional(),
+            minimumScore: z.number().int().min(0).max(100).optional(),
+            profileId: z.number().int().positive().optional(),
           })
         )
         .query(async ({ input }) => {
@@ -835,9 +840,22 @@ export const appRouter = router({
           if (input.status) conditions.push(eq(cvApplications.status, input.status));
           if (input.specialty) conditions.push(sql`LOWER(${cvApplications.specialty}) LIKE LOWER(${`%${input.specialty}%`})`);
           if (input.country) conditions.push(sql`${cvApplications.targetCountries} LIKE ${`%${input.country}%`}`);
+
+          let profile: typeof recruitmentMatchProfiles.$inferSelect | null = null;
+          if (input.profileId) {
+            const [selectedProfile] = await db.select().from(recruitmentMatchProfiles)
+              .where(and(eq(recruitmentMatchProfiles.id, input.profileId), eq(recruitmentMatchProfiles.active, 1)))
+              .limit(1);
+            if (!selectedProfile) throw new TRPCError({ code: "NOT_FOUND", message: "Profil de matching introuvable" });
+            profile = selectedProfile;
+            conditions.push(sql`${cvApplications.aiScore} >= ${selectedProfile.minimumScore}`);
+            if (selectedProfile.specialty) conditions.push(sql`LOWER(${cvApplications.specialty}) LIKE LOWER(${`%${selectedProfile.specialty}%`})`);
+            if (selectedProfile.targetCountry) conditions.push(sql`${cvApplications.targetCountries} LIKE ${`%${selectedProfile.targetCountry}%`}`);
+          }
+          if (input.minimumScore !== undefined) conditions.push(sql`${cvApplications.aiScore} >= ${input.minimumScore}`);
           const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
-          const items = await db
+          const rawItems = await db
             .select({
               id: cvApplications.id,
               trackingId: cvApplications.trackingId,
@@ -872,16 +890,64 @@ export const appRouter = router({
             .from(cvApplications)
             .where(whereClause)
             .orderBy(desc(cvApplications.createdAt))
-            .limit(input.limit)
-            .offset(input.offset);
+            .limit(profile ? 1000 : input.limit)
+            .offset(profile ? 0 : input.offset);
 
-          const countResult = await db
-            .select({ count: sql<number>`COUNT(*)` })
-            .from(cvApplications)
-            .where(whereClause);
-
+          const matchedItems = profile
+            ? rawItems.filter(item => matchesRecruitmentProfile({
+                score: item.aiScore,
+                specialty: item.specialty,
+                targetCountries: parseRecruitmentJsonArray(item.targetCountries),
+                languages: parseRecruitmentJsonArray(item.languages),
+                extractedSkills: (() => {
+                  try {
+                    const parsed = item.aiExtractedSkills ? JSON.parse(item.aiExtractedSkills) : {};
+                    return Array.isArray(parsed.skills) ? parsed.skills.filter((value: unknown): value is string => typeof value === "string") : [];
+                  } catch { return []; }
+                })(),
+                profile,
+              }))
+            : rawItems;
+          const items = profile ? matchedItems.slice(input.offset, input.offset + input.limit) : matchedItems;
+          const countResult = profile ? [{ count: matchedItems.length }] : await db.select({ count: sql<number>`COUNT(*)` }).from(cvApplications).where(whereClause);
           return { items, total: countResult[0]?.count || 0 };
         }),
+
+      profiles: router({
+        list: adminProcedure.query(async () => {
+          const db = await getDb();
+          if (!db) return [];
+          return db.select().from(recruitmentMatchProfiles).where(eq(recruitmentMatchProfiles.active, 1)).orderBy(desc(recruitmentMatchProfiles.updatedAt));
+        }),
+        create: adminProcedure
+          .input(z.object({
+            name: z.string().trim().min(1).max(160),
+            targetCountry: z.string().trim().max(120).optional(),
+            specialty: z.string().trim().max(160).optional(),
+            minimumScore: z.number().int().min(0).max(100).default(0),
+            requiredLanguages: z.array(z.string().trim().min(1).max(80)).max(12).default([]),
+            requiredSkills: z.array(z.string().trim().min(1).max(120)).max(30).default([]),
+          }))
+          .mutation(async ({ input }) => {
+            const db = await getDb();
+            if (!db) throw new Error("Database connection failed");
+            const result = await db.insert(recruitmentMatchProfiles).values({
+              name: input.name,
+              targetCountry: input.targetCountry || null,
+              specialty: input.specialty || null,
+              minimumScore: input.minimumScore,
+              requiredLanguages: JSON.stringify(input.requiredLanguages),
+              requiredSkills: JSON.stringify(input.requiredSkills),
+            });
+            return { success: true, id: Number((result[0] as any)?.insertId || 0) };
+          }),
+        delete: adminProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ input }) => {
+          const db = await getDb();
+          if (!db) throw new Error("Database connection failed");
+          await db.update(recruitmentMatchProfiles).set({ active: 0, updatedAt: new Date() }).where(eq(recruitmentMatchProfiles.id, input.id));
+          return { success: true };
+        }),
+      }),
 
       updateStatus: adminProcedure
         .input(
@@ -891,7 +957,7 @@ export const appRouter = router({
             adminNotes: z.string().trim().max(5000).optional(),
           })
         )
-        .mutation(async ({ input }) => {
+        .mutation(async ({ input, ctx }) => {
           const db = await getDb();
           if (!db) throw new Error("Database connection failed");
 
@@ -899,13 +965,14 @@ export const appRouter = router({
             .update(cvApplications)
             .set({ status: input.status, adminNotes: input.adminNotes ?? null, updatedAt: new Date() })
             .where(eq(cvApplications.id, input.id));
+          await logRecruitmentAction({ applicationId: input.id, adminOpenId: ctx.user.openId, action: "status_update", metadata: { status: input.status } });
 
           return { success: true };
         }),
 
       getDownloadUrl: adminProcedure
         .input(z.object({ id: z.number() }))
-        .mutation(async ({ input }) => {
+        .mutation(async ({ input, ctx }) => {
           const db = await getDb();
           if (!db) throw new Error("Database connection failed");
           const [application] = await db
@@ -914,13 +981,14 @@ export const appRouter = router({
             .where(eq(cvApplications.id, input.id))
             .limit(1);
           if (!application) throw new TRPCError({ code: "NOT_FOUND", message: "Candidature introuvable" });
+          await logRecruitmentAction({ applicationId: input.id, adminOpenId: ctx.user.openId, action: "download", metadata: { fileName: application.cvOriginalName } });
           const signedUrl = await storageGetSignedUrl(application.cvFileKey);
           return { url: signedUrl, fileName: application.cvOriginalName };
         }),
 
       reanalyze: adminProcedure
         .input(z.object({ id: z.number() }))
-        .mutation(async ({ input }) => {
+        .mutation(async ({ input, ctx }) => {
           const db = await getDb();
           if (!db) throw new Error("Database connection failed");
           const [application] = await db
@@ -960,24 +1028,40 @@ export const appRouter = router({
             extractedText,
           });
           await saveCvAnalysis(application.id, analysis);
+          await logRecruitmentAction({ applicationId: application.id, adminOpenId: ctx.user.openId, action: "reanalyze", metadata: { score: analysis.relevanceScore } });
           return { success: true, score: analysis.relevanceScore };
         }),
 
-      erase: adminProcedure
-        .input(z.object({ id: z.number() }))
-        .mutation(async ({ input }) => {
+      sendTemplateEmail: adminProcedure
+        .input(z.object({ id: z.number(), template: z.enum(["profile_interest", "additional_information"]) }))
+        .mutation(async ({ input, ctx }) => {
           const db = await getDb();
           if (!db) throw new Error("Database connection failed");
           const [application] = await db
-            .select({ id: cvApplications.id })
+            .select({ id: cvApplications.id, firstName: cvApplications.firstName, lastName: cvApplications.lastName, email: cvApplications.email, trackingId: cvApplications.trackingId })
             .from(cvApplications)
             .where(eq(cvApplications.id, input.id))
             .limit(1);
           if (!application) throw new TRPCError({ code: "NOT_FOUND", message: "Candidature introuvable" });
+          const result = await sendRecruitmentTemplateEmail(application.email, `${application.firstName} ${application.lastName}`, application.trackingId, input.template as RecruitmentEmailTemplate);
+          await logRecruitmentAction({ applicationId: input.id, adminOpenId: ctx.user.openId, action: "email", metadata: { template: input.template, resendId: result.id } });
+          return { success: true };
+        }),
 
-          // The storage contract intentionally has no object-delete endpoint.
-          // Removing the only database reference makes the private object unreachable
-          // through the application and fulfills the administrative erasure workflow.
+      erase: adminProcedure
+        .input(z.object({ id: z.number() }))
+        .mutation(async ({ input, ctx }) => {
+          const db = await getDb();
+          if (!db) throw new Error("Database connection failed");
+          const [application] = await db
+            .select({ id: cvApplications.id, trackingId: cvApplications.trackingId })
+            .from(cvApplications)
+            .where(eq(cvApplications.id, input.id))
+            .limit(1);
+          if (!application) throw new TRPCError({ code: "NOT_FOUND", message: "Candidature introuvable" });
+          await logRecruitmentAction({ applicationId: input.id, adminOpenId: ctx.user.openId, action: "erase", metadata: { trackingId: application.trackingId } });
+          // The storage contract has no object-delete endpoint. Removing the only
+          // database reference makes the private object unreachable in the app.
           await db.delete(cvApplications).where(eq(cvApplications.id, input.id));
           return { success: true };
         }),

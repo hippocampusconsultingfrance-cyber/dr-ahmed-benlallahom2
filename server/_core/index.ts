@@ -474,6 +474,22 @@ async function startServer() {
     }
   });
 
+  // Retention cleanup: archives expired recruitment dossiers and notifies the owner.
+  // The platform Heartbeat caller is authenticated and supplies the task UID.
+  app.post("/api/scheduled/recruitment-retention", async (req, res) => {
+    try {
+      const { sdk: sdkInstance } = await import("./sdk");
+      const user = await sdkInstance.authenticateRequest(req);
+      if (!user.isCron || !user.taskUid) return res.status(403).json({ error: "cron-only" });
+      const { runRecruitmentRetentionCleanup } = await import("../recruitmentRetention");
+      const result = await runRecruitmentRetentionCleanup(`heartbeat:${user.taskUid}`);
+      return res.json({ ok: true, ...result });
+    } catch (error: any) {
+      console.error("[RecruitmentRetention] Handler error:", error);
+      return res.status(500).json({ error: error.message, timestamp: new Date().toISOString() });
+    }
+  });
+
   // development mode uses Vite, production mode uses static files
   if (process.env.NODE_ENV === "development") {
     await setupVite(app, server);

@@ -367,3 +367,38 @@ export async function sendCvApplicationConfirmationEmail(
     console.error("Error sending CV application confirmation:", error);
   }
 }
+
+export type RecruitmentEmailTemplate = "profile_interest" | "additional_information";
+
+export async function sendRecruitmentTemplateEmail(
+  candidateEmail: string,
+  candidateName: string,
+  trackingId: string,
+  template: RecruitmentEmailTemplate,
+): Promise<{ id?: string }> {
+  const isInterest = template === "profile_interest";
+  const subject = isInterest
+    ? `Votre profil nous intéresse — ${trackingId}`
+    : `Complément d’information concernant votre candidature — ${trackingId}`;
+  const body = isInterest
+    ? "Après une première revue humaine de votre candidature, nous souhaiterions échanger avec vous au sujet des opportunités internationales susceptibles de correspondre à votre profil. Merci de nous répondre avec vos disponibilités et votre numéro de téléphone si celui-ci a changé."
+    : "Afin de poursuivre l’examen humain de votre candidature, merci de nous transmettre les informations ou documents professionnels complémentaires demandés par notre équipe. Ne transmettez jamais de données de patients ni de dossier clinique.";
+
+  const { data, error } = await resend.emails.send({
+    from: FROM_EMAIL,
+    to: [candidateEmail],
+    subject,
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <h2 style="color: #0891b2;">Hippocampus Consulting</h2>
+        <p>Bonjour ${escapeHtml(candidateName)},</p>
+        <p>${escapeHtml(body)}</p>
+        <p><strong>Référence :</strong> ${escapeHtml(trackingId)}</p>
+        <p>Cette communication concerne uniquement votre candidature professionnelle. Vous pouvez demander l’accès, la rectification ou la suppression de vos données via notre formulaire RGPD.</p>
+        <p style="color: #64748b;">Dr. Ahmed Ben Lallahom<br>Hippocampus Consulting</p>
+      </div>
+    `,
+  });
+  if (error) throw new Error(`Resend recruitment email failed: ${error.message}`);
+  return { id: data?.id };
+}

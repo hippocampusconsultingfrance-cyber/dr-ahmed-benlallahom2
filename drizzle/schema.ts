@@ -1,4 +1,4 @@
-import { int, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
+import { index, int, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
 
 /**
  * Core user table backing auth flow.
@@ -216,3 +216,40 @@ export const cvApplications = mysqlTable("cv_applications", {
 
 export type CvApplication = typeof cvApplications.$inferSelect;
 export type InsertCvApplication = typeof cvApplications.$inferInsert;
+
+/**
+ * Immutable administrative audit trail for sensitive recruitment actions.
+ */
+export const recruitmentAuditLogs = mysqlTable("recruitment_audit_logs", {
+  id: int("id").autoincrement().primaryKey(),
+  applicationId: int("application_id"),
+  adminOpenId: varchar("admin_open_id", { length: 128 }).notNull(),
+  action: mysqlEnum("action", ["download", "reanalyze", "erase", "email", "status_update", "retention_cleanup"]).notNull(),
+  metadata: text("metadata"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, table => ({
+  applicationIdx: index("recruitment_audit_application_idx").on(table.applicationId),
+  createdIdx: index("recruitment_audit_created_idx").on(table.createdAt),
+}));
+
+export type RecruitmentAuditLog = typeof recruitmentAuditLogs.$inferSelect;
+export type InsertRecruitmentAuditLog = typeof recruitmentAuditLogs.$inferInsert;
+
+/**
+ * Admin-defined matching profiles for country/specialty/language/score screening.
+ */
+export const recruitmentMatchProfiles = mysqlTable("recruitment_match_profiles", {
+  id: int("id").autoincrement().primaryKey(),
+  name: varchar("name", { length: 160 }).notNull(),
+  targetCountry: varchar("target_country", { length: 120 }),
+  specialty: varchar("specialty", { length: 160 }),
+  minimumScore: int("minimum_score").default(0).notNull(),
+  requiredLanguages: text("required_languages"),
+  requiredSkills: text("required_skills"),
+  active: int("active").default(1).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+});
+
+export type RecruitmentMatchProfile = typeof recruitmentMatchProfiles.$inferSelect;
+export type InsertRecruitmentMatchProfile = typeof recruitmentMatchProfiles.$inferInsert;
