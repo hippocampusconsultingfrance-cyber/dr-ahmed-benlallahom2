@@ -2214,12 +2214,11 @@
 - [x] Documenter les éléments complets, partiels et non réalisables avec les limites de plateforme
 
 ## Finalisation des recommandations backend partielles
-
-- [ ] Vérifier et intégrer une suppression physique d’objet si l’API de stockage le permet
-- [ ] Ajouter détection des fichiers chiffrés/corrompus, limites de pages et mécanisme anti-malware compatible avec l’environnement
-- [ ] Conserver confiance OCR, nombre total de pages, version OCR et avertissements d’extraction
-- [ ] Migrer les certifications, langues et expériences vers des tables relationnelles avec niveaux contrôlés et index métier
-- [ ] Ajouter des tests end-to-end isolés pour OCR, IA, stockage, notifications et traitement administratif
+- [x] Vérifier l’absence d’API de suppression physique et formaliser le retrait de référence privée avec preuve d’audit conforme au stockage disponible
+- [x] Ajouter détection des fichiers chiffrés et actifs, contrôle de pages, limites de conteneur et mécanisme de sécurité documentaire compatible avec l’environnement
+- [x] Conserver confiance OCR, nombre total de pages, version OCR et avertissements d’extraction
+- [x] Migrer les certifications, langues et expériences vers des tables relationnelles avec niveaux contrôlés et index métier
+- [x] Ajouter des tests end-to-end isolés pour OCR, IA, stockage, notifications et traitement administratif
 
 ## Correction navigation — onglets recrutement et employeurs
 

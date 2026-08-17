@@ -370,12 +370,11 @@ export async function sendCvApplicationConfirmationEmail(
 
 export type RecruitmentEmailTemplate = "profile_interest" | "additional_information";
 
-export async function sendRecruitmentTemplateEmail(
-  candidateEmail: string,
+export function buildRecruitmentTemplateEmail(
   candidateName: string,
   trackingId: string,
   template: RecruitmentEmailTemplate,
-): Promise<{ id?: string }> {
+) {
   const isInterest = template === "profile_interest";
   const subject = isInterest
     ? `Votre profil nous intéresse — ${trackingId}`
@@ -383,10 +382,7 @@ export async function sendRecruitmentTemplateEmail(
   const body = isInterest
     ? "Après une première revue humaine de votre candidature, nous souhaiterions échanger avec vous au sujet des opportunités internationales susceptibles de correspondre à votre profil. Merci de nous répondre avec vos disponibilités et votre numéro de téléphone si celui-ci a changé."
     : "Afin de poursuivre l’examen humain de votre candidature, merci de nous transmettre les informations ou documents professionnels complémentaires demandés par notre équipe. Ne transmettez jamais de données de patients ni de dossier clinique.";
-
-  const { data, error } = await resend.emails.send({
-    from: FROM_EMAIL,
-    to: [candidateEmail],
+  return {
     subject,
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
@@ -398,6 +394,22 @@ export async function sendRecruitmentTemplateEmail(
         <p style="color: #64748b;">Dr. Ahmed Ben Lallahom<br>Hippocampus Consulting</p>
       </div>
     `,
+  };
+}
+
+export async function sendRecruitmentTemplateEmail(
+  candidateEmail: string,
+  candidateName: string,
+  trackingId: string,
+  template: RecruitmentEmailTemplate,
+): Promise<{ id?: string }> {
+  const message = buildRecruitmentTemplateEmail(candidateName, trackingId, template);
+
+  const { data, error } = await resend.emails.send({
+    from: FROM_EMAIL,
+    to: [candidateEmail],
+    subject: message.subject,
+    html: message.html,
   });
   if (error) throw new Error(`Resend recruitment email failed: ${error.message}`);
   return { id: data?.id };

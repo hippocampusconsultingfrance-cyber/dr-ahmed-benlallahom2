@@ -2,7 +2,7 @@ import { PDFParse } from "pdf-parse";
 import mammoth from "mammoth";
 import WordExtractor from "word-extractor";
 import { eq } from "drizzle-orm";
-import { cvApplications } from "../drizzle/schema";
+import { cvApplications, cvCandidateCertifications, cvCandidateExperiences, cvCandidateLanguages } from "../drizzle/schema";
 import { getDb } from "./db";
 import { invokeLLM } from "./_core/llm";
 
@@ -26,12 +26,19 @@ export type NormalizedCertification = {
   evidence: string;
 };
 
+export type NormalizedLanguage = {
+  language: string;
+  proficiency: "basic" | "working" | "professional" | "fluent" | "native" | "unknown";
+  evidence: string;
+};
+
 export type RecruitmentAnalysisResult = {
   summary: string;
   professionalTitle: string;
   specialties: string[];
   skills: string[];
   languages: string[];
+  normalizedLanguages: NormalizedLanguage[];
   certifications: NormalizedCertification[];
   countriesOfInterest: string[];
   yearsExperience: number | null;
@@ -73,6 +80,17 @@ const certificationSchema = {
   additionalProperties: false,
 } as const;
 
+const languageSchema = {
+  type: "object",
+  properties: {
+    language: { type: "string" },
+    proficiency: { type: "string", enum: ["basic", "working", "professional", "fluent", "native", "unknown"] },
+    evidence: { type: "string" },
+  },
+  required: ["language", "proficiency", "evidence"],
+  additionalProperties: false,
+} as const;
+
 const analysisSchema = {
   name: "healthcare_candidate_analysis",
   strict: true,
@@ -84,6 +102,7 @@ const analysisSchema = {
       specialties: { type: "array", items: { type: "string" } },
       skills: { type: "array", items: { type: "string" } },
       languages: { type: "array", items: { type: "string" } },
+      normalizedLanguages: { type: "array", items: languageSchema },
       certifications: { type: "array", items: certificationSchema },
       countriesOfInterest: { type: "array", items: { type: "string" } },
       yearsExperience: { anyOf: [{ type: "integer", minimum: 0, maximum: 70 }, { type: "null" }] },
@@ -95,7 +114,7 @@ const analysisSchema = {
       reasoning: { type: "string" },
     },
     required: [
-      "summary", "professionalTitle", "specialties", "skills", "languages", "certifications", "countriesOfInterest",
+      "summary", "professionalTitle", "specialties", "skills", "languages", "normalizedLanguages", "certifications", "countriesOfInterest",
       "yearsExperience", "normalizedExperiences", "relevanceScore", "strengths", "gaps",
       "dataQualityWarnings", "reasoning",
     ],
@@ -108,8 +127,12 @@ const visionOcrSchema = {
   strict: true,
   schema: {
     type: "object",
-    properties: { text: { type: "string" } },
-    required: ["text"],
+    properties: {
+      text: { type: "string" },
+      confidence: { type: "integer", minimum: 0, maximum: 100 },
+      warnings: { type: "array", items: { type: "string" } },
+    },
+    required: ["text", "confidence", "warnings"],
     additionalProperties: false,
   },
 } as const;
@@ -133,14 +156,23 @@ function messageContentToString(content: unknown): string {
     .join("\n");
 }
 
-async function extractPdfWithVision(buffer: Buffer): Promise<string> {
+export type CvExtractionResult = {
+  text: string;
+  method: "pdf_text" | "pdf_vision" | "docx" | "doc";
+  totalPages: number | null;
+  ocrConfidence: number | null;
+  ocrModelVersion: string | null;
+  warnings: string[];
+};
+
+async function extractPdfWithVision(buffer: Buffer): Promise<{ text: string; confidence: number | null; warnings: string[] }> {
   const parser = new PDFParse({ data: buffer });
   try {
     const screenshots = await parser.getScreenshot({ first: 3, desiredWidth: 1400, imageDataUrl: true, imageBuffer: false });
     const pages = screenshots.pages
       .filter(page => page.dataUrl)
       .map(page => ({ type: "image_url" as const, image_url: { url: page.dataUrl, detail: "high" as const } }));
-    if (pages.length === 0) return "";
+    if (pages.length === 0) return { text: "", confidence: null, warnings: ["vision_ocr_no_rendered_pages"] };
 
     const response = await invokeLLM({
       model: "gemini-3-flash-preview",
@@ -155,47 +187,65 @@ async function extractPdfWithVision(buffer: Buffer): Promise<string> {
       response_format: { type: "json_schema", json_schema: visionOcrSchema },
     });
     const raw = messageContentToString(response.choices[0]?.message?.content);
-    if (!raw) return "";
-    const parsed = JSON.parse(raw) as { text?: unknown };
-    return typeof parsed.text === "string" ? cleanText(parsed.text) : "";
+    if (!raw) return { text: "", confidence: null, warnings: ["vision_ocr_empty_response"] };
+    const parsed = JSON.parse(raw) as { text?: unknown; confidence?: unknown; warnings?: unknown };
+    return {
+      text: typeof parsed.text === "string" ? cleanText(parsed.text) : "",
+      confidence: typeof parsed.confidence === "number" && Number.isInteger(parsed.confidence) ? parsed.confidence : null,
+      warnings: Array.isArray(parsed.warnings) ? parsed.warnings.filter((warning): warning is string => typeof warning === "string") : [],
+    };
   } finally {
     await parser.destroy();
   }
 }
 
-export async function extractCvText(buffer: Buffer, mimeType: string): Promise<string> {
+export async function extractCvDocument(buffer: Buffer, mimeType: string): Promise<CvExtractionResult> {
   if (mimeType === "application/pdf") {
     const parser = new PDFParse({ data: buffer });
     let extracted = "";
+    let totalPages: number | null = null;
     try {
       const result = await parser.getText();
       extracted = cleanText(result.text);
+      const info = await parser.getInfo();
+      totalPages = Number.isInteger(info.total) ? info.total : null;
     } finally {
       await parser.destroy();
     }
-    if (extracted.length >= 80) return extracted;
-    const visionText = await extractPdfWithVision(buffer);
-    return cleanText([extracted, visionText].filter(Boolean).join("\n\n"));
+    if (extracted.length >= 80) return { text: extracted, method: "pdf_text", totalPages, ocrConfidence: null, ocrModelVersion: null, warnings: [] };
+    const vision = await extractPdfWithVision(buffer);
+    return {
+      text: cleanText([extracted, vision.text].filter(Boolean).join("\n\n")),
+      method: "pdf_vision",
+      totalPages,
+      ocrConfidence: vision.confidence,
+      ocrModelVersion: "gemini-3-flash-preview",
+      warnings: ["vision_ocr_fallback", ...vision.warnings],
+    };
   }
 
   if (mimeType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") {
     const result = await mammoth.extractRawText({ buffer });
-    return cleanText(result.value);
+    return { text: cleanText(result.value), method: "docx", totalPages: null, ocrConfidence: null, ocrModelVersion: null, warnings: result.messages.map(message => `${message.type}:${message.message}`) };
   }
 
   if (mimeType === "application/msword") {
     const document = await new WordExtractor().extract(buffer);
-    return cleanText(document.getBody());
+    return { text: cleanText(document.getBody()), method: "doc", totalPages: null, ocrConfidence: null, ocrModelVersion: null, warnings: ["legacy_doc_format_limited_extraction"] };
   }
 
   throw new Error("Format de CV non pris en charge pour l’analyse automatique.");
+}
+
+export async function extractCvText(buffer: Buffer, mimeType: string): Promise<string> {
+  return (await extractCvDocument(buffer, mimeType)).text;
 }
 
 function parseAnalysis(content: unknown): RecruitmentAnalysisResult {
   const raw = messageContentToString(content);
   const parsed = JSON.parse(raw) as RecruitmentAnalysisResult;
   if (
-    !parsed || typeof parsed.summary !== "string" || !Array.isArray(parsed.specialties) || !Array.isArray(parsed.skills) || !Array.isArray(parsed.languages) || !Array.isArray(parsed.certifications) ||
+    !parsed || typeof parsed.summary !== "string" || !Array.isArray(parsed.specialties) || !Array.isArray(parsed.skills) || !Array.isArray(parsed.languages) || !Array.isArray(parsed.normalizedLanguages) || !Array.isArray(parsed.certifications) ||
     !Array.isArray(parsed.strengths) || !Array.isArray(parsed.gaps) || !Array.isArray(parsed.dataQualityWarnings) ||
     !Array.isArray(parsed.normalizedExperiences) || !Number.isInteger(parsed.relevanceScore) ||
     parsed.relevanceScore < 0 || parsed.relevanceScore > 100
@@ -243,7 +293,7 @@ Texte extrait du CV :
 ${cvText}
 ---
 
-Normalise chaque expérience dans normalizedExperiences. Convertis les dates explicites vers YYYY-MM lorsque possible, utilise null si absente, et distingue permanent, temporary, locum (remplacement), internship (stage), fellowship, rotation et volunteer. Normalise aussi les certifications explicitement listées dans certifications : conserve le nom, l’organisme, le pays, la date d’expiration quand elle est explicitement indiquée et la preuve textuelle ; n’invente jamais une certification. Les langues doivent être fournies sous une forme cohérente et sans niveau de maîtrise inventé. Ne transforme jamais une date ou une durée incertaine en fait : ajoute une dataQualityWarning et cite la preuve textuelle dans evidence. Le score doit mesurer uniquement la pertinence professionnelle apparente au regard de la spécialité, des compétences, de l’expérience explicitement décrite et des pays ciblés. Il ne constitue pas une décision de recrutement.`,
+Normalise chaque expérience dans normalizedExperiences. Convertis les dates explicites vers YYYY-MM lorsque possible, utilise null si absente, et distingue permanent, temporary, locum (remplacement), internship (stage), fellowship, rotation et volunteer. Normalise aussi les certifications explicitement listées dans certifications : conserve le nom, l’organisme, le pays, la date d’expiration quand elle est explicitement indiquée et la preuve textuelle ; n’invente jamais une certification. Dans normalizedLanguages, donne la langue, un niveau contrôlé seulement s’il est explicitement attesté (sinon unknown) et une preuve textuelle. Ne transforme jamais une date, une durée ou un niveau incertain en fait : ajoute une dataQualityWarning et cite la preuve textuelle dans evidence. Le score doit mesurer uniquement la pertinence professionnelle apparente au regard de la spécialité, des compétences, de l’expérience explicitement décrite et des pays ciblés. Il ne constitue pas une décision de recrutement.`,
       },
     ],
     response_format: { type: "json_schema", json_schema: analysisSchema },
@@ -270,15 +320,55 @@ export async function saveCvAnalysis(applicationId: number, analysis: Recruitmen
       specialties: analysis.specialties,
       skills: analysis.skills,
       languages: analysis.languages,
+      normalizedLanguages: analysis.normalizedLanguages,
       countriesOfInterest: analysis.countriesOfInterest,
       yearsExperience: analysis.yearsExperience,
       normalizedExperiences: analysis.normalizedExperiences,
       certifications: analysis.certifications,
     }),
     normalizedCertifications: JSON.stringify(analysis.certifications),
-    normalizedLanguages: JSON.stringify(analysis.languages),
+    normalizedLanguages: JSON.stringify(analysis.normalizedLanguages),
     normalizedExperiences: JSON.stringify(analysis.normalizedExperiences),
     aiMatchReasoning: analysis.reasoning,
     aiAnalyzedAt: new Date(),
   }).where(eq(cvApplications.id, applicationId));
+
+  await db.delete(cvCandidateCertifications).where(eq(cvCandidateCertifications.applicationId, applicationId));
+  await db.delete(cvCandidateLanguages).where(eq(cvCandidateLanguages.applicationId, applicationId));
+  await db.delete(cvCandidateExperiences).where(eq(cvCandidateExperiences.applicationId, applicationId));
+
+  if (analysis.certifications.length > 0) {
+    await db.insert(cvCandidateCertifications).values(analysis.certifications.map(certification => ({
+      applicationId,
+      name: certification.name.slice(0, 180),
+      issuingBody: certification.issuingBody?.slice(0, 180) ?? null,
+      country: certification.country?.slice(0, 100) ?? null,
+      expiresAt: certification.expiresAt?.slice(0, 10) ?? null,
+      evidence: certification.evidence || null,
+      source: "extracted" as const,
+    })));
+  }
+  if (analysis.normalizedLanguages.length > 0) {
+    await db.insert(cvCandidateLanguages).values(analysis.normalizedLanguages.map(language => ({
+      applicationId,
+      language: language.language.slice(0, 80),
+      proficiency: language.proficiency,
+      evidence: language.evidence || null,
+      source: "extracted" as const,
+    })));
+  }
+  if (analysis.normalizedExperiences.length > 0) {
+    await db.insert(cvCandidateExperiences).values(analysis.normalizedExperiences.map(experience => ({
+      applicationId,
+      role: experience.role.slice(0, 180),
+      organization: experience.organization.slice(0, 180),
+      startDate: experience.startDate?.slice(0, 10) ?? null,
+      endDate: experience.endDate?.slice(0, 10) ?? null,
+      employmentType: experience.employmentType,
+      specialty: experience.specialty.slice(0, 160),
+      country: experience.country?.slice(0, 100) ?? null,
+      durationMonths: experience.durationMonths,
+      evidence: experience.evidence || null,
+    })));
+  }
 }

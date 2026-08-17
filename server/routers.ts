@@ -5,10 +5,10 @@ import { publicProcedure, adminProcedure, router } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { getDb } from "./db";
-import { contactMessages, gdprRequests, testimonials, appointments, blogPosts, availabilitySlots, blockedDates, cvApplications, recruitmentAuditLogs, recruitmentMatchProfiles, clientBriefs, clientBriefCandidates } from "../drizzle/schema";
+import { contactMessages, gdprRequests, testimonials, appointments, blogPosts, availabilitySlots, blockedDates, cvApplications, cvCandidateCertifications, recruitmentAuditLogs, recruitmentMatchProfiles, clientBriefs, clientBriefCandidates } from "../drizzle/schema";
 import { notifyOwner } from "./_core/notification";
 import { storageGetSignedUrl } from "./storage";
-import { eq, and, sql, desc, gte, lt } from "drizzle-orm";
+import { eq, and, sql, desc, gte, inArray, lt } from "drizzle-orm";
 import Stripe from "stripe";
 import {
   sendConfirmationEmail,
@@ -882,6 +882,9 @@ export const appRouter = router({
               cvOriginalName: cvApplications.cvOriginalName,
               cvMimeType: cvApplications.cvMimeType,
               cvSizeBytes: cvApplications.cvSizeBytes,
+              fileValidationStatus: cvApplications.fileValidationStatus,
+              fileSecurityScanVersion: cvApplications.fileSecurityScanVersion,
+              fileValidationNotes: cvApplications.fileValidationNotes,
               gdprConsent: cvApplications.gdprConsent,
               marketingConsent: cvApplications.marketingConsent,
               status: cvApplications.status,
@@ -902,6 +905,10 @@ export const appRouter = router({
               analysisPromptVersion: cvApplications.analysisPromptVersion,
               extractionMethod: cvApplications.extractionMethod,
               extractionPageCount: cvApplications.extractionPageCount,
+              extractionTotalPages: cvApplications.extractionTotalPages,
+              ocrConfidence: cvApplications.ocrConfidence,
+              ocrModelVersion: cvApplications.ocrModelVersion,
+              extractionWarnings: cvApplications.extractionWarnings,
               analysisRequestedAt: cvApplications.analysisRequestedAt,
               createdAt: cvApplications.createdAt,
               updatedAt: cvApplications.updatedAt,
@@ -1107,11 +1114,24 @@ export const appRouter = router({
             aiScore: cvApplications.aiScore,
             status: cvApplications.status,
           }).from(cvApplications).where(sql`${cvApplications.status} NOT IN ('rejected', 'archived')`).limit(250);
+          const applicationIds = applications.map(application => application.id);
+          const certificationRows = applicationIds.length > 0
+            ? await db.select({ applicationId: cvCandidateCertifications.applicationId, name: cvCandidateCertifications.name })
+              .from(cvCandidateCertifications)
+              .where(inArray(cvCandidateCertifications.applicationId, applicationIds))
+            : [];
+          const certificationsByApplication = new Map<number, string[]>();
+          for (const certification of certificationRows) {
+            certificationsByApplication.set(certification.applicationId, [
+              ...(certificationsByApplication.get(certification.applicationId) || []),
+              certification.name,
+            ]);
+          }
           const associations = await db.select().from(clientBriefCandidates).where(eq(clientBriefCandidates.briefId, brief.id));
           const associationByApplication = new Map(associations.map(association => [association.applicationId, association]));
           const candidates = applications.map(application => ({
             ...application,
-            match: computeBriefCandidateMatch(brief, application),
+            match: computeBriefCandidateMatch(brief, { ...application, certificationNames: certificationsByApplication.get(application.id) || [] }),
             association: associationByApplication.get(application.id) ?? null,
           })).sort((left, right) => right.match.score - left.match.score);
           return { brief, candidates };

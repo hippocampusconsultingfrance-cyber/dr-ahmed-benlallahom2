@@ -1,7 +1,7 @@
 import { and, eq, inArray, lte } from "drizzle-orm";
 import { cvApplications, cvProcessingJobs } from "../drizzle/schema";
 import { getDb } from "./db";
-import { extractCvText, analyzeCvText, saveCvAnalysis } from "./recruitmentAnalysis";
+import { extractCvDocument, analyzeCvText, saveCvAnalysis } from "./recruitmentAnalysis";
 import { storageGetSignedUrl, storagePut } from "./storage";
 import { validateCvFile } from "./recruitmentFileValidation";
 
@@ -9,6 +9,73 @@ const MAX_ATTEMPTS = 3;
 const PROCESSING_BATCH_SIZE = 5;
 const ANALYSIS_MODEL = "gpt-5-mini";
 const ANALYSIS_PROMPT_VERSION = "recruitment-v2";
+
+type CvPipelineInput = {
+  cvFileKey: string;
+  cvMimeType: string;
+  cvOriginalName: string;
+  cvSizeBytes: number;
+  fileChecksum: string | null;
+  fileValidationStatus: "quarantined" | "accepted" | "rejected" | "validation_failed";
+  trackingId: string;
+  firstName: string;
+  lastName: string;
+  specialty: string;
+  targetCountries: string;
+  languages: string | null;
+  yearsExperience: number | null;
+  message: string | null;
+};
+
+type CvPipelineSteps = {
+  download: (storageKey: string) => Promise<Buffer>;
+  promote: (storageKey: string, buffer: Buffer, mimeType: string) => Promise<{ key: string }>;
+  validate: typeof validateCvFile;
+  extract: typeof extractCvDocument;
+  analyze: typeof analyzeCvText;
+};
+
+const defaultCvPipelineSteps: CvPipelineSteps = {
+  download: async storageKey => {
+    const signedUrl = await storageGetSignedUrl(storageKey);
+    const fileResponse = await fetch(signedUrl);
+    if (!fileResponse.ok) throw new Error(`cv_download_failed_${fileResponse.status}`);
+    return Buffer.from(await fileResponse.arrayBuffer());
+  },
+  promote: async (storageKey, buffer, mimeType) => storagePut(storageKey, buffer, mimeType),
+  validate: validateCvFile,
+  extract: extractCvDocument,
+  analyze: analyzeCvText,
+};
+
+/** External-boundary pipeline, dependency-injected for deterministic integration tests. */
+export async function executeCvExternalPipeline(input: CvPipelineInput, steps: CvPipelineSteps = defaultCvPipelineSteps) {
+  const buffer = await steps.download(input.cvFileKey);
+  const validation = steps.validate({
+    buffer,
+    mimeType: input.cvMimeType,
+    originalName: input.cvOriginalName,
+    size: input.cvSizeBytes,
+  });
+  if (input.fileChecksum && input.fileChecksum !== validation.checksum) {
+    throw new Error("cv_validation_checksum_mismatch");
+  }
+  const promotedStorage = input.fileValidationStatus === "quarantined"
+    ? await steps.promote(`recruitment/cv/${input.trackingId}-${input.cvOriginalName}`, buffer, input.cvMimeType)
+    : null;
+  const extraction = await steps.extract(buffer, input.cvMimeType);
+  const analysis = await steps.analyze({
+    firstName: input.firstName,
+    lastName: input.lastName,
+    specialty: input.specialty,
+    targetCountries: JSON.parse(input.targetCountries || "[]"),
+    languages: JSON.parse(input.languages || "[]"),
+    yearsExperience: input.yearsExperience ?? undefined,
+    message: input.message ?? undefined,
+    extractedText: extraction.text,
+  });
+  return { validation, promotedStorage, extraction, analysis };
+}
 
 export function retryDelayMs(attempt: number) {
   return Math.min(60 * 60 * 1000, 60_000 * 2 ** Math.max(0, attempt - 1));
@@ -67,53 +134,31 @@ async function processCvAnalysisJob(jobId: number) {
     await db.update(cvApplications).set({ analysisStatus: "extracting", updatedAt: new Date() })
       .where(eq(cvApplications.id, application.id));
 
-    const signedUrl = await storageGetSignedUrl(application.cvFileKey);
-    const fileResponse = await fetch(signedUrl);
-    if (!fileResponse.ok) throw new Error(`cv_download_failed_${fileResponse.status}`);
-    const buffer = Buffer.from(await fileResponse.arrayBuffer());
-    const fileValidation = validateCvFile({
-      buffer,
-      mimeType: application.cvMimeType,
-      originalName: application.cvOriginalName,
-      size: application.cvSizeBytes,
-    });
-    if (application.fileChecksum && application.fileChecksum !== fileValidation.checksum) {
-      throw new Error("cv_validation_checksum_mismatch");
-    }
-    if (application.fileValidationStatus === "quarantined") {
-      const finalStorage = await storagePut(
-        `recruitment/cv/${application.trackingId}-${application.cvOriginalName}`,
-        buffer,
-        application.cvMimeType,
-      );
+    const pipeline = await executeCvExternalPipeline(application);
+    if (pipeline.promotedStorage) {
       await db.update(cvApplications).set({
-        cvFileKey: finalStorage.key,
+        cvFileKey: pipeline.promotedStorage.key,
         fileValidationStatus: "accepted",
-        fileChecksum: fileValidation.checksum,
-        fileValidationNotes: `${fileValidation.notes}; promoted_from_quarantine`,
+        fileChecksum: pipeline.validation.checksum,
+        fileValidationNotes: `${pipeline.validation.notes}; promoted_from_quarantine`,
         fileValidatedAt: new Date(),
+        fileSecurityScanVersion: pipeline.validation.securityScanVersion,
         updatedAt: new Date(),
       }).where(eq(cvApplications.id, application.id));
     }
-    const extractedText = await extractCvText(buffer, application.cvMimeType);
 
     await db.update(cvApplications).set({
       analysisStatus: "analyzing",
-      extractionMethod: extractionMethodFor(application.cvMimeType),
-      extractionPageCount: application.cvMimeType === "application/pdf" ? 3 : null,
+      extractionMethod: pipeline.extraction.method,
+      extractionPageCount: pipeline.extraction.totalPages,
+      extractionTotalPages: pipeline.extraction.totalPages,
+      ocrConfidence: pipeline.extraction.ocrConfidence,
+      ocrModelVersion: pipeline.extraction.ocrModelVersion,
+      extractionWarnings: JSON.stringify([...pipeline.validation.warnings, ...pipeline.extraction.warnings]),
       updatedAt: new Date(),
     }).where(eq(cvApplications.id, application.id));
 
-    const analysis = await analyzeCvText({
-      firstName: application.firstName,
-      lastName: application.lastName,
-      specialty: application.specialty,
-      targetCountries: JSON.parse(application.targetCountries || "[]"),
-      languages: JSON.parse(application.languages || "[]"),
-      yearsExperience: application.yearsExperience ?? undefined,
-      message: application.message ?? undefined,
-      extractedText,
-    });
+    const analysis = pipeline.analysis;
     await saveCvAnalysis(application.id, analysis);
 
     const now = new Date();

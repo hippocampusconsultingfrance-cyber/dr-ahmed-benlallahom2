@@ -9,6 +9,7 @@ type CandidateForMatching = {
   targetCountries: string | null;
   certifications: string | null;
   normalizedCertifications: string | null;
+  certificationNames?: string[];
 };
 
 const normalise = (value: string) => value
@@ -60,6 +61,7 @@ export function computeBriefCandidateMatch(brief: BriefForMatching, candidate: C
 
   const required = certificationNames(brief.requiredCertifications);
   const available = [
+    ...(candidate.certificationNames || []),
     ...certificationNames(candidate.normalizedCertifications),
     ...certificationNames(candidate.certifications),
   ];

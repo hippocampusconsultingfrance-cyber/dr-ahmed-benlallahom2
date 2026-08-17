@@ -106,6 +106,20 @@
       "when": 1786969785054,
       "tag": "0014_crazy_rictor",
       "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "5",
+      "when": 1786971383374,
+      "tag": "0015_zippy_riptide",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "5",
+      "when": 1786971647080,
+      "tag": "0016_curly_anita_blake",
+      "breakpoints": true
     }
   ]
 }

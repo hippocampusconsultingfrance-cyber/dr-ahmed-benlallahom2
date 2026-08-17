@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { validateCvFile } from "./recruitmentFileValidation";
 
-const validPdf = Buffer.concat([Buffer.from("%PDF-1.7\n"), Buffer.alloc(300, 65)]);
+const validPdf = Buffer.concat([Buffer.from("%PDF-1.7\n1 0 obj << /Type /Page >> endobj\n"), Buffer.alloc(300, 65)]);
 const validDoc = Buffer.concat([Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]), Buffer.alloc(300, 66)]);
 const validDocx = Buffer.concat([Buffer.from([0x50, 0x4b, 0x03, 0x04]), Buffer.from("[Content_Types].xml"), Buffer.alloc(300, 67)]);
 
@@ -15,5 +15,19 @@ describe("validation et quarantaine des CV", () => {
   it("rejette une extension ou une signature qui ne correspond pas au type déclaré", () => {
     expect(() => validateCvFile({ buffer: validPdf, mimeType: "application/pdf", originalName: "cv.docx", size: validPdf.length })).toThrow("cv_validation_type_mismatch");
     expect(() => validateCvFile({ buffer: Buffer.alloc(300, 70), mimeType: "application/pdf", originalName: "cv.pdf", size: 300 })).toThrow("cv_validation_signature_invalid");
+  });
+
+  it("rejette les PDF chiffrés, actifs ou excessivement longs avant analyse", () => {
+    const encrypted = Buffer.concat([validPdf, Buffer.from(" /Encrypt")]);
+    const active = Buffer.concat([validPdf, Buffer.from(" /JavaScript")]);
+    const manyPages = Buffer.concat([Buffer.from("%PDF-1.7\n"), Buffer.from(Array.from({ length: 26 }, () => "/Type /Page").join(" ")), Buffer.from(" "), Buffer.alloc(300, 65)]);
+    expect(() => validateCvFile({ buffer: encrypted, mimeType: "application/pdf", originalName: "cv.pdf", size: encrypted.length })).toThrow("cv_validation_pdf_encrypted");
+    expect(() => validateCvFile({ buffer: active, mimeType: "application/pdf", originalName: "cv.pdf", size: active.length })).toThrow("cv_validation_pdf_active_content");
+    expect(() => validateCvFile({ buffer: manyPages, mimeType: "application/pdf", originalName: "cv.pdf", size: manyPages.length })).toThrow("cv_validation_pdf_page_limit_exceeded");
+  });
+
+  it("rejette les DOCX dotés de contenu externe ou embarqué", () => {
+    const activeDocx = Buffer.concat([validDocx, Buffer.from(' TargetMode="External"')]);
+    expect(() => validateCvFile({ buffer: activeDocx, mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", originalName: "cv.docx", size: activeDocx.length })).toThrow("cv_validation_docx_active_content");
   });
 });

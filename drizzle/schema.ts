@@ -203,6 +203,7 @@ export const cvApplications = mysqlTable("cv_applications", {
   fileChecksum: varchar("file_checksum", { length: 64 }),
   fileValidationNotes: text("file_validation_notes"),
   fileValidatedAt: timestamp("file_validated_at"),
+  fileSecurityScanVersion: varchar("file_security_scan_version", { length: 40 }),
   normalizedCertifications: text("normalized_certifications"),
   normalizedLanguages: text("normalized_languages"),
   normalizedExperiences: text("normalized_experiences"),
@@ -227,6 +228,10 @@ export const cvApplications = mysqlTable("cv_applications", {
   analysisPromptVersion: varchar("analysis_prompt_version", { length: 40 }),
   extractionMethod: varchar("extraction_method", { length: 40 }),
   extractionPageCount: int("extraction_page_count"),
+  extractionTotalPages: int("extraction_total_pages"),
+  ocrConfidence: int("ocr_confidence"),
+  ocrModelVersion: varchar("ocr_model_version", { length: 100 }),
+  extractionWarnings: text("extraction_warnings"),
   analysisRequestedAt: timestamp("analysis_requested_at"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
@@ -234,6 +239,55 @@ export const cvApplications = mysqlTable("cv_applications", {
 
 export type CvApplication = typeof cvApplications.$inferSelect;
 export type InsertCvApplication = typeof cvApplications.$inferInsert;
+
+/** Normalized certifications extracted from or declared in a candidate CV. */
+export const cvCandidateCertifications = mysqlTable("cv_candidate_certifications", {
+  id: int("id").autoincrement().primaryKey(),
+  applicationId: int("application_id").notNull(),
+  name: varchar("name", { length: 180 }).notNull(),
+  issuingBody: varchar("issuing_body", { length: 180 }),
+  country: varchar("country", { length: 100 }),
+  expiresAt: varchar("expires_at", { length: 10 }),
+  evidence: text("evidence"),
+  source: mysqlEnum("source", ["declared", "extracted"]).default("extracted").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, table => ({
+  applicationIdx: index("cv_candidate_certifications_application_idx").on(table.applicationId),
+  nameIdx: index("cv_candidate_certifications_name_idx").on(table.name),
+}));
+
+/** Normalized languages with a controlled level or unknown when no level is stated. */
+export const cvCandidateLanguages = mysqlTable("cv_candidate_languages", {
+  id: int("id").autoincrement().primaryKey(),
+  applicationId: int("application_id").notNull(),
+  language: varchar("language", { length: 80 }).notNull(),
+  proficiency: mysqlEnum("proficiency", ["basic", "working", "professional", "fluent", "native", "unknown"]).default("unknown").notNull(),
+  evidence: text("evidence"),
+  source: mysqlEnum("source", ["declared", "extracted"]).default("extracted").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, table => ({
+  applicationIdx: index("cv_candidate_languages_application_idx").on(table.applicationId),
+  languageIdx: index("cv_candidate_languages_language_idx").on(table.language),
+}));
+
+/** Structured professional experience used for transparent human-reviewed matching. */
+export const cvCandidateExperiences = mysqlTable("cv_candidate_experiences", {
+  id: int("id").autoincrement().primaryKey(),
+  applicationId: int("application_id").notNull(),
+  role: varchar("role", { length: 180 }).notNull(),
+  organization: varchar("organization", { length: 180 }).notNull(),
+  startDate: varchar("start_date", { length: 10 }),
+  endDate: varchar("end_date", { length: 10 }),
+  employmentType: mysqlEnum("employment_type", ["permanent", "temporary", "locum", "internship", "fellowship", "rotation", "volunteer", "unknown"]).default("unknown").notNull(),
+  specialty: varchar("specialty", { length: 160 }).notNull(),
+  country: varchar("country", { length: 100 }),
+  durationMonths: int("duration_months"),
+  evidence: text("evidence"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, table => ({
+  applicationIdx: index("cv_candidate_experiences_application_idx").on(table.applicationId),
+  specialtyIdx: index("cv_candidate_experiences_specialty_idx").on(table.specialty),
+}));
 
 /**
  * Durable queue of document-processing jobs. One job is retried safely instead of
