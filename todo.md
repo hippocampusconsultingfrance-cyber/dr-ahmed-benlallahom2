@@ -2147,3 +2147,19 @@
 - [x] Refondre le tableau de bord administrateur avec un pipeline de statut détaillé (nouveau, présélection, entretien, vérification, placé, refusé) et une fiche candidat complète
 - [x] Créer la page publique « Employeurs / Missions » (`/employers` ou `/recruitment/employers`) pour permettre aux établissements de santé et groupes industriels de soumettre un besoin
 - [x] Valider le typecheck, la suite de tests unitaires et publier le checkpoint
+
+## Animation de succès — Espace Employeurs
+
+- [x] Ajouter une animation de succès personnalisée et accessible après soumission d’un brief
+- [x] Clarifier le message de remerciement, la référence et les prochaines étapes dans les quatre langues
+- [x] Vérifier l’état de succès sur desktop, mobile et avec la réduction des animations
+
+## Alignement navigation — Recrutement et Employeurs
+
+- [x] Harmoniser les liens Recrutement et Employeurs avec le même groupe, la même hauteur et le même espacement que Leadership, Services, Formation et Contact
+- [x] Vérifier l’alignement de la navigation sur desktop large, desktop standard et mobile
+
+## Vérification globale des liens et des boutons
+
+- [x] S’assurer que depuis n’importe quelle sous-page (ex. /recruitment, /employers, /booking, /legal), les clics sur les onglets de la barre de navigation ramènent correctement à la section d’accueil ou ouvrent la bonne page
+- [x] Vérifier que tous les boutons d’action (CTA, soumission de formulaires, onglets admin, téléchargements, sélecteurs de langue) réagissent sans blocage

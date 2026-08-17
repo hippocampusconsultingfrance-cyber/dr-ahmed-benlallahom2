@@ -31,6 +31,9 @@ const copy = {
     sending: "Transmission sécurisée…",
     successTitle: "Brief de mission enregistré",
     successText: "Votre demande a bien été transmise à notre équipe exécutive. Votre référence de suivi :",
+    successThanks: "Merci pour votre confiance.",
+    successNext: "Notre équipe vous contactera sous 24 heures pour préciser le besoin, les délais et les prochaines étapes.",
+    successPrivacy: "Votre brief est traité de manière confidentielle par notre cellule de recrutement.",
     backHome: "Retour à l’accueil",
     required: "Veuillez remplir les champs obligatoires.",
     genericError: "La transmission a échoué. Vérifiez vos informations et réessayez.",
@@ -67,6 +70,9 @@ const copy = {
     sending: "Secure transmission…",
     successTitle: "Mission Brief Registered",
     successText: "Your request has been forwarded to our executive team. Your tracking reference:",
+    successThanks: "Thank you for your trust.",
+    successNext: "Our team will contact you within 24 hours to clarify the brief, timeline, and next steps.",
+    successPrivacy: "Your brief is handled confidentially by our recruitment unit.",
     backHome: "Back to Home",
     required: "Please fill in mandatory fields.",
     genericError: "Transmission failed. Check your information and try again.",
@@ -103,6 +109,9 @@ const copy = {
     sending: "Sichere Übertragung…",
     successTitle: "Einsatz-Brief registriert",
     successText: "Ihre Anfrage wurde an unser Executive-Team übermittelt. Tracking-Referenz:",
+    successThanks: "Vielen Dank für Ihr Vertrauen.",
+    successNext: "Unser Team kontaktiert Sie innerhalb von 24 Stunden, um Bedarf, Zeitplan und nächste Schritte zu klären.",
+    successPrivacy: "Ihr Brief wird vertraulich von unserem Recruiting-Team bearbeitet.",
     backHome: "Zur Startseite",
     required: "Bitte füllen Sie die Pflichtfelder aus.",
     genericError: "Übertragung fehlgeschlagen. Bitte überprüfen Sie Ihre Angaben.",
@@ -139,6 +148,9 @@ const copy = {
     sending: "安全传输中…",
     successTitle: "任务需求已登记",
     successText: "您的需求已转发至高管团队。追踪参考号：",
+    successThanks: "感谢您的信任。",
+    successNext: "我们的团队将在 24 小时内联系您，确认需求、时间表和后续步骤。",
+    successPrivacy: "您的需求将由我们的招聘团队以保密方式处理。",
     backHome: "返回首页",
     required: "请填写必填项。",
     genericError: "传输失败，请检查后重试。",
@@ -258,11 +270,24 @@ export default function EmployersPage() {
 
           <div className="editorial-card p-6 md:p-8">
             {status === "success" ? (
-              <div className="py-12 text-center" role="status">
-                <CheckCircle2 className="mx-auto h-16 w-16 text-primary" />
-                <h2 className="mt-6 font-display text-3xl text-foreground">{t.successTitle}</h2>
-                <p className="mx-auto mt-4 max-w-md text-muted-foreground">{t.successText}</p>
-                <p className="mt-4 rounded-xl bg-primary/10 px-6 py-4 font-mono text-xl font-bold text-primary">{briefId}</p>
+              <div className="success-confirmation py-10 text-center" role="status" aria-live="polite">
+                <div className="success-orbit mx-auto" aria-hidden="true">
+                  <div className="success-orbit__ring" />
+                  <div className="success-orbit__core">
+                    <CheckCircle2 className="success-orbit__icon h-12 w-12" strokeWidth={1.6} />
+                  </div>
+                </div>
+                <p className="mt-7 text-xs font-semibold uppercase tracking-[0.24em] text-primary">{t.successThanks}</p>
+                <h2 className="mt-3 font-display text-3xl text-foreground md:text-4xl">{t.successTitle}</h2>
+                <p className="mx-auto mt-4 max-w-lg text-base leading-7 text-muted-foreground">{t.successText}</p>
+                <p className="mx-auto mt-5 max-w-xs rounded-xl border border-primary/20 bg-primary/10 px-6 py-4 font-mono text-xl font-bold tracking-wide text-primary">{briefId}</p>
+                <div className="mx-auto mt-6 max-w-md rounded-2xl border border-border/70 bg-background/40 p-5 text-left">
+                  <p className="text-sm leading-6 text-foreground">{t.successNext}</p>
+                  <p className="mt-3 flex items-start gap-2 text-xs leading-5 text-muted-foreground">
+                    <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+                    <span>{t.successPrivacy}</span>
+                  </p>
+                </div>
                 <Link href="/" className="cta-primary mt-8 inline-flex">{t.backHome}</Link>
               </div>
             ) : (

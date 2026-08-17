@@ -1204,3 +1204,77 @@ body {
   0%, 100% { transform: scale(0.96); opacity: 0.78; }
   50% { transform: scale(1); opacity: 1; }
 }
+
+/* Employer brief success state: restrained clinical signal with reduced-motion fallback. */
+.success-orbit {
+  position: relative;
+  display: grid;
+  width: 7rem;
+  height: 7rem;
+  place-items: center;
+}
+
+.success-orbit__ring {
+  position: absolute;
+  inset: 0.25rem;
+  border: 1px solid oklch(0.75 0.15 220 / 0.5);
+  border-radius: 999px;
+  box-shadow: 0 0 0 0 oklch(0.75 0.15 220 / 0.25), inset 0 0 24px oklch(0.75 0.15 220 / 0.08);
+  animation: success-ring 1.2s cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+.success-orbit__ring::after {
+  position: absolute;
+  inset: 0.7rem;
+  border: 1px dashed oklch(0.72 0.1 75 / 0.55);
+  border-radius: inherit;
+  content: "";
+  animation: success-spin 8s linear infinite;
+}
+
+.success-orbit__core {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  width: 4.75rem;
+  height: 4.75rem;
+  place-items: center;
+  border: 1px solid oklch(0.75 0.15 220 / 0.6);
+  border-radius: 999px;
+  background: oklch(0.12 0.02 250 / 0.96);
+  color: oklch(0.75 0.15 220);
+  box-shadow: 0 14px 40px oklch(0.75 0.15 220 / 0.2);
+  animation: success-core 0.55s cubic-bezier(0.23, 1, 0.32, 1) 0.1s both;
+}
+
+.success-orbit__icon {
+  animation: success-icon 0.45s cubic-bezier(0.23, 1, 0.32, 1) 0.35s both;
+}
+
+@keyframes success-ring {
+  from { opacity: 0; transform: scale(0.72); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes success-core {
+  from { opacity: 0; transform: scale(0.82); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes success-icon {
+  from { opacity: 0; transform: scale(0.72) rotate(-8deg); }
+  to { opacity: 1; transform: scale(1) rotate(0deg); }
+}
+
+@keyframes success-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .success-orbit__ring,
+  .success-orbit__ring::after,
+  .success-orbit__core,
+  .success-orbit__icon {
+    animation: none;
+  }
+}

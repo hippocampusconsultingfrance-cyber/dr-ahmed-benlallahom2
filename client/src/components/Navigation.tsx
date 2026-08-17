@@ -53,11 +53,16 @@ export default function Navigation() {
   }, []);
 
   const scrollTo = (id: string) => {
-    const el = document.getElementById(id);
-    if (el) {
-      el.scrollIntoView({ behavior: "smooth" });
-      setMobileOpen(false);
+    setMobileOpen(false);
+    const currentPath = window.location.pathname;
+    if (currentPath === "/" || currentPath === "") {
+      const el = document.getElementById(id);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth" });
+        return;
+      }
     }
+    window.location.href = `/#${id}`;
   };
 
   return (
@@ -110,8 +115,10 @@ export default function Navigation() {
               {item.label}
             </button>
           ))}
-          <a href="/recruitment" className="nav-link whitespace-nowrap text-sm font-medium text-muted-foreground hover:text-foreground transition-colors duration-200 relative after:absolute after:bottom-[-4px] after:left-0 after:w-0 after:h-[2px] after:bg-primary after:transition-all hover:after:w-full">{recruitmentLabel}</a>
-          <a href="/employers" className="nav-link whitespace-nowrap text-sm font-medium text-muted-foreground hover:text-foreground transition-colors duration-200 relative after:absolute after:bottom-[-4px] after:left-0 after:w-0 after:h-[2px] after:bg-primary after:transition-all hover:after:w-full">{employersLabel}</a>
+          <div className="flex items-center gap-6 border-l border-border/40 pl-6">
+            <a href="/recruitment" className="nav-link whitespace-nowrap text-sm font-medium text-muted-foreground hover:text-foreground transition-colors duration-200 relative after:absolute after:bottom-[-4px] after:left-0 after:w-0 after:h-[2px] after:bg-primary after:transition-all hover:after:w-full">{recruitmentLabel}</a>
+            <a href="/employers" className="nav-link whitespace-nowrap text-sm font-medium text-muted-foreground hover:text-foreground transition-colors duration-200 relative after:absolute after:bottom-[-4px] after:left-0 after:w-0 after:h-[2px] after:bg-primary after:transition-all hover:after:w-full">{employersLabel}</a>
+          </div>
         </nav>
 
         {/* Actions */}
