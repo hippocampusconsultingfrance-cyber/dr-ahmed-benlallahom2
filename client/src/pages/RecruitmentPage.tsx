@@ -17,8 +17,99 @@ const countryOptions = [
   { value: "Autre pays du Moyen-Orient", labels: { fr: "Autre pays du Moyen-Orient", en: "Other Middle East country", de: "Anderes Land im Nahen Osten", zh: "其他中东国家" } },
 ] as const;
 
-const specialtyOptions = [
-  "Anesthésie-réanimation", "Médecine d’urgence", "Cardiologie", "Chirurgie", "Pédiatrie", "Radiologie", "Oncologie", "Médecine interne", "Psychiatrie", "Médecine générale", "Soins infirmiers", "Pharmacie", "Autre spécialité",
+const specialtyCategories = [
+  {
+    category: { fr: "Médecine générale & Urgences", en: "General Practice & Emergency", de: "Allgemeinmedizin & Notfallmedizin", zh: "全科与急诊医学" },
+    items: [
+      "Médecine générale",
+      "Médecine d’urgence",
+      "Médecine intensive et réanimation",
+      "Gériatrie",
+      "Médecine du travail",
+      "Médecine du sport",
+      "Santé publique et médecine sociale",
+    ],
+  },
+  {
+    category: { fr: "Spécialités médicales", en: "Medical Specialties", de: "Medizinische Fachgebiete", zh: "内科专科" },
+    items: [
+      "Cardiologie",
+      "Cardiologie interventionnelle",
+      "Pneumologie",
+      "Gastro-entérologie et hépatologie",
+      "Néphrologie",
+      "Neurologie",
+      "Oncologie médicale",
+      "Hématologie",
+      "Endocrinologie, diabétologie et nutrition",
+      "Rhumatologie",
+      "Dermatologie et vénéréologie",
+      "Pédiatrie",
+      "Psychiatrie",
+      "Psychiatrie de l’enfant et de l’adolescent",
+      "Infectiologie et maladies tropicales",
+      "Médecine physique et de réadaptation (MPR)",
+    ],
+  },
+  {
+    category: { fr: "Chirurgie & Spécialités chirurgicales", en: "Surgery & Surgical Specialties", de: "Chirurgie & Chirurgische Fachgebiete", zh: "外科与手术专科" },
+    items: [
+      "Chirurgie générale",
+      "Chirurgie viscérale et digestive",
+      "Chirurgie orthopédique et traumatologie",
+      "Neurochirurgie",
+      "Chirurgie cardiovasculaire et thoracique",
+      "Chirurgie plastique, reconstructrice et esthétique",
+      "Chirurgie pédiatrique",
+      "Chirurgie maxillo-faciale",
+      "Urologie",
+      "Gynécologie et obstétrique",
+      "Ophtalmologie",
+      "Oto-rhino-laryngologie (ORL) et chirurgie cervico-faciale",
+      "Stomatologie",
+    ],
+  },
+  {
+    category: { fr: "Anesthésie, Imagerie & Laboratoire", en: "Anesthesia, Imaging & Laboratory", de: "Anästhesie, Bildgebung & Labor", zh: "麻醉、影像与检验医学" },
+    items: [
+      "Anesthésie-réanimation",
+      "Radiologie et imagerie médicale",
+      "Médecine nucléaire",
+      "Biologie médicale / Pathologie",
+      "Anatomie et cytologie pathologiques",
+      "Pharmacologie médicale",
+      "Toxicologie",
+    ],
+  },
+  {
+    category: { fr: "Soins infirmiers & Paramédical", en: "Nursing & Allied Health", de: "Pflege & Paramedizinische Berufe", zh: "护理与专职医疗" },
+    items: [
+      "Soins infirmiers généraux",
+      "Infirmier(ère) en soins généraux et spécialisés (IDE)",
+      "Infirmier(ère) anesthésiste (IADE)",
+      "Infirmier(ère) de bloc opératoire (IBODE)",
+      "Infirmier(ère) puériculteur(trice)",
+      "Infirmier(ère) en pratique avancée (IPA)",
+      "Cadre de santé / Direction des soins",
+      "Sage-femme",
+      "Masseur-kinésithérapeute / Physiothérapeute",
+      "Ergothérapeute",
+      "Orthophoniste",
+      "Orthoptiste",
+      "Psychomotricien(ne)",
+      "Manipulateur(trice) d’électroradiologie médicale (ERM)",
+      "Technicien(ne) de laboratoire médical",
+      "Préparateur(trice) en pharmacie",
+      "Pharmacien(ne)",
+      "Diététicien(ne) / Nutritionniste",
+      "Psychologue clinicien(ne)",
+      "Assistant(e) social(e) de santé",
+    ],
+  },
+  {
+    category: { fr: "Autre", en: "Other", de: "Sonstige", zh: "其他" },
+    items: ["Autre spécialité ou profession"],
+  },
 ] as const;
 
 const copy = {
@@ -29,26 +120,29 @@ const copy = {
     nav: "Recrutement",
     formTitle: "Déposer votre candidature",
     formIntro: "Envoyez-nous votre profil. Une candidature complète nous permet de vous orienter vers les opportunités pertinentes.",
-    firstName: "Prénom", lastName: "Nom", email: "Email professionnel", phone: "Téléphone", specialty: "Spécialité / profession", countries: "Pays ciblés", languages: "Langues professionnelles", experience: "Années d’expérience", message: "Message ou projet professionnel", cv: "CV (PDF, DOC ou DOCX — 5 Mo maximum)", chooseFile: "Choisir un fichier", noFile: "Aucun fichier sélectionné", gdpr: "J’accepte que mes données soient traitées pour l’examen de ma candidature, y compris par une analyse automatisée d’aide à la présélection, conformément à la politique de confidentialité. Une revue humaine est toujours requise et aucune décision n’est prise uniquement par l’IA.", marketing: "J’accepte de recevoir occasionnellement des informations sur des opportunités professionnelles.", submit: "Envoyer ma candidature", sending: "Envoi en cours…", successTitle: "Candidature reçue", successText: "Votre profil a bien été enregistré. Conservez votre numéro de suivi :", backHome: "Retour au site", required: "Champ obligatoire", consentError: "Votre consentement RGPD est requis.", fileError: "Veuillez joindre un CV au format PDF, DOC ou DOCX de 5 Mo maximum.", genericError: "La candidature n’a pas pu être envoyée. Vérifiez les informations et réessayez.", privacyNote: "Ne transmettez aucune donnée de patient, dossier médical ou information clinique dans ce formulaire.", confidentiality: "Données traitées de manière confidentielle", international: "Opportunités internationales sélectionnées", humanReview: "Examen humain de chaque profil", select: "Sélectionner",
+    firstName: "Prénom", lastName: "Nom", email: "Email professionnel", phone: "Téléphone", specialty: "Spécialité / profession", specialtyCustom: "Précisez votre spécialité ou profession", countries: "Pays ciblés", languages: "Langues professionnelles", experience: "Années d’expérience", message: "Message ou projet professionnel", cv: "CV (PDF, DOC ou DOCX — 5 Mo maximum)", chooseFile: "Choisir un fichier", noFile: "Aucun fichier sélectionné", gdpr: "J’accepte que mes données soient traitées pour l’examen de ma candidature, y compris par une analyse automatisée d’aide à la présélection, conformément à la politique de confidentialité. Une revue humaine est toujours requise et aucune décision n’est prise uniquement par l’IA.", marketing: "J’accepte de recevoir occasionnellement des informations sur des opportunités professionnelles.", submit: "Envoyer ma candidature", sending: "Envoi en cours…", successTitle: "Candidature reçue", successText: "Votre profil a bien été enregistré. Conservez votre numéro de suivi :", backHome: "Retour au site", required: "Champ obligatoire", consentError: "Votre consentement RGPD est requis.", fileError: "Veuillez joindre un CV au format PDF, DOC ou DOCX de 5 Mo maximum.", genericError: "La candidature n’a pas pu être envoyée. Vérifiez les informations et réessayez.", privacyNote: "Ne transmettez aucune donnée de patient, dossier médical ou information clinique dans ce formulaire.", confidentiality: "Données traitées de manière confidentielle", international: "Opportunités internationales sélectionnées", humanReview: "Examen humain de chaque profil", select: "Sélectionner", otherSpecialty: "Autre spécialité ou profession",
     metaTitle: "Recrutement international de professionnels de santé | Hippocampus Consulting", metaDescription: "Déposez votre CV pour être considéré pour des opportunités de recrutement médical en Europe, au Canada et au Moyen-Orient.",
   },
   en: {
-    eyebrow: "Hippocampus Consulting · Medical mobility", title: "Your expertise can cross borders.", intro: "We are building an international network of healthcare professionals for selected opportunities in Europe, Canada and the Middle East.", nav: "Recruitment", formTitle: "Submit your application", formIntro: "Share your profile with us. A complete application helps us identify relevant opportunities.", firstName: "First name", lastName: "Last name", email: "Professional email", phone: "Phone", specialty: "Specialty / profession", countries: "Target countries", languages: "Professional languages", experience: "Years of experience", message: "Message or professional project", cv: "CV (PDF, DOC or DOCX — 5 MB maximum)", chooseFile: "Choose a file", noFile: "No file selected", gdpr: "I consent to my data being processed to review my application, including automated analysis to assist pre-screening, in accordance with the privacy policy. Human review is always required and no decision is made solely by AI.", marketing: "I agree to occasionally receive information about professional opportunities.", submit: "Submit my application", sending: "Sending…", successTitle: "Application received", successText: "Your profile has been registered. Keep your tracking number:", backHome: "Back to site", required: "Required field", consentError: "GDPR consent is required.", fileError: "Please attach a PDF, DOC or DOCX CV up to 5 MB.", genericError: "Your application could not be sent. Check the information and try again.", privacyNote: "Do not submit patient data, medical records or clinical information through this form.", confidentiality: "Confidential data handling", international: "Selected international opportunities", humanReview: "Human review of every profile", select: "Select", metaTitle: "International healthcare recruitment | Hippocampus Consulting", metaDescription: "Submit your CV to be considered for healthcare recruitment opportunities in Europe, Canada and the Middle East.",
+    eyebrow: "Hippocampus Consulting · Medical mobility", title: "Your expertise can cross borders.", intro: "We are building an international network of healthcare professionals for selected opportunities in Europe, Canada and the Middle East.", nav: "Recruitment", formTitle: "Submit your application", formIntro: "Share your profile with us. A complete application helps us identify relevant opportunities.", firstName: "First name", lastName: "Last name", email: "Professional email", phone: "Phone", specialty: "Specialty / profession", specialtyCustom: "Specify your specialty or profession", countries: "Target countries", languages: "Professional languages", experience: "Years of experience", message: "Message or professional project", cv: "CV (PDF, DOC or DOCX — 5 MB maximum)", chooseFile: "Choose a file", noFile: "No file selected", gdpr: "I consent to my data being processed to review my application, including automated analysis to assist pre-screening, in accordance with the privacy policy. Human review is always required and no decision is made solely by AI.", marketing: "I agree to occasionally receive information about professional opportunities.", submit: "Submit my application", sending: "Sending…", successTitle: "Application received", successText: "Your profile has been registered. Keep your tracking number:", backHome: "Back to site", required: "Required field", consentError: "GDPR consent is required.", fileError: "Please attach a PDF, DOC or DOCX CV up to 5 MB.", genericError: "Your application could not be sent. Check the information and try again.", privacyNote: "Do not submit patient data, medical records or clinical information through this form.", confidentiality: "Confidential data handling", international: "Selected international opportunities", humanReview: "Human review of every profile", select: "Select", otherSpecialty: "Other specialty or profession",
+    metaTitle: "International healthcare recruitment | Hippocampus Consulting", metaDescription: "Submit your CV to be considered for healthcare recruitment opportunities in Europe, Canada and the Middle East.",
   },
   de: {
-    eyebrow: "Hippocampus Consulting · Medizinische Mobilität", title: "Ihre Expertise kennt keine Grenzen.", intro: "Wir bauen ein internationales Netzwerk von Gesundheitsfachkräften für ausgewählte Möglichkeiten in Europa, Kanada und dem Nahen Osten auf.", nav: "Recruiting", formTitle: "Bewerbung einreichen", formIntro: "Teilen Sie Ihr Profil mit uns. Eine vollständige Bewerbung erleichtert die Zuordnung zu passenden Möglichkeiten.", firstName: "Vorname", lastName: "Nachname", email: "Berufliche E-Mail", phone: "Telefon", specialty: "Fachgebiet / Beruf", countries: "Zielländer", languages: "Berufssprachen", experience: "Berufserfahrung in Jahren", message: "Nachricht oder berufliches Projekt", cv: "Lebenslauf (PDF, DOC oder DOCX — maximal 5 MB)", chooseFile: "Datei auswählen", noFile: "Keine Datei ausgewählt", gdpr: "Ich stimme der Verarbeitung meiner Daten zur Prüfung meiner Bewerbung einschließlich einer automatisierten Analyse zur Unterstützung der Vorauswahl gemäß der Datenschutzerklärung zu. Eine menschliche Prüfung ist immer erforderlich; keine Entscheidung wird ausschließlich durch KI getroffen.", marketing: "Ich möchte gelegentlich Informationen zu beruflichen Möglichkeiten erhalten.", submit: "Bewerbung senden", sending: "Wird gesendet…", successTitle: "Bewerbung erhalten", successText: "Ihr Profil wurde gespeichert. Bewahren Sie Ihre Referenznummer auf:", backHome: "Zur Website", required: "Pflichtfeld", consentError: "Die RGPD-Zustimmung ist erforderlich.", fileError: "Bitte fügen Sie einen PDF-, DOC- oder DOCX-Lebenslauf bis 5 MB bei.", genericError: "Die Bewerbung konnte nicht gesendet werden. Bitte prüfen Sie die Angaben und versuchen Sie es erneut.", privacyNote: "Übermitteln Sie keine Patientendaten, medizinischen Akten oder klinischen Informationen über dieses Formular.", confidentiality: "Vertrauliche Datenverarbeitung", international: "Ausgewählte internationale Möglichkeiten", humanReview: "Menschliche Prüfung jedes Profils", select: "Auswählen", metaTitle: "Internationales Recruiting von Gesundheitsfachkräften | Hippocampus Consulting", metaDescription: "Reichen Sie Ihren Lebenslauf für internationale Recruiting-Möglichkeiten in Europa, Kanada und dem Nahen Osten ein.",
+    eyebrow: "Hippocampus Consulting · Medizinische Mobilität", title: "Ihre Expertise kennt keine Grenzen.", intro: "Wir bauen ein internationales Netzwerk von Gesundheitsfachkräften für ausgewählte Möglichkeiten in Europa, Kanada und dem Nahen Osten auf.", nav: "Recruiting", formTitle: "Bewerbung einreichen", formIntro: "Teilen Sie Ihr Profil mit uns. Eine vollständige Bewerbung erleichtert die Zuordnung zu passenden Möglichkeiten.", firstName: "Vorname", lastName: "Nachname", email: "Berufliche E-Mail", phone: "Telefon", specialty: "Fachgebiet / Beruf", specialtyCustom: "Geben Sie Ihr Fachgebiet an", countries: "Zielländer", languages: "Berufssprachen", experience: "Berufserfahrung in Jahren", message: "Nachricht oder berufliches Projekt", cv: "Lebenslauf (PDF, DOC oder DOCX — maximal 5 MB)", chooseFile: "Datei auswählen", noFile: "Keine Datei ausgewählt", gdpr: "Ich stimme der Verarbeitung meiner Daten zur Prüfung meiner Bewerbung einschließlich einer automatisierten Analyse zur Unterstützung der Vorauswahl gemäß der Datenschutzerklärung zu. Eine menschliche Prüfung ist immer erforderlich; keine Entscheidung wird ausschließlich durch KI getroffen.", marketing: "Ich möchte gelegentlich Informationen zu beruflichen Möglichkeiten erhalten.", submit: "Bewerbung senden", sending: "Wird gesendet…", successTitle: "Bewerbung erhalten", successText: "Ihr Profil wurde gespeichert. Bewahren Sie Ihre Referenznummer auf:", backHome: "Zur Website", required: "Pflichtfeld", consentError: "Die RGPD-Zustimmung ist erforderlich.", fileError: "Bitte fügen Sie einen PDF-, DOC- oder DOCX-Lebenslauf bis 5 MB bei.", genericError: "Die Bewerbung konnte nicht gesendet werden. Bitte prüfen Sie die Angaben und versuchen Sie es erneut.", privacyNote: "Übermitteln Sie keine Patientendaten, medizinischen Akten oder klinischen Informationen über dieses Formular.", confidentiality: "Vertrauliche Datenverarbeitung", international: "Ausgewählte internationale Möglichkeiten", humanReview: "Menschliche Prüfung jedes Profils", select: "Auswählen", otherSpecialty: "Anderes Fachgebiet",
+    metaTitle: "Internationales Recruiting von Gesundheitsfachkräften | Hippocampus Consulting", metaDescription: "Reichen Sie Ihren Lebenslauf für internationale Recruiting-Möglichkeiten in Europa, Kanada und dem Nahen Osten ein.",
   },
   zh: {
-    eyebrow: "Hippocampus Consulting · 国际医疗人才流动", title: "让您的专业能力走向国际。", intro: "我们正在建立医疗专业人员国际网络，匹配欧洲、加拿大和中东地区经过筛选的职业机会。", nav: "招聘", formTitle: "提交申请", formIntro: "请分享您的职业资料。完整的申请有助于我们识别合适的机会。", firstName: "名", lastName: "姓", email: "职业邮箱", phone: "电话", specialty: "专业 / 职业", countries: "目标国家", languages: "职业语言", experience: "工作年限", message: "留言或职业项目", cv: "简历（PDF、DOC 或 DOCX，最大 5 MB）", chooseFile: "选择文件", noFile: "未选择文件", gdpr: "我同意根据隐私政策处理我的个人数据以审核申请，包括使用自动化分析辅助初步筛选。始终需要人工审核，不会仅依据人工智能作出决定。", marketing: "我同意偶尔接收职业机会相关信息。", submit: "提交申请", sending: "正在发送…", successTitle: "已收到申请", successText: "您的资料已登记。请保存您的跟踪编号：", backHome: "返回网站", required: "必填项", consentError: "需要您的隐私同意。", fileError: "请附加不超过 5 MB 的 PDF、DOC 或 DOCX 简历。", genericError: "申请无法发送。请检查信息后重试。", privacyNote: "请勿在此表单中提交患者数据、病历或临床信息。", confidentiality: "机密数据处理", international: "精选国际机会", humanReview: "人工审核每份资料", select: "请选择", metaTitle: "国际医疗专业人员招聘 | Hippocampus Consulting", metaDescription: "提交您的简历，申请欧洲、加拿大和中东地区的医疗招聘机会。",
+    eyebrow: "Hippocampus Consulting · 国际医疗人才流动", title: "让您的专业能力走向国际。", intro: "我们正在建立医疗专业人员国际网络，匹配欧洲、加拿大和中东地区经过筛选的职业机会。", nav: "招聘", formTitle: "提交申请", formIntro: "请分享您的职业资料。完整的申请有助于我们识别合适的机会。", firstName: "名", lastName: "姓", email: "职业邮箱", phone: "电话", specialty: "专业 / 职业", specialtyCustom: "请输入您的专业或职业", countries: "目标国家", languages: "职业语言", experience: "工作年限", message: "留言或职业项目", cv: "简历（PDF、DOC 或 DOCX，最大 5 MB）", chooseFile: "选择文件", noFile: "未选择文件", gdpr: "我同意根据隐私政策处理我的个人数据以审核申请，包括使用自动化分析辅助初步筛选。始终需要人工审核，不会仅依据人工智能作出决定。", marketing: "我同意偶尔接收职业机会相关信息。", submit: "提交申请", sending: "正在发送…", successTitle: "已收到申请", successText: "您的资料已登记。请保存您的跟踪编号：", backHome: "返回网站", required: "必填项", consentError: "需要您的隐私同意。", fileError: "请附加不超过 5 MB 的 PDF、DOC 或 DOCX 简历。", genericError: "申请无法发送。请检查信息后重试。", privacyNote: "请勿在此表单中提交患者数据、病历或临床信息。", confidentiality: "机密数据处理", international: "精选国际机会", humanReview: "人工审核每份资料", select: "请选择", otherSpecialty: "其他专业或职业",
+    metaTitle: "国际医疗专业人员招聘 | Hippocampus Consulting", metaDescription: "提交您的简历，申请欧洲、加拿大和中东地区的医疗招聘机会。",
   },
 } as const;
 
 type Language = keyof typeof copy;
 type FormState = {
-  firstName: string; lastName: string; email: string; phone: string; specialty: string; targetCountries: string[]; languages: string; yearsExperience: string; message: string; gdprConsent: boolean; marketingConsent: boolean; website: string;
+  firstName: string; lastName: string; email: string; phone: string; specialty: string; specialtyCustom: string; targetCountries: string[]; languages: string; yearsExperience: string; message: string; gdprConsent: boolean; marketingConsent: boolean; website: string;
 };
 
-const initialForm: FormState = { firstName: "", lastName: "", email: "", phone: "", specialty: "", targetCountries: [], languages: "", yearsExperience: "", message: "", gdprConsent: false, marketingConsent: false, website: "" };
+const initialForm: FormState = { firstName: "", lastName: "", email: "", phone: "", specialty: "", specialtyCustom: "", targetCountries: [], languages: "", yearsExperience: "", message: "", gdprConsent: false, marketingConsent: false, website: "" };
 
 export default function RecruitmentPage() {
   const { language } = useLanguage();
@@ -76,7 +170,11 @@ export default function RecruitmentPage() {
       setStatus("error"); setErrorMessage(t.fileError); return;
     }
     if (!form.gdprConsent) { setStatus("error"); setErrorMessage(t.consentError); return; }
-    if (!form.targetCountries.length || !form.specialty || !form.firstName || !form.lastName || !form.email) { setStatus("error"); setErrorMessage(`${t.required}.`); return; }
+    
+    const finalSpecialty = form.specialty === "Autre spécialité ou profession" ? form.specialtyCustom.trim() : form.specialty;
+    if (!form.targetCountries.length || !finalSpecialty || !form.firstName || !form.lastName || !form.email) {
+      setStatus("error"); setErrorMessage(`${t.required}.`); return;
+    }
 
     const body = new FormData();
     body.append("cv", file);
@@ -84,7 +182,7 @@ export default function RecruitmentPage() {
     body.append("lastName", form.lastName);
     body.append("email", form.email);
     body.append("phone", form.phone);
-    body.append("specialty", form.specialty);
+    body.append("specialty", finalSpecialty);
     body.append("targetCountries", JSON.stringify(form.targetCountries));
     body.append("languages", JSON.stringify(form.languages.split(",").map(item => item.trim()).filter(Boolean)));
     body.append("yearsExperience", form.yearsExperience);
@@ -143,12 +241,42 @@ export default function RecruitmentPage() {
                     <label className="space-y-2 text-sm text-foreground"><span>{t.phone}</span><input id="recruitment-phone" type="tel" value={form.phone} onChange={event => update("phone", event.target.value)} className="form-control" autoComplete="tel" /></label>
                   </div>
                   <div className="grid gap-4 sm:grid-cols-2">
-                    <label className="space-y-2 text-sm text-foreground"><span>{t.specialty} *</span><select id="recruitment-specialty" required value={form.specialty} onChange={event => update("specialty", event.target.value)} className="form-control"><option value="">{t.select}</option>{specialtyOptions.map(option => <option key={option} value={option}>{option}</option>)}</select></label>
-                    <label className="space-y-2 text-sm text-foreground"><span>{t.experience}</span><input id="recruitment-experience" type="number" min="0" max="70" value={form.yearsExperience} onChange={event => update("yearsExperience", event.target.value)} className="form-control" /></label>
+                    <label className="block w-full space-y-2 text-sm text-foreground">
+                      <span className="block mb-2 font-medium">{t.specialty} *</span>
+                      <select id="recruitment-specialty" required value={form.specialty} onChange={event => update("specialty", event.target.value)} className="form-control block w-full mt-1">
+                        <option value="">{t.select}</option>
+                        {specialtyCategories.map(group => (
+                          <optgroup key={group.category.fr} label={group.category[lang] || group.category.fr}>
+                            {group.items.map(item => <option key={item} value={item}>{item}</option>)}
+                          </optgroup>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="block w-full space-y-2 text-sm text-foreground">
+                      <span className="block mb-2 font-medium">{t.experience}</span>
+                      <input id="recruitment-experience" type="number" min="0" max="70" value={form.yearsExperience} onChange={event => update("yearsExperience", event.target.value)} className="form-control block w-full mt-1" />
+                    </label>
                   </div>
+
+                  {form.specialty === "Autre spécialité ou profession" && (
+                    <label className="block w-full space-y-2 text-sm text-foreground">
+                      <span className="block mb-2 font-medium">{t.specialtyCustom} *</span>
+                      <input id="recruitment-specialty-custom" required value={form.specialtyCustom} onChange={event => update("specialtyCustom", event.target.value)} placeholder="Ex. Perfusionniste, Audioprothésiste, etc." className="form-control block w-full mt-1" />
+                    </label>
+                  )}
+
                   <fieldset><legend className="mb-3 text-sm font-medium text-foreground">{t.countries} *</legend><div className="grid gap-2 sm:grid-cols-2">{countryOptions.map(country => <label key={country.value} className="flex items-center gap-3 rounded-lg border border-border/70 px-3 py-2 text-sm text-foreground"><input type="checkbox" checked={form.targetCountries.includes(country.value)} onChange={() => toggleCountry(country.value)} className="h-4 w-4 accent-primary" />{country.labels[lang]}</label>)}</div><p className="sr-only">{selectedCountryLabels}</p></fieldset>
-                  <label className="block w-full space-y-2 text-sm text-foreground"><span className="block">{t.languages}</span><input id="recruitment-languages" value={form.languages} onChange={event => update("languages", event.target.value)} placeholder="Français, English, Deutsch" className="form-control block w-full" /></label>
-                  <label className="block w-full space-y-2 text-sm text-foreground"><span className="block">{t.message}</span><textarea id="recruitment-message" value={form.message} onChange={event => update("message", event.target.value)} className="form-control block min-h-28 w-full" maxLength={5000} /></label>
+                  
+                  <label className="block w-full space-y-2 text-sm text-foreground">
+                    <span className="block mb-2 font-medium">{t.languages}</span>
+                    <input id="recruitment-languages" value={form.languages} onChange={event => update("languages", event.target.value)} placeholder="Français, English, Deutsch" className="form-control block w-full mt-1" />
+                  </label>
+                  
+                  <label className="block w-full space-y-2 text-sm text-foreground">
+                    <span className="block mb-2 font-medium">{t.message}</span>
+                    <textarea id="recruitment-message" value={form.message} onChange={event => update("message", event.target.value)} className="form-control block min-h-28 w-full mt-1" maxLength={5000} />
+                  </label>
+                  
                   <div className="rounded-xl border border-dashed border-primary/40 bg-primary/5 p-4"><label htmlFor="recruitment-cv" className="flex cursor-pointer items-center gap-3 text-sm font-medium text-foreground"><FileUp className="h-5 w-5 text-primary" /><span>{file ? file.name : t.chooseFile}</span><input ref={fileInputRef} id="recruitment-cv" type="file" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={event => setFile(event.target.files?.[0] || null)} className="sr-only" required /></label><p className="mt-2 text-xs text-muted-foreground">{file ? `${(file.size / (1024 * 1024)).toFixed(2)} MB` : t.cv}</p></div>
                   <label className="flex items-start gap-3 text-sm text-muted-foreground"><input type="checkbox" checked={form.gdprConsent} onChange={event => update("gdprConsent", event.target.checked)} className="mt-1 h-4 w-4 accent-primary" required /><span>{t.gdpr}</span></label>
                   <label className="flex items-start gap-3 text-sm text-muted-foreground"><input type="checkbox" checked={form.marketingConsent} onChange={event => update("marketingConsent", event.target.checked)} className="mt-1 h-4 w-4 accent-primary" /><span>{t.marketing}</span></label>

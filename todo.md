@@ -2110,3 +2110,10 @@
 - [x] Stabiliser la grille responsive du formulaire sur desktop, tablette et mobile
 - [x] Vérifier les tests, captures responsive et build après correction
 - [x] Créer le job Heartbeat quotidien `recruitment-retention-daily` (03:00 UTC) — task UID `KySNvzz9UHgvRxZKR4qBuS`
+
+## Évolution des spécialités de recrutement
+
+- [x] Créer une taxonomie groupée par catégories (Médecine générale, Spécialités médicales, Chirurgie, Anesthésie & Urgences, Spécialités techniques et de laboratoire, Soins infirmiers et paramédicaux)
+- [x] Ajouter un champ de saisie libre si le candidat sélectionne "Autre spécialité ou profession"
+- [x] Mettre à jour la validation serveur pour accepter toute spécialité personnalisée de 1 à 160 caractères
+- [x] Vérifier le rendu visuel et espacement du label sur la page de recrutement
