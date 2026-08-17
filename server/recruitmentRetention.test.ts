@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { buildRetentionRetirement } from "./recruitmentRetention";
+import { buildRetentionReviewReminder } from "./recruitmentRetention";
 
 describe("preuve de rétention des CV", () => {
-  it("retire la référence téléchargeable tout en conservant une preuve horodatée", () => {
+  it("conserve le CV tout en enregistrant un rappel de revue horodaté", () => {
     const at = new Date("2026-08-17T12:00:00.000Z");
-    const result = buildRetentionRetirement({ trackingId: "CVABC123", previousNotes: "signature_verified", at });
-    expect(result.cvFileKey).toBe("retired/CVABC123");
-    expect(result.cvOriginalName).toBe("document-retired");
-    expect(result.fileValidationStatus).toBe("rejected");
-    expect(result.fileValidationNotes).toContain("retention_reference_retired_at=2026-08-17T12:00:00.000Z");
+    const result = buildRetentionReviewReminder({ previousNotes: "signature_verified", at });
+    expect(result.retentionReviewNotifiedAt).toEqual(at);
+    expect(result.fileValidationNotes).toContain("retention_review_notified_at=2026-08-17T12:00:00.000Z");
+    expect(result).not.toHaveProperty("cvFileKey");
+    expect(result).not.toHaveProperty("fileValidationStatus");
   });
 });

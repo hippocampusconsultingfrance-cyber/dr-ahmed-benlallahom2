@@ -2244,3 +2244,15 @@
 - [x] Identifier le compte connecté affichant un accès refusé et vérifier son rôle
 - [x] Attribuer le rôle administrateur au compte propriétaire vérifié
 - [ ] Confirmer l’accès au dashboard CV sans élargir les permissions des autres comptes
+
+## Visibilité du dashboard recrutement
+
+- [ ] Vérifier la version du dashboard et les onglets réellement affichés après connexion
+- [ ] Ajouter des accès directs visibles vers Candidatures et Missions depuis l’administration
+- [ ] Vérifier que les routes directes préservent le contrôle administrateur puis publier
+
+## Conservation durable des CV
+
+- [x] Désactiver le retrait automatique de référence de stockage déclenché par la rétention
+- [x] Conserver les CV et leurs liens sécurisés jusqu’à une suppression RGPD manuelle demandée par l’administrateur
+- [x] Remplacer la purge par une alerte administrative non destructive et vérifier les CV existants

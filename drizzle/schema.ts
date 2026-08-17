@@ -213,6 +213,7 @@ export const cvApplications = mysqlTable("cv_applications", {
   adminNotes: text("admin_notes"),
   consentAt: timestamp("consent_at"),
   retentionUntil: timestamp("retention_until"),
+  retentionReviewNotifiedAt: timestamp("retention_review_notified_at"),
   // AI Recruitment Intelligence fields
   aiSummary: text("ai_summary"),
   aiScore: int("ai_score"), // 0 to 100 fit score

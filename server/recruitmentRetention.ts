@@ -1,15 +1,13 @@
-import { and, eq, lt, ne } from "drizzle-orm";
+import { and, eq, isNull, lt } from "drizzle-orm";
 import { cvApplications } from "../drizzle/schema";
 import { getDb } from "./db";
 import { notifyOwner } from "./_core/notification";
 import { logRecruitmentAction } from "./recruitmentAudit";
 
-export function buildRetentionRetirement(input: { trackingId: string; previousNotes: string | null; at: Date }) {
+export function buildRetentionReviewReminder(input: { previousNotes: string | null; at: Date }) {
   return {
-    cvFileKey: `retired/${input.trackingId}`,
-    cvOriginalName: "document-retired",
-    fileValidationStatus: "rejected" as const,
-    fileValidationNotes: `${input.previousNotes || ""}; retention_reference_retired_at=${input.at.toISOString()}`.slice(0, 4000),
+    fileValidationNotes: `${input.previousNotes || ""}; retention_review_notified_at=${input.at.toISOString()}`.slice(0, 4000),
+    retentionReviewNotifiedAt: input.at,
   };
 }
 
@@ -19,35 +17,28 @@ export async function runRecruitmentRetentionCleanup(actorOpenId: string) {
   const now = new Date();
   const expired = await db.select({ id: cvApplications.id, trackingId: cvApplications.trackingId, fileValidationNotes: cvApplications.fileValidationNotes })
     .from(cvApplications)
-    .where(and(lt(cvApplications.retentionUntil, now), ne(cvApplications.status, "archived")));
+    .where(and(lt(cvApplications.retentionUntil, now), isNull(cvApplications.retentionReviewNotifiedAt)));
 
   for (const application of expired) {
     await db.update(cvApplications)
       .set({
-        status: "archived",
-        ...buildRetentionRetirement({ trackingId: application.trackingId, previousNotes: application.fileValidationNotes, at: now }),
+        ...buildRetentionReviewReminder({ previousNotes: application.fileValidationNotes, at: now }),
         updatedAt: now,
       })
-      .where(and(eq(cvApplications.id, application.id), ne(cvApplications.status, "archived")));
+      .where(eq(cvApplications.id, application.id));
     await logRecruitmentAction({
       applicationId: application.id,
       adminOpenId: actorOpenId,
       action: "retention_cleanup",
-      metadata: { trackingId: application.trackingId, retiredAt: now.toISOString(), storageReferenceAccessible: false },
-    });
-    await logRecruitmentAction({
-      applicationId: application.id,
-      adminOpenId: actorOpenId,
-      action: "retention_cleanup",
-      metadata: { trackingId: application.trackingId, archivedAt: now.toISOString() },
+      metadata: { trackingId: application.trackingId, reviewNotifiedAt: now.toISOString(), storageReferenceAccessible: true, action: "non_destructive_retention_review" },
     });
   }
 
   if (expired.length > 0) {
     await notifyOwner({
-      title: `Rétention recrutement : ${expired.length} dossier(s) archivé(s)`,
-      content: `Les candidatures suivantes ont dépassé leur durée de conservation et ont été archivées automatiquement : ${expired.map(item => item.trackingId).join(", ")}. Vérifiez les demandes de suppression définitive dans le dashboard administrateur.`,
+      title: `Rétention recrutement : ${expired.length} dossier(s) à examiner`,
+      content: `Les candidatures suivantes ont dépassé leur durée de conservation : ${expired.map(item => item.trackingId).join(", ")}. Les CV et leurs références de stockage ont été conservés ; examinez-les dans le dashboard et ne lancez une suppression qu’en cas de demande RGPD explicite.`,
     });
   }
-  return { archived: expired.length, trackingIds: expired.map(item => item.trackingId) };
+  return { notified: expired.length, trackingIds: expired.map(item => item.trackingId) };
 }

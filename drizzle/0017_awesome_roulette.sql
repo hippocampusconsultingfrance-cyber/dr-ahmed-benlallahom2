@@ -1,0 +1,1 @@
+ALTER TABLE `cv_applications` ADD `retention_review_notified_at` timestamp;
