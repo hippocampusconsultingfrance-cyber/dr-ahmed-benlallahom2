@@ -114,7 +114,7 @@ export default function AdminDashboard() {
 
       {/* Content */}
       <main className="max-w-7xl mx-auto px-4 py-8">
-        {activeTab === "overview" && <OverviewTab />}
+        {activeTab === "overview" && <OverviewTab onNavigate={setActiveTab} />}
         {activeTab === "appointments" && <AppointmentsTab />}
         {activeTab === "contacts" && <ContactsTab />}
         {activeTab === "gdpr" && <GdprTab />}
@@ -128,7 +128,7 @@ export default function AdminDashboard() {
   );
 }
 
-function OverviewTab() {
+function OverviewTab({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
   const { data: stats, isLoading, error } = trpc.admin.stats.useQuery();
 
   if (error) {
@@ -147,19 +147,53 @@ function OverviewTab() {
   ];
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-      {cards.map((card) => {
-        const Icon = card.icon;
-        return (
-          <div key={card.label} className="bg-card border border-border rounded-lg p-6">
-            <div className="flex items-center justify-between mb-4">
-              <Icon className={`w-6 h-6 ${card.color}`} />
+    <div className="space-y-8">
+      <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        {cards.map((card) => {
+          const Icon = card.icon;
+          return (
+            <div key={card.label} className="bg-card border border-border rounded-lg p-6">
+              <div className="flex items-center justify-between mb-4">
+                <Icon className={`w-6 h-6 ${card.color}`} />
+              </div>
+              <p className="text-3xl font-bold text-foreground">{card.value}</p>
+              <p className="text-sm text-muted-foreground mt-1">{card.label}</p>
             </div>
-            <p className="text-3xl font-bold text-foreground">{card.value}</p>
-            <p className="text-sm text-muted-foreground mt-1">{card.label}</p>
-          </div>
-        );
-      })}
+          );
+        })}
+      </section>
+
+      <section aria-labelledby="recruitment-shortcuts-title" className="rounded-2xl border border-primary/25 bg-primary/5 p-5 sm:p-6">
+        <div className="mb-5">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">Accès rapide</p>
+          <h2 id="recruitment-shortcuts-title" className="mt-1 text-xl font-semibold text-foreground">Recrutement & Missions</h2>
+          <p className="mt-1 text-sm text-muted-foreground">Accédez directement aux CV déposés et aux besoins transmis par les employeurs.</p>
+        </div>
+        <div className="grid gap-4 md:grid-cols-2">
+          <button
+            type="button"
+            onClick={() => onNavigate("recruitment")}
+            className="group flex items-center justify-between rounded-xl border border-border bg-card p-5 text-left transition-colors hover:border-primary/60 hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          >
+            <span>
+              <span className="flex items-center gap-2 font-semibold text-foreground"><UserRound className="h-5 w-5 text-primary" /> Candidatures</span>
+              <span className="mt-1 block text-sm text-muted-foreground">Consulter les CV, analyses IA, disponibilités et certifications.</span>
+            </span>
+            <span aria-hidden="true" className="text-lg text-primary transition-transform group-hover:translate-x-0.5">→</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => onNavigate("employerBriefs")}
+            className="group flex items-center justify-between rounded-xl border border-border bg-card p-5 text-left transition-colors hover:border-primary/60 hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          >
+            <span>
+              <span className="flex items-center gap-2 font-semibold text-foreground"><BriefcaseBusiness className="h-5 w-5 text-primary" /> Missions</span>
+              <span className="mt-1 block text-sm text-muted-foreground">Gérer les briefs Employeurs et créer des shortlists de candidats.</span>
+            </span>
+            <span aria-hidden="true" className="text-lg text-primary transition-transform group-hover:translate-x-0.5">→</span>
+          </button>
+        </div>
+      </section>
     </div>
   );
 }

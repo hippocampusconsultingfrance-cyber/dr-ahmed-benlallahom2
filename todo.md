@@ -2247,9 +2247,9 @@
 
 ## Visibilité du dashboard recrutement
 
-- [ ] Vérifier la version du dashboard et les onglets réellement affichés après connexion
-- [ ] Ajouter des accès directs visibles vers Candidatures et Missions depuis l’administration
-- [ ] Vérifier que les routes directes préservent le contrôle administrateur puis publier
+- [x] Vérifier la version du dashboard et les onglets réellement affichés après connexion
+- [x] Ajouter des accès directs visibles vers Candidatures et Missions depuis l’administration
+- [x] Vérifier que les routes directes préservent le contrôle administrateur puis publier
 
 ## Conservation durable des CV
 
