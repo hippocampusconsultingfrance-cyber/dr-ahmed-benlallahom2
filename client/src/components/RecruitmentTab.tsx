@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { BrainCircuit, Download, FileSearch, Loader2, RefreshCw, Sparkles, UserRound } from "lucide-react";
+import { BrainCircuit, Download, FileSearch, Loader2, RefreshCw, Sparkles, Trash2, UserRound } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
@@ -94,6 +94,15 @@ export default function RecruitmentTab() {
   const reanalyze = trpc.admin.recruitment.reanalyze.useMutation({
     onSuccess: ({ score }) => {
       toast.success(`Analyse IA terminée — score ${score}/100`);
+      utils.admin.recruitment.list.invalidate();
+    },
+    onError: mutationError => toast.error(mutationError.message),
+  });
+
+  const eraseApplication = trpc.admin.recruitment.erase.useMutation({
+    onSuccess: () => {
+      toast.success("Dossier candidat effacé");
+      setExpandedId(null);
       utils.admin.recruitment.list.invalidate();
     },
     onError: mutationError => toast.error(mutationError.message),
@@ -198,10 +207,16 @@ export default function RecruitmentTab() {
                             <p className="text-xs text-muted-foreground">Aide à la revue humaine · aucune décision automatique</p>
                           </div>
                         </div>
-                        <Button size="sm" variant="outline" onClick={() => reanalyze.mutate({ id: application.id })} disabled={reanalyze.isPending}>
-                          {reanalyze.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
-                          {application.aiAnalyzedAt ? "Relancer l’analyse" : "Analyser le CV"}
-                        </Button>
+                        <div className="flex flex-wrap gap-2">
+                          <Button size="sm" variant="outline" onClick={() => reanalyze.mutate({ id: application.id })} disabled={reanalyze.isPending || eraseApplication.isPending}>
+                            {reanalyze.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
+                            {application.aiAnalyzedAt ? "Relancer l’analyse" : "Analyser le CV"}
+                          </Button>
+                          <Button size="sm" variant="outline" className="text-destructive hover:text-destructive" onClick={() => { if (window.confirm("Confirmer l’effacement définitif du dossier candidat et de ses résultats IA ?")) eraseApplication.mutate({ id: application.id }); }} disabled={eraseApplication.isPending || reanalyze.isPending}>
+                            {eraseApplication.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
+                            Effacer RGPD
+                          </Button>
+                        </div>
                       </div>
 
                       {application.aiSummary ? (

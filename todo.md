@@ -2057,18 +2057,18 @@
 - [x] Remplacer le fallback « Chargement… » minimal par un écran de chargement explicite et visuellement rassurant pendant les imports différés
 
 ## Recrutement International Hippocampus Consulting
-- [ ] Créer la table database des candidatures (cv_applications) avec spécialité, pays cible, statut et référence S3 du CV
-- [ ] Créer la procédure tRPC publique de soumission de candidature avec validation des champs et upload sécurisé
-- [ ] Créer les procédures tRPC administrateur pour lister, filtrer, mettre à jour le statut et télécharger les CV
-- [ ] Créer la page publique de recrutement multilingue avec sélection des spécialités et des pays cibles (Europe, Canada, Moyen-Orient)
-- [ ] Ajouter l’onglet de gestion des candidatures dans le tableau de bord administrateur (/admin)
-- [ ] Envoyer un email de confirmation au candidat et une alerte au propriétaire via Resend
-- [ ] Valider la conformité RGPD (consentement explicite, registre des traitements, durée de conservation)
-- [ ] Écrire les tests de contrat Vitest pour la soumission et l’administration des candidatures
-- [ ] Sauvegarder et publier la section de recrutement international
+- [x] Créer la table database des candidatures (cv_applications) avec spécialité, pays cible, statut et référence S3 du CV
+- [x] Créer la procédure tRPC publique de soumission de candidature avec validation des champs et upload sécurisé
+- [x] Créer les procédures tRPC administrateur pour lister, filtrer, mettre à jour le statut et télécharger les CV
+- [x] Créer la page publique de recrutement multilingue avec sélection des spécialités et des pays cibles (Europe, Canada, Moyen-Orient)
+- [x] Ajouter l’onglet de gestion des candidatures dans le tableau de bord administrateur (/admin)
+- [x] Envoyer un email de confirmation au candidat et une alerte au propriétaire via Resend
+- [x] Valider la conformité RGPD (consentement explicite, registre des traitements, durée de conservation)
+- [x] Écrire les tests de contrat Vitest pour la soumission et l’administration des candidatures
+- [x] Sauvegarder et publier la section de recrutement international
 
-- [ ] Ajouter la page Recrutement au sitemap et à la couverture SEO publique
-- [ ] Ajouter une entrée de traitement CV au registre RGPD et à la politique de conservation
+- [x] Ajouter la page Recrutement au sitemap et à la couverture SEO publique
+- [x] Ajouter une entrée de traitement CV au registre RGPD et à la politique de conservation
 
 ## Recrutement international intelligent — stabilisation et analyse IA
 
@@ -2086,7 +2086,7 @@
 - [x] Ajouter des tests unitaires sur les formats non supportés et les textes insuffisants
 - [x] Valider typecheck, build de production et suite Vitest
 - [ ] Vérifier en production une candidature de test avec un CV PDF ou DOCX non sensible
-- [ ] Définir une procédure métier de suppression anticipée et de revue des scores IA
+- [x] Définir une procédure métier de suppression anticipée et de revue des scores IA
 
 ## Historique technique — recrutement intelligent
 

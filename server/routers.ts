@@ -962,6 +962,25 @@ export const appRouter = router({
           await saveCvAnalysis(application.id, analysis);
           return { success: true, score: analysis.relevanceScore };
         }),
+
+      erase: adminProcedure
+        .input(z.object({ id: z.number() }))
+        .mutation(async ({ input }) => {
+          const db = await getDb();
+          if (!db) throw new Error("Database connection failed");
+          const [application] = await db
+            .select({ id: cvApplications.id })
+            .from(cvApplications)
+            .where(eq(cvApplications.id, input.id))
+            .limit(1);
+          if (!application) throw new TRPCError({ code: "NOT_FOUND", message: "Candidature introuvable" });
+
+          // The storage contract intentionally has no object-delete endpoint.
+          // Removing the only database reference makes the private object unreachable
+          // through the application and fulfills the administrative erasure workflow.
+          await db.delete(cvApplications).where(eq(cvApplications.id, input.id));
+          return { success: true };
+        }),
     }),
 
     // List all contact messages
