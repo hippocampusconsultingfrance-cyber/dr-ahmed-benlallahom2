@@ -2238,3 +2238,9 @@
 - [x] Inclure les carrières paramédicales dans l’intitulé Hippocampus Consulting et Mobilité internationale
 - [x] Mettre à jour les traductions FR, EN, DE et ZH correspondantes
 - [x] Vérifier les libellés puis publier la correction
+
+## Correction accès administrateur
+
+- [x] Identifier le compte connecté affichant un accès refusé et vérifier son rôle
+- [x] Attribuer le rôle administrateur au compte propriétaire vérifié
+- [ ] Confirmer l’accès au dashboard CV sans élargir les permissions des autres comptes

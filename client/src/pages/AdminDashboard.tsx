@@ -1,5 +1,6 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
+import { startLogin } from "@/const";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Calendar, MessageSquare, Shield, DollarSign, Eye, CheckCircle, XCircle, Clock, ArrowLeft, Star, Trash2, FileText, CalendarDays, Plus, Edit, Trash, Globe, UserRound, BriefcaseBusiness } from "lucide-react";
@@ -11,7 +12,7 @@ import EmployerBriefsTab from "@/components/EmployerBriefsTab";
 type Tab = "overview" | "appointments" | "contacts" | "gdpr" | "testimonials" | "blog" | "availability" | "recruitment" | "employerBriefs";
 
 export default function AdminDashboard() {
-  const { user, loading } = useAuth();
+  const { user, loading, refresh } = useAuth();
   const [, setLocation] = useLocation();
   const [activeTab, setActiveTab] = useState<Tab>("overview");
 
@@ -23,16 +24,36 @@ export default function AdminDashboard() {
     );
   }
 
-  if (!user || user.role !== "admin") {
+  if (!user) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold text-foreground mb-4">Accès refusé</h1>
-          <p className="text-muted-foreground mb-6">Vous n'avez pas les permissions nécessaires.</p>
-          <Button onClick={() => setLocation("/")}>
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Retour à l'accueil
+      <div className="min-h-screen bg-background flex items-center justify-center px-4">
+        <div className="max-w-md text-center">
+          <h1 className="text-2xl font-bold text-foreground mb-4">Connexion administrateur requise</h1>
+          <p className="text-muted-foreground mb-6">Connectez-vous avec le compte propriétaire pour accéder aux candidatures et aux missions.</p>
+          <Button onClick={startLogin}>
+            Se connecter
           </Button>
+        </div>
+      </div>
+    );
+  }
+
+  if (user.role !== "admin") {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center px-4">
+        <div className="max-w-md text-center">
+          <h1 className="text-2xl font-bold text-foreground mb-4">Accès refusé</h1>
+          <p className="text-muted-foreground mb-6">Votre session ne possède pas les permissions nécessaires. Si votre rôle vient d’être mis à jour, actualisez l’accès ou reconnectez-vous.</p>
+          <div className="flex flex-wrap justify-center gap-3">
+            <Button variant="outline" onClick={() => void refresh()}>
+              Actualiser l’accès
+            </Button>
+            <Button onClick={startLogin}>Se reconnecter</Button>
+            <Button variant="ghost" onClick={() => setLocation("/")}>
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Accueil
+            </Button>
+          </div>
         </div>
       </div>
     );
