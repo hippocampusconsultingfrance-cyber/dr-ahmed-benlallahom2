@@ -2124,3 +2124,11 @@
 - [x] Gérer le filtrage en temps réel des catégories et des items de la taxonomie médicale
 - [x] Conserver l’option "Autre spécialité ou profession" et le champ de saisie libre
 - [x] Valider le typecheck, les tests unitaires et le build de production
+
+## Recrutement VVIP & Offshore
+
+- [x] Créer la page dédiée `/vvip-offshore` (et `/recruitment` en tant que Hub) avec design prestige et thématique médicale d'urgence / haut de gamme (Moyen-Orient, plateformes pétrolières, offshore, résidences royales / VVIP)
+- [x] Rédiger les contenus bilingues FR / EN / DE / ZH (profils recherchés : urgentistes, infirmiers rigides, médecins d'expedition, certifications ATLS/ACLS/OGP)
+- [x] Connecter le formulaire de candidature VVIP au système de dépôt de CV existant avec étiquetage spécifique (`VVIP / Offshore`)
+- [x] Mettre à jour l'interface administrateur pour filtrer et identifier les candidats VVIP / Offshore
+- [x] Valider le typecheck, les tests unitaires et publier la section
