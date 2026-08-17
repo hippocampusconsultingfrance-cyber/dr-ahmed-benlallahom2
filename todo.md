@@ -2103,3 +2103,9 @@
 - [x] Ajouter un matching multicritère configurable par pays, spécialité, langues et seuil de score
 - [x] Ajouter des modèles de réponse email pré-rédigés depuis la fiche candidature
 - [x] Ajouter les tests et la documentation opérationnelle de ces améliorations
+
+## Correction UI — formulaire recrutement
+
+- [x] Corriger le chevauchement des libellés et contenus des champs Langues professionnelles et Message professionnel
+- [x] Stabiliser la grille responsive du formulaire sur desktop, tablette et mobile
+- [x] Vérifier les tests, captures responsive et build après correction
