@@ -2232,3 +2232,9 @@
 - [x] Recomposer le header en zones identité, navigation centrale et actions latérales avec des largeurs stables
 - [x] Aligner les six onglets sur une seule ligne de base sans séparation visuelle ni dérive selon la largeur
 - [x] Vérifier le header à 1280 px, 1440 px et grand écran puis publier le correctif
+
+## Libellés recrutement médical et paramédical
+
+- [x] Inclure les carrières paramédicales dans l’intitulé Hippocampus Consulting et Mobilité internationale
+- [x] Mettre à jour les traductions FR, EN, DE et ZH correspondantes
+- [x] Vérifier les libellés puis publier la correction
