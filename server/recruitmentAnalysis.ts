@@ -4,7 +4,7 @@ import WordExtractor from "word-extractor";
 import { eq } from "drizzle-orm";
 import { cvApplications, cvCandidateCertifications, cvCandidateExperiences, cvCandidateLanguages } from "../drizzle/schema";
 import { getDb } from "./db";
-import { invokeLLM } from "./_core/llm";
+import { invokeLLM, type Message } from "./_core/llm";
 
 export type NormalizedExperience = {
   role: string;
@@ -280,11 +280,7 @@ export async function analyzeCvText(input: {
   const cvText = cleanText(input.extractedText).slice(0, 60_000);
   if (cvText.length < 80) throw new Error("Le texte extrait du CV est insuffisant pour une analyse fiable.");
 
-  const response = await invokeLLM({
-    model: "gpt-5-mini",
-    maxCompletionTokens: 4_000,
-    reasoning: { effort: "low" },
-    messages: [
+  const messages: Message[] = [
       {
         role: "system",
         content: "Tu es un assistant de présélection pour Hippocampus Consulting. Tu analyses uniquement les informations professionnelles explicitement présentes dans le CV. Tu ne dois jamais déduire, classer ou recommander un candidat selon son âge, son sexe, son genre, son origine, sa nationalité, sa religion, son état de santé, son handicap, sa situation familiale, sa photo ou toute autre caractéristique protégée. Tu ne prends aucune décision automatique d’embauche ou de rejet. Tu produis une synthèse vérifiable, neutre et explicable pour une revue humaine. Si une information manque, indique-le au lieu de l’inventer. Réponds uniquement avec le JSON demandé.",
@@ -308,13 +304,38 @@ ${cvText}
 
 Normalise chaque expérience dans normalizedExperiences. Convertis les dates explicites vers YYYY-MM lorsque possible, utilise null si absente, et distingue permanent, temporary, locum (remplacement), internship (stage), fellowship, rotation et volunteer. Normalise aussi les certifications explicitement listées dans certifications : conserve le nom, l’organisme, le pays, la date d’expiration quand elle est explicitement indiquée et la preuve textuelle ; n’invente jamais une certification. Dans normalizedLanguages, donne la langue, un niveau contrôlé seulement s’il est explicitement attesté (sinon unknown) et une preuve textuelle. Ne transforme jamais une date, une durée ou un niveau incertain en fait : ajoute une dataQualityWarning et cite la preuve textuelle dans evidence. Le score doit mesurer uniquement la pertinence professionnelle apparente au regard de la spécialité, des compétences, de l’expérience explicitement décrite et des pays ciblés. Il ne constitue pas une décision de recrutement.`,
       },
-    ],
-    response_format: { type: "json_schema", json_schema: analysisSchema },
-  });
+    ];
 
-  const content = getFirstChoiceContent(response);
-  if (!content) throw new Error("L’analyse IA n’a renvoyé aucun contenu.");
-  return parseAnalysis(content);
+  const providers = [
+    {
+      model: "gpt-5-mini",
+      maxCompletionTokens: 4_000,
+      reasoning: { effort: "low" },
+    },
+    {
+      model: "gemini-3-flash-preview",
+      max_tokens: 8_000,
+      reasoning_effort: "low",
+    },
+  ] as const;
+
+  const failures: string[] = [];
+  for (const provider of providers) {
+    try {
+      const response = await invokeLLM({
+        ...provider,
+        messages,
+        response_format: { type: "json_schema", json_schema: analysisSchema },
+      });
+      const content = getFirstChoiceContent(response);
+      if (content) return parseAnalysis(content);
+      failures.push(`${provider.model}: contenu vide`);
+    } catch (error) {
+      failures.push(`${provider.model}: ${error instanceof Error ? error.message.slice(0, 160) : "erreur inconnue"}`);
+    }
+  }
+
+  throw new Error(`L’analyse IA n’a renvoyé aucun contenu exploitable (${failures.join(" | ")}).`);
 }
 
 export async function saveCvAnalysis(applicationId: number, analysis: RecruitmentAnalysisResult): Promise<void> {
