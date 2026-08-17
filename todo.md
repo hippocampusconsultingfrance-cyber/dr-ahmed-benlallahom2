@@ -2212,3 +2212,17 @@
 
 - [x] Comparer chaque recommandation de AUDIT_BACKEND_CV_CANDIDATURES_2026-08-17 avec l’implémentation publiée
 - [x] Documenter les éléments complets, partiels et non réalisables avec les limites de plateforme
+
+## Finalisation des recommandations backend partielles
+
+- [ ] Vérifier et intégrer une suppression physique d’objet si l’API de stockage le permet
+- [ ] Ajouter détection des fichiers chiffrés/corrompus, limites de pages et mécanisme anti-malware compatible avec l’environnement
+- [ ] Conserver confiance OCR, nombre total de pages, version OCR et avertissements d’extraction
+- [ ] Migrer les certifications, langues et expériences vers des tables relationnelles avec niveaux contrôlés et index métier
+- [ ] Ajouter des tests end-to-end isolés pour OCR, IA, stockage, notifications et traitement administratif
+
+## Correction navigation — onglets recrutement et employeurs
+
+- [x] Retirer la séparation et les contraintes qui isolent Recrutement et Employeurs du groupe principal
+- [x] Aligner les six onglets sur la même grille et la même ligne de base sur desktop et mobile
+- [x] Vérifier visuellement puis publier la correction de navigation
