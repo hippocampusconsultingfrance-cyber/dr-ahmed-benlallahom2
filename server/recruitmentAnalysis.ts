@@ -156,6 +156,18 @@ function messageContentToString(content: unknown): string {
     .join("\n");
 }
 
+/** Returns the first model message only when the provider payload has the expected shape. */
+export function getFirstChoiceContent(response: unknown): unknown {
+  if (!response || typeof response !== "object") return undefined;
+  const choices = (response as { choices?: unknown }).choices;
+  if (!Array.isArray(choices) || choices.length === 0) return undefined;
+  const first = choices[0];
+  if (!first || typeof first !== "object") return undefined;
+  const message = (first as { message?: unknown }).message;
+  if (!message || typeof message !== "object") return undefined;
+  return (message as { content?: unknown }).content;
+}
+
 export type CvExtractionResult = {
   text: string;
   method: "pdf_text" | "pdf_vision" | "docx" | "doc";
@@ -186,7 +198,7 @@ async function extractPdfWithVision(buffer: Buffer): Promise<{ text: string; con
       }],
       response_format: { type: "json_schema", json_schema: visionOcrSchema },
     });
-    const raw = messageContentToString(response.choices[0]?.message?.content);
+    const raw = messageContentToString(getFirstChoiceContent(response));
     if (!raw) return { text: "", confidence: null, warnings: ["vision_ocr_empty_response"] };
     const parsed = JSON.parse(raw) as { text?: unknown; confidence?: unknown; warnings?: unknown };
     return {
@@ -299,7 +311,7 @@ Normalise chaque expérience dans normalizedExperiences. Convertis les dates exp
     response_format: { type: "json_schema", json_schema: analysisSchema },
   });
 
-  const content = response.choices[0]?.message?.content;
+  const content = getFirstChoiceContent(response);
   if (!content) throw new Error("L’analyse IA n’a renvoyé aucun contenu.");
   return parseAnalysis(content);
 }

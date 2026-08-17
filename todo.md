@@ -2262,3 +2262,10 @@
 - [x] Retirer la règle de rétention obsolète du téléchargement administrateur
 - [x] Autoriser le téléchargement sécurisé des CV conservés, y compris en quarantaine et analyse en attente
 - [x] Vérifier le téléchargement d’un CV existant puis publier la correction
+
+## Correction pipeline d’analyse CV
+
+- [x] Identifier et neutraliser l’accès à une donnée PDF/extraction absente qui provoque l’erreur `reading '0'`
+- [x] Ajouter un repli sûr pour les métriques PDF/OCR incomplètes et les structures d’analyse vides
+- [ ] Ajouter un test de non-régression et relancer la candidature en erreur
+- [ ] Vérifier l’analyse terminée puis publier la correction
