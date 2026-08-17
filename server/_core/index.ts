@@ -54,20 +54,23 @@ const recruitmentUpload = multer({
   },
 });
 
-const recruitmentApplicationSchema = z.object({
-  firstName: z.string().trim().min(1).max(120),
-  lastName: z.string().trim().min(1).max(120),
-  email: z.string().trim().email().max(320),
-  phone: z.string().trim().max(50).optional().default(""),
-  specialty: z.string().trim().min(1).max(160),
-  targetCountries: z.array(z.string().trim().min(1).max(80)).min(1).max(12),
-  languages: z.array(z.string().trim().min(1).max(80)).max(12).default([]),
-  yearsExperience: z.number().int().min(0).max(70).optional(),
-  message: z.string().trim().max(5000).optional().default(""),
-  gdprConsent: z.literal("1"),
-  marketingConsent: z.enum(["0", "1"]).default("0"),
-  website: z.string().max(200).optional().default(""),
-});
+        const recruitmentApplicationSchema = z.object({
+          firstName: z.string().trim().min(1).max(120),
+          lastName: z.string().trim().min(1).max(120),
+          email: z.string().trim().email().max(320),
+          phone: z.string().trim().max(50).optional().default(""),
+          specialty: z.string().trim().min(1).max(160),
+          targetCountries: z.array(z.string().trim().min(1).max(80)).min(1).max(12),
+          languages: z.array(z.string().trim().min(1).max(80)).max(12).default([]),
+          yearsExperience: z.number().int().min(0).max(70).optional(),
+          availability: z.string().trim().max(100).optional().default(""),
+          mobility: z.string().trim().max(150).optional().default(""),
+          certifications: z.string().trim().max(1000).optional().default(""),
+          message: z.string().trim().max(5000).optional().default(""),
+          gdprConsent: z.literal("1"),
+          marketingConsent: z.enum(["0", "1"]).default("0"),
+          website: z.string().max(200).optional().default(""),
+        });
 
 function parseListField(value: unknown): string[] {
   if (typeof value !== "string") return [];
@@ -273,6 +276,65 @@ async function startServer() {
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
+  const clientBriefSchema = z.object({
+    organizationName: z.string().trim().min(1).max(180),
+    contactName: z.string().trim().min(1).max(120),
+    email: z.string().trim().email().max(320),
+    phone: z.string().trim().max(50).optional().default(""),
+    targetEnvironment: z.string().trim().min(1).max(120),
+    specialtyNeeded: z.string().trim().min(1).max(160),
+    country: z.string().trim().min(1).max(100),
+    requiredCertifications: z.string().trim().max(1000).optional().default(""),
+    timeline: z.string().trim().max(100).optional().default(""),
+    notes: z.string().trim().max(3000).optional().default(""),
+    website: z.string().max(200).optional().default(""),
+  });
+
+  app.post("/api/client-briefs", async (req, res) => {
+    try {
+      const parsed = clientBriefSchema.safeParse(req.body);
+      if (!parsed.success) {
+        res.status(400).json({ error: "Les informations du brief sont invalides." });
+        return;
+      }
+      if (parsed.data.website.trim()) {
+        res.status(400).json({ error: "Requête non autorisée." });
+        return;
+      }
+
+      const briefId = `BRIEF${Math.random().toString(36).slice(2, 8).toUpperCase()}${Date.now().toString(36).slice(-6).toUpperCase()}`;
+      const db = await (await import("../db")).getDb();
+      if (!db) {
+        res.status(503).json({ error: "Service temporairement indisponible." });
+        return;
+      }
+
+      await db.execute(sql`INSERT INTO client_briefs (
+        brief_id, organization_name, contact_name, email, phone,
+        target_environment, specialty_needed, country, required_certifications,
+        timeline, notes, brief_status
+      ) VALUES (
+        ${briefId}, ${parsed.data.organizationName}, ${parsed.data.contactName}, ${parsed.data.email}, ${parsed.data.phone},
+        ${parsed.data.targetEnvironment}, ${parsed.data.specialtyNeeded}, ${parsed.data.country}, ${parsed.data.requiredCertifications},
+        ${parsed.data.timeline}, ${parsed.data.notes}, 'new'
+      )`);
+
+      try {
+        await notifyOwner({
+          title: `Nouveau brief employeur (${briefId})`,
+          content: `Organisation: ${parsed.data.organizationName}\nContact: ${parsed.data.contactName} (${parsed.data.email})\nEnvironnement: ${parsed.data.targetEnvironment}\nSpécialité: ${parsed.data.specialtyNeeded} (${parsed.data.country})`,
+        });
+      } catch {
+        // notification fail non bloquante
+      }
+
+      res.json({ success: true, briefId });
+    } catch (error) {
+      console.error("Client brief error:", error);
+      res.status(500).json({ error: "Échec de l'enregistrement du brief." });
+    }
+  });
+
   app.post("/api/recruitment/apply", (req, res, next) => {
     recruitmentUpload.single("cv")(req, res, async uploadError => {
       if (uploadError) {
@@ -327,14 +389,15 @@ async function startServer() {
 
         const insertResult = await db.execute(sql`INSERT INTO cv_applications (
           tracking_id, first_name, last_name, email, phone, specialty,
-          target_countries, languages, years_experience, message,
+          target_countries, languages, years_experience, availability, mobility, certifications, message,
           cv_file_key, cv_original_name, cv_mime_type, cv_size_bytes,
           gdpr_consent, marketing_consent, status, consent_at, retention_until
         ) VALUES (
           ${trackingId}, ${parsed.data.firstName}, ${parsed.data.lastName}, ${parsed.data.email},
           ${parsed.data.phone || null}, ${parsed.data.specialty}, ${JSON.stringify(parsed.data.targetCountries)},
-          ${JSON.stringify(parsed.data.languages)}, ${parsed.data.yearsExperience ?? null}, ${parsed.data.message || null},
-          ${storageResult.key}, ${originalName}, ${file.mimetype}, ${file.size}, 1,
+          ${JSON.stringify(parsed.data.languages)}, ${parsed.data.yearsExperience ?? null},
+          ${parsed.data.availability || null}, ${parsed.data.mobility || null}, ${parsed.data.certifications || null},
+          ${parsed.data.message || null}, ${storageResult.key}, ${originalName}, ${file.mimetype}, ${file.size}, 1,
           ${parsed.data.marketingConsent === "1" ? 1 : 0}, "new", NOW(), ${retentionUntil}
         )`);
 

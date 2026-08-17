@@ -2138,3 +2138,12 @@
 - [x] Simplifier la navigation principale avec une seule entrée Recrutement et le Hub comme point d’accès aux deux parcours
 - [x] Corriger l’espacement entre le logo, la navigation et les actions sur desktop
 - [x] Vérifier les libellés VVIP/Offshore longs et les champs du formulaire sur desktop et mobile
+
+## Feuille de route d’améliorations (Prioritaires)
+
+- [x] Étendre la base de données (`cv_applications`) avec disponibilité, mobilité, certifications et notes internes
+- [x] Ajouter les tables et procédures pour le dépôt de missions employeurs (`client_briefs`)
+- [x] Enrichir les formulaires de candidature standard et VVIP avec disponibilité et certifications
+- [x] Refondre le tableau de bord administrateur avec un pipeline de statut détaillé (nouveau, présélection, entretien, vérification, placé, refusé) et une fiche candidat complète
+- [x] Créer la page publique « Employeurs / Missions » (`/employers` ou `/recruitment/employers`) pour permettre aux établissements de santé et groupes industriels de soumettre un besoin
+- [x] Valider le typecheck, la suite de tests unitaires et publier le checkpoint

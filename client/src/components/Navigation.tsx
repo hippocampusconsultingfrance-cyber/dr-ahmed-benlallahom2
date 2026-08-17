@@ -20,6 +20,7 @@ export default function Navigation() {
 
   const currentLang = languages.find((l) => l.code === language);
   const recruitmentLabel = { fr: "Recrutement", en: "Recruitment", de: "Recruiting", zh: "招聘" }[language];
+  const employersLabel = { fr: "Employeurs", en: "Employers", de: "Arbeitgeber", zh: "雇主专区" }[language];
 
   const handleLanguageChange = (code: string) => {
     if (code !== language) {
@@ -110,6 +111,7 @@ export default function Navigation() {
             </button>
           ))}
           <a href="/recruitment" className="nav-link whitespace-nowrap text-sm font-medium text-muted-foreground hover:text-foreground transition-colors duration-200 relative after:absolute after:bottom-[-4px] after:left-0 after:w-0 after:h-[2px] after:bg-primary after:transition-all hover:after:w-full">{recruitmentLabel}</a>
+          <a href="/employers" className="nav-link whitespace-nowrap text-sm font-medium text-muted-foreground hover:text-foreground transition-colors duration-200 relative after:absolute after:bottom-[-4px] after:left-0 after:w-0 after:h-[2px] after:bg-primary after:transition-all hover:after:w-full">{employersLabel}</a>
         </nav>
 
         {/* Actions */}
@@ -204,6 +206,7 @@ export default function Navigation() {
               </button>
             ))}
             <a href="/recruitment" onClick={() => setMobileOpen(false)} className="nav-mobile-link text-left text-lg font-medium text-foreground py-2 border-b border-border/20">{recruitmentLabel}</a>
+            <a href="/employers" onClick={() => setMobileOpen(false)} className="nav-mobile-link text-left text-lg font-medium text-foreground py-2 border-b border-border/20">{employersLabel}</a>
             <button
               onClick={() => scrollTo("contact")}
               className="nav-cta cta-primary mt-4 px-5 py-3.5 text-sm w-full"
