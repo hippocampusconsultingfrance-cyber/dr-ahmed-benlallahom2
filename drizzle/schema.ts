@@ -199,6 +199,13 @@ export const cvApplications = mysqlTable("cv_applications", {
   cvOriginalName: varchar("cv_original_name", { length: 255 }).notNull(),
   cvMimeType: varchar("cv_mime_type", { length: 100 }).notNull(),
   cvSizeBytes: int("cv_size_bytes").notNull(),
+  fileValidationStatus: mysqlEnum("file_validation_status", ["quarantined", "accepted", "rejected", "validation_failed"]).default("quarantined").notNull(),
+  fileChecksum: varchar("file_checksum", { length: 64 }),
+  fileValidationNotes: text("file_validation_notes"),
+  fileValidatedAt: timestamp("file_validated_at"),
+  normalizedCertifications: text("normalized_certifications"),
+  normalizedLanguages: text("normalized_languages"),
+  normalizedExperiences: text("normalized_experiences"),
   gdprConsent: int("gdpr_consent").default(0).notNull(),
   marketingConsent: int("marketing_consent").default(0).notNull(),
   status: mysqlEnum("status", ["new", "reviewing", "shortlisted", "placed", "rejected", "archived"]).default("new").notNull(),
@@ -313,3 +320,20 @@ export const clientBriefs = mysqlTable("client_briefs", {
 
 export type ClientBrief = typeof clientBriefs.$inferSelect;
 export type InsertClientBrief = typeof clientBriefs.$inferInsert;
+
+/** Shortlist and review state connecting an employer mission to selected candidates. */
+export const clientBriefCandidates = mysqlTable("client_brief_candidates", {
+  id: int("id").autoincrement().primaryKey(),
+  briefId: int("brief_id").notNull(),
+  applicationId: int("application_id").notNull(),
+  matchScore: int("match_score"),
+  status: mysqlEnum("association_status", ["suggested", "reviewing", "shortlisted", "declined"]).default("suggested").notNull(),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+}, table => ({
+  briefIdx: index("client_brief_candidates_brief_idx").on(table.briefId),
+  applicationIdx: index("client_brief_candidates_application_idx").on(table.applicationId),
+}));
+
+export type ClientBriefCandidate = typeof clientBriefCandidates.$inferSelect;

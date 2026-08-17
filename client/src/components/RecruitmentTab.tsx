@@ -82,6 +82,8 @@ export default function RecruitmentTab() {
   const [statusFilter, setStatusFilter] = useState<Status | "">("");
   const [countryFilter, setCountryFilter] = useState("");
   const [specialtyFilter, setSpecialtyFilter] = useState("");
+  const [languageFilter, setLanguageFilter] = useState("");
+  const [certificationFilter, setCertificationFilter] = useState("");
   const [minimumScore, setMinimumScore] = useState("");
   const [selectedProfileId, setSelectedProfileId] = useState("");
   const [expandedId, setExpandedId] = useState<number | null>(null);
@@ -98,6 +100,8 @@ export default function RecruitmentTab() {
     status: statusFilter || undefined,
     country: countryFilter.trim() || undefined,
     specialty: specialtyFilter.trim() || undefined,
+    language: languageFilter.trim() || undefined,
+    certification: certificationFilter.trim() || undefined,
     minimumScore: minimumScore ? Number(minimumScore) : undefined,
     profileId: selectedProfileId ? Number(selectedProfileId) : undefined,
   });
@@ -188,6 +192,14 @@ export default function RecruitmentTab() {
         <label className="space-y-1 text-sm text-muted-foreground">
           <span>Pays ciblé</span>
           <input value={countryFilter} onChange={event => setCountryFilter(event.target.value)} placeholder="Ex. Allemagne" className="h-10 w-full rounded-md border border-border bg-background px-3 text-foreground placeholder:text-muted-foreground" />
+        </label>
+        <label className="space-y-1 text-sm text-muted-foreground">
+          <span>Langue</span>
+          <input value={languageFilter} onChange={event => setLanguageFilter(event.target.value)} placeholder="Ex. anglais" className="h-10 w-full rounded-md border border-border bg-background px-3 text-foreground placeholder:text-muted-foreground" />
+        </label>
+        <label className="space-y-1 text-sm text-muted-foreground">
+          <span>Certification</span>
+          <input value={certificationFilter} onChange={event => setCertificationFilter(event.target.value)} placeholder="Ex. ACLS, ATLS" className="h-10 w-full rounded-md border border-border bg-background px-3 text-foreground placeholder:text-muted-foreground" />
         </label>
         <label className="space-y-1 text-sm text-muted-foreground">
           <span>Score IA minimum</span>

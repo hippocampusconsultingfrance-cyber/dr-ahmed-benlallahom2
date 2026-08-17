@@ -2,7 +2,8 @@ import { and, eq, inArray, lte } from "drizzle-orm";
 import { cvApplications, cvProcessingJobs } from "../drizzle/schema";
 import { getDb } from "./db";
 import { extractCvText, analyzeCvText, saveCvAnalysis } from "./recruitmentAnalysis";
-import { storageGetSignedUrl } from "./storage";
+import { storageGetSignedUrl, storagePut } from "./storage";
+import { validateCvFile } from "./recruitmentFileValidation";
 
 const MAX_ATTEMPTS = 3;
 const PROCESSING_BATCH_SIZE = 5;
@@ -60,6 +61,9 @@ async function processCvAnalysisJob(jobId: number) {
   }
 
   try {
+    if (application.fileValidationStatus === "rejected" || application.fileValidationStatus === "validation_failed") {
+      throw new Error("cv_validation_previously_failed");
+    }
     await db.update(cvApplications).set({ analysisStatus: "extracting", updatedAt: new Date() })
       .where(eq(cvApplications.id, application.id));
 
@@ -67,6 +71,30 @@ async function processCvAnalysisJob(jobId: number) {
     const fileResponse = await fetch(signedUrl);
     if (!fileResponse.ok) throw new Error(`cv_download_failed_${fileResponse.status}`);
     const buffer = Buffer.from(await fileResponse.arrayBuffer());
+    const fileValidation = validateCvFile({
+      buffer,
+      mimeType: application.cvMimeType,
+      originalName: application.cvOriginalName,
+      size: application.cvSizeBytes,
+    });
+    if (application.fileChecksum && application.fileChecksum !== fileValidation.checksum) {
+      throw new Error("cv_validation_checksum_mismatch");
+    }
+    if (application.fileValidationStatus === "quarantined") {
+      const finalStorage = await storagePut(
+        `recruitment/cv/${application.trackingId}-${application.cvOriginalName}`,
+        buffer,
+        application.cvMimeType,
+      );
+      await db.update(cvApplications).set({
+        cvFileKey: finalStorage.key,
+        fileValidationStatus: "accepted",
+        fileChecksum: fileValidation.checksum,
+        fileValidationNotes: `${fileValidation.notes}; promoted_from_quarantine`,
+        fileValidatedAt: new Date(),
+        updatedAt: new Date(),
+      }).where(eq(cvApplications.id, application.id));
+    }
     const extractedText = await extractCvText(buffer, application.cvMimeType);
 
     await db.update(cvApplications).set({
@@ -104,7 +132,8 @@ async function processCvAnalysisJob(jobId: number) {
   } catch (error) {
     const message = error instanceof Error ? error.message.slice(0, 4_000) : "unknown_processing_error";
     const now = new Date();
-    const finalFailure = job.attempts >= job.maxAttempts;
+    const validationFailure = message.startsWith("cv_validation_");
+    const finalFailure = validationFailure || job.attempts >= job.maxAttempts;
     await db.update(cvProcessingJobs).set({
       status: finalFailure ? "failed" : "retry",
       lastError: message,
@@ -115,6 +144,7 @@ async function processCvAnalysisJob(jobId: number) {
       analysisStatus: finalFailure ? "failed" : "queued",
       analysisAttempts: job.attempts,
       analysisLastError: message,
+      ...(validationFailure ? { fileValidationStatus: "validation_failed" as const, fileValidationNotes: message, fileValidatedAt: now } : {}),
       updatedAt: now,
     }).where(eq(cvApplications.id, job.applicationId));
     return { completed: false, applicationId: job.applicationId, retry: !finalFailure, error: message };

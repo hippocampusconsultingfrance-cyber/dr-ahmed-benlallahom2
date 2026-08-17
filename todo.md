@@ -2199,3 +2199,11 @@
 ## Exploitation du pipeline CV
 
 - [x] Activer le worker Heartbeat `recruitment-processing-every-5-minutes` (task UID `dbKBSjV8KD73hiooHVY6wc`) pour traiter automatiquement les analyses CV en attente
+
+## Lot 2 — sécurité documentaire, normalisation et briefs Employeurs
+
+- [x] Mettre en quarantaine les CV entrants et valider la signature, le MIME et le contenu avant analyse
+- [x] Journaliser une preuve de rétention par retrait de référence S3 et du dossier après expiration, conformément aux capacités du stockage
+- [x] Normaliser certifications, langues et expériences extraites dans des structures exploitables par le matching
+- [x] Ajouter un tableau de bord administrateur des briefs Employeurs et l’association mission–candidats
+- [x] Ajouter des tests d’intégration couvrant succès, échec d’extraction/OCR, échec IA, rétention, notifications et accès administrateur

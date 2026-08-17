@@ -13,6 +13,7 @@ import { serveStatic, setupVite } from "./vite";
 import { storagePut } from "../storage";
 import { notifyOwner } from "./notification";
 import { sql } from "drizzle-orm";
+import { validateCvFile } from "../recruitmentFileValidation";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -373,8 +374,21 @@ async function startServer() {
 
         const trackingId = `CV${Math.random().toString(36).slice(2, 10).toUpperCase()}${Date.now().toString(36).slice(-8).toUpperCase()}`;
         const originalName = safeFileName(file.originalname);
+        let fileValidation;
+        try {
+          fileValidation = validateCvFile({
+            buffer: file.buffer,
+            mimeType: file.mimetype,
+            originalName,
+            size: file.size,
+          });
+        } catch (validationError) {
+          const code = validationError instanceof Error ? validationError.message : "cv_validation_failed";
+          res.status(400).json({ error: "Le contenu du CV ne correspond pas à un document PDF, DOC ou DOCX valide.", code });
+          return;
+        }
         const storageResult = await storagePut(
-          `recruitment/cv/${trackingId}-${originalName}`,
+          `recruitment/quarantine/${trackingId}-${originalName}`,
           file.buffer,
           file.mimetype,
         );
@@ -391,13 +405,15 @@ async function startServer() {
           tracking_id, first_name, last_name, email, phone, specialty,
           target_countries, languages, years_experience, availability, mobility, certifications, message,
           cv_file_key, cv_original_name, cv_mime_type, cv_size_bytes,
+          file_validation_status, file_checksum, file_validation_notes,
           gdpr_consent, marketing_consent, status, consent_at, retention_until
         ) VALUES (
           ${trackingId}, ${parsed.data.firstName}, ${parsed.data.lastName}, ${parsed.data.email},
           ${parsed.data.phone || null}, ${parsed.data.specialty}, ${JSON.stringify(parsed.data.targetCountries)},
           ${JSON.stringify(parsed.data.languages)}, ${parsed.data.yearsExperience ?? null},
           ${parsed.data.availability || null}, ${parsed.data.mobility || null}, ${parsed.data.certifications || null},
-          ${parsed.data.message || null}, ${storageResult.key}, ${originalName}, ${file.mimetype}, ${file.size}, 1,
+          ${parsed.data.message || null}, ${storageResult.key}, ${originalName}, ${file.mimetype}, ${file.size},
+          'quarantined', ${fileValidation.checksum}, ${fileValidation.notes}, 1,
           ${parsed.data.marketingConsent === "1" ? 1 : 0}, "new", NOW(), ${retentionUntil}
         )`);
 

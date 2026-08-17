@@ -2,12 +2,13 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Calendar, MessageSquare, Shield, DollarSign, Eye, CheckCircle, XCircle, Clock, ArrowLeft, Star, Trash2, FileText, CalendarDays, Plus, Edit, Trash, Globe, UserRound } from "lucide-react";
+import { Calendar, MessageSquare, Shield, DollarSign, Eye, CheckCircle, XCircle, Clock, ArrowLeft, Star, Trash2, FileText, CalendarDays, Plus, Edit, Trash, Globe, UserRound, BriefcaseBusiness } from "lucide-react";
 import { toast } from "sonner";
 import { useLocation } from "wouter";
 import RecruitmentTab from "@/components/RecruitmentTab";
+import EmployerBriefsTab from "@/components/EmployerBriefsTab";
 
-type Tab = "overview" | "appointments" | "contacts" | "gdpr" | "testimonials" | "blog" | "availability" | "recruitment";
+type Tab = "overview" | "appointments" | "contacts" | "gdpr" | "testimonials" | "blog" | "availability" | "recruitment" | "employerBriefs";
 
 export default function AdminDashboard() {
   const { user, loading } = useAuth();
@@ -46,6 +47,7 @@ export default function AdminDashboard() {
     { id: "blog" as Tab, label: "Blog", icon: FileText },
     { id: "availability" as Tab, label: "Disponibilités", icon: CalendarDays },
     { id: "recruitment" as Tab, label: "Candidatures", icon: UserRound },
+    { id: "employerBriefs" as Tab, label: "Missions", icon: BriefcaseBusiness },
   ];
 
   return (
@@ -99,6 +101,7 @@ export default function AdminDashboard() {
         {activeTab === "blog" && <BlogTab />}
         {activeTab === "availability" && <AvailabilityTab />}
         {activeTab === "recruitment" && <RecruitmentTab />}
+        {activeTab === "employerBriefs" && <EmployerBriefsTab />}
       </main>
     </div>
   );

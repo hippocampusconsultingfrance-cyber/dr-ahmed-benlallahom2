@@ -18,12 +18,21 @@ export type NormalizedExperience = {
   evidence: string;
 };
 
+export type NormalizedCertification = {
+  name: string;
+  issuingBody: string | null;
+  country: string | null;
+  expiresAt: string | null;
+  evidence: string;
+};
+
 export type RecruitmentAnalysisResult = {
   summary: string;
   professionalTitle: string;
   specialties: string[];
   skills: string[];
   languages: string[];
+  certifications: NormalizedCertification[];
   countriesOfInterest: string[];
   yearsExperience: number | null;
   normalizedExperiences: NormalizedExperience[];
@@ -51,6 +60,19 @@ const experienceSchema = {
   additionalProperties: false,
 } as const;
 
+const certificationSchema = {
+  type: "object",
+  properties: {
+    name: { type: "string" },
+    issuingBody: { anyOf: [{ type: "string" }, { type: "null" }] },
+    country: { anyOf: [{ type: "string" }, { type: "null" }] },
+    expiresAt: { anyOf: [{ type: "string" }, { type: "null" }] },
+    evidence: { type: "string" },
+  },
+  required: ["name", "issuingBody", "country", "expiresAt", "evidence"],
+  additionalProperties: false,
+} as const;
+
 const analysisSchema = {
   name: "healthcare_candidate_analysis",
   strict: true,
@@ -62,6 +84,7 @@ const analysisSchema = {
       specialties: { type: "array", items: { type: "string" } },
       skills: { type: "array", items: { type: "string" } },
       languages: { type: "array", items: { type: "string" } },
+      certifications: { type: "array", items: certificationSchema },
       countriesOfInterest: { type: "array", items: { type: "string" } },
       yearsExperience: { anyOf: [{ type: "integer", minimum: 0, maximum: 70 }, { type: "null" }] },
       normalizedExperiences: { type: "array", items: experienceSchema },
@@ -72,7 +95,7 @@ const analysisSchema = {
       reasoning: { type: "string" },
     },
     required: [
-      "summary", "professionalTitle", "specialties", "skills", "languages", "countriesOfInterest",
+      "summary", "professionalTitle", "specialties", "skills", "languages", "certifications", "countriesOfInterest",
       "yearsExperience", "normalizedExperiences", "relevanceScore", "strengths", "gaps",
       "dataQualityWarnings", "reasoning",
     ],
@@ -172,7 +195,7 @@ function parseAnalysis(content: unknown): RecruitmentAnalysisResult {
   const raw = messageContentToString(content);
   const parsed = JSON.parse(raw) as RecruitmentAnalysisResult;
   if (
-    !parsed || typeof parsed.summary !== "string" || !Array.isArray(parsed.specialties) || !Array.isArray(parsed.skills) ||
+    !parsed || typeof parsed.summary !== "string" || !Array.isArray(parsed.specialties) || !Array.isArray(parsed.skills) || !Array.isArray(parsed.languages) || !Array.isArray(parsed.certifications) ||
     !Array.isArray(parsed.strengths) || !Array.isArray(parsed.gaps) || !Array.isArray(parsed.dataQualityWarnings) ||
     !Array.isArray(parsed.normalizedExperiences) || !Number.isInteger(parsed.relevanceScore) ||
     parsed.relevanceScore < 0 || parsed.relevanceScore > 100
@@ -220,7 +243,7 @@ Texte extrait du CV :
 ${cvText}
 ---
 
-Normalise chaque expérience dans normalizedExperiences. Convertis les dates explicites vers YYYY-MM lorsque possible, utilise null si absente, et distingue permanent, temporary, locum (remplacement), internship (stage), fellowship, rotation et volunteer. Ne transforme jamais une date ou une durée incertaine en fait : ajoute une dataQualityWarning et cite la preuve textuelle dans evidence. Le score doit mesurer uniquement la pertinence professionnelle apparente au regard de la spécialité, des compétences, de l’expérience explicitement décrite et des pays ciblés. Il ne constitue pas une décision de recrutement.`,
+Normalise chaque expérience dans normalizedExperiences. Convertis les dates explicites vers YYYY-MM lorsque possible, utilise null si absente, et distingue permanent, temporary, locum (remplacement), internship (stage), fellowship, rotation et volunteer. Normalise aussi les certifications explicitement listées dans certifications : conserve le nom, l’organisme, le pays, la date d’expiration quand elle est explicitement indiquée et la preuve textuelle ; n’invente jamais une certification. Les langues doivent être fournies sous une forme cohérente et sans niveau de maîtrise inventé. Ne transforme jamais une date ou une durée incertaine en fait : ajoute une dataQualityWarning et cite la preuve textuelle dans evidence. Le score doit mesurer uniquement la pertinence professionnelle apparente au regard de la spécialité, des compétences, de l’expérience explicitement décrite et des pays ciblés. Il ne constitue pas une décision de recrutement.`,
       },
     ],
     response_format: { type: "json_schema", json_schema: analysisSchema },
@@ -250,7 +273,11 @@ export async function saveCvAnalysis(applicationId: number, analysis: Recruitmen
       countriesOfInterest: analysis.countriesOfInterest,
       yearsExperience: analysis.yearsExperience,
       normalizedExperiences: analysis.normalizedExperiences,
+      certifications: analysis.certifications,
     }),
+    normalizedCertifications: JSON.stringify(analysis.certifications),
+    normalizedLanguages: JSON.stringify(analysis.languages),
+    normalizedExperiences: JSON.stringify(analysis.normalizedExperiences),
     aiMatchReasoning: analysis.reasoning,
     aiAnalyzedAt: new Date(),
   }).where(eq(cvApplications.id, applicationId));

@@ -5,7 +5,7 @@ import { publicProcedure, adminProcedure, router } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { getDb } from "./db";
-import { contactMessages, gdprRequests, testimonials, appointments, blogPosts, availabilitySlots, blockedDates, cvApplications, recruitmentAuditLogs, recruitmentMatchProfiles } from "../drizzle/schema";
+import { contactMessages, gdprRequests, testimonials, appointments, blogPosts, availabilitySlots, blockedDates, cvApplications, recruitmentAuditLogs, recruitmentMatchProfiles, clientBriefs, clientBriefCandidates } from "../drizzle/schema";
 import { notifyOwner } from "./_core/notification";
 import { storageGetSignedUrl } from "./storage";
 import { eq, and, sql, desc, gte, lt } from "drizzle-orm";
@@ -20,6 +20,7 @@ import {
   type RecruitmentEmailTemplate,
 } from "./_core/notifications";
 import { logRecruitmentAction, matchesRecruitmentProfile, parseRecruitmentJsonArray } from "./recruitmentAudit";
+import { computeBriefCandidateMatch } from "./clientBriefMatching";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "");
 
@@ -828,6 +829,8 @@ export const appRouter = router({
             status: z.enum(CV_APPLICATION_STATUSES).optional(),
             specialty: z.string().trim().max(160).optional(),
             country: z.string().trim().max(80).optional(),
+            language: z.string().trim().max(80).optional(),
+            certification: z.string().trim().max(160).optional(),
             minimumScore: z.number().int().min(0).max(100).optional(),
             profileId: z.number().int().positive().optional(),
           })
@@ -840,6 +843,8 @@ export const appRouter = router({
           if (input.status) conditions.push(eq(cvApplications.status, input.status));
           if (input.specialty) conditions.push(sql`LOWER(${cvApplications.specialty}) LIKE LOWER(${`%${input.specialty}%`})`);
           if (input.country) conditions.push(sql`${cvApplications.targetCountries} LIKE ${`%${input.country}%`}`);
+          if (input.language) conditions.push(sql`(${cvApplications.normalizedLanguages} LIKE ${`%${input.language}%`} OR ${cvApplications.languages} LIKE ${`%${input.language}%`})`);
+          if (input.certification) conditions.push(sql`(${cvApplications.normalizedCertifications} LIKE ${`%${input.certification}%`} OR ${cvApplications.certifications} LIKE ${`%${input.certification}%`})`);
 
           let profile: typeof recruitmentMatchProfiles.$inferSelect | null = null;
           if (input.profileId) {
@@ -870,6 +875,9 @@ export const appRouter = router({
               availability: cvApplications.availability,
               mobility: cvApplications.mobility,
               certifications: cvApplications.certifications,
+              normalizedCertifications: cvApplications.normalizedCertifications,
+              normalizedLanguages: cvApplications.normalizedLanguages,
+              normalizedExperiences: cvApplications.normalizedExperiences,
               message: cvApplications.message,
               cvOriginalName: cvApplications.cvOriginalName,
               cvMimeType: cvApplications.cvMimeType,
@@ -987,11 +995,14 @@ export const appRouter = router({
           const db = await getDb();
           if (!db) throw new Error("Database connection failed");
           const [application] = await db
-            .select({ cvFileKey: cvApplications.cvFileKey, cvOriginalName: cvApplications.cvOriginalName })
+            .select({ cvFileKey: cvApplications.cvFileKey, cvOriginalName: cvApplications.cvOriginalName, status: cvApplications.status, fileValidationStatus: cvApplications.fileValidationStatus })
             .from(cvApplications)
             .where(eq(cvApplications.id, input.id))
             .limit(1);
           if (!application) throw new TRPCError({ code: "NOT_FOUND", message: "Candidature introuvable" });
+          if (application.status === "archived" || application.fileValidationStatus !== "accepted") {
+            throw new TRPCError({ code: "NOT_FOUND", message: "Le document n’est plus disponible conformément au cycle de rétention." });
+          }
           await logRecruitmentAction({ applicationId: input.id, adminOpenId: ctx.user.openId, action: "download", metadata: { fileName: application.cvOriginalName } });
           const signedUrl = await storageGetSignedUrl(application.cvFileKey);
           return { url: signedUrl, fileName: application.cvOriginalName };
@@ -1057,6 +1068,84 @@ export const appRouter = router({
           // The storage contract has no object-delete endpoint. Removing the only
           // database reference makes the private object unreachable in the app.
           await db.delete(cvApplications).where(eq(cvApplications.id, input.id));
+          return { success: true };
+        }),
+    }),
+
+    // Employer mission briefs and their human-reviewed candidate associations.
+    clientBriefs: router({
+      list: adminProcedure.query(async () => {
+        const db = await getDb();
+        if (!db) return [];
+        return db.select().from(clientBriefs).orderBy(desc(clientBriefs.createdAt));
+      }),
+      updateStatus: adminProcedure
+        .input(z.object({ id: z.number().int().positive(), status: z.enum(["new", "reviewing", "shortlist_sent", "contract_signed", "closed"]) }))
+        .mutation(async ({ input }) => {
+          const db = await getDb();
+          if (!db) throw new Error("Database connection failed");
+          await db.update(clientBriefs).set({ status: input.status }).where(eq(clientBriefs.id, input.id));
+          return { success: true };
+        }),
+      candidates: adminProcedure
+        .input(z.object({ briefId: z.number().int().positive() }))
+        .query(async ({ input }) => {
+          const db = await getDb();
+          if (!db) return { brief: null, candidates: [] };
+          const [brief] = await db.select().from(clientBriefs).where(eq(clientBriefs.id, input.briefId)).limit(1);
+          if (!brief) throw new TRPCError({ code: "NOT_FOUND", message: "Brief employeur introuvable" });
+          const applications = await db.select({
+            id: cvApplications.id,
+            trackingId: cvApplications.trackingId,
+            firstName: cvApplications.firstName,
+            lastName: cvApplications.lastName,
+            specialty: cvApplications.specialty,
+            targetCountries: cvApplications.targetCountries,
+            certifications: cvApplications.certifications,
+            normalizedCertifications: cvApplications.normalizedCertifications,
+            availability: cvApplications.availability,
+            aiScore: cvApplications.aiScore,
+            status: cvApplications.status,
+          }).from(cvApplications).where(sql`${cvApplications.status} NOT IN ('rejected', 'archived')`).limit(250);
+          const associations = await db.select().from(clientBriefCandidates).where(eq(clientBriefCandidates.briefId, brief.id));
+          const associationByApplication = new Map(associations.map(association => [association.applicationId, association]));
+          const candidates = applications.map(application => ({
+            ...application,
+            match: computeBriefCandidateMatch(brief, application),
+            association: associationByApplication.get(application.id) ?? null,
+          })).sort((left, right) => right.match.score - left.match.score);
+          return { brief, candidates };
+        }),
+      associateCandidate: adminProcedure
+        .input(z.object({
+          briefId: z.number().int().positive(),
+          applicationId: z.number().int().positive(),
+          matchScore: z.number().int().min(0).max(100).optional(),
+          status: z.enum(["suggested", "reviewing", "shortlisted", "declined"]).default("suggested"),
+          notes: z.string().trim().max(5_000).optional(),
+        }))
+        .mutation(async ({ input }) => {
+          const db = await getDb();
+          if (!db) throw new Error("Database connection failed");
+          const [existing] = await db.select().from(clientBriefCandidates)
+            .where(and(eq(clientBriefCandidates.briefId, input.briefId), eq(clientBriefCandidates.applicationId, input.applicationId)))
+            .limit(1);
+          if (existing) {
+            await db.update(clientBriefCandidates).set({
+              matchScore: input.matchScore ?? existing.matchScore,
+              status: input.status,
+              notes: input.notes ?? existing.notes,
+              updatedAt: new Date(),
+            }).where(eq(clientBriefCandidates.id, existing.id));
+          } else {
+            await db.insert(clientBriefCandidates).values({
+              briefId: input.briefId,
+              applicationId: input.applicationId,
+              matchScore: input.matchScore ?? null,
+              status: input.status,
+              notes: input.notes ?? null,
+            });
+          }
           return { success: true };
         }),
     }),
