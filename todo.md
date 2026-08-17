@@ -2132,3 +2132,9 @@
 - [x] Connecter le formulaire de candidature VVIP au système de dépôt de CV existant avec étiquetage spécifique (`VVIP / Offshore`)
 - [x] Mettre à jour l'interface administrateur pour filtrer et identifier les candidats VVIP / Offshore
 - [x] Valider le typecheck, les tests unitaires et publier la section
+
+## Alignement final du recrutement
+
+- [x] Simplifier la navigation principale avec une seule entrée Recrutement et le Hub comme point d’accès aux deux parcours
+- [x] Corriger l’espacement entre le logo, la navigation et les actions sur desktop
+- [x] Vérifier les libellés VVIP/Offshore longs et les champs du formulaire sur desktop et mobile

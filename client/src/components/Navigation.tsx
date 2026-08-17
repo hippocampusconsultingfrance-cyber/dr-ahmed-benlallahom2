@@ -20,7 +20,6 @@ export default function Navigation() {
 
   const currentLang = languages.find((l) => l.code === language);
   const recruitmentLabel = { fr: "Recrutement", en: "Recruitment", de: "Recruiting", zh: "招聘" }[language];
-  const vvipLabel = { fr: "Missions VVIP / Offshore", en: "VVIP / Offshore Missions", de: "VVIP- / Offshore-Missionen", zh: "VVIP / 离岸任务" }[language];
 
   const handleLanguageChange = (code: string) => {
     if (code !== language) {
@@ -68,11 +67,11 @@ export default function Navigation() {
           : "bg-transparent"
       }`}
     >
-      <div className="container flex items-center justify-between h-18 md:h-20">
+      <div className="container flex items-center justify-between gap-4 h-18 md:h-20">
         {/* Logo — larger, more prominent */}
         <button
           onClick={() => scrollTo("hero")}
-          className="brand-lockup flex items-center gap-3 group"
+          className="brand-lockup flex shrink-0 items-center gap-3 group"
           aria-label="Dr. Ahmed Ben Lallahom — Accueil"
         >
           <img
@@ -95,7 +94,7 @@ export default function Navigation() {
         </button>
 
         {/* Desktop Nav */}
-        <nav className="hidden md:flex items-center gap-8" aria-label="Navigation principale">
+        <nav className="hidden md:flex min-w-0 flex-1 items-center justify-end gap-6" aria-label="Navigation principale">
           {[
             { id: "experience", label: content.nav.experience },
             { id: "services", label: content.nav.services },
@@ -110,12 +109,11 @@ export default function Navigation() {
               {item.label}
             </button>
           ))}
-          <a href="/recruitment" className="nav-link text-sm font-medium text-muted-foreground hover:text-foreground transition-colors duration-200 relative after:absolute after:bottom-[-4px] after:left-0 after:w-0 after:h-[2px] after:bg-primary after:transition-all hover:after:w-full">{recruitmentLabel}</a>
-          <a href="/vvip-offshore" className="nav-link text-sm font-medium text-primary hover:text-foreground transition-colors duration-200 relative after:absolute after:bottom-[-4px] after:left-0 after:w-0 after:h-[2px] after:bg-primary after:transition-all hover:after:w-full">{vvipLabel}</a>
+          <a href="/recruitment" className="nav-link whitespace-nowrap text-sm font-medium text-muted-foreground hover:text-foreground transition-colors duration-200 relative after:absolute after:bottom-[-4px] after:left-0 after:w-0 after:h-[2px] after:bg-primary after:transition-all hover:after:w-full">{recruitmentLabel}</a>
         </nav>
 
         {/* Actions */}
-        <div className="flex items-center gap-3">
+        <div className="flex shrink-0 items-center gap-3">
           {/* Language Dropdown */}
           <div ref={dropdownRef} className="relative">
             <button
@@ -206,7 +204,6 @@ export default function Navigation() {
               </button>
             ))}
             <a href="/recruitment" onClick={() => setMobileOpen(false)} className="nav-mobile-link text-left text-lg font-medium text-foreground py-2 border-b border-border/20">{recruitmentLabel}</a>
-            <a href="/vvip-offshore" onClick={() => setMobileOpen(false)} className="nav-mobile-link text-left text-lg font-medium text-primary py-2 border-b border-border/20">{vvipLabel}</a>
             <button
               onClick={() => scrollTo("contact")}
               className="nav-cta cta-primary mt-4 px-5 py-3.5 text-sm w-full"
