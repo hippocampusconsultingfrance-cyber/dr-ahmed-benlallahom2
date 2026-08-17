@@ -13,9 +13,11 @@ function escapeHtml(value: unknown): string {
     .replaceAll("'", "&#039;");
 }
 
-// Resend free tier uses onboarding@resend.dev as sender
-// Once a custom domain is verified in Resend, change this
-const FROM_EMAIL = "Dr. Ben Lallahom <onboarding@resend.dev>";
+// Domaine drahmedbenlallahom.com vérifié dans Resend.
+// Une boîte dédiée n'est pas nécessaire pour l'envoi transactionnel ; les
+// réponses des candidats restent dirigées vers la boîte de recrutement active.
+const FROM_EMAIL = "Hippocampus Consulting <recrutement@drahmedbenlallahom.com>";
+const RECRUITMENT_REPLY_TO = "hippocampusconsultingfrance@gmail.com";
 
 export async function sendConfirmationEmail(
   customerEmail: string,
@@ -353,6 +355,7 @@ export async function sendCvApplicationConfirmationEmail(
     const { data, error } = await resend.emails.send({
       from: FROM_EMAIL,
       to: [candidateEmail],
+      replyTo: RECRUITMENT_REPLY_TO,
       subject: `Candidature reçue - ${trackingId}`,
       html: emailContent,
     });
@@ -408,6 +411,7 @@ export async function sendRecruitmentTemplateEmail(
   const { data, error } = await resend.emails.send({
     from: FROM_EMAIL,
     to: [candidateEmail],
+    replyTo: RECRUITMENT_REPLY_TO,
     subject: message.subject,
     html: message.html,
   });

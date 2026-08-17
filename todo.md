@@ -2267,5 +2267,11 @@
 
 - [x] Identifier et neutraliser l’accès à une donnée PDF/extraction absente qui provoque l’erreur `reading '0'`
 - [x] Ajouter un repli sûr pour les métriques PDF/OCR incomplètes et les structures d’analyse vides
-- [ ] Ajouter un test de non-régression et relancer la candidature en erreur
-- [ ] Vérifier l’analyse terminée puis publier la correction
+- [x] Ajouter un test de non-régression et relancer la candidature en erreur
+- [x] Vérifier l’analyse terminée puis publier la correction
+
+## Configuration Resend — emails de recrutement
+
+- [x] Identifier l’adresse d’expéditeur actuelle et le comportement de repli Resend
+- [x] Préparer l’adresse d’expéditeur liée à un domaine vérifié et ses validations techniques
+- [ ] Vérifier l’envoi d’un modèle recrutement vers un candidat après validation du domaine
