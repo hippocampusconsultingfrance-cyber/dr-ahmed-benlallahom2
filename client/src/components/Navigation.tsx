@@ -73,11 +73,11 @@ export default function Navigation() {
           : "bg-transparent"
       }`}
     >
-      <div className="container flex items-center justify-between gap-4 h-18 md:h-20">
+      <div className="container grid h-18 grid-cols-[minmax(0,1fr)_auto] items-center gap-4 md:h-20 min-[1350px]:grid-cols-[minmax(280px,1fr)_auto_minmax(280px,1fr)]">
         {/* Logo — larger, more prominent */}
         <button
           onClick={() => scrollTo("hero")}
-          className="brand-lockup flex shrink-0 items-center gap-3 group"
+          className="brand-lockup flex shrink-0 items-center gap-3 group min-[1350px]:justify-self-start"
           aria-label="Dr. Ahmed Ben Lallahom — Accueil"
         >
           <img
@@ -100,7 +100,7 @@ export default function Navigation() {
         </button>
 
         {/* Desktop Nav */}
-        <nav className="hidden min-[1350px]:flex min-w-0 flex-1 items-center justify-end gap-6" aria-label="Navigation principale">
+        <nav className="hidden min-[1350px]:flex min-w-0 items-center justify-self-center gap-6" aria-label="Navigation principale">
           {[
             { id: "experience", label: content.nav.experience },
             { id: "services", label: content.nav.services },
@@ -110,17 +110,17 @@ export default function Navigation() {
             <button
               key={item.id}
               onClick={() => scrollTo(item.id)}
-              className="nav-link text-sm font-medium text-muted-foreground hover:text-foreground transition-colors duration-200 relative after:absolute after:bottom-[-4px] after:left-0 after:w-0 after:h-[2px] after:bg-primary after:transition-all hover:after:w-full"
+              className="nav-link inline-flex h-10 items-center text-sm font-medium text-muted-foreground hover:text-foreground transition-colors duration-200 relative after:absolute after:bottom-[2px] after:left-0 after:w-0 after:h-[2px] after:bg-primary after:transition-all hover:after:w-full"
             >
               {item.label}
             </button>
           ))}
-          <a href="/recruitment" className="nav-link whitespace-nowrap text-sm font-medium text-muted-foreground hover:text-foreground transition-colors duration-200 relative after:absolute after:bottom-[-4px] after:left-0 after:w-0 after:h-[2px] after:bg-primary after:transition-all hover:after:w-full">{recruitmentLabel}</a>
-          <a href="/employers" className="nav-link whitespace-nowrap text-sm font-medium text-muted-foreground hover:text-foreground transition-colors duration-200 relative after:absolute after:bottom-[-4px] after:left-0 after:w-0 after:h-[2px] after:bg-primary after:transition-all hover:after:w-full">{employersLabel}</a>
+          <a href="/recruitment" className="nav-link inline-flex h-10 items-center whitespace-nowrap text-sm font-medium text-muted-foreground hover:text-foreground transition-colors duration-200 relative after:absolute after:bottom-[2px] after:left-0 after:w-0 after:h-[2px] after:bg-primary after:transition-all hover:after:w-full">{recruitmentLabel}</a>
+          <a href="/employers" className="nav-link inline-flex h-10 items-center whitespace-nowrap text-sm font-medium text-muted-foreground hover:text-foreground transition-colors duration-200 relative after:absolute after:bottom-[2px] after:left-0 after:w-0 after:h-[2px] after:bg-primary after:transition-all hover:after:w-full">{employersLabel}</a>
         </nav>
 
         {/* Actions */}
-        <div className="flex shrink-0 items-center gap-3">
+        <div className="flex shrink-0 items-center gap-3 min-[1350px]:justify-self-end">
           {/* Language Dropdown */}
           <div ref={dropdownRef} className="relative">
             <button

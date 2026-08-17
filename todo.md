@@ -2226,3 +2226,9 @@
 - [x] Aligner les six onglets sur la même grille et la même ligne de base sur desktop et mobile
 - [x] Vérifier visuellement puis publier la correction de navigation
 - [x] Éviter tout chevauchement du logo et des six onglets aux largeurs desktop intermédiaires en basculant proprement vers le menu compact
+
+## Correctif définitif — géométrie du header desktop
+
+- [x] Recomposer le header en zones identité, navigation centrale et actions latérales avec des largeurs stables
+- [x] Aligner les six onglets sur une seule ligne de base sans séparation visuelle ni dérive selon la largeur
+- [x] Vérifier le header à 1280 px, 1440 px et grand écran puis publier le correctif
