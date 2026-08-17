@@ -282,7 +282,8 @@ export async function analyzeCvText(input: {
 
   const response = await invokeLLM({
     model: "gpt-5-mini",
-    max_tokens: 2_500,
+    maxCompletionTokens: 4_000,
+    reasoning: { effort: "low" },
     messages: [
       {
         role: "system",
