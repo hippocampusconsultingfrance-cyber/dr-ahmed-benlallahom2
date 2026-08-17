@@ -2207,3 +2207,8 @@
 - [x] Normaliser certifications, langues et expériences extraites dans des structures exploitables par le matching
 - [x] Ajouter un tableau de bord administrateur des briefs Employeurs et l’association mission–candidats
 - [x] Ajouter des tests d’intégration couvrant succès, échec d’extraction/OCR, échec IA, rétention, notifications et accès administrateur
+
+## Vérification de l’audit backend
+
+- [x] Comparer chaque recommandation de AUDIT_BACKEND_CV_CANDIDATURES_2026-08-17 avec l’implémentation publiée
+- [x] Documenter les éléments complets, partiels et non réalisables avec les limites de plateforme
