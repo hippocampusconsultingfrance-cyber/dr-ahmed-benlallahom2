@@ -8,6 +8,7 @@ import { getDb } from "./db";
 import { contactMessages, gdprRequests, testimonials, appointments, blogPosts, availabilitySlots, blockedDates, cvApplications, cvCandidateCertifications, recruitmentAuditLogs, recruitmentMatchProfiles, clientBriefs, clientBriefCandidates } from "../drizzle/schema";
 import { notifyOwner } from "./_core/notification";
 import { storageGetSignedUrl } from "./storage";
+import { canAdminDownloadCv, CV_DOWNLOAD_UNAVAILABLE_MESSAGE } from "./recruitmentDownloadPolicy";
 import { eq, and, sql, desc, gte, inArray, lt } from "drizzle-orm";
 import Stripe from "stripe";
 import {
@@ -1007,8 +1008,8 @@ export const appRouter = router({
             .where(eq(cvApplications.id, input.id))
             .limit(1);
           if (!application) throw new TRPCError({ code: "NOT_FOUND", message: "Candidature introuvable" });
-          if (application.status === "archived" || application.fileValidationStatus !== "accepted") {
-            throw new TRPCError({ code: "NOT_FOUND", message: "Le document n’est plus disponible conformément au cycle de rétention." });
+          if (!canAdminDownloadCv(application)) {
+            throw new TRPCError({ code: "NOT_FOUND", message: CV_DOWNLOAD_UNAVAILABLE_MESSAGE });
           }
           await logRecruitmentAction({ applicationId: input.id, adminOpenId: ctx.user.openId, action: "download", metadata: { fileName: application.cvOriginalName } });
           const signedUrl = await storageGetSignedUrl(application.cvFileKey);

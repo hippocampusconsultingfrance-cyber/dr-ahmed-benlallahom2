@@ -2256,3 +2256,9 @@
 - [x] Désactiver le retrait automatique de référence de stockage déclenché par la rétention
 - [x] Conserver les CV et leurs liens sécurisés jusqu’à une suppression RGPD manuelle demandée par l’administrateur
 - [x] Remplacer la purge par une alerte administrative non destructive et vérifier les CV existants
+
+## Correction téléchargement des CV
+
+- [x] Retirer la règle de rétention obsolète du téléchargement administrateur
+- [x] Autoriser le téléchargement sécurisé des CV conservés, y compris en quarantaine et analyse en attente
+- [x] Vérifier le téléchargement d’un CV existant puis publier la correction
