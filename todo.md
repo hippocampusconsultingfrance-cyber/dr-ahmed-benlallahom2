@@ -2163,3 +2163,9 @@
 
 - [x] S’assurer que depuis n’importe quelle sous-page (ex. /recruitment, /employers, /booking, /legal), les clics sur les onglets de la barre de navigation ramènent correctement à la section d’accueil ou ouvrent la bonne page
 - [x] Vérifier que tous les boutons d’action (CTA, soumission de formulaires, onglets admin, téléchargements, sélecteurs de langue) réagissent sans blocage
+
+## Élargissement des pays et enrichissement VVIP
+
+- [x] Élargir la liste des pays ciblés (Europe, Amérique du Nord, Golfe/Moyen-Orient, Asie/Pacifique, Afrique francophone) avec sélection multiple fluide
+- [x] Enrichir la page VVIP & Offshore avec de nouvelles sections (types de missions, protocoles de sécurité, exigences opérationnelles, FAQ)
+- [x] Vérifier le typecheck, les tests unitaires et publier le checkpoint

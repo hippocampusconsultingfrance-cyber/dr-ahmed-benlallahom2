@@ -9,12 +9,22 @@ import { useLanguage } from "@/contexts/LanguageContext";
 const countryOptions = [
   { value: "France", labels: { fr: "France", en: "France", de: "Frankreich", zh: "法国" } },
   { value: "Allemagne", labels: { fr: "Allemagne", en: "Germany", de: "Deutschland", zh: "德国" } },
+  { value: "Suisse", labels: { fr: "Suisse", en: "Switzerland", de: "Schweiz", zh: "瑞士" } },
+  { value: "Belgique", labels: { fr: "Belgique", en: "Belgium", de: "Belgien", zh: "比利时" } },
+  { value: "Royaume-Uni", labels: { fr: "Royaume-Uni", en: "United Kingdom", de: "Vereinigtes Königreich", zh: "英国" } },
   { value: "Italie", labels: { fr: "Italie", en: "Italy", de: "Italien", zh: "意大利" } },
+  { value: "Espagne", labels: { fr: "Espagne", en: "Spain", de: "Spanien", zh: "西班牙" } },
   { value: "Canada", labels: { fr: "Canada", en: "Canada", de: "Kanada", zh: "加拿大" } },
+  { value: "États-Unis", labels: { fr: "États-Unis", en: "United States", de: "Vereinigte Staaten", zh: "美国" } },
   { value: "Émirats arabes unis", labels: { fr: "Émirats arabes unis", en: "United Arab Emirates", de: "Vereinigte Arabische Emirate", zh: "阿联酋" } },
   { value: "Arabie saoudite", labels: { fr: "Arabie saoudite", en: "Saudi Arabia", de: "Saudi-Arabien", zh: "沙特阿拉伯" } },
   { value: "Qatar", labels: { fr: "Qatar", en: "Qatar", de: "Katar", zh: "卡塔尔" } },
-  { value: "Autre pays du Moyen-Orient", labels: { fr: "Autre pays du Moyen-Orient", en: "Other Middle East country", de: "Anderes Land im Nahen Osten", zh: "其他中东国家" } },
+  { value: "Oman", labels: { fr: "Oman", en: "Oman", de: "Oman", zh: "阿曼" } },
+  { value: "Koweït", labels: { fr: "Koweït", en: "Kuwait", de: "Kuwait", zh: "科威特" } },
+  { value: "Singapour", labels: { fr: "Singapour", en: "Singapore", de: "Singapur", zh: "新加坡" } },
+  { value: "Australie", labels: { fr: "Australie", en: "Australia", de: "Australien", zh: "澳大利亚" } },
+  { value: "Maroc", labels: { fr: "Maroc", en: "Morocco", de: "Marokko", zh: "摩洛哥" } },
+  { value: "Autre pays / Mobilité mondiale", labels: { fr: "Autre pays / Mobilité mondiale", en: "Other country / Global mobility", de: "Anderes Land / Globale Mobilität", zh: "其他国家/全球流动" } },
 ] as const;
 
 const specialtyCategories = [

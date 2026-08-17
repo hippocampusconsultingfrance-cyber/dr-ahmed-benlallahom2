@@ -1,5 +1,5 @@
-import { FormEvent, useMemo, useRef, useState } from "react";
-import { CheckCircle2, FileUp, Globe2, Loader2, ShieldCheck, UserCheck, Zap } from "lucide-react";
+import { FormEvent, useRef, useState } from "react";
+import { CheckCircle2, FileUp, Globe2, Loader2, ShieldCheck, UserCheck, Zap, Award, Compass, Lock } from "lucide-react";
 import { Link } from "wouter";
 import { SEOHead } from "@/components/SEOHead";
 import Navigation from "@/components/Navigation";
@@ -53,6 +53,20 @@ const copy = {
     p2Desc: "Golfe Persique, Moyen-Orient, plateformes en mer du Nord, Afrique de l’Ouest et chantiers isolés.",
     p3Title: "Standards Internationaux",
     p3Desc: "Accompagnement sur les normes médicales rigoureuses (OGP, Oil & Gas UK, AHA).",
+    section2Title: "Domaines d’intervention et expertises critiques",
+    section2Sub: "Une couverture médicale sur mesure pour les situations où l’infrastructure hospitalière classique n’est pas immédiatement accessible.",
+    card1Title: "Résidences VVIP & Délégations",
+    card1Desc: "Présence médicale permanente ou de liaison auprès de personnalités et de délégations officielles. Maîtrise des protocoles d'évacuation sanitaire d'urgence (EVASAN).",
+    card2Title: "Plateformes Pétrolières & Offshore",
+    card2Desc: "Prise en charge des traumatismes majeurs, stabilisation en milieu confiné, gestion des intoxications et des urgences chirurgicales sur plates-formes offshores et sites isolés.",
+    card3Title: "Chantiers & Sites Miniers Isolat",
+    card3Desc: "Mise en place de cliniques de site autonome, gestion de la médecine du travail d'urgence, traçabilité des stocks pharmaceutiques et télé-médecine avancée.",
+    reqTitle: "Exigences et qualifications requises",
+    reqSub: "Le recrutement VVIP et Offshore repose sur un filtrage drastique garantissant une sécurité opérationnelle absolue.",
+    req1: "Minimum 5 années d’exercice en médecine d’urgence, réanimation ou trauma-center.",
+    req2: "Certifications obligatoires à jour : ATLS, ACLS, PHTLS, et HUET / BOSIET pour l'offshore.",
+    req3: "Maîtrise bilingue ou multilingue (Français, Anglais, Arabe ou Allemand).",
+    req4: "Aptitude psychologique validée pour l'isolement et la gestion de crise sous haute pression.",
     metaTitle: "Recrutement Médical VVIP & Offshore | Hippocampus Consulting",
     metaDescription: "Candidature pour missions médicales d’élite : Moyen-Orient VVIP, plateformes pétrolières, sites offshore et environnements industriels isolés.",
   },
@@ -92,6 +106,20 @@ const copy = {
     p2Desc: "Persian Gulf, Middle East, North Sea platforms, West Africa, and remote industrial sites.",
     p3Title: "International Standards",
     p3Desc: "Compliance with rigorous medical standards (OGP, Oil & Gas UK, AHA).",
+    section2Title: "Mission Scopes & Critical Expertise",
+    section2Sub: "Tailored medical coverage for situations where standard hospital infrastructure is not immediately accessible.",
+    card1Title: "VVIP Residences & Delegations",
+    card1Desc: "Permanent or liaison medical presence for high-profile figures and official delegations. Mastery of emergency medical evacuation protocols (MEDEVAC).",
+    card2Title: "Oil Rigs & Offshore Platforms",
+    card2Desc: "Management of major trauma, confinement stabilization, toxicological incidents, and surgical emergencies on offshore rigs and remote installations.",
+    card3Title: "Remote Industrial & Mining Sites",
+    card3Desc: "Deployment of autonomous site clinics, emergency occupational health management, pharmaceutical stock tracking, and advanced telemedicine.",
+    reqTitle: "Mandatory Requirements & Qualifications",
+    reqSub: "VVIP and Offshore recruitment relies on rigorous screening ensuring absolute operational safety.",
+    req1: "Minimum 5 years of practice in emergency medicine, intensive care, or trauma centers.",
+    req2: "Up-to-date mandatory certifications: ATLS, ACLS, PHTLS, and HUET / BOSIET for offshore.",
+    req3: "Bilingual or multilingual fluency (French, English, Arabic, or German).",
+    req4: "Validated psychological aptitude for isolation and high-pressure crisis management.",
     metaTitle: "VVIP & Offshore Medical Recruitment | Hippocampus Consulting",
     metaDescription: "Apply for elite medical missions: Middle East VVIP, oil rigs, offshore sites, and remote industrial environments.",
   },
@@ -131,6 +159,20 @@ const copy = {
     p2Desc: "Persischer Golf, Naher Osten, Nordsee-Plattformen und Westafrika.",
     p3Title: "Internationale Standards",
     p3Desc: "Einhaltung strenger Medizinstandards (OGP, Oil & Gas UK, AHA).",
+    section2Title: "Einsatzbereiche & Kritische Expertise",
+    section2Sub: "Maßgeschneiderte medizinische Versorgung für Situationen, in denen keine reguläre Krankenhausinfrastruktur verfügbar ist.",
+    card1Title: "VVIP-Residenzen & Delegationen",
+    card1Desc: "Permanente medizinische Betreuung oder Begleitung für Persönlichkeiten und offizielle Delegationen. Beherrschung von Evakuierungsprotokollen (MEDEVAC).",
+    card2Title: "Bohrinseln & Offshore-Plattformen",
+    card2Desc: "Versorgung schwerer Traumata, Stabilisierung in engen Räumen, Giftunfälle und chirurgische Notfälle auf Bohrinseln.",
+    card3Title: "Entlegene Industrie- & Bergbaustandorte",
+    card3Desc: "Einrichtung autonomer Standortkliniken, arbeitsmedizinische Notfallversorgung und fortschrittliche Telemedizin.",
+    reqTitle: "Anforderungen & Qualifikationen",
+    reqSub: "Das VVIP- und Offshore-Recruiting basiert auf strengsten Prüfungen zur Gewährleistung absoluter operativer Sicherheit.",
+    req1: "Mindestens 5 Jahre Praxis in Notfallmedizin, Intensivmedizin oder Trauma-Zentren.",
+    req2: "Gültige Pflichtzertifikate: ATLS, ACLS, PHTLS sowie HUET / BOSIET für den Offshore-Bereich.",
+    req3: "Verhandlungssichere Sprachkenntnisse (Französisch, Englisch, Arabisch oder Deutsch).",
+    req4: "Nachgewiesene psychologische Eignung für Isolation und Krisenmanagement.",
     metaTitle: "VVIP & Offshore Medizinisches Recruiting | Hippocampus Consulting",
     metaDescription: "Bewerbung für Elite-Medizineinsätze: Naher Osten VVIP, Bohrinseln, Offshore-Standorte.",
   },
@@ -165,11 +207,25 @@ const copy = {
     fileError: "请附加有效的 PDF、DOC 或 DOCX 格式简历（最大 5 MB）。",
     genericError: "传输错误，请检查信息后重试。",
     p1Title: "卓越与绝对保密",
-    p1Desc: "严格的保密协议、安全许可与绝对隐 秘。",
+    p1Desc: "严格的保密协议、安全许可与绝对隐秘。",
     p2Title: "核心派驻区域",
     p2Desc: "波斯湾、中东、北海钻井平台及西非远洋项目。",
     p3Title: "严苛国际标准",
     p3Desc: "全面契合 OGP、Oil & Gas UK 及 AHA 医疗准则。",
+    section2Title: "任务领域与关键专长",
+    section2Sub: "在常规医院基础设施无法立即触及的环境中，提供量身定制的医疗保障。",
+    card1Title: "VVIP 宅邸与官方代表团",
+    card1Desc: "为要员及官方代表团提供常驻或随行医疗保障，精通紧急医疗后送（MEDEVAC）程序。",
+    card2Title: "海上钻井平台与离岸工程",
+    card2Desc: "应对海上平台及偏远设施的严重创伤、密闭空间稳定、中毒事件及外科急症。",
+    card3Title: "偏远矿山与工业驻地",
+    card3Desc: "建立自主营地诊所、应急职业健康管理、药品库存追溯及高级远程医疗。",
+    reqTitle: "岗位要求与专业资质",
+    reqSub: "VVIP 及离岸招聘采用极为严格的筛选标准，以确保绝对的作业安全。",
+    req1: "至少 5 年急诊医学、重症医学或创伤中心临床经验。",
+    req2: "必须持有有效期内的国际认证：ATLS、ACLS、PHTLS 及离岸 HUET/BOSIET。",
+    req3: "精通双语或多语（法语、英语、阿拉伯语或德语）。",
+    req4: "具备在隔离环境及高压危机管理下的心理适应能力。",
     metaTitle: "VVIP 与离岸医疗人才招聘 | Hippocampus Consulting",
     metaDescription: "申请精英医疗任务：中东 VVIP、海上钻井平台、离岸工程与偏远工业驻地。",
   },
@@ -230,33 +286,38 @@ export default function VvipOffshorePage() {
       setErrorMessage(t.required);
       return;
     }
-    if (!form.firstName || !form.lastName || !form.email) {
+    if (!form.firstName || !form.lastName || !form.email || !form.specialty) {
       setStatus("error");
       setErrorMessage(t.required);
       return;
     }
 
-    const body = new FormData();
-    body.append("cv", file);
-    body.append("firstName", form.firstName);
-    body.append("lastName", form.lastName);
-    body.append("email", form.email);
-    body.append("phone", form.phone);
-    body.append("specialty", `[VVIP/Offshore] ${form.specialty} (${form.environment})`);
-    body.append("targetCountries", JSON.stringify([form.environment]));
-    body.append("languages", JSON.stringify(["Français", "English"]));
-    body.append("yearsExperience", form.yearsExperience);
-    body.append("message", `Certifications: ${form.certifications || "Non spécifié"} | Secteur: VVIP & Offshore`);
-    body.append("gdprConsent", form.gdprConsent ? "1" : "0");
-    body.append("marketingConsent", "0");
-    body.append("website", form.website);
-
     setStatus("sending");
     try {
-      const res = await fetch("/api/recruitment/apply", { method: "POST", body });
+      const body = new FormData();
+      body.append("cv", file);
+      body.append("firstName", form.firstName);
+      body.append("lastName", form.lastName);
+      body.append("email", form.email);
+      body.append("phone", form.phone);
+      body.append("specialty", `[VVIP / Offshore] ${form.specialty} (${form.environment})`);
+      body.append("targetCountries", JSON.stringify([form.environment]));
+      body.append("languages", JSON.stringify(["Français", "Anglais"]));
+      body.append("yearsExperience", form.yearsExperience ? String(Number(form.yearsExperience)) : "5");
+      body.append("certifications", form.certifications);
+      body.append("message", `Mission VVIP / Offshore. Environnement: ${form.environment}. Certifications: ${form.certifications}`);
+      body.append("gdprConsent", "1");
+      body.append("marketingConsent", "0");
+      body.append("website", form.website);
+
+      const res = await fetch("/api/recruitment/apply", {
+        method: "POST",
+        body,
+      });
       const payload = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(payload.error || t.genericError);
-      setTrackingId(payload.trackingId || "VVIP-OFFSHORE-OK");
+
+      setTrackingId(payload.trackingId || "VVIP-OK");
       setStatus("success");
     } catch (err) {
       setStatus("error");
@@ -266,137 +327,206 @@ export default function VvipOffshorePage() {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <SEOHead title={t.metaTitle} description={t.metaDescription} ogUrl="https://drahmedbenlallahom.com/vvip-offshore" />
+      <SEOHead title={t.metaTitle} description={t.metaDescription} ogUrl="https://drahmedbenlallahom.com/recruitment/vvip-offshore" />
       <Navigation />
-      <main className="pt-28 md:pt-36 pb-20">
-        <section className="container grid gap-12 lg:grid-cols-[1fr_1.1fr] lg:items-start">
-          <div className="lg:sticky lg:top-32 space-y-8">
+      <main className="pt-32 md:pt-40 pb-24">
+        {/* Hero Section */}
+        <section className="container max-w-6xl">
+          <div className="grid gap-12 lg:grid-cols-[1.2fr_1fr] lg:items-center">
             <div>
               <p className="section-kicker">{t.eyebrow}</p>
-              <h1 className="mt-4 font-display text-4xl leading-tight text-foreground md:text-5xl">{t.title}</h1>
+              <h1 className="mt-4 font-display text-4xl leading-tight text-foreground md:text-5xl lg:text-6xl">{t.title}</h1>
               <p className="mt-6 text-lg leading-8 text-muted-foreground">{t.intro}</p>
+
+              <div className="mt-10 grid gap-6 sm:grid-cols-3">
+                {[
+                  { icon: ShieldCheck, title: t.p1Title, desc: t.p1Desc },
+                  { icon: Compass, title: t.p2Title, desc: t.p2Desc },
+                  { icon: Award, title: t.p3Title, desc: t.p3Desc },
+                ].map((item) => {
+                  const Icon = item.icon;
+                  return (
+                    <div key={item.title} className="editorial-card p-5">
+                      <div className="rounded-xl bg-primary/10 p-3 text-primary w-fit">
+                        <Icon className="h-6 w-6" />
+                      </div>
+                      <h3 className="mt-4 font-display text-lg text-foreground">{item.title}</h3>
+                      <p className="mt-2 text-xs leading-5 text-muted-foreground">{item.desc}</p>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
 
-            <div className="grid gap-4">
-              {[
-                { icon: ShieldCheck, title: t.p1Title, desc: t.p1Desc },
-                { icon: Globe2, title: t.p2Title, desc: t.p2Desc },
-                { icon: Zap, title: t.p3Title, desc: t.p3Desc },
-              ].map((item) => {
-                const Icon = item.icon;
-                return (
-                  <div key={item.title} className="editorial-card flex items-start gap-4 p-5">
-                    <div className="rounded-xl bg-primary/10 p-3 text-primary">
-                      <Icon className="h-6 w-6" />
-                    </div>
-                    <div>
-                      <h3 className="font-display text-lg text-foreground">{item.title}</h3>
-                      <p className="mt-1 text-sm text-muted-foreground">{item.desc}</p>
-                    </div>
+            {/* Application Form */}
+            <div className="editorial-card p-6 md:p-8">
+              {status === "success" ? (
+                <div className="py-12 text-center" role="status">
+                  <CheckCircle2 className="mx-auto h-16 w-16 text-primary" />
+                  <h2 className="mt-6 font-display text-3xl text-foreground">{t.successTitle}</h2>
+                  <p className="mx-auto mt-4 max-w-md text-muted-foreground">{t.successText}</p>
+                  <p className="mt-4 rounded-xl bg-primary/10 px-6 py-4 font-mono text-xl font-bold text-primary">{trackingId}</p>
+                  <Link href="/" className="cta-primary mt-8 inline-flex">{t.backHome}</Link>
+                </div>
+              ) : (
+                <>
+                  <div className="flex items-center gap-2.5 text-primary">
+                    <Lock className="h-5 w-5" />
+                    <span className="text-xs font-semibold uppercase tracking-wider">Canal Sécurisé VVIP</span>
                   </div>
-                );
-              })}
+                  <h2 className="mt-2 font-display text-2xl md:text-3xl text-foreground">{t.formTitle}</h2>
+                  <p className="mt-2 text-sm leading-6 text-muted-foreground">{t.formIntro}</p>
+
+                  <form onSubmit={handleSubmit} className="mt-6 space-y-5" noValidate>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <label className="block w-full space-y-1.5 text-sm text-foreground">
+                        <span className="block font-medium">{t.firstName} *</span>
+                        <input required value={form.firstName} onChange={(e) => update("firstName", e.target.value)} className="form-control block w-full" />
+                      </label>
+                      <label className="block w-full space-y-1.5 text-sm text-foreground">
+                        <span className="block font-medium">{t.lastName} *</span>
+                        <input required value={form.lastName} onChange={(e) => update("lastName", e.target.value)} className="form-control block w-full" />
+                      </label>
+                    </div>
+
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <label className="block w-full space-y-1.5 text-sm text-foreground">
+                        <span className="block font-medium">{t.email} *</span>
+                        <input type="email" required value={form.email} onChange={(e) => update("email", e.target.value)} className="form-control block w-full" autoComplete="email" />
+                      </label>
+                      <label className="block w-full space-y-1.5 text-sm text-foreground">
+                        <span className="block font-medium">{t.phone}</span>
+                        <input type="tel" value={form.phone} onChange={(e) => update("phone", e.target.value)} className="form-control block w-full" autoComplete="tel" />
+                      </label>
+                    </div>
+
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <label className="block w-full space-y-1.5 text-sm text-foreground">
+                        <span className="block font-medium">{t.specialty} *</span>
+                        <select value={form.specialty} onChange={(e) => update("specialty", e.target.value)} className="form-control block w-full">
+                          {specialtyOptions.map((opt) => (
+                            <option key={opt} value={opt}>{opt}</option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="block w-full space-y-1.5 text-sm text-foreground">
+                        <span className="block font-medium">{t.environment} *</span>
+                        <select value={form.environment} onChange={(e) => update("environment", e.target.value)} className="form-control block w-full">
+                          <option value="Moyen-Orient (Résidences / Gouvernement / VVIP)">{t.env1}</option>
+                          <option value="Plateformes pétrolières & gazières (Onshore / Offshore)">{t.env2}</option>
+                          <option value="Sociétés minières & industrielles isolées">{t.env3}</option>
+                          <option value="Événements internationaux de prestige">{t.env4}</option>
+                        </select>
+                      </label>
+                    </div>
+
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <label className="block w-full space-y-1.5 text-sm text-foreground">
+                        <span className="block font-medium">{t.experience}</span>
+                        <input type="number" min="0" max="50" value={form.yearsExperience} onChange={(e) => update("yearsExperience", e.target.value)} className="form-control block w-full" placeholder="Ex. 8 ans" />
+                      </label>
+                      <label className="block w-full space-y-1.5 text-sm text-foreground">
+                        <span className="block font-medium">{t.certifications}</span>
+                        <input value={form.certifications} onChange={(e) => update("certifications", e.target.value)} className="form-control block w-full" placeholder="ATLS, ACLS, HUET, etc." />
+                      </label>
+                    </div>
+
+                    <div className="space-y-2">
+                      <span className="block text-sm font-medium text-foreground">{t.cv} *</span>
+                      <div
+                        onClick={() => fileInputRef.current?.click()}
+                        className="group relative flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-border/70 bg-card/50 p-6 text-center transition-all hover:border-primary/60 hover:bg-card cursor-pointer"
+                      >
+                        <FileUp className="h-8 w-8 text-primary transition-transform group-hover:scale-110" />
+                        <span className="mt-3 text-sm font-medium text-foreground">
+                          {file ? file.name : t.chooseFile}
+                        </span>
+                        <span className="mt-1 text-xs text-muted-foreground">PDF, DOC ou DOCX — 5 Mo max</span>
+                        <input
+                          ref={fileInputRef}
+                          type="file"
+                          accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                          className="hidden"
+                          onChange={(e) => setFile(e.target.files?.[0] || null)}
+                        />
+                      </div>
+                    </div>
+
+                    <label className="flex items-start gap-3 cursor-pointer text-xs text-muted-foreground">
+                      <input
+                        type="checkbox"
+                        required
+                        checked={form.gdprConsent}
+                        onChange={(e) => update("gdprConsent", e.target.checked)}
+                        className="mt-0.5 rounded border-border accent-primary"
+                      />
+                      <span>{t.gdpr}</span>
+                    </label>
+
+                    <label className="absolute -left-[10000px] h-px w-px overflow-hidden" aria-hidden="true">
+                      <span>Website</span>
+                      <input tabIndex={-1} autoComplete="off" value={form.website} onChange={(e) => update("website", e.target.value)} />
+                    </label>
+
+                    {status === "error" && (
+                      <p className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive" role="alert">{errorMessage}</p>
+                    )}
+
+                    <button type="submit" disabled={status === "sending"} className="cta-primary w-full justify-center">
+                      {status === "sending" ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />{t.sending}</> : t.submit}
+                    </button>
+                  </form>
+                </>
+              )}
             </div>
           </div>
+        </section>
 
-          <div className="editorial-card p-6 md:p-8">
-            {status === "success" ? (
-              <div className="py-12 text-center" role="status">
-                <CheckCircle2 className="mx-auto h-16 w-16 text-primary" />
-                <h2 className="mt-6 font-display text-3xl text-foreground">{t.successTitle}</h2>
-                <p className="mx-auto mt-4 max-w-md text-muted-foreground">{t.successText}</p>
-                <p className="mt-4 rounded-xl bg-primary/10 px-6 py-4 font-mono text-xl font-bold text-primary">{trackingId}</p>
-                <Link href="/" className="cta-primary mt-8 inline-flex">{t.backHome}</Link>
+        {/* Detailed Expertise Section */}
+        <section className="container max-w-6xl mt-24">
+          <div className="text-center max-w-2xl mx-auto">
+            <p className="section-kicker">Expertise & Domaines</p>
+            <h2 className="mt-3 font-display text-3xl md:text-4xl text-foreground">{t.section2Title}</h2>
+            <p className="mt-4 text-muted-foreground">{t.section2Sub}</p>
+          </div>
+
+          <div className="mt-12 grid gap-8 md:grid-cols-3">
+            {[
+              { title: t.card1Title, desc: t.card1Desc },
+              { title: t.card2Title, desc: t.card2Desc },
+              { title: t.card3Title, desc: t.card3Desc },
+            ].map((card, idx) => (
+              <div key={card.title} className="editorial-card p-6 md:p-8 flex flex-col justify-between">
+                <div>
+                  <span className="font-mono text-xs text-primary font-semibold tracking-widest">0{idx + 1} // VVIP</span>
+                  <h3 className="mt-3 font-display text-xl text-foreground">{card.title}</h3>
+                  <p className="mt-4 text-sm leading-6 text-muted-foreground">{card.desc}</p>
+                </div>
+                <div className="mt-6 pt-4 border-t border-border/40 flex items-center gap-2 text-xs text-primary font-medium">
+                  <ShieldCheck className="h-4 w-4" /> Habilitation requise
+                </div>
               </div>
-            ) : (
-              <>
-                <h2 className="font-display text-3xl text-foreground">{t.formTitle}</h2>
-                <p className="mt-3 text-sm leading-6 text-muted-foreground">{t.formIntro}</p>
+            ))}
+          </div>
+        </section>
 
-                <form onSubmit={handleSubmit} className="mt-8 space-y-6" noValidate>
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <label className="block w-full space-y-2 text-sm text-foreground">
-                      <span className="block mb-1 font-medium">{t.firstName} *</span>
-                      <input required value={form.firstName} onChange={(e) => update("firstName", e.target.value)} className="form-control block w-full" autoComplete="given-name" />
-                    </label>
-                    <label className="block w-full space-y-2 text-sm text-foreground">
-                      <span className="block mb-1 font-medium">{t.lastName} *</span>
-                      <input required value={form.lastName} onChange={(e) => update("lastName", e.target.value)} className="form-control block w-full" autoComplete="family-name" />
-                    </label>
-                  </div>
+        {/* Requirements Section */}
+        <section className="container max-w-6xl mt-24">
+          <div className="editorial-card p-8 md:p-12 relative overflow-hidden bg-gradient-to-br from-card via-card to-background">
+            <div className="max-w-2xl">
+              <span className="section-kicker">Standards de Sélection</span>
+              <h2 className="mt-3 font-display text-3xl text-foreground">{t.reqTitle}</h2>
+              <p className="mt-3 text-muted-foreground">{t.reqSub}</p>
 
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <label className="block w-full space-y-2 text-sm text-foreground">
-                      <span className="block mb-1 font-medium">{t.email} *</span>
-                      <input type="email" required value={form.email} onChange={(e) => update("email", e.target.value)} className="form-control block w-full" autoComplete="email" />
-                    </label>
-                    <label className="block w-full space-y-2 text-sm text-foreground">
-                      <span className="block mb-1 font-medium">{t.phone}</span>
-                      <input type="tel" value={form.phone} onChange={(e) => update("phone", e.target.value)} className="form-control block w-full" autoComplete="tel" />
-                    </label>
-                  </div>
-
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <label className="block w-full space-y-2 text-sm text-foreground">
-                      <span className="block mb-1 font-medium">{t.specialty} *</span>
-                      <select value={form.specialty} onChange={(e) => update("specialty", e.target.value)} className="form-control block w-full">
-                        {specialtyOptions.map((opt) => (
-                          <option key={opt} value={opt}>{opt}</option>
-                        ))}
-                      </select>
-                    </label>
-
-                    <label className="block w-full space-y-2 text-sm text-foreground">
-                      <span className="block mb-1 font-medium">{t.environment} *</span>
-                      <select value={form.environment} onChange={(e) => update("environment", e.target.value)} className="form-control block w-full">
-                        <option value="Moyen-Orient (Résidences / Gouvernement / VVIP)">{t.env1}</option>
-                        <option value="Plateformes pétrolières & gazières (Onshore / Offshore)">{t.env2}</option>
-                        <option value="Sociétés minières & industrielles isolées">{t.env3}</option>
-                        <option value="Événements internationaux de prestige">{t.env4}</option>
-                      </select>
-                    </label>
-                  </div>
-
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <label className="block w-full space-y-2 text-sm text-foreground">
-                      <span className="block mb-1 font-medium">{t.experience}</span>
-                      <input type="number" min="0" max="50" value={form.yearsExperience} onChange={(e) => update("yearsExperience", e.target.value)} className="form-control block w-full" placeholder="Ex. 8 ans" />
-                    </label>
-                    <label className="block w-full space-y-2 text-sm text-foreground">
-                      <span className="block mb-1 font-medium">{t.certifications}</span>
-                      <input value={form.certifications} onChange={(e) => update("certifications", e.target.value)} className="form-control block w-full" placeholder="ATLS, ACLS, HUET, etc." />
-                    </label>
-                  </div>
-
-                  <div className="rounded-xl border border-dashed border-primary/40 bg-primary/5 p-4">
-                    <label htmlFor="vvip-cv" className="flex cursor-pointer items-center gap-3 text-sm font-medium text-foreground">
-                      <FileUp className="h-5 w-5 text-primary" />
-                      <span>{file ? file.name : t.chooseFile}</span>
-                      <input ref={fileInputRef} id="vvip-cv" type="file" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={(e) => setFile(e.target.files?.[0] || null)} className="sr-only" required />
-                    </label>
-                    <p className="mt-2 text-xs text-muted-foreground">{file ? `${(file.size / (1024 * 1024)).toFixed(2)} MB` : t.cv}</p>
-                  </div>
-
-                  <label className="flex items-start gap-3 text-sm text-muted-foreground">
-                    <input type="checkbox" checked={form.gdprConsent} onChange={(e) => update("gdprConsent", e.target.checked)} className="mt-1 h-4 w-4 accent-primary" required />
-                    <span>{t.gdpr}</span>
-                  </label>
-
-                  <label className="absolute -left-[10000px] h-px w-px overflow-hidden" aria-hidden="true">
-                    <span>Website</span>
-                    <input tabIndex={-1} autoComplete="off" value={form.website} onChange={(e) => update("website", e.target.value)} />
-                  </label>
-
-                  {status === "error" && (
-                    <p className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive" role="alert">{errorMessage}</p>
-                  )}
-
-                  <button type="submit" disabled={status === "sending"} className="cta-primary w-full justify-center">
-                    {status === "sending" ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />{t.sending}</> : t.submit}
-                  </button>
-                </form>
-              </>
-            )}
+              <ul className="mt-8 space-y-4">
+                {[t.req1, t.req2, t.req3, t.req4].map((req, i) => (
+                  <li key={i} className="flex items-start gap-3">
+                    <CheckCircle2 className="h-5 w-5 text-primary shrink-0 mt-0.5" />
+                    <span className="text-sm leading-6 text-foreground">{req}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
           </div>
         </section>
       </main>
