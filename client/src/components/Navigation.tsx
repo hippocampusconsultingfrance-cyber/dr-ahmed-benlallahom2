@@ -100,7 +100,7 @@ export default function Navigation() {
         </button>
 
         {/* Desktop Nav */}
-        <nav className="hidden md:flex min-w-0 flex-1 items-center justify-end gap-6" aria-label="Navigation principale">
+        <nav className="hidden min-[1350px]:flex min-w-0 flex-1 items-center justify-end gap-6" aria-label="Navigation principale">
           {[
             { id: "experience", label: content.nav.experience },
             { id: "services", label: content.nav.services },
@@ -174,7 +174,7 @@ export default function Navigation() {
 
           <button
             onClick={() => scrollTo("contact")}
-            className="nav-cta cta-primary hidden md:flex px-5 py-2.5 text-sm"
+            className="nav-cta cta-primary hidden min-[1350px]:flex px-5 py-2.5 text-sm"
           >
             {content.nav.getInTouch}
           </button>
@@ -182,7 +182,7 @@ export default function Navigation() {
           {/* Mobile menu toggle */}
           <button
             onClick={() => setMobileOpen(!mobileOpen)}
-            className="nav-control md:hidden p-2 text-foreground"
+            className="nav-control min-[1350px]:hidden p-2 text-foreground"
             aria-label={mobileOpen ? "Fermer le menu" : "Ouvrir le menu"}
             aria-expanded={mobileOpen}
             aria-controls="mobile-navigation"
@@ -194,7 +194,7 @@ export default function Navigation() {
 
       {/* Mobile Menu */}
       {mobileOpen && (
-        <div id="mobile-navigation" className="mobile-navigation md:hidden bg-background/95 backdrop-blur-xl border-b border-border">
+        <div id="mobile-navigation" className="mobile-navigation min-[1350px]:hidden bg-background/95 backdrop-blur-xl border-b border-border">
           <nav className="container py-6 flex flex-col gap-4" aria-label="Navigation mobile">
             {[
               { id: "experience", label: content.nav.experience },

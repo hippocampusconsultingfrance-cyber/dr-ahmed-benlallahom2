@@ -2226,3 +2226,4 @@
 - [x] Retirer la séparation et les contraintes qui isolent Recrutement et Employeurs du groupe principal
 - [x] Aligner les six onglets sur la même grille et la même ligne de base sur desktop et mobile
 - [x] Vérifier visuellement puis publier la correction de navigation
+- [x] Éviter tout chevauchement du logo et des six onglets aux largeurs desktop intermédiaires en basculant proprement vers le menu compact
