@@ -867,6 +867,9 @@ export const appRouter = router({
               targetCountries: cvApplications.targetCountries,
               languages: cvApplications.languages,
               yearsExperience: cvApplications.yearsExperience,
+              availability: cvApplications.availability,
+              mobility: cvApplications.mobility,
+              certifications: cvApplications.certifications,
               message: cvApplications.message,
               cvOriginalName: cvApplications.cvOriginalName,
               cvMimeType: cvApplications.cvMimeType,
@@ -884,6 +887,14 @@ export const appRouter = router({
               aiExtractedSkills: cvApplications.aiExtractedSkills,
               aiMatchReasoning: cvApplications.aiMatchReasoning,
               aiAnalyzedAt: cvApplications.aiAnalyzedAt,
+              analysisStatus: cvApplications.analysisStatus,
+              analysisAttempts: cvApplications.analysisAttempts,
+              analysisLastError: cvApplications.analysisLastError,
+              analysisModel: cvApplications.analysisModel,
+              analysisPromptVersion: cvApplications.analysisPromptVersion,
+              extractionMethod: cvApplications.extractionMethod,
+              extractionPageCount: cvApplications.extractionPageCount,
+              analysisRequestedAt: cvApplications.analysisRequestedAt,
               createdAt: cvApplications.createdAt,
               updatedAt: cvApplications.updatedAt,
             })
@@ -1009,27 +1020,10 @@ export const appRouter = router({
             .limit(1);
           if (!application) throw new TRPCError({ code: "NOT_FOUND", message: "Candidature introuvable" });
 
-          const signedUrl = await storageGetSignedUrl(application.cvFileKey);
-          const fileResponse = await fetch(signedUrl);
-          if (!fileResponse.ok) {
-            throw new TRPCError({ code: "BAD_GATEWAY", message: "Le CV n’a pas pu être récupéré pour l’analyse." });
-          }
-
-          const { extractCvText, analyzeCvText, saveCvAnalysis } = await import("./recruitmentAnalysis");
-          const extractedText = await extractCvText(Buffer.from(await fileResponse.arrayBuffer()), application.cvMimeType);
-          const analysis = await analyzeCvText({
-            firstName: application.firstName,
-            lastName: application.lastName,
-            specialty: application.specialty,
-            targetCountries: JSON.parse(application.targetCountries || "[]"),
-            languages: JSON.parse(application.languages || "[]"),
-            yearsExperience: application.yearsExperience ?? undefined,
-            message: application.message ?? undefined,
-            extractedText,
-          });
-          await saveCvAnalysis(application.id, analysis);
-          await logRecruitmentAction({ applicationId: application.id, adminOpenId: ctx.user.openId, action: "reanalyze", metadata: { score: analysis.relevanceScore } });
-          return { success: true, score: analysis.relevanceScore };
+          const { enqueueCvAnalysis } = await import("./recruitmentProcessing");
+          await enqueueCvAnalysis(application.id);
+          await logRecruitmentAction({ applicationId: application.id, adminOpenId: ctx.user.openId, action: "reanalyze", metadata: { queued: true } });
+          return { success: true, queued: true };
         }),
 
       sendTemplateEmail: adminProcedure

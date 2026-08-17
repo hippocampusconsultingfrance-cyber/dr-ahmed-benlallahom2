@@ -419,28 +419,12 @@ async function startServer() {
             title: `Nouvelle candidature recrutement — ${candidateName}`,
             content: `**Référence:** ${trackingId}\n**Email:** ${parsed.data.email}\n**Spécialité:** ${parsed.data.specialty}\n**Pays ciblés:** ${parsed.data.targetCountries.join(", ")}\n**CV:** reçu et stocké de manière privée`,
           }),
-          (async () => {
-            if (!insertedId) return;
-            try {
-              const { extractCvText, analyzeCvText, saveCvAnalysis } = await import("../recruitmentAnalysis");
-              const extractedText = await extractCvText(file.buffer, file.mimetype);
-              const analysis = await analyzeCvText({
-                firstName: parsed.data.firstName,
-                lastName: parsed.data.lastName,
-                specialty: parsed.data.specialty,
-                targetCountries: parsed.data.targetCountries,
-                languages: parsed.data.languages,
-                yearsExperience: parsed.data.yearsExperience,
-                message: parsed.data.message,
-                extractedText,
-              });
-              await saveCvAnalysis(Number(insertedId), analysis);
-              console.log(`CV analysis completed successfully for application ID ${insertedId}`);
-            } catch (analysisErr) {
-              console.error(`Background CV analysis failed for application ID ${insertedId}:`, analysisErr);
-            }
-          })(),
         ]);
+
+        if (insertedId) {
+          const { enqueueCvAnalysis } = await import("../recruitmentProcessing");
+          await enqueueCvAnalysis(Number(insertedId));
+        }
 
         res.status(201).json({ success: true, trackingId });
       } catch (error) {
@@ -549,6 +533,22 @@ async function startServer() {
       return res.json({ ok: true, ...result });
     } catch (error: any) {
       console.error("[RecruitmentRetention] Handler error:", error);
+      return res.status(500).json({ error: error.message, timestamp: new Date().toISOString() });
+    }
+  });
+
+  // CV processing worker: Heartbeat invokes a small idempotent batch so uploads
+  // remain fast and failures can be retried without losing the candidate dossier.
+  app.post("/api/scheduled/recruitment-processing", async (req, res) => {
+    try {
+      const { sdk: sdkInstance } = await import("./sdk");
+      const user = await sdkInstance.authenticateRequest(req);
+      if (!user.isCron || !user.taskUid) return res.status(403).json({ error: "cron-only" });
+      const { processDueCvAnalysisJobs } = await import("../recruitmentProcessing");
+      const result = await processDueCvAnalysisJobs(2);
+      return res.json({ ok: true, taskUid: user.taskUid, ...result });
+    } catch (error: any) {
+      console.error("[RecruitmentProcessing] Handler error:", error);
       return res.status(500).json({ error: error.message, timestamp: new Date().toISOString() });
     }
   });

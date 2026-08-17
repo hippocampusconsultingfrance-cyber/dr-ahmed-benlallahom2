@@ -59,6 +59,25 @@ function scoreTone(score: number | null) {
   return "border-slate-500/30 bg-slate-500/10 text-slate-700 dark:text-slate-300";
 }
 
+function analysisStatusLabel(status: string | null | undefined) {
+  const labels: Record<string, string> = {
+    queued: "Analyse en attente",
+    extracting: "Extraction en cours",
+    analyzing: "Analyse IA en cours",
+    completed: "Analyse terminée",
+    needs_review: "Revue humaine requise",
+    failed: "Analyse à relancer",
+  };
+  return labels[status || ""] || "Analyse en attente";
+}
+
+function analysisStatusTone(status: string | null | undefined) {
+  if (status === "completed") return "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300";
+  if (status === "needs_review") return "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300";
+  if (status === "failed") return "border-destructive/30 bg-destructive/10 text-destructive";
+  return "border-primary/25 bg-primary/10 text-primary";
+}
+
 export default function RecruitmentTab() {
   const [statusFilter, setStatusFilter] = useState<Status | "">("");
   const [countryFilter, setCountryFilter] = useState("");
@@ -104,8 +123,8 @@ export default function RecruitmentTab() {
   });
 
   const reanalyze = trpc.admin.recruitment.reanalyze.useMutation({
-    onSuccess: ({ score }) => {
-      toast.success(`Analyse IA terminée — score ${score}/100`);
+    onSuccess: () => {
+      toast.success("Analyse IA mise en file : le profil sera actualisé automatiquement");
       utils.admin.recruitment.list.invalidate();
     },
     onError: mutationError => toast.error(mutationError.message),
@@ -231,6 +250,9 @@ export default function RecruitmentTab() {
                     <span className={`rounded-full border px-2.5 py-1 text-xs font-medium ${scoreTone(application.aiScore)}`}>
                       {application.aiScore === null ? "IA en attente" : `Score IA ${application.aiScore}/100`}
                     </span>
+                    <span className={`rounded-full border px-2.5 py-1 text-xs font-medium ${analysisStatusTone(application.analysisStatus)}`}>
+                      {analysisStatusLabel(application.analysisStatus)}
+                    </span>
                     <select aria-label={`Statut de ${application.firstName} ${application.lastName}`} value={application.status} disabled={updateStatus.isPending} onChange={event => updateStatus.mutate({ id: application.id, status: event.target.value as Status })} className="h-9 rounded-md border border-border bg-background px-2 text-sm text-foreground">
                       {statusOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
                     </select>
@@ -247,11 +269,17 @@ export default function RecruitmentTab() {
                       <p><strong className="text-foreground">Téléphone :</strong> {application.phone || "—"}</p>
                       <p><strong className="text-foreground">Langues déclarées :</strong> {languages.join(", ") || "—"}</p>
                       <p><strong className="text-foreground">Expérience déclarée :</strong> {application.yearsExperience ?? "—"} ans</p>
+                      <p><strong className="text-foreground">Disponibilité :</strong> {application.availability || "—"}</p>
+                      <p><strong className="text-foreground">Mobilité :</strong> {application.mobility || "—"}</p>
+                      <p><strong className="text-foreground">Certifications :</strong> {application.certifications || "—"}</p>
                     </div>
                     <div className="space-y-1 text-muted-foreground">
                       <p><strong className="text-foreground">Fichier :</strong> {application.cvOriginalName} ({formatBytes(application.cvSizeBytes)})</p>
                       <p><strong className="text-foreground">Reçu le :</strong> {new Date(application.createdAt).toLocaleString("fr-FR", { timeZone: "Europe/Paris" })}</p>
                       <p><strong className="text-foreground">Conservation jusqu’au :</strong> {application.retentionUntil ? new Date(application.retentionUntil).toLocaleDateString("fr-FR", { timeZone: "Europe/Paris" }) : "—"}</p>
+                      <p><strong className="text-foreground">Pipeline :</strong> {analysisStatusLabel(application.analysisStatus)} · tentative {application.analysisAttempts ?? 0}</p>
+                      {application.analysisModel && <p><strong className="text-foreground">Analyse :</strong> {application.analysisModel} · {application.analysisPromptVersion || "version non renseignée"}</p>}
+                      {application.analysisLastError && <p className="text-destructive"><strong>Dernière erreur :</strong> {application.analysisLastError}</p>}
                       {application.message && <p className="pt-2"><strong className="text-foreground">Message :</strong> {application.message}</p>}
                     </div>
 

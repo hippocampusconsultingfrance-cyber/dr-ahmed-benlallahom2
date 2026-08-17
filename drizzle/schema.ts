@@ -191,6 +191,9 @@ export const cvApplications = mysqlTable("cv_applications", {
   targetCountries: text("target_countries").notNull(),
   languages: text("languages"),
   yearsExperience: int("years_experience"),
+  availability: varchar("availability", { length: 100 }),
+  mobility: varchar("mobility", { length: 150 }),
+  certifications: text("certifications"),
   message: text("message"),
   cvFileKey: varchar("cv_file_key", { length: 500 }).notNull(),
   cvOriginalName: varchar("cv_original_name", { length: 255 }).notNull(),
@@ -210,12 +213,45 @@ export const cvApplications = mysqlTable("cv_applications", {
   aiExtractedSkills: text("ai_extracted_skills"), // JSON array string
   aiMatchReasoning: text("ai_match_reasoning"),
   aiAnalyzedAt: timestamp("ai_analyzed_at"),
+  analysisStatus: mysqlEnum("analysis_status", ["queued", "extracting", "analyzing", "completed", "needs_review", "failed"]).default("queued").notNull(),
+  analysisAttempts: int("analysis_attempts").default(0).notNull(),
+  analysisLastError: text("analysis_last_error"),
+  analysisModel: varchar("analysis_model", { length: 100 }),
+  analysisPromptVersion: varchar("analysis_prompt_version", { length: 40 }),
+  extractionMethod: varchar("extraction_method", { length: 40 }),
+  extractionPageCount: int("extraction_page_count"),
+  analysisRequestedAt: timestamp("analysis_requested_at"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
 
 export type CvApplication = typeof cvApplications.$inferSelect;
 export type InsertCvApplication = typeof cvApplications.$inferInsert;
+
+/**
+ * Durable queue of document-processing jobs. One job is retried safely instead of
+ * holding the candidate HTTP request while parsing files and calling the model.
+ */
+export const cvProcessingJobs = mysqlTable("cv_processing_jobs", {
+  id: int("id").autoincrement().primaryKey(),
+  applicationId: int("application_id").notNull(),
+  jobType: mysqlEnum("job_type", ["analyze_cv"]).default("analyze_cv").notNull(),
+  status: mysqlEnum("job_status", ["queued", "running", "completed", "retry", "failed"]).default("queued").notNull(),
+  attempts: int("attempts").default(0).notNull(),
+  maxAttempts: int("max_attempts").default(3).notNull(),
+  scheduledFor: timestamp("scheduled_for").defaultNow().notNull(),
+  startedAt: timestamp("started_at"),
+  finishedAt: timestamp("finished_at"),
+  lastError: text("last_error"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+}, table => ({
+  jobScheduleIdx: index("cv_processing_jobs_schedule_idx").on(table.status, table.scheduledFor),
+  applicationIdx: index("cv_processing_jobs_application_idx").on(table.applicationId),
+}));
+
+export type CvProcessingJob = typeof cvProcessingJobs.$inferSelect;
+export type InsertCvProcessingJob = typeof cvProcessingJobs.$inferInsert;
 
 /**
  * Immutable administrative audit trail for sensitive recruitment actions.
@@ -253,3 +289,27 @@ export const recruitmentMatchProfiles = mysqlTable("recruitment_match_profiles",
 
 export type RecruitmentMatchProfile = typeof recruitmentMatchProfiles.$inferSelect;
 export type InsertRecruitmentMatchProfile = typeof recruitmentMatchProfiles.$inferInsert;
+
+/**
+ * Employer mission briefs. Keeping this table in Drizzle prevents typed-schema
+ * drift between the public brief endpoint and the administrative workflow.
+ */
+export const clientBriefs = mysqlTable("client_briefs", {
+  id: int("id").autoincrement().primaryKey(),
+  briefId: varchar("brief_id", { length: 20 }).notNull().unique(),
+  organizationName: varchar("organization_name", { length: 180 }).notNull(),
+  contactName: varchar("contact_name", { length: 120 }).notNull(),
+  email: varchar("email", { length: 320 }).notNull(),
+  phone: varchar("phone", { length: 50 }),
+  targetEnvironment: varchar("target_environment", { length: 120 }).notNull(),
+  specialtyNeeded: varchar("specialty_needed", { length: 160 }).notNull(),
+  country: varchar("country", { length: 100 }).notNull(),
+  requiredCertifications: text("required_certifications"),
+  timeline: varchar("timeline", { length: 100 }),
+  notes: text("notes"),
+  status: mysqlEnum("brief_status", ["new", "reviewing", "shortlist_sent", "contract_signed", "closed"]).default("new").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type ClientBrief = typeof clientBriefs.$inferSelect;
+export type InsertClientBrief = typeof clientBriefs.$inferInsert;

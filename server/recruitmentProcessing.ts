@@ -1,0 +1,152 @@
+import { and, eq, inArray, lte } from "drizzle-orm";
+import { cvApplications, cvProcessingJobs } from "../drizzle/schema";
+import { getDb } from "./db";
+import { extractCvText, analyzeCvText, saveCvAnalysis } from "./recruitmentAnalysis";
+import { storageGetSignedUrl } from "./storage";
+
+const MAX_ATTEMPTS = 3;
+const PROCESSING_BATCH_SIZE = 5;
+const ANALYSIS_MODEL = "gpt-5-mini";
+const ANALYSIS_PROMPT_VERSION = "recruitment-v2";
+
+export function retryDelayMs(attempt: number) {
+  return Math.min(60 * 60 * 1000, 60_000 * 2 ** Math.max(0, attempt - 1));
+}
+
+export function extractionMethodFor(mimeType: string) {
+  if (mimeType === "application/pdf") return "pdf_text_or_vision";
+  if (mimeType === "application/msword") return "doc";
+  if (mimeType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") return "docx";
+  return "unknown";
+}
+
+export function analysisCompletionStatus(input: { gaps: string[]; dataQualityWarnings: string[] }) {
+  return input.dataQualityWarnings.length > 0 || input.gaps.length > 0 ? "needs_review" as const : "completed" as const;
+}
+
+export async function enqueueCvAnalysis(applicationId: number, requestedAt = new Date()) {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+
+  await db.insert(cvProcessingJobs).values({
+    applicationId,
+    jobType: "analyze_cv",
+    status: "queued",
+    attempts: 0,
+    maxAttempts: MAX_ATTEMPTS,
+    scheduledFor: requestedAt,
+  });
+  await db.update(cvApplications).set({
+    analysisStatus: "queued",
+    analysisLastError: null,
+    analysisRequestedAt: requestedAt,
+    updatedAt: requestedAt,
+  }).where(eq(cvApplications.id, applicationId));
+}
+
+async function processCvAnalysisJob(jobId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+
+  const [job] = await db.select().from(cvProcessingJobs).where(eq(cvProcessingJobs.id, jobId)).limit(1);
+  if (!job || job.status !== "running") return { skipped: true, reason: "not_claimed" as const };
+
+  const [application] = await db.select().from(cvApplications)
+    .where(eq(cvApplications.id, job.applicationId)).limit(1);
+  if (!application) {
+    await db.update(cvProcessingJobs).set({ status: "completed", finishedAt: new Date(), lastError: "application_missing" })
+      .where(eq(cvProcessingJobs.id, job.id));
+    return { skipped: true, reason: "application_missing" as const };
+  }
+
+  try {
+    await db.update(cvApplications).set({ analysisStatus: "extracting", updatedAt: new Date() })
+      .where(eq(cvApplications.id, application.id));
+
+    const signedUrl = await storageGetSignedUrl(application.cvFileKey);
+    const fileResponse = await fetch(signedUrl);
+    if (!fileResponse.ok) throw new Error(`cv_download_failed_${fileResponse.status}`);
+    const buffer = Buffer.from(await fileResponse.arrayBuffer());
+    const extractedText = await extractCvText(buffer, application.cvMimeType);
+
+    await db.update(cvApplications).set({
+      analysisStatus: "analyzing",
+      extractionMethod: extractionMethodFor(application.cvMimeType),
+      extractionPageCount: application.cvMimeType === "application/pdf" ? 3 : null,
+      updatedAt: new Date(),
+    }).where(eq(cvApplications.id, application.id));
+
+    const analysis = await analyzeCvText({
+      firstName: application.firstName,
+      lastName: application.lastName,
+      specialty: application.specialty,
+      targetCountries: JSON.parse(application.targetCountries || "[]"),
+      languages: JSON.parse(application.languages || "[]"),
+      yearsExperience: application.yearsExperience ?? undefined,
+      message: application.message ?? undefined,
+      extractedText,
+    });
+    await saveCvAnalysis(application.id, analysis);
+
+    const now = new Date();
+    const completionStatus = analysisCompletionStatus(analysis);
+    await db.update(cvApplications).set({
+      analysisStatus: completionStatus,
+      analysisAttempts: job.attempts,
+      analysisLastError: null,
+      analysisModel: ANALYSIS_MODEL,
+      analysisPromptVersion: ANALYSIS_PROMPT_VERSION,
+      updatedAt: now,
+    }).where(eq(cvApplications.id, application.id));
+    await db.update(cvProcessingJobs).set({ status: "completed", finishedAt: now, lastError: null })
+      .where(eq(cvProcessingJobs.id, job.id));
+    return { completed: true, applicationId: application.id, score: analysis.relevanceScore, needsReview: completionStatus === "needs_review" };
+  } catch (error) {
+    const message = error instanceof Error ? error.message.slice(0, 4_000) : "unknown_processing_error";
+    const now = new Date();
+    const finalFailure = job.attempts >= job.maxAttempts;
+    await db.update(cvProcessingJobs).set({
+      status: finalFailure ? "failed" : "retry",
+      lastError: message,
+      scheduledFor: new Date(now.getTime() + retryDelayMs(job.attempts)),
+      finishedAt: finalFailure ? now : null,
+    }).where(eq(cvProcessingJobs.id, job.id));
+    await db.update(cvApplications).set({
+      analysisStatus: finalFailure ? "failed" : "queued",
+      analysisAttempts: job.attempts,
+      analysisLastError: message,
+      updatedAt: now,
+    }).where(eq(cvApplications.id, job.applicationId));
+    return { completed: false, applicationId: job.applicationId, retry: !finalFailure, error: message };
+  }
+}
+
+/** Process a small, durable batch. Safe to invoke repeatedly from Heartbeat. */
+export async function processDueCvAnalysisJobs(limit = PROCESSING_BATCH_SIZE) {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+  const now = new Date();
+  const candidates = await db.select().from(cvProcessingJobs)
+    .where(and(
+      inArray(cvProcessingJobs.status, ["queued", "retry"]),
+      lte(cvProcessingJobs.scheduledFor, now),
+    ))
+    .orderBy(cvProcessingJobs.scheduledFor)
+    .limit(Math.min(Math.max(limit, 1), PROCESSING_BATCH_SIZE));
+
+  const results: Array<Record<string, unknown>> = [];
+  for (const candidate of candidates) {
+    const startedAt = new Date();
+    await db.update(cvProcessingJobs).set({
+      status: "running",
+      attempts: candidate.attempts + 1,
+      startedAt,
+      finishedAt: null,
+    }).where(and(
+      eq(cvProcessingJobs.id, candidate.id),
+      inArray(cvProcessingJobs.status, ["queued", "retry"]),
+    ));
+    results.push(await processCvAnalysisJob(candidate.id));
+  }
+  return { processed: results.length, results };
+}

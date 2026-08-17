@@ -2169,3 +2169,23 @@
 - [x] Élargir la liste des pays ciblés (Europe, Amérique du Nord, Golfe/Moyen-Orient, Asie/Pacifique, Afrique francophone) avec sélection multiple fluide
 - [x] Enrichir la page VVIP & Offshore avec de nouvelles sections (types de missions, protocoles de sécurité, exigences opérationnelles, FAQ)
 - [x] Vérifier le typecheck, les tests unitaires et publier le checkpoint
+
+## Audit backend — traitement des CV et candidatures
+
+- [ ] Ajouter un vrai cycle de vie asynchrone d’analyse (en attente, extraction, analyse, échec, à revoir) avec tentatives contrôlées
+- [ ] Stocker séparément le texte extrait, la version de modèle, le prompt et les métadonnées techniques de chaque analyse
+- [ ] Mettre en place la suppression effective et vérifiable des CV en stockage privé après expiration ou demande RGPD
+- [ ] Ajouter une vraie table Drizzle, des migrations et un dashboard administrateur pour les briefs Employeurs
+- [ ] Exposer disponibilité, mobilité et certifications dans la fiche candidat et les filtres de matching
+- [ ] Remplacer le matching en mémoire par un filtrage et une pagination robustes côté base de données
+- [ ] Ajouter une vérification antivirale, une validation de contenu et une quarantaine des fichiers avant analyse
+- [ ] Ajouter des tests d’intégration et une supervision des échecs d’extraction, d’IA, d’email et de stockage
+
+## Lot 1 — fondation du pipeline de recrutement intelligent
+
+- [x] Synchroniser le schéma Drizzle avec les colonnes disponibilité, mobilité, certifications et la table client_briefs existantes
+- [x] Ajouter les états persistants, métadonnées techniques et jobs d’analyse aux candidatures
+- [x] Créer un worker idempotent de traitement différé avec reprises contrôlées et délais de relance
+- [x] Passer le dépôt et la réanalyse CV au pipeline asynchrone sans bloquer les réponses HTTP
+- [x] Afficher l’état de traitement et les données enrichies dans le tableau de bord candidat
+- [x] Tester le chemin de succès, les reprises et les échecs de traitement avant publication
