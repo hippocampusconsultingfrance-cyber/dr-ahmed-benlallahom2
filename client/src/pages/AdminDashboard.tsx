@@ -3,18 +3,21 @@ import { trpc } from "@/lib/trpc";
 import { startLogin } from "@/const";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Calendar, MessageSquare, Shield, DollarSign, Eye, CheckCircle, XCircle, Clock, ArrowLeft, Star, Trash2, FileText, CalendarDays, Plus, Edit, Trash, Globe, UserRound, BriefcaseBusiness } from "lucide-react";
+import { Calendar, MessageSquare, Shield, DollarSign, Eye, CheckCircle, XCircle, Clock, ArrowLeft, Star, Trash2, FileText, CalendarDays, Plus, Edit, Trash, Globe, UserRound, BriefcaseBusiness, Send, UsersRound } from "lucide-react";
 import { toast } from "sonner";
 import { useLocation } from "wouter";
 import RecruitmentTab from "@/components/RecruitmentTab";
 import EmployerBriefsTab from "@/components/EmployerBriefsTab";
+import VivierTab from "@/components/VivierTab";
+import MailingTab from "@/components/MailingTab";
 
-type Tab = "overview" | "appointments" | "contacts" | "gdpr" | "testimonials" | "blog" | "availability" | "recruitment" | "employerBriefs";
+type Tab = "overview" | "appointments" | "contacts" | "gdpr" | "testimonials" | "blog" | "availability" | "recruitment" | "vivier" | "mailing" | "employerBriefs";
 
 export default function AdminDashboard() {
   const { user, loading, refresh } = useAuth();
   const [, setLocation] = useLocation();
   const [activeTab, setActiveTab] = useState<Tab>("overview");
+  const [mailingSelectedIds, setMailingSelectedIds] = useState<number[]>([]);
 
   if (loading) {
     return (
@@ -68,6 +71,8 @@ export default function AdminDashboard() {
     { id: "blog" as Tab, label: "Blog", icon: FileText },
     { id: "availability" as Tab, label: "Disponibilités", icon: CalendarDays },
     { id: "recruitment" as Tab, label: "Candidatures", icon: UserRound },
+    { id: "vivier" as Tab, label: "Vivier", icon: UsersRound },
+    { id: "mailing" as Tab, label: "Mailing", icon: Send },
     { id: "employerBriefs" as Tab, label: "Missions", icon: BriefcaseBusiness },
   ];
 
@@ -122,6 +127,8 @@ export default function AdminDashboard() {
         {activeTab === "blog" && <BlogTab />}
         {activeTab === "availability" && <AvailabilityTab />}
         {activeTab === "recruitment" && <RecruitmentTab />}
+        {activeTab === "vivier" && <VivierTab onCompose={candidateIds => { setMailingSelectedIds(candidateIds); setActiveTab("mailing"); }} />}
+        {activeTab === "mailing" && <MailingTab initialSelectedIds={mailingSelectedIds} />}
         {activeTab === "employerBriefs" && <EmployerBriefsTab />}
       </main>
     </div>

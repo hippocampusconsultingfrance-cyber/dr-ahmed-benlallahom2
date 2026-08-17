@@ -392,3 +392,45 @@ export const clientBriefCandidates = mysqlTable("client_brief_candidates", {
 }));
 
 export type ClientBriefCandidate = typeof clientBriefCandidates.$inferSelect;
+
+/**
+ * Human-approved recruitment offer campaigns. A campaign is only created by an
+ * administrator after a visible audience preview; automated decision making is
+ * deliberately out of scope.
+ */
+export const recruitmentCampaigns = mysqlTable("recruitment_campaigns", {
+  id: int("id").autoincrement().primaryKey(),
+  title: varchar("title", { length: 180 }).notNull(),
+  subject: varchar("subject", { length: 255 }).notNull(),
+  body: text("body").notNull(),
+  language: mysqlEnum("language", ["fr", "en"]).default("fr").notNull(),
+  audienceMode: mysqlEnum("audience_mode", ["selected", "all_eligible", "filtered"]).notNull(),
+  audienceFilters: text("audience_filters"),
+  recipientCount: int("recipient_count").default(0).notNull(),
+  status: mysqlEnum("status", ["draft", "sending", "sent", "partially_sent", "failed"]).default("draft").notNull(),
+  createdByOpenId: varchar("created_by_open_id", { length: 128 }).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  sentAt: timestamp("sent_at"),
+}, table => ({
+  statusIdx: index("recruitment_campaigns_status_idx").on(table.status, table.createdAt),
+}));
+
+export type RecruitmentCampaign = typeof recruitmentCampaigns.$inferSelect;
+
+/** Immutable delivery log for a campaign recipient. */
+export const recruitmentCampaignRecipients = mysqlTable("recruitment_campaign_recipients", {
+  id: int("id").autoincrement().primaryKey(),
+  campaignId: int("campaign_id").notNull(),
+  applicationId: int("application_id").notNull(),
+  recipientEmail: varchar("recipient_email", { length: 320 }).notNull(),
+  deliveryStatus: mysqlEnum("delivery_status", ["queued", "sent", "failed", "skipped"]).default("queued").notNull(),
+  providerEmailId: varchar("provider_email_id", { length: 120 }),
+  error: text("error"),
+  sentAt: timestamp("sent_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, table => ({
+  campaignIdx: index("recruitment_campaign_recipients_campaign_idx").on(table.campaignId),
+  applicationIdx: index("recruitment_campaign_recipients_application_idx").on(table.applicationId),
+}));
+
+export type RecruitmentCampaignRecipient = typeof recruitmentCampaignRecipients.$inferSelect;

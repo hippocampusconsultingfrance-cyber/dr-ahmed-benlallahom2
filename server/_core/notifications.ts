@@ -372,28 +372,63 @@ export async function sendCvApplicationConfirmationEmail(
 }
 
 export type RecruitmentEmailTemplate = "profile_interest" | "additional_information";
+export type RecruitmentEmailLanguage = "fr" | "en";
+
+type RecruitmentTemplateOptions = {
+  language?: RecruitmentEmailLanguage;
+  customRequest?: string;
+};
+
+function textToSafeHtml(value: string) {
+  return escapeHtml(value).replace(/\r?\n/g, "<br />");
+}
 
 export function buildRecruitmentTemplateEmail(
   candidateName: string,
   trackingId: string,
   template: RecruitmentEmailTemplate,
+  options: RecruitmentTemplateOptions = {},
 ) {
+  const language = options.language || "fr";
   const isInterest = template === "profile_interest";
-  const subject = isInterest
-    ? `Votre profil nous intéresse — ${trackingId}`
-    : `Complément d’information concernant votre candidature — ${trackingId}`;
-  const body = isInterest
-    ? "Après une première revue humaine de votre candidature, nous souhaiterions échanger avec vous au sujet des opportunités internationales susceptibles de correspondre à votre profil. Merci de nous répondre avec vos disponibilités et votre numéro de téléphone si celui-ci a changé."
-    : "Afin de poursuivre l’examen humain de votre candidature, merci de nous transmettre les informations ou documents professionnels complémentaires demandés par notre équipe. Ne transmettez jamais de données de patients ni de dossier clinique.";
+  const copy = language === "en"
+    ? {
+        greeting: "Hello",
+        heading: "Hippocampus Consulting",
+        reference: "Reference",
+        privacy: "This message concerns your professional application only. You may request access, rectification or deletion of your data through our GDPR form.",
+        interestSubject: `Your profile has caught our attention — ${trackingId}`,
+        complementSubject: `Additional information requested for your application — ${trackingId}`,
+        interestBody: "Following an initial human review of your application, we would like to speak with you about international opportunities that may fit your profile. Please reply with your availability and an updated telephone number if applicable.",
+        complementBody: "To continue the human review of your application, please provide the additional professional information or documents requested by our team. Never send patient information or clinical records.",
+        requested: "Requested documents or information",
+      }
+    : {
+        greeting: "Bonjour",
+        heading: "Hippocampus Consulting",
+        reference: "Référence",
+        privacy: "Cette communication concerne uniquement votre candidature professionnelle. Vous pouvez demander l’accès, la rectification ou la suppression de vos données via notre formulaire RGPD.",
+        interestSubject: `Votre profil nous intéresse — ${trackingId}`,
+        complementSubject: `Complément d’information concernant votre candidature — ${trackingId}`,
+        interestBody: "Après une première revue humaine de votre candidature, nous souhaiterions échanger avec vous au sujet des opportunités internationales susceptibles de correspondre à votre profil. Merci de nous répondre avec vos disponibilités et votre numéro de téléphone si celui-ci a changé.",
+        complementBody: "Afin de poursuivre l’examen humain de votre candidature, merci de nous transmettre les informations ou documents professionnels complémentaires demandés par notre équipe. Ne transmettez jamais de données de patients ni de dossier clinique.",
+        requested: "Documents ou informations demandés",
+      };
+  const subject = isInterest ? copy.interestSubject : copy.complementSubject;
+  const body = isInterest ? copy.interestBody : copy.complementBody;
+  const customRequest = !isInterest && options.customRequest?.trim()
+    ? `<div style="background: #f8fafc; border-radius: 8px; padding: 14px; margin: 16px 0;"><strong>${copy.requested}</strong><br />${textToSafeHtml(options.customRequest.trim())}</div>`
+    : "";
   return {
     subject,
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-        <h2 style="color: #0891b2;">Hippocampus Consulting</h2>
-        <p>Bonjour ${escapeHtml(candidateName)},</p>
+        <h2 style="color: #0891b2;">${copy.heading}</h2>
+        <p>${copy.greeting} ${escapeHtml(candidateName)},</p>
         <p>${escapeHtml(body)}</p>
-        <p><strong>Référence :</strong> ${escapeHtml(trackingId)}</p>
-        <p>Cette communication concerne uniquement votre candidature professionnelle. Vous pouvez demander l’accès, la rectification ou la suppression de vos données via notre formulaire RGPD.</p>
+        ${customRequest}
+        <p><strong>${copy.reference}:</strong> ${escapeHtml(trackingId)}</p>
+        <p>${copy.privacy}</p>
         <p style="color: #64748b;">Dr. Ahmed Ben Lallahom<br>Hippocampus Consulting</p>
       </div>
     `,
@@ -405,8 +440,9 @@ export async function sendRecruitmentTemplateEmail(
   candidateName: string,
   trackingId: string,
   template: RecruitmentEmailTemplate,
+  options: RecruitmentTemplateOptions = {},
 ): Promise<{ id?: string }> {
-  const message = buildRecruitmentTemplateEmail(candidateName, trackingId, template);
+  const message = buildRecruitmentTemplateEmail(candidateName, trackingId, template, options);
 
   const { data, error } = await resend.emails.send({
     from: FROM_EMAIL,
@@ -416,5 +452,35 @@ export async function sendRecruitmentTemplateEmail(
     html: message.html,
   });
   if (error) throw new Error(`Resend recruitment email failed: ${error.message}`);
+  return { id: data?.id };
+}
+
+export async function sendRecruitmentCampaignEmail(input: {
+  candidateEmail: string;
+  candidateName: string;
+  campaignTitle: string;
+  subject: string;
+  body: string;
+  language: RecruitmentEmailLanguage;
+}): Promise<{ id?: string }> {
+  const copy = input.language === "en"
+    ? { greeting: "Hello", footer: "This offer concerns your professional profile. If you no longer wish to receive recruitment opportunities, please reply to this message." }
+    : { greeting: "Bonjour", footer: "Cette offre concerne votre profil professionnel. Si vous ne souhaitez plus recevoir d’opportunités de recrutement, répondez simplement à ce message." };
+  const { data, error } = await resend.emails.send({
+    from: FROM_EMAIL,
+    to: [input.candidateEmail],
+    replyTo: RECRUITMENT_REPLY_TO,
+    subject: input.subject,
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <h2 style="color: #0891b2;">${escapeHtml(input.campaignTitle)}</h2>
+        <p>${copy.greeting} ${escapeHtml(input.candidateName)},</p>
+        <p>${textToSafeHtml(input.body)}</p>
+        <p style="color: #64748b;">${copy.footer}</p>
+        <p style="color: #64748b;">Dr. Ahmed Ben Lallahom<br>Hippocampus Consulting</p>
+      </div>
+    `,
+  });
+  if (error) throw new Error(`Resend campaign email failed: ${error.message}`);
   return { id: data?.id };
 }

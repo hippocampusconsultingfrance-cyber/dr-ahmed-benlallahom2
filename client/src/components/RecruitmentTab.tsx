@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { BrainCircuit, Download, FileSearch, Loader2, RefreshCw, Sparkles, Trash2, UserRound } from "lucide-react";
+import { BrainCircuit, Download, FileSearch, Loader2, Mail, RefreshCw, Sparkles, Trash2, UserRound } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 const statusOptions = [
   { value: "new", label: "Nouvelle" },
@@ -14,6 +15,7 @@ const statusOptions = [
 ] as const;
 
 type Status = (typeof statusOptions)[number]["value"];
+type RecruitmentEmailTemplate = "profile_interest" | "additional_information";
 
 type ExtractedProfile = {
   professionalTitle?: string;
@@ -93,6 +95,9 @@ export default function RecruitmentTab() {
   const [profileScore, setProfileScore] = useState("80");
   const [profileLanguages, setProfileLanguages] = useState("");
   const [profileSkills, setProfileSkills] = useState("");
+  const [emailComposer, setEmailComposer] = useState<{ id: number; candidateName: string; template: RecruitmentEmailTemplate } | null>(null);
+  const [emailLanguage, setEmailLanguage] = useState<"fr" | "en">("fr");
+  const [customRequest, setCustomRequest] = useState("");
   const utils = trpc.useUtils();
   const profilesQuery = trpc.admin.recruitment.profiles.list.useQuery();
 
@@ -144,9 +149,19 @@ export default function RecruitmentTab() {
   });
 
   const sendTemplateEmail = trpc.admin.recruitment.sendTemplateEmail.useMutation({
-    onSuccess: () => toast.success("Email envoyé au candidat"),
+    onSuccess: () => {
+      toast.success("Email envoyé au candidat");
+      setEmailComposer(null);
+      setCustomRequest("");
+    },
     onError: mutationError => toast.error(mutationError.message),
   });
+
+  const openEmailComposer = (id: number, candidateName: string, template: RecruitmentEmailTemplate) => {
+    setEmailComposer({ id, candidateName, template });
+    setEmailLanguage("fr");
+    setCustomRequest("");
+  };
 
   const eraseApplication = trpc.admin.recruitment.erase.useMutation({
     onSuccess: () => {
@@ -313,11 +328,11 @@ export default function RecruitmentTab() {
                             {reanalyze.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
                             {application.aiAnalyzedAt ? "Relancer l’analyse" : "Analyser le CV"}
                           </Button>
-                          <Button size="sm" variant="outline" onClick={() => sendTemplateEmail.mutate({ id: application.id, template: "profile_interest" })} disabled={sendTemplateEmail.isPending || eraseApplication.isPending || reanalyze.isPending}>
-                            {sendTemplateEmail.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null} Proposer un échange
+                          <Button size="sm" variant="outline" onClick={() => openEmailComposer(application.id, `${application.firstName} ${application.lastName}`, "profile_interest")} disabled={sendTemplateEmail.isPending || eraseApplication.isPending || reanalyze.isPending}>
+                            <Mail className="mr-2 h-4 w-4" /> Proposer un échange
                           </Button>
-                          <Button size="sm" variant="outline" onClick={() => sendTemplateEmail.mutate({ id: application.id, template: "additional_information" })} disabled={sendTemplateEmail.isPending || eraseApplication.isPending || reanalyze.isPending}>
-                            Demander un complément
+                          <Button size="sm" variant="outline" onClick={() => openEmailComposer(application.id, `${application.firstName} ${application.lastName}`, "additional_information")} disabled={sendTemplateEmail.isPending || eraseApplication.isPending || reanalyze.isPending}>
+                            <Mail className="mr-2 h-4 w-4" /> Demander un complément
                           </Button>
                           <Button size="sm" variant="outline" className="text-destructive hover:text-destructive" onClick={() => { if (window.confirm("Confirmer l’effacement définitif du dossier candidat et de ses résultats IA ?")) eraseApplication.mutate({ id: application.id }); }} disabled={eraseApplication.isPending || reanalyze.isPending}>
                             {eraseApplication.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
@@ -375,6 +390,49 @@ export default function RecruitmentTab() {
           Aucune candidature ne correspond aux filtres.
         </div>
       )}
+
+      <Dialog open={Boolean(emailComposer)} onOpenChange={open => { if (!open && !sendTemplateEmail.isPending) setEmailComposer(null); }}>
+        <DialogContent className="sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Composer un email candidat</DialogTitle>
+            <DialogDescription>
+              {emailComposer ? `Message individuel à ${emailComposer.candidateName}.` : "Préparez un message individuel."}
+            </DialogDescription>
+          </DialogHeader>
+          {emailComposer && (
+            <div className="space-y-4 py-2">
+              <label className="block space-y-1 text-sm text-muted-foreground">
+                <span>Type de message</span>
+                <select value={emailComposer.template} onChange={event => setEmailComposer(current => current ? { ...current, template: event.target.value as RecruitmentEmailTemplate } : current)} className="h-10 w-full rounded-md border border-border bg-background px-3 text-foreground">
+                  <option value="profile_interest">Proposer un échange</option>
+                  <option value="additional_information">Demander un complément</option>
+                </select>
+              </label>
+              <label className="block space-y-1 text-sm text-muted-foreground">
+                <span>Langue d’envoi</span>
+                <select value={emailLanguage} onChange={event => setEmailLanguage(event.target.value as "fr" | "en")} className="h-10 w-full rounded-md border border-border bg-background px-3 text-foreground">
+                  <option value="fr">Français</option>
+                  <option value="en">English</option>
+                </select>
+              </label>
+              {emailComposer.template === "additional_information" && (
+                <label className="block space-y-1 text-sm text-muted-foreground">
+                  <span>Précisions à demander au candidat</span>
+                  <textarea value={customRequest} onChange={event => setCustomRequest(event.target.value)} maxLength={3000} placeholder="Ex. Merci de transmettre votre attestation d’inscription à l’ordre, vos diplômes et vos disponibilités." className="min-h-32 w-full rounded-md border border-border bg-background p-3 text-foreground placeholder:text-muted-foreground" />
+                  <span className="text-xs">Ce texte libre sera ajouté au message dans la langue choisie.</span>
+                </label>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEmailComposer(null)} disabled={sendTemplateEmail.isPending}>Annuler</Button>
+            <Button disabled={!emailComposer || sendTemplateEmail.isPending} onClick={() => emailComposer && sendTemplateEmail.mutate({ id: emailComposer.id, template: emailComposer.template, language: emailLanguage, customRequest: emailComposer.template === "additional_information" ? customRequest.trim() || undefined : undefined })}>
+              {sendTemplateEmail.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Mail className="mr-2 h-4 w-4" />}
+              Envoyer l’email
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </section>
   );
 }

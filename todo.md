@@ -2274,4 +2274,25 @@
 
 - [x] Identifier l’adresse d’expéditeur actuelle et le comportement de repli Resend
 - [x] Préparer l’adresse d’expéditeur liée à un domaine vérifié et ses validations techniques
-- [ ] Vérifier l’envoi d’un modèle recrutement vers un candidat après validation du domaine
+- [x] Vérifier l’envoi d’un modèle recrutement vers un candidat après validation du domaine
+
+## Demandes de complément personnalisées
+
+- [x] Ajouter une fenêtre avec champ libre pour décrire les documents ou informations demandés
+- [x] Transmettre la demande personnalisée au modèle email recrutement avec validation et échappement HTML
+- [x] Tester le parcours puis publier la demande de complément personnalisée
+
+## Langue des emails de recrutement
+
+- [x] Ajouter un choix Français / English pour les modèles Proposer un échange et Demander un complément
+- [x] Générer les deux modèles avec le choix de langue et la demande libre éventuelle
+- [x] Valider le choix de langue, le texte personnalisé et le rendu email avant publication
+
+## Vivier et Mailing recrutement
+
+- [x] Créer le modèle de campagne, destinataires et journal d’envoi avec consentement et exclusions administratives
+- [x] Ajouter les procédures admin de recherche, sélection et ciblage du vivier par critères professionnels
+- [x] Créer l’onglet Vivier avec sélection individuelle, filtres et profils éligibles
+- [x] Créer l’onglet Mailing avec composition d’offre, choix de langue, aperçu et sélection groupe / tout le vivier
+- [x] Ajouter l’envoi protégé avec récapitulatif, confirmation explicite et traçabilité des campagnes
+- [x] Tester les règles de ciblage, les exclusions et publier l’espace de mailing

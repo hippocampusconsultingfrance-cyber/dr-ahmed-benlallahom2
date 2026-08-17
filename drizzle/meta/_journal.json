@@ -127,6 +127,13 @@
       "when": 1786974520986,
       "tag": "0017_awesome_roulette",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "5",
+      "when": 1786988160467,
+      "tag": "0018_blue_giant_man",
+      "breakpoints": true
     }
   ]
 }

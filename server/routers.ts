@@ -5,7 +5,7 @@ import { publicProcedure, adminProcedure, router } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { getDb } from "./db";
-import { contactMessages, gdprRequests, testimonials, appointments, blogPosts, availabilitySlots, blockedDates, cvApplications, cvCandidateCertifications, recruitmentAuditLogs, recruitmentMatchProfiles, clientBriefs, clientBriefCandidates } from "../drizzle/schema";
+import { contactMessages, gdprRequests, testimonials, appointments, blogPosts, availabilitySlots, blockedDates, cvApplications, cvCandidateCertifications, recruitmentAuditLogs, recruitmentMatchProfiles, clientBriefs, clientBriefCandidates, recruitmentCampaigns, recruitmentCampaignRecipients } from "../drizzle/schema";
 import { notifyOwner } from "./_core/notification";
 import { storageGetSignedUrl } from "./storage";
 import { canAdminDownloadCv, CV_DOWNLOAD_UNAVAILABLE_MESSAGE } from "./recruitmentDownloadPolicy";
@@ -17,7 +17,9 @@ import {
   sendOwnerNotificationSMS,
   sendCustomerConfirmationSMS,
   sendRefundConfirmationEmail,
+  sendRecruitmentCampaignEmail,
   sendRecruitmentTemplateEmail,
+  type RecruitmentEmailLanguage,
   type RecruitmentEmailTemplate,
 } from "./_core/notifications";
 import { logRecruitmentAction, matchesRecruitmentProfile, parseRecruitmentJsonArray } from "./recruitmentAudit";
@@ -940,6 +942,150 @@ export const appRouter = router({
           return { items, total: countResult[0]?.count || 0 };
         }),
 
+      pool: router({
+        list: adminProcedure
+          .input(z.object({
+            specialty: z.string().trim().max(160).optional(),
+            country: z.string().trim().max(80).optional(),
+            minimumScore: z.number().int().min(0).max(100).optional(),
+            limit: z.number().int().min(1).max(200).optional().default(200),
+          }).optional())
+          .query(async ({ input }) => {
+            const db = await getDb();
+            if (!db) return [];
+            const conditions = [
+              eq(cvApplications.marketingConsent, 1),
+              sql`${cvApplications.status} NOT IN ('rejected', 'archived')`,
+            ];
+            if (input?.specialty) conditions.push(sql`LOWER(${cvApplications.specialty}) LIKE LOWER(${`%${input.specialty}%`})`);
+            if (input?.country) conditions.push(sql`${cvApplications.targetCountries} LIKE ${`%${input.country}%`}`);
+            if (input?.minimumScore !== undefined) conditions.push(sql`${cvApplications.aiScore} >= ${input.minimumScore}`);
+            return db.select({
+              id: cvApplications.id,
+              firstName: cvApplications.firstName,
+              lastName: cvApplications.lastName,
+              email: cvApplications.email,
+              specialty: cvApplications.specialty,
+              targetCountries: cvApplications.targetCountries,
+              languages: cvApplications.languages,
+              availability: cvApplications.availability,
+              mobility: cvApplications.mobility,
+              certifications: cvApplications.certifications,
+              aiScore: cvApplications.aiScore,
+              status: cvApplications.status,
+              marketingConsent: cvApplications.marketingConsent,
+              createdAt: cvApplications.createdAt,
+            }).from(cvApplications).where(and(...conditions)).orderBy(desc(cvApplications.aiScore), desc(cvApplications.createdAt)).limit(input?.limit || 200);
+          }),
+      }),
+
+      campaigns: router({
+        previewAudience: adminProcedure
+          .input(z.object({
+            mode: z.enum(["selected", "all_eligible", "filtered"]),
+            selectedIds: z.array(z.number().int().positive()).max(200).default([]),
+            specialty: z.string().trim().max(160).optional(),
+            country: z.string().trim().max(80).optional(),
+            minimumScore: z.number().int().min(0).max(100).optional(),
+          }))
+          .query(async ({ input }) => {
+            const db = await getDb();
+            if (!db) return [];
+            const conditions = [eq(cvApplications.marketingConsent, 1), sql`${cvApplications.status} NOT IN ('rejected', 'archived')`];
+            if (input.mode === "selected") {
+              if (!input.selectedIds.length) return [];
+              conditions.push(inArray(cvApplications.id, input.selectedIds));
+            }
+            if (input.mode === "filtered") {
+              if (input.specialty) conditions.push(sql`LOWER(${cvApplications.specialty}) LIKE LOWER(${`%${input.specialty}%`})`);
+              if (input.country) conditions.push(sql`${cvApplications.targetCountries} LIKE ${`%${input.country}%`}`);
+              if (input.minimumScore !== undefined) conditions.push(sql`${cvApplications.aiScore} >= ${input.minimumScore}`);
+            }
+            return db.select({
+              id: cvApplications.id,
+              firstName: cvApplications.firstName,
+              lastName: cvApplications.lastName,
+              email: cvApplications.email,
+              specialty: cvApplications.specialty,
+              aiScore: cvApplications.aiScore,
+            }).from(cvApplications).where(and(...conditions)).orderBy(desc(cvApplications.aiScore), desc(cvApplications.createdAt)).limit(200);
+          }),
+
+        list: adminProcedure.query(async () => {
+          const db = await getDb();
+          if (!db) return [];
+          return db.select().from(recruitmentCampaigns).orderBy(desc(recruitmentCampaigns.createdAt)).limit(50);
+        }),
+
+        send: adminProcedure
+          .input(z.object({
+            title: z.string().trim().min(3).max(180),
+            subject: z.string().trim().min(3).max(255),
+            body: z.string().trim().min(10).max(8000),
+            language: z.enum(["fr", "en"]),
+            mode: z.enum(["selected", "all_eligible", "filtered"]),
+            selectedIds: z.array(z.number().int().positive()).max(200).default([]),
+            specialty: z.string().trim().max(160).optional(),
+            country: z.string().trim().max(80).optional(),
+            minimumScore: z.number().int().min(0).max(100).optional(),
+            confirmed: z.literal(true),
+          }))
+          .mutation(async ({ input, ctx }) => {
+            const db = await getDb();
+            if (!db) throw new Error("Database connection failed");
+            const conditions = [eq(cvApplications.marketingConsent, 1), sql`${cvApplications.status} NOT IN ('rejected', 'archived')`];
+            if (input.mode === "selected") {
+              if (!input.selectedIds.length) throw new TRPCError({ code: "BAD_REQUEST", message: "Sélectionnez au moins un profil éligible" });
+              conditions.push(inArray(cvApplications.id, input.selectedIds));
+            }
+            if (input.mode === "filtered") {
+              if (input.specialty) conditions.push(sql`LOWER(${cvApplications.specialty}) LIKE LOWER(${`%${input.specialty}%`})`);
+              if (input.country) conditions.push(sql`${cvApplications.targetCountries} LIKE ${`%${input.country}%`}`);
+              if (input.minimumScore !== undefined) conditions.push(sql`${cvApplications.aiScore} >= ${input.minimumScore}`);
+            }
+            const audience = await db.select({ id: cvApplications.id, firstName: cvApplications.firstName, lastName: cvApplications.lastName, email: cvApplications.email })
+              .from(cvApplications).where(and(...conditions)).limit(200);
+            if (!audience.length) throw new TRPCError({ code: "BAD_REQUEST", message: "Aucun profil éligible : seuls les candidats ayant accepté les communications de recrutement peuvent être contactés." });
+
+            const [campaignResult] = await db.insert(recruitmentCampaigns).values({
+              title: input.title,
+              subject: input.subject,
+              body: input.body,
+              language: input.language,
+              audienceMode: input.mode,
+              audienceFilters: JSON.stringify({ specialty: input.specialty || null, country: input.country || null, minimumScore: input.minimumScore ?? null, selectedIds: input.mode === "selected" ? input.selectedIds : undefined }),
+              recipientCount: audience.length,
+              status: "sending",
+              createdByOpenId: ctx.user.openId,
+            });
+            const campaignId = Number((campaignResult as any).insertId);
+            let sent = 0;
+            let failed = 0;
+            for (const candidate of audience) {
+              const [recipientResult] = await db.insert(recruitmentCampaignRecipients).values({ campaignId, applicationId: candidate.id, recipientEmail: candidate.email, deliveryStatus: "queued" });
+              const recipientId = Number((recipientResult as any).insertId);
+              try {
+                const email = await sendRecruitmentCampaignEmail({
+                  candidateEmail: candidate.email,
+                  candidateName: `${candidate.firstName} ${candidate.lastName}`,
+                  campaignTitle: input.title,
+                  subject: input.subject,
+                  body: input.body,
+                  language: input.language as RecruitmentEmailLanguage,
+                });
+                await db.update(recruitmentCampaignRecipients).set({ deliveryStatus: "sent", providerEmailId: email.id || null, sentAt: new Date() }).where(eq(recruitmentCampaignRecipients.id, recipientId));
+                await logRecruitmentAction({ applicationId: candidate.id, adminOpenId: ctx.user.openId, action: "email", metadata: { campaignId, resendId: email.id, language: input.language } });
+                sent += 1;
+              } catch (error) {
+                await db.update(recruitmentCampaignRecipients).set({ deliveryStatus: "failed", error: error instanceof Error ? error.message.slice(0, 2000) : "Unknown campaign email failure" }).where(eq(recruitmentCampaignRecipients.id, recipientId));
+                failed += 1;
+              }
+            }
+            await db.update(recruitmentCampaigns).set({ status: failed === 0 ? "sent" : sent > 0 ? "partially_sent" : "failed", sentAt: new Date() }).where(eq(recruitmentCampaigns.id, campaignId));
+            return { campaignId, total: audience.length, sent, failed };
+          }),
+      }),
+
       profiles: router({
         list: adminProcedure.query(async () => {
           const db = await getDb();
@@ -1046,7 +1192,12 @@ export const appRouter = router({
         }),
 
       sendTemplateEmail: adminProcedure
-        .input(z.object({ id: z.number(), template: z.enum(["profile_interest", "additional_information"]) }))
+        .input(z.object({
+          id: z.number(),
+          template: z.enum(["profile_interest", "additional_information"]),
+          language: z.enum(["fr", "en"]).optional().default("fr"),
+          customRequest: z.string().trim().max(3000).optional(),
+        }))
         .mutation(async ({ input, ctx }) => {
           const db = await getDb();
           if (!db) throw new Error("Database connection failed");
@@ -1056,8 +1207,14 @@ export const appRouter = router({
             .where(eq(cvApplications.id, input.id))
             .limit(1);
           if (!application) throw new TRPCError({ code: "NOT_FOUND", message: "Candidature introuvable" });
-          const result = await sendRecruitmentTemplateEmail(application.email, `${application.firstName} ${application.lastName}`, application.trackingId, input.template as RecruitmentEmailTemplate);
-          await logRecruitmentAction({ applicationId: input.id, adminOpenId: ctx.user.openId, action: "email", metadata: { template: input.template, resendId: result.id } });
+          const result = await sendRecruitmentTemplateEmail(
+            application.email,
+            `${application.firstName} ${application.lastName}`,
+            application.trackingId,
+            input.template as RecruitmentEmailTemplate,
+            { language: input.language as RecruitmentEmailLanguage, customRequest: input.customRequest },
+          );
+          await logRecruitmentAction({ applicationId: input.id, adminOpenId: ctx.user.openId, action: "email", metadata: { template: input.template, language: input.language, customRequest: Boolean(input.customRequest), resendId: result.id } });
           return { success: true };
         }),
 
