@@ -2052,6 +2052,44 @@
 - [x] Identifier l’erreur dans les logs serveur, navigateur ou production
 - [x] Corriger la cause sans modifier les données métier
 - [x] Valider accueil, réservation, confirmation, paiement et administration
-- [ ] Sauvegarder la correction et documenter la résolution
+- [x] Sauvegarder la correction et documenter la résolution
 
 - [x] Remplacer le fallback « Chargement… » minimal par un écran de chargement explicite et visuellement rassurant pendant les imports différés
+
+## Recrutement International Hippocampus Consulting
+- [ ] Créer la table database des candidatures (cv_applications) avec spécialité, pays cible, statut et référence S3 du CV
+- [ ] Créer la procédure tRPC publique de soumission de candidature avec validation des champs et upload sécurisé
+- [ ] Créer les procédures tRPC administrateur pour lister, filtrer, mettre à jour le statut et télécharger les CV
+- [ ] Créer la page publique de recrutement multilingue avec sélection des spécialités et des pays cibles (Europe, Canada, Moyen-Orient)
+- [ ] Ajouter l’onglet de gestion des candidatures dans le tableau de bord administrateur (/admin)
+- [ ] Envoyer un email de confirmation au candidat et une alerte au propriétaire via Resend
+- [ ] Valider la conformité RGPD (consentement explicite, registre des traitements, durée de conservation)
+- [ ] Écrire les tests de contrat Vitest pour la soumission et l’administration des candidatures
+- [ ] Sauvegarder et publier la section de recrutement international
+
+- [ ] Ajouter la page Recrutement au sitemap et à la couverture SEO publique
+- [ ] Ajouter une entrée de traitement CV au registre RGPD et à la politique de conservation
+
+## Recrutement international intelligent — stabilisation et analyse IA
+
+- [x] Ajouter la table `cv_applications` et les champs de synthèse IA, score, forces, points à vérifier, compétences et date d’analyse
+- [x] Installer les parseurs PDF, DOCX et DOC côté serveur
+- [x] Extraire le texte des CV PDF, DOCX et DOC avec nettoyage et limite de contexte
+- [x] Analyser les CV avec `gpt-5-mini` et une sortie JSON structurée
+- [x] Ajouter les garde-fous contre l’inférence de caractéristiques protégées et rappeler la revue humaine
+- [x] Déclencher l’analyse automatiquement après dépôt et stockage privé du CV
+- [x] Ajouter une procédure admin de réanalyse contrôlée
+- [x] Exposer les résultats IA dans la liste admin des candidatures
+- [x] Afficher score, résumé, compétences, points forts et points à vérifier dans le dashboard
+- [x] Ajouter une transparence multilingue sur l’analyse automatisée et la revue humaine
+- [x] Générer et appliquer la migration des colonnes IA de `cv_applications`
+- [x] Ajouter des tests unitaires sur les formats non supportés et les textes insuffisants
+- [x] Valider typecheck, build de production et suite Vitest
+- [ ] Vérifier en production une candidature de test avec un CV PDF ou DOCX non sensible
+- [ ] Définir une procédure métier de suppression anticipée et de revue des scores IA
+
+## Historique technique — recrutement intelligent
+
+- [x] Corriger le chemin d’import du service `recruitmentAnalysis` dans l’endpoint multipart
+- [x] Corriger les erreurs de compilation héritées du schéma et du serveur après redémarrage
+- [x] Ajouter la prise en charge native des anciens fichiers DOC, sans binaire système externe

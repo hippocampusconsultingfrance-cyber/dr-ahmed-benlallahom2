@@ -15,6 +15,7 @@ const GDPRPage = lazy(() => import("./pages/GDPRPage"));
 const TestimonialsPage = lazy(() => import("./pages/TestimonialsPage"));
 const BookingPage = lazy(() => import("./pages/BookingPage"));
 const BookingConfirmationPage = lazy(() => import("./pages/BookingConfirmationPage"));
+const RecruitmentPage = lazy(() => import("./pages/RecruitmentPage"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 const AdminDashboard = lazy(() => import("./pages/AdminDashboard"));
 
@@ -42,6 +43,7 @@ function Router() {
       <Route path="/testimonials" component={TestimonialsPage} />
       <Route path="/booking/confirmation" component={BookingConfirmationPage} />
       <Route path="/booking" component={BookingPage} />
+      <Route path="/recruitment" component={RecruitmentPage} />
       <Route path="/admin" component={AdminDashboard} />
       <Route path="/404" component={NotFound} />
         <Route component={NotFound} />

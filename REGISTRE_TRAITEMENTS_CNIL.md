@@ -134,3 +134,27 @@ Ce registre est révisé annuellement ou en cas de modification significative de
 
 **Historique des versions :**
 - v1.0 - 2026-08-03 : Création initiale
+
+
+---
+
+## Traitement 6 : Candidatures de professionnels de santé — Recrutement international
+
+| Élément | Description |
+|---------|-------------|
+| **Nom du traitement** | Réception, qualification et suivi des candidatures de professionnels de santé pour des opportunités internationales |
+| **Responsable du traitement** | Hippocampus Consulting / Dr. Ahmed Ben Lallahom, à confirmer selon le rôle contractuel exact dans chaque mission |
+| **Données collectées** | Prénom, nom, email, téléphone facultatif, spécialité, pays recherchés, langues professionnelles, années d’expérience, message libre et CV téléversé |
+| **Données exclues** | Ne pas demander de numéro de sécurité sociale, coordonnées bancaires, données de patients, dossiers cliniques, données de santé non nécessaires, informations familiales ou autres données sans lien direct avec la candidature |
+| **Base légale** | À documenter selon le rôle exact : mesures précontractuelles à la demande du candidat pour l’examen d’une candidature ; consentement distinct pour la conservation dans un vivier ou les communications commerciales lorsque nécessaire |
+| **Finalités** | Examiner la candidature, vérifier l’adéquation professionnelle avec des opportunités communiquées, contacter le candidat, assurer le suivi administratif et, avec information appropriée, conserver la candidature dans un vivier |
+| **Catégories de destinataires** | Personnes habilitées chargées du recrutement chez Hippocampus Consulting ; établissements ou partenaires destinataires uniquement lorsque cela est nécessaire, prévu et expliqué au candidat |
+| **Sous-traitants** | Hébergement et stockage sécurisé Manus/S3 ; envoi d’emails Resend lorsque nécessaire. Les transferts et garanties contractuelles doivent être vérifiés avant tout partage avec un partenaire situé hors EEE |
+| **Durée de conservation** | Candidature active : durée nécessaire au processus concerné. Vivier : en principe jusqu’à deux ans à compter du dernier contact, sous réserve d’une information claire et d’une base légale appropriée. Les durées doivent être confirmées avec le conseil juridique compétent |
+| **Droits des personnes** | Accès, rectification, effacement, limitation, opposition lorsque applicable, retrait du consentement pour les finalités fondées sur le consentement et réclamation auprès de la CNIL |
+| **Accès administrateur** | Accès limité aux comptes administrateurs autorisés ; téléchargement du CV uniquement par action protégée et via URL signée à durée limitée |
+| **Mesures de sécurité** | HTTPS, validation stricte du type et de la taille du fichier, stockage des octets hors base de données, clé de fichier non publique, URL signée temporaire, contrôle d’accès admin, limitation des champs et journalisation des actions sensibles |
+| **Information candidat** | Notice courte affichée avant l’envoi : responsable, finalités, base légale, champs obligatoires, destinataires, durée, droits, contact et absence de décision automatisée à ce stade |
+| **Date d’ajout** | 2026-08-17 |
+
+> Ce traitement doit être adapté si Hippocampus Consulting agit comme employeur, cabinet de recrutement, sous-traitant ou responsable conjoint pour une mission donnée. Une revue juridique locale est recommandée pour les recrutements en Allemagne, Italie, Canada et au Moyen-Orient.

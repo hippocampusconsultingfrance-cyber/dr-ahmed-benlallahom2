@@ -176,3 +176,43 @@ export const blockedDates = mysqlTable("blocked_dates", {
 
 export type BlockedDate = typeof blockedDates.$inferSelect;
 export type InsertBlockedDate = typeof blockedDates.$inferInsert;
+
+/**
+ * International healthcare recruitment applications with AI intelligence metadata.
+ */
+export const cvApplications = mysqlTable("cv_applications", {
+  id: int("id").autoincrement().primaryKey(),
+  trackingId: varchar("tracking_id", { length: 20 }).notNull().unique(),
+  firstName: varchar("first_name", { length: 120 }).notNull(),
+  lastName: varchar("last_name", { length: 120 }).notNull(),
+  email: varchar("email", { length: 320 }).notNull(),
+  phone: varchar("phone", { length: 50 }),
+  specialty: varchar("specialty", { length: 160 }).notNull(),
+  targetCountries: text("target_countries").notNull(),
+  languages: text("languages"),
+  yearsExperience: int("years_experience"),
+  message: text("message"),
+  cvFileKey: varchar("cv_file_key", { length: 500 }).notNull(),
+  cvOriginalName: varchar("cv_original_name", { length: 255 }).notNull(),
+  cvMimeType: varchar("cv_mime_type", { length: 100 }).notNull(),
+  cvSizeBytes: int("cv_size_bytes").notNull(),
+  gdprConsent: int("gdpr_consent").default(0).notNull(),
+  marketingConsent: int("marketing_consent").default(0).notNull(),
+  status: mysqlEnum("status", ["new", "reviewing", "shortlisted", "placed", "rejected", "archived"]).default("new").notNull(),
+  adminNotes: text("admin_notes"),
+  consentAt: timestamp("consent_at"),
+  retentionUntil: timestamp("retention_until"),
+  // AI Recruitment Intelligence fields
+  aiSummary: text("ai_summary"),
+  aiScore: int("ai_score"), // 0 to 100 fit score
+  aiStrengths: text("ai_strengths"), // JSON array string
+  aiWeaknesses: text("ai_weaknesses"), // JSON array string
+  aiExtractedSkills: text("ai_extracted_skills"), // JSON array string
+  aiMatchReasoning: text("ai_match_reasoning"),
+  aiAnalyzedAt: timestamp("ai_analyzed_at"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type CvApplication = typeof cvApplications.$inferSelect;
+export type InsertCvApplication = typeof cvApplications.$inferInsert;

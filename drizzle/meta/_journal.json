@@ -57,6 +57,20 @@
       "when": 1785362473861,
       "tag": "0007_broad_mordo",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "5",
+      "when": 1786955557860,
+      "tag": "0008_futuristic_overlord",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "5",
+      "when": 1786956637703,
+      "tag": "0009_steep_lord_tyger",
+      "breakpoints": true
     }
   ]
 }

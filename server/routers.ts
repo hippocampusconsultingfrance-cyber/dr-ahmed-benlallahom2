@@ -5,8 +5,9 @@ import { publicProcedure, adminProcedure, router } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { getDb } from "./db";
-import { contactMessages, gdprRequests, testimonials, appointments, blogPosts, availabilitySlots, blockedDates } from "../drizzle/schema";
+import { contactMessages, gdprRequests, testimonials, appointments, blogPosts, availabilitySlots, blockedDates, cvApplications } from "../drizzle/schema";
 import { notifyOwner } from "./_core/notification";
+import { storageGetSignedUrl } from "./storage";
 import { eq, and, sql, desc, gte, lt } from "drizzle-orm";
 import Stripe from "stripe";
 import {
@@ -29,6 +30,7 @@ const TRUSTED_HOSTS = new Set([
 ]);
 
 const PARIS_TIME_ZONE = "Europe/Paris";
+const CV_APPLICATION_STATUSES = ["new", "reviewing", "shortlisted", "placed", "rejected", "archived"] as const;
 const PARIS_DAY_INDEX: Record<string, number> = {
   Sun: 0,
   Mon: 1,
@@ -810,6 +812,155 @@ export const appRouter = router({
             if (error instanceof TRPCError) throw error;
             throw new TRPCError({ code: "BAD_REQUEST", message: "Le remboursement Stripe a échoué" });
           }
+        }),
+    }),
+
+    // International recruitment applications
+    recruitment: router({
+      list: adminProcedure
+        .input(
+          z.object({
+            limit: z.number().min(1).max(100).optional().default(50),
+            offset: z.number().min(0).optional().default(0),
+            status: z.enum(CV_APPLICATION_STATUSES).optional(),
+            specialty: z.string().trim().max(160).optional(),
+            country: z.string().trim().max(80).optional(),
+          })
+        )
+        .query(async ({ input }) => {
+          const db = await getDb();
+          if (!db) return { items: [], total: 0 };
+
+          const conditions = [];
+          if (input.status) conditions.push(eq(cvApplications.status, input.status));
+          if (input.specialty) conditions.push(sql`LOWER(${cvApplications.specialty}) LIKE LOWER(${`%${input.specialty}%`})`);
+          if (input.country) conditions.push(sql`${cvApplications.targetCountries} LIKE ${`%${input.country}%`}`);
+          const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
+          const items = await db
+            .select({
+              id: cvApplications.id,
+              trackingId: cvApplications.trackingId,
+              firstName: cvApplications.firstName,
+              lastName: cvApplications.lastName,
+              email: cvApplications.email,
+              phone: cvApplications.phone,
+              specialty: cvApplications.specialty,
+              targetCountries: cvApplications.targetCountries,
+              languages: cvApplications.languages,
+              yearsExperience: cvApplications.yearsExperience,
+              message: cvApplications.message,
+              cvOriginalName: cvApplications.cvOriginalName,
+              cvMimeType: cvApplications.cvMimeType,
+              cvSizeBytes: cvApplications.cvSizeBytes,
+              gdprConsent: cvApplications.gdprConsent,
+              marketingConsent: cvApplications.marketingConsent,
+              status: cvApplications.status,
+              adminNotes: cvApplications.adminNotes,
+              consentAt: cvApplications.consentAt,
+              retentionUntil: cvApplications.retentionUntil,
+              aiSummary: cvApplications.aiSummary,
+              aiScore: cvApplications.aiScore,
+              aiStrengths: cvApplications.aiStrengths,
+              aiWeaknesses: cvApplications.aiWeaknesses,
+              aiExtractedSkills: cvApplications.aiExtractedSkills,
+              aiMatchReasoning: cvApplications.aiMatchReasoning,
+              aiAnalyzedAt: cvApplications.aiAnalyzedAt,
+              createdAt: cvApplications.createdAt,
+              updatedAt: cvApplications.updatedAt,
+            })
+            .from(cvApplications)
+            .where(whereClause)
+            .orderBy(desc(cvApplications.createdAt))
+            .limit(input.limit)
+            .offset(input.offset);
+
+          const countResult = await db
+            .select({ count: sql<number>`COUNT(*)` })
+            .from(cvApplications)
+            .where(whereClause);
+
+          return { items, total: countResult[0]?.count || 0 };
+        }),
+
+      updateStatus: adminProcedure
+        .input(
+          z.object({
+            id: z.number(),
+            status: z.enum(CV_APPLICATION_STATUSES),
+            adminNotes: z.string().trim().max(5000).optional(),
+          })
+        )
+        .mutation(async ({ input }) => {
+          const db = await getDb();
+          if (!db) throw new Error("Database connection failed");
+
+          await db
+            .update(cvApplications)
+            .set({ status: input.status, adminNotes: input.adminNotes ?? null, updatedAt: new Date() })
+            .where(eq(cvApplications.id, input.id));
+
+          return { success: true };
+        }),
+
+      getDownloadUrl: adminProcedure
+        .input(z.object({ id: z.number() }))
+        .mutation(async ({ input }) => {
+          const db = await getDb();
+          if (!db) throw new Error("Database connection failed");
+          const [application] = await db
+            .select({ cvFileKey: cvApplications.cvFileKey, cvOriginalName: cvApplications.cvOriginalName })
+            .from(cvApplications)
+            .where(eq(cvApplications.id, input.id))
+            .limit(1);
+          if (!application) throw new TRPCError({ code: "NOT_FOUND", message: "Candidature introuvable" });
+          const signedUrl = await storageGetSignedUrl(application.cvFileKey);
+          return { url: signedUrl, fileName: application.cvOriginalName };
+        }),
+
+      reanalyze: adminProcedure
+        .input(z.object({ id: z.number() }))
+        .mutation(async ({ input }) => {
+          const db = await getDb();
+          if (!db) throw new Error("Database connection failed");
+          const [application] = await db
+            .select({
+              id: cvApplications.id,
+              firstName: cvApplications.firstName,
+              lastName: cvApplications.lastName,
+              specialty: cvApplications.specialty,
+              targetCountries: cvApplications.targetCountries,
+              languages: cvApplications.languages,
+              yearsExperience: cvApplications.yearsExperience,
+              message: cvApplications.message,
+              cvFileKey: cvApplications.cvFileKey,
+              cvMimeType: cvApplications.cvMimeType,
+            })
+            .from(cvApplications)
+            .where(eq(cvApplications.id, input.id))
+            .limit(1);
+          if (!application) throw new TRPCError({ code: "NOT_FOUND", message: "Candidature introuvable" });
+
+          const signedUrl = await storageGetSignedUrl(application.cvFileKey);
+          const fileResponse = await fetch(signedUrl);
+          if (!fileResponse.ok) {
+            throw new TRPCError({ code: "BAD_GATEWAY", message: "Le CV n’a pas pu être récupéré pour l’analyse." });
+          }
+
+          const { extractCvText, analyzeCvText, saveCvAnalysis } = await import("./recruitmentAnalysis");
+          const extractedText = await extractCvText(Buffer.from(await fileResponse.arrayBuffer()), application.cvMimeType);
+          const analysis = await analyzeCvText({
+            firstName: application.firstName,
+            lastName: application.lastName,
+            specialty: application.specialty,
+            targetCountries: JSON.parse(application.targetCountries || "[]"),
+            languages: JSON.parse(application.languages || "[]"),
+            yearsExperience: application.yearsExperience ?? undefined,
+            message: application.message ?? undefined,
+            extractedText,
+          });
+          await saveCvAnalysis(application.id, analysis);
+          return { success: true, score: analysis.relevanceScore };
         }),
     }),
 

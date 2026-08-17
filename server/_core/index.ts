@@ -1,5 +1,7 @@
 import "dotenv/config";
 import express from "express";
+import multer from "multer";
+import { z } from "zod";
 import { createServer } from "http";
 import net from "net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
@@ -8,6 +10,9 @@ import { registerStorageProxy } from "./storageProxy";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
+import { storagePut } from "../storage";
+import { notifyOwner } from "./notification";
+import { sql } from "drizzle-orm";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -26,6 +31,57 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
     }
   }
   throw new Error(`No available port found starting from ${startPort}`);
+}
+
+const RECRUITMENT_MAX_FILE_SIZE = 5 * 1024 * 1024;
+const RECRUITMENT_ALLOWED_MIME_TYPES = new Set([
+  "application/pdf",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+]);
+
+const recruitmentUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: RECRUITMENT_MAX_FILE_SIZE, files: 1, fields: 20 },
+  fileFilter: (_req, file, callback) => {
+    const extension = file.originalname.toLowerCase().split(".").pop();
+    const allowedExtension = extension === "pdf" || extension === "doc" || extension === "docx";
+    if (!allowedExtension || !RECRUITMENT_ALLOWED_MIME_TYPES.has(file.mimetype)) {
+      callback(new Error("Format de CV non accepté. Utilisez PDF, DOC ou DOCX."));
+      return;
+    }
+    callback(null, true);
+  },
+});
+
+const recruitmentApplicationSchema = z.object({
+  firstName: z.string().trim().min(1).max(120),
+  lastName: z.string().trim().min(1).max(120),
+  email: z.string().trim().email().max(320),
+  phone: z.string().trim().max(50).optional().default(""),
+  specialty: z.string().trim().min(1).max(160),
+  targetCountries: z.array(z.string().trim().min(1).max(80)).min(1).max(12),
+  languages: z.array(z.string().trim().min(1).max(80)).max(12).default([]),
+  yearsExperience: z.number().int().min(0).max(70).optional(),
+  message: z.string().trim().max(5000).optional().default(""),
+  gdprConsent: z.literal("1"),
+  marketingConsent: z.enum(["0", "1"]).default("0"),
+  website: z.string().max(200).optional().default(""),
+});
+
+function parseListField(value: unknown): string[] {
+  if (typeof value !== "string") return [];
+  try {
+    const parsed = JSON.parse(value);
+    if (Array.isArray(parsed)) return parsed.filter(item => typeof item === "string");
+  } catch {
+    // FormData callers must use JSON arrays; invalid values fail schema validation.
+  }
+  return [];
+}
+
+function safeFileName(value: string): string {
+  return value.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 180) || "cv";
 }
 
 async function startServer() {
@@ -217,6 +273,120 @@ async function startServer() {
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
+  app.post("/api/recruitment/apply", (req, res, next) => {
+    recruitmentUpload.single("cv")(req, res, async uploadError => {
+      if (uploadError) {
+        const message = uploadError instanceof multer.MulterError && uploadError.code === "LIMIT_FILE_SIZE"
+          ? "Le CV ne doit pas dépasser 5 Mo."
+          : uploadError.message || "Le fichier CV n’a pas pu être reçu.";
+        res.status(400).json({ error: message });
+        return;
+      }
+
+      try {
+        const file = req.file;
+        if (!file) {
+          res.status(400).json({ error: "Le CV est requis." });
+          return;
+        }
+
+        const parsed = recruitmentApplicationSchema.safeParse({
+          ...req.body,
+          targetCountries: parseListField(req.body.targetCountries),
+          languages: parseListField(req.body.languages),
+          yearsExperience: req.body.yearsExperience === "" || req.body.yearsExperience === undefined
+            ? undefined
+            : Number(req.body.yearsExperience),
+        });
+
+        if (!parsed.success) {
+          res.status(400).json({ error: "Les informations de candidature sont invalides." });
+          return;
+        }
+
+        if (parsed.data.website.trim()) {
+          res.status(400).json({ error: "La candidature n’a pas pu être traitée." });
+          return;
+        }
+
+        const trackingId = `CV${Math.random().toString(36).slice(2, 10).toUpperCase()}${Date.now().toString(36).slice(-8).toUpperCase()}`;
+        const originalName = safeFileName(file.originalname);
+        const storageResult = await storagePut(
+          `recruitment/cv/${trackingId}-${originalName}`,
+          file.buffer,
+          file.mimetype,
+        );
+        const retentionUntil = new Date();
+        retentionUntil.setFullYear(retentionUntil.getFullYear() + 2);
+
+        const db = await (await import("../db")).getDb();
+        if (!db) {
+          res.status(503).json({ error: "Le service de candidature est temporairement indisponible." });
+          return;
+        }
+
+        const insertResult = await db.execute(sql`INSERT INTO cv_applications (
+          tracking_id, first_name, last_name, email, phone, specialty,
+          target_countries, languages, years_experience, message,
+          cv_file_key, cv_original_name, cv_mime_type, cv_size_bytes,
+          gdpr_consent, marketing_consent, status, consent_at, retention_until
+        ) VALUES (
+          ${trackingId}, ${parsed.data.firstName}, ${parsed.data.lastName}, ${parsed.data.email},
+          ${parsed.data.phone || null}, ${parsed.data.specialty}, ${JSON.stringify(parsed.data.targetCountries)},
+          ${JSON.stringify(parsed.data.languages)}, ${parsed.data.yearsExperience ?? null}, ${parsed.data.message || null},
+          ${storageResult.key}, ${originalName}, ${file.mimetype}, ${file.size}, 1,
+          ${parsed.data.marketingConsent === "1" ? 1 : 0}, "new", NOW(), ${retentionUntil}
+        )`);
+
+        const insertedId = (insertResult[0] as any)?.insertId;
+
+        const candidateName = `${parsed.data.firstName} ${parsed.data.lastName}`;
+        await Promise.allSettled([
+          (async () => {
+            const { sendCvApplicationConfirmationEmail } = await import("./notifications");
+            await sendCvApplicationConfirmationEmail(
+              parsed.data.email,
+              candidateName,
+              trackingId,
+              parsed.data.specialty,
+              parsed.data.targetCountries.join(", "),
+            );
+          })(),
+          notifyOwner({
+            title: `Nouvelle candidature recrutement — ${candidateName}`,
+            content: `**Référence:** ${trackingId}\n**Email:** ${parsed.data.email}\n**Spécialité:** ${parsed.data.specialty}\n**Pays ciblés:** ${parsed.data.targetCountries.join(", ")}\n**CV:** reçu et stocké de manière privée`,
+          }),
+          (async () => {
+            if (!insertedId) return;
+            try {
+              const { extractCvText, analyzeCvText, saveCvAnalysis } = await import("../recruitmentAnalysis");
+              const extractedText = await extractCvText(file.buffer, file.mimetype);
+              const analysis = await analyzeCvText({
+                firstName: parsed.data.firstName,
+                lastName: parsed.data.lastName,
+                specialty: parsed.data.specialty,
+                targetCountries: parsed.data.targetCountries,
+                languages: parsed.data.languages,
+                yearsExperience: parsed.data.yearsExperience,
+                message: parsed.data.message,
+                extractedText,
+              });
+              await saveCvAnalysis(Number(insertedId), analysis);
+              console.log(`CV analysis completed successfully for application ID ${insertedId}`);
+            } catch (analysisErr) {
+              console.error(`Background CV analysis failed for application ID ${insertedId}:`, analysisErr);
+            }
+          })(),
+        ]);
+
+        res.status(201).json({ success: true, trackingId });
+      } catch (error) {
+        console.error("Recruitment application error:", error);
+        res.status(500).json({ error: "La candidature n’a pas pu être enregistrée." });
+      }
+    });
+  });
+
   app.get("/sitemap.xml", async (_req, res) => {
     const origin = "https://drahmedbenlallahom.com";
     const publicPaths = [
@@ -227,6 +397,7 @@ async function startServer() {
       "/gdpr",
       "/testimonials",
       "/booking",
+      "/recruitment",
     ];
 
     const staticEntries = publicPaths.map(path => `<url><loc>${origin}${path}</loc></url>`);

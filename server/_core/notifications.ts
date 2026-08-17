@@ -325,3 +325,45 @@ export async function sendReminderEmail(
     console.error("Error sending reminder email:", error);
   }
 }
+
+export async function sendCvApplicationConfirmationEmail(
+  candidateEmail: string,
+  candidateName: string,
+  trackingId: string,
+  specialty: string,
+  targetCountries: string,
+) {
+  try {
+    const emailContent = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <h2 style="color: #0891b2;">Candidature reçue — Hippocampus Consulting</h2>
+        <p>Bonjour ${escapeHtml(candidateName)},</p>
+        <p>Nous confirmons la réception de votre candidature de recrutement international.</p>
+        <div style="background: #f8fafc; border-radius: 8px; padding: 16px; margin: 16px 0;">
+          <p><strong>Numéro de suivi :</strong> ${escapeHtml(trackingId)}</p>
+          <p><strong>Spécialité :</strong> ${escapeHtml(specialty)}</p>
+          <p><strong>Pays ciblés :</strong> ${escapeHtml(targetCountries)}</p>
+        </div>
+        <p>Votre profil sera examiné selon les opportunités disponibles et les critères du pays concerné. Nous vous contacterons si votre profil correspond à une recherche.</p>
+        <p>Ne transmettez pas de données de patients, de dossiers médicaux ou de documents cliniques dans votre candidature.</p>
+        <p style="color: #64748b;">Dr. Ahmed Ben Lallahom<br>Hippocampus Consulting</p>
+      </div>
+    `;
+
+    const { data, error } = await resend.emails.send({
+      from: FROM_EMAIL,
+      to: [candidateEmail],
+      subject: `Candidature reçue - ${trackingId}`,
+      html: emailContent,
+    });
+
+    if (error) {
+      console.error("Resend error sending CV application confirmation:", error);
+      return;
+    }
+
+    console.log(`CV application confirmation sent to ${candidateEmail} (id: ${data?.id})`);
+  } catch (error) {
+    console.error("Error sending CV application confirmation:", error);
+  }
+}
