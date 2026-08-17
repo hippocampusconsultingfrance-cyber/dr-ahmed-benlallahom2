@@ -62,7 +62,7 @@ export default function ContactSection() {
         <img
           src="/manus-storage/hero-consulting_b0a2cb5b.png"
           loading="lazy"
-          alt=""
+          alt="Consultation médicale et accompagnement professionnel par le Dr. Ahmed Ben Lallahom"
           className="w-full h-full object-cover"
         />
       </div>

@@ -2189,3 +2189,13 @@
 - [x] Passer le dépôt et la réanalyse CV au pipeline asynchrone sans bloquer les réponses HTTP
 - [x] Afficher l’état de traitement et les données enrichies dans le tableau de bord candidat
 - [x] Tester le chemin de succès, les reprises et les échecs de traitement avant publication
+
+## Correction SEO — page d’accueil
+
+- [x] Remplacer le titre document.title de la page / par un titre entre 30 et 60 caractères
+- [x] Identifier et compléter les deux attributs alt manquants parmi les six images de la page d’accueil
+- [x] Vérifier la longueur du titre, les six images et publier la correction SEO
+
+## Exploitation du pipeline CV
+
+- [x] Activer le worker Heartbeat `recruitment-processing-every-5-minutes` (task UID `dbKBSjV8KD73hiooHVY6wc`) pour traiter automatiquement les analyses CV en attente

@@ -10,7 +10,7 @@ export default function ServicesSection() {
         <img
           src="/manus-storage/services-bg_a14b9c28.png"
           loading="lazy"
-          alt=""
+          alt="Réseau de soins et expertise médicale internationale"
           className="w-full h-full object-cover"
         />
       </div>
