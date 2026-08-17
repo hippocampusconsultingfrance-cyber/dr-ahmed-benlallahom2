@@ -2117,3 +2117,10 @@
 - [x] Ajouter un champ de saisie libre si le candidat sélectionne "Autre spécialité ou profession"
 - [x] Mettre à jour la validation serveur pour accepter toute spécialité personnalisée de 1 à 160 caractères
 - [x] Vérifier le rendu visuel et espacement du label sur la page de recrutement
+
+## Recherche interactive de spécialité
+
+- [x] Ajouter un champ de recherche instantanée (input avec loupe/effacement) au-dessus du sélecteur ou transformé en menu déroulant filtrable
+- [x] Gérer le filtrage en temps réel des catégories et des items de la taxonomie médicale
+- [x] Conserver l’option "Autre spécialité ou profession" et le champ de saisie libre
+- [x] Valider le typecheck, les tests unitaires et le build de production
