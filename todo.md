@@ -2109,3 +2109,4 @@
 - [x] Corriger le chevauchement des libellés et contenus des champs Langues professionnelles et Message professionnel
 - [x] Stabiliser la grille responsive du formulaire sur desktop, tablette et mobile
 - [x] Vérifier les tests, captures responsive et build après correction
+- [x] Créer le job Heartbeat quotidien `recruitment-retention-daily` (03:00 UTC) — task UID `KySNvzz9UHgvRxZKR4qBuS`
