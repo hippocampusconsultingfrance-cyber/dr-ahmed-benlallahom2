@@ -55,3 +55,15 @@ Les constatations ci-dessous proviennent des captures du serveur de prévisualis
 | Sitemap | Les routes recrutement détaillées, Employeurs et méthode Hippocampus sont présentes dans le sitemap dynamique. | Contrôle de `/sitemap.xml` après publication. |
 
 > La mise à jour améliore la visibilité des métadonnées pour les robots et aperçus sociaux sans rendre les données privées côté serveur. Le contenu des pages demeure rendu par l’application React, conformément à l’architecture actuelle.
+
+## Contrôle de délivrabilité transactionnelle — 18 août 2026
+
+| Élément contrôlé | Résultat | Décision opérationnelle |
+|---|---|---|
+| Domaine Resend | `drahmedbenlallahom.com` est vérifié, avec envoi activé depuis la région `eu-west-1`. | Aucun changement DNS requis. |
+| SPF et DKIM | Les en-têtes Gmail de l’email d’activation indiquent `spf=pass` et deux signatures `dkim=pass`, dont une alignée sur `drahmedbenlallahom.com`. | L’authentification de l’expéditeur est conforme. |
+| DMARC | Gmail indique `dmarc=pass`, avec une politique de surveillance `p=none`. | Conserver cette politique pendant l’observation ; ne pas passer à `quarantine` ou `reject` avant confirmation durable des envois légitimes. |
+| Statut Resend | Les emails récents d’activation, de MFA et de candidatures sont marqués `delivered`. | Le classement en Spam observé est attribuable à la réputation naissante, non à un échec d’authentification. |
+| Modèle candidat | Les emails d’activation et de réinitialisation rappellent désormais de vérifier les indésirables et d’ajouter l’expéditeur aux contacts. | Test unitaire ajouté au modèle transactionnel. |
+
+> Les informations d’authentification ont été vérifiées à partir des en-têtes Gmail fournis par le propriétaire. Aucun lien d’activation n’est repris ni conservé dans cette note.
