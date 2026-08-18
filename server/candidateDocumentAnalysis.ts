@@ -38,7 +38,7 @@ function contentText(content: unknown): string {
   return "";
 }
 
-function parseAnalysis(content: unknown): CandidateDocumentAnalysis {
+export function parseCandidateDocumentAnalysis(content: unknown): CandidateDocumentAnalysis {
   const raw = contentText(content).trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "");
   if (!raw) throw new Error("candidate_document_ai_empty_response");
   const parsed = JSON.parse(raw) as Partial<CandidateDocumentAnalysis>;
@@ -60,7 +60,6 @@ function prompt(declaredCategory: string) {
 }
 
 export async function analyzeCandidateDocument(input: { buffer: Buffer; mimeType: string; declaredCategory: string; attempt: number }): Promise<{ analysis: CandidateDocumentAnalysis; model: string }> {
-  const model = input.attempt >= 3 ? "claude-haiku-4-5" : input.attempt === 2 ? "gemini-3-flash-preview" : "gpt-5-mini";
   let messages: Message[];
   if (input.mimeType === "image/jpeg" || input.mimeType === "image/png") {
     const dataUrl = `data:${input.mimeType};base64,${input.buffer.toString("base64")}`;
@@ -71,12 +70,32 @@ export async function analyzeCandidateDocument(input: { buffer: Buffer; mimeType
     if (text.length < 20) throw new Error("candidate_document_text_unavailable");
     messages = [{ role: "user", content: `${prompt(input.declaredCategory)}\n\nContenu à examiner :\n${text.slice(0, 30000)}` }];
   }
-  const response = await invokeLLM({
-    model,
-    max_tokens: model.startsWith("gemini") ? 3000 : undefined,
-    max_completion_tokens: model.startsWith("gpt") ? 3000 : undefined,
-    messages,
-    response_format: { type: "json_schema", json_schema: documentAnalysisSchema },
-  });
-  return { analysis: parseAnalysis(response.choices?.[0]?.message?.content), model };
+  const providers = input.attempt >= 3
+    ? ["claude-haiku-4-5", "gemini-3-flash-preview"]
+    : input.attempt === 2
+      ? ["gemini-3-flash-preview", "gpt-5-mini"]
+      : ["gpt-5-mini", "gemini-3-flash-preview"];
+  const failures: string[] = [];
+
+  for (const model of providers) {
+    try {
+      const response = await invokeLLM({
+        model,
+        max_tokens: model.startsWith("gemini") ? 3000 : undefined,
+        max_completion_tokens: model.startsWith("gpt") ? 3000 : undefined,
+        messages,
+        response_format: { type: "json_schema", json_schema: documentAnalysisSchema },
+      });
+      const content = response.choices?.[0]?.message?.content;
+      if (!contentText(content).trim()) {
+        failures.push(`${model}: contenu vide`);
+        continue;
+      }
+      return { analysis: parseCandidateDocumentAnalysis(content), model };
+    } catch (error) {
+      failures.push(`${model}: ${error instanceof Error ? error.message.slice(0, 160) : "erreur inconnue"}`);
+    }
+  }
+
+  throw new Error(`candidate_document_ai_unavailable_${failures.join(" | ")}`);
 }

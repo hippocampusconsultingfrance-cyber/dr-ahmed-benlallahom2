@@ -2359,3 +2359,5 @@
 - [x] Remplacer le retour technique brut des consentements candidat par une validation claire et accessible
 - [x] Corriger la divergence de schéma de la table candidate_accounts qui bloque l’inscription et masque les détails SQL côté candidat
 - [x] Indiquer au candidat de vérifier les courriers indésirables après l’envoi de l’email d’activation
+- [ ] Vérifier le dépôt, le traitement et le téléchargement d’un document fictif depuis un compte candidat activé
+- [x] Ajouter un repli multi-modèle lorsque l’analyse IA d’un document candidat renvoie un contenu vide
