@@ -2374,4 +2374,5 @@
 - [x] Vérifier l’interface publique de réservation sur desktop et mobile sans déclencher de paiement
 - [x] Ajouter une signature Dr. Ahmed Ben Lallahom visible au-dessus du formulaire de réservation
 - [x] Ajouter une page publique de désabonnement recrutements reliée au mécanisme sécurisé existant
+- [x] Corriger le contrat build/start de production qui provoque un HTTP 500 global après déploiement
 - [x] Remplacer l’affichage système mm/dd/yyyy du champ de réservation par une saisie explicitement localisée en français
