@@ -17,6 +17,7 @@ export const bookingContent = {
       email: "Email",
       phone: "Numéro de téléphone",
       date: "Date et heure",
+      datePlaceholder: "JJ/MM/AAAA · HH:MM",
       dateHint: "Choisissez la date et l’heure de votre consultation. Le créneau est affiché en heure de Paris.",
       details: "Détails de votre demande",
       detailsPlaceholder: "Décrivez brièvement votre situation...",
@@ -58,6 +59,7 @@ export const bookingContent = {
       email: "Email",
       phone: "Phone Number",
       date: "Date and Time",
+      datePlaceholder: "DD/MM/YYYY · HH:MM",
       dateHint: "Choose your consultation date and time. The slot is displayed in Paris time.",
       details: "Request Details",
       detailsPlaceholder: "Briefly describe your situation...",
@@ -99,6 +101,7 @@ export const bookingContent = {
       email: "E-Mail",
       phone: "Telefonnummer",
       date: "Datum und Uhrzeit",
+      datePlaceholder: "TT.MM.JJJJ · HH:MM",
       dateHint: "Wählen Sie Datum und Uhrzeit Ihrer Beratung. Der Termin wird in Pariser Zeit angezeigt.",
       details: "Anforderungsdetails",
       detailsPlaceholder: "Beschreiben Sie Ihre Situation kurz...",
@@ -140,6 +143,7 @@ export const bookingContent = {
       email: "电子邮件",
       phone: "电话号码",
       date: "日期和时间",
+      datePlaceholder: "年/月/日 · 时:分",
       dateHint: "请选择咨询日期和时间。时段以巴黎时间显示。",
       details: "请求详情",
       detailsPlaceholder: "简要描述您的情况...",
@@ -203,6 +207,7 @@ export default function BookingPage() {
         { dateStyle: "full", timeStyle: "short", timeZone: "Europe/Paris" }
       ).format(selectedDate)
     : null;
+  const dateInputLocale = language === "fr" ? "fr-FR" : language === "de" ? "de-DE" : language === "zh" ? "zh-CN" : "en-GB";
 
   // Handle Stripe redirect
   useEffect(() => {
@@ -517,18 +522,29 @@ export default function BookingPage() {
                 <Calendar className="w-4 h-4" aria-hidden="true" />
                 {content.form.date}
               </label>
-              <input
-                id="booking-date"
-                type="datetime-local"
-                required
-                value={formData.date}
-                onChange={(e) => {
-                  setFormData({ ...formData, date: e.target.value });
-                  handleDateChange(e);
-                }}
-                className="form-field-premium w-full px-4 py-2 border"
-                aria-describedby="availability-status"
-              />
+              <div className="relative">
+                <div
+                  aria-hidden="true"
+                  className={`form-field-premium flex min-h-11 w-full items-center gap-2 border px-4 py-2 text-sm ${localizedDate ? "text-foreground" : "text-muted-foreground"}`}
+                >
+                  <Calendar className="h-4 w-4 shrink-0 text-primary" />
+                  <span>{localizedDate ?? content.form.datePlaceholder}</span>
+                </div>
+                <input
+                  id="booking-date"
+                  type="datetime-local"
+                  required
+                  value={formData.date}
+                  onChange={(e) => {
+                    setFormData({ ...formData, date: e.target.value });
+                    handleDateChange(e);
+                  }}
+                  lang={dateInputLocale}
+                  className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                  aria-describedby="availability-status"
+                  aria-label={content.form.date}
+                />
+              </div>
               <p className="mt-2 text-xs leading-5 text-muted-foreground">{content.form.dateHint}</p>
               {localizedDate && <p className="mt-2 text-sm font-medium text-primary" aria-live="polite">{localizedDate}</p>}
               <div id="availability-status" className={`availability-status mt-3 ${isBlockedDate || isBookedSlot ? "is-unavailable" : "is-available"}`} role="status" aria-live="polite">
