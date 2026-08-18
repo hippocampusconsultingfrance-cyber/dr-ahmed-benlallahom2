@@ -10,7 +10,7 @@ import { candidateAccounts, candidateDocumentAuditLogs, candidateDocuments, cont
 import { notifyOwner } from "./_core/notification";
 import { storageGetSignedUrl } from "./storage";
 import { canAdminDownloadCv, CV_DOWNLOAD_UNAVAILABLE_MESSAGE } from "./recruitmentDownloadPolicy";
-import { eq, and, sql, desc, gte, inArray, isNull, lt } from "drizzle-orm";
+import { eq, and, sql, desc, gte, inArray, isNull, lt, ne } from "drizzle-orm";
 import Stripe from "stripe";
 import {
   sendConfirmationEmail,
@@ -1426,6 +1426,26 @@ export const appRouter = router({
           await enqueueCvAnalysis(application.id);
           await logRecruitmentAction({ applicationId: application.id, adminOpenId: ctx.user.openId, action: "reanalyze", metadata: { queued: true } });
           return { success: true, queued: true };
+        }),
+
+      reanalyzeFailed: adminProcedure
+        .input(z.object({ limit: z.number().int().min(1).max(25).default(10) }).optional())
+        .mutation(async ({ input, ctx }) => {
+          const db = await getDb();
+          if (!db) throw new Error("Database connection failed");
+          const failedApplications = await db
+            .select({ id: cvApplications.id, trackingId: cvApplications.trackingId })
+            .from(cvApplications)
+            .where(and(eq(cvApplications.analysisStatus, "failed"), ne(cvApplications.status, "rejected"), ne(cvApplications.status, "archived")))
+            .orderBy(cvApplications.updatedAt)
+            .limit(input?.limit ?? 10);
+
+          const { enqueueCvAnalysis } = await import("./recruitmentProcessing");
+          for (const application of failedApplications) {
+            await enqueueCvAnalysis(application.id);
+            await logRecruitmentAction({ applicationId: application.id, adminOpenId: ctx.user.openId, action: "reanalyze", metadata: { queued: true, batch: true } });
+          }
+          return { success: true, queued: failedApplications.length };
         }),
 
       sendTemplateEmail: adminProcedure

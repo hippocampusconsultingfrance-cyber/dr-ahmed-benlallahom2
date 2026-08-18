@@ -183,6 +183,13 @@
       "when": 1787071353969,
       "tag": "0025_stiff_mojo",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "5",
+      "when": 1787071902137,
+      "tag": "0026_square_boom_boom",
+      "breakpoints": true
     }
   ]
 }

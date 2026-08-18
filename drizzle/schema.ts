@@ -128,6 +128,25 @@ export const appointments = mysqlTable("appointments", {
 export type Appointment = typeof appointments.$inferSelect;
 export type InsertAppointment = typeof appointments.$inferInsert;
 
+/** Durable post-payment work. Stripe webhooks only enqueue work; notifications and invoices are retried safely. */
+export const appointmentFulfillmentJobs = mysqlTable("appointment_fulfillment_jobs", {
+  id: int("id").autoincrement().primaryKey(),
+  appointmentId: int("appointment_id").notNull(),
+  jobType: mysqlEnum("job_type", ["confirmation", "invoice"]).notNull(),
+  status: mysqlEnum("status", ["queued", "running", "retry", "completed", "failed"]).default("queued").notNull(),
+  attempts: int("attempts").default(0).notNull(),
+  maxAttempts: int("max_attempts").default(3).notNull(),
+  scheduledFor: timestamp("scheduled_for").defaultNow().notNull(),
+  lastError: text("last_error"),
+  startedAt: timestamp("started_at"),
+  finishedAt: timestamp("finished_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+}, table => ({
+  appointmentJobUnique: uniqueIndex("appointment_fulfillment_unique").on(table.appointmentId, table.jobType),
+  dueJobs: index("appointment_fulfillment_due_idx").on(table.status, table.scheduledFor),
+}));
+
 /**
  * Blog posts / Medical news articles.
  * Admin can publish articles, veille scientifique, etc.

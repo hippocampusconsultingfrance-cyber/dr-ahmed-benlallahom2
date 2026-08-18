@@ -139,6 +139,14 @@ export default function RecruitmentTab() {
     onError: mutationError => toast.error(mutationError.message),
   });
 
+  const reanalyzeFailed = trpc.admin.recruitment.reanalyzeFailed.useMutation({
+    onSuccess: ({ queued }) => {
+      toast.success(`${queued} analyse${queued > 1 ? "s" : ""} IA mise${queued > 1 ? "s" : ""} en reprise contrôlée`);
+      utils.admin.recruitment.list.invalidate();
+    },
+    onError: mutationError => toast.error(mutationError.message),
+  });
+
   const createProfile = trpc.admin.recruitment.profiles.create.useMutation({
     onSuccess: () => {
       toast.success("Profil de matching enregistré");
@@ -186,10 +194,16 @@ export default function RecruitmentTab() {
             Les CV sont conservés dans un stockage privé. L’analyse IA fournit une aide à la revue humaine et ne prend aucune décision automatique.
           </p>
         </div>
-        <Button variant="outline" onClick={() => refetch()} disabled={isLoading}>
-          <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
-          Actualiser
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={() => reanalyzeFailed.mutate({ limit: 10 })} disabled={reanalyzeFailed.isPending}>
+            <BrainCircuit className={`mr-2 h-4 w-4 ${reanalyzeFailed.isPending ? "animate-pulse" : ""}`} />
+            Reprendre les échecs IA
+          </Button>
+          <Button variant="outline" onClick={() => refetch()} disabled={isLoading}>
+            <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
+            Actualiser
+          </Button>
+        </div>
       </div>
 
       <div className="grid gap-3 rounded-xl border border-border bg-card/60 p-4 md:grid-cols-3">

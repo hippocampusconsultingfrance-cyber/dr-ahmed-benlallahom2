@@ -197,85 +197,10 @@ async function startServer() {
 
             console.log(`Payment confirmed for appointment: ${trackingId}`);
             
-            // Send notifications AFTER payment is confirmed
-            try {
-              const { sendConfirmationEmail, sendCustomerConfirmationSMS, sendOwnerNotificationEmail, sendOwnerNotificationSMS } = await import("./notifications");
-              
-              if (appointment) {
-                const finalPriceNum = parseFloat(appointment.finalPrice);
-                
-                sendConfirmationEmail(
-                  appointment.customerEmail,
-                  appointment.customerName,
-                  trackingId,
-                  appointment.appointmentDate,
-                  finalPriceNum,
-                  appointment.requestDetails
-                ).catch(console.error);
-
-                sendCustomerConfirmationSMS(
-                  appointment.customerPhone,
-                  trackingId,
-                  appointment.appointmentDate
-                ).catch(console.error);
-
-                sendOwnerNotificationEmail(
-                  appointment.customerName,
-                  appointment.customerEmail,
-                  appointment.customerPhone,
-                  trackingId,
-                  appointment.appointmentDate,
-                  finalPriceNum,
-                  appointment.requestDetails
-                ).catch(console.error);
-
-                sendOwnerNotificationSMS(
-                  appointment.customerName,
-                  appointment.customerPhone,
-                  trackingId,
-                  appointment.appointmentDate,
-                  finalPriceNum
-                ).catch(console.error);
-
-                // Generate and send invoice PDF
-                try {
-                  const { generateInvoicePDF } = await import("../invoice");
-                  const { sendInvoiceEmail } = await import("./notifications");
-                  
-                  const basePriceNum = parseFloat(appointment.basePrice);
-                  const invoiceResult = await generateInvoicePDF({
-                    trackingId,
-                    customerName: appointment.customerName,
-                    customerEmail: appointment.customerEmail,
-                    customerPhone: appointment.customerPhone,
-                    appointmentDate: appointment.appointmentDate,
-                    consultationType: appointment.consultationType || "Conseil en santé",
-                    duration: appointment.duration || 30,
-                    basePrice: basePriceNum,
-                    finalPrice: finalPriceNum,
-                    isNightRate: appointment.isNightRate === 1,
-                    paymentDate: new Date(),
-                  });
-                  
-                  console.log(`Invoice generated for ${trackingId}: ${invoiceResult.key}`);
-                  
-                  // Send invoice by email
-                  await sendInvoiceEmail(
-                    appointment.customerEmail,
-                    appointment.customerName,
-                    trackingId,
-                    finalPriceNum,
-                    invoiceResult.buffer
-                  );
-                  
-                  console.log(`Invoice sent by email to ${appointment.customerEmail}`);
-                } catch (invoiceError) {
-                  console.error("Failed to generate/send invoice:", invoiceError);
-                }
-              }
-            } catch (notificationError) {
-              console.error("Failed to send notifications after payment:", notificationError);
-            }
+            // Keep webhook acknowledgement fast: work is persisted then retried
+            // independently if notification or invoice delivery has a transient failure.
+            const { enqueueAppointmentFulfillment } = await import("../appointmentFulfillment");
+            await enqueueAppointmentFulfillment(appointment.id);
           }
         } catch (error) {
           console.error("Failed to update appointment after payment:", error);
@@ -838,6 +763,20 @@ async function startServer() {
       return res.json({ ok: true, taskUid: user.taskUid, ...result });
     } catch (error: any) {
       console.error("[RecruitmentProcessing] Handler error:", error);
+      return res.status(500).json({ error: error.message, timestamp: new Date().toISOString() });
+    }
+  });
+
+  app.post("/api/scheduled/appointment-fulfillment", async (req, res) => {
+    try {
+      const { sdk: sdkInstance } = await import("./sdk");
+      const user = await sdkInstance.authenticateRequest(req);
+      if (!user.isCron || !user.taskUid) return res.status(403).json({ error: "cron-only" });
+      const { processDueAppointmentFulfillmentJobs } = await import("../appointmentFulfillment");
+      const result = await processDueAppointmentFulfillmentJobs(3);
+      return res.json({ ok: true, taskUid: user.taskUid, ...result });
+    } catch (error: any) {
+      console.error("[AppointmentFulfillment] Handler error:", error);
       return res.status(500).json({ error: error.message, timestamp: new Date().toISOString() });
     }
   });
