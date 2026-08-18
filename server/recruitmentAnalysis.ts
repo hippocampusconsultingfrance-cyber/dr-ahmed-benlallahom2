@@ -50,6 +50,16 @@ export type RecruitmentAnalysisResult = {
   reasoning: string;
 };
 
+export type RecruitmentAnalysisProvider = "gpt-5-mini" | "gemini-3-flash-preview";
+
+/**
+ * A background callback has a short execution window. Alternating providers by
+ * retry keeps each attempt bounded while retaining a real fallback path.
+ */
+export function analysisProviderForAttempt(attempt: number): RecruitmentAnalysisProvider {
+  return attempt >= 2 ? "gemini-3-flash-preview" : "gpt-5-mini";
+}
+
 const experienceSchema = {
   type: "object",
   properties: {
@@ -254,7 +264,10 @@ export async function extractCvText(buffer: Buffer, mimeType: string): Promise<s
 }
 
 function parseAnalysis(content: unknown): RecruitmentAnalysisResult {
-  const raw = messageContentToString(content);
+  const raw = messageContentToString(content)
+    .trim()
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```$/, "");
   const parsed = JSON.parse(raw) as RecruitmentAnalysisResult;
   if (
     !parsed || typeof parsed.summary !== "string" || !Array.isArray(parsed.specialties) || !Array.isArray(parsed.skills) || !Array.isArray(parsed.languages) || !Array.isArray(parsed.normalizedLanguages) || !Array.isArray(parsed.certifications) ||
@@ -276,6 +289,7 @@ export async function analyzeCvText(input: {
   yearsExperience?: number;
   message?: string;
   extractedText: string;
+  provider?: RecruitmentAnalysisProvider;
 }): Promise<RecruitmentAnalysisResult> {
   const cvText = cleanText(input.extractedText).slice(0, 60_000);
   if (cvText.length < 80) throw new Error("Le texte extrait du CV est insuffisant pour une analyse fiable.");
@@ -302,40 +316,27 @@ Texte extrait du CV :
 ${cvText}
 ---
 
-Normalise chaque expérience dans normalizedExperiences. Convertis les dates explicites vers YYYY-MM lorsque possible, utilise null si absente, et distingue permanent, temporary, locum (remplacement), internship (stage), fellowship, rotation et volunteer. Normalise aussi les certifications explicitement listées dans certifications : conserve le nom, l’organisme, le pays, la date d’expiration quand elle est explicitement indiquée et la preuve textuelle ; n’invente jamais une certification. Dans normalizedLanguages, donne la langue, un niveau contrôlé seulement s’il est explicitement attesté (sinon unknown) et une preuve textuelle. Ne transforme jamais une date, une durée ou un niveau incertain en fait : ajoute une dataQualityWarning et cite la preuve textuelle dans evidence. Le score doit mesurer uniquement la pertinence professionnelle apparente au regard de la spécialité, des compétences, de l’expérience explicitement décrite et des pays ciblés. Il ne constitue pas une décision de recrutement.`,
+Normalise chaque expérience dans normalizedExperiences. Convertis les dates explicites vers YYYY-MM lorsque possible, utilise null si absente, et distingue permanent, temporary, locum (remplacement), internship (stage), fellowship, rotation et volunteer. Normalise aussi les certifications explicitement listées dans certifications : conserve le nom, l’organisme, le pays, la date d’expiration quand elle est explicitement indiquée et la preuve textuelle ; n’invente jamais une certification. Dans normalizedLanguages, donne la langue, un niveau contrôlé seulement s’il est explicitement attesté (sinon unknown) et une preuve textuelle. Pour limiter le volume, garde au plus 8 expériences, 12 certifications et 10 langues ; chaque evidence doit être un extrait bref de 160 caractères maximum. Ne transforme jamais une date, une durée ou un niveau incertain en fait : ajoute une dataQualityWarning et cite la preuve textuelle dans evidence. Le score doit mesurer uniquement la pertinence professionnelle apparente au regard de la spécialité, des compétences, de l’expérience explicitement décrite et des pays ciblés. Il ne constitue pas une décision de recrutement.`,
       },
     ];
 
-  const providers = [
-    {
-      model: "gpt-5-mini",
-      maxCompletionTokens: 4_000,
-      reasoning: { effort: "low" },
-    },
-    {
-      model: "gemini-3-flash-preview",
-      max_tokens: 8_000,
-      reasoning_effort: "low",
-    },
-  ] as const;
-
-  const failures: string[] = [];
-  for (const provider of providers) {
-    try {
-      const response = await invokeLLM({
-        ...provider,
-        messages,
-        response_format: { type: "json_schema", json_schema: analysisSchema },
-      });
-      const content = getFirstChoiceContent(response);
-      if (content) return parseAnalysis(content);
-      failures.push(`${provider.model}: contenu vide`);
-    } catch (error) {
-      failures.push(`${provider.model}: ${error instanceof Error ? error.message.slice(0, 160) : "erreur inconnue"}`);
-    }
+  const provider = input.provider ?? "gpt-5-mini";
+  const options = provider === "gpt-5-mini"
+    ? { model: provider, maxCompletionTokens: 2_800, reasoning: { effort: "low" as const } }
+    : { model: provider, max_tokens: 4_000, reasoning_effort: "low" as const };
+  try {
+    const response = await invokeLLM({
+      ...options,
+      messages,
+      response_format: { type: "json_schema", json_schema: analysisSchema },
+    });
+    const content = getFirstChoiceContent(response);
+    if (!content) throw new Error("contenu vide");
+    return parseAnalysis(content);
+  } catch (error) {
+    const reason = error instanceof Error ? error.message.slice(0, 220) : "erreur inconnue";
+    throw new Error(`Analyse IA ${provider} non exploitable : ${reason}`);
   }
-
-  throw new Error(`L’analyse IA n’a renvoyé aucun contenu exploitable (${failures.join(" | ")}).`);
 }
 
 export async function saveCvAnalysis(applicationId: number, analysis: RecruitmentAnalysisResult): Promise<void> {

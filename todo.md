@@ -2333,3 +2333,8 @@
 
 - [x] Remplacer le globe abstrait par une Terre stylisée avec continents en arrière-plan du hub Recrutement
 - [x] Vérifier le rendu de la Terre et la lisibilité de la page sur desktop et mobile avant publication
+
+## Diagnostic analyse CV en attente
+
+- [x] Identifier pourquoi la candidature CV_TAIBI_MIG_2026.PDF reste à l’état « Analyse en attente » avec tentative 0
+- [ ] Relancer ou corriger le traitement asynchrone, puis vérifier le résultat d’analyse du CV

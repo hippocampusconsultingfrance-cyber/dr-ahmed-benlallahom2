@@ -651,7 +651,9 @@ async function startServer() {
       const user = await sdkInstance.authenticateRequest(req);
       if (!user.isCron || !user.taskUid) return res.status(403).json({ error: "cron-only" });
       const { processDueCvAnalysisJobs } = await import("../recruitmentProcessing");
-      const result = await processDueCvAnalysisJobs(2);
+      // One external AI analysis per callback keeps the HTTP cron below the
+      // platform timeout; subsequent jobs are processed by the next heartbeat.
+      const result = await processDueCvAnalysisJobs(1);
       return res.json({ ok: true, taskUid: user.taskUid, ...result });
     } catch (error: any) {
       console.error("[RecruitmentProcessing] Handler error:", error);
