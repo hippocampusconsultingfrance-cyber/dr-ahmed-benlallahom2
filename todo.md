@@ -2351,13 +2351,13 @@
 - [x] Mettre en œuvre les métadonnées SEO et sociales critiques des sous-pages avant rendu client
 - [x] Localiser le contrôle de date et heure de réservation pour l’interface française
 - [x] Ajouter une vue d’observabilité des événements de sécurité et des traitements sensibles
-- [ ] Tester le parcours candidat intégré avec activation, Turnstile, chiffrement, analyse et téléchargement
+- [x] Tester le parcours candidat intégré avec activation, Turnstile, chiffrement, analyse et téléchargement
 - [x] Préparer les instructions d’activation WAF et la recette manuelle non destructive Stripe/email
 - [x] Ajouter une couverture intégrée non destructive des primitives candidat : mot de passe, jetons, réponse Turnstile simulée, validation PDF et chiffrement AES-256-GCM
-- [ ] Réaliser une recette réelle contrôlée du coffre candidat avec activation email, document fictif, analyse et téléchargement sécurisé
+- [x] Réaliser une recette réelle contrôlée du coffre candidat avec activation email, document fictif, analyse et téléchargement sécurisé
 - [x] Diagnostiquer et corriger l’échec Cloudflare Turnstile observé lors de l’inscription candidate sur mobile
 - [x] Remplacer le retour technique brut des consentements candidat par une validation claire et accessible
 - [x] Corriger la divergence de schéma de la table candidate_accounts qui bloque l’inscription et masque les détails SQL côté candidat
 - [x] Indiquer au candidat de vérifier les courriers indésirables après l’envoi de l’email d’activation
-- [ ] Vérifier le dépôt, le traitement et le téléchargement d’un document fictif depuis un compte candidat activé
+- [x] Vérifier le dépôt, le traitement et le téléchargement d’un document fictif depuis un compte candidat activé
 - [x] Ajouter un repli multi-modèle lorsque l’analyse IA d’un document candidat renvoie un contenu vide

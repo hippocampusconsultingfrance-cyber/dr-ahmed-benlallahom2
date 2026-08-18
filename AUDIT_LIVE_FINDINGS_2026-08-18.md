@@ -33,3 +33,14 @@ Les constatations ci-dessous proviennent des captures du serveur de prévisualis
 | `https://drahmedbenlallahom.com/candidate/access` | Après le chargement initial, l’écran de connexion candidat s’affiche correctement : identité Hippocampus, champs email et mot de passe, accès création/réinitialisation et information sur la revue humaine. | L’inscription, le Turnstile, l’activation email, le dépôt chiffré et le téléchargement nécessitent une recette contrôlée avec une adresse de test et ne sont pas exécutés sur des données réelles. |
 | File post-paiement | Le job `appointment-fulfillment` est actif toutes les cinq minutes (`YDLvE8jdPEDQftt9AWzUwR`) et son premier passage contrôlé a retourné HTTP 200 le 18 août 2026 à 17:17 UTC, sans travail en attente. | Une transaction Stripe de test doit encore être réalisée manuellement selon `RECETTE_MANUELLE_STRIPE_EMAIL.md`. |
 | Accès direct au coffre sans session | La route `/candidate/portal` affiche brièvement l’état de chargement puis redirige bien vers `/candidate/access` quand aucune session valide n’est présente. | Le contrôle de session s’effectue côté client après l’initialisation : le contenu de coffre ne doit pas être considéré comme autorisé tant que cette vérification n’est pas terminée. |
+
+## Recette contrôlée du coffre candidat — 18 août 2026
+
+| Étape | Résultat | Contrôle associé |
+|---|---|---|
+| Création et activation | Compte candidat de recette créé après validation Cloudflare Turnstile ; lien d’activation reçu et espace candidat ouvert. | Consentements explicites, mot de passe, activation d’email et session candidate. |
+| Dépôt sécurisé | Un PDF fictif sans donnée personnelle a été déposé depuis l’espace candidat. | Mise en quarantaine, chiffrement applicatif et stockage privé. |
+| Traitement asynchrone | Le worker a exécuté la file documentaire ; le fichier a été accepté, analysé, puis marqué `needs_review`. | Aucun choix automatisé : le statut final impose une revue humaine. |
+| Téléchargement | Le téléchargement autorisé par la session candidate a été effectué et le PDF est lisible. | Déchiffrement côté serveur et URL de téléchargement contrôlée. |
+
+> Le document de recette ne contient aucune donnée réelle. Son statut d’analyse confirme que l’IA sert exclusivement d’aide à la revue humaine.
