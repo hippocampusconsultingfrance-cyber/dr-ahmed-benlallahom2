@@ -53,6 +53,19 @@ function databaseOrThrow(db: Awaited<ReturnType<typeof getDb>>) {
   return db;
 }
 
+async function candidateDatabaseOperation<T>(operation: () => Promise<T>): Promise<T> {
+  try {
+    return await operation();
+  } catch (error) {
+    if (error instanceof TRPCError) throw error;
+    console.error("candidate_database_operation_failed", error);
+    throw new TRPCError({
+      code: "INTERNAL_SERVER_ERROR",
+      message: "Le service candidat est temporairement indisponible. Veuillez réessayer dans quelques instants.",
+    });
+  }
+}
+
 function candidateCookieToken(req: { headers: Record<string, unknown> }): string | null {
   const cookieHeader = req.headers.cookie;
   const source = Array.isArray(cookieHeader) ? cookieHeader[0] : cookieHeader;
@@ -157,35 +170,37 @@ export const candidatePortalRouter = router({
       const now = new Date();
       const verificationToken = createCandidateToken();
       const verificationExpiresAt = new Date(now.getTime() + CANDIDATE_TOKEN_MAX_AGE_MS);
-      const existing = await db.select().from(candidateAccounts).where(eq(candidateAccounts.email, email)).limit(1);
+      const existing = await candidateDatabaseOperation(() => db.select().from(candidateAccounts).where(eq(candidateAccounts.email, email)).limit(1));
 
       let candidateId: number | null = null;
       if (existing[0]) {
         if (!existing[0].emailVerifiedAt && existing[0].status === "active") {
-          await db.update(candidateAccounts).set({
+          const passwordHash = await hashCandidatePassword(input.password);
+          await candidateDatabaseOperation(() => db.update(candidateAccounts).set({
             firstName: input.firstName,
             lastName: input.lastName,
-            passwordHash: await hashCandidatePassword(input.password),
+            passwordHash,
             verificationTokenHash: hashCandidateToken(verificationToken, "verification"),
             verificationExpiresAt,
             termsAcceptedAt: now,
             documentConsentAt: now,
-          }).where(eq(candidateAccounts.id, existing[0].id));
+          }).where(eq(candidateAccounts.id, existing[0].id)));
           candidateId = existing[0].id;
         }
       } else {
-        const matchingApplication = await db.select({ id: cvApplications.id }).from(cvApplications).where(eq(cvApplications.email, email)).limit(1);
-        const result = await db.insert(candidateAccounts).values({
+        const matchingApplication = await candidateDatabaseOperation(() => db.select({ id: cvApplications.id }).from(cvApplications).where(eq(cvApplications.email, email)).limit(1));
+        const passwordHash = await hashCandidatePassword(input.password);
+        const result = await candidateDatabaseOperation(() => db.insert(candidateAccounts).values({
           email,
           firstName: input.firstName,
           lastName: input.lastName,
-          passwordHash: await hashCandidatePassword(input.password),
+          passwordHash,
           verificationTokenHash: hashCandidateToken(verificationToken, "verification"),
           verificationExpiresAt,
           linkedApplicationId: matchingApplication[0]?.id ?? null,
           termsAcceptedAt: now,
           documentConsentAt: now,
-        });
+        }));
         candidateId = Number(result[0].insertId);
       }
 
