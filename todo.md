@@ -2358,3 +2358,4 @@
 - [x] Diagnostiquer et corriger l’échec Cloudflare Turnstile observé lors de l’inscription candidate sur mobile
 - [x] Remplacer le retour technique brut des consentements candidat par une validation claire et accessible
 - [x] Corriger la divergence de schéma de la table candidate_accounts qui bloque l’inscription et masque les détails SQL côté candidat
+- [x] Indiquer au candidat de vérifier les courriers indésirables après l’envoi de l’email d’activation

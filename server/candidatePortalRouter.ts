@@ -30,7 +30,7 @@ import { enforcePersistentRateLimit, hashSecurityValue, isCompromisedPassword, l
 
 type CandidateSession = typeof candidateAccounts.$inferSelect;
 
-const genericAccessMessage = "Si vos informations sont valides, vous recevrez les instructions nécessaires.";
+const genericAccessMessage = "Si vos informations sont valides, vous recevrez les instructions nécessaires par email. Pensez à vérifier votre dossier Spam ou Courriers indésirables si le message n’apparaît pas dans votre boîte de réception.";
 
 function getRequestProtocol(req: { protocol?: string; headers: Record<string, unknown> }): boolean {
   const forwarded = req.headers["x-forwarded-proto"];
