@@ -2331,3 +2331,9 @@
 - [x] Tester les flux métier de réservation, recrutement, candidatures, comptes, documents, IA, emails et administration
 - [x] Auditer la sécurité, SEO, accessibilité, performance, conformité et observabilité
 - [x] Exécuter la suite de tests, consolider les preuves et proposer les corrections priorisées
+
+## Corrections prioritaires issues de l’audit global
+
+- [x] Rétablir la route publique /why-hippocampus et couvrir les routes Employeurs par un test de régression
+- [x] Ajouter les pages recrutement et Employeurs indexables au sitemap
+- [x] Ajouter des en-têtes HTTP de défense en profondeur après validation des origines externes autorisées

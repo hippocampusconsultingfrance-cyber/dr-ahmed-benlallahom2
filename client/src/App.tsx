@@ -19,6 +19,7 @@ const RecruitmentHubPage = lazy(() => import("./pages/RecruitmentHubPage"));
 const RecruitmentPage = lazy(() => import("./pages/RecruitmentPage"));
 const VvipOffshorePage = lazy(() => import("./pages/VvipOffshorePage"));
 const EmployersPage = lazy(() => import("./pages/EmployersPage"));
+const WhyHippocampusPage = lazy(() => import("./pages/WhyHippocampusPage"));
 const CandidateAccessPage = lazy(() => import("./pages/CandidateAccessPage"));
 const CandidateVerifyPage = lazy(() => import("./pages/CandidateVerifyPage"));
 const CandidateResetPasswordPage = lazy(() => import("./pages/CandidateResetPasswordPage"));
@@ -59,6 +60,7 @@ function Router() {
       <Route path="/candidate/reset-password" component={CandidateResetPasswordPage} />
       <Route path="/candidate/portal" component={CandidatePortalPage} />
       <Route path="/employers" component={EmployersPage} />
+      <Route path="/why-hippocampus" component={WhyHippocampusPage} />
       <Route path="/admin" component={AdminDashboard} />
       <Route path="/404" component={NotFound} />
         <Route component={NotFound} />
