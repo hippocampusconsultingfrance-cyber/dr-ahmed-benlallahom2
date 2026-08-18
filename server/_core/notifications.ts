@@ -522,10 +522,11 @@ export async function sendCandidatePortalAccessEmail(input: {
         <p>${instruction}</p>
         <p style="margin:24px 0;"><a href="${escapeHtml(input.actionUrl)}" style="display:inline-block;background:#0891b2;color:#ffffff;text-decoration:none;padding:12px 18px;border-radius:7px;font-weight:700;">${action}</a></p>
         <p style="color:#64748b;font-size:13px;">Ce lien est personnel et temporaire. Si vous n’êtes pas à l’origine de cette demande, vous pouvez ignorer cet email.</p>
+        <p style="color:#64748b;font-size:13px;">Si vous ne retrouvez pas cet email, vérifiez votre dossier Spam ou Courriers indésirables, puis ajoutez recrutement@drahmedbenlallahom.com à vos contacts.</p>
         <p style="color:#64748b;">Hippocampus Consulting</p>
       </div>
     `,
-    text: `${title}\n\nBonjour ${input.firstName || ""},\n\n${instruction}\n\n${input.actionUrl}\n\nCe lien est personnel et temporaire.`,
+    text: `${title}\n\nBonjour ${input.firstName || ""},\n\n${instruction}\n\n${input.actionUrl}\n\nCe lien est personnel et temporaire. Si vous ne retrouvez pas cet email, vérifiez votre dossier Spam ou Courriers indésirables, puis ajoutez recrutement@drahmedbenlallahom.com à vos contacts.`,
   });
   if (error) throw new Error(`Resend candidate access email failed: ${error.message}`);
   return { id: data?.id };

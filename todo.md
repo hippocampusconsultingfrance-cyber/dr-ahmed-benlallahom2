@@ -2367,3 +2367,5 @@
 - [x] Corriger le sitemap public qui ne référence pas encore toutes les pages de recrutement et Employeurs indexables
 - [x] Rendre les métadonnées SEO critiques des routes publiques visibles dans le HTML initial servi aux crawlers
 - [x] Retourner un statut HTTP 404 avec noindex pour les routes publiques inconnues
+- [x] Vérifier l’authentification SPF, DKIM et DMARC des emails transactionnels envoyés par Hippocampus Consulting
+- [x] Ajouter au message d’activation candidat un rappel clair de vérifier les courriers indésirables
