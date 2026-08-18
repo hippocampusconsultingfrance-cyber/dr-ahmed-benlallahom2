@@ -12,6 +12,16 @@ import { SEOHead } from "@/components/SEOHead";
 
 type Mode = "login" | "register" | "forgot";
 
+function candidateNotice(message: string) {
+  if (message.includes("termsAccepted") && message.includes("documentConsent")) {
+    return "Veuillez accepter les conditions d’utilisation et consentir au traitement confidentiel de vos documents avant de créer votre accès.";
+  }
+  if (message.includes("termsAccepted")) return "Veuillez accepter les conditions d’utilisation et la politique de confidentialité pour continuer.";
+  if (message.includes("documentConsent")) return "Veuillez consentir au traitement confidentiel de vos documents pour continuer.";
+  if (message.includes("candidate_turnstile")) return "La vérification anti-bot n’a pas abouti. Réessayez le contrôle avant de soumettre le formulaire.";
+  return message;
+}
+
 export default function CandidateAccessPage() {
   const [, navigate] = useLocation();
   const [mode, setMode] = useState<Mode>("login");
@@ -27,15 +37,15 @@ export default function CandidateAccessPage() {
 
   const login = trpc.candidatePortal.login.useMutation({
     onSuccess: () => navigate("/candidate/portal"),
-    onError: error => setNotice(error.message),
+    onError: error => setNotice(candidateNotice(error.message)),
   });
   const register = trpc.candidatePortal.register.useMutation({
     onSuccess: data => setNotice(data.message),
-    onError: error => setNotice(error.message),
+    onError: error => setNotice(candidateNotice(error.message)),
   });
   const reset = trpc.candidatePortal.requestPasswordReset.useMutation({
     onSuccess: data => setNotice(data.message),
-    onError: error => setNotice(error.message),
+    onError: error => setNotice(candidateNotice(error.message)),
   });
   const pending = login.isPending || register.isPending || reset.isPending;
 
@@ -46,6 +56,14 @@ export default function CandidateAccessPage() {
       login.mutate({ email, password });
     } else if (mode === "register") {
       if (password !== passwordConfirmation) { setNotice("Les deux mots de passe doivent être identiques."); return; }
+      if (!terms || !documentConsent) {
+        setNotice(!terms && !documentConsent
+          ? "Veuillez accepter les conditions d’utilisation et consentir au traitement confidentiel de vos documents avant de créer votre accès."
+          : !terms
+            ? "Veuillez accepter les conditions d’utilisation et la politique de confidentialité pour continuer."
+            : "Veuillez consentir au traitement confidentiel de vos documents pour continuer.");
+        return;
+      }
       if (!turnstileToken) { setNotice("Veuillez effectuer la vérification anti-bot avant de créer votre accès."); return; }
       register.mutate({ email, password, firstName, lastName, termsAccepted: terms, documentConsent, turnstileToken });
     } else {
