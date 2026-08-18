@@ -84,6 +84,18 @@ describe("règles déterministes du pipeline de traitement CV", () => {
     expect(requestedProvider).toBe("gemini-3-flash-preview");
   });
 
+  it("utilise un repli compact lors de la dernière tentative", async () => {
+    let requestedProvider = "";
+    await executeCvExternalPipeline({ ...input, analysisAttempt: 3 }, {
+      ...steps,
+      analyze: async request => {
+        requestedProvider = request.provider ?? "";
+        return analysis;
+      },
+    });
+    expect(requestedProvider).toBe("gpt-5-nano");
+  });
+
   it("propage de manière contrôlée les échecs de stockage, OCR et IA pour la logique de reprise", async () => {
     await expect(executeCvExternalPipeline(input, { ...steps, download: async () => { throw new Error("cv_download_failed_503"); } })).rejects.toThrow("cv_download_failed_503");
     await expect(executeCvExternalPipeline(input, { ...steps, extract: async () => { throw new Error("ocr_engine_failed"); } })).rejects.toThrow("ocr_engine_failed");

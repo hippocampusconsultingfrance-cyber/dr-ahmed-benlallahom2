@@ -2338,3 +2338,9 @@
 
 - [x] Identifier pourquoi la candidature CV_TAIBI_MIG_2026.PDF reste à l’état « Analyse en attente » avec tentative 0
 - [x] Relancer ou corriger le traitement asynchrone, puis vérifier le résultat d’analyse du CV
+
+## Vérification globale du pipeline IA CV
+
+- [ ] Contrôler les dernières exécutions, les reprises et les erreurs du traitement IA en production
+- [ ] Exécuter les tests de non-régression extraction, analyse, reprise et persistance des résultats
+- [ ] Vérifier la cohérence entre les résultats IA enregistrés et les informations affichées à l’administrateur

@@ -50,14 +50,15 @@ export type RecruitmentAnalysisResult = {
   reasoning: string;
 };
 
-export type RecruitmentAnalysisProvider = "gpt-5-mini" | "gemini-3-flash-preview";
+export type RecruitmentAnalysisProvider = "gpt-5-mini" | "gemini-3-flash-preview" | "gpt-5-nano";
 
 /**
  * A background callback has a short execution window. Alternating providers by
  * retry keeps each attempt bounded while retaining a real fallback path.
  */
 export function analysisProviderForAttempt(attempt: number): RecruitmentAnalysisProvider {
-  return attempt >= 2 ? "gemini-3-flash-preview" : "gpt-5-mini";
+  if (attempt >= 3) return "gpt-5-nano";
+  return attempt === 2 ? "gemini-3-flash-preview" : "gpt-5-mini";
 }
 
 const experienceSchema = {
@@ -321,13 +322,21 @@ Normalise chaque expérience dans normalizedExperiences. Convertis les dates exp
     ];
 
   const provider = input.provider ?? "gpt-5-mini";
-  const options = provider === "gpt-5-mini"
+  const compactFallback = provider === "gpt-5-nano";
+  const options = provider === "gemini-3-flash-preview"
+    ? { model: provider, max_tokens: 4_000, reasoning_effort: "low" as const }
+    : provider === "gpt-5-mini"
     ? { model: provider, maxCompletionTokens: 2_800, reasoning: { effort: "low" as const } }
-    : { model: provider, max_tokens: 4_000, reasoning_effort: "low" as const };
+    : { model: provider, maxCompletionTokens: 1_600, reasoning: { effort: "minimal" as const } };
   try {
     const response = await invokeLLM({
       ...options,
-      messages,
+      messages: compactFallback
+        ? [...messages, {
+            role: "user" as const,
+            content: "Mode de secours compact : retourne une synthèse courte. Limite skills, specialties, languages, strengths, gaps et countriesOfInterest à 6 éléments ; retourne normalizedExperiences, certifications et normalizedLanguages comme tableaux vides ; ajoute une dataQualityWarning indiquant que la normalisation détaillée nécessite une revue humaine. Le JSON doit rester inférieur à 1 200 tokens.",
+          }]
+        : messages,
       response_format: { type: "json_schema", json_schema: analysisSchema },
     });
     const content = getFirstChoiceContent(response);
