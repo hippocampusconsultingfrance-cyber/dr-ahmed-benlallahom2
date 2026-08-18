@@ -88,7 +88,3 @@ Les constatations ci-dessous proviennent des captures du serveur de prévisualis
 | Parcours non transactionnel | La page `/booking` renvoie HTTP 200 avec le titre, la description SEO et le bundle principal accessibles. | Sonde publique sans soumettre de réservation ni déclencher de paiement. |
 
 > Aucun paiement, aucune réservation et aucune donnée de patient n’ont été créés pendant cette vérification.
-
-## Ancrage de marque du parcours de réservation — 18 août 2026
-
-La page de réservation affiche désormais, au-dessus du formulaire, une signature **ABL / Dr. Ahmed Ben Lallahom** accompagnée d’une qualification médicale adaptée à la langue choisie. Cette signature reste visible sur desktop comme sur mobile, sans modifier les champs, les règles de disponibilité, la création de réservation ou Stripe. Un accent or discret complète les codes cyan et bleu nuit déjà employés pour distinguer l’autorité médicale de l’action principale.

@@ -2302,7 +2302,7 @@
 - [ ] Ajouter un tableau de bord recrutement avec volumes de CV, consentements, état d’analyse IA, activité de campagnes et taux de réponse
 - [ ] Créer une fiche candidat 360° avec chronologie des actions, emails, notes, pièces demandées et prochain suivi
 - [ ] Préparer des relances manuelles suggérées à J+7/J+14 sans aucun envoi automatique
-- [x] Ajouter un lien de désinscription marketing explicite, sécurisé et traçable pour les campagnes recrutement
+- [ ] Ajouter un lien de désinscription marketing explicite, sécurisé et traçable pour les campagnes recrutement
 - [ ] Ajouter un export CSV administratif contrôlé du vivier et des shortlists de missions
 - [ ] Créer des modèles réutilisables d’offres de recrutement par zone et type de mission
 - [ ] Enrichir le score de compatibilité mission–candidat avec spécialité, langues, mobilité, disponibilité et certifications
@@ -2373,10 +2373,4 @@
 - [x] Exclure le runtime de prévisualisation Manus du HTML de production afin de réduire le poids de la réponse initiale
 - [x] Vérifier l’interface publique de réservation sur desktop et mobile sans déclencher de paiement
 - [x] Ajouter une signature Dr. Ahmed Ben Lallahom visible au-dessus du formulaire de réservation
-- [x] Ajouter une page publique de désabonnement recrutements reliée au mécanisme sécurisé existant
-- [x] Corriger le contrat build/start de production qui provoque un HTTP 500 global après déploiement
-- [x] Rendre la résolution du répertoire statique de production robuste et journaliser les échecs de service HTML
-- [x] Rétablir le runtime Manus requis en production tout en conservant le collecteur de débogage exclu
-- [x] Ajouter une sonde de santé publique minimale pour diagnostiquer et surveiller le serveur de production
-- [x] Forcer le rendu statique lorsque le processus est hébergé afin d’éviter un démarrage Vite en production
 - [x] Remplacer l’affichage système mm/dd/yyyy du champ de réservation par une saisie explicitement localisée en français

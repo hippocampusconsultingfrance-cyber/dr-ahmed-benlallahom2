@@ -84,7 +84,7 @@ export function getRouteSeo(url: string): RouteSeo {
   const known = PUBLIC_ROUTES[pathname];
   if (known) return { ...known, canonicalPath: pathname };
 
-  if (pathname === "/booking/confirmation" || pathname === "/recruitment/unsubscribe" || PRIVATE_PREFIXES.some(prefix => pathname === prefix.slice(0, -1) || pathname.startsWith(prefix))) {
+  if (pathname === "/booking/confirmation" || PRIVATE_PREFIXES.some(prefix => pathname === prefix.slice(0, -1) || pathname.startsWith(prefix))) {
     return {
       title: `${SITE_NAME} | Espace sécurisé`,
       description: "Espace sécurisé du site Dr. Ahmed Ben Lallahom.",

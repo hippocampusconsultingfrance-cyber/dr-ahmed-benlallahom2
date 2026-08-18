@@ -53,18 +53,13 @@ export async function setupVite(app: Express, server: Server) {
 }
 
 export function serveStatic(app: Express) {
-  // The deployment bundle may live either directly in `dist/` or retain its
-  // original server/_core structure. Resolve the public client deterministically
-  // from the project root first, then fall back to paths relative to the bundle.
-  const staticCandidates = [
-    path.resolve(process.cwd(), "dist", "public"),
-    path.resolve(import.meta.dirname, "public"),
-    path.resolve(import.meta.dirname, "..", "public"),
-  ];
-  const distPath = staticCandidates.find(candidate => fs.existsSync(candidate)) ?? staticCandidates[0];
+  const distPath =
+    process.env.NODE_ENV === "development"
+      ? path.resolve(import.meta.dirname, "../..", "dist", "public")
+      : path.resolve(import.meta.dirname, "public");
   if (!fs.existsSync(distPath)) {
     console.error(
-      `[serveStatic] Could not find the client build directory. Tried: ${staticCandidates.join(", ")}`
+      `Could not find the build directory: ${distPath}, make sure to build the client first`
     );
   }
 
@@ -81,7 +76,6 @@ export function serveStatic(app: Express) {
         template.replace("<!--route-seo-->", () => renderRouteSeoHead(req.originalUrl))
       );
     } catch (error) {
-      console.error("[serveStatic] Failed to serve SPA shell", { distPath, error });
       next(error);
     }
   });

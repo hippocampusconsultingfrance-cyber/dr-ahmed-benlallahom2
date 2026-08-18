@@ -156,14 +156,12 @@ const plugins = [
   react(),
   tailwindcss(),
   jsxLocPlugin(),
-  vitePluginManusRuntime(),
-  ...(isProductionBuild ? [] : [vitePluginManusDebugCollector()]),
+  ...(isProductionBuild ? [] : [vitePluginManusRuntime(), vitePluginManusDebugCollector()]),
 ];
 
 export default defineConfig({
-  // Le runtime assure le contrat de déploiement Manus. Le collecteur de
-  // débogage, lui, reste limité à la prévisualisation afin de ne pas exposer
-  // son instrumentation aux visiteurs.
+  // Le runtime de l’éditeur visuel est utile uniquement en prévisualisation.
+  // Il est exclu du build public afin d’alléger le HTML initial des visiteurs.
   plugins,
   resolve: {
     alias: {
