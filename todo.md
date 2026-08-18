@@ -2403,3 +2403,10 @@
 - [x] Ajouter un pipeline d’analyse IA documentaire avec résultat structuré, confiance et revue humaine obligatoire
 - [x] Construire le portail candidat de dépôt, suivi et gestion des documents
 - [x] Ajouter les contrôles administratifs, les tests d’autorisation et les vérifications RGPD
+
+## Test intégral de l’espace candidat
+
+- [x] Vérifier la création de compte, la vérification d’email, la connexion et l’expiration de session
+- [x] Vérifier le dépôt privé, le rejet des fichiers dangereux et le journal d’audit documentaire
+- [x] Vérifier l’analyse asynchrone, le coffre candidat et la revue administrateur
+- [x] Retirer les données de test et consigner le résultat du parcours complet
