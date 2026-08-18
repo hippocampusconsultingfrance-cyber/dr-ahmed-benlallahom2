@@ -2328,3 +2328,8 @@
 
 - [x] Ajouter un globe terrestre stylisé en arrière-plan de la page Recrutement, sans compromettre la lisibilité ou l’accessibilité
 - [x] Vérifier le rendu du globe sur desktop et mobile avant publication
+
+## Terre avec continents — page Recrutement
+
+- [x] Remplacer le globe abstrait par une Terre stylisée avec continents en arrière-plan du hub Recrutement
+- [x] Vérifier le rendu de la Terre et la lisibilité de la page sur desktop et mobile avant publication
