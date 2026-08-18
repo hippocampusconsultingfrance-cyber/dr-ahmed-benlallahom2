@@ -7,6 +7,7 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import { LanguageProvider } from "./contexts/LanguageContext";
 import WhatsAppButton from "./components/WhatsAppButton";
 import CookieConsent from "./components/CookieConsent";
+import { SEOHead } from "./components/SEOHead";
 
 const Home = lazy(() => import("./pages/Home"));
 const VenturePage = lazy(() => import("./pages/VenturePage"));
@@ -26,6 +27,19 @@ const CandidateResetPasswordPage = lazy(() => import("./pages/CandidateResetPass
 const CandidatePortalPage = lazy(() => import("./pages/CandidatePortalPage"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 const AdminDashboard = lazy(() => import("./pages/AdminDashboard"));
+
+function CandidatePortalPrivateRoute() {
+  return (
+    <>
+      <SEOHead
+        title="Coffre documentaire candidat | Hippocampus Consulting"
+        description="Consultez et déposez vos documents administratifs de manière sécurisée."
+        noIndex
+      />
+      <CandidatePortalPage />
+    </>
+  );
+}
 
 function Router() {
   return (
@@ -58,7 +72,7 @@ function Router() {
       <Route path="/candidate/access" component={CandidateAccessPage} />
       <Route path="/candidate/verify" component={CandidateVerifyPage} />
       <Route path="/candidate/reset-password" component={CandidateResetPasswordPage} />
-      <Route path="/candidate/portal" component={CandidatePortalPage} />
+      <Route path="/candidate/portal" component={CandidatePortalPrivateRoute} />
       <Route path="/employers" component={EmployersPage} />
       <Route path="/why-hippocampus" component={WhyHippocampusPage} />
       <Route path="/admin" component={AdminDashboard} />

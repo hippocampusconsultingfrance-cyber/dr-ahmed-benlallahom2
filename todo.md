@@ -2352,4 +2352,4 @@
 - [x] Localiser le contrôle de date et heure de réservation pour l’interface française
 - [x] Ajouter une vue d’observabilité des événements de sécurité et des traitements sensibles
 - [ ] Tester le parcours candidat intégré avec activation, Turnstile, chiffrement, analyse et téléchargement
-- [ ] Préparer les instructions d’activation WAF et la recette manuelle non destructive Stripe/email
+- [x] Préparer les instructions d’activation WAF et la recette manuelle non destructive Stripe/email

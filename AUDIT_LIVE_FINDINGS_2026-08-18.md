@@ -25,3 +25,10 @@ Les constatations ci-dessous proviennent des captures du serveur de prévisualis
 | P2 | Performance | Les pages publiques se servent correctement mais les premiers temps de réponse sont de l’ordre de 2 à 6 secondes; `/recruitment/standard` a dépassé 12 secondes pendant la sonde. | Mesure HTTP depuis le domaine public. | Mesurer depuis plusieurs régions, optimiser les bundles et vérifier l’effet de démarrage à froid avant de fixer un objectif de performance. |
 | Conforme | Contrôles d’accès | Les endpoints de dépôt candidat et téléchargement administratif refusent l’accès sans session; le webhook Stripe sans signature retourne 400. | Sondes HTTP non authentifiées. | Maintenir ces tests de sécurité en CI. |
 | Conforme | Automatisation | Les files CV et documents ne présentent aucun job actuellement en attente, exécution ou reprise. | Requête d’état opérationnel. | Poursuivre la surveillance quotidienne et la revue des jobs en échec historiques. |
+
+## Contrôle de suivi — 18 août 2026
+
+| Parcours | Résultat observé | Limite de la vérification |
+|---|---|---|
+| `https://drahmedbenlallahom.com/candidate/access` | Après le chargement initial, l’écran de connexion candidat s’affiche correctement : identité Hippocampus, champs email et mot de passe, accès création/réinitialisation et information sur la revue humaine. | L’inscription, le Turnstile, l’activation email, le dépôt chiffré et le téléchargement nécessitent une recette contrôlée avec une adresse de test et ne sont pas exécutés sur des données réelles. |
+| File post-paiement | Le job `appointment-fulfillment` est actif toutes les cinq minutes (`YDLvE8jdPEDQftt9AWzUwR`). | Une transaction Stripe de test doit encore être réalisée manuellement selon `RECETTE_MANUELLE_STRIPE_EMAIL.md`. |
