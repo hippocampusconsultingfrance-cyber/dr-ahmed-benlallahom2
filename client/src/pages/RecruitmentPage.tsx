@@ -192,10 +192,22 @@ const regionalOverrides = {
   },
 } as const;
 type FormState = {
-  firstName: string; lastName: string; email: string; phonePrefix: string; phone: string; specialty: string; specialtyCustom: string; targetCountries: string[]; languages: string; yearsExperience: string; message: string; gdprConsent: boolean; marketingConsent: boolean; website: string;
+  firstName: string; lastName: string; email: string; phonePrefix: string; phone: string; specialty: string; specialtyCustom: string; targetCountries: string[]; languages: string[]; otherLanguage: string; yearsExperience: string; message: string; gdprConsent: boolean; marketingConsent: boolean; website: string;
 };
 
-const initialForm: FormState = { firstName: "", lastName: "", email: "", phonePrefix: "+33", phone: "", specialty: "", specialtyCustom: "", targetCountries: [], languages: "", yearsExperience: "", message: "", gdprConsent: false, marketingConsent: false, website: "" };
+const initialForm: FormState = { firstName: "", lastName: "", email: "", phonePrefix: "+33", phone: "", specialty: "", specialtyCustom: "", targetCountries: [], languages: [], otherLanguage: "", yearsExperience: "", message: "", gdprConsent: false, marketingConsent: false, website: "" };
+
+const professionalLanguageOptions: Array<{ value: string; labels: Record<Language, string> }> = [
+  { value: "Arabic", labels: { fr: "Arabe", en: "Arabic", de: "Arabisch", zh: "阿拉伯语" } },
+  { value: "French", labels: { fr: "Français", en: "French", de: "Französisch", zh: "法语" } },
+  { value: "English", labels: { fr: "Anglais", en: "English", de: "Englisch", zh: "英语" } },
+  { value: "Italian", labels: { fr: "Italien", en: "Italian", de: "Italienisch", zh: "意大利语" } },
+  { value: "Spanish", labels: { fr: "Espagnol", en: "Spanish", de: "Spanisch", zh: "西班牙语" } },
+  { value: "Portuguese", labels: { fr: "Portugais", en: "Portuguese", de: "Portugiesisch", zh: "葡萄牙语" } },
+  { value: "German", labels: { fr: "Allemand", en: "German", de: "Deutsch", zh: "德语" } },
+  { value: "Chinese", labels: { fr: "Chinois", en: "Chinese", de: "Chinesisch", zh: "中文" } },
+  { value: "Other", labels: { fr: "Autre", en: "Other", de: "Andere", zh: "其他" } },
+];
 
 export default function RecruitmentPage() {
   const { language } = useLanguage();
@@ -229,6 +241,12 @@ export default function RecruitmentPage() {
   const toggleCountry = (country: string) => {
     update("targetCountries", form.targetCountries.includes(country) ? form.targetCountries.filter(item => item !== country) : [...form.targetCountries, country]);
   };
+  const toggleLanguage = (selectedLanguage: string) => {
+    const languages = form.languages.includes(selectedLanguage)
+      ? form.languages.filter(item => item !== selectedLanguage)
+      : [...form.languages, selectedLanguage];
+    setForm(previous => ({ ...previous, languages, otherLanguage: languages.includes("Other") ? previous.otherLanguage : "" }));
+  };
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -252,7 +270,12 @@ export default function RecruitmentPage() {
     body.append("phone", phoneDigits ? `${form.phonePrefix}${phoneDigits}` : "");
     body.append("specialty", finalSpecialty);
     body.append("targetCountries", JSON.stringify(form.targetCountries));
-    body.append("languages", JSON.stringify(form.languages.split(",").map(item => item.trim()).filter(Boolean)));
+    const submittedLanguages = form.languages.flatMap(selectedLanguage => {
+      if (selectedLanguage !== "Other") return [selectedLanguage];
+      const other = form.otherLanguage.trim();
+      return other ? [`Other: ${other}`] : ["Other"];
+    });
+    body.append("languages", JSON.stringify(submittedLanguages));
     body.append("yearsExperience", form.yearsExperience);
     body.append("message", form.message);
     body.append("gdprConsent", form.gdprConsent ? "1" : "0");
@@ -377,10 +400,23 @@ export default function RecruitmentPage() {
 
                   <fieldset><legend className="mb-3 text-sm font-medium text-foreground">{t.countries} *</legend><div className="grid gap-2 sm:grid-cols-2">{countryOptions.map(country => <label key={country.value} className="flex items-center gap-3 rounded-lg border border-border/70 px-3 py-2 text-sm text-foreground"><input type="checkbox" checked={form.targetCountries.includes(country.value)} onChange={() => toggleCountry(country.value)} className="h-4 w-4 accent-primary" />{country.labels[lang]}</label>)}</div><p className="sr-only">{selectedCountryLabels}</p></fieldset>
                   
-                  <label className="block w-full space-y-2 text-sm text-foreground">
-                    <span className="block mb-2 font-medium">{t.languages}</span>
-                    <input id="recruitment-languages" value={form.languages} onChange={event => update("languages", event.target.value)} placeholder="Français, English, Deutsch" className="form-control block w-full mt-1" />
-                  </label>
+                  <fieldset>
+                    <legend className="mb-3 text-sm font-medium text-foreground">{t.languages}</legend>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      {professionalLanguageOptions.map(option => (
+                        <label key={option.value} className="flex items-center gap-3 rounded-lg border border-border/70 px-3 py-2.5 text-sm text-foreground transition-colors hover:border-primary/45 hover:bg-primary/5">
+                          <input type="checkbox" checked={form.languages.includes(option.value)} onChange={() => toggleLanguage(option.value)} className="h-4 w-4 accent-primary" />
+                          {option.labels[lang]}
+                        </label>
+                      ))}
+                    </div>
+                    {form.languages.includes("Other") && (
+                      <label className="mt-3 flex flex-col gap-2 text-sm text-foreground animate-in fade-in duration-200">
+                        <span className="font-medium">{lang === "fr" ? "Précisez l’autre langue" : lang === "en" ? "Specify the other language" : lang === "de" ? "Andere Sprache angeben" : "请说明其他语言"} *</span>
+                        <input id="recruitment-languages-other" required value={form.otherLanguage} onChange={event => update("otherLanguage", event.target.value)} placeholder={lang === "fr" ? "Ex. Turc, Russe, Néerlandais" : lang === "en" ? "E.g. Turkish, Russian, Dutch" : lang === "de" ? "z. B. Türkisch, Russisch, Niederländisch" : "例如：土耳其语、俄语、荷兰语"} className="form-control" />
+                      </label>
+                    )}
+                  </fieldset>
                   
                   <label className="block w-full space-y-2 text-sm text-foreground">
                     <span className="block mb-2 font-medium">{t.message}</span>

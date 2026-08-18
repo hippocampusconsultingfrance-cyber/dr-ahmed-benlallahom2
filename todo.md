@@ -2353,9 +2353,15 @@
 
 ## Langues professionnelles — formulaire candidat
 
-- [ ] Remplacer le champ de langues professionnelles par des cases à cocher
-- [ ] Afficher en premier arabe, français, anglais, chinois et allemand, puis les autres langues
-- [ ] Vérifier l’enregistrement et le rendu du formulaire candidat avant publication
+- [x] Remplacer le champ de langues professionnelles par des cases à cocher
+- [x] Afficher les langues demandées dans l’ordre arrêté : arabe, français, anglais, italien, espagnol, portugais, allemand, chinois, puis autre
+- [x] Vérifier l’enregistrement et le rendu du formulaire candidat avant publication
+
+## Langues professionnelles principales
+
+- [x] Proposer les cases à cocher arabe, français, anglais, italien, espagnol, portugais, allemand et chinois
+- [x] Ajouter une case Autre avec un champ libre de précision conditionnel
+- [x] Vérifier la conservation de la sélection et de la précision Autre à la soumission
 
 ## Recherche de spécialité — formulaire candidat
 
@@ -2374,9 +2380,9 @@
 
 ## Délivrabilité des emails recrutement
 
-- [ ] Vérifier SPF, DKIM, DMARC, réputation d’envoi et événements Resend du domaine d’expédition
+- [x] Vérifier SPF, DKIM, DMARC, réputation d’envoi et événements Resend du domaine d’expédition
 - [x] Améliorer les en-têtes et le contenu des emails individuels de recrutement pour limiter le classement en spam
-- [ ] Identifier les actions externes de réputation ou de DNS encore nécessaires
+- [x] Identifier les actions externes de réputation ou de DNS encore nécessaires
 
 ## Logo Hippocampus Consulting dans les emails
 
