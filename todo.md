@@ -2365,3 +2365,5 @@
 - [x] Vérifier le rattachement Cloudflare et guider l’activation de la règle WAF du portail candidat : zone absente du compte, WAF de compte Enterprise non activable sans migration DNS planifiée
 - [ ] Reprendre les constats opérationnels prioritaires encore ouverts après la recette candidat et le contrôle WAF
 - [x] Corriger le sitemap public qui ne référence pas encore toutes les pages de recrutement et Employeurs indexables
+- [x] Rendre les métadonnées SEO critiques des routes publiques visibles dans le HTML initial servi aux crawlers
+- [x] Retourner un statut HTTP 404 avec noindex pour les routes publiques inconnues

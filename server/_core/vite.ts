@@ -5,6 +5,7 @@ import { nanoid } from "nanoid";
 import path from "path";
 import { createServer as createViteServer } from "vite";
 import viteConfig from "../../vite.config";
+import { getRouteSeo, renderRouteSeoHead } from "../routeSeo";
 
 export async function setupVite(app: Express, server: Server) {
   const serverOptions = {
@@ -38,8 +39,12 @@ export async function setupVite(app: Express, server: Server) {
         `src="/src/main.tsx"`,
         `src="/src/main.tsx?v=${nanoid()}"`
       );
-      const page = await vite.transformIndexHtml(url, template);
-      res.status(200).set({ "Content-Type": "text/html" }).end(page);
+      const seo = getRouteSeo(url);
+      const page = (await vite.transformIndexHtml(url, template)).replace(
+        "<!--route-seo-->",
+        () => renderRouteSeoHead(url)
+      );
+      res.status(seo.notFound ? 404 : 200).set({ "Content-Type": "text/html" }).end(page);
     } catch (e) {
       vite.ssrFixStacktrace(e as Error);
       next(e);
@@ -58,10 +63,20 @@ export function serveStatic(app: Express) {
     );
   }
 
-  app.use(express.static(distPath));
+  app.use(express.static(distPath, { index: false }));
 
-  // fall through to index.html if the file doesn't exist
-  app.use("*", (_req, res) => {
-    res.sendFile(path.resolve(distPath, "index.html"));
+  // Fall through to the SPA shell with route-specific SEO head tags. This keeps
+  // social crawlers and non-JS metadata parsers from seeing the home-page tags
+  // on every public route while preserving the client-rendered application.
+  app.use("*", async (req, res, next) => {
+    try {
+      const template = await fs.promises.readFile(path.resolve(distPath, "index.html"), "utf-8");
+      const seo = getRouteSeo(req.originalUrl);
+      res.status(seo.notFound ? 404 : 200).set({ "Content-Type": "text/html" }).end(
+        template.replace("<!--route-seo-->", () => renderRouteSeoHead(req.originalUrl))
+      );
+    } catch (error) {
+      next(error);
+    }
   });
 }
