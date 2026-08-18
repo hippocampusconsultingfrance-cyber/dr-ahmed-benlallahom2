@@ -2371,5 +2371,5 @@
 - [x] Ajouter au message d’activation candidat un rappel clair de vérifier les courriers indésirables
 - [x] Mesurer et réduire, lorsque cela est sûr, le poids du chargement initial des pages publiques
 - [x] Exclure le runtime de prévisualisation Manus du HTML de production afin de réduire le poids de la réponse initiale
-- [ ] Vérifier l’interface publique de réservation sur desktop et mobile sans déclencher de paiement
+- [x] Vérifier l’interface publique de réservation sur desktop et mobile sans déclencher de paiement
 - [x] Remplacer l’affichage système mm/dd/yyyy du champ de réservation par une saisie explicitement localisée en français

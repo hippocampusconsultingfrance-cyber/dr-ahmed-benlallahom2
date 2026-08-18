@@ -78,3 +78,13 @@ Les constatations ci-dessous proviennent des captures du serveur de prévisualis
 | Prévisualisation de développement | Devait rester disponible | Fonctionnelle après redémarrage | Capture de l’accueil sur le serveur local. |
 
 > Les outils de prévisualisation Manus sont désormais chargés uniquement en développement. Les visiteurs reçoivent un HTML public plus léger, sans modifier les routes, les parcours candidats ou la logique métier.
+
+## Vérification du parcours de réservation — 18 août 2026
+
+| Élément contrôlé | Résultat | Vérification |
+|---|---|---|
+| Date et heure | Le champ français affiche désormais `JJ/MM/AAAA · HH:MM`, indépendamment du format propre au navigateur. | Contrôle visuel desktop et mobile ; test unitaire des quatre langues. |
+| Responsive | Le formulaire, le bouton de paiement et les informations tarifaires restent accessibles sur un écran mobile de 375 px. | Capture mobile en pleine page. |
+| Parcours non transactionnel | La page `/booking` renvoie HTTP 200 avec le titre, la description SEO et le bundle principal accessibles. | Sonde publique sans soumettre de réservation ni déclencher de paiement. |
+
+> Aucun paiement, aucune réservation et aucune donnée de patient n’ont été créés pendant cette vérification.
