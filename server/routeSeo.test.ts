@@ -14,8 +14,11 @@ describe("route SEO initial head", () => {
 
   it("empêche l’indexation des parcours privés et inconnus", () => {
     expect(renderRouteSeoHead("/candidate/portal")).toContain('content="noindex, follow"');
+    const unsubscribe = getRouteSeo("/recruitment/unsubscribe?token=example");
     const unknown = getRouteSeo("/route-inconnue");
 
+    expect(unsubscribe.noIndex).toBe(true);
+    expect(unsubscribe.notFound).toBeUndefined();
     expect(unknown.noIndex).toBe(true);
     expect(unknown.notFound).toBe(true);
   });
