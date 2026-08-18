@@ -80,7 +80,19 @@ export default function WhyHippocampusPage() {
   const guaranteeIcons = [ShieldCheck, UsersRound, Globe2];
 
   return <div className="min-h-screen bg-[#050b14] text-slate-100">
-    <SEOHead title={t.metaTitle} description={t.metaDescription} />
+    <SEOHead
+      title={t.metaTitle}
+      description={t.metaDescription}
+      ogUrl="https://drahmedbenlallahom.com/why-hippocampus"
+      structuredData={{
+        "@context": "https://schema.org",
+        "@type": "ProfessionalService",
+        name: "Hippocampus Consulting",
+        url: "https://drahmedbenlallahom.com/why-hippocampus",
+        areaServed: ["Europe", "Canada", "Middle East", "Africa"],
+        serviceType: "International medical and allied health recruitment",
+      }}
+    />
     <Navigation />
     <main>
       <section className="relative overflow-hidden border-b border-cyan-400/15 px-4 pb-20 pt-32 sm:px-6 lg:px-8">

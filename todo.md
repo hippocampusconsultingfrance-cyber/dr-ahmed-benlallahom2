@@ -2345,10 +2345,10 @@
 
 ## Exécution complète des lots de l’audit
 
-- [ ] Ajouter une reprise contrôlée des anciens échecs IA avec historique explicite dans l’administration
+- [x] Ajouter une reprise contrôlée des anciens échecs IA avec historique explicite dans l’administration
 - [x] Garantir l’atomicité de la création des réservations concurrentes et des créneaux libres
 - [x] Mettre en file les factures et notifications post-paiement avec reprise et alerte en cas d’échec
-- [ ] Mettre en œuvre les métadonnées SEO et sociales critiques des sous-pages avant rendu client
+- [x] Mettre en œuvre les métadonnées SEO et sociales critiques des sous-pages avant rendu client
 - [x] Localiser le contrôle de date et heure de réservation pour l’interface française
 - [x] Ajouter une vue d’observabilité des événements de sécurité et des traitements sensibles
 - [ ] Tester le parcours candidat intégré avec activation, Turnstile, chiffrement, analyse et téléchargement

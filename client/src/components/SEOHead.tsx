@@ -8,6 +8,7 @@ interface SEOHeadProps {
   ogUrl?: string;
   twitterHandle?: string;
   structuredData?: Record<string, any>;
+  noIndex?: boolean;
 }
 
 export function SEOHead({
@@ -18,6 +19,7 @@ export function SEOHead({
   ogUrl = "https://drahmedbenlallahom.com",
   twitterHandle = "@drahmedbenlallahom",
   structuredData,
+  noIndex = false,
 }: SEOHeadProps) {
   useEffect(() => {
     // Update title
@@ -47,6 +49,7 @@ export function SEOHead({
     if (keywords) {
       updateMeta("keywords", keywords);
     }
+    updateMeta("robots", noIndex ? "noindex, nofollow, noarchive" : "index, follow, max-image-preview:large");
 
     // Open Graph tags
     updateMeta("og:title", title, true);
@@ -88,7 +91,7 @@ export function SEOHead({
     } else if (script) {
       script.remove();
     }
-  }, [title, description, keywords, ogImage, ogUrl, twitterHandle, structuredData]);
+  }, [title, description, keywords, ogImage, ogUrl, twitterHandle, structuredData, noIndex]);
 
   return null;
 }
