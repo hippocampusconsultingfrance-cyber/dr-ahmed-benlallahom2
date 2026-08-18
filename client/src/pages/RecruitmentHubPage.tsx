@@ -1,4 +1,4 @@
-import { ShieldCheck, Globe2, UsersRound, Award, ArrowRight, Stethoscope, Briefcase } from "lucide-react";
+import { ShieldCheck, ArrowRight, Stethoscope } from "lucide-react";
 import { Link } from "wouter";
 import { SEOHead } from "@/components/SEOHead";
 import Navigation from "@/components/Navigation";
@@ -86,6 +86,46 @@ const copy = {
 
 type Language = keyof typeof copy;
 
+function InternationalGlobe() {
+  return (
+    <div className="pointer-events-none absolute -right-32 -top-8 z-0 hidden h-[44rem] w-[44rem] opacity-80 md:block" aria-hidden="true">
+      <svg viewBox="0 0 720 720" className="h-full w-full" fill="none">
+        <defs>
+          <radialGradient id="recruitment-globe-core" cx="0" cy="0" r="1" gradientTransform="translate(360 360) rotate(90) scale(355)">
+            <stop stopColor="#22d3ee" stopOpacity="0.24" />
+            <stop offset="0.58" stopColor="#22d3ee" stopOpacity="0.075" />
+            <stop offset="1" stopColor="#22d3ee" stopOpacity="0" />
+          </radialGradient>
+          <clipPath id="recruitment-globe-clip"><circle cx="360" cy="360" r="252" /></clipPath>
+          <filter id="recruitment-globe-glow" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="5" /></filter>
+        </defs>
+        <circle cx="360" cy="360" r="310" fill="url(#recruitment-globe-core)" />
+        <circle cx="360" cy="360" r="252" stroke="#22d3ee" strokeOpacity="0.62" strokeWidth="1.5" />
+        <g clipPath="url(#recruitment-globe-clip)" stroke="#22d3ee" strokeOpacity="0.42" strokeWidth="1">
+          <ellipse cx="360" cy="360" rx="88" ry="252" />
+          <ellipse cx="360" cy="360" rx="170" ry="252" />
+          <ellipse cx="360" cy="360" rx="228" ry="252" />
+          <ellipse cx="360" cy="360" rx="252" ry="82" />
+          <ellipse cx="360" cy="360" rx="252" ry="163" />
+          <path d="M108 360h504M150 238h420M150 482h420" />
+          <path d="M175 292c55-38 110-45 164-17 47 25 93 33 142 14 44-17 91-13 147 16M154 424c72 29 133 27 183-5 49-31 102-34 159-10 45 19 89 19 135-4" strokeOpacity="0.38" strokeWidth="1.2" />
+          <path d="M198 184c57 36 103 57 145 62 46 6 86-7 121-41 39-38 81-47 131-30M194 541c44-46 93-68 147-65 49 3 91 22 129 58 39 37 83 50 135 41" strokeOpacity="0.28" strokeWidth="1.2" />
+        </g>
+        <g fill="#22d3ee">
+          <circle cx="208" cy="257" r="4" opacity="0.86" />
+          <circle cx="419" cy="212" r="3.5" opacity="0.72" />
+          <circle cx="520" cy="345" r="4.5" opacity="0.9" />
+          <circle cx="332" cy="483" r="3.5" opacity="0.75" />
+          <circle cx="236" cy="418" r="3" opacity="0.65" />
+        </g>
+        <g fill="#22d3ee" opacity="0.72" filter="url(#recruitment-globe-glow)">
+          <circle cx="208" cy="257" r="10" /><circle cx="419" cy="212" r="9" /><circle cx="520" cy="345" r="11" /><circle cx="332" cy="483" r="9" />
+        </g>
+      </svg>
+    </div>
+  );
+}
+
 export default function RecruitmentHubPage() {
   const { language } = useLanguage();
   const lang = (language in copy ? language : "fr") as Language;
@@ -95,9 +135,10 @@ export default function RecruitmentHubPage() {
     <div className="min-h-screen bg-background text-foreground">
       <SEOHead title={t.metaTitle} description={t.metaDescription} ogUrl="https://drahmedbenlallahom.com/recruitment" />
       <Navigation />
-      <main className="pt-32 md:pt-40 pb-24">
-        <section className="container max-w-5xl">
-          <div className="text-center max-w-3xl mx-auto mb-16">
+      <main className="relative isolate overflow-hidden pt-32 pb-24 md:pt-40">
+        <InternationalGlobe />
+        <section className="container relative z-10 max-w-5xl">
+          <div className="mx-auto mb-16 max-w-3xl text-center">
             <p className="section-kicker">{t.eyebrow}</p>
             <h1 className="mt-4 font-display text-4xl leading-tight md:text-6xl text-foreground">{t.title}</h1>
             <p className="mt-6 text-lg text-muted-foreground leading-8">{t.intro}</p>

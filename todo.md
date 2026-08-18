@@ -2323,3 +2323,8 @@
 - [x] Créer une page employeurs multilingue présentant la méthode, les zones couvertes, la confidentialité et le parcours de shortlist
 - [x] Ajouter un appel à l’action vers le brief de mission et un accès cohérent depuis les parcours Employeurs
 - [x] Vérifier le rendu et les liens de la nouvelle page avant publication
+
+## Fond international — page Recrutement
+
+- [x] Ajouter un globe terrestre stylisé en arrière-plan de la page Recrutement, sans compromettre la lisibilité ou l’accessibilité
+- [x] Vérifier le rendu du globe sur desktop et mobile avant publication
