@@ -44,3 +44,14 @@ Les constatations ci-dessous proviennent des captures du serveur de prévisualis
 | Téléchargement | Le téléchargement autorisé par la session candidate a été effectué et le PDF est lisible. | Déchiffrement côté serveur et URL de téléchargement contrôlée. |
 
 > Le document de recette ne contient aucune donnée réelle. Son statut d’analyse confirme que l’IA sert exclusivement d’aide à la revue humaine.
+
+## Vérification SEO de production — 18 août 2026
+
+| Élément | Résultat publié | Contrôle effectué |
+|---|---|---|
+| Métadonnées des pages commerciales | Les réponses HTML initiales de `/recruitment/vvip-offshore`, `/employers` et `/why-hippocampus` servent désormais des titres, descriptions, canoniques et balises sociales propres à chaque route. | Lecture directe du HTML sur `drahmedbenlallahom.com` après publication. |
+| Parcours privés | `/candidate/portal` retourne HTTP 200 avec `noindex, follow` et des métadonnées d’espace sécurisé. | Lecture directe de la réponse HTML publique, sans session candidate. |
+| Routes inconnues | Une route inexistante retourne désormais HTTP 404 avec `noindex, follow`. | Sonde HTTP directe de `/route-inconnue`. |
+| Sitemap | Les routes recrutement détaillées, Employeurs et méthode Hippocampus sont présentes dans le sitemap dynamique. | Contrôle de `/sitemap.xml` après publication. |
+
+> La mise à jour améliore la visibilité des métadonnées pour les robots et aperçus sociaux sans rendre les données privées côté serveur. Le contenu des pages demeure rendu par l’application React, conformément à l’architecture actuelle.
