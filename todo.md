@@ -2353,3 +2353,4 @@
 - [x] Ajouter une vue d’observabilité des événements de sécurité et des traitements sensibles
 - [ ] Tester le parcours candidat intégré avec activation, Turnstile, chiffrement, analyse et téléchargement
 - [x] Préparer les instructions d’activation WAF et la recette manuelle non destructive Stripe/email
+- [x] Ajouter une couverture intégrée non destructive des primitives candidat : mot de passe, jetons, réponse Turnstile simulée, validation PDF et chiffrement AES-256-GCM
