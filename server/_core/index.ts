@@ -826,8 +826,11 @@ async function startServer() {
     }
   });
 
-  // development mode uses Vite, production mode uses static files
-  if (process.env.NODE_ENV === "development") {
+  // The deployed runtime always provides PORT. Prefer static assets whenever
+  // this process is externally hosted, even if NODE_ENV was not propagated.
+  const useViteDevelopmentServer = process.env.NODE_ENV === "development" && !process.env.PORT;
+  console.log(`[boot] mode=${process.env.NODE_ENV || "unset"} port=${process.env.PORT || "unset"} renderer=${useViteDevelopmentServer ? "vite" : "static"}`);
+  if (useViteDevelopmentServer) {
     await setupVite(app, server);
   } else {
     serveStatic(app);

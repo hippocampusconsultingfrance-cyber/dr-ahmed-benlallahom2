@@ -2378,4 +2378,5 @@
 - [x] Rendre la résolution du répertoire statique de production robuste et journaliser les échecs de service HTML
 - [x] Rétablir le runtime Manus requis en production tout en conservant le collecteur de débogage exclu
 - [x] Ajouter une sonde de santé publique minimale pour diagnostiquer et surveiller le serveur de production
+- [x] Forcer le rendu statique lorsque le processus est hébergé afin d’éviter un démarrage Vite en production
 - [x] Remplacer l’affichage système mm/dd/yyyy du champ de réservation par une saisie explicitement localisée en français
