@@ -67,3 +67,14 @@ Les constatations ci-dessous proviennent des captures du serveur de prévisualis
 | Modèle candidat | Les emails d’activation et de réinitialisation rappellent désormais de vérifier les indésirables et d’ajouter l’expéditeur aux contacts. | Test unitaire ajouté au modèle transactionnel. |
 
 > Les informations d’authentification ont été vérifiées à partir des en-têtes Gmail fournis par le propriétaire. Aucun lien d’activation n’est repris ni conservé dans cette note.
+
+## Optimisation du chargement initial — 18 août 2026
+
+| Mesure | Avant | Après publication | Vérification |
+|---|---:|---:|---|
+| HTML initial de la page d’accueil | Environ 374 Ko | Environ 6,9 Ko | Lecture directe de `drahmedbenlallahom.com` après propagation. |
+| Runtime de prévisualisation dans le HTML public | Présent | Absent | Aucun marqueur `window.__MANUS_HOST_DEV__` ni collecteur de débogage dans la réponse publique. |
+| Bundle JavaScript principal | Environ 672 Ko au build initial | Environ 458 Ko au build public | Sortie du build de production. |
+| Prévisualisation de développement | Devait rester disponible | Fonctionnelle après redémarrage | Capture de l’accueil sur le serveur local. |
+
+> Les outils de prévisualisation Manus sont désormais chargés uniquement en développement. Les visiteurs reçoivent un HTML public plus léger, sans modifier les routes, les parcours candidats ou la logique métier.
