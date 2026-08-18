@@ -2322,4 +2322,4 @@
 - [x] Rejeter les mots de passe compromis à partir d’un contrôle non divulguant
 - [x] Chiffrer applicativement les documents les plus sensibles avec une clé distincte
 - [x] Étendre le journal de sécurité et les alertes administratives
-- [ ] Ajouter une campagne régulière de tests de sécurité couvrant accès, fichiers, liens et contournements
+- [x] Ajouter une campagne régulière de tests de sécurité couvrant accès, fichiers, liens et contournements
