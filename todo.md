@@ -2361,3 +2361,5 @@
 - [x] Indiquer au candidat de vérifier les courriers indésirables après l’envoi de l’email d’activation
 - [x] Vérifier le dépôt, le traitement et le téléchargement d’un document fictif depuis un compte candidat activé
 - [x] Ajouter un repli multi-modèle lorsque l’analyse IA d’un document candidat renvoie un contenu vide
+- [ ] Contrôler les jobs, la conservation du document de recette et les protections opérationnelles restantes du coffre candidat
+- [x] Vérifier le rattachement Cloudflare et guider l’activation de la règle WAF du portail candidat : zone absente du compte, WAF de compte Enterprise non activable sans migration DNS planifiée

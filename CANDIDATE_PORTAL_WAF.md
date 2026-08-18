@@ -18,3 +18,9 @@ Créer ensuite une règle de **Rate limiting** : 20 requêtes sur 10 minutes par
 Ne pas appliquer cette règle aux appels Heartbeat `/api/scheduled/*`, qui sont authentifiés séparément et nécessaires au traitement documentaire.
 
 > La protection Turnstile côté formulaire et la limitation persistante côté serveur restent actives même si la règle WAF est temporairement désactivée.
+
+## État vérifié le 18 août 2026
+
+Le compte Cloudflare `hippocampusconsultingfrance@gmail.com` contient l’application Turnstile, mais pas la zone DNS `drahmedbenlallahom.com`. Le tableau WAF accessible dans ce compte est un WAF au niveau du compte nécessitant un plan Enterprise et ne permet pas de créer une règle de zone pour le site hébergé via Manus.
+
+> Ne pas acheter l’option Enterprise ni migrer les serveurs DNS uniquement pour appliquer cette règle. Une migration de zone doit être étudiée séparément, car elle peut modifier le routage du domaine vers l’hébergement Manus. Les protections applicatives existantes restent en place : Turnstile, limites persistantes, chiffrement documentaire, sessions et journalisation.
