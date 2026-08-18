@@ -301,24 +301,24 @@ export default function RecruitmentPage() {
                 <h2 className="font-display text-3xl text-foreground">{t.formTitle}</h2>
                 <p className="mt-3 text-sm leading-6 text-muted-foreground">{t.formIntro}</p>
                 <form onSubmit={handleSubmit} className="mt-8 space-y-6" noValidate>
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    {[{ key: "firstName" as const, label: t.firstName }, { key: "lastName" as const, label: t.lastName }].map(field => <label key={field.key} className="space-y-2 text-sm text-foreground"><span>{field.label} *</span><input id={`recruitment-${field.key}`} required value={form[field.key]} onChange={event => update(field.key, event.target.value)} className="form-control" autoComplete={field.key === "firstName" ? "given-name" : "family-name"} /></label>)}
+                  <div className="grid gap-5 sm:grid-cols-2 sm:items-start">
+                    {[{ key: "firstName" as const, label: t.firstName }, { key: "lastName" as const, label: t.lastName }].map(field => <label key={field.key} className="flex min-w-0 flex-col gap-2 text-sm text-foreground"><span className="font-medium">{field.label} *</span><input id={`recruitment-${field.key}`} required value={form[field.key]} onChange={event => update(field.key, event.target.value)} className="form-control" autoComplete={field.key === "firstName" ? "given-name" : "family-name"} /></label>)}
                   </div>
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <label className="space-y-2 text-sm text-foreground"><span>{t.email} *</span><input id="recruitment-email" type="email" required value={form.email} onChange={event => update("email", event.target.value)} className="form-control" autoComplete="email" /></label>
-                    <label className="space-y-2 text-sm text-foreground"><span>{t.phone}</span><div className="grid grid-cols-[minmax(10rem,0.9fr)_minmax(0,1fr)] gap-2"><select aria-label="Préfixe pays" value={form.phonePrefix} onChange={event => update("phonePrefix", event.target.value)} className="form-control min-w-0 text-sm" autoComplete="tel-country-code">{phonePrefixOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select><input id="recruitment-phone" type="tel" inputMode="tel" value={form.phone} onChange={event => update("phone", event.target.value)} placeholder="6 12 34 56 78" className="form-control min-w-0" autoComplete="tel-national" /></div><span className="block text-xs text-muted-foreground">Saisissez le numéro sans son préfixe international.</span></label>
+                  <div className="grid gap-5 sm:grid-cols-2 sm:items-start">
+                    <label className="flex min-w-0 flex-col gap-2 text-sm text-foreground"><span className="font-medium">{t.email} *</span><input id="recruitment-email" type="email" required value={form.email} onChange={event => update("email", event.target.value)} className="form-control" autoComplete="email" /></label>
+                    <label className="flex min-w-0 flex-col gap-2 text-sm text-foreground"><span className="font-medium">{t.phone}</span><div className="grid grid-cols-[minmax(10rem,0.9fr)_minmax(0,1fr)] gap-2"><select aria-label="Préfixe pays" value={form.phonePrefix} onChange={event => update("phonePrefix", event.target.value)} className="form-control min-w-0 text-sm" autoComplete="tel-country-code">{phonePrefixOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select><input id="recruitment-phone" type="tel" inputMode="tel" value={form.phone} onChange={event => update("phone", event.target.value)} placeholder="6 12 34 56 78" className="form-control min-w-0" autoComplete="tel-national" /></div><span className="min-h-5 text-xs leading-5 text-muted-foreground">Saisissez le numéro sans son préfixe international.</span></label>
                   </div>
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <div className="block w-full space-y-2 text-sm text-foreground">
-                      <span className="block mb-2 font-medium">{t.specialty} *</span>
-                      <div className="relative mb-2">
+                  <div className="grid gap-5 sm:grid-cols-2 sm:items-start">
+                    <div className="flex min-w-0 flex-col gap-2 text-sm text-foreground">
+                      <span className="font-medium">{t.specialty} *</span>
+                      <div className="relative">
                         <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                         <input
                           type="text"
                           value={specialtyQuery}
                           onChange={event => setSpecialtyQuery(event.target.value)}
                           placeholder={t.specialtySearch}
-                          className="form-control block w-full pl-9 pr-8 text-sm"
+                        className="form-control block w-full pl-9 pr-8 text-sm"
                         />
                         {specialtyQuery && (
                           <button
@@ -340,7 +340,7 @@ export default function RecruitmentPage() {
                           update("specialty", event.target.value);
                           setSpecialtyQuery("");
                         }}
-                        className="form-control block w-full mt-1"
+                        className="form-control block w-full"
                       >
                         <option value="">{t.select}</option>
                         {filteredSpecialtyCategories.length === 0 ? (
@@ -353,17 +353,18 @@ export default function RecruitmentPage() {
                           ))
                         )}
                       </select>
-                      <p id="recruitment-specialty-search-hint" className="mt-1 text-xs text-muted-foreground">
+                      <p id="recruitment-specialty-search-hint" className="min-h-5 text-xs leading-5 text-muted-foreground">
                         {specialtyQuery ? `${filteredSpecialtyCount} résultat${filteredSpecialtyCount > 1 ? "s" : ""} affiché${filteredSpecialtyCount > 1 ? "s" : ""} : sélectionnez votre spécialité.` : "Saisissez quelques lettres pour afficher directement les résultats."}
                       </p>
                       {form.specialty && form.specialty !== "Autre spécialité ou profession" && (
-                        <p className="mt-1.5 text-xs text-primary font-medium">Sélectionné : {form.specialty}</p>
+                        <p className="text-xs font-medium leading-5 text-primary">Sélectionné : {form.specialty}</p>
                       )}
                     </div>
                     
-                    <label className="block w-full space-y-2 text-sm text-foreground">
-                      <span className="block mb-2 font-medium">{t.experience}</span>
-                      <input id="recruitment-experience" type="number" min="0" max="70" value={form.yearsExperience} onChange={event => update("yearsExperience", event.target.value)} className="form-control block w-full mt-1" />
+                    <label className="flex min-w-0 flex-col gap-2 text-sm text-foreground">
+                      <span className="font-medium">{t.experience}</span>
+                      <input id="recruitment-experience" type="number" min="0" max="70" value={form.yearsExperience} onChange={event => update("yearsExperience", event.target.value)} className="form-control block w-full" />
+                      <span className="min-h-5 text-xs leading-5 text-muted-foreground">Indiquez une estimation de votre expérience professionnelle.</span>
                     </label>
                   </div>
 

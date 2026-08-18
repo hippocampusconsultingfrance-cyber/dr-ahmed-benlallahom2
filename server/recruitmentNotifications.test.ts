@@ -30,4 +30,10 @@ describe("contrat isolé des notifications recrutement", () => {
     expect(message.html).toContain("Documents ou informations demandés");
     expect(message.html).toContain("&lt;votre&gt; attestation<br />");
   });
+
+  it("affiche le logo Hippocampus Consulting dans les emails de recrutement", () => {
+    const message = buildRecruitmentTemplateEmail("Amina Martin", "CV-2026", "profile_interest");
+    expect(message.html).toContain("hippocampus-consulting-email-logo_c57dd3cd.jpg");
+    expect(message.html).toContain('alt="Hippocampus Consulting"');
+  });
 });

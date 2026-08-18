@@ -2366,3 +2366,20 @@
 
 - [x] Ajouter un sélecteur de préfixe pays avant le champ de numéro de téléphone
 - [x] Transmettre le numéro complet internationalisé au dépôt de candidature et vérifier le rendu avant publication
+
+## Alignement du formulaire candidat
+
+- [x] Harmoniser les hauteurs et l’alignement des champs téléphone, spécialité et expérience
+- [x] Vérifier le rendu de la grille sur desktop et mobile avant publication
+
+## Délivrabilité des emails recrutement
+
+- [ ] Vérifier SPF, DKIM, DMARC, réputation d’envoi et événements Resend du domaine d’expédition
+- [ ] Améliorer les en-têtes et le contenu des emails individuels de recrutement pour limiter le classement en spam
+- [ ] Identifier les actions externes de réputation ou de DNS encore nécessaires
+
+## Logo Hippocampus Consulting dans les emails
+
+- [x] Préparer et héberger une version légère du logo Hippocampus Consulting pour les clients email
+- [x] Ajouter le logo aux modèles d’emails Hippocampus Consulting, y compris recrutement et briefs employeurs
+- [x] Vérifier le rendu HTML des modèles puis publier la mise à jour

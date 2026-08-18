@@ -18,6 +18,11 @@ function escapeHtml(value: unknown): string {
 // réponses des candidats restent dirigées vers la boîte de recrutement active.
 const FROM_EMAIL = "Hippocampus Consulting <recrutement@drahmedbenlallahom.com>";
 const RECRUITMENT_REPLY_TO = "hippocampusconsultingfrance@gmail.com";
+const HIPPOCAMPUS_LOGO_URL = "https://drahmedbenlallahom.com/manus-storage/hippocampus-consulting-email-logo_c57dd3cd.jpg";
+
+function hippocampusEmailHeader() {
+  return `<div style="padding: 0 0 18px; text-align: center;"><img src="${HIPPOCAMPUS_LOGO_URL}" width="152" alt="Hippocampus Consulting" style="display: inline-block; width: 152px; max-width: 45%; height: auto; border: 0; outline: none; text-decoration: none;" /></div>`;
+}
 
 export async function sendConfirmationEmail(
   customerEmail: string,
@@ -40,6 +45,7 @@ export async function sendConfirmationEmail(
 
     const emailContent = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        ${hippocampusEmailHeader()}
         <h2 style="color: #0891b2;">Confirmation de Réservation</h2>
         <p>Bonjour ${escapeHtml(customerName)},</p>
         <p>Votre réservation a été confirmée avec succès.</p>
@@ -159,6 +165,7 @@ export async function sendInvoiceEmail(
   try {
     const emailContent = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        ${hippocampusEmailHeader()}
         <h2 style="color: #0891b2;">Votre Facture - Consultation Dr. Ben Lallahom</h2>
         <p>Bonjour ${escapeHtml(customerName)},</p>
         <p>Veuillez trouver ci-joint la facture correspondant à votre consultation.</p>
@@ -243,6 +250,7 @@ export async function sendRefundConfirmationEmail(
 
     const emailContent = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        ${hippocampusEmailHeader()}
         <h2 style="color: #0891b2;">Confirmation de remboursement</h2>
         <p>Bonjour ${escapeHtml(customerName)},</p>
         <p>Le remboursement de votre consultation a été enregistré.</p>
@@ -292,6 +300,7 @@ export async function sendReminderEmail(
 
     const emailContent = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        ${hippocampusEmailHeader()}
         <h2 style="color: #0891b2;">⏰ Rappel - Votre consultation est demain</h2>
         <p>Bonjour ${escapeHtml(customerName)},</p>
         <p>Nous vous rappelons que votre consultation avec le Dr. Ahmed Ben Lallahom est prévue <strong>demain</strong>.</p>
@@ -338,6 +347,7 @@ export async function sendCvApplicationConfirmationEmail(
   try {
     const emailContent = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        ${hippocampusEmailHeader()}
         <h2 style="color: #0891b2;">Candidature reçue — Hippocampus Consulting</h2>
         <p>Bonjour ${escapeHtml(candidateName)},</p>
         <p>Nous confirmons la réception de votre candidature de recrutement international.</p>
@@ -423,6 +433,7 @@ export function buildRecruitmentTemplateEmail(
     subject,
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        ${hippocampusEmailHeader()}
         <h2 style="color: #0891b2;">${copy.heading}</h2>
         <p>${copy.greeting} ${escapeHtml(candidateName)},</p>
         <p>${escapeHtml(body)}</p>
@@ -474,6 +485,7 @@ export async function sendRecruitmentCampaignEmail(input: {
     subject: input.subject,
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        ${hippocampusEmailHeader()}
         <h2 style="color: #0891b2;">${escapeHtml(input.campaignTitle)}</h2>
         <p>${copy.greeting} ${escapeHtml(input.candidateName)},</p>
         <p>${textToSafeHtml(input.body)}</p>
@@ -516,7 +528,7 @@ export async function sendEmployerBriefAcknowledgment(input: {
     to: [input.email],
     replyTo: RECRUITMENT_REPLY_TO,
     subject: copy.subject,
-    html: `<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;"><h2 style="color: #0891b2;">${copy.heading}</h2><p>${copy.greeting} ${escapeHtml(input.contactName)},</p><p>${copy.body}</p><div style="background: #f8fafc; border-radius: 8px; padding: 16px; margin: 16px 0;"><strong>${copy.reference} :</strong> ${escapeHtml(input.briefId)}</div><p style="color: #64748b;">${copy.footer}</p><p style="color: #64748b;">Dr. Ahmed Ben Lallahom<br>Hippocampus Consulting</p></div>`,
+    html: `<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">${hippocampusEmailHeader()}<h2 style="color: #0891b2;">${copy.heading}</h2><p>${copy.greeting} ${escapeHtml(input.contactName)},</p><p>${copy.body}</p><div style="background: #f8fafc; border-radius: 8px; padding: 16px; margin: 16px 0;"><strong>${copy.reference} :</strong> ${escapeHtml(input.briefId)}</div><p style="color: #64748b;">${copy.footer}</p><p style="color: #64748b;">Dr. Ahmed Ben Lallahom<br>Hippocampus Consulting</p></div>`,
   });
   if (error) throw new Error(`Resend employer brief acknowledgement failed: ${error.message}`);
   return { id: data?.id };
