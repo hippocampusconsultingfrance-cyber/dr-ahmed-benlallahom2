@@ -10,7 +10,7 @@ const copy = {
   fr: {
     eyebrow: "Hippocampus Consulting · Espace Employeurs & Partenaires",
     title: "Déléguez le recrutement de vos équipes médicales d’élite.",
-    intro: "Nous sélectionnons et qualifions pour les hôpitaux, cliniques, plateformes offshore et résidences VVIP des professionnels de santé d'exception, prêts à intervenir en Europe, au Canada, au Moyen-Orient et sur les sites isolés.",
+    intro: "Nous sélectionnons et qualifions pour les hôpitaux, cliniques, plateformes offshore et grands groupes industriels des professionnels de santé d'exception, prêts à intervenir en Europe, au Canada, au Moyen-Orient, en Afrique et sur les sites isolés.",
     formTitle: "Soumettre un brief de mission",
     formIntro: "Précisez vos besoins opérationnels. Notre cellule spécialisée vous contactera sous 24h avec une shortlist qualifiée.",
     orgName: "Établissement ou entreprise",
@@ -49,7 +49,7 @@ const copy = {
   en: {
     eyebrow: "Hippocampus Consulting · Employers & Partners",
     title: "Delegate the recruitment of your elite medical teams.",
-    intro: "We source and qualify exceptional healthcare professionals for hospitals, clinics, offshore rigs, and VVIP residences across Europe, Canada, the Middle East, and remote sites.",
+    intro: "We source and qualify exceptional healthcare professionals for hospitals, clinics, offshore rigs, and major industrial groups across Europe, Canada, the Middle East, Africa, and remote sites.",
     formTitle: "Submit a Mission Brief",
     formIntro: "Specify your operational requirements. Our specialized unit will contact you within 24 hours with a qualified shortlist.",
     orgName: "Organization or Company",
@@ -88,7 +88,7 @@ const copy = {
   de: {
     eyebrow: "Hippocampus Consulting · Arbeitgeber & Partner",
     title: "Delegieren Sie die Rekrutierung Ihrer medizinischen Elite-Teams.",
-    intro: "Wir rekrutieren und qualifizieren herausragende medizinische Fachkräfte für Krankenhäuser, Kliniken, Offshore-Plattformen und VVIP-Residenzen in Europa, Kanada und dem Nahen Osten.",
+    intro: "Wir rekrutieren und qualifizieren herausragende medizinische Fachkräfte für Krankenhäuser, Kliniken, Offshore-Plattformen und große Industriegruppen in Europa, Kanada, dem Nahen Osten und Afrika.",
     formTitle: "Einsatz-Brief einreichen",
     formIntro: "Geben Sie Ihre operativen Anforderungen an. Unser spezialisiertes Team kontaktiert Sie innerhalb von 24 Stunden.",
     orgName: "Einrichtung oder Unternehmen",
@@ -127,7 +127,7 @@ const copy = {
   zh: {
     eyebrow: "Hippocampus Consulting · 雇主与合作伙伴专区",
     title: "委托我们为您招募精英医疗团队。",
-    intro: "我们为欧洲、加拿大、中东及偏远站点的医院、诊所、离岸钻井平台及 VVIP 宅邸甄选并认证顶尖医疗专业人员。",
+    intro: "我们为欧洲、加拿大、中东、非洲及偏远站点的医院、诊所、离岸钻井平台及大型工业集团甄选并认证顶尖医疗专业人员。",
     formTitle: "提交任务需求 (Brief)",
     formIntro: "请告知您的运营需求。我们的专业团队将在 24 小时内为您提供合格的候选人 shortlist。",
     orgName: "机构或公司名称",

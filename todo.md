@@ -2309,3 +2309,11 @@
 - [x] Améliorer l’espace Employeurs avec suivi de brief, accusé de réception, statut de shortlist et descriptif de poste
 - [x] Renforcer la réassurance publique des pages recrutement sur confidentialité, consentement, revue humaine et délais indicatifs
 - [x] Ajouter un suivi de délivrabilité des campagnes et des erreurs d’envoi, sans réutiliser automatiquement les adresses en erreur
+
+## Correction de formulation — missions VVIP et Offshore
+
+- [x] Retirer la référence aux résidences de prestige des descriptions publiques des missions VVIP et Offshore
+
+## Zones d’opportunités recrutement
+
+- [x] Ajouter explicitement l’Afrique aux zones d’opportunités de recrutement dans les contenus publics multilingues
