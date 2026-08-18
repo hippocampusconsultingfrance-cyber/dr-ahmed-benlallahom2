@@ -2410,3 +2410,22 @@
 - [x] Vérifier le dépôt privé, le rejet des fichiers dangereux et le journal d’audit documentaire
 - [x] Vérifier l’analyse asynchrone, le coffre candidat et la revue administrateur
 - [x] Retirer les données de test et consigner le résultat du parcours complet
+
+## Confirmation du mot de passe candidat
+
+- [x] Remplacer l’intitulé « Phrase de passe » par « Mot de passe »
+- [x] Ajouter un champ de confirmation et bloquer l’inscription si les deux valeurs diffèrent
+- [x] Vérifier le rendu et la validation de la création de compte avant publication
+
+## Activation email et anti-bot — espace candidat
+
+- [x] Rendre l’activation par lien email explicitement obligatoire avant toute connexion candidate
+- [x] Ajouter un champ leurre anti-bot et des limites de tentatives à l’inscription et à la demande de réinitialisation
+- [x] Ajouter un délai minimal de soumission pour décourager les formulaires automatisés
+- [x] Tester les blocages anti-bot et l’activation email avant publication
+
+## Création de compte après candidature
+
+- [x] Afficher un accès explicite à la création de compte sécurisé après chaque candidature soumise
+- [x] Préremplir l’email du candidat dans le parcours de compte et lier le compte à sa candidature
+- [x] Exiger l’activation email avant accès au coffre documentaire puis tester le parcours complet

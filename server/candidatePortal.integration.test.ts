@@ -53,6 +53,8 @@ describe("parcours d’intégration espace candidat", () => {
       lastName: "Candidat",
       termsAccepted: true,
       documentConsent: true,
+      website: "",
+      submittedAt: Date.now() - 2_000,
     });
 
     const db = await getDb();
@@ -62,6 +64,7 @@ describe("parcours d’intégration espace candidat", () => {
     candidateId = account.id;
     expect(account.emailVerifiedAt).toBeNull();
     expect(account.documentConsentAt).toBeTruthy();
+    await expect(registration.instance.candidatePortal.login({ email, password })).rejects.toThrow("Email ou mot de passe incorrect");
 
     await db.update(candidateAccounts).set({
       verificationTokenHash: hashCandidateToken(verificationToken, "verification"),
@@ -79,5 +82,23 @@ describe("parcours d’intégration espace candidat", () => {
 
     const incorrect = caller();
     await expect(incorrect.instance.candidatePortal.login({ email, password: "mot de passe incorrect" })).rejects.toThrow("Email ou mot de passe incorrect");
+  });
+
+  it("ignore une inscription automatisée qui remplit le champ leurre", async () => {
+    const botEmail = `candidate-bot-${Date.now()}@example.invalid`;
+    const automated = caller();
+    await expect(automated.instance.candidatePortal.register({
+      email: botEmail,
+      password,
+      firstName: "Bot",
+      lastName: "Test",
+      termsAccepted: true,
+      documentConsent: true,
+      website: "https://spam.example",
+      submittedAt: Date.now(),
+    })).resolves.toEqual({ message: "Si vos informations sont valides, vous recevrez les instructions nécessaires." });
+    const db = await getDb();
+    if (!db) throw new Error("database unavailable");
+    await expect(db.select().from(candidateAccounts).where(eq(candidateAccounts.email, botEmail)).limit(1)).resolves.toEqual([]);
   });
 });

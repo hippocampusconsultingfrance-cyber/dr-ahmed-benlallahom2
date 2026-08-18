@@ -29,6 +29,32 @@ import { publicProcedure, router } from "./_core/trpc";
 type CandidateSession = typeof candidateAccounts.$inferSelect;
 
 const genericAccessMessage = "Si vos informations sont valides, vous recevrez les instructions nécessaires.";
+const candidateRateWindows = new Map<string, { count: number; resetAt: number }>();
+
+function requestFingerprint(req: { headers: Record<string, unknown> }, scope: string, email: string) {
+  const forwarded = req.headers["x-forwarded-for"];
+  const source = Array.isArray(forwarded) ? forwarded[0] : forwarded;
+  const ip = typeof source === "string" ? source.split(",")[0].trim() : "unknown";
+  return `${scope}:${ip}:${normalizeCandidateEmail(email)}`;
+}
+
+function consumeCandidateRateLimit(key: string, maxAttempts: number, windowMs: number) {
+  const now = Date.now();
+  const current = candidateRateWindows.get(key);
+  if (!current || current.resetAt <= now) {
+    candidateRateWindows.set(key, { count: 1, resetAt: now + windowMs });
+    return true;
+  }
+  if (current.count >= maxAttempts) return false;
+  current.count += 1;
+  return true;
+}
+
+function looksAutomated(input: { website?: string; submittedAt?: number }) {
+  if (input.website?.trim()) return true;
+  const elapsed = Date.now() - (input.submittedAt ?? 0);
+  return elapsed < 1500 || elapsed > 24 * 60 * 60 * 1000;
+}
 
 function getRequestProtocol(req: { protocol?: string; headers: Record<string, unknown> }): boolean {
   const forwarded = req.headers["x-forwarded-proto"];
@@ -116,6 +142,7 @@ async function createCandidateSession(candidateId: number, req: { protocol?: str
 
 const passwordInput = z.string().min(1).max(128);
 const genericAuthInput = z.object({ email: z.string().email().max(320), password: passwordInput });
+const publicFormSecurityInput = z.object({ website: z.string().max(160).optional().default(""), submittedAt: z.number().int().positive() });
 
 export const candidatePortalRouter = router({
   register: publicProcedure
@@ -124,12 +151,13 @@ export const candidatePortalRouter = router({
       lastName: z.string().trim().min(1).max(120),
       termsAccepted: z.boolean().refine(value => value, "L’acceptation des conditions est requise."),
       documentConsent: z.boolean().refine(value => value, "Le consentement au traitement documentaire est requis."),
-    }))
+    }).merge(publicFormSecurityInput))
     .mutation(async ({ input, ctx }) => {
-      const passwordError = validateCandidatePassword(input.password);
-      if (passwordError) throw new TRPCError({ code: "BAD_REQUEST", message: "Choisissez une phrase de passe d’au moins 15 caractères." });
-      const db = databaseOrThrow(await getDb());
       const email = normalizeCandidateEmail(input.email);
+      if (looksAutomated(input) || !consumeCandidateRateLimit(requestFingerprint(ctx.req, "register", email), 3, 20 * 60 * 1000)) return { message: genericAccessMessage };
+      const passwordError = validateCandidatePassword(input.password);
+      if (passwordError) throw new TRPCError({ code: "BAD_REQUEST", message: "Choisissez un mot de passe d’au moins 15 caractères." });
+      const db = databaseOrThrow(await getDb());
       const now = new Date();
       const verificationToken = createCandidateToken();
       const verificationExpiresAt = new Date(now.getTime() + CANDIDATE_TOKEN_MAX_AGE_MS);
@@ -194,6 +222,7 @@ export const candidatePortalRouter = router({
     const email = normalizeCandidateEmail(input.email);
     const candidate = (await db.select().from(candidateAccounts).where(eq(candidateAccounts.email, email)).limit(1))[0];
     const genericError = new TRPCError({ code: "UNAUTHORIZED", message: "Email ou mot de passe incorrect." });
+    if (!consumeCandidateRateLimit(requestFingerprint(ctx.req, "login", email), 8, 15 * 60 * 1000)) throw genericError;
     if (!candidate || candidate.status !== "active" || !candidate.emailVerifiedAt) throw genericError;
     if (candidate.lockedUntil && candidate.lockedUntil > new Date()) throw genericError;
     const valid = await verifyCandidatePassword(input.password, candidate.passwordHash);
@@ -223,7 +252,8 @@ export const candidatePortalRouter = router({
     return { success: true };
   }),
 
-  requestPasswordReset: publicProcedure.input(z.object({ email: z.string().email().max(320) })).mutation(async ({ input, ctx }) => {
+  requestPasswordReset: publicProcedure.input(z.object({ email: z.string().email().max(320) }).merge(publicFormSecurityInput)).mutation(async ({ input, ctx }) => {
+    if (looksAutomated(input) || !consumeCandidateRateLimit(requestFingerprint(ctx.req, "reset", input.email), 3, 20 * 60 * 1000)) return { message: genericAccessMessage };
     const db = databaseOrThrow(await getDb());
     const email = normalizeCandidateEmail(input.email);
     const candidate = (await db.select().from(candidateAccounts).where(and(eq(candidateAccounts.email, email), eq(candidateAccounts.status, "active"))).limit(1))[0];
@@ -241,7 +271,7 @@ export const candidatePortalRouter = router({
 
   resetPassword: publicProcedure.input(z.object({ email: z.string().email().max(320), token: z.string().min(20).max(200), password: passwordInput })).mutation(async ({ input, ctx }) => {
     const passwordError = validateCandidatePassword(input.password);
-    if (passwordError) throw new TRPCError({ code: "BAD_REQUEST", message: "Choisissez une phrase de passe d’au moins 15 caractères." });
+    if (passwordError) throw new TRPCError({ code: "BAD_REQUEST", message: "Choisissez un mot de passe d’au moins 15 caractères." });
     const db = databaseOrThrow(await getDb());
     const candidate = (await db.select().from(candidateAccounts).where(and(
       eq(candidateAccounts.email, normalizeCandidateEmail(input.email)),
