@@ -659,6 +659,10 @@ async function startServer() {
       "/testimonials",
       "/booking",
       "/recruitment",
+      "/recruitment/standard",
+      "/recruitment/vvip-offshore",
+      "/employers",
+      "/why-hippocampus",
     ];
 
     const staticEntries = publicPaths.map(path => `<url><loc>${origin}${path}</loc></url>`);

@@ -2363,3 +2363,5 @@
 - [x] Ajouter un repli multi-modèle lorsque l’analyse IA d’un document candidat renvoie un contenu vide
 - [ ] Contrôler les jobs, la conservation du document de recette et les protections opérationnelles restantes du coffre candidat
 - [x] Vérifier le rattachement Cloudflare et guider l’activation de la règle WAF du portail candidat : zone absente du compte, WAF de compte Enterprise non activable sans migration DNS planifiée
+- [ ] Reprendre les constats opérationnels prioritaires encore ouverts après la recette candidat et le contrôle WAF
+- [x] Corriger le sitemap public qui ne référence pas encore toutes les pages de recrutement et Employeurs indexables
