@@ -232,12 +232,6 @@ const copy = {
 } as const;
 
 type Language = keyof typeof copy;
-const candidateAccountCopy = {
-  fr: { title: "Activez votre espace candidat", text: "Créez votre compte sécurisé pour déposer vos documents administratifs. Un lien d’activation sera envoyé à votre email avant tout accès.", cta: "Créer mon compte sécurisé" },
-  en: { title: "Activate your candidate space", text: "Create your secure account to submit administrative documents. An activation link will be sent to your email before access is granted.", cta: "Create my secure account" },
-  de: { title: "Bewerberbereich aktivieren", text: "Erstellen Sie Ihr sicheres Konto für Verwaltungsdokumente. Vor dem Zugriff erhalten Sie einen Aktivierungslink per E-Mail.", cta: "Sicheres Konto erstellen" },
-  zh: { title: "激活您的候选人空间", text: "创建安全账户以提交行政文件。访问前将向您的邮箱发送激活链接。", cta: "创建安全账户" },
-} as const;
 type FormState = {
   firstName: string;
   lastName: string;
@@ -268,7 +262,6 @@ export default function VvipOffshorePage() {
   const { language } = useLanguage();
   const lang = (language in copy ? language : "fr") as Language;
   const t = copy[lang];
-  const candidateAccount = candidateAccountCopy[lang];
   const [form, setForm] = useState<FormState>(initialForm);
   const [file, setFile] = useState<File | null>(null);
   const [status, setStatus] = useState<"idle" | "sending" | "success" | "error">("idle");
@@ -373,11 +366,6 @@ export default function VvipOffshorePage() {
                   <h2 className="mt-6 font-display text-3xl text-foreground">{t.successTitle}</h2>
                   <p className="mx-auto mt-4 max-w-md text-muted-foreground">{t.successText}</p>
                   <p className="mt-4 rounded-xl bg-primary/10 px-6 py-4 font-mono text-xl font-bold text-primary">{trackingId}</p>
-                  <div className="mx-auto mt-6 max-w-md rounded-2xl border border-primary/25 bg-primary/5 p-5 text-left">
-                    <p className="font-semibold text-foreground">{candidateAccount.title}</p>
-                    <p className="mt-2 text-sm leading-6 text-muted-foreground">{candidateAccount.text}</p>
-                    <Link href={`/candidate/access?mode=register&email=${encodeURIComponent(form.email)}`} className="cta-primary mt-4 inline-flex">{candidateAccount.cta}</Link>
-                  </div>
                   <Link href="/" className="cta-primary mt-8 inline-flex">{t.backHome}</Link>
                 </div>
               ) : (

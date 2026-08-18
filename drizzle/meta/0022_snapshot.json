@@ -1,7 +1,7 @@
 {
   "version": "5",
   "dialect": "mysql",
-  "id": "bd9bf446-c0ce-49c0-bfa3-c0849d6d65f9",
+  "id": "a57079a4-130a-4ec6-a8b3-74082cf0ab33",
   "prevId": "ecd5de12-4bf3-4efd-9c6d-06c9a6b3c269",
   "tables": {
     "appointments": {
@@ -565,8 +565,8 @@
           "notNull": false,
           "autoincrement": false
         },
-        "status": {
-          "name": "status",
+        "candidate_account_status": {
+          "name": "candidate_account_status",
           "type": "enum('active','disabled','erased')",
           "primaryKey": false,
           "notNull": true,
@@ -651,8 +651,8 @@
           "notNull": false,
           "autoincrement": false
         },
-        "actor_type": {
-          "name": "actor_type",
+        "candidate_document_actor_type": {
+          "name": "candidate_document_actor_type",
           "type": "enum('candidate','admin','system')",
           "primaryKey": false,
           "notNull": true,
@@ -665,8 +665,8 @@
           "notNull": false,
           "autoincrement": false
         },
-        "action": {
-          "name": "action",
+        "candidate_document_audit_action": {
+          "name": "candidate_document_audit_action",
           "type": "enum('upload','download','view','analysis_requested','analysis_completed','reviewed','erased','login','logout')",
           "primaryKey": false,
           "notNull": true,
@@ -735,8 +735,8 @@
           "notNull": true,
           "autoincrement": false
         },
-        "status": {
-          "name": "status",
+        "candidate_document_job_status": {
+          "name": "candidate_document_job_status",
           "type": "enum('queued','running','completed','retry','failed')",
           "primaryKey": false,
           "notNull": true,
@@ -810,7 +810,7 @@
         "candidate_document_jobs_schedule_idx": {
           "name": "candidate_document_jobs_schedule_idx",
           "columns": [
-            "status",
+            "candidate_document_job_status",
             "scheduled_for"
           ],
           "isUnique": false
@@ -859,8 +859,8 @@
           "notNull": false,
           "autoincrement": false
         },
-        "category": {
-          "name": "category",
+        "candidate_document_category": {
+          "name": "candidate_document_category",
           "type": "enum('identity_document','medical_license','diploma','certificate','professional_insurance','vaccination_record','criminal_record','employment_evidence','proof_of_address','other')",
           "primaryKey": false,
           "notNull": true,
@@ -908,8 +908,8 @@
           "notNull": true,
           "autoincrement": false
         },
-        "validation_status": {
-          "name": "validation_status",
+        "candidate_document_validation_status": {
+          "name": "candidate_document_validation_status",
           "type": "enum('quarantined','accepted','rejected','validation_failed')",
           "primaryKey": false,
           "notNull": true,
@@ -930,8 +930,8 @@
           "notNull": false,
           "autoincrement": false
         },
-        "status": {
-          "name": "status",
+        "candidate_document_status": {
+          "name": "candidate_document_status",
           "type": "enum('uploaded','validating','analyzing','needs_review','reviewed','rejected','archived')",
           "primaryKey": false,
           "notNull": true,
@@ -973,8 +973,8 @@
           "notNull": false,
           "autoincrement": false
         },
-        "analysis_status": {
-          "name": "analysis_status",
+        "candidate_document_analysis_status": {
+          "name": "candidate_document_analysis_status",
           "type": "enum('queued','extracting','analyzing','completed','needs_review','failed')",
           "primaryKey": false,
           "notNull": true,
@@ -1061,8 +1061,8 @@
         "candidate_documents_review_queue_idx": {
           "name": "candidate_documents_review_queue_idx",
           "columns": [
-            "status",
-            "analysis_status"
+            "candidate_document_status",
+            "candidate_document_analysis_status"
           ],
           "isUnique": false
         },

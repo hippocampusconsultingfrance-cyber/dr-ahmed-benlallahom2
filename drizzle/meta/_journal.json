@@ -159,8 +159,22 @@
     {
       "idx": 22,
       "version": "5",
-      "when": 1787054965800,
-      "tag": "0022_fast_red_shift",
+      "when": 1787062005307,
+      "tag": "0022_opposite_nick_fury",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "5",
+      "when": 1787062868912,
+      "tag": "0023_unknown_thena",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "5",
+      "when": 1787062940837,
+      "tag": "0024_premium_fat_cobra",
       "breakpoints": true
     }
   ]

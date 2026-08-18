@@ -1,4 +1,4 @@
-import { index, int, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
+import { index, int, mysqlEnum, mysqlTable, text, timestamp, uniqueIndex, varchar } from "drizzle-orm/mysql-core";
 
 /**
  * Core user table backing auth flow.
@@ -321,132 +321,6 @@ export type CvProcessingJob = typeof cvProcessingJobs.$inferSelect;
 export type InsertCvProcessingJob = typeof cvProcessingJobs.$inferInsert;
 
 /**
- * Candidate-owned account, kept separate from the internal Manus OAuth user
- * model. Passwords are represented only by slow salted hashes.
- */
-export const candidateAccounts = mysqlTable("candidate_accounts", {
-  id: int("id").autoincrement().primaryKey(),
-  email: varchar("email", { length: 320 }).notNull().unique(),
-  firstName: varchar("first_name", { length: 120 }),
-  lastName: varchar("last_name", { length: 120 }),
-  passwordHash: varchar("password_hash", { length: 512 }).notNull(),
-  emailVerifiedAt: timestamp("email_verified_at"),
-  verificationTokenHash: varchar("verification_token_hash", { length: 128 }),
-  verificationExpiresAt: timestamp("verification_expires_at"),
-  passwordResetTokenHash: varchar("password_reset_token_hash", { length: 128 }),
-  passwordResetExpiresAt: timestamp("password_reset_expires_at"),
-  failedLoginCount: int("failed_login_count").default(0).notNull(),
-  lockedUntil: timestamp("locked_until"),
-  lastLoginAt: timestamp("last_login_at"),
-  linkedApplicationId: int("linked_application_id"),
-  termsAcceptedAt: timestamp("terms_accepted_at"),
-  documentConsentAt: timestamp("document_consent_at"),
-  status: mysqlEnum("status", ["active", "disabled", "erased"]).default("active").notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
-}, table => ({
-  emailVerifiedIdx: index("candidate_accounts_email_verified_idx").on(table.email, table.emailVerifiedAt),
-  applicationIdx: index("candidate_accounts_application_idx").on(table.linkedApplicationId),
-}));
-
-export type CandidateAccount = typeof candidateAccounts.$inferSelect;
-
-/** Opaque, hashed, expiring candidate sessions. */
-export const candidateSessions = mysqlTable("candidate_sessions", {
-  id: int("id").autoincrement().primaryKey(),
-  candidateId: int("candidate_id").notNull(),
-  tokenHash: varchar("token_hash", { length: 128 }).notNull().unique(),
-  expiresAt: timestamp("expires_at").notNull(),
-  revokedAt: timestamp("revoked_at"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-}, table => ({
-  candidateExpiryIdx: index("candidate_sessions_candidate_expiry_idx").on(table.candidateId, table.expiresAt),
-}));
-
-/** Private administrative documents owned by an authenticated candidate. */
-export const candidateDocuments = mysqlTable("candidate_documents", {
-  id: int("id").autoincrement().primaryKey(),
-  candidateId: int("candidate_id").notNull(),
-  applicationId: int("application_id"),
-  category: mysqlEnum("category", [
-    "identity_document",
-    "medical_license",
-    "diploma",
-    "certificate",
-    "professional_insurance",
-    "vaccination_record",
-    "criminal_record",
-    "employment_evidence",
-    "proof_of_address",
-    "other",
-  ]).notNull(),
-  categoryOtherLabel: varchar("category_other_label", { length: 160 }),
-  originalName: varchar("original_name", { length: 255 }).notNull(),
-  storageKey: varchar("storage_key", { length: 500 }).notNull(),
-  mimeType: varchar("mime_type", { length: 100 }).notNull(),
-  sizeBytes: int("size_bytes").notNull(),
-  checksum: varchar("checksum", { length: 64 }).notNull(),
-  validationStatus: mysqlEnum("validation_status", ["quarantined", "accepted", "rejected", "validation_failed"]).default("quarantined").notNull(),
-  validationNotes: text("validation_notes"),
-  securityScanVersion: varchar("security_scan_version", { length: 40 }),
-  status: mysqlEnum("status", ["uploaded", "validating", "analyzing", "needs_review", "reviewed", "rejected", "archived"]).default("uploaded").notNull(),
-  aiSummary: text("ai_summary"),
-  aiExtractedData: text("ai_extracted_data"),
-  aiConfidence: int("ai_confidence"),
-  aiFlags: text("ai_flags"),
-  aiModel: varchar("ai_model", { length: 100 }),
-  analysisStatus: mysqlEnum("analysis_status", ["queued", "extracting", "analyzing", "completed", "needs_review", "failed"]).default("queued").notNull(),
-  analysisAttempts: int("analysis_attempts").default(0).notNull(),
-  analysisLastError: text("analysis_last_error"),
-  analyzedAt: timestamp("analyzed_at"),
-  reviewedByOpenId: varchar("reviewed_by_open_id", { length: 128 }),
-  reviewedAt: timestamp("reviewed_at"),
-  reviewNotes: text("review_notes"),
-  retentionUntil: timestamp("retention_until"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
-}, table => ({
-  candidateCreatedIdx: index("candidate_documents_candidate_created_idx").on(table.candidateId, table.createdAt),
-  reviewQueueIdx: index("candidate_documents_review_queue_idx").on(table.status, table.analysisStatus),
-  applicationIdx: index("candidate_documents_application_idx").on(table.applicationId),
-}));
-
-export type CandidateDocument = typeof candidateDocuments.$inferSelect;
-
-/** Durable queue for private-document analysis; requests never wait for an LLM. */
-export const candidateDocumentProcessingJobs = mysqlTable("candidate_document_processing_jobs", {
-  id: int("id").autoincrement().primaryKey(),
-  documentId: int("document_id").notNull(),
-  status: mysqlEnum("status", ["queued", "running", "completed", "retry", "failed"]).default("queued").notNull(),
-  attempts: int("attempts").default(0).notNull(),
-  maxAttempts: int("max_attempts").default(3).notNull(),
-  scheduledFor: timestamp("scheduled_for").defaultNow().notNull(),
-  startedAt: timestamp("started_at"),
-  finishedAt: timestamp("finished_at"),
-  lastError: text("last_error"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
-}, table => ({
-  documentScheduleIdx: index("candidate_document_jobs_schedule_idx").on(table.status, table.scheduledFor),
-  documentIdx: index("candidate_document_jobs_document_idx").on(table.documentId),
-}));
-
-/** Audit trail for candidate and administrator access to private documents. */
-export const candidateDocumentAuditLogs = mysqlTable("candidate_document_audit_logs", {
-  id: int("id").autoincrement().primaryKey(),
-  documentId: int("document_id"),
-  candidateId: int("candidate_id"),
-  actorType: mysqlEnum("actor_type", ["candidate", "admin", "system"]).notNull(),
-  actorReference: varchar("actor_reference", { length: 128 }),
-  action: mysqlEnum("action", ["upload", "download", "view", "analysis_requested", "analysis_completed", "reviewed", "erased", "login", "logout"]).notNull(),
-  metadata: text("metadata"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-}, table => ({
-  documentCreatedIdx: index("candidate_document_audit_document_created_idx").on(table.documentId, table.createdAt),
-  candidateCreatedIdx: index("candidate_document_audit_candidate_created_idx").on(table.candidateId, table.createdAt),
-}));
-
-/**
  * Immutable administrative audit trail for sensitive recruitment actions.
  */
 export const recruitmentAuditLogs = mysqlTable("recruitment_audit_logs", {
@@ -631,3 +505,180 @@ export const recruitmentEmailEvents = mysqlTable("recruitment_email_events", {
 }));
 
 export type RecruitmentEmailEvent = typeof recruitmentEmailEvents.$inferSelect;
+
+/** Candidate-owned account, activated by a one-time email verification link. */
+export const candidateAccounts = mysqlTable("candidate_accounts", {
+  id: int("id").autoincrement().primaryKey(),
+  email: varchar("email", { length: 320 }).notNull().unique(),
+  firstName: varchar("first_name", { length: 120 }),
+  lastName: varchar("last_name", { length: 120 }),
+  passwordHash: varchar("password_hash", { length: 512 }).notNull(),
+  emailVerifiedAt: timestamp("email_verified_at"),
+  verificationTokenHash: varchar("verification_token_hash", { length: 128 }),
+  verificationExpiresAt: timestamp("verification_expires_at"),
+  passwordResetTokenHash: varchar("password_reset_token_hash", { length: 128 }),
+  passwordResetExpiresAt: timestamp("password_reset_expires_at"),
+  failedLoginCount: int("failed_login_count").default(0).notNull(),
+  lockedUntil: timestamp("locked_until"),
+  lastLoginAt: timestamp("last_login_at"),
+  linkedApplicationId: int("linked_application_id"),
+  termsAcceptedAt: timestamp("terms_accepted_at"),
+  documentConsentAt: timestamp("document_consent_at"),
+  status: mysqlEnum("candidate_account_status", ["active", "disabled", "erased"]).default("active").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+}, table => ({
+  emailVerifiedIdx: index("candidate_accounts_email_verified_idx").on(table.email, table.emailVerifiedAt),
+  applicationIdx: index("candidate_accounts_application_idx").on(table.linkedApplicationId),
+}));
+
+export type CandidateAccount = typeof candidateAccounts.$inferSelect;
+
+/** Opaque, hashed, expiring candidate sessions. */
+export const candidateSessions = mysqlTable("candidate_sessions", {
+  id: int("id").autoincrement().primaryKey(),
+  candidateId: int("candidate_id").notNull(),
+  tokenHash: varchar("token_hash", { length: 128 }).notNull().unique(),
+  deviceLabel: varchar("device_label", { length: 180 }),
+  ipHash: varchar("ip_hash", { length: 128 }),
+  lastSeenAt: timestamp("last_seen_at").defaultNow().notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  revokedAt: timestamp("revoked_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, table => ({
+  candidateExpiryIdx: index("candidate_sessions_candidate_expiry_idx").on(table.candidateId, table.expiresAt),
+}));
+
+/** Private administrative documents owned by an authenticated candidate. */
+export const candidateDocuments = mysqlTable("candidate_documents", {
+  id: int("id").autoincrement().primaryKey(),
+  candidateId: int("candidate_id").notNull(),
+  applicationId: int("application_id"),
+  category: mysqlEnum("candidate_document_category", ["identity_document", "medical_license", "diploma", "certificate", "professional_insurance", "vaccination_record", "criminal_record", "employment_evidence", "proof_of_address", "other"]).notNull(),
+  categoryOtherLabel: varchar("category_other_label", { length: 160 }),
+  originalName: varchar("original_name", { length: 255 }).notNull(),
+  storageKey: varchar("storage_key", { length: 500 }).notNull(),
+  mimeType: varchar("mime_type", { length: 100 }).notNull(),
+  sizeBytes: int("size_bytes").notNull(),
+  checksum: varchar("checksum", { length: 64 }).notNull(),
+  validationStatus: mysqlEnum("candidate_document_validation_status", ["quarantined", "accepted", "rejected", "validation_failed"]).default("quarantined").notNull(),
+  validationNotes: text("validation_notes"),
+  securityScanVersion: varchar("security_scan_version", { length: 40 }),
+  malwareScanStatus: mysqlEnum("candidate_document_malware_scan_status", ["pending", "clean", "suspicious", "unavailable"]).default("pending").notNull(),
+  malwareScanProvider: varchar("malware_scan_provider", { length: 80 }),
+  malwareScannedAt: timestamp("malware_scanned_at"),
+  encryptionAlgorithm: varchar("encryption_algorithm", { length: 80 }),
+  encryptionIv: varchar("encryption_iv", { length: 128 }),
+  encryptionAuthTag: varchar("encryption_auth_tag", { length: 128 }),
+  status: mysqlEnum("candidate_document_status", ["uploaded", "validating", "analyzing", "needs_review", "reviewed", "rejected", "archived"]).default("uploaded").notNull(),
+  aiSummary: text("ai_summary"),
+  aiExtractedData: text("ai_extracted_data"),
+  aiConfidence: int("ai_confidence"),
+  aiFlags: text("ai_flags"),
+  aiModel: varchar("ai_model", { length: 100 }),
+  analysisStatus: mysqlEnum("candidate_document_analysis_status", ["queued", "extracting", "analyzing", "completed", "needs_review", "failed"]).default("queued").notNull(),
+  analysisAttempts: int("analysis_attempts").default(0).notNull(),
+  analysisLastError: text("analysis_last_error"),
+  analyzedAt: timestamp("analyzed_at"),
+  reviewedByOpenId: varchar("reviewed_by_open_id", { length: 128 }),
+  reviewedAt: timestamp("reviewed_at"),
+  reviewNotes: text("review_notes"),
+  retentionUntil: timestamp("retention_until"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+}, table => ({
+  candidateCreatedIdx: index("candidate_documents_candidate_created_idx").on(table.candidateId, table.createdAt),
+  reviewQueueIdx: index("candidate_documents_review_queue_idx").on(table.status, table.analysisStatus),
+  applicationIdx: index("candidate_documents_application_idx").on(table.applicationId),
+}));
+
+export type CandidateDocument = typeof candidateDocuments.$inferSelect;
+
+/** Durable queue for private-document analysis; requests never wait for an LLM. */
+export const candidateDocumentProcessingJobs = mysqlTable("candidate_document_processing_jobs", {
+  id: int("id").autoincrement().primaryKey(),
+  documentId: int("document_id").notNull(),
+  status: mysqlEnum("candidate_document_job_status", ["queued", "running", "completed", "retry", "failed"]).default("queued").notNull(),
+  attempts: int("attempts").default(0).notNull(),
+  maxAttempts: int("max_attempts").default(3).notNull(),
+  scheduledFor: timestamp("scheduled_for").defaultNow().notNull(),
+  startedAt: timestamp("started_at"),
+  finishedAt: timestamp("finished_at"),
+  lastError: text("last_error"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+}, table => ({
+  documentScheduleIdx: index("candidate_document_jobs_schedule_idx").on(table.status, table.scheduledFor),
+  documentIdx: index("candidate_document_jobs_document_idx").on(table.documentId),
+}));
+
+/** Audit trail for candidate and administrator access to private documents. */
+export const candidateDocumentAuditLogs = mysqlTable("candidate_document_audit_logs", {
+  id: int("id").autoincrement().primaryKey(),
+  documentId: int("document_id"),
+  candidateId: int("candidate_id"),
+  actorType: mysqlEnum("candidate_document_actor_type", ["candidate", "admin", "system"]).notNull(),
+  actorReference: varchar("actor_reference", { length: 128 }),
+  action: mysqlEnum("candidate_document_audit_action", ["upload", "download", "view", "analysis_requested", "analysis_completed", "reviewed", "erased", "login", "logout"]).notNull(),
+  metadata: text("metadata"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, table => ({
+  documentCreatedIdx: index("candidate_document_audit_document_created_idx").on(table.documentId, table.createdAt),
+  candidateCreatedIdx: index("candidate_document_audit_candidate_created_idx").on(table.candidateId, table.createdAt),
+}));
+
+/** Persistent rate limits survive process restarts and capture abuse by action and opaque identity key. */
+export const candidateSecurityRateLimits = mysqlTable("candidate_security_rate_limits", {
+  id: int("id").autoincrement().primaryKey(),
+  action: varchar("action", { length: 80 }).notNull(),
+  subjectHash: varchar("subject_hash", { length: 128 }).notNull(),
+  windowStartedAt: timestamp("window_started_at").notNull(),
+  attemptCount: int("attempt_count").default(0).notNull(),
+  blockedUntil: timestamp("blocked_until"),
+  lastAttemptAt: timestamp("last_attempt_at").defaultNow().notNull(),
+}, table => ({
+  actionSubjectUnique: uniqueIndex("candidate_security_rate_limit_subject_unique").on(table.action, table.subjectHash),
+  blockedIdx: index("candidate_security_rate_limit_blocked_idx").on(table.blockedUntil),
+}));
+
+/** Security-relevant candidate and administrator events, with privacy-preserving IP hashes. */
+export const securityEvents = mysqlTable("security_events", {
+  id: int("id").autoincrement().primaryKey(),
+  actorKind: mysqlEnum("security_event_actor_kind", ["candidate", "admin", "anonymous", "system"]).notNull(),
+  actorReference: varchar("actor_reference", { length: 160 }),
+  category: varchar("category", { length: 100 }).notNull(),
+  outcome: mysqlEnum("security_event_outcome", ["allowed", "blocked", "failed", "alert"]).notNull(),
+  severity: mysqlEnum("security_event_severity", ["info", "warning", "high", "critical"]).default("info").notNull(),
+  ipHash: varchar("ip_hash", { length: 128 }),
+  metadata: text("metadata"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, table => ({
+  eventCreatedIdx: index("security_events_created_idx").on(table.createdAt),
+  actorCreatedIdx: index("security_events_actor_created_idx").on(table.actorKind, table.actorReference, table.createdAt),
+  severityCreatedIdx: index("security_events_severity_created_idx").on(table.severity, table.createdAt),
+}));
+
+/** One-time email MFA challenges issued only to already authenticated administrators. */
+export const adminMfaChallenges = mysqlTable("admin_mfa_challenges", {
+  id: int("id").autoincrement().primaryKey(),
+  openId: varchar("open_id", { length: 128 }).notNull(),
+  codeHash: varchar("code_hash", { length: 128 }).notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  consumedAt: timestamp("consumed_at"),
+  attempts: int("attempts").default(0).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, table => ({
+  openIdExpiryIdx: index("admin_mfa_challenge_openid_expiry_idx").on(table.openId, table.expiresAt),
+}));
+
+/** Opaque, expiring proof that an administrator completed the second factor. */
+export const adminMfaSessions = mysqlTable("admin_mfa_sessions", {
+  id: int("id").autoincrement().primaryKey(),
+  openId: varchar("open_id", { length: 128 }).notNull(),
+  tokenHash: varchar("token_hash", { length: 128 }).notNull().unique(),
+  expiresAt: timestamp("expires_at").notNull(),
+  revokedAt: timestamp("revoked_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, table => ({
+  openIdExpiryIdx: index("admin_mfa_session_openid_expiry_idx").on(table.openId, table.expiresAt),
+}));

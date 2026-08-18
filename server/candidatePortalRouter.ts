@@ -25,36 +25,12 @@ import {
 import { sendCandidatePortalAccessEmail } from "./_core/notifications";
 import { storageGetSignedUrl } from "./storage";
 import { publicProcedure, router } from "./_core/trpc";
+import { candidateRequestIp, verifyCandidateTurnstile } from "./candidateTurnstile";
+import { enforcePersistentRateLimit, hashSecurityValue, isCompromisedPassword, logSecurityEvent, requestIpHash } from "./candidateSecurity";
 
 type CandidateSession = typeof candidateAccounts.$inferSelect;
 
 const genericAccessMessage = "Si vos informations sont valides, vous recevrez les instructions nécessaires.";
-const candidateRateWindows = new Map<string, { count: number; resetAt: number }>();
-
-function requestFingerprint(req: { headers: Record<string, unknown> }, scope: string, email: string) {
-  const forwarded = req.headers["x-forwarded-for"];
-  const source = Array.isArray(forwarded) ? forwarded[0] : forwarded;
-  const ip = typeof source === "string" ? source.split(",")[0].trim() : "unknown";
-  return `${scope}:${ip}:${normalizeCandidateEmail(email)}`;
-}
-
-function consumeCandidateRateLimit(key: string, maxAttempts: number, windowMs: number) {
-  const now = Date.now();
-  const current = candidateRateWindows.get(key);
-  if (!current || current.resetAt <= now) {
-    candidateRateWindows.set(key, { count: 1, resetAt: now + windowMs });
-    return true;
-  }
-  if (current.count >= maxAttempts) return false;
-  current.count += 1;
-  return true;
-}
-
-function looksAutomated(input: { website?: string; submittedAt?: number }) {
-  if (input.website?.trim()) return true;
-  const elapsed = Date.now() - (input.submittedAt ?? 0);
-  return elapsed < 1500 || elapsed > 24 * 60 * 60 * 1000;
-}
 
 function getRequestProtocol(req: { protocol?: string; headers: Record<string, unknown> }): boolean {
   const forwarded = req.headers["x-forwarded-proto"];
@@ -135,6 +111,8 @@ async function createCandidateSession(candidateId: number, req: { protocol?: str
   await db.insert(candidateSessions).values({
     candidateId,
     tokenHash: hashCandidateToken(token, "session"),
+    deviceLabel: typeof req.headers["user-agent"] === "string" ? req.headers["user-agent"].slice(0, 180) : "Navigateur inconnu",
+    ipHash: requestIpHash(req.headers),
     expiresAt,
   });
   res.cookie(CANDIDATE_SESSION_COOKIE, token, candidateSessionCookieOptions(getRequestProtocol(req)));
@@ -142,7 +120,7 @@ async function createCandidateSession(candidateId: number, req: { protocol?: str
 
 const passwordInput = z.string().min(1).max(128);
 const genericAuthInput = z.object({ email: z.string().email().max(320), password: passwordInput });
-const publicFormSecurityInput = z.object({ website: z.string().max(160).optional().default(""), submittedAt: z.number().int().positive() });
+const turnstileInput = z.object({ turnstileToken: z.string().min(20).max(4096) });
 
 export const candidatePortalRouter = router({
   register: publicProcedure
@@ -151,12 +129,30 @@ export const candidatePortalRouter = router({
       lastName: z.string().trim().min(1).max(120),
       termsAccepted: z.boolean().refine(value => value, "L’acceptation des conditions est requise."),
       documentConsent: z.boolean().refine(value => value, "Le consentement au traitement documentaire est requis."),
-    }).merge(publicFormSecurityInput))
+    }).merge(turnstileInput))
     .mutation(async ({ input, ctx }) => {
       const email = normalizeCandidateEmail(input.email);
-      if (looksAutomated(input) || !consumeCandidateRateLimit(requestFingerprint(ctx.req, "register", email), 3, 20 * 60 * 1000)) return { message: genericAccessMessage };
+      const ipHash = requestIpHash(ctx.req.headers);
+      try {
+        await enforcePersistentRateLimit({ action: "candidate_register", subject: `${email}:${ipHash ?? "unknown"}`, maxAttempts: 5, windowMs: 60 * 60 * 1000, blockMs: 60 * 60 * 1000 });
+      } catch {
+        await logSecurityEvent({ actorKind: "anonymous", actorReference: hashSecurityValue(email), category: "candidate_register_rate_limited", outcome: "blocked", severity: "warning", ipHash });
+        throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "Trop de tentatives. Veuillez réessayer plus tard." });
+      }
+      try {
+        await verifyCandidateTurnstile({ token: input.turnstileToken, remoteIp: candidateRequestIp(ctx.req.headers) });
+      } catch {
+        await logSecurityEvent({ actorKind: "anonymous", actorReference: hashSecurityValue(email), category: "candidate_register_turnstile", outcome: "blocked", severity: "warning", ipHash });
+        throw new TRPCError({ code: "BAD_REQUEST", message: "La vérification anti-bot doit être renouvelée avant de créer votre accès." });
+      }
       const passwordError = validateCandidatePassword(input.password);
       if (passwordError) throw new TRPCError({ code: "BAD_REQUEST", message: "Choisissez un mot de passe d’au moins 15 caractères." });
+      try {
+        if (await isCompromisedPassword(input.password)) throw new TRPCError({ code: "BAD_REQUEST", message: "Ce mot de passe a déjà été compromis. Choisissez-en un autre, long et unique." });
+      } catch (error) {
+        if (error instanceof TRPCError) throw error;
+        throw new TRPCError({ code: "SERVICE_UNAVAILABLE", message: "Le contrôle de sécurité du mot de passe est temporairement indisponible." });
+      }
       const db = databaseOrThrow(await getDb());
       const now = new Date();
       const verificationToken = createCandidateToken();
@@ -195,7 +191,8 @@ export const candidatePortalRouter = router({
 
       if (candidateId) {
         const verifyUrl = `${portalOrigin(ctx.req)}/candidate/verify?email=${encodeURIComponent(email)}&token=${encodeURIComponent(verificationToken)}`;
-        await sendCandidatePortalAccessEmail({ to: email, firstName: input.firstName, kind: "verify", actionUrl: verifyUrl }).catch(error => console.error("candidate_verification_email_failed", error));
+        await sendCandidatePortalAccessEmail({ to: email, firstName: input.firstName, kind: "verify", actionUrl: verifyUrl }).catch((error: unknown) => console.error("candidate_verification_email_failed", error));
+        await logSecurityEvent({ actorKind: "candidate", actorReference: String(candidateId), category: "candidate_account_created", outcome: "allowed", ipHash });
       }
       return { message: genericAccessMessage };
     }),
@@ -220,11 +217,23 @@ export const candidatePortalRouter = router({
   login: publicProcedure.input(genericAuthInput).mutation(async ({ input, ctx }) => {
     const db = databaseOrThrow(await getDb());
     const email = normalizeCandidateEmail(input.email);
+    const ipHash = requestIpHash(ctx.req.headers);
+    try {
+      await enforcePersistentRateLimit({ action: "candidate_login", subject: `${email}:${ipHash ?? "unknown"}`, maxAttempts: 10, windowMs: 15 * 60 * 1000, blockMs: 15 * 60 * 1000 });
+    } catch {
+      await logSecurityEvent({ actorKind: "anonymous", actorReference: hashSecurityValue(email), category: "candidate_login_rate_limited", outcome: "blocked", severity: "warning", ipHash });
+      throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "Trop de tentatives. Veuillez réessayer dans quelques minutes." });
+    }
     const candidate = (await db.select().from(candidateAccounts).where(eq(candidateAccounts.email, email)).limit(1))[0];
     const genericError = new TRPCError({ code: "UNAUTHORIZED", message: "Email ou mot de passe incorrect." });
-    if (!consumeCandidateRateLimit(requestFingerprint(ctx.req, "login", email), 8, 15 * 60 * 1000)) throw genericError;
-    if (!candidate || candidate.status !== "active" || !candidate.emailVerifiedAt) throw genericError;
-    if (candidate.lockedUntil && candidate.lockedUntil > new Date()) throw genericError;
+    if (!candidate || candidate.status !== "active" || !candidate.emailVerifiedAt) {
+      await logSecurityEvent({ actorKind: "anonymous", actorReference: hashSecurityValue(email), category: "candidate_login", outcome: "failed", severity: "warning", ipHash });
+      throw genericError;
+    }
+    if (candidate.lockedUntil && candidate.lockedUntil > new Date()) {
+      await logSecurityEvent({ actorKind: "candidate", actorReference: String(candidate.id), category: "candidate_login_locked", outcome: "blocked", severity: "warning", ipHash });
+      throw genericError;
+    }
     const valid = await verifyCandidatePassword(input.password, candidate.passwordHash);
     if (!valid) {
       const failedLoginCount = candidate.failedLoginCount + 1;
@@ -232,11 +241,13 @@ export const candidatePortalRouter = router({
         failedLoginCount,
         lockedUntil: failedLoginCount >= 5 ? new Date(Date.now() + 15 * 60 * 1000) : null,
       }).where(eq(candidateAccounts.id, candidate.id));
+      await logSecurityEvent({ actorKind: "candidate", actorReference: String(candidate.id), category: "candidate_login", outcome: "failed", severity: failedLoginCount >= 5 ? "high" : "warning", ipHash });
       throw genericError;
     }
     await db.update(candidateAccounts).set({ failedLoginCount: 0, lockedUntil: null, lastLoginAt: new Date() }).where(eq(candidateAccounts.id, candidate.id));
     await createCandidateSession(candidate.id, ctx.req, ctx.res);
     await logCandidateAudit({ candidateId: candidate.id, action: "login", metadata: { method: "password" } });
+    await logSecurityEvent({ actorKind: "candidate", actorReference: String(candidate.id), category: "candidate_login", outcome: "allowed", ipHash });
     return { success: true };
   }),
 
@@ -252,10 +263,22 @@ export const candidatePortalRouter = router({
     return { success: true };
   }),
 
-  requestPasswordReset: publicProcedure.input(z.object({ email: z.string().email().max(320) }).merge(publicFormSecurityInput)).mutation(async ({ input, ctx }) => {
-    if (looksAutomated(input) || !consumeCandidateRateLimit(requestFingerprint(ctx.req, "reset", input.email), 3, 20 * 60 * 1000)) return { message: genericAccessMessage };
-    const db = databaseOrThrow(await getDb());
+  requestPasswordReset: publicProcedure.input(z.object({ email: z.string().email().max(320), turnstileToken: z.string().min(20).max(4096) })).mutation(async ({ input, ctx }) => {
     const email = normalizeCandidateEmail(input.email);
+    const ipHash = requestIpHash(ctx.req.headers);
+    try {
+      await enforcePersistentRateLimit({ action: "candidate_password_reset", subject: `${email}:${ipHash ?? "unknown"}`, maxAttempts: 4, windowMs: 60 * 60 * 1000, blockMs: 60 * 60 * 1000 });
+    } catch {
+      await logSecurityEvent({ actorKind: "anonymous", actorReference: hashSecurityValue(email), category: "candidate_password_reset_rate_limited", outcome: "blocked", severity: "warning", ipHash });
+      throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "Trop de demandes. Veuillez réessayer plus tard." });
+    }
+    try {
+      await verifyCandidateTurnstile({ token: input.turnstileToken, remoteIp: candidateRequestIp(ctx.req.headers) });
+    } catch {
+      await logSecurityEvent({ actorKind: "anonymous", actorReference: hashSecurityValue(email), category: "candidate_password_reset_turnstile", outcome: "blocked", severity: "warning", ipHash });
+      throw new TRPCError({ code: "BAD_REQUEST", message: "La vérification anti-bot doit être renouvelée avant de demander un lien." });
+    }
+    const db = databaseOrThrow(await getDb());
     const candidate = (await db.select().from(candidateAccounts).where(and(eq(candidateAccounts.email, email), eq(candidateAccounts.status, "active"))).limit(1))[0];
     if (candidate?.emailVerifiedAt) {
       const token = createCandidateToken();
@@ -264,7 +287,8 @@ export const candidatePortalRouter = router({
         passwordResetExpiresAt: new Date(Date.now() + CANDIDATE_TOKEN_MAX_AGE_MS),
       }).where(eq(candidateAccounts.id, candidate.id));
       const resetUrl = `${portalOrigin(ctx.req)}/candidate/reset-password?email=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}`;
-      await sendCandidatePortalAccessEmail({ to: email, firstName: candidate.firstName ?? "", kind: "reset", actionUrl: resetUrl }).catch(error => console.error("candidate_reset_email_failed", error));
+      await sendCandidatePortalAccessEmail({ to: email, firstName: candidate.firstName ?? "", kind: "reset", actionUrl: resetUrl }).catch((error: unknown) => console.error("candidate_reset_email_failed", error));
+      await logSecurityEvent({ actorKind: "candidate", actorReference: String(candidate.id), category: "candidate_password_reset_requested", outcome: "allowed", ipHash });
     }
     return { message: genericAccessMessage };
   }),
@@ -272,6 +296,12 @@ export const candidatePortalRouter = router({
   resetPassword: publicProcedure.input(z.object({ email: z.string().email().max(320), token: z.string().min(20).max(200), password: passwordInput })).mutation(async ({ input, ctx }) => {
     const passwordError = validateCandidatePassword(input.password);
     if (passwordError) throw new TRPCError({ code: "BAD_REQUEST", message: "Choisissez un mot de passe d’au moins 15 caractères." });
+    try {
+      if (await isCompromisedPassword(input.password)) throw new TRPCError({ code: "BAD_REQUEST", message: "Ce mot de passe a déjà été compromis. Choisissez-en un autre, long et unique." });
+    } catch (error) {
+      if (error instanceof TRPCError) throw error;
+      throw new TRPCError({ code: "SERVICE_UNAVAILABLE", message: "Le contrôle de sécurité du mot de passe est temporairement indisponible." });
+    }
     const db = databaseOrThrow(await getDb());
     const candidate = (await db.select().from(candidateAccounts).where(and(
       eq(candidateAccounts.email, normalizeCandidateEmail(input.email)),
@@ -297,6 +327,36 @@ export const candidatePortalRouter = router({
     const candidate = await getCandidateSession(ctx.req);
     if (!candidate) return null;
     return { id: candidate.id, email: candidate.email, firstName: candidate.firstName, lastName: candidate.lastName, emailVerifiedAt: candidate.emailVerifiedAt, linkedApplicationId: candidate.linkedApplicationId, documentConsentAt: candidate.documentConsentAt };
+  }),
+
+  sessions: publicProcedure.query(async ({ ctx }) => {
+    const candidate = await requireCandidateSession(ctx.req);
+    const db = databaseOrThrow(await getDb());
+    const currentToken = candidateCookieToken(ctx.req);
+    const currentTokenHash = currentToken ? hashCandidateToken(currentToken, "session") : null;
+    const sessions = await db.select({ id: candidateSessions.id, deviceLabel: candidateSessions.deviceLabel, createdAt: candidateSessions.createdAt, lastSeenAt: candidateSessions.lastSeenAt, expiresAt: candidateSessions.expiresAt, tokenHash: candidateSessions.tokenHash }).from(candidateSessions).where(and(eq(candidateSessions.candidateId, candidate.id), isNull(candidateSessions.revokedAt), gt(candidateSessions.expiresAt, new Date()))).orderBy(desc(candidateSessions.lastSeenAt));
+    return sessions.map(({ tokenHash, ...session }) => ({ ...session, current: tokenHash === currentTokenHash }));
+  }),
+
+  revokeSession: publicProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ input, ctx }) => {
+    const candidate = await requireCandidateSession(ctx.req);
+    const db = databaseOrThrow(await getDb());
+    const session = (await db.select().from(candidateSessions).where(and(eq(candidateSessions.id, input.id), eq(candidateSessions.candidateId, candidate.id), isNull(candidateSessions.revokedAt))).limit(1))[0];
+    if (!session) throw new TRPCError({ code: "NOT_FOUND", message: "Session introuvable." });
+    await db.update(candidateSessions).set({ revokedAt: new Date() }).where(eq(candidateSessions.id, session.id));
+    const currentToken = candidateCookieToken(ctx.req);
+    if (currentToken && session.tokenHash === hashCandidateToken(currentToken, "session")) ctx.res.clearCookie(CANDIDATE_SESSION_COOKIE, { ...candidateSessionCookieOptions(getRequestProtocol(ctx.req)), maxAge: -1 });
+    await logSecurityEvent({ actorKind: "candidate", actorReference: String(candidate.id), category: "candidate_session_revoked", outcome: "allowed", ipHash: requestIpHash(ctx.req.headers) });
+    return { success: true };
+  }),
+
+  revokeAllSessions: publicProcedure.mutation(async ({ ctx }) => {
+    const candidate = await requireCandidateSession(ctx.req);
+    const db = databaseOrThrow(await getDb());
+    await db.update(candidateSessions).set({ revokedAt: new Date() }).where(and(eq(candidateSessions.candidateId, candidate.id), isNull(candidateSessions.revokedAt)));
+    ctx.res.clearCookie(CANDIDATE_SESSION_COOKIE, { ...candidateSessionCookieOptions(getRequestProtocol(ctx.req)), maxAge: -1 });
+    await logSecurityEvent({ actorKind: "candidate", actorReference: String(candidate.id), category: "candidate_sessions_revoked_all", outcome: "allowed", ipHash: requestIpHash(ctx.req.headers) });
+    return { success: true };
   }),
 
   documents: publicProcedure.query(async ({ ctx }) => {

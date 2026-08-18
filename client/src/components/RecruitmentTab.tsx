@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { BrainCircuit, Download, FileSearch, History, Loader2, Mail, RefreshCw, Sparkles, Trash2, UserRound } from "lucide-react";
+import { BrainCircuit, Download, FileSearch, Loader2, Mail, RefreshCw, Sparkles, Trash2, UserRound } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
@@ -96,12 +96,10 @@ export default function RecruitmentTab() {
   const [profileLanguages, setProfileLanguages] = useState("");
   const [profileSkills, setProfileSkills] = useState("");
   const [emailComposer, setEmailComposer] = useState<{ id: number; candidateName: string; template: RecruitmentEmailTemplate } | null>(null);
-  const [detailId, setDetailId] = useState<number | null>(null);
   const [emailLanguage, setEmailLanguage] = useState<"fr" | "en">("fr");
   const [customRequest, setCustomRequest] = useState("");
   const utils = trpc.useUtils();
   const profilesQuery = trpc.admin.recruitment.profiles.list.useQuery();
-  const candidateDetail = trpc.admin.recruitment.candidate.detail.useQuery({ id: detailId || 1 }, { enabled: Boolean(detailId) });
 
   const { data, isLoading, error, refetch } = trpc.admin.recruitment.list.useQuery({
     status: statusFilter || undefined,
@@ -155,16 +153,6 @@ export default function RecruitmentTab() {
       toast.success("Email envoyé au candidat");
       setEmailComposer(null);
       setCustomRequest("");
-    },
-    onError: mutationError => toast.error(mutationError.message),
-  });
-
-  const markCandidateResponse = trpc.admin.recruitment.candidate.markResponse.useMutation({
-    onSuccess: () => {
-      toast.success("Réponse candidat enregistrée");
-      candidateDetail.refetch();
-      utils.admin.recruitment.list.invalidate();
-      utils.admin.recruitment.dashboard.invalidate();
     },
     onError: mutationError => toast.error(mutationError.message),
   });
@@ -346,9 +334,6 @@ export default function RecruitmentTab() {
                           <Button size="sm" variant="outline" onClick={() => openEmailComposer(application.id, `${application.firstName} ${application.lastName}`, "additional_information")} disabled={sendTemplateEmail.isPending || eraseApplication.isPending || reanalyze.isPending}>
                             <Mail className="mr-2 h-4 w-4" /> Demander un complément
                           </Button>
-                          <Button size="sm" variant="outline" onClick={() => setDetailId(application.id)}>
-                            <History className="mr-2 h-4 w-4" /> Fiche 360°
-                          </Button>
                           <Button size="sm" variant="outline" className="text-destructive hover:text-destructive" onClick={() => { if (window.confirm("Confirmer l’effacement définitif du dossier candidat et de ses résultats IA ?")) eraseApplication.mutate({ id: application.id }); }} disabled={eraseApplication.isPending || reanalyze.isPending}>
                             {eraseApplication.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
                             Effacer RGPD
@@ -446,47 +431,6 @@ export default function RecruitmentTab() {
               Envoyer l’email
             </Button>
           </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={Boolean(detailId)} onOpenChange={open => { if (!open) setDetailId(null); }}>
-        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Fiche candidat 360°</DialogTitle>
-            <DialogDescription>Chronologie des actions, campagnes et relances. Aucun envoi n’est déclenché depuis cette vue.</DialogDescription>
-          </DialogHeader>
-          {candidateDetail.isLoading ? (
-            <div className="flex items-center gap-2 py-8 text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Chargement…</div>
-          ) : candidateDetail.data ? (
-            <div className="space-y-5 py-2">
-              <div className="rounded-lg border border-border bg-card p-4">
-                <p className="font-semibold text-foreground">{candidateDetail.data.candidate.firstName} {candidateDetail.data.candidate.lastName} · {candidateDetail.data.candidate.specialty}</p>
-                <p className="mt-1 text-sm text-muted-foreground">Dernier contact : {candidateDetail.data.candidate.lastContactedAt ? new Date(candidateDetail.data.candidate.lastContactedAt).toLocaleString("fr-FR") : "aucun"} · Dernière réponse : {candidateDetail.data.candidate.lastCandidateResponseAt ? new Date(candidateDetail.data.candidate.lastCandidateResponseAt).toLocaleString("fr-FR") : "non enregistrée"}</p>
-                <Button className="mt-3" size="sm" variant="outline" disabled={markCandidateResponse.isPending} onClick={() => markCandidateResponse.mutate({ id: candidateDetail.data!.candidate.id })}>
-                  {markCandidateResponse.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null} Marquer « réponse reçue »
-                </Button>
-              </div>
-              <div>
-                <h3 className="text-sm font-semibold text-foreground">Relances suggérées — jamais automatiques</h3>
-                <div className="mt-2 space-y-2">
-                  {candidateDetail.data.followUps.length ? candidateDetail.data.followUps.map(task => <div key={task.id} className="rounded-lg border border-border p-3 text-sm"><span className="font-medium text-foreground">{task.kind === "follow_up_7" ? "J+7" : task.kind === "follow_up_14" ? "J+14" : "Personnalisée"}</span><span className="text-muted-foreground"> · {new Date(task.dueAt).toLocaleDateString("fr-FR")} · {task.status}</span>{task.notes ? <p className="mt-1 text-muted-foreground">{task.notes}</p> : null}</div>) : <p className="text-sm text-muted-foreground">Aucune relance suggérée.</p>}
-                </div>
-              </div>
-              <div>
-                <h3 className="text-sm font-semibold text-foreground">Campagnes et délivrabilité</h3>
-                <div className="mt-2 space-y-2">
-                  {candidateDetail.data.campaignRecipients.length ? candidateDetail.data.campaignRecipients.map(item => <div key={item.id} className="rounded-lg border border-border p-3 text-sm"><span className="font-medium text-foreground">{item.campaignTitle || `Campagne #${item.campaignId}`}</span><span className="text-muted-foreground"> · {item.deliveryStatus}{item.lastEventAt ? ` · ${new Date(item.lastEventAt).toLocaleString("fr-FR")}` : ""}</span>{item.error ? <p className="mt-1 text-destructive">{item.error}</p> : null}</div>) : <p className="text-sm text-muted-foreground">Aucune campagne enregistrée.</p>}
-                </div>
-              </div>
-              <div>
-                <h3 className="text-sm font-semibold text-foreground">Journal administratif</h3>
-                <div className="mt-2 space-y-2">
-                  {candidateDetail.data.audits.length ? candidateDetail.data.audits.map(item => <div key={item.id} className="rounded-lg border border-border p-3 text-sm"><span className="font-medium text-foreground">{item.action}</span><span className="text-muted-foreground"> · {new Date(item.createdAt).toLocaleString("fr-FR")}</span></div>) : <p className="text-sm text-muted-foreground">Aucune action enregistrée.</p>}
-                </div>
-              </div>
-            </div>
-          ) : null}
-          <DialogFooter><Button variant="outline" onClick={() => setDetailId(null)}>Fermer</Button></DialogFooter>
         </DialogContent>
       </Dialog>
     </section>

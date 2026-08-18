@@ -2299,133 +2299,27 @@
 
 ## Dix améliorations prioritaires du recrutement — août 2026
 
-- [x] Ajouter un tableau de bord recrutement avec volumes de CV, consentements, état d’analyse IA, activité de campagnes et taux de réponse
-- [x] Créer une fiche candidat 360° avec chronologie des actions, emails, notes, pièces demandées et prochain suivi
-- [x] Préparer des relances manuelles suggérées à J+7/J+14 sans aucun envoi automatique
-- [x] Ajouter un lien de désinscription marketing explicite, sécurisé et traçable pour les campagnes recrutement
-- [x] Ajouter un export CSV administratif contrôlé du vivier et des shortlists de missions
-- [x] Créer des modèles réutilisables d’offres de recrutement par zone et type de mission
-- [x] Enrichir le score de compatibilité mission–candidat avec spécialité, langues, mobilité, disponibilité et certifications
-- [x] Améliorer l’espace Employeurs avec suivi de brief, accusé de réception, statut de shortlist et descriptif de poste
-- [x] Renforcer la réassurance publique des pages recrutement sur confidentialité, consentement, revue humaine et délais indicatifs
-- [x] Ajouter un suivi de délivrabilité des campagnes et des erreurs d’envoi, sans réutiliser automatiquement les adresses en erreur
+- [ ] Ajouter un tableau de bord recrutement avec volumes de CV, consentements, état d’analyse IA, activité de campagnes et taux de réponse
+- [ ] Créer une fiche candidat 360° avec chronologie des actions, emails, notes, pièces demandées et prochain suivi
+- [ ] Préparer des relances manuelles suggérées à J+7/J+14 sans aucun envoi automatique
+- [ ] Ajouter un lien de désinscription marketing explicite, sécurisé et traçable pour les campagnes recrutement
+- [ ] Ajouter un export CSV administratif contrôlé du vivier et des shortlists de missions
+- [ ] Créer des modèles réutilisables d’offres de recrutement par zone et type de mission
+- [ ] Enrichir le score de compatibilité mission–candidat avec spécialité, langues, mobilité, disponibilité et certifications
+- [ ] Améliorer l’espace Employeurs avec suivi de brief, accusé de réception, statut de shortlist et descriptif de poste
+- [ ] Renforcer la réassurance publique des pages recrutement sur confidentialité, consentement, revue humaine et délais indicatifs
+- [ ] Ajouter un suivi de délivrabilité des campagnes et des erreurs d’envoi, sans réutiliser automatiquement les adresses en erreur
 
-## Correction de formulation — missions VVIP et Offshore
+## Consolidation et sécurité de l’espace candidat
 
-- [x] Retirer la référence aux résidences de prestige des descriptions publiques des missions VVIP et Offshore
-
-## Zones d’opportunités recrutement
-
-- [x] Ajouter explicitement l’Afrique aux zones d’opportunités de recrutement dans les contenus publics multilingues
-
-## Page Pourquoi Hippocampus Consulting
-
-- [x] Créer une page employeurs multilingue présentant la méthode, les zones couvertes, la confidentialité et le parcours de shortlist
-- [x] Ajouter un appel à l’action vers le brief de mission et un accès cohérent depuis les parcours Employeurs
-- [x] Vérifier le rendu et les liens de la nouvelle page avant publication
-
-## Fond international — page Recrutement
-
-- [x] Ajouter un globe terrestre stylisé en arrière-plan de la page Recrutement, sans compromettre la lisibilité ou l’accessibilité
-- [x] Vérifier le rendu du globe sur desktop et mobile avant publication
-
-## Terre avec continents — page Recrutement
-
-- [x] Remplacer le globe abstrait par une Terre stylisée avec continents en arrière-plan du hub Recrutement
-- [x] Vérifier le rendu de la Terre et la lisibilité de la page sur desktop et mobile avant publication
-
-## Diagnostic analyse CV en attente
-
-- [x] Identifier pourquoi la candidature CV_TAIBI_MIG_2026.PDF reste à l’état « Analyse en attente » avec tentative 0
-- [x] Relancer ou corriger le traitement asynchrone, puis vérifier le résultat d’analyse du CV
-
-## Vérification globale du pipeline IA CV
-
-- [x] Contrôler les dernières exécutions, les reprises et les erreurs du traitement IA en production
-- [x] Exécuter les tests de non-régression extraction, analyse, reprise et persistance des résultats
-- [x] Vérifier la cohérence entre les résultats IA enregistrés et les informations affichées à l’administrateur
-
-## Fiabilisation automatique de l’analyse IA
-
-- [x] Empêcher qu’un CV accepté reste bloqué en erreur après les trois tentatives IA
-- [x] Produire automatiquement une fiche de revue humaine exploitable à partir des données déclarées et du texte extrait lorsque l’IA ne répond pas
-- [x] Reprendre automatiquement les CV déjà bloqués puis vérifier leur affichage administratif
-
-## Langues professionnelles — formulaire candidat
-
-- [x] Remplacer le champ de langues professionnelles par des cases à cocher
-- [x] Afficher les langues demandées dans l’ordre arrêté : arabe, français, anglais, italien, espagnol, portugais, allemand, chinois, puis autre
-- [x] Vérifier l’enregistrement et le rendu du formulaire candidat avant publication
-
-## Langues professionnelles principales
-
-- [x] Proposer les cases à cocher arabe, français, anglais, italien, espagnol, portugais, allemand et chinois
-- [x] Ajouter une case Autre avec un champ libre de précision conditionnel
-- [x] Vérifier la conservation de la sélection et de la précision Autre à la soumission
-
-## Recherche de spécialité — formulaire candidat
-
-- [x] Ouvrir automatiquement les résultats de spécialités dès la saisie dans le champ de recherche
-- [x] Vérifier la sélection d’une spécialité filtrée sur desktop et mobile avant publication
-
-## Téléphone international — formulaire candidat
-
-- [x] Ajouter un sélecteur de préfixe pays avant le champ de numéro de téléphone
-- [x] Transmettre le numéro complet internationalisé au dépôt de candidature et vérifier le rendu avant publication
-
-## Alignement du formulaire candidat
-
-- [x] Harmoniser les hauteurs et l’alignement des champs téléphone, spécialité et expérience
-- [x] Vérifier le rendu de la grille sur desktop et mobile avant publication
-
-## Délivrabilité des emails recrutement
-
-- [x] Vérifier SPF, DKIM, DMARC, réputation d’envoi et événements Resend du domaine d’expédition
-- [x] Améliorer les en-têtes et le contenu des emails individuels de recrutement pour limiter le classement en spam
-- [x] Identifier les actions externes de réputation ou de DNS encore nécessaires
-
-## Logo Hippocampus Consulting dans les emails
-
-- [x] Préparer et héberger une version légère du logo Hippocampus Consulting pour les clients email
-- [x] Ajouter le logo aux modèles d’emails Hippocampus Consulting, y compris recrutement et briefs employeurs
-- [x] Vérifier le rendu HTML des modèles puis publier la mise à jour
-
-## Affiche LinkedIn — recrutement international
-
-- [x] Créer une affiche LinkedIn attractive pour promouvoir les recrutements internationaux Hippocampus Consulting
-- [x] Vérifier la lisibilité du message et livrer le visuel prêt à publier
-
-## Espace candidat sécurisé — documents administratifs
-
-- [x] Définir les catégories de documents, règles de conservation, consentements et statuts de revue humaine
-- [x] Créer l’authentification candidate par email et mot de passe avec vérification et réinitialisation sécurisée
-- [x] Créer le coffre de documents candidat avec stockage privé, contrôle de type, taille, accès et traçabilité
-- [x] Ajouter un pipeline d’analyse IA documentaire avec résultat structuré, confiance et revue humaine obligatoire
-- [x] Construire le portail candidat de dépôt, suivi et gestion des documents
-- [x] Ajouter les contrôles administratifs, les tests d’autorisation et les vérifications RGPD
-
-## Test intégral de l’espace candidat
-
-- [x] Vérifier la création de compte, la vérification d’email, la connexion et l’expiration de session
-- [x] Vérifier le dépôt privé, le rejet des fichiers dangereux et le journal d’audit documentaire
-- [x] Vérifier l’analyse asynchrone, le coffre candidat et la revue administrateur
-- [x] Retirer les données de test et consigner le résultat du parcours complet
-
-## Confirmation du mot de passe candidat
-
-- [x] Remplacer l’intitulé « Phrase de passe » par « Mot de passe »
-- [x] Ajouter un champ de confirmation et bloquer l’inscription si les deux valeurs diffèrent
-- [x] Vérifier le rendu et la validation de la création de compte avant publication
-
-## Activation email et anti-bot — espace candidat
-
-- [x] Rendre l’activation par lien email explicitement obligatoire avant toute connexion candidate
-- [x] Ajouter un champ leurre anti-bot et des limites de tentatives à l’inscription et à la demande de réinitialisation
-- [x] Ajouter un délai minimal de soumission pour décourager les formulaires automatisés
-- [x] Tester les blocages anti-bot et l’activation email avant publication
-
-## Création de compte après candidature
-
-- [x] Afficher un accès explicite à la création de compte sécurisé après chaque candidature soumise
-- [x] Préremplir l’email du candidat dans le parcours de compte et lier le compte à sa candidature
-- [x] Exiger l’activation email avant accès au coffre documentaire puis tester le parcours complet
+- [x] Consolider les routes publiques et le routeur du portail candidat avant d’appliquer les nouvelles protections
+- [x] Intégrer Cloudflare Turnstile aux inscriptions, réinitialisations et dépôts publics avec validation serveur
+- [x] Mettre en place une limitation persistante des tentatives et documenter la règle WAF/IP externe
+- [x] Ajouter une double authentification pour les administrateurs
+- [ ] Ajouter une analyse antivirus dédiée avant la promotion des documents dans le coffre
+- [x] Créer des notifications de sécurité pour comptes, tentatives abusives, téléchargements et mots de passe
+- [x] Donner aux candidats une liste de sessions et la possibilité de les révoquer
+- [x] Rejeter les mots de passe compromis à partir d’un contrôle non divulguant
+- [x] Chiffrer applicativement les documents les plus sensibles avec une clé distincte
+- [x] Étendre le journal de sécurité et les alertes administratives
+- [ ] Ajouter une campagne régulière de tests de sécurité couvrant accès, fichiers, liens et contournements

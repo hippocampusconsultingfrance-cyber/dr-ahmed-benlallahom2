@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { analysisCompletionStatus, buildHumanReviewFallback, executeCvExternalPipeline, extractionMethodFor, retryDelayMs } from "./recruitmentProcessing";
+import { analysisCompletionStatus, executeCvExternalPipeline, extractionMethodFor, retryDelayMs } from "./recruitmentProcessing";
 
 const checksum = "a".repeat(64);
 const input = {
@@ -70,38 +70,6 @@ describe("règles déterministes du pipeline de traitement CV", () => {
     expect(result.promotedStorage?.key).toContain("recruitment/cv/");
     expect(result.extraction.method).toBe("pdf_text");
     expect(result.analysis.relevanceScore).toBe(80);
-  });
-
-  it("passe au fournisseur de repli lors de la deuxième tentative", async () => {
-    let requestedProvider = "";
-    await executeCvExternalPipeline({ ...input, analysisAttempt: 2 }, {
-      ...steps,
-      analyze: async request => {
-        requestedProvider = request.provider ?? "";
-        return analysis;
-      },
-    });
-    expect(requestedProvider).toBe("gemini-3-flash-preview");
-  });
-
-  it("utilise un repli compact lors de la dernière tentative", async () => {
-    let requestedProvider = "";
-    await executeCvExternalPipeline({ ...input, analysisAttempt: 3 }, {
-      ...steps,
-      analyze: async request => {
-        requestedProvider = request.provider ?? "";
-        return analysis;
-      },
-    });
-    expect(requestedProvider).toBe("claude-haiku-4-5");
-  });
-
-  it("produit une fiche exploitable pour revue humaine quand les fournisseurs IA échouent", () => {
-    const fallback = buildHumanReviewFallback(input, "contenu IA vide");
-    expect(fallback.summary).toContain("revue humaine");
-    expect(fallback.specialties).toEqual(["Anesthésie"]);
-    expect(fallback.languages).toEqual(["Français"]);
-    expect(fallback.relevanceScore).toBe(0);
   });
 
   it("propage de manière contrôlée les échecs de stockage, OCR et IA pour la logique de reprise", async () => {

@@ -2,7 +2,7 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { randomUUID } from "node:crypto";
 import { COOKIE_NAME } from "../shared/const";
 import { systemRouter } from "./_core/systemRouter";
-import { publicProcedure, adminProcedure, router } from "./_core/trpc";
+import { publicProcedure, protectedProcedure, adminProcedure, router } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { getDb } from "./db";
@@ -26,6 +26,7 @@ import {
 import { logRecruitmentAction, matchesRecruitmentProfile, parseRecruitmentJsonArray } from "./recruitmentAudit";
 import { computeBriefCandidateMatch } from "./clientBriefMatching";
 import { candidatePortalRouter } from "./candidatePortalRouter";
+import { issueAdminMfaChallenge, isAdminMfaVerified, verifyAdminMfaChallenge } from "./adminMfa";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "");
 
@@ -213,6 +214,27 @@ function getSafeCheckoutOrigin(req: { headers: Record<string, string | string[] 
 export const appRouter = router({
   system: systemRouter,
   candidatePortal: candidatePortalRouter,
+  adminSecurity: router({
+    status: protectedProcedure.query(async ({ ctx }) => {
+      if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN", message: "Accès administrateur requis." });
+      return { verified: await isAdminMfaVerified(ctx.req, ctx.user.openId), email: ctx.user.email ?? null };
+    }),
+    begin: protectedProcedure.mutation(async ({ ctx }) => {
+      if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN", message: "Accès administrateur requis." });
+      if (!ctx.user.email) throw new TRPCError({ code: "BAD_REQUEST", message: "Aucun email administrateur vérifié n’est disponible pour la double authentification." });
+      await issueAdminMfaChallenge({ openId: ctx.user.openId, email: ctx.user.email, req: ctx.req });
+      return { success: true };
+    }),
+    verify: protectedProcedure.input(z.object({ code: z.string().regex(/^\d{6}$/) })).mutation(async ({ input, ctx }) => {
+      if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN", message: "Accès administrateur requis." });
+      try {
+        await verifyAdminMfaChallenge({ openId: ctx.user.openId, code: input.code, req: ctx.req, res: ctx.res });
+        return { success: true };
+      } catch {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Le code de sécurité est invalide ou expiré." });
+      }
+    }),
+  }),
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user),
     logout: publicProcedure.mutation(({ ctx }) => {
@@ -1444,7 +1466,7 @@ export const appRouter = router({
         .mutation(async ({ input }) => {
           const db = await getDb();
           if (!db) throw new Error("Database connection failed");
-          await db.update(clientBriefs).set(input.status === "shortlist_sent" ? { status: input.status, shortlistSentAt: new Date() } : { status: input.status }).where(eq(clientBriefs.id, input.id));
+          await db.update(clientBriefs).set({ status: input.status }).where(eq(clientBriefs.id, input.id));
           return { success: true };
         }),
       candidates: adminProcedure
@@ -1461,10 +1483,6 @@ export const appRouter = router({
             lastName: cvApplications.lastName,
             specialty: cvApplications.specialty,
             targetCountries: cvApplications.targetCountries,
-            languages: cvApplications.languages,
-            normalizedLanguages: cvApplications.normalizedLanguages,
-            mobility: cvApplications.mobility,
-            yearsExperience: cvApplications.yearsExperience,
             certifications: cvApplications.certifications,
             normalizedCertifications: cvApplications.normalizedCertifications,
             availability: cvApplications.availability,
@@ -1477,11 +1495,6 @@ export const appRouter = router({
               .from(cvCandidateCertifications)
               .where(inArray(cvCandidateCertifications.applicationId, applicationIds))
             : [];
-          const languageRows = applicationIds.length > 0
-            ? await db.select({ applicationId: cvCandidateLanguages.applicationId, language: cvCandidateLanguages.language })
-              .from(cvCandidateLanguages)
-              .where(inArray(cvCandidateLanguages.applicationId, applicationIds))
-            : [];
           const certificationsByApplication = new Map<number, string[]>();
           for (const certification of certificationRows) {
             certificationsByApplication.set(certification.applicationId, [
@@ -1489,18 +1502,11 @@ export const appRouter = router({
               certification.name,
             ]);
           }
-          const languagesByApplication = new Map<number, string[]>();
-          for (const language of languageRows) {
-            languagesByApplication.set(language.applicationId, [
-              ...(languagesByApplication.get(language.applicationId) || []),
-              language.language,
-            ]);
-          }
           const associations = await db.select().from(clientBriefCandidates).where(eq(clientBriefCandidates.briefId, brief.id));
           const associationByApplication = new Map(associations.map(association => [association.applicationId, association]));
           const candidates = applications.map(application => ({
             ...application,
-            match: computeBriefCandidateMatch(brief, { ...application, certificationNames: certificationsByApplication.get(application.id) || [], languageNames: languagesByApplication.get(application.id) || [] }),
+            match: computeBriefCandidateMatch(brief, { ...application, certificationNames: certificationsByApplication.get(application.id) || [] }),
             association: associationByApplication.get(application.id) ?? null,
           })).sort((left, right) => right.match.score - left.match.score);
           return { brief, candidates };
@@ -1510,7 +1516,6 @@ export const appRouter = router({
           briefId: z.number().int().positive(),
           applicationId: z.number().int().positive(),
           matchScore: z.number().int().min(0).max(100).optional(),
-          matchBreakdown: z.string().trim().max(2_000).optional(),
           status: z.enum(["suggested", "reviewing", "shortlisted", "declined"]).default("suggested"),
           notes: z.string().trim().max(5_000).optional(),
         }))
@@ -1523,7 +1528,6 @@ export const appRouter = router({
           if (existing) {
             await db.update(clientBriefCandidates).set({
               matchScore: input.matchScore ?? existing.matchScore,
-              matchBreakdown: input.matchBreakdown ?? existing.matchBreakdown,
               status: input.status,
               notes: input.notes ?? existing.notes,
               updatedAt: new Date(),
@@ -1533,7 +1537,6 @@ export const appRouter = router({
               briefId: input.briefId,
               applicationId: input.applicationId,
               matchScore: input.matchScore ?? null,
-              matchBreakdown: input.matchBreakdown ?? null,
               status: input.status,
               notes: input.notes ?? null,
             });
@@ -1544,7 +1547,10 @@ export const appRouter = router({
 
     candidateDocuments: router({
       list: adminProcedure
-        .input(z.object({ status: z.enum(["uploaded", "validating", "analyzing", "needs_review", "reviewed", "rejected", "archived"]).optional(), limit: z.number().int().min(1).max(100).default(50) }))
+        .input(z.object({
+          status: z.enum(["uploaded", "validating", "analyzing", "needs_review", "reviewed", "rejected", "archived"]).optional(),
+          limit: z.number().int().min(1).max(100).default(50),
+        }))
         .query(async ({ input }) => {
           const db = await getDb();
           if (!db) return [];
@@ -1586,13 +1592,12 @@ export const appRouter = router({
         }),
       download: adminProcedure
         .input(z.object({ id: z.number().int().positive() }))
-        .mutation(async ({ input, ctx }) => {
+        .mutation(async ({ input }) => {
           const db = await getDb();
           if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Le coffre documentaire est temporairement indisponible." });
           const document = (await db.select().from(candidateDocuments).where(eq(candidateDocuments.id, input.id)).limit(1))[0];
           if (!document) throw new TRPCError({ code: "NOT_FOUND", message: "Document introuvable." });
-          await db.insert(candidateDocumentAuditLogs).values({ candidateId: document.candidateId, documentId: document.id, actorType: "admin", actorReference: ctx.user.openId, action: "download" });
-          return { url: await storageGetSignedUrl(document.storageKey), filename: document.originalName };
+          return { url: `/api/admin/candidate-documents/${document.id}/download`, filename: document.originalName };
         }),
     }),
 

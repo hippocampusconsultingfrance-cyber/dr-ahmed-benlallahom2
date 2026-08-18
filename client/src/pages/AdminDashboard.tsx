@@ -3,23 +3,27 @@ import { trpc } from "@/lib/trpc";
 import { startLogin } from "@/const";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Calendar, MessageSquare, Shield, DollarSign, Eye, CheckCircle, XCircle, Clock, ArrowLeft, Star, Trash2, FileText, CalendarDays, Plus, Edit, Trash, Globe, UserRound, BriefcaseBusiness, Send, UsersRound, BarChart3 } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Calendar, MessageSquare, Shield, DollarSign, Eye, CheckCircle, XCircle, Clock, ArrowLeft, Star, Trash2, FileText, CalendarDays, Plus, Edit, Trash, Globe, UserRound, BriefcaseBusiness, Send, UsersRound } from "lucide-react";
 import { toast } from "sonner";
 import { useLocation } from "wouter";
 import RecruitmentTab from "@/components/RecruitmentTab";
 import EmployerBriefsTab from "@/components/EmployerBriefsTab";
 import VivierTab from "@/components/VivierTab";
 import MailingTab from "@/components/MailingTab";
-import RecruitmentOperationsTab from "@/components/RecruitmentOperationsTab";
 import CandidateDocumentsAdminTab from "@/components/CandidateDocumentsAdminTab";
 
-type Tab = "overview" | "appointments" | "contacts" | "gdpr" | "testimonials" | "blog" | "availability" | "recruitment" | "candidateDocuments" | "vivier" | "mailing" | "recruitmentOperations" | "employerBriefs";
+type Tab = "overview" | "appointments" | "contacts" | "gdpr" | "testimonials" | "blog" | "availability" | "recruitment" | "candidateDocuments" | "vivier" | "mailing" | "employerBriefs";
 
 export default function AdminDashboard() {
   const { user, loading, refresh } = useAuth();
   const [, setLocation] = useLocation();
   const [activeTab, setActiveTab] = useState<Tab>("overview");
   const [mailingSelectedIds, setMailingSelectedIds] = useState<number[]>([]);
+  const [mfaCode, setMfaCode] = useState("");
+  const adminSecurity = trpc.adminSecurity.status.useQuery(undefined, { enabled: Boolean(user?.role === "admin") });
+  const requestMfa = trpc.adminSecurity.begin.useMutation({ onSuccess: () => toast.success("Un code de sécurité a été envoyé à votre email administrateur."), onError: error => toast.error(error.message) });
+  const verifyMfa = trpc.adminSecurity.verify.useMutation({ onSuccess: () => { void adminSecurity.refetch(); toast.success("Double authentification validée."); }, onError: error => toast.error(error.message) });
 
   if (loading) {
     return (
@@ -64,6 +68,14 @@ export default function AdminDashboard() {
     );
   }
 
+  if (adminSecurity.isLoading) {
+    return <div className="min-h-screen bg-background flex items-center justify-center"><div className="animate-pulse text-muted-foreground">Vérification de sécurité…</div></div>;
+  }
+
+  if (!adminSecurity.data?.verified) {
+    return <div className="min-h-screen bg-background flex items-center justify-center px-4"><div className="w-full max-w-md rounded-2xl border border-cyan-900/50 bg-card p-7 shadow-2xl"><div className="mb-5 flex items-center gap-3"><span className="grid h-11 w-11 place-items-center rounded-xl bg-cyan-400/10 text-cyan-300"><Shield className="h-6 w-6"/></span><div><h1 className="text-xl font-bold text-foreground">Validation de sécurité</h1><p className="text-sm text-muted-foreground">Une seconde vérification protège les documents et CV sensibles.</p></div></div><p className="mb-4 text-sm text-muted-foreground">Demandez un code à six chiffres sur votre email administrateur, puis saisissez-le ci-dessous.</p><Button className="mb-5 w-full" onClick={() => requestMfa.mutate()} disabled={requestMfa.isPending}>{requestMfa.isPending ? "Envoi en cours…" : "Envoyer un code de sécurité"}</Button><div className="space-y-2"><label htmlFor="admin-mfa-code" className="text-sm font-medium text-foreground">Code à 6 chiffres</label><Input id="admin-mfa-code" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={mfaCode} onChange={event => setMfaCode(event.target.value.replace(/\D/g, ""))} placeholder="123456"/><Button className="mt-2 w-full" variant="outline" disabled={mfaCode.length !== 6 || verifyMfa.isPending} onClick={() => verifyMfa.mutate({ code: mfaCode })}>{verifyMfa.isPending ? "Vérification…" : "Valider le code"}</Button></div><Button variant="ghost" className="mt-3 w-full" onClick={() => setLocation("/")}>Retour au site</Button></div></div>;
+  }
+
   const tabs = [
     { id: "overview" as Tab, label: "Vue d'ensemble", icon: DollarSign },
     { id: "appointments" as Tab, label: "Réservations", icon: Calendar },
@@ -73,10 +85,9 @@ export default function AdminDashboard() {
     { id: "blog" as Tab, label: "Blog", icon: FileText },
     { id: "availability" as Tab, label: "Disponibilités", icon: CalendarDays },
     { id: "recruitment" as Tab, label: "Candidatures", icon: UserRound },
-    { id: "candidateDocuments" as Tab, label: "Documents candidats", icon: FileText },
+    { id: "candidateDocuments" as Tab, label: "Documents candidats", icon: Shield },
     { id: "vivier" as Tab, label: "Vivier", icon: UsersRound },
     { id: "mailing" as Tab, label: "Mailing", icon: Send },
-    { id: "recruitmentOperations" as Tab, label: "Pilotage", icon: BarChart3 },
     { id: "employerBriefs" as Tab, label: "Missions", icon: BriefcaseBusiness },
   ];
 
@@ -134,7 +145,6 @@ export default function AdminDashboard() {
         {activeTab === "candidateDocuments" && <CandidateDocumentsAdminTab />}
         {activeTab === "vivier" && <VivierTab onCompose={candidateIds => { setMailingSelectedIds(candidateIds); setActiveTab("mailing"); }} />}
         {activeTab === "mailing" && <MailingTab initialSelectedIds={mailingSelectedIds} />}
-        {activeTab === "recruitmentOperations" && <RecruitmentOperationsTab />}
         {activeTab === "employerBriefs" && <EmployerBriefsTab />}
       </main>
     </div>

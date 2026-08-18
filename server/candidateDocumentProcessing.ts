@@ -3,6 +3,7 @@ import { candidateDocumentAuditLogs, candidateDocumentProcessingJobs, candidateD
 import { getDb } from "./db";
 import { analyzeCandidateDocument } from "./candidateDocumentAnalysis";
 import { storageGetSignedUrl } from "./storage";
+import { decryptCandidateDocument } from "./candidateDocumentEncryption";
 
 const MAX_DOCUMENT_ANALYSIS_ATTEMPTS = 3;
 
@@ -14,11 +15,14 @@ export async function enqueueCandidateDocumentAnalysis(documentId: number) {
   await db.insert(candidateDocumentAuditLogs).values({ candidateId: (await db.select({ candidateId: candidateDocuments.candidateId }).from(candidateDocuments).where(eq(candidateDocuments.id, documentId)).limit(1))[0]?.candidateId ?? null, documentId, actorType: "system", action: "analysis_requested" });
 }
 
-async function privateDocumentBytes(storageKey: string): Promise<Buffer> {
-  const url = await storageGetSignedUrl(storageKey);
+async function privateDocumentBytes(input: { storageKey: string; encryptionAlgorithm?: string | null; encryptionIv?: string | null; encryptionAuthTag?: string | null }): Promise<Buffer> {
+  const url = await storageGetSignedUrl(input.storageKey);
   const response = await fetch(url);
   if (!response.ok) throw new Error(`candidate_document_download_failed_${response.status}`);
-  return Buffer.from(await response.arrayBuffer());
+  const stored = Buffer.from(await response.arrayBuffer());
+  if (!input.encryptionAlgorithm) return stored;
+  if (input.encryptionAlgorithm !== "aes-256-gcm" || !input.encryptionIv || !input.encryptionAuthTag) throw new Error("candidate_document_encryption_metadata_invalid");
+  return decryptCandidateDocument(stored, input.encryptionIv, input.encryptionAuthTag);
 }
 
 function retryTime(attempt: number) {
@@ -53,7 +57,7 @@ export async function processDueCandidateDocumentAnalysisJobs(limit = 1) {
     }
     try {
       await db.update(candidateDocuments).set({ status: "analyzing", analysisStatus: "analyzing", analysisAttempts: attempts }).where(eq(candidateDocuments.id, document.id));
-      const result = await analyzeCandidateDocument({ buffer: await privateDocumentBytes(document.storageKey), mimeType: document.mimeType, declaredCategory: document.categoryOtherLabel || document.category, attempt: attempts });
+      const result = await analyzeCandidateDocument({ buffer: await privateDocumentBytes(document), mimeType: document.mimeType, declaredCategory: document.categoryOtherLabel || document.category, attempt: attempts });
       await db.update(candidateDocuments).set({
         validationStatus: "accepted",
         status: "needs_review",

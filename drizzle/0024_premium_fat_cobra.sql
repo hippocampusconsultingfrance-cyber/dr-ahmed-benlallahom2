@@ -1,0 +1,2 @@
+DROP INDEX `candidate_security_rate_limit_subject_idx` ON `candidate_security_rate_limits`;--> statement-breakpoint
+ALTER TABLE `candidate_security_rate_limits` ADD CONSTRAINT `candidate_security_rate_limit_subject_unique` UNIQUE(`action`,`subject_hash`);

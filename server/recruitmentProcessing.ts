@@ -1,7 +1,7 @@
 import { and, eq, inArray, lte } from "drizzle-orm";
 import { cvApplications, cvProcessingJobs } from "../drizzle/schema";
 import { getDb } from "./db";
-import { extractCvDocument, analyzeCvText, analysisProviderForAttempt, saveCvAnalysis, type RecruitmentAnalysisResult } from "./recruitmentAnalysis";
+import { extractCvDocument, analyzeCvText, saveCvAnalysis } from "./recruitmentAnalysis";
 import { storageGetSignedUrl, storagePut } from "./storage";
 import { validateCvFile } from "./recruitmentFileValidation";
 
@@ -9,7 +9,6 @@ const MAX_ATTEMPTS = 3;
 const PROCESSING_BATCH_SIZE = 5;
 const ANALYSIS_MODEL = "gpt-5-mini";
 const ANALYSIS_PROMPT_VERSION = "recruitment-v2";
-const STALE_JOB_CLAIM_MS = 2 * 60 * 1000;
 
 type CvPipelineInput = {
   cvFileKey: string;
@@ -26,7 +25,6 @@ type CvPipelineInput = {
   languages: string | null;
   yearsExperience: number | null;
   message: string | null;
-  analysisAttempt?: number;
 };
 
 type CvPipelineSteps = {
@@ -75,7 +73,6 @@ export async function executeCvExternalPipeline(input: CvPipelineInput, steps: C
     yearsExperience: input.yearsExperience ?? undefined,
     message: input.message ?? undefined,
     extractedText: extraction.text,
-    provider: analysisProviderForAttempt(input.analysisAttempt ?? 1),
   });
   return { validation, promotedStorage, extraction, analysis };
 }
@@ -95,70 +92,18 @@ export function analysisCompletionStatus(input: { gaps: string[]; dataQualityWar
   return input.dataQualityWarnings.length > 0 || input.gaps.length > 0 ? "needs_review" as const : "completed" as const;
 }
 
-function parseDeclaredList(value: string | null): string[] {
-  try {
-    const parsed = JSON.parse(value || "[]");
-    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string").slice(0, 12) : [];
-  } catch {
-    return [];
-  }
-}
-
-/**
- * Never turn a transient provider failure into a dead candidate record. This is
- * explicitly a review aid, not a substitute for document analysis or a hiring
- * decision: it preserves declared data and makes the human action visible.
- */
-export function buildHumanReviewFallback(input: CvPipelineInput, failure: string): RecruitmentAnalysisResult {
-  const languages = parseDeclaredList(input.languages);
-  const countries = parseDeclaredList(input.targetCountries);
-  const specialty = input.specialty.trim() || "Professionnel de santé";
-  return {
-    summary: `Le CV a été reçu et validé. L’analyse automatisée détaillée n’a pas pu être finalisée ; une revue humaine est requise avant toute décision.`,
-    professionalTitle: specialty,
-    specialties: [specialty],
-    skills: [],
-    languages,
-    normalizedLanguages: [],
-    certifications: [],
-    countriesOfInterest: countries,
-    yearsExperience: input.yearsExperience ?? null,
-    normalizedExperiences: [],
-    relevanceScore: 0,
-    strengths: ["Dossier candidat disponible pour revue humaine", `Spécialité déclarée : ${specialty}`],
-    gaps: ["Lecture structurée du CV à confirmer manuellement"],
-    dataQualityWarnings: [`Analyse IA indisponible après reprises contrôlées : ${failure.slice(0, 180)}`],
-    reasoning: "Aucune décision automatisée n’a été prise. Les informations affichées proviennent des données déclarées par le candidat et nécessitent une revue humaine.",
-  };
-}
-
 export async function enqueueCvAnalysis(applicationId: number, requestedAt = new Date()) {
   const db = await getDb();
   if (!db) throw new Error("Database connection failed");
 
-  const [existingJob] = await db.select().from(cvProcessingJobs)
-    .where(and(eq(cvProcessingJobs.applicationId, applicationId), inArray(cvProcessingJobs.status, ["queued", "retry"])))
-    .orderBy(cvProcessingJobs.scheduledFor)
-    .limit(1);
-  if (existingJob) {
-    await db.update(cvProcessingJobs).set({
-      status: "queued",
-      attempts: 0,
-      scheduledFor: requestedAt,
-      startedAt: null,
-      finishedAt: null,
-      lastError: null,
-    }).where(eq(cvProcessingJobs.id, existingJob.id));
-  } else {
-    await db.insert(cvProcessingJobs).values({
-      applicationId,
-      jobType: "analyze_cv",
-      status: "queued",
-      attempts: 0,
-      maxAttempts: MAX_ATTEMPTS,
-      scheduledFor: requestedAt,
-    });
-  }
+  await db.insert(cvProcessingJobs).values({
+    applicationId,
+    jobType: "analyze_cv",
+    status: "queued",
+    attempts: 0,
+    maxAttempts: MAX_ATTEMPTS,
+    scheduledFor: requestedAt,
+  });
   await db.update(cvApplications).set({
     analysisStatus: "queued",
     analysisLastError: null,
@@ -189,7 +134,7 @@ async function processCvAnalysisJob(jobId: number) {
     await db.update(cvApplications).set({ analysisStatus: "extracting", updatedAt: new Date() })
       .where(eq(cvApplications.id, application.id));
 
-    const pipeline = await executeCvExternalPipeline({ ...application, analysisAttempt: job.attempts });
+    const pipeline = await executeCvExternalPipeline(application);
     if (pipeline.promotedStorage) {
       await db.update(cvApplications).set({
         cvFileKey: pipeline.promotedStorage.key,
@@ -222,7 +167,7 @@ async function processCvAnalysisJob(jobId: number) {
       analysisStatus: completionStatus,
       analysisAttempts: job.attempts,
       analysisLastError: null,
-      analysisModel: analysisProviderForAttempt(job.attempts),
+      analysisModel: ANALYSIS_MODEL,
       analysisPromptVersion: ANALYSIS_PROMPT_VERSION,
       updatedAt: now,
     }).where(eq(cvApplications.id, application.id));
@@ -234,29 +179,6 @@ async function processCvAnalysisJob(jobId: number) {
     const now = new Date();
     const validationFailure = message.startsWith("cv_validation_");
     const finalFailure = validationFailure || job.attempts >= job.maxAttempts;
-    if (finalFailure && !validationFailure) {
-      try {
-        const fallback = buildHumanReviewFallback(application, message);
-        await saveCvAnalysis(application.id, fallback);
-        await db.update(cvApplications).set({
-          analysisStatus: "needs_review",
-          analysisAttempts: job.attempts,
-          analysisLastError: null,
-          analysisModel: "automatic_review_fallback",
-          analysisPromptVersion: ANALYSIS_PROMPT_VERSION,
-          aiScore: null,
-          updatedAt: now,
-        }).where(eq(cvApplications.id, application.id));
-        await db.update(cvProcessingJobs).set({
-          status: "completed",
-          finishedAt: now,
-          lastError: "ai_review_fallback_created",
-        }).where(eq(cvProcessingJobs.id, job.id));
-        return { completed: true, applicationId: job.applicationId, needsReview: true, fallback: true };
-      } catch (fallbackError) {
-        console.error("[RecruitmentProcessing] Human review fallback failed", fallbackError);
-      }
-    }
     await db.update(cvProcessingJobs).set({
       status: finalFailure ? "failed" : "retry",
       lastError: message,
@@ -279,32 +201,6 @@ export async function processDueCvAnalysisJobs(limit = PROCESSING_BATCH_SIZE) {
   const db = await getDb();
   if (!db) throw new Error("Database connection failed");
   const now = new Date();
-  const staleBefore = new Date(now.getTime() - STALE_JOB_CLAIM_MS);
-  await db.update(cvProcessingJobs).set({
-    status: "retry",
-    scheduledFor: now,
-    startedAt: null,
-    lastError: "worker_callback_timeout_requeued",
-  }).where(and(eq(cvProcessingJobs.status, "running"), lte(cvProcessingJobs.startedAt, staleBefore)));
-  const recoverableFailed = await db.select({ id: cvProcessingJobs.id, maxAttempts: cvProcessingJobs.maxAttempts })
-    .from(cvProcessingJobs)
-    .innerJoin(cvApplications, eq(cvApplications.id, cvProcessingJobs.applicationId))
-    .where(and(
-      eq(cvProcessingJobs.status, "failed"),
-      eq(cvApplications.analysisStatus, "failed"),
-      inArray(cvApplications.fileValidationStatus, ["quarantined", "accepted"]),
-    ))
-    .limit(1);
-  if (recoverableFailed[0]) {
-    await db.update(cvProcessingJobs).set({
-      status: "queued",
-      attempts: Math.max(0, recoverableFailed[0].maxAttempts - 1),
-      scheduledFor: now,
-      startedAt: null,
-      finishedAt: null,
-      lastError: "automatic_recovery_for_human_review",
-    }).where(eq(cvProcessingJobs.id, recoverableFailed[0].id));
-  }
   const candidates = await db.select().from(cvProcessingJobs)
     .where(and(
       inArray(cvProcessingJobs.status, ["queued", "retry"]),

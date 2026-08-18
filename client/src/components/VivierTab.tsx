@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { CheckSquare, Download, Loader2, Mail, RefreshCw, UsersRound } from "lucide-react";
+import { CheckSquare, Loader2, Mail, RefreshCw, UsersRound } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { trpc } from "@/lib/trpc";
@@ -37,19 +37,6 @@ export default function VivierTab({ onCompose }: VivierTabProps) {
     limit: 200,
   }), [specialty, country, minimumScore]);
   const { data: candidates, isLoading, error, refetch } = trpc.admin.recruitment.pool.list.useQuery(filters);
-  const exportCsv = trpc.admin.recruitment.exportCsv.useMutation({
-    onSuccess: ({ csv, filename, count }) => {
-      const blob = new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = filename;
-      link.click();
-      URL.revokeObjectURL(url);
-      toast.success(`${count} profil${count > 1 ? "s" : ""} exporté${count > 1 ? "s" : ""}.`);
-    },
-    onError: mutationError => toast.error(mutationError.message),
-  });
   const visibleIds = candidates?.map(candidate => candidate.id) || [];
   const allVisibleSelected = visibleIds.length > 0 && visibleIds.every(id => selectedIds.includes(id));
 
@@ -88,9 +75,6 @@ export default function VivierTab({ onCompose }: VivierTabProps) {
           </Button>
           <Button onClick={composeSelected} disabled={!selectedIds.length}>
             <Mail className="mr-2 h-4 w-4" /> Composer pour {selectedIds.length || "…"} profil{selectedIds.length > 1 ? "s" : ""}
-          </Button>
-          <Button variant="outline" onClick={() => exportCsv.mutate({ type: "pool", candidateIds: selectedIds.length ? selectedIds : visibleIds })} disabled={!visibleIds.length || exportCsv.isPending}>
-            {exportCsv.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />} Exporter {selectedIds.length ? "la sélection" : "le vivier filtré"}
           </Button>
         </div>
       </div>

@@ -10,7 +10,7 @@ const copy = {
   fr: {
     eyebrow: "Hippocampus Consulting · Espace Employeurs & Partenaires",
     title: "Déléguez le recrutement de vos équipes médicales d’élite.",
-    intro: "Nous sélectionnons et qualifions pour les hôpitaux, cliniques, plateformes offshore et grands groupes industriels des professionnels de santé d'exception, prêts à intervenir en Europe, au Canada, au Moyen-Orient, en Afrique et sur les sites isolés.",
+    intro: "Nous sélectionnons et qualifions pour les hôpitaux, cliniques, plateformes offshore et résidences VVIP des professionnels de santé d'exception, prêts à intervenir en Europe, au Canada, au Moyen-Orient et sur les sites isolés.",
     formTitle: "Soumettre un brief de mission",
     formIntro: "Précisez vos besoins opérationnels. Notre cellule spécialisée vous contactera sous 24h avec une shortlist qualifiée.",
     orgName: "Établissement ou entreprise",
@@ -49,7 +49,7 @@ const copy = {
   en: {
     eyebrow: "Hippocampus Consulting · Employers & Partners",
     title: "Delegate the recruitment of your elite medical teams.",
-    intro: "We source and qualify exceptional healthcare professionals for hospitals, clinics, offshore rigs, and major industrial groups across Europe, Canada, the Middle East, Africa, and remote sites.",
+    intro: "We source and qualify exceptional healthcare professionals for hospitals, clinics, offshore rigs, and VVIP residences across Europe, Canada, the Middle East, and remote sites.",
     formTitle: "Submit a Mission Brief",
     formIntro: "Specify your operational requirements. Our specialized unit will contact you within 24 hours with a qualified shortlist.",
     orgName: "Organization or Company",
@@ -88,7 +88,7 @@ const copy = {
   de: {
     eyebrow: "Hippocampus Consulting · Arbeitgeber & Partner",
     title: "Delegieren Sie die Rekrutierung Ihrer medizinischen Elite-Teams.",
-    intro: "Wir rekrutieren und qualifizieren herausragende medizinische Fachkräfte für Krankenhäuser, Kliniken, Offshore-Plattformen und große Industriegruppen in Europa, Kanada, dem Nahen Osten und Afrika.",
+    intro: "Wir rekrutieren und qualifizieren herausragende medizinische Fachkräfte für Krankenhäuser, Kliniken, Offshore-Plattformen und VVIP-Residenzen in Europa, Kanada und dem Nahen Osten.",
     formTitle: "Einsatz-Brief einreichen",
     formIntro: "Geben Sie Ihre operativen Anforderungen an. Unser spezialisiertes Team kontaktiert Sie innerhalb von 24 Stunden.",
     orgName: "Einrichtung oder Unternehmen",
@@ -127,7 +127,7 @@ const copy = {
   zh: {
     eyebrow: "Hippocampus Consulting · 雇主与合作伙伴专区",
     title: "委托我们为您招募精英医疗团队。",
-    intro: "我们为欧洲、加拿大、中东、非洲及偏远站点的医院、诊所、离岸钻井平台及大型工业集团甄选并认证顶尖医疗专业人员。",
+    intro: "我们为欧洲、加拿大、中东及偏远站点的医院、诊所、离岸钻井平台及 VVIP 宅邸甄选并认证顶尖医疗专业人员。",
     formTitle: "提交任务需求 (Brief)",
     formIntro: "请告知您的运营需求。我们的专业团队将在 24 小时内为您提供合格的候选人 shortlist。",
     orgName: "机构或公司名称",
@@ -166,12 +166,6 @@ const copy = {
 } as const;
 
 type Language = keyof typeof copy;
-const advancedFieldsCopy: Record<Language, { requiredLanguages: string; minimumYearsExperience: string; availabilityNeeded: string; jobDescription: string; reassurance: string }> = {
-  fr: { requiredLanguages: "Langues requises", minimumYearsExperience: "Expérience minimale (années)", availabilityNeeded: "Disponibilité attendue", jobDescription: "Descriptif de poste / périmètre de mission", reassurance: "Brief confidentiel · candidats contactés uniquement avec leur consentement · shortlists toujours validées par un recruteur." },
-  en: { requiredLanguages: "Required languages", minimumYearsExperience: "Minimum experience (years)", availabilityNeeded: "Expected availability", jobDescription: "Job description / mission scope", reassurance: "Confidential brief · candidates contacted only with consent · every shortlist is validated by a recruiter." },
-  de: { requiredLanguages: "Erforderliche Sprachen", minimumYearsExperience: "Mindestberufserfahrung (Jahre)", availabilityNeeded: "Erwartete Verfügbarkeit", jobDescription: "Stellenbeschreibung / Einsatzumfang", reassurance: "Vertrauliches Briefing · Kandidaten werden nur mit Einwilligung kontaktiert · jede Shortlist wird menschlich geprüft." },
-  zh: { requiredLanguages: "语言要求", minimumYearsExperience: "最低经验（年）", availabilityNeeded: "期望到岗时间", jobDescription: "职位描述 / 任务范围", reassurance: "需求严格保密 · 仅联系已同意沟通的候选人 · 每份 shortlist 均由招聘人员人工审核。" },
-};
 type BriefFormState = {
   organizationName: string;
   contactName: string;
@@ -181,10 +175,6 @@ type BriefFormState = {
   specialtyNeeded: string;
   country: string;
   requiredCertifications: string;
-  requiredLanguages: string;
-  minimumYearsExperience: string;
-  availabilityNeeded: string;
-  jobDescription: string;
   timeline: string;
   notes: string;
   website: string;
@@ -199,10 +189,6 @@ const initialBrief: BriefFormState = {
   specialtyNeeded: "",
   country: "",
   requiredCertifications: "",
-  requiredLanguages: "",
-  minimumYearsExperience: "",
-  availabilityNeeded: "",
-  jobDescription: "",
   timeline: "",
   notes: "",
   website: "",
@@ -212,7 +198,6 @@ export default function EmployersPage() {
   const { language } = useLanguage();
   const lang = (language in copy ? language : "fr") as Language;
   const t = copy[lang];
-  const advanced = advancedFieldsCopy[lang];
   const [form, setForm] = useState<BriefFormState>(initialBrief);
   const [status, setStatus] = useState<"idle" | "sending" | "success" | "error">("idle");
   const [errorMessage, setErrorMessage] = useState("");
@@ -236,7 +221,7 @@ export default function EmployersPage() {
       const res = await fetch("/api/client-briefs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...form, language: lang, minimumYearsExperience: form.minimumYearsExperience ? Number(form.minimumYearsExperience) : undefined }),
+        body: JSON.stringify(form),
       });
       const payload = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(payload.error || t.genericError);
@@ -259,8 +244,6 @@ export default function EmployersPage() {
               <p className="section-kicker">{t.eyebrow}</p>
               <h1 className="mt-4 font-display text-4xl leading-tight text-foreground md:text-5xl">{t.title}</h1>
               <p className="mt-6 text-lg leading-8 text-muted-foreground">{t.intro}</p>
-              <p className="mt-4 rounded-xl border border-primary/20 bg-primary/5 p-4 text-sm leading-6 text-muted-foreground"><ShieldCheck className="mr-2 inline h-4 w-4 text-primary" />{advanced.reassurance}</p>
-              <Link href="/why-hippocampus" className="mt-5 inline-flex items-center text-sm font-semibold text-primary transition-opacity hover:opacity-75">Pourquoi Hippocampus Consulting ? <span className="ml-2" aria-hidden="true">→</span></Link>
             </div>
 
             <div className="grid gap-4">
@@ -366,15 +349,6 @@ export default function EmployersPage() {
                     <span className="block mb-1 font-medium">{t.requiredCertifications}</span>
                     <input value={form.requiredCertifications} onChange={(e) => update("requiredCertifications", e.target.value)} className="form-control block w-full" placeholder="ATLS, ACLS, HUET, OGP, etc." />
                   </label>
-
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <label className="block w-full space-y-2 text-sm text-foreground"><span className="block mb-1 font-medium">{advanced.requiredLanguages}</span><input value={form.requiredLanguages} onChange={(e) => update("requiredLanguages", e.target.value)} className="form-control block w-full" placeholder="English, Arabic, German…" /></label>
-                    <label className="block w-full space-y-2 text-sm text-foreground"><span className="block mb-1 font-medium">{advanced.minimumYearsExperience}</span><input type="number" min="0" max="70" value={form.minimumYearsExperience} onChange={(e) => update("minimumYearsExperience", e.target.value)} className="form-control block w-full" placeholder="Ex. 5" /></label>
-                  </div>
-
-                  <label className="block w-full space-y-2 text-sm text-foreground"><span className="block mb-1 font-medium">{advanced.availabilityNeeded}</span><input value={form.availabilityNeeded} onChange={(e) => update("availabilityNeeded", e.target.value)} className="form-control block w-full" placeholder="Ex. Disponibilité immédiate" /></label>
-
-                  <label className="block w-full space-y-2 text-sm text-foreground"><span className="block mb-1 font-medium">{advanced.jobDescription}</span><textarea value={form.jobDescription} onChange={(e) => update("jobDescription", e.target.value)} className="form-control block min-h-28 w-full" maxLength={5000} placeholder="Responsabilités, rotations, équipe, exigences de licence ou de sécurité…" /></label>
 
                   <label className="block w-full space-y-2 text-sm text-foreground">
                     <span className="block mb-1 font-medium">{t.notes}</span>

@@ -18,28 +18,12 @@ function escapeHtml(value: unknown): string {
 // réponses des candidats restent dirigées vers la boîte de recrutement active.
 const FROM_EMAIL = "Hippocampus Consulting <recrutement@drahmedbenlallahom.com>";
 const RECRUITMENT_REPLY_TO = "hippocampusconsultingfrance@gmail.com";
-const HIPPOCAMPUS_LOGO_URL = "https://drahmedbenlallahom.com/manus-storage/hippocampus-consulting-email-logo_c57dd3cd.jpg";
 
-function hippocampusEmailHeader() {
-  return `<div style="padding: 0 0 18px; text-align: center;"><img src="${HIPPOCAMPUS_LOGO_URL}" width="152" alt="Hippocampus Consulting" style="display: inline-block; width: 152px; max-width: 45%; height: auto; border: 0; outline: none; text-decoration: none;" /></div>`;
-}
-
-export async function sendCandidatePortalAccessEmail(input: {
-  to: string;
-  firstName: string;
-  kind: "verify" | "reset";
-  actionUrl: string;
-}) {
-  const isReset = input.kind === "reset";
-  const actionLabel = isReset ? "Choisir un nouveau mot de passe" : "Activer mon espace candidat";
-  const subject = isReset ? "Réinitialisez votre accès sécurisé — Hippocampus Consulting" : "Activez votre espace candidat sécurisé — Hippocampus Consulting";
-  const intro = isReset
-    ? "Une demande de réinitialisation de votre accès candidat a été reçue."
-    : "Votre espace candidat sécurisé est presque prêt.";
-  const html = `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:24px;color:#17324d;line-height:1.55;">${hippocampusEmailHeader()}<h2 style="color:#0891b2;">${isReset ? "Réinitialisation de votre accès" : "Bienvenue dans votre espace candidat"}</h2><p>Bonjour ${escapeHtml(input.firstName || "")},</p><p>${intro}</p><p>Utilisez le bouton ci-dessous. Ce lien expire dans 30 minutes et ne doit pas être transféré.</p><p style="margin:28px 0;"><a href="${escapeHtml(input.actionUrl)}" style="display:inline-block;background:#0891b2;color:#fff;padding:13px 20px;border-radius:8px;font-weight:700;text-decoration:none;">${actionLabel}</a></p><p style="font-size:13px;color:#526477;">Si vous n’êtes pas à l’origine de cette demande, aucune action n’est requise.</p><p style="font-size:13px;color:#526477;">Hippocampus Consulting · Données et documents traités de manière confidentielle.</p></div>`;
-  const text = `${isReset ? "Réinitialisation de votre accès" : "Activation de votre espace candidat"}\n\nBonjour ${input.firstName || ""},\n\n${intro}\n\n${actionLabel} : ${input.actionUrl}\n\nCe lien expire dans 30 minutes. Si vous n’êtes pas à l’origine de cette demande, aucune action n’est requise.`;
-  const { error } = await resend.emails.send({ from: FROM_EMAIL, to: [input.to], replyTo: RECRUITMENT_REPLY_TO, subject, html, text });
-  if (error) throw new Error(`candidate_portal_email_failed:${error.message}`);
+export async function sendAdminMfaCodeEmail(email: string, code: string) {
+  const html = `<div style="font-family:Arial,sans-serif;max-width:560px;margin:auto;padding:24px"><h2 style="color:#0891b2">Validation de sécurité administrateur</h2><p>Un accès au tableau de bord Hippocampus Consulting vient d’être demandé.</p><p style="margin:24px 0;padding:18px;text-align:center;border-radius:10px;background:#f1f5f9;font-size:28px;letter-spacing:7px;font-weight:700;color:#0f172a">${escapeHtml(code)}</p><p>Ce code expire dans 10 minutes et ne doit être communiqué à personne. Si vous n’êtes pas à l’origine de cette demande, ignorez cet email.</p></div>`;
+  const text = `Validation de sécurité administrateur\n\nCode : ${code}\n\nCe code expire dans 10 minutes. Ne le communiquez à personne.`;
+  const { error } = await resend.emails.send({ from: FROM_EMAIL, to: [email], replyTo: RECRUITMENT_REPLY_TO, subject: "Code de sécurité — Hippocampus Consulting", html, text });
+  if (error) throw new Error(`admin_mfa_email_failed:${error.message}`);
 }
 
 export async function sendConfirmationEmail(
@@ -63,7 +47,6 @@ export async function sendConfirmationEmail(
 
     const emailContent = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-        ${hippocampusEmailHeader()}
         <h2 style="color: #0891b2;">Confirmation de Réservation</h2>
         <p>Bonjour ${escapeHtml(customerName)},</p>
         <p>Votre réservation a été confirmée avec succès.</p>
@@ -183,7 +166,6 @@ export async function sendInvoiceEmail(
   try {
     const emailContent = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-        ${hippocampusEmailHeader()}
         <h2 style="color: #0891b2;">Votre Facture - Consultation Dr. Ben Lallahom</h2>
         <p>Bonjour ${escapeHtml(customerName)},</p>
         <p>Veuillez trouver ci-joint la facture correspondant à votre consultation.</p>
@@ -268,7 +250,6 @@ export async function sendRefundConfirmationEmail(
 
     const emailContent = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-        ${hippocampusEmailHeader()}
         <h2 style="color: #0891b2;">Confirmation de remboursement</h2>
         <p>Bonjour ${escapeHtml(customerName)},</p>
         <p>Le remboursement de votre consultation a été enregistré.</p>
@@ -318,7 +299,6 @@ export async function sendReminderEmail(
 
     const emailContent = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-        ${hippocampusEmailHeader()}
         <h2 style="color: #0891b2;">⏰ Rappel - Votre consultation est demain</h2>
         <p>Bonjour ${escapeHtml(customerName)},</p>
         <p>Nous vous rappelons que votre consultation avec le Dr. Ahmed Ben Lallahom est prévue <strong>demain</strong>.</p>
@@ -365,7 +345,6 @@ export async function sendCvApplicationConfirmationEmail(
   try {
     const emailContent = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-        ${hippocampusEmailHeader()}
         <h2 style="color: #0891b2;">Candidature reçue — Hippocampus Consulting</h2>
         <p>Bonjour ${escapeHtml(candidateName)},</p>
         <p>Nous confirmons la réception de votre candidature de recrutement international.</p>
@@ -425,8 +404,8 @@ export function buildRecruitmentTemplateEmail(
         heading: "Hippocampus Consulting",
         reference: "Reference",
         privacy: "This message concerns your professional application only. You may request access, rectification or deletion of your data through our GDPR form.",
-        interestSubject: `Hippocampus Consulting — follow-up on your application (${trackingId})`,
-        complementSubject: `Hippocampus Consulting — information requested for your application (${trackingId})`,
+        interestSubject: `Your profile has caught our attention — ${trackingId}`,
+        complementSubject: `Additional information requested for your application — ${trackingId}`,
         interestBody: "Following an initial human review of your application, we would like to speak with you about international opportunities that may fit your profile. Please reply with your availability and an updated telephone number if applicable.",
         complementBody: "To continue the human review of your application, please provide the additional professional information or documents requested by our team. Never send patient information or clinical records.",
         requested: "Requested documents or information",
@@ -436,8 +415,8 @@ export function buildRecruitmentTemplateEmail(
         heading: "Hippocampus Consulting",
         reference: "Référence",
         privacy: "Cette communication concerne uniquement votre candidature professionnelle. Vous pouvez demander l’accès, la rectification ou la suppression de vos données via notre formulaire RGPD.",
-        interestSubject: `Hippocampus Consulting — suite à votre candidature (${trackingId})`,
-        complementSubject: `Hippocampus Consulting — informations demandées pour votre candidature (${trackingId})`,
+        interestSubject: `Votre profil nous intéresse — ${trackingId}`,
+        complementSubject: `Complément d’information concernant votre candidature — ${trackingId}`,
         interestBody: "Après une première revue humaine de votre candidature, nous souhaiterions échanger avec vous au sujet des opportunités internationales susceptibles de correspondre à votre profil. Merci de nous répondre avec vos disponibilités et votre numéro de téléphone si celui-ci a changé.",
         complementBody: "Afin de poursuivre l’examen humain de votre candidature, merci de nous transmettre les informations ou documents professionnels complémentaires demandés par notre équipe. Ne transmettez jamais de données de patients ni de dossier clinique.",
         requested: "Documents ou informations demandés",
@@ -449,10 +428,8 @@ export function buildRecruitmentTemplateEmail(
     : "";
   return {
     subject,
-    text: `${copy.greeting} ${candidateName},\n\n${body}${!isInterest && options.customRequest?.trim() ? `\n\n${copy.requested}:\n${options.customRequest.trim()}` : ""}\n\n${copy.reference}: ${trackingId}\n\n${copy.privacy}\n\nDr. Ahmed Ben Lallahom\nHippocampus Consulting`,
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-        ${hippocampusEmailHeader()}
         <h2 style="color: #0891b2;">${copy.heading}</h2>
         <p>${copy.greeting} ${escapeHtml(candidateName)},</p>
         <p>${escapeHtml(body)}</p>
@@ -480,7 +457,6 @@ export async function sendRecruitmentTemplateEmail(
     replyTo: RECRUITMENT_REPLY_TO,
     subject: message.subject,
     html: message.html,
-    text: message.text,
   });
   if (error) throw new Error(`Resend recruitment email failed: ${error.message}`);
   return { id: data?.id };
@@ -503,10 +479,8 @@ export async function sendRecruitmentCampaignEmail(input: {
     to: [input.candidateEmail],
     replyTo: RECRUITMENT_REPLY_TO,
     subject: input.subject,
-    text: `${copy.greeting} ${input.candidateName},\n\n${input.body}\n\n${copy.footer}\n\n${copy.unsubscribe}: ${input.unsubscribeUrl}\n\nDr. Ahmed Ben Lallahom\nHippocampus Consulting`,
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-        ${hippocampusEmailHeader()}
         <h2 style="color: #0891b2;">${escapeHtml(input.campaignTitle)}</h2>
         <p>${copy.greeting} ${escapeHtml(input.candidateName)},</p>
         <p>${textToSafeHtml(input.body)}</p>
@@ -520,37 +494,39 @@ export async function sendRecruitmentCampaignEmail(input: {
   return { id: data?.id };
 }
 
-export async function sendEmployerBriefAcknowledgment(input: {
-  email: string;
-  contactName: string;
-  briefId: string;
-  language?: "fr" | "en" | "de" | "zh";
+export async function sendCandidatePortalAccessEmail(input: {
+  to: string;
+  firstName: string;
+  kind: "verify" | "reset";
+  actionUrl: string;
 }): Promise<{ id?: string }> {
-  const english = input.language === "en";
-  const copy = english
-    ? {
-        subject: `Mission brief received — ${input.briefId}`,
-        greeting: "Hello",
-        heading: "Your mission brief has been received",
-        body: "Our executive recruitment team has registered your request. We will review the operational requirements, qualification criteria and timeline before proposing the next steps.",
-        reference: "Tracking reference",
-        footer: "This acknowledgement does not constitute an automatic acceptance of the mission. Every shortlist remains subject to human review and professional verification.",
-      }
-    : {
-        subject: `Brief de mission reçu — ${input.briefId}`,
-        greeting: "Bonjour",
-        heading: "Votre brief de mission a bien été reçu",
-        body: "Notre équipe de recrutement a enregistré votre demande. Elle examinera les besoins opérationnels, les critères de qualification et le calendrier avant de vous proposer les prochaines étapes.",
-        reference: "Référence de suivi",
-        footer: "Cet accusé de réception ne constitue pas une acceptation automatique de la mission. Toute shortlist reste soumise à une revue humaine et à des vérifications professionnelles.",
-      };
+  const verification = input.kind === "verify";
+  const subject = verification
+    ? "Activez votre espace candidat sécurisé — Hippocampus Consulting"
+    : "Réinitialisez votre mot de passe — Hippocampus Consulting";
+  const title = verification ? "Activez votre espace candidat" : "Réinitialisez votre mot de passe";
+  const instruction = verification
+    ? "Pour activer votre coffre documentaire sécurisé, confirmez votre adresse email en cliquant sur le bouton ci-dessous."
+    : "Une demande de réinitialisation a été reçue. Choisissez un nouveau mot de passe en cliquant sur le bouton ci-dessous.";
+  const action = verification ? "Activer mon espace" : "Réinitialiser mon mot de passe";
+
   const { data, error } = await resend.emails.send({
     from: FROM_EMAIL,
-    to: [input.email],
+    to: [input.to],
     replyTo: RECRUITMENT_REPLY_TO,
-    subject: copy.subject,
-    html: `<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">${hippocampusEmailHeader()}<h2 style="color: #0891b2;">${copy.heading}</h2><p>${copy.greeting} ${escapeHtml(input.contactName)},</p><p>${copy.body}</p><div style="background: #f8fafc; border-radius: 8px; padding: 16px; margin: 16px 0;"><strong>${copy.reference} :</strong> ${escapeHtml(input.briefId)}</div><p style="color: #64748b;">${copy.footer}</p><p style="color: #64748b;">Dr. Ahmed Ben Lallahom<br>Hippocampus Consulting</p></div>`,
+    subject,
+    html: `
+      <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:24px;color:#0f172a;">
+        <h2 style="color:#0891b2;">${title}</h2>
+        <p>Bonjour ${escapeHtml(input.firstName || "")},</p>
+        <p>${instruction}</p>
+        <p style="margin:24px 0;"><a href="${escapeHtml(input.actionUrl)}" style="display:inline-block;background:#0891b2;color:#ffffff;text-decoration:none;padding:12px 18px;border-radius:7px;font-weight:700;">${action}</a></p>
+        <p style="color:#64748b;font-size:13px;">Ce lien est personnel et temporaire. Si vous n’êtes pas à l’origine de cette demande, vous pouvez ignorer cet email.</p>
+        <p style="color:#64748b;">Hippocampus Consulting</p>
+      </div>
+    `,
+    text: `${title}\n\nBonjour ${input.firstName || ""},\n\n${instruction}\n\n${input.actionUrl}\n\nCe lien est personnel et temporaire.`,
   });
-  if (error) throw new Error(`Resend employer brief acknowledgement failed: ${error.message}`);
+  if (error) throw new Error(`Resend candidate access email failed: ${error.message}`);
   return { id: data?.id };
 }
