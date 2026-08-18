@@ -2376,4 +2376,5 @@
 - [x] Ajouter une page publique de désabonnement recrutements reliée au mécanisme sécurisé existant
 - [x] Corriger le contrat build/start de production qui provoque un HTTP 500 global après déploiement
 - [x] Rendre la résolution du répertoire statique de production robuste et journaliser les échecs de service HTML
+- [x] Rétablir le runtime Manus requis en production tout en conservant le collecteur de débogage exclu
 - [x] Remplacer l’affichage système mm/dd/yyyy du champ de réservation par une saisie explicitement localisée en français
