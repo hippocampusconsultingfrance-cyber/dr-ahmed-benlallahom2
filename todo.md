@@ -2372,4 +2372,5 @@
 - [x] Mesurer et réduire, lorsque cela est sûr, le poids du chargement initial des pages publiques
 - [x] Exclure le runtime de prévisualisation Manus du HTML de production afin de réduire le poids de la réponse initiale
 - [x] Vérifier l’interface publique de réservation sur desktop et mobile sans déclencher de paiement
+- [x] Ajouter une signature Dr. Ahmed Ben Lallahom visible au-dessus du formulaire de réservation
 - [x] Remplacer l’affichage système mm/dd/yyyy du champ de réservation par une saisie explicitement localisée en français

@@ -189,6 +189,12 @@ export default function BookingPage() {
     de: { label: "Beratung", note: "Eine strukturierte, vertrauliche Beratung, die auf Ihre Anfrage zugeschnitten ist." },
     zh: { label: "咨询", note: "为您的需求量身定制的结构化、保密咨询。" },
   }[language] ?? { label: "Consultation", note: "A structured, confidential consultation tailored to your request." };
+  const bookingBrandCopy = {
+    fr: "Médecin anesthésiste-réanimateur · Conseil médical",
+    en: "Anaesthesiologist & intensive care physician · Medical advisory",
+    de: "Anästhesist und Intensivmediziner · Medizinische Beratung",
+    zh: "麻醉与重症医学医师 · 医疗咨询",
+  }[language] ?? "Medical advisory";
 
   const [formData, setFormData] = useState({
     name: "",
@@ -358,6 +364,17 @@ export default function BookingPage() {
       <div className="max-w-3xl mx-auto">
         {/* Breadcrumb */}
         <Breadcrumb items={[{ label: content.title }]} />
+
+        <div className="mb-6 flex items-center gap-3 rounded-xl border border-border/50 bg-card/40 px-4 py-3 shadow-sm shadow-black/10">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-primary/50 bg-primary/10 font-display text-sm font-bold tracking-tight text-primary" aria-hidden="true">
+            ABL
+          </span>
+          <div className="min-w-0">
+            <p className="font-display text-base font-semibold tracking-tight text-foreground">Dr. Ahmed Ben Lallahom</p>
+            <p className="text-xs leading-5 text-muted-foreground">{bookingBrandCopy}</p>
+          </div>
+          <span className="ml-auto hidden h-2 w-2 shrink-0 rounded-full bg-[#c9a96e] sm:block" aria-label="Signature médicale" />
+        </div>
 
         {/* Progress Indicator */}
         {!paymentStatus && (
