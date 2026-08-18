@@ -2375,7 +2375,7 @@
 ## Délivrabilité des emails recrutement
 
 - [ ] Vérifier SPF, DKIM, DMARC, réputation d’envoi et événements Resend du domaine d’expédition
-- [ ] Améliorer les en-têtes et le contenu des emails individuels de recrutement pour limiter le classement en spam
+- [x] Améliorer les en-têtes et le contenu des emails individuels de recrutement pour limiter le classement en spam
 - [ ] Identifier les actions externes de réputation ou de DNS encore nécessaires
 
 ## Logo Hippocampus Consulting dans les emails

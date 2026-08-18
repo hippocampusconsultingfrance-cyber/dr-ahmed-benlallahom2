@@ -407,8 +407,8 @@ export function buildRecruitmentTemplateEmail(
         heading: "Hippocampus Consulting",
         reference: "Reference",
         privacy: "This message concerns your professional application only. You may request access, rectification or deletion of your data through our GDPR form.",
-        interestSubject: `Your profile has caught our attention — ${trackingId}`,
-        complementSubject: `Additional information requested for your application — ${trackingId}`,
+        interestSubject: `Hippocampus Consulting — follow-up on your application (${trackingId})`,
+        complementSubject: `Hippocampus Consulting — information requested for your application (${trackingId})`,
         interestBody: "Following an initial human review of your application, we would like to speak with you about international opportunities that may fit your profile. Please reply with your availability and an updated telephone number if applicable.",
         complementBody: "To continue the human review of your application, please provide the additional professional information or documents requested by our team. Never send patient information or clinical records.",
         requested: "Requested documents or information",
@@ -418,8 +418,8 @@ export function buildRecruitmentTemplateEmail(
         heading: "Hippocampus Consulting",
         reference: "Référence",
         privacy: "Cette communication concerne uniquement votre candidature professionnelle. Vous pouvez demander l’accès, la rectification ou la suppression de vos données via notre formulaire RGPD.",
-        interestSubject: `Votre profil nous intéresse — ${trackingId}`,
-        complementSubject: `Complément d’information concernant votre candidature — ${trackingId}`,
+        interestSubject: `Hippocampus Consulting — suite à votre candidature (${trackingId})`,
+        complementSubject: `Hippocampus Consulting — informations demandées pour votre candidature (${trackingId})`,
         interestBody: "Après une première revue humaine de votre candidature, nous souhaiterions échanger avec vous au sujet des opportunités internationales susceptibles de correspondre à votre profil. Merci de nous répondre avec vos disponibilités et votre numéro de téléphone si celui-ci a changé.",
         complementBody: "Afin de poursuivre l’examen humain de votre candidature, merci de nous transmettre les informations ou documents professionnels complémentaires demandés par notre équipe. Ne transmettez jamais de données de patients ni de dossier clinique.",
         requested: "Documents ou informations demandés",
@@ -431,6 +431,7 @@ export function buildRecruitmentTemplateEmail(
     : "";
   return {
     subject,
+    text: `${copy.greeting} ${candidateName},\n\n${body}${!isInterest && options.customRequest?.trim() ? `\n\n${copy.requested}:\n${options.customRequest.trim()}` : ""}\n\n${copy.reference}: ${trackingId}\n\n${copy.privacy}\n\nDr. Ahmed Ben Lallahom\nHippocampus Consulting`,
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
         ${hippocampusEmailHeader()}
@@ -461,6 +462,7 @@ export async function sendRecruitmentTemplateEmail(
     replyTo: RECRUITMENT_REPLY_TO,
     subject: message.subject,
     html: message.html,
+    text: message.text,
   });
   if (error) throw new Error(`Resend recruitment email failed: ${error.message}`);
   return { id: data?.id };
@@ -483,6 +485,7 @@ export async function sendRecruitmentCampaignEmail(input: {
     to: [input.candidateEmail],
     replyTo: RECRUITMENT_REPLY_TO,
     subject: input.subject,
+    text: `${copy.greeting} ${input.candidateName},\n\n${input.body}\n\n${copy.footer}\n\n${copy.unsubscribe}: ${input.unsubscribeUrl}\n\nDr. Ahmed Ben Lallahom\nHippocampus Consulting`,
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
         ${hippocampusEmailHeader()}
