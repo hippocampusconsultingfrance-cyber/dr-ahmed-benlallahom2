@@ -2369,3 +2369,5 @@
 - [x] Retourner un statut HTTP 404 avec noindex pour les routes publiques inconnues
 - [x] Vérifier l’authentification SPF, DKIM et DMARC des emails transactionnels envoyés par Hippocampus Consulting
 - [x] Ajouter au message d’activation candidat un rappel clair de vérifier les courriers indésirables
+- [x] Mesurer et réduire, lorsque cela est sûr, le poids du chargement initial des pages publiques
+- [x] Exclure le runtime de prévisualisation Manus du HTML de production afin de réduire le poids de la réponse initiale
