@@ -25,6 +25,7 @@ import {
 } from "./_core/notifications";
 import { logRecruitmentAction, matchesRecruitmentProfile, parseRecruitmentJsonArray } from "./recruitmentAudit";
 import { computeBriefCandidateMatch } from "./clientBriefMatching";
+import { candidatePortalRouter } from "./candidatePortalRouter";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "");
 
@@ -211,6 +212,7 @@ function getSafeCheckoutOrigin(req: { headers: Record<string, string | string[] 
 
 export const appRouter = router({
   system: systemRouter,
+  candidatePortal: candidatePortalRouter,
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user),
     logout: publicProcedure.mutation(({ ctx }) => {

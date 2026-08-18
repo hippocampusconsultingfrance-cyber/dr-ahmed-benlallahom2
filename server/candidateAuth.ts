@@ -1,0 +1,79 @@
+import { createHash, createHmac, randomBytes, scrypt as scryptCallback, timingSafeEqual } from "node:crypto";
+
+export const CANDIDATE_SESSION_COOKIE = "candidate_portal_session";
+export const CANDIDATE_SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 7;
+export const CANDIDATE_TOKEN_MAX_AGE_MS = 1000 * 60 * 30;
+const SCRYPT_N = 1 << 15;
+const SCRYPT_R = 8;
+const SCRYPT_P = 3;
+const SCRYPT_KEY_LENGTH = 64;
+
+function candidateAuthPepper(): string {
+  const pepper = process.env.CANDIDATE_AUTH_PEPPER;
+  if (!pepper || pepper.length < 32) throw new Error("candidate_auth_pepper_invalid");
+  return pepper;
+}
+
+export function normalizeCandidateEmail(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+function passwordMaterial(password: string): Buffer {
+  return createHmac("sha256", candidateAuthPepper()).update(password, "utf8").digest();
+}
+
+function deriveCandidateKey(password: Buffer, salt: Buffer, N: number, r: number, p: number): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    scryptCallback(password, salt, SCRYPT_KEY_LENGTH, { N, r, p, maxmem: 128 * 1024 * 1024 }, (error, derivedKey) => {
+      if (error) reject(error);
+      else resolve(derivedKey);
+    });
+  });
+}
+
+export function validateCandidatePassword(password: string): string | null {
+  if (password.length < 15) return "candidate_password_too_short";
+  if (password.length > 128) return "candidate_password_too_long";
+  return null;
+}
+
+export async function hashCandidatePassword(password: string): Promise<string> {
+  const validation = validateCandidatePassword(password);
+  if (validation) throw new Error(validation);
+  const salt = randomBytes(16);
+  const hash = await deriveCandidateKey(passwordMaterial(password), salt, SCRYPT_N, SCRYPT_R, SCRYPT_P);
+  return ["scrypt", SCRYPT_N, SCRYPT_R, SCRYPT_P, salt.toString("base64url"), hash.toString("base64url")].join("$");
+}
+
+export async function verifyCandidatePassword(password: string, storedHash: string): Promise<boolean> {
+  const [algorithm, n, r, p, saltText, hashText] = storedHash.split("$");
+  if (algorithm !== "scrypt" || !n || !r || !p || !saltText || !hashText) return false;
+  const numericN = Number(n);
+  const numericR = Number(r);
+  const numericP = Number(p);
+  if (![numericN, numericR, numericP].every(Number.isSafeInteger)) return false;
+  const expected = Buffer.from(hashText, "base64url");
+  if (expected.length !== SCRYPT_KEY_LENGTH) return false;
+  const actual = await deriveCandidateKey(passwordMaterial(password), Buffer.from(saltText, "base64url"), numericN, numericR, numericP);
+  return timingSafeEqual(actual, expected);
+}
+
+export function createCandidateToken(): string {
+  return randomBytes(32).toString("base64url");
+}
+
+export function hashCandidateToken(token: string, purpose: "session" | "verification" | "reset"): string {
+  return createHash("sha256")
+    .update(`${purpose}:${token}:${candidateAuthPepper()}`, "utf8")
+    .digest("hex");
+}
+
+export function candidateSessionCookieOptions(isSecure: boolean) {
+  return {
+    httpOnly: true,
+    secure: isSecure,
+    sameSite: "lax" as const,
+    path: "/",
+    maxAge: CANDIDATE_SESSION_MAX_AGE_SECONDS * 1000,
+  };
+}

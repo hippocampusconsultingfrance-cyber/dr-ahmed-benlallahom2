@@ -24,6 +24,24 @@ function hippocampusEmailHeader() {
   return `<div style="padding: 0 0 18px; text-align: center;"><img src="${HIPPOCAMPUS_LOGO_URL}" width="152" alt="Hippocampus Consulting" style="display: inline-block; width: 152px; max-width: 45%; height: auto; border: 0; outline: none; text-decoration: none;" /></div>`;
 }
 
+export async function sendCandidatePortalAccessEmail(input: {
+  to: string;
+  firstName: string;
+  kind: "verify" | "reset";
+  actionUrl: string;
+}) {
+  const isReset = input.kind === "reset";
+  const actionLabel = isReset ? "Choisir un nouveau mot de passe" : "Activer mon espace candidat";
+  const subject = isReset ? "Réinitialisez votre accès sécurisé — Hippocampus Consulting" : "Activez votre espace candidat sécurisé — Hippocampus Consulting";
+  const intro = isReset
+    ? "Une demande de réinitialisation de votre accès candidat a été reçue."
+    : "Votre espace candidat sécurisé est presque prêt.";
+  const html = `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:24px;color:#17324d;line-height:1.55;">${hippocampusEmailHeader()}<h2 style="color:#0891b2;">${isReset ? "Réinitialisation de votre accès" : "Bienvenue dans votre espace candidat"}</h2><p>Bonjour ${escapeHtml(input.firstName || "")},</p><p>${intro}</p><p>Utilisez le bouton ci-dessous. Ce lien expire dans 30 minutes et ne doit pas être transféré.</p><p style="margin:28px 0;"><a href="${escapeHtml(input.actionUrl)}" style="display:inline-block;background:#0891b2;color:#fff;padding:13px 20px;border-radius:8px;font-weight:700;text-decoration:none;">${actionLabel}</a></p><p style="font-size:13px;color:#526477;">Si vous n’êtes pas à l’origine de cette demande, aucune action n’est requise.</p><p style="font-size:13px;color:#526477;">Hippocampus Consulting · Données et documents traités de manière confidentielle.</p></div>`;
+  const text = `${isReset ? "Réinitialisation de votre accès" : "Activation de votre espace candidat"}\n\nBonjour ${input.firstName || ""},\n\n${intro}\n\n${actionLabel} : ${input.actionUrl}\n\nCe lien expire dans 30 minutes. Si vous n’êtes pas à l’origine de cette demande, aucune action n’est requise.`;
+  const { error } = await resend.emails.send({ from: FROM_EMAIL, to: [input.to], replyTo: RECRUITMENT_REPLY_TO, subject, html, text });
+  if (error) throw new Error(`candidate_portal_email_failed:${error.message}`);
+}
+
 export async function sendConfirmationEmail(
   customerEmail: string,
   customerName: string,

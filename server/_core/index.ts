@@ -16,7 +16,10 @@ import { notifyOwner } from "./notification";
 import { eq, sql } from "drizzle-orm";
 import { validateCvFile } from "../recruitmentFileValidation";
 import { getDb } from "../db";
-import { cvApplications, recruitmentCampaignRecipients, recruitmentEmailEvents } from "../../drizzle/schema";
+import { candidateDocumentAuditLogs, candidateDocuments, cvApplications, recruitmentCampaignRecipients, recruitmentEmailEvents } from "../../drizzle/schema";
+import { CANDIDATE_DOCUMENT_MAX_BYTES, candidateDocumentMimeTypes, safeCandidateDocumentName, validateCandidateDocument } from "../candidateDocumentValidation";
+import { requireCandidateSession } from "../candidatePortalRouter";
+import { enqueueCandidateDocumentAnalysis, processDueCandidateDocumentAnalysisJobs } from "../candidateDocumentProcessing";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -52,6 +55,20 @@ const recruitmentUpload = multer({
     const allowedExtension = extension === "pdf" || extension === "doc" || extension === "docx";
     if (!allowedExtension || !RECRUITMENT_ALLOWED_MIME_TYPES.has(file.mimetype)) {
       callback(new Error("Format de CV non accepté. Utilisez PDF, DOC ou DOCX."));
+      return;
+    }
+    callback(null, true);
+  },
+});
+
+const candidateDocumentUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: CANDIDATE_DOCUMENT_MAX_BYTES, files: 1, fields: 8 },
+  fileFilter: (_req, file, callback) => {
+    const extension = file.originalname.toLowerCase().split(".").pop();
+    const extensionAllowed = ["pdf", "doc", "docx", "jpg", "jpeg", "png"].includes(extension ?? "");
+    if (!extensionAllowed || !candidateDocumentMimeTypes.has(file.mimetype)) {
+      callback(new Error("Format non accepté. Utilisez PDF, DOC, DOCX, JPG ou PNG."));
       return;
     }
     callback(null, true);
@@ -540,6 +557,87 @@ async function startServer() {
     });
   });
 
+  app.post("/api/candidate/documents", async (req, res) => {
+    let candidate;
+    try {
+      candidate = await requireCandidateSession(req);
+    } catch {
+      res.status(401).json({ error: "Votre session a expiré. Veuillez vous reconnecter." });
+      return;
+    }
+    if (!candidate.documentConsentAt) {
+      res.status(403).json({ error: "Le consentement au traitement documentaire est requis." });
+      return;
+    }
+    candidateDocumentUpload.single("document")(req, res, async uploadError => {
+      if (uploadError) {
+        const message = uploadError instanceof multer.MulterError && uploadError.code === "LIMIT_FILE_SIZE"
+          ? "Le document ne doit pas dépasser 10 Mo."
+          : uploadError.message || "Le document n’a pas pu être reçu.";
+        res.status(400).json({ error: message });
+        return;
+      }
+      try {
+        const file = req.file;
+        if (!file) {
+          res.status(400).json({ error: "Sélectionnez un document." });
+          return;
+        }
+        const category = String(req.body.category || "");
+        const categories = ["identity_document", "medical_license", "diploma", "certificate", "professional_insurance", "vaccination_record", "criminal_record", "employment_evidence", "proof_of_address", "other"] as const;
+        if (!categories.includes(category as typeof categories[number])) {
+          res.status(400).json({ error: "La catégorie de document est invalide." });
+          return;
+        }
+        const categoryOtherLabel = String(req.body.categoryOtherLabel || "").trim().slice(0, 160);
+        if (category === "other" && !categoryOtherLabel) {
+          res.status(400).json({ error: "Précisez la nature de ce document." });
+          return;
+        }
+        const originalName = safeCandidateDocumentName(file.originalname);
+        let validation;
+        try {
+          validation = validateCandidateDocument({ buffer: file.buffer, mimeType: file.mimetype, originalName, size: file.size });
+        } catch (error) {
+          res.status(400).json({ error: "Le document ne satisfait pas les contrôles de sécurité.", code: error instanceof Error ? error.message : "candidate_document_validation_failed" });
+          return;
+        }
+        const storageResult = await storagePut(`candidate-documents/quarantine/${candidate.id}/${Date.now()}-${originalName}`, file.buffer, file.mimetype);
+        const retentionUntil = new Date();
+        retentionUntil.setFullYear(retentionUntil.getFullYear() + 2);
+        const db = await getDb();
+        if (!db) {
+          res.status(503).json({ error: "Le coffre documentaire est temporairement indisponible." });
+          return;
+        }
+        const inserted = await db.insert(candidateDocuments).values({
+          candidateId: candidate.id,
+          applicationId: candidate.linkedApplicationId,
+          category: category as typeof categories[number],
+          categoryOtherLabel: category === "other" ? categoryOtherLabel : null,
+          originalName,
+          storageKey: storageResult.key,
+          mimeType: file.mimetype,
+          sizeBytes: file.size,
+          checksum: validation.checksum,
+          validationStatus: "quarantined",
+          validationNotes: validation.notes,
+          securityScanVersion: validation.securityScanVersion,
+          status: "uploaded",
+          analysisStatus: "queued",
+          retentionUntil,
+        });
+        const documentId = Number(inserted[0].insertId);
+        await db.insert(candidateDocumentAuditLogs).values({ candidateId: candidate.id, documentId, actorType: "candidate", actorReference: String(candidate.id), action: "upload", metadata: JSON.stringify({ category, mimeType: file.mimetype, bytes: file.size }) });
+        await enqueueCandidateDocumentAnalysis(documentId);
+        res.status(201).json({ success: true, documentId, status: "queued" });
+      } catch (error) {
+        console.error("Candidate document upload error:", error);
+        res.status(500).json({ error: "Le document n’a pas pu être enregistré." });
+      }
+    });
+  });
+
   app.get("/sitemap.xml", async (_req, res) => {
     const origin = "https://drahmedbenlallahom.com";
     const publicPaths = [
@@ -657,6 +755,19 @@ async function startServer() {
       return res.json({ ok: true, taskUid: user.taskUid, ...result });
     } catch (error: any) {
       console.error("[RecruitmentProcessing] Handler error:", error);
+      return res.status(500).json({ error: error.message, timestamp: new Date().toISOString() });
+    }
+  });
+
+  app.post("/api/scheduled/candidate-document-processing", async (req, res) => {
+    try {
+      const { sdk: sdkInstance } = await import("./sdk");
+      const user = await sdkInstance.authenticateRequest(req);
+      if (!user.isCron || !user.taskUid) return res.status(403).json({ error: "cron-only" });
+      const result = await processDueCandidateDocumentAnalysisJobs(1);
+      return res.json({ ok: true, taskUid: user.taskUid, ...result });
+    } catch (error: any) {
+      console.error("[CandidateDocumentProcessing] Handler error:", error);
       return res.status(500).json({ error: error.message, timestamp: new Date().toISOString() });
     }
   });

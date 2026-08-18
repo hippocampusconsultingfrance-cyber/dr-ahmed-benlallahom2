@@ -2389,3 +2389,17 @@
 - [x] Préparer et héberger une version légère du logo Hippocampus Consulting pour les clients email
 - [x] Ajouter le logo aux modèles d’emails Hippocampus Consulting, y compris recrutement et briefs employeurs
 - [x] Vérifier le rendu HTML des modèles puis publier la mise à jour
+
+## Affiche LinkedIn — recrutement international
+
+- [x] Créer une affiche LinkedIn attractive pour promouvoir les recrutements internationaux Hippocampus Consulting
+- [x] Vérifier la lisibilité du message et livrer le visuel prêt à publier
+
+## Espace candidat sécurisé — documents administratifs
+
+- [x] Définir les catégories de documents, règles de conservation, consentements et statuts de revue humaine
+- [ ] Créer l’authentification candidate par email et mot de passe avec vérification et réinitialisation sécurisée
+- [ ] Créer le coffre de documents candidat avec stockage privé, contrôle de type, taille, accès et traçabilité
+- [ ] Ajouter un pipeline d’analyse IA documentaire avec résultat structuré, confiance et revue humaine obligatoire
+- [ ] Construire le portail candidat de dépôt, suivi et gestion des documents
+- [ ] Ajouter les contrôles administratifs, les tests d’autorisation et les vérifications RGPD
