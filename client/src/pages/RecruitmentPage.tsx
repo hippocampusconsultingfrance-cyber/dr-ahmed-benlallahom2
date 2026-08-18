@@ -28,6 +28,37 @@ const countryOptions = [
   { value: "Autre pays / Mobilité mondiale", labels: { fr: "Autre pays / Mobilité mondiale", en: "Other country / Global mobility", de: "Anderes Land / Globale Mobilität", zh: "其他国家/全球流动" } },
 ] as const;
 
+const phonePrefixOptions = [
+  { value: "+33", label: "France (+33)" },
+  { value: "+49", label: "Allemagne (+49)" },
+  { value: "+44", label: "Royaume-Uni (+44)" },
+  { value: "+39", label: "Italie (+39)" },
+  { value: "+34", label: "Espagne (+34)" },
+  { value: "+41", label: "Suisse (+41)" },
+  { value: "+32", label: "Belgique (+32)" },
+  { value: "+1", label: "Canada / États-Unis (+1)" },
+  { value: "+971", label: "Émirats arabes unis (+971)" },
+  { value: "+966", label: "Arabie saoudite (+966)" },
+  { value: "+974", label: "Qatar (+974)" },
+  { value: "+968", label: "Oman (+968)" },
+  { value: "+965", label: "Koweït (+965)" },
+  { value: "+973", label: "Bahreïn (+973)" },
+  { value: "+962", label: "Jordanie (+962)" },
+  { value: "+961", label: "Liban (+961)" },
+  { value: "+212", label: "Maroc (+212)" },
+  { value: "+213", label: "Algérie (+213)" },
+  { value: "+216", label: "Tunisie (+216)" },
+  { value: "+20", label: "Égypte (+20)" },
+  { value: "+27", label: "Afrique du Sud (+27)" },
+  { value: "+221", label: "Sénégal (+221)" },
+  { value: "+225", label: "Côte d’Ivoire (+225)" },
+  { value: "+237", label: "Cameroun (+237)" },
+  { value: "+86", label: "Chine (+86)" },
+  { value: "+81", label: "Japon (+81)" },
+  { value: "+65", label: "Singapour (+65)" },
+  { value: "+61", label: "Australie (+61)" },
+] as const;
+
 const specialtyCategories = [
   {
     category: { fr: "Médecine générale & Urgences", en: "General Practice & Emergency", de: "Allgemeinmedizin & Notfallmedizin", zh: "全科与急诊医学" },
@@ -161,10 +192,10 @@ const regionalOverrides = {
   },
 } as const;
 type FormState = {
-  firstName: string; lastName: string; email: string; phone: string; specialty: string; specialtyCustom: string; targetCountries: string[]; languages: string; yearsExperience: string; message: string; gdprConsent: boolean; marketingConsent: boolean; website: string;
+  firstName: string; lastName: string; email: string; phonePrefix: string; phone: string; specialty: string; specialtyCustom: string; targetCountries: string[]; languages: string; yearsExperience: string; message: string; gdprConsent: boolean; marketingConsent: boolean; website: string;
 };
 
-const initialForm: FormState = { firstName: "", lastName: "", email: "", phone: "", specialty: "", specialtyCustom: "", targetCountries: [], languages: "", yearsExperience: "", message: "", gdprConsent: false, marketingConsent: false, website: "" };
+const initialForm: FormState = { firstName: "", lastName: "", email: "", phonePrefix: "+33", phone: "", specialty: "", specialtyCustom: "", targetCountries: [], languages: "", yearsExperience: "", message: "", gdprConsent: false, marketingConsent: false, website: "" };
 
 export default function RecruitmentPage() {
   const { language } = useLanguage();
@@ -188,6 +219,10 @@ export default function RecruitmentPage() {
       return { ...group, items: filteredItems };
     }).filter(group => group.items.length > 0);
   }, [specialtyQuery]);
+  const filteredSpecialtyCount = useMemo(
+    () => filteredSpecialtyCategories.reduce((total, group) => total + group.items.length, 0),
+    [filteredSpecialtyCategories],
+  );
 
   const update = <K extends keyof FormState>(key: K, value: FormState[K]) => setForm(previous => ({ ...previous, [key]: value }));
 
@@ -213,7 +248,8 @@ export default function RecruitmentPage() {
     body.append("firstName", form.firstName);
     body.append("lastName", form.lastName);
     body.append("email", form.email);
-    body.append("phone", form.phone);
+    const phoneDigits = form.phone.replace(/\D/g, "").replace(/^0+/, "");
+    body.append("phone", phoneDigits ? `${form.phonePrefix}${phoneDigits}` : "");
     body.append("specialty", finalSpecialty);
     body.append("targetCountries", JSON.stringify(form.targetCountries));
     body.append("languages", JSON.stringify(form.languages.split(",").map(item => item.trim()).filter(Boolean)));
@@ -270,7 +306,7 @@ export default function RecruitmentPage() {
                   </div>
                   <div className="grid gap-4 sm:grid-cols-2">
                     <label className="space-y-2 text-sm text-foreground"><span>{t.email} *</span><input id="recruitment-email" type="email" required value={form.email} onChange={event => update("email", event.target.value)} className="form-control" autoComplete="email" /></label>
-                    <label className="space-y-2 text-sm text-foreground"><span>{t.phone}</span><input id="recruitment-phone" type="tel" value={form.phone} onChange={event => update("phone", event.target.value)} className="form-control" autoComplete="tel" /></label>
+                    <label className="space-y-2 text-sm text-foreground"><span>{t.phone}</span><div className="grid grid-cols-[minmax(10rem,0.9fr)_minmax(0,1fr)] gap-2"><select aria-label="Préfixe pays" value={form.phonePrefix} onChange={event => update("phonePrefix", event.target.value)} className="form-control min-w-0 text-sm" autoComplete="tel-country-code">{phonePrefixOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select><input id="recruitment-phone" type="tel" inputMode="tel" value={form.phone} onChange={event => update("phone", event.target.value)} placeholder="6 12 34 56 78" className="form-control min-w-0" autoComplete="tel-national" /></div><span className="block text-xs text-muted-foreground">Saisissez le numéro sans son préfixe international.</span></label>
                   </div>
                   <div className="grid gap-4 sm:grid-cols-2">
                     <div className="block w-full space-y-2 text-sm text-foreground">
@@ -294,7 +330,18 @@ export default function RecruitmentPage() {
                           </button>
                         )}
                       </div>
-                      <select id="recruitment-specialty" required value={form.specialty} onChange={event => update("specialty", event.target.value)} className="form-control block w-full mt-1">
+                      <select
+                        id="recruitment-specialty"
+                        required
+                        value={form.specialty}
+                        size={specialtyQuery ? Math.min(Math.max(filteredSpecialtyCount, 1), 8) : 1}
+                        aria-describedby="recruitment-specialty-search-hint"
+                        onChange={event => {
+                          update("specialty", event.target.value);
+                          setSpecialtyQuery("");
+                        }}
+                        className="form-control block w-full mt-1"
+                      >
                         <option value="">{t.select}</option>
                         {filteredSpecialtyCategories.length === 0 ? (
                           <option value="" disabled>{t.noMatch}</option>
@@ -306,6 +353,9 @@ export default function RecruitmentPage() {
                           ))
                         )}
                       </select>
+                      <p id="recruitment-specialty-search-hint" className="mt-1 text-xs text-muted-foreground">
+                        {specialtyQuery ? `${filteredSpecialtyCount} résultat${filteredSpecialtyCount > 1 ? "s" : ""} affiché${filteredSpecialtyCount > 1 ? "s" : ""} : sélectionnez votre spécialité.` : "Saisissez quelques lettres pour afficher directement les résultats."}
+                      </p>
                       {form.specialty && form.specialty !== "Autre spécialité ou profession" && (
                         <p className="mt-1.5 text-xs text-primary font-medium">Sélectionné : {form.specialty}</p>
                       )}

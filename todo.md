@@ -2350,3 +2350,19 @@
 - [x] Empêcher qu’un CV accepté reste bloqué en erreur après les trois tentatives IA
 - [x] Produire automatiquement une fiche de revue humaine exploitable à partir des données déclarées et du texte extrait lorsque l’IA ne répond pas
 - [x] Reprendre automatiquement les CV déjà bloqués puis vérifier leur affichage administratif
+
+## Langues professionnelles — formulaire candidat
+
+- [ ] Remplacer le champ de langues professionnelles par des cases à cocher
+- [ ] Afficher en premier arabe, français, anglais, chinois et allemand, puis les autres langues
+- [ ] Vérifier l’enregistrement et le rendu du formulaire candidat avant publication
+
+## Recherche de spécialité — formulaire candidat
+
+- [x] Ouvrir automatiquement les résultats de spécialités dès la saisie dans le champ de recherche
+- [x] Vérifier la sélection d’une spécialité filtrée sur desktop et mobile avant publication
+
+## Téléphone international — formulaire candidat
+
+- [x] Ajouter un sélecteur de préfixe pays avant le champ de numéro de téléphone
+- [x] Transmettre le numéro complet internationalisé au dépôt de candidature et vérifier le rendu avant publication
