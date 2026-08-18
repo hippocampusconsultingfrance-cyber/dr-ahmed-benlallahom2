@@ -2323,3 +2323,11 @@
 - [x] Chiffrer applicativement les documents les plus sensibles avec une clé distincte
 - [x] Étendre le journal de sécurité et les alertes administratives
 - [x] Ajouter une campagne régulière de tests de sécurité couvrant accès, fichiers, liens et contournements
+
+## Audit global détaillé du site
+
+- [x] Cartographier les pages, routes, flux métier, services et points de sécurité à vérifier
+- [x] Tester les interfaces publiques, responsive, navigation, formulaires et appels à l’action
+- [x] Tester les flux métier de réservation, recrutement, candidatures, comptes, documents, IA, emails et administration
+- [x] Auditer la sécurité, SEO, accessibilité, performance, conformité et observabilité
+- [x] Exécuter la suite de tests, consolider les preuves et proposer les corrections priorisées
