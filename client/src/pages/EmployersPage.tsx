@@ -260,6 +260,7 @@ export default function EmployersPage() {
               <h1 className="mt-4 font-display text-4xl leading-tight text-foreground md:text-5xl">{t.title}</h1>
               <p className="mt-6 text-lg leading-8 text-muted-foreground">{t.intro}</p>
               <p className="mt-4 rounded-xl border border-primary/20 bg-primary/5 p-4 text-sm leading-6 text-muted-foreground"><ShieldCheck className="mr-2 inline h-4 w-4 text-primary" />{advanced.reassurance}</p>
+              <Link href="/why-hippocampus" className="mt-5 inline-flex items-center text-sm font-semibold text-primary transition-opacity hover:opacity-75">Pourquoi Hippocampus Consulting ? <span className="ml-2" aria-hidden="true">→</span></Link>
             </div>
 
             <div className="grid gap-4">

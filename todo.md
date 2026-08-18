@@ -2317,3 +2317,9 @@
 ## Zones d’opportunités recrutement
 
 - [x] Ajouter explicitement l’Afrique aux zones d’opportunités de recrutement dans les contenus publics multilingues
+
+## Page Pourquoi Hippocampus Consulting
+
+- [x] Créer une page employeurs multilingue présentant la méthode, les zones couvertes, la confidentialité et le parcours de shortlist
+- [x] Ajouter un appel à l’action vers le brief de mission et un accès cohérent depuis les parcours Employeurs
+- [x] Vérifier le rendu et les liens de la nouvelle page avant publication

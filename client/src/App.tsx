@@ -19,6 +19,7 @@ const RecruitmentHubPage = lazy(() => import("./pages/RecruitmentHubPage"));
 const RecruitmentPage = lazy(() => import("./pages/RecruitmentPage"));
 const VvipOffshorePage = lazy(() => import("./pages/VvipOffshorePage"));
 const EmployersPage = lazy(() => import("./pages/EmployersPage"));
+const WhyHippocampusPage = lazy(() => import("./pages/WhyHippocampusPage"));
 const RecruitmentUnsubscribePage = lazy(() => import("./pages/RecruitmentUnsubscribePage"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 const AdminDashboard = lazy(() => import("./pages/AdminDashboard"));
@@ -53,6 +54,7 @@ function Router() {
       <Route path="/recruitment/vvip-offshore" component={VvipOffshorePage} />
       <Route path="/vvip-offshore" component={VvipOffshorePage} />
       <Route path="/employers" component={EmployersPage} />
+      <Route path="/why-hippocampus" component={WhyHippocampusPage} />
       <Route path="/admin" component={AdminDashboard} />
       <Route path="/404" component={NotFound} />
         <Route component={NotFound} />
