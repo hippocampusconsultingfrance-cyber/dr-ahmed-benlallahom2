@@ -2377,4 +2377,5 @@
 - [x] Corriger le contrat build/start de production qui provoque un HTTP 500 global après déploiement
 - [x] Rendre la résolution du répertoire statique de production robuste et journaliser les échecs de service HTML
 - [x] Rétablir le runtime Manus requis en production tout en conservant le collecteur de débogage exclu
+- [x] Ajouter une sonde de santé publique minimale pour diagnostiquer et surveiller le serveur de production
 - [x] Remplacer l’affichage système mm/dd/yyyy du champ de réservation par une saisie explicitement localisée en français

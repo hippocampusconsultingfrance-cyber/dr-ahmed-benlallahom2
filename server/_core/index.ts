@@ -131,6 +131,11 @@ async function startServer() {
     ].join("; "));
     next();
   });
+
+  app.get("/api/health", (_req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    res.status(200).json({ status: "ok" });
+  });
   
   // Stripe Webhook (MUST be before express.json() to receive raw body)
   app.post("/api/stripe/webhook", express.raw({ type: "application/json" }), async (req, res) => {
