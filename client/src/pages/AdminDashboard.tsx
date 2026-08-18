@@ -11,8 +11,9 @@ import EmployerBriefsTab from "@/components/EmployerBriefsTab";
 import VivierTab from "@/components/VivierTab";
 import MailingTab from "@/components/MailingTab";
 import RecruitmentOperationsTab from "@/components/RecruitmentOperationsTab";
+import CandidateDocumentsAdminTab from "@/components/CandidateDocumentsAdminTab";
 
-type Tab = "overview" | "appointments" | "contacts" | "gdpr" | "testimonials" | "blog" | "availability" | "recruitment" | "vivier" | "mailing" | "recruitmentOperations" | "employerBriefs";
+type Tab = "overview" | "appointments" | "contacts" | "gdpr" | "testimonials" | "blog" | "availability" | "recruitment" | "candidateDocuments" | "vivier" | "mailing" | "recruitmentOperations" | "employerBriefs";
 
 export default function AdminDashboard() {
   const { user, loading, refresh } = useAuth();
@@ -72,6 +73,7 @@ export default function AdminDashboard() {
     { id: "blog" as Tab, label: "Blog", icon: FileText },
     { id: "availability" as Tab, label: "Disponibilités", icon: CalendarDays },
     { id: "recruitment" as Tab, label: "Candidatures", icon: UserRound },
+    { id: "candidateDocuments" as Tab, label: "Documents candidats", icon: FileText },
     { id: "vivier" as Tab, label: "Vivier", icon: UsersRound },
     { id: "mailing" as Tab, label: "Mailing", icon: Send },
     { id: "recruitmentOperations" as Tab, label: "Pilotage", icon: BarChart3 },
@@ -129,6 +131,7 @@ export default function AdminDashboard() {
         {activeTab === "blog" && <BlogTab />}
         {activeTab === "availability" && <AvailabilityTab />}
         {activeTab === "recruitment" && <RecruitmentTab />}
+        {activeTab === "candidateDocuments" && <CandidateDocumentsAdminTab />}
         {activeTab === "vivier" && <VivierTab onCompose={candidateIds => { setMailingSelectedIds(candidateIds); setActiveTab("mailing"); }} />}
         {activeTab === "mailing" && <MailingTab initialSelectedIds={mailingSelectedIds} />}
         {activeTab === "recruitmentOperations" && <RecruitmentOperationsTab />}

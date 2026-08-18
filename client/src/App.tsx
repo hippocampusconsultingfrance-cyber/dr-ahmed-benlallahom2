@@ -21,6 +21,10 @@ const VvipOffshorePage = lazy(() => import("./pages/VvipOffshorePage"));
 const EmployersPage = lazy(() => import("./pages/EmployersPage"));
 const WhyHippocampusPage = lazy(() => import("./pages/WhyHippocampusPage"));
 const RecruitmentUnsubscribePage = lazy(() => import("./pages/RecruitmentUnsubscribePage"));
+const CandidateAccessPage = lazy(() => import("./pages/CandidateAccessPage"));
+const CandidateVerifyPage = lazy(() => import("./pages/CandidateVerifyPage"));
+const CandidateResetPasswordPage = lazy(() => import("./pages/CandidateResetPasswordPage"));
+const CandidatePortalPage = lazy(() => import("./pages/CandidatePortalPage"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 const AdminDashboard = lazy(() => import("./pages/AdminDashboard"));
 
@@ -53,6 +57,10 @@ function Router() {
       <Route path="/recruitment/standard" component={RecruitmentPage} />
       <Route path="/recruitment/vvip-offshore" component={VvipOffshorePage} />
       <Route path="/vvip-offshore" component={VvipOffshorePage} />
+      <Route path="/candidate/access" component={CandidateAccessPage} />
+      <Route path="/candidate/verify" component={CandidateVerifyPage} />
+      <Route path="/candidate/reset-password" component={CandidateResetPasswordPage} />
+      <Route path="/candidate/portal" component={CandidatePortalPage} />
       <Route path="/employers" component={EmployersPage} />
       <Route path="/why-hippocampus" component={WhyHippocampusPage} />
       <Route path="/admin" component={AdminDashboard} />

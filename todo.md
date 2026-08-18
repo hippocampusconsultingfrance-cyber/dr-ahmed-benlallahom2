@@ -2398,8 +2398,8 @@
 ## Espace candidat sécurisé — documents administratifs
 
 - [x] Définir les catégories de documents, règles de conservation, consentements et statuts de revue humaine
-- [ ] Créer l’authentification candidate par email et mot de passe avec vérification et réinitialisation sécurisée
-- [ ] Créer le coffre de documents candidat avec stockage privé, contrôle de type, taille, accès et traçabilité
-- [ ] Ajouter un pipeline d’analyse IA documentaire avec résultat structuré, confiance et revue humaine obligatoire
-- [ ] Construire le portail candidat de dépôt, suivi et gestion des documents
-- [ ] Ajouter les contrôles administratifs, les tests d’autorisation et les vérifications RGPD
+- [x] Créer l’authentification candidate par email et mot de passe avec vérification et réinitialisation sécurisée
+- [x] Créer le coffre de documents candidat avec stockage privé, contrôle de type, taille, accès et traçabilité
+- [x] Ajouter un pipeline d’analyse IA documentaire avec résultat structuré, confiance et revue humaine obligatoire
+- [x] Construire le portail candidat de dépôt, suivi et gestion des documents
+- [x] Ajouter les contrôles administratifs, les tests d’autorisation et les vérifications RGPD

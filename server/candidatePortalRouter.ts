@@ -119,7 +119,12 @@ const genericAuthInput = z.object({ email: z.string().email().max(320), password
 
 export const candidatePortalRouter = router({
   register: publicProcedure
-    .input(genericAuthInput.extend({ firstName: z.string().trim().min(1).max(120), lastName: z.string().trim().min(1).max(120), termsAccepted: z.literal(true), documentConsent: z.literal(true) }))
+    .input(genericAuthInput.extend({
+      firstName: z.string().trim().min(1).max(120),
+      lastName: z.string().trim().min(1).max(120),
+      termsAccepted: z.boolean().refine(value => value, "L’acceptation des conditions est requise."),
+      documentConsent: z.boolean().refine(value => value, "Le consentement au traitement documentaire est requis."),
+    }))
     .mutation(async ({ input, ctx }) => {
       const passwordError = validateCandidatePassword(input.password);
       if (passwordError) throw new TRPCError({ code: "BAD_REQUEST", message: "Choisissez une phrase de passe d’au moins 15 caractères." });

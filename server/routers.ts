@@ -6,7 +6,7 @@ import { publicProcedure, adminProcedure, router } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { getDb } from "./db";
-import { contactMessages, gdprRequests, testimonials, appointments, blogPosts, availabilitySlots, blockedDates, cvApplications, cvCandidateCertifications, cvCandidateLanguages, recruitmentAuditLogs, recruitmentMatchProfiles, clientBriefs, clientBriefCandidates, recruitmentCampaigns, recruitmentCampaignRecipients, recruitmentEmailEvents, recruitmentFollowUpTasks, recruitmentOfferTemplates } from "../drizzle/schema";
+import { candidateAccounts, candidateDocumentAuditLogs, candidateDocuments, contactMessages, gdprRequests, testimonials, appointments, blogPosts, availabilitySlots, blockedDates, cvApplications, cvCandidateCertifications, cvCandidateLanguages, recruitmentAuditLogs, recruitmentMatchProfiles, clientBriefs, clientBriefCandidates, recruitmentCampaigns, recruitmentCampaignRecipients, recruitmentEmailEvents, recruitmentFollowUpTasks, recruitmentOfferTemplates } from "../drizzle/schema";
 import { notifyOwner } from "./_core/notification";
 import { storageGetSignedUrl } from "./storage";
 import { canAdminDownloadCv, CV_DOWNLOAD_UNAVAILABLE_MESSAGE } from "./recruitmentDownloadPolicy";
@@ -1539,6 +1539,60 @@ export const appRouter = router({
             });
           }
           return { success: true };
+        }),
+    }),
+
+    candidateDocuments: router({
+      list: adminProcedure
+        .input(z.object({ status: z.enum(["uploaded", "validating", "analyzing", "needs_review", "reviewed", "rejected", "archived"]).optional(), limit: z.number().int().min(1).max(100).default(50) }))
+        .query(async ({ input }) => {
+          const db = await getDb();
+          if (!db) return [];
+          const conditions = input.status ? eq(candidateDocuments.status, input.status) : undefined;
+          return db.select({
+            id: candidateDocuments.id,
+            candidateId: candidateDocuments.candidateId,
+            candidateEmail: candidateAccounts.email,
+            firstName: candidateAccounts.firstName,
+            lastName: candidateAccounts.lastName,
+            category: candidateDocuments.category,
+            categoryOtherLabel: candidateDocuments.categoryOtherLabel,
+            originalName: candidateDocuments.originalName,
+            mimeType: candidateDocuments.mimeType,
+            sizeBytes: candidateDocuments.sizeBytes,
+            validationStatus: candidateDocuments.validationStatus,
+            status: candidateDocuments.status,
+            analysisStatus: candidateDocuments.analysisStatus,
+            aiSummary: candidateDocuments.aiSummary,
+            aiExtractedData: candidateDocuments.aiExtractedData,
+            aiConfidence: candidateDocuments.aiConfidence,
+            aiFlags: candidateDocuments.aiFlags,
+            aiModel: candidateDocuments.aiModel,
+            reviewNotes: candidateDocuments.reviewNotes,
+            createdAt: candidateDocuments.createdAt,
+            analyzedAt: candidateDocuments.analyzedAt,
+          }).from(candidateDocuments).innerJoin(candidateAccounts, eq(candidateDocuments.candidateId, candidateAccounts.id)).where(conditions).orderBy(desc(candidateDocuments.createdAt)).limit(input.limit);
+        }),
+      review: adminProcedure
+        .input(z.object({ id: z.number().int().positive(), status: z.enum(["reviewed", "rejected", "archived"]), notes: z.string().trim().min(1).max(5000) }))
+        .mutation(async ({ input, ctx }) => {
+          const db = await getDb();
+          if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Le coffre documentaire est temporairement indisponible." });
+          const document = (await db.select().from(candidateDocuments).where(eq(candidateDocuments.id, input.id)).limit(1))[0];
+          if (!document) throw new TRPCError({ code: "NOT_FOUND", message: "Document introuvable." });
+          await db.update(candidateDocuments).set({ status: input.status, reviewedByOpenId: ctx.user.openId, reviewedAt: new Date(), reviewNotes: input.notes }).where(eq(candidateDocuments.id, input.id));
+          await db.insert(candidateDocumentAuditLogs).values({ candidateId: document.candidateId, documentId: document.id, actorType: "admin", actorReference: ctx.user.openId, action: "reviewed", metadata: JSON.stringify({ status: input.status }) });
+          return { success: true };
+        }),
+      download: adminProcedure
+        .input(z.object({ id: z.number().int().positive() }))
+        .mutation(async ({ input, ctx }) => {
+          const db = await getDb();
+          if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Le coffre documentaire est temporairement indisponible." });
+          const document = (await db.select().from(candidateDocuments).where(eq(candidateDocuments.id, input.id)).limit(1))[0];
+          if (!document) throw new TRPCError({ code: "NOT_FOUND", message: "Document introuvable." });
+          await db.insert(candidateDocumentAuditLogs).values({ candidateId: document.candidateId, documentId: document.id, actorType: "admin", actorReference: ctx.user.openId, action: "download" });
+          return { url: await storageGetSignedUrl(document.storageKey), filename: document.originalName };
         }),
     }),
 
