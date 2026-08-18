@@ -24,6 +24,6 @@ describe("recruitment analysis safeguards", () => {
   it("alterne le fournisseur IA lors d’une reprise afin de limiter le délai de chaque tentative", () => {
     expect(analysisProviderForAttempt(1)).toBe("gpt-5-mini");
     expect(analysisProviderForAttempt(2)).toBe("gemini-3-flash-preview");
-    expect(analysisProviderForAttempt(3)).toBe("gpt-5-nano");
+    expect(analysisProviderForAttempt(3)).toBe("claude-haiku-4-5");
   });
 });

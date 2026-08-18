@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { analysisCompletionStatus, executeCvExternalPipeline, extractionMethodFor, retryDelayMs } from "./recruitmentProcessing";
+import { analysisCompletionStatus, buildHumanReviewFallback, executeCvExternalPipeline, extractionMethodFor, retryDelayMs } from "./recruitmentProcessing";
 
 const checksum = "a".repeat(64);
 const input = {
@@ -93,7 +93,15 @@ describe("règles déterministes du pipeline de traitement CV", () => {
         return analysis;
       },
     });
-    expect(requestedProvider).toBe("gpt-5-nano");
+    expect(requestedProvider).toBe("claude-haiku-4-5");
+  });
+
+  it("produit une fiche exploitable pour revue humaine quand les fournisseurs IA échouent", () => {
+    const fallback = buildHumanReviewFallback(input, "contenu IA vide");
+    expect(fallback.summary).toContain("revue humaine");
+    expect(fallback.specialties).toEqual(["Anesthésie"]);
+    expect(fallback.languages).toEqual(["Français"]);
+    expect(fallback.relevanceScore).toBe(0);
   });
 
   it("propage de manière contrôlée les échecs de stockage, OCR et IA pour la logique de reprise", async () => {

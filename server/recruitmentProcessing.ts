@@ -1,7 +1,7 @@
 import { and, eq, inArray, lte } from "drizzle-orm";
 import { cvApplications, cvProcessingJobs } from "../drizzle/schema";
 import { getDb } from "./db";
-import { extractCvDocument, analyzeCvText, analysisProviderForAttempt, saveCvAnalysis } from "./recruitmentAnalysis";
+import { extractCvDocument, analyzeCvText, analysisProviderForAttempt, saveCvAnalysis, type RecruitmentAnalysisResult } from "./recruitmentAnalysis";
 import { storageGetSignedUrl, storagePut } from "./storage";
 import { validateCvFile } from "./recruitmentFileValidation";
 
@@ -93,6 +93,43 @@ export function extractionMethodFor(mimeType: string) {
 
 export function analysisCompletionStatus(input: { gaps: string[]; dataQualityWarnings: string[] }) {
   return input.dataQualityWarnings.length > 0 || input.gaps.length > 0 ? "needs_review" as const : "completed" as const;
+}
+
+function parseDeclaredList(value: string | null): string[] {
+  try {
+    const parsed = JSON.parse(value || "[]");
+    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string").slice(0, 12) : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Never turn a transient provider failure into a dead candidate record. This is
+ * explicitly a review aid, not a substitute for document analysis or a hiring
+ * decision: it preserves declared data and makes the human action visible.
+ */
+export function buildHumanReviewFallback(input: CvPipelineInput, failure: string): RecruitmentAnalysisResult {
+  const languages = parseDeclaredList(input.languages);
+  const countries = parseDeclaredList(input.targetCountries);
+  const specialty = input.specialty.trim() || "Professionnel de santé";
+  return {
+    summary: `Le CV a été reçu et validé. L’analyse automatisée détaillée n’a pas pu être finalisée ; une revue humaine est requise avant toute décision.`,
+    professionalTitle: specialty,
+    specialties: [specialty],
+    skills: [],
+    languages,
+    normalizedLanguages: [],
+    certifications: [],
+    countriesOfInterest: countries,
+    yearsExperience: input.yearsExperience ?? null,
+    normalizedExperiences: [],
+    relevanceScore: 0,
+    strengths: ["Dossier candidat disponible pour revue humaine", `Spécialité déclarée : ${specialty}`],
+    gaps: ["Lecture structurée du CV à confirmer manuellement"],
+    dataQualityWarnings: [`Analyse IA indisponible après reprises contrôlées : ${failure.slice(0, 180)}`],
+    reasoning: "Aucune décision automatisée n’a été prise. Les informations affichées proviennent des données déclarées par le candidat et nécessitent une revue humaine.",
+  };
 }
 
 export async function enqueueCvAnalysis(applicationId: number, requestedAt = new Date()) {
@@ -197,6 +234,29 @@ async function processCvAnalysisJob(jobId: number) {
     const now = new Date();
     const validationFailure = message.startsWith("cv_validation_");
     const finalFailure = validationFailure || job.attempts >= job.maxAttempts;
+    if (finalFailure && !validationFailure) {
+      try {
+        const fallback = buildHumanReviewFallback(application, message);
+        await saveCvAnalysis(application.id, fallback);
+        await db.update(cvApplications).set({
+          analysisStatus: "needs_review",
+          analysisAttempts: job.attempts,
+          analysisLastError: null,
+          analysisModel: "automatic_review_fallback",
+          analysisPromptVersion: ANALYSIS_PROMPT_VERSION,
+          aiScore: null,
+          updatedAt: now,
+        }).where(eq(cvApplications.id, application.id));
+        await db.update(cvProcessingJobs).set({
+          status: "completed",
+          finishedAt: now,
+          lastError: "ai_review_fallback_created",
+        }).where(eq(cvProcessingJobs.id, job.id));
+        return { completed: true, applicationId: job.applicationId, needsReview: true, fallback: true };
+      } catch (fallbackError) {
+        console.error("[RecruitmentProcessing] Human review fallback failed", fallbackError);
+      }
+    }
     await db.update(cvProcessingJobs).set({
       status: finalFailure ? "failed" : "retry",
       lastError: message,
@@ -226,6 +286,25 @@ export async function processDueCvAnalysisJobs(limit = PROCESSING_BATCH_SIZE) {
     startedAt: null,
     lastError: "worker_callback_timeout_requeued",
   }).where(and(eq(cvProcessingJobs.status, "running"), lte(cvProcessingJobs.startedAt, staleBefore)));
+  const recoverableFailed = await db.select({ id: cvProcessingJobs.id, maxAttempts: cvProcessingJobs.maxAttempts })
+    .from(cvProcessingJobs)
+    .innerJoin(cvApplications, eq(cvApplications.id, cvProcessingJobs.applicationId))
+    .where(and(
+      eq(cvProcessingJobs.status, "failed"),
+      eq(cvApplications.analysisStatus, "failed"),
+      inArray(cvApplications.fileValidationStatus, ["quarantined", "accepted"]),
+    ))
+    .limit(1);
+  if (recoverableFailed[0]) {
+    await db.update(cvProcessingJobs).set({
+      status: "queued",
+      attempts: Math.max(0, recoverableFailed[0].maxAttempts - 1),
+      scheduledFor: now,
+      startedAt: null,
+      finishedAt: null,
+      lastError: "automatic_recovery_for_human_review",
+    }).where(eq(cvProcessingJobs.id, recoverableFailed[0].id));
+  }
   const candidates = await db.select().from(cvProcessingJobs)
     .where(and(
       inArray(cvProcessingJobs.status, ["queued", "retry"]),

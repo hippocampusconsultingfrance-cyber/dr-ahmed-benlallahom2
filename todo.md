@@ -2344,3 +2344,9 @@
 - [ ] Contrôler les dernières exécutions, les reprises et les erreurs du traitement IA en production
 - [ ] Exécuter les tests de non-régression extraction, analyse, reprise et persistance des résultats
 - [ ] Vérifier la cohérence entre les résultats IA enregistrés et les informations affichées à l’administrateur
+
+## Fiabilisation automatique de l’analyse IA
+
+- [ ] Empêcher qu’un CV accepté reste bloqué en erreur après les trois tentatives IA
+- [ ] Produire automatiquement une fiche de revue humaine exploitable à partir des données déclarées et du texte extrait lorsque l’IA ne répond pas
+- [ ] Reprendre automatiquement les CV déjà bloqués puis vérifier leur affichage administratif

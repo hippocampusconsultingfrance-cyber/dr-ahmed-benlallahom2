@@ -50,14 +50,14 @@ export type RecruitmentAnalysisResult = {
   reasoning: string;
 };
 
-export type RecruitmentAnalysisProvider = "gpt-5-mini" | "gemini-3-flash-preview" | "gpt-5-nano";
+export type RecruitmentAnalysisProvider = "gpt-5-mini" | "gemini-3-flash-preview" | "claude-haiku-4-5";
 
 /**
  * A background callback has a short execution window. Alternating providers by
  * retry keeps each attempt bounded while retaining a real fallback path.
  */
 export function analysisProviderForAttempt(attempt: number): RecruitmentAnalysisProvider {
-  if (attempt >= 3) return "gpt-5-nano";
+  if (attempt >= 3) return "claude-haiku-4-5";
   return attempt === 2 ? "gemini-3-flash-preview" : "gpt-5-mini";
 }
 
@@ -322,12 +322,12 @@ Normalise chaque expérience dans normalizedExperiences. Convertis les dates exp
     ];
 
   const provider = input.provider ?? "gpt-5-mini";
-  const compactFallback = provider === "gpt-5-nano";
+  const compactFallback = provider === "claude-haiku-4-5";
   const options = provider === "gemini-3-flash-preview"
     ? { model: provider, max_tokens: 4_000, reasoning_effort: "low" as const }
     : provider === "gpt-5-mini"
     ? { model: provider, maxCompletionTokens: 2_800, reasoning: { effort: "low" as const } }
-    : { model: provider, maxCompletionTokens: 1_600, reasoning: { effort: "minimal" as const } };
+    : { model: provider, max_tokens: 2_000 };
   try {
     const response = await invokeLLM({
       ...options,
