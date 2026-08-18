@@ -2337,3 +2337,19 @@
 - [x] Rétablir la route publique /why-hippocampus et couvrir les routes Employeurs par un test de régression
 - [x] Ajouter les pages recrutement et Employeurs indexables au sitemap
 - [x] Ajouter des en-têtes HTTP de défense en profondeur après validation des origines externes autorisées
+
+## Optimisation de performance issue de l’audit
+
+- [ ] Réduire le poids du bundle initial par découpage explicite des dépendances frontales
+- [ ] Vérifier les tailles de bundles après build sans dégrader les parcours publics
+
+## Exécution complète des lots de l’audit
+
+- [ ] Ajouter une reprise contrôlée des anciens échecs IA avec historique explicite dans l’administration
+- [x] Garantir l’atomicité de la création des réservations concurrentes et des créneaux libres
+- [ ] Mettre en file les factures et notifications post-paiement avec reprise et alerte en cas d’échec
+- [ ] Mettre en œuvre les métadonnées SEO et sociales critiques des sous-pages avant rendu client
+- [x] Localiser le contrôle de date et heure de réservation pour l’interface française
+- [x] Ajouter une vue d’observabilité des événements de sécurité et des traitements sensibles
+- [ ] Tester le parcours candidat intégré avec activation, Turnstile, chiffrement, analyse et téléchargement
+- [ ] Préparer les instructions d’activation WAF et la recette manuelle non destructive Stripe/email

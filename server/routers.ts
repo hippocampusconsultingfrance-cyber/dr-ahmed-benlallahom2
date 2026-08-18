@@ -6,7 +6,7 @@ import { publicProcedure, protectedProcedure, adminProcedure, router } from "./_
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { getDb } from "./db";
-import { candidateAccounts, candidateDocumentAuditLogs, candidateDocuments, contactMessages, gdprRequests, testimonials, appointments, blogPosts, availabilitySlots, blockedDates, cvApplications, cvCandidateCertifications, cvCandidateLanguages, recruitmentAuditLogs, recruitmentMatchProfiles, clientBriefs, clientBriefCandidates, recruitmentCampaigns, recruitmentCampaignRecipients, recruitmentEmailEvents, recruitmentFollowUpTasks, recruitmentOfferTemplates } from "../drizzle/schema";
+import { candidateAccounts, candidateDocumentAuditLogs, candidateDocuments, contactMessages, gdprRequests, testimonials, appointments, blogPosts, availabilitySlots, blockedDates, cvApplications, cvCandidateCertifications, cvCandidateLanguages, recruitmentAuditLogs, recruitmentMatchProfiles, clientBriefs, clientBriefCandidates, recruitmentCampaigns, recruitmentCampaignRecipients, recruitmentEmailEvents, recruitmentFollowUpTasks, recruitmentOfferTemplates, securityEvents } from "../drizzle/schema";
 import { notifyOwner } from "./_core/notification";
 import { storageGetSignedUrl } from "./storage";
 import { canAdminDownloadCv, CV_DOWNLOAD_UNAVAILABLE_MESSAGE } from "./recruitmentDownloadPolicy";
@@ -233,6 +233,21 @@ export const appRouter = router({
       } catch {
         throw new TRPCError({ code: "BAD_REQUEST", message: "Le code de sécurité est invalide ou expiré." });
       }
+    }),
+    events: protectedProcedure.input(z.object({ limit: z.number().int().min(1).max(100).default(50) }).optional()).query(async ({ input, ctx }) => {
+      if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN", message: "Accès administrateur requis." });
+      if (!(await isAdminMfaVerified(ctx.req, ctx.user.openId))) throw new TRPCError({ code: "FORBIDDEN", message: "Double authentification administrateur requise." });
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Base de données indisponible." });
+      const events = await db.select({
+        id: securityEvents.id,
+        actorKind: securityEvents.actorKind,
+        category: securityEvents.category,
+        outcome: securityEvents.outcome,
+        severity: securityEvents.severity,
+        createdAt: securityEvents.createdAt,
+      }).from(securityEvents).orderBy(desc(securityEvents.createdAt)).limit(input?.limit ?? 50);
+      return events;
     }),
   }),
   auth: router({
@@ -471,12 +486,16 @@ export const appRouter = router({
           }
 
           const appointmentDateFormatted = date.toISOString().slice(0, 19).replace('T', ' ');
+          const slotKey = date.toISOString();
           await db.execute(
-            sql`INSERT INTO appointments (tracking_id, customer_name, customer_email, customer_phone, consultation_type, request_details, appointment_date, duration, base_price, final_price, is_night_rate, payment_status, appointment_status) VALUES (${trackingId}, ${input.customerName}, ${input.customerEmail}, ${input.customerPhone}, ${'health_advice'}, ${input.requestDetails}, ${appointmentDateFormatted}, ${30}, ${basePrice}, ${finalPrice}, ${isNightRate ? 1 : 0}, ${'pending'}, ${'confirmed'})`
+            sql`INSERT INTO appointments (tracking_id, customer_name, customer_email, customer_phone, consultation_type, request_details, appointment_date, slot_key, duration, base_price, final_price, is_night_rate, payment_status, appointment_status) VALUES (${trackingId}, ${input.customerName}, ${input.customerEmail}, ${input.customerPhone}, ${'health_advice'}, ${input.requestDetails}, ${appointmentDateFormatted}, ${slotKey}, ${30}, ${basePrice}, ${finalPrice}, ${isNightRate ? 1 : 0}, ${'pending'}, ${'confirmed'})`
           );
         } catch (dbError) {
           console.error("Database insert error:", dbError);
           if (dbError instanceof TRPCError) throw dbError;
+          if (String(dbError).toLowerCase().includes("appointments_active_slot_unique") || String(dbError).toLowerCase().includes("duplicate")) {
+            throw new TRPCError({ code: "CONFLICT", message: "Ce créneau vient d’être réservé par un autre patient. Veuillez en choisir un autre." });
+          }
           throw new Error(`Failed to create appointment: ${dbError instanceof Error ? dbError.message : "Unknown error"}`);
         }
 
@@ -599,7 +618,7 @@ export const appRouter = router({
 
         const result = await db
           .update(appointments)
-          .set({ appointmentStatus: "cancelled" })
+          .set({ appointmentStatus: "cancelled", slotKey: null })
           .where(
             and(
               eq(appointments.trackingId, trackingId),
@@ -777,7 +796,7 @@ export const appRouter = router({
 
           await db
             .update(appointments)
-            .set({ appointmentStatus: input.appointmentStatus })
+            .set({ appointmentStatus: input.appointmentStatus, slotKey: input.appointmentStatus === "cancelled" ? null : undefined })
             .where(eq(appointments.trackingId, input.trackingId));
 
           return { success: true };
@@ -843,6 +862,7 @@ export const appRouter = router({
               .set({
                 paymentStatus: "refunded",
                 appointmentStatus: "cancelled",
+                slotKey: null,
                 cancellationReason: input.reason,
                 cancelledAt: now,
                 refundAmount,

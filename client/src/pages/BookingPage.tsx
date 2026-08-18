@@ -17,6 +17,7 @@ export const bookingContent = {
       email: "Email",
       phone: "Numéro de téléphone",
       date: "Date et heure",
+      dateHint: "Choisissez la date et l’heure de votre consultation. Le créneau est affiché en heure de Paris.",
       details: "Détails de votre demande",
       detailsPlaceholder: "Décrivez brièvement votre situation...",
       submit: "Procéder au paiement",
@@ -57,6 +58,7 @@ export const bookingContent = {
       email: "Email",
       phone: "Phone Number",
       date: "Date and Time",
+      dateHint: "Choose your consultation date and time. The slot is displayed in Paris time.",
       details: "Request Details",
       detailsPlaceholder: "Briefly describe your situation...",
       submit: "Proceed to Payment",
@@ -97,6 +99,7 @@ export const bookingContent = {
       email: "E-Mail",
       phone: "Telefonnummer",
       date: "Datum und Uhrzeit",
+      dateHint: "Wählen Sie Datum und Uhrzeit Ihrer Beratung. Der Termin wird in Pariser Zeit angezeigt.",
       details: "Anforderungsdetails",
       detailsPlaceholder: "Beschreiben Sie Ihre Situation kurz...",
       submit: "Zur Zahlung übergehen",
@@ -137,6 +140,7 @@ export const bookingContent = {
       email: "电子邮件",
       phone: "电话号码",
       date: "日期和时间",
+      dateHint: "请选择咨询日期和时间。时段以巴黎时间显示。",
       details: "请求详情",
       detailsPlaceholder: "简要描述您的情况...",
       submit: "继续付款",
@@ -193,6 +197,12 @@ export default function BookingPage() {
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [paymentStatus, setPaymentStatus] = useState<"success" | "canceled" | null>(null);
   const [trackingId, setTrackingId] = useState<string | null>(null);
+  const localizedDate = selectedDate
+    ? new Intl.DateTimeFormat(
+        language === "fr" ? "fr-FR" : language === "de" ? "de-DE" : language === "zh" ? "zh-CN" : "en-GB",
+        { dateStyle: "full", timeStyle: "short", timeZone: "Europe/Paris" }
+      ).format(selectedDate)
+    : null;
 
   // Handle Stripe redirect
   useEffect(() => {
@@ -519,6 +529,8 @@ export default function BookingPage() {
                 className="form-field-premium w-full px-4 py-2 border"
                 aria-describedby="availability-status"
               />
+              <p className="mt-2 text-xs leading-5 text-muted-foreground">{content.form.dateHint}</p>
+              {localizedDate && <p className="mt-2 text-sm font-medium text-primary" aria-live="polite">{localizedDate}</p>}
               <div id="availability-status" className={`availability-status mt-3 ${isBlockedDate || isBookedSlot ? "is-unavailable" : "is-available"}`} role="status" aria-live="polite">
                 <span className="availability-dot" aria-hidden="true" />
                 <span>{availabilityLabel}</span>

@@ -102,6 +102,7 @@ export const appointments = mysqlTable("appointments", {
   consultationType: varchar("consultation_type", { length: 100 }).default("health_advice").notNull(),
   requestDetails: text("request_details").notNull(), // Free text description of the request
   appointmentDate: timestamp("appointment_date").notNull(), // Date and time of the appointment
+  slotKey: varchar("slot_key", { length: 64 }), // Unique active 30-minute slot lock; cleared when cancelled
   duration: int("duration").default(30).notNull(), // Duration in minutes
   basePrice: varchar("base_price", { length: 20 }).notNull(), // Base price (100 EUR)
   finalPrice: varchar("final_price", { length: 20 }).notNull(), // Final price with surcharges
@@ -120,7 +121,9 @@ export const appointments = mysqlTable("appointments", {
   reminderSent: int("reminder_sent").default(0).notNull(), // 1 = 24h reminder sent
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-});
+}, table => ({
+  activeSlotUnique: uniqueIndex("appointments_active_slot_unique").on(table.slotKey),
+}));
 
 export type Appointment = typeof appointments.$inferSelect;
 export type InsertAppointment = typeof appointments.$inferInsert;

@@ -291,7 +291,7 @@ async function startServer() {
             const db = drizzle(process.env.DATABASE_URL!);
             await db
               .update(appointments)
-              .set({ appointmentStatus: "cancelled" })
+              .set({ appointmentStatus: "cancelled", slotKey: null })
               .where(
                 and(
                   eq(appointments.trackingId, trackingId),
