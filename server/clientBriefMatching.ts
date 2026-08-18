@@ -2,14 +2,23 @@ type BriefForMatching = {
   specialtyNeeded: string;
   country: string;
   requiredCertifications: string | null;
+  requiredLanguages?: string | null;
+  minimumYearsExperience?: number | null;
+  availabilityNeeded?: string | null;
 };
 
 type CandidateForMatching = {
   specialty: string;
   targetCountries: string | null;
+  mobility?: string | null;
   certifications: string | null;
   normalizedCertifications: string | null;
   certificationNames?: string[];
+  languages?: string | null;
+  normalizedLanguages?: string | null;
+  languageNames?: string[];
+  yearsExperience?: number | null;
+  availability?: string | null;
 };
 
 const normalise = (value: string) => value
@@ -23,6 +32,26 @@ const containsTerm = (haystack: string, needle: string) => {
   return normalisedNeedle.length > 1 && normalise(haystack).includes(normalisedNeedle);
 };
 
+function parseTerms(value: string | null | undefined) {
+  if (!value) return [] as string[];
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    if (Array.isArray(parsed)) {
+      return parsed.flatMap(item => {
+        if (typeof item === "string") return [item];
+        if (item && typeof item === "object") {
+          const record = item as Record<string, unknown>;
+          return [record.name, record.language].filter((item): item is string => typeof item === "string");
+        }
+        return [];
+      });
+    }
+  } catch {
+    // Free-text values remain valid fallback data for a human-reviewed score.
+  }
+  return value.split(/[,;\n]/).map(item => item.trim()).filter(Boolean);
+}
+
 function specialtyMatches(candidateSpecialty: string, requestedSpecialty: string) {
   if (containsTerm(candidateSpecialty, requestedSpecialty) || containsTerm(requestedSpecialty, candidateSpecialty)) return true;
   const roots = (value: string) => normalise(value)
@@ -34,46 +63,59 @@ function specialtyMatches(candidateSpecialty: string, requestedSpecialty: string
   return requestedRoots.length > 0 && requestedRoots.every(root => candidateRoots.has(root));
 }
 
-function certificationNames(value: string | null) {
-  if (!value) return [] as string[];
-  try {
-    const parsed = JSON.parse(value) as unknown;
-    if (Array.isArray(parsed)) {
-      return parsed.flatMap(item => typeof item === "string" ? [item] : item && typeof item === "object" && "name" in item && typeof item.name === "string" ? [item.name] : []);
-    }
-  } catch {
-    // Fall back to the candidate's declared free-text values.
-  }
-  return value.split(/[,;\n]/).map(value => value.trim()).filter(Boolean);
-}
+const matchesAny = (required: string[], available: string[]) => required.filter(requiredName =>
+  available.some(candidateName => containsTerm(candidateName, requiredName) || containsTerm(requiredName, candidateName)),
+);
 
 export function computeBriefCandidateMatch(brief: BriefForMatching, candidate: CandidateForMatching) {
   const reasons: string[] = [];
-  let score = 0;
+  const breakdown = { specialty: 0, mobility: 0, certifications: 0, languages: 0, experience: 0, availability: 0 };
+
   if (specialtyMatches(candidate.specialty, brief.specialtyNeeded)) {
-    score += 45;
+    breakdown.specialty = 35;
     reasons.push("spécialité compatible");
   }
-  if (containsTerm(candidate.targetCountries || "", brief.country)) {
-    score += 20;
+
+  const countryEvidence = [...parseTerms(candidate.targetCountries), candidate.mobility || ""].join(" · ");
+  if (containsTerm(countryEvidence, brief.country)) {
+    breakdown.mobility = 15;
     reasons.push("mobilité vers le pays de mission déclarée");
   }
 
-  const required = certificationNames(brief.requiredCertifications);
-  const available = [
+  const requiredCertifications = parseTerms(brief.requiredCertifications);
+  const availableCertifications = [
     ...(candidate.certificationNames || []),
-    ...certificationNames(candidate.normalizedCertifications),
-    ...certificationNames(candidate.certifications),
+    ...parseTerms(candidate.normalizedCertifications),
+    ...parseTerms(candidate.certifications),
   ];
-  const matchedCertifications = required.filter(requiredName => available.some(candidateName => containsTerm(candidateName, requiredName) || containsTerm(requiredName, candidateName)));
-  if (required.length > 0 && matchedCertifications.length > 0) {
-    score += Math.round((matchedCertifications.length / required.length) * 35);
+  const matchedCertifications = matchesAny(requiredCertifications, availableCertifications);
+  if (requiredCertifications.length > 0 && matchedCertifications.length > 0) {
+    breakdown.certifications = Math.round((matchedCertifications.length / requiredCertifications.length) * 20);
     reasons.push(`certifications correspondantes : ${matchedCertifications.join(", ")}`);
   }
-  if (required.length === 0) {
-    score += 15;
-    reasons.push("aucune certification spécifique imposée");
+
+  const requiredLanguages = parseTerms(brief.requiredLanguages);
+  const availableLanguages = [
+    ...(candidate.languageNames || []),
+    ...parseTerms(candidate.normalizedLanguages),
+    ...parseTerms(candidate.languages),
+  ];
+  const matchedLanguages = matchesAny(requiredLanguages, availableLanguages);
+  if (requiredLanguages.length > 0 && matchedLanguages.length > 0) {
+    breakdown.languages = Math.round((matchedLanguages.length / requiredLanguages.length) * 15);
+    reasons.push(`langues correspondantes : ${matchedLanguages.join(", ")}`);
   }
 
-  return { score: Math.min(score, 100), reasons, matchedCertifications };
+  if (brief.minimumYearsExperience && candidate.yearsExperience !== null && candidate.yearsExperience !== undefined && candidate.yearsExperience >= brief.minimumYearsExperience) {
+    breakdown.experience = 10;
+    reasons.push(`expérience déclarée : ${candidate.yearsExperience} an(s) pour un minimum de ${brief.minimumYearsExperience}`);
+  }
+
+  if (brief.availabilityNeeded && candidate.availability && (containsTerm(candidate.availability, brief.availabilityNeeded) || containsTerm(brief.availabilityNeeded, candidate.availability))) {
+    breakdown.availability = 5;
+    reasons.push("disponibilité compatible avec le besoin exprimé");
+  }
+
+  const score = Object.values(breakdown).reduce((total, value) => total + value, 0);
+  return { score: Math.min(score, 100), reasons, matchedCertifications, matchedLanguages, breakdown };
 }

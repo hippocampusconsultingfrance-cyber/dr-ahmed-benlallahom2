@@ -209,6 +209,11 @@ export const cvApplications = mysqlTable("cv_applications", {
   normalizedExperiences: text("normalized_experiences"),
   gdprConsent: int("gdpr_consent").default(0).notNull(),
   marketingConsent: int("marketing_consent").default(0).notNull(),
+  marketingUnsubscribeToken: varchar("marketing_unsubscribe_token", { length: 80 }),
+  marketingUnsubscribedAt: timestamp("marketing_unsubscribed_at"),
+  marketingSuppressedAt: timestamp("marketing_suppressed_at"),
+  lastContactedAt: timestamp("last_contacted_at"),
+  lastCandidateResponseAt: timestamp("last_candidate_response_at"),
   status: mysqlEnum("status", ["new", "reviewing", "shortlisted", "placed", "rejected", "archived"]).default("new").notNull(),
   adminNotes: text("admin_notes"),
   consentAt: timestamp("consent_at"),
@@ -322,7 +327,7 @@ export const recruitmentAuditLogs = mysqlTable("recruitment_audit_logs", {
   id: int("id").autoincrement().primaryKey(),
   applicationId: int("application_id"),
   adminOpenId: varchar("admin_open_id", { length: 128 }).notNull(),
-  action: mysqlEnum("action", ["download", "reanalyze", "erase", "email", "status_update", "retention_cleanup"]).notNull(),
+  action: mysqlEnum("action", ["download", "reanalyze", "erase", "email", "status_update", "retention_cleanup", "export"]).notNull(),
   metadata: text("metadata"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, table => ({
@@ -367,9 +372,15 @@ export const clientBriefs = mysqlTable("client_briefs", {
   specialtyNeeded: varchar("specialty_needed", { length: 160 }).notNull(),
   country: varchar("country", { length: 100 }).notNull(),
   requiredCertifications: text("required_certifications"),
+  requiredLanguages: text("required_languages"),
+  minimumYearsExperience: int("minimum_years_experience"),
+  availabilityNeeded: varchar("availability_needed", { length: 100 }),
+  jobDescription: text("job_description"),
   timeline: varchar("timeline", { length: 100 }),
   notes: text("notes"),
   status: mysqlEnum("brief_status", ["new", "reviewing", "shortlist_sent", "contract_signed", "closed"]).default("new").notNull(),
+  acknowledgedAt: timestamp("acknowledged_at"),
+  shortlistSentAt: timestamp("shortlist_sent_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -382,6 +393,7 @@ export const clientBriefCandidates = mysqlTable("client_brief_candidates", {
   briefId: int("brief_id").notNull(),
   applicationId: int("application_id").notNull(),
   matchScore: int("match_score"),
+  matchBreakdown: text("match_breakdown"),
   status: mysqlEnum("association_status", ["suggested", "reviewing", "shortlisted", "declined"]).default("suggested").notNull(),
   notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -417,16 +429,36 @@ export const recruitmentCampaigns = mysqlTable("recruitment_campaigns", {
 
 export type RecruitmentCampaign = typeof recruitmentCampaigns.$inferSelect;
 
+/** Reusable, admin-owned copy blocks for recurring medical recruitment offers. */
+export const recruitmentOfferTemplates = mysqlTable("recruitment_offer_templates", {
+  id: int("id").autoincrement().primaryKey(),
+  name: varchar("name", { length: 180 }).notNull(),
+  category: mysqlEnum("category", ["europe", "canada", "middle_east", "vvip_offshore", "paramedical", "general"]).default("general").notNull(),
+  language: mysqlEnum("language", ["fr", "en"]).default("fr").notNull(),
+  subject: varchar("subject", { length: 255 }).notNull(),
+  body: text("body").notNull(),
+  active: int("active").default(1).notNull(),
+  createdByOpenId: varchar("created_by_open_id", { length: 128 }).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+}, table => ({
+  activeIdx: index("recruitment_offer_templates_active_idx").on(table.active, table.updatedAt),
+}));
+
+export type RecruitmentOfferTemplate = typeof recruitmentOfferTemplates.$inferSelect;
+
 /** Immutable delivery log for a campaign recipient. */
 export const recruitmentCampaignRecipients = mysqlTable("recruitment_campaign_recipients", {
   id: int("id").autoincrement().primaryKey(),
   campaignId: int("campaign_id").notNull(),
   applicationId: int("application_id").notNull(),
   recipientEmail: varchar("recipient_email", { length: 320 }).notNull(),
-  deliveryStatus: mysqlEnum("delivery_status", ["queued", "sent", "failed", "skipped"]).default("queued").notNull(),
+  deliveryStatus: mysqlEnum("delivery_status", ["queued", "sent", "delivered", "delayed", "bounced", "complained", "failed", "suppressed", "skipped"]).default("queued").notNull(),
   providerEmailId: varchar("provider_email_id", { length: 120 }),
   error: text("error"),
   sentAt: timestamp("sent_at"),
+  deliveredAt: timestamp("delivered_at"),
+  lastEventAt: timestamp("last_event_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, table => ({
   campaignIdx: index("recruitment_campaign_recipients_campaign_idx").on(table.campaignId),
@@ -434,3 +466,42 @@ export const recruitmentCampaignRecipients = mysqlTable("recruitment_campaign_re
 }));
 
 export type RecruitmentCampaignRecipient = typeof recruitmentCampaignRecipients.$inferSelect;
+
+/** Manual follow-up worklist; reminders are suggestions only and never send email by themselves. */
+export const recruitmentFollowUpTasks = mysqlTable("recruitment_follow_up_tasks", {
+  id: int("id").autoincrement().primaryKey(),
+  applicationId: int("application_id").notNull(),
+  campaignId: int("campaign_id"),
+  kind: mysqlEnum("kind", ["follow_up_7", "follow_up_14", "custom"]).notNull(),
+  dueAt: timestamp("due_at").notNull(),
+  status: mysqlEnum("status", ["suggested", "completed", "dismissed"]).default("suggested").notNull(),
+  notes: text("notes"),
+  completedAt: timestamp("completed_at"),
+  completedByOpenId: varchar("completed_by_open_id", { length: 128 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+}, table => ({
+  applicationIdx: index("recruitment_follow_up_tasks_application_idx").on(table.applicationId, table.status, table.dueAt),
+  campaignIdx: index("recruitment_follow_up_tasks_campaign_idx").on(table.campaignId),
+}));
+
+export type RecruitmentFollowUpTask = typeof recruitmentFollowUpTasks.$inferSelect;
+
+/** Idempotent provider event archive used for delivery reporting and bounce suppression. */
+export const recruitmentEmailEvents = mysqlTable("recruitment_email_events", {
+  id: int("id").autoincrement().primaryKey(),
+  providerEventId: varchar("provider_event_id", { length: 120 }).notNull().unique(),
+  providerEmailId: varchar("provider_email_id", { length: 120 }),
+  campaignRecipientId: int("campaign_recipient_id"),
+  applicationId: int("application_id"),
+  eventType: varchar("event_type", { length: 80 }).notNull(),
+  recipientEmail: varchar("recipient_email", { length: 320 }),
+  payload: text("payload"),
+  occurredAt: timestamp("occurred_at").notNull(),
+  receivedAt: timestamp("received_at").defaultNow().notNull(),
+}, table => ({
+  providerEmailIdx: index("recruitment_email_events_provider_email_idx").on(table.providerEmailId),
+  applicationIdx: index("recruitment_email_events_application_idx").on(table.applicationId),
+}));
+
+export type RecruitmentEmailEvent = typeof recruitmentEmailEvents.$inferSelect;

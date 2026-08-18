@@ -1,0 +1,1 @@
+ALTER TABLE `recruitment_audit_logs` MODIFY COLUMN `action` enum('download','reanalyze','erase','email','status_update','retention_cleanup','export') NOT NULL;

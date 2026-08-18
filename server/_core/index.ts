@@ -1,6 +1,7 @@
 import "dotenv/config";
 import express from "express";
 import multer from "multer";
+import { Webhook } from "svix";
 import { z } from "zod";
 import { createServer } from "http";
 import net from "net";
@@ -12,8 +13,10 @@ import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { storagePut } from "../storage";
 import { notifyOwner } from "./notification";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { validateCvFile } from "../recruitmentFileValidation";
+import { getDb } from "../db";
+import { cvApplications, recruitmentCampaignRecipients, recruitmentEmailEvents } from "../../drizzle/schema";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -272,6 +275,79 @@ async function startServer() {
       res.status(400).send(`Webhook Error: ${error}`);
     }
   });
+
+  app.post("/api/webhooks/resend", express.raw({ type: "application/json" }), async (req, res) => {
+    const webhookSecret = process.env.RESEND_WEBHOOK_SECRET;
+    if (!webhookSecret) {
+      res.status(503).send("Resend webhook is not configured");
+      return;
+    }
+    try {
+      const payload = Buffer.isBuffer(req.body) ? req.body.toString("utf8") : String(req.body || "");
+      const event = new Webhook(webhookSecret).verify(payload, {
+        "svix-id": String(req.headers["svix-id"] || ""),
+        "svix-timestamp": String(req.headers["svix-timestamp"] || ""),
+        "svix-signature": String(req.headers["svix-signature"] || ""),
+      }) as { type?: string; created_at?: string; data?: Record<string, any> };
+      const providerEventId = String(req.headers["svix-id"] || "");
+      if (!providerEventId || !event.type) {
+        res.status(400).send("Invalid Resend webhook payload");
+        return;
+      }
+      const db = await getDb();
+      if (!db) throw new Error("Database connection failed");
+      const [alreadyRecorded] = await db.select({ id: recruitmentEmailEvents.id }).from(recruitmentEmailEvents).where(eq(recruitmentEmailEvents.providerEventId, providerEventId)).limit(1);
+      if (alreadyRecorded) {
+        res.status(200).json({ received: true, duplicate: true });
+        return;
+      }
+
+      const data = event.data || {};
+      const providerEmailId = typeof data.email_id === "string" ? data.email_id : null;
+      const recipientEmail = Array.isArray(data.to) && typeof data.to[0] === "string" ? data.to[0].toLowerCase() : null;
+      const statusByEvent: Record<string, "sent" | "delivered" | "delayed" | "bounced" | "complained" | "failed" | "suppressed" | undefined> = {
+        "email.sent": "sent",
+        "email.delivered": "delivered",
+        "email.delivery_delayed": "delayed",
+        "email.bounced": "bounced",
+        "email.complained": "complained",
+        "email.failed": "failed",
+        "email.suppressed": "suppressed",
+      };
+      const deliveryStatus = statusByEvent[event.type];
+      const recipients = providerEmailId
+        ? await db.select().from(recruitmentCampaignRecipients).where(eq(recruitmentCampaignRecipients.providerEmailId, providerEmailId)).limit(5)
+        : [];
+      const recipient = recipients[0];
+      const occurredAt = event.created_at && Number.isFinite(new Date(event.created_at).getTime()) ? new Date(event.created_at) : new Date();
+      await db.insert(recruitmentEmailEvents).values({
+        providerEventId,
+        providerEmailId,
+        campaignRecipientId: recipient?.id || null,
+        applicationId: recipient?.applicationId || null,
+        eventType: event.type,
+        recipientEmail,
+        payload: payload.slice(0, 20_000),
+        occurredAt,
+      });
+
+      if (recipient && deliveryStatus) {
+        await db.update(recruitmentCampaignRecipients).set({
+          deliveryStatus,
+          error: deliveryStatus === "bounced" || deliveryStatus === "failed" ? String(data.bounce?.message || data.error?.message || data.error || "Email delivery failed").slice(0, 2_000) : null,
+          deliveredAt: deliveryStatus === "delivered" ? occurredAt : recipient.deliveredAt,
+          lastEventAt: occurredAt,
+        }).where(eq(recruitmentCampaignRecipients.id, recipient.id));
+        if (["bounced", "complained", "suppressed"].includes(deliveryStatus)) {
+          await db.update(cvApplications).set({ marketingConsent: 0, marketingSuppressedAt: occurredAt, updatedAt: new Date() }).where(eq(cvApplications.id, recipient.applicationId));
+        }
+      }
+      res.status(200).json({ received: true });
+    } catch (error) {
+      console.error("Resend webhook verification failed:", error);
+      res.status(400).send("Invalid Resend webhook");
+    }
+  });
   
   // Configure body parser with larger size limit for file uploads (after Stripe webhook)
   app.use(express.json({ limit: "50mb" }));
@@ -286,8 +362,13 @@ async function startServer() {
     specialtyNeeded: z.string().trim().min(1).max(160),
     country: z.string().trim().min(1).max(100),
     requiredCertifications: z.string().trim().max(1000).optional().default(""),
+    requiredLanguages: z.string().trim().max(500).optional().default(""),
+    minimumYearsExperience: z.number().int().min(0).max(70).optional(),
+    availabilityNeeded: z.string().trim().max(100).optional().default(""),
+    jobDescription: z.string().trim().max(5000).optional().default(""),
     timeline: z.string().trim().max(100).optional().default(""),
     notes: z.string().trim().max(3000).optional().default(""),
+    language: z.enum(["fr", "en", "de", "zh"]).optional().default("fr"),
     website: z.string().max(200).optional().default(""),
   });
 
@@ -313,12 +394,21 @@ async function startServer() {
       await db.execute(sql`INSERT INTO client_briefs (
         brief_id, organization_name, contact_name, email, phone,
         target_environment, specialty_needed, country, required_certifications,
-        timeline, notes, brief_status
+        required_languages, minimum_years_experience, availability_needed, job_description,
+        timeline, notes, brief_status, acknowledged_at
       ) VALUES (
         ${briefId}, ${parsed.data.organizationName}, ${parsed.data.contactName}, ${parsed.data.email}, ${parsed.data.phone},
         ${parsed.data.targetEnvironment}, ${parsed.data.specialtyNeeded}, ${parsed.data.country}, ${parsed.data.requiredCertifications},
-        ${parsed.data.timeline}, ${parsed.data.notes}, 'new'
+        ${parsed.data.requiredLanguages}, ${parsed.data.minimumYearsExperience ?? null}, ${parsed.data.availabilityNeeded}, ${parsed.data.jobDescription},
+        ${parsed.data.timeline}, ${parsed.data.notes}, 'new', NOW()
       )`);
+
+      try {
+        const { sendEmployerBriefAcknowledgment } = await import("./notifications");
+        await sendEmployerBriefAcknowledgment({ email: parsed.data.email, contactName: parsed.data.contactName, briefId, language: parsed.data.language });
+      } catch (error) {
+        console.error("Employer brief acknowledgement failed:", error);
+      }
 
       try {
         await notifyOwner({

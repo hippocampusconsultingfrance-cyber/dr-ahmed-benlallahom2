@@ -2296,3 +2296,16 @@
 - [x] Créer l’onglet Mailing avec composition d’offre, choix de langue, aperçu et sélection groupe / tout le vivier
 - [x] Ajouter l’envoi protégé avec récapitulatif, confirmation explicite et traçabilité des campagnes
 - [x] Tester les règles de ciblage, les exclusions et publier l’espace de mailing
+
+## Dix améliorations prioritaires du recrutement — août 2026
+
+- [x] Ajouter un tableau de bord recrutement avec volumes de CV, consentements, état d’analyse IA, activité de campagnes et taux de réponse
+- [x] Créer une fiche candidat 360° avec chronologie des actions, emails, notes, pièces demandées et prochain suivi
+- [x] Préparer des relances manuelles suggérées à J+7/J+14 sans aucun envoi automatique
+- [x] Ajouter un lien de désinscription marketing explicite, sécurisé et traçable pour les campagnes recrutement
+- [x] Ajouter un export CSV administratif contrôlé du vivier et des shortlists de missions
+- [x] Créer des modèles réutilisables d’offres de recrutement par zone et type de mission
+- [x] Enrichir le score de compatibilité mission–candidat avec spécialité, langues, mobilité, disponibilité et certifications
+- [x] Améliorer l’espace Employeurs avec suivi de brief, accusé de réception, statut de shortlist et descriptif de poste
+- [x] Renforcer la réassurance publique des pages recrutement sur confidentialité, consentement, revue humaine et délais indicatifs
+- [x] Ajouter un suivi de délivrabilité des campagnes et des erreurs d’envoi, sans réutiliser automatiquement les adresses en erreur

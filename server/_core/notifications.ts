@@ -462,10 +462,11 @@ export async function sendRecruitmentCampaignEmail(input: {
   subject: string;
   body: string;
   language: RecruitmentEmailLanguage;
+  unsubscribeUrl: string;
 }): Promise<{ id?: string }> {
   const copy = input.language === "en"
-    ? { greeting: "Hello", footer: "This offer concerns your professional profile. If you no longer wish to receive recruitment opportunities, please reply to this message." }
-    : { greeting: "Bonjour", footer: "Cette offre concerne votre profil professionnel. Si vous ne souhaitez plus recevoir d’opportunités de recrutement, répondez simplement à ce message." };
+    ? { greeting: "Hello", footer: "This offer concerns your professional profile.", unsubscribe: "Unsubscribe from future recruitment opportunities" }
+    : { greeting: "Bonjour", footer: "Cette offre concerne votre profil professionnel.", unsubscribe: "Ne plus recevoir d’opportunités de recrutement" };
   const { data, error } = await resend.emails.send({
     from: FROM_EMAIL,
     to: [input.candidateEmail],
@@ -477,10 +478,46 @@ export async function sendRecruitmentCampaignEmail(input: {
         <p>${copy.greeting} ${escapeHtml(input.candidateName)},</p>
         <p>${textToSafeHtml(input.body)}</p>
         <p style="color: #64748b;">${copy.footer}</p>
+        <p style="font-size: 12px;"><a href="${escapeHtml(input.unsubscribeUrl)}" style="color: #0e7490;">${copy.unsubscribe}</a></p>
         <p style="color: #64748b;">Dr. Ahmed Ben Lallahom<br>Hippocampus Consulting</p>
       </div>
     `,
   });
   if (error) throw new Error(`Resend campaign email failed: ${error.message}`);
+  return { id: data?.id };
+}
+
+export async function sendEmployerBriefAcknowledgment(input: {
+  email: string;
+  contactName: string;
+  briefId: string;
+  language?: "fr" | "en" | "de" | "zh";
+}): Promise<{ id?: string }> {
+  const english = input.language === "en";
+  const copy = english
+    ? {
+        subject: `Mission brief received — ${input.briefId}`,
+        greeting: "Hello",
+        heading: "Your mission brief has been received",
+        body: "Our executive recruitment team has registered your request. We will review the operational requirements, qualification criteria and timeline before proposing the next steps.",
+        reference: "Tracking reference",
+        footer: "This acknowledgement does not constitute an automatic acceptance of the mission. Every shortlist remains subject to human review and professional verification.",
+      }
+    : {
+        subject: `Brief de mission reçu — ${input.briefId}`,
+        greeting: "Bonjour",
+        heading: "Votre brief de mission a bien été reçu",
+        body: "Notre équipe de recrutement a enregistré votre demande. Elle examinera les besoins opérationnels, les critères de qualification et le calendrier avant de vous proposer les prochaines étapes.",
+        reference: "Référence de suivi",
+        footer: "Cet accusé de réception ne constitue pas une acceptation automatique de la mission. Toute shortlist reste soumise à une revue humaine et à des vérifications professionnelles.",
+      };
+  const { data, error } = await resend.emails.send({
+    from: FROM_EMAIL,
+    to: [input.email],
+    replyTo: RECRUITMENT_REPLY_TO,
+    subject: copy.subject,
+    html: `<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;"><h2 style="color: #0891b2;">${copy.heading}</h2><p>${copy.greeting} ${escapeHtml(input.contactName)},</p><p>${copy.body}</p><div style="background: #f8fafc; border-radius: 8px; padding: 16px; margin: 16px 0;"><strong>${copy.reference} :</strong> ${escapeHtml(input.briefId)}</div><p style="color: #64748b;">${copy.footer}</p><p style="color: #64748b;">Dr. Ahmed Ben Lallahom<br>Hippocampus Consulting</p></div>`,
+  });
+  if (error) throw new Error(`Resend employer brief acknowledgement failed: ${error.message}`);
   return { id: data?.id };
 }

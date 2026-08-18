@@ -1,15 +1,16 @@
 import { getSessionCookieOptions } from "./_core/cookies";
+import { randomUUID } from "node:crypto";
 import { COOKIE_NAME } from "../shared/const";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, adminProcedure, router } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { getDb } from "./db";
-import { contactMessages, gdprRequests, testimonials, appointments, blogPosts, availabilitySlots, blockedDates, cvApplications, cvCandidateCertifications, recruitmentAuditLogs, recruitmentMatchProfiles, clientBriefs, clientBriefCandidates, recruitmentCampaigns, recruitmentCampaignRecipients } from "../drizzle/schema";
+import { contactMessages, gdprRequests, testimonials, appointments, blogPosts, availabilitySlots, blockedDates, cvApplications, cvCandidateCertifications, cvCandidateLanguages, recruitmentAuditLogs, recruitmentMatchProfiles, clientBriefs, clientBriefCandidates, recruitmentCampaigns, recruitmentCampaignRecipients, recruitmentEmailEvents, recruitmentFollowUpTasks, recruitmentOfferTemplates } from "../drizzle/schema";
 import { notifyOwner } from "./_core/notification";
 import { storageGetSignedUrl } from "./storage";
 import { canAdminDownloadCv, CV_DOWNLOAD_UNAVAILABLE_MESSAGE } from "./recruitmentDownloadPolicy";
-import { eq, and, sql, desc, gte, inArray, lt } from "drizzle-orm";
+import { eq, and, sql, desc, gte, inArray, isNull, lt } from "drizzle-orm";
 import Stripe from "stripe";
 import {
   sendConfirmationEmail,
@@ -38,6 +39,13 @@ const TRUSTED_HOSTS = new Set([
 
 const PARIS_TIME_ZONE = "Europe/Paris";
 const CV_APPLICATION_STATUSES = ["new", "reviewing", "shortlisted", "placed", "rejected", "archived"] as const;
+
+function csvCell(value: unknown): string {
+  const text = value === null || value === undefined ? "" : String(value);
+  const protectedText = /^[=+\-@]/.test(text) ? `'${text}` : text;
+  return `"${protectedText.replace(/"/g, '""')}"`;
+}
+
 const PARIS_DAY_INDEX: Record<string, number> = {
   Sun: 0,
   Mon: 1,
@@ -672,6 +680,24 @@ export const appRouter = router({
           );
 
         return results.map(r => r.appointmentDate);
+    }),
+  }),
+
+  recruitmentPreferences: router({
+    unsubscribe: publicProcedure
+      .input(z.object({ token: z.string().trim().min(24).max(80) }))
+      .mutation(async ({ input }) => {
+        const db = await getDb();
+        if (!db) throw new Error("Database connection failed");
+        const [candidate] = await db.select({ id: cvApplications.id, marketingUnsubscribedAt: cvApplications.marketingUnsubscribedAt })
+          .from(cvApplications)
+          .where(eq(cvApplications.marketingUnsubscribeToken, input.token))
+          .limit(1);
+        if (!candidate) throw new TRPCError({ code: "NOT_FOUND", message: "Lien de désinscription invalide ou expiré." });
+        if (!candidate.marketingUnsubscribedAt) {
+          await db.update(cvApplications).set({ marketingConsent: 0, marketingUnsubscribedAt: new Date(), updatedAt: new Date() }).where(eq(cvApplications.id, candidate.id));
+        }
+        return { success: true, alreadyUnsubscribed: Boolean(candidate.marketingUnsubscribedAt) };
       }),
   }),
 
@@ -955,6 +981,8 @@ export const appRouter = router({
             if (!db) return [];
             const conditions = [
               eq(cvApplications.marketingConsent, 1),
+              isNull(cvApplications.marketingUnsubscribedAt),
+              isNull(cvApplications.marketingSuppressedAt),
               sql`${cvApplications.status} NOT IN ('rejected', 'archived')`,
             ];
             if (input?.specialty) conditions.push(sql`LOWER(${cvApplications.specialty}) LIKE LOWER(${`%${input.specialty}%`})`);
@@ -991,7 +1019,7 @@ export const appRouter = router({
           .query(async ({ input }) => {
             const db = await getDb();
             if (!db) return [];
-            const conditions = [eq(cvApplications.marketingConsent, 1), sql`${cvApplications.status} NOT IN ('rejected', 'archived')`];
+            const conditions = [eq(cvApplications.marketingConsent, 1), isNull(cvApplications.marketingUnsubscribedAt), isNull(cvApplications.marketingSuppressedAt), sql`${cvApplications.status} NOT IN ('rejected', 'archived')`];
             if (input.mode === "selected") {
               if (!input.selectedIds.length) return [];
               conditions.push(inArray(cvApplications.id, input.selectedIds));
@@ -1014,7 +1042,20 @@ export const appRouter = router({
         list: adminProcedure.query(async () => {
           const db = await getDb();
           if (!db) return [];
-          return db.select().from(recruitmentCampaigns).orderBy(desc(recruitmentCampaigns.createdAt)).limit(50);
+          const campaigns = await db.select().from(recruitmentCampaigns).orderBy(desc(recruitmentCampaigns.createdAt)).limit(50);
+          if (!campaigns.length) return [];
+          const metrics = await db.select({
+            campaignId: recruitmentCampaignRecipients.campaignId,
+            total: sql<number>`COUNT(*)`,
+            delivered: sql<number>`SUM(CASE WHEN ${recruitmentCampaignRecipients.deliveryStatus} = 'delivered' THEN 1 ELSE 0 END)`,
+            sent: sql<number>`SUM(CASE WHEN ${recruitmentCampaignRecipients.deliveryStatus} IN ('sent', 'delivered') THEN 1 ELSE 0 END)`,
+            failed: sql<number>`SUM(CASE WHEN ${recruitmentCampaignRecipients.deliveryStatus} IN ('failed', 'bounced', 'complained', 'suppressed') THEN 1 ELSE 0 END)`,
+            delayed: sql<number>`SUM(CASE WHEN ${recruitmentCampaignRecipients.deliveryStatus} = 'delayed' THEN 1 ELSE 0 END)`,
+          }).from(recruitmentCampaignRecipients)
+            .where(inArray(recruitmentCampaignRecipients.campaignId, campaigns.map(campaign => campaign.id)))
+            .groupBy(recruitmentCampaignRecipients.campaignId);
+          const metricByCampaign = new Map(metrics.map(metric => [metric.campaignId, metric]));
+          return campaigns.map(campaign => ({ ...campaign, delivery: metricByCampaign.get(campaign.id) || { total: 0, sent: 0, delivered: 0, failed: 0, delayed: 0 } }));
         }),
 
         send: adminProcedure
@@ -1033,7 +1074,7 @@ export const appRouter = router({
           .mutation(async ({ input, ctx }) => {
             const db = await getDb();
             if (!db) throw new Error("Database connection failed");
-            const conditions = [eq(cvApplications.marketingConsent, 1), sql`${cvApplications.status} NOT IN ('rejected', 'archived')`];
+            const conditions = [eq(cvApplications.marketingConsent, 1), isNull(cvApplications.marketingUnsubscribedAt), isNull(cvApplications.marketingSuppressedAt), sql`${cvApplications.status} NOT IN ('rejected', 'archived')`];
             if (input.mode === "selected") {
               if (!input.selectedIds.length) throw new TRPCError({ code: "BAD_REQUEST", message: "Sélectionnez au moins un profil éligible" });
               conditions.push(inArray(cvApplications.id, input.selectedIds));
@@ -1043,7 +1084,7 @@ export const appRouter = router({
               if (input.country) conditions.push(sql`${cvApplications.targetCountries} LIKE ${`%${input.country}%`}`);
               if (input.minimumScore !== undefined) conditions.push(sql`${cvApplications.aiScore} >= ${input.minimumScore}`);
             }
-            const audience = await db.select({ id: cvApplications.id, firstName: cvApplications.firstName, lastName: cvApplications.lastName, email: cvApplications.email })
+            const audience = await db.select({ id: cvApplications.id, firstName: cvApplications.firstName, lastName: cvApplications.lastName, email: cvApplications.email, marketingUnsubscribeToken: cvApplications.marketingUnsubscribeToken })
               .from(cvApplications).where(and(...conditions)).limit(200);
             if (!audience.length) throw new TRPCError({ code: "BAD_REQUEST", message: "Aucun profil éligible : seuls les candidats ayant accepté les communications de recrutement peuvent être contactés." });
 
@@ -1062,6 +1103,10 @@ export const appRouter = router({
             let sent = 0;
             let failed = 0;
             for (const candidate of audience) {
+              const unsubscribeToken = candidate.marketingUnsubscribeToken || randomUUID().replace(/-/g, "");
+              if (!candidate.marketingUnsubscribeToken) {
+                await db.update(cvApplications).set({ marketingUnsubscribeToken: unsubscribeToken }).where(eq(cvApplications.id, candidate.id));
+              }
               const [recipientResult] = await db.insert(recruitmentCampaignRecipients).values({ campaignId, applicationId: candidate.id, recipientEmail: candidate.email, deliveryStatus: "queued" });
               const recipientId = Number((recipientResult as any).insertId);
               try {
@@ -1072,8 +1117,15 @@ export const appRouter = router({
                   subject: input.subject,
                   body: input.body,
                   language: input.language as RecruitmentEmailLanguage,
+                  unsubscribeUrl: `${DEFAULT_PUBLIC_ORIGIN}/recruitment/unsubscribe?token=${encodeURIComponent(unsubscribeToken)}`,
                 });
-                await db.update(recruitmentCampaignRecipients).set({ deliveryStatus: "sent", providerEmailId: email.id || null, sentAt: new Date() }).where(eq(recruitmentCampaignRecipients.id, recipientId));
+                const contactedAt = new Date();
+                await db.update(recruitmentCampaignRecipients).set({ deliveryStatus: "sent", providerEmailId: email.id || null, sentAt: contactedAt, lastEventAt: contactedAt }).where(eq(recruitmentCampaignRecipients.id, recipientId));
+                await db.update(cvApplications).set({ lastContactedAt: contactedAt }).where(eq(cvApplications.id, candidate.id));
+                await db.insert(recruitmentFollowUpTasks).values([
+                  { applicationId: candidate.id, campaignId, kind: "follow_up_7", dueAt: new Date(contactedAt.getTime() + 7 * 24 * 60 * 60 * 1000), notes: "Relance suggérée à J+7 — aucun email n’est envoyé automatiquement." },
+                  { applicationId: candidate.id, campaignId, kind: "follow_up_14", dueAt: new Date(contactedAt.getTime() + 14 * 24 * 60 * 60 * 1000), notes: "Relance suggérée à J+14 — aucun email n’est envoyé automatiquement." },
+                ]);
                 await logRecruitmentAction({ applicationId: candidate.id, adminOpenId: ctx.user.openId, action: "email", metadata: { campaignId, resendId: email.id, language: input.language } });
                 sent += 1;
               } catch (error) {
@@ -1084,6 +1136,147 @@ export const appRouter = router({
             await db.update(recruitmentCampaigns).set({ status: failed === 0 ? "sent" : sent > 0 ? "partially_sent" : "failed", sentAt: new Date() }).where(eq(recruitmentCampaigns.id, campaignId));
             return { campaignId, total: audience.length, sent, failed };
           }),
+      }),
+
+      dashboard: adminProcedure.query(async () => {
+        const db = await getDb();
+        if (!db) return null;
+        const [candidateStats] = await db.select({
+          total: sql<number>`COUNT(*)`,
+          marketingEligible: sql<number>`SUM(CASE WHEN ${cvApplications.marketingConsent} = 1 AND ${cvApplications.marketingUnsubscribedAt} IS NULL AND ${cvApplications.marketingSuppressedAt} IS NULL THEN 1 ELSE 0 END)`,
+          analysesCompleted: sql<number>`SUM(CASE WHEN ${cvApplications.analysisStatus} = 'completed' THEN 1 ELSE 0 END)`,
+          analysesFailed: sql<number>`SUM(CASE WHEN ${cvApplications.analysisStatus} = 'failed' THEN 1 ELSE 0 END)`,
+          contacted: sql<number>`SUM(CASE WHEN ${cvApplications.lastContactedAt} IS NOT NULL THEN 1 ELSE 0 END)`,
+          responded: sql<number>`SUM(CASE WHEN ${cvApplications.lastCandidateResponseAt} IS NOT NULL THEN 1 ELSE 0 END)`,
+        }).from(cvApplications);
+        const [campaignStats] = await db.select({
+          total: sql<number>`COUNT(*)`,
+          sent: sql<number>`SUM(CASE WHEN ${recruitmentCampaigns.status} IN ('sent', 'partially_sent') THEN 1 ELSE 0 END)`,
+        }).from(recruitmentCampaigns);
+        const [deliveryStats] = await db.select({
+          delivered: sql<number>`SUM(CASE WHEN ${recruitmentCampaignRecipients.deliveryStatus} = 'delivered' THEN 1 ELSE 0 END)`,
+          failed: sql<number>`SUM(CASE WHEN ${recruitmentCampaignRecipients.deliveryStatus} IN ('failed', 'bounced', 'complained', 'suppressed') THEN 1 ELSE 0 END)`,
+          delayed: sql<number>`SUM(CASE WHEN ${recruitmentCampaignRecipients.deliveryStatus} = 'delayed' THEN 1 ELSE 0 END)`,
+        }).from(recruitmentCampaignRecipients);
+        const [followUpStats] = await db.select({
+          pending: sql<number>`SUM(CASE WHEN ${recruitmentFollowUpTasks.status} = 'suggested' THEN 1 ELSE 0 END)`,
+          due: sql<number>`SUM(CASE WHEN ${recruitmentFollowUpTasks.status} = 'suggested' AND ${recruitmentFollowUpTasks.dueAt} <= NOW() THEN 1 ELSE 0 END)`,
+        }).from(recruitmentFollowUpTasks);
+        const [briefStats] = await db.select({
+          total: sql<number>`COUNT(*)`,
+          active: sql<number>`SUM(CASE WHEN ${clientBriefs.status} IN ('new', 'reviewing', 'shortlist_sent') THEN 1 ELSE 0 END)`,
+        }).from(clientBriefs);
+        return { candidateStats, campaignStats, deliveryStats, followUpStats, briefStats };
+      }),
+
+      candidate: router({
+        detail: adminProcedure.input(z.object({ id: z.number().int().positive() })).query(async ({ input }) => {
+          const db = await getDb();
+          if (!db) return null;
+          const [candidate] = await db.select().from(cvApplications).where(eq(cvApplications.id, input.id)).limit(1);
+          if (!candidate) throw new TRPCError({ code: "NOT_FOUND", message: "Candidature introuvable" });
+          const [audits, campaignRecipients, followUps] = await Promise.all([
+            db.select().from(recruitmentAuditLogs).where(eq(recruitmentAuditLogs.applicationId, input.id)).orderBy(desc(recruitmentAuditLogs.createdAt)).limit(100),
+            db.select({
+              id: recruitmentCampaignRecipients.id,
+              campaignId: recruitmentCampaignRecipients.campaignId,
+              campaignTitle: recruitmentCampaigns.title,
+              deliveryStatus: recruitmentCampaignRecipients.deliveryStatus,
+              error: recruitmentCampaignRecipients.error,
+              sentAt: recruitmentCampaignRecipients.sentAt,
+              deliveredAt: recruitmentCampaignRecipients.deliveredAt,
+              lastEventAt: recruitmentCampaignRecipients.lastEventAt,
+            }).from(recruitmentCampaignRecipients).leftJoin(recruitmentCampaigns, eq(recruitmentCampaignRecipients.campaignId, recruitmentCampaigns.id)).where(eq(recruitmentCampaignRecipients.applicationId, input.id)).orderBy(desc(recruitmentCampaignRecipients.createdAt)).limit(100),
+            db.select().from(recruitmentFollowUpTasks).where(eq(recruitmentFollowUpTasks.applicationId, input.id)).orderBy(recruitmentFollowUpTasks.status, recruitmentFollowUpTasks.dueAt).limit(50),
+          ]);
+          return { candidate, audits, campaignRecipients, followUps };
+        }),
+        markResponse: adminProcedure.input(z.object({ id: z.number().int().positive(), note: z.string().trim().max(1000).optional() })).mutation(async ({ input, ctx }) => {
+          const db = await getDb();
+          if (!db) throw new Error("Database connection failed");
+          const responseAt = new Date();
+          await db.update(cvApplications).set({ lastCandidateResponseAt: responseAt, updatedAt: responseAt }).where(eq(cvApplications.id, input.id));
+          await logRecruitmentAction({ applicationId: input.id, adminOpenId: ctx.user.openId, action: "status_update", metadata: { event: "candidate_response", note: input.note || null } });
+          return { success: true, responseAt };
+        }),
+      }),
+
+      followUps: router({
+        list: adminProcedure.input(z.object({ status: z.enum(["suggested", "completed", "dismissed"]).optional() }).optional()).query(async ({ input }) => {
+          const db = await getDb();
+          if (!db) return [];
+          const whereClause = input?.status ? eq(recruitmentFollowUpTasks.status, input.status) : undefined;
+          return db.select({
+            id: recruitmentFollowUpTasks.id,
+            applicationId: recruitmentFollowUpTasks.applicationId,
+            campaignId: recruitmentFollowUpTasks.campaignId,
+            kind: recruitmentFollowUpTasks.kind,
+            dueAt: recruitmentFollowUpTasks.dueAt,
+            status: recruitmentFollowUpTasks.status,
+            notes: recruitmentFollowUpTasks.notes,
+            completedAt: recruitmentFollowUpTasks.completedAt,
+            firstName: cvApplications.firstName,
+            lastName: cvApplications.lastName,
+            specialty: cvApplications.specialty,
+            email: cvApplications.email,
+          }).from(recruitmentFollowUpTasks).innerJoin(cvApplications, eq(recruitmentFollowUpTasks.applicationId, cvApplications.id)).where(whereClause).orderBy(recruitmentFollowUpTasks.dueAt).limit(200);
+        }),
+        update: adminProcedure.input(z.object({ id: z.number().int().positive(), status: z.enum(["suggested", "completed", "dismissed"]), notes: z.string().trim().max(2000).optional() })).mutation(async ({ input, ctx }) => {
+          const db = await getDb();
+          if (!db) throw new Error("Database connection failed");
+          const [task] = await db.select().from(recruitmentFollowUpTasks).where(eq(recruitmentFollowUpTasks.id, input.id)).limit(1);
+          if (!task) throw new TRPCError({ code: "NOT_FOUND", message: "Relance introuvable" });
+          await db.update(recruitmentFollowUpTasks).set({
+            status: input.status,
+            notes: input.notes ?? task.notes,
+            completedAt: input.status === "suggested" ? null : new Date(),
+            completedByOpenId: input.status === "suggested" ? null : ctx.user.openId,
+            updatedAt: new Date(),
+          }).where(eq(recruitmentFollowUpTasks.id, input.id));
+          await logRecruitmentAction({ applicationId: task.applicationId, adminOpenId: ctx.user.openId, action: "status_update", metadata: { event: "follow_up", taskId: task.id, status: input.status } });
+          return { success: true };
+        }),
+      }),
+
+      offerTemplates: router({
+        list: adminProcedure.query(async () => {
+          const db = await getDb();
+          if (!db) return [];
+          return db.select().from(recruitmentOfferTemplates).orderBy(desc(recruitmentOfferTemplates.updatedAt)).limit(100);
+        }),
+        create: adminProcedure.input(z.object({ name: z.string().trim().min(3).max(180), category: z.enum(["europe", "canada", "middle_east", "vvip_offshore", "paramedical", "general"]), language: z.enum(["fr", "en"]), subject: z.string().trim().min(3).max(255), body: z.string().trim().min(10).max(8000) })).mutation(async ({ input, ctx }) => {
+          const db = await getDb();
+          if (!db) throw new Error("Database connection failed");
+          const [result] = await db.insert(recruitmentOfferTemplates).values({ ...input, createdByOpenId: ctx.user.openId });
+          return { success: true, id: Number((result as any).insertId) };
+        }),
+        update: adminProcedure.input(z.object({ id: z.number().int().positive(), name: z.string().trim().min(3).max(180), category: z.enum(["europe", "canada", "middle_east", "vvip_offshore", "paramedical", "general"]), language: z.enum(["fr", "en"]), subject: z.string().trim().min(3).max(255), body: z.string().trim().min(10).max(8000), active: z.number().int().min(0).max(1) })).mutation(async ({ input }) => {
+          const db = await getDb();
+          if (!db) throw new Error("Database connection failed");
+          await db.update(recruitmentOfferTemplates).set({ ...input, updatedAt: new Date() }).where(eq(recruitmentOfferTemplates.id, input.id));
+          return { success: true };
+        }),
+      }),
+
+      exportCsv: adminProcedure.input(z.object({ type: z.enum(["pool", "shortlist"]), briefId: z.number().int().positive().optional(), candidateIds: z.array(z.number().int().positive()).max(200).optional().default([]) })).mutation(async ({ input, ctx }) => {
+        const db = await getDb();
+        if (!db) throw new Error("Database connection failed");
+        let candidateIds = input.candidateIds;
+        if (input.type === "shortlist") {
+          if (!input.briefId) throw new TRPCError({ code: "BAD_REQUEST", message: "Une mission est requise pour exporter une shortlist." });
+          const associations = await db.select({ applicationId: clientBriefCandidates.applicationId }).from(clientBriefCandidates).where(and(eq(clientBriefCandidates.briefId, input.briefId), eq(clientBriefCandidates.status, "shortlisted")));
+          candidateIds = associations.map(association => association.applicationId);
+        }
+        const conditions = [sql`${cvApplications.status} NOT IN ('rejected', 'archived')`];
+        if (candidateIds.length) conditions.push(inArray(cvApplications.id, candidateIds));
+        if (input.type === "pool" && !candidateIds.length) {
+          conditions.push(eq(cvApplications.marketingConsent, 1), isNull(cvApplications.marketingUnsubscribedAt), isNull(cvApplications.marketingSuppressedAt));
+        }
+        const rows = await db.select({ id: cvApplications.id, firstName: cvApplications.firstName, lastName: cvApplications.lastName, email: cvApplications.email, phone: cvApplications.phone, specialty: cvApplications.specialty, targetCountries: cvApplications.targetCountries, languages: cvApplications.languages, yearsExperience: cvApplications.yearsExperience, availability: cvApplications.availability, mobility: cvApplications.mobility, certifications: cvApplications.certifications, aiScore: cvApplications.aiScore, status: cvApplications.status }).from(cvApplications).where(and(...conditions)).orderBy(desc(cvApplications.aiScore), desc(cvApplications.createdAt)).limit(200);
+        const header = ["Prénom", "Nom", "Email", "Téléphone", "Spécialité", "Pays ciblés", "Langues", "Expérience (ans)", "Disponibilité", "Mobilité", "Certifications", "Score IA", "Statut"];
+        const csv = [header.map(csvCell).join(";"), ...rows.map(row => [row.firstName, row.lastName, row.email, row.phone, row.specialty, row.targetCountries, row.languages, row.yearsExperience, row.availability, row.mobility, row.certifications, row.aiScore, row.status].map(csvCell).join(";"))].join("\n");
+        await Promise.all(rows.map(row => logRecruitmentAction({ applicationId: row.id, adminOpenId: ctx.user.openId, action: "export", metadata: { type: input.type, briefId: input.briefId || null } })));
+        return { filename: `${input.type}-${new Date().toISOString().slice(0, 10)}.csv`, csv, count: rows.length };
       }),
 
       profiles: router({
@@ -1249,7 +1442,7 @@ export const appRouter = router({
         .mutation(async ({ input }) => {
           const db = await getDb();
           if (!db) throw new Error("Database connection failed");
-          await db.update(clientBriefs).set({ status: input.status }).where(eq(clientBriefs.id, input.id));
+          await db.update(clientBriefs).set(input.status === "shortlist_sent" ? { status: input.status, shortlistSentAt: new Date() } : { status: input.status }).where(eq(clientBriefs.id, input.id));
           return { success: true };
         }),
       candidates: adminProcedure
@@ -1266,6 +1459,10 @@ export const appRouter = router({
             lastName: cvApplications.lastName,
             specialty: cvApplications.specialty,
             targetCountries: cvApplications.targetCountries,
+            languages: cvApplications.languages,
+            normalizedLanguages: cvApplications.normalizedLanguages,
+            mobility: cvApplications.mobility,
+            yearsExperience: cvApplications.yearsExperience,
             certifications: cvApplications.certifications,
             normalizedCertifications: cvApplications.normalizedCertifications,
             availability: cvApplications.availability,
@@ -1278,6 +1475,11 @@ export const appRouter = router({
               .from(cvCandidateCertifications)
               .where(inArray(cvCandidateCertifications.applicationId, applicationIds))
             : [];
+          const languageRows = applicationIds.length > 0
+            ? await db.select({ applicationId: cvCandidateLanguages.applicationId, language: cvCandidateLanguages.language })
+              .from(cvCandidateLanguages)
+              .where(inArray(cvCandidateLanguages.applicationId, applicationIds))
+            : [];
           const certificationsByApplication = new Map<number, string[]>();
           for (const certification of certificationRows) {
             certificationsByApplication.set(certification.applicationId, [
@@ -1285,11 +1487,18 @@ export const appRouter = router({
               certification.name,
             ]);
           }
+          const languagesByApplication = new Map<number, string[]>();
+          for (const language of languageRows) {
+            languagesByApplication.set(language.applicationId, [
+              ...(languagesByApplication.get(language.applicationId) || []),
+              language.language,
+            ]);
+          }
           const associations = await db.select().from(clientBriefCandidates).where(eq(clientBriefCandidates.briefId, brief.id));
           const associationByApplication = new Map(associations.map(association => [association.applicationId, association]));
           const candidates = applications.map(application => ({
             ...application,
-            match: computeBriefCandidateMatch(brief, { ...application, certificationNames: certificationsByApplication.get(application.id) || [] }),
+            match: computeBriefCandidateMatch(brief, { ...application, certificationNames: certificationsByApplication.get(application.id) || [], languageNames: languagesByApplication.get(application.id) || [] }),
             association: associationByApplication.get(application.id) ?? null,
           })).sort((left, right) => right.match.score - left.match.score);
           return { brief, candidates };
@@ -1299,6 +1508,7 @@ export const appRouter = router({
           briefId: z.number().int().positive(),
           applicationId: z.number().int().positive(),
           matchScore: z.number().int().min(0).max(100).optional(),
+          matchBreakdown: z.string().trim().max(2_000).optional(),
           status: z.enum(["suggested", "reviewing", "shortlisted", "declined"]).default("suggested"),
           notes: z.string().trim().max(5_000).optional(),
         }))
@@ -1311,6 +1521,7 @@ export const appRouter = router({
           if (existing) {
             await db.update(clientBriefCandidates).set({
               matchScore: input.matchScore ?? existing.matchScore,
+              matchBreakdown: input.matchBreakdown ?? existing.matchBreakdown,
               status: input.status,
               notes: input.notes ?? existing.notes,
               updatedAt: new Date(),
@@ -1320,6 +1531,7 @@ export const appRouter = router({
               briefId: input.briefId,
               applicationId: input.applicationId,
               matchScore: input.matchScore ?? null,
+              matchBreakdown: input.matchBreakdown ?? null,
               status: input.status,
               notes: input.notes ?? null,
             });

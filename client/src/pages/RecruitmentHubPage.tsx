@@ -20,6 +20,8 @@ const copy = {
     badge1: "Réseau mondial certifié",
     badge2: "Revue humaine & IA éthique",
     badge3: "Conformité RGPD stricte",
+    privacyTitle: "Vos données, sous contrôle",
+    privacyDescription: "Votre CV reste dans un espace privé. L’IA assiste uniquement la lecture du profil ; aucune décision de recrutement n’est automatisée. Les opportunités de recrutement ne sont envoyées qu’avec votre consentement explicite.",
     metaTitle: "Espace Recrutement & Carrières | Hippocampus Consulting",
     metaDescription: "Choisissez entre la mobilité médicale et paramédicale internationale et les missions VVIP / Offshore avec Hippocampus Consulting.",
   },
@@ -37,6 +39,8 @@ const copy = {
     badge1: "Certified Global Network",
     badge2: "Human Review & Ethical AI",
     badge3: "Strict GDPR Compliance",
+    privacyTitle: "Your data, under control",
+    privacyDescription: "Your CV remains in a private space. AI only assists profile review; no recruitment decision is automated. Recruitment opportunities are sent only with your explicit consent.",
     metaTitle: "Recruitment & Careers Hub | Hippocampus Consulting",
     metaDescription: "Choose between international medical and allied health mobility and VVIP / Offshore missions with Hippocampus Consulting.",
   },
@@ -54,6 +58,8 @@ const copy = {
     badge1: "Zertifiziertes globales Netzwerk",
     badge2: "Menschliche Prüfung & ethische KI",
     badge3: "Strikte DSGVO-Konformität",
+    privacyTitle: "Ihre Daten unter Kontrolle",
+    privacyDescription: "Ihr Lebenslauf bleibt in einem privaten Bereich. KI unterstützt nur die Profilprüfung; keine Rekrutierungsentscheidung ist automatisiert. Recruiting-Angebote werden nur mit Ihrer ausdrücklichen Einwilligung versandt.",
     metaTitle: "Recruitment & Karrieren Hub | Hippocampus Consulting",
     metaDescription: "Wählen Sie zwischen internationaler medizinischer und paramedizinischer Mobilität sowie VVIP- / Offshore-Missionen.",
   },
@@ -71,6 +77,8 @@ const copy = {
     badge1: "认证全球网络",
     badge2: "人工审核与伦理AI",
     badge3: "严格合规保障",
+    privacyTitle: "您的数据由您掌控",
+    privacyDescription: "您的简历保存在私有空间。AI 仅辅助档案审阅，不作任何自动招聘决定。只有在您明确同意后，才会向您发送招聘机会。",
     metaTitle: "招聘与职业中心 | Hippocampus Consulting",
     metaDescription: "在 Hippocampus Consulting 选择国际医疗与辅助医疗人才流动或 VVIP 与离岸任务。",
   },
@@ -98,6 +106,10 @@ export default function RecruitmentHubPage() {
               <span className="px-3 py-1.5 rounded-full border border-border/60 bg-card/40">{t.badge1}</span>
               <span className="px-3 py-1.5 rounded-full border border-border/60 bg-card/40">{t.badge2}</span>
               <span className="px-3 py-1.5 rounded-full border border-border/60 bg-card/40">{t.badge3}</span>
+            </div>
+            <div className="mx-auto mt-7 max-w-2xl rounded-2xl border border-primary/20 bg-primary/5 p-4 text-left">
+              <p className="text-sm font-semibold text-foreground">{t.privacyTitle}</p>
+              <p className="mt-1 text-sm leading-6 text-muted-foreground">{t.privacyDescription}</p>
             </div>
           </div>
 

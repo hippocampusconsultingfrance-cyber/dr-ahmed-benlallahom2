@@ -3,15 +3,16 @@ import { trpc } from "@/lib/trpc";
 import { startLogin } from "@/const";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Calendar, MessageSquare, Shield, DollarSign, Eye, CheckCircle, XCircle, Clock, ArrowLeft, Star, Trash2, FileText, CalendarDays, Plus, Edit, Trash, Globe, UserRound, BriefcaseBusiness, Send, UsersRound } from "lucide-react";
+import { Calendar, MessageSquare, Shield, DollarSign, Eye, CheckCircle, XCircle, Clock, ArrowLeft, Star, Trash2, FileText, CalendarDays, Plus, Edit, Trash, Globe, UserRound, BriefcaseBusiness, Send, UsersRound, BarChart3 } from "lucide-react";
 import { toast } from "sonner";
 import { useLocation } from "wouter";
 import RecruitmentTab from "@/components/RecruitmentTab";
 import EmployerBriefsTab from "@/components/EmployerBriefsTab";
 import VivierTab from "@/components/VivierTab";
 import MailingTab from "@/components/MailingTab";
+import RecruitmentOperationsTab from "@/components/RecruitmentOperationsTab";
 
-type Tab = "overview" | "appointments" | "contacts" | "gdpr" | "testimonials" | "blog" | "availability" | "recruitment" | "vivier" | "mailing" | "employerBriefs";
+type Tab = "overview" | "appointments" | "contacts" | "gdpr" | "testimonials" | "blog" | "availability" | "recruitment" | "vivier" | "mailing" | "recruitmentOperations" | "employerBriefs";
 
 export default function AdminDashboard() {
   const { user, loading, refresh } = useAuth();
@@ -73,6 +74,7 @@ export default function AdminDashboard() {
     { id: "recruitment" as Tab, label: "Candidatures", icon: UserRound },
     { id: "vivier" as Tab, label: "Vivier", icon: UsersRound },
     { id: "mailing" as Tab, label: "Mailing", icon: Send },
+    { id: "recruitmentOperations" as Tab, label: "Pilotage", icon: BarChart3 },
     { id: "employerBriefs" as Tab, label: "Missions", icon: BriefcaseBusiness },
   ];
 
@@ -129,6 +131,7 @@ export default function AdminDashboard() {
         {activeTab === "recruitment" && <RecruitmentTab />}
         {activeTab === "vivier" && <VivierTab onCompose={candidateIds => { setMailingSelectedIds(candidateIds); setActiveTab("mailing"); }} />}
         {activeTab === "mailing" && <MailingTab initialSelectedIds={mailingSelectedIds} />}
+        {activeTab === "recruitmentOperations" && <RecruitmentOperationsTab />}
         {activeTab === "employerBriefs" && <EmployerBriefsTab />}
       </main>
     </div>

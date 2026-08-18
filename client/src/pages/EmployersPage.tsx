@@ -166,6 +166,12 @@ const copy = {
 } as const;
 
 type Language = keyof typeof copy;
+const advancedFieldsCopy: Record<Language, { requiredLanguages: string; minimumYearsExperience: string; availabilityNeeded: string; jobDescription: string; reassurance: string }> = {
+  fr: { requiredLanguages: "Langues requises", minimumYearsExperience: "Expérience minimale (années)", availabilityNeeded: "Disponibilité attendue", jobDescription: "Descriptif de poste / périmètre de mission", reassurance: "Brief confidentiel · candidats contactés uniquement avec leur consentement · shortlists toujours validées par un recruteur." },
+  en: { requiredLanguages: "Required languages", minimumYearsExperience: "Minimum experience (years)", availabilityNeeded: "Expected availability", jobDescription: "Job description / mission scope", reassurance: "Confidential brief · candidates contacted only with consent · every shortlist is validated by a recruiter." },
+  de: { requiredLanguages: "Erforderliche Sprachen", minimumYearsExperience: "Mindestberufserfahrung (Jahre)", availabilityNeeded: "Erwartete Verfügbarkeit", jobDescription: "Stellenbeschreibung / Einsatzumfang", reassurance: "Vertrauliches Briefing · Kandidaten werden nur mit Einwilligung kontaktiert · jede Shortlist wird menschlich geprüft." },
+  zh: { requiredLanguages: "语言要求", minimumYearsExperience: "最低经验（年）", availabilityNeeded: "期望到岗时间", jobDescription: "职位描述 / 任务范围", reassurance: "需求严格保密 · 仅联系已同意沟通的候选人 · 每份 shortlist 均由招聘人员人工审核。" },
+};
 type BriefFormState = {
   organizationName: string;
   contactName: string;
@@ -175,6 +181,10 @@ type BriefFormState = {
   specialtyNeeded: string;
   country: string;
   requiredCertifications: string;
+  requiredLanguages: string;
+  minimumYearsExperience: string;
+  availabilityNeeded: string;
+  jobDescription: string;
   timeline: string;
   notes: string;
   website: string;
@@ -189,6 +199,10 @@ const initialBrief: BriefFormState = {
   specialtyNeeded: "",
   country: "",
   requiredCertifications: "",
+  requiredLanguages: "",
+  minimumYearsExperience: "",
+  availabilityNeeded: "",
+  jobDescription: "",
   timeline: "",
   notes: "",
   website: "",
@@ -198,6 +212,7 @@ export default function EmployersPage() {
   const { language } = useLanguage();
   const lang = (language in copy ? language : "fr") as Language;
   const t = copy[lang];
+  const advanced = advancedFieldsCopy[lang];
   const [form, setForm] = useState<BriefFormState>(initialBrief);
   const [status, setStatus] = useState<"idle" | "sending" | "success" | "error">("idle");
   const [errorMessage, setErrorMessage] = useState("");
@@ -221,7 +236,7 @@ export default function EmployersPage() {
       const res = await fetch("/api/client-briefs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify({ ...form, language: lang, minimumYearsExperience: form.minimumYearsExperience ? Number(form.minimumYearsExperience) : undefined }),
       });
       const payload = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(payload.error || t.genericError);
@@ -244,6 +259,7 @@ export default function EmployersPage() {
               <p className="section-kicker">{t.eyebrow}</p>
               <h1 className="mt-4 font-display text-4xl leading-tight text-foreground md:text-5xl">{t.title}</h1>
               <p className="mt-6 text-lg leading-8 text-muted-foreground">{t.intro}</p>
+              <p className="mt-4 rounded-xl border border-primary/20 bg-primary/5 p-4 text-sm leading-6 text-muted-foreground"><ShieldCheck className="mr-2 inline h-4 w-4 text-primary" />{advanced.reassurance}</p>
             </div>
 
             <div className="grid gap-4">
@@ -349,6 +365,15 @@ export default function EmployersPage() {
                     <span className="block mb-1 font-medium">{t.requiredCertifications}</span>
                     <input value={form.requiredCertifications} onChange={(e) => update("requiredCertifications", e.target.value)} className="form-control block w-full" placeholder="ATLS, ACLS, HUET, OGP, etc." />
                   </label>
+
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <label className="block w-full space-y-2 text-sm text-foreground"><span className="block mb-1 font-medium">{advanced.requiredLanguages}</span><input value={form.requiredLanguages} onChange={(e) => update("requiredLanguages", e.target.value)} className="form-control block w-full" placeholder="English, Arabic, German…" /></label>
+                    <label className="block w-full space-y-2 text-sm text-foreground"><span className="block mb-1 font-medium">{advanced.minimumYearsExperience}</span><input type="number" min="0" max="70" value={form.minimumYearsExperience} onChange={(e) => update("minimumYearsExperience", e.target.value)} className="form-control block w-full" placeholder="Ex. 5" /></label>
+                  </div>
+
+                  <label className="block w-full space-y-2 text-sm text-foreground"><span className="block mb-1 font-medium">{advanced.availabilityNeeded}</span><input value={form.availabilityNeeded} onChange={(e) => update("availabilityNeeded", e.target.value)} className="form-control block w-full" placeholder="Ex. Disponibilité immédiate" /></label>
+
+                  <label className="block w-full space-y-2 text-sm text-foreground"><span className="block mb-1 font-medium">{advanced.jobDescription}</span><textarea value={form.jobDescription} onChange={(e) => update("jobDescription", e.target.value)} className="form-control block min-h-28 w-full" maxLength={5000} placeholder="Responsabilités, rotations, équipe, exigences de licence ou de sécurité…" /></label>
 
                   <label className="block w-full space-y-2 text-sm text-foreground">
                     <span className="block mb-1 font-medium">{t.notes}</span>

@@ -11,7 +11,7 @@ describe("matching mission–candidat", () => {
       certifications: "",
       normalizedCertifications: '[{"name":"ACLS"},{"name":"ATLS"}]',
     });
-    expect(result.score).toBe(100);
+    expect(result.score).toBe(70);
     expect(result.matchedCertifications).toEqual(["ACLS", "ATLS"]);
   });
 
@@ -24,5 +24,26 @@ describe("matching mission–candidat", () => {
     });
     expect(result.score).toBe(0);
     expect(result.reasons).toEqual([]);
+  });
+
+  it("prend en compte les langues, l’expérience et la disponibilité quand le brief les précise", () => {
+    const result = computeBriefCandidateMatch({
+      ...brief,
+      requiredLanguages: "anglais, arabe",
+      minimumYearsExperience: 5,
+      availabilityNeeded: "immédiat",
+    }, {
+      specialty: "Médecin anesthésiste-réanimateur",
+      targetCountries: '["Arabie saoudite"]',
+      certifications: "ACLS, ATLS",
+      normalizedCertifications: null,
+      languages: '["anglais", "arabe"]',
+      normalizedLanguages: null,
+      yearsExperience: 8,
+      availability: "Disponible immédiatement",
+    });
+    expect(result.score).toBe(100);
+    expect(result.matchedLanguages).toEqual(["anglais", "arabe"]);
+    expect(result.breakdown).toEqual({ specialty: 35, mobility: 15, certifications: 20, languages: 15, experience: 10, availability: 5 });
   });
 });
