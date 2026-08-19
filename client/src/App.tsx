@@ -4,12 +4,20 @@ import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { LanguageProvider } from "./contexts/LanguageContext";
+import { useLanguage } from "./contexts/LanguageContext";
 import WhatsAppButton from "./components/WhatsAppButton";
 import CookieConsent from "./components/CookieConsent";
 import AnalyticsConsent from "./components/AnalyticsConsent";
 import ConnectionMotionPreference from "./components/ConnectionMotionPreference";
 import { SEOHead } from "./components/SEOHead";
 import SkipToContent from "./components/SkipToContent";
+
+export const routeLoadingCopy = {
+  fr: { title: "Chargement de votre espace", caption: "Préparation de l’expérience médicale sécurisée…" },
+  en: { title: "Loading your space", caption: "Preparing your secure medical experience…" },
+  de: { title: "Ihr Bereich wird geladen", caption: "Ihre sichere medizinische Erfahrung wird vorbereitet…" },
+  zh: { title: "正在加载您的空间", caption: "正在准备您的安全医疗体验…" },
+} as const;
 
 const Home = lazy(() => import("./pages/Home"));
 const VenturePage = lazy(() => import("./pages/VenturePage"));
@@ -34,6 +42,12 @@ const ServiceStatusPage = lazy(() => import("./pages/ServiceStatusPage"));
 const FAQPage = lazy(() => import("./pages/FAQPage"));
 const SearchPage = lazy(() => import("./pages/SearchPage"));
 
+function RouteLoading() {
+  const { language } = useLanguage();
+  const copy = routeLoadingCopy[(language in routeLoadingCopy ? language : "fr") as keyof typeof routeLoadingCopy];
+  return <div className="app-loading-shell" role="status" aria-live="polite"><div className="app-loading-mark" aria-hidden="true"><span /></div><div className="app-loading-copy"><span className="app-loading-kicker">ABL / HIPPOCAMPUS</span><span className="app-loading-title">{copy.title}</span><span className="app-loading-caption">{copy.caption}</span></div></div>;
+}
+
 function CandidatePortalPrivateRoute() {
   return (
     <>
@@ -49,20 +63,7 @@ function CandidatePortalPrivateRoute() {
 
 function Router() {
   return (
-    <Suspense
-      fallback={
-        <div className="app-loading-shell" role="status" aria-live="polite">
-          <div className="app-loading-mark" aria-hidden="true">
-            <span />
-          </div>
-          <div className="app-loading-copy">
-            <span className="app-loading-kicker">ABL / HIPPOCAMPUS</span>
-            <span className="app-loading-title">Chargement de votre espace</span>
-            <span className="app-loading-caption">Préparation de l’expérience médicale sécurisée…</span>
-          </div>
-        </div>
-      }
-    >
+    <Suspense fallback={<RouteLoading />}>
       <Switch>
       <Route path="/" component={Home} />
       <Route path="/venture/:slug" component={VenturePage} />

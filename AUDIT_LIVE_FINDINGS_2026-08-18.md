@@ -444,3 +444,6 @@ Le dernier recours applicatif est maintenant localisé dans les quatre langues e
 
 ## Ordre des providers du fallback global — 19 août 2026
 La première intégration du fallback localisé l’avait placé avant le provider de langue, ce qui empêchait le rendu de l’application. Le fallback est désormais imbriqué après ce provider. La page d’accueil a été contrôlée visuellement après correction et s’affiche de nouveau normalement. La suite complète compte 210 tests réussis, 2 explicitement ignorés, avec un build de production valide.
+
+## État de chargement global multilingue — 19 août 2026
+Le chargement différé des routes traduit maintenant son titre et son descriptif dans les quatre langues prises en charge. Le statut reste annoncé aux technologies d’assistance pendant le chargement des pages, tout en conservant l’identité ABL / Hippocampus. La suite complète compte 211 tests réussis, 2 explicitement ignorés, avec un build de production valide.

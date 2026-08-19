@@ -2421,4 +2421,5 @@
 - [x] Traduire intégralement la section de contact, ses validations et son accusé de réception dans les quatre langues prises en charge
 - [x] Localiser le fallback global d’erreur dans les quatre langues sans promettre de notification non vérifiée
 - [x] Placer le fallback global localisé après le provider de langue afin de restaurer le rendu public
+- [x] Localiser l’état de chargement global des routes dans les quatre langues prises en charge
 - [x] Renforcer robots.txt pour décourager l’exploration des parcours candidats et de désinscription non indexables
