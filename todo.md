@@ -2503,3 +2503,4 @@
 - [x] Localiser les métadonnées SEO du parcours de désinscription recrutement en FR/EN/DE/ZH
 - [x] Vérifier et localiser les contenus, contrôles et métadonnées de la FAQ publique en FR/EN/DE/ZH
 - [x] Vérifier et localiser les contenus, actions et métadonnées de la page 404 publique en FR/EN/DE/ZH
+- [x] Vérifier et localiser les contenus, statuts et métadonnées de la page de statut des services en FR/EN/DE/ZH

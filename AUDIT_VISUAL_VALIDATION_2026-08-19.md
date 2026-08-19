@@ -158,6 +158,8 @@ La FAQ publique dispose désormais de commandes et garanties entièrement locali
 
 La page 404 publique est couverte dans les quatre langues : métadonnées no-index, contexte de page introuvable, explication, retour à l’accueil et retour à la page précédente. Les copies sont maintenant exportées et testées pour empêcher une régression de traduction.
 
+Les pages publiques d’incident et de maintenance sont couvertes en français, anglais, allemand et chinois. Les messages restent volontairement non techniques, distinguent l’incident de la maintenance et proposent un retour à l’accueil ainsi qu’une action de nouvelle tentative.
+
 ## Disponibilité de production
 
 Le 19 août 2026, les routes publiques `/`, `/booking`, `/gdpr`, `/faq`, `/search`, `/error`, `/maintenance`, `/recruitment`, `/employers` et `/why-hippocampus` ont toutes répondu en HTTP 200 sur le domaine principal. L’accès `www.drahmedbenlallahom.com` redirige correctement vers `drahmedbenlallahom.com` et sert ensuite la page d’accueil en HTTP 200. Aucun écart de disponibilité n’a été observé sur cet échantillon.
