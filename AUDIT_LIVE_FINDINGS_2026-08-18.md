@@ -465,3 +465,6 @@ Le dernier contrôle des ternaires de langue montre que les libellés encore lim
 
 ## Pages ventures — libellés multilingues — 19 août 2026
 Les états de secours, fil d’Ariane, boutons, titres de sections et navigation des pages ventures sont maintenant localisés en français, anglais, allemand et chinois. Le catalogue narratif détaillé des ventures demeure actuellement disponible en français et en anglais ; l’interface s’appuie sur la version anglaise en allemand et chinois jusqu’à la production d’une traduction métier dédiée. Cette limite est explicitement maintenue dans le suivi. La suite complète compte 214 tests réussis, 2 explicitement ignorés, avec un build de production valide.
+
+## Récits ventures allemands et chinois — 19 août 2026
+Les six pages ventures disposent désormais d’un rôle, d’une accroche et de trois paragraphes de présentation en allemand et en chinois. La sélection de contenu fusionne ces récits localisés avec les actifs et informations structurelles existants, sans modifier les données source françaises et anglaises. Le test de non-régression exige une narration non vide pour chaque venture dans les deux nouvelles langues. La suite complète compte 216 tests réussis, 2 explicitement ignorés, avec un build de production valide.

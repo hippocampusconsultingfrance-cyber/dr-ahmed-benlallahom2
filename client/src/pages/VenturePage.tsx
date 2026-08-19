@@ -1,6 +1,7 @@
 import { useLanguage } from "@/contexts/LanguageContext";
 import { venturesFr } from "@/data/ventures-fr";
 import { venturesEn } from "@/data/ventures-en";
+import { ventureNarrativesDe, ventureNarrativesZh } from "@/data/ventureNarratives";
 import { useParams, Link } from "wouter";
 import { ArrowLeft, ExternalLink, ChevronRight, Linkedin, User } from "lucide-react";
 import Navigation from "@/components/Navigation";
@@ -20,7 +21,11 @@ export default function VenturePage() {
   const params = useParams<{ slug: string }>();
   const slug = params.slug;
 
-  const ventures = language === "fr" ? venturesFr : venturesEn;
+  const baseVentures = language === "fr" ? venturesFr : venturesEn;
+  const narratives = language === "de" ? ventureNarrativesDe : language === "zh" ? ventureNarrativesZh : undefined;
+  const ventures = narratives
+    ? baseVentures.map((venture) => ({ ...venture, ...(narratives[venture.slug] ?? {}) }))
+    : baseVentures;
   const venture = ventures.find((v) => v.slug === slug);
 
   if (!venture) {
