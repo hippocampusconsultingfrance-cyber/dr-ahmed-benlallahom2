@@ -408,3 +408,6 @@ Le provider global d’infobulles n’était utilisé par aucun parcours public 
 
 ## Protection contre la double soumission de paiement — 19 août 2026
 Le bouton de paiement restait déjà désactivé pendant la création du rendez-vous et de la session Stripe. Un verrou synchrone par référence protège maintenant aussi la très courte fenêtre avant le prochain rendu React : un double clic ou une double soumission clavier ne peut pas créer deux parcours simultanés. Le verrou est relâché si une erreur survient ou lors d’une nouvelle réservation. Côté serveur, le créneau est vérifié avant insertion et la contrainte de créneau actif protège les requêtes concurrentes. La suite complète compte 195 tests réussis, 2 explicitement ignorés, avec un build de production valide.
+
+## Erreurs publiques de réservation — 19 août 2026
+Les alertes publiques déclenchées lors de la création de rendez-vous ou de session Stripe utilisent désormais uniquement les messages génériques localisés prévus pour le visiteur. Les détails d’erreur restent consignés dans la console de diagnostic et ne sont plus interpolés dans l’interface. Un test de non-régression garantit cette séparation. La suite complète compte 196 tests réussis, 2 explicitement ignorés, avec un build de production valide.

@@ -346,7 +346,7 @@ export default function BookingPage() {
     },
     onError: (error) => {
       paymentSubmissionRef.current = false;
-      alert(`${content.paymentError} ${error.message}`);
+      alert(content.paymentError);
       console.error("Checkout session error:", error);
     },
   });
@@ -416,7 +416,7 @@ export default function BookingPage() {
     } catch (error) {
       paymentSubmissionRef.current = false;
       console.error("Booking error:", error);
-      alert(`${content.bookingError} ${error instanceof Error ? error.message : "Unknown error"}`);
+      alert(content.bookingError);
     }
   };
 

@@ -61,4 +61,15 @@ describe("booking date placeholders", () => {
     expect(source).toContain("paymentSubmissionRef.current = true;");
     expect(source).toContain("paymentSubmissionRef.current = false;");
   });
+
+  it("n’expose pas de détail technique dans les alertes publiques de paiement", async () => {
+    const source = await import("node:fs/promises").then((fs) =>
+      fs.readFile(new URL("./BookingPage.tsx", import.meta.url), "utf8")
+    );
+
+    expect(source).toContain("alert(content.paymentError);");
+    expect(source).toContain("alert(content.bookingError);");
+    expect(source).not.toContain("alert(`${content.paymentError} ${error.message}`)");
+    expect(source).not.toContain("alert(`${content.bookingError} ${error instanceof Error ? error.message : \"Unknown error\"}`)");
+  });
 });

@@ -264,7 +264,7 @@
 - [x] Vérifier les états anti-double-clic du paiement
 - [ ] Vérifier le rendu de la confirmation et de l’annulation de paiement
 - [ ] Vérifier les messages de validation des formulaires dans les quatre langues
-- [ ] Vérifier les messages d’erreur sans exposition de données sensibles
+- [x] Vérifier les messages d’erreur sans exposition de données sensibles
 - [ ] Vérifier les liens de facture sur desktop et mobile
 - [ ] Vérifier les notifications de rappel sur desktop et mobile
 - [ ] Vérifier les écrans Blog et Disponibilités du dashboard sur tablette
