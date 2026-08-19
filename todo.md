@@ -259,7 +259,7 @@
 - [ ] Vérifier les écrans Blog et Disponibilités du dashboard sur tablette
 - [ ] Ajouter des contrôles clavier aux témoignages en carrousel
 - [ ] Vérifier le contraste et la lisibilité du bandeau cookies
-- [ ] Ajouter un lien permanent vers les préférences cookies
+- [x] Ajouter un lien permanent vers les préférences cookies
 - [ ] Vérifier que les traceurs non essentiels restent bloqués sans consentement
 - [ ] Préparer une revue annuelle des traductions et de l’identité visuelle
 - [ ] Préparer une revue annuelle de l’accessibilité et des performances

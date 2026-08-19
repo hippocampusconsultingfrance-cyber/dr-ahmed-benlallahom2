@@ -209,3 +209,7 @@ La base déployée contient bien les tables relationnelles de certifications, la
 ## Information d’urgence du parcours de réservation — 19 août 2026
 
 Une notice visible, traduite en français, anglais, allemand et chinois, rappelle au bas du formulaire que la consultation programmée ne remplace pas une prise en charge urgente. Elle oriente en cas de danger immédiat vers le 112 ou les services d’urgence locaux. Le composant dispose d’un libellé accessible et sa présence est couverte par le test de localisation de la réservation.
+
+## Préférences cookies réversibles — 19 août 2026
+
+Après le premier choix, un contrôle flottant « Préférences cookies » reste accessible sur les pages publiques. Il permet de modifier les cookies de performance et de préférence, tandis que les cookies essentiels restent activés. Les valeurs mémorisées sont relues de manière défensive : une valeur incomplète ou mal formée est écartée et le bandeau de choix est réaffiché.
