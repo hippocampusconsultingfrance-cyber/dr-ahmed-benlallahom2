@@ -19,7 +19,7 @@ import PublicContentSkeleton from "@/components/PublicContentSkeleton";
 import { getActiveAdminTabLabel } from "./adminDashboardMobileTabs";
 import { buildAppointmentsAgenda } from "./appointmentsAgenda";
 
-type Tab = "overview" | "appointments" | "contacts" | "gdpr" | "testimonials" | "blog" | "availability" | "recruitment" | "candidateDocuments" | "security" | "vivier" | "mailing" | "employerBriefs";
+type Tab = "overview" | "appointments" | "contacts" | "gdpr" | "testimonials" | "availability" | "recruitment" | "candidateDocuments" | "security" | "vivier" | "mailing" | "employerBriefs";
 
 export default function AdminDashboard() {
   const { user, loading, refresh } = useAuth();
@@ -90,7 +90,6 @@ export default function AdminDashboard() {
     { id: "contacts" as Tab, label: "Messages", icon: MessageSquare },
     { id: "gdpr" as Tab, label: "RGPD", icon: Shield },
     { id: "testimonials" as Tab, label: "Témoignages", icon: Star },
-    { id: "blog" as Tab, label: "Blog", icon: FileText },
     { id: "availability" as Tab, label: "Disponibilités", icon: CalendarDays },
     { id: "recruitment" as Tab, label: "Candidatures", icon: UserRound },
     { id: "candidateDocuments" as Tab, label: "Documents candidats", icon: Shield },
@@ -160,7 +159,6 @@ export default function AdminDashboard() {
         {activeTab === "contacts" && <ContactsTab />}
         {activeTab === "gdpr" && <GdprTab />}
         {activeTab === "testimonials" && <TestimonialsTab />}
-        {activeTab === "blog" && <BlogTab />}
         {activeTab === "availability" && <AvailabilityTab />}
         {activeTab === "recruitment" && <RecruitmentTab />}
         {activeTab === "candidateDocuments" && <CandidateDocumentsAdminTab />}
@@ -595,15 +593,15 @@ function TestimonialsTab() {
                 <p className="text-sm font-medium text-foreground">{t.title}</p>
                 <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{t.content}</p>
               </div>
-              <div className="flex gap-2 shrink-0">
+              <div className="flex w-full flex-wrap gap-2 sm:w-auto sm:flex-nowrap">
                 {t.status !== "approved" && (
-                  <Button size="sm" onClick={() => updateStatus.mutate({ id: t.id, status: "approved" })}>
+                  <Button size="sm" className="min-h-10 flex-1 sm:min-h-0 sm:flex-none" onClick={() => updateStatus.mutate({ id: t.id, status: "approved" })}>
                     <CheckCircle className="w-3 h-3 mr-1" />
                     Approuver
                   </Button>
                 )}
                 {t.status !== "rejected" && (
-                  <Button size="sm" variant="outline" onClick={() => updateStatus.mutate({ id: t.id, status: "rejected" })}>
+                  <Button size="sm" variant="outline" className="min-h-10 flex-1 sm:min-h-0 sm:flex-none" onClick={() => updateStatus.mutate({ id: t.id, status: "rejected" })}>
                     <XCircle className="w-3 h-3 mr-1" />
                     Rejeter
                   </Button>
@@ -611,6 +609,7 @@ function TestimonialsTab() {
                 <Button
                   size="sm"
                   variant="outline"
+                  className="min-h-10 flex-1 sm:min-h-0 sm:flex-none"
                   onClick={() => updateStatus.mutate({ id: t.id, status: t.status, featured: t.featured === 1 ? 0 : 1 })}
                 >
                   {t.featured === 1 ? "Retirer" : "Mettre en avant"}
@@ -618,6 +617,7 @@ function TestimonialsTab() {
                 <Button
                   size="sm"
                   variant="destructive"
+                  className="min-h-10 sm:min-h-0 sm:flex-none"
                   onClick={() => {
                     if (confirm("Supprimer ce témoignage ?")) {
                       deleteTestimonial.mutate({ id: t.id });

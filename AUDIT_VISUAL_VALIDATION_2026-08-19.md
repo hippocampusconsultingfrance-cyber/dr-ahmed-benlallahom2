@@ -109,3 +109,7 @@ Les certifications, langues et expériences extraites sont conservées à la foi
 ## Filtres du vivier administratif
 
 Le vivier actif applique un consentement marketing positif et propose les critères requis : spécialité, pays ciblé, score IA minimal, disponibilité, mobilité et certification. Les paramètres sont bornés côté serveur et testés, tandis que l’interface les expose dans la zone de filtre. Les candidatures rejetées et archivées sont écartées de cette recherche opérationnelle.
+
+## Tableau de bord administratif mobile
+
+L’administration utilise désormais le sélecteur de sections sur mobile et des actions denses adaptées à la largeur réduite. Les commandes de modération des témoignages reviennent à la ligne et conservent des cibles tactiles d’au moins quarante pixels de hauteur. L’onglet Blog, devenu inactif après le retrait de la section Actualités du site, n’est plus proposé dans la navigation administrative ; le bundle de ce tableau de bord est réduit en conséquence.
