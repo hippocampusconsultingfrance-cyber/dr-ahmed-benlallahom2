@@ -4,6 +4,22 @@ import { trpc } from "@/lib/trpc";
 import { useState, useEffect, useCallback } from "react";
 import PublicContentSkeleton from "./PublicContentSkeleton";
 
+export function getTestimonialsCarouselIndex({
+  key,
+  currentIndex,
+  length,
+}: {
+  key: "ArrowLeft" | "ArrowRight" | "Home" | "End";
+  currentIndex: number;
+  length: number;
+}) {
+  if (length <= 1) return 0;
+  if (key === "Home") return 0;
+  if (key === "End") return length - 1;
+  if (key === "ArrowLeft") return (currentIndex - 1 + length) % length;
+  return (currentIndex + 1) % length;
+}
+
 export default function TestimonialsSection() {
   const { language } = useLanguage();
   const { data: testimonials = [], isLoading: loading, error } = trpc.testimonials.list.useQuery(
@@ -30,6 +46,7 @@ export default function TestimonialsSection() {
       previous: "Témoignage précédent",
       next: "Témoignage suivant",
       goTo: "Aller au témoignage",
+      keyboardHelp: "Utilisez les flèches gauche et droite pour parcourir les témoignages, Début pour le premier et Fin pour le dernier.",
     },
     en: {
       title: "Partner Testimonials",
@@ -41,6 +58,7 @@ export default function TestimonialsSection() {
       previous: "Previous testimonial",
       next: "Next testimonial",
       goTo: "Go to testimonial",
+      keyboardHelp: "Use the left and right arrow keys to browse testimonials, Home for the first and End for the last.",
     },
     de: {
       title: "Partnerbewertungen",
@@ -52,6 +70,7 @@ export default function TestimonialsSection() {
       previous: "Vorherige Bewertung",
       next: "Nächste Bewertung",
       goTo: "Zur Bewertung",
+      keyboardHelp: "Verwenden Sie die linke und rechte Pfeiltaste zum Durchsuchen, Pos1 für die erste und Ende für die letzte Bewertung.",
     },
     zh: {
       title: "合作伙伴评价",
@@ -63,6 +82,7 @@ export default function TestimonialsSection() {
       previous: "上一条评价",
       next: "下一条评价",
       goTo: "前往评价",
+      keyboardHelp: "使用左右箭头浏览评价，按 Home 键跳至第一条，按 End 键跳至最后一条。",
     },
   };
 
@@ -173,7 +193,28 @@ export default function TestimonialsSection() {
           className="relative"
           onMouseEnter={() => setIsAutoPlaying(false)}
           onMouseLeave={() => setIsAutoPlaying(true)}
+          onFocus={() => setIsAutoPlaying(false)}
+          onBlur={(event) => {
+            if (!event.currentTarget.contains(event.relatedTarget)) setIsAutoPlaying(true);
+          }}
+          onKeyDown={(event) => {
+            if (featuredTestimonials.length <= 1) return;
+            if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+            event.preventDefault();
+            setIsAutoPlaying(false);
+            setCurrentIndex(getTestimonialsCarouselIndex({
+              key: event.key as "ArrowLeft" | "ArrowRight" | "Home" | "End",
+              currentIndex,
+              length: featuredTestimonials.length,
+            }));
+          }}
+          tabIndex={0}
+          role="region"
+          aria-roledescription="carousel"
+          aria-label={currentContent.title}
+          aria-describedby="testimonials-keyboard-help"
         >
+          <p id="testimonials-keyboard-help" className="sr-only">{currentContent.keyboardHelp}</p>
           {/* Navigation Arrows */}
           {featuredTestimonials.length > 3 && (
             <>

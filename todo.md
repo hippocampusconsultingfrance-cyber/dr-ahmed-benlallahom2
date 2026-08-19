@@ -268,7 +268,7 @@
 - [ ] Vérifier les liens de facture sur desktop et mobile
 - [ ] Vérifier les notifications de rappel sur desktop et mobile
 - [ ] Vérifier les écrans Blog et Disponibilités du dashboard sur tablette
-- [ ] Ajouter des contrôles clavier aux témoignages en carrousel
+- [x] Ajouter des contrôles clavier aux témoignages en carrousel
 - [x] Vérifier le contraste et la lisibilité du bandeau cookies
 - [x] Ajouter un lien permanent vers les préférences cookies, y compris après fermeture du bandeau sans choix explicite
 - [x] Vérifier que les traceurs non essentiels restent bloqués sans consentement
