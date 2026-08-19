@@ -271,3 +271,7 @@ Le référentiel `BRAND_KIT.md` documente désormais l’architecture ABL / Hipp
 ## Emails Hippocampus harmonisés — 19 août 2026
 
 Les emails de sécurité MFA, confirmation de réservation, facture, remboursement, rappel, candidature, campagne de recrutement et accès au portail candidat utilisent désormais une enveloppe HTML partagée. Elle ajoute une signature ABL / HIPPOCAMPUS, un bandeau bleu nuit, l’accent cyan et un pied de message professionnel et confidentiel, tout en conservant les liens, pièces jointes et textes alternatifs existants. Les modèles sont couverts par des tests ciblés ; la suite complète et le build sont validés.
+
+## Notifications d’interface — 19 août 2026
+
+Le composant global de notifications attribue désormais une apparence cohérente aux états succès, erreur, avertissement et information : bordure de couleur, fond contrasté, titre lisible et bouton de fermeture visible. La configuration limite les alertes simultanées à trois afin de préserver la lisibilité et s’applique à tous les toasts déjà utilisés par les formulaires, le paiement, l’administration et le recrutement.

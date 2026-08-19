@@ -240,7 +240,7 @@
 - [ ] Vérifier les performances après ajout d’animations ou d’images
 - [ ] Préparer des visuels LinkedIn cohérents avec la marque
 - [ ] Vérifier le rendu des emails HTML dans Gmail, Outlook et Apple Mail
-- [ ] Harmoniser les notifications de succès, avertissement et erreur
+- [x] Harmoniser les notifications de succès, avertissement et erreur
 - [ ] Créer une checklist de qualité visuelle avant mise en production
 - [ ] Vérifier la cohérence des icônes et supprimer les mélanges de styles
 - [ ] Ajouter une version mobile renforcée de la page de réservation
