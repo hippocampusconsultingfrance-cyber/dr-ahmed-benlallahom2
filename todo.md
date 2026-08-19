@@ -193,6 +193,10 @@
 - [x] Localiser les types, statuts, actions, état vide et horodatage de l’onglet Demandes RGPD administratif en FR/EN/DE/ZH
 - [x] Localiser les statuts, actions, confirmation et état vide de l’onglet Témoignages administratif en FR/EN/DE/ZH
 - [x] Localiser les créneaux, dates bloquées, formulaires, actions et états vides de l’onglet Disponibilités administratif en FR/EN/DE/ZH
+- [x] Localiser les statuts, filtres, actions et état vide du tableau Candidatures administratif en FR/EN/DE/ZH
+- [x] Localiser le bloc d’en-tête, les filtres, les statuts de candidature et l’état vide du tableau Candidatures
+- [x] Localiser les actions CV et le compositeur d’email du tableau Candidatures
+- [x] Localiser les détails d’analyse, de fichier et de lecture IA du tableau Candidatures
 - [x] Remplacer les états vides textuels des onglets Témoignages et Disponibilités par le panneau administratif illustré partagé
 - [x] Ajouter un état vide illustré au carrousel de témoignages partenaires
 - [x] Ajouter un repère illustré et accessible aux états de disponibilité de réservation

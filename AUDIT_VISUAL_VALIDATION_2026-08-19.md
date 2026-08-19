@@ -130,6 +130,14 @@ L’onglet Témoignages localise ses statuts de modération, labels de mise en a
 
 L’onglet Disponibilités localise les jours, créneaux hebdomadaires, formulaires de blocage, retours de succès, actions de suppression, états vides et dates affichées. Les boutons composés uniquement d’icônes portent désormais un nom accessible localisé. Les règles de création, suppression et blocage de créneaux restent strictement inchangées.
 
+Le tableau Candidatures dispose désormais d’un premier lot localisé : titre, information de gouvernance IA, reprise des analyses, filtres, statuts de candidature, statuts d’analyse, chargement, score et état vide. Les valeurs persistées et les critères de recherche ne changent pas ; seule leur présentation visible est traduite dans les quatre langues actives.
+
+Les actions opérationnelles du tableau Candidatures — téléchargement du CV, ouverture de la fiche 360°, analyse ou relance, prise de contact, demande de complément, effacement RGPD et compositeur d’email — sont elles aussi localisées. Le contenu du message, le choix d’email FR/EN et les opérations de traitement restent inchangés ; les détails de lecture IA font l’objet du lot suivant.
+
+Les détails de fichier, dates de conservation, états d’analyse, métadonnées de pipeline, lecture IA, indicateurs d’extraction et comptes rendus associés sont maintenant localisés à leur tour. Les horodatages suivent la langue active, tout en conservant le fuseau Europe/Paris ; les données de candidat et les sorties d’analyse sont conservées sans transformation.
+
+Enfin, les profils de matching et leurs champs de création sont alignés sur les quatre langues actives. Le tableau Candidatures couvre ainsi ses filtres, statut, critères de matching, actions, messagerie, détails d’analyse et état vide. La boîte Candidate 360° conserve son propre composant et sera traitée séparément si nécessaire.
+
 ## Disponibilité de production
 
 Le 19 août 2026, les routes publiques `/`, `/booking`, `/gdpr`, `/faq`, `/search`, `/error`, `/maintenance`, `/recruitment`, `/employers` et `/why-hippocampus` ont toutes répondu en HTTP 200 sur le domaine principal. L’accès `www.drahmedbenlallahom.com` redirige correctement vers `drahmedbenlallahom.com` et sert ensuite la page d’accueil en HTTP 200. Aucun écart de disponibilité n’a été observé sur cet échantillon.
