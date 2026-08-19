@@ -559,6 +559,8 @@ export default function BookingPage() {
                 required
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                autoComplete="name"
+                enterKeyHint="next"
                 className="form-field-premium w-full px-4 py-2 border"
               />
             </div>
@@ -575,6 +577,9 @@ export default function BookingPage() {
                 required
                 value={formData.email}
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                autoComplete="email"
+                inputMode="email"
+                enterKeyHint="next"
                 className="form-field-premium w-full px-4 py-2 border"
               />
             </div>
@@ -591,6 +596,9 @@ export default function BookingPage() {
                 required
                 value={formData.phone}
                 onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                autoComplete="tel"
+                inputMode="tel"
+                enterKeyHint="next"
                 className="form-field-premium w-full px-4 py-2 border"
               />
             </div>
@@ -610,6 +618,7 @@ export default function BookingPage() {
                   onChange={(e) => synchronizeDateTime(e.target.value, timeText)}
                   inputMode="numeric"
                   autoComplete="off"
+                  enterKeyHint="next"
                   placeholder={content.form.dateOnlyPlaceholder}
                   className="form-field-premium h-11 w-full border px-4 py-2"
                   aria-describedby="availability-status booking-date-error"
@@ -623,6 +632,7 @@ export default function BookingPage() {
                   onChange={(e) => synchronizeDateTime(dateText, e.target.value)}
                   inputMode="numeric"
                   autoComplete="off"
+                  enterKeyHint="next"
                   placeholder={content.form.timePlaceholder}
                   className="form-field-premium h-11 w-full border px-4 py-2"
                   aria-describedby="availability-status booking-date-error"
@@ -672,6 +682,7 @@ export default function BookingPage() {
                 onChange={(e) => setFormData({ ...formData, details: e.target.value })}
                 placeholder={content.form.detailsPlaceholder}
                 rows={4}
+                enterKeyHint="done"
                 className="form-field-premium w-full px-4 py-2 border"
               />
             </div>

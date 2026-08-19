@@ -281,3 +281,7 @@ Le composant global de notifications attribue désormais une apparence cohérent
 Les styles d’impression mettent le fond et les textes en noir sur blanc, masquent la navigation, le footer, les éléments fixes et les notifications, puis conservent les liens externes avec leur URL de référence. Les sections et éléments de contenu évitent la coupure interne lorsque le navigateur le permet. Cette règle cible particulièrement les pages légales, RGPD et FAQ sans affecter leur rendu à l’écran.
 
 La FAQ déploie maintenant explicitement ses panneaux accordéon, même lorsque leur état écran est fermé, afin que les questions et réponses soient disponibles à l’impression. Un test ciblé contrôle les sélecteurs d’impression et la présence des routes Legal, GDPR et FAQ dans l’application.
+
+## Saisie mobile de réservation — 19 août 2026
+
+Le formulaire de consultation préserve ses zones tactiles, ses champs date et heure explicitement visibles et le bouton de paiement pleine largeur. Les champs nom, email et téléphone exposent désormais les attributs de remplissage automatique appropriés, et le clavier mobile propose une action « suivant » jusqu’au champ de détails, puis « terminer ». Cette optimisation est couverte par les tests de réservation ; la suite complète et le build sont validés.

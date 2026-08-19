@@ -20,6 +20,18 @@ describe("booking date placeholders", () => {
     expect(source).not.toContain('opacity-0');
   });
 
+  it("aide la saisie tactile avec le remplissage automatique et les touches d’action", async () => {
+    const source = await import("node:fs/promises").then((fs) =>
+      fs.readFile(new URL("./BookingPage.tsx", import.meta.url), "utf8")
+    );
+
+    expect(source).toContain('autoComplete="name"');
+    expect(source).toContain('autoComplete="email"');
+    expect(source).toContain('autoComplete="tel"');
+    expect(source).toContain('enterKeyHint="next"');
+    expect(source).toContain('enterKeyHint="done"');
+  });
+
   it("parses a valid French date and time and rejects invalid calendar values", () => {
     const parsed = parseBookingDateTime("21/08/2026", "10:00");
 
