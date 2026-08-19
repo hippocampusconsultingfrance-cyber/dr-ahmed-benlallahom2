@@ -116,6 +116,8 @@ Le titre de repli affiché par le panneau d’erreur administratif partagé est 
 
 L’en-tête du tableau de bord et ses douze onglets racine sont maintenant alimentés par une copie partagée en français, anglais, allemand et chinois. Le sélecteur mobile, son nom accessible et l’intitulé de la section active réemploient les mêmes libellés afin d’éviter une divergence entre bureau, mobile et lecteur d’écran. Une non-régression contrôle la présence des douze intitulés pour chaque langue.
 
+Les écrans historiques d’accès administratif sont alignés sur cette même copie multilingue : chargement, connexion requise, accès refusé, vérification de sécurité et code MFA. Les retours de succès d’envoi et de validation MFA suivent également la langue active. Une non-régression protège le contenu de ces états en français, anglais, allemand et chinois.
+
 ## Disponibilité de production
 
 Le 19 août 2026, les routes publiques `/`, `/booking`, `/gdpr`, `/faq`, `/search`, `/error`, `/maintenance`, `/recruitment`, `/employers` et `/why-hippocampus` ont toutes répondu en HTTP 200 sur le domaine principal. L’accès `www.drahmedbenlallahom.com` redirige correctement vers `drahmedbenlallahom.com` et sert ensuite la page d’accueil en HTTP 200. Aucun écart de disponibilité n’a été observé sur cet échantillon.

@@ -23,10 +23,10 @@ import { buildAppointmentsAgenda } from "./appointmentsAgenda";
 type Tab = "overview" | "appointments" | "contacts" | "gdpr" | "testimonials" | "availability" | "recruitment" | "candidateDocuments" | "security" | "vivier" | "mailing" | "employerBriefs";
 
 export const adminShellCopy = {
-  fr: { title: "Administration", site: "Site", section: "Section d’administration", tabs: { overview: "Vue d’ensemble", appointments: "Réservations", contacts: "Messages", gdpr: "RGPD", testimonials: "Témoignages", availability: "Disponibilités", recruitment: "Candidatures", candidateDocuments: "Documents candidats", security: "Sécurité", vivier: "Vivier", mailing: "Mailing", employerBriefs: "Missions" } },
-  en: { title: "Administration", site: "Website", section: "Administration section", tabs: { overview: "Overview", appointments: "Appointments", contacts: "Messages", gdpr: "GDPR", testimonials: "Testimonials", availability: "Availability", recruitment: "Applications", candidateDocuments: "Candidate documents", security: "Security", vivier: "Talent pool", mailing: "Mailing", employerBriefs: "Missions" } },
-  de: { title: "Verwaltung", site: "Website", section: "Verwaltungsbereich", tabs: { overview: "Übersicht", appointments: "Termine", contacts: "Nachrichten", gdpr: "DSGVO", testimonials: "Bewertungen", availability: "Verfügbarkeiten", recruitment: "Bewerbungen", candidateDocuments: "Kandidatendokumente", security: "Sicherheit", vivier: "Talentpool", mailing: "Mailing", employerBriefs: "Aufträge" } },
-  zh: { title: "管理后台", site: "网站", section: "管理栏目", tabs: { overview: "概览", appointments: "预约", contacts: "消息", gdpr: "隐私保护", testimonials: "合作伙伴评价", availability: "可用时间", recruitment: "申请", candidateDocuments: "候选人文件", security: "安全", vivier: "人才库", mailing: "邮件活动", employerBriefs: "任务需求" } },
+  fr: { title: "Administration", site: "Site", section: "Section d’administration", access: { loading: "Chargement de l’accès administrateur", loginRequired: "Connexion administrateur requise", loginDescription: "Connectez-vous avec le compte propriétaire pour accéder aux candidatures et aux missions.", login: "Se connecter", forbidden: "Accès refusé", forbiddenDescription: "Votre session ne possède pas les permissions nécessaires. Si votre rôle vient d’être mis à jour, actualisez l’accès ou reconnectez-vous.", refresh: "Actualiser l’accès", reconnect: "Se reconnecter", home: "Accueil", checking: "Vérification de sécurité", mfaTitle: "Validation de sécurité", mfaDescription: "Une seconde vérification protège les documents et CV sensibles.", mfaInstructions: "Demandez un code à six chiffres sur votre email administrateur, puis saisissez-le ci-dessous.", sendCode: "Envoyer un code de sécurité", sending: "Envoi en cours…", codeLabel: "Code à 6 chiffres", verifying: "Vérification…", verify: "Valider le code", backToSite: "Retour au site", codeSent: "Un code de sécurité a été envoyé à votre email administrateur.", mfaVerified: "Double authentification validée." }, tabs: { overview: "Vue d’ensemble", appointments: "Réservations", contacts: "Messages", gdpr: "RGPD", testimonials: "Témoignages", availability: "Disponibilités", recruitment: "Candidatures", candidateDocuments: "Documents candidats", security: "Sécurité", vivier: "Vivier", mailing: "Mailing", employerBriefs: "Missions" } },
+  en: { title: "Administration", site: "Website", section: "Administration section", access: { loading: "Loading administrator access", loginRequired: "Administrator sign-in required", loginDescription: "Sign in with the owner account to access applications and assignments.", login: "Sign in", forbidden: "Access denied", forbiddenDescription: "Your session does not have the required permissions. If your role was updated, refresh access or sign in again.", refresh: "Refresh access", reconnect: "Sign in again", home: "Home", checking: "Security verification", mfaTitle: "Security verification", mfaDescription: "A second check protects sensitive documents and CVs.", mfaInstructions: "Request a six-digit code at your administrator email address, then enter it below.", sendCode: "Send a security code", sending: "Sending…", codeLabel: "6-digit code", verifying: "Verifying…", verify: "Verify code", backToSite: "Back to website", codeSent: "A security code was sent to your administrator email.", mfaVerified: "Two-factor authentication verified." }, tabs: { overview: "Overview", appointments: "Appointments", contacts: "Messages", gdpr: "GDPR", testimonials: "Testimonials", availability: "Availability", recruitment: "Applications", candidateDocuments: "Candidate documents", security: "Security", vivier: "Talent pool", mailing: "Mailing", employerBriefs: "Missions" } },
+  de: { title: "Verwaltung", site: "Website", section: "Verwaltungsbereich", access: { loading: "Administratorzugang wird geladen", loginRequired: "Administratoranmeldung erforderlich", loginDescription: "Melden Sie sich mit dem Eigentümerkonto an, um auf Bewerbungen und Aufträge zuzugreifen.", login: "Anmelden", forbidden: "Zugriff verweigert", forbiddenDescription: "Ihre Sitzung besitzt nicht die erforderlichen Berechtigungen. Wenn Ihre Rolle aktualisiert wurde, aktualisieren Sie den Zugang oder melden Sie sich erneut an.", refresh: "Zugang aktualisieren", reconnect: "Erneut anmelden", home: "Startseite", checking: "Sicherheitsüberprüfung", mfaTitle: "Sicherheitsüberprüfung", mfaDescription: "Eine zweite Prüfung schützt sensible Dokumente und Lebensläufe.", mfaInstructions: "Fordern Sie einen sechsstelligen Code über Ihre Administrator-E-Mail an und geben Sie ihn unten ein.", sendCode: "Sicherheitscode senden", sending: "Wird gesendet…", codeLabel: "6-stelliger Code", verifying: "Wird überprüft…", verify: "Code bestätigen", backToSite: "Zur Website zurück", codeSent: "Ein Sicherheitscode wurde an Ihre Administrator-E-Mail gesendet.", mfaVerified: "Zwei-Faktor-Authentifizierung bestätigt." }, tabs: { overview: "Übersicht", appointments: "Termine", contacts: "Nachrichten", gdpr: "DSGVO", testimonials: "Bewertungen", availability: "Verfügbarkeiten", recruitment: "Bewerbungen", candidateDocuments: "Kandidatendokumente", security: "Sicherheit", vivier: "Talentpool", mailing: "Mailing", employerBriefs: "Aufträge" } },
+  zh: { title: "管理后台", site: "网站", section: "管理栏目", access: { loading: "正在加载管理员访问权限", loginRequired: "需要管理员登录", loginDescription: "请使用所有者账户登录，以访问申请和任务。", login: "登录", forbidden: "访问被拒绝", forbiddenDescription: "当前会话没有所需权限。若您的角色刚刚更新，请刷新访问权限或重新登录。", refresh: "刷新访问权限", reconnect: "重新登录", home: "首页", checking: "安全验证", mfaTitle: "安全验证", mfaDescription: "第二次验证可保护敏感文件和简历。", mfaInstructions: "请向管理员邮箱申请六码验证码，然后在下方输入。", sendCode: "发送安全验证码", sending: "正在发送…", codeLabel: "6 位验证码", verifying: "正在验证…", verify: "验证代码", backToSite: "返回网站", codeSent: "安全验证码已发送至您的管理员邮箱。", mfaVerified: "双重身份验证已完成。" }, tabs: { overview: "概览", appointments: "预约", contacts: "消息", gdpr: "隐私保护", testimonials: "合作伙伴评价", availability: "可用时间", recruitment: "申请", candidateDocuments: "候选人文件", security: "安全", vivier: "人才库", mailing: "邮件活动", employerBriefs: "任务需求" } },
 } as const;
 
 export default function AdminDashboard() {
@@ -38,14 +38,14 @@ export default function AdminDashboard() {
   const [mailingSelectedIds, setMailingSelectedIds] = useState<number[]>([]);
   const [mfaCode, setMfaCode] = useState("");
   const adminSecurity = trpc.adminSecurity.status.useQuery(undefined, { enabled: Boolean(user?.role === "admin") });
-  const requestMfa = trpc.adminSecurity.begin.useMutation({ onSuccess: () => toast.success("Un code de sécurité a été envoyé à votre email administrateur."), onError: error => toast.error(error.message) });
-  const verifyMfa = trpc.adminSecurity.verify.useMutation({ onSuccess: () => { void adminSecurity.refetch(); toast.success("Double authentification validée."); }, onError: error => toast.error(error.message) });
+  const requestMfa = trpc.adminSecurity.begin.useMutation({ onSuccess: () => toast.success(shell.access.codeSent), onError: error => toast.error(error.message) });
+  const verifyMfa = trpc.adminSecurity.verify.useMutation({ onSuccess: () => { void adminSecurity.refetch(); toast.success(shell.access.mfaVerified); }, onError: error => toast.error(error.message) });
 
   if (loading) {
     return (
       <div className="min-h-screen bg-background px-4 py-16">
         <div className="mx-auto max-w-3xl">
-          <PublicContentSkeleton cards={1} label="Chargement de l’accès administrateur" />
+          <PublicContentSkeleton cards={1} label={shell.access.loading} />
         </div>
       </div>
     );
@@ -55,10 +55,10 @@ export default function AdminDashboard() {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center px-4">
         <div className="max-w-md text-center">
-          <h1 className="text-2xl font-bold text-foreground mb-4">Connexion administrateur requise</h1>
-          <p className="text-muted-foreground mb-6">Connectez-vous avec le compte propriétaire pour accéder aux candidatures et aux missions.</p>
+          <h1 className="text-2xl font-bold text-foreground mb-4">{shell.access.loginRequired}</h1>
+          <p className="text-muted-foreground mb-6">{shell.access.loginDescription}</p>
           <Button onClick={startLogin}>
-            Se connecter
+            {shell.access.login}
           </Button>
         </div>
       </div>
@@ -69,16 +69,16 @@ export default function AdminDashboard() {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center px-4">
         <div className="max-w-md text-center">
-          <h1 className="text-2xl font-bold text-foreground mb-4">Accès refusé</h1>
-          <p className="text-muted-foreground mb-6">Votre session ne possède pas les permissions nécessaires. Si votre rôle vient d’être mis à jour, actualisez l’accès ou reconnectez-vous.</p>
+          <h1 className="text-2xl font-bold text-foreground mb-4">{shell.access.forbidden}</h1>
+          <p className="text-muted-foreground mb-6">{shell.access.forbiddenDescription}</p>
           <div className="flex flex-wrap justify-center gap-3">
             <Button variant="outline" onClick={() => void refresh()}>
-              Actualiser l’accès
+              {shell.access.refresh}
             </Button>
-            <Button onClick={startLogin}>Se reconnecter</Button>
+            <Button onClick={startLogin}>{shell.access.reconnect}</Button>
             <Button variant="ghost" onClick={() => setLocation("/")}>
               <ArrowLeft className="w-4 h-4 mr-2" />
-              Accueil
+              {shell.access.home}
             </Button>
           </div>
         </div>
@@ -87,11 +87,11 @@ export default function AdminDashboard() {
   }
 
   if (adminSecurity.isLoading) {
-    return <div className="min-h-screen bg-background px-4 py-16"><div className="mx-auto max-w-3xl"><PublicContentSkeleton cards={1} label="Vérification de sécurité" /></div></div>;
+    return <div className="min-h-screen bg-background px-4 py-16"><div className="mx-auto max-w-3xl"><PublicContentSkeleton cards={1} label={shell.access.checking} /></div></div>;
   }
 
   if (!adminSecurity.data?.verified) {
-    return <div className="min-h-screen bg-background flex items-center justify-center px-4"><div className="w-full max-w-md rounded-2xl border border-cyan-900/50 bg-card p-7 shadow-2xl"><div className="mb-5 flex items-center gap-3"><span className="grid h-11 w-11 place-items-center rounded-xl bg-cyan-400/10 text-cyan-300"><Shield className="h-6 w-6"/></span><div><h1 className="text-xl font-bold text-foreground">Validation de sécurité</h1><p className="text-sm text-muted-foreground">Une seconde vérification protège les documents et CV sensibles.</p></div></div><p className="mb-4 text-sm text-muted-foreground">Demandez un code à six chiffres sur votre email administrateur, puis saisissez-le ci-dessous.</p><Button className="mb-5 w-full" onClick={() => requestMfa.mutate()} disabled={requestMfa.isPending}>{requestMfa.isPending ? "Envoi en cours…" : "Envoyer un code de sécurité"}</Button><div className="space-y-2"><label htmlFor="admin-mfa-code" className="text-sm font-medium text-foreground">Code à 6 chiffres</label><Input id="admin-mfa-code" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={mfaCode} onChange={event => setMfaCode(event.target.value.replace(/\D/g, ""))} placeholder="123456"/><Button className="mt-2 w-full" variant="outline" disabled={mfaCode.length !== 6 || verifyMfa.isPending} onClick={() => verifyMfa.mutate({ code: mfaCode })}>{verifyMfa.isPending ? "Vérification…" : "Valider le code"}</Button></div><Button variant="ghost" className="mt-3 w-full" onClick={() => setLocation("/")}>Retour au site</Button></div></div>;
+    return <div className="min-h-screen bg-background flex items-center justify-center px-4"><div className="w-full max-w-md rounded-2xl border border-cyan-900/50 bg-card p-7 shadow-2xl"><div className="mb-5 flex items-center gap-3"><span className="grid h-11 w-11 place-items-center rounded-xl bg-cyan-400/10 text-cyan-300"><Shield className="h-6 w-6"/></span><div><h1 className="text-xl font-bold text-foreground">{shell.access.mfaTitle}</h1><p className="text-sm text-muted-foreground">{shell.access.mfaDescription}</p></div></div><p className="mb-4 text-sm text-muted-foreground">{shell.access.mfaInstructions}</p><Button className="mb-5 w-full" onClick={() => requestMfa.mutate()} disabled={requestMfa.isPending}>{requestMfa.isPending ? shell.access.sending : shell.access.sendCode}</Button><div className="space-y-2"><label htmlFor="admin-mfa-code" className="text-sm font-medium text-foreground">{shell.access.codeLabel}</label><Input id="admin-mfa-code" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={mfaCode} onChange={event => setMfaCode(event.target.value.replace(/\D/g, ""))} placeholder="123456"/><Button className="mt-2 w-full" variant="outline" disabled={mfaCode.length !== 6 || verifyMfa.isPending} onClick={() => verifyMfa.mutate({ code: mfaCode })}>{verifyMfa.isPending ? shell.access.verifying : shell.access.verify}</Button></div><Button variant="ghost" className="mt-3 w-full" onClick={() => setLocation("/")}>{shell.access.backToSite}</Button></div></div>;
   }
 
   const tabs = [

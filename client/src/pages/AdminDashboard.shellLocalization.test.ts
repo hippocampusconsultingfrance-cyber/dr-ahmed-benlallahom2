@@ -7,6 +7,7 @@ describe("shell d’administration localisé", () => {
       expect(copy.title).not.toHaveLength(0);
       expect(copy.site).not.toHaveLength(0);
       expect(copy.section).not.toHaveLength(0);
+      expect(Object.values(copy.access).every(label => label.length > 0)).toBe(true);
       expect(Object.values(copy.tabs)).toHaveLength(12);
       expect(Object.values(copy.tabs).every(label => label.length > 0)).toBe(true);
     }
@@ -15,5 +16,7 @@ describe("shell d’administration localisé", () => {
   it("conserve les libellés chinois et allemands prioritaires", () => {
     expect(adminShellCopy.de.tabs.recruitment).toBe("Bewerbungen");
     expect(adminShellCopy.zh.tabs.candidateDocuments).toBe("候选人文件");
+    expect(adminShellCopy.en.access.loginRequired).toBe("Administrator sign-in required");
+    expect(adminShellCopy.zh.access.verify).toBe("验证代码");
   });
 });
