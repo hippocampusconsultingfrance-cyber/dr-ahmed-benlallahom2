@@ -2,6 +2,7 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { Star } from "lucide-react";
 import { useState, useMemo } from "react";
 import { trpc } from "@/lib/trpc";
+import PublicContentSkeleton from "@/components/PublicContentSkeleton";
 import { SEOHead } from "@/components/SEOHead";
 import Breadcrumb from "@/components/Breadcrumb";
 
@@ -180,11 +181,7 @@ export default function TestimonialsPage() {
             <p className="text-red-400 text-lg">Erreur lors du chargement des témoignages</p>
           </div>
         ) : loading ? (
-          <div className="space-y-6">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="bg-slate-800 rounded-lg p-6 h-48 animate-pulse" />
-            ))}
-          </div>
+          <PublicContentSkeleton label="Chargement des témoignages partenaires" />
         ) : filteredTestimonials.length === 0 ? (
           <div className="text-center py-12">
             <p className="text-gray-400 text-lg">{currentContent.noTestimonials}</p>

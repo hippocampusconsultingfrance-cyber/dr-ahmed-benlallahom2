@@ -182,7 +182,7 @@
 - [ ] Ajouter des états vides illustrés pour le blog, les témoignages, les disponibilités et le dashboard
 - [x] Ajouter un skeleton de chargement cohérent et accessible aux témoignages publics
 - [x] Ajouter des skeletons de chargement cohérents aux autres parcours encore en spinner seul : vivier, fiche candidat 360°, dashboard recrutement et sections admin
-- [ ] Auditer tous les états de chargement restants et réserver les spinners aux actions instantanées ou boutons en cours d’envoi
+- [x] Auditer tous les états de chargement restants et réserver les spinners aux actions instantanées ou boutons en cours d’envoi
 - [x] Ajouter une page de confirmation de réservation plus complète et rassurante
 - [x] Ajouter une page FAQ visuelle sans conseils médicaux personnalisés
 - [x] Ajouter des composants graphiques de confiance pour le paiement, la confidentialité et la disponibilité
@@ -1500,6 +1500,9 @@
 - [ ] Préparer une revue annuelle de la cohérence des liens consent advanced localization tests
 - [ ] Préparer une revue annuelle de la cohérence des liens consent speculative localization tests
 - [ ] Préparer une revue annuelle de la cohérence des liens consent candidate localization tests
+- [x] Remplacer l’indicateur de vérification plein écran du portail candidat par un état de chargement accessible cohérent
+- [x] Ajouter un état de chargement explicite pour les sessions actives du portail candidat
+- [x] Refaire le contrôle global des indicateurs de chargement actifs et documenter les exceptions justifiées
 - [ ] Préparer une revue annuelle de la cohérence des liens consent proposal localization tests
 - [ ] Préparer une revue annuelle de la cohérence des liens consent recommendation localization tests
 - [ ] Préparer une revue annuelle de la cohérence des liens consent roadmap localization tests
