@@ -13,6 +13,7 @@ import VivierTab from "@/components/VivierTab";
 import MailingTab from "@/components/MailingTab";
 import CandidateDocumentsAdminTab from "@/components/CandidateDocumentsAdminTab";
 import SecurityOperationsTab from "@/components/SecurityOperationsTab";
+import RecruitmentDashboardPanel from "@/components/RecruitmentDashboardPanel";
 
 type Tab = "overview" | "appointments" | "contacts" | "gdpr" | "testimonials" | "blog" | "availability" | "recruitment" | "candidateDocuments" | "security" | "vivier" | "mailing" | "employerBriefs";
 
@@ -188,6 +189,8 @@ function OverviewTab({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
           );
         })}
       </section>
+
+      <RecruitmentDashboardPanel />
 
       <section aria-labelledby="recruitment-shortcuts-title" className="rounded-2xl border border-primary/25 bg-primary/5 p-5 sm:p-6">
         <div className="mb-5">

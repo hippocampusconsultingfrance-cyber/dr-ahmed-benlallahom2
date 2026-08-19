@@ -2299,7 +2299,7 @@
 
 ## Dix améliorations prioritaires du recrutement — août 2026
 
-- [ ] Ajouter un tableau de bord recrutement avec volumes de CV, consentements, état d’analyse IA, activité de campagnes et taux de réponse
+- [x] Ajouter un tableau de bord recrutement avec volumes de CV, consentements, état d'analyse IA, activité de campagnes et taux de réponse
 - [ ] Créer une fiche candidat 360° avec chronologie des actions, emails, notes, pièces demandées et prochain suivi
 - [ ] Préparer des relances manuelles suggérées à J+7/J+14 sans aucun envoi automatique
 - [ ] Ajouter un lien de désinscription marketing explicite, sécurisé et traçable pour les campagnes recrutement

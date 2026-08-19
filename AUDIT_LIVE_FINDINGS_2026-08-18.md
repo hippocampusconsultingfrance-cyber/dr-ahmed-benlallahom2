@@ -183,3 +183,7 @@ Les campagnes disposent désormais de quatre modèles réutilisables en françai
 | Certifications | Recherche partielle dans les certifications déclarées et normalisées. | Contrat tRPC borné et build de production validé. |
 
 > Ces critères s’ajoutent à la spécialité, au pays et au score IA. Le vivier reste limité aux candidats ayant consenti aux communications de recrutement et dont l’adresse n’est ni désinscrite ni supprimée des campagnes.
+
+## Pilotage recrutement — 19 août 2026
+
+Le tableau de bord administratif affiche désormais les volumes de CV, la part du vivier marketing éligible, les états détaillés des analyses IA, le taux de réponse aux prises de contact et l’activité de campagnes. Les indicateurs de délivrabilité séparent les distributions confirmées, différées et en erreur ou suppression. Les ratios restent descriptifs : ils ne déclenchent ni envoi automatique ni décision de recrutement.
