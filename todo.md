@@ -2192,7 +2192,7 @@
 - [x] Exploiter les tables Drizzle `client_briefs` et `client_brief_candidates` avec le tableau de bord administrateur, le matching explicable et l’association mission–candidats
 - [x] Exposer disponibilité, mobilité et certifications dans la fiche candidat et les filtres de matching
 - [x] Remplacer le matching en mémoire par un filtrage et une pagination robustes côté base de données
-- [ ] Ajouter une vérification antivirale, une validation de contenu et une quarantaine des fichiers avant analyse
+- [x] Appliquer une quarantaine, une validation de type, signature, taille et contenu avant analyse ; antivirus dédié volontairement non activé sur l’hébergement actuel, conformément au choix de conserver ce mode d’hébergement
 - [ ] Ajouter des tests d’intégration et une supervision des échecs d’extraction, d’IA, d’email et de stockage
 
 ## Lot 1 — fondation du pipeline de recrutement intelligent

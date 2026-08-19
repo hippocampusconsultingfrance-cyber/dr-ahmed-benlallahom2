@@ -93,3 +93,7 @@ Le module comporte une table Drizzle `client_briefs` pour les missions employeur
 ## Concurrence de la file d’analyse CV
 
 Chaque worker réclame désormais un job par une mise à jour conditionnelle des seuls états `queued` ou `retry`. Le traitement externe ne démarre que si la base confirme qu’une ligne a réellement été revendiquée. Une seconde exécution concurrente observe donc zéro ligne modifiée et ignore le job, ce qui évite une double extraction ou une double analyse du même CV. Ce comportement est couvert par un test déterministe.
+
+## Quarantaine et validation documentaire
+
+Les CV entrants sont placés en quarantaine avant toute analyse. La validation vérifie le MIME déclaré, l’extension, la signature binaire, la taille et l’intégrité du conteneur ; elle refuse notamment les PDF chiffrés, actifs ou trop longs ainsi que les DOCX contenant des contenus externes, macros ou objets embarqués. Les fichiers ne sont promus vers le stockage définitif qu’après validation. Un moteur antivirus dédié demeure volontairement non activé sur l’hébergement actuel, conformément à la décision de ne pas basculer vers une offre d’hébergement réservée.
