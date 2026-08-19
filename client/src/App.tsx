@@ -7,6 +7,7 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import { LanguageProvider } from "./contexts/LanguageContext";
 import WhatsAppButton from "./components/WhatsAppButton";
 import CookieConsent from "./components/CookieConsent";
+import AnalyticsConsent from "./components/AnalyticsConsent";
 import { SEOHead } from "./components/SEOHead";
 import SkipToContent from "./components/SkipToContent";
 
@@ -95,6 +96,7 @@ function App() {
             <Router />
             <WhatsAppButton />
             <CookieConsent />
+            <AnalyticsConsent />
           </TooltipProvider>
         </LanguageProvider>
       </ThemeProvider>

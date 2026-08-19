@@ -219,3 +219,7 @@ Le contrôle reste également présent lorsque le visiteur ferme le bandeau init
 ## Lisibilité renforcée et mouvement réduit — 19 août 2026
 
 La navigation propose maintenant un contrôle de lisibilité renforcée, mémorisé localement, qui augmente modérément la taille, l’interlignage, le contraste des textes secondaires et la visibilité des bordures. Le réglage reste disponible dans le menu mobile. Les styles globaux respectent également `prefers-reduced-motion` : animations, transitions décoratives, parallax et effets de chargement sont réduits ou désactivés sans masquer le contenu.
+
+## Chargement conditionnel de l’analytique — 19 août 2026
+
+Le script Umami n’est plus présent statiquement dans le document HTML. Il est ajouté au document uniquement après l’enregistrement d’un consentement de performance explicite, puis retiré si cette préférence est désactivée. Sans consentement, avec une valeur locale invalide ou avec le seul consentement essentiel, le chargeur reste inactif. Les tests unitaires couvrent les trois états et la compilation de production confirme l’absence de référence Umami dans le HTML généré.

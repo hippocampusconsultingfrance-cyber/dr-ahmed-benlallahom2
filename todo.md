@@ -260,7 +260,7 @@
 - [ ] Ajouter des contrôles clavier aux témoignages en carrousel
 - [ ] Vérifier le contraste et la lisibilité du bandeau cookies
 - [x] Ajouter un lien permanent vers les préférences cookies, y compris après fermeture du bandeau sans choix explicite
-- [ ] Vérifier que les traceurs non essentiels restent bloqués sans consentement
+- [x] Vérifier que les traceurs non essentiels restent bloqués sans consentement
 - [ ] Préparer une revue annuelle des traductions et de l’identité visuelle
 - [ ] Préparer une revue annuelle de l’accessibilité et des performances
 - [ ] Préparer une revue annuelle des droits sur les visuels et logos

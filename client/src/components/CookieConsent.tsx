@@ -3,6 +3,7 @@ import { Settings2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { COOKIE_CONSENT_STORAGE_KEY, normalizeCookieConsent, shouldShowCookiePreferences, type CookieConsentValue } from "./cookieConsentState";
+import { COOKIE_CONSENT_CHANGE_EVENT } from "./analyticsConsent";
 
 const cookieCopy = {
   fr: { title: "Gestion des cookies", description: "Vous pouvez accepter tous les cookies ou personnaliser vos préférences.", learnMore: "En savoir plus", essential: "Essentiels uniquement", customize: "Personnaliser", acceptAll: "Accepter tous les cookies", settings: "Préférences cookies", settingsDescription: "Vous pouvez modifier votre choix à tout moment. Les cookies essentiels restent actifs car ils permettent le fonctionnement du site.", performance: "Cookies de performance", performanceDescription: "Mesurent l’utilisation du site pour aider à l’améliorer.", preferences: "Cookies de préférence", preferencesDescription: "Mémorisent vos choix d’affichage, tels que la langue ou le thème.", save: "Enregistrer mes préférences", close: "Fermer" },
@@ -40,6 +41,7 @@ export default function CookieConsent() {
     setCookieConsent(consent);
     setDraftConsent(consent);
     localStorage.setItem(COOKIE_CONSENT_STORAGE_KEY, JSON.stringify(consent));
+    window.dispatchEvent(new Event(COOKIE_CONSENT_CHANGE_EVENT));
     setShowBanner(false);
     setShowPreferences(false);
   };
