@@ -46,7 +46,7 @@ describe("états vides actifs", () => {
 
   it("conserve les panneaux illustrés des témoignages et disponibilités administratifs", async () => {
     const source = await readFile(new URL("../pages/AdminDashboard.tsx", import.meta.url), "utf8");
-    expect(source).toContain('AdminEmptyState icon={CalendarDays} title="Aucune réservation"');
+    expect(source).toContain('AdminEmptyState icon={CalendarDays} title={copy.emptyTitle}');
     expect(source).toContain('AdminEmptyState icon={MessageSquare} title="Aucun message"');
     expect(source).toContain('AdminEmptyState icon={Shield} title="Aucune demande RGPD"');
     expect(source).toContain('AdminEmptyState icon={Star} title="Aucun témoignage"');

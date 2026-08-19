@@ -120,6 +120,8 @@ Les écrans historiques d’accès administratif sont alignés sur cette même c
 
 La vue d’ensemble administrative localise également ses quatre indicateurs, son état de chargement et les raccourcis vers les candidatures et les missions. Les comptages et règles métier restent inchangés ; seuls les libellés visibles et les descriptions d’orientation s’adaptent à la langue active. Une non-régression garantit la présence des contenus français, anglais, allemands et chinois.
 
+L’onglet Réservations adapte maintenant ses filtres de paiement, ses statuts, son agenda, ses confirmations de remboursement, ses actions et son état vide aux quatre langues actives. Les dates affichées suivent aussi la locale de l’interface tout en conservant le fuseau Europe/Paris. Les règles métier de remboursement et les statuts persistés ne sont pas modifiés.
+
 ## Disponibilité de production
 
 Le 19 août 2026, les routes publiques `/`, `/booking`, `/gdpr`, `/faq`, `/search`, `/error`, `/maintenance`, `/recruitment`, `/employers` et `/why-hippocampus` ont toutes répondu en HTTP 200 sur le domaine principal. L’accès `www.drahmedbenlallahom.com` redirige correctement vers `drahmedbenlallahom.com` et sert ensuite la page d’accueil en HTTP 200. Aucun écart de disponibilité n’a été observé sur cet échantillon.

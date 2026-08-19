@@ -36,6 +36,13 @@ export const adminOverviewCopy = {
   zh: { loading: "正在加载管理指标", error: "加载出错", bookings: "预约", messages: "消息", gdpr: "隐私请求", revenue: "收入", eyebrow: "快速入口", title: "招聘与任务", intro: "直接查看已提交的简历和雇主需求。", applications: "申请", applicationsDescription: "查看简历、AI 分析、可入职时间和认证。", missions: "任务", missionsDescription: "管理雇主需求并创建候选人短名单。" },
 } as const;
 
+export const adminAppointmentsCopy = {
+  fr: { statusUpdated: "Statut mis à jour", refundConfirmed: (amount: string | number) => `Remboursement confirmé : ${amount} €`, loading: "Chargement des rendez-vous", all: "Tous", paymentStatus: { pending: "En attente", completed: "Payé", failed: "Échoué", refunded: "Remboursé" }, appointmentStatus: { confirmed: "Confirmé", cancelled: "Annulé", completed: "Terminé", no_show: "Absent" }, total: (count: number) => `${count} réservation${count > 1 ? "s" : ""}`, agenda: "Prochains rendez-vous", timezone: "Fuseau Europe/Paris", noUpcoming: "Aucun rendez-vous confirmé à venir pour le moment.", complete: "Terminer", refund: "Rembourser", confirmRefund: (amount: string | number, trackingId: string) => `Confirmer le remboursement de ${amount} € pour ${trackingId} ?`, refundReason: "Remboursement demandé par l’administration", emptyTitle: "Aucune réservation", emptyDescription: "Les nouvelles réservations apparaîtront ici dès leur confirmation." },
+  en: { statusUpdated: "Status updated", refundConfirmed: (amount: string | number) => `Refund confirmed: €${amount}`, loading: "Loading appointments", all: "All", paymentStatus: { pending: "Pending", completed: "Paid", failed: "Failed", refunded: "Refunded" }, appointmentStatus: { confirmed: "Confirmed", cancelled: "Cancelled", completed: "Completed", no_show: "No-show" }, total: (count: number) => `${count} appointment${count > 1 ? "s" : ""}`, agenda: "Upcoming appointments", timezone: "Europe/Paris time zone", noUpcoming: "There are no confirmed upcoming appointments at the moment.", complete: "Complete", refund: "Refund", confirmRefund: (amount: string | number, trackingId: string) => `Confirm the €${amount} refund for ${trackingId}?`, refundReason: "Refund requested by administration", emptyTitle: "No appointments", emptyDescription: "New appointments will appear here once confirmed." },
+  de: { statusUpdated: "Status aktualisiert", refundConfirmed: (amount: string | number) => `Rückerstattung bestätigt: ${amount} €`, loading: "Termine werden geladen", all: "Alle", paymentStatus: { pending: "Ausstehend", completed: "Bezahlt", failed: "Fehlgeschlagen", refunded: "Erstattet" }, appointmentStatus: { confirmed: "Bestätigt", cancelled: "Storniert", completed: "Abgeschlossen", no_show: "Nicht erschienen" }, total: (count: number) => `${count} Termin${count === 1 ? "" : "e"}`, agenda: "Kommende Termine", timezone: "Zeitzone Europa/Paris", noUpcoming: "Derzeit gibt es keine bestätigten kommenden Termine.", complete: "Abschließen", refund: "Erstatten", confirmRefund: (amount: string | number, trackingId: string) => `Rückerstattung von ${amount} € für ${trackingId} bestätigen?`, refundReason: "Rückerstattung von der Verwaltung angefordert", emptyTitle: "Keine Termine", emptyDescription: "Neue Termine werden hier nach der Bestätigung angezeigt." },
+  zh: { statusUpdated: "状态已更新", refundConfirmed: (amount: string | number) => `退款已确认：${amount} 欧元`, loading: "正在加载预约", all: "全部", paymentStatus: { pending: "待处理", completed: "已付款", failed: "失败", refunded: "已退款" }, appointmentStatus: { confirmed: "已确认", cancelled: "已取消", completed: "已完成", no_show: "未到场" }, total: (count: number) => `${count} 个预约`, agenda: "即将到来的预约", timezone: "欧洲/巴黎时区", noUpcoming: "目前没有已确认的即将到来的预约。", complete: "完成", refund: "退款", confirmRefund: (amount: string | number, trackingId: string) => `确认向 ${trackingId} 退款 ${amount} 欧元？`, refundReason: "管理端请求退款", emptyTitle: "暂无预约", emptyDescription: "新的预约确认后将显示在这里。" },
+} as const;
+
 export default function AdminDashboard() {
   const { user, loading, refresh } = useAuth();
   const { language } = useLanguage();
@@ -263,6 +270,9 @@ function OverviewTab({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
 }
 
 function AppointmentsTab() {
+  const { language } = useLanguage();
+  const copy = adminAppointmentsCopy[language as keyof typeof adminAppointmentsCopy] ?? adminAppointmentsCopy.fr;
+  const locale = language === "zh" ? "zh-CN" : language === "de" ? "de-DE" : language === "en" ? "en-GB" : "fr-FR";
   const [statusFilter, setStatusFilter] = useState<string | undefined>(undefined);
   const utils = trpc.useUtils();
   const { data, isLoading, error } = trpc.admin.appointments.list.useQuery({
@@ -270,14 +280,14 @@ function AppointmentsTab() {
   });
   const updateStatus = trpc.admin.appointments.updateStatus.useMutation({
     onSuccess: () => {
-      toast.success("Statut mis à jour");
+      toast.success(copy.statusUpdated);
       utils.admin.appointments.list.invalidate();
       utils.admin.stats.invalidate();
     },
   });
   const refundAppointment = trpc.admin.appointments.refund.useMutation({
     onSuccess: ({ refundAmount }) => {
-      toast.success(`Remboursement confirmé : ${refundAmount} €`);
+      toast.success(copy.refundConfirmed(refundAmount));
       utils.admin.appointments.list.invalidate();
       utils.admin.stats.invalidate();
     },
@@ -306,7 +316,7 @@ function AppointmentsTab() {
   const agenda = buildAppointmentsAgenda(data?.items ?? []);
 
   if (isLoading) {
-    return <PublicContentSkeleton label="Chargement des rendez-vous" />;
+    return <PublicContentSkeleton label={copy.loading} />;
   }
 
   return (
@@ -321,20 +331,20 @@ function AppointmentsTab() {
               statusFilter === s ? "bg-primary text-primary-foreground" : "bg-card border border-border text-muted-foreground hover:text-foreground"
             }`}
           >
-            {s === undefined ? "Tous" : s === "pending" ? "En attente" : s === "completed" ? "Payé" : s === "failed" ? "Échoué" : "Remboursé"}
+            {s === undefined ? copy.all : copy.paymentStatus[s as keyof typeof copy.paymentStatus]}
           </button>
         ))}
       </div>
 
-      <p className="text-sm text-muted-foreground mb-4">{data?.total || 0} réservation(s)</p>
+      <p className="text-sm text-muted-foreground mb-4">{copy.total(data?.total || 0)}</p>
 
       <section aria-labelledby="appointments-agenda-title" className="mb-6 rounded-xl border border-primary/20 bg-primary/5 p-4 sm:p-5">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <CalendarDays className="h-5 w-5 text-primary" aria-hidden="true" />
-            <h2 id="appointments-agenda-title" className="font-semibold text-foreground">Prochains rendez-vous</h2>
+            <h2 id="appointments-agenda-title" className="font-semibold text-foreground">{copy.agenda}</h2>
           </div>
-          <span className="text-xs text-muted-foreground">Fuseau Europe/Paris</span>
+          <span className="text-xs text-muted-foreground">{copy.timezone}</span>
         </div>
         {agenda.length > 0 ? (
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -345,7 +355,7 @@ function AppointmentsTab() {
                   {day.items.map((apt) => (
                     <div key={apt.id} className="flex items-center justify-between gap-2 text-sm">
                       <span className="min-w-0 truncate text-foreground"><span className="font-mono text-primary">{apt.time}</span> · {apt.customerName}</span>
-                      <span className={`shrink-0 rounded px-2 py-0.5 text-[11px] font-medium ${appointmentStatusColors[apt.appointmentStatus] || "bg-muted text-muted-foreground"}`}>{apt.appointmentStatus}</span>
+                      <span className={`shrink-0 rounded px-2 py-0.5 text-[11px] font-medium ${appointmentStatusColors[apt.appointmentStatus] || "bg-muted text-muted-foreground"}`}>{copy.appointmentStatus[apt.appointmentStatus as keyof typeof copy.appointmentStatus] ?? apt.appointmentStatus}</span>
                     </div>
                   ))}
                 </div>
@@ -353,7 +363,7 @@ function AppointmentsTab() {
             ))}
           </div>
         ) : (
-          <p className="text-sm text-muted-foreground">Aucun rendez-vous à venir confirmé pour le moment.</p>
+          <p className="text-sm text-muted-foreground">{copy.noUpcoming}</p>
         )}
       </section>
 
@@ -370,16 +380,16 @@ function AppointmentsTab() {
                 <div className="flex flex-wrap gap-3 text-sm text-muted-foreground">
                   <span>{apt.customerEmail}</span>
                   <span>{apt.customerPhone}</span>
-                  <span>{new Date(apt.appointmentDate).toLocaleString("fr-FR", { timeZone: "Europe/Paris" })}</span>
+                  <span>{new Date(apt.appointmentDate).toLocaleString(locale, { timeZone: "Europe/Paris" })}</span>
                   <span className="font-semibold text-foreground">{apt.finalPrice}€</span>
                 </div>
               </div>
               <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:flex-nowrap">
                 <span className={`px-2 py-1 rounded text-xs font-medium ${statusColors[apt.paymentStatus] || ""}`}>
-                  {apt.paymentStatus}
+                  {copy.paymentStatus[apt.paymentStatus as keyof typeof copy.paymentStatus] ?? apt.paymentStatus}
                 </span>
                 <span className={`px-2 py-1 rounded text-xs font-medium ${appointmentStatusColors[apt.appointmentStatus] || ""}`}>
-                  {apt.appointmentStatus}
+                  {copy.appointmentStatus[apt.appointmentStatus as keyof typeof copy.appointmentStatus] ?? apt.appointmentStatus}
                 </span>
                 {apt.appointmentStatus === "confirmed" && (
                   <Button
@@ -389,7 +399,7 @@ function AppointmentsTab() {
                     onClick={() => updateStatus.mutate({ trackingId: apt.trackingId, appointmentStatus: "completed" })}
                   >
                     <CheckCircle className="w-3 h-3 mr-1" />
-                    Terminer
+                    {copy.complete}
                   </Button>
                 )}
                 {apt.paymentStatus === "completed" && apt.appointmentStatus === "confirmed" && (
@@ -399,15 +409,15 @@ function AppointmentsTab() {
                     className="min-h-10 flex-1 sm:min-h-0 sm:flex-none"
                     disabled={refundAppointment.isPending}
                     onClick={() => {
-                      if (!window.confirm(`Confirmer le remboursement de ${apt.finalPrice} € pour ${apt.trackingId} ?`)) return;
+                      if (!window.confirm(copy.confirmRefund(apt.finalPrice, apt.trackingId))) return;
                       refundAppointment.mutate({
                         trackingId: apt.trackingId,
-                        reason: "Remboursement demandé par l’administration",
+                        reason: copy.refundReason,
                       });
                     }}
                   >
                     <DollarSign className="w-3 h-3 mr-1" />
-                    Rembourser
+                    {copy.refund}
                   </Button>
                 )}
               </div>
@@ -418,7 +428,7 @@ function AppointmentsTab() {
           </div>
         ))}
         {(!data?.items || data.items.length === 0) && (
-          <AdminEmptyState icon={CalendarDays} title="Aucune réservation" description="Les nouvelles réservations apparaîtront ici dès leur confirmation." />
+          <AdminEmptyState icon={CalendarDays} title={copy.emptyTitle} description={copy.emptyDescription} />
         )}
       </div>
     </div>
