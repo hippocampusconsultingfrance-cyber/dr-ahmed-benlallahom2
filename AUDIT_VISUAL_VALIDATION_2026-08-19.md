@@ -121,3 +121,7 @@ Le formulaire de candidature VVIP utilise désormais des options de spécialité
 ## Navigation accessible des pages légales
 
 Les groupes d’onglets des mentions légales, de la confidentialité et des conditions d’utilisation disposent désormais d’un nom accessible dans la langue affichée : français, anglais, allemand ou chinois. Cette correction améliore le repérage de la navigation interne par les lecteurs d’écran, sans modifier le contenu juridique.
+
+## Formulaire Employeurs dans les quatre langues
+
+Les exemples de saisie du brief Employeurs sont désormais adaptés à la langue active pour le profil recherché, la zone géographique, le calendrier et les précisions de mission. Cette correction conserve les libellés explicites déjà associés aux champs tout en supprimant les dernières aides françaises visibles dans les parcours anglais, allemand et chinois.

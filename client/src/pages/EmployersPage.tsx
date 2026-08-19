@@ -23,10 +23,14 @@ export const employerCopy = {
     env3: "Mission VVIP offshore / Groupe industriel",
     env4: "Site minier ou industriel isolé",
     specialtyNeeded: "Spécialité médicale ou paramédicale recherchée",
+    specialtyPlaceholder: "Ex. Médecin urgentiste, IADE, etc.",
     country: "Pays / Zone géographique",
+    countryPlaceholder: "Ex. Arabie saoudite, Canada, France",
     requiredCertifications: "Certifications obligatoires (ex. ATLS, ACLS, HUET)",
     timeline: "Calendrier souhaité (ex. Immédiat, Q3 2026)",
+    timelinePlaceholder: "Ex. Immédiat, T3 2026",
     notes: "Détails de la mission ou contraintes particulières",
+    notesPlaceholder: "Décrivez le contexte, les rotations ou les exigences linguistiques…",
     submit: "Transmettre le brief de mission",
     sending: "Transmission sécurisée…",
     successTitle: "Brief de mission enregistré",
@@ -62,10 +66,14 @@ export const employerCopy = {
     env3: "VVIP Offshore Mission / Industrial Group",
     env4: "Remote Mining or Industrial Site",
     specialtyNeeded: "Specialty / Profession Needed",
+    specialtyPlaceholder: "e.g. Emergency physician, nurse anaesthetist",
     country: "Country / Region",
+    countryPlaceholder: "e.g. Saudi Arabia, Canada, France",
     requiredCertifications: "Mandatory Certifications (e.g. ATLS, ACLS, HUET)",
     timeline: "Expected Timeline (e.g. Immediate, Q3 2026)",
+    timelinePlaceholder: "e.g. Immediate, Q3 2026",
     notes: "Mission details or specific constraints",
+    notesPlaceholder: "Briefly describe the context, rotations, or language requirements…",
     submit: "Submit Mission Brief",
     sending: "Secure transmission…",
     successTitle: "Mission Brief Registered",
@@ -101,10 +109,14 @@ export const employerCopy = {
     env3: "VVIP-Offshore-Einsatz / Industriegruppe",
     env4: "Entlegener Industrie- oder Bergbaustandort",
     specialtyNeeded: "Gesuchtes medizinisches Fachgebiet",
+    specialtyPlaceholder: "z. B. Notarzt, Fachpflege Anästhesie",
     country: "Land / Region",
+    countryPlaceholder: "z. B. Saudi-Arabien, Kanada, Frankreich",
     requiredCertifications: "Erforderliche Zertifikate (z.B. ATLS, ACLS, HUET)",
     timeline: "Zeitplan (z.B. Sofort, Q3 2026)",
+    timelinePlaceholder: "z. B. Sofort, Q3 2026",
     notes: "Einsatzdetails oder besondere Anforderungen",
+    notesPlaceholder: "Beschreiben Sie kurz Kontext, Rotationen oder Sprachanforderungen…",
     submit: "Einsatz-Brief absenden",
     sending: "Sichere Übertragung…",
     successTitle: "Einsatz-Brief registriert",
@@ -140,10 +152,14 @@ export const employerCopy = {
     env3: "VVIP 离岸任务 / 工业集团",
     env4: "偏远矿山或工业驻地",
     specialtyNeeded: "急需医疗或医护专业",
+    specialtyPlaceholder: "例如：急诊医师、麻醉专科护士",
     country: "国家 / 地区",
+    countryPlaceholder: "例如：沙特阿拉伯、加拿大、法国",
     requiredCertifications: "强制认证（如 ATLS, ACLS, HUET）",
     timeline: "期望时间表（如：即刻、2026年第三季度）",
+    timelinePlaceholder: "例如：即刻、2026年第三季度",
     notes: "任务详情或特殊约束",
+    notesPlaceholder: "请简要说明任务背景、轮班或语言要求…",
     submit: "提交任务需求",
     sending: "安全传输中…",
     successTitle: "任务需求已登记",
@@ -331,18 +347,18 @@ export default function EmployersPage() {
                     </label>
                     <label className="block w-full space-y-2 text-sm text-foreground">
                       <span className="block mb-1 font-medium">{t.specialtyNeeded} *</span>
-                      <input required value={form.specialtyNeeded} onChange={(e) => update("specialtyNeeded", e.target.value)} className="form-control block w-full" placeholder="Ex. Médecin Urgentiste, IADE, etc." />
+                      <input required value={form.specialtyNeeded} onChange={(e) => update("specialtyNeeded", e.target.value)} className="form-control block w-full" placeholder={t.specialtyPlaceholder} />
                     </label>
                   </div>
 
                   <div className="grid gap-4 sm:grid-cols-2">
                     <label className="block w-full space-y-2 text-sm text-foreground">
                       <span className="block mb-1 font-medium">{t.country} *</span>
-                      <input required value={form.country} onChange={(e) => update("country", e.target.value)} className="form-control block w-full" placeholder="Ex. Arabie Saoudite, Canada, France" />
+                      <input required value={form.country} onChange={(e) => update("country", e.target.value)} className="form-control block w-full" placeholder={t.countryPlaceholder} />
                     </label>
                     <label className="block w-full space-y-2 text-sm text-foreground">
                       <span className="block mb-1 font-medium">{t.timeline}</span>
-                      <input value={form.timeline} onChange={(e) => update("timeline", e.target.value)} className="form-control block w-full" placeholder="Ex. Immédiat, Q3 2026" />
+                      <input value={form.timeline} onChange={(e) => update("timeline", e.target.value)} className="form-control block w-full" placeholder={t.timelinePlaceholder} />
                     </label>
                   </div>
 
@@ -353,7 +369,7 @@ export default function EmployersPage() {
 
                   <label className="block w-full space-y-2 text-sm text-foreground">
                     <span className="block mb-1 font-medium">{t.notes}</span>
-                    <textarea value={form.notes} onChange={(e) => update("notes", e.target.value)} className="form-control block min-h-24 w-full" maxLength={3000} placeholder="Décrivez brièvement le contexte, les rotations ou les exigences linguistiques…" />
+                    <textarea value={form.notes} onChange={(e) => update("notes", e.target.value)} className="form-control block min-h-24 w-full" maxLength={3000} placeholder={t.notesPlaceholder} />
                   </label>
 
                   <label className="absolute -left-[10000px] h-px w-px overflow-hidden" aria-hidden="true">
