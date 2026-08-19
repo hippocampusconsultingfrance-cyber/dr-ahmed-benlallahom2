@@ -51,7 +51,7 @@ export default function EmployerBriefsTab() {
   const activeBrief = matches.data?.brief ?? null;
 
   if (isLoading) return <PublicContentSkeleton label={copy.loading} />;
-  if (error) return <p className="py-8 text-center text-red-400">{copy.loadError}: {error.message}</p>;
+  if (error) return <p className="py-8 text-center text-red-400">{copy.loadError}</p>;
 
   return (
     <div className="grid gap-6 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">

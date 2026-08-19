@@ -12,5 +12,7 @@ describe("briefs Employeurs multilingues", () => {
     expect(source).toContain("{copy.shortlistAssisted}");
     expect(source).toContain("{copy.humanReview}");
     expect(source).toContain("{copy.previous}");
+    expect(source).toContain("{copy.loadError}</p>");
+    expect(source).not.toContain("{copy.loadError}: {error.message}");
   });
 });
