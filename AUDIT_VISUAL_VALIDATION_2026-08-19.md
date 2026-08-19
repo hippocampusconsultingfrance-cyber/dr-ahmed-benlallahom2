@@ -144,6 +144,8 @@ Le pilotage Recrutement localise à présent ses indicateurs, relances manuelles
 
 L’espace Briefs Employeurs a fait l’objet d’un contrôle complémentaire. Ses contrôles, détails et pagination restent sur la copie multilingue existante, et l’état d’erreur affiche désormais uniquement un message localisé générique, sans exposer de détail technique retourné par le serveur.
 
+Le portail candidat sécurisé est déjà couvert de bout en bout par une copie française, anglaise, allemande et chinoise. La vérification de non-régression étend la couverture aux sessions actives, révocations, dépôt protégé, retours d’envoi, catégories documentaires, états d’analyse et absence de document.
+
 ## Disponibilité de production
 
 Le 19 août 2026, les routes publiques `/`, `/booking`, `/gdpr`, `/faq`, `/search`, `/error`, `/maintenance`, `/recruitment`, `/employers` et `/why-hippocampus` ont toutes répondu en HTTP 200 sur le domaine principal. L’accès `www.drahmedbenlallahom.com` redirige correctement vers `drahmedbenlallahom.com` et sert ensuite la page d’accueil en HTTP 200. Aucun écart de disponibilité n’a été observé sur cet échantillon.

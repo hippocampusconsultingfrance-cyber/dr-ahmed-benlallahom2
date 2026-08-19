@@ -2495,3 +2495,4 @@
 - [x] Localiser les libellés, états et horodatages de l’observabilité de sécurité administrative dans les quatre langues actives
 - [x] Localiser les statuts, actions et messages de shortlist des briefs Employeurs dans les quatre langues actives
 - [x] Vérifier et localiser les contrôles, détails et horodatages restants des Briefs Employeurs en FR/EN/DE/ZH
+- [x] Vérifier et localiser les contrôles, messages et états du portail candidat sécurisé en FR/EN/DE/ZH
