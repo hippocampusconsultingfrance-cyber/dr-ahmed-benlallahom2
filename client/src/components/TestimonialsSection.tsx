@@ -1,5 +1,5 @@
 import { useLanguage } from "@/contexts/LanguageContext";
-import { Star, ChevronLeft, ChevronRight } from "lucide-react";
+import { Star, ChevronLeft, ChevronRight, MessageCircleHeart } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { useState, useEffect, useCallback } from "react";
 import PublicContentSkeleton from "./PublicContentSkeleton";
@@ -158,7 +158,12 @@ export default function TestimonialsSection() {
           <h2 className="font-display text-3xl md:text-5xl font-bold text-foreground mb-4">
             {currentContent.title}
           </h2>
-          <p className="text-muted-foreground">{currentContent.empty}</p>
+          <div className="mx-auto mt-6 max-w-md rounded-2xl border border-dashed border-border bg-card/40 px-6 py-8">
+            <span className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
+              <MessageCircleHeart className="h-6 w-6" aria-hidden="true" />
+            </span>
+            <p className="text-muted-foreground">{currentContent.empty}</p>
+          </div>
         </div>
       </section>
     );

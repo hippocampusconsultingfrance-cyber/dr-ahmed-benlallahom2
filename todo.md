@@ -179,7 +179,13 @@
 - [x] Créer un système de design documenté avec tokens de couleur, typographie, espacements et composants
 - [ ] Créer une bibliothèque de visuels médicaux authentiques avec droits d’utilisation et textes alternatifs
 - [x] Ne pas développer la page Blog : la section Actualités et ses routes publiques restent désactivées à la demande du propriétaire
-- [ ] Ajouter des états vides illustrés pour le blog, les témoignages, les disponibilités et le dashboard
+- [x] Vérifier les états vides des témoignages, de la réservation, des Briefs Employeurs, du Mailing, du Vivier, de la revue documentaire et du panneau administratif partagé ; le Blog restant désactivé
+- [x] Vérifier par test et documenter composant par composant les états vides des parcours explicitement couverts, le Blog restant désactivé
+- [ ] Étendre l’audit des états vides à toute autre surface administrative active non encore recensée
+- [x] Ajouter un état vide illustré au carrousel de témoignages partenaires
+- [x] Ajouter un repère illustré et accessible aux états de disponibilité de réservation
+- [x] Ajouter une couverture de non-régression des états vides de Vivier et de la revue administrative des documents candidats
+- [x] Documenter composant par composant les états vides actifs vérifiés et les parcours hors périmètre
 - [x] Ajouter un skeleton de chargement cohérent et accessible aux témoignages publics
 - [x] Ajouter des skeletons de chargement cohérents aux autres parcours encore en spinner seul : vivier, fiche candidat 360°, dashboard recrutement et sections admin
 - [x] Auditer tous les états de chargement restants et réserver les spinners aux actions instantanées ou boutons en cours d’envoi

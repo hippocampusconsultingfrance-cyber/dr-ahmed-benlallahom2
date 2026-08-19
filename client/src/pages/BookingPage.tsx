@@ -226,6 +226,15 @@ export function parseBookingDateTime(dateValue: string, timeValue: string): Date
 
 export type BookingAvailabilityState = "select" | "checking" | "unavailable" | "available";
 
+export type BookingAvailabilityIcon = "calendar" | "clock" | "alert" | "check";
+
+export function getBookingAvailabilityIcon(state: BookingAvailabilityState): BookingAvailabilityIcon {
+  if (state === "checking") return "clock";
+  if (state === "unavailable") return "alert";
+  if (state === "available") return "check";
+  return "calendar";
+}
+
 export function getBookingAvailabilityState({
   selected,
   pending,
@@ -687,7 +696,11 @@ export default function BookingPage() {
               {dateError && <p id="booking-date-error" className="mt-2 text-sm text-destructive" role="alert">{dateError}</p>}
               {localizedDate && <p className="mt-2 text-sm font-medium text-primary" aria-live="polite">{localizedDate}</p>}
               <div id="availability-status" className={`availability-status availability-${availabilityState} mt-3`} role="status" aria-live="polite" data-state={availabilityState}>
-                <span className="availability-dot" aria-hidden="true" />
+                {(() => {
+                  const icon = getBookingAvailabilityIcon(availabilityState);
+                  const AvailabilityIcon = icon === "check" ? CheckCircle : icon === "alert" ? AlertCircle : icon === "clock" ? Clock : Calendar;
+                  return <AvailabilityIcon className="h-4 w-4 shrink-0" aria-hidden="true" />;
+                })()}
                 <span>{availabilityLabel}</span>
               </div>
             </div>

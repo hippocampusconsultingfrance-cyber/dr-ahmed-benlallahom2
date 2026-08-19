@@ -1,4 +1,4 @@
-import type { ComponentType } from "react";
+import React, { type ComponentType } from "react";
 import { AlertTriangle } from "lucide-react";
 
 type IconComponent = ComponentType<{ className?: string; "aria-hidden"?: boolean }>;

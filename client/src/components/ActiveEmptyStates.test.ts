@@ -1,0 +1,46 @@
+import { describe, expect, it } from "vitest";
+import { readFile } from "node:fs/promises";
+
+async function readComponent(name: string) {
+  return readFile(new URL(`./${name}`, import.meta.url), "utf8");
+}
+
+describe("états vides actifs", () => {
+  it("conserve l’état vide localisé des témoignages partenaires", async () => {
+    const source = await readComponent("TestimonialsSection.tsx");
+    expect(source).toContain("if (featuredTestimonials.length === 0)");
+    expect(source).toContain("currentContent.empty");
+    expect(source).toContain("Aucun témoignage disponible pour le moment.");
+    expect(source).toContain("No testimonials are available at the moment.");
+  });
+
+  it("conserve les états vides du pilotage des briefs employeurs", async () => {
+    const source = await readComponent("EmployerBriefsTab.tsx");
+    expect(source).toContain("noBrief");
+    expect(source).toContain("noCandidate");
+    expect(source).toContain("Aucun brief Employeur à traiter.");
+  });
+
+  it("conserve les états vides d’audience et d’historique du mailing", async () => {
+    const source = await readComponent("MailingTab.tsx");
+    expect(source).toContain("noSelected");
+    expect(source).toContain("noCampaign");
+    expect(source).toContain("Aucune campagne n’a encore été enregistrée.");
+  });
+
+  it("conserve l’état vide illustré et filtrable du Vivier", async () => {
+    const source = await readComponent("VivierTab.tsx");
+    expect(source).toContain("candidates?.length ?");
+    expect(source).toContain("UsersRound");
+    expect(source).toContain("copy.empty");
+    expect(source).toContain("Aucun candidat éligible ne correspond aux filtres actuels.");
+  });
+
+  it("conserve l’état vide de la revue documentaire selon le filtre actif", async () => {
+    const source = await readComponent("CandidateDocumentsAdminTab.tsx");
+    expect(source).toContain("!list.isLoading && !list.data?.length");
+    expect(source).toContain("border-dashed");
+    expect(source).toContain("copy.empty");
+    expect(source).toContain("Aucun document ne correspond à ce filtre.");
+  });
+});

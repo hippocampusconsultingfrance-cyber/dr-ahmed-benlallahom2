@@ -80,6 +80,21 @@ Le contrôle flottant WhatsApp est volontairement masqué pendant l’affichage 
 
 La page éditoriale publique `/why-hippocampus` présente la méthode employeurs, les zones couvertes, les garanties de confidentialité et conformité, ainsi que les parcours explicites vers le brief de mission et le recrutement. Une vérification visuelle pleine page sur bureau confirme une hiérarchie lisible, des cartes régulières et des appels à l’action distingués. La route, les quatre variantes linguistiques, les garanties, les CTA et les métadonnées de service sont protégés par une non-régression dédiée.
 
+## États vides des espaces actifs
+
+Les témoignages partenaires, les briefs Employeurs, l’espace Mailing et les tableaux administratifs conservent des états vides explicites, localisés ou contextualisés selon le parcours. Le composant partagé des tableaux de bord fournit une icône décorative, un titre et une explication accessibles. Les disponibilités de réservation restent couvertes par leur test de statut existant. La section Blog demeure volontairement désactivée à la demande du propriétaire ; elle n’est donc pas traitée comme un parcours actif nécessitant un état vide.
+
+| Parcours actif | État vide ou d’absence vérifié | Couverture associée |
+|---|---|---|
+| Témoignages partenaires | Carte vide illustrée, icône décorative masquée aux technologies d’assistance et libellé localisé. | `TestimonialsSection.test.ts` |
+| Réservation | Quatre états de disponibilité avec un repère visuel distinct : saisie, vérification, indisponible et disponible. | `BookingPage.test.ts` |
+| Briefs Employeurs | Absence de brief, de correspondance ou de candidat disponible. | `ActiveEmptyStates.test.ts` |
+| Mailing recrutement | Audience sélectionnée vide et historique de campagne vide. | `ActiveEmptyStates.test.ts` |
+| Vivier candidats | Résultat de filtre sans candidat avec icône et message localisé. | `ActiveEmptyStates.test.ts` |
+| Revue documentaire candidat | Aucun document correspondant au filtre actif. | `ActiveEmptyStates.test.ts` |
+| Tableau administratif partagé | Icône, titre et explication accessibles. | `AdminStatePanel.test.tsx` |
+| Blog | Hors périmètre : section et routes désactivées à la demande du propriétaire. | Suivi de désactivation existant. |
+
 ## Disponibilité de production
 
 Le 19 août 2026, les routes publiques `/`, `/booking`, `/gdpr`, `/faq`, `/search`, `/error`, `/maintenance`, `/recruitment`, `/employers` et `/why-hippocampus` ont toutes répondu en HTTP 200 sur le domaine principal. L’accès `www.drahmedbenlallahom.com` redirige correctement vers `drahmedbenlallahom.com` et sert ensuite la page d’accueil en HTTP 200. Aucun écart de disponibilité n’a été observé sur cet échantillon.
