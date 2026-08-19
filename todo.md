@@ -2243,7 +2243,7 @@
 
 - [x] Identifier le compte connecté affichant un accès refusé et vérifier son rôle
 - [x] Attribuer le rôle administrateur au compte propriétaire vérifié
-- [ ] Confirmer l’accès au dashboard CV sans élargir les permissions des autres comptes
+- [x] Confirmer l’accès au dashboard CV sans élargir les permissions des autres comptes
 
 ## Visibilité du dashboard recrutement
 

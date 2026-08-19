@@ -126,3 +126,13 @@ Les constatations ci-dessous proviennent des captures du serveur de prévisualis
 | Cible accessible | Le premier élément `main` reçoit automatiquement une cible stable et devient focalisable lorsque le lien est activé. |
 
 > Ce mécanisme réduit le nombre de tabulations nécessaires avant d’atteindre le contenu principal, sans modifier la navigation visible à la souris.
+
+## Accès administrateur recrutement — 19 août 2026
+
+| Contrôle | Résultat |
+|---|---|
+| Rôle du propriétaire | Le compte `ahmed.benlallahom@gmail.com` possède le rôle `admin`, sans modification des droits d’autres comptes. |
+| Protection d’accès | La seconde vérification par code email est demandée avant l’accès aux données sensibles. |
+| Sections opérationnelles | Les entrées Candidatures, Documents candidats, Sécurité, Vivier, Mailing et Missions sont visibles après validation MFA. |
+
+> Les raccourcis Candidatures et Missions sont également disponibles depuis la vue d’ensemble administrative.
