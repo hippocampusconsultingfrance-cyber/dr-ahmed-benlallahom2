@@ -307,3 +307,7 @@ Le contrôle réseau direct de Cloudflare Turnstile est maintenant réservé aux
 ## États d’administration — 19 août 2026
 
 Les sections Réservations, Messages et demandes RGPD partagent désormais des états vides et erreurs explicites. Les états vides indiquent où apparaîtront les données réelles, sans ajout d’illustration ou de contenu fictif ; les erreurs utilisent un rôle d’alerte et évitent l’affichage de détails techniques superflus. Le composant commun est couvert par un test, et la suite complète ainsi que le build de production sont validés.
+
+## Impression des factures et informations — 19 août 2026
+
+Les contenus Legal, RGPD et FAQ bénéficient des styles d’impression documentés précédemment. La facture PDF est désormais explicitement construite au format A4 avec marges, pied de page et palette ABL / Hippocampus centralisés. Un test de génération en mémoire confirme la production d’un flux PDF stockable, en plus de la vérification de ses constantes de mise en page. La suite complète compte 176 tests réussis et le build de production est valide.

@@ -252,7 +252,7 @@
 - [x] Ajouter une vue agenda administrateur synthétique fondée sur les rendez-vous réels
 - [x] Ajouter des états d’erreur et états vides sobres et accessibles aux parcours administratifs prioritaires
 - [ ] Ajouter une page de résultats de recherche interne accessible
-- [ ] Vérifier l’impression des pages légales, RGPD et factures
+- [x] Vérifier l’impression des pages légales, RGPD et factures
 - [ ] Vérifier la compatibilité avec un lecteur d’écran
 - [ ] Vérifier la navigation au clavier uniquement
 - [ ] Vérifier les pages à 200 % de zoom

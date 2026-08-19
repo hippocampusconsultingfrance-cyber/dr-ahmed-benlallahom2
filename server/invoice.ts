@@ -1,6 +1,19 @@
 import PDFDocument from "pdfkit";
 import { storagePut } from "./storage.js";
 
+export const INVOICE_LAYOUT = {
+  size: "A4" as const,
+  margin: 50,
+  footerBrandY: 750,
+  footerValidityY: 762,
+};
+
+export const INVOICE_BRAND = {
+  accent: "#0891b2",
+  ink: "#0f172a",
+  muted: "#666666",
+};
+
 interface InvoiceData {
   trackingId: string;
   customerName: string;
@@ -18,7 +31,7 @@ interface InvoiceData {
 export async function generateInvoicePDF(data: InvoiceData): Promise<{ buffer: Buffer; key: string; url: string }> {
   return new Promise(async (resolve, reject) => {
     try {
-      const doc = new PDFDocument({ size: "A4", margin: 50 });
+      const doc = new PDFDocument({ size: INVOICE_LAYOUT.size, margin: INVOICE_LAYOUT.margin });
       const chunks: Buffer[] = [];
 
       doc.on("data", (chunk: Buffer) => chunks.push(chunk));
@@ -48,7 +61,9 @@ export async function generateInvoicePDF(data: InvoiceData): Promise<{ buffer: B
       });
 
       // Header
-      doc.fontSize(24).font("Helvetica-Bold").text("FACTURE", { align: "center" });
+      doc.fontSize(8).font("Helvetica-Bold").fillColor(INVOICE_BRAND.accent).text("ABL / HIPPOCAMPUS CONSULTING", { align: "center" });
+      doc.moveDown(0.35);
+      doc.fontSize(24).font("Helvetica-Bold").fillColor(INVOICE_BRAND.ink).text("FACTURE", { align: "center" });
       doc.moveDown(0.5);
 
       // Company info
@@ -68,7 +83,7 @@ export async function generateInvoicePDF(data: InvoiceData): Promise<{ buffer: B
       doc.text(`Réf. RDV: ${data.trackingId}`, 350);
 
       // Separator
-      doc.moveTo(50, 200).lineTo(545, 200).stroke();
+      doc.strokeColor(INVOICE_BRAND.accent).moveTo(50, 200).lineTo(545, 200).stroke();
 
       // Client info
       doc.fontSize(12).font("Helvetica-Bold").text("Facturé à:", 50, 220);
@@ -133,17 +148,17 @@ export async function generateInvoicePDF(data: InvoiceData): Promise<{ buffer: B
       doc.text(`Mode de paiement: Carte bancaire (Stripe)`, 350, currentY + 15);
 
       // Footer
-      doc.fontSize(8).font("Helvetica").fillColor("#666666");
+      doc.fontSize(8).font("Helvetica").fillColor(INVOICE_BRAND.muted);
       doc.text(
         "Hippocampus Consulting - Dr. Ahmed Ben Lallahom - Conseil en santé",
         50,
-        750,
+        INVOICE_LAYOUT.footerBrandY,
         { align: "center" }
       );
       doc.text(
         "Cette facture est générée automatiquement et fait foi de paiement.",
         50,
-        762,
+        INVOICE_LAYOUT.footerValidityY,
         { align: "center" }
       );
 
