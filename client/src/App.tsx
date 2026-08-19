@@ -1,5 +1,4 @@
 import { Toaster } from "@/components/ui/sonner";
-import { TooltipProvider } from "@/components/ui/tooltip";
 import { lazy, Suspense } from "react";
 import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
@@ -100,15 +99,13 @@ function App() {
     <ErrorBoundary>
       <ThemeProvider defaultTheme="dark" switchable>
         <LanguageProvider>
-          <TooltipProvider>
-            <SkipToContent />
-            <Toaster />
-            <Router />
-            <WhatsAppButton />
-            <CookieConsent />
-            <AnalyticsConsent />
-            <ConnectionMotionPreference />
-          </TooltipProvider>
+          <SkipToContent />
+          <Toaster />
+          <Router />
+          <WhatsAppButton />
+          <CookieConsent />
+          <AnalyticsConsent />
+          <ConnectionMotionPreference />
         </LanguageProvider>
       </ThemeProvider>
     </ErrorBoundary>

@@ -402,3 +402,6 @@ Le build conserve déjà un découpage par route : tableau de bord, réservation
 
 ## Navigation mobile compacte — 19 août 2026
 La page d’accueil a été contrôlée à 375 px de large avec les préférences d’affichage et le bandeau de consentement visibles. Le sélecteur de langue, les contrôles de thème et d’accessibilité, la recherche et le menu mobile restent espacés et accessibles ; aucun chevauchement ni élément tronqué n’a été observé. Le bandeau de consentement conserve ses trois actions lisibles dans le flux inférieur sans interférer avec la navigation haute.
+
+## Allègement sûr du bundle initial — 19 août 2026
+Le provider global d’infobulles n’était utilisé par aucun parcours public ; les composants qui en nécessitent un conservent leur provider local autonome. Son retrait réduit l’artefact initial de 470,9 kB à 429,4 kB non compressé, et de 147,5 kB à 133,2 kB gzip, sans modifier le découpage par route. La suite complète compte 194 tests réussis, 2 explicitement ignorés, et le build de production est valide.

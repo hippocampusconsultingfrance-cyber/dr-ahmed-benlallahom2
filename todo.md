@@ -2361,8 +2361,9 @@
 
 ## Optimisation de performance issue de l’audit
 
-- [ ] Réduire le poids du bundle initial par découpage explicite des dépendances frontales
+- [x] Réduire le poids du bundle initial par découpage explicite des dépendances frontales
 - [x] Vérifier les tailles de bundles après build sans dégrader les parcours publics
+- [x] Retirer le provider global d’infobulles non utilisé des parcours publics afin d’alléger le bundle initial
 
 ## Exécution complète des lots de l’audit
 
