@@ -200,7 +200,7 @@
 - [ ] Ajouter une stratégie de compression et de recadrage responsive des images
 - [ ] Ajouter une navigation clavier complète sur menus, carrousels, modales et calendriers
 - [ ] Ajouter des feedbacks visuels après contact, réservation, paiement et demande RGPD
-- [ ] Ajouter une version imprimable et accessible des pages de contenu importantes
+- [x] Ajouter une version imprimable et accessible des pages légales, RGPD et FAQ
 - [ ] Vérifier le rendu sur Chrome, Safari et Firefox
 - [ ] Vérifier la coexistence du bandeau cookies, du bouton WhatsApp et de la navigation mobile
 - [ ] Vérifier que les visuels médicaux ne suggèrent aucune promesse thérapeutique non étayée
@@ -241,6 +241,8 @@
 - [ ] Préparer des visuels LinkedIn cohérents avec la marque
 - [ ] Vérifier le rendu des emails HTML dans Gmail, Outlook et Apple Mail
 - [x] Harmoniser les notifications de succès, avertissement et erreur
+- [x] Garantir que le contenu FAQ est entièrement visible à l’impression, y compris les panneaux d’accordéon fermés
+- [x] Ajouter une vérification ciblée que Legal, GDPR et FAQ exposent leur contenu utile en mode impression
 - [ ] Créer une checklist de qualité visuelle avant mise en production
 - [ ] Vérifier la cohérence des icônes et supprimer les mélanges de styles
 - [ ] Ajouter une version mobile renforcée de la page de réservation

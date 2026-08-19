@@ -1336,3 +1336,79 @@ html.data-saver .cta-secondary:hover {
     animation: none;
   }
 }
+
+@media print {
+  @page {
+    margin: 14mm;
+  }
+
+  html,
+  body {
+    background: #ffffff !important;
+    color: #111827 !important;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  header,
+  footer,
+  nav,
+  .fixed,
+  .sticky,
+  [data-sonner-toaster] {
+    display: none !important;
+  }
+
+  main {
+    max-width: none !important;
+    padding: 0 !important;
+  }
+
+  h1,
+  h2,
+  h3,
+  p,
+  li,
+  blockquote,
+  section,
+  article {
+    color: #111827 !important;
+    break-inside: avoid;
+  }
+
+  a[href] {
+    color: #0f4c5c !important;
+    text-decoration: underline;
+  }
+
+  a[href^="http"]::after {
+    content: " (" attr(href) ")";
+    font-size: 0.8em;
+    overflow-wrap: anywhere;
+  }
+
+  [data-slot="accordion-content"],
+  [data-slot="accordion-content"][data-state="closed"] {
+    display: block !important;
+    height: auto !important;
+    overflow: visible !important;
+    animation: none !important;
+  }
+
+  [data-slot="accordion-content"] > div {
+    display: block !important;
+    padding-bottom: 1rem !important;
+  }
+
+  [data-slot="accordion-trigger"] svg {
+    display: none !important;
+  }
+
+  .accordion-item,
+  .border,
+  .rounded-xl,
+  .rounded-2xl {
+    border-color: #cbd5e1 !important;
+    box-shadow: none !important;
+  }
+}

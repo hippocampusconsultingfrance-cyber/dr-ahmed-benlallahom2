@@ -275,3 +275,9 @@ Les emails de sécurité MFA, confirmation de réservation, facture, rembourseme
 ## Notifications d’interface — 19 août 2026
 
 Le composant global de notifications attribue désormais une apparence cohérente aux états succès, erreur, avertissement et information : bordure de couleur, fond contrasté, titre lisible et bouton de fermeture visible. La configuration limite les alertes simultanées à trois afin de préserver la lisibilité et s’applique à tous les toasts déjà utilisés par les formulaires, le paiement, l’administration et le recrutement.
+
+## Impression des pages d’information — 19 août 2026
+
+Les styles d’impression mettent le fond et les textes en noir sur blanc, masquent la navigation, le footer, les éléments fixes et les notifications, puis conservent les liens externes avec leur URL de référence. Les sections et éléments de contenu évitent la coupure interne lorsque le navigateur le permet. Cette règle cible particulièrement les pages légales, RGPD et FAQ sans affecter leur rendu à l’écran.
+
+La FAQ déploie maintenant explicitement ses panneaux accordéon, même lorsque leur état écran est fermé, afin que les questions et réponses soient disponibles à l’impression. Un test ciblé contrôle les sélecteurs d’impression et la présence des routes Legal, GDPR et FAQ dans l’application.
