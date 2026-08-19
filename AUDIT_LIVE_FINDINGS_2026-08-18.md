@@ -151,3 +151,15 @@ Les constatations ci-dessous proviennent des captures du serveur de prévisualis
 ## Modèles de campagnes recrutement — 19 août 2026
 
 Les campagnes disposent désormais de quatre modèles réutilisables en français et en anglais : Europe, Canada, Moyen-Orient et offshore. La sélection d’un modèle préremplit le nom interne, l’objet et le contenu sans envoyer d’email. Les éléments entre crochets restent volontairement à compléter par l’administrateur avant confirmation, et l’audience demeure filtrée côté serveur selon le consentement marketing.
+
+## Recette Stripe contrôlée annulée — 19 août 2026
+
+| Étape | Résultat | Contrôle associé |
+|---|---|---|
+| Créneau et tarification | La saisie accessible date/heure a reconnu un créneau futur au tarif de jour de 100 €. | Le bouton de paiement ne s’active qu’après validation du créneau. |
+| Redirection Stripe | Une session Stripe réelle a été créée et a affiché la prestation, le numéro de suivi et le montant de 100 €. | Aucun moyen de paiement n’a été saisi. |
+| Annulation contrôlée | Le retour depuis Stripe a été effectué avant paiement. | Aucun débit réel n’a été déclenché. |
+| Effets post-paiement | La réservation est restée `pending` au paiement et `cancelled` côté rendez-vous ; aucun job de confirmation ni de facture n’a été créé. | La file post-paiement ne s’exécute qu’après encaissement confirmé. |
+| Cohérence de cycle de vie | Les expirations Stripe enregistrent désormais l’horodatage d’annulation tout en libérant le créneau. | Règle couverte par un test unitaire. |
+
+> Cette recette valide la création de session et l’absence d’effet prématuré. Un encaissement réel n’a pas été exécuté.
