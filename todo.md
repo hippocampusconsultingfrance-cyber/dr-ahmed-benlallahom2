@@ -223,7 +223,8 @@
 - [ ] Ajouter une procédure de revue UX basée sur les retours utilisateurs réels
 - [x] Ne pas ajouter de visuels de partage social pour le Blog : aucune page ni aucun article Actualités n’est publié
 - [x] Ajouter des descriptions alternatives précises et contextuelles à toutes les images
-- [ ] Ajouter une page de présentation Hippocampus Consulting avec une mise en page éditoriale
+- [x] Ajouter une page de présentation Hippocampus Consulting avec une mise en page éditoriale
+- [x] Ajouter une non-régression de route, contenu et CTAs pour la page Pourquoi Hippocampus
 - [ ] Ajouter une page Ressources Médicales avec cartes, filtres et téléchargements contrôlés
 - [ ] Ajouter une page Presse ou Publications uniquement avec contenus vérifiables
 - [ ] Ajouter une page Partenaires uniquement après autorisation écrite des organisations concernées

@@ -68,6 +68,10 @@ Cette vérification est statique et automatisée ; elle ne soumet aucun formulai
 
 Une revue complémentaire à la largeur de 375 px confirme que les premières étapes des pages Réservation, RGPD, Recrutement et Employeurs restent lisibles et sans chevauchement visible. Les appels à l’action de navigation et le sélecteur de langue restent atteignables. Le bandeau de consentement est volontairement affiché dans cette session sans choix enregistré : il recouvre le bas de l’écran comme prévu, mais ne masque pas le titre, le contexte ni le début du formulaire. Sa coexistence avec la navigation mobile est déjà couverte par un test dédié.
 
+## Page Pourquoi Hippocampus
+
+La page éditoriale publique `/why-hippocampus` présente la méthode employeurs, les zones couvertes, les garanties de confidentialité et conformité, ainsi que les parcours explicites vers le brief de mission et le recrutement. Une vérification visuelle pleine page sur bureau confirme une hiérarchie lisible, des cartes régulières et des appels à l’action distingués. La route, les quatre variantes linguistiques, les garanties, les CTA et les métadonnées de service sont protégés par une non-régression dédiée.
+
 ## Disponibilité de production
 
 Le 19 août 2026, les routes publiques `/`, `/booking`, `/gdpr`, `/faq`, `/search`, `/error`, `/maintenance`, `/recruitment`, `/employers` et `/why-hippocampus` ont toutes répondu en HTTP 200 sur le domaine principal. L’accès `www.drahmedbenlallahom.com` redirige correctement vers `drahmedbenlallahom.com` et sert ensuite la page d’accueil en HTTP 200. Aucun écart de disponibilité n’a été observé sur cet échantillon.
