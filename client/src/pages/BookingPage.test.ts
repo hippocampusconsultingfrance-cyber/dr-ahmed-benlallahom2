@@ -8,4 +8,14 @@ describe("booking date placeholders", () => {
     expect(bookingContent.de.form.datePlaceholder).toBe("TT.MM.JJJJ · HH:MM");
     expect(bookingContent.zh.form.datePlaceholder).toBe("年/月/日 · 时:分");
   });
+
+  it("keeps the date field accessible with a native datetime-local control", async () => {
+    const source = await import("node:fs/promises").then((fs) =>
+      fs.readFile(new URL("./BookingPage.tsx", import.meta.url), "utf8")
+    );
+
+    expect(source).toContain('id="booking-date"');
+    expect(source).toContain('type="datetime-local"');
+    expect(source).not.toContain('cursor-pointer opacity-0');
+  });
 });

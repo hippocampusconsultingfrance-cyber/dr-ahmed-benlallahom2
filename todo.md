@@ -2308,6 +2308,8 @@
 - [x] Enrichir le score de compatibilité mission–candidat avec spécialité, langues, mobilité, disponibilité et certifications
 - [x] Afficher la répartition explicable du score de matching dans la fiche mission-candidat
 - [x] Ajouter des modèles réutilisables FR/EN pour les campagnes Europe, Canada, Moyen-Orient et offshore
+- [ ] Préparer et réaliser une recette Stripe non destructive avec confirmation explicite avant paiement
+- [x] Corriger le champ date/heure qui ne sélectionne pas correctement le créneau de réservation
 - [ ] Améliorer l’espace Employeurs avec suivi de brief, accusé de réception, statut de shortlist et descriptif de poste
 - [ ] Renforcer la réassurance publique des pages recrutement sur confidentialité, consentement, revue humaine et délais indicatifs
 - [ ] Ajouter un suivi de délivrabilité des campagnes et des erreurs d’envoi, sans réutiliser automatiquement les adresses en erreur

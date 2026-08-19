@@ -539,29 +539,20 @@ export default function BookingPage() {
                 <Calendar className="w-4 h-4" aria-hidden="true" />
                 {content.form.date}
               </label>
-              <div className="relative">
-                <div
-                  aria-hidden="true"
-                  className={`form-field-premium flex min-h-11 w-full items-center gap-2 border px-4 py-2 text-sm ${localizedDate ? "text-foreground" : "text-muted-foreground"}`}
-                >
-                  <Calendar className="h-4 w-4 shrink-0 text-primary" />
-                  <span>{localizedDate ?? content.form.datePlaceholder}</span>
-                </div>
-                <input
-                  id="booking-date"
-                  type="datetime-local"
-                  required
-                  value={formData.date}
-                  onChange={(e) => {
-                    setFormData({ ...formData, date: e.target.value });
-                    handleDateChange(e);
-                  }}
-                  lang={dateInputLocale}
-                  className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-                  aria-describedby="availability-status"
-                  aria-label={content.form.date}
-                />
-              </div>
+              <input
+                id="booking-date"
+                type="datetime-local"
+                required
+                value={formData.date}
+                onChange={(e) => {
+                  setFormData({ ...formData, date: e.target.value });
+                  handleDateChange(e);
+                }}
+                lang={dateInputLocale}
+                className="form-field-premium h-11 w-full cursor-pointer border px-4 py-2"
+                aria-describedby="availability-status"
+                aria-label={content.form.date}
+              />
               <p className="mt-2 text-xs leading-5 text-muted-foreground">{content.form.dateHint}</p>
               {localizedDate && <p className="mt-2 text-sm font-medium text-primary" aria-live="polite">{localizedDate}</p>}
               <div id="availability-status" className={`availability-status mt-3 ${isBlockedDate || isBookedSlot ? "is-unavailable" : "is-available"}`} role="status" aria-live="polite">
