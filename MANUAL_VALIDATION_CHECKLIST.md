@@ -17,3 +17,7 @@ Cette checklist complète les contrôles automatisés et visuels déjà réalis�
 ## Traçabilité recommandée
 
 Pour chaque contrôle, conserver la date, le navigateur, l’appareil, la page concernée, le résultat et, en cas d’écart, une capture d’écran non sensible. Les anomalies doivent être reproduites une seconde fois avant toute conclusion.
+
+## Statut de suivi
+
+La localisation des parcours publics et administratifs a été vérifiée par compilation et tests automatisés. Les vérifications d’accessibilité et de rendu qui dépendent d’un navigateur réel, d’un système d’assistance ou d’un moyen de paiement restent volontairement consignées dans cette checklist : elles ne sont ni simulées ni déclarées exécutées par le projet. Cette tâche de développement est donc clôturée comme **documentée**, avec exécution opérationnelle à réaliser sur le domaine publié.

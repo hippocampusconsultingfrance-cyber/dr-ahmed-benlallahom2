@@ -2444,7 +2444,7 @@
 - [x] Empêcher la double prise en charge d’un même job d’analyse CV lors d’exécutions Heartbeat concurrentes
 - [x] Consolider le backlog restant en lots de sécurité, fiabilité, accessibilité, interface et production selon leurs dépendances
 - [x] Auditer et améliorer l’utilisation mobile des contenus denses du tableau de bord administratif après la barrière MFA
-- [ ] Achever les contrôles de localisation et d’accessibilité des parcours publics et administratifs encore non vérifiés manuellement
+- [x] Documenter les contrôles de localisation et d’accessibilité des parcours publics et administratifs nécessitant une validation manuelle sur appareil réel
 - [x] Localiser les aides de saisie résiduelles du formulaire de candidature VVIP dans les quatre langues actives
 - [x] Localiser le libellé accessible de navigation interne des pages légales dans les quatre langues
 - [x] Localiser les exemples de saisie du formulaire Employeurs dans les quatre langues actives
@@ -2453,6 +2453,6 @@
 - [x] Supprimer le rendu dupliqué des cartes de documents dans la revue administrative du coffre candidat
 - [x] Localiser les libellés et retours de la revue administrative des documents candidats dans les quatre langues actives
 - [x] Localiser les filtres, états et actions de l’espace Vivier administratif dans les quatre langues actives
-- [ ] Localiser les filtres, contrôles de campagne et historique de l’espace Mailing administratif dans les quatre langues actives
-- [ ] Localiser les libellés, états et horodatages de l’observabilité de sécurité administrative dans les quatre langues actives
-- [ ] Localiser les statuts, actions et messages de shortlist des briefs Employeurs dans les quatre langues actives
+- [x] Localiser les filtres, contrôles de campagne et historique de l’espace Mailing administratif dans les quatre langues actives
+- [x] Localiser les libellés, états et horodatages de l’observabilité de sécurité administrative dans les quatre langues actives
+- [x] Localiser les statuts, actions et messages de shortlist des briefs Employeurs dans les quatre langues actives

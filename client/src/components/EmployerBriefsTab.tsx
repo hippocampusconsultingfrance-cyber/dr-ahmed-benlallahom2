@@ -9,10 +9,10 @@ import { downloadRecruitmentCsv } from "./recruitmentCsvDownload";
 import { useLanguage } from "@/contexts/LanguageContext";
 
 const briefCopy = {
-  fr: { title: "Briefs Employeurs", missionNeeds: "besoin(s) de mission reçu(s)", statuses: { new: "Nouveau brief", reviewing: "Qualification en cours", shortlist_sent: "Shortlist envoyée", contract_signed: "Mission confirmée", closed: "Clôturée" } },
-  en: { title: "Employer briefs", missionNeeds: "mission request(s) received", statuses: { new: "New brief", reviewing: "Qualification in progress", shortlist_sent: "Shortlist sent", contract_signed: "Mission confirmed", closed: "Closed" } },
-  de: { title: "Arbeitgeber-Briefs", missionNeeds: "Missionsanfrage(n) eingegangen", statuses: { new: "Neuer Brief", reviewing: "Qualifizierung läuft", shortlist_sent: "Shortlist gesendet", contract_signed: "Mission bestätigt", closed: "Abgeschlossen" } },
-  zh: { title: "雇主需求", missionNeeds: "已收到任务需求", statuses: { new: "新需求", reviewing: "资格确认中", shortlist_sent: "已发送候选名单", contract_signed: "任务已确认", closed: "已关闭" } },
+  fr: { title: "Briefs Employeurs", missionNeeds: "besoin(s) de mission reçu(s)", statuses: { new: "Nouveau brief", reviewing: "Qualification en cours", shortlist_sent: "Shortlist envoyée", contract_signed: "Mission confirmée", closed: "Clôturée" }, statusUpdated: "Statut du brief mis à jour", candidateAdded: "Candidat ajouté à la shortlist", exportDone: "profil(s) de shortlist exporté(s). L’export est journalisé.", loading: "Chargement des briefs employeurs", loadError: "Erreur de chargement", timelineUnknown: "Calendrier à préciser", viewProfiles: "Voir les profils", qualify: "Qualifier", noBrief: "Aucun brief Employeur à traiter.", shortlistAssisted: "Shortlist assistée", selectBrief: "Sélectionnez un brief pour consulter les correspondances basées exclusivement sur la spécialité, la mobilité et les certifications déclarées.", calculating: "Calcul des correspondances candidats", humanReview: "Les scores sont une aide à la revue humaine, pas une décision automatisée.", export: "Exporter la shortlist", availabilityUnknown: "Disponibilité à confirmer", noMatch: "Aucune correspondance professionnelle explicite détectée.", scoreDetail: "Détail du score de compatibilité", shortlisted: "Shortlisté", shortlist: "Shortlister", noCandidate: "Aucun candidat disponible pour le moment.", page: "Page", of: "sur", profiles: "profil(s) à examiner", previous: "Précédent", next: "Suivant" },
+  en: { title: "Employer briefs", missionNeeds: "mission request(s) received", statuses: { new: "New brief", reviewing: "Qualification in progress", shortlist_sent: "Shortlist sent", contract_signed: "Mission confirmed", closed: "Closed" }, statusUpdated: "Brief status updated", candidateAdded: "Candidate added to the shortlist", exportDone: "shortlist profile(s) exported. The export is logged.", loading: "Loading employer briefs", loadError: "Loading error", timelineUnknown: "Timeline to be confirmed", viewProfiles: "View profiles", qualify: "Qualify", noBrief: "No employer brief to process.", shortlistAssisted: "Assisted shortlist", selectBrief: "Select a brief to consult matches based solely on declared specialty, mobility and certifications.", calculating: "Calculating candidate matches", humanReview: "Scores support human review; they are not an automated decision.", export: "Export shortlist", availabilityUnknown: "Availability to be confirmed", noMatch: "No explicit professional match detected.", scoreDetail: "Compatibility score details", shortlisted: "Shortlisted", shortlist: "Shortlist", noCandidate: "No candidate is currently available.", page: "Page", of: "of", profiles: "profile(s) to review", previous: "Previous", next: "Next" },
+  de: { title: "Arbeitgeber-Briefs", missionNeeds: "Missionsanfrage(n) eingegangen", statuses: { new: "Neuer Brief", reviewing: "Qualifizierung läuft", shortlist_sent: "Shortlist gesendet", contract_signed: "Mission bestätigt", closed: "Abgeschlossen" }, statusUpdated: "Brief-Status aktualisiert", candidateAdded: "Kandidat zur Shortlist hinzugefügt", exportDone: "Shortlist-Profil(e) exportiert. Der Export wird protokolliert.", loading: "Arbeitgeber-Briefs werden geladen", loadError: "Ladefehler", timelineUnknown: "Zeitplan noch festzulegen", viewProfiles: "Profile anzeigen", qualify: "Qualifizieren", noBrief: "Kein Arbeitgeber-Brief zu bearbeiten.", shortlistAssisted: "Unterstützte Shortlist", selectBrief: "Wählen Sie einen Brief, um Übereinstimmungen ausschließlich anhand von Fachgebiet, Mobilität und angegebenen Zertifikaten zu prüfen.", calculating: "Kandidatenübereinstimmungen werden berechnet", humanReview: "Scores unterstützen die menschliche Prüfung und sind keine automatisierte Entscheidung.", export: "Shortlist exportieren", availabilityUnknown: "Verfügbarkeit zu bestätigen", noMatch: "Keine ausdrückliche berufliche Übereinstimmung erkannt.", scoreDetail: "Details des Kompatibilitätsscores", shortlisted: "Auf Shortlist", shortlist: "Auf Shortlist setzen", noCandidate: "Derzeit ist kein Kandidat verfügbar.", page: "Seite", of: "von", profiles: "Profil(e) zur Prüfung", previous: "Zurück", next: "Weiter" },
+  zh: { title: "雇主需求", missionNeeds: "已收到任务需求", statuses: { new: "新需求", reviewing: "资格确认中", shortlist_sent: "已发送候选名单", contract_signed: "任务已确认", closed: "已关闭" }, statusUpdated: "需求状态已更新", candidateAdded: "候选人已加入候选名单", exportDone: "个候选名单已导出。导出操作已记录。", loading: "正在加载雇主需求", loadError: "加载错误", timelineUnknown: "待确认时间表", viewProfiles: "查看候选人", qualify: "资格确认", noBrief: "没有待处理的雇主需求。", shortlistAssisted: "辅助候选名单", selectBrief: "请选择一项需求，以查看仅根据已声明专业、流动性和证书得出的匹配结果。", calculating: "正在计算候选人匹配", humanReview: "分数仅用于辅助人工审核，并非自动决策。", export: "导出候选名单", availabilityUnknown: "待确认可用性", noMatch: "未检测到明确的职业匹配。", scoreDetail: "匹配分数详情", shortlisted: "已列入名单", shortlist: "加入名单", noCandidate: "目前没有可用候选人。", page: "第", of: "页，共", profiles: "个待审查候选人", previous: "上一页", next: "下一页" },
 } as const;
 
 export default function EmployerBriefsTab() {
@@ -29,14 +29,14 @@ export default function EmployerBriefsTab() {
   );
   const updateStatus = trpc.admin.clientBriefs.updateStatus.useMutation({
     onSuccess: () => {
-      toast.success("Statut du brief mis à jour");
+      toast.success(copy.statusUpdated);
       utils.admin.clientBriefs.list.invalidate();
     },
     onError: error => toast.error(error.message),
   });
   const associate = trpc.admin.clientBriefs.associateCandidate.useMutation({
     onSuccess: () => {
-      toast.success("Candidat ajouté à la shortlist");
+      toast.success(copy.candidateAdded);
       if (selectedBriefId) utils.admin.clientBriefs.candidates.invalidate(matchesInput);
     },
     onError: error => toast.error(error.message),
@@ -44,14 +44,14 @@ export default function EmployerBriefsTab() {
   const exportShortlist = trpc.admin.recruitment.exportCsv.useMutation({
     onSuccess: result => {
       downloadRecruitmentCsv(result);
-      toast.success(`${result.count} profil${result.count > 1 ? "s" : ""} de shortlist exporté${result.count > 1 ? "s" : ""}. L’export est journalisé.`);
+      toast.success(`${result.count} ${copy.exportDone}`);
     },
     onError: exportError => toast.error(exportError.message),
   });
   const activeBrief = matches.data?.brief ?? null;
 
-  if (isLoading) return <PublicContentSkeleton label="Chargement des briefs employeurs" />;
-  if (error) return <p className="py-8 text-center text-red-400">Erreur de chargement : {error.message}</p>;
+  if (isLoading) return <PublicContentSkeleton label={copy.loading} />;
+  if (error) return <p className="py-8 text-center text-red-400">{copy.loadError}: {error.message}</p>;
 
   return (
     <div className="grid gap-6 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
@@ -69,39 +69,39 @@ export default function EmployerBriefsTab() {
               <div className="min-w-0">
                 <p className="font-semibold text-foreground">{brief.organizationName}</p>
                 <p className="mt-1 text-sm text-muted-foreground">{brief.specialtyNeeded} · {brief.country}</p>
-                <p className="mt-1 text-xs text-muted-foreground">{brief.targetEnvironment} · {brief.timeline || "Calendrier à préciser"}</p>
+                <p className="mt-1 text-xs text-muted-foreground">{brief.targetEnvironment} · {brief.timeline || copy.timelineUnknown}</p>
               </div>
               <span className="shrink-0 rounded-full bg-muted px-2 py-1 text-xs text-muted-foreground">{copy.statuses[brief.status as keyof typeof copy.statuses] ?? brief.status}</span>
             </div>
             <div className="mt-4 flex flex-wrap gap-2">
               <Button size="sm" variant="outline" onClick={() => { setSelectedBriefId(brief.id); setMatchPage(0); }}>
-                <UsersRound className="mr-1 h-3.5 w-3.5" />Voir les profils
+                <UsersRound className="mr-1 h-3.5 w-3.5" />{copy.viewProfiles}
               </Button>
-              {brief.status === "new" && <Button size="sm" onClick={() => updateStatus.mutate({ id: brief.id, status: "reviewing" })}>Qualifier</Button>}
-              {brief.status === "reviewing" && <Button size="sm" onClick={() => updateStatus.mutate({ id: brief.id, status: "shortlist_sent" })}>Shortlist envoyée</Button>}
+              {brief.status === "new" && <Button size="sm" onClick={() => updateStatus.mutate({ id: brief.id, status: "reviewing" })}>{copy.qualify}</Button>}
+              {brief.status === "reviewing" && <Button size="sm" onClick={() => updateStatus.mutate({ id: brief.id, status: "shortlist_sent" })}>{copy.statuses.shortlist_sent}</Button>}
             </div>
           </article>
         ))}
-        {(!briefs || briefs.length === 0) && <p className="rounded-xl border border-dashed border-border py-10 text-center text-sm text-muted-foreground">Aucun brief Employeur à traiter.</p>}
+        {(!briefs || briefs.length === 0) && <p className="rounded-xl border border-dashed border-border py-10 text-center text-sm text-muted-foreground">{copy.noBrief}</p>}
       </section>
 
       <section className="rounded-xl border border-border bg-card p-5">
-        {!selectedBriefId && <div className="flex min-h-72 flex-col items-center justify-center text-center"><UsersRound className="mb-3 h-8 w-8 text-primary" /><h2 className="font-semibold text-foreground">Shortlist assistée</h2><p className="mt-2 max-w-sm text-sm text-muted-foreground">Sélectionnez un brief pour consulter les correspondances basées exclusivement sur la spécialité, la mobilité et les certifications déclarées.</p></div>}
-        {selectedBriefId && matches.isLoading && <PublicContentSkeleton cards={2} columns={2} label="Calcul des correspondances candidats" />}
+        {!selectedBriefId && <div className="flex min-h-72 flex-col items-center justify-center text-center"><UsersRound className="mb-3 h-8 w-8 text-primary" /><h2 className="font-semibold text-foreground">{copy.shortlistAssisted}</h2><p className="mt-2 max-w-sm text-sm text-muted-foreground">{copy.selectBrief}</p></div>}
+        {selectedBriefId && matches.isLoading && <PublicContentSkeleton cards={2} columns={2} label={copy.calculating} />}
         {matches.data && activeBrief && <>
-          <div className="mb-5 flex flex-col gap-3 border-b border-border pb-4 sm:flex-row sm:items-start sm:justify-between"><div><p className="text-sm text-primary">{activeBrief.briefId}</p><h2 className="text-xl font-semibold text-foreground">{activeBrief.specialtyNeeded} — {activeBrief.country}</h2><p className="mt-1 text-sm text-muted-foreground">Les scores sont une aide à la revue humaine, pas une décision automatisée.</p></div><Button size="sm" variant="outline" disabled={exportShortlist.isPending} onClick={() => exportShortlist.mutate({ type: "shortlist", briefId: activeBrief.id })}>{exportShortlist.isPending ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Download className="mr-1.5 h-3.5 w-3.5" />}Exporter la shortlist</Button></div>
+          <div className="mb-5 flex flex-col gap-3 border-b border-border pb-4 sm:flex-row sm:items-start sm:justify-between"><div><p className="text-sm text-primary">{activeBrief.briefId}</p><h2 className="text-xl font-semibold text-foreground">{activeBrief.specialtyNeeded} — {activeBrief.country}</h2><p className="mt-1 text-sm text-muted-foreground">{copy.humanReview}</p></div><Button size="sm" variant="outline" disabled={exportShortlist.isPending} onClick={() => exportShortlist.mutate({ type: "shortlist", briefId: activeBrief.id })}>{exportShortlist.isPending ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Download className="mr-1.5 h-3.5 w-3.5" />}{copy.export}</Button></div>
           <div className="space-y-3">
             {matches.data.candidates.map(candidate => (
               <article key={candidate.id} className="rounded-lg border border-border bg-background p-4">
                 <div className="flex flex-col justify-between gap-3 sm:flex-row">
-                  <div><div className="flex items-center gap-2"><p className="font-medium text-foreground">{candidate.firstName} {candidate.lastName}</p><span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">{candidate.match.score}/100</span></div><p className="mt-1 text-sm text-muted-foreground">{candidate.specialty} · {candidate.availability || "Disponibilité à confirmer"}</p>{candidate.match.reasons.length > 0 ? <p className="mt-2 text-xs text-muted-foreground">{candidate.match.reasons.join(" · ")}</p> : <p className="mt-2 text-xs text-muted-foreground">Aucune correspondance professionnelle explicite détectée.</p>}{getPositiveMatchBreakdown(candidate.match.breakdown).length > 0 && <div className="mt-3 flex flex-wrap gap-1.5" aria-label="Détail du score de compatibilité">{getPositiveMatchBreakdown(candidate.match.breakdown).map(item => <span key={item.key} className="rounded-full border border-primary/20 bg-primary/5 px-2 py-1 text-[11px] font-medium text-foreground">{item.label} +{item.points}</span>)}</div>}</div>
-                  <Button size="sm" disabled={associate.isPending} onClick={() => associate.mutate({ briefId: activeBrief.id, applicationId: candidate.id, matchScore: candidate.match.score, status: "shortlisted" })}>{candidate.association?.status === "shortlisted" ? <><CheckCircle2 className="mr-1 h-3.5 w-3.5" />Shortlisté</> : <>Shortlister<ChevronRight className="ml-1 h-3.5 w-3.5" /></>}</Button>
+                  <div><div className="flex items-center gap-2"><p className="font-medium text-foreground">{candidate.firstName} {candidate.lastName}</p><span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">{candidate.match.score}/100</span></div><p className="mt-1 text-sm text-muted-foreground">{candidate.specialty} · {candidate.availability || copy.availabilityUnknown}</p>{candidate.match.reasons.length > 0 ? <p className="mt-2 text-xs text-muted-foreground">{candidate.match.reasons.join(" · ")}</p> : <p className="mt-2 text-xs text-muted-foreground">{copy.noMatch}</p>}{getPositiveMatchBreakdown(candidate.match.breakdown).length > 0 && <div className="mt-3 flex flex-wrap gap-1.5" aria-label={copy.scoreDetail}>{getPositiveMatchBreakdown(candidate.match.breakdown).map(item => <span key={item.key} className="rounded-full border border-primary/20 bg-primary/5 px-2 py-1 text-[11px] font-medium text-foreground">{item.label} +{item.points}</span>)}</div>}</div>
+                  <Button size="sm" disabled={associate.isPending} onClick={() => associate.mutate({ briefId: activeBrief.id, applicationId: candidate.id, matchScore: candidate.match.score, status: "shortlisted" })}>{candidate.association?.status === "shortlisted" ? <><CheckCircle2 className="mr-1 h-3.5 w-3.5" />{copy.shortlisted}</> : <>{copy.shortlist}<ChevronRight className="ml-1 h-3.5 w-3.5" /></>}</Button>
                 </div>
               </article>
             ))}
-            {matches.data.candidates.length === 0 && <p className="py-10 text-center text-sm text-muted-foreground">Aucun candidat disponible pour le moment.</p>}
+            {matches.data.candidates.length === 0 && <p className="py-10 text-center text-sm text-muted-foreground">{copy.noCandidate}</p>}
           </div>
-          {matches.data.pagination.totalPages > 1 && <div className="mt-5 flex flex-col gap-3 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between"><p className="text-sm text-muted-foreground">Page {matches.data.pagination.page + 1} sur {matches.data.pagination.totalPages} · {matches.data.pagination.total} profil{matches.data.pagination.total > 1 ? "s" : ""} à examiner</p><div className="flex gap-2"><Button size="sm" variant="outline" disabled={matches.data.pagination.page === 0 || matches.isFetching} onClick={() => setMatchPage(current => Math.max(0, current - 1))}>Précédent</Button><Button size="sm" variant="outline" disabled={matches.data.pagination.page + 1 >= matches.data.pagination.totalPages || matches.isFetching} onClick={() => setMatchPage(current => current + 1)}>Suivant</Button></div></div>}
+          {matches.data.pagination.totalPages > 1 && <div className="mt-5 flex flex-col gap-3 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between"><p className="text-sm text-muted-foreground">{copy.page} {matches.data.pagination.page + 1} {copy.of} {matches.data.pagination.totalPages} · {matches.data.pagination.total} {copy.profiles}</p><div className="flex gap-2"><Button size="sm" variant="outline" disabled={matches.data.pagination.page === 0 || matches.isFetching} onClick={() => setMatchPage(current => Math.max(0, current - 1))}>{copy.previous}</Button><Button size="sm" variant="outline" disabled={matches.data.pagination.page + 1 >= matches.data.pagination.totalPages || matches.isFetching} onClick={() => setMatchPage(current => current + 1)}>{copy.next}</Button></div></div>}
         </>}
       </section>
     </div>
