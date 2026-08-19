@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { readFile } from "node:fs/promises";
 import { footerBrandLogoAltCopy, getHomeSectionHref } from "./Footer";
 
 describe("liens de navigation du pied de page", () => {
@@ -14,5 +15,11 @@ describe("liens de navigation du pied de page", () => {
     for (const alt of Object.values(footerBrandLogoAltCopy)) {
       expect(alt.trim()).not.toHaveLength(0);
     }
+  });
+
+  it("réutilise le libellé de contact localisé pour le titre partagé", async () => {
+    const source = await readFile(new URL("./Footer.tsx", import.meta.url), "utf8");
+    expect(source).toContain("{content.nav.contact}</h4>");
+    expect(source).not.toContain(">Contact</h4>");
   });
 });

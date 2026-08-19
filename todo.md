@@ -2437,3 +2437,4 @@
 - [x] Ne jamais exposer de détail technique dans les erreurs publiques du formulaire de candidature VVIP
 - [x] Localiser l’alternative textuelle du logo de marque dans le pied de page et éviter toute redondance dans le bouton d’accueil
 - [x] Préparer une checklist concise de validation manuelle pour l’accessibilité et la compatibilité navigateur
+- [x] Localiser le titre de contact visible dans le pied de page partagé

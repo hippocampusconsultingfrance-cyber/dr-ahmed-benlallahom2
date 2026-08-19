@@ -85,7 +85,7 @@ export default function Footer() {
 
           {/* Contact */}
           <div>
-            <h4 className="font-semibold text-foreground mb-4 text-sm uppercase tracking-wide">Contact</h4>
+            <h4 className="font-semibold text-foreground mb-4 text-sm uppercase tracking-wide">{content.nav.contact}</h4>
             <div className="space-y-2.5">
               <a
                 href={`tel:${siteConfig.phone.replace(/\s/g, "")}`}
