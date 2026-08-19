@@ -147,3 +147,5 @@ L’espace Vivier reprend maintenant la langue active pour ses six filtres méti
 ## Illustrations originales Services et Réservation
 
 Deux illustrations sans texte ont été intégrées comme éléments décoratifs, donc masquées aux lecteurs d’écran : une composition médicale abstraite pour les Services et un parcours lumineux pour la colonne de consultation. La réservation a été vérifiée en bureau ; l’illustration reste contenue dans sa colonne et ne concurrence pas le formulaire ni les informations de sécurité.
+
+Le contrôle mobile confirme que le formulaire conserve la priorité de lecture et d’action. La carte de consultation, avec son illustration décorative, se place ensuite dans le flux sans débordement ni recouvrement des champs, du bouton de paiement ou de l’avertissement d’urgence.
