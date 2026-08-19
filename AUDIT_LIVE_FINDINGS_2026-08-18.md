@@ -88,3 +88,14 @@ Les constatations ci-dessous proviennent des captures du serveur de prévisualis
 | Parcours non transactionnel | La page `/booking` renvoie HTTP 200 avec le titre, la description SEO et le bundle principal accessibles. | Sonde publique sans soumettre de réservation ni déclencher de paiement. |
 
 > Aucun paiement, aucune réservation et aucune donnée de patient n’ont été créés pendant cette vérification.
+
+## Reprise administrée des analyses documentaires — 19 août 2026
+
+| Élément | Mesure appliquée | Garantie de contrôle |
+|---|---|---|
+| Document en échec | Le tableau administratif expose une action « Relancer l’IA » pour les documents dont l’analyse est indisponible ou soumise à revue. | Le fichier existant est conservé ; aucun nouveau dépôt n’est imposé au candidat. |
+| Prévention des doublons | La relance est bloquée lorsqu’un document est refusé ou qu’une analyse est déjà en cours. | Évite les files concurrentes et préserve la décision de revue humaine. |
+| Traçabilité | Chaque demande de reprise est journalisée avec l’administrateur à l’origine de l’action, puis remise dans la file sécurisée. | Le parcours reste auditable au regard du RGPD. |
+| Décision humaine | Une analyse relancée produit une synthèse d’aide ; elle ne valide jamais un document automatiquement. | La revue humaine reste obligatoire avant toute décision. |
+
+> Le CV historique dont le téléchargement d’analyse avait reçu un 403 peut désormais être relancé depuis l’administration, sans suppression ni remplacement du document original.
