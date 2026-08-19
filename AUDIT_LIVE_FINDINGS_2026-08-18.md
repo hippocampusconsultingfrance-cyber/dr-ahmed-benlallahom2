@@ -289,3 +289,7 @@ Le formulaire de consultation préserve ses zones tactiles, ses champs date et h
 ## États de disponibilité de réservation — 19 août 2026
 
 Le badge de disponibilité distingue maintenant quatre états : aucun créneau sélectionné, vérification en cours, créneau indisponible et créneau disponible. Chaque état a une bordure, un fond et une couleur dédiés, avec un attribut `data-state` et une annonce polie pour les lecteurs d’écran. La logique qui détermine ces états est couverte par des tests unitaires ; la suite complète et le build sont validés.
+
+## Checklist de préproduction — 19 août 2026
+
+Le document `PREPRODUCTION_CHECKLIST.md` formalise les contrôles nécessaires avant toute publication : build, parcours publics, réservation, emails, recrutement, portail candidat, confidentialité, accessibilité, SEO et résilience. Il précise les preuves attendues et les conditions de blocage. Un test automatisé garantit que les catégories de contrôle critiques restent présentes dans cette checklist.

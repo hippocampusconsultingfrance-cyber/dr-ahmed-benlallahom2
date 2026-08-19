@@ -244,7 +244,7 @@
 - [x] Garantir que le contenu FAQ est entièrement visible à l’impression, y compris les panneaux d’accordéon fermés
 - [x] Ajouter une vérification ciblée que Legal, GDPR et FAQ exposent leur contenu utile en mode impression
 - [x] Conserver les routes publiques /blog et /blog/:slug désactivées conformément au retrait demandé de la section Actualités
-- [ ] Créer une checklist de qualité visuelle avant mise en production
+- [x] Créer une checklist visuelle et fonctionnelle de préproduction
 - [ ] Vérifier la cohérence des icônes et supprimer les mélanges de styles
 - [x] Ajouter une version mobile renforcée de la page de réservation
 - [x] Ajouter des indicateurs de disponibilité plus lisibles au parcours de réservation
