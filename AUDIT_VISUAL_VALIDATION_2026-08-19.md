@@ -39,3 +39,7 @@ Le 19 août 2026, les routes publiques `/`, `/booking`, `/gdpr`, `/faq`, `/searc
 ## En-têtes de sécurité de production
 
 Le domaine principal expose une politique de transport strict (HSTS), une politique de sécurité de contenu restrictive avec sources explicitement autorisées pour Stripe et Turnstile, une protection anti-intégration via `frame-ancestors 'self'`, `X-Content-Type-Options: nosniff`, une politique de référent stricte et une politique de permissions qui désactive caméra, microphone et géolocalisation. La politique de permissions autorise uniquement le paiement depuis la même origine, ce qui est cohérent avec le parcours Stripe intégré. Aucun écart exploitable n’a été observé sur les en-têtes inspectés.
+
+## Ressources SEO et parcours sensibles
+
+Le fichier `robots.txt` publié référence le sitemap officiel, autorise les contenus publics et exclut explicitement l’administration, les parcours candidats, les API, les confirmations de réservation, les routes Blog désactivées et la désinscription de recrutement. Le sitemap ne recense que des contenus publics éditoriaux et fonctionnels ; il ne contient ni route d’administration, ni portail candidat, ni parcours de désinscription. Aucun correctif n’a été requis lors de ce contrôle.
