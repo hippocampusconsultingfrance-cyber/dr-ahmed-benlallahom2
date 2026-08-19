@@ -191,6 +191,7 @@
 - [x] Localiser les filtres, statuts, agenda et actions de l’onglet Réservations administratif en FR/EN/DE/ZH
 - [x] Localiser le chargement, compteur, action de lecture, état vide et horodatage de l’onglet Messages administratif en FR/EN/DE/ZH
 - [x] Localiser les types, statuts, actions, état vide et horodatage de l’onglet Demandes RGPD administratif en FR/EN/DE/ZH
+- [x] Localiser les statuts, actions, confirmation et état vide de l’onglet Témoignages administratif en FR/EN/DE/ZH
 - [x] Remplacer les états vides textuels des onglets Témoignages et Disponibilités par le panneau administratif illustré partagé
 - [x] Ajouter un état vide illustré au carrousel de témoignages partenaires
 - [x] Ajouter un repère illustré et accessible aux états de disponibilité de réservation

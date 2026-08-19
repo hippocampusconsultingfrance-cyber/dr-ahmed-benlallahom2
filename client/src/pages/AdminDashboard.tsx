@@ -57,6 +57,13 @@ export const adminGdprCopy = {
   zh: { statusUpdated: "状态已更新", loading: "正在加载隐私请求", total: (count: number) => `${count} 个隐私请求`, types: { access: "访问", rectification: "更正", deletion: "删除", portability: "数据可携带", objection: "异议" }, statuses: { pending: "待处理", in_progress: "处理中", completed: "已处理", rejected: "已拒绝" }, start: "开始处理", complete: "完成", emptyTitle: "暂无隐私请求", emptyDescription: "访问、更正或删除请求将显示在这里。" },
 } as const;
 
+export const adminTestimonialsCopy = {
+  fr: { updated: "Témoignage mis à jour", deleted: "Témoignage supprimé", loading: "Chargement des témoignages administratifs", total: (count: number) => `${count} témoignage${count > 1 ? "s" : ""}`, statuses: { pending: "En attente", approved: "Approuvé", rejected: "Rejeté" }, featured: "Mis en avant", approve: "Approuver", reject: "Rejeter", unfeature: "Retirer", feature: "Mettre en avant", confirmDelete: "Supprimer ce témoignage ?", emptyTitle: "Aucun témoignage", emptyDescription: "Les témoignages partenaires soumis ou importés apparaîtront ici pour validation." },
+  en: { updated: "Testimonial updated", deleted: "Testimonial deleted", loading: "Loading administrative testimonials", total: (count: number) => `${count} testimonial${count > 1 ? "s" : ""}`, statuses: { pending: "Pending", approved: "Approved", rejected: "Rejected" }, featured: "Featured", approve: "Approve", reject: "Reject", unfeature: "Remove feature", feature: "Feature", confirmDelete: "Delete this testimonial?", emptyTitle: "No testimonials", emptyDescription: "Submitted or imported partner testimonials will appear here for review." },
+  de: { updated: "Bewertung aktualisiert", deleted: "Bewertung gelöscht", loading: "Administrative Bewertungen werden geladen", total: (count: number) => `${count} Bewertung${count === 1 ? "" : "en"}`, statuses: { pending: "Ausstehend", approved: "Freigegeben", rejected: "Abgelehnt" }, featured: "Hervorgehoben", approve: "Freigeben", reject: "Ablehnen", unfeature: "Hervorhebung entfernen", feature: "Hervorheben", confirmDelete: "Diese Bewertung löschen?", emptyTitle: "Keine Bewertungen", emptyDescription: "Eingereichte oder importierte Partnerbewertungen werden hier zur Prüfung angezeigt." },
+  zh: { updated: "评价已更新", deleted: "评价已删除", loading: "正在加载管理端评价", total: (count: number) => `${count} 条评价`, statuses: { pending: "待处理", approved: "已批准", rejected: "已拒绝" }, featured: "精选", approve: "批准", reject: "拒绝", unfeature: "取消精选", feature: "设为精选", confirmDelete: "删除此评价？", emptyTitle: "暂无评价", emptyDescription: "提交或导入的合作伙伴评价将在此显示以供审核。" },
+} as const;
+
 export default function AdminDashboard() {
   const { user, loading, refresh } = useAuth();
   const { language } = useLanguage();
@@ -586,17 +593,19 @@ function GdprTab() {
 }
 
 function TestimonialsTab() {
+  const { language } = useLanguage();
+  const copy = adminTestimonialsCopy[language as keyof typeof adminTestimonialsCopy] ?? adminTestimonialsCopy.fr;
   const { data: testimonialsList, isLoading } = trpc.admin.testimonials.list.useQuery();
   const utils = trpc.useUtils();
   const updateStatus = trpc.admin.testimonials.updateStatus.useMutation({
     onSuccess: () => {
-      toast.success("Témoignage mis à jour");
+      toast.success(copy.updated);
       utils.admin.testimonials.list.invalidate();
     },
   });
   const deleteTestimonial = trpc.admin.testimonials.delete.useMutation({
     onSuccess: () => {
-      toast.success("Témoignage supprimé");
+      toast.success(copy.deleted);
       utils.admin.testimonials.list.invalidate();
     },
   });
@@ -608,12 +617,12 @@ function TestimonialsTab() {
   };
 
   if (isLoading) {
-    return <PublicContentSkeleton label="Chargement des témoignages administratifs" />;
+    return <PublicContentSkeleton label={copy.loading} />;
   }
 
   return (
     <div>
-      <p className="text-sm text-muted-foreground mb-4">{testimonialsList?.length || 0} témoignage(s)</p>
+      <p className="text-sm text-muted-foreground mb-4">{copy.total(testimonialsList?.length || 0)}</p>
       <div className="space-y-3">
         {testimonialsList?.map((t) => (
           <div key={t.id} className="bg-card border border-border rounded-lg p-4">
@@ -627,9 +636,9 @@ function TestimonialsTab() {
                     ))}
                   </div>
                   <span className={`px-2 py-0.5 rounded text-xs font-medium ${statusColors[t.status] || ""}`}>
-                    {t.status}
+                    {copy.statuses[t.status as keyof typeof copy.statuses] ?? t.status}
                   </span>
-                  {t.featured === 1 && <span className="px-2 py-0.5 rounded text-xs font-medium bg-cyan-500/20 text-cyan-400">Featured</span>}
+                  {t.featured === 1 && <span className="px-2 py-0.5 rounded text-xs font-medium bg-cyan-500/20 text-cyan-400">{copy.featured}</span>}
                 </div>
                 <p className="text-sm font-medium text-foreground">{t.title}</p>
                 <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{t.content}</p>
@@ -638,13 +647,13 @@ function TestimonialsTab() {
                 {t.status !== "approved" && (
                   <Button size="sm" className="min-h-10 flex-1 sm:min-h-0 sm:flex-none" onClick={() => updateStatus.mutate({ id: t.id, status: "approved" })}>
                     <CheckCircle className="w-3 h-3 mr-1" />
-                    Approuver
+                    {copy.approve}
                   </Button>
                 )}
                 {t.status !== "rejected" && (
                   <Button size="sm" variant="outline" className="min-h-10 flex-1 sm:min-h-0 sm:flex-none" onClick={() => updateStatus.mutate({ id: t.id, status: "rejected" })}>
                     <XCircle className="w-3 h-3 mr-1" />
-                    Rejeter
+                    {copy.reject}
                   </Button>
                 )}
                 <Button
@@ -653,14 +662,14 @@ function TestimonialsTab() {
                   className="min-h-10 flex-1 sm:min-h-0 sm:flex-none"
                   onClick={() => updateStatus.mutate({ id: t.id, status: t.status, featured: t.featured === 1 ? 0 : 1 })}
                 >
-                  {t.featured === 1 ? "Retirer" : "Mettre en avant"}
+                  {t.featured === 1 ? copy.unfeature : copy.feature}
                 </Button>
                 <Button
                   size="sm"
                   variant="destructive"
                   className="min-h-10 sm:min-h-0 sm:flex-none"
                   onClick={() => {
-                    if (confirm("Supprimer ce témoignage ?")) {
+                    if (confirm(copy.confirmDelete)) {
                       deleteTestimonial.mutate({ id: t.id });
                     }
                   }}
@@ -672,7 +681,7 @@ function TestimonialsTab() {
           </div>
         ))}
         {(!testimonialsList || testimonialsList.length === 0) && (
-          <AdminEmptyState icon={Star} title="Aucun témoignage" description="Les témoignages partenaires soumis ou importés apparaîtront ici pour validation." />
+          <AdminEmptyState icon={Star} title={copy.emptyTitle} description={copy.emptyDescription} />
         )}
       </div>
     </div>

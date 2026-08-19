@@ -49,7 +49,7 @@ describe("états vides actifs", () => {
     expect(source).toContain('AdminEmptyState icon={CalendarDays} title={copy.emptyTitle}');
     expect(source).toContain('AdminEmptyState icon={MessageSquare} title={copy.emptyTitle}');
     expect(source).toContain('AdminEmptyState icon={Shield} title={copy.emptyTitle}');
-    expect(source).toContain('AdminEmptyState icon={Star} title="Aucun témoignage"');
+    expect(source).toContain('AdminEmptyState icon={Star} title={copy.emptyTitle}');
     expect(source).toContain('AdminEmptyState icon={CalendarDays} title="Aucun créneau configuré"');
     expect(source).toContain('AdminEmptyState icon={CalendarDays} title="Aucune date bloquée"');
   });

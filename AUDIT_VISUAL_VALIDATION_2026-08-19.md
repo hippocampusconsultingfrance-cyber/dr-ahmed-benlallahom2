@@ -126,6 +126,8 @@ L’onglet Messages localise son chargement, son décompte, son action de lectur
 
 L’onglet Demandes RGPD localise désormais ses types de demande, statuts de traitement, actions, compteurs, chargement, état vide et horodatages. Les valeurs de statut persistées restent inchangées : seules leur présentation et les actions administratives visibles s’adaptent à la langue active.
 
+L’onglet Témoignages localise ses statuts de modération, labels de mise en avant, actions d’approbation et de rejet, confirmation de suppression, compteur, chargement et état vide. Les témoignages publiés eux-mêmes restent inchangés et conservent leur langue de rédaction d’origine.
+
 ## Disponibilité de production
 
 Le 19 août 2026, les routes publiques `/`, `/booking`, `/gdpr`, `/faq`, `/search`, `/error`, `/maintenance`, `/recruitment`, `/employers` et `/why-hippocampus` ont toutes répondu en HTTP 200 sur le domaine principal. L’accès `www.drahmedbenlallahom.com` redirige correctement vers `drahmedbenlallahom.com` et sert ensuite la page d’accueil en HTTP 200. Aucun écart de disponibilité n’a été observé sur cet échantillon.
