@@ -2445,5 +2445,6 @@
 - [x] Localiser les aides de saisie résiduelles du formulaire de candidature VVIP dans les quatre langues actives
 - [x] Localiser le libellé accessible de navigation interne des pages légales dans les quatre langues
 - [x] Localiser les exemples de saisie du formulaire Employeurs dans les quatre langues actives
-- [ ] Réaliser une validation finale des parcours critiques publiés, des tests automatisés et des ressources SEO
+- [x] Réaliser une validation finale des parcours critiques publiés, des tests automatisés et des ressources SEO
 - [x] Retirer l’onglet et les contrôles administratifs Blog désormais inactifs afin d’aligner l’administration sur le retrait de la section Actualités
+- [x] Supprimer le rendu dupliqué des cartes de documents dans la revue administrative du coffre candidat

@@ -125,3 +125,15 @@ Les groupes d’onglets des mentions légales, de la confidentialité et des con
 ## Formulaire Employeurs dans les quatre langues
 
 Les exemples de saisie du brief Employeurs sont désormais adaptés à la langue active pour le profil recherché, la zone géographique, le calendrier et les précisions de mission. Cette correction conserve les libellés explicites déjà associés aux champs tout en supprimant les dernières aides françaises visibles dans les parcours anglais, allemand et chinois.
+
+## Contrôle responsive des pages modifiées
+
+Les pages Employeurs, VVIP & Offshore et Mentions légales ont été contrôlées aux largeurs bureau et mobile. Les formulaires passent sur une colonne sans débordement, les appels à l’action restent atteignables et le contenu légal conserve son défilement horizontal dédié pour les onglets. Aucun chevauchement visible n’a été observé dans les parcours vérifiés.
+
+## Disponibilité de production après les correctifs
+
+Après la publication des derniers lots, les routes Employeurs, VVIP & Offshore et Mentions légales répondent toutes en HTTP 200 sur le domaine principal. Le sous-domaine `www` redirige bien vers le domaine canonique avant de servir la page Employeurs. La suite automatisée complète et le build de production ont également été exécutés avec succès.
+
+## Revue administrative des documents candidats
+
+La liste de documents du coffre candidat contenait deux rendus successifs de la même collection, ce qui pouvait doubler chaque carte affichée. Le composant a été remis en forme avec un unique parcours de données, sans modifier les actions de revue, téléchargement ou réanalyse. Un test de non-régression vérifie que chaque document n’est produit qu’une seule fois par le rendu.
