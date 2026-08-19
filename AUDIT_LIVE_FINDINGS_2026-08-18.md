@@ -411,3 +411,6 @@ Le bouton de paiement restait déjà désactivé pendant la création du rendez-
 
 ## Erreurs publiques de réservation — 19 août 2026
 Les alertes publiques déclenchées lors de la création de rendez-vous ou de session Stripe utilisent désormais uniquement les messages génériques localisés prévus pour le visiteur. Les détails d’erreur restent consignés dans la console de diagnostic et ne sont plus interpolés dans l’interface. Un test de non-régression garantit cette séparation. La suite complète compte 196 tests réussis, 2 explicitement ignorés, avec un build de production valide.
+
+## Retours Stripe de confirmation — 19 août 2026
+La page de confirmation traite désormais explicitement trois états : paiement confirmé, paiement annulé et statut inconnu. Une URL directe sans statut Stripe valide ne peut plus afficher une confirmation trompeuse ; elle présente un état neutre, localisé en quatre langues, avec retour vers la réservation ou l’accueil. Les cartes promettant email et facture sont limitées au seul paiement confirmé. La page est également marquée `noindex`. La suite complète compte 199 tests réussis, 2 explicitement ignorés, et la vue de statut neutre a été vérifiée visuellement.

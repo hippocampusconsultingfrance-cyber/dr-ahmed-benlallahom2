@@ -262,7 +262,7 @@
 - [ ] Vérifier le positionnement des éléments flottants sur petits écrans
 - [ ] Vérifier les états de chargement des appels tRPC
 - [x] Vérifier les états anti-double-clic du paiement
-- [ ] Vérifier le rendu de la confirmation et de l’annulation de paiement
+- [x] Vérifier le rendu de la confirmation et de l’annulation de paiement
 - [ ] Vérifier les messages de validation des formulaires dans les quatre langues
 - [x] Vérifier les messages d’erreur sans exposition de données sensibles
 - [ ] Vérifier les liens de facture sur desktop et mobile
@@ -2412,4 +2412,5 @@
 - [x] Rendre les liens Leadership, Services, Formation et Contact du pied de page fonctionnels depuis toutes les pages publiques
 - [x] Rendre les liens Leadership, Services, Formation et Contact de la navigation principale fonctionnels depuis toutes les pages publiques
 - [x] Ajouter un test de non-régression des limites d’accès aux documents et sessions du portail candidat
+- [x] Afficher un état neutre lorsqu’une page de confirmation de paiement est ouverte sans statut Stripe valide
 - [x] Renforcer robots.txt pour décourager l’exploration des parcours candidats et de désinscription non indexables

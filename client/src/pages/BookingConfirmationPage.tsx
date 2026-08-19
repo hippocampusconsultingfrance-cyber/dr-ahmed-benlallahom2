@@ -8,7 +8,7 @@ import Breadcrumb from "@/components/Breadcrumb";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { SEOHead } from "@/components/SEOHead";
 
-const confirmationContent = {
+export const confirmationContent = {
   fr: {
     success: {
       eyebrow: "Paiement confirmé",
@@ -23,6 +23,13 @@ const confirmationContent = {
       description: "Aucun paiement n’a été confirmé. Votre créneau n’est donc pas réservé.",
       nextSteps: "Vous pouvez revenir au formulaire, vérifier vos informations et relancer le paiement lorsque vous êtes prêt.",
       status: "Réservation en attente",
+    },
+    unknown: {
+      eyebrow: "Statut à vérifier",
+      title: "Nous ne pouvons pas confirmer le paiement",
+      description: "Cette page ne contient pas de confirmation de paiement valide.",
+      nextSteps: "Vérifiez votre email ou revenez au formulaire avant de relancer le paiement.",
+      status: "Vérification nécessaire",
     },
     stepsTitle: "Prochaines étapes",
     steps: ["Vérifiez votre email de confirmation.", "Conservez votre référence de suivi.", "Préparez votre demande pour la consultation."],
@@ -52,6 +59,13 @@ const confirmationContent = {
       nextSteps: "You can return to the form, review your information and restart payment whenever you are ready.",
       status: "Booking pending",
     },
+    unknown: {
+      eyebrow: "Status to verify",
+      title: "We cannot confirm the payment",
+      description: "This page does not contain a valid payment confirmation.",
+      nextSteps: "Check your email or return to the form before restarting payment.",
+      status: "Verification required",
+    },
     stepsTitle: "Next steps",
     steps: ["Check your confirmation email.", "Keep your tracking reference.", "Prepare your request for the consultation."],
     privacy: "Your data is handled confidentially and in accordance with our privacy policy.",
@@ -79,6 +93,13 @@ const confirmationContent = {
       description: "Es wurde keine Zahlung bestätigt; der Termin wurde daher nicht reserviert.",
       nextSteps: "Sie können zum Formular zurückkehren, Ihre Angaben prüfen und die Zahlung später erneut starten.",
       status: "Buchung ausstehend",
+    },
+    unknown: {
+      eyebrow: "Status prüfen",
+      title: "Wir können die Zahlung nicht bestätigen",
+      description: "Diese Seite enthält keine gültige Zahlungsbestätigung.",
+      nextSteps: "Prüfen Sie Ihre E-Mail oder kehren Sie zum Formular zurück, bevor Sie die Zahlung erneut starten.",
+      status: "Überprüfung erforderlich",
     },
     stepsTitle: "Nächste Schritte",
     steps: ["Prüfen Sie Ihre Bestätigungs-E-Mail.", "Bewahren Sie Ihre Verfolgungsnummer auf.", "Bereiten Sie Ihre Anfrage für die Beratung vor."],
@@ -108,6 +129,13 @@ const confirmationContent = {
       nextSteps: "您可以返回表单，检查信息，并在准备好后重新开始付款。",
       status: "预约待处理",
     },
+    unknown: {
+      eyebrow: "状态待核实",
+      title: "我们无法确认付款",
+      description: "此页面不包含有效的付款确认信息。",
+      nextSteps: "请查看您的电子邮件，或在重新付款前返回表单。",
+      status: "需要核实",
+    },
     stepsTitle: "下一步",
     steps: ["查看确认邮件。", "保存您的跟踪编号。", "准备咨询所需的请求内容。"],
     privacy: "您的数据将按照隐私政策以保密方式处理。",
@@ -123,12 +151,22 @@ const confirmationContent = {
   },
 } as const;
 
+export type BookingConfirmationState = "success" | "canceled" | "unknown";
+
+export function getBookingConfirmationState(status: string | null): BookingConfirmationState {
+  if (status === "success") return "success";
+  if (status === "canceled") return "canceled";
+  return "unknown";
+}
+
 export default function BookingConfirmationPage() {
   const { language } = useLanguage();
   useLocation();
   const copy = confirmationContent[language as keyof typeof confirmationContent] ?? confirmationContent.en;
   const params = new URLSearchParams(window.location.search);
-  const canceled = params.get("status") === "canceled";
+  const paymentState = getBookingConfirmationState(params.get("status"));
+  const canceled = paymentState === "canceled";
+  const paymentConfirmed = paymentState === "success";
   const trackingId = params.get("trackingId");
   const sessionId = params.get("session_id");
   const cancelPending = trpc.appointments.cancelPending.useMutation();
@@ -139,28 +177,26 @@ export default function BookingConfirmationPage() {
     }
   }, [canceled, sessionId]);
 
-  const state = canceled ? copy.canceled : copy.success;
+  const state = paymentConfirmed ? copy.success : canceled ? copy.canceled : copy.unknown;
 
-  const seoTitle = canceled
-    ? `${copy.canceled.title} | Dr. Ahmed Ben Lallahom`
-    : `${copy.success.title} | Dr. Ahmed Ben Lallahom`;
-  const seoDescription = canceled ? copy.canceled.description : copy.success.description;
+  const seoTitle = `${state.title} | Dr. Ahmed Ben Lallahom`;
+  const seoDescription = state.description;
 
   return (
     <main className="min-h-screen bg-background px-4 py-8 sm:py-12">
-      <SEOHead title={seoTitle} description={seoDescription} ogUrl="https://drahmedbenlallahom.com/booking/confirmation" />
+      <SEOHead title={seoTitle} description={seoDescription} ogUrl="https://drahmedbenlallahom.com/booking/confirmation" noIndex />
       <div className="max-w-4xl mx-auto">
         <Breadcrumb items={[{ label: state.title }]} />
 
-        <section className={`confirmation-panel ${canceled ? "is-canceled" : "is-success"} mt-6`} aria-live="polite">
+        <section className={`confirmation-panel ${paymentConfirmed ? "is-success" : "is-canceled"} mt-6`} aria-live="polite">
           <div className="confirmation-icon" aria-hidden="true">
-            {canceled ? <AlertCircle className="w-8 h-8" /> : <CheckCircle className="w-8 h-8" />}
+            {paymentConfirmed ? <CheckCircle className="w-8 h-8" /> : <AlertCircle className="w-8 h-8" />}
           </div>
           <span className="eyebrow-label mb-4">{state.eyebrow}</span>
           <h1 className="font-display text-4xl sm:text-6xl font-bold tracking-tight max-w-3xl">{state.title}</h1>
           <p className="mt-5 text-lg text-muted-foreground max-w-2xl leading-relaxed">{state.description}</p>
 
-          {trackingId && (
+          {trackingId && paymentState !== "unknown" && (
             <div className="confirmation-reference mt-7">
               <span className="text-xs uppercase tracking-[0.2em] text-muted-foreground">{state.status}</span>
               <strong className="font-mono text-primary text-lg break-all">{trackingId}</strong>
@@ -185,6 +221,7 @@ export default function BookingConfirmationPage() {
           </div>
         </section>
 
+        {paymentConfirmed && (
         <section className="grid md:grid-cols-3 gap-4 mt-6" aria-label={copy.stepsTitle}>
           {[
             { icon: Mail, label: copy.email },
@@ -197,6 +234,7 @@ export default function BookingConfirmationPage() {
             </Card>
           ))}
         </section>
+        )}
 
         <section className="confirmation-next-steps mt-8">
           <div>
