@@ -463,6 +463,9 @@ La sélection du droit RGPD est un contrôle natif `select` associé à un libel
 ## Formulaire Employeurs — contrôle d’accessibilité — 19 août 2026
 Les champs actifs du formulaire Employeurs sont chacun inclus dans leur libellé textuel, ce qui crée une association explicite pour la navigation clavier et les lecteurs d’écran. Les champs obligatoires conservent l’attribut natif requis, l’erreur est annoncée avec le rôle d’alerte et le champ leurre est retiré de l’arbre d’accessibilité. Aucun ajustement supplémentaire n’a été requis.
 
+## Typographie chinoise renforcée — 19 août 2026
+Les documents portant la langue chinoise utilisent désormais une pile CJK dédiée, avec Noto Sans SC puis des alternatives système chinoises adaptées au texte courant, et Noto Serif SC pour les titres. Les polices latines DM Sans et Playfair Display restent inchangées pour les autres langues. Le contrôle automatisé protège ces deux invariants ; la suite complète compte 217 tests réussis, 2 explicitement ignorés, avec un build de production valide.
+
 ## Sélection de créneau accessible — 19 août 2026
 La réservation accepte la saisie clavier de la date et de l’heure et annonce les erreurs de format, la date interprétée et la disponibilité du créneau via des régions accessibles. Le champ heure utilise désormais son propre libellé localisé, plutôt que le seul exemple de format. Les soumissions restent bloquées lorsqu’un créneau est indisponible, en cours de vérification ou non valide. La suite complète compte 215 tests réussis, 2 explicitement ignorés, avec un build de production valide.
 

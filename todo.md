@@ -2422,6 +2422,7 @@
 - [x] Localiser le fallback global d’erreur dans les quatre langues sans promettre de notification non vérifiée
 - [x] Placer le fallback global localisé après le provider de langue afin de restaurer le rendu public
 - [x] Localiser l’état de chargement global des routes dans les quatre langues prises en charge
+- [x] Ajouter une pile de polices CJK dédiée aux contenus chinois pour préserver leur lisibilité
 - [x] Marquer la page introuvable comme non indexable pour éviter toute indexation de route erronée
 - [x] Traduire intégralement le formulaire de demande RGPD et ses états dans les quatre langues prises en charge
 - [x] Traduire les pages de ventures et leurs états de secours dans les quatre langues prises en charge

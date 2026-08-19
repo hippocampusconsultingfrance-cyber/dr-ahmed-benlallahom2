@@ -132,6 +132,18 @@ html.high-readability textarea {
   }
 }
 
+html[lang="zh"],
+html[lang="zh"] body,
+[lang="zh"] {
+  font-family: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", "Hiragino Sans GB", system-ui, sans-serif;
+  letter-spacing: normal;
+}
+
+html[lang="zh"] .font-display,
+[lang="zh"] .font-display {
+  font-family: "Noto Serif SC", "Songti SC", "SimSun", serif;
+}
+
 @layer components {
   .container {
     width: 100%;
