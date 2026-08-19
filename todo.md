@@ -2188,7 +2188,7 @@
 
 - [ ] Ajouter un vrai cycle de vie asynchrone d’analyse (en attente, extraction, analyse, échec, à revoir) avec tentatives contrôlées
 - [ ] Stocker séparément le texte extrait, la version de modèle, le prompt et les métadonnées techniques de chaque analyse
-- [ ] Mettre en place la suppression effective et vérifiable des CV en stockage privé après expiration ou demande RGPD
+- [x] Conserver les CV après expiration et notifier l’administrateur pour revue ; aucune suppression automatique, une suppression éventuelle reste exclusivement manuelle au titre d’une demande RGPD explicite
 - [ ] Ajouter une vraie table Drizzle, des migrations et un dashboard administrateur pour les briefs Employeurs
 - [x] Exposer disponibilité, mobilité et certifications dans la fiche candidat et les filtres de matching
 - [x] Remplacer le matching en mémoire par un filtrage et une pagination robustes côté base de données

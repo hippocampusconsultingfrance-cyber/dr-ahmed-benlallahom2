@@ -73,3 +73,7 @@ Les contrôles qui restent intrinsèquement manuels sont la lecture effective av
 ## Pied de page partagé
 
 Le titre visible de la colonne de contact réutilise désormais le libellé de navigation localisé au lieu d’une chaîne française codée en dur. Cette correction assure la cohérence du pied de page en anglais, allemand et chinois, avec un test de non-régression dédié.
+
+## Conservation des CV
+
+La tâche de rétention active ne détruit ni le fichier ni sa référence de stockage. Lorsqu’une date de conservation est dépassée, elle enregistre un rappel horodaté, crée une trace d’audit non destructive et notifie l’administrateur afin qu’il examine le dossier. La suppression ne peut être envisagée que manuellement, au titre d’une demande RGPD explicite, conformément à la règle de conservation définie pour le site.
