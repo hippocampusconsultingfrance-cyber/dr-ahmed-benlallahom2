@@ -331,3 +331,6 @@ La validation d’un lien d’activation affiche désormais le skeleton accessib
 
 ## Vérification responsive des parcours publics — 19 août 2026
 Les parcours Recrutement, Employeurs, VVIP & Offshore, Réservation, Accès candidat et FAQ ont été contrôlés en largeur bureau et mobile. Les titres, cartes, champs de formulaire, boutons, accords FAQ et pied de page restent lisibles et ne présentent pas de débordement visible dans les vues examinées. Durant ce contrôle, la page Employeurs a révélé une référence résiduelle aux résidences VVIP : elle a été retirée dans les quatre langues, y compris dans le libellé de l’environnement et les métadonnées. Le contenu décrit désormais uniquement les plateformes pétrolières, grands groupes industriels et missions offshore autorisés.
+
+## Accès direct au contenu principal — 19 août 2026
+Le lien d’accès direct global affecte dynamiquement l’identifiant `main-content` et un `tabIndex=-1` au premier élément `main` de chaque parcours, puis lui transfère le focus. Les pages qui ne portent pas explicitement cet identifiant dans leur JSX restent donc compatibles sans duplication de logique. Ce comportement est couvert par des tests unitaires du composant dédié.
