@@ -55,7 +55,7 @@ function LegalPageFr() {
 
           {/* Onglets interactifs */}
           <div className="mb-12">
-            <div role="tablist" aria-label="Legal sections" className="legal-tabs flex gap-4 mb-8 border-b border-border overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
+            <div role="tablist" aria-label="Sections juridiques" className="legal-tabs flex gap-4 mb-8 border-b border-border overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
               <button
                 type="button"
                 role="tab"
@@ -607,7 +607,7 @@ function LegalPageDe() {
 
           {/* Interactive Tabs */}
           <div className="mb-12">
-            <div role="tablist" aria-label="Legal sections" className="legal-tabs flex gap-4 mb-8 border-b border-border overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
+            <div role="tablist" aria-label="Rechtliche Bereiche" className="legal-tabs flex gap-4 mb-8 border-b border-border overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
               <button
                 type="button"
                 role="tab"
@@ -875,7 +875,7 @@ function LegalPageZh() {
 
           {/* Interactive Tabs */}
           <div className="mb-12">
-            <div role="tablist" aria-label="Legal sections" className="legal-tabs flex gap-4 mb-8 border-b border-border overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
+            <div role="tablist" aria-label="法律栏目" className="legal-tabs flex gap-4 mb-8 border-b border-border overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
               <button
                 type="button"
                 role="tab"

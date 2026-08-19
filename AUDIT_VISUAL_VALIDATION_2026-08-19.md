@@ -117,3 +117,7 @@ L’administration utilise désormais le sélecteur de sections sur mobile et de
 ## Formulaire VVIP dans les quatre langues
 
 Le formulaire de candidature VVIP utilise désormais des options de spécialité, aides de saisie pour l’expérience et les certifications, ainsi qu’une indication de format de fichier adaptées au français, à l’anglais, à l’allemand et au chinois. L’initialisation du formulaire sélectionne l’option de spécialité correspondant à la langue active. Un test de non-régression vérifie que les contrôles visibles ne reviennent pas à des chaînes françaises codées en dur.
+
+## Navigation accessible des pages légales
+
+Les groupes d’onglets des mentions légales, de la confidentialité et des conditions d’utilisation disposent désormais d’un nom accessible dans la langue affichée : français, anglais, allemand ou chinois. Cette correction améliore le repérage de la navigation interne par les lecteurs d’écran, sans modifier le contenu juridique.

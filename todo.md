@@ -2443,5 +2443,6 @@
 - [x] Auditer et améliorer l’utilisation mobile des contenus denses du tableau de bord administratif après la barrière MFA
 - [ ] Achever les contrôles de localisation et d’accessibilité des parcours publics et administratifs encore non vérifiés manuellement
 - [x] Localiser les aides de saisie résiduelles du formulaire de candidature VVIP dans les quatre langues actives
+- [x] Localiser le libellé accessible de navigation interne des pages légales dans les quatre langues
 - [ ] Réaliser une validation finale des parcours critiques publiés, des tests automatisés et des ressources SEO
 - [x] Retirer l’onglet et les contrôles administratifs Blog désormais inactifs afin d’aligner l’administration sur le retrait de la section Actualités
