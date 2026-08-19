@@ -227,3 +227,7 @@ Le script Umami n’est plus présent statiquement dans le document HTML. Il est
 ## Préférences de langue et de thème — 19 août 2026
 
 Les préférences de langue, thème et lisibilité s’appuient désormais sur des lecteurs normalisés qui rejettent les valeurs inattendues du stockage local. La suite de non-régression vérifie le cycle complet FR → EN → DE → ZH → FR, le repli sur la langue par défaut et l’acceptation exclusive des thèmes clair ou sombre. Cette logique limite les régressions d’interface dues à une donnée locale obsolète ou modifiée.
+
+## Garde-fou de longueur multilingue — 19 août 2026
+
+Les libellés critiques de navigation et l’appel à l’action de réservation sont maintenant contrôlés automatiquement en français, anglais, allemand et chinois. Le test signale toute chaîne qui excède l’enveloppe prévue pour ces contrôles et protège ainsi les zones de navigation les plus contraintes. Il ne remplace pas la vérification visuelle des contenus longs ; celle-ci demeure listée comme revue responsive globale.

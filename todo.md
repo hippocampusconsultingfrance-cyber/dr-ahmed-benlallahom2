@@ -229,7 +229,7 @@
 - [ ] Mettre en place une validation graphique avant chaque checkpoint
 - [ ] Ajouter une documentation d’utilisation des composants pour les futures évolutions
 - [x] Ajouter des tests de non-régression pour le changement de langue et de thème
-- [ ] Ajouter des tests de longueur de traduction pour les boutons et titres
+- [x] Ajouter des tests de longueur de traduction pour les boutons et titres critiques de navigation
 - [ ] Ajouter un mode sans animation pour les connexions lentes et préférences utilisateur
 - [ ] Ajouter un mode sombre optimisé pour les écrans OLED
 - [ ] Vérifier les performances après ajout d’animations ou d’images
