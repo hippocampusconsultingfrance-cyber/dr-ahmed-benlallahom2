@@ -20,6 +20,7 @@ export const bookingContent = {
       datePlaceholder: "JJ/MM/AAAA · HH:MM",
       dateOnlyPlaceholder: "JJ/MM/AAAA",
       timePlaceholder: "HH:MM",
+      timeLabel: "Heure",
       invalidDate: "Saisissez une date valide au format JJ/MM/AAAA et une heure au format HH:MM.",
       dateHint: "Choisissez la date et l’heure de votre consultation. Le créneau est affiché en heure de Paris.",
       details: "Détails de votre demande",
@@ -67,6 +68,7 @@ export const bookingContent = {
       datePlaceholder: "DD/MM/YYYY · HH:MM",
       dateOnlyPlaceholder: "DD/MM/YYYY",
       timePlaceholder: "HH:MM",
+      timeLabel: "Time",
       invalidDate: "Enter a valid date in DD/MM/YYYY format and a time in HH:MM format.",
       dateHint: "Choose your consultation date and time. The slot is displayed in Paris time.",
       details: "Request Details",
@@ -114,6 +116,7 @@ export const bookingContent = {
       datePlaceholder: "TT.MM.JJJJ · HH:MM",
       dateOnlyPlaceholder: "TT.MM.JJJJ",
       timePlaceholder: "HH:MM",
+      timeLabel: "Uhrzeit",
       invalidDate: "Geben Sie ein gültiges Datum im Format TT.MM.JJJJ und eine Uhrzeit im Format HH:MM ein.",
       dateHint: "Wählen Sie Datum und Uhrzeit Ihrer Beratung. Der Termin wird in Pariser Zeit angezeigt.",
       details: "Anforderungsdetails",
@@ -161,6 +164,7 @@ export const bookingContent = {
       datePlaceholder: "年/月/日 · 时:分",
       dateOnlyPlaceholder: "日/月/年",
       timePlaceholder: "时:分",
+      timeLabel: "时间",
       invalidDate: "请输入有效日期（日/月/年）和时间（时:分）。",
       dateHint: "请选择咨询日期和时间。时段以巴黎时间显示。",
       details: "请求详情",
@@ -669,7 +673,7 @@ export default function BookingPage() {
                   placeholder={content.form.timePlaceholder}
                   className="form-field-premium h-11 w-full border px-4 py-2"
                   aria-describedby="availability-status booking-date-error"
-                  aria-label={content.form.timePlaceholder}
+                  aria-label={content.form.timeLabel}
                 />
               </div>
               <p className="mt-2 text-xs leading-5 text-muted-foreground">{content.form.dateHint}</p>
