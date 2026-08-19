@@ -441,3 +441,6 @@ La section de contact complète désormais le catalogue de contenu existant avec
 
 ## Fallback global d’erreur multilingue — 19 août 2026
 Le dernier recours applicatif est maintenant localisé dans les quatre langues et ne révèle aucun détail technique. Le texte a également été rectifié pour ne plus prétendre qu’une notification a été envoyée lorsqu’aucune télémétrie de ce type n’est effectivement déclenchée. Les seules actions proposées sont le rechargement de la page et le retour à l’accueil. La suite complète compte 210 tests réussis, 2 explicitement ignorés, avec un build de production valide.
+
+## Ordre des providers du fallback global — 19 août 2026
+La première intégration du fallback localisé l’avait placé avant le provider de langue, ce qui empêchait le rendu de l’application. Le fallback est désormais imbriqué après ce provider. La page d’accueil a été contrôlée visuellement après correction et s’affiche de nouveau normalement. La suite complète compte 210 tests réussis, 2 explicitement ignorés, avec un build de production valide.

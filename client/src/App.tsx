@@ -96,9 +96,9 @@ function Router() {
 
 function App() {
   return (
-    <ErrorBoundary>
-      <ThemeProvider defaultTheme="dark" switchable>
-        <LanguageProvider>
+    <ThemeProvider defaultTheme="dark" switchable>
+      <LanguageProvider>
+        <ErrorBoundary>
           <SkipToContent />
           <Toaster />
           <Router />
@@ -106,9 +106,9 @@ function App() {
           <CookieConsent />
           <AnalyticsConsent />
           <ConnectionMotionPreference />
-        </LanguageProvider>
-      </ThemeProvider>
-    </ErrorBoundary>
+        </ErrorBoundary>
+      </LanguageProvider>
+    </ThemeProvider>
   );
 }
 
