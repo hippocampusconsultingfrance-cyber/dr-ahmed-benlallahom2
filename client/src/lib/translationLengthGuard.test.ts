@@ -32,4 +32,25 @@ describe("garde-fou de longueur des traductions", () => {
       expect(ctaIssues, language).toEqual([]);
     }
   });
+
+  it("protège les libellés publics compacts, y compris les textes allemand et chinois", () => {
+    const contents = { fr: contentFr, en: contentEn, de: contentDe, zh: contentZh };
+    for (const language of Object.keys(contents) as Array<keyof typeof contents>) {
+      const content = contents[language];
+      const compactLabels = {
+        ...content.nav,
+        ...PUBLIC_NAVIGATION[language],
+        bookConsultation: content.hero.bookConsultation,
+        contact: content.nav.contact,
+      };
+
+      expect(findTranslationLengthIssues(compactLabels, 40), language).toEqual([]);
+    }
+  });
+
+  it("compte les caractères Unicode sans tronquer les libellés CJK", () => {
+    expect(findTranslationLengthIssues({ cjk: "预约咨询" }, 3)).toEqual([
+      { key: "cjk", length: 4, maxLength: 3 },
+    ]);
+  });
 });

@@ -218,6 +218,7 @@
 - [ ] Auditer fichier par fichier tous les visuels médicaux actifs sur les parcours publics et ventures afin de confirmer l’absence de promesse thérapeutique
 - [ ] Construire un inventaire asset par asset des visuels médicaux publics et vérifier localement leurs contextes adjacents par test
 - [ ] Vérifier que les contenus longs en allemand et chinois ne débordent pas des composants
+- [x] Étendre les tests de longueur aux libellés publics critiques des quatre langues actives
 - [x] Vérifier l’alignement des titres, CTA et formulaires sur desktop, tablette et mobile
 - [ ] Ajouter une procédure de revue UX basée sur les retours utilisateurs réels
 - [x] Ne pas ajouter de visuels de partage social pour le Blog : aucune page ni aucun article Actualités n’est publié

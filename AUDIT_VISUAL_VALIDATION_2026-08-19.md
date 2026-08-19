@@ -39,6 +39,10 @@ Les composants interactifs restants ont été cartographiés. Le carrousel de t�
 | Préférences cookies | Échap ferme la fenêtre et rend le focus à l’élément qui l’a ouverte. | `CookieConsent.fixedControls.test.ts`. |
 | Réservation | Les champs date et heure restent des contrôles visibles et atteignables au clavier ; les états de disponibilité sont explicites. | `BookingPage.test.ts`. |
 
+## Garde-fou de longueur multilingue
+
+Les libellés publics compacts de navigation et de réservation sont contrôlés dans les quatre langues actives. Le garde-fou compte désormais les caractères Unicode par point de code, ce qui évite un traitement incohérent des libellés chinois. Les contrôles automatisés couvrent les liens de navigation, les CTA critiques et les libellés allemands et chinois à risque. La vérification visuelle complète des contenus très longs sur appareil réel reste documentée séparément.
+
 ## Messages de validation publics
 
 Les formulaires Contact, RGPD, brief employeur, accès candidat et candidature VVIP disposent de retours localisés dans les quatre langues. La candidature VVIP a été corrigée afin qu’un message renvoyé par le serveur ne soit jamais affiché directement au visiteur : le détail est conservé dans la console de diagnostic et l’interface affiche uniquement son message localisé générique. Un test de non-régression protège ce comportement.
