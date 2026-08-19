@@ -77,6 +77,16 @@
   --ring: oklch(0.55 0.2 220);
 }
 
+html.dark.oled-dark {
+  --background: oklch(0.03 0.008 250);
+  --card: oklch(0.06 0.012 250);
+  --popover: oklch(0.06 0.012 250);
+  --secondary: oklch(0.09 0.012 250);
+  --muted: oklch(0.08 0.01 250);
+  --input: oklch(0.08 0.01 250);
+  --border: oklch(0.2 0.018 250);
+}
+
 html.high-readability {
   font-size: 106.25%;
   --muted-foreground: oklch(0.77 0.018 250);

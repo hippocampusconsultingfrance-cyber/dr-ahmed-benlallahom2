@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { HIGH_READABILITY_STORAGE_KEY, readHighReadabilityPreference } from "./readabilityPreference";
+import { OLED_DARK_STORAGE_KEY, readOledDarkPreference } from "./oledPreference";
 import { readThemePreference, type UserTheme } from "./userPreferences";
 
 type Theme = UserTheme;
@@ -9,6 +10,8 @@ interface ThemeContextType {
   toggleTheme?: () => void;
   highReadability: boolean;
   toggleHighReadability?: () => void;
+  oledDark: boolean;
+  toggleOledDark?: () => void;
   switchable: boolean;
 }
 
@@ -32,6 +35,7 @@ export function ThemeProvider({
     return defaultTheme;
   });
   const [highReadability, setHighReadability] = useState(() => readHighReadabilityPreference(localStorage.getItem(HIGH_READABILITY_STORAGE_KEY)));
+  const [oledDark, setOledDark] = useState(() => readOledDarkPreference(localStorage.getItem(OLED_DARK_STORAGE_KEY)));
 
   useEffect(() => {
     const root = document.documentElement;
@@ -51,15 +55,21 @@ export function ThemeProvider({
     localStorage.setItem(HIGH_READABILITY_STORAGE_KEY, String(highReadability));
   }, [highReadability]);
 
+  useEffect(() => {
+    document.documentElement.classList.toggle("oled-dark", oledDark);
+    localStorage.setItem(OLED_DARK_STORAGE_KEY, String(oledDark));
+  }, [oledDark]);
+
   const toggleTheme = switchable
     ? () => {
         setTheme(prev => (prev === "light" ? "dark" : "light"));
       }
     : undefined;
   const toggleHighReadability = () => setHighReadability(current => !current);
+  const toggleOledDark = () => setOledDark(current => !current);
 
   return (
-    <ThemeContext.Provider value={{ theme, toggleTheme, highReadability, toggleHighReadability, switchable }}>
+    <ThemeContext.Provider value={{ theme, toggleTheme, highReadability, toggleHighReadability, oledDark, toggleOledDark, switchable }}>
       {children}
     </ThemeContext.Provider>
   );

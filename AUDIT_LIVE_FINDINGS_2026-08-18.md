@@ -243,3 +243,7 @@ Lorsque le navigateur expose une préférence `saveData`, la page applique la cl
 ## Bandeau cookies — lisibilité et focus — 19 août 2026
 
 Le bandeau de consentement utilise désormais un fond quasi opaque, une séparation cyan discrète et une ombre renforcée afin de rester lisible sur les visuels sombres et clairs. Le lien de confidentialité et le bouton de fermeture disposent d’un indicateur de focus explicite. La vérification visuelle sur le thème sombre, la suite complète et le build de production sont conformes.
+
+## Thème sombre OLED — 19 août 2026
+
+Un contrôle OLED apparaît lorsque le thème sombre est actif, sur desktop comme dans la navigation mobile. Il enregistre le choix localement et remplace les fonds et surfaces bleu nuit par des noirs plus profonds, tout en préservant les couleurs de texte, les contrastes et l’accent cyan. La préférence est désactivée par défaut et sa lecture défensive est couverte par un test unitaire.

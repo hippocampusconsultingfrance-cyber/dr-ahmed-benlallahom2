@@ -1,12 +1,12 @@
 import { useState, useEffect, useRef } from "react";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useTheme } from "@/contexts/ThemeContext";
-import { Accessibility, Menu, X, ChevronDown, Sun, Moon } from "lucide-react";
+import { Accessibility, CircleDot, Menu, X, ChevronDown, Sun, Moon } from "lucide-react";
 import { getMenuFocusIndex, isNavigationDismissKey } from "./navigationKeyboard";
 
 export default function Navigation() {
   const { content, language } = useLanguage();
-  const { theme, toggleTheme, highReadability, toggleHighReadability } = useTheme();
+  const { theme, toggleTheme, highReadability, toggleHighReadability, oledDark, toggleOledDark } = useTheme();
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -15,6 +15,12 @@ export default function Navigation() {
     en: { enable: "Enable high readability", disable: "Disable high readability", label: "High readability" },
     de: { enable: "Verbesserte Lesbarkeit aktivieren", disable: "Verbesserte Lesbarkeit deaktivieren", label: "Verbesserte Lesbarkeit" },
     zh: { enable: "启用高可读性模式", disable: "关闭高可读性模式", label: "高可读性模式" },
+  }[language as "fr" | "en" | "de" | "zh"];
+  const oledCopy = {
+    fr: { enable: "Activer le noir OLED", disable: "Désactiver le noir OLED", label: "Noir OLED" },
+    en: { enable: "Enable OLED black", disable: "Disable OLED black", label: "OLED black" },
+    de: { enable: "OLED-Schwarz aktivieren", disable: "OLED-Schwarz deaktivieren", label: "OLED-Schwarz" },
+    zh: { enable: "启用 OLED 黑色", disable: "关闭 OLED 黑色", label: "OLED 黑色" },
   }[language as "fr" | "en" | "de" | "zh"];
   const dropdownRef = useRef<HTMLDivElement>(null);
   const languageButtonRef = useRef<HTMLButtonElement>(null);
@@ -228,6 +234,18 @@ export default function Navigation() {
             </button>
           )}
 
+          {theme === "dark" && toggleOledDark && oledCopy && (
+            <button
+              onClick={toggleOledDark}
+              className={`nav-control rounded-full border p-2 transition-all duration-200 ${oledDark ? "border-primary bg-primary/15 text-primary" : "border-border/50 text-muted-foreground hover:border-primary/40 hover:text-foreground"}`}
+              title={oledDark ? oledCopy.disable : oledCopy.enable}
+              aria-label={oledDark ? oledCopy.disable : oledCopy.enable}
+              aria-pressed={oledDark}
+            >
+              <CircleDot className="h-4 w-4" />
+            </button>
+          )}
+
           <button
             onClick={() => scrollTo("contact")}
             className="nav-cta cta-primary hidden min-[1350px]:flex px-5 py-2.5 text-sm"
@@ -270,6 +288,7 @@ export default function Navigation() {
             <a href="/recruitment" onClick={() => setMobileOpen(false)} className="nav-mobile-link text-left text-lg font-medium text-foreground py-2 border-b border-border/20">{recruitmentLabel}</a>
             <a href="/employers" onClick={() => setMobileOpen(false)} className="nav-mobile-link text-left text-lg font-medium text-foreground py-2 border-b border-border/20">{employersLabel}</a>
             {toggleHighReadability && readabilityCopy && <button onClick={toggleHighReadability} className="nav-mobile-link flex items-center gap-2 text-left text-lg font-medium text-foreground py-2 border-b border-border/20" aria-pressed={highReadability}><Accessibility className="h-4 w-4" />{readabilityCopy.label}</button>}
+            {theme === "dark" && toggleOledDark && oledCopy && <button onClick={toggleOledDark} className="nav-mobile-link flex items-center gap-2 text-left text-lg font-medium text-foreground py-2 border-b border-border/20" aria-pressed={oledDark}><CircleDot className="h-4 w-4" />{oledCopy.label}</button>}
             <button
               onClick={() => scrollTo("contact")}
               className="nav-cta cta-primary mt-4 px-5 py-3.5 text-sm w-full"
