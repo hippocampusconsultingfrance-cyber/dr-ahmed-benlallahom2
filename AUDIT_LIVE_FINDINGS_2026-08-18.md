@@ -382,3 +382,6 @@ Les domaines principal et Manus servent HTTPS avec HSTS, politique de sécurité
 
 ## Indexation des parcours sensibles — 19 août 2026
 Le sitemap publié n’expose aucune route candidate, administrative, de recherche, de statut ou de désinscription. Les pages sensibles vérifiées servent toutes `noindex, follow`. Le fichier `robots.txt` exclut désormais explicitement le préfixe candidat et la page de désinscription, en complément des métadonnées et des contrôles d’accès applicatifs.
+
+## Contrôle authentifié de l’administration — 19 août 2026
+Le tableau de bord a été ouvert après connexion et validation du second facteur, sans effectuer de modification de donnée. Les indicateurs, raccourcis, vivier, filtres, cartes candidats et actions de sélection s’affichent correctement sur la session administrateur. En format mobile, la barre horizontale d’onglets est remplacée sous le seuil `sm` par une liste déroulante native de 44 px de hauteur, avec libellé accessible et focus visible ; cette stratégie évite la compression ou le débordement des treize onglets. La vérification visuelle interactive a été réalisée en vue bureau authentifiée ; le contrôle mobile repose sur cette implémentation responsive et ses tests existants.
