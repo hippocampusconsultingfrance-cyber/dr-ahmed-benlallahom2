@@ -376,3 +376,6 @@ Les échéances de relance générées après une campagne sont visibles dans la
 
 ## Cloisonnement des accès candidat — 19 août 2026
 Un contrat de non-régression vérifie que les sessions affichées ou révoquées sont systématiquement filtrées par l’identité du candidat connecté. Il vérifie également que la liste et le téléchargement de documents exigent cette même identité. Ce contrôle complète les tests d’intégration du portail couvrant mots de passe, jetons, anti-bot et chiffrement documentaire. La suite complète compte 193 tests réussis, 2 explicitement ignorés, avec un build de production valide.
+
+## En-têtes de sécurité en production — 19 août 2026
+Les domaines principal et Manus servent HTTPS avec HSTS, politique de sécurité du contenu, politique de permissions, politique de référent, blocage du reniflage MIME et protection contre l’encapsulation par `frame-ancestors`. Le domaine `www` redirige en HTTPS vers le domaine principal. Aucun écart critique n’a été observé ; aucune modification de configuration n’était nécessaire.
