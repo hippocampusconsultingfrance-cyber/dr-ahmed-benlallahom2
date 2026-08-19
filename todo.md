@@ -2434,3 +2434,4 @@
 - [x] Ajouter un libellé explicite associé au champ heure de réservation pour les lecteurs d’écran
 - [x] Localiser les libellés accessibles du menu principal dans les quatre langues prises en charge
 - [x] Renforcer robots.txt pour décourager l’exploration des parcours candidats et de désinscription non indexables
+- [x] Ne jamais exposer de détail technique dans les erreurs publiques du formulaire de candidature VVIP

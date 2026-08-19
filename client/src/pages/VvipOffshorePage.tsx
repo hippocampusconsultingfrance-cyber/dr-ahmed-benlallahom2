@@ -353,7 +353,8 @@ export default function VvipOffshorePage() {
       setStatus("success");
     } catch (err) {
       setStatus("error");
-      setErrorMessage(err instanceof Error ? err.message : t.genericError);
+      console.error("VVIP application submission error:", err);
+      setErrorMessage(t.genericError);
     }
   }
 
