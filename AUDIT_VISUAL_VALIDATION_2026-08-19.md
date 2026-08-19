@@ -31,3 +31,7 @@ Le sélecteur de langue conserve le focus, prend en charge les flèches, Accueil
 ## Messages de validation publics
 
 Les formulaires Contact, RGPD, brief employeur, accès candidat et candidature VVIP disposent de retours localisés dans les quatre langues. La candidature VVIP a été corrigée afin qu’un message renvoyé par le serveur ne soit jamais affiché directement au visiteur : le détail est conservé dans la console de diagnostic et l’interface affiche uniquement son message localisé générique. Un test de non-régression protège ce comportement.
+
+## Disponibilité de production
+
+Le 19 août 2026, les routes publiques `/`, `/booking`, `/gdpr`, `/faq`, `/search`, `/error`, `/maintenance`, `/recruitment`, `/employers` et `/why-hippocampus` ont toutes répondu en HTTP 200 sur le domaine principal. L’accès `www.drahmedbenlallahom.com` redirige correctement vers `drahmedbenlallahom.com` et sert ensuite la page d’accueil en HTTP 200. Aucun écart de disponibilité n’a été observé sur cet échantillon.
