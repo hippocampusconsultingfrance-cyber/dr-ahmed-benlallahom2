@@ -7,6 +7,7 @@ import { trpc } from "@/lib/trpc";
 import PublicContentSkeleton from "@/components/PublicContentSkeleton";
 import { getRecruitmentCampaignTemplate, RECRUITMENT_CAMPAIGN_TEMPLATES, type RecruitmentCampaignTemplateId } from "./recruitmentCampaignTemplates";
 import { deliveryRateLabel } from "./campaignDeliveryMetrics";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 type MailingTabProps = {
   initialSelectedIds: number[];
@@ -14,14 +15,14 @@ type MailingTabProps = {
 
 type AudienceMode = "selected" | "all_eligible" | "filtered";
 
-function campaignStatusLabel(status: string) {
-  const labels: Record<string, string> = {
-    draft: "Brouillon",
-    sending: "Envoi en cours",
-    sent: "Envoyée",
-    partially_sent: "Partiellement envoyée",
-    failed: "Échec d’envoi",
-  };
+const mailingCopy = {
+  fr: { title: "Mailing recrutement", intro: "Diffusez une offre uniquement à des profils ayant explicitement accepté les communications de recrutement. L’envoi est journalisé candidat par candidat.", statuses: { draft: "Brouillon", sending: "Envoi en cours", sent: "Envoyée", partially_sent: "Partiellement envoyée", failed: "Échec d’envoi" } },
+  en: { title: "Recruitment mailing", intro: "Send an offer only to profiles that have explicitly accepted recruitment communications. Each delivery is logged candidate by candidate.", statuses: { draft: "Draft", sending: "Sending", sent: "Sent", partially_sent: "Partially sent", failed: "Sending failed" } },
+  de: { title: "Recruiting-Mailing", intro: "Versenden Sie Angebote nur an Profile, die Recruiting-Kommunikation ausdrücklich akzeptiert haben. Jede Zustellung wird pro Kandidat protokolliert.", statuses: { draft: "Entwurf", sending: "Wird gesendet", sent: "Gesendet", partially_sent: "Teilweise gesendet", failed: "Versand fehlgeschlagen" } },
+  zh: { title: "招聘邮件", intro: "仅向明确同意接收招聘沟通的候选人发送职位信息。每次发送都会逐位候选人记录。", statuses: { draft: "草稿", sending: "发送中", sent: "已发送", partially_sent: "部分已发送", failed: "发送失败" } },
+} as const;
+
+function campaignStatusLabel(status: string, labels: Record<string, string>) {
   return labels[status] || status;
 }
 
@@ -33,6 +34,8 @@ function campaignStatusTone(status: string) {
 }
 
 export default function MailingTab({ initialSelectedIds }: MailingTabProps) {
+  const { language: interfaceLanguage } = useLanguage();
+  const copy = mailingCopy[interfaceLanguage as keyof typeof mailingCopy] ?? mailingCopy.fr;
   const utils = trpc.useUtils();
   const [mode, setMode] = useState<AudienceMode>(initialSelectedIds.length ? "selected" : "all_eligible");
   const [selectedIds, setSelectedIds] = useState<number[]>(initialSelectedIds);
@@ -94,8 +97,8 @@ export default function MailingTab({ initialSelectedIds }: MailingTabProps) {
     <section className="space-y-7" aria-labelledby="mailing-heading">
       <div>
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">Hippocampus Consulting</p>
-        <h2 id="mailing-heading" className="mt-2 text-2xl font-semibold text-foreground">Mailing recrutement</h2>
-        <p className="mt-2 max-w-3xl text-sm text-muted-foreground">Diffusez une offre uniquement à des profils ayant explicitement accepté les communications de recrutement. L’envoi est journalisé candidat par candidat.</p>
+        <h2 id="mailing-heading" className="mt-2 text-2xl font-semibold text-foreground">{copy.title}</h2>
+        <p className="mt-2 max-w-3xl text-sm text-muted-foreground">{copy.intro}</p>
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_22rem]">
@@ -189,7 +192,7 @@ export default function MailingTab({ initialSelectedIds }: MailingTabProps) {
               return <article key={campaign.id} className="flex flex-col gap-4 rounded-xl border border-border p-4">
                 <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                   <div><h4 className="font-semibold text-foreground">{campaign.title}</h4><p className="mt-1 text-sm text-muted-foreground">{campaign.subject} · {campaign.language.toUpperCase()} · {campaign.recipientCount} destinataire{campaign.recipientCount > 1 ? "s" : ""}</p><p className="mt-1 text-xs text-muted-foreground">Créée le {new Date(campaign.createdAt).toLocaleString("fr-FR", { timeZone: "Europe/Paris" })}</p></div>
-                  <span className={`w-fit rounded-full border px-2.5 py-1 text-xs font-medium ${campaignStatusTone(campaign.status)}`}>{campaignStatusLabel(campaign.status)}</span>
+                  <span className={`w-fit rounded-full border px-2.5 py-1 text-xs font-medium ${campaignStatusTone(campaign.status)}`}>{campaignStatusLabel(campaign.status, copy.statuses)}</span>
                 </div>
                 <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4" aria-label={`Suivi de la campagne ${campaign.title}`}>
                   <div className="rounded-lg bg-emerald-500/10 p-3 text-sm"><span className="flex items-center gap-1.5 text-emerald-700 dark:text-emerald-300"><CheckCircle2 className="h-4 w-4" /> Distribués</span><p className="mt-1 font-semibold text-foreground">{delivered} <span className="text-xs font-normal text-muted-foreground">/ {total}</span></p></div>
