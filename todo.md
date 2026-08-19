@@ -2189,7 +2189,7 @@
 - [x] Mettre en œuvre un cycle asynchrone durable d’analyse CV : file persistante, statuts en attente/extraction/analyse/à revoir/échec, tentatives plafonnées et reprises exponentielles
 - [x] Conserver le texte extrait, le modèle effectivement utilisé, la version de prompt et les métadonnées techniques de chaque analyse de CV
 - [x] Conserver les CV après expiration et notifier l’administrateur pour revue ; aucune suppression automatique, une suppression éventuelle reste exclusivement manuelle au titre d’une demande RGPD explicite
-- [ ] Ajouter une vraie table Drizzle, des migrations et un dashboard administrateur pour les briefs Employeurs
+- [x] Exploiter les tables Drizzle `client_briefs` et `client_brief_candidates` avec le tableau de bord administrateur, le matching explicable et l’association mission–candidats
 - [x] Exposer disponibilité, mobilité et certifications dans la fiche candidat et les filtres de matching
 - [x] Remplacer le matching en mémoire par un filtrage et une pagination robustes côté base de données
 - [ ] Ajouter une vérification antivirale, une validation de contenu et une quarantaine des fichiers avant analyse

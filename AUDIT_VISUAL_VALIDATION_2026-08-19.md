@@ -85,3 +85,7 @@ Le traitement des CV s’appuie sur une file persistante avec un statut de job d
 ## Traçabilité reproductible des analyses
 
 Le dossier candidat conserve désormais le texte extrait séparément, le modèle réellement retenu par la chaîne de repli, la version de prompt, la méthode d’extraction, le nombre de pages, le modèle et la confiance OCR ainsi que les avertissements d’extraction. Cette trace permet de comprendre et de rejouer le contexte d’une analyse sans conserver un second fichier CV. La migration ajoutant `extracted_text` est additive et vérifiée sur la base déployée ; un test de contrat protège la persistance de ces éléments.
+
+## Briefs Employeurs et associations mission–candidats
+
+Le module comporte une table Drizzle `client_briefs` pour les missions employeurs et une table `client_brief_candidates` pour les associations candidates. Le tableau de bord administratif permet de consulter les briefs, de faire évoluer leur statut, de calculer un matching explicable à partir de la spécialité, des certifications, des langues, de la mobilité, de la disponibilité et du score IA, puis d’associer une candidature avec un statut de revue ou de shortlist. L’accès à ces procédures est réservé à l’administration.
