@@ -197,6 +197,7 @@
 - [ ] Ajouter une prévisualisation graphique de facture dans l’espace client
 - [x] Ajouter des illustrations originales sans texte pour les services et les étapes de réservation
 - [x] Ajouter une non-régression confirmant que les illustrations Services et Réservation restent décoratives et correctement intégrées
+- [ ] Exécuter de façon autonome les améliorations restantes réalisables et documenter sans blocage les contrôles nécessitant un appareil ou un service externe
 - [ ] Vérifier les droits sur les photographies, logos, illustrations et visuels externes
 - [ ] Mettre en place une revue graphique trimestrielle et une checklist avant publication
 - [ ] Centraliser les libellés d’interface afin d’éviter les chaînes de texte hardcodées
@@ -206,7 +207,8 @@
 - [x] Ajouter une version imprimable et accessible des pages légales, RGPD et FAQ
 - [ ] Vérifier le rendu sur Chrome, Safari et Firefox
 - [x] Vérifier la coexistence du bandeau cookies, du bouton WhatsApp et de la navigation mobile
-- [ ] Vérifier que les visuels médicaux ne suggèrent aucune promesse thérapeutique non étayée
+- [ ] Auditer fichier par fichier tous les visuels médicaux actifs sur les parcours publics et ventures afin de confirmer l’absence de promesse thérapeutique
+- [ ] Construire un inventaire asset par asset des visuels médicaux publics et vérifier localement leurs contextes adjacents par test
 - [ ] Vérifier que les contenus longs en allemand et chinois ne débordent pas des composants
 - [x] Vérifier l’alignement des titres, CTA et formulaires sur desktop, tablette et mobile
 - [ ] Ajouter une procédure de revue UX basée sur les retours utilisateurs réels

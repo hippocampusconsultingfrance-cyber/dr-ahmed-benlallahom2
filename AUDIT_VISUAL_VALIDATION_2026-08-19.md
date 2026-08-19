@@ -149,3 +149,17 @@ L’espace Vivier reprend maintenant la langue active pour ses six filtres méti
 Deux illustrations sans texte ont été intégrées comme éléments décoratifs, donc masquées aux lecteurs d’écran : une composition médicale abstraite pour les Services et un parcours lumineux pour la colonne de consultation. La réservation a été vérifiée en bureau ; l’illustration reste contenue dans sa colonne et ne concurrence pas le formulaire ni les informations de sécurité.
 
 Le contrôle mobile confirme que le formulaire conserve la priorité de lecture et d’action. La carte de consultation, avec son illustration décorative, se place ensuite dans le flux sans débordement ni recouvrement des champs, du bouton de paiement ou de l’avertissement d’urgence.
+
+Les illustrations médicales ajoutées sont abstraites, sans texte et utilisées uniquement comme éléments décoratifs. Leur intégration ne revendique ni guérison, ni résultat thérapeutique, ni performance médicale garantie.
+
+### Inventaire et contrôle des visuels médicaux actifs
+
+| Asset | Emplacement | Constat |
+|---|---|---|
+| `services-medical-compass_333540df.jpg` | Section Services | Composition abstraite associant stéthoscope, repère graphique et tracé cardiaque, sans texte ni acte de soin ; employée comme décor et masquée aux lecteurs d’écran. |
+| `booking-care-path_b41c3403.jpg` | Colonne de consultation de la réservation | Illustration abstraite de parcours, confidentialité et identité vérifiée ; elle ne représente pas un traitement, une guérison ou un résultat médical. |
+| Logos et portraits de ventures | Pages Ventures | Éléments d’identité de marque ou portraits présentés avec leur contexte professionnel ; ils ne servent pas à exprimer une promesse thérapeutique. |
+
+Un test de non-régression inventorie les deux illustrations générées, confirme leur usage décoratif et exclut les formulations de promesse thérapeutique dans leurs composants adjacents.
+
+L’inventaire de non-régression couvre également, asset par asset, les trois visuels de parcours, le logo de marque, les quatre logos de ventures et les onze portraits affichés dans les données Ventures. Chaque référence est liée explicitement à son ou ses fichiers source et soumise au même contrôle local de vocabulaire de promesse thérapeutique.
