@@ -447,3 +447,6 @@ La première intégration du fallback localisé l’avait placé avant le provid
 
 ## État de chargement global multilingue — 19 août 2026
 Le chargement différé des routes traduit maintenant son titre et son descriptif dans les quatre langues prises en charge. Le statut reste annoncé aux technologies d’assistance pendant le chargement des pages, tout en conservant l’identité ABL / Hippocampus. La suite complète compte 211 tests réussis, 2 explicitement ignorés, avec un build de production valide.
+
+## Page introuvable non indexable — 19 août 2026
+La page 404 publique reste localisée, mais indique maintenant explicitement aux moteurs de recherche de ne pas l’indexer. Un test dédié protège cette métadonnée contre une régression future. La suite complète compte 212 tests réussis, 2 explicitement ignorés, avec un build de production valide.
