@@ -17,6 +17,7 @@ const copy = {
     p2Title: "Missions VVIP & Offshore",
     p2Desc: "Interventions d’urgence et de soutien médical hautement spécialisé pour plateformes pétrolières, sociétés offshore et grands groupes industriels au Moyen-Orient et à l’international.",
     p2Cta: "Accéder au parcours VVIP & Offshore",
+    p2Badge: "Élite & sécurisé",
     badge1: "Réseau mondial certifié",
     badge2: "Revue humaine & IA éthique",
     badge3: "Conformité RGPD stricte",
@@ -34,6 +35,7 @@ const copy = {
     p2Title: "VVIP & Offshore Missions",
     p2Desc: "High-acuity emergency and medical support assignments for oil rigs, offshore companies, and major industrial corporations.",
     p2Cta: "Access VVIP & Offshore Pathway",
+    p2Badge: "Elite & secure",
     badge1: "Certified Global Network",
     badge2: "Human Review & Ethical AI",
     badge3: "Strict GDPR Compliance",
@@ -51,6 +53,7 @@ const copy = {
     p2Title: "VVIP- & Offshore-Missionen",
     p2Desc: "Spezialisierte Notfall- und medizinische Betreuung für Bohrinseln, Offshore-Unternehmen und große Industriekonzerne.",
     p2Cta: "Zum VVIP- & Offshore-Pfad",
+    p2Badge: "Exklusiv & sicher",
     badge1: "Zertifiziertes globales Netzwerk",
     badge2: "Menschliche Prüfung & ethische KI",
     badge3: "Strikte DSGVO-Konformität",
@@ -68,6 +71,7 @@ const copy = {
     p2Title: "VVIP 与离岸任务派驻",
     p2Desc: "面向中东海上钻井平台、离岸企业及大型工业企业的急救与专项医疗保障任务。",
     p2Cta: "进入 VVIP 与离岸通道",
+    p2Badge: "高端且安全",
     badge1: "认证全球网络",
     badge2: "人工审核与伦理AI",
     badge3: "严格合规保障",
@@ -122,7 +126,7 @@ export default function RecruitmentHubPage() {
             {/* VVIP & Offshore Pathway */}
             <div className="editorial-card p-8 flex flex-col justify-between border border-border/80 hover:border-primary/50 transition-all group relative overflow-hidden">
               <div className="absolute top-0 right-0 bg-primary/10 text-primary px-4 py-1.5 text-[10px] font-mono tracking-widest uppercase rounded-bl-xl font-bold">
-                Élite & Sécurisé
+                {t.p2Badge}
               </div>
               <div>
                 <div className="w-12 h-12 rounded-xl bg-primary/15 text-primary flex items-center mb-6">

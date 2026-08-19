@@ -2376,4 +2376,5 @@
 - [x] Vérifier la stabilité des routes publiques et privées essentielles après l’incident de disponibilité
 - [x] Retirer toute référence aux résidences de prestige du parcours VVIP et Offshore
 - [x] Ajouter une reprise administrée et traçable des analyses IA indisponibles des documents candidats
+- [x] Localiser le badge VVIP du hub recrutement dans les quatre langues prises en charge
 - [x] Remplacer l’affichage système mm/dd/yyyy du champ de réservation par une saisie explicitement localisée en français
