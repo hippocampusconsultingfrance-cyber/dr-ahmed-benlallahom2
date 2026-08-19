@@ -89,3 +89,7 @@ Le dossier candidat conserve désormais le texte extrait séparément, le modèl
 ## Briefs Employeurs et associations mission–candidats
 
 Le module comporte une table Drizzle `client_briefs` pour les missions employeurs et une table `client_brief_candidates` pour les associations candidates. Le tableau de bord administratif permet de consulter les briefs, de faire évoluer leur statut, de calculer un matching explicable à partir de la spécialité, des certifications, des langues, de la mobilité, de la disponibilité et du score IA, puis d’associer une candidature avec un statut de revue ou de shortlist. L’accès à ces procédures est réservé à l’administration.
+
+## Concurrence de la file d’analyse CV
+
+Chaque worker réclame désormais un job par une mise à jour conditionnelle des seuls états `queued` ou `retry`. Le traitement externe ne démarre que si la base confirme qu’une ligne a réellement été revendiquée. Une seconde exécution concurrente observe donc zéro ligne modifiée et ignore le job, ce qui évite une double extraction ou une double analyse du même CV. Ce comportement est couvert par un test déterministe.

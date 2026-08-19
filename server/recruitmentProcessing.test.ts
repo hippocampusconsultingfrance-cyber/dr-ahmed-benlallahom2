@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { analysisCompletionStatus, executeCvExternalPipeline, extractionMethodFor, retryDelayMs } from "./recruitmentProcessing";
+import { analysisCompletionStatus, didClaimProcessingJob, executeCvExternalPipeline, extractionMethodFor, retryDelayMs } from "./recruitmentProcessing";
 
 const checksum = "a".repeat(64);
 const input = {
@@ -59,6 +59,13 @@ describe("règles déterministes du pipeline de traitement CV", () => {
     expect(retryDelayMs(1)).toBe(60_000);
     expect(retryDelayMs(2)).toBe(120_000);
     expect(retryDelayMs(10)).toBe(3_600_000);
+  });
+
+  it("ne traite que le job effectivement revendiqué par la mise à jour conditionnelle", () => {
+    expect(didClaimProcessingJob([{ affectedRows: 1 }])).toBe(true);
+    expect(didClaimProcessingJob([{ affectedRows: 0 }])).toBe(false);
+    expect(didClaimProcessingJob({ affectedRows: 0 })).toBe(false);
+    expect(didClaimProcessingJob(undefined)).toBe(false);
   });
 
   it("termine une analyse propre et impose une revue humaine en cas d’incertitude", () => {

@@ -80,6 +80,13 @@ export function retryDelayMs(attempt: number) {
   return Math.min(60 * 60 * 1000, 60_000 * 2 ** Math.max(0, attempt - 1));
 }
 
+/** Accept only the worker whose conditional status update actually claimed the row. */
+export function didClaimProcessingJob(result: unknown): boolean {
+  const header = Array.isArray(result) ? result[0] : result;
+  if (!header || typeof header !== "object" || !("affectedRows" in header)) return false;
+  return typeof header.affectedRows === "number" && header.affectedRows === 1;
+}
+
 export function extractionMethodFor(mimeType: string) {
   if (mimeType === "application/pdf") return "pdf_text_or_vision";
   if (mimeType === "application/msword") return "doc";
@@ -212,7 +219,7 @@ export async function processDueCvAnalysisJobs(limit = PROCESSING_BATCH_SIZE) {
   const results: Array<Record<string, unknown>> = [];
   for (const candidate of candidates) {
     const startedAt = new Date();
-    await db.update(cvProcessingJobs).set({
+    const claimResult = await db.update(cvProcessingJobs).set({
       status: "running",
       attempts: candidate.attempts + 1,
       startedAt,
@@ -221,6 +228,7 @@ export async function processDueCvAnalysisJobs(limit = PROCESSING_BATCH_SIZE) {
       eq(cvProcessingJobs.id, candidate.id),
       inArray(cvProcessingJobs.status, ["queued", "retry"]),
     ));
+    if (!didClaimProcessingJob(claimResult)) continue;
     results.push(await processCvAnalysisJob(candidate.id));
   }
   return { processed: results.length, results };
