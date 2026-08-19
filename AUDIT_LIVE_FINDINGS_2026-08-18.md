@@ -373,3 +373,6 @@ L’administration peut désormais exporter une sélection explicite du vivier d
 
 ## Relances manuelles J+7 et J+14 — 19 août 2026
 Les échéances de relance générées après une campagne sont visibles dans la fiche candidat 360°. L’administrateur peut les marquer comme traitées ou les ignorer ; ces actions sont journalisées. Le panneau rappelle explicitement qu’aucun email ne part automatiquement : une prise de contact doit être décidée séparément depuis les outils de recrutement.
+
+## Cloisonnement des accès candidat — 19 août 2026
+Un contrat de non-régression vérifie que les sessions affichées ou révoquées sont systématiquement filtrées par l’identité du candidat connecté. Il vérifie également que la liste et le téléchargement de documents exigent cette même identité. Ce contrôle complète les tests d’intégration du portail couvrant mots de passe, jetons, anti-bot et chiffrement documentaire. La suite complète compte 193 tests réussis, 2 explicitement ignorés, avec un build de production valide.
