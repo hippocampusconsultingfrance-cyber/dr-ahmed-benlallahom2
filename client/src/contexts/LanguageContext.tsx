@@ -4,8 +4,9 @@ import { contentEn } from "@/data/content-en";
 import { contentDe } from "@/data/content-de";
 import { contentZh } from "@/data/content-zh";
 import { siteConfig } from "@/data/site-config";
+import { getNextLanguage, readLanguagePreference, type UserLanguage } from "./userPreferences";
 
-type Language = "fr" | "en" | "de" | "zh";
+type Language = UserLanguage;
 type Content = typeof contentFr;
 
 interface LanguageContextType {
@@ -19,12 +20,9 @@ const LanguageContext = createContext<LanguageContextType | undefined>(undefined
 export function LanguageProvider({ children }: { children: ReactNode }) {
   const [language, setLanguage] = useState<Language>(() => {
     if (typeof window !== "undefined") {
-      const saved = localStorage.getItem("language");
-      if (saved === "fr" || saved === "en" || saved === "de" || saved === "zh") {
-        return saved;
-      }
+      return readLanguagePreference(localStorage.getItem("language"), siteConfig.defaultLanguage as Language);
     }
-    return siteConfig.defaultLanguage;
+    return siteConfig.defaultLanguage as Language;
   });
 
   // Persister la langue et synchroniser les métadonnées documentaires pour le SEO et l’accessibilité
@@ -35,10 +33,7 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
 
   const toggleLanguage = useCallback(() => {
     setLanguage((prev) => {
-      const languages: Language[] = ["fr", "en", "de", "zh"];
-      const currentIndex = languages.indexOf(prev);
-      const nextIndex = (currentIndex + 1) % languages.length;
-      const nextLang = languages[nextIndex];
+      const nextLang = getNextLanguage(prev);
       localStorage.setItem("language", nextLang);
       return nextLang;
     });

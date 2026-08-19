@@ -228,7 +228,7 @@
 - [ ] Préparer un kit de marque exportable pour les documents et réseaux sociaux
 - [ ] Mettre en place une validation graphique avant chaque checkpoint
 - [ ] Ajouter une documentation d’utilisation des composants pour les futures évolutions
-- [ ] Ajouter des tests de non-régression pour le changement de langue et de thème
+- [x] Ajouter des tests de non-régression pour le changement de langue et de thème
 - [ ] Ajouter des tests de longueur de traduction pour les boutons et titres
 - [ ] Ajouter un mode sans animation pour les connexions lentes et préférences utilisateur
 - [ ] Ajouter un mode sombre optimisé pour les écrans OLED

@@ -1,7 +1,8 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { HIGH_READABILITY_STORAGE_KEY, readHighReadabilityPreference } from "./readabilityPreference";
+import { readThemePreference, type UserTheme } from "./userPreferences";
 
-type Theme = "light" | "dark";
+type Theme = UserTheme;
 
 interface ThemeContextType {
   theme: Theme;
@@ -26,8 +27,7 @@ export function ThemeProvider({
 }: ThemeProviderProps) {
   const [theme, setTheme] = useState<Theme>(() => {
     if (switchable) {
-      const stored = localStorage.getItem("theme");
-      return (stored as Theme) || defaultTheme;
+      return readThemePreference(localStorage.getItem("theme"), defaultTheme);
     }
     return defaultTheme;
   });

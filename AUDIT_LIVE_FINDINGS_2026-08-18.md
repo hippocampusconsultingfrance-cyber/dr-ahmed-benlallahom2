@@ -223,3 +223,7 @@ La navigation propose maintenant un contrôle de lisibilité renforcée, mémori
 ## Chargement conditionnel de l’analytique — 19 août 2026
 
 Le script Umami n’est plus présent statiquement dans le document HTML. Il est ajouté au document uniquement après l’enregistrement d’un consentement de performance explicite, puis retiré si cette préférence est désactivée. Sans consentement, avec une valeur locale invalide ou avec le seul consentement essentiel, le chargeur reste inactif. Les tests unitaires couvrent les trois états et la compilation de production confirme l’absence de référence Umami dans le HTML généré.
+
+## Préférences de langue et de thème — 19 août 2026
+
+Les préférences de langue, thème et lisibilité s’appuient désormais sur des lecteurs normalisés qui rejettent les valeurs inattendues du stockage local. La suite de non-régression vérifie le cycle complet FR → EN → DE → ZH → FR, le repli sur la langue par défaut et l’acceptation exclusive des thèmes clair ou sombre. Cette logique limite les régressions d’interface dues à une donnée locale obsolète ou modifiée.
