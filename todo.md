@@ -2448,3 +2448,4 @@
 - [x] Réaliser une validation finale des parcours critiques publiés, des tests automatisés et des ressources SEO
 - [x] Retirer l’onglet et les contrôles administratifs Blog désormais inactifs afin d’aligner l’administration sur le retrait de la section Actualités
 - [x] Supprimer le rendu dupliqué des cartes de documents dans la revue administrative du coffre candidat
+- [x] Localiser les libellés et retours de la revue administrative des documents candidats dans les quatre langues actives

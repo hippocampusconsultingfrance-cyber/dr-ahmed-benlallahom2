@@ -137,3 +137,5 @@ Après la publication des derniers lots, les routes Employeurs, VVIP & Offshore 
 ## Revue administrative des documents candidats
 
 La liste de documents du coffre candidat contenait deux rendus successifs de la même collection, ce qui pouvait doubler chaque carte affichée. Le composant a été remis en forme avec un unique parcours de données, sans modifier les actions de revue, téléchargement ou réanalyse. Un test de non-régression vérifie que chaque document n’est produit qu’une seule fois par le rendu.
+
+La revue administrative est désormais également localisée en français, anglais, allemand et chinois : filtres, catégories, statuts, actions, retours de succès, synthèse IA et notes de revue utilisent la langue active. Les messages d’erreur détaillés restent visibles uniquement pour l’administration authentifiée, afin de faciliter le diagnostic sans exposer ces détails dans les parcours publics.
