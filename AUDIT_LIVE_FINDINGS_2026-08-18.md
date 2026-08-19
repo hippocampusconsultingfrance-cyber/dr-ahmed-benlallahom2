@@ -399,3 +399,6 @@ Le formulaire public de brief fournit un accusé de réception multilingue avec 
 
 ## Mesure du bundle client — 19 août 2026
 Le build conserve déjà un découpage par route : tableau de bord, réservations, recrutement, espace candidat, FAQ et autres parcours publics sont générés en artefacts distincts. L’artefact partagé initial représente 470,9 kB non compressé, soit 147,5 kB gzip lors du dernier build ; les pages les plus lourdes restent différées, dont le tableau de bord à 189,3 kB. Aucun découpage manuel supplémentaire n’a été appliqué : une tentative antérieure créait un cycle React/Radix empêchant le rendu. La stratégie actuelle privilégie donc la stabilité tout en conservant le chargement différé des pages.
+
+## Navigation mobile compacte — 19 août 2026
+La page d’accueil a été contrôlée à 375 px de large avec les préférences d’affichage et le bandeau de consentement visibles. Le sélecteur de langue, les contrôles de thème et d’accessibilité, la recherche et le menu mobile restent espacés et accessibles ; aucun chevauchement ni élément tronqué n’a été observé. Le bandeau de consentement conserve ses trois actions lisibles dans le flux inférieur sans interférer avec la navigation haute.
