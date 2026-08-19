@@ -2450,3 +2450,4 @@
 - [x] Supprimer le rendu dupliqué des cartes de documents dans la revue administrative du coffre candidat
 - [x] Localiser les libellés et retours de la revue administrative des documents candidats dans les quatre langues actives
 - [x] Localiser les filtres, états et actions de l’espace Vivier administratif dans les quatre langues actives
+- [ ] Localiser les filtres, contrôles de campagne et historique de l’espace Mailing administratif dans les quatre langues actives
