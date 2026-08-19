@@ -1333,7 +1333,7 @@ export const appRouter = router({
         }
         const conditions = [sql`${cvApplications.status} NOT IN ('rejected', 'archived')`];
         if (candidateIds.length) conditions.push(inArray(cvApplications.id, candidateIds));
-        if (input.type === "pool" && !candidateIds.length) {
+        if (input.type === "pool") {
           conditions.push(eq(cvApplications.marketingConsent, 1), isNull(cvApplications.marketingUnsubscribedAt), isNull(cvApplications.marketingSuppressedAt));
         }
         const rows = await db.select({ id: cvApplications.id, firstName: cvApplications.firstName, lastName: cvApplications.lastName, email: cvApplications.email, phone: cvApplications.phone, specialty: cvApplications.specialty, targetCountries: cvApplications.targetCountries, languages: cvApplications.languages, yearsExperience: cvApplications.yearsExperience, availability: cvApplications.availability, mobility: cvApplications.mobility, certifications: cvApplications.certifications, aiScore: cvApplications.aiScore, status: cvApplications.status }).from(cvApplications).where(and(...conditions)).orderBy(desc(cvApplications.aiScore), desc(cvApplications.createdAt)).limit(200);

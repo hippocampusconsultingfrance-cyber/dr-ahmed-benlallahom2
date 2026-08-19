@@ -1,10 +1,11 @@
 import { useMemo, useState } from "react";
-import { BriefcaseBusiness, CheckCircle2, ChevronRight, UsersRound } from "lucide-react";
+import { BriefcaseBusiness, CheckCircle2, ChevronRight, Download, Loader2, UsersRound } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { trpc } from "@/lib/trpc";
 import { getPositiveMatchBreakdown } from "./matchBreakdown";
-import PublicContentSkeleton from "@/components/PublicContentSkeleton";
+import PublicContentSkeleton from "./PublicContentSkeleton";
+import { downloadRecruitmentCsv } from "./recruitmentCsvDownload";
 
 const statusLabels: Record<string, string> = {
   new: "Nouveau brief",
@@ -37,6 +38,13 @@ export default function EmployerBriefsTab() {
       if (selectedBriefId) utils.admin.clientBriefs.candidates.invalidate(matchesInput);
     },
     onError: error => toast.error(error.message),
+  });
+  const exportShortlist = trpc.admin.recruitment.exportCsv.useMutation({
+    onSuccess: result => {
+      downloadRecruitmentCsv(result);
+      toast.success(`${result.count} profil${result.count > 1 ? "s" : ""} de shortlist exporté${result.count > 1 ? "s" : ""}. L’export est journalisé.`);
+    },
+    onError: exportError => toast.error(exportError.message),
   });
   const activeBrief = matches.data?.brief ?? null;
 
@@ -79,7 +87,7 @@ export default function EmployerBriefsTab() {
         {!selectedBriefId && <div className="flex min-h-72 flex-col items-center justify-center text-center"><UsersRound className="mb-3 h-8 w-8 text-primary" /><h2 className="font-semibold text-foreground">Shortlist assistée</h2><p className="mt-2 max-w-sm text-sm text-muted-foreground">Sélectionnez un brief pour consulter les correspondances basées exclusivement sur la spécialité, la mobilité et les certifications déclarées.</p></div>}
         {selectedBriefId && matches.isLoading && <PublicContentSkeleton cards={2} columns={2} label="Calcul des correspondances candidats" />}
         {matches.data && activeBrief && <>
-          <div className="mb-5 border-b border-border pb-4"><p className="text-sm text-primary">{activeBrief.briefId}</p><h2 className="text-xl font-semibold text-foreground">{activeBrief.specialtyNeeded} — {activeBrief.country}</h2><p className="mt-1 text-sm text-muted-foreground">Les scores sont une aide à la revue humaine, pas une décision automatisée.</p></div>
+          <div className="mb-5 flex flex-col gap-3 border-b border-border pb-4 sm:flex-row sm:items-start sm:justify-between"><div><p className="text-sm text-primary">{activeBrief.briefId}</p><h2 className="text-xl font-semibold text-foreground">{activeBrief.specialtyNeeded} — {activeBrief.country}</h2><p className="mt-1 text-sm text-muted-foreground">Les scores sont une aide à la revue humaine, pas une décision automatisée.</p></div><Button size="sm" variant="outline" disabled={exportShortlist.isPending} onClick={() => exportShortlist.mutate({ type: "shortlist", briefId: activeBrief.id })}>{exportShortlist.isPending ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Download className="mr-1.5 h-3.5 w-3.5" />}Exporter la shortlist</Button></div>
           <div className="space-y-3">
             {matches.data.candidates.map(candidate => (
               <article key={candidate.id} className="rounded-lg border border-border bg-background p-4">

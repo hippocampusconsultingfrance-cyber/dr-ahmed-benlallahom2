@@ -1,9 +1,10 @@
 import { useMemo, useState } from "react";
-import { CheckSquare, Loader2, Mail, RefreshCw, UsersRound } from "lucide-react";
+import { CheckSquare, Download, Loader2, Mail, RefreshCw, UsersRound } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { trpc } from "@/lib/trpc";
 import PublicContentSkeleton from "./PublicContentSkeleton";
+import { downloadRecruitmentCsv } from "./recruitmentCsvDownload";
 
 type VivierTabProps = {
   onCompose: (candidateIds: number[]) => void;
@@ -44,6 +45,13 @@ export default function VivierTab({ onCompose }: VivierTabProps) {
     limit: 200,
   }), [specialty, country, availability, mobility, certification, minimumScore]);
   const { data: candidates, isLoading, error, refetch } = trpc.admin.recruitment.pool.list.useQuery(filters);
+  const exportCsv = trpc.admin.recruitment.exportCsv.useMutation({
+    onSuccess: result => {
+      downloadRecruitmentCsv(result);
+      toast.success(`${result.count} profil${result.count > 1 ? "s" : ""} exporté${result.count > 1 ? "s" : ""}. L’export est journalisé.`);
+    },
+    onError: exportError => toast.error(exportError.message),
+  });
   const visibleIds = candidates?.map(candidate => candidate.id) || [];
   const allVisibleSelected = visibleIds.length > 0 && visibleIds.every(id => selectedIds.includes(id));
 
@@ -66,6 +74,14 @@ export default function VivierTab({ onCompose }: VivierTabProps) {
     onCompose(selectedIds);
   };
 
+  const exportSelected = () => {
+    if (!selectedIds.length) {
+      toast.error("Sélectionnez les profils à exporter afin de limiter l’export aux données nécessaires.");
+      return;
+    }
+    exportCsv.mutate({ type: "pool", candidateIds: selectedIds });
+  };
+
   if (error) return <div className="py-10 text-center text-destructive">Erreur de chargement du vivier : {error.message}</div>;
 
   return (
@@ -82,6 +98,10 @@ export default function VivierTab({ onCompose }: VivierTabProps) {
           </Button>
           <Button onClick={composeSelected} disabled={!selectedIds.length}>
             <Mail className="mr-2 h-4 w-4" /> Composer pour {selectedIds.length || "…"} profil{selectedIds.length > 1 ? "s" : ""}
+          </Button>
+          <Button variant="outline" onClick={exportSelected} disabled={!selectedIds.length || exportCsv.isPending}>
+            {exportCsv.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
+            Exporter la sélection
           </Button>
         </div>
       </div>
