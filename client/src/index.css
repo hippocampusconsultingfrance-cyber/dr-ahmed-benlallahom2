@@ -779,6 +779,29 @@ body {
   }
 }
 
+html.data-saver {
+  scroll-behavior: auto;
+}
+
+html.data-saver *,
+html.data-saver *::before,
+html.data-saver *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+  scroll-behavior: auto !important;
+}
+
+html.data-saver .fade-in-up,
+html.data-saver .parallax-subtle,
+html.data-saver .card-glow:hover,
+html.data-saver .hover-lift:hover,
+html.data-saver .cta-primary:hover,
+html.data-saver .cta-secondary:hover {
+  opacity: 1;
+  transform: none;
+}
+
 .about-section,
 .experience-section,
 .education-section,

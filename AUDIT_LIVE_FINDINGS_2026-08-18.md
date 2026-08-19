@@ -235,3 +235,7 @@ Les libellés critiques de navigation et l’appel à l’action de réservation
 ## Navigation clavier — 19 août 2026
 
 Le sélecteur de langue dirige le focus vers son premier choix lors de l’ouverture ; les flèches, Accueil et Fin déplacent le focus dans les quatre langues. La touche Échap ferme le sélecteur ou le menu mobile et restitue le focus au contrôle qui l’a ouvert. Les comportements de déplacement et de fermeture sont isolés dans un test unitaire dédié.
+
+## Sobriété de mouvement en économie de données — 19 août 2026
+
+Lorsque le navigateur expose une préférence `saveData`, la page applique la classe `data-saver` et neutralise les animations, transitions, parallax et décalages décoratifs. La préférence est réévaluée lorsque la connexion évolue et n’interfère pas avec les navigateurs qui ne proposent pas cette information. Le comportement est couvert par un test unitaire ; les règles système `prefers-reduced-motion` restent inchangées et complémentaires.

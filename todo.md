@@ -231,6 +231,7 @@
 - [x] Ajouter des tests de non-régression pour le changement de langue et de thème
 - [x] Ajouter des tests de longueur de traduction pour les boutons et titres critiques de navigation
 - [x] Renforcer le clavier du sélecteur de langue et du menu mobile avec fermeture Échap et gestion du focus
+- [x] Réduire les animations décoratives lorsque le navigateur signale une connexion en économie de données
 - [ ] Ajouter un mode sans animation pour les connexions lentes et préférences utilisateur
 - [ ] Ajouter un mode sombre optimisé pour les écrans OLED
 - [ ] Vérifier les performances après ajout d’animations ou d’images
