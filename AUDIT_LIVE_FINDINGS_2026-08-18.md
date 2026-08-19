@@ -108,3 +108,12 @@ Les constatations ci-dessous proviennent des captures du serveur de prévisualis
 | Positionnement métier | Les formulations restent limitées aux plateformes pétrolières, entreprises offshore et grands groupes industriels. | Aucune référence aux résidences de prestige ne subsiste dans le hub recrutement. |
 
 > Cette correction éditoriale ne modifie ni les champs de candidature, ni l’analyse IA, ni la logique de traitement des profils.
+
+## Accessibilité des images publiques — 19 août 2026
+
+| Contrôle | Résultat |
+|---|---|
+| Images de contenu | Les images publiques de présentation, de services, de consultation, de navigation et de blog disposent d’alternatives descriptives. |
+| Visuels décoratifs | Le visuel décoratif du formulaire RGPD conserve volontairement une alternative vide afin de ne pas ajouter de bruit aux lecteurs d’écran. |
+
+> Aucun texte alternatif manquant n’a été relevé dans les composants publics examinés.
