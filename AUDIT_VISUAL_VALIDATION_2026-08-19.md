@@ -112,6 +112,10 @@ Les onglets racine restants du tableau de bord ont aussi été recensés. Les R�
 
 Le titre de repli affiché par le panneau d’erreur administratif partagé est désormais défini en français, anglais, allemand et chinois. Les descriptions d’erreur restent fournies par l’onglet appelant et ne sont pas exposées dans les parcours publics. Une non-régression vérifie les quatre variantes du titre.
 
+## Navigation administrative localisée
+
+L’en-tête du tableau de bord et ses douze onglets racine sont maintenant alimentés par une copie partagée en français, anglais, allemand et chinois. Le sélecteur mobile, son nom accessible et l’intitulé de la section active réemploient les mêmes libellés afin d’éviter une divergence entre bureau, mobile et lecteur d’écran. Une non-régression contrôle la présence des douze intitulés pour chaque langue.
+
 ## Disponibilité de production
 
 Le 19 août 2026, les routes publiques `/`, `/booking`, `/gdpr`, `/faq`, `/search`, `/error`, `/maintenance`, `/recruitment`, `/employers` et `/why-hippocampus` ont toutes répondu en HTTP 200 sur le domaine principal. L’accès `www.drahmedbenlallahom.com` redirige correctement vers `drahmedbenlallahom.com` et sert ensuite la page d’accueil en HTTP 200. Aucun écart de disponibilité n’a été observé sur cet échantillon.

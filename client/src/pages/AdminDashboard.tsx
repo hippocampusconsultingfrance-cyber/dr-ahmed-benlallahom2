@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Calendar, MessageSquare, Shield, DollarSign, Eye, CheckCircle, XCircle, Clock, ArrowLeft, Star, Trash2, FileText, CalendarDays, Plus, Edit, Trash, Globe, UserRound, BriefcaseBusiness, Send, UsersRound } from "lucide-react";
 import { toast } from "sonner";
 import { useLocation } from "wouter";
+import { useLanguage } from "@/contexts/LanguageContext";
 import RecruitmentTab from "@/components/RecruitmentTab";
 import EmployerBriefsTab from "@/components/EmployerBriefsTab";
 import VivierTab from "@/components/VivierTab";
@@ -21,8 +22,17 @@ import { buildAppointmentsAgenda } from "./appointmentsAgenda";
 
 type Tab = "overview" | "appointments" | "contacts" | "gdpr" | "testimonials" | "availability" | "recruitment" | "candidateDocuments" | "security" | "vivier" | "mailing" | "employerBriefs";
 
+export const adminShellCopy = {
+  fr: { title: "Administration", site: "Site", section: "Section d’administration", tabs: { overview: "Vue d’ensemble", appointments: "Réservations", contacts: "Messages", gdpr: "RGPD", testimonials: "Témoignages", availability: "Disponibilités", recruitment: "Candidatures", candidateDocuments: "Documents candidats", security: "Sécurité", vivier: "Vivier", mailing: "Mailing", employerBriefs: "Missions" } },
+  en: { title: "Administration", site: "Website", section: "Administration section", tabs: { overview: "Overview", appointments: "Appointments", contacts: "Messages", gdpr: "GDPR", testimonials: "Testimonials", availability: "Availability", recruitment: "Applications", candidateDocuments: "Candidate documents", security: "Security", vivier: "Talent pool", mailing: "Mailing", employerBriefs: "Missions" } },
+  de: { title: "Verwaltung", site: "Website", section: "Verwaltungsbereich", tabs: { overview: "Übersicht", appointments: "Termine", contacts: "Nachrichten", gdpr: "DSGVO", testimonials: "Bewertungen", availability: "Verfügbarkeiten", recruitment: "Bewerbungen", candidateDocuments: "Kandidatendokumente", security: "Sicherheit", vivier: "Talentpool", mailing: "Mailing", employerBriefs: "Aufträge" } },
+  zh: { title: "管理后台", site: "网站", section: "管理栏目", tabs: { overview: "概览", appointments: "预约", contacts: "消息", gdpr: "隐私保护", testimonials: "合作伙伴评价", availability: "可用时间", recruitment: "申请", candidateDocuments: "候选人文件", security: "安全", vivier: "人才库", mailing: "邮件活动", employerBriefs: "任务需求" } },
+} as const;
+
 export default function AdminDashboard() {
   const { user, loading, refresh } = useAuth();
+  const { language } = useLanguage();
+  const shell = adminShellCopy[language as keyof typeof adminShellCopy] ?? adminShellCopy.fr;
   const [, setLocation] = useLocation();
   const [activeTab, setActiveTab] = useState<Tab>("overview");
   const [mailingSelectedIds, setMailingSelectedIds] = useState<number[]>([]);
@@ -85,18 +95,18 @@ export default function AdminDashboard() {
   }
 
   const tabs = [
-    { id: "overview" as Tab, label: "Vue d'ensemble", icon: DollarSign },
-    { id: "appointments" as Tab, label: "Réservations", icon: Calendar },
-    { id: "contacts" as Tab, label: "Messages", icon: MessageSquare },
-    { id: "gdpr" as Tab, label: "RGPD", icon: Shield },
-    { id: "testimonials" as Tab, label: "Témoignages", icon: Star },
-    { id: "availability" as Tab, label: "Disponibilités", icon: CalendarDays },
-    { id: "recruitment" as Tab, label: "Candidatures", icon: UserRound },
-    { id: "candidateDocuments" as Tab, label: "Documents candidats", icon: Shield },
-    { id: "security" as Tab, label: "Sécurité", icon: Shield },
-    { id: "vivier" as Tab, label: "Vivier", icon: UsersRound },
-    { id: "mailing" as Tab, label: "Mailing", icon: Send },
-    { id: "employerBriefs" as Tab, label: "Missions", icon: BriefcaseBusiness },
+    { id: "overview" as Tab, label: shell.tabs.overview, icon: DollarSign },
+    { id: "appointments" as Tab, label: shell.tabs.appointments, icon: Calendar },
+    { id: "contacts" as Tab, label: shell.tabs.contacts, icon: MessageSquare },
+    { id: "gdpr" as Tab, label: shell.tabs.gdpr, icon: Shield },
+    { id: "testimonials" as Tab, label: shell.tabs.testimonials, icon: Star },
+    { id: "availability" as Tab, label: shell.tabs.availability, icon: CalendarDays },
+    { id: "recruitment" as Tab, label: shell.tabs.recruitment, icon: UserRound },
+    { id: "candidateDocuments" as Tab, label: shell.tabs.candidateDocuments, icon: Shield },
+    { id: "security" as Tab, label: shell.tabs.security, icon: Shield },
+    { id: "vivier" as Tab, label: shell.tabs.vivier, icon: UsersRound },
+    { id: "mailing" as Tab, label: shell.tabs.mailing, icon: Send },
+    { id: "employerBriefs" as Tab, label: shell.tabs.employerBriefs, icon: BriefcaseBusiness },
   ];
 
   return (
@@ -107,9 +117,9 @@ export default function AdminDashboard() {
           <div className="flex items-center gap-4">
             <Button variant="ghost" size="sm" onClick={() => setLocation("/")}>
               <ArrowLeft className="w-4 h-4 mr-2" />
-              Site
+              {shell.site}
             </Button>
-            <h1 className="text-xl font-bold text-foreground">Administration</h1>
+            <h1 className="text-xl font-bold text-foreground">{shell.title}</h1>
           </div>
           <span className="max-w-full truncate text-sm text-muted-foreground">{user.name}</span>
         </div>
@@ -118,14 +128,14 @@ export default function AdminDashboard() {
       {/* Tabs */}
       <nav className="border-b border-border bg-card/30">
         <div className="max-w-7xl mx-auto px-4">
-          <label className="sr-only" htmlFor="admin-active-tab">Section d’administration</label>
+          <label className="sr-only" htmlFor="admin-active-tab">{shell.section}</label>
           <div className="py-2 sm:hidden">
             <select
               id="admin-active-tab"
               value={activeTab}
               onChange={event => setActiveTab(event.target.value as Tab)}
               className="h-11 w-full rounded-lg border border-border bg-background px-3 text-sm font-medium text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-              aria-label={`Section d’administration : ${getActiveAdminTabLabel(tabs, activeTab)}`}
+              aria-label={`${shell.section} : ${getActiveAdminTabLabel(tabs, activeTab)}`}
             >
               {tabs.map(tab => <option key={tab.id} value={tab.id}>{tab.label}</option>)}
             </select>
