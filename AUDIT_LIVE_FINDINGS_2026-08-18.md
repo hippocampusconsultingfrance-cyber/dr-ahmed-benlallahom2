@@ -417,3 +417,6 @@ La page de confirmation traite désormais explicitement trois états : paiement 
 
 ## Carrousel de témoignages accessible au clavier — 19 août 2026
 Le carrousel de témoignages peut maintenant recevoir le focus et répondre aux flèches gauche et droite, ainsi qu’aux touches Début et Fin. L’autodéfilement se met en pause pendant l’interaction au clavier ou au pointeur, puis reprend lorsque le focus quitte le carrousel. Une consigne invisible localisée décrit ces commandes aux technologies d’assistance. La suite complète compte 202 tests réussis, 2 explicitement ignorés, avec un build de production valide.
+
+## Erreur publique du formulaire Employeurs — 19 août 2026
+Le formulaire public de brief Employeurs utilisait encore le détail brut d’une erreur de réseau ou de serveur dans son message affiché. Il emploie désormais le message générique localisé prévu dans les quatre langues, tandis que le détail reste limité à la console de diagnostic. La suite complète compte 203 tests réussis, 2 explicitement ignorés, avec un build de production valide.

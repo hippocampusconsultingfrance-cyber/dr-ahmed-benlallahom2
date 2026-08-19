@@ -228,8 +228,9 @@ export default function EmployersPage() {
       setBriefId(payload.briefId || "BRIEF-OK");
       setStatus("success");
     } catch (err) {
+      console.error("Employer brief submission error:", err);
       setStatus("error");
-      setErrorMessage(err instanceof Error ? err.message : t.genericError);
+      setErrorMessage(t.genericError);
     }
   }
 

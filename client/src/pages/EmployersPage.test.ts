@@ -35,4 +35,13 @@ describe("libellés critiques de la page Employeurs", () => {
       expect(copy.successPrivacy.length, language).toBeGreaterThan(0);
     }
   });
+
+  it("n’expose pas de détail technique lors d’un échec de dépôt public", async () => {
+    const source = await import("node:fs/promises").then((fs) =>
+      fs.readFile(new URL("./EmployersPage.tsx", import.meta.url), "utf8")
+    );
+
+    expect(source).toContain("setErrorMessage(t.genericError);");
+    expect(source).not.toContain("setErrorMessage(err instanceof Error ? err.message");
+  });
 });
