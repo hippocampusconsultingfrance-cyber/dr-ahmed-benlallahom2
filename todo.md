@@ -2418,4 +2418,5 @@
 - [x] Vérifier et localiser les pages publiques restantes de vérification et de réinitialisation du compte candidat
 - [x] Traduire intégralement l’espace candidat authentifié, ses documents et ses sessions dans les quatre langues prises en charge
 - [x] Localiser le bouton WhatsApp public et son message prérempli dans les quatre langues prises en charge
+- [x] Traduire intégralement la section de contact, ses validations et son accusé de réception dans les quatre langues prises en charge
 - [x] Renforcer robots.txt pour décourager l’exploration des parcours candidats et de désinscription non indexables

@@ -5,8 +5,16 @@ import { Phone, Mail, Linkedin, Send, CheckCircle, Loader2 } from "lucide-react"
 import { useState } from "react";
 import { toast } from "sonner";
 
+export const contactCopy = {
+  fr: { phone: "Téléphone", email: "Email", sent: "Message envoyé avec succès !", sendError: "L’envoi du message a échoué. Veuillez réessayer.", consentRequired: "Veuillez accepter la politique de confidentialité.", successTitle: "Message envoyé !", successDescription: "Merci pour votre message. Je vous répondrai dans les meilleurs délais.", sendAnother: "Envoyer un autre message", sending: "Envoi en cours..." },
+  en: { phone: "Phone", email: "Email", sent: "Message sent successfully!", sendError: "The message could not be sent. Please try again.", consentRequired: "Please accept the privacy policy.", successTitle: "Message sent!", successDescription: "Thank you for your message. I will get back to you as soon as possible.", sendAnother: "Send another message", sending: "Sending..." },
+  de: { phone: "Telefon", email: "E-Mail", sent: "Nachricht erfolgreich gesendet!", sendError: "Die Nachricht konnte nicht gesendet werden. Bitte versuchen Sie es erneut.", consentRequired: "Bitte akzeptieren Sie die Datenschutzerklärung.", successTitle: "Nachricht gesendet!", successDescription: "Vielen Dank für Ihre Nachricht. Ich werde Ihnen schnellstmöglich antworten.", sendAnother: "Weitere Nachricht senden", sending: "Wird gesendet..." },
+  zh: { phone: "电话", email: "电子邮箱", sent: "消息发送成功！", sendError: "无法发送消息，请重试。", consentRequired: "请接受隐私政策。", successTitle: "消息已发送！", successDescription: "感谢您的留言，我会尽快回复您。", sendAnother: "发送另一条消息", sending: "正在发送..." },
+} as const;
+
 export default function ContactSection() {
   const { content, language } = useLanguage();
+  const copy = contactCopy[(language in contactCopy ? language : "fr") as keyof typeof contactCopy];
   const [formData, setFormData] = useState({
     name: "",
     phone: "",
@@ -20,18 +28,10 @@ export default function ContactSection() {
     onSuccess: () => {
       setSubmitted(true);
       setFormData({ name: "", phone: "", email: "", message: "", gdprConsent: false });
-      toast.success(
-        language === "fr"
-          ? "Message envoyé avec succès !"
-          : "Message sent successfully!"
-      );
+      toast.success(copy.sent);
     },
     onError: (error) => {
-      toast.error(
-        language === "fr"
-          ? "Erreur lors de l'envoi. Veuillez réessayer."
-          : "Error sending message. Please try again."
-      );
+      toast.error(copy.sendError);
       console.error("Contact form error:", error);
     },
   });
@@ -39,11 +39,7 @@ export default function ContactSection() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.gdprConsent) {
-      toast.error(
-        language === "fr"
-          ? "Veuillez accepter la Politique de Confidentialité"
-          : "Please accept the Privacy Policy"
-      );
+      toast.error(copy.consentRequired);
       return;
     }
     submitMutation.mutate({
@@ -92,7 +88,7 @@ export default function ContactSection() {
                   <Phone className="w-5 h-5 text-primary" />
                 </div>
                 <div>
-                  <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">Téléphone</p>
+                  <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">{copy.phone}</p>
                   <p className="text-foreground font-medium">{siteConfig.phone}</p>
                 </div>
               </a>
@@ -105,7 +101,7 @@ export default function ContactSection() {
                   <Mail className="w-5 h-5 text-primary" />
                 </div>
                 <div>
-                  <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">Email</p>
+                  <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">{copy.email}</p>
                   <p className="text-foreground font-medium text-sm break-all">{siteConfig.email}</p>
                 </div>
               </a>
@@ -133,18 +129,16 @@ export default function ContactSection() {
               <div className="success-panel p-8 sm:p-10 rounded-2xl bg-card/60 backdrop-blur-sm border border-border/30 flex flex-col items-center justify-center min-h-[400px] text-center">
                 <CheckCircle className="w-16 h-16 text-primary mb-6" />
                 <h3 className="font-display text-2xl font-bold text-foreground mb-3">
-                  {language === "fr" ? "Message envoyé !" : "Message sent!"}
+                  {copy.successTitle}
                 </h3>
                 <p className="text-muted-foreground max-w-sm mb-8">
-                  {language === "fr"
-                    ? "Merci pour votre message. Je vous répondrai dans les meilleurs délais."
-                    : "Thank you for your message. I will get back to you as soon as possible."}
+                  {copy.successDescription}
                 </p>
                 <button
                   onClick={() => setSubmitted(false)}
                   className="px-6 py-3 rounded-lg border border-border text-foreground font-medium hover:border-primary/50 transition-all"
                 >
-                  {language === "fr" ? "Envoyer un autre message" : "Send another message"}
+                  {copy.sendAnother}
                 </button>
               </div>
             ) : (
@@ -231,7 +225,7 @@ export default function ContactSection() {
 
                 {submitMutation.error && (
                   <p role="alert" className="form-alert text-sm text-destructive">
-                    {language === "fr" ? "Erreur lors de l'envoi. Veuillez réessayer." : "Error sending the message. Please try again."}
+                    {copy.sendError}
                   </p>
                 )}
 
@@ -243,7 +237,7 @@ export default function ContactSection() {
                   {submitMutation.isPending ? (
                     <>
                       <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
-                      <span role="status">{language === "fr" ? "Envoi en cours..." : "Sending..."}</span>
+                      <span role="status">{copy.sending}</span>
                     </>
                   ) : (
                     <>

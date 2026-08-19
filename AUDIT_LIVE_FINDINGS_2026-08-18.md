@@ -435,3 +435,6 @@ Le contrôle de production borné confirme une réponse HTTP 200 pour l’accès
 
 ## Bouton WhatsApp multilingue — 19 août 2026
 Le bouton flottant WhatsApp adapte maintenant son message prérempli, son libellé accessible et son infobulle aux quatre langues du site. Il conserve le numéro de contact existant, l’ouverture sécurisée dans un nouvel onglet et son comportement de masquage pendant le bandeau de consentement. La suite complète compte 208 tests réussis, 2 explicitement ignorés, avec un build de production valide.
+
+## Section de contact multilingue — 19 août 2026
+La section de contact complète désormais le catalogue de contenu existant avec des validations, messages de succès, erreurs, consentement RGPD et accusé de réception localisés en français, anglais, allemand et chinois. Les détails d’erreur restent limités à la console de diagnostic. La suite complète compte 209 tests réussis, 2 explicitement ignorés, avec un build de production valide.
