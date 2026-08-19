@@ -19,4 +19,5 @@ describe("routes publiques Employeurs et recrutement", () => {
       "/why-hippocampus",
     ].forEach(path => expect(sitemap).toContain(`https://drahmedbenlallahom.com${path}`));
   });
+
 });
