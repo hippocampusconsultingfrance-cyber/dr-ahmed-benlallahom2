@@ -12,6 +12,9 @@ describe("candidate account public page translations", () => {
       expect(copy.resetTitle.length, language).toBeGreaterThan(0);
       expect(copy.resetDescription.length, language).toBeGreaterThan(0);
       expect(copy.save.length, language).toBeGreaterThan(0);
+      expect(copy.verifiedTitle.length, language).toBeGreaterThan(0);
+      expect(copy.invalidDescription.length, language).toBeGreaterThan(0);
+      expect(copy.backToAccess.length, language).toBeGreaterThan(0);
     }
   });
 
@@ -19,5 +22,7 @@ describe("candidate account public page translations", () => {
     expect(candidateAccountCopy.en.save).toBe("Save and access my portal");
     expect(candidateAccountCopy.de.resetTitle).toBe("Neues Passwort");
     expect(candidateAccountCopy.zh.genericError).toContain("链接");
+    expect(candidateAccountCopy.en.verifiedTitle).toBe("Your portal is activated");
+    expect(candidateAccountCopy.de.backToAccess).toBe("Zur Anmeldung");
   });
 });

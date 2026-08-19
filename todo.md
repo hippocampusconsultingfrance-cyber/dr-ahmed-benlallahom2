@@ -2498,3 +2498,4 @@
 - [x] Vérifier et localiser les contrôles, messages et états du portail candidat sécurisé en FR/EN/DE/ZH
 - [x] Vérifier et localiser les formulaires, vérifications et retours du parcours d’accès candidat en FR/EN/DE/ZH
 - [x] Vérifier et localiser les contrôles, validations et retours de réinitialisation candidat en FR/EN/DE/ZH
+- [x] Vérifier et localiser les états d’activation de compte candidat en FR/EN/DE/ZH
