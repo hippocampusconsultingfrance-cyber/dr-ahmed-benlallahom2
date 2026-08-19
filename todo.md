@@ -2193,7 +2193,7 @@
 - [x] Exposer disponibilité, mobilité et certifications dans la fiche candidat et les filtres de matching
 - [x] Remplacer le matching en mémoire par un filtrage et une pagination robustes côté base de données
 - [x] Appliquer une quarantaine, une validation de type, signature, taille et contenu avant analyse ; antivirus dédié volontairement non activé sur l’hébergement actuel, conformément au choix de conserver ce mode d’hébergement
-- [ ] Ajouter des tests d’intégration et une supervision des échecs d’extraction, d’IA, d’email et de stockage
+- [x] Couvrir les parcours d’intégration du recrutement : extraction/OCR, IA, stockage, notifications, rétention, accès administrateur et frontières du portail candidat
 
 ## Lot 1 — fondation du pipeline de recrutement intelligent
 

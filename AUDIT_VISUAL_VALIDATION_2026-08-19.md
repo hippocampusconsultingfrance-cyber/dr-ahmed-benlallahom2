@@ -97,3 +97,7 @@ Chaque worker réclame désormais un job par une mise à jour conditionnelle des
 ## Quarantaine et validation documentaire
 
 Les CV entrants sont placés en quarantaine avant toute analyse. La validation vérifie le MIME déclaré, l’extension, la signature binaire, la taille et l’intégrité du conteneur ; elle refuse notamment les PDF chiffrés, actifs ou trop longs ainsi que les DOCX contenant des contenus externes, macros ou objets embarqués. Les fichiers ne sont promus vers le stockage définitif qu’après validation. Un moteur antivirus dédié demeure volontairement non activé sur l’hébergement actuel, conformément à la décision de ne pas basculer vers une offre d’hébergement réservée.
+
+## Couverture des chemins critiques de recrutement
+
+La suite couvre les chemins de succès et d’échec du pipeline : validation de fichier, quarantaine, extraction, repli OCR, échec IA, reprise contrôlée, rétention non destructive, notifications, téléchargement, chiffrement documentaire, accès candidat et restrictions administratives. Les tests dédiés restent séparés par responsabilité afin de signaler rapidement la frontière affectée lorsqu’un fournisseur externe ou une règle métier évolue.
