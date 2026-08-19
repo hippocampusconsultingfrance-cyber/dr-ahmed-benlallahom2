@@ -43,6 +43,13 @@ export const adminAppointmentsCopy = {
   zh: { statusUpdated: "状态已更新", refundConfirmed: (amount: string | number) => `退款已确认：${amount} 欧元`, loading: "正在加载预约", all: "全部", paymentStatus: { pending: "待处理", completed: "已付款", failed: "失败", refunded: "已退款" }, appointmentStatus: { confirmed: "已确认", cancelled: "已取消", completed: "已完成", no_show: "未到场" }, total: (count: number) => `${count} 个预约`, agenda: "即将到来的预约", timezone: "欧洲/巴黎时区", noUpcoming: "目前没有已确认的即将到来的预约。", complete: "完成", refund: "退款", confirmRefund: (amount: string | number, trackingId: string) => `确认向 ${trackingId} 退款 ${amount} 欧元？`, refundReason: "管理端请求退款", emptyTitle: "暂无预约", emptyDescription: "新的预约确认后将显示在这里。" },
 } as const;
 
+export const adminContactsCopy = {
+  fr: { markedRead: "Marqué comme lu", loading: "Chargement des messages", total: (count: number) => `${count} message${count > 1 ? "s" : ""}`, read: "Lu", emptyTitle: "Aucun message", emptyDescription: "Les demandes de contact reçues sur le site seront affichées dans cette section." },
+  en: { markedRead: "Marked as read", loading: "Loading messages", total: (count: number) => `${count} message${count > 1 ? "s" : ""}`, read: "Read", emptyTitle: "No messages", emptyDescription: "Contact requests received through the website will appear in this section." },
+  de: { markedRead: "Als gelesen markiert", loading: "Nachrichten werden geladen", total: (count: number) => `${count} Nachricht${count === 1 ? "" : "en"}`, read: "Gelesen", emptyTitle: "Keine Nachrichten", emptyDescription: "Über die Website eingegangene Kontaktanfragen werden in diesem Bereich angezeigt." },
+  zh: { markedRead: "已标记为已读", loading: "正在加载消息", total: (count: number) => `${count} 条消息`, read: "已读", emptyTitle: "暂无消息", emptyDescription: "通过网站收到的联系请求将显示在此区域。" },
+} as const;
+
 export default function AdminDashboard() {
   const { user, loading, refresh } = useAuth();
   const { language } = useLanguage();
@@ -436,11 +443,14 @@ function AppointmentsTab() {
 }
 
 function ContactsTab() {
+  const { language } = useLanguage();
+  const copy = adminContactsCopy[language as keyof typeof adminContactsCopy] ?? adminContactsCopy.fr;
+  const locale = language === "zh" ? "zh-CN" : language === "de" ? "de-DE" : language === "en" ? "en-GB" : "fr-FR";
   const utils = trpc.useUtils();
   const { data, isLoading, error } = trpc.admin.contacts.list.useQuery({});
   const markRead = trpc.admin.contacts.markRead.useMutation({
     onSuccess: () => {
-      toast.success("Marqué comme lu");
+      toast.success(copy.markedRead);
       utils.admin.contacts.list.invalidate();
     },
   });
@@ -450,12 +460,12 @@ function ContactsTab() {
   }
 
   if (isLoading) {
-    return <PublicContentSkeleton label="Chargement des messages" />;
+    return <PublicContentSkeleton label={copy.loading} />;
   }
 
   return (
     <div>
-      <p className="text-sm text-muted-foreground mb-4">{data?.total || 0} message(s)</p>
+      <p className="text-sm text-muted-foreground mb-4">{copy.total(data?.total || 0)}</p>
       <div className="space-y-3">
         {data?.items.map((msg) => (
           <div key={msg.id} className={`bg-card border rounded-lg p-4 ${msg.read === 0 ? "border-primary/50" : "border-border"}`}>
@@ -469,21 +479,21 @@ function ContactsTab() {
                 <div className="flex flex-wrap gap-x-3 gap-y-1 text-sm text-muted-foreground mb-2">
                   <span>{msg.email}</span>
                   {msg.phone && <span>{msg.phone}</span>}
-                  <span>{new Date(msg.createdAt).toLocaleString("fr-FR")}</span>
+                  <span>{new Date(msg.createdAt).toLocaleString(locale)}</span>
                 </div>
                 <p className="text-sm text-foreground">{msg.message}</p>
               </div>
               {msg.read === 0 && (
                 <Button size="sm" variant="outline" className="min-h-10 self-start sm:min-h-0" onClick={() => markRead.mutate({ id: msg.id })}>
                   <Eye className="w-3 h-3 mr-1" />
-                  Lu
+                  {copy.read}
                 </Button>
               )}
             </div>
           </div>
         ))}
         {(!data?.items || data.items.length === 0) && (
-          <AdminEmptyState icon={MessageSquare} title="Aucun message" description="Les demandes de contact reçues sur le site seront affichées dans cette section." />
+          <AdminEmptyState icon={MessageSquare} title={copy.emptyTitle} description={copy.emptyDescription} />
         )}
       </div>
     </div>

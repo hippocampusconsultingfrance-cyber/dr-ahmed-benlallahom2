@@ -122,6 +122,8 @@ La vue d’ensemble administrative localise également ses quatre indicateurs, s
 
 L’onglet Réservations adapte maintenant ses filtres de paiement, ses statuts, son agenda, ses confirmations de remboursement, ses actions et son état vide aux quatre langues actives. Les dates affichées suivent aussi la locale de l’interface tout en conservant le fuseau Europe/Paris. Les règles métier de remboursement et les statuts persistés ne sont pas modifiés.
 
+L’onglet Messages localise son chargement, son décompte, son action de lecture, son retour de succès, son état vide et la présentation de ses horodatages. Le contenu envoyé par un visiteur est naturellement conservé dans sa langue d’origine ; seules les commandes et informations d’interface suivent la langue administrative active.
+
 ## Disponibilité de production
 
 Le 19 août 2026, les routes publiques `/`, `/booking`, `/gdpr`, `/faq`, `/search`, `/error`, `/maintenance`, `/recruitment`, `/employers` et `/why-hippocampus` ont toutes répondu en HTTP 200 sur le domaine principal. L’accès `www.drahmedbenlallahom.com` redirige correctement vers `drahmedbenlallahom.com` et sert ensuite la page d’accueil en HTTP 200. Aucun écart de disponibilité n’a été observé sur cet échantillon.

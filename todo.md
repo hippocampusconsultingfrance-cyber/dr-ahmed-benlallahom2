@@ -189,6 +189,7 @@
 - [x] Localiser les états de connexion, accès refusé et validation MFA du tableau de bord administratif en FR/EN/DE/ZH
 - [x] Localiser les indicateurs et raccourcis de la vue d’ensemble administrative en FR/EN/DE/ZH
 - [x] Localiser les filtres, statuts, agenda et actions de l’onglet Réservations administratif en FR/EN/DE/ZH
+- [x] Localiser le chargement, compteur, action de lecture, état vide et horodatage de l’onglet Messages administratif en FR/EN/DE/ZH
 - [x] Remplacer les états vides textuels des onglets Témoignages et Disponibilités par le panneau administratif illustré partagé
 - [x] Ajouter un état vide illustré au carrousel de témoignages partenaires
 - [x] Ajouter un repère illustré et accessible aux états de disponibilité de réservation
