@@ -64,6 +64,13 @@ export const adminTestimonialsCopy = {
   zh: { updated: "评价已更新", deleted: "评价已删除", loading: "正在加载管理端评价", total: (count: number) => `${count} 条评价`, statuses: { pending: "待处理", approved: "已批准", rejected: "已拒绝" }, featured: "精选", approve: "批准", reject: "拒绝", unfeature: "取消精选", feature: "设为精选", confirmDelete: "删除此评价？", emptyTitle: "暂无评价", emptyDescription: "提交或导入的合作伙伴评价将在此显示以供审核。" },
 } as const;
 
+export const adminAvailabilityCopy = {
+  fr: { slotAdded: "Créneau ajouté", slotDeleted: "Créneau supprimé", dateBlocked: "Date bloquée", dateUnblocked: "Date débloquée", loading: "Chargement des disponibilités", days: ["Dimanche", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi"], weeklyTitle: "Créneaux hebdomadaires", addSlot: "Ajouter un créneau", day: "Jour", start: "Début", end: "Fin", add: "Ajouter", deleteSlot: "Supprimer le créneau", slotsEmptyTitle: "Aucun créneau configuré", slotsEmptyDescription: "Ajoutez un créneau hebdomadaire pour le rendre disponible à la réservation.", blockedTitle: "Dates bloquées", blockDate: "Bloquer une date", date: "Date", reason: "Raison (optionnel)", reasonPlaceholder: "Congés, formation...", block: "Bloquer", unblockDate: "Débloquer la date", blockedEmptyTitle: "Aucune date bloquée", blockedEmptyDescription: "Les jours bloqués pour congés, formation ou indisponibilité apparaîtront ici." },
+  en: { slotAdded: "Time slot added", slotDeleted: "Time slot deleted", dateBlocked: "Date blocked", dateUnblocked: "Date unblocked", loading: "Loading availability", days: ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"], weeklyTitle: "Weekly time slots", addSlot: "Add a time slot", day: "Day", start: "Start", end: "End", add: "Add", deleteSlot: "Delete time slot", slotsEmptyTitle: "No time slots configured", slotsEmptyDescription: "Add a weekly time slot to make it available for booking.", blockedTitle: "Blocked dates", blockDate: "Block a date", date: "Date", reason: "Reason (optional)", reasonPlaceholder: "Leave, training...", block: "Block", unblockDate: "Unblock date", blockedEmptyTitle: "No blocked dates", blockedEmptyDescription: "Days blocked for leave, training or unavailability will appear here." },
+  de: { slotAdded: "Zeitfenster hinzugefügt", slotDeleted: "Zeitfenster gelöscht", dateBlocked: "Datum gesperrt", dateUnblocked: "Datum entsperrt", loading: "Verfügbarkeiten werden geladen", days: ["Sonntag", "Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag"], weeklyTitle: "Wöchentliche Zeitfenster", addSlot: "Zeitfenster hinzufügen", day: "Tag", start: "Beginn", end: "Ende", add: "Hinzufügen", deleteSlot: "Zeitfenster löschen", slotsEmptyTitle: "Keine Zeitfenster eingerichtet", slotsEmptyDescription: "Fügen Sie ein wöchentliches Zeitfenster hinzu, um es für Buchungen verfügbar zu machen.", blockedTitle: "Gesperrte Daten", blockDate: "Datum sperren", date: "Datum", reason: "Grund (optional)", reasonPlaceholder: "Urlaub, Fortbildung...", block: "Sperren", unblockDate: "Datum entsperren", blockedEmptyTitle: "Keine gesperrten Daten", blockedEmptyDescription: "Für Urlaub, Fortbildung oder Nichtverfügbarkeit gesperrte Tage werden hier angezeigt." },
+  zh: { slotAdded: "时段已添加", slotDeleted: "时段已删除", dateBlocked: "日期已屏蔽", dateUnblocked: "日期已解除屏蔽", loading: "正在加载可用时间", days: ["星期日", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六"], weeklyTitle: "每周时段", addSlot: "添加时段", day: "星期", start: "开始", end: "结束", add: "添加", deleteSlot: "删除时段", slotsEmptyTitle: "尚未设置时段", slotsEmptyDescription: "添加每周时段以开放预约。", blockedTitle: "已屏蔽日期", blockDate: "屏蔽日期", date: "日期", reason: "原因（可选）", reasonPlaceholder: "休假、培训...", block: "屏蔽", unblockDate: "解除日期屏蔽", blockedEmptyTitle: "暂无已屏蔽日期", blockedEmptyDescription: "因休假、培训或不可用而屏蔽的日期将显示在这里。" },
+} as const;
+
 export default function AdminDashboard() {
   const { user, loading, refresh } = useAuth();
   const { language } = useLanguage();
@@ -942,6 +949,9 @@ function BlogTab() {
 }
 
 function AvailabilityTab() {
+  const { language } = useLanguage();
+  const copy = adminAvailabilityCopy[language as keyof typeof adminAvailabilityCopy] ?? adminAvailabilityCopy.fr;
+  const locale = language === "zh" ? "zh-CN" : language === "de" ? "de-DE" : language === "en" ? "en-GB" : "fr-FR";
   const utils = trpc.useUtils();
   const { data: slots, isLoading: slotsLoading } = trpc.admin.availability.listSlots.useQuery();
   const { data: blockedDates, isLoading: blockedLoading } = trpc.admin.availability.listBlockedDates.useQuery();
@@ -953,7 +963,7 @@ function AvailabilityTab() {
 
   const createSlot = trpc.admin.availability.addSlot.useMutation({
     onSuccess: () => {
-      toast.success("Créneau ajouté");
+      toast.success(copy.slotAdded);
       utils.admin.availability.listSlots.invalidate();
       setShowSlotForm(false);
       setSlotForm({ dayOfWeek: 1, startTime: "09:00", endTime: "10:00" });
@@ -963,14 +973,14 @@ function AvailabilityTab() {
 
   const deleteSlot = trpc.admin.availability.deleteSlot.useMutation({
     onSuccess: () => {
-      toast.success("Créneau supprimé");
+      toast.success(copy.slotDeleted);
       utils.admin.availability.listSlots.invalidate();
     },
   });
 
   const blockDate = trpc.admin.availability.addBlockedDate.useMutation({
     onSuccess: () => {
-      toast.success("Date bloquée");
+      toast.success(copy.dateBlocked);
       utils.admin.availability.listBlockedDates.invalidate();
       setShowBlockForm(false);
       setBlockForm({ date: "", reason: "" });
@@ -980,16 +990,14 @@ function AvailabilityTab() {
 
   const unblockDate = trpc.admin.availability.removeBlockedDate.useMutation({
     onSuccess: () => {
-      toast.success("Date débloquée");
+      toast.success(copy.dateUnblocked);
       utils.admin.availability.listBlockedDates.invalidate();
     },
     onError: (e: any) => toast.error(e.message),
   });
 
-  const dayNames = ["Dimanche", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi"];
-
   if (slotsLoading || blockedLoading) {
-    return <PublicContentSkeleton label="Chargement des disponibilités" />;
+    return <PublicContentSkeleton label={copy.loading} />;
   }
 
   return (
@@ -997,10 +1005,10 @@ function AvailabilityTab() {
       {/* Créneaux hebdomadaires */}
       <section>
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <h3 className="text-lg font-semibold text-foreground">Créneaux hebdomadaires</h3>
+          <h3 className="text-lg font-semibold text-foreground">{copy.weeklyTitle}</h3>
           <Button size="sm" className="min-h-10 w-full sm:w-auto sm:min-h-0" onClick={() => setShowSlotForm(!showSlotForm)}>
             <Plus className="w-4 h-4 mr-2" />
-            Ajouter un créneau
+            {copy.addSlot}
           </Button>
         </div>
 
@@ -1008,19 +1016,19 @@ function AvailabilityTab() {
           <div className="bg-card border border-border rounded-lg p-4 mb-4">
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
               <div>
-                <label className="text-sm text-muted-foreground block mb-1">Jour</label>
+                <label className="text-sm text-muted-foreground block mb-1">{copy.day}</label>
                 <select
                   className="w-full px-3 py-2 rounded-lg bg-background border border-border text-foreground"
                   value={slotForm.dayOfWeek}
                   onChange={(e) => setSlotForm({ ...slotForm, dayOfWeek: parseInt(e.target.value) })}
                 >
-                  {dayNames.map((name, i) => (
+                  {copy.days.map((name, i) => (
                     <option key={i} value={i}>{name}</option>
                   ))}
                 </select>
               </div>
               <div>
-                <label className="text-sm text-muted-foreground block mb-1">Début</label>
+                <label className="text-sm text-muted-foreground block mb-1">{copy.start}</label>
                 <input
                   type="time"
                   className="w-full px-3 py-2 rounded-lg bg-background border border-border text-foreground"
@@ -1029,7 +1037,7 @@ function AvailabilityTab() {
                 />
               </div>
               <div>
-                <label className="text-sm text-muted-foreground block mb-1">Fin</label>
+                <label className="text-sm text-muted-foreground block mb-1">{copy.end}</label>
                 <input
                   type="time"
                   className="w-full px-3 py-2 rounded-lg bg-background border border-border text-foreground"
@@ -1038,7 +1046,7 @@ function AvailabilityTab() {
                 />
               </div>
               <Button className="min-h-11 w-full md:w-auto md:min-h-0" onClick={() => createSlot.mutate(slotForm)} disabled={createSlot.isPending}>
-                Ajouter
+                {copy.add}
               </Button>
             </div>
           </div>
@@ -1048,7 +1056,7 @@ function AvailabilityTab() {
           {slots?.map((slot) => (
             <div key={slot.id} className="bg-card border border-border rounded-lg p-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex flex-wrap gap-x-2 gap-y-1">
-                <span className="font-medium text-foreground">{dayNames[slot.dayOfWeek]}</span>
+                <span className="font-medium text-foreground">{copy.days[slot.dayOfWeek]}</span>
                 <span className="text-sm text-muted-foreground ml-2">{slot.startTime} - {slot.endTime}</span>
               </div>
               <Button
@@ -1056,13 +1064,14 @@ function AvailabilityTab() {
                 variant="ghost"
                 className="min-h-10 self-start sm:min-h-0"
                 onClick={() => deleteSlot.mutate({ id: slot.id })}
+                aria-label={copy.deleteSlot}
               >
                 <Trash className="w-3 h-3 text-red-400" />
               </Button>
             </div>
           ))}
           {(!slots || slots.length === 0) && (
-            <div className="col-span-full"><AdminEmptyState icon={CalendarDays} title="Aucun créneau configuré" description="Ajoutez un créneau hebdomadaire pour le rendre disponible à la réservation." /></div>
+            <div className="col-span-full"><AdminEmptyState icon={CalendarDays} title={copy.slotsEmptyTitle} description={copy.slotsEmptyDescription} /></div>
           )}
         </div>
       </section>
@@ -1070,10 +1079,10 @@ function AvailabilityTab() {
       {/* Dates bloquées */}
       <section>
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <h3 className="text-lg font-semibold text-foreground">Dates bloquées</h3>
+          <h3 className="text-lg font-semibold text-foreground">{copy.blockedTitle}</h3>
           <Button size="sm" className="min-h-10 w-full sm:w-auto sm:min-h-0" onClick={() => setShowBlockForm(!showBlockForm)}>
             <Plus className="w-4 h-4 mr-2" />
-            Bloquer une date
+            {copy.blockDate}
           </Button>
         </div>
 
@@ -1081,7 +1090,7 @@ function AvailabilityTab() {
           <div className="bg-card border border-border rounded-lg p-4 mb-4">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
               <div>
-                <label className="text-sm text-muted-foreground block mb-1">Date</label>
+                <label className="text-sm text-muted-foreground block mb-1">{copy.date}</label>
                 <input
                   type="date"
                   className="w-full px-3 py-2 rounded-lg bg-background border border-border text-foreground"
@@ -1090,16 +1099,16 @@ function AvailabilityTab() {
                 />
               </div>
               <div>
-                <label className="text-sm text-muted-foreground block mb-1">Raison (optionnel)</label>
+                <label className="text-sm text-muted-foreground block mb-1">{copy.reason}</label>
                 <input
                   className="w-full px-3 py-2 rounded-lg bg-background border border-border text-foreground"
                   value={blockForm.reason}
                   onChange={(e) => setBlockForm({ ...blockForm, reason: e.target.value })}
-                  placeholder="Congés, formation..."
+                  placeholder={copy.reasonPlaceholder}
                 />
               </div>
               <Button className="min-h-11 w-full md:w-auto md:min-h-0" onClick={() => blockDate.mutate(blockForm)} disabled={blockDate.isPending || !blockForm.date}>
-                Bloquer
+                {copy.block}
               </Button>
             </div>
           </div>
@@ -1109,7 +1118,7 @@ function AvailabilityTab() {
           {blockedDates?.map((bd) => (
             <div key={bd.id} className="bg-card border border-border rounded-lg p-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex flex-col gap-1 sm:flex-row sm:items-center">
-                <span className="font-medium text-foreground">{new Date(bd.date + "T00:00:00").toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</span>
+                <span className="font-medium text-foreground">{new Date(bd.date + "T00:00:00").toLocaleDateString(locale, { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</span>
                 {bd.reason && <span className="text-sm text-muted-foreground ml-3">{bd.reason}</span>}
               </div>
               <Button
@@ -1117,13 +1126,14 @@ function AvailabilityTab() {
                 variant="ghost"
                 className="min-h-10 self-start sm:min-h-0"
                 onClick={() => unblockDate.mutate({ id: bd.id })}
+                aria-label={copy.unblockDate}
               >
                 <XCircle className="w-4 h-4 text-red-400" />
               </Button>
             </div>
           ))}
           {(!blockedDates || blockedDates.length === 0) && (
-            <AdminEmptyState icon={CalendarDays} title="Aucune date bloquée" description="Les jours bloqués pour congés, formation ou indisponibilité apparaîtront ici." />
+            <AdminEmptyState icon={CalendarDays} title={copy.blockedEmptyTitle} description={copy.blockedEmptyDescription} />
           )}
         </div>
       </section>

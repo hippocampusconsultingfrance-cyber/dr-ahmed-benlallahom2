@@ -50,8 +50,8 @@ describe("états vides actifs", () => {
     expect(source).toContain('AdminEmptyState icon={MessageSquare} title={copy.emptyTitle}');
     expect(source).toContain('AdminEmptyState icon={Shield} title={copy.emptyTitle}');
     expect(source).toContain('AdminEmptyState icon={Star} title={copy.emptyTitle}');
-    expect(source).toContain('AdminEmptyState icon={CalendarDays} title="Aucun créneau configuré"');
-    expect(source).toContain('AdminEmptyState icon={CalendarDays} title="Aucune date bloquée"');
+    expect(source).toContain('AdminEmptyState icon={CalendarDays} title={copy.slotsEmptyTitle}');
+    expect(source).toContain('AdminEmptyState icon={CalendarDays} title={copy.blockedEmptyTitle}');
   });
 
   it("conserve les alternatives d’absence de données des tableaux recrutement et sécurité", async () => {
