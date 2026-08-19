@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bookingContent } from "./BookingPage";
+import { bookingContent, parseBookingDateTime } from "./BookingPage";
 
 describe("booking date placeholders", () => {
   it("uses an explicit localized placeholder for every supported language", () => {
@@ -9,13 +9,25 @@ describe("booking date placeholders", () => {
     expect(bookingContent.zh.form.datePlaceholder).toBe("年/月/日 · 时:分");
   });
 
-  it("keeps the date field accessible with a native datetime-local control", async () => {
+  it("keeps date and time controls visible and keyboard accessible", async () => {
     const source = await import("node:fs/promises").then((fs) =>
       fs.readFile(new URL("./BookingPage.tsx", import.meta.url), "utf8")
     );
 
     expect(source).toContain('id="booking-date"');
-    expect(source).toContain('type="datetime-local"');
-    expect(source).not.toContain('cursor-pointer opacity-0');
+    expect(source).toContain('id="booking-time"');
+    expect(source).toContain('type="text"');
+    expect(source).not.toContain('opacity-0');
+  });
+
+  it("parses a valid French date and time and rejects invalid calendar values", () => {
+    const parsed = parseBookingDateTime("21/08/2026", "10:00");
+
+    expect(parsed?.getFullYear()).toBe(2026);
+    expect(parsed?.getMonth()).toBe(7);
+    expect(parsed?.getDate()).toBe(21);
+    expect(parsed?.getHours()).toBe(10);
+    expect(parseBookingDateTime("31/02/2026", "10:00")).toBeNull();
+    expect(parseBookingDateTime("21/08/2026", "25:00")).toBeNull();
   });
 });

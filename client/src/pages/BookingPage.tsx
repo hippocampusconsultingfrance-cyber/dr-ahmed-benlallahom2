@@ -18,6 +18,9 @@ export const bookingContent = {
       phone: "Numéro de téléphone",
       date: "Date et heure",
       datePlaceholder: "JJ/MM/AAAA · HH:MM",
+      dateOnlyPlaceholder: "JJ/MM/AAAA",
+      timePlaceholder: "HH:MM",
+      invalidDate: "Saisissez une date valide au format JJ/MM/AAAA et une heure au format HH:MM.",
       dateHint: "Choisissez la date et l’heure de votre consultation. Le créneau est affiché en heure de Paris.",
       details: "Détails de votre demande",
       detailsPlaceholder: "Décrivez brièvement votre situation...",
@@ -60,6 +63,9 @@ export const bookingContent = {
       phone: "Phone Number",
       date: "Date and Time",
       datePlaceholder: "DD/MM/YYYY · HH:MM",
+      dateOnlyPlaceholder: "DD/MM/YYYY",
+      timePlaceholder: "HH:MM",
+      invalidDate: "Enter a valid date in DD/MM/YYYY format and a time in HH:MM format.",
       dateHint: "Choose your consultation date and time. The slot is displayed in Paris time.",
       details: "Request Details",
       detailsPlaceholder: "Briefly describe your situation...",
@@ -102,6 +108,9 @@ export const bookingContent = {
       phone: "Telefonnummer",
       date: "Datum und Uhrzeit",
       datePlaceholder: "TT.MM.JJJJ · HH:MM",
+      dateOnlyPlaceholder: "TT.MM.JJJJ",
+      timePlaceholder: "HH:MM",
+      invalidDate: "Geben Sie ein gültiges Datum im Format TT.MM.JJJJ und eine Uhrzeit im Format HH:MM ein.",
       dateHint: "Wählen Sie Datum und Uhrzeit Ihrer Beratung. Der Termin wird in Pariser Zeit angezeigt.",
       details: "Anforderungsdetails",
       detailsPlaceholder: "Beschreiben Sie Ihre Situation kurz...",
@@ -144,6 +153,9 @@ export const bookingContent = {
       phone: "电话号码",
       date: "日期和时间",
       datePlaceholder: "年/月/日 · 时:分",
+      dateOnlyPlaceholder: "日/月/年",
+      timePlaceholder: "时:分",
+      invalidDate: "请输入有效日期（日/月/年）和时间（时:分）。",
       dateHint: "请选择咨询日期和时间。时段以巴黎时间显示。",
       details: "请求详情",
       detailsPlaceholder: "简要描述您的情况...",
@@ -179,6 +191,27 @@ export const bookingContent = {
   },
 };
 
+export function parseBookingDateTime(dateValue: string, timeValue: string): Date | null {
+  const normalizedDate = dateValue.trim().replace(/[.\-]/g, "/");
+  const dateMatch = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(normalizedDate);
+  const timeMatch = /^(\d{1,2}):(\d{2})$/.exec(timeValue.trim());
+
+  if (!dateMatch || !timeMatch) return null;
+
+  const [, dayText, monthText, yearText] = dateMatch;
+  const [, hourText, minuteText] = timeMatch;
+  const day = Number(dayText);
+  const month = Number(monthText);
+  const year = Number(yearText);
+  const hour = Number(hourText);
+  const minute = Number(minuteText);
+  const parsed = new Date(year, month - 1, day, hour, minute, 0, 0);
+
+  return parsed.getFullYear() === year && parsed.getMonth() === month - 1 && parsed.getDate() === day && parsed.getHours() === hour && parsed.getMinutes() === minute
+    ? parsed
+    : null;
+}
+
 export default function BookingPage() {
   const { language } = useLanguage();
   const [location, setLocation] = useLocation();
@@ -205,6 +238,9 @@ export default function BookingPage() {
   });
 
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [dateText, setDateText] = useState("");
+  const [timeText, setTimeText] = useState("");
+  const [dateError, setDateError] = useState<string | null>(null);
   const [paymentStatus, setPaymentStatus] = useState<"success" | "canceled" | null>(null);
   const [trackingId, setTrackingId] = useState<string | null>(null);
   const localizedDate = selectedDate
@@ -213,7 +249,6 @@ export default function BookingPage() {
         { dateStyle: "full", timeStyle: "short", timeZone: "Europe/Paris" }
       ).format(selectedDate)
     : null;
-  const dateInputLocale = language === "fr" ? "fr-FR" : language === "de" ? "de-DE" : language === "zh" ? "zh-CN" : "en-GB";
 
   // Handle Stripe redirect
   useEffect(() => {
@@ -280,12 +315,28 @@ export default function BookingPage() {
     },
   });
 
-  const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const dateStr = e.target.value;
-    if (dateStr) {
-      const date = new Date(dateStr);
-      setSelectedDate(date);
+  const synchronizeDateTime = (nextDateText: string, nextTimeText: string) => {
+    setDateText(nextDateText);
+    setTimeText(nextTimeText);
+
+    if (!nextDateText.trim() || !nextTimeText.trim()) {
+      setSelectedDate(null);
+      setDateError(null);
+      setFormData((current) => ({ ...current, date: "" }));
+      return;
     }
+
+    const parsed = parseBookingDateTime(nextDateText, nextTimeText);
+    if (!parsed) {
+      setSelectedDate(null);
+      setDateError(content.form.invalidDate);
+      setFormData((current) => ({ ...current, date: "" }));
+      return;
+    }
+
+    setDateError(null);
+    setSelectedDate(parsed);
+    setFormData((current) => ({ ...current, date: `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, "0")}-${String(parsed.getDate()).padStart(2, "0")}T${String(parsed.getHours()).padStart(2, "0")}:${String(parsed.getMinutes()).padStart(2, "0")}` }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -332,6 +383,9 @@ export default function BookingPage() {
   const handleReset = () => {
     setFormData({ name: "", email: "", phone: "", date: "", details: "" });
     setSelectedDate(null);
+    setDateText("");
+    setTimeText("");
+    setDateError(null);
     setPaymentStatus(null);
     setTrackingId(null);
   };
@@ -539,21 +593,36 @@ export default function BookingPage() {
                 <Calendar className="w-4 h-4" aria-hidden="true" />
                 {content.form.date}
               </label>
-              <input
-                id="booking-date"
-                type="datetime-local"
-                required
-                value={formData.date}
-                onChange={(e) => {
-                  setFormData({ ...formData, date: e.target.value });
-                  handleDateChange(e);
-                }}
-                lang={dateInputLocale}
-                className="form-field-premium h-11 w-full cursor-pointer border px-4 py-2"
-                aria-describedby="availability-status"
-                aria-label={content.form.date}
-              />
+              <div className="grid gap-3 sm:grid-cols-2">
+                <input
+                  id="booking-date"
+                  type="text"
+                  required
+                  value={dateText}
+                  onChange={(e) => synchronizeDateTime(e.target.value, timeText)}
+                  inputMode="numeric"
+                  autoComplete="off"
+                  placeholder={content.form.dateOnlyPlaceholder}
+                  className="form-field-premium h-11 w-full border px-4 py-2"
+                  aria-describedby="availability-status booking-date-error"
+                  aria-label={content.form.date}
+                />
+                <input
+                  id="booking-time"
+                  type="text"
+                  required
+                  value={timeText}
+                  onChange={(e) => synchronizeDateTime(dateText, e.target.value)}
+                  inputMode="numeric"
+                  autoComplete="off"
+                  placeholder={content.form.timePlaceholder}
+                  className="form-field-premium h-11 w-full border px-4 py-2"
+                  aria-describedby="availability-status booking-date-error"
+                  aria-label={content.form.timePlaceholder}
+                />
+              </div>
               <p className="mt-2 text-xs leading-5 text-muted-foreground">{content.form.dateHint}</p>
+              {dateError && <p id="booking-date-error" className="mt-2 text-sm text-destructive" role="alert">{dateError}</p>}
               {localizedDate && <p className="mt-2 text-sm font-medium text-primary" aria-live="polite">{localizedDate}</p>}
               <div id="availability-status" className={`availability-status mt-3 ${isBlockedDate || isBookedSlot ? "is-unavailable" : "is-available"}`} role="status" aria-live="polite">
                 <span className="availability-dot" aria-hidden="true" />
