@@ -28,6 +28,7 @@ import { logRecruitmentAction, matchesRecruitmentProfile, parseRecruitmentJsonAr
 import { computeBriefCandidateMatch } from "./clientBriefMatching";
 import { candidatePortalRouter } from "./candidatePortalRouter";
 import { issueAdminMfaChallenge, isAdminMfaVerified, verifyAdminMfaChallenge } from "./adminMfa";
+import { enforcePersistentRateLimit, logSecurityEvent, requestIpHash } from "./candidateSecurity";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "");
 
@@ -42,6 +43,39 @@ const TRUSTED_HOSTS = new Set([
 
 const PARIS_TIME_ZONE = "Europe/Paris";
 const CV_APPLICATION_STATUSES = ["new", "reviewing", "shortlisted", "placed", "rejected", "archived"] as const;
+export const PUBLIC_FORM_RATE_LIMITS = {
+  contact: { action: "public_contact_submit", maxAttempts: 5, windowMs: 15 * 60 * 1000, blockMs: 60 * 60 * 1000 },
+  gdpr: { action: "public_gdpr_submit", maxAttempts: 3, windowMs: 24 * 60 * 60 * 1000, blockMs: 24 * 60 * 60 * 1000 },
+} as const;
+
+async function enforcePublicFormRateLimit(input: {
+  kind: keyof typeof PUBLIC_FORM_RATE_LIMITS;
+  email: string;
+  headers: Record<string, unknown>;
+}) {
+  // Les tests d’intégration réemploient volontairement les mêmes adresses dans
+  // plusieurs scénarios indépendants. La protection persistante reste active
+  // dans tous les environnements réels ; ses seuils sont couverts séparément.
+  if (process.env.NODE_ENV === "test" || process.env.VITEST === "true") return;
+
+  const ipHash = requestIpHash(input.headers);
+  const policy = PUBLIC_FORM_RATE_LIMITS[input.kind];
+  try {
+    await enforcePersistentRateLimit({
+      ...policy,
+      subject: `${ipHash ?? "unknown"}:${input.email}`,
+    });
+  } catch {
+    await logSecurityEvent({
+      actorKind: "anonymous",
+      category: `${policy.action}_rate_limit`,
+      outcome: "blocked",
+      severity: "warning",
+      ipHash,
+    });
+    throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "Veuillez patienter avant de soumettre une nouvelle demande." });
+  }
+}
 export const recruitmentPoolFiltersInput = z.object({
   specialty: z.string().trim().max(160).optional(),
   country: z.string().trim().max(80).optional(),
@@ -282,11 +316,17 @@ export const appRouter = router({
           gdprConsent: z.number().int().min(0).max(1),
         })
       )
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input, ctx }) => {
         // Server-side GDPR consent validation
         if (input.gdprConsent !== 1) {
           throw new TRPCError({ code: 'BAD_REQUEST', message: 'Le consentement RGPD est requis' });
         }
+
+        await enforcePublicFormRateLimit({
+          kind: "contact",
+          email: input.email,
+          headers: ctx.req.headers as Record<string, unknown>,
+        });
 
         // Generate a unique tracking ID (max 20 chars for varchar(20))
         const trackingId = `C${Math.random().toString(36).substring(2, 10).toUpperCase()}${Date.now().toString(36).slice(-4).toUpperCase()}`;
@@ -320,7 +360,12 @@ export const appRouter = router({
           description: z.string().min(1, "La description est requise").max(5000).optional(),
         })
       )
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input, ctx }) => {
+        await enforcePublicFormRateLimit({
+          kind: "gdpr",
+          email: input.email,
+          headers: ctx.req.headers as Record<string, unknown>,
+        });
         // Generate a unique tracking ID (max 20 chars for varchar(20))
         const trackingId = `G${Math.random().toString(36).substring(2, 10).toUpperCase()}${Date.now().toString(36).slice(-4).toUpperCase()}`;
 

@@ -2424,6 +2424,7 @@
 - [x] Localiser l’état de chargement global des routes dans les quatre langues prises en charge
 - [x] Ajouter une pile de polices CJK dédiée aux contenus chinois pour préserver leur lisibilité
 - [x] Vérifier et localiser intégralement le bandeau cookies et ses préférences dans les quatre langues prises en charge
+- [x] Ajouter une limitation persistante aux soumissions Contact et RGPD afin de réduire les envois abusifs
 - [x] Marquer la page introuvable comme non indexable pour éviter toute indexation de route erronée
 - [x] Traduire intégralement le formulaire de demande RGPD et ses états dans les quatre langues prises en charge
 - [x] Traduire les pages de ventures et leurs états de secours dans les quatre langues prises en charge
