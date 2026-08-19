@@ -222,7 +222,7 @@
 - [ ] Ajouter une animation de transition de page courte et désactivable
 - [ ] Ajouter un contrôle de taille de police sans rupture de mise en page
 - [ ] Ajouter un composant de citation médicale avec source et date de mise à jour
-- [ ] Ajouter une notice visible indiquant que le site ne remplace pas les urgences médicales
+- [x] Ajouter une notice visible indiquant que le site ne remplace pas les urgences médicales
 - [ ] Vérifier l’accessibilité des couleurs cyan, gris et doré sur les deux thèmes
 - [ ] Évaluer la réduction des effets décoratifs sur les formulaires et pages légales
 - [ ] Préparer un kit de marque exportable pour les documents et réseaux sociaux

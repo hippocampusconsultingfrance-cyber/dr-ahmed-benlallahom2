@@ -52,6 +52,8 @@ export const bookingContent = {
       cancellation: "Remboursement intégral au-delà de 24 h avant le rendez-vous. Après ce délai, la réservation n’est pas remboursable.",
       paymentTrust: "Paiement sécurisé par Stripe · Confirmation et facture envoyées par email",
       availabilityLabel: "Disponibilité",
+      emergencyTitle: "En cas d’urgence",
+      emergencyNote: "En cas d’urgence médicale ou de danger immédiat, appelez le 112 ou les services d’urgence locaux. Cette consultation programmée ne remplace pas une prise en charge d’urgence.",
 
   },
   en: {
@@ -97,6 +99,8 @@ export const bookingContent = {
       cancellation: "Full refund is available more than 24 hours before the appointment. After that deadline, the booking is non-refundable.",
       paymentTrust: "Secure payment by Stripe · Confirmation and invoice sent by email",
       availabilityLabel: "Availability",
+      emergencyTitle: "In an emergency",
+      emergencyNote: "For a medical emergency or immediate danger, call 112 or your local emergency services. This scheduled consultation does not replace emergency care.",
 
   },
   de: {
@@ -142,6 +146,8 @@ export const bookingContent = {
       cancellation: "Eine vollständige Rückerstattung ist mehr als 24 Stunden vor dem Termin möglich. Danach ist die Buchung nicht erstattungsfähig.",
       paymentTrust: "Sichere Zahlung über Stripe · Bestätigung und Rechnung per E-Mail",
       availabilityLabel: "Verfügbarkeit",
+      emergencyTitle: "Im Notfall",
+      emergencyNote: "Bei einem medizinischen Notfall oder unmittelbarer Gefahr rufen Sie 112 oder den örtlichen Rettungsdienst an. Diese geplante Beratung ersetzt keine Notfallversorgung.",
 
   },
   zh: {
@@ -187,6 +193,8 @@ export const bookingContent = {
       cancellation: "预约前24小时以上可全额退款，超过此期限后不可退款。",
       paymentTrust: "Stripe安全支付 · 确认信息和发票将通过电子邮件发送",
       availabilityLabel: "可用性",
+      emergencyTitle: "紧急情况",
+      emergencyNote: "如遇医疗紧急情况或面临即时危险，请拨打 112 或当地急救服务。本次预约咨询不能替代紧急医疗救治。",
 
   },
 };
@@ -687,6 +695,10 @@ export default function BookingPage() {
                 <p>{content.cancellation}</p>
               </div>
             </div>
+            <aside role="note" aria-label={content.emergencyTitle} className="mt-4 flex gap-3 rounded-xl border border-amber-400/30 bg-amber-500/10 p-4 text-sm text-foreground">
+              <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600 dark:text-amber-300" aria-hidden="true" />
+              <div><p className="font-semibold">{content.emergencyTitle}</p><p className="mt-1 leading-6 text-muted-foreground">{content.emergencyNote}</p></div>
+            </aside>
           </form>
 
           {paymentStatus && (

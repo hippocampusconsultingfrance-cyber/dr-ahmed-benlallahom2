@@ -205,3 +205,7 @@ La shortlist des briefs Employeurs charge désormais les candidats par pages de 
 ## Normalisation des parcours candidats — vérification du 19 août 2026
 
 La base déployée contient bien les tables relationnelles de certifications, langues et expériences candidates. À chaque analyse de CV, les lignes précédentes sont remplacées par les éléments structurés extraits ; les données d’origine et les métadonnées d’analyse restent également conservées. Aucune migration complémentaire n’est nécessaire pour ce lot.
+
+## Information d’urgence du parcours de réservation — 19 août 2026
+
+Une notice visible, traduite en français, anglais, allemand et chinois, rappelle au bas du formulaire que la consultation programmée ne remplace pas une prise en charge urgente. Elle oriente en cas de danger immédiat vers le 112 ou les services d’urgence locaux. Le composant dispose d’un libellé accessible et sa présence est couverte par le test de localisation de la réservation.

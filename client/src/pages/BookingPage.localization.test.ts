@@ -7,4 +7,11 @@ describe("localisation de la réservation", () => {
       expect(content.form.dateHint).toBeTruthy();
     });
   });
+
+  it("affiche une information d’urgence explicite dans toutes les langues prises en charge", () => {
+    Object.values(bookingContent).forEach(content => {
+      expect(content.emergencyTitle).toBeTruthy();
+      expect(content.emergencyNote).toContain("112");
+    });
+  });
 });
