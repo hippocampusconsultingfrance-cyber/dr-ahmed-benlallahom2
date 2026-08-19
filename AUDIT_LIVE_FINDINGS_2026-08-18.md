@@ -361,3 +361,6 @@ Une passe de disponibilité couvre les parcours publics prioritaires : accueil, 
 
 ## Navigation par fragment du pied de page — validée
 Les liens Leadership, Services, Formation et Contact du pied de page utilisent désormais des fragments d’URL portables de l’accueil. La page d’accueil traite le fragment après le montage complet des sections, avec plusieurs tentatives différées pour éviter la course avec le rendu initial. Le test de composant couvre les URL produites ; la vérification navigateur de `/#contact` confirme le positionnement sur la section Contact, avec le formulaire et les coordonnées visibles dans le viewport.
+
+## Navigation principale hors accueil — validée
+Les liens Leadership, Services, Formation et Contact de la navigation principale et de son menu mobile utilisent déjà le même mécanisme de secours : lorsque la section n’est pas présente dans la page courante, ils redirigent vers le fragment correspondant de l’accueil. La validation navigateur du fragment Contact confirme donc également le comportement de destination de ces contrôles. Aucune modification supplémentaire n’était nécessaire.
