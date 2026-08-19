@@ -355,3 +355,6 @@ Le test graphique de non-régression vérifie désormais les garde-fous structur
 
 ## Correction des routes publiques profondes — 19 août 2026
 Le fallback SPA attribuait une réponse 404 aux routes publiques absentes de la table SEO, malgré un rendu client fonctionnel. Les parcours FAQ, recherche, erreur, maintenance et VVIP Offshore sont désormais déclarés explicitement, avec exclusion de l’indexation pour la recherche et les pages de statut. Les contrôles locaux et publiés confirment une réponse HTTP 200 sur le domaine principal et le domaine Manus ; le sous-domaine `www` redirige correctement en HTTP 301 vers le domaine principal.
+
+## Disponibilité de production — 19 août 2026
+Une passe de disponibilité couvre les parcours publics prioritaires : accueil, réservation, recrutement standard et VVIP, employeurs, présentation Hippocampus, accès candidat, FAQ, pages légales, RGPD, témoignages, recherche et pages de statut. Chaque route contrôlée répond HTTP 200 sur le domaine principal. Le sous-domaine `www` renvoie une redirection HTTP 301 vers l’URL équivalente du domaine principal, sans perte du chemin demandé.
