@@ -423,3 +423,6 @@ Le formulaire public de brief Employeurs utilisait encore le détail brut d’un
 
 ## Accès candidat multilingue — 19 août 2026
 Le parcours d’accès candidat, auparavant présenté en français uniquement, couvre désormais les quatre langues du site : informations de sécurité, modes connexion/création/réinitialisation, champs, consentements, boutons, messages de succès et validations anti-bot. Les erreurs non reconnues sont masquées derrière un message générique localisé. Le rendu mobile français a été vérifié ; les tests de contenu et de validation couvrent les quatre langues. La suite complète compte 205 tests réussis, 2 explicitement ignorés, avec un build de production valide.
+
+## Vérification et réinitialisation candidat — 19 août 2026
+Les pages publiques de vérification d’email et de réinitialisation de mot de passe sont désormais localisées dans les quatre langues. La réinitialisation demande deux saisies identiques du nouveau mot de passe et masque tout détail serveur derrière un message générique. Les écrans mobiles de lien de vérification invalide et de réinitialisation ont été contrôlés, sans exposition d’information personnelle ni technique. La suite complète compte 206 tests réussis, 2 explicitement ignorés, avec un build de production valide.

@@ -2415,4 +2415,5 @@
 - [x] Afficher un état neutre lorsqu’une page de confirmation de paiement est ouverte sans statut Stripe valide
 - [x] Ne plus afficher de détail d’erreur technique dans le formulaire public Employeurs
 - [x] Traduire intégralement l’accès candidat et ses validations dans les quatre langues prises en charge
+- [x] Vérifier et localiser les pages publiques restantes de vérification et de réinitialisation du compte candidat
 - [x] Renforcer robots.txt pour décourager l’exploration des parcours candidats et de désinscription non indexables
