@@ -3,6 +3,7 @@ import { BriefcaseBusiness, CheckCircle2, ChevronRight, Loader2, UsersRound } fr
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { trpc } from "@/lib/trpc";
+import { getPositiveMatchBreakdown } from "./matchBreakdown";
 
 const statusLabels: Record<string, string> = {
   new: "Nouveau brief",
@@ -80,7 +81,7 @@ export default function EmployerBriefsTab() {
             {matches.data.candidates.slice(0, 25).map(candidate => (
               <article key={candidate.id} className="rounded-lg border border-border bg-background p-4">
                 <div className="flex flex-col justify-between gap-3 sm:flex-row">
-                  <div><div className="flex items-center gap-2"><p className="font-medium text-foreground">{candidate.firstName} {candidate.lastName}</p><span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">{candidate.match.score}/100</span></div><p className="mt-1 text-sm text-muted-foreground">{candidate.specialty} · {candidate.availability || "Disponibilité à confirmer"}</p>{candidate.match.reasons.length > 0 ? <p className="mt-2 text-xs text-muted-foreground">{candidate.match.reasons.join(" · ")}</p> : <p className="mt-2 text-xs text-muted-foreground">Aucune correspondance professionnelle explicite détectée.</p>}</div>
+                  <div><div className="flex items-center gap-2"><p className="font-medium text-foreground">{candidate.firstName} {candidate.lastName}</p><span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">{candidate.match.score}/100</span></div><p className="mt-1 text-sm text-muted-foreground">{candidate.specialty} · {candidate.availability || "Disponibilité à confirmer"}</p>{candidate.match.reasons.length > 0 ? <p className="mt-2 text-xs text-muted-foreground">{candidate.match.reasons.join(" · ")}</p> : <p className="mt-2 text-xs text-muted-foreground">Aucune correspondance professionnelle explicite détectée.</p>}{getPositiveMatchBreakdown(candidate.match.breakdown).length > 0 && <div className="mt-3 flex flex-wrap gap-1.5" aria-label="Détail du score de compatibilité">{getPositiveMatchBreakdown(candidate.match.breakdown).map(item => <span key={item.key} className="rounded-full border border-primary/20 bg-primary/5 px-2 py-1 text-[11px] font-medium text-foreground">{item.label} +{item.points}</span>)}</div>}</div>
                   <Button size="sm" disabled={associate.isPending} onClick={() => associate.mutate({ briefId: activeBrief.id, applicationId: candidate.id, matchScore: candidate.match.score, status: "shortlisted" })}>{candidate.association?.status === "shortlisted" ? <><CheckCircle2 className="mr-1 h-3.5 w-3.5" />Shortlisté</> : <>Shortlister<ChevronRight className="ml-1 h-3.5 w-3.5" /></>}</Button>
                 </div>
               </article>

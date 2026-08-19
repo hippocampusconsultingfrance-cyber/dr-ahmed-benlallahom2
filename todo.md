@@ -2305,7 +2305,8 @@
 - [ ] Ajouter un lien de désinscription marketing explicite, sécurisé et traçable pour les campagnes recrutement
 - [ ] Ajouter un export CSV administratif contrôlé du vivier et des shortlists de missions
 - [ ] Créer des modèles réutilisables d’offres de recrutement par zone et type de mission
-- [ ] Enrichir le score de compatibilité mission–candidat avec spécialité, langues, mobilité, disponibilité et certifications
+- [x] Enrichir le score de compatibilité mission–candidat avec spécialité, langues, mobilité, disponibilité et certifications
+- [x] Afficher la répartition explicable du score de matching dans la fiche mission-candidat
 - [ ] Améliorer l’espace Employeurs avec suivi de brief, accusé de réception, statut de shortlist et descriptif de poste
 - [ ] Renforcer la réassurance publique des pages recrutement sur confidentialité, consentement, revue humaine et délais indicatifs
 - [ ] Ajouter un suivi de délivrabilité des campagnes et des erreurs d’envoi, sans réutiliser automatiquement les adresses en erreur
