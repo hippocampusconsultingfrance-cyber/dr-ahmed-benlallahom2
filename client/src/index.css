@@ -77,6 +77,31 @@
   --ring: oklch(0.55 0.2 220);
 }
 
+html.high-readability {
+  font-size: 106.25%;
+  --muted-foreground: oklch(0.77 0.018 250);
+  --border: oklch(0.35 0.025 250);
+}
+
+:root:not(.dark).high-readability {
+  --muted-foreground: oklch(0.34 0.028 250);
+  --border: oklch(0.7 0.02 250);
+}
+
+html.high-readability body {
+  letter-spacing: 0.006em;
+  line-height: 1.62;
+}
+
+html.high-readability p,
+html.high-readability li,
+html.high-readability label,
+html.high-readability input,
+html.high-readability select,
+html.high-readability textarea {
+  line-height: 1.62;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

@@ -1,10 +1,13 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
+import { HIGH_READABILITY_STORAGE_KEY, readHighReadabilityPreference } from "./readabilityPreference";
 
 type Theme = "light" | "dark";
 
 interface ThemeContextType {
   theme: Theme;
   toggleTheme?: () => void;
+  highReadability: boolean;
+  toggleHighReadability?: () => void;
   switchable: boolean;
 }
 
@@ -28,6 +31,7 @@ export function ThemeProvider({
     }
     return defaultTheme;
   });
+  const [highReadability, setHighReadability] = useState(() => readHighReadabilityPreference(localStorage.getItem(HIGH_READABILITY_STORAGE_KEY)));
 
   useEffect(() => {
     const root = document.documentElement;
@@ -42,14 +46,20 @@ export function ThemeProvider({
     }
   }, [theme, switchable]);
 
+  useEffect(() => {
+    document.documentElement.classList.toggle("high-readability", highReadability);
+    localStorage.setItem(HIGH_READABILITY_STORAGE_KEY, String(highReadability));
+  }, [highReadability]);
+
   const toggleTheme = switchable
     ? () => {
         setTheme(prev => (prev === "light" ? "dark" : "light"));
       }
     : undefined;
+  const toggleHighReadability = () => setHighReadability(current => !current);
 
   return (
-    <ThemeContext.Provider value={{ theme, toggleTheme, switchable }}>
+    <ThemeContext.Provider value={{ theme, toggleTheme, highReadability, toggleHighReadability, switchable }}>
       {children}
     </ThemeContext.Provider>
   );

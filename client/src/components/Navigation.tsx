@@ -1,14 +1,20 @@
 import { useState, useEffect, useRef } from "react";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useTheme } from "@/contexts/ThemeContext";
-import { Menu, X, ChevronDown, Sun, Moon } from "lucide-react";
+import { Accessibility, Menu, X, ChevronDown, Sun, Moon } from "lucide-react";
 
 export default function Navigation() {
   const { content, language } = useLanguage();
-  const { theme, toggleTheme } = useTheme();
+  const { theme, toggleTheme, highReadability, toggleHighReadability } = useTheme();
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const readabilityCopy = {
+    fr: { enable: "Activer la lisibilité renforcée", disable: "Désactiver la lisibilité renforcée", label: "Lisibilité renforcée" },
+    en: { enable: "Enable high readability", disable: "Disable high readability", label: "High readability" },
+    de: { enable: "Verbesserte Lesbarkeit aktivieren", disable: "Verbesserte Lesbarkeit deaktivieren", label: "Verbesserte Lesbarkeit" },
+    zh: { enable: "启用高可读性模式", disable: "关闭高可读性模式", label: "高可读性模式" },
+  }[language as "fr" | "en" | "de" | "zh"];
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const languages = [
@@ -172,6 +178,18 @@ export default function Navigation() {
             </button>
           )}
 
+          {toggleHighReadability && readabilityCopy && (
+            <button
+              onClick={toggleHighReadability}
+              className={`nav-control rounded-full border p-2 transition-all duration-200 ${highReadability ? "border-primary bg-primary/15 text-primary" : "border-border/50 text-muted-foreground hover:border-primary/40 hover:text-foreground"}`}
+              title={highReadability ? readabilityCopy.disable : readabilityCopy.enable}
+              aria-label={highReadability ? readabilityCopy.disable : readabilityCopy.enable}
+              aria-pressed={highReadability}
+            >
+              <Accessibility className="h-4 w-4" />
+            </button>
+          )}
+
           <button
             onClick={() => scrollTo("contact")}
             className="nav-cta cta-primary hidden min-[1350px]:flex px-5 py-2.5 text-sm"
@@ -212,6 +230,7 @@ export default function Navigation() {
             ))}
             <a href="/recruitment" onClick={() => setMobileOpen(false)} className="nav-mobile-link text-left text-lg font-medium text-foreground py-2 border-b border-border/20">{recruitmentLabel}</a>
             <a href="/employers" onClick={() => setMobileOpen(false)} className="nav-mobile-link text-left text-lg font-medium text-foreground py-2 border-b border-border/20">{employersLabel}</a>
+            {toggleHighReadability && readabilityCopy && <button onClick={toggleHighReadability} className="nav-mobile-link flex items-center gap-2 text-left text-lg font-medium text-foreground py-2 border-b border-border/20" aria-pressed={highReadability}><Accessibility className="h-4 w-4" />{readabilityCopy.label}</button>}
             <button
               onClick={() => scrollTo("contact")}
               className="nav-cta cta-primary mt-4 px-5 py-3.5 text-sm w-full"

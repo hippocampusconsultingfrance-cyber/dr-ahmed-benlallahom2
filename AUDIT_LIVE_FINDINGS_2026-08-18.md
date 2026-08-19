@@ -213,3 +213,9 @@ Une notice visible, traduite en français, anglais, allemand et chinois, rappell
 ## Préférences cookies réversibles — 19 août 2026
 
 Après le premier choix, un contrôle flottant « Préférences cookies » reste accessible sur les pages publiques. Il permet de modifier les cookies de performance et de préférence, tandis que les cookies essentiels restent activés. Les valeurs mémorisées sont relues de manière défensive : une valeur incomplète ou mal formée est écartée et le bandeau de choix est réaffiché.
+
+Le contrôle reste également présent lorsque le visiteur ferme le bandeau initial sans exprimer de choix : il peut alors ouvrir les préférences et enregistrer une décision à tout moment. Ce cas est couvert par un test dédié.
+
+## Lisibilité renforcée et mouvement réduit — 19 août 2026
+
+La navigation propose maintenant un contrôle de lisibilité renforcée, mémorisé localement, qui augmente modérément la taille, l’interlignage, le contraste des textes secondaires et la visibilité des bordures. Le réglage reste disponible dans le menu mobile. Les styles globaux respectent également `prefers-reduced-motion` : animations, transitions décoratives, parallax et effets de chargement sont réduits ou désactivés sans masquer le contenu.

@@ -188,7 +188,7 @@
 - [ ] Tester clavier, lecteur d’écran, contraste renforcé et zoom à 200 %
 - [ ] Vérifier la longueur des textes et des boutons dans FR, EN, DE et ZH
 - [ ] Améliorer la version mobile du dashboard administrateur
-- [ ] Ajouter un mode haute lisibilité et une gestion complète de prefers-reduced-motion
+- [x] Ajouter un mode haute lisibilité et une gestion complète de prefers-reduced-motion
 - [ ] Ajouter une page d’erreur serveur et une page de maintenance cohérentes avec la marque
 - [ ] Documenter le kit de marque : logo, couleurs, typographies, icônes et règles d’utilisation
 - [ ] Harmoniser les modèles d’emails avec l’identité visuelle du site
@@ -259,7 +259,7 @@
 - [ ] Vérifier les écrans Blog et Disponibilités du dashboard sur tablette
 - [ ] Ajouter des contrôles clavier aux témoignages en carrousel
 - [ ] Vérifier le contraste et la lisibilité du bandeau cookies
-- [x] Ajouter un lien permanent vers les préférences cookies
+- [x] Ajouter un lien permanent vers les préférences cookies, y compris après fermeture du bandeau sans choix explicite
 - [ ] Vérifier que les traceurs non essentiels restent bloqués sans consentement
 - [ ] Préparer une revue annuelle des traductions et de l’identité visuelle
 - [ ] Préparer une revue annuelle de l’accessibilité et des performances

@@ -12,3 +12,7 @@ export function normalizeCookieConsent(value: unknown): CookieConsentValue | nul
   if (typeof candidate.performance !== "boolean" || typeof candidate.preferences !== "boolean") return null;
   return { essential: true, performance: candidate.performance, preferences: candidate.preferences };
 }
+
+export function shouldShowCookiePreferences(showBanner: boolean) {
+  return !showBanner;
+}

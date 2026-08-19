@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { normalizeCookieConsent } from "./cookieConsentState";
+import { normalizeCookieConsent, shouldShowCookiePreferences } from "./cookieConsentState";
 
 describe("préférences de cookies", () => {
   it("normalise un consentement mémorisé et maintient les cookies essentiels", () => {
@@ -9,5 +9,10 @@ describe("préférences de cookies", () => {
   it("rejette une préférence incomplète ou mal formée", () => {
     expect(normalizeCookieConsent({ performance: "yes", preferences: false })).toBeNull();
     expect(normalizeCookieConsent(null)).toBeNull();
+  });
+
+  it("garde l’accès aux préférences après fermeture du bandeau sans choix", () => {
+    expect(shouldShowCookiePreferences(true)).toBe(false);
+    expect(shouldShowCookiePreferences(false)).toBe(true);
   });
 });
