@@ -7,7 +7,6 @@ import { validateCvFile } from "./recruitmentFileValidation";
 
 const MAX_ATTEMPTS = 3;
 const PROCESSING_BATCH_SIZE = 5;
-const ANALYSIS_MODEL = "gpt-5-mini";
 const ANALYSIS_PROMPT_VERSION = "recruitment-v2";
 
 type CvPipelineInput = {
@@ -64,7 +63,7 @@ export async function executeCvExternalPipeline(input: CvPipelineInput, steps: C
     ? await steps.promote(`recruitment/cv/${input.trackingId}-${input.cvOriginalName}`, buffer, input.cvMimeType)
     : null;
   const extraction = await steps.extract(buffer, input.cvMimeType);
-  const analysis = await steps.analyze({
+  const analysisExecution = await steps.analyze({
     firstName: input.firstName,
     lastName: input.lastName,
     specialty: input.specialty,
@@ -74,7 +73,7 @@ export async function executeCvExternalPipeline(input: CvPipelineInput, steps: C
     message: input.message ?? undefined,
     extractedText: extraction.text,
   });
-  return { validation, promotedStorage, extraction, analysis };
+  return { validation, promotedStorage, extraction, analysis: analysisExecution.result, analysisModel: analysisExecution.model };
 }
 
 export function retryDelayMs(attempt: number) {
@@ -147,9 +146,10 @@ async function processCvAnalysisJob(jobId: number) {
       }).where(eq(cvApplications.id, application.id));
     }
 
-    await db.update(cvApplications).set({
-      analysisStatus: "analyzing",
-      extractionMethod: pipeline.extraction.method,
+      await db.update(cvApplications).set({
+        analysisStatus: "analyzing",
+        extractedText: pipeline.extraction.text,
+        extractionMethod: pipeline.extraction.method,
       extractionPageCount: pipeline.extraction.totalPages,
       extractionTotalPages: pipeline.extraction.totalPages,
       ocrConfidence: pipeline.extraction.ocrConfidence,
@@ -167,7 +167,7 @@ async function processCvAnalysisJob(jobId: number) {
       analysisStatus: completionStatus,
       analysisAttempts: job.attempts,
       analysisLastError: null,
-      analysisModel: ANALYSIS_MODEL,
+        analysisModel: pipeline.analysisModel,
       analysisPromptVersion: ANALYSIS_PROMPT_VERSION,
       updatedAt: now,
     }).where(eq(cvApplications.id, application.id));

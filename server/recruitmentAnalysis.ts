@@ -50,6 +50,11 @@ export type RecruitmentAnalysisResult = {
   reasoning: string;
 };
 
+export type RecruitmentAnalysisExecution = {
+  result: RecruitmentAnalysisResult;
+  model: "gpt-5-mini" | "gemini-3-flash-preview";
+};
+
 const experienceSchema = {
   type: "object",
   properties: {
@@ -276,7 +281,7 @@ export async function analyzeCvText(input: {
   yearsExperience?: number;
   message?: string;
   extractedText: string;
-}): Promise<RecruitmentAnalysisResult> {
+}): Promise<RecruitmentAnalysisExecution> {
   const cvText = cleanText(input.extractedText).slice(0, 60_000);
   if (cvText.length < 80) throw new Error("Le texte extrait du CV est insuffisant pour une analyse fiable.");
 
@@ -328,7 +333,7 @@ Normalise chaque expérience dans normalizedExperiences. Convertis les dates exp
         response_format: { type: "json_schema", json_schema: analysisSchema },
       });
       const content = getFirstChoiceContent(response);
-      if (content) return parseAnalysis(content);
+      if (content) return { result: parseAnalysis(content), model: provider.model };
       failures.push(`${provider.model}: contenu vide`);
     } catch (error) {
       failures.push(`${provider.model}: ${error instanceof Error ? error.message.slice(0, 160) : "erreur inconnue"}`);

@@ -81,3 +81,7 @@ La tâche de rétention active ne détruit ni le fichier ni sa référence de st
 ## Cycle d’analyse asynchrone des CV
 
 Le traitement des CV s’appuie sur une file persistante avec un statut de job distinct. À l’envoi, l’analyse est placée en attente ; le worker Heartbeat fait évoluer la candidature vers l’extraction puis l’analyse, avant une clôture en `completed`, `needs_review` ou `failed`. Les erreurs de téléchargement, extraction/OCR ou IA sont enregistrées, replanifiées avec un délai exponentiel et plafonnées à trois tentatives ; les erreurs de validation sont arrêtées immédiatement. Les tests couvrent la promotion depuis la quarantaine, les statuts de revue humaine, les délais de reprise et les échecs externes contrôlés.
+
+## Traçabilité reproductible des analyses
+
+Le dossier candidat conserve désormais le texte extrait séparément, le modèle réellement retenu par la chaîne de repli, la version de prompt, la méthode d’extraction, le nombre de pages, le modèle et la confiance OCR ainsi que les avertissements d’extraction. Cette trace permet de comprendre et de rejouer le contexte d’une analyse sans conserver un second fichier CV. La migration ajoutant `extracted_text` est additive et vérifiée sur la base déployée ; un test de contrat protège la persistance de ces éléments.

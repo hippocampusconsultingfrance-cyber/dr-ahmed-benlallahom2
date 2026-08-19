@@ -37,12 +37,14 @@ const analysis = {
   reasoning: "Revue humaine requise.",
 };
 
+const analysisExecution = { result: analysis, model: "gpt-5-mini" as const };
+
 const steps = {
   download: async () => Buffer.alloc(320, 1),
   promote: async () => ({ key: "recruitment/cv/CV-001-cv.pdf" }),
   validate: () => ({ checksum, notes: "signature_verified", mimeType: "application/pdf", pageCount: 1, securityScanVersion: "document-safety-v2", warnings: [] }),
   extract: async () => ({ text: "CV professionnel avec expérience clinique confirmée.", method: "pdf_text" as const, totalPages: 1, ocrConfidence: null, ocrModelVersion: null, warnings: [] }),
-  analyze: async () => analysis,
+  analyze: async () => analysisExecution,
 };
 
 describe("règles déterministes du pipeline de traitement CV", () => {
@@ -70,6 +72,7 @@ describe("règles déterministes du pipeline de traitement CV", () => {
     expect(result.promotedStorage?.key).toContain("recruitment/cv/");
     expect(result.extraction.method).toBe("pdf_text");
     expect(result.analysis.relevanceScore).toBe(80);
+    expect(result.analysisModel).toBe("gpt-5-mini");
   });
 
   it("propage de manière contrôlée les échecs de stockage, OCR et IA pour la logique de reprise", async () => {

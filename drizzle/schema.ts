@@ -248,6 +248,7 @@ export const cvApplications = mysqlTable("cv_applications", {
   aiWeaknesses: text("ai_weaknesses"), // JSON array string
   aiExtractedSkills: text("ai_extracted_skills"), // JSON array string
   aiMatchReasoning: text("ai_match_reasoning"),
+  extractedText: text("extracted_text"),
   aiAnalyzedAt: timestamp("ai_analyzed_at"),
   analysisStatus: mysqlEnum("analysis_status", ["queued", "extracting", "analyzing", "completed", "needs_review", "failed"]).default("queued").notNull(),
   analysisAttempts: int("analysis_attempts").default(0).notNull(),

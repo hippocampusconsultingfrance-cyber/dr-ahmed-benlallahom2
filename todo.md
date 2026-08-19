@@ -2187,7 +2187,7 @@
 ## Audit backend — traitement des CV et candidatures
 
 - [x] Mettre en œuvre un cycle asynchrone durable d’analyse CV : file persistante, statuts en attente/extraction/analyse/à revoir/échec, tentatives plafonnées et reprises exponentielles
-- [ ] Stocker séparément le texte extrait, la version de modèle, le prompt et les métadonnées techniques de chaque analyse
+- [x] Conserver le texte extrait, le modèle effectivement utilisé, la version de prompt et les métadonnées techniques de chaque analyse de CV
 - [x] Conserver les CV après expiration et notifier l’administrateur pour revue ; aucune suppression automatique, une suppression éventuelle reste exclusivement manuelle au titre d’une demande RGPD explicite
 - [ ] Ajouter une vraie table Drizzle, des migrations et un dashboard administrateur pour les briefs Employeurs
 - [x] Exposer disponibilité, mobilité et certifications dans la fiche candidat et les filtres de matching
