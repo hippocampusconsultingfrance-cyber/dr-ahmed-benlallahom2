@@ -140,6 +140,8 @@ Enfin, les profils de matching et leurs champs de création sont alignés sur le
 
 La fiche Candidate 360° est désormais localisée : aperçu sécurisé, statuts, dates, notes, pièces demandées, relances, chronologie, actions et états d’absence. Les titres et détails archivés dans la chronologie restent préservés dans leur langue d’enregistrement afin de conserver leur valeur de traçabilité.
 
+Le pilotage Recrutement localise à présent ses indicateurs, relances manuelles, métriques de vivier, états d’analyse et délivrabilité des campagnes. Les calculs et données sources restent inchangés ; les ratios affichés conservent leur rôle informatif et ne fondent aucune décision automatisée.
+
 ## Disponibilité de production
 
 Le 19 août 2026, les routes publiques `/`, `/booking`, `/gdpr`, `/faq`, `/search`, `/error`, `/maintenance`, `/recruitment`, `/employers` et `/why-hippocampus` ont toutes répondu en HTTP 200 sur le domaine principal. L’accès `www.drahmedbenlallahom.com` redirige correctement vers `drahmedbenlallahom.com` et sert ensuite la page d’accueil en HTTP 200. Aucun écart de disponibilité n’a été observé sur cet échantillon.
