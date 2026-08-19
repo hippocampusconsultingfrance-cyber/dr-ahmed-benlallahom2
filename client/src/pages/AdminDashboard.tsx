@@ -29,6 +29,13 @@ export const adminShellCopy = {
   zh: { title: "管理后台", site: "网站", section: "管理栏目", access: { loading: "正在加载管理员访问权限", loginRequired: "需要管理员登录", loginDescription: "请使用所有者账户登录，以访问申请和任务。", login: "登录", forbidden: "访问被拒绝", forbiddenDescription: "当前会话没有所需权限。若您的角色刚刚更新，请刷新访问权限或重新登录。", refresh: "刷新访问权限", reconnect: "重新登录", home: "首页", checking: "安全验证", mfaTitle: "安全验证", mfaDescription: "第二次验证可保护敏感文件和简历。", mfaInstructions: "请向管理员邮箱申请六码验证码，然后在下方输入。", sendCode: "发送安全验证码", sending: "正在发送…", codeLabel: "6 位验证码", verifying: "正在验证…", verify: "验证代码", backToSite: "返回网站", codeSent: "安全验证码已发送至您的管理员邮箱。", mfaVerified: "双重身份验证已完成。" }, tabs: { overview: "概览", appointments: "预约", contacts: "消息", gdpr: "隐私保护", testimonials: "合作伙伴评价", availability: "可用时间", recruitment: "申请", candidateDocuments: "候选人文件", security: "安全", vivier: "人才库", mailing: "邮件活动", employerBriefs: "任务需求" } },
 } as const;
 
+export const adminOverviewCopy = {
+  fr: { loading: "Chargement des indicateurs administratifs", error: "Erreur de chargement", bookings: "Réservations", messages: "Messages", gdpr: "Demandes RGPD", revenue: "Revenus", eyebrow: "Accès rapide", title: "Recrutement & Missions", intro: "Accédez directement aux CV déposés et aux besoins transmis par les employeurs.", applications: "Candidatures", applicationsDescription: "Consulter les CV, analyses IA, disponibilités et certifications.", missions: "Missions", missionsDescription: "Gérer les briefs Employeurs et créer des shortlists de candidats." },
+  en: { loading: "Loading administration indicators", error: "Loading error", bookings: "Appointments", messages: "Messages", gdpr: "GDPR requests", revenue: "Revenue", eyebrow: "Quick access", title: "Recruitment & missions", intro: "Access submitted CVs and needs shared by employers directly.", applications: "Applications", applicationsDescription: "Review CVs, AI analyses, availability and certifications.", missions: "Missions", missionsDescription: "Manage employer briefs and create candidate shortlists." },
+  de: { loading: "Verwaltungsindikatoren werden geladen", error: "Ladefehler", bookings: "Termine", messages: "Nachrichten", gdpr: "DSGVO-Anfragen", revenue: "Umsatz", eyebrow: "Schnellzugriff", title: "Recruiting & Aufträge", intro: "Greifen Sie direkt auf eingereichte Lebensläufe und Arbeitgeberanforderungen zu.", applications: "Bewerbungen", applicationsDescription: "Lebensläufe, KI-Analysen, Verfügbarkeiten und Zertifikate prüfen.", missions: "Aufträge", missionsDescription: "Arbeitgeber-Briefs verwalten und Kandidaten-Shortlists erstellen." },
+  zh: { loading: "正在加载管理指标", error: "加载出错", bookings: "预约", messages: "消息", gdpr: "隐私请求", revenue: "收入", eyebrow: "快速入口", title: "招聘与任务", intro: "直接查看已提交的简历和雇主需求。", applications: "申请", applicationsDescription: "查看简历、AI 分析、可入职时间和认证。", missions: "任务", missionsDescription: "管理雇主需求并创建候选人短名单。" },
+} as const;
+
 export default function AdminDashboard() {
   const { user, loading, refresh } = useAuth();
   const { language } = useLanguage();
@@ -182,21 +189,23 @@ export default function AdminDashboard() {
 }
 
 function OverviewTab({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
+  const { language } = useLanguage();
+  const copy = adminOverviewCopy[language as keyof typeof adminOverviewCopy] ?? adminOverviewCopy.fr;
   const { data: stats, isLoading, error } = trpc.admin.stats.useQuery();
 
   if (error) {
-    return <div className="text-center py-8 text-red-400">Erreur de chargement : {error.message}</div>;
+    return <div className="text-center py-8 text-red-400">{copy.error} : {error.message}</div>;
   }
 
   if (isLoading) {
-    return <PublicContentSkeleton cards={4} columns={4} label="Chargement des indicateurs administratifs" />;
+    return <PublicContentSkeleton cards={4} columns={4} label={copy.loading} />;
   }
 
   const cards = [
-    { label: "Réservations", value: stats?.appointments || 0, icon: Calendar, color: "text-cyan-400" },
-    { label: "Messages", value: stats?.contacts || 0, icon: MessageSquare, color: "text-green-400" },
-    { label: "Demandes RGPD", value: stats?.gdpr || 0, icon: Shield, color: "text-yellow-400" },
-    { label: "Revenus", value: `${stats?.revenue || 0}€`, icon: DollarSign, color: "text-emerald-400" },
+    { label: copy.bookings, value: stats?.appointments || 0, icon: Calendar, color: "text-cyan-400" },
+    { label: copy.messages, value: stats?.contacts || 0, icon: MessageSquare, color: "text-green-400" },
+    { label: copy.gdpr, value: stats?.gdpr || 0, icon: Shield, color: "text-yellow-400" },
+    { label: copy.revenue, value: `${stats?.revenue || 0}€`, icon: DollarSign, color: "text-emerald-400" },
   ];
 
   return (
@@ -220,9 +229,9 @@ function OverviewTab({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
 
       <section aria-labelledby="recruitment-shortcuts-title" className="rounded-2xl border border-primary/25 bg-primary/5 p-5 sm:p-6">
         <div className="mb-5">
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">Accès rapide</p>
-          <h2 id="recruitment-shortcuts-title" className="mt-1 text-xl font-semibold text-foreground">Recrutement & Missions</h2>
-          <p className="mt-1 text-sm text-muted-foreground">Accédez directement aux CV déposés et aux besoins transmis par les employeurs.</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">{copy.eyebrow}</p>
+          <h2 id="recruitment-shortcuts-title" className="mt-1 text-xl font-semibold text-foreground">{copy.title}</h2>
+          <p className="mt-1 text-sm text-muted-foreground">{copy.intro}</p>
         </div>
         <div className="grid gap-4 md:grid-cols-2">
           <button
@@ -231,8 +240,8 @@ function OverviewTab({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
             className="group flex items-center justify-between rounded-xl border border-border bg-card p-5 text-left transition-colors hover:border-primary/60 hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
           >
             <span>
-              <span className="flex items-center gap-2 font-semibold text-foreground"><UserRound className="h-5 w-5 text-primary" /> Candidatures</span>
-              <span className="mt-1 block text-sm text-muted-foreground">Consulter les CV, analyses IA, disponibilités et certifications.</span>
+              <span className="flex items-center gap-2 font-semibold text-foreground"><UserRound className="h-5 w-5 text-primary" /> {copy.applications}</span>
+              <span className="mt-1 block text-sm text-muted-foreground">{copy.applicationsDescription}</span>
             </span>
             <span aria-hidden="true" className="text-lg text-primary transition-transform group-hover:translate-x-0.5">→</span>
           </button>
@@ -242,8 +251,8 @@ function OverviewTab({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
             className="group flex items-center justify-between rounded-xl border border-border bg-card p-5 text-left transition-colors hover:border-primary/60 hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
           >
             <span>
-              <span className="flex items-center gap-2 font-semibold text-foreground"><BriefcaseBusiness className="h-5 w-5 text-primary" /> Missions</span>
-              <span className="mt-1 block text-sm text-muted-foreground">Gérer les briefs Employeurs et créer des shortlists de candidats.</span>
+              <span className="flex items-center gap-2 font-semibold text-foreground"><BriefcaseBusiness className="h-5 w-5 text-primary" /> {copy.missions}</span>
+              <span className="mt-1 block text-sm text-muted-foreground">{copy.missionsDescription}</span>
             </span>
             <span aria-hidden="true" className="text-lg text-primary transition-transform group-hover:translate-x-0.5">→</span>
           </button>

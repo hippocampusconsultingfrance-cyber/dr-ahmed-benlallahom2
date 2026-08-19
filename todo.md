@@ -187,6 +187,7 @@
 - [ ] Localiser les libellés de chargement et les états vides des onglets administratifs historiques en FR/EN/DE/ZH
 - [x] Localiser l’en-tête, le sélecteur de section et les onglets du tableau de bord administratif en FR/EN/DE/ZH
 - [x] Localiser les états de connexion, accès refusé et validation MFA du tableau de bord administratif en FR/EN/DE/ZH
+- [x] Localiser les indicateurs et raccourcis de la vue d’ensemble administrative en FR/EN/DE/ZH
 - [x] Remplacer les états vides textuels des onglets Témoignages et Disponibilités par le panneau administratif illustré partagé
 - [x] Ajouter un état vide illustré au carrousel de témoignages partenaires
 - [x] Ajouter un repère illustré et accessible aux états de disponibilité de réservation
