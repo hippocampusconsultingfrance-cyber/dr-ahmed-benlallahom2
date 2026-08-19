@@ -105,3 +105,7 @@ La suite couvre les chemins de succès et d’échec du pipeline : validation de
 ## Données de recrutement normalisées
 
 Les certifications, langues et expériences extraites sont conservées à la fois dans les champs de synthèse du dossier et dans des tables relationnelles dédiées. Le matching de brief consomme les certifications et langues normalisées ; le vivier conserve les structures normalisées et les expose dans l’administration. Les filtres restent compatibles avec les données déjà déposées en utilisant également les champs de déclaration initiaux.
+
+## Filtres du vivier administratif
+
+Le vivier actif applique un consentement marketing positif et propose les critères requis : spécialité, pays ciblé, score IA minimal, disponibilité, mobilité et certification. Les paramètres sont bornés côté serveur et testés, tandis que l’interface les expose dans la zone de filtre. Les candidatures rejetées et archivées sont écartées de cette recherche opérationnelle.
