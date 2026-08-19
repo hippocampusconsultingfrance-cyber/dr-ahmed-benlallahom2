@@ -231,3 +231,7 @@ Les préférences de langue, thème et lisibilité s’appuient désormais sur d
 ## Garde-fou de longueur multilingue — 19 août 2026
 
 Les libellés critiques de navigation et l’appel à l’action de réservation sont maintenant contrôlés automatiquement en français, anglais, allemand et chinois. Le test signale toute chaîne qui excède l’enveloppe prévue pour ces contrôles et protège ainsi les zones de navigation les plus contraintes. Il ne remplace pas la vérification visuelle des contenus longs ; celle-ci demeure listée comme revue responsive globale.
+
+## Navigation clavier — 19 août 2026
+
+Le sélecteur de langue dirige le focus vers son premier choix lors de l’ouverture ; les flèches, Accueil et Fin déplacent le focus dans les quatre langues. La touche Échap ferme le sélecteur ou le menu mobile et restitue le focus au contrôle qui l’a ouvert. Les comportements de déplacement et de fermeture sont isolés dans un test unitaire dédié.

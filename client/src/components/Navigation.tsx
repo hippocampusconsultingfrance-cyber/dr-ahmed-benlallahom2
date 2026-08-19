@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { Accessibility, Menu, X, ChevronDown, Sun, Moon } from "lucide-react";
+import { getMenuFocusIndex, isNavigationDismissKey } from "./navigationKeyboard";
 
 export default function Navigation() {
   const { content, language } = useLanguage();
@@ -16,6 +17,8 @@ export default function Navigation() {
     zh: { enable: "启用高可读性模式", disable: "关闭高可读性模式", label: "高可读性模式" },
   }[language as "fr" | "en" | "de" | "zh"];
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const languageButtonRef = useRef<HTMLButtonElement>(null);
+  const mobileMenuButtonRef = useRef<HTMLButtonElement>(null);
 
   const languages = [
     { code: "fr", name: "Français", flag: "🇫🇷" },
@@ -53,10 +56,43 @@ export default function Navigation() {
   }, [dropdownOpen]);
 
   useEffect(() => {
+    if (!dropdownOpen) return;
+    const firstMenuItem = dropdownRef.current?.querySelector<HTMLButtonElement>('[role="menuitem"]');
+    firstMenuItem?.focus();
+  }, [dropdownOpen]);
+
+  useEffect(() => {
+    const handleEscape = (event: KeyboardEvent) => {
+      if (!isNavigationDismissKey(event.key)) return;
+      if (dropdownOpen) {
+        event.preventDefault();
+        setDropdownOpen(false);
+        languageButtonRef.current?.focus();
+      }
+      if (mobileOpen) {
+        event.preventDefault();
+        setMobileOpen(false);
+        mobileMenuButtonRef.current?.focus();
+      }
+    };
+    document.addEventListener("keydown", handleEscape);
+    return () => document.removeEventListener("keydown", handleEscape);
+  }, [dropdownOpen, mobileOpen]);
+
+  useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 50);
     window.addEventListener("scroll", handleScroll);
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
+
+  const handleLanguageMenuKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    const menuItems = Array.from(dropdownRef.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]') ?? []);
+    const currentIndex = menuItems.findIndex((item) => item === document.activeElement);
+    const nextIndex = getMenuFocusIndex(currentIndex < 0 ? 0 : currentIndex, menuItems.length, event.key);
+    if (nextIndex === null) return;
+    event.preventDefault();
+    menuItems[nextIndex]?.focus();
+  };
 
   const scrollTo = (id: string) => {
     setMobileOpen(false);
@@ -131,11 +167,13 @@ export default function Navigation() {
           <div ref={dropdownRef} className="relative">
             <button
               onClick={() => setDropdownOpen(!dropdownOpen)}
+              ref={languageButtonRef}
               className="nav-control flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-border/50 text-sm font-medium text-muted-foreground hover:text-foreground hover:border-primary/40 transition-all duration-200 hover:bg-background/50"
               title="Change language"
               aria-label="Change language"
               aria-expanded={dropdownOpen}
               aria-haspopup="menu"
+              aria-controls="language-menu"
             >
               <span className="text-base">{currentLang?.flag}</span>
               <span>{currentLang?.code.toUpperCase()}</span>
@@ -146,7 +184,7 @@ export default function Navigation() {
             </button>
 
             {dropdownOpen && (
-              <div className="nav-language-menu absolute right-0 mt-2 w-48 bg-background border border-border/50 rounded-lg shadow-lg z-50 overflow-hidden" role="menu" aria-label="Choisir une langue">
+              <div id="language-menu" onKeyDown={handleLanguageMenuKeyDown} className="nav-language-menu absolute right-0 mt-2 w-48 bg-background border border-border/50 rounded-lg shadow-lg z-50 overflow-hidden" role="menu" aria-label="Choisir une langue">
                 {languages.map((lang) => (
                   <button
                     key={lang.code}
@@ -200,6 +238,7 @@ export default function Navigation() {
           {/* Mobile menu toggle */}
           <button
             onClick={() => setMobileOpen(!mobileOpen)}
+            ref={mobileMenuButtonRef}
             className="nav-control min-[1350px]:hidden p-2 text-foreground"
             aria-label={mobileOpen ? "Fermer le menu" : "Ouvrir le menu"}
             aria-expanded={mobileOpen}
