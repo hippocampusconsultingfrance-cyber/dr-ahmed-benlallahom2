@@ -99,3 +99,12 @@ Les constatations ci-dessous proviennent des captures du serveur de prévisualis
 | Décision humaine | Une analyse relancée produit une synthèse d’aide ; elle ne valide jamais un document automatiquement. | La revue humaine reste obligatoire avant toute décision. |
 
 > Le CV historique dont le téléchargement d’analyse avait reçu un 403 peut désormais être relancé depuis l’administration, sans suppression ni remplacement du document original.
+
+## Cohérence multilingue VVIP — 19 août 2026
+
+| Élément | Correction appliquée | Contrôle |
+|---|---|---|
+| Badge de la voie VVIP | Le badge du parcours VVIP est localisé en français, anglais, allemand et chinois. | Test complet et build de production validés. |
+| Positionnement métier | Les formulations restent limitées aux plateformes pétrolières, entreprises offshore et grands groupes industriels. | Aucune référence aux résidences de prestige ne subsiste dans le hub recrutement. |
+
+> Cette correction éditoriale ne modifie ni les champs de candidature, ni l’analyse IA, ni la logique de traitement des profils.
