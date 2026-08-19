@@ -2318,7 +2318,7 @@
 - [x] Préparer des relances manuelles suggérées à J+7/J+14 sans aucun envoi automatique
 - [x] Ajouter un lien de désinscription marketing explicite, sécurisé et traçable pour les campagnes recrutement
 - [x] Ajouter un export CSV administratif contrôlé du vivier et des shortlists de missions
-- [ ] Créer des modèles réutilisables d’offres de recrutement par zone et type de mission
+- [x] Créer des modèles réutilisables d’offres de recrutement par zone et type de mission
 - [x] Enrichir le score de compatibilité mission–candidat avec spécialité, langues, mobilité, disponibilité et certifications
 - [x] Afficher la répartition explicable du score de matching dans la fiche mission-candidat
 - [x] Ajouter des modèles réutilisables FR/EN pour les campagnes Europe, Canada, Moyen-Orient et offshore

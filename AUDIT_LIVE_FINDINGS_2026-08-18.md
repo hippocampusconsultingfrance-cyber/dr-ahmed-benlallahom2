@@ -390,3 +390,6 @@ Le vivier chargé dans cette session ne montre que les profils ayant donné leur
 
 ## Journaux de développement — 19 août 2026
 La revue des dernières entrées serveur et console navigateur ne relève aucune erreur, exception, réponse 500 ou échec applicatif. Le fichier de suivi réseau n’était pas disponible dans l’environnement restauré ; les contrôles HTTP de production et les suites de tests restent les sources complémentaires de vérification réseau.
+
+## Modèles réutilisables de campagnes — 19 août 2026
+La vérification de l’onglet Mailing confirme la présence de quatre modèles d’offres réutilisables, en français et en anglais : Europe, Canada, Moyen-Orient et mission VVIP/offshore. Chaque modèle comprend les paramètres opérationnels à compléter, notamment spécialité, localisation, type de mission, calendrier ou certifications selon le contexte. Le test dédié couvre les zones, les deux langues et le rejet sûr d’un identifiant de modèle inconnu.
