@@ -193,3 +193,7 @@ Le tableau de bord administratif affiche désormais les volumes de CV, la part d
 L’historique Mailing présente désormais, pour chaque campagne, les distributions confirmées, les ouvertures remontées, les délais et les échecs ou suppressions. Les événements sont archivés de manière idempotente à partir du webhook Resend ; les compteurs évitent le double comptage lorsqu’un même destinataire génère plusieurs événements. Les ouvertures sont affichées comme un signal indicatif, conformément aux limites signalées par Resend. Les adresses concernées par un bounce, une plainte ou une suppression restent exclues des campagnes ultérieures.
 
 Référence technique : [Resend — Event Types](https://resend.com/docs/webhooks/event-types) et [Resend — email.opened](https://resend.com/docs/webhooks/emails/opened).
+
+## Fiche candidat 360° — 19 août 2026
+
+Depuis l’onglet **Candidatures**, le bouton « Fiche 360° » ouvre une vue administrative protégée par MFA. Elle réunit la chronologie de la candidature, les actions d’administration, les campagnes et leurs états, les demandes libres de compléments, la note interne et le prochain suivi suggéré. Le texte libre demandé par l’administrateur est désormais archivé dans le journal d’audit du dossier afin de préserver la continuité du suivi, sans créer de décision automatisée.

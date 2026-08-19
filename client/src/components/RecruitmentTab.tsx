@@ -1,9 +1,10 @@
 import { useState } from "react";
-import { BrainCircuit, Download, FileSearch, Loader2, Mail, RefreshCw, Sparkles, Trash2, UserRound } from "lucide-react";
+import { BrainCircuit, ClipboardList, Download, FileSearch, Loader2, Mail, RefreshCw, Sparkles, Trash2, UserRound } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import Candidate360Dialog from "./Candidate360Dialog";
 
 const statusOptions = [
   { value: "new", label: "Nouvelle" },
@@ -89,6 +90,7 @@ export default function RecruitmentTab() {
   const [minimumScore, setMinimumScore] = useState("");
   const [selectedProfileId, setSelectedProfileId] = useState("");
   const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [candidate360Id, setCandidate360Id] = useState<number | null>(null);
   const [profileName, setProfileName] = useState("");
   const [profileCountry, setProfileCountry] = useState("");
   const [profileSpecialty, setProfileSpecialty] = useState("");
@@ -298,9 +300,12 @@ export default function RecruitmentTab() {
                     <select aria-label={`Statut de ${application.firstName} ${application.lastName}`} value={application.status} disabled={updateStatus.isPending} onChange={event => updateStatus.mutate({ id: application.id, status: event.target.value as Status })} className="h-9 rounded-md border border-border bg-background px-2 text-sm text-foreground">
                       {statusOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
                     </select>
-                    <Button size="sm" variant="outline" onClick={() => downloadCv.mutate({ id: application.id })} disabled={downloadCv.isPending}>
-                      <Download className="mr-2 h-4 w-4" /> CV
-                    </Button>
+                          <Button size="sm" variant="outline" onClick={() => downloadCv.mutate({ id: application.id })} disabled={downloadCv.isPending}>
+                            <Download className="mr-2 h-4 w-4" /> CV
+                          </Button>
+                          <Button size="sm" variant="outline" onClick={() => setCandidate360Id(application.id)}>
+                            <ClipboardList className="mr-2 h-4 w-4" /> Fiche 360°
+                          </Button>
                   </div>
                 </div>
 
@@ -447,6 +452,7 @@ export default function RecruitmentTab() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <Candidate360Dialog applicationId={candidate360Id} onOpenChange={open => { if (!open) setCandidate360Id(null); }} />
     </section>
   );
 }

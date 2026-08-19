@@ -1484,7 +1484,7 @@ export const appRouter = router({
             input.template as RecruitmentEmailTemplate,
             { language: input.language as RecruitmentEmailLanguage, customRequest: input.customRequest },
           );
-          await logRecruitmentAction({ applicationId: input.id, adminOpenId: ctx.user.openId, action: "email", metadata: { template: input.template, language: input.language, customRequest: Boolean(input.customRequest), resendId: result.id } });
+          await logRecruitmentAction({ applicationId: input.id, adminOpenId: ctx.user.openId, action: "email", metadata: { template: input.template, language: input.language, customRequest: input.customRequest || null, resendId: result.id } });
           return { success: true };
         }),
 
