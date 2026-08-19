@@ -2401,3 +2401,4 @@
 - [x] Vérifier et compléter les textes alternatifs des images visibles sur les pages publiques
 - [x] Vérifier la navigation clavier et ajouter un accès direct au contenu principal si nécessaire
 - [x] Remplacer l’affichage système mm/dd/yyyy du champ de réservation par une saisie explicitement localisée en français
+- [x] Retirer la référence résiduelle aux résidences VVIP de la page Employeurs et conserver uniquement les environnements autorisés

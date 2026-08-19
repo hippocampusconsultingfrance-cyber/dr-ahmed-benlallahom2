@@ -10,7 +10,7 @@ const copy = {
   fr: {
     eyebrow: "Hippocampus Consulting · Espace Employeurs & Partenaires",
     title: "Déléguez le recrutement de vos équipes médicales d’élite.",
-    intro: "Nous sélectionnons et qualifions pour les hôpitaux, cliniques, plateformes offshore et résidences VVIP des professionnels de santé d'exception, prêts à intervenir en Europe, au Canada, au Moyen-Orient et sur les sites isolés.",
+    intro: "Nous sélectionnons et qualifions, pour les hôpitaux, cliniques, plateformes pétrolières, grands groupes industriels et missions offshore, des professionnels de santé d'exception prêts à intervenir en Europe, au Canada, au Moyen-Orient, en Afrique et sur les sites isolés.",
     formTitle: "Soumettre un brief de mission",
     formIntro: "Précisez vos besoins opérationnels. Notre cellule spécialisée vous contactera sous 24h avec une shortlist qualifiée.",
     orgName: "Établissement ou entreprise",
@@ -20,7 +20,7 @@ const copy = {
     targetEnvironment: "Environnement de la mission",
     env1: "Hôpital / Clinique internationale",
     env2: "Plateforme pétrolière / Site Offshore",
-    env3: "Résidence VVIP / Délégation officielle",
+    env3: "Mission VVIP offshore / Groupe industriel",
     env4: "Site minier ou industriel isolé",
     specialtyNeeded: "Spécialité médicale ou paramédicale recherchée",
     country: "Pays / Zone géographique",
@@ -44,12 +44,12 @@ const copy = {
     b3Title: "Discrétion & Réactivité",
     b3Desc: "Accompagnement sur-mesure pour les environnements les plus exigeants.",
     metaTitle: "Espace Employeurs & Recrutement Médical | Hippocampus Consulting",
-    metaDescription: "Soumettez vos briefs de recrutement médical pour hôpitaux, cliniques, plateformes offshore et missions VVIP.",
+    metaDescription: "Soumettez vos briefs de recrutement médical pour hôpitaux, cliniques, plateformes pétrolières, grands groupes industriels et missions VVIP offshore.",
   },
   en: {
     eyebrow: "Hippocampus Consulting · Employers & Partners",
     title: "Delegate the recruitment of your elite medical teams.",
-    intro: "We source and qualify exceptional healthcare professionals for hospitals, clinics, offshore rigs, and VVIP residences across Europe, Canada, the Middle East, and remote sites.",
+    intro: "We source and qualify exceptional healthcare professionals for hospitals, clinics, oil rigs, industrial groups, and offshore missions across Europe, Canada, the Middle East, Africa, and remote sites.",
     formTitle: "Submit a Mission Brief",
     formIntro: "Specify your operational requirements. Our specialized unit will contact you within 24 hours with a qualified shortlist.",
     orgName: "Organization or Company",
@@ -59,7 +59,7 @@ const copy = {
     targetEnvironment: "Mission Environment",
     env1: "Hospital / International Clinic",
     env2: "Oil Rig / Offshore Site",
-    env3: "VVIP Residence / Official Delegation",
+    env3: "VVIP Offshore Mission / Industrial Group",
     env4: "Remote Mining or Industrial Site",
     specialtyNeeded: "Specialty / Profession Needed",
     country: "Country / Region",
@@ -83,12 +83,12 @@ const copy = {
     b3Title: "Discretion & Responsiveness",
     b3Desc: "Tailored support for the most demanding environments.",
     metaTitle: "Employers & Medical Recruitment | Hippocampus Consulting",
-    metaDescription: "Submit your medical recruitment briefs for hospitals, clinics, offshore platforms, and VVIP missions.",
+    metaDescription: "Submit your medical recruitment briefs for hospitals, clinics, oil rigs, industrial groups, and VVIP offshore missions.",
   },
   de: {
     eyebrow: "Hippocampus Consulting · Arbeitgeber & Partner",
     title: "Delegieren Sie die Rekrutierung Ihrer medizinischen Elite-Teams.",
-    intro: "Wir rekrutieren und qualifizieren herausragende medizinische Fachkräfte für Krankenhäuser, Kliniken, Offshore-Plattformen und VVIP-Residenzen in Europa, Kanada und dem Nahen Osten.",
+    intro: "Wir rekrutieren und qualifizieren herausragende medizinische Fachkräfte für Krankenhäuser, Kliniken, Offshore-Plattformen, Industriegruppen und Offshore-Einsätze in Europa, Kanada, dem Nahen Osten, Afrika und an abgelegenen Standorten.",
     formTitle: "Einsatz-Brief einreichen",
     formIntro: "Geben Sie Ihre operativen Anforderungen an. Unser spezialisiertes Team kontaktiert Sie innerhalb von 24 Stunden.",
     orgName: "Einrichtung oder Unternehmen",
@@ -98,7 +98,7 @@ const copy = {
     targetEnvironment: "Einsatzumgebung",
     env1: "Krankenhaus / Internationale Klinik",
     env2: "Bohrinsel / Offshore-Standort",
-    env3: "VVIP-Residenz / Offizielle Delegation",
+    env3: "VVIP-Offshore-Einsatz / Industriegruppe",
     env4: "Entlegener Industrie- oder Bergbaustandort",
     specialtyNeeded: "Gesuchtes medizinisches Fachgebiet",
     country: "Land / Region",
@@ -127,7 +127,7 @@ const copy = {
   zh: {
     eyebrow: "Hippocampus Consulting · 雇主与合作伙伴专区",
     title: "委托我们为您招募精英医疗团队。",
-    intro: "我们为欧洲、加拿大、中东及偏远站点的医院、诊所、离岸钻井平台及 VVIP 宅邸甄选并认证顶尖医疗专业人员。",
+    intro: "我们为欧洲、加拿大、中东、非洲及偏远站点的医院、诊所、石油钻井平台、工业集团和离岸任务甄选并认证顶尖医疗专业人员。",
     formTitle: "提交任务需求 (Brief)",
     formIntro: "请告知您的运营需求。我们的专业团队将在 24 小时内为您提供合格的候选人 shortlist。",
     orgName: "机构或公司名称",
@@ -137,7 +137,7 @@ const copy = {
     targetEnvironment: "任务环境",
     env1: "医院 / 国际诊所",
     env2: "石油钻井平台 / 离岸工程",
-    env3: "VVIP 宅邸 / 官方代表团",
+    env3: "VVIP 离岸任务 / 工业集团",
     env4: "偏远矿山或工业驻地",
     specialtyNeeded: "急需医疗或医护专业",
     country: "国家 / 地区",
@@ -161,7 +161,7 @@ const copy = {
     b3Title: "绝对保密与高效响应",
     b3Desc: "为最具挑战性的环境提供定制化支持。",
     metaTitle: "雇主专区与医疗招聘 | Hippocampus Consulting",
-    metaDescription: "为医院、诊所、离岸平台及 VVIP 任务提交医疗招聘需求。",
+    metaDescription: "为医院、诊所、石油钻井平台、工业集团及 VVIP 离岸任务提交医疗招聘需求。",
   },
 } as const;
 
@@ -324,7 +324,7 @@ export default function EmployersPage() {
                       <select value={form.targetEnvironment} onChange={(e) => update("targetEnvironment", e.target.value)} className="form-control block w-full">
                         <option value="Hôpital / Clinique internationale">{t.env1}</option>
                         <option value="Plateforme pétrolière / Site Offshore">{t.env2}</option>
-                        <option value="Résidence VVIP / Délégation officielle">{t.env3}</option>
+                        <option value="Mission VVIP offshore / Groupe industriel">{t.env3}</option>
                         <option value="Site minier ou industriel isolé">{t.env4}</option>
                       </select>
                     </label>
