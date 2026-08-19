@@ -2309,6 +2309,7 @@
 - [x] Afficher la répartition explicable du score de matching dans la fiche mission-candidat
 - [x] Ajouter des modèles réutilisables FR/EN pour les campagnes Europe, Canada, Moyen-Orient et offshore
 - [ ] Préparer et réaliser une recette Stripe non destructive avec confirmation explicite avant paiement
+- [x] Vérifier et corriger la cohérence de l’annulation d’une session Stripe non payée
 - [x] Corriger le champ date/heure qui ne sélectionne pas correctement le créneau de réservation
 - [x] Remplacer le sélecteur date/heure natif bloquant par deux saisies accessibles de date et d’heure
 - [ ] Améliorer l’espace Employeurs avec suivi de brief, accusé de réception, statut de shortlist et descriptif de poste

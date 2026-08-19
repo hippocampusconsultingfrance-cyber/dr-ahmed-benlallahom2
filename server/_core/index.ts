@@ -213,10 +213,11 @@ async function startServer() {
             const { drizzle } = await import("drizzle-orm/mysql2");
             const { appointments } = await import("../../drizzle/schema");
             const { and, eq } = await import("drizzle-orm");
+            const { getExpiredAppointmentUpdate } = await import("../stripeLifecycle");
             const db = drizzle(process.env.DATABASE_URL!);
             await db
               .update(appointments)
-              .set({ appointmentStatus: "cancelled", slotKey: null })
+              .set(getExpiredAppointmentUpdate())
               .where(
                 and(
                   eq(appointments.trackingId, trackingId),
