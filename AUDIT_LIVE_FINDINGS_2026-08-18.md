@@ -117,3 +117,12 @@ Les constatations ci-dessous proviennent des captures du serveur de prévisualis
 | Visuels décoratifs | Le visuel décoratif du formulaire RGPD conserve volontairement une alternative vide afin de ne pas ajouter de bruit aux lecteurs d’écran. |
 
 > Aucun texte alternatif manquant n’a été relevé dans les composants publics examinés.
+
+## Navigation clavier — 19 août 2026
+
+| Élément | Résultat |
+|---|---|
+| Accès direct au contenu | Un lien d’évitement « Aller au contenu principal » apparaît au focus clavier sur l’ensemble de l’application. |
+| Cible accessible | Le premier élément `main` reçoit automatiquement une cible stable et devient focalisable lorsque le lien est activé. |
+
+> Ce mécanisme réduit le nombre de tabulations nécessaires avant d’atteindre le contenu principal, sans modifier la navigation visible à la souris.
