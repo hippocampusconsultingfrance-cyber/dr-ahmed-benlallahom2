@@ -6,16 +6,18 @@ import { trpc } from "@/lib/trpc";
 import { getPositiveMatchBreakdown } from "./matchBreakdown";
 import PublicContentSkeleton from "./PublicContentSkeleton";
 import { downloadRecruitmentCsv } from "./recruitmentCsvDownload";
+import { useLanguage } from "@/contexts/LanguageContext";
 
-const statusLabels: Record<string, string> = {
-  new: "Nouveau brief",
-  reviewing: "Qualification en cours",
-  shortlist_sent: "Shortlist envoyée",
-  contract_signed: "Mission confirmée",
-  closed: "Clôturée",
-};
+const briefCopy = {
+  fr: { title: "Briefs Employeurs", missionNeeds: "besoin(s) de mission reçu(s)", statuses: { new: "Nouveau brief", reviewing: "Qualification en cours", shortlist_sent: "Shortlist envoyée", contract_signed: "Mission confirmée", closed: "Clôturée" } },
+  en: { title: "Employer briefs", missionNeeds: "mission request(s) received", statuses: { new: "New brief", reviewing: "Qualification in progress", shortlist_sent: "Shortlist sent", contract_signed: "Mission confirmed", closed: "Closed" } },
+  de: { title: "Arbeitgeber-Briefs", missionNeeds: "Missionsanfrage(n) eingegangen", statuses: { new: "Neuer Brief", reviewing: "Qualifizierung läuft", shortlist_sent: "Shortlist gesendet", contract_signed: "Mission bestätigt", closed: "Abgeschlossen" } },
+  zh: { title: "雇主需求", missionNeeds: "已收到任务需求", statuses: { new: "新需求", reviewing: "资格确认中", shortlist_sent: "已发送候选名单", contract_signed: "任务已确认", closed: "已关闭" } },
+} as const;
 
 export default function EmployerBriefsTab() {
+  const { language } = useLanguage();
+  const copy = briefCopy[language as keyof typeof briefCopy] ?? briefCopy.fr;
   const utils = trpc.useUtils();
   const [selectedBriefId, setSelectedBriefId] = useState<number | null>(null);
   const [matchPage, setMatchPage] = useState(0);
@@ -56,8 +58,8 @@ export default function EmployerBriefsTab() {
       <section className="space-y-3">
         <div className="mb-4 flex items-center justify-between gap-3">
           <div>
-            <h2 className="text-lg font-semibold text-foreground">Briefs Employeurs</h2>
-            <p className="text-sm text-muted-foreground">{briefs?.length ?? 0} besoin(s) de mission reçu(s)</p>
+            <h2 className="text-lg font-semibold text-foreground">{copy.title}</h2>
+            <p className="text-sm text-muted-foreground">{briefs?.length ?? 0} {copy.missionNeeds}</p>
           </div>
           <BriefcaseBusiness className="h-5 w-5 text-primary" aria-hidden="true" />
         </div>
@@ -69,7 +71,7 @@ export default function EmployerBriefsTab() {
                 <p className="mt-1 text-sm text-muted-foreground">{brief.specialtyNeeded} · {brief.country}</p>
                 <p className="mt-1 text-xs text-muted-foreground">{brief.targetEnvironment} · {brief.timeline || "Calendrier à préciser"}</p>
               </div>
-              <span className="shrink-0 rounded-full bg-muted px-2 py-1 text-xs text-muted-foreground">{statusLabels[brief.status] ?? brief.status}</span>
+              <span className="shrink-0 rounded-full bg-muted px-2 py-1 text-xs text-muted-foreground">{copy.statuses[brief.status as keyof typeof copy.statuses] ?? brief.status}</span>
             </div>
             <div className="mt-4 flex flex-wrap gap-2">
               <Button size="sm" variant="outline" onClick={() => { setSelectedBriefId(brief.id); setMatchPage(0); }}>
