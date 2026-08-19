@@ -1,0 +1,25 @@
+# Validation visuelle — 19 août 2026
+
+## Périmètre contrôlé
+
+Les parcours publics critiques ont été vérifiés sur la prévisualisation active en vue complète, sur bureau (1280 × 720) puis mobile (375 × 812) : accueil, réservation, demande RGPD, hub recrutement, brief employeur, accès candidat, FAQ et méthode employeurs.
+
+## Constats confirmés
+
+Les huit pages se chargent sans écran vide ni erreur de rendu. Les titres, formulaires, cartes, appels à l’action, alertes d’urgence, pied de page et navigation conservent une hiérarchie lisible dans les deux formats testés. Aucun débordement horizontal visible n’a été observé sur les parcours contrôlés. L’accès candidat valide est `/candidate/access` ; l’URL raccourcie `/candidate-access` n’est pas une route du produit et conduit volontairement à la page 404.
+
+Le même contrôle a été répété au format tablette (768 × 1024). Les formulaires de réservation, RGPD et brief employeur restent lisibles et conservent des actions atteignables ; le hub recrutement, la FAQ, la méthode employeurs et l’accès candidat adaptent leur contenu sans chevauchement visible.
+
+La réservation conserve des champs accessibles, des informations tarifaires jour/nuit et un avertissement d’urgence. Les formulaires RGPD et employeurs présentent des libellés et contrôles visuellement distincts. Les pages recrutement, FAQ et méthode employeurs adaptent leurs cartes en pile sur mobile sans chevauchement visible.
+
+## Limites de ce contrôle
+
+Cette vérification porte sur le rendu et le chargement. Les tests de clavier, lecteur d’écran, contrastes instrumentés, zoom à 200 % et les quatre traductions restent des contrôles complémentaires à exécuter séparément.
+
+## Vérification sur le domaine publié
+
+Le 19 août 2026, la page `https://drahmedbenlallahom.com/booking` a été contrôlée après la publication. Après le chargement différé normal, le formulaire de réservation est visible avec ses libellés associés pour le nom, l’email et le téléphone ; la tarification jour/nuit, l’avertissement d’urgence et les informations de paiement sont également présents. Aucun écran d’erreur ni absence de contenu n’a été constaté.
+
+## Alternatives textuelles des images
+
+Un contrôle du code recense les balises image des composants et pages concernés. Chaque image porte désormais une politique explicite : texte alternatif contextuel pour les visuels informatifs (portrait, logo, illustration de service, contenu de venture) ou alternative vide uniquement pour l’illustration strictement décorative du formulaire RGPD. Un test de non-régression empêche l’ajout d’une balise image sans attribut `alt`.

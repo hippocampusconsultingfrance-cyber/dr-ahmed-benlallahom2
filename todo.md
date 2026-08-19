@@ -207,10 +207,10 @@
 - [x] Vérifier la coexistence du bandeau cookies, du bouton WhatsApp et de la navigation mobile
 - [ ] Vérifier que les visuels médicaux ne suggèrent aucune promesse thérapeutique non étayée
 - [ ] Vérifier que les contenus longs en allemand et chinois ne débordent pas des composants
-- [ ] Vérifier l’alignement des titres, CTA et formulaires sur desktop, tablette et mobile
+- [x] Vérifier l’alignement des titres, CTA et formulaires sur desktop, tablette et mobile
 - [ ] Ajouter une procédure de revue UX basée sur les retours utilisateurs réels
 - [ ] Ajouter des visuels de partage social cohérents pour les pages et articles du blog
-- [ ] Ajouter des descriptions alternatives précises et contextuelles à toutes les images
+- [x] Ajouter des descriptions alternatives précises et contextuelles à toutes les images
 - [ ] Ajouter une page de présentation Hippocampus Consulting avec une mise en page éditoriale
 - [ ] Ajouter une page Ressources Médicales avec cartes, filtres et téléchargements contrôlés
 - [ ] Ajouter une page Presse ou Publications uniquement avec contenus vérifiables
