@@ -2307,6 +2307,7 @@
 - [ ] Créer des modèles réutilisables d’offres de recrutement par zone et type de mission
 - [x] Enrichir le score de compatibilité mission–candidat avec spécialité, langues, mobilité, disponibilité et certifications
 - [x] Afficher la répartition explicable du score de matching dans la fiche mission-candidat
+- [x] Ajouter des modèles réutilisables FR/EN pour les campagnes Europe, Canada, Moyen-Orient et offshore
 - [ ] Améliorer l’espace Employeurs avec suivi de brief, accusé de réception, statut de shortlist et descriptif de poste
 - [ ] Renforcer la réassurance publique des pages recrutement sur confidentialité, consentement, revue humaine et délais indicatifs
 - [ ] Ajouter un suivi de délivrabilité des campagnes et des erreurs d’envoi, sans réutiliser automatiquement les adresses en erreur

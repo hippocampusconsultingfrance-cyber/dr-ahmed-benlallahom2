@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { trpc } from "@/lib/trpc";
+import { getRecruitmentCampaignTemplate, RECRUITMENT_CAMPAIGN_TEMPLATES, type RecruitmentCampaignTemplateId } from "./recruitmentCampaignTemplates";
 
 type MailingTabProps = {
   initialSelectedIds: number[];
@@ -40,6 +41,7 @@ export default function MailingTab({ initialSelectedIds }: MailingTabProps) {
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
   const [language, setLanguage] = useState<"fr" | "en">("fr");
+  const [templateId, setTemplateId] = useState<"" | RecruitmentCampaignTemplateId>("");
   const [confirmationOpen, setConfirmationOpen] = useState(false);
 
   useEffect(() => {
@@ -77,6 +79,15 @@ export default function MailingTab({ initialSelectedIds }: MailingTabProps) {
     sendCampaign.mutate({ ...audienceInput, title: title.trim(), subject: subject.trim(), body: body.trim(), language, confirmed: true });
   };
 
+  const applyTemplate = (id: string) => {
+    setTemplateId(id as RecruitmentCampaignTemplateId);
+    const template = getRecruitmentCampaignTemplate(id, language);
+    if (!template) return;
+    setTitle(template.title);
+    setSubject(template.subject);
+    setBody(template.body);
+  };
+
   return (
     <section className="space-y-7" aria-labelledby="mailing-heading">
       <div>
@@ -100,6 +111,14 @@ export default function MailingTab({ initialSelectedIds }: MailingTabProps) {
               </select>
             </label>
           </div>
+          <label className="block space-y-1 text-sm text-muted-foreground">
+            <span>Modèle d’offre réutilisable</span>
+            <select value={templateId} onChange={event => applyTemplate(event.target.value)} className="h-10 w-full rounded-md border border-border bg-background px-3 text-foreground">
+              <option value="">Choisir un modèle (facultatif)</option>
+              {RECRUITMENT_CAMPAIGN_TEMPLATES.map(template => <option key={template.id} value={template.id}>{template.label[language]}</option>)}
+            </select>
+            <span className="text-xs">Le modèle préremplit l’offre. Vérifiez et complétez les éléments entre crochets avant envoi.</span>
+          </label>
           <label className="block space-y-1 text-sm text-muted-foreground">
             <span>Objet de l’email</span>
             <input value={subject} onChange={event => setSubject(event.target.value)} maxLength={255} placeholder="Ex. Opportunité médicale internationale" className="h-10 w-full rounded-md border border-border bg-background px-3 text-foreground placeholder:text-muted-foreground" />
