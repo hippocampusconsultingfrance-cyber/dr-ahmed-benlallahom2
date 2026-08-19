@@ -370,3 +370,6 @@ Chaque campagne inclut désormais un lien personnel de désinscription vers une 
 
 ## Export CSV contrôlé du vivier et des shortlists — 19 août 2026
 L’administration peut désormais exporter une sélection explicite du vivier depuis son onglet dédié et la shortlist d’un brief Employeur depuis la fiche de mission. Les fichiers restent générés dans le navigateur après une action consciente de l’administrateur, avec préfixe UTF-8 pour préserver les caractères accentués. Chaque ligne exportée est journalisée côté serveur. L’export du vivier applique systématiquement les exclusions de consentement, de désinscription et de suppression marketing, y compris lorsqu’une sélection est fournie.
+
+## Relances manuelles J+7 et J+14 — 19 août 2026
+Les échéances de relance générées après une campagne sont visibles dans la fiche candidat 360°. L’administrateur peut les marquer comme traitées ou les ignorer ; ces actions sont journalisées. Le panneau rappelle explicitement qu’aucun email ne part automatiquement : une prise de contact doit être décidée séparément depuis les outils de recrutement.
