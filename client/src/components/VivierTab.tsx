@@ -5,179 +5,37 @@ import { Button } from "@/components/ui/button";
 import { trpc } from "@/lib/trpc";
 import PublicContentSkeleton from "./PublicContentSkeleton";
 import { downloadRecruitmentCsv } from "./recruitmentCsvDownload";
+import { useLanguage } from "@/contexts/LanguageContext";
 
-type VivierTabProps = {
-  onCompose: (candidateIds: number[]) => void;
-};
+type VivierTabProps = { onCompose: (candidateIds: number[]) => void };
 
-function parseJsonList(value: string | null): string[] {
-  if (!value) return [];
-  try {
-    const parsed = JSON.parse(value);
-    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string") : [];
-  } catch {
-    return [];
-  }
-}
+const vivierCopy = {
+  fr: { eyebrow: "Hippocampus Consulting", title: "Vivier de talents", intro: "Seuls les candidats ayant donné leur consentement explicite aux communications de recrutement apparaissent dans cet espace.", refresh: "Actualiser", compose: (count: number) => `Composer pour ${count || "…"} profil${count > 1 ? "s" : ""}`, exportSelection: "Exporter la sélection", specialty: "Spécialité", specialtyPlaceholder: "Ex. anesthésie", country: "Pays ciblé", countryPlaceholder: "Ex. Allemagne", availability: "Disponibilité", availabilityPlaceholder: "Ex. immédiate, septembre", mobility: "Mobilité", mobilityPlaceholder: "Ex. Moyen-Orient, offshore", certification: "Certification", certificationPlaceholder: "Ex. ACLS, HUET", minimumScore: "Score IA minimum", minimumScorePlaceholder: "Ex. 80", eligible: (count: number) => `${count} profil${count > 1 ? "s" : ""} éligible${count > 1 ? "s" : ""} dans le vivier filtré.`, selectList: "Sélectionner la liste", deselectList: "Désélectionner la liste", loading: "Chargement du vivier de candidats", selectCandidate: (name: string) => `Sélectionner ${name}`, scoreUnavailable: "Score IA indisponible", score: (value: number) => `Score IA ${value}/100`, countries: "Pays", languages: "Langues", certifications: "Certifications", empty: "Aucun candidat éligible ne correspond aux filtres actuels.", composeRequired: "Sélectionnez au moins un candidat pour composer une campagne ciblée.", exportRequired: "Sélectionnez les profils à exporter afin de limiter l’export aux données nécessaires.", exported: (count: number) => `${count} profil${count > 1 ? "s" : ""} exporté${count > 1 ? "s" : ""}. L’export est journalisé.`, errorLoading: "Erreur de chargement du vivier" },
+  en: { eyebrow: "Hippocampus Consulting", title: "Talent pool", intro: "Only candidates who have given explicit consent to recruitment communications appear in this area.", refresh: "Refresh", compose: (count: number) => `Compose for ${count || "…"} profile${count > 1 ? "s" : ""}`, exportSelection: "Export selection", specialty: "Specialty", specialtyPlaceholder: "e.g. anaesthesia", country: "Target country", countryPlaceholder: "e.g. Germany", availability: "Availability", availabilityPlaceholder: "e.g. immediate, September", mobility: "Mobility", mobilityPlaceholder: "e.g. Middle East, offshore", certification: "Certification", certificationPlaceholder: "e.g. ACLS, HUET", minimumScore: "Minimum AI score", minimumScorePlaceholder: "e.g. 80", eligible: (count: number) => `${count} eligible profile${count > 1 ? "s" : ""} in the filtered talent pool.`, selectList: "Select list", deselectList: "Deselect list", loading: "Loading candidate talent pool", selectCandidate: (name: string) => `Select ${name}`, scoreUnavailable: "AI score unavailable", score: (value: number) => `AI score ${value}/100`, countries: "Countries", languages: "Languages", certifications: "Certifications", empty: "No eligible candidate matches the current filters.", composeRequired: "Select at least one candidate to compose a targeted campaign.", exportRequired: "Select profiles to export in order to limit the export to necessary data.", exported: (count: number) => `${count} profile${count > 1 ? "s" : ""} exported. The export is logged.`, errorLoading: "Talent pool loading error" },
+  de: { eyebrow: "Hippocampus Consulting", title: "Talentpool", intro: "In diesem Bereich erscheinen nur Kandidaten, die ausdrücklich in Recruiting-Kommunikation eingewilligt haben.", refresh: "Aktualisieren", compose: (count: number) => `Für ${count || "…"} Profil${count > 1 ? "e" : ""} verfassen`, exportSelection: "Auswahl exportieren", specialty: "Fachgebiet", specialtyPlaceholder: "z. B. Anästhesie", country: "Zielland", countryPlaceholder: "z. B. Deutschland", availability: "Verfügbarkeit", availabilityPlaceholder: "z. B. sofort, September", mobility: "Mobilität", mobilityPlaceholder: "z. B. Naher Osten, Offshore", certification: "Zertifizierung", certificationPlaceholder: "z. B. ACLS, HUET", minimumScore: "Mindest-KI-Score", minimumScorePlaceholder: "z. B. 80", eligible: (count: number) => `${count} berechtigte${count === 1 ? "s" : ""} Profil${count === 1 ? "" : "e"} im gefilterten Talentpool.`, selectList: "Liste auswählen", deselectList: "Auswahl aufheben", loading: "Kandidaten-Talentpool wird geladen", selectCandidate: (name: string) => `${name} auswählen`, scoreUnavailable: "KI-Score nicht verfügbar", score: (value: number) => `KI-Score ${value}/100`, countries: "Länder", languages: "Sprachen", certifications: "Zertifizierungen", empty: "Kein berechtigtes Profil entspricht den aktuellen Filtern.", composeRequired: "Wählen Sie mindestens ein Profil für eine gezielte Kampagne aus.", exportRequired: "Wählen Sie die zu exportierenden Profile aus, um den Export auf erforderliche Daten zu begrenzen.", exported: (count: number) => `${count} Profil${count === 1 ? "" : "e"} exportiert. Der Export wird protokolliert.`, errorLoading: "Fehler beim Laden des Talentpools" },
+  zh: { eyebrow: "Hippocampus Consulting", title: "人才库", intro: "只有明确同意接收招聘沟通的候选人才会出现在此区域。", refresh: "刷新", compose: (count: number) => `为 ${count || "…"} 位候选人编写邮件`, exportSelection: "导出所选内容", specialty: "专业", specialtyPlaceholder: "例如：麻醉", country: "目标国家", countryPlaceholder: "例如：德国", availability: "可入职时间", availabilityPlaceholder: "例如：立即、九月", mobility: "流动性", mobilityPlaceholder: "例如：中东、离岸", certification: "认证", certificationPlaceholder: "例如：ACLS、HUET", minimumScore: "最低 AI 分数", minimumScorePlaceholder: "例如：80", eligible: (count: number) => `筛选后的人才库中有 ${count} 位符合条件的候选人。`, selectList: "选择列表", deselectList: "取消选择", loading: "正在加载候选人人才库", selectCandidate: (name: string) => `选择 ${name}`, scoreUnavailable: "AI 分数不可用", score: (value: number) => `AI 分数 ${value}/100`, countries: "国家", languages: "语言", certifications: "认证", empty: "没有符合当前筛选条件的候选人。", composeRequired: "请至少选择一位候选人以编写定向招聘活动。", exportRequired: "请选择要导出的候选人，以便将导出范围限制在必要数据内。", exported: (count: number) => `已导出 ${count} 位候选人。导出操作已记录。`, errorLoading: "人才库加载错误" },
+} as const;
 
-function scoreTone(score: number | null) {
-  if (score === null) return "border-border bg-muted/30 text-muted-foreground";
-  if (score >= 75) return "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300";
-  if (score >= 50) return "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300";
-  return "border-slate-500/30 bg-slate-500/10 text-slate-700 dark:text-slate-300";
-}
+function parseJsonList(value: string | null): string[] { try { const parsed = value ? JSON.parse(value) : []; return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string") : []; } catch { return []; } }
+function scoreTone(score: number | null) { if (score === null) return "border-border bg-muted/30 text-muted-foreground"; if (score >= 75) return "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"; if (score >= 50) return "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300"; return "border-slate-500/30 bg-slate-500/10 text-slate-700 dark:text-slate-300"; }
 
 export default function VivierTab({ onCompose }: VivierTabProps) {
-  const [specialty, setSpecialty] = useState("");
-  const [country, setCountry] = useState("");
-  const [availability, setAvailability] = useState("");
-  const [mobility, setMobility] = useState("");
-  const [certification, setCertification] = useState("");
-  const [minimumScore, setMinimumScore] = useState("");
-  const [selectedIds, setSelectedIds] = useState<number[]>([]);
-  const filters = useMemo(() => ({
-    specialty: specialty.trim() || undefined,
-    country: country.trim() || undefined,
-    availability: availability.trim() || undefined,
-    mobility: mobility.trim() || undefined,
-    certification: certification.trim() || undefined,
-    minimumScore: minimumScore ? Number(minimumScore) : undefined,
-    limit: 200,
-  }), [specialty, country, availability, mobility, certification, minimumScore]);
+  const { language } = useLanguage();
+  const copy = vivierCopy[language as keyof typeof vivierCopy] ?? vivierCopy.fr;
+  const [specialty, setSpecialty] = useState(""); const [country, setCountry] = useState(""); const [availability, setAvailability] = useState(""); const [mobility, setMobility] = useState(""); const [certification, setCertification] = useState(""); const [minimumScore, setMinimumScore] = useState(""); const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  const filters = useMemo(() => ({ specialty: specialty.trim() || undefined, country: country.trim() || undefined, availability: availability.trim() || undefined, mobility: mobility.trim() || undefined, certification: certification.trim() || undefined, minimumScore: minimumScore ? Number(minimumScore) : undefined, limit: 200 }), [specialty, country, availability, mobility, certification, minimumScore]);
   const { data: candidates, isLoading, error, refetch } = trpc.admin.recruitment.pool.list.useQuery(filters);
-  const exportCsv = trpc.admin.recruitment.exportCsv.useMutation({
-    onSuccess: result => {
-      downloadRecruitmentCsv(result);
-      toast.success(`${result.count} profil${result.count > 1 ? "s" : ""} exporté${result.count > 1 ? "s" : ""}. L’export est journalisé.`);
-    },
-    onError: exportError => toast.error(exportError.message),
-  });
-  const visibleIds = candidates?.map(candidate => candidate.id) || [];
-  const allVisibleSelected = visibleIds.length > 0 && visibleIds.every(id => selectedIds.includes(id));
+  const exportCsv = trpc.admin.recruitment.exportCsv.useMutation({ onSuccess: result => { downloadRecruitmentCsv(result); toast.success(copy.exported(result.count)); }, onError: exportError => toast.error(exportError.message) });
+  const visibleIds = candidates?.map(candidate => candidate.id) || []; const allVisibleSelected = visibleIds.length > 0 && visibleIds.every(id => selectedIds.includes(id));
+  const toggleCandidate = (candidateId: number) => setSelectedIds(current => current.includes(candidateId) ? current.filter(id => id !== candidateId) : [...current, candidateId]);
+  const toggleVisible = () => setSelectedIds(current => allVisibleSelected ? current.filter(id => !visibleIds.includes(id)) : Array.from(new Set([...current, ...visibleIds])));
+  const composeSelected = () => { if (!selectedIds.length) { toast.error(copy.composeRequired); return; } onCompose(selectedIds); };
+  const exportSelected = () => { if (!selectedIds.length) { toast.error(copy.exportRequired); return; } exportCsv.mutate({ type: "pool", candidateIds: selectedIds }); };
+  if (error) return <div className="py-10 text-center text-destructive">{copy.errorLoading}: {error.message}</div>;
 
-  const toggleCandidate = (candidateId: number) => {
-    setSelectedIds(current => current.includes(candidateId) ? current.filter(id => id !== candidateId) : [...current, candidateId]);
-  };
-
-  const toggleVisible = () => {
-    setSelectedIds(current => {
-      if (allVisibleSelected) return current.filter(id => !visibleIds.includes(id));
-      return Array.from(new Set([...current, ...visibleIds]));
-    });
-  };
-
-  const composeSelected = () => {
-    if (!selectedIds.length) {
-      toast.error("Sélectionnez au moins un candidat pour composer une campagne ciblée.");
-      return;
-    }
-    onCompose(selectedIds);
-  };
-
-  const exportSelected = () => {
-    if (!selectedIds.length) {
-      toast.error("Sélectionnez les profils à exporter afin de limiter l’export aux données nécessaires.");
-      return;
-    }
-    exportCsv.mutate({ type: "pool", candidateIds: selectedIds });
-  };
-
-  if (error) return <div className="py-10 text-center text-destructive">Erreur de chargement du vivier : {error.message}</div>;
-
-  return (
-    <section className="space-y-6" aria-labelledby="vivier-heading">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">Hippocampus Consulting</p>
-          <h2 id="vivier-heading" className="mt-2 text-2xl font-semibold text-foreground">Vivier de talents</h2>
-          <p className="mt-2 max-w-3xl text-sm text-muted-foreground">Seuls les candidats ayant donné leur consentement explicite aux communications de recrutement apparaissent dans cet espace.</p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button variant="outline" onClick={() => void refetch()} disabled={isLoading}>
-            <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? "animate-spin" : ""}`} /> Actualiser
-          </Button>
-          <Button onClick={composeSelected} disabled={!selectedIds.length}>
-            <Mail className="mr-2 h-4 w-4" /> Composer pour {selectedIds.length || "…"} profil{selectedIds.length > 1 ? "s" : ""}
-          </Button>
-          <Button variant="outline" onClick={exportSelected} disabled={!selectedIds.length || exportCsv.isPending}>
-            {exportCsv.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
-            Exporter la sélection
-          </Button>
-        </div>
-      </div>
-
-      <div className="grid gap-3 rounded-xl border border-border bg-card/60 p-4 md:grid-cols-2 xl:grid-cols-3">
-        <label className="space-y-1 text-sm text-muted-foreground">
-          <span>Spécialité</span>
-          <input value={specialty} onChange={event => setSpecialty(event.target.value)} placeholder="Ex. anesthésie" className="h-10 w-full rounded-md border border-border bg-background px-3 text-foreground placeholder:text-muted-foreground" />
-        </label>
-        <label className="space-y-1 text-sm text-muted-foreground">
-          <span>Pays ciblé</span>
-          <input value={country} onChange={event => setCountry(event.target.value)} placeholder="Ex. Allemagne" className="h-10 w-full rounded-md border border-border bg-background px-3 text-foreground placeholder:text-muted-foreground" />
-        </label>
-        <label className="space-y-1 text-sm text-muted-foreground">
-          <span>Disponibilité</span>
-          <input value={availability} onChange={event => setAvailability(event.target.value)} placeholder="Ex. immédiate, septembre" className="h-10 w-full rounded-md border border-border bg-background px-3 text-foreground placeholder:text-muted-foreground" />
-        </label>
-        <label className="space-y-1 text-sm text-muted-foreground">
-          <span>Mobilité</span>
-          <input value={mobility} onChange={event => setMobility(event.target.value)} placeholder="Ex. Moyen-Orient, offshore" className="h-10 w-full rounded-md border border-border bg-background px-3 text-foreground placeholder:text-muted-foreground" />
-        </label>
-        <label className="space-y-1 text-sm text-muted-foreground">
-          <span>Certification</span>
-          <input value={certification} onChange={event => setCertification(event.target.value)} placeholder="Ex. ACLS, HUET" className="h-10 w-full rounded-md border border-border bg-background px-3 text-foreground placeholder:text-muted-foreground" />
-        </label>
-        <label className="space-y-1 text-sm text-muted-foreground">
-          <span>Score IA minimum</span>
-          <input type="number" min="0" max="100" value={minimumScore} onChange={event => setMinimumScore(event.target.value)} placeholder="Ex. 80" className="h-10 w-full rounded-md border border-border bg-background px-3 text-foreground placeholder:text-muted-foreground" />
-        </label>
-      </div>
-
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-primary/20 bg-primary/5 p-4">
-        <p className="text-sm text-muted-foreground"><strong className="text-foreground">{candidates?.length || 0}</strong> profil{(candidates?.length || 0) > 1 ? "s" : ""} éligible{(candidates?.length || 0) > 1 ? "s" : ""} dans le vivier filtré.</p>
-        <Button size="sm" variant="outline" onClick={toggleVisible} disabled={!visibleIds.length}>
-          <CheckSquare className="mr-2 h-4 w-4" /> {allVisibleSelected ? "Désélectionner la liste" : "Sélectionner la liste"}
-        </Button>
-      </div>
-
-      {isLoading ? (
-        <PublicContentSkeleton cards={2} columns={2} label="Chargement du vivier de candidats" />
-      ) : candidates?.length ? (
-        <div className="grid gap-4 lg:grid-cols-2">
-          {candidates.map(candidate => {
-            const countries = parseJsonList(candidate.targetCountries);
-            const languages = parseJsonList(candidate.languages);
-            const selected = selectedIds.includes(candidate.id);
-            return (
-              <article key={candidate.id} className={`rounded-xl border bg-card p-4 shadow-sm transition-colors ${selected ? "border-primary ring-1 ring-primary/30" : "border-border"}`}>
-                <div className="flex gap-3">
-                  <input type="checkbox" aria-label={`Sélectionner ${candidate.firstName} ${candidate.lastName}`} checked={selected} onChange={() => toggleCandidate(candidate.id)} className="mt-1 h-4 w-4 accent-primary" />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-start justify-between gap-2">
-                      <div>
-                        <h3 className="font-semibold text-foreground">{candidate.firstName} {candidate.lastName}</h3>
-                        <p className="mt-0.5 text-sm text-muted-foreground">{candidate.specialty}</p>
-                      </div>
-                      <span className={`rounded-full border px-2.5 py-1 text-xs font-medium ${scoreTone(candidate.aiScore)}`}>{candidate.aiScore === null ? "Score IA indisponible" : `Score IA ${candidate.aiScore}/100`}</span>
-                    </div>
-                    <div className="mt-3 grid gap-1 text-sm text-muted-foreground sm:grid-cols-2">
-                      <p><strong className="text-foreground">Pays :</strong> {countries.join(", ") || "—"}</p>
-                      <p><strong className="text-foreground">Langues :</strong> {languages.join(", ") || "—"}</p>
-                      <p><strong className="text-foreground">Disponibilité :</strong> {candidate.availability || "—"}</p>
-                      <p><strong className="text-foreground">Mobilité :</strong> {candidate.mobility || "—"}</p>
-                    </div>
-                    {candidate.certifications && <p className="mt-3 text-xs text-muted-foreground"><strong className="text-foreground">Certifications :</strong> {candidate.certifications}</p>}
-                  </div>
-                </div>
-              </article>
-            );
-          })}
-        </div>
-      ) : (
-        <div className="rounded-xl border border-dashed border-border py-16 text-center text-muted-foreground">
-          <UsersRound className="mx-auto mb-3 h-8 w-8" /> Aucun candidat éligible ne correspond aux filtres actuels.
-        </div>
-      )}
-    </section>
-  );
+  return <section className="space-y-6" aria-labelledby="vivier-heading"><div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between"><div><p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">{copy.eyebrow}</p><h2 id="vivier-heading" className="mt-2 text-2xl font-semibold text-foreground">{copy.title}</h2><p className="mt-2 max-w-3xl text-sm text-muted-foreground">{copy.intro}</p></div><div className="flex flex-wrap gap-2"><Button variant="outline" onClick={() => void refetch()} disabled={isLoading}><RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />{copy.refresh}</Button><Button onClick={composeSelected} disabled={!selectedIds.length}><Mail className="mr-2 h-4 w-4" />{copy.compose(selectedIds.length)}</Button><Button variant="outline" onClick={exportSelected} disabled={!selectedIds.length || exportCsv.isPending}>{exportCsv.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}{copy.exportSelection}</Button></div></div>
+    <div className="grid gap-3 rounded-xl border border-border bg-card/60 p-4 md:grid-cols-2 xl:grid-cols-3"><label className="space-y-1 text-sm text-muted-foreground"><span>{copy.specialty}</span><input value={specialty} onChange={event => setSpecialty(event.target.value)} placeholder={copy.specialtyPlaceholder} className="h-10 w-full rounded-md border border-border bg-background px-3 text-foreground placeholder:text-muted-foreground" /></label><label className="space-y-1 text-sm text-muted-foreground"><span>{copy.country}</span><input value={country} onChange={event => setCountry(event.target.value)} placeholder={copy.countryPlaceholder} className="h-10 w-full rounded-md border border-border bg-background px-3 text-foreground placeholder:text-muted-foreground" /></label><label className="space-y-1 text-sm text-muted-foreground"><span>{copy.availability}</span><input value={availability} onChange={event => setAvailability(event.target.value)} placeholder={copy.availabilityPlaceholder} className="h-10 w-full rounded-md border border-border bg-background px-3 text-foreground placeholder:text-muted-foreground" /></label><label className="space-y-1 text-sm text-muted-foreground"><span>{copy.mobility}</span><input value={mobility} onChange={event => setMobility(event.target.value)} placeholder={copy.mobilityPlaceholder} className="h-10 w-full rounded-md border border-border bg-background px-3 text-foreground placeholder:text-muted-foreground" /></label><label className="space-y-1 text-sm text-muted-foreground"><span>{copy.certification}</span><input value={certification} onChange={event => setCertification(event.target.value)} placeholder={copy.certificationPlaceholder} className="h-10 w-full rounded-md border border-border bg-background px-3 text-foreground placeholder:text-muted-foreground" /></label><label className="space-y-1 text-sm text-muted-foreground"><span>{copy.minimumScore}</span><input type="number" min="0" max="100" value={minimumScore} onChange={event => setMinimumScore(event.target.value)} placeholder={copy.minimumScorePlaceholder} className="h-10 w-full rounded-md border border-border bg-background px-3 text-foreground placeholder:text-muted-foreground" /></label></div>
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-primary/20 bg-primary/5 p-4"><p className="text-sm text-muted-foreground"><strong className="text-foreground">{candidates?.length || 0}</strong> {copy.eligible(candidates?.length || 0)}</p><Button size="sm" variant="outline" onClick={toggleVisible} disabled={!visibleIds.length}><CheckSquare className="mr-2 h-4 w-4" />{allVisibleSelected ? copy.deselectList : copy.selectList}</Button></div>
+    {isLoading ? <PublicContentSkeleton cards={2} columns={2} label={copy.loading} /> : candidates?.length ? <div className="grid gap-4 lg:grid-cols-2">{candidates.map(candidate => { const countries = parseJsonList(candidate.targetCountries); const languages = parseJsonList(candidate.languages); const selected = selectedIds.includes(candidate.id); const name = `${candidate.firstName} ${candidate.lastName}`; return <article key={candidate.id} className={`rounded-xl border bg-card p-4 shadow-sm transition-colors ${selected ? "border-primary ring-1 ring-primary/30" : "border-border"}`}><div className="flex gap-3"><input type="checkbox" aria-label={copy.selectCandidate(name)} checked={selected} onChange={() => toggleCandidate(candidate.id)} className="mt-1 h-4 w-4 accent-primary" /><div className="min-w-0 flex-1"><div className="flex flex-wrap items-start justify-between gap-2"><div><h3 className="font-semibold text-foreground">{name}</h3><p className="mt-0.5 text-sm text-muted-foreground">{candidate.specialty}</p></div><span className={`rounded-full border px-2.5 py-1 text-xs font-medium ${scoreTone(candidate.aiScore)}`}>{candidate.aiScore === null ? copy.scoreUnavailable : copy.score(candidate.aiScore)}</span></div><div className="mt-3 grid gap-1 text-sm text-muted-foreground sm:grid-cols-2"><p><strong className="text-foreground">{copy.countries}:</strong> {countries.join(", ") || "—"}</p><p><strong className="text-foreground">{copy.languages}:</strong> {languages.join(", ") || "—"}</p><p><strong className="text-foreground">{copy.availability}:</strong> {candidate.availability || "—"}</p><p><strong className="text-foreground">{copy.mobility}:</strong> {candidate.mobility || "—"}</p></div>{candidate.certifications && <p className="mt-3 text-xs text-muted-foreground"><strong className="text-foreground">{copy.certifications}:</strong> {candidate.certifications}</p>}</div></div></article>; })}</div> : <div className="rounded-xl border border-dashed border-border py-16 text-center text-muted-foreground"><UsersRound className="mx-auto mb-3 h-8 w-8" />{copy.empty}</div>}
+  </section>;
 }
