@@ -28,14 +28,20 @@ function scoreTone(score: number | null) {
 export default function VivierTab({ onCompose }: VivierTabProps) {
   const [specialty, setSpecialty] = useState("");
   const [country, setCountry] = useState("");
+  const [availability, setAvailability] = useState("");
+  const [mobility, setMobility] = useState("");
+  const [certification, setCertification] = useState("");
   const [minimumScore, setMinimumScore] = useState("");
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const filters = useMemo(() => ({
     specialty: specialty.trim() || undefined,
     country: country.trim() || undefined,
+    availability: availability.trim() || undefined,
+    mobility: mobility.trim() || undefined,
+    certification: certification.trim() || undefined,
     minimumScore: minimumScore ? Number(minimumScore) : undefined,
     limit: 200,
-  }), [specialty, country, minimumScore]);
+  }), [specialty, country, availability, mobility, certification, minimumScore]);
   const { data: candidates, isLoading, error, refetch } = trpc.admin.recruitment.pool.list.useQuery(filters);
   const visibleIds = candidates?.map(candidate => candidate.id) || [];
   const allVisibleSelected = visibleIds.length > 0 && visibleIds.every(id => selectedIds.includes(id));
@@ -79,7 +85,7 @@ export default function VivierTab({ onCompose }: VivierTabProps) {
         </div>
       </div>
 
-      <div className="grid gap-3 rounded-xl border border-border bg-card/60 p-4 md:grid-cols-3">
+      <div className="grid gap-3 rounded-xl border border-border bg-card/60 p-4 md:grid-cols-2 xl:grid-cols-3">
         <label className="space-y-1 text-sm text-muted-foreground">
           <span>Spécialité</span>
           <input value={specialty} onChange={event => setSpecialty(event.target.value)} placeholder="Ex. anesthésie" className="h-10 w-full rounded-md border border-border bg-background px-3 text-foreground placeholder:text-muted-foreground" />
@@ -87,6 +93,18 @@ export default function VivierTab({ onCompose }: VivierTabProps) {
         <label className="space-y-1 text-sm text-muted-foreground">
           <span>Pays ciblé</span>
           <input value={country} onChange={event => setCountry(event.target.value)} placeholder="Ex. Allemagne" className="h-10 w-full rounded-md border border-border bg-background px-3 text-foreground placeholder:text-muted-foreground" />
+        </label>
+        <label className="space-y-1 text-sm text-muted-foreground">
+          <span>Disponibilité</span>
+          <input value={availability} onChange={event => setAvailability(event.target.value)} placeholder="Ex. immédiate, septembre" className="h-10 w-full rounded-md border border-border bg-background px-3 text-foreground placeholder:text-muted-foreground" />
+        </label>
+        <label className="space-y-1 text-sm text-muted-foreground">
+          <span>Mobilité</span>
+          <input value={mobility} onChange={event => setMobility(event.target.value)} placeholder="Ex. Moyen-Orient, offshore" className="h-10 w-full rounded-md border border-border bg-background px-3 text-foreground placeholder:text-muted-foreground" />
+        </label>
+        <label className="space-y-1 text-sm text-muted-foreground">
+          <span>Certification</span>
+          <input value={certification} onChange={event => setCertification(event.target.value)} placeholder="Ex. ACLS, HUET" className="h-10 w-full rounded-md border border-border bg-background px-3 text-foreground placeholder:text-muted-foreground" />
         </label>
         <label className="space-y-1 text-sm text-muted-foreground">
           <span>Score IA minimum</span>

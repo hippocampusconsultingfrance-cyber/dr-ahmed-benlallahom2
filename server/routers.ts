@@ -42,6 +42,15 @@ const TRUSTED_HOSTS = new Set([
 
 const PARIS_TIME_ZONE = "Europe/Paris";
 const CV_APPLICATION_STATUSES = ["new", "reviewing", "shortlisted", "placed", "rejected", "archived"] as const;
+export const recruitmentPoolFiltersInput = z.object({
+  specialty: z.string().trim().max(160).optional(),
+  country: z.string().trim().max(80).optional(),
+  availability: z.string().trim().max(100).optional(),
+  mobility: z.string().trim().max(150).optional(),
+  certification: z.string().trim().max(180).optional(),
+  minimumScore: z.number().int().min(0).max(100).optional(),
+  limit: z.number().int().min(1).max(200).optional().default(200),
+}).optional();
 
 function csvCell(value: unknown): string {
   const text = value === null || value === undefined ? "" : String(value);
@@ -1015,12 +1024,7 @@ export const appRouter = router({
 
       pool: router({
         list: adminProcedure
-          .input(z.object({
-            specialty: z.string().trim().max(160).optional(),
-            country: z.string().trim().max(80).optional(),
-            minimumScore: z.number().int().min(0).max(100).optional(),
-            limit: z.number().int().min(1).max(200).optional().default(200),
-          }).optional())
+          .input(recruitmentPoolFiltersInput)
           .query(async ({ input }) => {
             const db = await getDb();
             if (!db) return [];
@@ -1032,6 +1036,9 @@ export const appRouter = router({
             ];
             if (input?.specialty) conditions.push(sql`LOWER(${cvApplications.specialty}) LIKE LOWER(${`%${input.specialty}%`})`);
             if (input?.country) conditions.push(sql`${cvApplications.targetCountries} LIKE ${`%${input.country}%`}`);
+            if (input?.availability) conditions.push(sql`LOWER(COALESCE(${cvApplications.availability}, '')) LIKE LOWER(${`%${input.availability}%`})`);
+            if (input?.mobility) conditions.push(sql`(LOWER(COALESCE(${cvApplications.mobility}, '')) LIKE LOWER(${`%${input.mobility}%`}) OR LOWER(COALESCE(${cvApplications.targetCountries}, '')) LIKE LOWER(${`%${input.mobility}%`}))`);
+            if (input?.certification) conditions.push(sql`(LOWER(COALESCE(${cvApplications.certifications}, '')) LIKE LOWER(${`%${input.certification}%`}) OR LOWER(COALESCE(${cvApplications.normalizedCertifications}, '')) LIKE LOWER(${`%${input.certification}%`}))`);
             if (input?.minimumScore !== undefined) conditions.push(sql`${cvApplications.aiScore} >= ${input.minimumScore}`);
             return db.select({
               id: cvApplications.id,

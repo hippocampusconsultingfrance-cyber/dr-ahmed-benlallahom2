@@ -173,3 +173,13 @@ Les campagnes disposent désormais de quatre modèles réutilisables en françai
 | Positionnement VVIP | Les formulations restantes relatives à des résidences ont été supprimées du formulaire standard et de la page dédiée. Le contenu est limité aux environnements institutionnels, industriels, offshore et pétroliers. | Recherche automatisée de termes interdits dans les deux pages. |
 
 > Les outils d’intelligence artificielle restent présentés comme une aide à l’organisation et à la revue. Aucune décision de recrutement ne peut être prise uniquement par automatisation.
+
+## Filtres professionnels du vivier — 19 août 2026
+
+| Critère | Comportement ajouté | Contrôle |
+|---|---|---|
+| Disponibilité | Recherche partielle dans la disponibilité déclarée du candidat. | Contrat tRPC borné et test unitaire. |
+| Mobilité | Recherche partielle dans la mobilité déclarée et les pays ciblés. | Contrat tRPC borné et build de production validé. |
+| Certifications | Recherche partielle dans les certifications déclarées et normalisées. | Contrat tRPC borné et build de production validé. |
+
+> Ces critères s’ajoutent à la spécialité, au pays et au score IA. Le vivier reste limité aux candidats ayant consenti aux communications de recrutement et dont l’adresse n’est ni désinscrite ni supprimée des campagnes.
