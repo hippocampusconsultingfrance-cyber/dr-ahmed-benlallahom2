@@ -2414,4 +2414,5 @@
 - [x] Ajouter un test de non-régression des limites d’accès aux documents et sessions du portail candidat
 - [x] Afficher un état neutre lorsqu’une page de confirmation de paiement est ouverte sans statut Stripe valide
 - [x] Ne plus afficher de détail d’erreur technique dans le formulaire public Employeurs
+- [x] Traduire intégralement l’accès candidat et ses validations dans les quatre langues prises en charge
 - [x] Renforcer robots.txt pour décourager l’exploration des parcours candidats et de désinscription non indexables

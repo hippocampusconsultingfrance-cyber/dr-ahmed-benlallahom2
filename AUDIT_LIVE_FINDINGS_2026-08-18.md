@@ -420,3 +420,6 @@ Le carrousel de témoignages peut maintenant recevoir le focus et répondre aux 
 
 ## Erreur publique du formulaire Employeurs — 19 août 2026
 Le formulaire public de brief Employeurs utilisait encore le détail brut d’une erreur de réseau ou de serveur dans son message affiché. Il emploie désormais le message générique localisé prévu dans les quatre langues, tandis que le détail reste limité à la console de diagnostic. La suite complète compte 203 tests réussis, 2 explicitement ignorés, avec un build de production valide.
+
+## Accès candidat multilingue — 19 août 2026
+Le parcours d’accès candidat, auparavant présenté en français uniquement, couvre désormais les quatre langues du site : informations de sécurité, modes connexion/création/réinitialisation, champs, consentements, boutons, messages de succès et validations anti-bot. Les erreurs non reconnues sont masquées derrière un message générique localisé. Le rendu mobile français a été vérifié ; les tests de contenu et de validation couvrent les quatre langues. La suite complète compte 205 tests réussis, 2 explicitement ignorés, avec un build de production valide.
