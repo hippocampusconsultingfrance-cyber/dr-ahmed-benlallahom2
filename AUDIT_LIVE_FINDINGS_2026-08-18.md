@@ -293,3 +293,7 @@ Le badge de disponibilité distingue maintenant quatre états : aucun créneau s
 ## Checklist de préproduction — 19 août 2026
 
 Le document `PREPRODUCTION_CHECKLIST.md` formalise les contrôles nécessaires avant toute publication : build, parcours publics, réservation, emails, recrutement, portail candidat, confidentialité, accessibilité, SEO et résilience. Il précise les preuves attendues et les conditions de blocage. Un test automatisé garantit que les catégories de contrôle critiques restent présentes dans cette checklist.
+
+## Cohérence iconographique — 19 août 2026
+
+L’audit des sources client confirme que les composants utilisent exclusivement la bibliothèque Lucide pour les pictogrammes d’interface. Aucune importation de `react-icons` ni de `@heroicons` n’a été détectée. Un test de non-régression empêche l’ajout involontaire d’une autre bibliothèque d’icônes ; une vérification visuelle de l’accueil confirme la cohérence du trait et des tailles sur les contrôles publics.
