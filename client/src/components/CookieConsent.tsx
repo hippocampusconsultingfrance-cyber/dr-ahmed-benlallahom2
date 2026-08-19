@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
 import { Settings2, X } from "lucide-react";
+import { useEffect, useRef, useState, type MouseEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { COOKIE_CONSENT_STORAGE_KEY, normalizeCookieConsent, shouldShowCookiePreferences, type CookieConsentValue } from "./cookieConsentState";
@@ -31,6 +31,7 @@ export default function CookieConsent() {
   const [showPreferences, setShowPreferences] = useState(false);
   const [cookieConsent, setCookieConsent] = useState<CookieConsentValue | null>(null);
   const [draftConsent, setDraftConsent] = useState<CookieConsentValue>({ essential: true, performance: false, preferences: false });
+  const preferencesTriggerRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     const stored = localStorage.getItem(COOKIE_CONSENT_STORAGE_KEY);
@@ -54,6 +55,18 @@ export default function CookieConsent() {
     syncCookieBannerOpenAttribute(root, showBanner);
     return () => root.removeAttribute(COOKIE_BANNER_OPEN_ATTRIBUTE);
   }, [showBanner]);
+
+  useEffect(() => {
+    if (!showPreferences) return;
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      setShowPreferences(false);
+      requestAnimationFrame(() => preferencesTriggerRef.current?.focus());
+    };
+    window.addEventListener("keydown", handleEscape);
+    return () => window.removeEventListener("keydown", handleEscape);
+  }, [showPreferences]);
 
   const saveConsent = (consent: CookieConsentValue) => {
     setCookieConsent(consent);
@@ -80,9 +93,15 @@ export default function CookieConsent() {
     });
   };
 
-  const handleCustomize = () => {
+  const handleCustomize = (event?: MouseEvent<HTMLElement>) => {
+    preferencesTriggerRef.current = event?.currentTarget ?? document.activeElement as HTMLElement | null;
     setDraftConsent(cookieConsent || { essential: true, performance: false, preferences: false });
     setShowPreferences(true);
+  };
+
+  const closePreferences = () => {
+    setShowPreferences(false);
+    requestAnimationFrame(() => preferencesTriggerRef.current?.focus());
   };
 
   return (
@@ -93,7 +112,7 @@ export default function CookieConsent() {
 
       {shouldShowCookiePreferences(showBanner) && <button type="button" onClick={handleCustomize} className="fixed bottom-4 left-4 z-40 inline-flex items-center gap-2 rounded-full border border-border bg-background/95 px-3 py-2 text-xs font-medium text-foreground shadow-lg backdrop-blur transition-colors hover:border-primary/50 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" aria-label={copy.settings}><Settings2 className="h-4 w-4" aria-hidden="true" />{copy.settings}</button>}
 
-      {showPreferences && <div className="fixed inset-0 z-[60] grid place-items-center bg-black/60 p-4" role="dialog" aria-modal="true" aria-label={copy.settings}><section className="w-full max-w-lg rounded-2xl border border-border bg-background p-6 shadow-2xl"><div className="flex items-start justify-between gap-4"><div><h2 className="text-lg font-semibold text-foreground">{copy.settings}</h2><p className="mt-2 text-sm leading-6 text-muted-foreground">{copy.settingsDescription}</p></div><button type="button" onClick={() => setShowPreferences(false)} className="text-muted-foreground hover:text-foreground" aria-label={copy.close}><X className="h-5 w-5" /></button></div><div className="mt-6 space-y-4"><label className="flex cursor-pointer items-start gap-3 rounded-xl border border-border p-4"><input type="checkbox" checked disabled className="mt-1 h-4 w-4 accent-primary" /><span><span className="font-medium text-foreground">{copy.essential}</span><span className="mt-1 block text-sm text-muted-foreground">{copy.settingsDescription}</span></span></label><label className="flex cursor-pointer items-start gap-3 rounded-xl border border-border p-4"><input type="checkbox" checked={draftConsent.performance} onChange={event => setDraftConsent(current => ({ ...current, performance: event.target.checked }))} className="mt-1 h-4 w-4 accent-primary" /><span><span className="font-medium text-foreground">{copy.performance}</span><span className="mt-1 block text-sm text-muted-foreground">{copy.performanceDescription}</span></span></label><label className="flex cursor-pointer items-start gap-3 rounded-xl border border-border p-4"><input type="checkbox" checked={draftConsent.preferences} onChange={event => setDraftConsent(current => ({ ...current, preferences: event.target.checked }))} className="mt-1 h-4 w-4 accent-primary" /><span><span className="font-medium text-foreground">{copy.preferences}</span><span className="mt-1 block text-sm text-muted-foreground">{copy.preferencesDescription}</span></span></label></div><div className="mt-6 flex flex-wrap justify-end gap-2"><Button variant="outline" onClick={() => setShowPreferences(false)}>{copy.close}</Button><Button onClick={() => saveConsent(draftConsent)}>{copy.save}</Button></div></section></div>}
+      {showPreferences && <div className="fixed inset-0 z-[60] grid place-items-center bg-black/60 p-4" role="dialog" aria-modal="true" aria-label={copy.settings}><section className="w-full max-w-lg rounded-2xl border border-border bg-background p-6 shadow-2xl"><div className="flex items-start justify-between gap-4"><div><h2 className="text-lg font-semibold text-foreground">{copy.settings}</h2><p className="mt-2 text-sm leading-6 text-muted-foreground">{copy.settingsDescription}</p></div><button type="button" onClick={closePreferences} className="text-muted-foreground hover:text-foreground" aria-label={copy.close}><X className="h-5 w-5" /></button></div><div className="mt-6 space-y-4"><label className="flex cursor-pointer items-start gap-3 rounded-xl border border-border p-4"><input type="checkbox" checked disabled className="mt-1 h-4 w-4 accent-primary" /><span><span className="font-medium text-foreground">{copy.essential}</span><span className="mt-1 block text-sm text-muted-foreground">{copy.settingsDescription}</span></span></label><label className="flex cursor-pointer items-start gap-3 rounded-xl border border-border p-4"><input type="checkbox" checked={draftConsent.performance} onChange={event => setDraftConsent(current => ({ ...current, performance: event.target.checked }))} className="mt-1 h-4 w-4 accent-primary" /><span><span className="font-medium text-foreground">{copy.performance}</span><span className="mt-1 block text-sm text-muted-foreground">{copy.performanceDescription}</span></span></label><label className="flex cursor-pointer items-start gap-3 rounded-xl border border-border p-4"><input type="checkbox" checked={draftConsent.preferences} onChange={event => setDraftConsent(current => ({ ...current, preferences: event.target.checked }))} className="mt-1 h-4 w-4 accent-primary" /><span><span className="font-medium text-foreground">{copy.preferences}</span><span className="mt-1 block text-sm text-muted-foreground">{copy.preferencesDescription}</span></span></label></div><div className="mt-6 flex flex-wrap justify-end gap-2"><Button variant="outline" onClick={closePreferences}>{copy.close}</Button><Button onClick={() => saveConsent(draftConsent)}>{copy.save}</Button></div></section></div>}
     </>
   );
 }

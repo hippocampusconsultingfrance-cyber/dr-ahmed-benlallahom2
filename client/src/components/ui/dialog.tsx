@@ -19,6 +19,13 @@ const DialogCompositionContext = React.createContext<{
 export const useDialogComposition = () =>
   React.useContext(DialogCompositionContext);
 
+export function shouldPreventDialogEscape(
+  nativeIsComposing: boolean | undefined,
+  contextIsComposing: boolean,
+) {
+  return Boolean(nativeIsComposing) || contextIsComposing;
+}
+
 function Dialog({
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Root>) {
@@ -104,7 +111,10 @@ function DialogContent({
     (e: KeyboardEvent) => {
       // Check both the native isComposing property and our context state
       // This handles Safari's timing issues with composition events
-      const isCurrentlyComposing = (e as any).isComposing || isComposing();
+      const isCurrentlyComposing = shouldPreventDialogEscape(
+        (e as any).isComposing,
+        isComposing(),
+      );
 
       // If IME is composing, prevent dialog from closing
       if (isCurrentlyComposing) {
@@ -206,4 +216,3 @@ export {
   DialogTitle,
   DialogTrigger
 };
-

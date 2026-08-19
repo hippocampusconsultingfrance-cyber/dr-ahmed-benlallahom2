@@ -19,4 +19,15 @@ describe("coordination des contrôles fixes", () => {
     expect(root.removeAttribute).toHaveBeenCalledWith(COOKIE_BANNER_OPEN_ATTRIBUTE);
     expect(root.setAttribute).not.toHaveBeenCalled();
   });
+
+  it("prévoit la fermeture par Échap et la restitution du focus des préférences", async () => {
+    const source = await import("node:fs/promises").then(fs =>
+      fs.readFile(new URL("./CookieConsent.tsx", import.meta.url), "utf8")
+    );
+
+    expect(source).toContain('if (event.key !== "Escape") return;');
+    expect(source).toContain("preferencesTriggerRef.current?.focus()");
+    expect(source).toContain("const closePreferences = () => {");
+    expect(source).toContain("onClick={closePreferences}");
+  });
 });

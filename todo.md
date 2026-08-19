@@ -202,7 +202,10 @@
 - [ ] Mettre en place une revue graphique trimestrielle et une checklist avant publication
 - [ ] Centraliser les libellés d’interface afin d’éviter les chaînes de texte hardcodées
 - [ ] Ajouter une stratégie de compression et de recadrage responsive des images
-- [ ] Ajouter une navigation clavier complète sur menus, carrousels, modales et calendriers
+- [x] Vérifier et compléter la navigation clavier sur menus, carrousels, modales et contrôles de réservation
+- [x] Ajouter des tests comportementaux ciblés couvrant la fermeture par Échap du dialogue partagé et les actions d’annulation des confirmations actives
+- [x] Documenter composant par composant la couverture clavier effective des menus, carrousel, dialogues et contrôles de réservation
+- [x] Ajouter la fermeture par Échap et la restitution du focus pour la fenêtre de préférences cookies
 - [x] Vérifier et maintenir les feedbacks visuels après contact, réservation, paiement et demande RGPD
 - [x] Auditer explicitement les feedbacks visuels des parcours Contact, Réservation, Paiement et RGPD, puis documenter les résultats dans le journal d’audit
 - [x] Ajouter des tests ciblés de non-régression couvrant les états de succès et d’erreur des parcours Contact, Réservation, Confirmation de paiement et demande RGPD

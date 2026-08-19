@@ -28,6 +28,17 @@ Un contrôle du code recense les balises image des composants et pages concerné
 
 Le sélecteur de langue conserve le focus, prend en charge les flèches, Accueil et Fin, puis se ferme par Échap ; le menu mobile se ferme également par Échap et restitue le focus à son déclencheur. Les libellés accessibles de la navigation — accueil, menu principal, recherche, changement de langue, thèmes et menu mobile — sont maintenant définis en français, anglais, allemand et chinois, avec test de couverture des quatre langues.
 
+Les composants interactifs restants ont été cartographiés. Le carrousel de témoignages prend en charge les flèches, Accueil et Fin ; les dialogues de confirmation et administratifs s’appuient sur les composants de dialogue accessibles de la bibliothèque d’interface ; la réservation emploie des champs de date et d’heure visibles, compatibles clavier, plutôt qu’un calendrier graphique custom. La fenêtre interne de préférences cookies dispose désormais d’une fermeture par Échap et restitue le focus à son déclencheur. Des tests dédiés couvrent la navigation, le carrousel et ce dernier comportement.
+
+| Composant | Interaction clavier couverte | Preuve de non-régression |
+|---|---|---|
+| Menu de langue | Flèches, Accueil, Fin et Échap, avec conservation du focus. | `navigationKeyboard.test.ts` et `navigationAccessibilityCopy.test.ts`. |
+| Carrousel de témoignages | Flèches gauche/droite, Accueil et Fin sur une zone focalisable. | `TestimonialsSection.test.ts`. |
+| Dialogues administratifs | Le dialogue partagé intercepte Échap hors composition IME et expose une action de fermeture focalisable. | `dialogKeyboard.test.ts` vérifie le comportement hors/en composition IME, la primitive, la gestion d’Échap et la fermeture. |
+| Confirmations sensibles | Les confirmations conservent un bouton Annuler dédié, atteignable au clavier ; elles ne se ferment pas implicitement pendant une décision à confirmer. | `dialogKeyboard.test.ts` vérifie le composant de confirmation et son usage Mailing. |
+| Préférences cookies | Échap ferme la fenêtre et rend le focus à l’élément qui l’a ouverte. | `CookieConsent.fixedControls.test.ts`. |
+| Réservation | Les champs date et heure restent des contrôles visibles et atteignables au clavier ; les états de disponibilité sont explicites. | `BookingPage.test.ts`. |
+
 ## Messages de validation publics
 
 Les formulaires Contact, RGPD, brief employeur, accès candidat et candidature VVIP disposent de retours localisés dans les quatre langues. La candidature VVIP a été corrigée afin qu’un message renvoyé par le serveur ne soit jamais affiché directement au visiteur : le détail est conservé dans la console de diagnostic et l’interface affiche uniquement son message localisé générique. Un test de non-régression protège ce comportement.
