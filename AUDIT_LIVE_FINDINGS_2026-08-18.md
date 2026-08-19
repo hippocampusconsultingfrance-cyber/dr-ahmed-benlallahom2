@@ -454,5 +454,8 @@ La page 404 publique reste localisée, mais indique maintenant explicitement aux
 ## Formulaire de demande RGPD multilingue — 19 août 2026
 Le formulaire de demande RGPD localise désormais ses actions de retour, soumission, succès, erreur et confirmation dans les quatre langues du site. Les libellés des droits et des champs restent fournis par le catalogue RGPD existant. Les erreurs publiques sont génériques et les détails restent en diagnostic. La suite complète compte 213 tests réussis, 2 explicitement ignorés, avec un build de production valide.
 
+## Associations de champs RGPD accessibles — 19 août 2026
+Chaque champ du formulaire de demande RGPD possède désormais un identifiant stable et un libellé associé explicitement. Cette amélioration facilite l’annonce du contexte de saisie par les lecteurs d’écran et le clic sur les libellés. Un test contrôle l’unicité et la convention de nommage de ces identifiants. La suite complète compte 215 tests réussis, 2 explicitement ignorés, avec un build de production valide.
+
 ## Pages ventures — libellés multilingues — 19 août 2026
 Les états de secours, fil d’Ariane, boutons, titres de sections et navigation des pages ventures sont maintenant localisés en français, anglais, allemand et chinois. Le catalogue narratif détaillé des ventures demeure actuellement disponible en français et en anglais ; l’interface s’appuie sur la version anglaise en allemand et chinois jusqu’à la production d’une traduction métier dédiée. Cette limite est explicitement maintenue dans le suivi. La suite complète compte 214 tests réussis, 2 explicitement ignorés, avec un build de production valide.

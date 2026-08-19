@@ -11,6 +11,14 @@ export const gdprRequestCopy = {
   zh: { submitted: "GDPR 请求已成功提交！", error: "无法发送请求，请重试。", back: "返回", received: "已收到请求！", another: "提交另一项请求", sending: "正在提交..." },
 } as const;
 
+export const gdprFieldIds = {
+  name: "gdpr-request-name",
+  email: "gdpr-request-email",
+  phone: "gdpr-request-phone",
+  requestType: "gdpr-request-type",
+  description: "gdpr-request-description",
+} as const;
+
 interface GDPRRequestFormProps {
   onBack?: () => void;
 }
@@ -117,11 +125,12 @@ export default function GDPRRequestForm({ onBack }: GDPRRequestFormProps) {
             <form onSubmit={handleSubmit} className="p-8 sm:p-10 rounded-2xl bg-card/60 backdrop-blur-sm border border-border/30 space-y-5">
               <div className="grid sm:grid-cols-2 gap-5">
                 <div>
-                  <label className="block text-sm font-medium text-foreground mb-2">
+                  <label htmlFor={gdprFieldIds.name} className="block text-sm font-medium text-foreground mb-2">
                     {content.gdpr.form.name}
                   </label>
                   <input
                     type="text"
+                    id={gdprFieldIds.name}
                     required
                     placeholder={content.gdpr.form.namePlaceholder}
                     value={formData.name}
@@ -130,11 +139,12 @@ export default function GDPRRequestForm({ onBack }: GDPRRequestFormProps) {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-foreground mb-2">
+                  <label htmlFor={gdprFieldIds.email} className="block text-sm font-medium text-foreground mb-2">
                     {content.gdpr.form.email}
                   </label>
                   <input
                     type="email"
+                    id={gdprFieldIds.email}
                     required
                     placeholder={content.gdpr.form.emailPlaceholder}
                     value={formData.email}
@@ -145,11 +155,12 @@ export default function GDPRRequestForm({ onBack }: GDPRRequestFormProps) {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-foreground mb-2">
+                <label htmlFor={gdprFieldIds.phone} className="block text-sm font-medium text-foreground mb-2">
                   {content.gdpr.form.phone}
                 </label>
                 <input
                   type="tel"
+                  id={gdprFieldIds.phone}
                   placeholder={content.gdpr.form.phonePlaceholder}
                   value={formData.phone}
                   onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
@@ -158,11 +169,12 @@ export default function GDPRRequestForm({ onBack }: GDPRRequestFormProps) {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-foreground mb-2">
+                <label htmlFor={gdprFieldIds.requestType} className="block text-sm font-medium text-foreground mb-2">
                   {content.gdpr.form.requestType}
                 </label>
                 <select
                   required
+                  id={gdprFieldIds.requestType}
                   value={formData.requestType}
                   onChange={(e) => setFormData({ ...formData, requestType: e.target.value as any })}
                   className="w-full px-4 py-3 rounded-lg bg-input/50 border border-border/50 text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/40 transition-all"
@@ -176,11 +188,12 @@ export default function GDPRRequestForm({ onBack }: GDPRRequestFormProps) {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-foreground mb-2">
+                <label htmlFor={gdprFieldIds.description} className="block text-sm font-medium text-foreground mb-2">
                   {content.gdpr.form.description}
                 </label>
                 <textarea
                   rows={6}
+                  id={gdprFieldIds.description}
                   placeholder={content.gdpr.form.descriptionPlaceholder}
                   value={formData.description}
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}

@@ -2427,4 +2427,5 @@
 - [ ] Traduire les pages de ventures et leurs états de secours dans les quatre langues prises en charge
 - [x] Localiser les libellés et états de secours visibles des pages ventures dans les quatre langues prises en charge
 - [ ] Traduire les récits métier détaillés des ventures en allemand et en chinois avant de clore la localisation complète
+- [x] Associer explicitement les libellés et champs du formulaire RGPD pour la navigation au lecteur d’écran
 - [x] Renforcer robots.txt pour décourager l’exploration des parcours candidats et de désinscription non indexables
