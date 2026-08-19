@@ -8,6 +8,14 @@ describe("getRecruitmentUnsubscribeCopy", () => {
       expect(copy.confirm.trim()).not.toHaveLength(0);
       expect(copy.success.trim()).not.toHaveLength(0);
       expect(copy.invalid.trim()).not.toHaveLength(0);
+      expect(copy.metaTitle.trim()).not.toHaveLength(0);
+      expect(copy.metaDescription.trim()).not.toHaveLength(0);
     }
+  });
+
+  it("uses distinct localized metadata for the public unsubscribe page", () => {
+    expect(getRecruitmentUnsubscribeCopy("en").metaTitle).toBe("Recruitment unsubscribe | Hippocampus Consulting");
+    expect(getRecruitmentUnsubscribeCopy("de").metaDescription).toContain("Recruiting-Mitteilungen");
+    expect(getRecruitmentUnsubscribeCopy("zh").metaTitle).toContain("取消招聘订阅");
   });
 });

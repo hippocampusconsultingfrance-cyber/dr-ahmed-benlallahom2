@@ -2499,3 +2499,5 @@
 - [x] Vérifier et localiser les formulaires, vérifications et retours du parcours d’accès candidat en FR/EN/DE/ZH
 - [x] Vérifier et localiser les contrôles, validations et retours de réinitialisation candidat en FR/EN/DE/ZH
 - [x] Vérifier et localiser les états d’activation de compte candidat en FR/EN/DE/ZH
+- [x] Vérifier et localiser les contrôles, confirmations et erreurs de désinscription recrutement en FR/EN/DE/ZH
+- [x] Localiser les métadonnées SEO du parcours de désinscription recrutement en FR/EN/DE/ZH

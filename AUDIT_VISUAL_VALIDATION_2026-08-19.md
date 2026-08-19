@@ -152,6 +152,8 @@ La page de réinitialisation de mot de passe candidat réutilise une copie dédi
 
 Le parcours d’activation de compte candidat est couvert dans ces mêmes langues : attente de vérification, activation réussie avec redirection, lien manquant, lien invalide ou expiré, et retour sécurisé à la connexion. Aucun détail d’erreur serveur n’est exposé sur cette page.
 
+Le parcours public de désinscription des communications de recrutement est localisé en français, anglais, allemand et chinois. Il couvre les métadonnées no-index, la confirmation explicite, le traitement en cours, la préférence enregistrée, le lien invalide et le retour vers l’accueil.
+
 ## Disponibilité de production
 
 Le 19 août 2026, les routes publiques `/`, `/booking`, `/gdpr`, `/faq`, `/search`, `/error`, `/maintenance`, `/recruitment`, `/employers` et `/why-hippocampus` ont toutes répondu en HTTP 200 sur le domaine principal. L’accès `www.drahmedbenlallahom.com` redirige correctement vers `drahmedbenlallahom.com` et sert ensuite la page d’accueil en HTTP 200. Aucun écart de disponibilité n’a été observé sur cet échantillon.
