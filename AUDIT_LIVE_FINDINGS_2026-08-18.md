@@ -337,3 +337,6 @@ Le lien d’accès direct global affecte dynamiquement l’identifiant `main-con
 
 ## Lisibilité du contact dans le pied de page — 19 août 2026
 La grille bureau du pied de page attribue désormais une largeur dédiée à la colonne de contact. L’adresse email professionnelle y reste sur une ligne à partir du format bureau, tandis que le retour à la ligne contrôlé est conservé sur mobile afin d’éviter tout débordement horizontal. Les rendus employeurs en largeur bureau et mobile ont été vérifiés après correction.
+
+## Vérification à fort zoom — 19 août 2026
+Les parcours Accueil, Employeurs, VVIP & Offshore, Réservation, Accès candidat et FAQ ont été examinés à une largeur CSS réduite équivalente à une consultation à fort zoom. Aucun débordement horizontal, texte tronqué, perte de contrôle ou action inaccessible n’a été observé dans les vues contrôlées. Les formulaires conservent des champs lisibles et les boutons restent disponibles dans le flux de lecture.

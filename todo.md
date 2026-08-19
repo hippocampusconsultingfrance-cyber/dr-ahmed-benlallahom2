@@ -257,7 +257,7 @@
 - [x] Vérifier l’impression des pages légales, RGPD et factures
 - [ ] Vérifier la compatibilité avec un lecteur d’écran
 - [ ] Vérifier la navigation au clavier uniquement
-- [ ] Vérifier les pages à 200 % de zoom
+- [x] Vérifier les pages à 200 % de zoom
 - [ ] Vérifier les textes et CTA dans les quatre langues
 - [ ] Vérifier le positionnement des éléments flottants sur petits écrans
 - [ ] Vérifier les états de chargement des appels tRPC
