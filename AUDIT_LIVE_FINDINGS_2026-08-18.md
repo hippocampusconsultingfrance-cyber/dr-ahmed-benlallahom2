@@ -438,3 +438,6 @@ Le bouton flottant WhatsApp adapte maintenant son message prérempli, son libell
 
 ## Section de contact multilingue — 19 août 2026
 La section de contact complète désormais le catalogue de contenu existant avec des validations, messages de succès, erreurs, consentement RGPD et accusé de réception localisés en français, anglais, allemand et chinois. Les détails d’erreur restent limités à la console de diagnostic. La suite complète compte 209 tests réussis, 2 explicitement ignorés, avec un build de production valide.
+
+## Fallback global d’erreur multilingue — 19 août 2026
+Le dernier recours applicatif est maintenant localisé dans les quatre langues et ne révèle aucun détail technique. Le texte a également été rectifié pour ne plus prétendre qu’une notification a été envoyée lorsqu’aucune télémétrie de ce type n’est effectivement déclenchée. Les seules actions proposées sont le rechargement de la page et le retour à l’accueil. La suite complète compte 210 tests réussis, 2 explicitement ignorés, avec un build de production valide.
