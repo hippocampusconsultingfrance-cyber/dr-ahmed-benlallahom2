@@ -334,3 +334,6 @@ Les parcours Recrutement, Employeurs, VVIP & Offshore, Réservation, Accès cand
 
 ## Accès direct au contenu principal — 19 août 2026
 Le lien d’accès direct global affecte dynamiquement l’identifiant `main-content` et un `tabIndex=-1` au premier élément `main` de chaque parcours, puis lui transfère le focus. Les pages qui ne portent pas explicitement cet identifiant dans leur JSX restent donc compatibles sans duplication de logique. Ce comportement est couvert par des tests unitaires du composant dédié.
+
+## Lisibilité du contact dans le pied de page — 19 août 2026
+La grille bureau du pied de page attribue désormais une largeur dédiée à la colonne de contact. L’adresse email professionnelle y reste sur une ligne à partir du format bureau, tandis que le retour à la ligne contrôlé est conservé sur mobile afin d’éviter tout débordement horizontal. Les rendus employeurs en largeur bureau et mobile ont été vérifiés après correction.

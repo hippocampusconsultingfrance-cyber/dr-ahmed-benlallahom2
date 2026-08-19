@@ -16,7 +16,7 @@ export default function Footer() {
       <div className="ecg-divider absolute top-0 left-0 right-0" />
 
       <div className="container py-16 pt-20">
-        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-10">
+        <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)_minmax(0,1fr)_minmax(17rem,1.35fr)]">
           {/* Brand */}
           <div className="sm:col-span-2 lg:col-span-1">
             <div className="flex items-center gap-3 mb-4">
@@ -91,7 +91,7 @@ export default function Footer() {
               </a>
               <a
                 href={`mailto:${siteConfig.email}`}
-                className="block text-sm text-muted-foreground hover:text-primary transition-colors break-all"
+                className="block break-all text-[13px] leading-5 text-muted-foreground transition-colors hover:text-primary lg:break-normal lg:whitespace-nowrap"
               >
                 {siteConfig.email}
               </a>
