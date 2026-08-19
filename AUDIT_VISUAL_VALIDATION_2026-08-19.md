@@ -55,3 +55,7 @@ Les journaux locaux récents ne présentent ni erreur serveur, ni réponse rése
 ## Tableau de bord administratif sur mobile
 
 À 375 px de largeur, la route administrative présente d’abord sa validation de sécurité par code à six chiffres, sans exposer de donnée candidate ou administrative avant validation. Le formulaire de sécurité est lisible, les deux actions sont atteignables et aucun débordement horizontal n’est visible. Le contrôle des onglets internes du tableau de bord nécessite une authentification administrative et une validation MFA ; il n’a pas été contourné dans le cadre de cette vérification visuelle.
+
+## Liens et contrôles publics
+
+Un contrôle statique des composants et pages visibles n’a trouvé aucun lien public vide, ancre vide ni ouverture de fenêtre factice. Les seules ancres `#` recensées appartiennent à une page de démonstration non routée et non exposée au public. Les liens de navigation principaux, de pied de page et les routes profondes ont déjà fait l’objet d’un contrôle de disponibilité HTTP.
