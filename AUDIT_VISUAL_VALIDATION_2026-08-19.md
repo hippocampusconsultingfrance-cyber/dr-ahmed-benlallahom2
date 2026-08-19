@@ -43,6 +43,10 @@ Les composants interactifs restants ont été cartographiés. Le carrousel de t�
 
 Les libellés publics compacts de navigation et de réservation sont contrôlés dans les quatre langues actives. Le garde-fou compte désormais les caractères Unicode par point de code, ce qui évite un traitement incohérent des libellés chinois. Les contrôles automatisés couvrent les liens de navigation, les CTA critiques et les libellés allemands et chinois à risque. La vérification visuelle complète des contenus très longs sur appareil réel reste documentée séparément.
 
+## Contraste des thèmes
+
+Les paires textuelles centrales des thèmes sombre et clair sont soumises à un seuil automatisé de contraste AA de 4,5:1 : texte principal, texte secondaire gris, texte sur primaire cyan et texte sur accent doré. Le primaire du thème clair a été légèrement assombri afin d’atteindre ce seuil avec son texte clair. Le calcul s’effectue à partir des tokens OKLCH, ce qui protège les futures modifications de palette contre une régression de lisibilité.
+
 ## Messages de validation publics
 
 Les formulaires Contact, RGPD, brief employeur, accès candidat et candidature VVIP disposent de retours localisés dans les quatre langues. La candidature VVIP a été corrigée afin qu’un message renvoyé par le serveur ne soit jamais affiché directement au visiteur : le détail est conservé dans la console de diagnostic et l’interface affiche uniquement son message localisé générique. Un test de non-régression protège ce comportement.

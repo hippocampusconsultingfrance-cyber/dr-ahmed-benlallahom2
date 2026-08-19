@@ -237,7 +237,8 @@
 - [ ] Ajouter un contrôle de taille de police sans rupture de mise en page
 - [ ] Ajouter un composant de citation médicale avec source et date de mise à jour
 - [x] Ajouter une notice visible indiquant que le site ne remplace pas les urgences médicales
-- [ ] Vérifier l’accessibilité des couleurs cyan, gris et doré sur les deux thèmes
+- [x] Vérifier l’accessibilité des couleurs cyan, gris et doré sur les deux thèmes
+- [x] Ajouter un test automatisé de contraste pour les paires de tokens textuels et interactifs des thèmes clair et sombre
 - [ ] Évaluer la réduction des effets décoratifs sur les formulaires et pages légales
 - [ ] Préparer un kit de marque exportable pour les documents et réseaux sociaux
 - [ ] Mettre en place une validation graphique avant chaque checkpoint
