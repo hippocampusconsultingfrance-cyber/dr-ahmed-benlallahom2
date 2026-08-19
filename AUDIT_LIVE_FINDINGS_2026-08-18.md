@@ -136,3 +136,14 @@ Les constatations ci-dessous proviennent des captures du serveur de prévisualis
 | Sections opérationnelles | Les entrées Candidatures, Documents candidats, Sécurité, Vivier, Mailing et Missions sont visibles après validation MFA. |
 
 > Les raccourcis Candidatures et Missions sont également disponibles depuis la vue d’ensemble administrative.
+
+## Matching mission-candidat explicable — 19 août 2026
+
+| Critère professionnel | Pondération maximale | Restitution |
+|---|---:|---|
+| Spécialité déclarée | 35 points | Affichée dans le détail du score. |
+| Mobilité vers le pays de mission | 15 points | Affichée lorsqu’elle est déclarée. |
+| Certifications requises | 20 points | Pondérées selon les certifications correspondantes. |
+| Langues, expérience et disponibilité | 30 points | Évaluées uniquement lorsque le brief les précise. |
+
+> Le score est limité aux informations professionnelles déclarées. Il est présenté comme une aide à la revue humaine ; le statut de shortlist reste une action explicite de l’administrateur.
