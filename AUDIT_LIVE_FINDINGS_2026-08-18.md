@@ -285,3 +285,7 @@ La FAQ déploie maintenant explicitement ses panneaux accordéon, même lorsque 
 ## Saisie mobile de réservation — 19 août 2026
 
 Le formulaire de consultation préserve ses zones tactiles, ses champs date et heure explicitement visibles et le bouton de paiement pleine largeur. Les champs nom, email et téléphone exposent désormais les attributs de remplissage automatique appropriés, et le clavier mobile propose une action « suivant » jusqu’au champ de détails, puis « terminer ». Cette optimisation est couverte par les tests de réservation ; la suite complète et le build sont validés.
+
+## États de disponibilité de réservation — 19 août 2026
+
+Le badge de disponibilité distingue maintenant quatre états : aucun créneau sélectionné, vérification en cours, créneau indisponible et créneau disponible. Chaque état a une bordure, un fond et une couleur dédiés, avec un attribut `data-state` et une annonce polie pour les lecteurs d’écran. La logique qui détermine ces états est couverte par des tests unitaires ; la suite complète et le build sont validés.

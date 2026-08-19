@@ -220,6 +220,25 @@ export function parseBookingDateTime(dateValue: string, timeValue: string): Date
     : null;
 }
 
+export type BookingAvailabilityState = "select" | "checking" | "unavailable" | "available";
+
+export function getBookingAvailabilityState({
+  selected,
+  pending,
+  blocked,
+  booked,
+}: {
+  selected: boolean;
+  pending: boolean;
+  blocked: boolean;
+  booked: boolean;
+}): BookingAvailabilityState {
+  if (!selected) return "select";
+  if (pending) return "checking";
+  if (blocked || booked) return "unavailable";
+  return "available";
+}
+
 export default function BookingPage() {
   const { language } = useLanguage();
   const [location, setLocation] = useLocation();
@@ -297,9 +316,15 @@ export default function BookingPage() {
       ? content.form.checkingAvailability
       : isBlockedDate
       ? content.form.blocked
-        : isBookedSlot
-          ? content.form.alreadyBooked
-          : content.form.available;
+      : isBookedSlot
+        ? content.form.alreadyBooked
+        : content.form.available;
+  const availabilityState = getBookingAvailabilityState({
+    selected: Boolean(selectedDate),
+    pending: availabilityPending,
+    blocked: isBlockedDate,
+    booked: isBookedSlot,
+  });
 
   const calculatePrice = trpc.appointments.calculatePrice.useQuery(
     { appointmentDate: selectedDate?.toISOString() || "" },
@@ -642,7 +667,7 @@ export default function BookingPage() {
               <p className="mt-2 text-xs leading-5 text-muted-foreground">{content.form.dateHint}</p>
               {dateError && <p id="booking-date-error" className="mt-2 text-sm text-destructive" role="alert">{dateError}</p>}
               {localizedDate && <p className="mt-2 text-sm font-medium text-primary" aria-live="polite">{localizedDate}</p>}
-              <div id="availability-status" className={`availability-status mt-3 ${isBlockedDate || isBookedSlot ? "is-unavailable" : "is-available"}`} role="status" aria-live="polite">
+              <div id="availability-status" className={`availability-status availability-${availabilityState} mt-3`} role="status" aria-live="polite" data-state={availabilityState}>
                 <span className="availability-dot" aria-hidden="true" />
                 <span>{availabilityLabel}</span>
               </div>

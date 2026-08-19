@@ -247,7 +247,7 @@
 - [ ] Créer une checklist de qualité visuelle avant mise en production
 - [ ] Vérifier la cohérence des icônes et supprimer les mélanges de styles
 - [x] Ajouter une version mobile renforcée de la page de réservation
-- [ ] Ajouter une vue calendrier plus lisible avec indicateurs de disponibilité
+- [x] Ajouter des indicateurs de disponibilité plus lisibles au parcours de réservation
 - [ ] Ajouter une vue agenda administrateur plus graphique
 - [ ] Ajouter des états d’erreur et états vides avec illustrations sobres
 - [ ] Ajouter une page de résultats de recherche interne accessible

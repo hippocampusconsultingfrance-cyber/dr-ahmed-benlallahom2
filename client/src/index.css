@@ -460,6 +460,30 @@ html.high-readability textarea {
     background: color-mix(in oklch, var(--destructive) 7%, transparent);
   }
 
+  .availability-status.availability-select {
+    border-style: dashed;
+    color: var(--muted-foreground);
+    background: color-mix(in oklch, var(--muted) 44%, transparent);
+  }
+
+  .availability-status.availability-checking {
+    border-color: color-mix(in oklch, var(--accent) 56%, var(--border));
+    color: color-mix(in oklch, var(--foreground) 76%, var(--accent));
+    background: color-mix(in oklch, var(--accent) 10%, transparent);
+  }
+
+  .availability-status.availability-unavailable {
+    border-color: color-mix(in oklch, var(--destructive) 45%, var(--border));
+    color: var(--destructive);
+    background: color-mix(in oklch, var(--destructive) 7%, transparent);
+  }
+
+  .availability-status.availability-available {
+    border-color: color-mix(in oklch, oklch(0.72 0.16 155) 48%, var(--border));
+    color: color-mix(in oklch, var(--foreground) 76%, oklch(0.72 0.16 155));
+    background: color-mix(in oklch, oklch(0.72 0.16 155) 9%, transparent);
+  }
+
   .availability-dot {
     width: 0.5rem;
     height: 0.5rem;

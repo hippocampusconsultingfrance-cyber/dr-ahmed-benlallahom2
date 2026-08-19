@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bookingContent, parseBookingDateTime } from "./BookingPage";
+import { bookingContent, getBookingAvailabilityState, parseBookingDateTime } from "./BookingPage";
 
 describe("booking date placeholders", () => {
   it("uses an explicit localized placeholder for every supported language", () => {
@@ -41,5 +41,13 @@ describe("booking date placeholders", () => {
     expect(parsed?.getHours()).toBe(10);
     expect(parseBookingDateTime("31/02/2026", "10:00")).toBeNull();
     expect(parseBookingDateTime("21/08/2026", "25:00")).toBeNull();
+  });
+
+  it("distingue explicitement les états de disponibilité du créneau", () => {
+    expect(getBookingAvailabilityState({ selected: false, pending: false, blocked: false, booked: false })).toBe("select");
+    expect(getBookingAvailabilityState({ selected: true, pending: true, blocked: false, booked: false })).toBe("checking");
+    expect(getBookingAvailabilityState({ selected: true, pending: false, blocked: true, booked: false })).toBe("unavailable");
+    expect(getBookingAvailabilityState({ selected: true, pending: false, blocked: false, booked: true })).toBe("unavailable");
+    expect(getBookingAvailabilityState({ selected: true, pending: false, blocked: false, booked: false })).toBe("available");
   });
 });
