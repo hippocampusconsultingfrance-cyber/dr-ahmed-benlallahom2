@@ -2,6 +2,7 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { Star, ChevronLeft, ChevronRight } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { useState, useEffect, useCallback } from "react";
+import PublicContentSkeleton from "./PublicContentSkeleton";
 
 export default function TestimonialsSection() {
   const { language } = useLanguage();
@@ -124,11 +125,7 @@ export default function TestimonialsSection() {
             </h2>
             <p className="text-muted-foreground text-lg">{currentContent.subtitle}</p>
           </div>
-          <div className="grid md:grid-cols-3 gap-6">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="testimonial-skeleton rounded-2xl p-6 h-64 animate-pulse" />
-            ))}
-          </div>
+          <PublicContentSkeleton label={language === "fr" ? "Chargement des témoignages" : language === "en" ? "Loading testimonials" : language === "de" ? "Bewertungen werden geladen" : "正在加载评价"} />
         </div>
       </section>
     );

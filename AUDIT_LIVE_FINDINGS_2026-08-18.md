@@ -315,3 +315,10 @@ Les contenus Legal, RGPD et FAQ bénéficient des styles d’impression document
 ## Recherche interne publique — 19 août 2026
 
 La route `/search` offre désormais un index local multilingue des principaux parcours publics : consultation, recrutement, employeurs, portail candidat, FAQ, données personnelles et mentions légales. La recherche normalise les accents, privilégie les correspondances de titre et ne référence aucune route privée, administrative ou de coffre documentaire. Les états sans requête et sans résultat sont accessibles, et la page est exclue de l’indexation afin d’éviter une pagination de recherche sans contenu autonome.
+
+## Skeleton public accessible — 19 août 2026
+
+Le chargement des témoignages partenaires utilise désormais un skeleton de cartes réutilisable au lieu de formes vides animées isolées. Il expose un rôle de statut, un libellé multilingue et masque ses formes décoratives aux lecteurs d’écran. Le nombre de cartes est borné afin de préserver la lisibilité, et le mouvement reste couvert par les préférences globales de mouvement réduit et d’économie de données.
+
+## Couverture des chargements administratifs — 19 août 2026
+Les listes et tableaux de bord administratifs utilisent maintenant le même skeleton accessible : indicateurs, rendez-vous, messages, demandes RGPD, témoignages, disponibilités, candidatures, vivier, profils candidats, documents sécurisés, journal de sécurité, briefs Employeurs, correspondances et historique des campagnes. Les éléments décoratifs sont masqués aux lecteurs d’écran et chaque contexte de chargement fournit un libellé explicite. Les animations restantes sont limitées aux actions demandées par l’utilisateur, telles que l’actualisation, l’envoi de campagne, l’analyse IA, la suppression ou l’enregistrement. La suite complète compte 181 tests réussis, 2 explicitement ignorés, et la compilation de production est valide.

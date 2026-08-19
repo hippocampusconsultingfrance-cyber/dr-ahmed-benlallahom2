@@ -1,7 +1,8 @@
-import { CalendarClock, ClipboardList, FileText, Loader2, Mail, MessageSquare, UserRound } from "lucide-react";
+import { CalendarClock, ClipboardList, FileText, Mail, MessageSquare, UserRound } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { trpc } from "@/lib/trpc";
 import { buildCandidateTimeline, type CandidateTimelineEvent } from "./candidate360Timeline";
+import PublicContentSkeleton from "./PublicContentSkeleton";
 
 type Candidate360DialogProps = {
   applicationId: number | null;
@@ -36,7 +37,7 @@ export default function Candidate360Dialog({ applicationId, onOpenChange }: Cand
           <DialogTitle>Fiche candidat 360°</DialogTitle>
           <DialogDescription>Vue administrative sécurisée : historique, emails, notes et actions de suivi. L’analyse IA reste une aide à la revue humaine.</DialogDescription>
         </DialogHeader>
-        {detailQuery.isLoading ? <div className="flex items-center justify-center gap-2 py-16 text-muted-foreground"><Loader2 className="h-5 w-5 animate-spin" /> Chargement de la fiche…</div> : detail ? (
+        {detailQuery.isLoading ? <PublicContentSkeleton cards={2} columns={2} label="Chargement de la fiche candidat" /> : detail ? (
           <div className="space-y-6 py-2">
             <div className="rounded-xl border border-primary/20 bg-primary/5 p-4">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between"><div><h3 className="text-lg font-semibold text-foreground">{detail.candidate.firstName} {detail.candidate.lastName}</h3><p className="text-sm text-muted-foreground">{detail.candidate.specialty} · {detail.candidate.trackingId}</p></div><span className="rounded-full border border-border bg-background px-2.5 py-1 text-xs text-muted-foreground">Statut : {detail.candidate.status}</span></div>

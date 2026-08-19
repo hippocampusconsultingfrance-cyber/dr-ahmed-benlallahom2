@@ -1,6 +1,7 @@
-import { AlertTriangle, BarChart3, CheckCircle2, Clock3, Loader2, MailCheck, Send, UserRound, UsersRound } from "lucide-react";
+import { AlertTriangle, BarChart3, CheckCircle2, Clock3, MailCheck, Send, UserRound, UsersRound } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { nonNegativeCount, percentageLabel } from "./recruitmentDashboardMetrics";
+import PublicContentSkeleton from "./PublicContentSkeleton";
 
 type MetricCardProps = {
   icon: typeof UserRound;
@@ -31,7 +32,7 @@ export default function RecruitmentDashboardPanel() {
   }
 
   if (isLoading || !data) {
-    return <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4" aria-label="Chargement des indicateurs recrutement">{Array.from({ length: 4 }, (_, index) => <div key={index} className="h-36 animate-pulse rounded-xl border border-border bg-card" />)}</section>;
+    return <section aria-label="Chargement des indicateurs recrutement"><PublicContentSkeleton cards={4} columns={4} label="Chargement des indicateurs recrutement" /></section>;
   }
 
   const candidates = data.candidateStats;

@@ -180,7 +180,9 @@
 - [ ] Créer une bibliothèque de visuels médicaux authentiques avec droits d’utilisation et textes alternatifs
 - [ ] Améliorer la page Blog avec image principale, catégories, temps de lecture, table des matières et articles associés
 - [ ] Ajouter des états vides illustrés pour le blog, les témoignages, les disponibilités et le dashboard
-- [ ] Ajouter des skeletons de chargement cohérents au lieu de spinners seuls
+- [x] Ajouter un skeleton de chargement cohérent et accessible aux témoignages publics
+- [x] Ajouter des skeletons de chargement cohérents aux autres parcours encore en spinner seul : vivier, fiche candidat 360°, dashboard recrutement et sections admin
+- [ ] Auditer tous les états de chargement restants et réserver les spinners aux actions instantanées ou boutons en cours d’envoi
 - [x] Ajouter une page de confirmation de réservation plus complète et rassurante
 - [x] Ajouter une page FAQ visuelle sans conseils médicaux personnalisés
 - [x] Ajouter des composants graphiques de confiance pour le paiement, la confidentialité et la disponibilité

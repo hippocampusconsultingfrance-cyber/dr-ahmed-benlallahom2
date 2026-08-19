@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { trpc } from "@/lib/trpc";
+import PublicContentSkeleton from "@/components/PublicContentSkeleton";
 import { getRecruitmentCampaignTemplate, RECRUITMENT_CAMPAIGN_TEMPLATES, type RecruitmentCampaignTemplateId } from "./recruitmentCampaignTemplates";
 import { deliveryRateLabel } from "./campaignDeliveryMetrics";
 
@@ -176,7 +177,7 @@ export default function MailingTab({ initialSelectedIds }: MailingTabProps) {
 
       <section className="rounded-2xl border border-border bg-card p-5">
         <div className="mb-4 flex items-center gap-2"><Mail className="h-5 w-5 text-primary" /><h3 className="font-semibold text-foreground">Historique des campagnes</h3></div>
-        {campaignsQuery.isLoading ? <div className="flex items-center gap-2 py-8 text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Chargement de l’historique…</div> : campaignsQuery.data?.length ? (
+        {campaignsQuery.isLoading ? <PublicContentSkeleton label="Chargement de l’historique des campagnes" /> : campaignsQuery.data?.length ? (
           <div className="space-y-3">
             {campaignsQuery.data.map(campaign => {
               const delivery = campaign.delivery;

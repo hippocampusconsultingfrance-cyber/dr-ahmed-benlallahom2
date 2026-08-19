@@ -2,6 +2,7 @@ import { useState } from "react";
 import { BrainCircuit, ClipboardList, Download, FileSearch, Loader2, Mail, RefreshCw, Sparkles, Trash2, UserRound } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
+import PublicContentSkeleton from "@/components/PublicContentSkeleton";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import Candidate360Dialog from "./Candidate360Dialog";
@@ -266,7 +267,7 @@ export default function RecruitmentTab() {
       </div>
 
       {isLoading ? (
-        <div className="flex items-center justify-center gap-2 py-12 text-muted-foreground"><Loader2 className="h-5 w-5 animate-spin" /> Chargement des candidatures…</div>
+        <PublicContentSkeleton label="Chargement des candidatures" />
       ) : data?.items.length ? (
         <div className="space-y-3">
           {data.items.map(application => {

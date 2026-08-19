@@ -15,6 +15,7 @@ import CandidateDocumentsAdminTab from "@/components/CandidateDocumentsAdminTab"
 import SecurityOperationsTab from "@/components/SecurityOperationsTab";
 import RecruitmentDashboardPanel from "@/components/RecruitmentDashboardPanel";
 import { AdminEmptyState, AdminErrorState } from "@/components/AdminStatePanel";
+import PublicContentSkeleton from "@/components/PublicContentSkeleton";
 import { getActiveAdminTabLabel } from "./adminDashboardMobileTabs";
 import { buildAppointmentsAgenda } from "./appointmentsAgenda";
 
@@ -32,8 +33,10 @@ export default function AdminDashboard() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="animate-pulse text-muted-foreground">Chargement...</div>
+      <div className="min-h-screen bg-background px-4 py-16">
+        <div className="mx-auto max-w-3xl">
+          <PublicContentSkeleton cards={1} label="Chargement de l’accès administrateur" />
+        </div>
       </div>
     );
   }
@@ -74,7 +77,7 @@ export default function AdminDashboard() {
   }
 
   if (adminSecurity.isLoading) {
-    return <div className="min-h-screen bg-background flex items-center justify-center"><div className="animate-pulse text-muted-foreground">Vérification de sécurité…</div></div>;
+    return <div className="min-h-screen bg-background px-4 py-16"><div className="mx-auto max-w-3xl"><PublicContentSkeleton cards={1} label="Vérification de sécurité" /></div></div>;
   }
 
   if (!adminSecurity.data?.verified) {
@@ -178,7 +181,7 @@ function OverviewTab({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
   }
 
   if (isLoading) {
-    return <div className="grid grid-cols-1 md:grid-cols-4 gap-6">{[1, 2, 3, 4].map(i => <div key={i} className="h-32 bg-card rounded-lg animate-pulse" />)}</div>;
+    return <PublicContentSkeleton cards={4} columns={4} label="Chargement des indicateurs administratifs" />;
   }
 
   const cards = [
@@ -286,7 +289,7 @@ function AppointmentsTab() {
   const agenda = buildAppointmentsAgenda(data?.items ?? []);
 
   if (isLoading) {
-    return <div className="space-y-4">{[1, 2, 3].map(i => <div key={i} className="h-20 bg-card rounded-lg animate-pulse" />)}</div>;
+    return <PublicContentSkeleton label="Chargement des rendez-vous" />;
   }
 
   return (
@@ -420,7 +423,7 @@ function ContactsTab() {
   }
 
   if (isLoading) {
-    return <div className="space-y-4">{[1, 2, 3].map(i => <div key={i} className="h-20 bg-card rounded-lg animate-pulse" />)}</div>;
+    return <PublicContentSkeleton label="Chargement des messages" />;
   }
 
   return (
@@ -490,7 +493,7 @@ function GdprTab() {
   };
 
   if (isLoading) {
-    return <div className="space-y-4">{[1, 2, 3].map(i => <div key={i} className="h-20 bg-card rounded-lg animate-pulse" />)}</div>;
+    return <PublicContentSkeleton label="Chargement des demandes RGPD" />;
   }
 
   return (
@@ -566,7 +569,7 @@ function TestimonialsTab() {
   };
 
   if (isLoading) {
-    return <div className="space-y-4">{[1, 2, 3].map(i => <div key={i} className="h-20 bg-card rounded-lg animate-pulse" />)}</div>;
+    return <PublicContentSkeleton label="Chargement des témoignages administratifs" />;
   }
 
   return (
@@ -715,7 +718,7 @@ function BlogTab() {
   }
 
   if (isLoading) {
-    return <div className="space-y-4">{[1, 2, 3].map(i => <div key={i} className="h-20 bg-card rounded-lg animate-pulse" />)}</div>;
+    return <PublicContentSkeleton label="Chargement des contenus éditoriaux" />;
   }
 
   return (
@@ -936,7 +939,7 @@ function AvailabilityTab() {
   const dayNames = ["Dimanche", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi"];
 
   if (slotsLoading || blockedLoading) {
-    return <div className="space-y-4">{[1, 2, 3].map(i => <div key={i} className="h-20 bg-card rounded-lg animate-pulse" />)}</div>;
+    return <PublicContentSkeleton label="Chargement des disponibilités" />;
   }
 
   return (

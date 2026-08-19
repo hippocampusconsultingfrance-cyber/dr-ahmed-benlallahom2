@@ -1,5 +1,6 @@
 import { ShieldAlert, ShieldCheck, TriangleAlert } from "lucide-react";
 import { trpc } from "@/lib/trpc";
+import PublicContentSkeleton from "@/components/PublicContentSkeleton";
 
 const severityStyle = {
   info: "border-cyan-400/20 bg-cyan-400/5 text-cyan-200",
@@ -11,7 +12,7 @@ const severityStyle = {
 export default function SecurityOperationsTab() {
   const events = trpc.adminSecurity.events.useQuery({ limit: 75 }, { refetchInterval: 30_000 });
 
-  if (events.isLoading) return <div className="h-48 animate-pulse rounded-2xl border border-border bg-card/60" />;
+  if (events.isLoading) return <PublicContentSkeleton cards={2} columns={2} label="Chargement du journal de sécurité" />;
   if (events.error) return <div className="rounded-2xl border border-red-500/30 bg-red-500/5 p-5 text-sm text-red-200">Impossible de charger le journal de sécurité : {events.error.message}</div>;
 
   const rows = events.data ?? [];

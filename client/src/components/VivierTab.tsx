@@ -3,6 +3,7 @@ import { CheckSquare, Loader2, Mail, RefreshCw, UsersRound } from "lucide-react"
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { trpc } from "@/lib/trpc";
+import PublicContentSkeleton from "./PublicContentSkeleton";
 
 type VivierTabProps = {
   onCompose: (candidateIds: number[]) => void;
@@ -120,7 +121,7 @@ export default function VivierTab({ onCompose }: VivierTabProps) {
       </div>
 
       {isLoading ? (
-        <div className="flex items-center justify-center gap-2 py-14 text-muted-foreground"><Loader2 className="h-5 w-5 animate-spin" /> Chargement du vivier…</div>
+        <PublicContentSkeleton cards={2} columns={2} label="Chargement du vivier de candidats" />
       ) : candidates?.length ? (
         <div className="grid gap-4 lg:grid-cols-2">
           {candidates.map(candidate => {

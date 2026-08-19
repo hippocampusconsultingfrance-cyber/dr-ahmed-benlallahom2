@@ -440,6 +440,17 @@ html.high-readability textarea {
     box-shadow: 0 14px 36px color-mix(in oklch, var(--background) 22%, transparent);
   }
 
+  .skeleton-shimmer {
+    background: linear-gradient(90deg, color-mix(in oklch, var(--muted) 72%, transparent), color-mix(in oklch, var(--primary) 14%, var(--muted)), color-mix(in oklch, var(--muted) 72%, transparent));
+    background-size: 220% 100%;
+    animation: skeleton-shimmer 1.5s ease-in-out infinite;
+  }
+
+  @keyframes skeleton-shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -20% 0; }
+  }
+
   .availability-status {
     display: inline-flex;
     align-items: center;

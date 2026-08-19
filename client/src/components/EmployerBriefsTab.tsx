@@ -1,9 +1,10 @@
 import { useMemo, useState } from "react";
-import { BriefcaseBusiness, CheckCircle2, ChevronRight, Loader2, UsersRound } from "lucide-react";
+import { BriefcaseBusiness, CheckCircle2, ChevronRight, UsersRound } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { trpc } from "@/lib/trpc";
 import { getPositiveMatchBreakdown } from "./matchBreakdown";
+import PublicContentSkeleton from "@/components/PublicContentSkeleton";
 
 const statusLabels: Record<string, string> = {
   new: "Nouveau brief",
@@ -39,7 +40,7 @@ export default function EmployerBriefsTab() {
   });
   const activeBrief = matches.data?.brief ?? null;
 
-  if (isLoading) return <div className="space-y-3">{[1, 2, 3].map(value => <div key={value} className="h-24 animate-pulse rounded-xl bg-card" />)}</div>;
+  if (isLoading) return <PublicContentSkeleton label="Chargement des briefs employeurs" />;
   if (error) return <p className="py-8 text-center text-red-400">Erreur de chargement : {error.message}</p>;
 
   return (
@@ -76,7 +77,7 @@ export default function EmployerBriefsTab() {
 
       <section className="rounded-xl border border-border bg-card p-5">
         {!selectedBriefId && <div className="flex min-h-72 flex-col items-center justify-center text-center"><UsersRound className="mb-3 h-8 w-8 text-primary" /><h2 className="font-semibold text-foreground">Shortlist assistée</h2><p className="mt-2 max-w-sm text-sm text-muted-foreground">Sélectionnez un brief pour consulter les correspondances basées exclusivement sur la spécialité, la mobilité et les certifications déclarées.</p></div>}
-        {selectedBriefId && matches.isLoading && <div className="flex min-h-72 items-center justify-center text-muted-foreground"><Loader2 className="mr-2 h-4 w-4 animate-spin" />Calcul des correspondances…</div>}
+        {selectedBriefId && matches.isLoading && <PublicContentSkeleton cards={2} columns={2} label="Calcul des correspondances candidats" />}
         {matches.data && activeBrief && <>
           <div className="mb-5 border-b border-border pb-4"><p className="text-sm text-primary">{activeBrief.briefId}</p><h2 className="text-xl font-semibold text-foreground">{activeBrief.specialtyNeeded} — {activeBrief.country}</h2><p className="mt-1 text-sm text-muted-foreground">Les scores sont une aide à la revue humaine, pas une décision automatisée.</p></div>
           <div className="space-y-3">
