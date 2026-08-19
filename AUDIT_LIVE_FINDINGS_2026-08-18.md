@@ -352,3 +352,6 @@ Le composant de consentement marque désormais le document lorsque le bandeau es
 
 ## Contrat responsive de non-régression — 19 août 2026
 Le test graphique de non-régression vérifie désormais les garde-fous structurels utilisés à fort zoom et sur mobile : blocage du débordement horizontal, hauteur limitée du bandeau cookies, marqueur de consentement ouvert et classe du bouton WhatsApp. Ce contrôle ne remplace pas une vérification manuelle multi-navigateurs, mais empêche la suppression accidentelle des protections CSS et de la coordination des composants. La suite complète compte 185 tests réussis, 2 explicitement ignorés, avec un build de production valide.
+
+## Correction des routes publiques profondes — 19 août 2026
+Le fallback SPA attribuait une réponse 404 aux routes publiques absentes de la table SEO, malgré un rendu client fonctionnel. Les parcours FAQ, recherche, erreur, maintenance et VVIP Offshore sont désormais déclarés explicitement, avec exclusion de l’indexation pour la recherche et les pages de statut. Les contrôles locaux et publiés confirment une réponse HTTP 200 sur le domaine principal et le domaine Manus ; le sous-domaine `www` redirige correctement en HTTP 301 vers le domaine principal.
