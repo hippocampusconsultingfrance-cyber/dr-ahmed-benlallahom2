@@ -183,6 +183,8 @@
 - [x] Vérifier par test et documenter composant par composant les états vides des parcours explicitement couverts, le Blog restant désactivé
 - [x] Recenser et vérifier les états vides de tous les onglets racine actifs du tableau de bord administratif
 - [x] Ajouter une non-régression explicite de l’état sans candidature du tableau Recrutement
+- [x] Localiser le titre de l’état d’erreur administratif partagé en FR/EN/DE/ZH
+- [ ] Localiser les libellés de chargement et les états vides des onglets administratifs historiques en FR/EN/DE/ZH
 - [x] Remplacer les états vides textuels des onglets Témoignages et Disponibilités par le panneau administratif illustré partagé
 - [x] Ajouter un état vide illustré au carrousel de témoignages partenaires
 - [x] Ajouter un repère illustré et accessible aux états de disponibilité de réservation

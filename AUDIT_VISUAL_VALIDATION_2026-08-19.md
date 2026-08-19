@@ -108,6 +108,10 @@ Les onglets racine restants du tableau de bord ont aussi été recensés. Les R�
 | Pilotage recrutement | Compteurs non négatifs et explicites, y compris à zéro. | `ActiveEmptyStates.test.ts`, `recruitmentDashboardMetrics.test.ts` |
 | Sécurité | Illustration positive lorsqu’aucun événement n’est journalisé. | `ActiveEmptyStates.test.ts`, `SecurityOperationsTab.localization.test.ts` |
 
+## État d’erreur administratif partagé
+
+Le titre de repli affiché par le panneau d’erreur administratif partagé est désormais défini en français, anglais, allemand et chinois. Les descriptions d’erreur restent fournies par l’onglet appelant et ne sont pas exposées dans les parcours publics. Une non-régression vérifie les quatre variantes du titre.
+
 ## Disponibilité de production
 
 Le 19 août 2026, les routes publiques `/`, `/booking`, `/gdpr`, `/faq`, `/search`, `/error`, `/maintenance`, `/recruitment`, `/employers` et `/why-hippocampus` ont toutes répondu en HTTP 200 sur le domaine principal. L’accès `www.drahmedbenlallahom.com` redirige correctement vers `drahmedbenlallahom.com` et sert ensuite la page d’accueil en HTTP 200. Aucun écart de disponibilité n’a été observé sur cet échantillon.
