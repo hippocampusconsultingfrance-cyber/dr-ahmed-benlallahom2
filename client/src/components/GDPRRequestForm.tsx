@@ -4,12 +4,20 @@ import { CheckCircle, Loader2, ArrowLeft } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
+export const gdprRequestCopy = {
+  fr: { submitted: "Demande RGPD soumise avec succès !", error: "La demande n’a pas pu être envoyée. Veuillez réessayer.", back: "Retour", received: "Demande reçue !", another: "Soumettre une autre demande", sending: "Envoi en cours..." },
+  en: { submitted: "GDPR request submitted successfully!", error: "The request could not be sent. Please try again.", back: "Back", received: "Request received!", another: "Submit another request", sending: "Submitting..." },
+  de: { submitted: "DSGVO-Anfrage erfolgreich übermittelt!", error: "Die Anfrage konnte nicht gesendet werden. Bitte versuchen Sie es erneut.", back: "Zurück", received: "Anfrage eingegangen!", another: "Weitere Anfrage senden", sending: "Wird gesendet..." },
+  zh: { submitted: "GDPR 请求已成功提交！", error: "无法发送请求，请重试。", back: "返回", received: "已收到请求！", another: "提交另一项请求", sending: "正在提交..." },
+} as const;
+
 interface GDPRRequestFormProps {
   onBack?: () => void;
 }
 
 export default function GDPRRequestForm({ onBack }: GDPRRequestFormProps) {
   const { content, language } = useLanguage();
+  const copy = gdprRequestCopy[(language in gdprRequestCopy ? language : "fr") as keyof typeof gdprRequestCopy];
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -29,18 +37,10 @@ export default function GDPRRequestForm({ onBack }: GDPRRequestFormProps) {
         requestType: "access",
         description: "",
       });
-      toast.success(
-        language === "fr"
-          ? "Demande RGPD soumise avec succès !"
-          : "GDPR request submitted successfully!"
-      );
+      toast.success(copy.submitted);
     },
     onError: (error) => {
-      toast.error(
-        language === "fr"
-          ? "Erreur lors de la soumission. Veuillez réessayer."
-          : "Error submitting request. Please try again."
-      );
+      toast.error(copy.error);
       console.error("GDPR form error:", error);
     },
   });
@@ -82,7 +82,7 @@ export default function GDPRRequestForm({ onBack }: GDPRRequestFormProps) {
                 className="flex items-center gap-2 text-primary hover:text-primary/80 transition-colors mb-6"
               >
                 <ArrowLeft className="w-4 h-4" />
-                {language === "fr" ? "Retour" : "Back"}
+                {copy.back}
               </button>
             )}
             <h1 className="font-display text-3xl sm:text-4xl lg:text-5xl font-bold text-foreground mb-4">
@@ -101,7 +101,7 @@ export default function GDPRRequestForm({ onBack }: GDPRRequestFormProps) {
             <div className="p-8 sm:p-10 rounded-2xl bg-card/60 backdrop-blur-sm border border-border/30 flex flex-col items-center justify-center min-h-[400px] text-center">
               <CheckCircle className="w-16 h-16 text-primary mb-6" />
               <h3 className="font-display text-2xl font-bold text-foreground mb-3">
-                {language === "fr" ? "Demande reçue !" : "Request received!"}
+                {copy.received}
               </h3>
               <p className="text-muted-foreground max-w-sm mb-8">
                 {content.gdpr.form.successMessage}
@@ -110,7 +110,7 @@ export default function GDPRRequestForm({ onBack }: GDPRRequestFormProps) {
                 onClick={() => setSubmitted(false)}
                 className="px-6 py-3 rounded-lg border border-border text-foreground font-medium hover:border-primary/50 transition-all"
               >
-                {language === "fr" ? "Soumettre une autre demande" : "Submit another request"}
+                {copy.another}
               </button>
             </div>
           ) : (
@@ -196,7 +196,7 @@ export default function GDPRRequestForm({ onBack }: GDPRRequestFormProps) {
                 {submitMutation.isPending ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    {language === "fr" ? "Envoi en cours..." : "Submitting..."}
+                    {copy.sending}
                   </>
                 ) : (
                   content.gdpr.form.send

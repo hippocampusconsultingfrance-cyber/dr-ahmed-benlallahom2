@@ -450,3 +450,6 @@ Le chargement différé des routes traduit maintenant son titre et son descripti
 
 ## Page introuvable non indexable — 19 août 2026
 La page 404 publique reste localisée, mais indique maintenant explicitement aux moteurs de recherche de ne pas l’indexer. Un test dédié protège cette métadonnée contre une régression future. La suite complète compte 212 tests réussis, 2 explicitement ignorés, avec un build de production valide.
+
+## Formulaire de demande RGPD multilingue — 19 août 2026
+Le formulaire de demande RGPD localise désormais ses actions de retour, soumission, succès, erreur et confirmation dans les quatre langues du site. Les libellés des droits et des champs restent fournis par le catalogue RGPD existant. Les erreurs publiques sont génériques et les détails restent en diagnostic. La suite complète compte 213 tests réussis, 2 explicitement ignorés, avec un build de production valide.
