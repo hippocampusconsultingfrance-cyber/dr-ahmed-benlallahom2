@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
@@ -270,6 +270,7 @@ export default function BookingPage() {
   const [dateError, setDateError] = useState<string | null>(null);
   const [paymentStatus, setPaymentStatus] = useState<"success" | "canceled" | null>(null);
   const [trackingId, setTrackingId] = useState<string | null>(null);
+  const paymentSubmissionRef = useRef(false);
   const localizedDate = selectedDate
     ? new Intl.DateTimeFormat(
         language === "fr" ? "fr-FR" : language === "de" ? "de-DE" : language === "zh" ? "zh-CN" : "en-GB",
@@ -339,10 +340,12 @@ export default function BookingPage() {
         // Use window.location.assign instead of window.open to avoid popup blocking
         window.location.assign(data.checkoutUrl);
       } else {
+        paymentSubmissionRef.current = false;
         alert(content.paymentError);
       }
     },
     onError: (error) => {
+      paymentSubmissionRef.current = false;
       alert(`${content.paymentError} ${error.message}`);
       console.error("Checkout session error:", error);
     },
@@ -375,6 +378,8 @@ export default function BookingPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    if (paymentSubmissionRef.current || isLoading) return;
+
     if (!selectedDate) {
       alert(content.form.date);
       return;
@@ -390,6 +395,7 @@ export default function BookingPage() {
       return;
     }
 
+    paymentSubmissionRef.current = true;
     try {
       const appointmentResult = await createAppointment.mutateAsync({
         customerName: formData.name,
@@ -408,12 +414,14 @@ export default function BookingPage() {
         });
       }
     } catch (error) {
+      paymentSubmissionRef.current = false;
       console.error("Booking error:", error);
       alert(`${content.bookingError} ${error instanceof Error ? error.message : "Unknown error"}`);
     }
   };
 
   const handleReset = () => {
+    paymentSubmissionRef.current = false;
     setFormData({ name: "", email: "", phone: "", date: "", details: "" });
     setSelectedDate(null);
     setDateText("");

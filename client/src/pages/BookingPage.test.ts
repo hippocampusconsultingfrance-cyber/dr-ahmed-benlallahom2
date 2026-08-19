@@ -50,4 +50,15 @@ describe("booking date placeholders", () => {
     expect(getBookingAvailabilityState({ selected: true, pending: false, blocked: false, booked: true })).toBe("unavailable");
     expect(getBookingAvailabilityState({ selected: true, pending: false, blocked: false, booked: false })).toBe("available");
   });
+
+  it("verrouille immédiatement une soumission de paiement répétée avant le rendu du bouton désactivé", async () => {
+    const source = await import("node:fs/promises").then((fs) =>
+      fs.readFile(new URL("./BookingPage.tsx", import.meta.url), "utf8")
+    );
+
+    expect(source).toContain("const paymentSubmissionRef = useRef(false)");
+    expect(source).toContain("if (paymentSubmissionRef.current || isLoading) return;");
+    expect(source).toContain("paymentSubmissionRef.current = true;");
+    expect(source).toContain("paymentSubmissionRef.current = false;");
+  });
 });

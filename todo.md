@@ -261,7 +261,7 @@
 - [ ] Vérifier les textes et CTA dans les quatre langues
 - [ ] Vérifier le positionnement des éléments flottants sur petits écrans
 - [ ] Vérifier les états de chargement des appels tRPC
-- [ ] Vérifier les états anti-double-clic du paiement
+- [x] Vérifier les états anti-double-clic du paiement
 - [ ] Vérifier le rendu de la confirmation et de l’annulation de paiement
 - [ ] Vérifier les messages de validation des formulaires dans les quatre langues
 - [ ] Vérifier les messages d’erreur sans exposition de données sensibles

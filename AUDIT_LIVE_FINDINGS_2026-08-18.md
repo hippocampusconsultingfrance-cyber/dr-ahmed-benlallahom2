@@ -405,3 +405,6 @@ La page d’accueil a été contrôlée à 375 px de large avec les préférence
 
 ## Allègement sûr du bundle initial — 19 août 2026
 Le provider global d’infobulles n’était utilisé par aucun parcours public ; les composants qui en nécessitent un conservent leur provider local autonome. Son retrait réduit l’artefact initial de 470,9 kB à 429,4 kB non compressé, et de 147,5 kB à 133,2 kB gzip, sans modifier le découpage par route. La suite complète compte 194 tests réussis, 2 explicitement ignorés, et le build de production est valide.
+
+## Protection contre la double soumission de paiement — 19 août 2026
+Le bouton de paiement restait déjà désactivé pendant la création du rendez-vous et de la session Stripe. Un verrou synchrone par référence protège maintenant aussi la très courte fenêtre avant le prochain rendu React : un double clic ou une double soumission clavier ne peut pas créer deux parcours simultanés. Le verrou est relâché si une erreur survient ou lors d’une nouvelle réservation. Côté serveur, le créneau est vérifié avant insertion et la contrainte de créneau actif protège les requêtes concurrentes. La suite complète compte 195 tests réussis, 2 explicitement ignorés, avec un build de production valide.
