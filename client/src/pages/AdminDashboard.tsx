@@ -14,6 +14,7 @@ import MailingTab from "@/components/MailingTab";
 import CandidateDocumentsAdminTab from "@/components/CandidateDocumentsAdminTab";
 import SecurityOperationsTab from "@/components/SecurityOperationsTab";
 import RecruitmentDashboardPanel from "@/components/RecruitmentDashboardPanel";
+import { AdminEmptyState, AdminErrorState } from "@/components/AdminStatePanel";
 import { getActiveAdminTabLabel } from "./adminDashboardMobileTabs";
 import { buildAppointmentsAgenda } from "./appointmentsAgenda";
 
@@ -266,7 +267,7 @@ function AppointmentsTab() {
   });
 
   if (error) {
-    return <div className="text-center py-8 text-red-400">Erreur de chargement : {error.message}</div>;
+    return <AdminErrorState description={error.message} />;
   }
 
   const statusColors: Record<string, string> = {
@@ -397,7 +398,7 @@ function AppointmentsTab() {
           </div>
         ))}
         {(!data?.items || data.items.length === 0) && (
-          <p className="text-center text-muted-foreground py-8">Aucune réservation</p>
+          <AdminEmptyState icon={CalendarDays} title="Aucune réservation" description="Les nouvelles réservations apparaîtront ici dès leur confirmation." />
         )}
       </div>
     </div>
@@ -415,7 +416,7 @@ function ContactsTab() {
   });
 
   if (error) {
-    return <div className="text-center py-8 text-red-400">Erreur de chargement : {error.message}</div>;
+    return <AdminErrorState description={error.message} />;
   }
 
   if (isLoading) {
@@ -452,7 +453,7 @@ function ContactsTab() {
           </div>
         ))}
         {(!data?.items || data.items.length === 0) && (
-          <p className="text-center text-muted-foreground py-8">Aucun message</p>
+          <AdminEmptyState icon={MessageSquare} title="Aucun message" description="Les demandes de contact reçues sur le site seront affichées dans cette section." />
         )}
       </div>
     </div>
@@ -470,7 +471,7 @@ function GdprTab() {
   });
 
   if (error) {
-    return <div className="text-center py-8 text-red-400">Erreur de chargement : {error.message}</div>;
+    return <AdminErrorState description={error.message} />;
   }
 
   const statusColors: Record<string, string> = {
@@ -535,7 +536,7 @@ function GdprTab() {
           </div>
         ))}
         {(!data?.items || data.items.length === 0) && (
-          <p className="text-center text-muted-foreground py-8">Aucune demande RGPD</p>
+          <AdminEmptyState icon={Shield} title="Aucune demande RGPD" description="Les demandes d’accès, rectification ou suppression apparaîtront ici." />
         )}
       </div>
     </div>

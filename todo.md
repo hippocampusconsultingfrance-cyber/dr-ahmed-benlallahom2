@@ -250,7 +250,7 @@
 - [x] Ajouter des indicateurs de disponibilité plus lisibles au parcours de réservation
 - [x] Stabiliser le test d’intégration Turnstile afin qu’un délai réseau externe ne bloque pas la suite locale
 - [x] Ajouter une vue agenda administrateur synthétique fondée sur les rendez-vous réels
-- [ ] Ajouter des états d’erreur et états vides avec illustrations sobres
+- [x] Ajouter des états d’erreur et états vides sobres et accessibles aux parcours administratifs prioritaires
 - [ ] Ajouter une page de résultats de recherche interne accessible
 - [ ] Vérifier l’impression des pages légales, RGPD et factures
 - [ ] Vérifier la compatibilité avec un lecteur d’écran
