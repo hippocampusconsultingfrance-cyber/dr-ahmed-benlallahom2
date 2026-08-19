@@ -32,6 +32,19 @@ Le sélecteur de langue conserve le focus, prend en charge les flèches, Accueil
 
 Les formulaires Contact, RGPD, brief employeur, accès candidat et candidature VVIP disposent de retours localisés dans les quatre langues. La candidature VVIP a été corrigée afin qu’un message renvoyé par le serveur ne soit jamais affiché directement au visiteur : le détail est conservé dans la console de diagnostic et l’interface affiche uniquement son message localisé générique. Un test de non-régression protège ce comportement.
 
+## Feedbacks visuels des parcours critiques
+
+Le code des parcours Contact, demande RGPD, réservation et confirmation de paiement a été contrôlé. Contact et RGPD remplacent le formulaire par un panneau de confirmation lisible et annoncent aussi la réussite par un message d’état ; la réservation passe par une confirmation dédiée après le retour du paiement ; la page de confirmation distingue explicitement les états de réussite, d’annulation et d’état inconnu. Les contrôles associés ne déclenchent aucune soumission réelle et ne transmettent aucune donnée de test. Une non-régression vérifie la présence de ces contrats d’interface.
+
+| Parcours | État de succès contrôlé | État d’erreur ou d’interruption contrôlé |
+|---|---|---|
+| Contact | Après succès, le formulaire devient un panneau `success-panel` avec titre, explication et action permettant un nouvel envoi. | L’échec de transmission et l’absence de consentement sont présentés par des messages localisés distincts. |
+| Demande RGPD | Après succès, le formulaire devient un panneau « demande reçue » avec un retour à la saisie possible. | L’échec de transmission appelle un message localisé sans afficher le détail technique retourné par le serveur. |
+| Réservation | Les états de disponibilité « sélectionner », « vérification », « indisponible » et « disponible » sont explicitement distingués avant paiement. | Les erreurs de création de réservation ou de paiement affichent le message public localisé, sans concaténer le détail technique. |
+| Paiement et confirmation | Le retour `success` ouvre un état de confirmation spécifique, exclu de l’indexation. | Les retours `canceled`, absent ou inattendu produisent respectivement un état d’annulation ou un état neutre explicite, sans les présenter comme un paiement confirmé. |
+
+Cette vérification est statique et automatisée ; elle ne soumet aucun formulaire public et ne crée aucune transaction Stripe. Le paiement de bout en bout reste un contrôle manuel distinct sur le domaine publié et avec une carte de test.
+
 ## Disponibilité de production
 
 Le 19 août 2026, les routes publiques `/`, `/booking`, `/gdpr`, `/faq`, `/search`, `/error`, `/maintenance`, `/recruitment`, `/employers` et `/why-hippocampus` ont toutes répondu en HTTP 200 sur le domaine principal. L’accès `www.drahmedbenlallahom.com` redirige correctement vers `drahmedbenlallahom.com` et sert ensuite la page d’accueil en HTTP 200. Aucun écart de disponibilité n’a été observé sur cet échantillon.

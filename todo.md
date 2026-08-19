@@ -203,7 +203,12 @@
 - [ ] Centraliser les libellés d’interface afin d’éviter les chaînes de texte hardcodées
 - [ ] Ajouter une stratégie de compression et de recadrage responsive des images
 - [ ] Ajouter une navigation clavier complète sur menus, carrousels, modales et calendriers
-- [ ] Ajouter des feedbacks visuels après contact, réservation, paiement et demande RGPD
+- [x] Vérifier et maintenir les feedbacks visuels après contact, réservation, paiement et demande RGPD
+- [x] Auditer explicitement les feedbacks visuels des parcours Contact, Réservation, Paiement et RGPD, puis documenter les résultats dans le journal d’audit
+- [x] Ajouter des tests ciblés de non-régression couvrant les états de succès et d’erreur des parcours Contact, Réservation, Confirmation de paiement et demande RGPD
+- [x] Ajouter des tests ciblés couvrant explicitement les états de succès et d’erreur de ContactSection et GDPRRequestForm
+- [x] Ajouter des tests ciblés couvrant les états de réservation sur BookingPage ainsi que les états success/canceled/unknown de BookingConfirmationPage
+- [x] Compléter le journal d’audit avec une vérification explicite, parcours par parcours, des feedbacks visuels Contact, Réservation, Paiement et RGPD en distinguant succès et erreur
 - [x] Ajouter une version imprimable et accessible des pages légales, RGPD et FAQ
 - [ ] Vérifier le rendu sur Chrome, Safari et Firefox
 - [x] Vérifier la coexistence du bandeau cookies, du bouton WhatsApp et de la navigation mobile
