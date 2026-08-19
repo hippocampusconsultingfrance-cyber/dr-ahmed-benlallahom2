@@ -340,3 +340,6 @@ La grille bureau du pied de page attribue désormais une largeur dédiée à la 
 
 ## Vérification à fort zoom — 19 août 2026
 Les parcours Accueil, Employeurs, VVIP & Offshore, Réservation, Accès candidat et FAQ ont été examinés à une largeur CSS réduite équivalente à une consultation à fort zoom. Aucun débordement horizontal, texte tronqué, perte de contrôle ou action inaccessible n’a été observé dans les vues contrôlées. Les formulaires conservent des champs lisibles et les boutons restent disponibles dans le flux de lecture.
+
+## Garde-fou multilingue Employeurs — 19 août 2026
+Les libellés structurants de la page Employeurs sont désormais couverts par un test de longueur dans les quatre langues : titre, intitulé du brief, environnements de mission, spécialité, zone géographique et bouton de soumission. Le contrôle a révélé un titre allemand trop long pour l’enveloppe responsive ; il a été raccourci sans modifier le sens commercial. La suite complète compte maintenant 182 tests réussis, 2 explicitement ignorés, avec un build de production valide.

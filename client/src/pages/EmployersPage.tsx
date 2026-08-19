@@ -6,7 +6,7 @@ import Navigation from "@/components/Navigation";
 import Footer from "@/components/Footer";
 import { useLanguage } from "@/contexts/LanguageContext";
 
-const copy = {
+export const employerCopy = {
   fr: {
     eyebrow: "Hippocampus Consulting · Espace Employeurs & Partenaires",
     title: "Déléguez le recrutement de vos équipes médicales d’élite.",
@@ -87,7 +87,7 @@ const copy = {
   },
   de: {
     eyebrow: "Hippocampus Consulting · Arbeitgeber & Partner",
-    title: "Delegieren Sie die Rekrutierung Ihrer medizinischen Elite-Teams.",
+    title: "Rekrutieren Sie Ihre medizinischen Elite-Teams.",
     intro: "Wir rekrutieren und qualifizieren herausragende medizinische Fachkräfte für Krankenhäuser, Kliniken, Offshore-Plattformen, Industriegruppen und Offshore-Einsätze in Europa, Kanada, dem Nahen Osten, Afrika und an abgelegenen Standorten.",
     formTitle: "Einsatz-Brief einreichen",
     formIntro: "Geben Sie Ihre operativen Anforderungen an. Unser spezialisiertes Team kontaktiert Sie innerhalb von 24 Stunden.",
@@ -165,7 +165,7 @@ const copy = {
   },
 } as const;
 
-type Language = keyof typeof copy;
+type Language = keyof typeof employerCopy;
 type BriefFormState = {
   organizationName: string;
   contactName: string;
@@ -196,8 +196,8 @@ const initialBrief: BriefFormState = {
 
 export default function EmployersPage() {
   const { language } = useLanguage();
-  const lang = (language in copy ? language : "fr") as Language;
-  const t = copy[lang];
+  const lang = (language in employerCopy ? language : "fr") as Language;
+  const t = employerCopy[lang];
   const [form, setForm] = useState<BriefFormState>(initialBrief);
   const [status, setStatus] = useState<"idle" | "sending" | "success" | "error">("idle");
   const [errorMessage, setErrorMessage] = useState("");
