@@ -201,3 +201,7 @@ Depuis l’onglet **Candidatures**, le bouton « Fiche 360° » ouvre une vue ad
 ## Matching mission–candidats paginé — 19 août 2026
 
 La shortlist des briefs Employeurs charge désormais les candidats par pages de 25 directement depuis la base de données, avec un total et des contrôles Précédent/Suivant. Les données normalisées de certifications et de langues, ainsi que mobilité, disponibilité et expérience, sont récupérées uniquement pour la page demandée. Le score visible reste une aide à la priorisation et doit toujours être confirmé par une revue humaine.
+
+## Normalisation des parcours candidats — vérification du 19 août 2026
+
+La base déployée contient bien les tables relationnelles de certifications, langues et expériences candidates. À chaque analyse de CV, les lignes précédentes sont remplacées par les éléments structurés extraits ; les données d’origine et les métadonnées d’analyse restent également conservées. Aucune migration complémentaire n’est nécessaire pour ce lot.
