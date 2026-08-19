@@ -95,6 +95,19 @@ Les témoignages partenaires, les briefs Employeurs, l’espace Mailing et les t
 | Tableau administratif partagé | Icône, titre et explication accessibles. | `AdminStatePanel.test.tsx` |
 | Blog | Hors périmètre : section et routes désactivées à la demande du propriétaire. | Suivi de désactivation existant. |
 
+Les onglets racine restants du tableau de bord ont aussi été recensés. Les Réservations, Messages et Demandes RGPD utilisent le panneau illustré partagé ; les Témoignages, Créneaux hebdomadaires et Dates bloquées ont été alignés sur ce même composant. La Sécurité garde son état sans événement illustré et le pilotage Recrutement affiche des indicateurs à zéro explicites plutôt qu’une zone vide. La boîte Candidate 360 est un détail contextuel, non un onglet de collecte ; ses absences de notes, relances, demandes ou chronologie sont présentées à l’intérieur de sections déjà libellées.
+
+| Onglet administratif racine | Comportement en l’absence de données | Couverture associée |
+|---|---|---|
+| Réservations | Panneau illustré « Aucune réservation » et agenda sans rendez-vous confirmé. | `ActiveEmptyStates.test.ts`, `appointmentsAgenda.test.ts` |
+| Messages | Panneau illustré « Aucun message ». | `ActiveEmptyStates.test.ts` |
+| Demandes RGPD | Panneau illustré « Aucune demande RGPD ». | `ActiveEmptyStates.test.ts` |
+| Témoignages administratifs | Panneau illustré « Aucun témoignage ». | `ActiveEmptyStates.test.ts` |
+| Disponibilités | Panneaux illustrés pour aucun créneau et aucune date bloquée. | `ActiveEmptyStates.test.ts` |
+| Candidatures | Carte illustrée lorsqu’aucun dossier ne correspond aux filtres, avec icône décorative. | `ActiveEmptyStates.test.ts` |
+| Pilotage recrutement | Compteurs non négatifs et explicites, y compris à zéro. | `ActiveEmptyStates.test.ts`, `recruitmentDashboardMetrics.test.ts` |
+| Sécurité | Illustration positive lorsqu’aucun événement n’est journalisé. | `ActiveEmptyStates.test.ts`, `SecurityOperationsTab.localization.test.ts` |
+
 ## Disponibilité de production
 
 Le 19 août 2026, les routes publiques `/`, `/booking`, `/gdpr`, `/faq`, `/search`, `/error`, `/maintenance`, `/recruitment`, `/employers` et `/why-hippocampus` ont toutes répondu en HTTP 200 sur le domaine principal. L’accès `www.drahmedbenlallahom.com` redirige correctement vers `drahmedbenlallahom.com` et sert ensuite la page d’accueil en HTTP 200. Aucun écart de disponibilité n’a été observé sur cet échantillon.

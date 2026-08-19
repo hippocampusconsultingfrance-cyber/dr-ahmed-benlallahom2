@@ -406,7 +406,7 @@ export default function RecruitmentTab() {
         </div>
       ) : (
         <div className="rounded-xl border border-dashed border-border py-16 text-center text-muted-foreground">
-          <FileSearch className="mx-auto mb-3 h-8 w-8" />
+          <FileSearch className="mx-auto mb-3 h-8 w-8" aria-hidden="true" />
           Aucune candidature ne correspond aux filtres.
         </div>
       )}

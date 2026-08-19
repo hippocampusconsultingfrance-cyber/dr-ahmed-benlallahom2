@@ -631,7 +631,7 @@ function TestimonialsTab() {
           </div>
         ))}
         {(!testimonialsList || testimonialsList.length === 0) && (
-          <p className="text-center text-muted-foreground py-8">Aucun témoignage</p>
+          <AdminEmptyState icon={Star} title="Aucun témoignage" description="Les témoignages partenaires soumis ou importés apparaîtront ici pour validation." />
         )}
       </div>
     </div>
@@ -1012,7 +1012,7 @@ function AvailabilityTab() {
             </div>
           ))}
           {(!slots || slots.length === 0) && (
-            <p className="text-muted-foreground col-span-full text-center py-4">Aucun créneau configuré</p>
+            <div className="col-span-full"><AdminEmptyState icon={CalendarDays} title="Aucun créneau configuré" description="Ajoutez un créneau hebdomadaire pour le rendre disponible à la réservation." /></div>
           )}
         </div>
       </section>
@@ -1073,7 +1073,7 @@ function AvailabilityTab() {
             </div>
           ))}
           {(!blockedDates || blockedDates.length === 0) && (
-            <p className="text-muted-foreground text-center py-4">Aucune date bloquée</p>
+            <AdminEmptyState icon={CalendarDays} title="Aucune date bloquée" description="Les jours bloqués pour congés, formation ou indisponibilité apparaîtront ici." />
           )}
         </div>
       </section>
