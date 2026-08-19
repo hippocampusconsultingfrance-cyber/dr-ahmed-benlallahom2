@@ -460,5 +460,8 @@ Chaque champ du formulaire de demande RGPD possède désormais un identifiant st
 ## Sélection de créneau accessible — 19 août 2026
 La réservation accepte la saisie clavier de la date et de l’heure et annonce les erreurs de format, la date interprétée et la disponibilité du créneau via des régions accessibles. Le champ heure utilise désormais son propre libellé localisé, plutôt que le seul exemple de format. Les soumissions restent bloquées lorsqu’un créneau est indisponible, en cours de vérification ou non valide. La suite complète compte 215 tests réussis, 2 explicitement ignorés, avec un build de production valide.
 
+## Audit des libellés publics résiduels — 19 août 2026
+Le dernier contrôle des ternaires de langue montre que les libellés encore limités au français et à l’anglais se trouvent dans les pages Blog et article Blog. Ces routes restent désactivées de la navigation et du routage public conformément à la décision de retrait de la section Actualités. Les parcours publics actifs identifiés par ce contrôle couvrent les quatre langues.
+
 ## Pages ventures — libellés multilingues — 19 août 2026
 Les états de secours, fil d’Ariane, boutons, titres de sections et navigation des pages ventures sont maintenant localisés en français, anglais, allemand et chinois. Le catalogue narratif détaillé des ventures demeure actuellement disponible en français et en anglais ; l’interface s’appuie sur la version anglaise en allemand et chinois jusqu’à la production d’une traduction métier dédiée. Cette limite est explicitement maintenue dans le suivi. La suite complète compte 214 tests réussis, 2 explicitement ignorés, avec un build de production valide.
