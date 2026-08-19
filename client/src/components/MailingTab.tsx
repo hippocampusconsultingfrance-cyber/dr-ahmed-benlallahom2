@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { Loader2, Mail, Send, ShieldCheck, UsersRound } from "lucide-react";
+import { CheckCircle2, CircleAlert, Clock3, Eye, Loader2, Mail, Send, ShieldCheck, UsersRound } from "lucide-react";
 import { toast } from "sonner";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { trpc } from "@/lib/trpc";
 import { getRecruitmentCampaignTemplate, RECRUITMENT_CAMPAIGN_TEMPLATES, type RecruitmentCampaignTemplateId } from "./recruitmentCampaignTemplates";
+import { deliveryRateLabel } from "./campaignDeliveryMetrics";
 
 type MailingTabProps = {
   initialSelectedIds: number[];
@@ -177,10 +178,27 @@ export default function MailingTab({ initialSelectedIds }: MailingTabProps) {
         <div className="mb-4 flex items-center gap-2"><Mail className="h-5 w-5 text-primary" /><h3 className="font-semibold text-foreground">Historique des campagnes</h3></div>
         {campaignsQuery.isLoading ? <div className="flex items-center gap-2 py-8 text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Chargement de l’historique…</div> : campaignsQuery.data?.length ? (
           <div className="space-y-3">
-            {campaignsQuery.data.map(campaign => <article key={campaign.id} className="flex flex-col gap-3 rounded-xl border border-border p-4 md:flex-row md:items-center md:justify-between">
-              <div><h4 className="font-semibold text-foreground">{campaign.title}</h4><p className="mt-1 text-sm text-muted-foreground">{campaign.subject} · {campaign.language.toUpperCase()} · {campaign.recipientCount} destinataire{campaign.recipientCount > 1 ? "s" : ""}</p><p className="mt-1 text-xs text-muted-foreground">Créée le {new Date(campaign.createdAt).toLocaleString("fr-FR", { timeZone: "Europe/Paris" })}</p></div>
-              <span className={`w-fit rounded-full border px-2.5 py-1 text-xs font-medium ${campaignStatusTone(campaign.status)}`}>{campaignStatusLabel(campaign.status)}</span>
-            </article>)}
+            {campaignsQuery.data.map(campaign => {
+              const delivery = campaign.delivery;
+              const delivered = Number(delivery.delivered || 0);
+              const opened = Number(delivery.opened || 0);
+              const failed = Number(delivery.failed || 0);
+              const delayed = Number(delivery.delayed || 0);
+              const total = Number(delivery.total || campaign.recipientCount || 0);
+              return <article key={campaign.id} className="flex flex-col gap-4 rounded-xl border border-border p-4">
+                <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                  <div><h4 className="font-semibold text-foreground">{campaign.title}</h4><p className="mt-1 text-sm text-muted-foreground">{campaign.subject} · {campaign.language.toUpperCase()} · {campaign.recipientCount} destinataire{campaign.recipientCount > 1 ? "s" : ""}</p><p className="mt-1 text-xs text-muted-foreground">Créée le {new Date(campaign.createdAt).toLocaleString("fr-FR", { timeZone: "Europe/Paris" })}</p></div>
+                  <span className={`w-fit rounded-full border px-2.5 py-1 text-xs font-medium ${campaignStatusTone(campaign.status)}`}>{campaignStatusLabel(campaign.status)}</span>
+                </div>
+                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4" aria-label={`Suivi de la campagne ${campaign.title}`}>
+                  <div className="rounded-lg bg-emerald-500/10 p-3 text-sm"><span className="flex items-center gap-1.5 text-emerald-700 dark:text-emerald-300"><CheckCircle2 className="h-4 w-4" /> Distribués</span><p className="mt-1 font-semibold text-foreground">{delivered} <span className="text-xs font-normal text-muted-foreground">/ {total}</span></p></div>
+                  <div className="rounded-lg bg-cyan-500/10 p-3 text-sm"><span className="flex items-center gap-1.5 text-cyan-700 dark:text-cyan-300"><Eye className="h-4 w-4" /> Ouverts</span><p className="mt-1 font-semibold text-foreground">{opened} <span className="text-xs font-normal text-muted-foreground">· {deliveryRateLabel(opened, delivered)}</span></p></div>
+                  <div className="rounded-lg bg-amber-500/10 p-3 text-sm"><span className="flex items-center gap-1.5 text-amber-700 dark:text-amber-300"><Clock3 className="h-4 w-4" /> Différés</span><p className="mt-1 font-semibold text-foreground">{delayed}</p></div>
+                  <div className="rounded-lg bg-destructive/10 p-3 text-sm"><span className="flex items-center gap-1.5 text-destructive"><CircleAlert className="h-4 w-4" /> Erreurs / suppressions</span><p className="mt-1 font-semibold text-foreground">{failed}</p></div>
+                </div>
+                <p className="text-xs text-muted-foreground">Les ouvertures sont fournies par Resend à titre indicatif : certains clients de messagerie peuvent les limiter ou les fausser. Les adresses en bounce, plainte ou suppression restent exclues des campagnes suivantes.</p>
+              </article>;
+            })}
           </div>
         ) : <p className="py-8 text-sm text-muted-foreground">Aucune campagne n’a encore été enregistrée.</p>}
       </section>

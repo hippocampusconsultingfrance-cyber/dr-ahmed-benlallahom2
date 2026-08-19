@@ -187,3 +187,9 @@ Les campagnes disposent désormais de quatre modèles réutilisables en françai
 ## Pilotage recrutement — 19 août 2026
 
 Le tableau de bord administratif affiche désormais les volumes de CV, la part du vivier marketing éligible, les états détaillés des analyses IA, le taux de réponse aux prises de contact et l’activité de campagnes. Les indicateurs de délivrabilité séparent les distributions confirmées, différées et en erreur ou suppression. Les ratios restent descriptifs : ils ne déclenchent ni envoi automatique ni décision de recrutement.
+
+## Délivrabilité des campagnes — 19 août 2026
+
+L’historique Mailing présente désormais, pour chaque campagne, les distributions confirmées, les ouvertures remontées, les délais et les échecs ou suppressions. Les événements sont archivés de manière idempotente à partir du webhook Resend ; les compteurs évitent le double comptage lorsqu’un même destinataire génère plusieurs événements. Les ouvertures sont affichées comme un signal indicatif, conformément aux limites signalées par Resend. Les adresses concernées par un bounce, une plainte ou une suppression restent exclues des campagnes ultérieures.
+
+Référence technique : [Resend — Event Types](https://resend.com/docs/webhooks/event-types) et [Resend — email.opened](https://resend.com/docs/webhooks/emails/opened).
