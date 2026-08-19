@@ -379,3 +379,6 @@ Un contrat de non-régression vérifie que les sessions affichées ou révoquée
 
 ## En-têtes de sécurité en production — 19 août 2026
 Les domaines principal et Manus servent HTTPS avec HSTS, politique de sécurité du contenu, politique de permissions, politique de référent, blocage du reniflage MIME et protection contre l’encapsulation par `frame-ancestors`. Le domaine `www` redirige en HTTPS vers le domaine principal. Aucun écart critique n’a été observé ; aucune modification de configuration n’était nécessaire.
+
+## Indexation des parcours sensibles — 19 août 2026
+Le sitemap publié n’expose aucune route candidate, administrative, de recherche, de statut ou de désinscription. Les pages sensibles vérifiées servent toutes `noindex, follow`. Le fichier `robots.txt` exclut désormais explicitement le préfixe candidat et la page de désinscription, en complément des métadonnées et des contrôles d’accès applicatifs.

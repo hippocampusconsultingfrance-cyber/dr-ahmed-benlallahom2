@@ -2411,3 +2411,4 @@
 - [x] Rendre les liens Leadership, Services, Formation et Contact du pied de page fonctionnels depuis toutes les pages publiques
 - [x] Rendre les liens Leadership, Services, Formation et Contact de la navigation principale fonctionnels depuis toutes les pages publiques
 - [x] Ajouter un test de non-régression des limites d’accès aux documents et sessions du portail candidat
+- [x] Renforcer robots.txt pour décourager l’exploration des parcours candidats et de désinscription non indexables

@@ -3,9 +3,11 @@
 User-agent: *
 Allow: /
 Disallow: /admin
+Disallow: /candidate/
 Disallow: /404
 Disallow: /booking/confirmation
 Disallow: /blog
+Disallow: /recruitment/unsubscribe
 Disallow: /api/
 
 Sitemap: https://drahmedbenlallahom.com/sitemap.xml
