@@ -204,7 +204,7 @@
 - [ ] Ajouter des feedbacks visuels après contact, réservation, paiement et demande RGPD
 - [x] Ajouter une version imprimable et accessible des pages légales, RGPD et FAQ
 - [ ] Vérifier le rendu sur Chrome, Safari et Firefox
-- [ ] Vérifier la coexistence du bandeau cookies, du bouton WhatsApp et de la navigation mobile
+- [x] Vérifier la coexistence du bandeau cookies, du bouton WhatsApp et de la navigation mobile
 - [ ] Vérifier que les visuels médicaux ne suggèrent aucune promesse thérapeutique non étayée
 - [ ] Vérifier que les contenus longs en allemand et chinois ne débordent pas des composants
 - [ ] Vérifier l’alignement des titres, CTA et formulaires sur desktop, tablette et mobile
@@ -257,7 +257,7 @@
 - [x] Vérifier l’impression des pages légales, RGPD et factures
 - [ ] Vérifier la compatibilité avec un lecteur d’écran
 - [ ] Vérifier la navigation au clavier uniquement
-- [x] Vérifier les pages à 200 % de zoom
+- [ ] Vérifier les pages à 200 % de zoom
 - [ ] Vérifier les textes et CTA dans les quatre langues
 - [ ] Vérifier le positionnement des éléments flottants sur petits écrans
 - [ ] Vérifier les états de chargement des appels tRPC
@@ -2405,3 +2405,5 @@
 - [x] Ajouter une cible de contenu principal compatible avec le lien d’accès direct sur les parcours publics et candidats prioritaires
 - [x] Empêcher le retour à la ligne inadapté de l’adresse email dans le pied de page sur bureau
 - [x] Étendre les garde-fous de longueur aux libellés critiques de la page Employeurs en quatre langues
+- [x] Ajouter une règle explicite de positionnement du bouton WhatsApp pendant l’affichage du bandeau cookies mobile
+- [ ] Ajouter des contrôles automatisés de non-régression pour les éléments fixes mobiles et le zoom élevé

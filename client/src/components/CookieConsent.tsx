@@ -5,6 +5,18 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { COOKIE_CONSENT_STORAGE_KEY, normalizeCookieConsent, shouldShowCookiePreferences, type CookieConsentValue } from "./cookieConsentState";
 import { COOKIE_CONSENT_CHANGE_EVENT } from "./analyticsConsent";
 
+export const COOKIE_BANNER_OPEN_ATTRIBUTE = "data-cookie-banner-open";
+
+type CookieBannerRoot = Pick<HTMLElement, "setAttribute" | "removeAttribute">;
+
+export function syncCookieBannerOpenAttribute(root: CookieBannerRoot, isOpen: boolean) {
+  if (isOpen) {
+    root.setAttribute(COOKIE_BANNER_OPEN_ATTRIBUTE, "true");
+    return;
+  }
+  root.removeAttribute(COOKIE_BANNER_OPEN_ATTRIBUTE);
+}
+
 const cookieCopy = {
   fr: { title: "Gestion des cookies", description: "Vous pouvez accepter tous les cookies ou personnaliser vos préférences.", learnMore: "En savoir plus", essential: "Essentiels uniquement", customize: "Personnaliser", acceptAll: "Accepter tous les cookies", settings: "Préférences cookies", settingsDescription: "Vous pouvez modifier votre choix à tout moment. Les cookies essentiels restent actifs car ils permettent le fonctionnement du site.", performance: "Cookies de performance", performanceDescription: "Mesurent l’utilisation du site pour aider à l’améliorer.", preferences: "Cookies de préférence", preferencesDescription: "Mémorisent vos choix d’affichage, tels que la langue ou le thème.", save: "Enregistrer mes préférences", close: "Fermer" },
   en: { title: "Cookie settings", description: "You can accept all cookies or customise your preferences.", learnMore: "Learn more", essential: "Essential only", customize: "Customise", acceptAll: "Accept all cookies", settings: "Cookie preferences", settingsDescription: "You may change your choice at any time. Essential cookies remain active because they enable the website to operate.", performance: "Performance cookies", performanceDescription: "Measure site usage to help improve it.", preferences: "Preference cookies", preferencesDescription: "Remember display choices such as language or theme.", save: "Save my preferences", close: "Close" },
@@ -36,6 +48,12 @@ export default function CookieConsent() {
       setShowBanner(true);
     }
   }, []);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    syncCookieBannerOpenAttribute(root, showBanner);
+    return () => root.removeAttribute(COOKIE_BANNER_OPEN_ATTRIBUTE);
+  }, [showBanner]);
 
   const saveConsent = (consent: CookieConsentValue) => {
     setCookieConsent(consent);

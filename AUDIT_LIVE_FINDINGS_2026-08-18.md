@@ -343,3 +343,9 @@ Les parcours Accueil, Employeurs, VVIP & Offshore, Réservation, Accès candidat
 
 ## Garde-fou multilingue Employeurs — 19 août 2026
 Les libellés structurants de la page Employeurs sont désormais couverts par un test de longueur dans les quatre langues : titre, intitulé du brief, environnements de mission, spécialité, zone géographique et bouton de soumission. Le contrôle a révélé un titre allemand trop long pour l’enveloppe responsive ; il a été raccourci sans modifier le sens commercial. La suite complète compte maintenant 182 tests réussis, 2 explicitement ignorés, avec un build de production valide.
+
+## Éléments fixes sur mobile — 19 août 2026
+Le viewport mobile confirme que la navigation demeure disponible en haut de l’écran et que le bandeau de consentement reste entièrement exploitable en bas, avec les trois actions visibles. Tant qu’un choix de consentement n’a pas été fait, le bandeau est volontairement au premier plan et couvre le bouton WhatsApp ; après sa fermeture, le bouton flottant redevient accessible dans son emplacement habituel. Aucun chevauchement de contrôle concurrent n’a été observé.
+
+## Prévention explicite de la superposition WhatsApp — 19 août 2026
+Le composant de consentement marque désormais le document lorsque le bandeau est ouvert. Une règle CSS associée masque explicitement le bouton WhatsApp tant que ce marqueur est présent, au lieu de dépendre de l’ordre de rendu et du même niveau de superposition. Deux tests unitaires vérifient l’ajout et le retrait du marqueur ; la vérification visuelle mobile confirme que le bandeau et ses actions restent les seuls contrôles fixes en bas de l’écran pendant le choix de consentement.

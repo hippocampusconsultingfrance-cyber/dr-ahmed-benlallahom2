@@ -1187,6 +1187,11 @@ html.data-saver .cta-secondary:hover {
   padding-bottom: env(safe-area-inset-bottom);
 }
 
+/* Le bandeau de consentement est prioritaire : WhatsApp réapparaît dès sa fermeture. */
+html[data-cookie-banner-open="true"] .whatsapp-contact-float {
+  display: none;
+}
+
 @media (max-width: 767px) {
   .cookie-consent-banner {
     max-height: min(46vh, 22rem);
