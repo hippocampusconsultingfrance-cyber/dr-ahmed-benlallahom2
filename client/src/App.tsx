@@ -30,6 +30,7 @@ const CandidateResetPasswordPage = lazy(() => import("./pages/CandidateResetPass
 const CandidatePortalPage = lazy(() => import("./pages/CandidatePortalPage"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 const AdminDashboard = lazy(() => import("./pages/AdminDashboard"));
+const ServiceStatusPage = lazy(() => import("./pages/ServiceStatusPage"));
 
 function CandidatePortalPrivateRoute() {
   return (
@@ -79,6 +80,8 @@ function Router() {
       <Route path="/employers" component={EmployersPage} />
       <Route path="/why-hippocampus" component={WhyHippocampusPage} />
       <Route path="/admin" component={AdminDashboard} />
+      <Route path="/error" component={() => <ServiceStatusPage kind="error" />} />
+      <Route path="/maintenance" component={() => <ServiceStatusPage kind="maintenance" />} />
       <Route path="/404" component={NotFound} />
         <Route component={NotFound} />
       </Switch>

@@ -255,3 +255,7 @@ Sur mobile, la rangée d’onglets horizontale de l’administration est remplac
 > Cette première adaptation concerne la navigation. Les cartes, formulaires, listes et actions des onglets administratifs font l’objet d’un lot mobile complémentaire avant de considérer l’ergonomie complète comme finalisée.
 
 Le lot complémentaire empile désormais les actions des Réservations, Messages et demandes RGPD, augmente leur zone tactile sur mobile, replie les formulaires et cartes Blog, puis adapte Créneaux et Dates bloquées. Les tests de non-régression vérifient la présence du sélecteur compact et des classes d’empilement. La recette visuelle des contenus protégés après MFA reste à exécuter dans une session administrateur active.
+
+## Parcours d’erreur et maintenance — 19 août 2026
+
+Les routes publiques `/error` et `/maintenance` affichent des états cohérents avec l’identité ABL / Hippocampus en français, anglais, allemand et chinois. Elles ne révèlent ni pile d’exécution ni détail technique, proposent un retour à l’accueil et une nouvelle tentative, et sont exclues de l’indexation. Le fallback global côté navigateur a été aligné : les traces techniques ne sont plus affichées au visiteur.

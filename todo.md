@@ -189,7 +189,7 @@
 - [ ] Vérifier la longueur des textes et des boutons dans FR, EN, DE et ZH
 - [ ] Améliorer la version mobile du dashboard administrateur : navigation compacte terminée, adaptation des contenus denses restante
 - [x] Ajouter un mode haute lisibilité et une gestion complète de prefers-reduced-motion
-- [ ] Ajouter une page d’erreur serveur et une page de maintenance cohérentes avec la marque
+- [x] Ajouter une page d’erreur serveur et une page de maintenance cohérentes avec la marque
 - [ ] Documenter le kit de marque : logo, couleurs, typographies, icônes et règles d’utilisation
 - [ ] Harmoniser les modèles d’emails avec l’identité visuelle du site
 - [ ] Ajouter une prévisualisation graphique de facture dans l’espace client
