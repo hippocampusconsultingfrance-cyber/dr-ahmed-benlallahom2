@@ -68,6 +68,8 @@ Cette vérification est statique et automatisée ; elle ne soumet aucun formulai
 
 Une revue complémentaire à la largeur de 375 px confirme que les premières étapes des pages Réservation, RGPD, Recrutement et Employeurs restent lisibles et sans chevauchement visible. Les appels à l’action de navigation et le sélecteur de langue restent atteignables. Le bandeau de consentement est volontairement affiché dans cette session sans choix enregistré : il recouvre le bas de l’écran comme prévu, mais ne masque pas le titre, le contexte ni le début du formulaire. Sa coexistence avec la navigation mobile est déjà couverte par un test dédié.
 
+Le contrôle flottant WhatsApp est volontairement masqué pendant l’affichage du bandeau cookies, qui reste prioritaire pour la conformité et la lisibilité. Sur mobile, le bandeau est borné en hauteur, peut défiler si nécessaire et conserve des actions de taille suffisante. Cette règle de non-chevauchement est protégée par test.
+
 ## Page Pourquoi Hippocampus
 
 La page éditoriale publique `/why-hippocampus` présente la méthode employeurs, les zones couvertes, les garanties de confidentialité et conformité, ainsi que les parcours explicites vers le brief de mission et le recrutement. Une vérification visuelle pleine page sur bureau confirme une hiérarchie lisible, des cartes régulières et des appels à l’action distingués. La route, les quatre variantes linguistiques, les garanties, les CTA et les métadonnées de service sont protégés par une non-régression dédiée.

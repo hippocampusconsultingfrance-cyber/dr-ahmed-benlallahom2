@@ -273,7 +273,8 @@
 - [ ] Vérifier la navigation au clavier uniquement
 - [ ] Vérifier les pages à 200 % de zoom
 - [ ] Vérifier les textes et CTA dans les quatre langues
-- [ ] Vérifier le positionnement des éléments flottants sur petits écrans
+- [x] Vérifier le positionnement des éléments flottants sur petits écrans
+- [x] Ajouter une non-régression empêchant le chevauchement du bandeau cookies et du bouton WhatsApp
 - [ ] Vérifier les états de chargement des appels tRPC
 - [x] Vérifier les états anti-double-clic du paiement
 - [x] Vérifier le rendu de la confirmation et de l’annulation de paiement
