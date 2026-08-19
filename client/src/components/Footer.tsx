@@ -73,6 +73,9 @@ export default function Footer() {
               <Link href="/legal?tab=terms" className="block text-sm text-muted-foreground hover:text-primary transition-colors">
                 {content.footer.terms}
               </Link>
+              <Link href="/faq" className="block text-sm text-muted-foreground hover:text-primary transition-colors">
+                FAQ
+              </Link>
             </nav>
           </div>
 

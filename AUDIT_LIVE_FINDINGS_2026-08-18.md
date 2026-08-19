@@ -259,3 +259,7 @@ Le lot complémentaire empile désormais les actions des Réservations, Messages
 ## Parcours d’erreur et maintenance — 19 août 2026
 
 Les routes publiques `/error` et `/maintenance` affichent des états cohérents avec l’identité ABL / Hippocampus en français, anglais, allemand et chinois. Elles ne révèlent ni pile d’exécution ni détail technique, proposent un retour à l’accueil et une nouvelle tentative, et sont exclues de l’indexation. Le fallback global côté navigateur a été aligné : les traces techniques ne sont plus affichées au visiteur.
+
+## FAQ publique — 19 août 2026
+
+La route `/faq`, accessible depuis le footer, regroupe les informations pratiques sur la consultation, le paiement, l’annulation, les urgences et le parcours Hippocampus Consulting dans les quatre langues. La page utilise un accordéon clavier accessible et rappelle explicitement qu’elle ne fournit ni avis médical personnalisé ni accès aux urgences. Le volet recrutement précise que l’analyse assistée organise les dossiers, tandis que toute décision reste soumise à une revue humaine.

@@ -31,6 +31,7 @@ const CandidatePortalPage = lazy(() => import("./pages/CandidatePortalPage"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 const AdminDashboard = lazy(() => import("./pages/AdminDashboard"));
 const ServiceStatusPage = lazy(() => import("./pages/ServiceStatusPage"));
+const FAQPage = lazy(() => import("./pages/FAQPage"));
 
 function CandidatePortalPrivateRoute() {
   return (
@@ -82,6 +83,7 @@ function Router() {
       <Route path="/admin" component={AdminDashboard} />
       <Route path="/error" component={() => <ServiceStatusPage kind="error" />} />
       <Route path="/maintenance" component={() => <ServiceStatusPage kind="maintenance" />} />
+      <Route path="/faq" component={FAQPage} />
       <Route path="/404" component={NotFound} />
         <Route component={NotFound} />
       </Switch>

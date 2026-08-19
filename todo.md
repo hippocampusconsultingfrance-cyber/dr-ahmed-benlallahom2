@@ -182,7 +182,7 @@
 - [ ] Ajouter des états vides illustrés pour le blog, les témoignages, les disponibilités et le dashboard
 - [ ] Ajouter des skeletons de chargement cohérents au lieu de spinners seuls
 - [x] Ajouter une page de confirmation de réservation plus complète et rassurante
-- [ ] Ajouter une page FAQ visuelle sans conseils médicaux personnalisés
+- [x] Ajouter une page FAQ visuelle sans conseils médicaux personnalisés
 - [x] Ajouter des composants graphiques de confiance pour le paiement, la confidentialité et la disponibilité
 - [ ] Ajouter des tests visuels automatisés sur les pages critiques
 - [ ] Tester clavier, lecteur d’écran, contraste renforcé et zoom à 200 %
