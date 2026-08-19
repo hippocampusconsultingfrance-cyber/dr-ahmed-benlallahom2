@@ -426,3 +426,6 @@ Le parcours d’accès candidat, auparavant présenté en français uniquement, 
 
 ## Vérification et réinitialisation candidat — 19 août 2026
 Les pages publiques de vérification d’email et de réinitialisation de mot de passe sont désormais localisées dans les quatre langues. La réinitialisation demande deux saisies identiques du nouveau mot de passe et masque tout détail serveur derrière un message générique. Les écrans mobiles de lien de vérification invalide et de réinitialisation ont été contrôlés, sans exposition d’information personnelle ni technique. La suite complète compte 206 tests réussis, 2 explicitement ignorés, avec un build de production valide.
+
+## Espace candidat authentifié multilingue — 19 août 2026
+Le portail authentifié couvre désormais les quatre langues pour les sessions actives, l’upload, les catégories documentaires, les statuts d’analyse, les contrôles de téléchargement et les garanties de protection des données. Les dates de session utilisent la locale choisie, tandis que les erreurs d’upload exposent uniquement un message localisé générique. Les contrôles de contenu couvrent documents, sessions et messages dans chaque langue. La suite complète compte 207 tests réussis, 2 explicitement ignorés, avec un build de production valide.
