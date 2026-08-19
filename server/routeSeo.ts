@@ -37,6 +37,11 @@ const PUBLIC_ROUTES: Record<string, Omit<RouteSeo, "canonicalPath">> = {
     description: "Postulez pour des missions médicales spécialisées offshore, industrielles et au Moyen-Orient.",
     keywords: "mission médicale offshore, santé Moyen-Orient, plateforme pétrolière",
   },
+  "/vvip-offshore": {
+    title: "Missions santé offshore et Moyen-Orient | Hippocampus",
+    description: "Postulez pour des missions médicales spécialisées offshore, industrielles et au Moyen-Orient.",
+    keywords: "mission médicale offshore, santé Moyen-Orient, plateforme pétrolière",
+  },
   "/employers": {
     title: "Recruter des soignants | Hippocampus Consulting",
     description: "Confiez votre besoin de recrutement médical ou paramédical international à Hippocampus Consulting.",
@@ -58,6 +63,25 @@ const PUBLIC_ROUTES: Record<string, Omit<RouteSeo, "canonicalPath">> = {
   "/legal": {
     title: "Mentions légales | Dr. Ben Lallahom",
     description: "Consultez les mentions légales et conditions d’utilisation du site Dr. Ahmed Ben Lallahom.",
+  },
+  "/faq": {
+    title: "Questions fréquentes | Dr. Ben Lallahom",
+    description: "Retrouvez les informations pratiques sur la consultation, la réservation et Hippocampus Consulting.",
+  },
+  "/search": {
+    title: "Recherche | Dr. Ben Lallahom",
+    description: "Recherchez les informations publiques du site.",
+    noIndex: true,
+  },
+  "/error": {
+    title: "Service temporairement indisponible | Dr. Ben Lallahom",
+    description: "Information de disponibilité du service.",
+    noIndex: true,
+  },
+  "/maintenance": {
+    title: "Maintenance en cours | Dr. Ben Lallahom",
+    description: "Information de maintenance du service.",
+    noIndex: true,
   },
   "/venture/novarena": {
     title: "Novarena | Dr. Ben Lallahom",

@@ -19,4 +19,16 @@ describe("route SEO initial head", () => {
     expect(unknown.noIndex).toBe(true);
     expect(unknown.notFound).toBe(true);
   });
+
+  it("reconnaît les routes publiques profondes sans les marquer introuvables", () => {
+    for (const path of ["/faq", "/search", "/error", "/maintenance", "/vvip-offshore"]) {
+      expect(getRouteSeo(path).notFound, path).not.toBe(true);
+    }
+  });
+
+  it("exclut les outils et pages de statut de l’indexation", () => {
+    for (const path of ["/search", "/error", "/maintenance"]) {
+      expect(getRouteSeo(path).noIndex, path).toBe(true);
+    }
+  });
 });

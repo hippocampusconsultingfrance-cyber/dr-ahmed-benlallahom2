@@ -2407,3 +2407,4 @@
 - [x] Étendre les garde-fous de longueur aux libellés critiques de la page Employeurs en quatre langues
 - [x] Ajouter une règle explicite de positionnement du bouton WhatsApp pendant l’affichage du bandeau cookies mobile
 - [x] Ajouter des contrôles automatisés de non-régression pour les éléments fixes mobiles et le zoom élevé
+- [ ] Corriger la réponse HTTP 404 des routes publiques profondes FAQ, recherche et pages de statut sur le domaine publié
