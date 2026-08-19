@@ -239,3 +239,7 @@ Le sélecteur de langue dirige le focus vers son premier choix lors de l’ouver
 ## Sobriété de mouvement en économie de données — 19 août 2026
 
 Lorsque le navigateur expose une préférence `saveData`, la page applique la classe `data-saver` et neutralise les animations, transitions, parallax et décalages décoratifs. La préférence est réévaluée lorsque la connexion évolue et n’interfère pas avec les navigateurs qui ne proposent pas cette information. Le comportement est couvert par un test unitaire ; les règles système `prefers-reduced-motion` restent inchangées et complémentaires.
+
+## Bandeau cookies — lisibilité et focus — 19 août 2026
+
+Le bandeau de consentement utilise désormais un fond quasi opaque, une séparation cyan discrète et une ombre renforcée afin de rester lisible sur les visuels sombres et clairs. Le lien de confidentialité et le bouton de fermeture disposent d’un indicateur de focus explicite. La vérification visuelle sur le thème sombre, la suite complète et le build de production sont conformes.

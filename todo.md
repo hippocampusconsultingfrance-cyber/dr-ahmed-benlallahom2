@@ -260,7 +260,7 @@
 - [ ] Vérifier les notifications de rappel sur desktop et mobile
 - [ ] Vérifier les écrans Blog et Disponibilités du dashboard sur tablette
 - [ ] Ajouter des contrôles clavier aux témoignages en carrousel
-- [ ] Vérifier le contraste et la lisibilité du bandeau cookies
+- [x] Vérifier le contraste et la lisibilité du bandeau cookies
 - [x] Ajouter un lien permanent vers les préférences cookies, y compris après fermeture du bandeau sans choix explicite
 - [x] Vérifier que les traceurs non essentiels restent bloqués sans consentement
 - [ ] Préparer une revue annuelle des traductions et de l’identité visuelle
