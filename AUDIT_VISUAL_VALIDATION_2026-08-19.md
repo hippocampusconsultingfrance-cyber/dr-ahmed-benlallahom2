@@ -45,6 +45,10 @@ Le code des parcours Contact, demande RGPD, réservation et confirmation de paie
 
 Cette vérification est statique et automatisée ; elle ne soumet aucun formulaire public et ne crée aucune transaction Stripe. Le paiement de bout en bout reste un contrôle manuel distinct sur le domaine publié et avec une carte de test.
 
+## Contrôle mobile complémentaire des parcours critiques
+
+Une revue complémentaire à la largeur de 375 px confirme que les premières étapes des pages Réservation, RGPD, Recrutement et Employeurs restent lisibles et sans chevauchement visible. Les appels à l’action de navigation et le sélecteur de langue restent atteignables. Le bandeau de consentement est volontairement affiché dans cette session sans choix enregistré : il recouvre le bas de l’écran comme prévu, mais ne masque pas le titre, le contexte ni le début du formulaire. Sa coexistence avec la navigation mobile est déjà couverte par un test dédié.
+
 ## Disponibilité de production
 
 Le 19 août 2026, les routes publiques `/`, `/booking`, `/gdpr`, `/faq`, `/search`, `/error`, `/maintenance`, `/recruitment`, `/employers` et `/why-hippocampus` ont toutes répondu en HTTP 200 sur le domaine principal. L’accès `www.drahmedbenlallahom.com` redirige correctement vers `drahmedbenlallahom.com` et sert ensuite la page d’accueil en HTTP 200. Aucun écart de disponibilité n’a été observé sur cet échantillon.
