@@ -311,20 +311,20 @@ export default function RecruitmentTab() {
                       </div>
                     </div>
                   </button>
-                  <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex w-full flex-wrap items-center gap-2 lg:w-auto">
                     <span className={`rounded-full border px-2.5 py-1 text-xs font-medium ${scoreTone(application.aiScore)}`}>
                       {application.aiScore === null ? copy.aiPending : copy.score(application.aiScore)}
                     </span>
                     <span className={`rounded-full border px-2.5 py-1 text-xs font-medium ${analysisStatusTone(application.analysisStatus)}`}>
                       {analysisStatusLabel(application.analysisStatus, copy.analysisStatuses)}
                     </span>
-                    <select aria-label={copy.statusFor(`${application.firstName} ${application.lastName}`)} value={application.status} disabled={updateStatus.isPending} onChange={event => updateStatus.mutate({ id: application.id, status: event.target.value as Status })} className="h-9 rounded-md border border-border bg-background px-2 text-sm text-foreground">
+                    <select aria-label={copy.statusFor(`${application.firstName} ${application.lastName}`)} value={application.status} disabled={updateStatus.isPending} onChange={event => updateStatus.mutate({ id: application.id, status: event.target.value as Status })} className="min-h-10 flex-1 rounded-md border border-border bg-background px-2 text-sm text-foreground sm:flex-none">
                       {statusOptions.map(option => <option key={option} value={option}>{copy.statuses[option]}</option>)}
                     </select>
-                          <Button size="sm" variant="outline" onClick={() => downloadCv.mutate({ id: application.id })} disabled={downloadCv.isPending}>
+                          <Button size="sm" variant="outline" className="min-h-10 flex-1 sm:flex-none" onClick={() => downloadCv.mutate({ id: application.id })} disabled={downloadCv.isPending}>
                             <Download className="mr-2 h-4 w-4" /> {actions.cv}
                           </Button>
-                          <Button size="sm" variant="outline" onClick={() => setCandidate360Id(application.id)}>
+                          <Button size="sm" variant="outline" className="min-h-10 flex-1 sm:flex-none" onClick={() => setCandidate360Id(application.id)}>
                             <ClipboardList className="mr-2 h-4 w-4" /> {actions.candidate360}
                           </Button>
                   </div>
@@ -342,7 +342,7 @@ export default function RecruitmentTab() {
                       <p><strong className="text-foreground">{details.certifications} :</strong> {application.certifications || "—"}</p>
                     </div>
                     <div className="space-y-1 text-muted-foreground">
-                      <p><strong className="text-foreground">{details.file} :</strong> {application.cvOriginalName} ({formatBytes(application.cvSizeBytes)})</p>
+                      <p className="break-words"><strong className="text-foreground">{details.file} :</strong> {application.cvOriginalName} ({formatBytes(application.cvSizeBytes)})</p>
                       <p><strong className="text-foreground">{details.fileCheck} :</strong> {application.fileValidationStatus === "accepted" ? details.fileStatuses.accepted : application.fileValidationStatus || details.fileStatuses.pending}{application.fileSecurityScanVersion ? ` · ${application.fileSecurityScanVersion}` : ""}</p>
                       <p><strong className="text-foreground">{details.received} :</strong> {new Date(application.createdAt).toLocaleString(locale, { timeZone: "Europe/Paris" })}</p>
                       <p><strong className="text-foreground">{details.retention} :</strong> {application.retentionUntil ? new Date(application.retentionUntil).toLocaleDateString(locale, { timeZone: "Europe/Paris" }) : "—"}</p>
@@ -364,17 +364,17 @@ export default function RecruitmentTab() {
                           </div>
                         </div>
                         <div className="flex flex-wrap gap-2">
-                          <Button size="sm" variant="outline" onClick={() => reanalyze.mutate({ id: application.id })} disabled={reanalyze.isPending || eraseApplication.isPending}>
+                          <Button size="sm" variant="outline" className="min-h-10 flex-1 sm:flex-none" onClick={() => reanalyze.mutate({ id: application.id })} disabled={reanalyze.isPending || eraseApplication.isPending}>
                             {reanalyze.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
                             {application.aiAnalyzedAt ? actions.reanalyze : actions.analyze}
                           </Button>
-                          <Button size="sm" variant="outline" onClick={() => openEmailComposer(application.id, `${application.firstName} ${application.lastName}`, "profile_interest")} disabled={sendTemplateEmail.isPending || eraseApplication.isPending || reanalyze.isPending}>
+                          <Button size="sm" variant="outline" className="min-h-10 flex-1 sm:flex-none" onClick={() => openEmailComposer(application.id, `${application.firstName} ${application.lastName}`, "profile_interest")} disabled={sendTemplateEmail.isPending || eraseApplication.isPending || reanalyze.isPending}>
                             <Mail className="mr-2 h-4 w-4" /> {actions.offerConversation}
                           </Button>
-                          <Button size="sm" variant="outline" onClick={() => openEmailComposer(application.id, `${application.firstName} ${application.lastName}`, "additional_information")} disabled={sendTemplateEmail.isPending || eraseApplication.isPending || reanalyze.isPending}>
+                          <Button size="sm" variant="outline" className="min-h-10 flex-1 sm:flex-none" onClick={() => openEmailComposer(application.id, `${application.firstName} ${application.lastName}`, "additional_information")} disabled={sendTemplateEmail.isPending || eraseApplication.isPending || reanalyze.isPending}>
                             <Mail className="mr-2 h-4 w-4" /> {actions.requestDocuments}
                           </Button>
-                          <Button size="sm" variant="outline" className="text-destructive hover:text-destructive" onClick={() => { if (window.confirm(actions.confirmErase)) eraseApplication.mutate({ id: application.id }); }} disabled={eraseApplication.isPending || reanalyze.isPending}>
+                          <Button size="sm" variant="outline" className="min-h-10 flex-1 text-destructive hover:text-destructive sm:flex-none" onClick={() => { if (window.confirm(actions.confirmErase)) eraseApplication.mutate({ id: application.id }); }} disabled={eraseApplication.isPending || reanalyze.isPending}>
                             {eraseApplication.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
                             {actions.erase}
                           </Button>

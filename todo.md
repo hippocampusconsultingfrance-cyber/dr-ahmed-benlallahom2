@@ -214,6 +214,9 @@
 - [ ] Tester clavier, lecteur d’écran, contraste renforcé et zoom à 200 %
 - [ ] Vérifier la longueur des textes et des boutons dans FR, EN, DE et ZH
 - [ ] Améliorer la version mobile du dashboard administrateur : navigation compacte terminée, adaptation des contenus denses restante
+- [ ] Auditer et ajuster les tableaux de candidatures, réservations et fichiers candidats pour une lecture mobile sans débordement
+- [x] Agrandir et répartir les actions du tableau Candidatures pour une utilisation tactile sans débordement
+- [x] Auditer et ajuster la revue administrative des fichiers candidats pour une lecture mobile sans débordement
 - [x] Ajouter un mode haute lisibilité et une gestion complète de prefers-reduced-motion
 - [x] Ajouter une page d’erreur serveur et une page de maintenance cohérentes avec la marque
 - [x] Documenter le kit de marque : logo, couleurs, typographies, icônes et règles d’utilisation

@@ -162,6 +162,10 @@ Les pages publiques d’incident et de maintenance sont couvertes en français, 
 
 La page Ventures est couverte dans les quatre langues : interface de récupération, fil d’Ariane, sections de présentation, navigation, métadonnées et descriptions allemande et chinoise. Les logos de sociétés disposent également d’un texte alternatif dans la langue active.
 
+Le tableau Candidatures renforce sa lecture mobile : actions regroupées sur toute la largeur avant le point de rupture, cibles tactiles de hauteur minimale, retour au format compact sur écran large et rupture des noms de fichier longs. Une non-régression protège ces contraintes de mise en page.
+
+La revue administrative des documents candidats suit le même principe : noms de fichier et courriels peuvent se rompre, les contrôles d’analyse et d’ouverture occupent la largeur disponible sur mobile, et les actions de décision conservent des cibles tactiles distinctes.
+
 ## Disponibilité de production
 
 Le 19 août 2026, les routes publiques `/`, `/booking`, `/gdpr`, `/faq`, `/search`, `/error`, `/maintenance`, `/recruitment`, `/employers` et `/why-hippocampus` ont toutes répondu en HTTP 200 sur le domaine principal. L’accès `www.drahmedbenlallahom.com` redirige correctement vers `drahmedbenlallahom.com` et sert ensuite la page d’accueil en HTTP 200. Aucun écart de disponibilité n’a été observé sur cet échantillon.
