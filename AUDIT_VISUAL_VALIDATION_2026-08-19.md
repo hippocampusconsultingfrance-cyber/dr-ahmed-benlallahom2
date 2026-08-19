@@ -51,3 +51,7 @@ Les pages d’accueil, réservation, RGPD, recrutement, brief employeur, accès 
 ## Journaux d’exécution
 
 Les journaux locaux récents ne présentent ni erreur serveur, ni réponse réseau en 4xx/5xx dans l’échantillon contrôlé. Une ancienne erreur de développement relative au provider de langue est encore visible dans l’historique du navigateur, mais elle correspond à un état déjà corrigé et suivi d’un rendu public valide. La consultation des journaux du conteneur publié n’était pas disponible lors du contrôle, le service de journaux renvoyant `cloudrun service not found`; la disponibilité HTTP et les parcours publics ont donc été utilisés comme contrôle de substitution.
+
+## Tableau de bord administratif sur mobile
+
+À 375 px de largeur, la route administrative présente d’abord sa validation de sécurité par code à six chiffres, sans exposer de donnée candidate ou administrative avant validation. Le formulaire de sécurité est lisible, les deux actions sont atteignables et aucun débordement horizontal n’est visible. Le contrôle des onglets internes du tableau de bord nécessite une authentification administrative et une validation MFA ; il n’a pas été contourné dans le cadre de cette vérification visuelle.
