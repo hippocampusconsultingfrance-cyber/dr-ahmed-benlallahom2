@@ -43,3 +43,7 @@ Le domaine principal expose une politique de transport strict (HSTS), une politi
 ## Ressources SEO et parcours sensibles
 
 Le fichier `robots.txt` publié référence le sitemap officiel, autorise les contenus publics et exclut explicitement l’administration, les parcours candidats, les API, les confirmations de réservation, les routes Blog désactivées et la désinscription de recrutement. Le sitemap ne recense que des contenus publics éditoriaux et fonctionnels ; il ne contient ni route d’administration, ni portail candidat, ni parcours de désinscription. Aucun correctif n’a été requis lors de ce contrôle.
+
+## Largeur réduite équivalente à un zoom élevé
+
+Les pages d’accueil, réservation, RGPD, recrutement, brief employeur, accès candidat, FAQ et méthode employeurs ont été revues à 640 px de largeur, une contrainte comparable à un affichage zoomé sur un écran de bureau. Les titres, contrôles de formulaire, cartes, appels à l’action et pieds de page restent lisibles sans débordement horizontal visible. Ce contrôle de rendu ne remplace pas une validation manuelle au zoom natif de 200 % avec un navigateur et un lecteur d’écran.
