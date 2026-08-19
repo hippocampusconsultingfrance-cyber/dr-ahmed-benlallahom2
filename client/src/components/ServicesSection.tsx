@@ -8,9 +8,10 @@ export default function ServicesSection() {
       {/* Background with diagnostic grid */}
       <div className="absolute inset-0 opacity-20">
         <img
-          src="/manus-storage/services-bg_a14b9c28.png"
+          src="/manus-storage/services-medical-compass_333540df.jpg"
           loading="lazy"
-          alt="Réseau de soins et expertise médicale internationale"
+          alt=""
+          aria-hidden="true"
           className="w-full h-full object-cover"
         />
       </div>

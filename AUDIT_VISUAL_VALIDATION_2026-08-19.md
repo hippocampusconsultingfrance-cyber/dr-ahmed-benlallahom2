@@ -143,3 +143,7 @@ La revue administrative est désormais également localisée en français, angla
 ## Vivier administratif multilingue
 
 L’espace Vivier reprend maintenant la langue active pour ses six filtres métier, les appels à l’action, les scores IA, les libellés de profil, les états de chargement et les retours d’export. Les critères transmis au serveur ne changent pas ; cette amélioration porte uniquement sur l’interface et conserve les garde-fous de consentement ainsi que la journalisation des exports.
+
+## Illustrations originales Services et Réservation
+
+Deux illustrations sans texte ont été intégrées comme éléments décoratifs, donc masquées aux lecteurs d’écran : une composition médicale abstraite pour les Services et un parcours lumineux pour la colonne de consultation. La réservation a été vérifiée en bureau ; l’illustration reste contenue dans sa colonne et ne concurrence pas le formulaire ni les informations de sécurité.

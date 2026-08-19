@@ -195,7 +195,8 @@
 - [x] Documenter le kit de marque : logo, couleurs, typographies, icônes et règles d’utilisation
 - [x] Harmoniser les modèles d’emails avec l’identité visuelle du site
 - [ ] Ajouter une prévisualisation graphique de facture dans l’espace client
-- [ ] Ajouter des illustrations originales pour les services et les étapes de réservation
+- [x] Ajouter des illustrations originales sans texte pour les services et les étapes de réservation
+- [x] Ajouter une non-régression confirmant que les illustrations Services et Réservation restent décoratives et correctement intégrées
 - [ ] Vérifier les droits sur les photographies, logos, illustrations et visuels externes
 - [ ] Mettre en place une revue graphique trimestrielle et une checklist avant publication
 - [ ] Centraliser les libellés d’interface afin d’éviter les chaînes de texte hardcodées
