@@ -6,16 +6,6 @@ import Navigation from "@/components/Navigation";
 import Footer from "@/components/Footer";
 import { useLanguage } from "@/contexts/LanguageContext";
 
-const specialtyOptions = [
-  "Médecin urgentiste (ATLS / ACLS)",
-  "Médecin de plateforme / Offshore",
-  "Médecin de soins intensifs / Réanimateur",
-  "Infirmier(ère) paramédical(e) Offshore / Rig Medic",
-  "Infirmier(ère) anesthésiste (IADE) VVIP",
-  "Médecin personnel / Concierge VIP",
-  "Autre spécialité VVIP / Offshore",
-] as const;
-
 const copy = {
   fr: {
     eyebrow: "Hippocampus Consulting · Missions d’Élite VVIP & Offshore",
@@ -35,9 +25,21 @@ const copy = {
     env3: "Sociétés minières & industrielles isolées",
     env4: "Événements internationaux de prestige",
     experience: "Années d’expérience en zone critique",
+    experiencePlaceholder: "Ex. 8 ans",
     certifications: "Certifications détenues (ex. ATLS, ACLS, PHTLS, HUET)",
+    certificationsPlaceholder: "ATLS, ACLS, HUET, etc.",
     cv: "CV détaillé (PDF, DOC ou DOCX — 5 Mo max)",
+    fileHint: "PDF, DOC ou DOCX — 5 Mo max",
     chooseFile: "Choisir un fichier",
+    specialties: [
+      "Médecin urgentiste (ATLS / ACLS)",
+      "Médecin de plateforme / Offshore",
+      "Médecin de soins intensifs / Réanimateur",
+      "Infirmier(ère) paramédical(e) Offshore / Rig Medic",
+      "Infirmier(ère) anesthésiste (IADE) VVIP",
+      "Médecin personnel / Concierge VIP",
+      "Autre spécialité VVIP / Offshore",
+    ],
     gdpr: "J’accepte le traitement de mes données pour l’évaluation de mon profil dans le cadre des missions VVIP et offshore, avec analyse automatisée d’aide à la présélection et revue humaine obligatoire.",
     submit: "Soumettre ma candidature VVIP",
     sending: "Transmission sécurisée…",
@@ -88,9 +90,21 @@ const copy = {
     env3: "Remote Mining & Industrial Sites",
     env4: "Prestigious International Events",
     experience: "Years of experience in critical zones",
+    experiencePlaceholder: "e.g. 8 years",
     certifications: "Held certifications (e.g. ATLS, ACLS, PHTLS, HUET)",
+    certificationsPlaceholder: "ATLS, ACLS, HUET, etc.",
     cv: "Detailed CV (PDF, DOC or DOCX — 5 MB max)",
+    fileHint: "PDF, DOC or DOCX — 5 MB max",
     chooseFile: "Choose a file",
+    specialties: [
+      "Emergency physician (ATLS / ACLS)",
+      "Platform / offshore physician",
+      "Intensive care physician",
+      "Offshore paramedic / rig medic",
+      "VVIP nurse anaesthetist",
+      "Private physician / VIP concierge doctor",
+      "Other VVIP / offshore specialty",
+    ],
     gdpr: "I consent to the processing of my data for VVIP and offshore mission evaluation, including automated pre-screening assistance and mandatory human review.",
     submit: "Submit VVIP Application",
     sending: "Secure transmission…",
@@ -141,9 +155,21 @@ const copy = {
     env3: "Entlegene Bergbau- & Industriestandorte",
     env4: "Prestigeträchtige internationale Events",
     experience: "Jahre Berufserfahrung in Krisen- / Sonderzonen",
+    experiencePlaceholder: "z. B. 8 Jahre",
     certifications: "Zertifikate (z.B. ATLS, ACLS, PHTLS, HUET)",
+    certificationsPlaceholder: "ATLS, ACLS, HUET usw.",
     cv: "Detaillierter Lebenslauf (PDF, DOC oder DOCX — max. 5 MB)",
+    fileHint: "PDF, DOC oder DOCX — max. 5 MB",
     chooseFile: "Datei auswählen",
+    specialties: [
+      "Notarzt / Notärztin (ATLS / ACLS)",
+      "Plattformarzt / Offshore-Arzt",
+      "Intensivmediziner / Reanimation",
+      "Offshore-Rettungssanitäter / Rig Medic",
+      "VVIP-Fachpflege Anästhesie",
+      "Privatarzt / VIP-Concierge-Arzt",
+      "Andere VVIP- / Offshore-Fachrichtung",
+    ],
     gdpr: "Ich stimme der Verarbeitung meiner Daten zur Eignungsprüfung für VVIP- und Offshore-Missionen zu, einschließlich automatisierter Vorauswahl und verpflichtender menschlicher Prüfung.",
     submit: "VVIP-Bewerbung absenden",
     sending: "Sichere Übertragung…",
@@ -194,9 +220,21 @@ const copy = {
     env3: "偏远矿业与工业驻地",
     env4: "高端国际峰会与活动",
     experience: "关键环境工作年限",
+    experiencePlaceholder: "例如 8 年",
     certifications: "相关专业认证（如 ATLS, ACLS, PHTLS, HUET）",
+    certificationsPlaceholder: "ATLS、ACLS、HUET 等",
     cv: "详细简历（PDF、DOC 或 DOCX，最大 5 MB）",
+    fileHint: "PDF、DOC 或 DOCX，最大 5 MB",
     chooseFile: "选择文件",
+    specialties: [
+      "急诊医师（ATLS / ACLS）",
+      "平台 / 离岸医师",
+      "重症医学医师",
+      "离岸急救医护 / Rig Medic",
+      "VVIP 麻醉专科护士",
+      "私人医师 / VIP 医疗管家",
+      "其他 VVIP / 离岸专业方向",
+    ],
     gdpr: "我同意为评估 VVIP 及离岸任务处理我的个人数据，包括自动化筛选辅助与强制性人工审核。",
     submit: "提交 VVIP 申请",
     sending: "安全传输中…",
@@ -276,25 +314,25 @@ type FormState = {
   website: string;
 };
 
-const initialForm: FormState = {
+const createInitialForm = (language: Language): FormState => ({
   firstName: "",
   lastName: "",
   email: "",
   phone: "",
-  specialty: specialtyOptions[0],
+  specialty: copy[language].specialties[0],
   environment: "Moyen-Orient (Gouvernement / VVIP)",
   yearsExperience: "",
   certifications: "",
   gdprConsent: false,
   website: "",
-};
+});
 
 export default function VvipOffshorePage() {
   const { language } = useLanguage();
   const lang = (language in copy ? language : "fr") as Language;
   const t = copy[lang];
   const trust = publicTrustCopy[lang];
-  const [form, setForm] = useState<FormState>(initialForm);
+  const [form, setForm] = useState<FormState>(() => createInitialForm(lang));
   const [file, setFile] = useState<File | null>(null);
   const [status, setStatus] = useState<"idle" | "sending" | "success" | "error">("idle");
   const [errorMessage, setErrorMessage] = useState("");
@@ -446,7 +484,7 @@ export default function VvipOffshorePage() {
                       <label className="block w-full space-y-1.5 text-sm text-foreground">
                         <span className="block font-medium">{t.specialty} *</span>
                         <select value={form.specialty} onChange={(e) => update("specialty", e.target.value)} className="form-control block w-full">
-                          {specialtyOptions.map((opt) => (
+                          {t.specialties.map((opt) => (
                             <option key={opt} value={opt}>{opt}</option>
                           ))}
                         </select>
@@ -465,11 +503,11 @@ export default function VvipOffshorePage() {
                     <div className="grid gap-4 sm:grid-cols-2">
                       <label className="block w-full space-y-1.5 text-sm text-foreground">
                         <span className="block font-medium">{t.experience}</span>
-                        <input type="number" min="0" max="50" value={form.yearsExperience} onChange={(e) => update("yearsExperience", e.target.value)} className="form-control block w-full" placeholder="Ex. 8 ans" />
+                        <input type="number" min="0" max="50" value={form.yearsExperience} onChange={(e) => update("yearsExperience", e.target.value)} className="form-control block w-full" placeholder={t.experiencePlaceholder} />
                       </label>
                       <label className="block w-full space-y-1.5 text-sm text-foreground">
                         <span className="block font-medium">{t.certifications}</span>
-                        <input value={form.certifications} onChange={(e) => update("certifications", e.target.value)} className="form-control block w-full" placeholder="ATLS, ACLS, HUET, etc." />
+                        <input value={form.certifications} onChange={(e) => update("certifications", e.target.value)} className="form-control block w-full" placeholder={t.certificationsPlaceholder} />
                       </label>
                     </div>
 
@@ -483,7 +521,7 @@ export default function VvipOffshorePage() {
                         <span className="mt-3 text-sm font-medium text-foreground">
                           {file ? file.name : t.chooseFile}
                         </span>
-                        <span className="mt-1 text-xs text-muted-foreground">PDF, DOC ou DOCX — 5 Mo max</span>
+                        <span className="mt-1 text-xs text-muted-foreground">{t.fileHint}</span>
                         <input
                           ref={fileInputRef}
                           type="file"

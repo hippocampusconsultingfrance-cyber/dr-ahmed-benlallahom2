@@ -113,3 +113,7 @@ Le vivier actif applique un consentement marketing positif et propose les critè
 ## Tableau de bord administratif mobile
 
 L’administration utilise désormais le sélecteur de sections sur mobile et des actions denses adaptées à la largeur réduite. Les commandes de modération des témoignages reviennent à la ligne et conservent des cibles tactiles d’au moins quarante pixels de hauteur. L’onglet Blog, devenu inactif après le retrait de la section Actualités du site, n’est plus proposé dans la navigation administrative ; le bundle de ce tableau de bord est réduit en conséquence.
+
+## Formulaire VVIP dans les quatre langues
+
+Le formulaire de candidature VVIP utilise désormais des options de spécialité, aides de saisie pour l’expérience et les certifications, ainsi qu’une indication de format de fichier adaptées au français, à l’anglais, à l’allemand et au chinois. L’initialisation du formulaire sélectionne l’option de spécialité correspondant à la langue active. Un test de non-régression vérifie que les contrôles visibles ne reviennent pas à des chaînes françaises codées en dur.
