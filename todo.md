@@ -2362,7 +2362,7 @@
 ## Optimisation de performance issue de l’audit
 
 - [ ] Réduire le poids du bundle initial par découpage explicite des dépendances frontales
-- [ ] Vérifier les tailles de bundles après build sans dégrader les parcours publics
+- [x] Vérifier les tailles de bundles après build sans dégrader les parcours publics
 
 ## Exécution complète des lots de l’audit
 

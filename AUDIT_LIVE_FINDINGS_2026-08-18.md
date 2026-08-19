@@ -396,3 +396,6 @@ La vérification de l’onglet Mailing confirme la présence de quatre modèles 
 
 ## Parcours Employeurs consolidé — 19 août 2026
 Le formulaire public de brief fournit un accusé de réception multilingue avec référence de suivi, confidentialité, délai de contact annoncé et prochaines étapes. Dans l’administration, chaque brief affiche son statut, peut passer de nouveau à qualification puis à shortlist envoyée, expose les correspondances explicables et permet l’export contrôlé de la shortlist. La couverture de test vérifie désormais le contenu de confirmation dans les quatre langues. La suite complète compte 194 tests réussis, 2 explicitement ignorés, avec un build de production valide.
+
+## Mesure du bundle client — 19 août 2026
+Le build conserve déjà un découpage par route : tableau de bord, réservations, recrutement, espace candidat, FAQ et autres parcours publics sont générés en artefacts distincts. L’artefact partagé initial représente 470,9 kB non compressé, soit 147,5 kB gzip lors du dernier build ; les pages les plus lourdes restent différées, dont le tableau de bord à 189,3 kB. Aucun découpage manuel supplémentaire n’a été appliqué : une tentative antérieure créait un cycle React/Radix empêchant le rendu. La stratégie actuelle privilégie donc la stabilité tout en conservant le chargement différé des pages.
