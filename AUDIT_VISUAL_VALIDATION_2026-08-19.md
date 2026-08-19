@@ -148,6 +148,8 @@ Le portail candidat sécurisé est déjà couvert de bout en bout par une copie 
 
 Le parcours d’accès candidat est lui aussi couvert dans les quatre langues : connexion, création de compte, réinitialisation, consentements, vérification anti-bot, messages de réussite et erreurs génériques masquant les détails serveur. Les libellés de protection, contraintes de mot de passe et liens de navigation sont inclus dans la non-régression.
 
+La page de réinitialisation de mot de passe candidat réutilise une copie dédiée en français, anglais, allemand et chinois. La couverture vérifie les métadonnées, consignes de mot de passe, confirmation, messages de validation, action de sauvegarde et message d’erreur générique.
+
 ## Disponibilité de production
 
 Le 19 août 2026, les routes publiques `/`, `/booking`, `/gdpr`, `/faq`, `/search`, `/error`, `/maintenance`, `/recruitment`, `/employers` et `/why-hippocampus` ont toutes répondu en HTTP 200 sur le domaine principal. L’accès `www.drahmedbenlallahom.com` redirige correctement vers `drahmedbenlallahom.com` et sert ensuite la page d’accueil en HTTP 200. Aucun écart de disponibilité n’a été observé sur cet échantillon.
