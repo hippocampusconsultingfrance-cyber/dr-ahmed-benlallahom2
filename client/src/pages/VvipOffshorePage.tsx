@@ -1,5 +1,5 @@
 import { FormEvent, useRef, useState } from "react";
-import { CheckCircle2, FileUp, Globe2, Loader2, ShieldCheck, UserCheck, Zap, Award, Compass, Lock } from "lucide-react";
+import { CheckCircle2, Clock3, FileUp, Globe2, Loader2, ShieldCheck, UserCheck, Zap, Award, Compass, Lock } from "lucide-react";
 import { Link } from "wouter";
 import { SEOHead } from "@/components/SEOHead";
 import Navigation from "@/components/Navigation";
@@ -20,7 +20,7 @@ const copy = {
   fr: {
     eyebrow: "Hippocampus Consulting · Missions d’Élite VVIP & Offshore",
     title: "Médecine d’urgence et soins hautement spécialisés en environnements critiques.",
-    intro: "Nous recrutons des médecins, urgentistes et personnels paramédicaux d’élite pour des missions exclusives au Moyen-Orient (résidences royales, délégations VVIP), sur les plateformes pétrolières et auprès des grandes sociétés industrielles offshore.",
+    intro: "Nous recrutons des médecins, urgentistes et personnels paramédicaux d’élite pour des missions exclusives au Moyen-Orient (délégations VVIP et environnements institutionnels), sur les plateformes pétrolières et auprès des grandes sociétés industrielles offshore.",
     nav: "VVIP & Offshore",
     formTitle: "Candidature Missions VVIP & Offshore",
     formIntro: "Ces missions requièrent une excellence clinique irréprochable, une résistance au stress éprouvée et des certifications internationales à jour (ATLS, ACLS, HUET/BOSIET selon les sites).",
@@ -30,7 +30,7 @@ const copy = {
     phone: "Téléphone",
     specialty: "Profil recherché / Spécialité",
     environment: "Environnement de prédilection",
-    env1: "Moyen-Orient (Résidences / Gouvernement / VVIP)",
+    env1: "Moyen-Orient (Gouvernement / VVIP)",
     env2: "Plateformes pétrolières & gazières (Onshore / Offshore)",
     env3: "Sociétés minières & industrielles isolées",
     env4: "Événements internationaux de prestige",
@@ -55,8 +55,8 @@ const copy = {
     p3Desc: "Accompagnement sur les normes médicales rigoureuses (OGP, Oil & Gas UK, AHA).",
     section2Title: "Domaines d’intervention et expertises critiques",
     section2Sub: "Une couverture médicale sur mesure pour les situations où l’infrastructure hospitalière classique n’est pas immédiatement accessible.",
-    card1Title: "Résidences VVIP & Délégations",
-    card1Desc: "Présence médicale permanente ou de liaison auprès de personnalités et de délégations officielles. Maîtrise des protocoles d'évacuation sanitaire d'urgence (EVASAN).",
+    card1Title: "Délégations VVIP & missions institutionnelles",
+    card1Desc: "Présence médicale permanente ou de liaison auprès de délégations officielles et dans des environnements institutionnels exigeants. Maîtrise des protocoles d'évacuation sanitaire d'urgence (EVASAN).",
     card2Title: "Plateformes Pétrolières & Offshore",
     card2Desc: "Prise en charge des traumatismes majeurs, stabilisation en milieu confiné, gestion des intoxications et des urgences chirurgicales sur plates-formes offshores et sites isolés.",
     card3Title: "Chantiers & Sites Miniers Isolat",
@@ -73,7 +73,7 @@ const copy = {
   en: {
     eyebrow: "Hippocampus Consulting · Elite VVIP & Offshore Missions",
     title: "High-acuity emergency medicine in demanding environments.",
-    intro: "We recruit elite physicians, emergency doctors, and healthcare professionals for exclusive assignments in the Middle East (royal residences, VVIP delegations), oil rigs, and major offshore industrial corporations.",
+    intro: "We recruit elite physicians, emergency doctors, and healthcare professionals for exclusive assignments in the Middle East (VVIP delegations and institutional environments), oil rigs, and major offshore industrial corporations.",
     nav: "VVIP & Offshore",
     formTitle: "VVIP & Offshore Application",
     formIntro: "These missions require flawless clinical excellence, proven stress resilience, and up-to-date international certifications (ATLS, ACLS, HUET/BOSIET).",
@@ -83,7 +83,7 @@ const copy = {
     phone: "Phone",
     specialty: "Target Profile / Specialty",
     environment: "Preferred Environment",
-    env1: "Middle East (Residences / Government / VVIP)",
+    env1: "Middle East (Government / VVIP)",
     env2: "Oil & Gas Rigs (Onshore / Offshore)",
     env3: "Remote Mining & Industrial Sites",
     env4: "Prestigious International Events",
@@ -108,8 +108,8 @@ const copy = {
     p3Desc: "Compliance with rigorous medical standards (OGP, Oil & Gas UK, AHA).",
     section2Title: "Mission Scopes & Critical Expertise",
     section2Sub: "Tailored medical coverage for situations where standard hospital infrastructure is not immediately accessible.",
-    card1Title: "VVIP Residences & Delegations",
-    card1Desc: "Permanent or liaison medical presence for high-profile figures and official delegations. Mastery of emergency medical evacuation protocols (MEDEVAC).",
+    card1Title: "VVIP Delegations & Institutional Missions",
+    card1Desc: "Permanent or liaison medical presence for official delegations and demanding institutional environments. Mastery of emergency medical evacuation protocols (MEDEVAC).",
     card2Title: "Oil Rigs & Offshore Platforms",
     card2Desc: "Management of major trauma, confinement stabilization, toxicological incidents, and surgical emergencies on offshore rigs and remote installations.",
     card3Title: "Remote Industrial & Mining Sites",
@@ -136,7 +136,7 @@ const copy = {
     phone: "Telefon",
     specialty: "Gesuchtes Profil / Fachgebiet",
     environment: "Bevorzugte Einsatzumgebung",
-    env1: "Naher Osten (Residenzen / Regierung / VVIP)",
+    env1: "Naher Osten (Regierung / VVIP)",
     env2: "Öl- & Gasplattformen (Onshore / Offshore)",
     env3: "Entlegene Bergbau- & Industriestandorte",
     env4: "Prestigeträchtige internationale Events",
@@ -161,8 +161,8 @@ const copy = {
     p3Desc: "Einhaltung strenger Medizinstandards (OGP, Oil & Gas UK, AHA).",
     section2Title: "Einsatzbereiche & Kritische Expertise",
     section2Sub: "Maßgeschneiderte medizinische Versorgung für Situationen, in denen keine reguläre Krankenhausinfrastruktur verfügbar ist.",
-    card1Title: "VVIP-Residenzen & Delegationen",
-    card1Desc: "Permanente medizinische Betreuung oder Begleitung für Persönlichkeiten und offizielle Delegationen. Beherrschung von Evakuierungsprotokollen (MEDEVAC).",
+    card1Title: "VVIP-Delegationen & institutionelle Einsätze",
+    card1Desc: "Permanente medizinische Betreuung oder Begleitung für offizielle Delegationen und anspruchsvolle institutionelle Einsatzumgebungen. Beherrschung von Evakuierungsprotokollen (MEDEVAC).",
     card2Title: "Bohrinseln & Offshore-Plattformen",
     card2Desc: "Versorgung schwerer Traumata, Stabilisierung in engen Räumen, Giftunfälle und chirurgische Notfälle auf Bohrinseln.",
     card3Title: "Entlegene Industrie- & Bergbaustandorte",
@@ -179,7 +179,7 @@ const copy = {
   zh: {
     eyebrow: "Hippocampus Consulting · 精英 VVIP 与 离岸海洋工程医疗",
     title: "苛刻环境下的急救医学与高端医疗保障。",
-    intro: "我们为中东地区（王室 residence、VVIP 代表团）、石油钻井平台及大型离岸海洋工程企业招募顶尖医师、急诊-重症 specialist 及专业医护人员。",
+    intro: "我们为中东地区（政府及 VVIP 代表团）、石油钻井平台及大型离岸海洋工程企业招募顶尖医师、急诊-重症 specialist 及专业医护人员。",
     nav: "VVIP & 离岸",
     formTitle: "VVIP 与离岸任务专属申请",
     formIntro: "此类任务要求卓越的临床能力、出色的抗压素质以及最新的国际权威认证（ATLS、ACLS、HUET/BOSIET）。",
@@ -189,7 +189,7 @@ const copy = {
     phone: "电话",
     specialty: "目标岗位 / 专业方向",
     environment: "倾向工作环境",
-    env1: "中东地区（王室 / 政府 / VVIP 宅邸）",
+    env1: "中东地区（政府 / VVIP）",
     env2: "油气钻井平台（陆上 / 海上 Offshore）",
     env3: "偏远矿业与工业驻地",
     env4: "高端国际峰会与活动",
@@ -214,8 +214,8 @@ const copy = {
     p3Desc: "全面契合 OGP、Oil & Gas UK 及 AHA 医疗准则。",
     section2Title: "任务领域与关键专长",
     section2Sub: "在常规医院基础设施无法立即触及的环境中，提供量身定制的医疗保障。",
-    card1Title: "VVIP 宅邸与官方代表团",
-    card1Desc: "为要员及官方代表团提供常驻或随行医疗保障，精通紧急医疗后送（MEDEVAC）程序。",
+    card1Title: "VVIP 官方代表团与机构任务",
+    card1Desc: "为官方代表团及高要求机构环境提供常驻或随行医疗保障，精通紧急医疗后送（MEDEVAC）程序。",
     card2Title: "海上钻井平台与离岸工程",
     card2Desc: "应对海上平台及偏远设施的严重创伤、密闭空间稳定、中毒事件及外科急症。",
     card3Title: "偏远矿山与工业驻地",
@@ -228,6 +228,37 @@ const copy = {
     req4: "具备在隔离环境及高压危机管理下的心理适应能力。",
     metaTitle: "VVIP 与离岸医疗人才招聘 | Hippocampus Consulting",
     metaDescription: "申请精英医疗任务：中东 VVIP、海上钻井平台、离岸工程与偏远工业驻地。",
+  },
+} as const;
+
+const publicTrustCopy = {
+  fr: {
+    title: "Traitement confidentiel de votre dossier",
+    confidentiality: "Votre dossier est conservé dans un espace privé et n’est consulté que par les personnes habilitées à traiter les missions concernées.",
+    consent: "Votre consentement est recueilli avant tout traitement de votre candidature et de vos documents.",
+    humanReview: "Les outils d’analyse assistent la lecture du dossier ; aucune décision de recrutement n’est prise automatiquement.",
+    timeline: "Délai indicatif : une première revue est généralement engagée sous 5 jours ouvrés, selon les exigences de la mission.",
+  },
+  en: {
+    title: "Confidential handling of your file",
+    confidentiality: "Your file is kept in a private area and reviewed only by personnel authorised for the relevant assignments.",
+    consent: "Your consent is collected before any processing of your application and documents.",
+    humanReview: "Analysis tools assist file review; no recruitment decision is made automatically.",
+    timeline: "Indicative timing: an initial review is generally started within 5 business days, depending on assignment requirements.",
+  },
+  de: {
+    title: "Vertrauliche Bearbeitung Ihrer Unterlagen",
+    confidentiality: "Ihre Unterlagen werden in einem privaten Bereich aufbewahrt und nur von für die jeweiligen Einsätze berechtigten Personen eingesehen.",
+    consent: "Ihre Einwilligung wird vor jeder Verarbeitung Ihrer Bewerbung und Unterlagen eingeholt.",
+    humanReview: "Analysetools unterstützen die Prüfung der Unterlagen; keine Einstellungsentscheidung wird automatisiert getroffen.",
+    timeline: "Unverbindlicher Zeitraum: Eine erste Prüfung beginnt in der Regel innerhalb von 5 Werktagen, abhängig von den Anforderungen des Einsatzes.",
+  },
+  zh: {
+    title: "您的资料将被保密处理",
+    confidentiality: "您的资料存放于私密区域，仅由获授权处理相关任务的人员查阅。",
+    consent: "处理您的申请和文件前会征得您的同意。",
+    humanReview: "分析工具仅辅助资料审阅；不会自动作出任何招聘决定。",
+    timeline: "参考时限：我们通常会在 5 个工作日内启动初步审核，具体取决于任务要求。",
   },
 } as const;
 
@@ -251,7 +282,7 @@ const initialForm: FormState = {
   email: "",
   phone: "",
   specialty: specialtyOptions[0],
-  environment: "Moyen-Orient (Résidences / Gouvernement / VVIP)",
+  environment: "Moyen-Orient (Gouvernement / VVIP)",
   yearsExperience: "",
   certifications: "",
   gdprConsent: false,
@@ -262,6 +293,7 @@ export default function VvipOffshorePage() {
   const { language } = useLanguage();
   const lang = (language in copy ? language : "fr") as Language;
   const t = copy[lang];
+  const trust = publicTrustCopy[lang];
   const [form, setForm] = useState<FormState>(initialForm);
   const [file, setFile] = useState<File | null>(null);
   const [status, setStatus] = useState<"idle" | "sending" | "success" | "error">("idle");
@@ -376,6 +408,15 @@ export default function VvipOffshorePage() {
                   </div>
                   <h2 className="mt-2 font-display text-2xl md:text-3xl text-foreground">{t.formTitle}</h2>
                   <p className="mt-2 text-sm leading-6 text-muted-foreground">{t.formIntro}</p>
+                  <section className="mt-5 rounded-xl border border-primary/20 bg-primary/5 p-4" aria-labelledby="vvip-public-trust-title">
+                    <h3 id="vvip-public-trust-title" className="font-semibold text-foreground">{trust.title}</h3>
+                    <ul className="mt-3 space-y-2 text-xs leading-5 text-muted-foreground">
+                      <li className="flex gap-2"><ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden="true" /><span>{trust.confidentiality}</span></li>
+                      <li className="flex gap-2"><UserCheck className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden="true" /><span>{trust.consent}</span></li>
+                      <li className="flex gap-2"><UserCheck className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden="true" /><span>{trust.humanReview}</span></li>
+                      <li className="flex gap-2"><Clock3 className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden="true" /><span>{trust.timeline}</span></li>
+                    </ul>
+                  </section>
 
                   <form onSubmit={handleSubmit} className="mt-6 space-y-5" noValidate>
                     <div className="grid gap-4 sm:grid-cols-2">
@@ -412,7 +453,7 @@ export default function VvipOffshorePage() {
                       <label className="block w-full space-y-1.5 text-sm text-foreground">
                         <span className="block font-medium">{t.environment} *</span>
                         <select value={form.environment} onChange={(e) => update("environment", e.target.value)} className="form-control block w-full">
-                          <option value="Moyen-Orient (Résidences / Gouvernement / VVIP)">{t.env1}</option>
+                          <option value="Moyen-Orient (Gouvernement / VVIP)">{t.env1}</option>
                           <option value="Plateformes pétrolières & gazières (Onshore / Offshore)">{t.env2}</option>
                           <option value="Sociétés minières & industrielles isolées">{t.env3}</option>
                           <option value="Événements internationaux de prestige">{t.env4}</option>

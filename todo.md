@@ -2310,10 +2310,11 @@
 - [x] Ajouter des modèles réutilisables FR/EN pour les campagnes Europe, Canada, Moyen-Orient et offshore
 - [x] Préparer et réaliser une recette Stripe non destructive avec confirmation explicite avant paiement
 - [x] Vérifier et corriger la cohérence de l’annulation d’une session Stripe non payée
+- [x] Renforcer la réassurance publique multilingue sur confidentialité, consentement, revue humaine et délais indicatifs
 - [x] Corriger le champ date/heure qui ne sélectionne pas correctement le créneau de réservation
 - [x] Remplacer le sélecteur date/heure natif bloquant par deux saisies accessibles de date et d’heure
 - [ ] Améliorer l’espace Employeurs avec suivi de brief, accusé de réception, statut de shortlist et descriptif de poste
-- [ ] Renforcer la réassurance publique des pages recrutement sur confidentialité, consentement, revue humaine et délais indicatifs
+- [x] Renforcer la réassurance publique des pages recrutement sur confidentialité, consentement, revue humaine et délais indicatifs
 - [ ] Ajouter un suivi de délivrabilité des campagnes et des erreurs d’envoi, sans réutiliser automatiquement les adresses en erreur
 
 ## Consolidation et sécurité de l’espace candidat
@@ -2380,7 +2381,7 @@
 - [x] Vérifier l’interface publique de réservation sur desktop et mobile sans déclencher de paiement
 - [x] Ajouter une signature Dr. Ahmed Ben Lallahom visible au-dessus du formulaire de réservation
 - [x] Vérifier la stabilité des routes publiques et privées essentielles après l’incident de disponibilité
-- [x] Retirer toute référence aux résidences de prestige du parcours VVIP et Offshore
+- [x] Retirer toute référence aux résidences de prestige du parcours VVIP et Offshore, y compris dans le formulaire standard multilingue
 - [x] Ajouter une reprise administrée et traçable des analyses IA indisponibles des documents candidats
 - [x] Localiser le badge VVIP du hub recrutement dans les quatre langues prises en charge
 - [x] Vérifier et compléter les textes alternatifs des images visibles sur les pages publiques

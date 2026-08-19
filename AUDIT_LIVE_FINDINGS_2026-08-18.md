@@ -163,3 +163,13 @@ Les campagnes disposent désormais de quatre modèles réutilisables en françai
 | Cohérence de cycle de vie | Les expirations Stripe enregistrent désormais l’horodatage d’annulation tout en libérant le créneau. | Règle couverte par un test unitaire. |
 
 > Cette recette valide la création de session et l’absence d’effet prématuré. Un encaissement réel n’a pas été exécuté.
+
+## Réassurance publique des candidatures — 19 août 2026
+
+| Parcours | Mesure visible | Validation |
+|---|---|---|
+| `/recruitment/standard` | Un encart multilingue expose la confidentialité du CV, le consentement préalable, la revue humaine obligatoire et un délai indicatif de première revue. | Rendu contrôlé sur desktop et mobile ; test de non-régression ajouté. |
+| `/recruitment/vvip-offshore` | Le même niveau de réassurance est présenté avant le formulaire, en tenant compte de la confidentialité renforcée des missions. | Rendu contrôlé sur desktop et mobile ; build de production validé. |
+| Positionnement VVIP | Les formulations restantes relatives à des résidences ont été supprimées du formulaire standard et de la page dédiée. Le contenu est limité aux environnements institutionnels, industriels, offshore et pétroliers. | Recherche automatisée de termes interdits dans les deux pages. |
+
+> Les outils d’intelligence artificielle restent présentés comme une aide à l’organisation et à la revue. Aucune décision de recrutement ne peut être prise uniquement par automatisation.
