@@ -8,6 +8,7 @@ import { LanguageProvider } from "./contexts/LanguageContext";
 import WhatsAppButton from "./components/WhatsAppButton";
 import CookieConsent from "./components/CookieConsent";
 import { SEOHead } from "./components/SEOHead";
+import SkipToContent from "./components/SkipToContent";
 
 const Home = lazy(() => import("./pages/Home"));
 const VenturePage = lazy(() => import("./pages/VenturePage"));
@@ -89,6 +90,7 @@ function App() {
       <ThemeProvider defaultTheme="dark" switchable>
         <LanguageProvider>
           <TooltipProvider>
+            <SkipToContent />
             <Toaster />
             <Router />
             <WhatsAppButton />
