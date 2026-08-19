@@ -50,6 +50,13 @@ export const adminContactsCopy = {
   zh: { markedRead: "已标记为已读", loading: "正在加载消息", total: (count: number) => `${count} 条消息`, read: "已读", emptyTitle: "暂无消息", emptyDescription: "通过网站收到的联系请求将显示在此区域。" },
 } as const;
 
+export const adminGdprCopy = {
+  fr: { statusUpdated: "Statut mis à jour", loading: "Chargement des demandes RGPD", total: (count: number) => `${count} demande${count > 1 ? "s" : ""} RGPD`, types: { access: "Accès", rectification: "Rectification", deletion: "Suppression", portability: "Portabilité", objection: "Opposition" }, statuses: { pending: "En attente", in_progress: "En cours", completed: "Traité", rejected: "Rejeté" }, start: "En cours", complete: "Traité", emptyTitle: "Aucune demande RGPD", emptyDescription: "Les demandes d’accès, rectification ou suppression apparaîtront ici." },
+  en: { statusUpdated: "Status updated", loading: "Loading GDPR requests", total: (count: number) => `${count} GDPR request${count > 1 ? "s" : ""}`, types: { access: "Access", rectification: "Rectification", deletion: "Erasure", portability: "Portability", objection: "Objection" }, statuses: { pending: "Pending", in_progress: "In progress", completed: "Completed", rejected: "Rejected" }, start: "Start", complete: "Complete", emptyTitle: "No GDPR requests", emptyDescription: "Access, rectification or erasure requests will appear here." },
+  de: { statusUpdated: "Status aktualisiert", loading: "DSGVO-Anfragen werden geladen", total: (count: number) => `${count} DSGVO-Anfrage${count === 1 ? "" : "n"}`, types: { access: "Auskunft", rectification: "Berichtigung", deletion: "Löschung", portability: "Datenübertragbarkeit", objection: "Widerspruch" }, statuses: { pending: "Ausstehend", in_progress: "In Bearbeitung", completed: "Erledigt", rejected: "Abgelehnt" }, start: "Bearbeiten", complete: "Abschließen", emptyTitle: "Keine DSGVO-Anfragen", emptyDescription: "Anfragen auf Auskunft, Berichtigung oder Löschung werden hier angezeigt." },
+  zh: { statusUpdated: "状态已更新", loading: "正在加载隐私请求", total: (count: number) => `${count} 个隐私请求`, types: { access: "访问", rectification: "更正", deletion: "删除", portability: "数据可携带", objection: "异议" }, statuses: { pending: "待处理", in_progress: "处理中", completed: "已处理", rejected: "已拒绝" }, start: "开始处理", complete: "完成", emptyTitle: "暂无隐私请求", emptyDescription: "访问、更正或删除请求将显示在这里。" },
+} as const;
+
 export default function AdminDashboard() {
   const { user, loading, refresh } = useAuth();
   const { language } = useLanguage();
@@ -501,11 +508,14 @@ function ContactsTab() {
 }
 
 function GdprTab() {
+  const { language } = useLanguage();
+  const copy = adminGdprCopy[language as keyof typeof adminGdprCopy] ?? adminGdprCopy.fr;
+  const locale = language === "zh" ? "zh-CN" : language === "de" ? "de-DE" : language === "en" ? "en-GB" : "fr-FR";
   const utils = trpc.useUtils();
   const { data, isLoading, error } = trpc.admin.gdprRequests.list.useQuery({});
   const updateStatus = trpc.admin.gdprRequests.updateStatus.useMutation({
     onSuccess: () => {
-      toast.success("Statut mis à jour");
+      toast.success(copy.statusUpdated);
       utils.admin.gdprRequests.list.invalidate();
     },
   });
@@ -521,21 +531,13 @@ function GdprTab() {
     rejected: "bg-red-500/20 text-red-400",
   };
 
-  const typeLabels: Record<string, string> = {
-    access: "Accès",
-    rectification: "Rectification",
-    deletion: "Suppression",
-    portability: "Portabilité",
-    objection: "Opposition",
-  };
-
   if (isLoading) {
-    return <PublicContentSkeleton label="Chargement des demandes RGPD" />;
+    return <PublicContentSkeleton label={copy.loading} />;
   }
 
   return (
     <div>
-      <p className="text-sm text-muted-foreground mb-4">{data?.total || 0} demande(s) RGPD</p>
+      <p className="text-sm text-muted-foreground mb-4">{copy.total(data?.total || 0)}</p>
       <div className="space-y-3">
         {data?.items.map((req) => (
           <div key={req.id} className="bg-card border border-border rounded-lg p-4">
@@ -544,15 +546,15 @@ function GdprTab() {
                 <div className="flex items-center gap-3 mb-1">
                   <span className="font-semibold text-foreground">{req.name}</span>
                   <span className="px-2 py-0.5 rounded text-xs font-medium bg-slate-700 text-slate-200">
-                    {typeLabels[req.requestType] || req.requestType}
+                    {copy.types[req.requestType as keyof typeof copy.types] ?? req.requestType}
                   </span>
                   <span className={`px-2 py-0.5 rounded text-xs font-medium ${statusColors[req.status] || ""}`}>
-                    {req.status}
+                    {copy.statuses[req.status as keyof typeof copy.statuses] ?? req.status}
                   </span>
                 </div>
                 <div className="flex gap-3 text-sm text-muted-foreground">
                   <span>{req.email}</span>
-                  <span>{new Date(req.createdAt).toLocaleString("fr-FR")}</span>
+                  <span>{new Date(req.createdAt).toLocaleString(locale)}</span>
                 </div>
                 {req.description && (
                   <p className="text-sm text-foreground mt-2">{req.description}</p>
@@ -562,13 +564,13 @@ function GdprTab() {
                 {req.status === "pending" && (
                   <Button size="sm" variant="outline" className="min-h-10 flex-1 sm:min-h-0 sm:flex-none" onClick={() => updateStatus.mutate({ id: req.id, status: "in_progress" })}>
                     <Clock className="w-3 h-3 mr-1" />
-                    En cours
+                    {copy.start}
                   </Button>
                 )}
                 {(req.status === "pending" || req.status === "in_progress") && (
                   <Button size="sm" className="min-h-10 flex-1 sm:min-h-0 sm:flex-none" onClick={() => updateStatus.mutate({ id: req.id, status: "completed" })}>
                     <CheckCircle className="w-3 h-3 mr-1" />
-                    Traité
+                    {copy.complete}
                   </Button>
                 )}
               </div>
@@ -576,7 +578,7 @@ function GdprTab() {
           </div>
         ))}
         {(!data?.items || data.items.length === 0) && (
-          <AdminEmptyState icon={Shield} title="Aucune demande RGPD" description="Les demandes d’accès, rectification ou suppression apparaîtront ici." />
+          <AdminEmptyState icon={Shield} title={copy.emptyTitle} description={copy.emptyDescription} />
         )}
       </div>
     </div>

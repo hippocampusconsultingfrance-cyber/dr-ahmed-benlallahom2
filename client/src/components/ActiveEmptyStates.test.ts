@@ -48,7 +48,7 @@ describe("états vides actifs", () => {
     const source = await readFile(new URL("../pages/AdminDashboard.tsx", import.meta.url), "utf8");
     expect(source).toContain('AdminEmptyState icon={CalendarDays} title={copy.emptyTitle}');
     expect(source).toContain('AdminEmptyState icon={MessageSquare} title={copy.emptyTitle}');
-    expect(source).toContain('AdminEmptyState icon={Shield} title="Aucune demande RGPD"');
+    expect(source).toContain('AdminEmptyState icon={Shield} title={copy.emptyTitle}');
     expect(source).toContain('AdminEmptyState icon={Star} title="Aucun témoignage"');
     expect(source).toContain('AdminEmptyState icon={CalendarDays} title="Aucun créneau configuré"');
     expect(source).toContain('AdminEmptyState icon={CalendarDays} title="Aucune date bloquée"');

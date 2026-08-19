@@ -124,6 +124,8 @@ L’onglet Réservations adapte maintenant ses filtres de paiement, ses statuts,
 
 L’onglet Messages localise son chargement, son décompte, son action de lecture, son retour de succès, son état vide et la présentation de ses horodatages. Le contenu envoyé par un visiteur est naturellement conservé dans sa langue d’origine ; seules les commandes et informations d’interface suivent la langue administrative active.
 
+L’onglet Demandes RGPD localise désormais ses types de demande, statuts de traitement, actions, compteurs, chargement, état vide et horodatages. Les valeurs de statut persistées restent inchangées : seules leur présentation et les actions administratives visibles s’adaptent à la langue active.
+
 ## Disponibilité de production
 
 Le 19 août 2026, les routes publiques `/`, `/booking`, `/gdpr`, `/faq`, `/search`, `/error`, `/maintenance`, `/recruitment`, `/employers` et `/why-hippocampus` ont toutes répondu en HTTP 200 sur le domaine principal. L’accès `www.drahmedbenlallahom.com` redirige correctement vers `drahmedbenlallahom.com` et sert ensuite la page d’accueil en HTTP 200. Aucun écart de disponibilité n’a été observé sur cet échantillon.
