@@ -263,3 +263,7 @@ Les routes publiques `/error` et `/maintenance` affichent des états cohérents 
 ## FAQ publique — 19 août 2026
 
 La route `/faq`, accessible depuis le footer, regroupe les informations pratiques sur la consultation, le paiement, l’annulation, les urgences et le parcours Hippocampus Consulting dans les quatre langues. La page utilise un accordéon clavier accessible et rappelle explicitement qu’elle ne fournit ni avis médical personnalisé ni accès aux urgences. Le volet recrutement précise que l’analyse assistée organise les dossiers, tandis que toute décision reste soumise à une revue humaine.
+
+## Kit de marque — 19 août 2026
+
+Le référentiel `BRAND_KIT.md` documente désormais l’architecture ABL / Hippocampus, les tokens OKLCH employés, les polices, les règles d’usage des CTA, l’iconographie, le mouvement et les exigences d’accessibilité. Les valeurs de fond, cyan et or du document ont été comparées directement aux tokens de production. Le kit sert de référence pour les nouvelles pages, documents, emails et supports professionnels.

@@ -190,7 +190,7 @@
 - [ ] Améliorer la version mobile du dashboard administrateur : navigation compacte terminée, adaptation des contenus denses restante
 - [x] Ajouter un mode haute lisibilité et une gestion complète de prefers-reduced-motion
 - [x] Ajouter une page d’erreur serveur et une page de maintenance cohérentes avec la marque
-- [ ] Documenter le kit de marque : logo, couleurs, typographies, icônes et règles d’utilisation
+- [x] Documenter le kit de marque : logo, couleurs, typographies, icônes et règles d’utilisation
 - [ ] Harmoniser les modèles d’emails avec l’identité visuelle du site
 - [ ] Ajouter une prévisualisation graphique de facture dans l’espace client
 - [ ] Ajouter des illustrations originales pour les services et les étapes de réservation
