@@ -7,8 +7,16 @@ import Navigation from "@/components/Navigation";
 import Footer from "@/components/Footer";
 import { SEOHead } from "@/components/SEOHead";
 
+export const venturePageCopy = {
+  fr: { notFound: "Page non trouvée", home: "Accueil", homeBack: "Retour à l'accueil", visit: "Visiter le site web", leadership: "Direction", services: "Services & Expertises", highlights: "Informations clés", back: "Retour aux entreprises", others: "Autres entreprises" },
+  en: { notFound: "Page not found", home: "Home", homeBack: "Back to home", visit: "Visit website", leadership: "Leadership team", services: "Services & expertise", highlights: "Key information", back: "Back to ventures", others: "Other ventures" },
+  de: { notFound: "Seite nicht gefunden", home: "Startseite", homeBack: "Zur Startseite", visit: "Website besuchen", leadership: "Leitungsteam", services: "Leistungen & Expertise", highlights: "Wichtige Informationen", back: "Zurück zu den Unternehmen", others: "Weitere Unternehmen" },
+  zh: { notFound: "页面未找到", home: "首页", homeBack: "返回首页", visit: "访问网站", leadership: "管理团队", services: "服务与专长", highlights: "关键信息", back: "返回企业列表", others: "其他企业" },
+} as const;
+
 export default function VenturePage() {
   const { language, content } = useLanguage();
+  const copy = venturePageCopy[(language in venturePageCopy ? language : "fr") as keyof typeof venturePageCopy];
   const params = useParams<{ slug: string }>();
   const slug = params.slug;
 
@@ -20,10 +28,10 @@ export default function VenturePage() {
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
           <h1 className="font-display text-3xl text-foreground mb-4">
-            {language === "fr" ? "Page non trouvée" : "Page not found"}
+            {copy.notFound}
           </h1>
           <Link href="/" className="text-primary hover:underline">
-            {language === "fr" ? "Retour à l'accueil" : "Back to home"}
+            {copy.homeBack}
           </Link>
         </div>
       </div>
@@ -43,7 +51,7 @@ export default function VenturePage() {
         <div className="container mb-8">
           <nav className="flex items-center gap-2 text-sm text-muted-foreground">
             <Link href="/" className="hover:text-primary transition-colors">
-              {language === "fr" ? "Accueil" : "Home"}
+              {copy.home}
             </Link>
             <ChevronRight className="w-3.5 h-3.5" />
             <Link href="/#experience" className="hover:text-primary transition-colors">
@@ -85,7 +93,7 @@ export default function VenturePage() {
                 className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-primary/10 text-primary border border-primary/30 hover:bg-primary/20 transition-all text-sm font-medium"
               >
                 <ExternalLink className="w-4 h-4" />
-                {language === "fr" ? "Visiter le site web" : "Visit website"}
+                {copy.visit}
               </a>
             )}
           </div>
@@ -109,7 +117,7 @@ export default function VenturePage() {
               {venture.team && venture.team.length > 0 && (
                 <div className="mb-12">
                   <h3 className="font-display text-2xl font-bold text-foreground mb-8">
-                    {language === "fr" ? "Direction" : "Leadership Team"}
+                    {copy.leadership}
                   </h3>
                   <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
                     {venture.team.map((member, i) => (
@@ -163,7 +171,7 @@ export default function VenturePage() {
               {/* Services */}
               <div className="p-8 rounded-2xl bg-card/50 border border-border/30">
                 <h3 className="font-display text-xl font-bold text-foreground mb-6">
-                  {language === "fr" ? "Services & Expertises" : "Services & Expertise"}
+                  {copy.services}
                 </h3>
                 <ul className="space-y-3">
                   {venture.services.map((service, i) => (
@@ -181,7 +189,7 @@ export default function VenturePage() {
               {/* Highlights card */}
               <div className="p-6 rounded-2xl bg-card/60 border border-border/30 mb-6 sticky top-28">
                 <h4 className="font-semibold text-foreground mb-5 text-sm uppercase tracking-wide">
-                  {language === "fr" ? "Informations Clés" : "Key Information"}
+                  {copy.highlights}
                 </h4>
                 <div className="space-y-4">
                   {venture.highlights.map((h, i) => (
@@ -213,7 +221,7 @@ export default function VenturePage() {
                 className="flex items-center gap-2 text-sm text-muted-foreground hover:text-primary transition-colors group"
               >
                 <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
-                {language === "fr" ? "Retour aux entreprises" : "Back to ventures"}
+                {copy.back}
               </Link>
             </div>
           </div>
@@ -223,7 +231,7 @@ export default function VenturePage() {
         <div className="container mt-20">
           <div className="ecg-divider mb-12" />
           <h3 className="font-display text-2xl font-bold text-foreground mb-8">
-            {language === "fr" ? "Autres Entreprises" : "Other Ventures"}
+            {copy.others}
           </h3>
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {ventures

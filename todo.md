@@ -2424,4 +2424,7 @@
 - [x] Localiser l’état de chargement global des routes dans les quatre langues prises en charge
 - [x] Marquer la page introuvable comme non indexable pour éviter toute indexation de route erronée
 - [x] Traduire intégralement le formulaire de demande RGPD et ses états dans les quatre langues prises en charge
+- [ ] Traduire les pages de ventures et leurs états de secours dans les quatre langues prises en charge
+- [x] Localiser les libellés et états de secours visibles des pages ventures dans les quatre langues prises en charge
+- [ ] Traduire les récits métier détaillés des ventures en allemand et en chinois avant de clore la localisation complète
 - [x] Renforcer robots.txt pour décourager l’exploration des parcours candidats et de désinscription non indexables
