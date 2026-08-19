@@ -267,3 +267,7 @@ La route `/faq`, accessible depuis le footer, regroupe les informations pratique
 ## Kit de marque — 19 août 2026
 
 Le référentiel `BRAND_KIT.md` documente désormais l’architecture ABL / Hippocampus, les tokens OKLCH employés, les polices, les règles d’usage des CTA, l’iconographie, le mouvement et les exigences d’accessibilité. Les valeurs de fond, cyan et or du document ont été comparées directement aux tokens de production. Le kit sert de référence pour les nouvelles pages, documents, emails et supports professionnels.
+
+## Emails Hippocampus harmonisés — 19 août 2026
+
+Les emails de sécurité MFA, confirmation de réservation, facture, remboursement, rappel, candidature, campagne de recrutement et accès au portail candidat utilisent désormais une enveloppe HTML partagée. Elle ajoute une signature ABL / HIPPOCAMPUS, un bandeau bleu nuit, l’accent cyan et un pied de message professionnel et confidentiel, tout en conservant les liens, pièces jointes et textes alternatifs existants. Les modèles sont couverts par des tests ciblés ; la suite complète et le build sont validés.
