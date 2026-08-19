@@ -25,4 +25,14 @@ describe("libellés critiques de la page Employeurs", () => {
       expect(findTranslationLengthIssues(labels, 60), language).toEqual([]);
     }
   });
+
+  it("confirme le dépôt du brief avec une référence et les prochaines étapes dans chaque langue", () => {
+    for (const language of Object.keys(employerCopy) as Array<keyof typeof employerCopy>) {
+      const copy = employerCopy[language];
+      expect(copy.successTitle.length, language).toBeGreaterThan(0);
+      expect(copy.successText.length, language).toBeGreaterThan(0);
+      expect(copy.successNext.length, language).toBeGreaterThan(0);
+      expect(copy.successPrivacy.length, language).toBeGreaterThan(0);
+    }
+  });
 });

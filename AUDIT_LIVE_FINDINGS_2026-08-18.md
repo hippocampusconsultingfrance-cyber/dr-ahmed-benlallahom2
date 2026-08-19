@@ -393,3 +393,6 @@ La revue des dernières entrées serveur et console navigateur ne relève aucune
 
 ## Modèles réutilisables de campagnes — 19 août 2026
 La vérification de l’onglet Mailing confirme la présence de quatre modèles d’offres réutilisables, en français et en anglais : Europe, Canada, Moyen-Orient et mission VVIP/offshore. Chaque modèle comprend les paramètres opérationnels à compléter, notamment spécialité, localisation, type de mission, calendrier ou certifications selon le contexte. Le test dédié couvre les zones, les deux langues et le rejet sûr d’un identifiant de modèle inconnu.
+
+## Parcours Employeurs consolidé — 19 août 2026
+Le formulaire public de brief fournit un accusé de réception multilingue avec référence de suivi, confidentialité, délai de contact annoncé et prochaines étapes. Dans l’administration, chaque brief affiche son statut, peut passer de nouveau à qualification puis à shortlist envoyée, expose les correspondances explicables et permet l’export contrôlé de la shortlist. La couverture de test vérifie désormais le contenu de confirmation dans les quatre langues. La suite complète compte 194 tests réussis, 2 explicitement ignorés, avec un build de production valide.
