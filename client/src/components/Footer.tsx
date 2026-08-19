@@ -3,9 +3,16 @@ import { siteConfig } from "@/data/site-config";
 import { Link } from "wouter";
 
 export const getHomeSectionHref = (sectionId: string) => `/#${sectionId}`;
+export const footerBrandLogoAltCopy = {
+  fr: "Logo du Dr. Ahmed Ben Lallahom",
+  en: "Dr. Ahmed Ben Lallahom logo",
+  de: "Logo von Dr. Ahmed Ben Lallahom",
+  zh: "Ahmed Ben Lallahom 医生标志",
+} as const;
 
 export default function Footer() {
-  const { content } = useLanguage();
+  const { content, language } = useLanguage();
+  const logoAlt = footerBrandLogoAltCopy[language as keyof typeof footerBrandLogoAltCopy] ?? footerBrandLogoAltCopy.fr;
 
   return (
     <footer className="relative border-t border-border/20 bg-card/30">
@@ -19,7 +26,7 @@ export default function Footer() {
             <div className="flex items-center gap-3 mb-4">
               <img
                 src="/manus-storage/logo-abl_2afbc5e0.png"
-                alt="Logo du Dr. Ahmed Ben Lallahom"
+                alt={logoAlt}
                 className="w-9 h-9"
               />
               <div>

@@ -59,3 +59,7 @@ Les journaux locaux récents ne présentent ni erreur serveur, ni réponse rése
 ## Liens et contrôles publics
 
 Un contrôle statique des composants et pages visibles n’a trouvé aucun lien public vide, ancre vide ni ouverture de fenêtre factice. Les seules ancres `#` recensées appartiennent à une page de démonstration non routée et non exposée au public. Les liens de navigation principaux, de pied de page et les routes profondes ont déjà fait l’objet d’un contrôle de disponibilité HTTP.
+
+## Alternative de marque localisée
+
+L’alternative textuelle du logo du pied de page est désormais définie en français, anglais, allemand et chinois, avec une couverture automatisée. Le logo placé dans le bouton d’accueil de la navigation est explicitement décoratif : le bouton porte déjà un nom accessible localisé et ne répète donc plus l’information au lecteur d’écran.
