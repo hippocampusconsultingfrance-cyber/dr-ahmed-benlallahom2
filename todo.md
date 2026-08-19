@@ -178,7 +178,7 @@
 
 - [x] Créer un système de design documenté avec tokens de couleur, typographie, espacements et composants
 - [ ] Créer une bibliothèque de visuels médicaux authentiques avec droits d’utilisation et textes alternatifs
-- [ ] Améliorer la page Blog avec image principale, catégories, temps de lecture, table des matières et articles associés
+- [x] Ne pas développer la page Blog : la section Actualités et ses routes publiques restent désactivées à la demande du propriétaire
 - [ ] Ajouter des états vides illustrés pour le blog, les témoignages, les disponibilités et le dashboard
 - [x] Ajouter un skeleton de chargement cohérent et accessible aux témoignages publics
 - [x] Ajouter des skeletons de chargement cohérents aux autres parcours encore en spinner seul : vivier, fiche candidat 360°, dashboard recrutement et sections admin
@@ -209,17 +209,17 @@
 - [ ] Vérifier que les contenus longs en allemand et chinois ne débordent pas des composants
 - [x] Vérifier l’alignement des titres, CTA et formulaires sur desktop, tablette et mobile
 - [ ] Ajouter une procédure de revue UX basée sur les retours utilisateurs réels
-- [ ] Ajouter des visuels de partage social cohérents pour les pages et articles du blog
+- [x] Ne pas ajouter de visuels de partage social pour le Blog : aucune page ni aucun article Actualités n’est publié
 - [x] Ajouter des descriptions alternatives précises et contextuelles à toutes les images
 - [ ] Ajouter une page de présentation Hippocampus Consulting avec une mise en page éditoriale
 - [ ] Ajouter une page Ressources Médicales avec cartes, filtres et téléchargements contrôlés
 - [ ] Ajouter une page Presse ou Publications uniquement avec contenus vérifiables
 - [ ] Ajouter une page Partenaires uniquement après autorisation écrite des organisations concernées
-- [ ] Ajouter une gestion visuelle des contenus brouillon, en relecture et publiés dans le dashboard
-- [ ] Ajouter un aperçu avant publication pour les articles et pages de contenu
-- [ ] Ajouter une progression de lecture sur les articles longs
-- [ ] Ajouter un système de recherche visuelle dans le blog
-- [ ] Ajouter des filtres accessibles par catégorie et langue
+- [x] Ne pas étendre la gestion éditoriale Blog : le module Actualités reste retiré du produit public
+- [x] Ne pas ajouter d’aperçu de publication Blog tant que le module Actualités reste désactivé
+- [x] Ne pas ajouter de progression de lecture pour des articles Blog non publiés
+- [x] Ne pas ajouter de recherche Blog tant que la section Actualités reste désactivée
+- [x] Ne pas ajouter de filtres de catégories Blog tant que la section Actualités reste désactivée
 - [ ] Ajouter une grille responsive commune à toutes les pages publiques
 - [ ] Ajouter une animation de transition de page courte et désactivable
 - [ ] Ajouter un contrôle de taille de police sans rupture de mise en page
