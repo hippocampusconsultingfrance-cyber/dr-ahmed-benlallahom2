@@ -63,3 +63,9 @@ Un contrôle statique des composants et pages visibles n’a trouvé aucun lien 
 ## Alternative de marque localisée
 
 L’alternative textuelle du logo du pied de page est désormais définie en français, anglais, allemand et chinois, avec une couverture automatisée. Le logo placé dans le bouton d’accueil de la navigation est explicitement décoratif : le bouton porte déjà un nom accessible localisé et ne répète donc plus l’information au lecteur d’écran.
+
+## Couverture de validation d’accessibilité
+
+La suite automatisée couvre le lien d’accès direct au contenu, la navigation clavier, les libellés accessibles du menu, les alternatives d’images, les préférences de cookies, les contrôles mobiles du tableau de bord, les longueurs de traduction, l’impression et les états de chargement ou d’erreur. Les vérifications de rendu ont également été réalisées sur mobile, tablette, bureau et largeur réduite.
+
+Les contrôles qui restent intrinsèquement manuels sont la lecture effective avec NVDA, VoiceOver ou TalkBack, les contrastes mesurés selon les réglages individuels de l’écran, le zoom natif de 200 % dans chaque navigateur et la compatibilité Safari/Firefox sur les appareils concernés. Ils ne peuvent pas être établis de façon fiable par une capture statique ou un test unitaire seul.
