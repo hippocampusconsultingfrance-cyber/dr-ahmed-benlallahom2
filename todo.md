@@ -2501,3 +2501,4 @@
 - [x] Vérifier et localiser les états d’activation de compte candidat en FR/EN/DE/ZH
 - [x] Vérifier et localiser les contrôles, confirmations et erreurs de désinscription recrutement en FR/EN/DE/ZH
 - [x] Localiser les métadonnées SEO du parcours de désinscription recrutement en FR/EN/DE/ZH
+- [x] Vérifier et localiser les contenus, contrôles et métadonnées de la FAQ publique en FR/EN/DE/ZH

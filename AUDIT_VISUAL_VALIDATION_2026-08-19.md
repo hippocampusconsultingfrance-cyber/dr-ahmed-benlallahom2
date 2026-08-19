@@ -154,6 +154,8 @@ Le parcours d’activation de compte candidat est couvert dans ces mêmes langue
 
 Le parcours public de désinscription des communications de recrutement est localisé en français, anglais, allemand et chinois. Il couvre les métadonnées no-index, la confirmation explicite, le traitement en cours, la préférence enregistrée, le lien invalide et le retour vers l’accueil.
 
+La FAQ publique dispose désormais de commandes et garanties entièrement localisées : réservation, accès au parcours Hippocampus, avertissement pratique, métadonnées et rappel explicite qu’un recrutement nécessite une revue humaine. Les réponses ne formulent pas de conseil médical personnalisé.
+
 ## Disponibilité de production
 
 Le 19 août 2026, les routes publiques `/`, `/booking`, `/gdpr`, `/faq`, `/search`, `/error`, `/maintenance`, `/recruitment`, `/employers` et `/why-hippocampus` ont toutes répondu en HTTP 200 sur le domaine principal. L’accès `www.drahmedbenlallahom.com` redirige correctement vers `drahmedbenlallahom.com` et sert ensuite la page d’accueil en HTTP 200. Aucun écart de disponibilité n’a été observé sur cet échantillon.
