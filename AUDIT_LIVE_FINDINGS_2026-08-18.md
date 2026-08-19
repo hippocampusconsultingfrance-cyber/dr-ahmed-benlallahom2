@@ -466,6 +466,9 @@ Les champs actifs du formulaire Employeurs sont chacun inclus dans leur libellé
 ## Typographie chinoise renforcée — 19 août 2026
 Les documents portant la langue chinoise utilisent désormais une pile CJK dédiée, avec Noto Sans SC puis des alternatives système chinoises adaptées au texte courant, et Noto Serif SC pour les titres. Les polices latines DM Sans et Playfair Display restent inchangées pour les autres langues. Le contrôle automatisé protège ces deux invariants ; la suite complète compte 217 tests réussis, 2 explicitement ignorés, avec un build de production valide.
 
+## Bandeau cookies multilingue — contrôle — 19 août 2026
+Le bandeau de consentement, la fenêtre de préférences et le raccourci persistant de réglage couvrent déjà les quatre langues du site. Les choix essentiels, performance et préférence sont portés par des libellés localisés, accessibles et associés à des cases natives. Aucun ajustement supplémentaire n’a été requis.
+
 ## Sélection de créneau accessible — 19 août 2026
 La réservation accepte la saisie clavier de la date et de l’heure et annonce les erreurs de format, la date interprétée et la disponibilité du créneau via des régions accessibles. Le champ heure utilise désormais son propre libellé localisé, plutôt que le seul exemple de format. Les soumissions restent bloquées lorsqu’un créneau est indisponible, en cours de vérification ou non valide. La suite complète compte 215 tests réussis, 2 explicitement ignorés, avec un build de production valide.
 
