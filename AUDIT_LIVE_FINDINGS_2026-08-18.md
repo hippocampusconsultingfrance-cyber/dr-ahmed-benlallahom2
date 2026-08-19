@@ -460,6 +460,9 @@ Chaque champ du formulaire de demande RGPD possède désormais un identifiant st
 ## Sélection de droit RGPD — contrôle d’accessibilité — 19 août 2026
 La sélection du droit RGPD est un contrôle natif `select` associé à un libellé explicite, avec des options localisées pour l’accès, la rectification, l’effacement, la portabilité et l’opposition. Elle est donc utilisable au clavier et annoncée correctement par les lecteurs d’écran. Aucun ajustement supplémentaire n’a été requis.
 
+## Formulaire Employeurs — contrôle d’accessibilité — 19 août 2026
+Les champs actifs du formulaire Employeurs sont chacun inclus dans leur libellé textuel, ce qui crée une association explicite pour la navigation clavier et les lecteurs d’écran. Les champs obligatoires conservent l’attribut natif requis, l’erreur est annoncée avec le rôle d’alerte et le champ leurre est retiré de l’arbre d’accessibilité. Aucun ajustement supplémentaire n’a été requis.
+
 ## Sélection de créneau accessible — 19 août 2026
 La réservation accepte la saisie clavier de la date et de l’heure et annonce les erreurs de format, la date interprétée et la disponibilité du créneau via des régions accessibles. Le champ heure utilise désormais son propre libellé localisé, plutôt que le seul exemple de format. Les soumissions restent bloquées lorsqu’un créneau est indisponible, en cours de vérification ou non valide. La suite complète compte 215 tests réussis, 2 explicitement ignorés, avec un build de production valide.
 
