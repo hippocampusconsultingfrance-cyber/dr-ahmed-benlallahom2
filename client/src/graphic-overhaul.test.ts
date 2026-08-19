@@ -106,4 +106,18 @@ describe("premium graphic overhaul contracts", () => {
     expect(confirmation).toContain("refund-policy-title");
     expect(css).toContain("cookie-consent-banner");
   });
+
+  it("keeps explicit responsive overflow and fixed-control safeguards", () => {
+    const css = readProjectFile("client/src/index.css");
+    const cookieConsent = readProjectFile("client/src/components/CookieConsent.tsx");
+    const whatsApp = readProjectFile("client/src/components/WhatsAppButton.tsx");
+
+    expect(css).toContain("overflow-x: hidden");
+    expect(css).toContain(".cookie-consent-banner");
+    expect(css).toContain("max-height: min(46vh, 22rem)");
+    expect(css).toContain('html[data-cookie-banner-open="true"] .whatsapp-contact-float');
+    expect(cookieConsent).toContain("syncCookieBannerOpenAttribute");
+    expect(cookieConsent).toContain("COOKIE_BANNER_OPEN_ATTRIBUTE");
+    expect(whatsApp).toContain("whatsapp-contact-float");
+  });
 });

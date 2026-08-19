@@ -2406,4 +2406,4 @@
 - [x] Empêcher le retour à la ligne inadapté de l’adresse email dans le pied de page sur bureau
 - [x] Étendre les garde-fous de longueur aux libellés critiques de la page Employeurs en quatre langues
 - [x] Ajouter une règle explicite de positionnement du bouton WhatsApp pendant l’affichage du bandeau cookies mobile
-- [ ] Ajouter des contrôles automatisés de non-régression pour les éléments fixes mobiles et le zoom élevé
+- [x] Ajouter des contrôles automatisés de non-régression pour les éléments fixes mobiles et le zoom élevé

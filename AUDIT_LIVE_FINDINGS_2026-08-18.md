@@ -349,3 +349,6 @@ Le viewport mobile confirme que la navigation demeure disponible en haut de l’
 
 ## Prévention explicite de la superposition WhatsApp — 19 août 2026
 Le composant de consentement marque désormais le document lorsque le bandeau est ouvert. Une règle CSS associée masque explicitement le bouton WhatsApp tant que ce marqueur est présent, au lieu de dépendre de l’ordre de rendu et du même niveau de superposition. Deux tests unitaires vérifient l’ajout et le retrait du marqueur ; la vérification visuelle mobile confirme que le bandeau et ses actions restent les seuls contrôles fixes en bas de l’écran pendant le choix de consentement.
+
+## Contrat responsive de non-régression — 19 août 2026
+Le test graphique de non-régression vérifie désormais les garde-fous structurels utilisés à fort zoom et sur mobile : blocage du débordement horizontal, hauteur limitée du bandeau cookies, marqueur de consentement ouvert et classe du bouton WhatsApp. Ce contrôle ne remplace pas une vérification manuelle multi-navigateurs, mais empêche la suppression accidentelle des protections CSS et de la coordination des composants. La suite complète compte 185 tests réussis, 2 explicitement ignorés, avec un build de production valide.
