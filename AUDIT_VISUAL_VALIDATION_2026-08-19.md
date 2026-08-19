@@ -47,3 +47,7 @@ Le fichier `robots.txt` publié référence le sitemap officiel, autorise les co
 ## Largeur réduite équivalente à un zoom élevé
 
 Les pages d’accueil, réservation, RGPD, recrutement, brief employeur, accès candidat, FAQ et méthode employeurs ont été revues à 640 px de largeur, une contrainte comparable à un affichage zoomé sur un écran de bureau. Les titres, contrôles de formulaire, cartes, appels à l’action et pieds de page restent lisibles sans débordement horizontal visible. Ce contrôle de rendu ne remplace pas une validation manuelle au zoom natif de 200 % avec un navigateur et un lecteur d’écran.
+
+## Journaux d’exécution
+
+Les journaux locaux récents ne présentent ni erreur serveur, ni réponse réseau en 4xx/5xx dans l’échantillon contrôlé. Une ancienne erreur de développement relative au provider de langue est encore visible dans l’historique du navigateur, mais elle correspond à un état déjà corrigé et suivi d’un rendu public valide. La consultation des journaux du conteneur publié n’était pas disponible lors du contrôle, le service de journaux renvoyant `cloudrun service not found`; la disponibilité HTTP et les parcours publics ont donc été utilisés comme contrôle de substitution.
