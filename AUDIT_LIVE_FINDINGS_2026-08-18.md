@@ -429,3 +429,9 @@ Les pages publiques de vérification d’email et de réinitialisation de mot de
 
 ## Espace candidat authentifié multilingue — 19 août 2026
 Le portail authentifié couvre désormais les quatre langues pour les sessions actives, l’upload, les catégories documentaires, les statuts d’analyse, les contrôles de téléchargement et les garanties de protection des données. Les dates de session utilisent la locale choisie, tandis que les erreurs d’upload exposent uniquement un message localisé générique. Les contrôles de contenu couvrent documents, sessions et messages dans chaque langue. La suite complète compte 207 tests réussis, 2 explicitement ignorés, avec un build de production valide.
+
+## Disponibilité des parcours candidats — 19 août 2026
+Le contrôle de production borné confirme une réponse HTTP 200 pour l’accès candidat, la vérification, la réinitialisation du mot de passe, le retour de réservation, la page Employeurs et la page Recrutement. Aucun écart de disponibilité n’a été détecté sur le domaine principal après la localisation des parcours candidats.
+
+## Bouton WhatsApp multilingue — 19 août 2026
+Le bouton flottant WhatsApp adapte maintenant son message prérempli, son libellé accessible et son infobulle aux quatre langues du site. Il conserve le numéro de contact existant, l’ouverture sécurisée dans un nouvel onglet et son comportement de masquage pendant le bandeau de consentement. La suite complète compte 208 tests réussis, 2 explicitement ignorés, avec un build de production valide.
