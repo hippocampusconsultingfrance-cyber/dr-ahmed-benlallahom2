@@ -2177,7 +2177,7 @@
 - [ ] Mettre en place la suppression effective et vérifiable des CV en stockage privé après expiration ou demande RGPD
 - [ ] Ajouter une vraie table Drizzle, des migrations et un dashboard administrateur pour les briefs Employeurs
 - [x] Exposer disponibilité, mobilité et certifications dans la fiche candidat et les filtres de matching
-- [ ] Remplacer le matching en mémoire par un filtrage et une pagination robustes côté base de données
+- [x] Remplacer le matching en mémoire par un filtrage et une pagination robustes côté base de données
 - [ ] Ajouter une vérification antivirale, une validation de contenu et une quarantaine des fichiers avant analyse
 - [ ] Ajouter des tests d’intégration et une supervision des échecs d’extraction, d’IA, d’email et de stockage
 

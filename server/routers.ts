@@ -1523,12 +1523,18 @@ export const appRouter = router({
           return { success: true };
         }),
       candidates: adminProcedure
-        .input(z.object({ briefId: z.number().int().positive() }))
+        .input(z.object({
+          briefId: z.number().int().positive(),
+          page: z.number().int().min(0).max(10_000).default(0),
+          limit: z.number().int().min(10).max(50).default(25),
+        }))
         .query(async ({ input }) => {
           const db = await getDb();
-          if (!db) return { brief: null, candidates: [] };
+          if (!db) return { brief: null, candidates: [], pagination: { page: input.page, limit: input.limit, total: 0, totalPages: 0 } };
           const [brief] = await db.select().from(clientBriefs).where(eq(clientBriefs.id, input.briefId)).limit(1);
           if (!brief) throw new TRPCError({ code: "NOT_FOUND", message: "Brief employeur introuvable" });
+          const candidateConditions = [sql`${cvApplications.status} NOT IN ('rejected', 'archived')`];
+          const [countResult] = await db.select({ total: sql<number>`COUNT(*)` }).from(cvApplications).where(and(...candidateConditions));
           const applications = await db.select({
             id: cvApplications.id,
             trackingId: cvApplications.trackingId,
@@ -1538,16 +1544,30 @@ export const appRouter = router({
             targetCountries: cvApplications.targetCountries,
             certifications: cvApplications.certifications,
             normalizedCertifications: cvApplications.normalizedCertifications,
+            languages: cvApplications.languages,
+            normalizedLanguages: cvApplications.normalizedLanguages,
+            yearsExperience: cvApplications.yearsExperience,
             availability: cvApplications.availability,
+            mobility: cvApplications.mobility,
             aiScore: cvApplications.aiScore,
             status: cvApplications.status,
-          }).from(cvApplications).where(sql`${cvApplications.status} NOT IN ('rejected', 'archived')`).limit(250);
+          }).from(cvApplications)
+            .where(and(...candidateConditions))
+            .orderBy(desc(cvApplications.aiScore), desc(cvApplications.createdAt), desc(cvApplications.id))
+            .limit(input.limit)
+            .offset(input.page * input.limit);
           const applicationIds = applications.map(application => application.id);
-          const certificationRows = applicationIds.length > 0
-            ? await db.select({ applicationId: cvCandidateCertifications.applicationId, name: cvCandidateCertifications.name })
-              .from(cvCandidateCertifications)
-              .where(inArray(cvCandidateCertifications.applicationId, applicationIds))
-            : [];
+          const [certificationRows, languageRows, associations] = applicationIds.length > 0
+            ? await Promise.all([
+              db.select({ applicationId: cvCandidateCertifications.applicationId, name: cvCandidateCertifications.name })
+                .from(cvCandidateCertifications)
+                .where(inArray(cvCandidateCertifications.applicationId, applicationIds)),
+              db.select({ applicationId: cvCandidateLanguages.applicationId, language: cvCandidateLanguages.language })
+                .from(cvCandidateLanguages)
+                .where(inArray(cvCandidateLanguages.applicationId, applicationIds)),
+              db.select().from(clientBriefCandidates).where(and(eq(clientBriefCandidates.briefId, brief.id), inArray(clientBriefCandidates.applicationId, applicationIds))),
+            ])
+            : [[], [], []] as const;
           const certificationsByApplication = new Map<number, string[]>();
           for (const certification of certificationRows) {
             certificationsByApplication.set(certification.applicationId, [
@@ -1555,14 +1575,25 @@ export const appRouter = router({
               certification.name,
             ]);
           }
-          const associations = await db.select().from(clientBriefCandidates).where(eq(clientBriefCandidates.briefId, brief.id));
+          const languagesByApplication = new Map<number, string[]>();
+          for (const language of languageRows) {
+            languagesByApplication.set(language.applicationId, [
+              ...(languagesByApplication.get(language.applicationId) || []),
+              language.language,
+            ]);
+          }
           const associationByApplication = new Map(associations.map(association => [association.applicationId, association]));
           const candidates = applications.map(application => ({
             ...application,
-            match: computeBriefCandidateMatch(brief, { ...application, certificationNames: certificationsByApplication.get(application.id) || [] }),
+            match: computeBriefCandidateMatch(brief, {
+              ...application,
+              certificationNames: certificationsByApplication.get(application.id) || [],
+              languageNames: languagesByApplication.get(application.id) || [],
+            }),
             association: associationByApplication.get(application.id) ?? null,
-          })).sort((left, right) => right.match.score - left.match.score);
-          return { brief, candidates };
+          }));
+          const total = Number(countResult?.total || 0);
+          return { brief, candidates, pagination: { page: input.page, limit: input.limit, total, totalPages: Math.ceil(total / input.limit) } };
         }),
       associateCandidate: adminProcedure
         .input(z.object({

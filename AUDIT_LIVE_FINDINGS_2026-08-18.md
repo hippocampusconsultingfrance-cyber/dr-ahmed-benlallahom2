@@ -197,3 +197,7 @@ Référence technique : [Resend — Event Types](https://resend.com/docs/webhook
 ## Fiche candidat 360° — 19 août 2026
 
 Depuis l’onglet **Candidatures**, le bouton « Fiche 360° » ouvre une vue administrative protégée par MFA. Elle réunit la chronologie de la candidature, les actions d’administration, les campagnes et leurs états, les demandes libres de compléments, la note interne et le prochain suivi suggéré. Le texte libre demandé par l’administrateur est désormais archivé dans le journal d’audit du dossier afin de préserver la continuité du suivi, sans créer de décision automatisée.
+
+## Matching mission–candidats paginé — 19 août 2026
+
+La shortlist des briefs Employeurs charge désormais les candidats par pages de 25 directement depuis la base de données, avec un total et des contrôles Précédent/Suivant. Les données normalisées de certifications et de langues, ainsi que mobilité, disponibilité et expérience, sont récupérées uniquement pour la page demandée. Le score visible reste une aide à la priorisation et doit toujours être confirmé par une revue humaine.

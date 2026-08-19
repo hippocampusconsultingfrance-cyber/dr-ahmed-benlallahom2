@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { BriefcaseBusiness, CheckCircle2, ChevronRight, Loader2, UsersRound } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -16,9 +16,11 @@ const statusLabels: Record<string, string> = {
 export default function EmployerBriefsTab() {
   const utils = trpc.useUtils();
   const [selectedBriefId, setSelectedBriefId] = useState<number | null>(null);
+  const [matchPage, setMatchPage] = useState(0);
   const { data: briefs, isLoading, error } = trpc.admin.clientBriefs.list.useQuery();
+  const matchesInput = useMemo(() => ({ briefId: selectedBriefId ?? 1, page: matchPage, limit: 25 }), [selectedBriefId, matchPage]);
   const matches = trpc.admin.clientBriefs.candidates.useQuery(
-    { briefId: selectedBriefId ?? 1 },
+    matchesInput,
     { enabled: selectedBriefId !== null },
   );
   const updateStatus = trpc.admin.clientBriefs.updateStatus.useMutation({
@@ -31,7 +33,7 @@ export default function EmployerBriefsTab() {
   const associate = trpc.admin.clientBriefs.associateCandidate.useMutation({
     onSuccess: () => {
       toast.success("Candidat ajouté à la shortlist");
-      if (selectedBriefId) utils.admin.clientBriefs.candidates.invalidate({ briefId: selectedBriefId });
+      if (selectedBriefId) utils.admin.clientBriefs.candidates.invalidate(matchesInput);
     },
     onError: error => toast.error(error.message),
   });
@@ -61,7 +63,7 @@ export default function EmployerBriefsTab() {
               <span className="shrink-0 rounded-full bg-muted px-2 py-1 text-xs text-muted-foreground">{statusLabels[brief.status] ?? brief.status}</span>
             </div>
             <div className="mt-4 flex flex-wrap gap-2">
-              <Button size="sm" variant="outline" onClick={() => setSelectedBriefId(brief.id)}>
+              <Button size="sm" variant="outline" onClick={() => { setSelectedBriefId(brief.id); setMatchPage(0); }}>
                 <UsersRound className="mr-1 h-3.5 w-3.5" />Voir les profils
               </Button>
               {brief.status === "new" && <Button size="sm" onClick={() => updateStatus.mutate({ id: brief.id, status: "reviewing" })}>Qualifier</Button>}
@@ -78,7 +80,7 @@ export default function EmployerBriefsTab() {
         {matches.data && activeBrief && <>
           <div className="mb-5 border-b border-border pb-4"><p className="text-sm text-primary">{activeBrief.briefId}</p><h2 className="text-xl font-semibold text-foreground">{activeBrief.specialtyNeeded} — {activeBrief.country}</h2><p className="mt-1 text-sm text-muted-foreground">Les scores sont une aide à la revue humaine, pas une décision automatisée.</p></div>
           <div className="space-y-3">
-            {matches.data.candidates.slice(0, 25).map(candidate => (
+            {matches.data.candidates.map(candidate => (
               <article key={candidate.id} className="rounded-lg border border-border bg-background p-4">
                 <div className="flex flex-col justify-between gap-3 sm:flex-row">
                   <div><div className="flex items-center gap-2"><p className="font-medium text-foreground">{candidate.firstName} {candidate.lastName}</p><span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">{candidate.match.score}/100</span></div><p className="mt-1 text-sm text-muted-foreground">{candidate.specialty} · {candidate.availability || "Disponibilité à confirmer"}</p>{candidate.match.reasons.length > 0 ? <p className="mt-2 text-xs text-muted-foreground">{candidate.match.reasons.join(" · ")}</p> : <p className="mt-2 text-xs text-muted-foreground">Aucune correspondance professionnelle explicite détectée.</p>}{getPositiveMatchBreakdown(candidate.match.breakdown).length > 0 && <div className="mt-3 flex flex-wrap gap-1.5" aria-label="Détail du score de compatibilité">{getPositiveMatchBreakdown(candidate.match.breakdown).map(item => <span key={item.key} className="rounded-full border border-primary/20 bg-primary/5 px-2 py-1 text-[11px] font-medium text-foreground">{item.label} +{item.points}</span>)}</div>}</div>
@@ -88,6 +90,7 @@ export default function EmployerBriefsTab() {
             ))}
             {matches.data.candidates.length === 0 && <p className="py-10 text-center text-sm text-muted-foreground">Aucun candidat disponible pour le moment.</p>}
           </div>
+          {matches.data.pagination.totalPages > 1 && <div className="mt-5 flex flex-col gap-3 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between"><p className="text-sm text-muted-foreground">Page {matches.data.pagination.page + 1} sur {matches.data.pagination.totalPages} · {matches.data.pagination.total} profil{matches.data.pagination.total > 1 ? "s" : ""} à examiner</p><div className="flex gap-2"><Button size="sm" variant="outline" disabled={matches.data.pagination.page === 0 || matches.isFetching} onClick={() => setMatchPage(current => Math.max(0, current - 1))}>Précédent</Button><Button size="sm" variant="outline" disabled={matches.data.pagination.page + 1 >= matches.data.pagination.totalPages || matches.isFetching} onClick={() => setMatchPage(current => current + 1)}>Suivant</Button></div></div>}
         </>}
       </section>
     </div>
