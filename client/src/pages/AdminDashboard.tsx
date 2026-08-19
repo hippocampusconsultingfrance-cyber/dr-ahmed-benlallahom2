@@ -14,6 +14,7 @@ import MailingTab from "@/components/MailingTab";
 import CandidateDocumentsAdminTab from "@/components/CandidateDocumentsAdminTab";
 import SecurityOperationsTab from "@/components/SecurityOperationsTab";
 import RecruitmentDashboardPanel from "@/components/RecruitmentDashboardPanel";
+import { getActiveAdminTabLabel } from "./adminDashboardMobileTabs";
 
 type Tab = "overview" | "appointments" | "contacts" | "gdpr" | "testimonials" | "blog" | "availability" | "recruitment" | "candidateDocuments" | "security" | "vivier" | "mailing" | "employerBriefs";
 
@@ -98,7 +99,7 @@ export default function AdminDashboard() {
     <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="border-b border-border bg-card/50 backdrop-blur sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-4 py-3 sm:py-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-4">
             <Button variant="ghost" size="sm" onClick={() => setLocation("/")}>
               <ArrowLeft className="w-4 h-4 mr-2" />
@@ -106,14 +107,26 @@ export default function AdminDashboard() {
             </Button>
             <h1 className="text-xl font-bold text-foreground">Administration</h1>
           </div>
-          <span className="text-sm text-muted-foreground">{user.name}</span>
+          <span className="max-w-full truncate text-sm text-muted-foreground">{user.name}</span>
         </div>
       </header>
 
       {/* Tabs */}
       <nav className="border-b border-border bg-card/30">
         <div className="max-w-7xl mx-auto px-4">
-          <div className="flex gap-1 overflow-x-auto">
+          <label className="sr-only" htmlFor="admin-active-tab">Section d’administration</label>
+          <div className="py-2 sm:hidden">
+            <select
+              id="admin-active-tab"
+              value={activeTab}
+              onChange={event => setActiveTab(event.target.value as Tab)}
+              className="h-11 w-full rounded-lg border border-border bg-background px-3 text-sm font-medium text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+              aria-label={`Section d’administration : ${getActiveAdminTabLabel(tabs, activeTab)}`}
+            >
+              {tabs.map(tab => <option key={tab.id} value={tab.id}>{tab.label}</option>)}
+            </select>
+          </div>
+          <div className="hidden gap-1 overflow-x-auto sm:flex">
             {tabs.map((tab) => {
               const Icon = tab.icon;
               return (
@@ -136,7 +149,7 @@ export default function AdminDashboard() {
       </nav>
 
       {/* Content */}
-      <main className="max-w-7xl mx-auto px-4 py-8">
+      <main className="max-w-7xl mx-auto px-4 py-5 sm:py-8">
         {activeTab === "overview" && <OverviewTab onNavigate={setActiveTab} />}
         {activeTab === "appointments" && <AppointmentsTab />}
         {activeTab === "contacts" && <ContactsTab />}
@@ -309,7 +322,7 @@ function AppointmentsTab() {
                   <span className="font-semibold text-foreground">{apt.finalPrice}€</span>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:flex-nowrap">
                 <span className={`px-2 py-1 rounded text-xs font-medium ${statusColors[apt.paymentStatus] || ""}`}>
                   {apt.paymentStatus}
                 </span>
@@ -320,6 +333,7 @@ function AppointmentsTab() {
                   <Button
                     size="sm"
                     variant="outline"
+                    className="min-h-10 flex-1 sm:min-h-0 sm:flex-none"
                     onClick={() => updateStatus.mutate({ trackingId: apt.trackingId, appointmentStatus: "completed" })}
                   >
                     <CheckCircle className="w-3 h-3 mr-1" />
@@ -330,6 +344,7 @@ function AppointmentsTab() {
                   <Button
                     size="sm"
                     variant="outline"
+                    className="min-h-10 flex-1 sm:min-h-0 sm:flex-none"
                     disabled={refundAppointment.isPending}
                     onClick={() => {
                       if (!window.confirm(`Confirmer le remboursement de ${apt.finalPrice} € pour ${apt.trackingId} ?`)) return;
@@ -382,14 +397,14 @@ function ContactsTab() {
       <div className="space-y-3">
         {data?.items.map((msg) => (
           <div key={msg.id} className={`bg-card border rounded-lg p-4 ${msg.read === 0 ? "border-primary/50" : "border-border"}`}>
-            <div className="flex items-start justify-between gap-3">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-3 mb-1">
                   <span className="font-semibold text-foreground">{msg.name}</span>
                   {msg.read === 0 && <span className="w-2 h-2 rounded-full bg-primary" />}
                   <span className="text-xs text-muted-foreground font-mono">{msg.trackingId}</span>
                 </div>
-                <div className="flex gap-3 text-sm text-muted-foreground mb-2">
+                <div className="flex flex-wrap gap-x-3 gap-y-1 text-sm text-muted-foreground mb-2">
                   <span>{msg.email}</span>
                   {msg.phone && <span>{msg.phone}</span>}
                   <span>{new Date(msg.createdAt).toLocaleString("fr-FR")}</span>
@@ -397,7 +412,7 @@ function ContactsTab() {
                 <p className="text-sm text-foreground">{msg.message}</p>
               </div>
               {msg.read === 0 && (
-                <Button size="sm" variant="outline" onClick={() => markRead.mutate({ id: msg.id })}>
+                <Button size="sm" variant="outline" className="min-h-10 self-start sm:min-h-0" onClick={() => markRead.mutate({ id: msg.id })}>
                   <Eye className="w-3 h-3 mr-1" />
                   Lu
                 </Button>
@@ -471,15 +486,15 @@ function GdprTab() {
                   <p className="text-sm text-foreground mt-2">{req.description}</p>
                 )}
               </div>
-              <div className="flex gap-2">
+              <div className="flex w-full flex-wrap gap-2 sm:w-auto sm:flex-nowrap">
                 {req.status === "pending" && (
-                  <Button size="sm" variant="outline" onClick={() => updateStatus.mutate({ id: req.id, status: "in_progress" })}>
+                  <Button size="sm" variant="outline" className="min-h-10 flex-1 sm:min-h-0 sm:flex-none" onClick={() => updateStatus.mutate({ id: req.id, status: "in_progress" })}>
                     <Clock className="w-3 h-3 mr-1" />
                     En cours
                   </Button>
                 )}
                 {(req.status === "pending" || req.status === "in_progress") && (
-                  <Button size="sm" onClick={() => updateStatus.mutate({ id: req.id, status: "completed" })}>
+                  <Button size="sm" className="min-h-10 flex-1 sm:min-h-0 sm:flex-none" onClick={() => updateStatus.mutate({ id: req.id, status: "completed" })}>
                     <CheckCircle className="w-3 h-3 mr-1" />
                     Traité
                   </Button>
@@ -672,8 +687,8 @@ function BlogTab() {
   }
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-6">
+      <div>
+        <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-sm text-muted-foreground">{posts?.length || 0} article(s)</p>
         <Button onClick={() => { resetForm(); setShowForm(true); }}>
           <Plus className="w-4 h-4 mr-2" />
@@ -682,7 +697,7 @@ function BlogTab() {
       </div>
 
       {showForm && (
-        <div className="bg-card border border-border rounded-lg p-6 mb-6">
+        <div className="bg-card border border-border rounded-lg p-4 sm:p-6 mb-6">
           <h3 className="text-lg font-semibold text-foreground mb-4">
             {editingPost ? "Modifier l'article" : "Nouvel article"}
           </h3>
@@ -771,7 +786,7 @@ function BlogTab() {
               placeholder="Contenu de l'article en Markdown..."
             />
           </div>
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <label className="flex items-center gap-2 text-sm text-foreground cursor-pointer">
               <input
                 type="checkbox"
@@ -781,9 +796,9 @@ function BlogTab() {
               />
               Publié
             </label>
-            <div className="flex gap-2">
-              <Button variant="outline" onClick={resetForm}>Annuler</Button>
-              <Button onClick={handleSubmit} disabled={createPost.isPending || updatePost.isPending}>
+            <div className="flex flex-col-reverse gap-2 sm:flex-row">
+              <Button className="min-h-11 w-full sm:w-auto sm:min-h-0" variant="outline" onClick={resetForm}>Annuler</Button>
+              <Button className="min-h-11 w-full sm:w-auto sm:min-h-0" onClick={handleSubmit} disabled={createPost.isPending || updatePost.isPending}>
                 {editingPost ? "Mettre à jour" : "Créer"}
               </Button>
             </div>
@@ -812,14 +827,15 @@ function BlogTab() {
                 </div>
                 {post.excerpt && <p className="text-sm text-muted-foreground mt-1 line-clamp-1">{post.excerpt}</p>}
               </div>
-              <div className="flex gap-2 shrink-0">
-                <Button size="sm" variant="outline" onClick={() => handleEdit(post)}>
+              <div className="flex w-full gap-2 shrink-0 sm:w-auto">
+                <Button size="sm" className="min-h-10 flex-1 sm:min-h-0 sm:flex-none" variant="outline" onClick={() => handleEdit(post)}>
                   <Edit className="w-3 h-3 mr-1" />
                   Modifier
                 </Button>
                 <Button
                   size="sm"
                   variant="destructive"
+                  className="min-h-10 sm:min-h-0"
                   onClick={() => {
                     if (confirm("Supprimer cet article ?")) {
                       deletePost.mutate({ id: post.id });
@@ -895,9 +911,9 @@ function AvailabilityTab() {
     <div className="space-y-8">
       {/* Créneaux hebdomadaires */}
       <section>
-        <div className="flex items-center justify-between mb-4">
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <h3 className="text-lg font-semibold text-foreground">Créneaux hebdomadaires</h3>
-          <Button size="sm" onClick={() => setShowSlotForm(!showSlotForm)}>
+          <Button size="sm" className="min-h-10 w-full sm:w-auto sm:min-h-0" onClick={() => setShowSlotForm(!showSlotForm)}>
             <Plus className="w-4 h-4 mr-2" />
             Ajouter un créneau
           </Button>
@@ -936,7 +952,7 @@ function AvailabilityTab() {
                   onChange={(e) => setSlotForm({ ...slotForm, endTime: e.target.value })}
                 />
               </div>
-              <Button onClick={() => createSlot.mutate(slotForm)} disabled={createSlot.isPending}>
+              <Button className="min-h-11 w-full md:w-auto md:min-h-0" onClick={() => createSlot.mutate(slotForm)} disabled={createSlot.isPending}>
                 Ajouter
               </Button>
             </div>
@@ -945,14 +961,15 @@ function AvailabilityTab() {
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
           {slots?.map((slot) => (
-            <div key={slot.id} className="bg-card border border-border rounded-lg p-3 flex items-center justify-between">
-              <div>
+            <div key={slot.id} className="bg-card border border-border rounded-lg p-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex flex-wrap gap-x-2 gap-y-1">
                 <span className="font-medium text-foreground">{dayNames[slot.dayOfWeek]}</span>
                 <span className="text-sm text-muted-foreground ml-2">{slot.startTime} - {slot.endTime}</span>
               </div>
               <Button
                 size="sm"
                 variant="ghost"
+                className="min-h-10 self-start sm:min-h-0"
                 onClick={() => deleteSlot.mutate({ id: slot.id })}
               >
                 <Trash className="w-3 h-3 text-red-400" />
@@ -967,9 +984,9 @@ function AvailabilityTab() {
 
       {/* Dates bloquées */}
       <section>
-        <div className="flex items-center justify-between mb-4">
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <h3 className="text-lg font-semibold text-foreground">Dates bloquées</h3>
-          <Button size="sm" onClick={() => setShowBlockForm(!showBlockForm)}>
+          <Button size="sm" className="min-h-10 w-full sm:w-auto sm:min-h-0" onClick={() => setShowBlockForm(!showBlockForm)}>
             <Plus className="w-4 h-4 mr-2" />
             Bloquer une date
           </Button>
@@ -996,7 +1013,7 @@ function AvailabilityTab() {
                   placeholder="Congés, formation..."
                 />
               </div>
-              <Button onClick={() => blockDate.mutate(blockForm)} disabled={blockDate.isPending || !blockForm.date}>
+              <Button className="min-h-11 w-full md:w-auto md:min-h-0" onClick={() => blockDate.mutate(blockForm)} disabled={blockDate.isPending || !blockForm.date}>
                 Bloquer
               </Button>
             </div>
@@ -1005,14 +1022,15 @@ function AvailabilityTab() {
 
         <div className="space-y-2">
           {blockedDates?.map((bd) => (
-            <div key={bd.id} className="bg-card border border-border rounded-lg p-3 flex items-center justify-between">
-              <div>
+            <div key={bd.id} className="bg-card border border-border rounded-lg p-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex flex-col gap-1 sm:flex-row sm:items-center">
                 <span className="font-medium text-foreground">{new Date(bd.date + "T00:00:00").toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</span>
                 {bd.reason && <span className="text-sm text-muted-foreground ml-3">{bd.reason}</span>}
               </div>
               <Button
                 size="sm"
                 variant="ghost"
+                className="min-h-10 self-start sm:min-h-0"
                 onClick={() => unblockDate.mutate({ id: bd.id })}
               >
                 <XCircle className="w-4 h-4 text-red-400" />

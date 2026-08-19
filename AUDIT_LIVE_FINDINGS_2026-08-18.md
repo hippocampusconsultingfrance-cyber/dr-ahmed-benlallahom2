@@ -247,3 +247,11 @@ Le bandeau de consentement utilise désormais un fond quasi opaque, une séparat
 ## Thème sombre OLED — 19 août 2026
 
 Un contrôle OLED apparaît lorsque le thème sombre est actif, sur desktop comme dans la navigation mobile. Il enregistre le choix localement et remplace les fonds et surfaces bleu nuit par des noirs plus profonds, tout en préservant les couleurs de texte, les contrastes et l’accent cyan. La préférence est désactivée par défaut et sa lecture défensive est couverte par un test unitaire.
+
+## Tableau de bord mobile — première adaptation — 19 août 2026
+
+Sur mobile, la rangée d’onglets horizontale de l’administration est remplacée par un sélecteur natif compact et accessible. Il expose la section courante, conserve l’ensemble des onglets et évite la navigation horizontale imprécise. Les onglets horizontaux restent disponibles à partir du format tablette ; les marges verticales du contenu sont également réduites sur téléphone.
+
+> Cette première adaptation concerne la navigation. Les cartes, formulaires, listes et actions des onglets administratifs font l’objet d’un lot mobile complémentaire avant de considérer l’ergonomie complète comme finalisée.
+
+Le lot complémentaire empile désormais les actions des Réservations, Messages et demandes RGPD, augmente leur zone tactile sur mobile, replie les formulaires et cartes Blog, puis adapte Créneaux et Dates bloquées. Les tests de non-régression vérifient la présence du sélecteur compact et des classes d’empilement. La recette visuelle des contenus protégés après MFA reste à exécuter dans une session administrateur active.

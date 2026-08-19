@@ -187,7 +187,7 @@
 - [ ] Ajouter des tests visuels automatisés sur les pages critiques
 - [ ] Tester clavier, lecteur d’écran, contraste renforcé et zoom à 200 %
 - [ ] Vérifier la longueur des textes et des boutons dans FR, EN, DE et ZH
-- [ ] Améliorer la version mobile du dashboard administrateur
+- [ ] Améliorer la version mobile du dashboard administrateur : navigation compacte terminée, adaptation des contenus denses restante
 - [x] Ajouter un mode haute lisibilité et une gestion complète de prefers-reduced-motion
 - [ ] Ajouter une page d’erreur serveur et une page de maintenance cohérentes avec la marque
 - [ ] Documenter le kit de marque : logo, couleurs, typographies, icônes et règles d’utilisation
@@ -232,6 +232,9 @@
 - [x] Ajouter des tests de longueur de traduction pour les boutons et titres critiques de navigation
 - [x] Renforcer le clavier du sélecteur de langue et du menu mobile avec fermeture Échap et gestion du focus
 - [x] Réduire les animations décoratives lorsque le navigateur signale une connexion en économie de données
+- [x] Adapter les cartes, listes et actions des onglets admin principaux pour petits écrans avec empilement, espacements et CTA lisibles
+- [ ] Vérifier visuellement le dashboard administrateur sur mobile réel/tablette et corriger débordements et actions difficiles à atteindre
+- [x] Ajouter des tests ciblés de non-régression pour la navigation et les sections admin critiques en mobile
 - [x] Ajouter un mode sans animation pour les connexions lentes et préférences utilisateur
 - [x] Ajouter un mode sombre optimisé pour les écrans OLED
 - [ ] Vérifier les performances après ajout d’animations ou d’images
