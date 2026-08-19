@@ -77,3 +77,7 @@ Le titre visible de la colonne de contact réutilise désormais le libellé de n
 ## Conservation des CV
 
 La tâche de rétention active ne détruit ni le fichier ni sa référence de stockage. Lorsqu’une date de conservation est dépassée, elle enregistre un rappel horodaté, crée une trace d’audit non destructive et notifie l’administrateur afin qu’il examine le dossier. La suppression ne peut être envisagée que manuellement, au titre d’une demande RGPD explicite, conformément à la règle de conservation définie pour le site.
+
+## Cycle d’analyse asynchrone des CV
+
+Le traitement des CV s’appuie sur une file persistante avec un statut de job distinct. À l’envoi, l’analyse est placée en attente ; le worker Heartbeat fait évoluer la candidature vers l’extraction puis l’analyse, avant une clôture en `completed`, `needs_review` ou `failed`. Les erreurs de téléchargement, extraction/OCR ou IA sont enregistrées, replanifiées avec un délai exponentiel et plafonnées à trois tentatives ; les erreurs de validation sont arrêtées immédiatement. Les tests couvrent la promotion depuis la quarantaine, les statuts de revue humaine, les délais de reprise et les échecs externes contrôlés.
