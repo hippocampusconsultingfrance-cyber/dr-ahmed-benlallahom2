@@ -23,3 +23,7 @@ Le 19 août 2026, la page `https://drahmedbenlallahom.com/booking` a été contr
 ## Alternatives textuelles des images
 
 Un contrôle du code recense les balises image des composants et pages concernés. Chaque image porte désormais une politique explicite : texte alternatif contextuel pour les visuels informatifs (portrait, logo, illustration de service, contenu de venture) ou alternative vide uniquement pour l’illustration strictement décorative du formulaire RGPD. Un test de non-régression empêche l’ajout d’une balise image sans attribut `alt`.
+
+## Navigation clavier et libellés accessibles
+
+Le sélecteur de langue conserve le focus, prend en charge les flèches, Accueil et Fin, puis se ferme par Échap ; le menu mobile se ferme également par Échap et restitue le focus à son déclencheur. Les libellés accessibles de la navigation — accueil, menu principal, recherche, changement de langue, thèmes et menu mobile — sont maintenant définis en français, anglais, allemand et chinois, avec test de couverture des quatre langues.

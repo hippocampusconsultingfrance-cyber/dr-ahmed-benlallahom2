@@ -3,6 +3,7 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { Accessibility, CircleDot, Menu, X, ChevronDown, Sun, Moon, Search } from "lucide-react";
 import { getMenuFocusIndex, isNavigationDismissKey } from "./navigationKeyboard";
+import { navigationAccessibilityCopy } from "./navigationAccessibilityCopy";
 
 export default function Navigation() {
   const { content, language } = useLanguage();
@@ -22,6 +23,7 @@ export default function Navigation() {
     de: { enable: "OLED-Schwarz aktivieren", disable: "OLED-Schwarz deaktivieren", label: "OLED-Schwarz" },
     zh: { enable: "启用 OLED 黑色", disable: "关闭 OLED 黑色", label: "OLED 黑色" },
   }[language as "fr" | "en" | "de" | "zh"];
+  const accessibilityCopy = navigationAccessibilityCopy[language as keyof typeof navigationAccessibilityCopy] ?? navigationAccessibilityCopy.fr;
   const dropdownRef = useRef<HTMLDivElement>(null);
   const languageButtonRef = useRef<HTMLButtonElement>(null);
   const mobileMenuButtonRef = useRef<HTMLButtonElement>(null);
@@ -126,7 +128,7 @@ export default function Navigation() {
         <button
           onClick={() => scrollTo("hero")}
           className="brand-lockup flex shrink-0 items-center gap-3 group min-[1350px]:justify-self-start"
-          aria-label="Dr. Ahmed Ben Lallahom — Accueil"
+          aria-label={accessibilityCopy.home}
         >
           <img
             src="/manus-storage/logo-abl_2afbc5e0.png"
@@ -148,7 +150,7 @@ export default function Navigation() {
         </button>
 
         {/* Desktop Nav */}
-        <nav className="hidden min-[1350px]:flex min-w-0 items-center justify-self-center gap-6" aria-label="Navigation principale">
+        <nav className="hidden min-[1350px]:flex min-w-0 items-center justify-self-center gap-6" aria-label={accessibilityCopy.mainNavigation}>
           {[
             { id: "experience", label: content.nav.experience },
             { id: "services", label: content.nav.services },
@@ -175,8 +177,8 @@ export default function Navigation() {
               onClick={() => setDropdownOpen(!dropdownOpen)}
               ref={languageButtonRef}
               className="nav-control flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-border/50 text-sm font-medium text-muted-foreground hover:text-foreground hover:border-primary/40 transition-all duration-200 hover:bg-background/50"
-              title="Change language"
-              aria-label="Change language"
+              title={accessibilityCopy.changeLanguage}
+              aria-label={accessibilityCopy.changeLanguage}
               aria-expanded={dropdownOpen}
               aria-haspopup="menu"
               aria-controls="language-menu"
@@ -190,7 +192,7 @@ export default function Navigation() {
             </button>
 
             {dropdownOpen && (
-              <div id="language-menu" onKeyDown={handleLanguageMenuKeyDown} className="nav-language-menu absolute right-0 mt-2 w-48 bg-background border border-border/50 rounded-lg shadow-lg z-50 overflow-hidden" role="menu" aria-label="Choisir une langue">
+              <div id="language-menu" onKeyDown={handleLanguageMenuKeyDown} className="nav-language-menu absolute right-0 mt-2 w-48 bg-background border border-border/50 rounded-lg shadow-lg z-50 overflow-hidden" role="menu" aria-label={accessibilityCopy.chooseLanguage}>
                 {languages.map((lang) => (
                   <button
                     key={lang.code}
@@ -215,8 +217,8 @@ export default function Navigation() {
             <button
               onClick={toggleTheme}
               className="nav-control p-2 rounded-full border border-border/50 text-muted-foreground hover:text-foreground hover:border-primary/40 transition-all duration-200"
-              title={theme === "dark" ? "Mode clair" : "Mode sombre"}
-              aria-label={theme === "dark" ? "Activer le mode clair" : "Activer le mode sombre"}
+              title={theme === "dark" ? accessibilityCopy.enableLight : accessibilityCopy.enableDark}
+              aria-label={theme === "dark" ? accessibilityCopy.enableLight : accessibilityCopy.enableDark}
             >
               {theme === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
             </button>
@@ -246,7 +248,7 @@ export default function Navigation() {
             </button>
           )}
 
-          <a href="/search" className="nav-control rounded-full border border-border/50 p-2 text-muted-foreground transition-all duration-200 hover:border-primary/40 hover:text-foreground" aria-label="Rechercher sur le site" title="Rechercher sur le site"><Search className="h-4 w-4" /></a>
+          <a href="/search" className="nav-control rounded-full border border-border/50 p-2 text-muted-foreground transition-all duration-200 hover:border-primary/40 hover:text-foreground" aria-label={accessibilityCopy.search} title={accessibilityCopy.search}><Search className="h-4 w-4" /></a>
 
           <button
             onClick={() => scrollTo("contact")}
@@ -260,7 +262,7 @@ export default function Navigation() {
             onClick={() => setMobileOpen(!mobileOpen)}
             ref={mobileMenuButtonRef}
             className="nav-control min-[1350px]:hidden p-2 text-foreground"
-            aria-label={mobileOpen ? "Fermer le menu" : "Ouvrir le menu"}
+            aria-label={mobileOpen ? accessibilityCopy.closeMenu : accessibilityCopy.openMenu}
             aria-expanded={mobileOpen}
             aria-controls="mobile-navigation"
           >
@@ -272,7 +274,7 @@ export default function Navigation() {
       {/* Mobile Menu */}
       {mobileOpen && (
         <div id="mobile-navigation" className="mobile-navigation min-[1350px]:hidden bg-background/95 backdrop-blur-xl border-b border-border">
-          <nav className="container py-6 flex flex-col gap-4" aria-label="Navigation mobile">
+          <nav className="container py-6 flex flex-col gap-4" aria-label={accessibilityCopy.mobileNavigation}>
             {[
               { id: "experience", label: content.nav.experience },
               { id: "services", label: content.nav.services },
