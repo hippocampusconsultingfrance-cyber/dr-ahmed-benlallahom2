@@ -311,3 +311,7 @@ Les sections Réservations, Messages et demandes RGPD partagent désormais des �
 ## Impression des factures et informations — 19 août 2026
 
 Les contenus Legal, RGPD et FAQ bénéficient des styles d’impression documentés précédemment. La facture PDF est désormais explicitement construite au format A4 avec marges, pied de page et palette ABL / Hippocampus centralisés. Un test de génération en mémoire confirme la production d’un flux PDF stockable, en plus de la vérification de ses constantes de mise en page. La suite complète compte 176 tests réussis et le build de production est valide.
+
+## Recherche interne publique — 19 août 2026
+
+La route `/search` offre désormais un index local multilingue des principaux parcours publics : consultation, recrutement, employeurs, portail candidat, FAQ, données personnelles et mentions légales. La recherche normalise les accents, privilégie les correspondances de titre et ne référence aucune route privée, administrative ou de coffre documentaire. Les états sans requête et sans résultat sont accessibles, et la page est exclue de l’indexation afin d’éviter une pagination de recherche sans contenu autonome.
