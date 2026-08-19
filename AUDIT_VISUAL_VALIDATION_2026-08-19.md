@@ -35,3 +35,7 @@ Les formulaires Contact, RGPD, brief employeur, accès candidat et candidature V
 ## Disponibilité de production
 
 Le 19 août 2026, les routes publiques `/`, `/booking`, `/gdpr`, `/faq`, `/search`, `/error`, `/maintenance`, `/recruitment`, `/employers` et `/why-hippocampus` ont toutes répondu en HTTP 200 sur le domaine principal. L’accès `www.drahmedbenlallahom.com` redirige correctement vers `drahmedbenlallahom.com` et sert ensuite la page d’accueil en HTTP 200. Aucun écart de disponibilité n’a été observé sur cet échantillon.
+
+## En-têtes de sécurité de production
+
+Le domaine principal expose une politique de transport strict (HSTS), une politique de sécurité de contenu restrictive avec sources explicitement autorisées pour Stripe et Turnstile, une protection anti-intégration via `frame-ancestors 'self'`, `X-Content-Type-Options: nosniff`, une politique de référent stricte et une politique de permissions qui désactive caméra, microphone et géolocalisation. La politique de permissions autorise uniquement le paiement depuis la même origine, ce qui est cohérent avec le parcours Stripe intégré. Aucun écart exploitable n’a été observé sur les en-têtes inspectés.
