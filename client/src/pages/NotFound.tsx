@@ -5,43 +5,18 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { SEOHead } from "@/components/SEOHead";
 
 export const notFoundSeo = { noIndex: true } as const;
+export const notFoundCopy = {
+  fr: { title: "404", subtitle: "Page introuvable", description: "La page que vous recherchez n'existe pas ou a été déplacée.", goHome: "Retour à l'accueil", goBack: "Page précédente" },
+  en: { title: "404", subtitle: "Page Not Found", description: "The page you are looking for doesn't exist or has been moved.", goHome: "Go Home", goBack: "Go Back" },
+  de: { title: "404", subtitle: "Seite nicht gefunden", description: "Die gesuchte Seite existiert nicht oder wurde verschoben.", goHome: "Zur Startseite", goBack: "Zurück" },
+  zh: { title: "404", subtitle: "页面未找到", description: "您查找的页面不存在或已被移动。", goHome: "返回首页", goBack: "返回上页" },
+} as const;
 
 export default function NotFound() {
   const [, setLocation] = useLocation();
   const { language } = useLanguage();
 
-  const content: Record<string, { title: string; subtitle: string; description: string; goHome: string; goBack: string }> = {
-    fr: {
-      title: "404",
-      subtitle: "Page introuvable",
-      description: "La page que vous recherchez n'existe pas ou a été déplacée.",
-      goHome: "Retour à l'accueil",
-      goBack: "Page précédente",
-    },
-    en: {
-      title: "404",
-      subtitle: "Page Not Found",
-      description: "The page you are looking for doesn't exist or has been moved.",
-      goHome: "Go Home",
-      goBack: "Go Back",
-    },
-    de: {
-      title: "404",
-      subtitle: "Seite nicht gefunden",
-      description: "Die gesuchte Seite existiert nicht oder wurde verschoben.",
-      goHome: "Zur Startseite",
-      goBack: "Zurück",
-    },
-    zh: {
-      title: "404",
-      subtitle: "页面未找到",
-      description: "您查找的页面不存在或已被移动。",
-      goHome: "返回首页",
-      goBack: "返回上页",
-    },
-  };
-
-  const c = content[language] || content.en;
+  const c = notFoundCopy[language as keyof typeof notFoundCopy] || notFoundCopy.en;
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center px-4">
