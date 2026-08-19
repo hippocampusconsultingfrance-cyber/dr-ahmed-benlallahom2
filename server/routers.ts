@@ -747,10 +747,17 @@ export const appRouter = router({
           .where(eq(cvApplications.marketingUnsubscribeToken, input.token))
           .limit(1);
         if (!candidate) throw new TRPCError({ code: "NOT_FOUND", message: "Lien de désinscription invalide ou expiré." });
-        if (!candidate.marketingUnsubscribedAt) {
+        const alreadyUnsubscribed = Boolean(candidate.marketingUnsubscribedAt);
+        if (!alreadyUnsubscribed) {
           await db.update(cvApplications).set({ marketingConsent: 0, marketingUnsubscribedAt: new Date(), updatedAt: new Date() }).where(eq(cvApplications.id, candidate.id));
         }
-        return { success: true, alreadyUnsubscribed: Boolean(candidate.marketingUnsubscribedAt) };
+        await db.insert(recruitmentAuditLogs).values({
+          applicationId: candidate.id,
+          adminOpenId: "public:unsubscribe",
+          action: "unsubscribe",
+          metadata: JSON.stringify({ source: "recruitment_preferences", alreadyUnsubscribed }),
+        });
+        return { success: true, alreadyUnsubscribed };
       }),
   }),
 

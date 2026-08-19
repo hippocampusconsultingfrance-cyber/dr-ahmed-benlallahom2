@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { matchesRecruitmentProfile, parseRecruitmentJsonArray } from "./recruitmentAudit";
+import { matchesRecruitmentProfile, parseRecruitmentJsonArray, type RecruitmentAuditAction } from "./recruitmentAudit";
 
 describe("recruitment matching profiles", () => {
   it("matches score, country, language and skill requirements", () => {
@@ -39,5 +39,10 @@ describe("recruitment matching profiles", () => {
   it("handles malformed JSON safely", () => {
     expect(parseRecruitmentJsonArray("not-json")).toEqual([]);
     expect(parseRecruitmentJsonArray(JSON.stringify(["France", 1, null]))).toEqual(["France"]);
+  });
+
+  it("supports the public marketing unsubscribe audit action", () => {
+    const action: RecruitmentAuditAction = "unsubscribe";
+    expect(action).toBe("unsubscribe");
   });
 });

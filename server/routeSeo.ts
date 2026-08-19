@@ -32,6 +32,11 @@ const PUBLIC_ROUTES: Record<string, Omit<RouteSeo, "canonicalPath">> = {
     description: "Déposez votre candidature pour des opportunités médicales et paramédicales internationales.",
     keywords: "candidature médicale, emploi paramédical, mobilité internationale",
   },
+  "/recruitment/unsubscribe": {
+    title: "Préférences recrutement | Hippocampus Consulting",
+    description: "Gérez vos préférences de communications de recrutement.",
+    noIndex: true,
+  },
   "/recruitment/vvip-offshore": {
     title: "Missions santé offshore et Moyen-Orient | Hippocampus",
     description: "Postulez pour des missions médicales spécialisées offshore, industrielles et au Moyen-Orient.",

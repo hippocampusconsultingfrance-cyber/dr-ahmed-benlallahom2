@@ -349,7 +349,7 @@ export const recruitmentAuditLogs = mysqlTable("recruitment_audit_logs", {
   id: int("id").autoincrement().primaryKey(),
   applicationId: int("application_id"),
   adminOpenId: varchar("admin_open_id", { length: 128 }).notNull(),
-  action: mysqlEnum("action", ["download", "reanalyze", "erase", "email", "status_update", "retention_cleanup", "export"]).notNull(),
+  action: mysqlEnum("action", ["download", "reanalyze", "erase", "email", "status_update", "retention_cleanup", "export", "unsubscribe"]).notNull(),
   metadata: text("metadata"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, table => ({

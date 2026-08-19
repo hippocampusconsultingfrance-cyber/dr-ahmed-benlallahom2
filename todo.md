@@ -2316,7 +2316,7 @@
 - [x] Ajouter un tableau de bord recrutement avec volumes de CV, consentements, état d'analyse IA, activité de campagnes et taux de réponse
 - [x] Créer une fiche candidat 360° avec chronologie des actions, emails, notes, pièces demandées et prochain suivi
 - [ ] Préparer des relances manuelles suggérées à J+7/J+14 sans aucun envoi automatique
-- [ ] Ajouter un lien de désinscription marketing explicite, sécurisé et traçable pour les campagnes recrutement
+- [x] Ajouter un lien de désinscription marketing explicite, sécurisé et traçable pour les campagnes recrutement
 - [ ] Ajouter un export CSV administratif contrôlé du vivier et des shortlists de missions
 - [ ] Créer des modèles réutilisables d’offres de recrutement par zone et type de mission
 - [x] Enrichir le score de compatibilité mission–candidat avec spécialité, langues, mobilité, disponibilité et certifications

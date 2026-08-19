@@ -28,6 +28,7 @@ const CandidateAccessPage = lazy(() => import("./pages/CandidateAccessPage"));
 const CandidateVerifyPage = lazy(() => import("./pages/CandidateVerifyPage"));
 const CandidateResetPasswordPage = lazy(() => import("./pages/CandidateResetPasswordPage"));
 const CandidatePortalPage = lazy(() => import("./pages/CandidatePortalPage"));
+const RecruitmentUnsubscribePage = lazy(() => import("./pages/RecruitmentUnsubscribePage"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 const AdminDashboard = lazy(() => import("./pages/AdminDashboard"));
 const ServiceStatusPage = lazy(() => import("./pages/ServiceStatusPage"));
@@ -75,6 +76,7 @@ function Router() {
       <Route path="/recruitment/standard" component={RecruitmentPage} />
       <Route path="/recruitment/vvip-offshore" component={VvipOffshorePage} />
       <Route path="/vvip-offshore" component={VvipOffshorePage} />
+      <Route path="/recruitment/unsubscribe" component={RecruitmentUnsubscribePage} />
       <Route path="/candidate/access" component={CandidateAccessPage} />
       <Route path="/candidate/verify" component={CandidateVerifyPage} />
       <Route path="/candidate/reset-password" component={CandidateResetPasswordPage} />

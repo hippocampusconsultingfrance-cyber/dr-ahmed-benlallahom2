@@ -364,3 +364,6 @@ Les liens Leadership, Services, Formation et Contact du pied de page utilisent d
 
 ## Navigation principale hors accueil — validée
 Les liens Leadership, Services, Formation et Contact de la navigation principale et de son menu mobile utilisent déjà le même mécanisme de secours : lorsque la section n’est pas présente dans la page courante, ils redirigent vers le fragment correspondant de l’accueil. La validation navigateur du fragment Contact confirme donc également le comportement de destination de ces contrôles. Aucune modification supplémentaire n’était nécessaire.
+
+## Désinscription des campagnes recrutement — 19 août 2026
+Chaque campagne inclut désormais un lien personnel de désinscription vers une page publique non indexable. La page demande une confirmation explicite avant de retirer le consentement marketing, sans afficher de donnée personnelle. L’action met à jour le consentement, exclut le profil des audiences ultérieures et inscrit un événement d’audit minimal, sans adresse email ni jeton. La route répond HTTP 200 en accès direct, y compris avec un lien invalide qui affiche une information sûre. La migration non destructive de l’énumération d’audit a été appliquée et vérifiée ; la suite complète compte 190 tests réussis, 2 explicitement ignorés, avec un build de production valide.

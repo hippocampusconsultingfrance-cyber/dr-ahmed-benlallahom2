@@ -8,7 +8,8 @@ export type RecruitmentAuditAction =
   | "email"
   | "status_update"
   | "retention_cleanup"
-  | "export";
+  | "export"
+  | "unsubscribe";
 
 /** Persist a minimal, non-sensitive audit record for a recruitment action. */
 export async function logRecruitmentAction(input: {
