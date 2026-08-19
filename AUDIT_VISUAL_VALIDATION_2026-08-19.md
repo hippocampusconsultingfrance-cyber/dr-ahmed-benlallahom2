@@ -101,3 +101,7 @@ Les CV entrants sont placés en quarantaine avant toute analyse. La validation v
 ## Couverture des chemins critiques de recrutement
 
 La suite couvre les chemins de succès et d’échec du pipeline : validation de fichier, quarantaine, extraction, repli OCR, échec IA, reprise contrôlée, rétention non destructive, notifications, téléchargement, chiffrement documentaire, accès candidat et restrictions administratives. Les tests dédiés restent séparés par responsabilité afin de signaler rapidement la frontière affectée lorsqu’un fournisseur externe ou une règle métier évolue.
+
+## Données de recrutement normalisées
+
+Les certifications, langues et expériences extraites sont conservées à la fois dans les champs de synthèse du dossier et dans des tables relationnelles dédiées. Le matching de brief consomme les certifications et langues normalisées ; le vivier conserve les structures normalisées et les expose dans l’administration. Les filtres restent compatibles avec les données déjà déposées en utilisant également les champs de déclaration initiaux.
