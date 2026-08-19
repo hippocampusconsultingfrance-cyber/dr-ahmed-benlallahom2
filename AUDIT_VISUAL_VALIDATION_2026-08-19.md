@@ -138,6 +138,8 @@ Les détails de fichier, dates de conservation, états d’analyse, métadonnée
 
 Enfin, les profils de matching et leurs champs de création sont alignés sur les quatre langues actives. Le tableau Candidatures couvre ainsi ses filtres, statut, critères de matching, actions, messagerie, détails d’analyse et état vide. La boîte Candidate 360° conserve son propre composant et sera traitée séparément si nécessaire.
 
+La fiche Candidate 360° est désormais localisée : aperçu sécurisé, statuts, dates, notes, pièces demandées, relances, chronologie, actions et états d’absence. Les titres et détails archivés dans la chronologie restent préservés dans leur langue d’enregistrement afin de conserver leur valeur de traçabilité.
+
 ## Disponibilité de production
 
 Le 19 août 2026, les routes publiques `/`, `/booking`, `/gdpr`, `/faq`, `/search`, `/error`, `/maintenance`, `/recruitment`, `/employers` et `/why-hippocampus` ont toutes répondu en HTTP 200 sur le domaine principal. L’accès `www.drahmedbenlallahom.com` redirige correctement vers `drahmedbenlallahom.com` et sert ensuite la page d’accueil en HTTP 200. Aucun écart de disponibilité n’a été observé sur cet échantillon.

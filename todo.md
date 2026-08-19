@@ -197,6 +197,7 @@
 - [x] Localiser le bloc d’en-tête, les filtres, les statuts de candidature et l’état vide du tableau Candidatures
 - [x] Localiser les actions CV et le compositeur d’email du tableau Candidatures
 - [x] Localiser les détails d’analyse, de fichier et de lecture IA du tableau Candidatures
+- [x] Localiser les sections, actions et états vides de la fiche Candidate 360° en FR/EN/DE/ZH
 - [x] Remplacer les états vides textuels des onglets Témoignages et Disponibilités par le panneau administratif illustré partagé
 - [x] Ajouter un état vide illustré au carrousel de témoignages partenaires
 - [x] Ajouter un repère illustré et accessible aux états de disponibilité de réservation
