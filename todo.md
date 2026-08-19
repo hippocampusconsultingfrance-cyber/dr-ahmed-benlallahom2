@@ -2408,3 +2408,4 @@
 - [x] Ajouter une règle explicite de positionnement du bouton WhatsApp pendant l’affichage du bandeau cookies mobile
 - [x] Ajouter des contrôles automatisés de non-régression pour les éléments fixes mobiles et le zoom élevé
 - [x] Corriger la réponse HTTP 404 des routes publiques profondes FAQ, recherche et pages de statut sur le domaine publié
+- [x] Rendre les liens Leadership, Services, Formation et Contact du pied de page fonctionnels depuis toutes les pages publiques

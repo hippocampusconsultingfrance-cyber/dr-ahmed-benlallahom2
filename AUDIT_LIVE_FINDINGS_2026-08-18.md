@@ -358,3 +358,6 @@ Le fallback SPA attribuait une réponse 404 aux routes publiques absentes de la 
 
 ## Disponibilité de production — 19 août 2026
 Une passe de disponibilité couvre les parcours publics prioritaires : accueil, réservation, recrutement standard et VVIP, employeurs, présentation Hippocampus, accès candidat, FAQ, pages légales, RGPD, témoignages, recherche et pages de statut. Chaque route contrôlée répond HTTP 200 sur le domaine principal. Le sous-domaine `www` renvoie une redirection HTTP 301 vers l’URL équivalente du domaine principal, sans perte du chemin demandé.
+
+## Navigation par fragment du pied de page — validée
+Les liens Leadership, Services, Formation et Contact du pied de page utilisent désormais des fragments d’URL portables de l’accueil. La page d’accueil traite le fragment après le montage complet des sections, avec plusieurs tentatives différées pour éviter la course avec le rendu initial. Le test de composant couvre les URL produites ; la vérification navigateur de `/#contact` confirme le positionnement sur la section Contact, avec le formulaire et les coordonnées visibles dans le viewport.

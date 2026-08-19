@@ -10,9 +10,27 @@ import TestimonialsSection from "@/components/TestimonialsSection";
 import Footer from "@/components/Footer";
 import { useScrollReveal } from "@/hooks/useScrollReveal";
 import { SEOHead } from "@/components/SEOHead";
+import { useEffect } from "react";
 
 export default function Home() {
   const revealRef = useScrollReveal();
+
+  useEffect(() => {
+    const scrollToHashTarget = () => {
+      const targetId = decodeURIComponent(window.location.hash.slice(1));
+      if (!targetId) return;
+      const target = document.getElementById(targetId);
+      if (!target) return;
+      window.scrollTo({ top: target.getBoundingClientRect().top + window.scrollY, behavior: "auto" });
+    };
+
+    const initialScrollTimers = [0, 180, 500].map(delay => window.setTimeout(scrollToHashTarget, delay));
+    window.addEventListener("hashchange", scrollToHashTarget);
+    return () => {
+      initialScrollTimers.forEach(timer => window.clearTimeout(timer));
+      window.removeEventListener("hashchange", scrollToHashTarget);
+    };
+  }, []);
 
   return (
     <div ref={revealRef} className="min-h-screen bg-background">

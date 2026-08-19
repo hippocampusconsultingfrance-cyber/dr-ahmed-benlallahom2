@@ -2,13 +2,10 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { siteConfig } from "@/data/site-config";
 import { Link } from "wouter";
 
+export const getHomeSectionHref = (sectionId: string) => `/#${sectionId}`;
+
 export default function Footer() {
   const { content } = useLanguage();
-
-  const scrollTo = (id: string) => {
-    const el = document.getElementById(id);
-    if (el) el.scrollIntoView({ behavior: "smooth" });
-  };
 
   return (
     <footer className="relative border-t border-border/20 bg-card/30">
@@ -49,13 +46,13 @@ export default function Footer() {
                 { id: "education", label: content.nav.education },
                 { id: "contact", label: content.nav.contact },
               ].map((item) => (
-                <button
+                <a
                   key={item.id}
-                  onClick={() => scrollTo(item.id)}
                   className="block text-sm text-muted-foreground hover:text-primary transition-colors"
+                  href={getHomeSectionHref(item.id)}
                 >
                   {item.label}
-                </button>
+                </a>
               ))}
             </nav>
           </div>
