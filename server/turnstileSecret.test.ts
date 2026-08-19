@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
 
 describe("Cloudflare Turnstile configuration", () => {
-  it("accepts the configured secret at the Siteverify endpoint", async () => {
+  it("exposes a configured secret for server-side verification", () => {
+    expect(process.env.TURNSTILE_SECRET_KEY).toBeTruthy();
+  });
+
+  const externalSecurityTest = process.env.RUN_EXTERNAL_SECURITY_TESTS === "true" ? it : it.skip;
+
+  externalSecurityTest("accepts the configured secret at the Siteverify endpoint", async () => {
     const secret = process.env.TURNSTILE_SECRET_KEY;
     expect(secret).toBeTruthy();
 
@@ -19,5 +25,5 @@ describe("Cloudflare Turnstile configuration", () => {
     expect(payload.success).toBe(false);
     expect(payload["error-codes"]).not.toContain("invalid-input-secret");
     expect(payload["error-codes"]).not.toContain("missing-input-secret");
-  }, 15_000);
+  }, 10_000);
 });

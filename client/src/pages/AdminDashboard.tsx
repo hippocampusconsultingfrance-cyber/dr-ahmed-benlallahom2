@@ -15,6 +15,7 @@ import CandidateDocumentsAdminTab from "@/components/CandidateDocumentsAdminTab"
 import SecurityOperationsTab from "@/components/SecurityOperationsTab";
 import RecruitmentDashboardPanel from "@/components/RecruitmentDashboardPanel";
 import { getActiveAdminTabLabel } from "./adminDashboardMobileTabs";
+import { buildAppointmentsAgenda } from "./appointmentsAgenda";
 
 type Tab = "overview" | "appointments" | "contacts" | "gdpr" | "testimonials" | "blog" | "availability" | "recruitment" | "candidateDocuments" | "security" | "vivier" | "mailing" | "employerBriefs";
 
@@ -281,6 +282,7 @@ function AppointmentsTab() {
     completed: "bg-green-500/20 text-green-400",
     no_show: "bg-gray-500/20 text-gray-400",
   };
+  const agenda = buildAppointmentsAgenda(data?.items ?? []);
 
   if (isLoading) {
     return <div className="space-y-4">{[1, 2, 3].map(i => <div key={i} className="h-20 bg-card rounded-lg animate-pulse" />)}</div>;
@@ -304,6 +306,35 @@ function AppointmentsTab() {
       </div>
 
       <p className="text-sm text-muted-foreground mb-4">{data?.total || 0} réservation(s)</p>
+
+      <section aria-labelledby="appointments-agenda-title" className="mb-6 rounded-xl border border-primary/20 bg-primary/5 p-4 sm:p-5">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <CalendarDays className="h-5 w-5 text-primary" aria-hidden="true" />
+            <h2 id="appointments-agenda-title" className="font-semibold text-foreground">Prochains rendez-vous</h2>
+          </div>
+          <span className="text-xs text-muted-foreground">Fuseau Europe/Paris</span>
+        </div>
+        {agenda.length > 0 ? (
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            {agenda.map((day) => (
+              <article key={day.key} className="rounded-lg border border-border bg-card p-3">
+                <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-primary">{day.label}</p>
+                <div className="space-y-2">
+                  {day.items.map((apt) => (
+                    <div key={apt.id} className="flex items-center justify-between gap-2 text-sm">
+                      <span className="min-w-0 truncate text-foreground"><span className="font-mono text-primary">{apt.time}</span> · {apt.customerName}</span>
+                      <span className={`shrink-0 rounded px-2 py-0.5 text-[11px] font-medium ${appointmentStatusColors[apt.appointmentStatus] || "bg-muted text-muted-foreground"}`}>{apt.appointmentStatus}</span>
+                    </div>
+                  ))}
+                </div>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">Aucun rendez-vous à venir confirmé pour le moment.</p>
+        )}
+      </section>
 
       {/* Table */}
       <div className="space-y-3">

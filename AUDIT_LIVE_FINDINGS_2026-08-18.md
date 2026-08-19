@@ -297,3 +297,9 @@ Le document `PREPRODUCTION_CHECKLIST.md` formalise les contrôles nécessaires a
 ## Cohérence iconographique — 19 août 2026
 
 L’audit des sources client confirme que les composants utilisent exclusivement la bibliothèque Lucide pour les pictogrammes d’interface. Aucune importation de `react-icons` ni de `@heroicons` n’a été détectée. Un test de non-régression empêche l’ajout involontaire d’une autre bibliothèque d’icônes ; une vérification visuelle de l’accueil confirme la cohérence du trait et des tailles sur les contrôles publics.
+
+## Agenda des rendez-vous et stabilité des tests — 19 août 2026
+
+L’onglet Réservations ajoute une vue agenda des prochains rendez-vous réels, regroupés par journée Europe/Paris. Les annulations et créneaux passés sont exclus ; aucune donnée de démonstration n’est ajoutée. Le groupement et l’ordre des rendez-vous sont couverts par un test unitaire.
+
+Le contrôle réseau direct de Cloudflare Turnstile est maintenant réservé aux exécutions où `RUN_EXTERNAL_SECURITY_TESTS=true`. La suite locale conserve une vérification de présence de la clé et ne dépend plus d’un délai réseau externe. Après cette correction, la suite complète compte 173 tests réussis et 2 tests explicitement ignorés, ainsi qu’un build de production valide.
