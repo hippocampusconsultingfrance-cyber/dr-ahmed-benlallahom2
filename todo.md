@@ -235,7 +235,8 @@
 - [x] Ne pas ajouter de filtres de catégories Blog tant que la section Actualités reste désactivée
 - [ ] Ajouter une grille responsive commune à toutes les pages publiques
 - [ ] Ajouter une animation de transition de page courte et désactivable
-- [ ] Ajouter un contrôle de taille de police sans rupture de mise en page
+- [x] Ajouter un contrôle de taille de police sans rupture de mise en page
+- [x] Ajouter un test comportemental de persistance et d’application du mode lisibilité renforcée
 - [ ] Ajouter un composant de citation médicale avec source et date de mise à jour
 - [x] Ajouter une notice visible indiquant que le site ne remplace pas les urgences médicales
 - [x] Vérifier l’accessibilité des couleurs cyan, gris et doré sur les deux thèmes

@@ -47,6 +47,10 @@ Les libellés publics compacts de navigation et de réservation sont contrôlés
 
 Les paires textuelles centrales des thèmes sombre et clair sont soumises à un seuil automatisé de contraste AA de 4,5:1 : texte principal, texte secondaire gris, texte sur primaire cyan et texte sur accent doré. Le primaire du thème clair a été légèrement assombri afin d’atteindre ce seuil avec son texte clair. Le calcul s’effectue à partir des tokens OKLCH, ce qui protège les futures modifications de palette contre une régression de lisibilité.
 
+## Lisibilité renforcée
+
+Le contrôle de lisibilité renforcée applique une taille de police racine de 106,25 %, une hauteur de ligne augmentée et des couleurs secondaires adaptées, tout en conservant des conteneurs flexibles pouvant rétrécir sans débordement. Son état est exposé aux technologies d’assistance, appliqué à la racine du document et mémorisé localement. Un test comportemental protège l’activation, la désactivation et la persistance de ce réglage.
+
 ## Messages de validation publics
 
 Les formulaires Contact, RGPD, brief employeur, accès candidat et candidature VVIP disposent de retours localisés dans les quatre langues. La candidature VVIP a été corrigée afin qu’un message renvoyé par le serveur ne soit jamais affiché directement au visiteur : le détail est conservé dans la console de diagnostic et l’interface affiche uniquement son message localisé générique. Un test de non-régression protège ce comportement.
