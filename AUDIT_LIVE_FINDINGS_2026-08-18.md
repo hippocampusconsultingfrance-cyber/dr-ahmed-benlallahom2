@@ -147,3 +147,7 @@ Les constatations ci-dessous proviennent des captures du serveur de prévisualis
 | Langues, expérience et disponibilité | 30 points | Évaluées uniquement lorsque le brief les précise. |
 
 > Le score est limité aux informations professionnelles déclarées. Il est présenté comme une aide à la revue humaine ; le statut de shortlist reste une action explicite de l’administrateur.
+
+## Modèles de campagnes recrutement — 19 août 2026
+
+Les campagnes disposent désormais de quatre modèles réutilisables en français et en anglais : Europe, Canada, Moyen-Orient et offshore. La sélection d’un modèle préremplit le nom interne, l’objet et le contenu sans envoyer d’email. Les éléments entre crochets restent volontairement à compléter par l’administrateur avant confirmation, et l’audience demeure filtrée côté serveur selon le consentement marketing.
