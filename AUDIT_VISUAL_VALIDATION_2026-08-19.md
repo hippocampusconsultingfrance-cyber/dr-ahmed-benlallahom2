@@ -55,6 +55,8 @@ Le contrôle de lisibilité renforcée applique une taille de police racine de 1
 
 Les formulaires Contact, RGPD, brief employeur, accès candidat et candidature VVIP disposent de retours localisés dans les quatre langues. La candidature VVIP a été corrigée afin qu’un message renvoyé par le serveur ne soit jamais affiché directement au visiteur : le détail est conservé dans la console de diagnostic et l’interface affiche uniquement son message localisé générique. Un test de non-régression protège ce comportement.
 
+Les parcours Contact, RGPD et Réservation sont également couverts par une vérification explicite de leurs retours d’état en français, anglais, allemand et chinois : succès, erreur, consentement requis et attente lorsque le parcours l’emploie. Cette couverture vérifie que chaque message public reste présent et non vide dans les quatre langues, sans exposer les détails techniques d’un échec.
+
 ## Feedbacks visuels des parcours critiques
 
 Le code des parcours Contact, demande RGPD, réservation et confirmation de paiement a été contrôlé. Contact et RGPD remplacent le formulaire par un panneau de confirmation lisible et annoncent aussi la réussite par un message d’état ; la réservation passe par une confirmation dédiée après le retour du paiement ; la page de confirmation distingue explicitement les états de réussite, d’annulation et d’état inconnu. Les contrôles associés ne déclenchent aucune soumission réelle et ne transmettent aucune donnée de test. Une non-régression vérifie la présence de ces contrats d’interface.

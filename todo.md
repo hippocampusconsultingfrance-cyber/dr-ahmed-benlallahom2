@@ -279,7 +279,8 @@
 - [ ] Vérifier les états de chargement des appels tRPC
 - [x] Vérifier les états anti-double-clic du paiement
 - [x] Vérifier le rendu de la confirmation et de l’annulation de paiement
-- [ ] Vérifier les messages de validation des formulaires dans les quatre langues
+- [x] Vérifier les messages de validation des formulaires dans les quatre langues
+- [x] Ajouter une non-régression couvrant succès, erreur et consentement des formulaires Contact, RGPD et Réservation en FR/EN/DE/ZH
 - [x] Vérifier les messages d’erreur sans exposition de données sensibles
 - [ ] Vérifier les liens de facture sur desktop et mobile
 - [ ] Vérifier les notifications de rappel sur desktop et mobile
