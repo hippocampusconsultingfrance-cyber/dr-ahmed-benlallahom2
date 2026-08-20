@@ -288,7 +288,8 @@
 - [x] Ajouter des tests ciblés de non-régression pour la navigation et les sections admin critiques en mobile
 - [x] Ajouter un mode sans animation pour les connexions lentes et préférences utilisateur
 - [x] Ajouter un mode sombre optimisé pour les écrans OLED
-- [ ] Vérifier les performances après ajout d’animations ou d’images
+- [x] Vérifier les performances après ajout d’animations ou d’images
+- [x] Ajouter une non-régression conservant le chargement différé du tableau de bord administratif
 - [ ] Préparer des visuels LinkedIn cohérents avec la marque
 - [ ] Vérifier le rendu des emails HTML dans Gmail, Outlook et Apple Mail
 - [x] Harmoniser les notifications de succès, avertissement et erreur

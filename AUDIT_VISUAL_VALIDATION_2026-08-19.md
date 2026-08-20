@@ -194,6 +194,12 @@ Les routes disposent d’une entrée courte de 180 ms, limitée à l’opacité 
 
 Le fichier `ANNUAL_REVIEW_CALENDAR.md` prépare une revue annuelle des traductions, de l’accessibilité, des visuels, des contenus médicaux, du RGPD et de la sécurité des espaces privés. Il distingue les preuves à archiver et les contrôles nécessitant un appareil réel ou un fournisseur tiers.
 
+## Contrôle de performance de production
+
+La compilation de production réussit avec un découpage par route. Les pages publiques critiques restent chargées dynamiquement, et le bundle administratif demeure isolé du parcours public initial. Le principal bundle client compressé est d’environ 134 kB ; le tableau de bord administratif compressé est d’environ 57 kB. Aucun fractionnement supplémentaire n’est justifié par cette vérification statique ; les mesures de navigation sur appareil réel restent à réaliser séparément.
+
+Une non-régression vérifie que les parcours Administration, Portail candidat et Réservation restent chargés de manière différée. Cela protège le chargement initial du parcours public contre une importation accidentelle de l’interface administrative.
+
 ## Vérification visuelle des parcours publics critiques
 
 Les pages Accueil, Réservation, RGPD, Recrutement et Employeurs ont été capturées en vue bureau. Les en-têtes, formulaires, CTAs et pieds de page restent lisibles, structurés et sans chevauchement visible. Les formulaires Réservation, RGPD et Brief Employeur présentent leurs champs à une largeur cohérente, avec une hiérarchie claire entre contenu informatif et action principale. La vérification équivalente sur mobile reste planifiée séparément.
