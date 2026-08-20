@@ -29,5 +29,8 @@ describe("calendrier annuel de revue", () => {
     expect(calendar).toContain("Liens légaux et droits");
     expect(calendar).toContain("Fournisseurs et exploitation");
     expect(calendar).toContain("Contact et service");
+    expect(calendar).toContain("Revue graphique trimestrielle");
+    expect(calendar).toContain("Routes critiques");
+    expect(calendar).toContain("Traçabilité");
   });
 });

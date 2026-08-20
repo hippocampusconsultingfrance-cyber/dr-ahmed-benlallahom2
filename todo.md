@@ -229,7 +229,7 @@
 - [x] Ajouter une non-régression confirmant que les illustrations Services et Réservation restent décoratives et correctement intégrées
 - [ ] Exécuter de façon autonome les améliorations restantes réalisables et documenter sans blocage les contrôles nécessitant un appareil ou un service externe
 - [ ] Vérifier les droits sur les photographies, logos, illustrations et visuels externes
-- [ ] Mettre en place une revue graphique trimestrielle et une checklist avant publication
+- [x] Mettre en place une revue graphique trimestrielle et une checklist avant publication
 - [ ] Centraliser les libellés d’interface afin d’éviter les chaînes de texte hardcodées
 - [x] Ajouter une stratégie de compression et de recadrage responsive des images : variantes WebP 640/1280, `srcSet`, `sizes` et absence de recadrage destructif pour les illustrations sources disponibles
 - [x] Ajouter le décodage asynchrone et une non-régression de chargement aux illustrations publiques décoratives
@@ -278,7 +278,7 @@
 - [x] Évaluer la réduction des effets décoratifs sur les formulaires et pages légales
 - [x] Réduire les animations de fond non essentielles des formulaires et pages légales lorsque la lisibilité renforcée est active
 - [x] Préparer un kit de marque exportable pour les documents et réseaux sociaux
-- [ ] Mettre en place une validation graphique avant chaque checkpoint
+- [x] Mettre en place une validation graphique avant chaque checkpoint
 - [x] Ajouter une documentation d’utilisation des composants pour les futures évolutions
 - [x] Ajouter des tests de non-régression pour le changement de langue et de thème
 - [x] Ajouter des tests de longueur de traduction pour les boutons et titres critiques de navigation

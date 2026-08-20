@@ -63,4 +63,16 @@ Ce calendrier organise les vérifications annuelles du site et de ses parcours c
 
 La revue doit être planifiée une fois par an, puis renouvelée après une évolution majeure de paiement, authentification, stockage documentaire, fournisseur externe ou politique de données. Commencer par l’inventaire de la version publiée et terminer par une liste d’actions datées. Les éléments nécessitant un appareil réel, une boîte e-mail tierce ou un compte fournisseur ne doivent jamais être déclarés réalisés sans preuve correspondante.
 
+## Revue graphique trimestrielle
+
+Cette revue légère complète le calendrier annuel ; elle vise les écarts d’interface visibles avant qu’ils ne deviennent structurels. Elle est planifiée au premier mois de chaque trimestre, et après toute évolution touchant la navigation, un formulaire, un tableau administratif, une illustration ou un composant global.
+
+| Étape | Contrôle trimestriel | Preuve minimale | Décision |
+|---|---|---|---|
+| 1. Routes critiques | Accueil, Réservation, Recrutement, Employeurs, Ressources, FAQ, pages légales et 404 en desktop/mobile. | Captures horodatées de la version publiée. | Corriger tout chevauchement, débordement ou hiérarchie ambiguë. |
+| 2. Contrôles interactifs | Navigation, sélecteur de langue, thème, cookies, CTA, formulaires, filtres, modales et contrôles flottants. | Parcours court et capture d’un état ouvert ou d’un état d’erreur pertinent. | Bloquer toute action inaccessible ou sans retour visible. |
+| 3. États de données | Chargement, erreur, vide, succès, annulation et indisponibilité sur les parcours modifiés. | Capture ou test ciblé lié au composant. | Réparer tout état trompeur, silencieux ou visuellement instable. |
+| 4. Marque et lisibilité | Contraste, espaces, rayons, icônes, alternatives, texte long DE/ZH et sobriété des mouvements. | Référence au test, à la checklist manuelle ou à l’anomalie corrigée. | Conserver les conventions du kit de marque ou documenter une exception. |
+| 5. Traçabilité | Reporter les routes, appareils, version, anomalies et décisions dans le journal d’audit. | Entrée datée dans `AUDIT_VISUAL_VALIDATION_2026-08-19.md`. | Publier, planifier une correction ou documenter une dérogation. |
+
 > Pour les contenus médicaux, le composant `MedicalCitation` doit être privilégié lorsqu’une source est affichée. Aucune citation ne doit être utilisée pour présenter une recommandation individualisée ou un résultat garanti.
