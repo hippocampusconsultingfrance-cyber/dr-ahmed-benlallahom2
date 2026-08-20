@@ -12,6 +12,7 @@
     "test": "vitest run",
     "test:visual": "node scripts/visual-regression.mjs",
     "test:visual:record": "VISUAL_BASELINE_MODE=record node scripts/visual-regression.mjs",
+    "validate:precheckpoint": "pnpm test:visual && pnpm vitest run client/src/components/visualRegressionHarness.test.ts client/src/components/graphicGovernance.test.ts && pnpm check",
     "db:push": "drizzle-kit generate && drizzle-kit migrate"
   },
   "dependencies": {

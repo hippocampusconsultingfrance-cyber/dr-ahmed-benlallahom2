@@ -239,7 +239,7 @@
 - [x] Vérifier l’accessibilité des couleurs cyan, gris et doré sur les deux thèmes : contrôle reproductible ajouté ; contraste renforcé du texte sur CTA cyan et seuils validés
 - [x] Évaluer la réduction des effets décoratifs sur les formulaires et pages légales : illustration non informative de réservation atténuée ; mentions légales conservées sans fond décoratif concurrent
 - [x] Préparer un kit de marque exportable pour les documents et réseaux sociaux : archive de jetons et typographies publiée ; usage isolé du logo explicitement conditionné à la fourniture d’un vectoriel validé
-- [ ] Mettre en place une validation graphique avant chaque checkpoint
+- [x] Mettre en place une validation graphique avant chaque checkpoint : commande `pnpm validate:precheckpoint`, protocole, matrice visuelle et capture ciblée requis pour les modifications publiques
 - [ ] Ajouter une documentation d’utilisation des composants pour les futures évolutions
 - [x] Ajouter des tests de non-régression pour le changement de langue et de thème
 - [x] Ajouter des tests de longueur de traduction pour les boutons et titres critiques de navigation
