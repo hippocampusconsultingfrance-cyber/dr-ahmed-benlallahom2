@@ -274,7 +274,7 @@
 - [x] Vérifier les états de chargement des appels tRPC : Réservation, Coffre candidat et Vérification e-mail audités ; chargement, erreur sûre, vide et blocage d’action explicitement distingués
 - [x] Vérifier les états anti-double-clic du paiement
 - [x] Vérifier le rendu de la confirmation et de l’annulation de paiement
-- [ ] Vérifier les messages de validation des formulaires dans les quatre langues
+- [x] Vérifier les messages de validation des formulaires dans les quatre langues : Contact, RGPD et Réservation vérifiés en FR/EN/DE/ZH avec retours d’erreur, consentement et chargement
 - [x] Vérifier les messages d’erreur sans exposition de données sensibles
 - [ ] Vérifier les liens de facture sur desktop et mobile
 - [ ] Vérifier les notifications de rappel sur desktop et mobile
