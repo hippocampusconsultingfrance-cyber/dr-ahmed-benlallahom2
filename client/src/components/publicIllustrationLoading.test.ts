@@ -14,6 +14,9 @@ describe("illustrations publiques décoratives", () => {
       expect(source).toContain('decoding="async"');
       expect(source).toContain('alt=""');
       expect(source).toContain('aria-hidden="true"');
+      expect(source).toContain('srcSet="/manus-storage/');
+      expect(source).toContain('sizes="(max-width: 640px)');
+      expect(source).toContain('.webp');
     }
   });
 });

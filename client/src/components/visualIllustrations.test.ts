@@ -9,8 +9,8 @@ describe("illustrations originales des parcours", () => {
       readFile(new URL("../pages/BookingPage.tsx", import.meta.url), "utf8"),
     ]);
 
-    expect(services).toContain("/manus-storage/services-medical-compass_333540df.jpg");
-    expect(booking).toContain("/manus-storage/booking-care-path_b41c3403.jpg");
+    expect(services).toContain("/manus-storage/services-medical-compass-1280_e4185fa1.webp");
+    expect(booking).toContain("/manus-storage/booking-care-path-1280_7edc0ae2.webp");
     expect(services).toContain('alt=""');
     expect(booking).toContain('alt=""');
   });
@@ -41,8 +41,8 @@ describe("illustrations originales des parcours", () => {
     const context = contextualSources.map(item => item.source).join("\n").toLowerCase();
 
     expect(contextualSources.length).toBeGreaterThan(3);
-    expect(context).toContain("services-medical-compass_333540df.jpg");
-    expect(context).toContain("booking-care-path_b41c3403.jpg");
+    expect(context).toContain("services-medical-compass-1280_e4185fa1.webp");
+    expect(context).toContain("booking-care-path-1280_7edc0ae2.webp");
     expect(context).not.toMatch(/guérison|guerison|résultat garanti|resultat garanti|traitement garanti|\bguaranteed\s+(?:cure|result)\b/);
   });
 
@@ -50,7 +50,7 @@ describe("illustrations originales des parcours", () => {
     const root = resolve(import.meta.dirname, "..");
     const ventureSources = ["data/ventures-fr.ts", "data/ventures-en.ts"];
     const assets: Record<string, string[]> = {
-      "booking-care-path_b41c3403.jpg": ["pages/BookingPage.tsx"],
+      "booking-care-path-1280_7edc0ae2.webp": ["pages/BookingPage.tsx"],
       "hero-ahmed-medical_4adb9653.png": ["components/AboutSection.tsx"],
       "hero-bg-ahmed_156f3568.png": ["components/HeroSection.tsx"],
       "hero-consulting_b0a2cb5b.png": ["components/ContactSection.tsx", "components/GDPRRequestForm.tsx"],
@@ -68,7 +68,7 @@ describe("illustrations originales des parcours", () => {
       "photo-sonia-new_cbb12509.png": ventureSources,
       "photo-wafa-clean_fe6f20ad.png": ventureSources,
       "photo-youssef-new_dc020979.png": ventureSources,
-      "services-medical-compass_333540df.jpg": ["components/ServicesSection.tsx"],
+      "services-medical-compass-1280_e4185fa1.webp": ["components/ServicesSection.tsx"],
     };
     const prohibitedClaims = /guérison|guerison|résultat garanti|resultat garanti|traitement garanti|\bguaranteed\s+(?:cure|result)\b/i;
 

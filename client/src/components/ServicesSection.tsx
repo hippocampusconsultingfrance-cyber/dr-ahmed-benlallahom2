@@ -8,7 +8,9 @@ export default function ServicesSection() {
       {/* Background with diagnostic grid */}
       <div className="absolute inset-0 opacity-20">
         <img
-          src="/manus-storage/services-medical-compass_333540df.jpg"
+          src="/manus-storage/services-medical-compass-1280_e4185fa1.webp"
+          srcSet="/manus-storage/services-medical-compass-640_868ac75e.webp 640w, /manus-storage/services-medical-compass-1280_e4185fa1.webp 1280w"
+          sizes="(max-width: 640px) 100vw, 1280px"
           loading="lazy"
           decoding="async"
           alt=""

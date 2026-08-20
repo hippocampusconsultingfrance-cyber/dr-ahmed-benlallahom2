@@ -306,6 +306,17 @@ Après paiement confirmé, le traitement durable `appointment-fulfillment` produ
 
 La tâche de rappel `appointment-reminder-24h` est active et recherche chaque heure les rendez-vous payés, confirmés, non encore notifiés, compris dans la fenêtre de 22 à 26 heures. L’exécution la plus récente observée a répondu avec succès ; le worker de facture a également répondu avec succès, sans travail à traiter. Des réponses 403 ponctuelles liées au cookie de la tâche planifiée ont été relevées dans l’historique, puis la configuration des deux tâches a été rafraîchie sans créer de tâche parallèle ; aucune configuration concurrente ne subsiste. La réception effective d’un e-mail de rappel sur un client desktop et mobile reste volontairement une vérification manuelle sur un rendez-vous de test payé, afin de ne pas envoyer de notification non sollicitée.
 
+## Compression et recadrage responsive des illustrations
+
+Les deux illustrations décoratives dont les sources sont disponibles ont été converties sans recadrage en variantes WebP de 640 px et 1 280 px. Elles remplacent des fichiers PNG de 2 560 × 1 440 px, auparavant nommés avec une extension `.jpg`, et sont désormais servies avec `srcSet` et `sizes`. Le navigateur choisit ainsi une variante cohérente avec la largeur d’affichage tout en conservant le chargement différé, le décodage asynchrone, l’alternative vide et le statut décoratif.
+
+| Illustration | Variantes publiées | Règle de dimensionnement | Décision de recadrage |
+|---|---:|---|---|
+| Étapes de réservation | 640 px, 1 280 px | `100vw` sous 640 px, 360 px au-delà | Aucune coupe de la source ; le conteneur conserve son rendu `object-cover`. |
+| Repère visuel des services | 640 px, 1 280 px | `100vw` sous 640 px, 1 280 px au-delà | Aucune coupe de la source ; l’image reste un fond décoratif avec contraste superposé. |
+
+Les autres images du site restent hébergées dans le stockage statique et ne disposent pas toutes de sources locales exportables. Elles conservent leur politique de chargement actuelle. Toute future illustration devra être déposée avec au moins une source 640 px et une source 1 280 px, au format WebP, puis référencée avec `srcSet` et `sizes` ; un recadrage ne doit être appliqué qu’après validation explicite du cadrage éditorial.
+
 ## Données de recrutement normalisées
 
 Les certifications, langues et expériences extraites sont conservées à la fois dans les champs de synthèse du dossier et dans des tables relationnelles dédiées. Le matching de brief consomme les certifications et langues normalisées ; le vivier conserve les structures normalisées et les expose dans l’administration. Les filtres restent compatibles avec les données déjà déposées en utilisant également les champs de déclaration initiaux.
