@@ -6,6 +6,7 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { toast } from "sonner";
 import { buildCandidateTimeline, type CandidateTimelineEvent } from "./candidate360Timeline";
 import PublicContentSkeleton from "./PublicContentSkeleton";
+import { getLocalizedCopy } from "@/lib/getLocalizedCopy";
 
 type Candidate360DialogProps = {
   applicationId: number | null;
@@ -32,7 +33,7 @@ function eventIcon(kind: CandidateTimelineEvent["kind"]) {
 
 export default function Candidate360Dialog({ applicationId, onOpenChange }: Candidate360DialogProps) {
   const { language } = useLanguage();
-  const copy = candidate360Copy[language as keyof typeof candidate360Copy] ?? candidate360Copy.fr;
+  const copy = getLocalizedCopy(candidate360Copy, language, "fr");
   const locale = language === "zh" ? "zh-CN" : language === "de" ? "de-DE" : language === "en" ? "en-GB" : "fr-FR";
   const utils = trpc.useUtils();
   const detailQuery = trpc.admin.recruitment.candidate.detail.useQuery(

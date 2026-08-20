@@ -248,6 +248,7 @@
 - [ ] Centraliser les libellés d’interface restants afin d’éviter les chaînes de texte hardcodées : premier lot Navigation/Footer migré vers un catalogue partagé
 - [x] Standardiser le repli sûr des contenus multilingues des confirmations publiques
 - [x] Réutiliser le repli multilingue typé dans les pages Ressources et Presse
+- [x] Réutiliser le repli multilingue typé dans Candidate 360° et le pilotage Recrutement
 - [x] Centraliser les libellés publics de Navigation et Footer dans un catalogue multilingue partagé
 - [x] Centraliser les libellés de lisibilité renforcée et de noir OLED dans le catalogue public partagé
 - [x] Ajouter une stratégie de compression et de recadrage responsive des images : variantes WebP 640/1280, `srcSet`, `sizes` et absence de recadrage destructif pour les illustrations sources disponibles

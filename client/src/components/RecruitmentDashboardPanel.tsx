@@ -3,6 +3,7 @@ import { trpc } from "@/lib/trpc";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { nonNegativeCount, percentageLabel } from "./recruitmentDashboardMetrics";
 import PublicContentSkeleton from "./PublicContentSkeleton";
+import { getLocalizedCopy } from "@/lib/getLocalizedCopy";
 
 type MetricCardProps = {
   icon: typeof UserRound;
@@ -34,7 +35,7 @@ function MetricCard({ icon: Icon, label, value, detail, tone }: MetricCardProps)
 
 export default function RecruitmentDashboardPanel() {
   const { language } = useLanguage();
-  const copy = recruitmentDashboardCopy[language as keyof typeof recruitmentDashboardCopy] ?? recruitmentDashboardCopy.fr;
+  const copy = getLocalizedCopy(recruitmentDashboardCopy, language, "fr");
   const { data, isLoading, error } = trpc.admin.recruitment.dashboard.useQuery();
 
   if (error) {
