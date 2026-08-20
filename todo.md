@@ -184,7 +184,7 @@
 - [x] Recenser et vérifier les états vides de tous les onglets racine actifs du tableau de bord administratif
 - [x] Ajouter une non-régression explicite de l’état sans candidature du tableau Recrutement
 - [x] Localiser le titre de l’état d’erreur administratif partagé en FR/EN/DE/ZH
-- [ ] Localiser les libellés de chargement et les états vides des onglets administratifs historiques en FR/EN/DE/ZH
+- [x] Localiser les libellés de chargement et les états vides des onglets administratifs historiques en FR/EN/DE/ZH
 - [x] Localiser l’en-tête, le sélecteur de section et les onglets du tableau de bord administratif en FR/EN/DE/ZH
 - [x] Localiser les états de connexion, accès refusé et validation MFA du tableau de bord administratif en FR/EN/DE/ZH
 - [x] Localiser les indicateurs et raccourcis de la vue d’ensemble administrative en FR/EN/DE/ZH

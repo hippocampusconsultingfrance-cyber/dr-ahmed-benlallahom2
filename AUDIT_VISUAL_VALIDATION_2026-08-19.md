@@ -166,6 +166,10 @@ Le tableau Candidatures renforce sa lecture mobile : actions regroupées sur tou
 
 La revue administrative des documents candidats suit le même principe : noms de fichier et courriels peuvent se rompre, les contrôles d’analyse et d’ouverture occupent la largeur disponible sur mobile, et les actions de décision conservent des cibles tactiles distinctes.
 
+## États administratifs localisés
+
+Les états de chargement, d’erreur et d’absence des onglets administratifs historiques sont alimentés par les copies FR/EN/DE/ZH : shell d’accès, vue d’ensemble, réservations, messages, demandes RGPD, témoignages, disponibilités, candidatures, vivier, mailing, documents et briefs. La vérification des sources confirme que ces états ne s’appuient pas sur des messages techniques exposés à l’utilisateur.
+
 ## Vérification visuelle des parcours publics critiques
 
 Les pages Accueil, Réservation, RGPD, Recrutement et Employeurs ont été capturées en vue bureau. Les en-têtes, formulaires, CTAs et pieds de page restent lisibles, structurés et sans chevauchement visible. Les formulaires Réservation, RGPD et Brief Employeur présentent leurs champs à une largeur cohérente, avec une hiérarchie claire entre contenu informatif et action principale. La vérification équivalente sur mobile reste planifiée séparément.
