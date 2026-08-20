@@ -283,26 +283,26 @@
 - [x] Vérifier le contraste et la lisibilité du bandeau cookies
 - [x] Ajouter un lien permanent vers les préférences cookies, y compris après fermeture du bandeau sans choix explicite
 - [x] Vérifier que les traceurs non essentiels restent bloqués sans consentement
-- [ ] Préparer une revue annuelle des traductions et de l’identité visuelle
-- [ ] Préparer une revue annuelle de l’accessibilité et des performances
-- [ ] Préparer une revue annuelle des droits sur les visuels et logos
-- [ ] Préparer une revue annuelle des contenus médicaux et de leurs sources
-- [ ] Préparer une revue annuelle des pages légales et RGPD
-- [ ] Préparer une revue annuelle des modèles d’emails et factures
-- [ ] Préparer une revue annuelle du parcours de réservation
-- [ ] Préparer une revue annuelle des retours utilisateurs
-- [ ] Préparer une revue annuelle de la cohérence entre le site, les emails et les réseaux sociaux
-- [ ] Préparer une revue annuelle de la cohérence des tarifs et politiques affichés
-- [ ] Préparer une revue annuelle du dashboard et des outils administrateur
-- [ ] Préparer une revue annuelle des pages 404, maintenance et erreur serveur
-- [ ] Préparer une revue annuelle des domaines, certificats et favicons
-- [ ] Préparer une revue annuelle des données structurées et métadonnées sociales
-- [ ] Préparer une revue annuelle du sitemap et des liens internes
-- [ ] Préparer une revue annuelle des composants UI et dépendances visuelles
-- [ ] Préparer une revue annuelle de la dette UX et des incohérences de navigation
-- [ ] Préparer une revue annuelle de la sobriété numérique des images et animations
-- [ ] Préparer une revue annuelle de la stratégie de contenu et des ressources téléchargeables
-- [ ] Préparer une revue annuelle de la marque Hippocampus Consulting
+- [x] Préparer une revue annuelle des traductions et de l’identité visuelle : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de l’accessibilité et des performances : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle des droits sur les visuels et logos : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle des contenus médicaux et de leurs sources : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle des pages légales et RGPD : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle des modèles d’emails et factures : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle du parcours de réservation : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle des retours utilisateurs : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence entre le site, les emails et les réseaux sociaux : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des tarifs et politiques affichés : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle du dashboard et des outils administrateur : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle des pages 404, maintenance et erreur serveur : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle des domaines, certificats et favicons : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle des données structurées et métadonnées sociales : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle du sitemap et des liens internes : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle des composants UI et dépendances visuelles : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la dette UX et des incohérences de navigation : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la sobriété numérique des images et animations : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la stratégie de contenu et des ressources téléchargeables : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la marque Hippocampus Consulting : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
 - [ ] Préparer une revue annuelle du positionnement international FR/EN/DE/ZH
 - [ ] Préparer une revue annuelle de la clarté des appels à l’action
 - [ ] Préparer une revue annuelle des formulaires et messages d’aide
