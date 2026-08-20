@@ -218,6 +218,7 @@
 - [x] Étendre les tests visuels automatisés à la FAQ publique, en desktop et mobile
 - [x] Étendre les tests visuels automatisés à la page Témoignages validés, en desktop et mobile
 - [x] Stabiliser la capture visuelle asynchrone des témoignages validés
+- [x] Étendre les tests visuels automatisés à la page Recherche interne, en desktop et mobile
 - [x] Étendre les tests visuels automatisés à la page RGPD en desktop et mobile
 - [x] Capturer et vérifier les parcours Accueil, Réservation, RGPD, Recrutement et Employeurs en vue bureau
 - [x] Capturer et vérifier les parcours Accueil, Réservation, RGPD, Recrutement et Employeurs en vue mobile
