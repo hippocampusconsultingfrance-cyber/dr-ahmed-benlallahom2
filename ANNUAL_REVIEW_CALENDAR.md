@@ -13,11 +13,14 @@ La revue graphique trimestrielle complète les contrôles automatiques et ne rem
 
 | Domaine | Contrôles annuels préparés |
 |---|---|
-| Contenus et identité | Traductions, identité visuelle, marque Hippocampus, contenu médical, sources, ressources et réseaux sociaux. |
+| Contenus et identité | Traductions, identité visuelle, marque Hippocampus, contacts professionnels, coordonnées publiques, noms et rôles des partenaires, diplômes et certifications, photographies professionnelles, biographies, contenu médical, sources, ressources et réseaux sociaux. |
 | Accessibilité et UX | Lecteur d’écran, clavier, zoom, contraste, dette UX, navigation et retours utilisateurs consentis. |
-| Conformité | Droits sur visuels et logos, pages légales/RGPD, modèles d’e-mails et factures. |
+| Conformité | Droits sur visuels et logos, politique de confidentialité, mentions légales, conditions générales, RGPD, modèles d’e-mails et factures. |
 | Parcours et opérations | Réservation, tarifs et politiques, dashboard, outils administrateur, pages 404/maintenance/erreur. |
 | Technique et visibilité | Domaines, certificats, favicons, données structurées, métadonnées sociales, sitemap, liens internes, composants UI et dépendances. |
 | Sobriété | Poids des images, animations et ressources de contenu téléchargeables. |
+| Interactions et langues | Positionnement FR/EN/DE/ZH, CTA, formulaires, aides, états vides/erreurs, composants accessibles et préférences de mouvement. |
+| Réservation et suivi | Paiement, notifications e-mail/SMS, factures, rappels, prix jour/nuit, durée, annulation, remboursement et étapes de confirmation. |
+| Information médicale et consentement | Mentions médicales, séparation information/conseil, limites de téléconsultation, urgence, demandes RGPD et consentement cookies. |
 
 > Un écart P0/P1 — contenu illisible, élément interactif masqué, divulgation de donnée, visuel sans droit vérifiable ou dégradation majeure d’un parcours — bloque la publication jusqu’à correction ou dérogation écrite et datée.

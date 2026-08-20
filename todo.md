@@ -303,45 +303,45 @@
 - [x] Préparer une revue annuelle de la sobriété numérique des images et animations : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
 - [x] Préparer une revue annuelle de la stratégie de contenu et des ressources téléchargeables : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
 - [x] Préparer une revue annuelle de la marque Hippocampus Consulting : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
-- [ ] Préparer une revue annuelle du positionnement international FR/EN/DE/ZH
-- [ ] Préparer une revue annuelle de la clarté des appels à l’action
-- [ ] Préparer une revue annuelle des formulaires et messages d’aide
-- [ ] Préparer une revue annuelle des états vides et erreurs
-- [ ] Préparer une revue annuelle des composants accessibles
-- [ ] Préparer une revue annuelle des animations et préférences de mouvement
-- [ ] Préparer une revue annuelle des retours de paiement et réservation
-- [ ] Préparer une revue annuelle des notifications email et SMS
-- [ ] Préparer une revue annuelle des factures et documents générés
-- [ ] Préparer une revue annuelle des ressources graphiques
-- [ ] Préparer une revue annuelle de la documentation design
-- [ ] Préparer une revue annuelle de la checklist de publication
-- [ ] Préparer une revue annuelle des tests visuels et responsive
-- [ ] Préparer une revue annuelle des anomalies graphiques signalées
-- [ ] Préparer une revue annuelle des améliorations réellement utilisées par les visiteurs
-- [ ] Préparer une revue annuelle des fonctionnalités à retirer si elles créent de la complexité
-- [ ] Préparer une revue annuelle de la simplicité du parcours de réservation
-- [ ] Préparer une revue annuelle de la lisibilité des mentions médicales
-- [ ] Préparer une revue annuelle de la distinction entre information et conseil médical
-- [ ] Préparer une revue annuelle de la clarté des limites de téléconsultation
-- [ ] Préparer une revue annuelle de la visibilité des contacts d’urgence
-- [ ] Préparer une revue annuelle de la clarté des conditions de remboursement
-- [ ] Préparer une revue annuelle de la clarté des prix jour/nuit
-- [ ] Préparer une revue annuelle de la clarté des durées de consultation
-- [ ] Préparer une revue annuelle de la clarté des étapes de paiement
-- [ ] Préparer une revue annuelle de la clarté des emails de confirmation
-- [ ] Préparer une revue annuelle de la clarté du téléchargement de facture
-- [ ] Préparer une revue annuelle de la clarté des rappels de rendez-vous
-- [ ] Préparer une revue annuelle de la clarté des demandes RGPD
-- [ ] Préparer une revue annuelle de la clarté du consentement cookies
-- [ ] Préparer une revue annuelle de la clarté de la politique de confidentialité
-- [ ] Préparer une revue annuelle de la clarté des mentions légales
-- [ ] Préparer une revue annuelle de la clarté des conditions générales
-- [ ] Préparer une revue annuelle de la clarté des contacts professionnels
-- [ ] Préparer une revue annuelle de la clarté des coordonnées publiques
-- [ ] Préparer une revue annuelle de la cohérence des noms et rôles des partenaires
-- [ ] Préparer une revue annuelle de la cohérence des diplômes et certifications
-- [ ] Préparer une revue annuelle de la cohérence des photographies professionnelles
-- [ ] Préparer une revue annuelle de la cohérence des biographies
+- [x] Préparer une revue annuelle du positionnement international FR/EN/DE/ZH : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la clarté des appels à l’action : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle des formulaires et messages d’aide : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle des états vides et erreurs : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle des composants accessibles : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle des animations et préférences de mouvement : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle des retours de paiement et réservation : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle des notifications email et SMS : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle des factures et documents générés : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle des ressources graphiques : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la documentation design : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la checklist de publication : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle des tests visuels et responsive : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle des anomalies graphiques signalées : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle des améliorations réellement utilisées par les visiteurs : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle des fonctionnalités à retirer si elles créent de la complexité : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la simplicité du parcours de réservation : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la lisibilité des mentions médicales : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la distinction entre information et conseil médical : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la clarté des limites de téléconsultation : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la visibilité des contacts d’urgence : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la clarté des conditions de remboursement : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la clarté des prix jour/nuit : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la clarté des durées de consultation : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la clarté des étapes de paiement : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la clarté des emails de confirmation : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la clarté du téléchargement de facture : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la clarté des rappels de rendez-vous : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la clarté des demandes RGPD : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la clarté du consentement cookies : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la clarté de la politique de confidentialité : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la clarté des mentions légales : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la clarté des conditions générales : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la clarté des contacts professionnels : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la clarté des coordonnées publiques : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des noms et rôles des partenaires : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des diplômes et certifications : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des photographies professionnelles : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des biographies : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
 - [ ] Préparer une revue annuelle de la cohérence des traductions
 - [ ] Préparer une revue annuelle de la cohérence des titres SEO
 - [ ] Préparer une revue annuelle de la cohérence des descriptions Open Graph
