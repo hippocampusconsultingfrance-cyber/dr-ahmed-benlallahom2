@@ -15,6 +15,7 @@ Le contrôle `pnpm test:visual` compare le premier viewport des routes publiques
 | `/faq` | 1280 × 720 | 375 × 812 | Questions pratiques, accordéons et repères d’urgence non personnalisés. |
 | `/search` | 1280 × 720 | 375 × 812 | Recherche interne, champ de requête et état initial non sensible. |
 | Route inconnue (404) | 1280 × 720 | 375 × 812 | Message d’erreur, actions de retour et repères de navigation. |
+| `/legal` | 1280 × 720 | 375 × 812 | Mentions légales, onglets et accessibilité de l’information juridique. |
 | `/testimonials` | 1280 × 720 | 375 × 812 | Témoignages validés, filtres de consultation et état de contenu public. |
 | `/gdpr` | 1280 × 720 | 375 × 812 | Parcours de droits, consentement et mise en page du formulaire. |
 | `/booking/confirmation?status=success` | 1280 × 720 | 375 × 812 | Confirmation non indexée, référence de suivi de démonstration et statut sécurisé de livraison de facture. |
