@@ -2502,3 +2502,4 @@
 - [x] Mettre les mentions légales et la politique de confidentialité au nom de Hippocampus Consulting SARL à partir de l’extrait d’immatriculation
 - [x] Remplacer l’environnement de prédilection VVIP par des choix à cocher
 - [x] Ajouter un champ de précision conditionnel lorsque « Autre pays / Mobilité mondiale » est sélectionné
+- [x] Remplacer « Email professionnel » par « Email » dans les formulaires de candidature

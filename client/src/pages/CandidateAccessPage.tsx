@@ -28,7 +28,7 @@ export const candidateAccessCopy = {
     forgotDescription: "Nous vous enverrons un lien sécurisé si un compte correspond à cet email.",
     firstName: "Prénom",
     lastName: "Nom",
-    email: "Email professionnel",
+    email: "Email",
     password: "Mot de passe",
     passwordHint: "Minimum 15 caractères. Choisissez un mot de passe long et unique.",
     confirmPassword: "Confirmer le mot de passe",

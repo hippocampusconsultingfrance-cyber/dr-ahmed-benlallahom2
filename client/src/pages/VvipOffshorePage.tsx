@@ -18,7 +18,7 @@ const copy = {
     formIntro: "Ces missions requièrent une excellence clinique irréprochable, une résistance au stress éprouvée et des certifications internationales à jour (ATLS, ACLS, HUET/BOSIET selon les sites).",
     firstName: "Prénom",
     lastName: "Nom",
-    email: "Email professionnel",
+    email: "Email",
     phone: "Téléphone",
     specialty: "Profil recherché / Spécialité",
     environment: "Environnement de prédilection",

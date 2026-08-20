@@ -16,7 +16,7 @@ export const employerCopy = {
     formIntro: "Précisez vos besoins opérationnels. Notre cellule spécialisée vous contactera sous 24h avec une shortlist qualifiée.",
     orgName: "Établissement ou entreprise",
     contactName: "Nom du responsable",
-    email: "Email professionnel",
+    email: "Email",
     phone: "Téléphone",
     targetEnvironment: "Environnement de la mission",
     env1: "Hôpital / Clinique internationale",
