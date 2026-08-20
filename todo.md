@@ -2499,3 +2499,4 @@
 - [x] Remplacer toute référence à un numéro d’urgence précis par l’invitation générale à appeler les secours
 - [x] Intégrer le logo Hippocampus Consulting fourni dans tous les e-mails aux candidats et établissements
 - [x] Réaliser une évaluation RGPD et juridique du site Hippocampus Consulting SARL avec un plan d’action priorisé
+- [x] Mettre les mentions légales et la politique de confidentialité au nom de Hippocampus Consulting SARL à partir de l’extrait d’immatriculation

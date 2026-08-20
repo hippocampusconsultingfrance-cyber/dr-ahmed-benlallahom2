@@ -7,6 +7,15 @@ import { SEOHead } from "@/components/SEOHead";
 import { useState, useEffect } from "react";
 import Breadcrumb from "@/components/Breadcrumb";
 
+const HIPPOCAMPUS_LEGAL = {
+  name: "Hippocampus Consulting SARL",
+  registeredOffice: "6 rue d’Armaillé, 75017 Paris, France",
+  rcs: "999 259 252 R.C.S. Paris",
+  capital: "1 000 €",
+  director: "Ahmed Ben Lallahom",
+  contactEmail: "hippocampusconsultingfrance@gmail.com",
+} as const;
+
 export default function LegalPage() {
   const { language } = useLanguage();
 
@@ -106,20 +115,22 @@ function LegalPageFr() {
                   <div>
                     <h3 className="font-semibold text-foreground mb-3">Éditeur du site</h3>
                     <div className="space-y-2">
-                      <p><strong>Nom :</strong> Dr. Ahmed Ben Lallahom</p>
-                      <p><strong>Statut :</strong> Professionnel de santé indépendant</p>
-                      <p><strong>Adresse :</strong> France</p>
-                      <p><strong>Téléphone :</strong> +33 9 72 15 24 13</p>
-                      <p><strong>Email :</strong> Disponible via le formulaire de contact</p>
+                      <p><strong>Dénomination :</strong> {HIPPOCAMPUS_LEGAL.name}</p>
+                      <p><strong>Forme juridique :</strong> Société à responsabilité limitée (SARL)</p>
+                      <p><strong>Capital social :</strong> {HIPPOCAMPUS_LEGAL.capital}</p>
+                      <p><strong>Immatriculation :</strong> {HIPPOCAMPUS_LEGAL.rcs}</p>
+                      <p><strong>Siège social :</strong> {HIPPOCAMPUS_LEGAL.registeredOffice}</p>
+                      <p><strong>Directeur de la publication et gérant :</strong> {HIPPOCAMPUS_LEGAL.director}</p>
+                      <p><strong>Email :</strong> {HIPPOCAMPUS_LEGAL.contactEmail}</p>
                     </div>
                   </div>
 
                   <div>
                     <h3 className="font-semibold text-foreground mb-3">Hébergeur</h3>
                     <div className="space-y-2">
-                      <p><strong>Nom :</strong> Manus</p>
-                      <p><strong>Adresse :</strong> Infrastructure cloud</p>
-                      <p><strong>Service :</strong> Hébergement et déploiement de sites web</p>
+                      <p><strong>Service :</strong> Manus, opéré par Butterfly Effect Pte. Ltd.</p>
+                      <p><strong>Rôle :</strong> Plateforme technique, hébergement et déploiement du site</p>
+                      <p><strong>Informations du prestataire :</strong> <a className="text-primary underline" href="https://manus.im/terms" target="_blank" rel="noreferrer">conditions de service Manus</a></p>
                     </div>
                   </div>
 
@@ -142,7 +153,7 @@ function LegalPageFr() {
                 <h2 className="text-2xl font-bold text-foreground">Politique de Confidentialité</h2>
                 <div className="text-muted-foreground space-y-4">
                   <h3 className="font-semibold text-foreground">1. Collecte de données personnelles</h3>
-                  <p>Ce site traite des données personnelles dans le cadre du formulaire de contact, de la réservation et du paiement d’une consultation, de l’émission de factures et du traitement des demandes RGPD. Les données collectées incluent :</p>
+                  <p>Ce site traite des données personnelles dans le cadre des formulaires de contact, des candidatures et du portail candidat, du recrutement pour les établissements, de la réservation et du paiement d’une consultation, de l’émission de factures et du traitement des demandes RGPD. Les données collectées incluent :</p>
                   <ul className="list-disc list-inside space-y-2 ml-2">
                     <li>Nom complet</li>
                     <li>Adresse email</li>
@@ -152,6 +163,8 @@ function LegalPageFr() {
                     <li>Cookies de session</li>
                     <li>Date et heure souhaitées, demande de consultation et référence de réservation</li>
                     <li>Informations nécessaires à la facture ; les données de carte sont traitées directement par Stripe</li>
+                    <li>Données de candidature : CV, spécialité, pays de diplôme, expériences, langues, certifications, mobilité et préférences de mission</li>
+                    <li>Documents déposés volontairement dans le portail candidat, protégés par des mesures techniques adaptées</li>
                   </ul>
 
                   <h3 className="font-semibold text-foreground mt-4">2. Base légale du traitement</h3>
@@ -172,6 +185,7 @@ function LegalPageFr() {
                     <li>Prévenir la fraude et les abus</li>
                   </ul>
                   <p className="mt-4"><strong>Aucune vente ni utilisation commerciale :</strong> Vos données ne sont pas vendues ni utilisées à des fins commerciales. Elles peuvent être transmises aux sous-traitants strictement nécessaires au fonctionnement du service, conformément à la section dédiée ci-dessous.</p>
+                  <p className="mt-4"><strong>Recrutement et IA :</strong> l’analyse automatisée des candidatures sert uniquement d’aide à la lecture et au rapprochement de profils. Elle ne produit aucune décision d’embauche ou de rejet sans revue humaine.</p>
 
                   <h3 className="font-semibold text-foreground mt-4">4. Durée de conservation</h3>
                   <p>Les données personnelles sont conservées :</p>
@@ -215,16 +229,17 @@ function LegalPageFr() {
                   <p className="mt-4">Vous pouvez refuser les cookies non-essentiels en configurant votre navigateur.</p>
 
                   <h3 className="font-semibold text-foreground mt-4">8. Responsable du traitement</h3>
-                  <p><strong>Responsable :</strong> Dr. Ahmed Ben Lallahom<br /><strong>Adresse :</strong> France<br /><strong>Contact :</strong> Via le formulaire de contact du site</p>
+                  <p><strong>Responsable :</strong> {HIPPOCAMPUS_LEGAL.name}<br /><strong>Siège social :</strong> {HIPPOCAMPUS_LEGAL.registeredOffice}<br /><strong>Gérant :</strong> {HIPPOCAMPUS_LEGAL.director}<br /><strong>Contact :</strong> {HIPPOCAMPUS_LEGAL.contactEmail}</p>
 
                   <h3 className="font-semibold text-foreground mt-4">9. Sous-traitants et transferts de données</h3>
                   <p>Nous utilisons les sous-traitants suivants pour traiter vos données :</p>
                   <ul className="list-disc list-inside space-y-2 ml-2">
                     <li><strong>Resend :</strong> Service d'envoi d'emails transactionnels (confirmations, factures, rappels)</li>
                     <li><strong>Stripe :</strong> Plateforme de paiement pour les réservations de consultations</li>
-                    <li><strong>Manus :</strong> Hébergement et infrastructure cloud du site</li>
+                    <li><strong>Google Drive :</strong> Copie privée, journalisée et contrôlée des CV déposés, après autorisation du responsable</li>
+                    <li><strong>Manus (Butterfly Effect Pte. Ltd.) :</strong> Hébergement, infrastructure cloud, authentification et composants d’analyse technique</li>
                   </ul>
-                  <p className="mt-4">Ces sous-traitants traitent uniquement les catégories nécessaires : coordonnées et références de réservation pour la gestion des rendez-vous, informations de facturation et statut de paiement pour Stripe, et données techniques ou de contact pour l'hébergement, l'authentification et les communications. Selon l'infrastructure utilisée par chaque prestataire, un traitement peut avoir lieu hors de l'Espace économique européen. Les garanties applicables sont celles prévues par leurs engagements contractuels et leurs accords de traitement, y compris les clauses contractuelles types lorsqu'elles sont requises. Les données de carte bancaire ne sont pas stockées par ce site.</p>
+                  <p className="mt-4">Ces sous-traitants traitent uniquement les catégories nécessaires : coordonnées et références de réservation pour la gestion des rendez-vous, informations de facturation et statut de paiement pour Stripe, CV et documents de candidature pour l’export privé Google Drive, et données techniques ou de contact pour l'hébergement, l'authentification, les communications et l’assistance à l’analyse. Selon l'infrastructure utilisée par chaque prestataire, un traitement peut avoir lieu hors de l'Espace économique européen. Les garanties applicables sont celles prévues par leurs engagements contractuels et leurs accords de traitement, y compris les clauses contractuelles types lorsqu'elles sont requises. Les données de carte bancaire ne sont pas stockées par ce site.</p>
 
                   <h3 className="font-semibold text-foreground mt-4">10. Registre des traitements</h3>
                   <p>Conformément aux exigences de la CNIL, nous maintenons un registre des traitements de données personnelles :</p>
@@ -251,7 +266,7 @@ function LegalPageFr() {
                   <p>En accédant et en utilisant ce site, vous acceptez pleinement et sans réserve les présentes conditions générales d'utilisation. Si vous n'acceptez pas ces conditions, veuillez ne pas utiliser ce site.</p>
 
                   <h3 className="font-semibold text-foreground mt-4">2. Description du service</h3>
-                  <p>Ce site fournit des informations professionnelles et de consultation sur l'anesthésie-réanimation, l'entrepreneuriat en santé et les services connexes. Le site est fourni à titre informatif uniquement.</p>
+                  <p>Ce site présente les activités de conseil, recrutement, accompagnement, formation et services numériques de Hippocampus Consulting SARL, ainsi que les informations professionnelles associées. Les contenus médicaux sont fournis à titre informatif et ne remplacent pas un avis médical personnalisé.</p>
 
                   <h3 className="font-semibold text-foreground mt-4">3. Utilisation acceptable</h3>
                   <p>Vous acceptez d'utiliser ce site uniquement à des fins légales et conformément à toutes les lois et réglementations applicables. Vous vous engagez à ne pas :</p>
@@ -297,7 +312,7 @@ function LegalPageFr() {
           {/* Date de mise à jour */}
           <section className="pt-8 border-t border-border">
             <p className="text-sm text-muted-foreground">
-              Dernière mise à jour : juillet 2026
+              Dernière mise à jour : août 2026
             </p>
           </section>
         </div>
@@ -390,20 +405,22 @@ function LegalPageEn() {
                   <div>
                     <h3 className="font-semibold text-foreground mb-3">Website Editor</h3>
                     <div className="space-y-2">
-                      <p><strong>Name:</strong> Dr. Ahmed Ben Lallahom</p>
-                      <p><strong>Status:</strong> Independent healthcare professional</p>
-                      <p><strong>Address:</strong> France</p>
-                      <p><strong>Phone:</strong> +33 9 72 15 24 13</p>
-                      <p><strong>Email:</strong> Available via contact form</p>
+                      <p><strong>Company:</strong> {HIPPOCAMPUS_LEGAL.name}</p>
+                      <p><strong>Legal form:</strong> French limited liability company (SARL)</p>
+                      <p><strong>Share capital:</strong> {HIPPOCAMPUS_LEGAL.capital}</p>
+                      <p><strong>Registration:</strong> {HIPPOCAMPUS_LEGAL.rcs}</p>
+                      <p><strong>Registered office:</strong> {HIPPOCAMPUS_LEGAL.registeredOffice}</p>
+                      <p><strong>Publication director and manager:</strong> {HIPPOCAMPUS_LEGAL.director}</p>
+                      <p><strong>Email:</strong> {HIPPOCAMPUS_LEGAL.contactEmail}</p>
                     </div>
                   </div>
 
                   <div>
                     <h3 className="font-semibold text-foreground mb-3">Hosting Provider</h3>
                     <div className="space-y-2">
-                      <p><strong>Name:</strong> Manus</p>
-                      <p><strong>Address:</strong> Cloud infrastructure</p>
-                      <p><strong>Service:</strong> Website hosting and deployment</p>
+                      <p><strong>Service:</strong> Manus, operated by Butterfly Effect Pte. Ltd.</p>
+                      <p><strong>Role:</strong> Technical platform, website hosting and deployment</p>
+                      <p><strong>Provider information:</strong> <a className="text-primary underline" href="https://manus.im/terms" target="_blank" rel="noreferrer">Manus terms of service</a></p>
                     </div>
                   </div>
 
@@ -499,10 +516,10 @@ function LegalPageEn() {
                   <p className="mt-4">You can refuse non-essential cookies by configuring your browser.</p>
 
                   <h3 className="font-semibold text-foreground mt-4">8. Data controller</h3>
-                  <p><strong>Controller:</strong> Dr. Ahmed Ben Lallahom<br /><strong>Address:</strong> France<br /><strong>Contact:</strong> Via the contact form on the website</p>
+                  <p><strong>Controller:</strong> {HIPPOCAMPUS_LEGAL.name}<br /><strong>Registered office:</strong> {HIPPOCAMPUS_LEGAL.registeredOffice}<br /><strong>Manager:</strong> {HIPPOCAMPUS_LEGAL.director}<br /><strong>Contact:</strong> {HIPPOCAMPUS_LEGAL.contactEmail}</p>
 
                   <h3 className="font-semibold text-foreground mt-4">9. Processors and international transfers</h3>
-                  <p>Resend sends transactional emails, Stripe processes consultation payments, and Manus provides hosting and technical infrastructure. Depending on the provider infrastructure, processing may take place outside the European Economic Area. The applicable safeguards are those provided by the providers' data processing agreements, including Standard Contractual Clauses where required. Only data necessary for booking, invoicing, payment status, authentication, hosting and communications is shared, and this website does not store card data.</p>
+                  <p>Resend sends transactional emails, Stripe processes consultation payments, Google Drive stores private copies of CVs after authorization by the controller, and Manus (Butterfly Effect Pte. Ltd.) provides hosting and technical infrastructure. Depending on the provider infrastructure, processing may take place outside the European Economic Area. The applicable safeguards are those provided by the providers' data processing agreements, including Standard Contractual Clauses where required. Only data necessary for booking, invoicing, recruitment, authentication, hosting and communications is shared, and this website does not store card data. AI-supported recruitment analysis is subject to human review and does not make automated hiring decisions.</p>
 
                   <h3 className="font-semibold text-foreground mt-4">10. Right to lodge a complaint</h3>
                   <p>If you believe your GDPR rights are not being respected, you have the right to lodge a complaint with the competent supervisory authority.</p>
@@ -565,7 +582,7 @@ function LegalPageEn() {
           {/* Last update date */}
           <section className="pt-8 border-t border-border">
             <p className="text-sm text-muted-foreground">
-              Last updated: July 2026
+              Last updated: August 2026
             </p>
           </section>
         </div>
@@ -658,20 +675,22 @@ function LegalPageDe() {
                   <div>
                     <h3 className="font-semibold text-foreground mb-3">Website-Herausgeber</h3>
                     <div className="space-y-2">
-                      <p><strong>Name:</strong> Dr. Ahmed Ben Lallahom</p>
-                      <p><strong>Status:</strong> Unabhängiger Gesundheitsfachmann</p>
-                      <p><strong>Adresse:</strong> Frankreich</p>
-                      <p><strong>Telefon:</strong> +33 9 72 15 24 13</p>
-                      <p><strong>E-Mail:</strong> Verfügbar über das Kontaktformular</p>
+                      <p><strong>Unternehmen:</strong> {HIPPOCAMPUS_LEGAL.name}</p>
+                      <p><strong>Rechtsform:</strong> Französische Gesellschaft mit beschränkter Haftung (SARL)</p>
+                      <p><strong>Stammkapital:</strong> {HIPPOCAMPUS_LEGAL.capital}</p>
+                      <p><strong>Handelsregister:</strong> {HIPPOCAMPUS_LEGAL.rcs}</p>
+                      <p><strong>Sitz:</strong> {HIPPOCAMPUS_LEGAL.registeredOffice}</p>
+                      <p><strong>Veröffentlichungsleiter und Geschäftsführer:</strong> {HIPPOCAMPUS_LEGAL.director}</p>
+                      <p><strong>E-Mail:</strong> {HIPPOCAMPUS_LEGAL.contactEmail}</p>
                     </div>
                   </div>
 
                   <div>
                     <h3 className="font-semibold text-foreground mb-3">Hosting-Anbieter</h3>
                     <div className="space-y-2">
-                      <p><strong>Name:</strong> Manus</p>
-                      <p><strong>Adresse:</strong> Cloud-Infrastruktur</p>
-                      <p><strong>Service:</strong> Website-Hosting und Bereitstellung</p>
+                      <p><strong>Service:</strong> Manus, betrieben von Butterfly Effect Pte. Ltd.</p>
+                      <p><strong>Rolle:</strong> Technische Plattform, Website-Hosting und Bereitstellung</p>
+                      <p><strong>Informationen zum Anbieter:</strong> <a className="text-primary underline" href="https://manus.im/terms" target="_blank" rel="noreferrer">Manus-Nutzungsbedingungen</a></p>
                     </div>
                   </div>
 
@@ -767,10 +786,10 @@ function LegalPageDe() {
                   <p className="mt-4">Sie können nicht-essenzielle Cookies ablehnen, indem Sie Ihren Browser konfigurieren.</p>
 
                   <h3 className="font-semibold text-foreground mt-4">8. Datenverantwortlicher</h3>
-                  <p><strong>Verantwortlicher:</strong> Dr. Ahmed Ben Lallahom<br /><strong>Adresse:</strong> Frankreich<br /><strong>Kontakt:</strong> Über das Kontaktformular auf der Website</p>
+                  <p><strong>Verantwortlicher:</strong> {HIPPOCAMPUS_LEGAL.name}<br /><strong>Sitz:</strong> {HIPPOCAMPUS_LEGAL.registeredOffice}<br /><strong>Geschäftsführer:</strong> {HIPPOCAMPUS_LEGAL.director}<br /><strong>Kontakt:</strong> {HIPPOCAMPUS_LEGAL.contactEmail}</p>
 
                   <h3 className="font-semibold text-foreground mt-4">9. Auftragsverarbeiter und internationale Übermittlungen</h3>
-                  <p>Resend versendet Transaktions-E-Mails, Stripe verarbeitet Zahlungen für Konsultationen und Manus stellt Hosting sowie technische Infrastruktur bereit. Je nach Infrastruktur des jeweiligen Anbieters kann eine Verarbeitung außerhalb des Europäischen Wirtschaftsraums erfolgen. Die geltenden Garantien ergeben sich aus den Auftragsverarbeitungsverträgen der Anbieter, einschließlich Standardvertragsklauseln, sofern erforderlich. Es werden nur für Terminbuchung, Rechnungsstellung, Zahlungsstatus, Authentifizierung, Hosting und Kommunikation erforderliche Daten weitergegeben; diese Website speichert keine Kartendaten.</p>
+                  <p>Resend versendet Transaktions-E-Mails, Stripe verarbeitet Zahlungen, Google Drive speichert nach Autorisierung des Verantwortlichen private CV-Kopien und Manus (Butterfly Effect Pte. Ltd.) stellt Hosting sowie technische Infrastruktur bereit. Je nach Infrastruktur des jeweiligen Anbieters kann eine Verarbeitung außerhalb des Europäischen Wirtschaftsraums erfolgen. Die geltenden Garantien ergeben sich aus den Auftragsverarbeitungsverträgen der Anbieter, einschließlich Standardvertragsklauseln, sofern erforderlich. Es werden nur für Buchung, Rechnungsstellung, Recruiting, Authentifizierung, Hosting und Kommunikation erforderliche Daten weitergegeben; diese Website speichert keine Kartendaten. Die KI-gestützte Bewerbungsanalyse wird menschlich überprüft und trifft keine automatisierten Einstellungsentscheidungen.</p>
 
                   <h3 className="font-semibold text-foreground mt-4">10. Beschwerderecht</h3>
                   <p>Wenn Sie der Ansicht sind, dass Ihre DSGVO-Rechte nicht respektiert werden, haben Sie das Recht, eine Beschwerde bei der zuständigen Aufsichtsbehörde einzureichen.</p>
@@ -833,7 +852,7 @@ function LegalPageDe() {
           {/* Last update date */}
           <section className="pt-8 border-t border-border">
             <p className="text-sm text-muted-foreground">
-              Zuletzt aktualisiert: Juli 2026
+              Zuletzt aktualisiert: August 2026
             </p>
           </section>
         </div>
@@ -926,20 +945,22 @@ function LegalPageZh() {
                   <div>
                     <h3 className="font-semibold text-foreground mb-3">网站编辑</h3>
                     <div className="space-y-2">
-                      <p><strong>姓名：</strong> Dr. Ahmed Ben Lallahom</p>
-                      <p><strong>身份：</strong> 独立医疗专业人士</p>
-                      <p><strong>地址：</strong> 法国</p>
-                      <p><strong>电话：</strong> +33 9 72 15 24 13</p>
-                      <p><strong>电子邮件：</strong> 可通过联系表格获取</p>
+                      <p><strong>公司：</strong>{HIPPOCAMPUS_LEGAL.name}</p>
+                      <p><strong>法律形式：</strong>法国有限责任公司（SARL）</p>
+                      <p><strong>注册资本：</strong>{HIPPOCAMPUS_LEGAL.capital}</p>
+                      <p><strong>商业登记：</strong>{HIPPOCAMPUS_LEGAL.rcs}</p>
+                      <p><strong>注册地址：</strong>{HIPPOCAMPUS_LEGAL.registeredOffice}</p>
+                      <p><strong>出版负责人及经理：</strong>{HIPPOCAMPUS_LEGAL.director}</p>
+                      <p><strong>电子邮件：</strong>{HIPPOCAMPUS_LEGAL.contactEmail}</p>
                     </div>
                   </div>
 
                   <div>
                     <h3 className="font-semibold text-foreground mb-3">托管服务商</h3>
                     <div className="space-y-2">
-                      <p><strong>名称：</strong> Manus</p>
-                      <p><strong>地址：</strong> 云基础设施</p>
-                      <p><strong>服务：</strong> 网站托管和部署</p>
+                      <p><strong>服务：</strong>Manus，由 Butterfly Effect Pte. Ltd. 运营</p>
+                      <p><strong>角色：</strong>技术平台、网站托管和部署</p>
+                      <p><strong>服务商信息：</strong><a className="text-primary underline" href="https://manus.im/terms" target="_blank" rel="noreferrer">Manus 服务条款</a></p>
                     </div>
                   </div>
 
@@ -1035,10 +1056,10 @@ function LegalPageZh() {
                   <p className="mt-4">您可以通过配置浏览器来拒绝非必要的Cookie。</p>
 
                   <h3 className="font-semibold text-foreground mt-4">8. 数据控制者</h3>
-                  <p><strong>控制者：</strong> Dr. Ahmed Ben Lallahom<br /><strong>地址：</strong> 法国<br /><strong>联系：</strong> 通过网站上的联系表格</p>
+                  <p><strong>控制者：</strong>{HIPPOCAMPUS_LEGAL.name}<br /><strong>注册地址：</strong>{HIPPOCAMPUS_LEGAL.registeredOffice}<br /><strong>经理：</strong>{HIPPOCAMPUS_LEGAL.director}<br /><strong>联系：</strong>{HIPPOCAMPUS_LEGAL.contactEmail}</p>
 
                   <h3 className="font-semibold text-foreground mt-4">9. 处理者与国际传输</h3>
-                  <p>Resend 用于发送交易邮件，Stripe 处理咨询付款，Manus 提供网站托管和技术基础设施。根据各服务商使用的基础设施，数据可能在欧洲经济区以外处理。适用的保障措施以服务商的数据处理协议为准；在需要时包括标准合同条款。仅共享预约、发票、付款状态、身份验证、托管和通信所必需的数据；本网站不保存银行卡数据。</p>
+                  <p>Resend 用于发送交易邮件，Stripe 处理付款，Google Drive 在控制者授权后保存私有 CV 副本，Manus（Butterfly Effect Pte. Ltd.）提供网站托管和技术基础设施。根据各服务商使用的基础设施，数据可能在欧洲经济区以外处理。适用的保障措施以服务商的数据处理协议为准；在需要时包括标准合同条款。仅共享预约、发票、招聘、身份验证、托管和通信所必需的数据；本网站不保存银行卡数据。AI 辅助的候选人分析始终经人工复核，不作出自动招聘决定。</p>
 
                   <h3 className="font-semibold text-foreground mt-4">10. 投诉权</h3>
                   <p>如果您认为您的GDPR权利未得到尊重，您有权向主管监管机构提出投诉。</p>
@@ -1101,7 +1122,7 @@ function LegalPageZh() {
           {/* Last update date */}
           <section className="pt-8 border-t border-border">
             <p className="text-sm text-muted-foreground">
-              最后更新：2026年7月
+              最后更新：2026年8月
             </p>
           </section>
         </div>
