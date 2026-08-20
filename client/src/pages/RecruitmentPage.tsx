@@ -250,6 +250,7 @@ export default function RecruitmentPage() {
   const [form, setForm] = useState<FormState>(initialForm);
   const [file, setFile] = useState<File | null>(null);
   const [status, setStatus] = useState<"idle" | "sending" | "success" | "error">("idle");
+  const [validationAttempted, setValidationAttempted] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [trackingId, setTrackingId] = useState("");
   const [specialtyQuery, setSpecialtyQuery] = useState("");
@@ -292,6 +293,7 @@ export default function RecruitmentPage() {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setErrorMessage("");
+    setValidationAttempted(true);
     const submittedDiplomaCountry = resolveCountryForSubmission(form.diplomaCountry, new FormData(event.currentTarget).get("diplomaCountry"), worldwideCountries.map(country => country.label));
     if (!file || !isAcceptedCvFile(file)) {
       setStatus("error"); setErrorMessage(t.fileError); return;
@@ -328,6 +330,7 @@ export default function RecruitmentPage() {
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(payload.error || t.genericError);
       setTrackingId(payload.trackingId || "");
+      setValidationAttempted(false);
       setStatus("success");
     } catch (submissionError) {
       setStatus("error"); setErrorMessage(submissionError instanceof Error ? submissionError.message : t.genericError);
@@ -468,13 +471,13 @@ export default function RecruitmentPage() {
                     </label>
                   )}
 
-                  <fieldset><legend className="mb-3 text-sm font-medium text-foreground">{t.countries} *</legend><div className="grid gap-2 sm:grid-cols-2">{countryOptions.map(country => <label key={country.value} className="flex items-center gap-3 rounded-lg border border-border/70 px-3 py-2 text-sm text-foreground"><input type="checkbox" checked={form.targetCountries.includes(country.value)} onChange={() => toggleCountry(country.value)} className="h-4 w-4 accent-primary" />{country.labels[lang]}</label>)}</div><p className="sr-only">{selectedCountryLabels}</p></fieldset>
+                  <fieldset className={validationAttempted && !form.targetCountries.length ? "form-consent-group-invalid" : ""}><legend className="mb-3 text-sm font-medium text-foreground">{t.countries} *</legend><div className="grid gap-2 sm:grid-cols-2">{countryOptions.map(country => <label key={country.value} className="form-consent-item flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-foreground"><input type="checkbox" checked={form.targetCountries.includes(country.value)} onChange={() => toggleCountry(country.value)} className="form-consent-checkbox" />{country.labels[lang]}</label>)}</div><p className="sr-only">{selectedCountryLabels}</p></fieldset>
                   
                   <fieldset>
                     <legend className="mb-3 text-sm font-medium text-foreground">{t.languages}</legend>
                     <div className="grid gap-2 sm:grid-cols-2">
-                      {professionalLanguageOptions.map(option => <label key={option.value} className="flex min-h-11 items-center gap-3 rounded-lg border border-border/70 px-3 py-2 text-sm text-foreground transition-colors hover:border-primary/45">
-                        <input type="checkbox" checked={form.languages.includes(option.value)} onChange={() => toggleProfessionalLanguage(option.value)} className="h-4 w-4 accent-primary" />
+                      {professionalLanguageOptions.map(option => <label key={option.value} className="form-consent-item flex min-h-11 items-center gap-3 rounded-lg px-3 py-2 text-sm text-foreground transition-colors hover:border-primary/45">
+                        <input type="checkbox" checked={form.languages.includes(option.value)} onChange={() => toggleProfessionalLanguage(option.value)} className="form-consent-checkbox" />
                         {option.labels[lang]}
                       </label>)}
                     </div>
@@ -487,8 +490,8 @@ export default function RecruitmentPage() {
                   </label>
                   
                   <div className="rounded-xl border border-dashed border-primary/40 bg-primary/5 p-4"><label htmlFor="recruitment-cv" className="flex cursor-pointer items-center gap-3 text-sm font-medium text-foreground"><FileUp className="h-5 w-5 text-primary" /><span>{file ? file.name : t.chooseFile}</span><input ref={fileInputRef} id="recruitment-cv" type="file" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={event => setFile(event.target.files?.[0] || null)} className="sr-only" required /></label><p className="mt-2 text-xs text-muted-foreground">{file ? `${(file.size / (1024 * 1024)).toFixed(2)} MB` : t.cv}</p></div>
-                  <label className="flex items-start gap-3 text-sm text-muted-foreground"><input type="checkbox" checked={form.gdprConsent} onChange={event => update("gdprConsent", event.target.checked)} className="mt-1 h-4 w-4 accent-primary" required /><span>{t.gdpr}</span></label>
-                  <label className="flex items-start gap-3 text-sm text-muted-foreground"><input type="checkbox" checked={form.marketingConsent} onChange={event => update("marketingConsent", event.target.checked)} className="mt-1 h-4 w-4 accent-primary" /><span>{t.marketing}</span></label>
+                  <label className={`form-consent-item flex items-start gap-3 text-sm text-muted-foreground ${validationAttempted && !form.gdprConsent ? "form-consent-item-invalid" : ""}`}><input type="checkbox" checked={form.gdprConsent} aria-invalid={validationAttempted && !form.gdprConsent} onChange={event => update("gdprConsent", event.target.checked)} className="form-consent-checkbox mt-1" required /><span>{t.gdpr}</span></label>
+                  <label className="form-consent-item flex items-start gap-3 text-sm text-muted-foreground"><input type="checkbox" checked={form.marketingConsent} onChange={event => update("marketingConsent", event.target.checked)} className="form-consent-checkbox mt-1" /><span>{t.marketing}</span></label>
                   <label className="absolute -left-[10000px] h-px w-px overflow-hidden" aria-hidden="true"><span>Website</span><input tabIndex={-1} autoComplete="off" value={form.website} onChange={event => update("website", event.target.value)} /></label>
                   {status === "error" && <p className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive" role="alert">{errorMessage}</p>}
                   <button type="submit" disabled={status === "sending"} className="cta-primary w-full justify-center">{status === "sending" ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />{t.sending}</> : t.submit}</button>

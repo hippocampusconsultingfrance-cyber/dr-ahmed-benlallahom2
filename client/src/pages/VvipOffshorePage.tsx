@@ -358,6 +358,7 @@ export default function VvipOffshorePage() {
   const [file, setFile] = useState<File | null>(null);
   const [status, setStatus] = useState<"idle" | "sending" | "success" | "error">("idle");
   const [errorMessage, setErrorMessage] = useState("");
+  const [validationAttempted, setValidationAttempted] = useState(false);
   const [trackingId, setTrackingId] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const diplomaCountries = useMemo(() => getWorldwideCountries(lang), [lang]);
@@ -368,6 +369,7 @@ export default function VvipOffshorePage() {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setErrorMessage("");
+    setValidationAttempted(true);
     const submittedDiplomaCountry = resolveCountryForSubmission(form.diplomaCountry, new FormData(event.currentTarget).get("diplomaCountry"), diplomaCountries.map(country => country.label));
 
     if (!file || !isAcceptedVvipCvFile(file)) {
@@ -413,6 +415,7 @@ export default function VvipOffshorePage() {
       if (!res.ok) throw new Error(payload.error || t.genericError);
 
       setTrackingId(payload.trackingId || "VVIP-OK");
+      setValidationAttempted(false);
       setStatus("success");
     } catch (err) {
       setStatus("error");
@@ -566,13 +569,14 @@ export default function VvipOffshorePage() {
                       </div>
                     </div>
 
-                    <label className="flex items-start gap-3 cursor-pointer text-xs text-muted-foreground">
+                    <label className={`form-consent-item flex items-start gap-3 cursor-pointer text-xs text-muted-foreground ${validationAttempted && !form.gdprConsent ? "form-consent-item-invalid" : ""}`}>
                       <input
                         type="checkbox"
                         required
                         checked={form.gdprConsent}
+                        aria-invalid={validationAttempted && !form.gdprConsent}
                         onChange={(e) => update("gdprConsent", e.target.checked)}
-                        className="mt-0.5 rounded border-border accent-primary"
+                        className="form-consent-checkbox mt-0.5"
                       />
                       <span>{t.gdpr}</span>
                     </label>

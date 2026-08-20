@@ -222,6 +222,7 @@ export default function CandidateAccessPage() {
   const [lastName, setLastName] = useState("");
   const [terms, setTerms] = useState(false);
   const [documentConsent, setDocumentConsent] = useState(false);
+  const [consentAttempted, setConsentAttempted] = useState(false);
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
 
@@ -266,9 +267,11 @@ export default function CandidateAccessPage() {
     } else if (mode === "register") {
       if (password !== passwordConfirmation) { setNotice(copy.passwordMismatch); return; }
       if (!terms || !documentConsent) {
+        setConsentAttempted(true);
         setNotice(!terms && !documentConsent ? copy.bothConsentMissing : !terms ? copy.termsMissing : copy.documentConsentMissing);
         return;
       }
+      setConsentAttempted(false);
       if (!turnstileToken) { setNotice(copy.turnstileRegisterMissing); return; }
       register.mutate({ email, password, firstName, lastName, termsAccepted: terms, documentConsent, turnstileToken, invitationToken: invitationToken || undefined });
     } else {
@@ -305,7 +308,7 @@ export default function CandidateAccessPage() {
                 <div className="space-y-2"><Label htmlFor="candidate-email">{copy.email}</Label><Input id="candidate-email" type="email" autoComplete="email" value={email} onChange={event => setEmail(event.target.value)} readOnly={mode === "register" && Boolean(invitationToken && invitation.data)} required /></div>
                 {mode !== "forgot" && <div className="space-y-2"><Label htmlFor="candidate-password">{copy.password}</Label><Input id="candidate-password" type="password" autoComplete={mode === "login" ? "current-password" : "new-password"} value={password} onChange={event => setPassword(event.target.value)} minLength={15} required /><p className="text-xs text-slate-500">{copy.passwordHint}</p></div>}
                 {mode === "register" && <div className="space-y-2"><Label htmlFor="candidate-password-confirmation">{copy.confirmPassword}</Label><Input id="candidate-password-confirmation" type="password" autoComplete="new-password" value={passwordConfirmation} onChange={event => setPasswordConfirmation(event.target.value)} minLength={15} required /></div>}
-                {mode === "register" && <div className="space-y-3 rounded-xl border border-slate-800 bg-slate-900/45 p-4 text-sm"><label className="flex cursor-pointer gap-3"><Checkbox checked={terms} onCheckedChange={value => setTerms(value === true)} /><span>{copy.terms}</span></label><label className="flex cursor-pointer gap-3"><Checkbox checked={documentConsent} onCheckedChange={value => setDocumentConsent(value === true)} /><span>{copy.documentConsent}</span></label></div>}
+                {mode === "register" && <div className="candidate-consent-panel space-y-3 rounded-xl border border-slate-700/90 bg-slate-900/75 p-4 text-sm"><label className={`candidate-consent-item ${consentAttempted && !terms ? "candidate-consent-item-invalid" : ""}`}><Checkbox className="candidate-consent-checkbox" checked={terms} aria-invalid={consentAttempted && !terms} onCheckedChange={value => { const next = value === true; setTerms(next); if (next && documentConsent) setConsentAttempted(false); }} /><span>{copy.terms}</span></label><label className={`candidate-consent-item ${consentAttempted && !documentConsent ? "candidate-consent-item-invalid" : ""}`}><Checkbox className="candidate-consent-checkbox" checked={documentConsent} aria-invalid={consentAttempted && !documentConsent} onCheckedChange={value => { const next = value === true; setDocumentConsent(next); if (next && terms) setConsentAttempted(false); }} /><span>{copy.documentConsent}</span></label></div>}
                 {(mode === "register" || mode === "forgot") && <TurnstileWidget onToken={setTurnstileToken} />}
                 {notice && <p role="status" className="rounded-lg border border-cyan-800/50 bg-cyan-950/30 p-3 text-sm text-cyan-100">{notice}</p>}
                 <Button type="submit" className="w-full bg-cyan-500 text-slate-950 hover:bg-cyan-400" disabled={pending}>{pending ? <Loader2 className="animate-spin" /> : mode === "login" ? <LogIn /> : mode === "register" ? <UserPlus /> : <KeyRound />}{mode === "login" ? copy.login : mode === "register" ? copy.register : copy.reset}</Button>

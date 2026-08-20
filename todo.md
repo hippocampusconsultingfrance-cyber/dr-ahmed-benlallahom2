@@ -2493,3 +2493,4 @@
 - [x] Fiabiliser la synchronisation du pays de diplôme VVIP prérempli sur téléphone avant la soumission
 - [x] Appliquer la synchronisation fiable des valeurs de pays préremplies à tous les formulaires du site
 - [x] Confirmer la synchronisation des pays préremplis sur le parcours de recrutement mobilité
+- [x] Rendre les cases à cocher obligatoires contrastées et visibles, avec un état rouge actionnable lorsqu’elles ne sont pas validées

@@ -32,12 +32,16 @@ export default function ContactSection() {
     },
   });
 
+  const [consentAttempted, setConsentAttempted] = useState(false);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.gdprConsent) {
+      setConsentAttempted(true);
       toast.error(copy.consentRequired);
       return;
     }
+    setConsentAttempted(false);
     submitMutation.mutate({
       name: formData.name,
       email: formData.email,
@@ -205,14 +209,15 @@ export default function ContactSection() {
                   />
                 </div>
 
-                <div className="contact-consent flex items-start gap-3 p-4 rounded-lg bg-primary/5 border border-primary/20">
+                <div className={`form-consent-item contact-consent flex items-start gap-3 rounded-lg p-4 ${consentAttempted && !formData.gdprConsent ? "form-consent-item-invalid" : ""}`}>
                   <input
                     type="checkbox"
                     id="gdprConsent"
                     required
                     checked={formData.gdprConsent}
-                    onChange={(e) => setFormData({ ...formData, gdprConsent: e.target.checked })}
-                    className="w-5 h-5 rounded border-border/50 text-primary focus:ring-primary/40 cursor-pointer mt-0.5 flex-shrink-0"
+                    aria-invalid={consentAttempted && !formData.gdprConsent}
+                    onChange={(e) => { const checked = e.target.checked; setFormData({ ...formData, gdprConsent: checked }); if (checked) setConsentAttempted(false); }}
+                    className="form-consent-checkbox mt-0.5"
                   />
                   <label htmlFor="gdprConsent" className="text-sm text-foreground cursor-pointer flex-1">
                     {content.contact.form.gdprConsent}
