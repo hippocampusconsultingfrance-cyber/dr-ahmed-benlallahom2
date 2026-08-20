@@ -2496,3 +2496,4 @@
 - [x] Rendre les cases à cocher obligatoires contrastées et visibles, avec un état rouge actionnable lorsqu’elles ne sont pas validées
 - [x] Mettre en rouge tous les champs obligatoires vides ou invalides lors de la soumission, avec un message précis par champ
 - [x] Remplacer toute référence à un numéro d’urgence précis par l’invitation générale à appeler les secours
+- [x] Intégrer le logo Hippocampus Consulting fourni dans tous les e-mails aux candidats et établissements

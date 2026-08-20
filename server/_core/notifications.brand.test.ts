@@ -6,6 +6,8 @@ describe("identité visuelle des emails Hippocampus", () => {
     const html = buildHippocampusEmailShell("<p>Contenu test</p>");
     expect(html).toContain("ABL / HIPPOCAMPUS");
     expect(html).toContain("Hippocampus Consulting");
+    expect(html).toContain("hippocampus-consulting-logo-fr_94dc2977.png");
+    expect(html).toContain('alt="Hippocampus Consulting"');
     expect(html).toContain("#071827");
     expect(html).toContain("Contenu test");
   });

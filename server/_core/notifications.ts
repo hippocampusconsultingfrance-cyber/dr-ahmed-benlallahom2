@@ -18,14 +18,19 @@ function escapeHtml(value: unknown): string {
 // réponses des candidats restent dirigées vers la boîte de recrutement active.
 const FROM_EMAIL = "Hippocampus Consulting <recrutement@drahmedbenlallahom.com>";
 const RECRUITMENT_REPLY_TO = "hippocampusconsultingfrance@gmail.com";
+const HIPPOCAMPUS_LOGO_URL = "https://drahmedbenlallahom.com/manus-storage/hippocampus-consulting-logo-fr_94dc2977.png";
 
 export function buildHippocampusEmailShell(content: string) {
   return `
     <div style="margin:0;padding:24px 12px;background:#f1f5f9;font-family:Arial,sans-serif;color:#0f172a;">
       <div style="max-width:600px;margin:0 auto;background:#ffffff;border:1px solid #dbe4ee;border-radius:14px;overflow:hidden;">
-        <div style="padding:22px 28px;background:#071827;border-bottom:3px solid #0891b2;">
-          <div style="font-size:11px;letter-spacing:2px;font-weight:700;color:#38bdf8;">ABL / HIPPOCAMPUS</div>
-          <div style="margin-top:5px;font-size:19px;font-weight:700;color:#ffffff;">Hippocampus Consulting</div>
+        <div style="padding:18px 28px;background:#071827;border-bottom:3px solid #0891b2;">
+          <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;">
+            <tr>
+              <td style="padding:0 14px 0 0;vertical-align:middle;"><img src="${HIPPOCAMPUS_LOGO_URL}" width="64" alt="Hippocampus Consulting" style="display:block;width:64px;height:64px;border:0;border-radius:8px;background:#ffffff;" /></td>
+              <td style="vertical-align:middle;"><div style="font-size:11px;letter-spacing:2px;font-weight:700;color:#38bdf8;">ABL / HIPPOCAMPUS</div><div style="margin-top:5px;font-size:19px;font-weight:700;color:#ffffff;">Hippocampus Consulting</div></td>
+            </tr>
+          </table>
         </div>
         <div style="padding:28px;">${content}</div>
         <div style="padding:18px 28px;border-top:1px solid #e2e8f0;background:#f8fafc;font-size:12px;line-height:1.5;color:#64748b;">Dr. Ahmed Ben Lallahom · Hippocampus Consulting<br />Communication professionnelle et confidentielle</div>
