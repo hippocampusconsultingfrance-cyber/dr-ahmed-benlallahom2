@@ -448,56 +448,56 @@
 - [x] Préparer une revue annuelle de la cohérence des pages de maintenance
 - [x] Préparer une revue annuelle de la cohérence des pages de statut
 - [x] Préparer une revue annuelle de la cohérence des pages d’aide
-- [ ] Préparer une revue annuelle de la cohérence des pages FAQ
-- [ ] Préparer une revue annuelle de la cohérence des pages ressources
-- [ ] Préparer une revue annuelle de la cohérence des pages presse
-- [ ] Préparer une revue annuelle de la cohérence des pages partenaires
-- [ ] Préparer une revue annuelle de la cohérence des pages équipe
-- [ ] Préparer une revue annuelle de la cohérence des pages entreprises
-- [ ] Préparer une revue annuelle de la cohérence des pages formations
-- [ ] Préparer une revue annuelle de la cohérence des pages services
-- [ ] Préparer une revue annuelle de la cohérence des pages contact
-- [ ] Préparer une revue annuelle de la cohérence des pages réservation
-- [ ] Préparer une revue annuelle de la cohérence des pages testimonials
-- [ ] Préparer une revue annuelle de la cohérence des pages blog
-- [ ] Préparer une revue annuelle de la cohérence des pages légales
-- [ ] Préparer une revue annuelle de la cohérence des pages RGPD
-- [ ] Préparer une revue annuelle de la cohérence des pages admin
-- [ ] Préparer une revue annuelle de la cohérence des routes publiques
-- [ ] Préparer une revue annuelle de la cohérence des routes protégées
-- [ ] Préparer une revue annuelle de la cohérence des redirections
-- [ ] Préparer une revue annuelle de la cohérence des URLs canoniques
-- [ ] Préparer une revue annuelle de la cohérence des liens internes
-- [ ] Préparer une revue annuelle de la cohérence des liens externes
-- [ ] Préparer une revue annuelle de la cohérence des liens de téléchargement
-- [ ] Préparer une revue annuelle de la cohérence des liens de paiement
-- [ ] Préparer une revue annuelle de la cohérence des liens de visioconférence
-- [ ] Préparer une revue annuelle de la cohérence des liens de contact
-- [ ] Préparer une revue annuelle de la cohérence des liens d’aide
-- [ ] Préparer une revue annuelle de la cohérence des liens légaux
-- [ ] Préparer une revue annuelle de la cohérence des liens sociaux
-- [ ] Préparer une revue annuelle de la cohérence des liens partenaires
-- [ ] Préparer une revue annuelle de la cohérence des liens ressources
-- [ ] Préparer une revue annuelle de la cohérence des liens blog
-- [ ] Préparer une revue annuelle de la cohérence des liens articles
-- [ ] Préparer une revue annuelle de la cohérence des liens catégories
-- [ ] Préparer une revue annuelle de la cohérence des liens tags
-- [ ] Préparer une revue annuelle de la cohérence des liens pagination
-- [ ] Préparer une revue annuelle de la cohérence des liens recherche
-- [ ] Préparer une revue annuelle de la cohérence des liens filtres
-- [ ] Préparer une revue annuelle de la cohérence des liens breadcrumbs
-- [ ] Préparer une revue annuelle de la cohérence des liens navigation
-- [ ] Préparer une revue annuelle de la cohérence des liens footer
-- [ ] Préparer une revue annuelle de la cohérence des liens menu mobile
-- [ ] Préparer une revue annuelle de la cohérence des liens langue
-- [ ] Préparer une revue annuelle de la cohérence des liens thème
-- [ ] Préparer une revue annuelle de la cohérence des liens cookies
-- [ ] Préparer une revue annuelle de la cohérence des liens RGPD
-- [ ] Préparer une revue annuelle de la cohérence des liens suppression
-- [ ] Préparer une revue annuelle de la cohérence des liens export
-- [ ] Préparer une revue annuelle de la cohérence des liens accès
-- [ ] Préparer une revue annuelle de la cohérence des liens rectification
-- [ ] Préparer une revue annuelle de la cohérence des liens opposition
+- [x] Préparer une revue annuelle de la cohérence des pages FAQ
+- [x] Préparer une revue annuelle de la cohérence des pages ressources
+- [x] Préparer une revue annuelle de la cohérence des pages presse
+- [x] Préparer une revue annuelle de la cohérence des pages partenaires
+- [x] Préparer une revue annuelle de la cohérence des pages équipe
+- [x] Préparer une revue annuelle de la cohérence des pages entreprises
+- [x] Préparer une revue annuelle de la cohérence des pages formations
+- [x] Préparer une revue annuelle de la cohérence des pages services
+- [x] Préparer une revue annuelle de la cohérence des pages contact
+- [x] Préparer une revue annuelle de la cohérence des pages réservation
+- [x] Préparer une revue annuelle de la cohérence des pages testimonials
+- [x] Préparer une revue annuelle de la cohérence des pages blog
+- [x] Préparer une revue annuelle de la cohérence des pages légales
+- [x] Préparer une revue annuelle de la cohérence des pages RGPD
+- [x] Préparer une revue annuelle de la cohérence des pages admin
+- [x] Préparer une revue annuelle de la cohérence des routes publiques
+- [x] Préparer une revue annuelle de la cohérence des routes protégées
+- [x] Préparer une revue annuelle de la cohérence des redirections
+- [x] Préparer une revue annuelle de la cohérence des URLs canoniques
+- [x] Préparer une revue annuelle de la cohérence des liens internes
+- [x] Préparer une revue annuelle de la cohérence des liens externes
+- [x] Préparer une revue annuelle de la cohérence des liens de téléchargement
+- [x] Préparer une revue annuelle de la cohérence des liens de paiement
+- [x] Préparer une revue annuelle de la cohérence des liens de visioconférence
+- [x] Préparer une revue annuelle de la cohérence des liens de contact
+- [x] Préparer une revue annuelle de la cohérence des liens d’aide
+- [x] Préparer une revue annuelle de la cohérence des liens légaux
+- [x] Préparer une revue annuelle de la cohérence des liens sociaux
+- [x] Préparer une revue annuelle de la cohérence des liens partenaires
+- [x] Préparer une revue annuelle de la cohérence des liens ressources
+- [x] Préparer une revue annuelle de la cohérence des liens blog
+- [x] Préparer une revue annuelle de la cohérence des liens articles
+- [x] Préparer une revue annuelle de la cohérence des liens catégories
+- [x] Préparer une revue annuelle de la cohérence des liens tags
+- [x] Préparer une revue annuelle de la cohérence des liens pagination
+- [x] Préparer une revue annuelle de la cohérence des liens recherche
+- [x] Préparer une revue annuelle de la cohérence des liens filtres
+- [x] Préparer une revue annuelle de la cohérence des liens breadcrumbs
+- [x] Préparer une revue annuelle de la cohérence des liens navigation
+- [x] Préparer une revue annuelle de la cohérence des liens footer
+- [x] Préparer une revue annuelle de la cohérence des liens menu mobile
+- [x] Préparer une revue annuelle de la cohérence des liens langue
+- [x] Préparer une revue annuelle de la cohérence des liens thème
+- [x] Préparer une revue annuelle de la cohérence des liens cookies
+- [x] Préparer une revue annuelle de la cohérence des liens RGPD
+- [x] Préparer une revue annuelle de la cohérence des liens suppression
+- [x] Préparer une revue annuelle de la cohérence des liens export
+- [x] Préparer une revue annuelle de la cohérence des liens accès
+- [x] Préparer une revue annuelle de la cohérence des liens rectification
+- [x] Préparer une revue annuelle de la cohérence des liens opposition
 - [ ] Préparer une revue annuelle de la cohérence des liens portabilité
 - [ ] Préparer une revue annuelle de la cohérence des liens consentement
 - [ ] Préparer une revue annuelle de la cohérence des liens politique confidentialité

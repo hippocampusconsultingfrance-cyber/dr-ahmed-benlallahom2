@@ -41,6 +41,15 @@ Ce calendrier organise les vérifications annuelles du site et de ses parcours c
 | Canaux et artefacts | Documents PDF, e-mails, SMS, notifications administrateur/client, vues imprimables, exports, téléchargements, partages et aperçus sociaux. | Échantillons rendus, liens vérifiés et résultats des tests de génération. | Réparer tout artefact incomplet, ambigu ou inaccessible. |
 | Pages de support | Résultats de recherche, erreurs, maintenance, statut et aide. | Liste de routes, captures et contrôle de disponibilité. | Garder un message clair, une action de reprise et une indexation appropriée. |
 
+## Pages, routes et liens
+
+| Domaine | Périmètre annuel | Preuves à archiver | Décision attendue |
+|---|---|---|---|
+| Pages éditoriales et métier | FAQ, ressources éventuelles, presse, partenaires, équipe, entreprises, formations, services, contact, réservation, témoignages, légales, RGPD et administration. Les sections désactivées, dont le Blog, sont contrôlées comme telles. | Inventaire des routes actives, statut de chaque section et captures des pages exposées. | Mettre à jour, désactiver ou corriger toute page dont le contenu ou l’objectif n’est plus valide. |
+| Routes et indexation | Routes publiques/protégées, redirections, URL canoniques et cohérence d’accès. | Carte des routes, réponses HTTP et vérification de robots/sitemap/canonical. | Corriger les accès non voulus et les incohérences d’indexation. |
+| Liens de service | Liens internes/externes, téléchargement, paiement, visioconférence, contact, aide, légal, social, partenaire, ressource, recherche, filtres, pagination et breadcrumbs. | Résultat de contrôle de liens, routes de destination et propriétaire du lien externe. | Réparer, remplacer ou supprimer les liens obsolètes. |
+| Navigation et droits | Navigation, footer, menu mobile, langue, thème, cookies, RGPD, suppression, export, accès, rectification et opposition. | Parcours clavier, captures mobile et tests d’autorisation. | Préserver une sortie claire et empêcher tout lien vers une action non autorisée. |
+
 ## Déroulement recommandé
 
 La revue doit être planifiée une fois par an, puis renouvelée après une évolution majeure de paiement, authentification, stockage documentaire, fournisseur externe ou politique de données. Commencer par l’inventaire de la version publiée et terminer par une liste d’actions datées. Les éléments nécessitant un appareil réel, une boîte e-mail tierce ou un compte fournisseur ne doivent jamais être déclarés réalisés sans preuve correspondante.

@@ -200,6 +200,8 @@ La matrice annuelle couvre aussi la clarté médicale et transactionnelle, l’i
 
 Elle couvre désormais les états d’interface, composants visuels, canaux de diffusion et pages de support, avec les preuves à conserver et les décisions de correction attendues.
 
+Le calendrier inclut maintenant les pages éditoriales et métier, les routes et l’indexation, les liens de service ainsi que la navigation et les droits associés.
+
 ## Kit de marque exportable
 
 Le fichier `BRAND_KIT.md` centralise la signature, les tokens de palette, les typographies, les règles de ton, les formats d’export LinkedIn, documentaires et e-mail, ainsi que les contrôles de droits et d’accessibilité à effectuer avant diffusion.

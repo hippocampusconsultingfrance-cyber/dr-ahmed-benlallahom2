@@ -22,5 +22,9 @@ describe("calendrier annuel de revue", () => {
     expect(calendar).toContain("Composants et système visuel");
     expect(calendar).toContain("Canaux et artefacts");
     expect(calendar).toContain("Pages de support");
+    expect(calendar).toContain("Pages éditoriales et métier");
+    expect(calendar).toContain("Routes et indexation");
+    expect(calendar).toContain("Liens de service");
+    expect(calendar).toContain("Navigation et droits");
   });
 });
