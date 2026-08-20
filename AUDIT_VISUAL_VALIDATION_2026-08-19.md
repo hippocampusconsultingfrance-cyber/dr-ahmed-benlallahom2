@@ -317,6 +317,10 @@ Les deux illustrations décoratives dont les sources sont disponibles ont été 
 
 Les autres images du site restent hébergées dans le stockage statique et ne disposent pas toutes de sources locales exportables. Elles conservent leur politique de chargement actuelle. Toute future illustration devra être déposée avec au moins une source 640 px et une source 1 280 px, au format WebP, puis référencée avec `srcSet` et `sizes` ; un recadrage ne doit être appliqué qu’après validation explicite du cadrage éditorial.
 
+## Longueur des contrôles multilingues de la page Ressources
+
+Les libellés compacts de la page Ressources — recherche, filtres, format de document et appel à l’ouverture d’une source externe — sont désormais contrôlés dans les quatre langues. Le garde-fou compte les caractères Unicode sans tronquer le chinois et impose une limite conservatrice de quarante-deux caractères sur ces commandes. Les paragraphes éditoriaux restent volontairement fluides et passent à la ligne dans des conteneurs à largeur contrainte ; leur validation sur lecteurs d’écran, zoom natif et navigateurs distincts demeure un contrôle sur appareil réel documenté dans la checklist manuelle.
+
 ## Données de recrutement normalisées
 
 Les certifications, langues et expériences extraites sont conservées à la fois dans les champs de synthèse du dossier et dans des tables relationnelles dédiées. Le matching de brief consomme les certifications et langues normalisées ; le vivier conserve les structures normalisées et les expose dans l’administration. Les filtres restent compatibles avec les données déjà déposées en utilisant également les champs de déclaration initiaux.

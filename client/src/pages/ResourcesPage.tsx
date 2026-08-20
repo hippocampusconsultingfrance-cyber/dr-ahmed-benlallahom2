@@ -52,7 +52,7 @@ const resources: Resource[] = [
   },
 ];
 
-const copy: Record<ResourceLanguage, {
+export const resourcesCopy: Record<ResourceLanguage, {
   eyebrow: string; title: string; description: string; search: string; placeholder: string; all: string; safety: string; guidance: string; results: string; empty: string; external: string; pdf: string; web: string; controlled: string; note: string; updated: string;
 }> = {
   fr: { eyebrow: "Informations vérifiables", title: "Ressources médicales", description: "Une sélection de sources institutionnelles à consulter directement auprès de leur éditeur. Ces ressources sont générales et ne remplacent pas un avis médical personnalisé.", search: "Rechercher une ressource", placeholder: "Ex. sécurité, anesthésie, recommandations…", all: "Toutes", safety: "Sécurité des soins", guidance: "Recommandations", results: "ressource(s) disponible(s)", empty: "Aucune ressource ne correspond à ce filtre.", external: "Ouvrir la source institutionnelle", pdf: "Document PDF officiel", web: "Page institutionnelle", controlled: "Les documents s’ouvrent sur le site de leur organisme éditeur. Aucun téléchargement n’est déclenché automatiquement.", note: "En cas d’urgence médicale ou de danger immédiat, appelez le 112 ou les services d’urgence locaux. Cette page n’est pas un service d’urgence.", updated: "Sources vérifiées le 20 août 2026." },
@@ -63,8 +63,8 @@ const copy: Record<ResourceLanguage, {
 
 export default function ResourcesPage() {
   const { language } = useLanguage();
-  const locale = (language in copy ? language : "fr") as ResourceLanguage;
-  const strings = copy[locale];
+  const locale = (language in resourcesCopy ? language : "fr") as ResourceLanguage;
+  const strings = resourcesCopy[locale];
   const [category, setCategory] = useState<"all" | ResourceCategory>("all");
   const [query, setQuery] = useState("");
   const visibleResources = useMemo(() => {
