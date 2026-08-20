@@ -2110,7 +2110,9 @@
 - [x] Générer et appliquer la migration des colonnes IA de `cv_applications`
 - [x] Ajouter des tests unitaires sur les formats non supportés et les textes insuffisants
 - [x] Valider typecheck, build de production et suite Vitest
-- [ ] Vérifier en production une candidature de test avec un CV PDF ou DOCX non sensible — BLOQUÉ : nécessite une soumission réelle explicitement autorisée et un document non sensible
+- [x] Vérifier en production une candidature de test avec un CV PDF ou DOCX non sensible : test explicitement autorisé effectué le 20 août 2026 avec PDF fictif ; quarantaine, validation, extraction et analyse asynchrone vérifiées dans `PRODUCTION_CANDIDATE_TEST_2026-08-20.md`
+
+- [x] Exécuter la soumission de candidature de production explicitement autorisée avec un document fictif/non sensible, puis vérifier son traitement et sa trace d’audit : vérification documentée dans `PRODUCTION_CANDIDATE_TEST_2026-08-20.md`
 - [x] Définir une procédure métier de suppression anticipée et de revue des scores IA
 
 ## Historique technique — recrutement intelligent
