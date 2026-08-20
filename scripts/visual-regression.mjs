@@ -17,6 +17,7 @@ const scenarios = [
   { id: "resources-desktop", path: "/resources", viewport: { width: 1280, height: 720 } },
   { id: "press-desktop", path: "/press", viewport: { width: 1280, height: 720 } },
   { id: "faq-desktop", path: "/faq", viewport: { width: 1280, height: 720 } },
+  { id: "testimonials-desktop", path: "/testimonials", viewport: { width: 1280, height: 720 }, readySelector: '[data-visual-state="resolved"]' },
   { id: "gdpr-desktop", path: "/gdpr", viewport: { width: 1280, height: 720 } },
   { id: "booking-confirmation-desktop", path: "/booking/confirmation?status=success&trackingId=VISUAL-TEST-2026", viewport: { width: 1280, height: 720 } },
   { id: "home-mobile", path: "/", viewport: { width: 375, height: 812 } },
@@ -26,6 +27,7 @@ const scenarios = [
   { id: "resources-mobile", path: "/resources", viewport: { width: 375, height: 812 } },
   { id: "press-mobile", path: "/press", viewport: { width: 375, height: 812 } },
   { id: "faq-mobile", path: "/faq", viewport: { width: 375, height: 812 } },
+  { id: "testimonials-mobile", path: "/testimonials", viewport: { width: 375, height: 812 }, readySelector: '[data-visual-state="resolved"]' },
   { id: "gdpr-mobile", path: "/gdpr", viewport: { width: 375, height: 812 } },
   { id: "booking-confirmation-mobile", path: "/booking/confirmation?status=success&trackingId=VISUAL-TEST-2026", viewport: { width: 375, height: 812 } },
   { id: "booking-de-desktop", path: "/booking", viewport: { width: 1280, height: 720 }, language: "de", locale: "de-DE" },
@@ -44,6 +46,7 @@ const baselineUrls = {
   "resources-desktop": `${baseUrl}/manus-storage/resources-desktop_f92552e1.png`,
   "press-desktop": `${baseUrl}/manus-storage/press-desktop_b3b7f718.png`,
   "faq-desktop": `${baseUrl}/manus-storage/faq-desktop_0f8938df.png`,
+  "testimonials-desktop": `${baseUrl}/manus-storage/testimonials-desktop_045aff0c.png`,
   "gdpr-desktop": `${baseUrl}/manus-storage/gdpr-desktop_f40305d1.png`,
   "booking-confirmation-desktop": `${baseUrl}/manus-storage/booking-confirmation-desktop_e6802c33.png`,
   "home-mobile": `${baseUrl}/manus-storage/home-mobile_90be5c67.png`,
@@ -53,6 +56,7 @@ const baselineUrls = {
   "resources-mobile": `${baseUrl}/manus-storage/resources-mobile_a60f5a6e.png`,
   "press-mobile": `${baseUrl}/manus-storage/press-mobile_097bd159.png`,
   "faq-mobile": `${baseUrl}/manus-storage/faq-mobile_d751061b.png`,
+  "testimonials-mobile": `${baseUrl}/manus-storage/testimonials-mobile_aaebfaf3.png`,
   "gdpr-mobile": `${baseUrl}/manus-storage/gdpr-mobile_f47a18c5.png`,
   "booking-confirmation-mobile": `${baseUrl}/manus-storage/booking-confirmation-mobile_d628296d.png`,
   "booking-de-desktop": `${baseUrl}/manus-storage/booking-de-desktop_d984e5a4.png`,
@@ -82,6 +86,7 @@ async function captureScenario(browser, scenario) {
   }, scenario.language ?? "fr");
   const page = await context.newPage();
   await page.goto(`${baseUrl}${scenario.path}`, { waitUntil: "domcontentloaded", timeout: 20_000 });
+  if (scenario.readySelector) await page.waitForSelector(scenario.readySelector, { timeout: 10_000 });
   await page.evaluate(async () => {
     await document.fonts.ready;
   });
