@@ -27,5 +27,7 @@ La revue graphique trimestrielle complète les contrôles automatiques et ne rem
 | Système visuel | Cartes, icônes, bordures, rayons, ombres, espacements, largeurs de contenu, hauteurs de section, transitions, états focus/hover/active, états disabled/loading/error/success, retours empty/skeletons/toasts et composants modales/drawers/menus déroulants. |
 | Composants et médias | Calendriers, carrousels, formulaires, tableaux, graphiques, badges, avatars, logos, illustrations, photographies, vidéos, sons et documents PDF. |
 | Diffusion et résilience | E-mails, SMS, notifications admin/client, pages imprimables, exports, téléchargements, partages, aperçus sociaux, recherche, pages d’erreur et maintenance. |
+| Pages et routes | Aide, FAQ, ressources, presse, partenaires, équipe, entreprises, formations, services, contact, réservation, témoignages, blog, pages légales/RGPD, administration, routes publiques/protégées et redirections. |
+| Liens et intégrations | URLs canoniques, liens internes/externes, téléchargement, paiement, visioconférence, contact, aide, légal, social, partenaires, ressources, blog, articles, catégories, tags, pagination, recherche, filtres, breadcrumbs, navigation, footer, menu mobile, langue, thème, cookies, RGPD et suppression. |
 
 > Un écart P0/P1 — contenu illisible, élément interactif masqué, divulgation de donnée, visuel sans droit vérifiable ou dégradation majeure d’un parcours — bloque la publication jusqu’à correction ou dérogation écrite et datée.
