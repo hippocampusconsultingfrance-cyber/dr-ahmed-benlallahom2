@@ -258,7 +258,7 @@
 - [x] Ajouter une page de présentation Hippocampus Consulting avec une mise en page éditoriale
 - [x] Ajouter une non-régression de route, contenu et CTAs pour la page Pourquoi Hippocampus
 - [x] Ajouter une page Ressources Médicales avec cartes, filtres et accès contrôlé aux documents institutionnels externes
-- [ ] Ajouter une page Presse ou Publications uniquement avec contenus vérifiables
+- [x] Ajouter une page Presse ou Publications uniquement avec contenus vérifiables
 - [ ] Ajouter une page Partenaires uniquement après autorisation écrite des organisations concernées
 - [x] Ne pas étendre la gestion éditoriale Blog : le module Actualités reste retiré du produit public
 - [x] Ne pas ajouter d’aperçu de publication Blog tant que le module Actualités reste désactivé

@@ -11,6 +11,7 @@ export const footerBrandLogoAltCopy = {
 } as const;
 
 const resourcesLabel = { fr: "Ressources médicales", en: "Medical resources", de: "Medizinische Ressourcen", zh: "医疗资源" } as const;
+const pressLabel = { fr: "Presse & publications", en: "Press & publications", de: "Presse & Publikationen", zh: "媒体与出版物" } as const;
 
 export default function Footer() {
   const { content, language } = useLanguage();
@@ -84,6 +85,9 @@ export default function Footer() {
               </Link>
               <Link href="/resources" className="block text-sm text-muted-foreground hover:text-primary transition-colors">
                 {resourcesLabel[language as keyof typeof resourcesLabel] ?? resourcesLabel.fr}
+              </Link>
+              <Link href="/press" className="block text-sm text-muted-foreground hover:text-primary transition-colors">
+                {pressLabel[language as keyof typeof pressLabel] ?? pressLabel.fr}
               </Link>
             </nav>
           </div>
