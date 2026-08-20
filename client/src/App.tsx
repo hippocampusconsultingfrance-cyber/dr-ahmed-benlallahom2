@@ -11,6 +11,7 @@ import AnalyticsConsent from "./components/AnalyticsConsent";
 import ConnectionMotionPreference from "./components/ConnectionMotionPreference";
 import { SEOHead } from "./components/SEOHead";
 import SkipToContent from "./components/SkipToContent";
+import PageTransition from "./components/PageTransition";
 
 export const routeLoadingCopy = {
   fr: { title: "Chargement de votre espace", caption: "Préparation de l’expérience médicale sécurisée…" },
@@ -106,7 +107,7 @@ function App() {
         <ErrorBoundary>
           <SkipToContent />
           <Toaster />
-          <Router />
+          <PageTransition><Router /></PageTransition>
           <WhatsAppButton />
           <CookieConsent />
           <AnalyticsConsent />
