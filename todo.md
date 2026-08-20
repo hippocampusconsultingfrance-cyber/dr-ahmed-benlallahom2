@@ -270,7 +270,7 @@
 - [ ] Vérifier la navigation au clavier uniquement
 - [ ] Vérifier les pages à 200 % de zoom
 - [ ] Vérifier les textes et CTA dans les quatre langues
-- [ ] Vérifier le positionnement des éléments flottants sur petits écrans
+- [x] Vérifier le positionnement des éléments flottants sur petits écrans : bouton WhatsApp en zone sûre sous le bandeau cookies, navigation prioritaire et capture mobile validée
 - [ ] Vérifier les états de chargement des appels tRPC
 - [x] Vérifier les états anti-double-clic du paiement
 - [x] Vérifier le rendu de la confirmation et de l’annulation de paiement
