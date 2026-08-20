@@ -27,6 +27,19 @@ const countryOptions = [
   { value: "Autre pays / Mobilité mondiale", labels: { fr: "Autre pays / Mobilité mondiale", en: "Other country / Global mobility", de: "Anderes Land / Globale Mobilität", zh: "其他国家/全球流动" } },
 ] as const;
 
+const professionalLanguageOptions = [
+  { value: "Arabic", labels: { fr: "Arabe", en: "Arabic", de: "Arabisch", zh: "阿拉伯语" } },
+  { value: "French", labels: { fr: "Français", en: "French", de: "Französisch", zh: "法语" } },
+  { value: "English", labels: { fr: "Anglais", en: "English", de: "Englisch", zh: "英语" } },
+  { value: "Spanish", labels: { fr: "Espagnol", en: "Spanish", de: "Spanisch", zh: "西班牙语" } },
+  { value: "Portuguese", labels: { fr: "Portugais", en: "Portuguese", de: "Portugiesisch", zh: "葡萄牙语" } },
+  { value: "German", labels: { fr: "Allemand", en: "German", de: "Deutsch", zh: "德语" } },
+  { value: "Chinese", labels: { fr: "Chinois", en: "Chinese", de: "Chinesisch", zh: "中文" } },
+  { value: "Other", labels: { fr: "Autre", en: "Other", de: "Andere", zh: "其他" } },
+] as const;
+
+const otherLanguageLabel = { fr: "Autre langue (à préciser)", en: "Other language (please specify)", de: "Andere Sprache (bitte angeben)", zh: "其他语言（请注明）" } as const;
+
 const specialtyCategories = [
   {
     category: { fr: "Médecine générale & Urgences", en: "General Practice & Emergency", de: "Allgemeinmedizin & Notfallmedizin", zh: "全科与急诊医学" },
@@ -187,10 +200,10 @@ const diplomaCountryCopy = {
 
 type Language = keyof typeof copy;
 type FormState = {
-  firstName: string; lastName: string; email: string; phone: string; specialty: string; specialtyCustom: string; diplomaCountry: string; targetCountries: string[]; languages: string; yearsExperience: string; message: string; gdprConsent: boolean; marketingConsent: boolean; website: string;
+  firstName: string; lastName: string; email: string; phone: string; specialty: string; specialtyCustom: string; diplomaCountry: string; targetCountries: string[]; languages: string[]; otherLanguage: string; yearsExperience: string; message: string; gdprConsent: boolean; marketingConsent: boolean; website: string;
 };
 
-const initialForm: FormState = { firstName: "", lastName: "", email: "", phone: "", specialty: "", specialtyCustom: "", diplomaCountry: "", targetCountries: [], languages: "", yearsExperience: "", message: "", gdprConsent: false, marketingConsent: false, website: "" };
+const initialForm: FormState = { firstName: "", lastName: "", email: "", phone: "", specialty: "", specialtyCustom: "", diplomaCountry: "", targetCountries: [], languages: [], otherLanguage: "", yearsExperience: "", message: "", gdprConsent: false, marketingConsent: false, website: "" };
 
 const WORLDWIDE_COUNTRY_CODES = "AF,AX,AL,DZ,AS,AD,AO,AI,AQ,AG,AR,AM,AW,AU,AT,AZ,BS,BH,BD,BB,BY,BE,BZ,BJ,BM,BT,BO,BQ,BA,BW,BV,BR,IO,BN,BG,BF,BI,CV,KH,CM,CA,KY,CF,TD,CL,CN,CX,CC,CO,KM,CG,CD,CK,CR,CI,HR,CU,CW,CY,CZ,DK,DJ,DM,DO,EC,EG,SV,GQ,ER,EE,SZ,ET,FK,FO,FJ,FI,FR,GF,PF,TF,GA,GM,GE,DE,GH,GI,GR,GL,GD,GP,GU,GT,GG,GN,GW,GY,HT,HM,VA,HN,HK,HU,IS,IN,ID,IR,IQ,IE,IM,IL,IT,JM,JP,JE,JO,KZ,KE,KI,KP,KR,KW,KG,LA,LV,LB,LS,LR,LY,LI,LT,LU,MO,MG,MW,MY,MV,ML,MT,MH,MQ,MR,MU,YT,MX,FM,MD,MC,MN,ME,MS,MA,MZ,MM,NA,NR,NP,NL,NC,NZ,NI,NE,NG,NU,NF,MK,MP,NO,OM,PK,PW,PS,PA,PG,PY,PE,PH,PN,PL,PT,PR,QA,RE,RO,RU,RW,BL,SH,KN,LC,MF,PM,VC,WS,SM,ST,SA,SN,RS,SC,SL,SG,SX,SK,SI,SB,SO,ZA,GS,SS,ES,LK,SD,SR,SJ,SE,CH,SY,TW,TJ,TZ,TH,TL,TG,TK,TO,TT,TN,TR,TM,TC,TV,UG,UA,AE,GB,US,UM,UY,UZ,VU,VE,VN,VG,VI,WF,EH,YE,ZM,ZW".split(",");
 
@@ -259,6 +272,10 @@ export default function RecruitmentPage() {
     update("targetCountries", form.targetCountries.includes(country) ? form.targetCountries.filter(item => item !== country) : [...form.targetCountries, country]);
   };
 
+  const toggleProfessionalLanguage = (languageValue: string) => {
+    update("languages", form.languages.includes(languageValue) ? form.languages.filter(item => item !== languageValue) : [...form.languages, languageValue]);
+  };
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setErrorMessage("");
@@ -281,7 +298,10 @@ export default function RecruitmentPage() {
     body.append("specialty", finalSpecialty);
     body.append("diplomaCountry", form.diplomaCountry);
     body.append("targetCountries", JSON.stringify(form.targetCountries));
-    body.append("languages", JSON.stringify(form.languages.split(",").map(item => item.trim()).filter(Boolean)));
+    const submittedLanguages = form.languages.flatMap(languageValue => languageValue === "Other"
+      ? form.otherLanguage.split(",").map(item => item.trim()).filter(Boolean)
+      : [languageValue]);
+    body.append("languages", JSON.stringify(submittedLanguages));
     body.append("yearsExperience", form.yearsExperience);
     body.append("message", form.message);
     body.append("gdprConsent", form.gdprConsent ? "1" : "0");
@@ -306,7 +326,8 @@ export default function RecruitmentPage() {
       <Navigation />
       <main className="recruitment-page pt-28 md:pt-36">
         <section className="container grid gap-12 pb-16 lg:grid-cols-[0.9fr_1.1fr] lg:items-start">
-          <div className="lg:sticky lg:top-32">
+          <div className="relative isolate overflow-hidden rounded-3xl lg:sticky lg:top-32">
+            <img src="/manus-storage/hippocampus-recruitment-earth_f3124b59.png" alt="" aria-hidden="true" className="pointer-events-none absolute -right-28 top-4 h-[30rem] w-[23rem] rounded-full object-cover opacity-35 mix-blend-screen [mask-image:radial-gradient(ellipse_at_center,black_36%,transparent_72%)]" />
             <p className="section-kicker">{t.eyebrow}</p>
             <h1 className="mt-5 max-w-2xl font-display text-4xl leading-tight text-foreground md:text-6xl">{t.title}</h1>
             <p className="mt-6 max-w-xl text-lg leading-8 text-muted-foreground">{t.intro}</p>
@@ -343,7 +364,7 @@ export default function RecruitmentPage() {
                     {[{ key: "firstName" as const, label: t.firstName }, { key: "lastName" as const, label: t.lastName }].map(field => <label key={field.key} className="recruitment-field-group"><span>{field.label} *</span><input id={`recruitment-${field.key}`} required value={form[field.key]} onChange={event => update(field.key, event.target.value)} className="recruitment-field" autoComplete={field.key === "firstName" ? "given-name" : "family-name"} /></label>)}
                   </div>
                   <div className="grid gap-5 sm:grid-cols-2">
-                    <label className="recruitment-field-group"><span>{t.email} *</span><input id="recruitment-email" type="email" required value={form.email} onChange={event => update("email", event.target.value)} className="recruitment-field" autoComplete="email" /></label>
+                    <label className="recruitment-field-group"><span>{lang === "fr" ? "Email" : t.email} *</span><input id="recruitment-email" type="email" required value={form.email} onChange={event => update("email", event.target.value)} className="recruitment-field" autoComplete="email" /></label>
                     <label className="recruitment-field-group"><span>{t.phone}</span><input id="recruitment-phone" type="tel" value={form.phone} onChange={event => update("phone", event.target.value)} className="recruitment-field" autoComplete="tel" /></label>
                   </div>
                   <div className="grid gap-5 sm:grid-cols-2">
@@ -433,10 +454,16 @@ export default function RecruitmentPage() {
 
                   <fieldset><legend className="mb-3 text-sm font-medium text-foreground">{t.countries} *</legend><div className="grid gap-2 sm:grid-cols-2">{countryOptions.map(country => <label key={country.value} className="flex items-center gap-3 rounded-lg border border-border/70 px-3 py-2 text-sm text-foreground"><input type="checkbox" checked={form.targetCountries.includes(country.value)} onChange={() => toggleCountry(country.value)} className="h-4 w-4 accent-primary" />{country.labels[lang]}</label>)}</div><p className="sr-only">{selectedCountryLabels}</p></fieldset>
                   
-                  <label className="recruitment-field-group">
-                    <span>{t.languages}</span>
-                    <input id="recruitment-languages" value={form.languages} onChange={event => update("languages", event.target.value)} placeholder="Français, English, Deutsch" className="recruitment-field" />
-                  </label>
+                  <fieldset>
+                    <legend className="mb-3 text-sm font-medium text-foreground">{t.languages}</legend>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      {professionalLanguageOptions.map(option => <label key={option.value} className="flex min-h-11 items-center gap-3 rounded-lg border border-border/70 px-3 py-2 text-sm text-foreground transition-colors hover:border-primary/45">
+                        <input type="checkbox" checked={form.languages.includes(option.value)} onChange={() => toggleProfessionalLanguage(option.value)} className="h-4 w-4 accent-primary" />
+                        {option.labels[lang]}
+                      </label>)}
+                    </div>
+                    {form.languages.includes("Other") && <label className="recruitment-field-group mt-4 animate-in fade-in duration-200"><span>{otherLanguageLabel[lang]}</span><input id="recruitment-other-language" value={form.otherLanguage} onChange={event => update("otherLanguage", event.target.value)} placeholder="Ex. Italien, russe…" className="recruitment-field" /></label>}
+                  </fieldset>
                   
                   <label className="recruitment-field-group">
                     <span>{t.message}</span>

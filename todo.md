@@ -2477,3 +2477,8 @@
 - [x] Réaligner les libellés et champs du formulaire de candidature afin que chaque zone de saisie apparaisse sous son intitulé
 - [x] Remplacer la liste ouverte des pays d’obtention du diplôme par un sélecteur recherché fermé par défaut
 - [x] Éliminer le chevauchement entre icônes, texte saisi et actions d’effacement dans les recherches du formulaire et normaliser les recherches du site
+- [x] Renommer le champ « Email professionnel » en « Email » dans le formulaire de candidature
+- [x] Remplacer la saisie libre des langues professionnelles par des cases à cocher et un champ « autre langue » conditionnel
+- [x] Ajouter une illustration terrestre professionnelle à la page de recrutement
+- [x] Retirer le titre et le texte d’introduction de la page de recherche générale
+- [x] Recentrer toute la rédaction de la recherche générale sur les informations publiques visibles, sans référence aux consultations ou parcours
