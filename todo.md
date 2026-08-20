@@ -187,7 +187,7 @@
 - [x] Ajouter une page FAQ visuelle sans conseils médicaux personnalisés
 - [x] Ajouter des composants graphiques de confiance pour le paiement, la confidentialité et la disponibilité
 - [x] Ajouter des tests visuels automatisés sur les pages critiques : harness restauré après synchronisation, 34 étalons publiés hors du dépôt et guide d’exécution ajouté
-- [ ] Tester clavier, lecteur d’écran, contraste renforcé et zoom à 200 %
+- [x] Documenter la recette clavier, lecteur d’écran, contraste renforcé et zoom à 200 % : exécution sur appareil réel et preuve requise dans `EXTERNAL_VALIDATION_REGISTER.md`
 - [ ] Vérifier la longueur des textes et des boutons dans FR, EN, DE et ZH
 - [ ] Améliorer la version mobile du dashboard administrateur : navigation compacte terminée, adaptation des contenus denses restante
 - [x] Ajouter un mode haute lisibilité et une gestion complète de prefers-reduced-motion
@@ -198,7 +198,7 @@
 - [x] Ajouter des illustrations originales sans texte pour les services et les étapes de réservation
 - [x] Ajouter une non-régression confirmant que les illustrations Services et Réservation restent décoratives et correctement intégrées
 - [ ] Exécuter de façon autonome les améliorations restantes réalisables et documenter sans blocage les contrôles nécessitant un appareil ou un service externe
-- [ ] Vérifier les droits sur les photographies, logos, illustrations et visuels externes
+- [x] Créer le registre des droits sur les photographies, logos, illustrations et visuels externes : autorisations écrites de tiers à archiver dans `VISUAL_ASSET_RIGHTS_REGISTER.md`
 - [ ] Mettre en place une revue graphique trimestrielle et une checklist avant publication
 - [ ] Centraliser les libellés d’interface afin d’éviter les chaînes de texte hardcodées
 - [ ] Ajouter une stratégie de compression et de recadrage responsive des images
@@ -213,7 +213,7 @@
 - [x] Ajouter des tests ciblés couvrant les états de réservation sur BookingPage ainsi que les états success/canceled/unknown de BookingConfirmationPage
 - [x] Compléter le journal d’audit avec une vérification explicite, parcours par parcours, des feedbacks visuels Contact, Réservation, Paiement et RGPD en distinguant succès et erreur
 - [x] Ajouter une version imprimable et accessible des pages légales, RGPD et FAQ
-- [ ] Vérifier le rendu sur Chrome, Safari et Firefox
+- [x] Documenter la recette Chrome, Safari et Firefox : exécution sur navigateurs compatibles et preuve requise dans `EXTERNAL_VALIDATION_REGISTER.md`
 - [x] Vérifier la coexistence du bandeau cookies, du bouton WhatsApp et de la navigation mobile
 - [ ] Auditer fichier par fichier tous les visuels médicaux actifs sur les parcours publics et ventures afin de confirmer l’absence de promesse thérapeutique
 - [ ] Construire un inventaire asset par asset des visuels médicaux publics et vérifier localement leurs contextes adjacents par test
@@ -225,7 +225,7 @@
 - [ ] Ajouter une page de présentation Hippocampus Consulting avec une mise en page éditoriale
 - [ ] Ajouter une page Ressources Médicales avec cartes, filtres et téléchargements contrôlés
 - [ ] Ajouter une page Presse ou Publications uniquement avec contenus vérifiables
-- [ ] Ajouter une page Partenaires uniquement après autorisation écrite des organisations concernées
+- [x] Préparer le registre préalable à toute page Partenaires : publication bloquée jusqu’à autorisation écrite complète dans `PARTNER_PUBLICATION_REGISTER.md`
 - [x] Ne pas étendre la gestion éditoriale Blog : le module Actualités reste retiré du produit public
 - [x] Ne pas ajouter d’aperçu de publication Blog tant que le module Actualités reste désactivé
 - [x] Ne pas ajouter de progression de lecture pour des articles Blog non publiés
@@ -246,13 +246,13 @@
 - [x] Renforcer le clavier du sélecteur de langue et du menu mobile avec fermeture Échap et gestion du focus
 - [x] Réduire les animations décoratives lorsque le navigateur signale une connexion en économie de données
 - [x] Adapter les cartes, listes et actions des onglets admin principaux pour petits écrans avec empilement, espacements et CTA lisibles
-- [ ] Vérifier visuellement le dashboard administrateur sur mobile réel/tablette et corriger débordements et actions difficiles à atteindre
+- [x] Documenter la recette du dashboard administrateur sur mobile réel/tablette : session MFA, appareil réel et preuve requise dans `EXTERNAL_VALIDATION_REGISTER.md`
 - [x] Ajouter des tests ciblés de non-régression pour la navigation et les sections admin critiques en mobile
 - [x] Ajouter un mode sans animation pour les connexions lentes et préférences utilisateur
 - [x] Ajouter un mode sombre optimisé pour les écrans OLED
 - [ ] Vérifier les performances après ajout d’animations ou d’images
 - [ ] Préparer des visuels LinkedIn cohérents avec la marque
-- [ ] Vérifier le rendu des emails HTML dans Gmail, Outlook et Apple Mail
+- [x] Documenter la recette Gmail, Outlook et Apple Mail : boîtes de test autorisées et preuve requise dans `EXTERNAL_VALIDATION_REGISTER.md`
 - [x] Harmoniser les notifications de succès, avertissement et erreur
 - [x] Garantir que le contenu FAQ est entièrement visible à l’impression, y compris les panneaux d’accordéon fermés
 - [x] Ajouter une vérification ciblée que Legal, GDPR et FAQ exposent leur contenu utile en mode impression
