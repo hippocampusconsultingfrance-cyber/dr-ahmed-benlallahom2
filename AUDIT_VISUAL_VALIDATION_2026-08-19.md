@@ -178,6 +178,10 @@ Lorsque le mode de lisibilité renforcée est activé, les entrées animées et 
 
 Le projet contient désormais `COMPONENTS_GUIDE.md`, qui décrit les composants partagés, conventions de localisation, états d’interface, protections des données sensibles et étapes de validation avant publication. Un test de présence protège cette documentation afin qu’elle reste disponible lors des évolutions futures.
 
+## Citation médicale sourcée
+
+Le composant `MedicalCitation` permet d’afficher une citation générale avec un lien de source, une date de mise à jour, un contexte éventuel et un avertissement de non-substitution à l’avis médical personnalisé ou aux urgences. Son format, son libellé et sa date sont localisés en français, anglais, allemand et chinois ; il ne publie aucune recommandation clinique par défaut.
+
 ## Vérification visuelle des parcours publics critiques
 
 Les pages Accueil, Réservation, RGPD, Recrutement et Employeurs ont été capturées en vue bureau. Les en-têtes, formulaires, CTAs et pieds de page restent lisibles, structurés et sans chevauchement visible. Les formulaires Réservation, RGPD et Brief Employeur présentent leurs champs à une largeur cohérente, avec une hiérarchie claire entre contenu informatif et action principale. La vérification équivalente sur mobile reste planifiée séparément.
