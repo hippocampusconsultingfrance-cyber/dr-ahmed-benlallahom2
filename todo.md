@@ -234,7 +234,7 @@
 - [x] Ajouter une grille responsive commune à toutes les pages publiques : primitive `.container`, paliers de gouttières et garde-fou sur les routes représentatives documentés dans `PUBLIC_LAYOUT_GRID.md`
 - [x] Ajouter une animation de transition de page courte et désactivable : transition 180 ms sur opacité/translation, neutralisée pour réduction de mouvement et économie de données
 - [x] Ajouter un contrôle de taille de police sans rupture de mise en page : mode Lisibilité renforcée persistant (+6,25 %), lignes ajustées et commande accessible dans la navigation
-- [ ] Ajouter un composant de citation médicale avec source et date de mise à jour
+- [x] Ajouter un composant de citation médicale avec source et date de mise à jour : `MedicalCitation` impose la source et la date, distingue le niveau d’information et protège les liens externes
 - [x] Ajouter une notice visible indiquant que le site ne remplace pas les urgences médicales
 - [ ] Vérifier l’accessibilité des couleurs cyan, gris et doré sur les deux thèmes
 - [ ] Évaluer la réduction des effets décoratifs sur les formulaires et pages légales
