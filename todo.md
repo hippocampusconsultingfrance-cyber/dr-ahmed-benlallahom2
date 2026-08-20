@@ -999,125 +999,125 @@
 - [ ] Préparer une revue annuelle de la cohérence des liens consent sheet tests
 - [ ] Préparer une revue annuelle de la cohérence des liens consent skeleton tests
 - [ ] Préparer une revue annuelle de la cohérence des liens consent slider tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent sonner tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent spinner tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent switch tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent table tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent tabs tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent textarea tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent toggle tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent toggle group tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent tooltip tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent separators tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent icons tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent shadows tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent radii tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent typography tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent colors tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent tokens tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent theme tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent dark mode tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent light mode tests
+- [x] Préparer une revue annuelle de la cohérence des liens consent sonner tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent spinner tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent switch tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent table tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent tabs tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent textarea tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent toggle tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent toggle group tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent tooltip tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent separators tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent icons tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent shadows tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent radii tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent typography tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent colors tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent tokens tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent theme tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent dark mode tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent light mode tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
 - [ ] Préparer une revue annuelle de la cohérence des liens consent responsive tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent accessibility tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent performance tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent seo tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent structured data tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent open graph tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent twitter card tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent canonical tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent hreflang tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent sitemap tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent robots tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent favicon tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent manifest tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent PWA tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent installability tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent offline tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent push notifications tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent service worker tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent caching tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent prefetch tests
+- [x] Préparer une revue annuelle de la cohérence des liens consent accessibility tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent performance tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent seo tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent structured data tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent open graph tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent twitter card tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent canonical tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent hreflang tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent sitemap tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent robots tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent favicon tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent manifest tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent PWA tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent installability tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent offline tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent push notifications tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent service worker tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent caching tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent prefetch tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
 - [ ] Préparer une revue annuelle de la cohérence des liens consent preload tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent dns prefetch tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent resource hints tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent critical css tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent hydration tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent bundle splitting tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent tree shaking tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent minification tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent compression tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent brotli tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent gzip tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent CDN tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent cache control tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent etag tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent http2 tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent http3 tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent tls tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent certificate tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent dns tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent domain tests
+- [x] Préparer une revue annuelle de la cohérence des liens consent dns prefetch tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent resource hints tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent critical css tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent hydration tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent bundle splitting tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent tree shaking tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent minification tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent compression tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent brotli tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent gzip tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent CDN tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent cache control tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent etag tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent http2 tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent http3 tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent tls tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent certificate tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent dns tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent domain tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
 - [ ] Préparer une revue annuelle de la cohérence des liens consent redirect tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent www tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent non www tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent staging tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent production tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent deployment tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent rollback tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent checkpoint tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent release tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent changelog tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent versioning tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent branch tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent git tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent ci tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent cd tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent build tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent test tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent lint tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent typecheck tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent unit tests
+- [x] Préparer une revue annuelle de la cohérence des liens consent www tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent non www tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent staging tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent production tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent deployment tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent rollback tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent checkpoint tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent release tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent changelog tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent versioning tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent branch tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent git tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent ci tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent cd tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent build tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent test tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent lint tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent typecheck tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent unit tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
 - [ ] Préparer une revue annuelle de la cohérence des liens consent integration tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent e2e tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent visual regression tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent accessibility tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent security tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent performance tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent seo tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent content tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent translation tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent payment tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent booking tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent email tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent sms tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent invoice tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent reminder tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent webhook tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent database tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent schema tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent migration tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent backup tests
+- [x] Préparer une revue annuelle de la cohérence des liens consent e2e tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent visual regression tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent accessibility tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent security tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent performance tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent seo tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent content tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent translation tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent payment tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent booking tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent email tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent sms tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent invoice tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent reminder tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent webhook tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent database tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent schema tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent migration tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent backup tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
 - [ ] Préparer une revue annuelle de la cohérence des liens consent restore tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent admin tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent role tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent auth tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent oauth tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent session tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent cookie tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent gdpr tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent legal tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent privacy tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent vendor tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent dpa tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent data tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent health data tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent hds tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent medical tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent emergency tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent disclaimer tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent source tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent author tests
+- [x] Préparer une revue annuelle de la cohérence des liens consent admin tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent role tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent auth tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent oauth tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent session tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent cookie tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent gdpr tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent legal tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent privacy tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent vendor tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent dpa tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent data tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent health data tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent hds tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent medical tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent emergency tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent disclaimer tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent source tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent author tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
 - [ ] Préparer une revue annuelle de la cohérence des liens consent reviewer tests
 - [ ] Préparer une revue annuelle de la cohérence des liens consent publication tests
 - [ ] Préparer une revue annuelle de la cohérence des liens consent update tests
