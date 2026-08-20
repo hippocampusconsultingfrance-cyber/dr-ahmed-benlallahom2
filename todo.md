@@ -249,7 +249,7 @@
 - [x] Ajouter un statut graphique de livraison sécurisée de facture sur la confirmation de paiement
 - [x] Ajouter des illustrations originales sans texte pour les services et les étapes de réservation
 - [x] Ajouter une non-régression confirmant que les illustrations Services et Réservation restent décoratives et correctement intégrées
-- [ ] Exécuter de façon autonome les améliorations restantes réalisables et documenter sans blocage les contrôles nécessitant un appareil ou un service externe : contrôles externes centralisés dans `EXTERNAL_VALIDATION_REGISTER.md`
+- [x] Exécuter de façon autonome les améliorations restantes réalisables et documenter sans blocage les contrôles nécessitant un appareil ou un service externe : tâches réalisables exécutées ; seuls les assets autorisés, droits tiers, accès client authentifié et validations écrites restent conditionnels et tracés dans leurs registres
 - [x] Centraliser les validations externes restantes avec leurs preuves attendues et conditions de clôture
 - [ ] Vérifier les droits sur les photographies, logos, illustrations et visuels externes : registre créé ; autorisations écrites de tiers encore à archiver
 - [x] Créer un registre de provenance et de preuves requises pour les actifs visuels publics
