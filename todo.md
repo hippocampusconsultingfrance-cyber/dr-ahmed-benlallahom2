@@ -178,7 +178,8 @@
 ## Améliorations graphiques avancées à planifier
 
 - [x] Créer un système de design documenté avec tokens de couleur, typographie, espacements et composants
-- [ ] Créer une bibliothèque de visuels médicaux authentiques avec droits d’utilisation et textes alternatifs
+- [ ] Créer une bibliothèque de visuels médicaux authentiques avec droits d’utilisation et textes alternatifs : manifeste d’intégration prêt, assets authentiques autorisés encore à fournir ou valider
+- [x] Préparer le manifeste d’intégration des visuels médicaux authentiques et autorisés
 - [x] Ne pas développer la page Blog : la section Actualités et ses routes publiques restent désactivées à la demande du propriétaire
 - [x] Vérifier les états vides des témoignages, de la réservation, des Briefs Employeurs, du Mailing, du Vivier, de la revue documentaire et du panneau administratif partagé ; le Blog restant désactivé
 - [x] Vérifier par test et documenter composant par composant les états vides des parcours explicitement couverts, le Blog restant désactivé
