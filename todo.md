@@ -251,7 +251,7 @@
 - [x] Ajouter un mode sans animation pour les connexions lentes et préférences utilisateur
 - [x] Ajouter un mode sombre optimisé pour les écrans OLED
 - [x] Vérifier les performances après ajout d’animations ou d’images : budgets gzip de l’entrée, des routes différées et du dashboard admin ajoutés ; vérification WebP et animations désactivables documentée
-- [ ] Préparer des visuels LinkedIn cohérents avec la marque
+- [x] Préparer des visuels LinkedIn cohérents avec la marque : affiche internationale 3:4 générée, vérifiée, documentée avec légende et cadre de publication sans promesse d’embauche
 - [x] Documenter la recette Gmail, Outlook et Apple Mail : boîtes de test autorisées et preuve requise dans `EXTERNAL_VALIDATION_REGISTER.md`
 - [x] Harmoniser les notifications de succès, avertissement et erreur
 - [x] Garantir que le contenu FAQ est entièrement visible à l’impression, y compris les panneaux d’accordéon fermés
