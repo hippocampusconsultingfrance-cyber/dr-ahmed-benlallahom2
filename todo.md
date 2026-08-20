@@ -278,7 +278,8 @@
 - [x] Ajouter une non-régression de route, contenu et CTAs pour la page Pourquoi Hippocampus
 - [x] Ajouter une page Ressources Médicales avec cartes, filtres et accès contrôlé aux documents institutionnels externes
 - [x] Ajouter une page Presse ou Publications uniquement avec contenus vérifiables
-- [ ] Ajouter une page Partenaires uniquement après autorisation écrite des organisations concernées
+- [ ] Ajouter une page Partenaires uniquement après autorisation écrite des organisations concernées : registre de validation préparé dans `PARTNER_PUBLICATION_REGISTER.md`
+- [x] Préparer le registre de validation préalable à toute publication de partenaire
 - [x] Ne pas étendre la gestion éditoriale Blog : le module Actualités reste retiré du produit public
 - [x] Ne pas ajouter d’aperçu de publication Blog tant que le module Actualités reste désactivé
 - [x] Ne pas ajouter de progression de lecture pour des articles Blog non publiés
