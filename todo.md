@@ -217,7 +217,7 @@
 - [ ] Tester clavier, lecteur d’écran, contraste renforcé et zoom à 200 %
 - [ ] Vérifier la longueur des textes et des boutons dans FR, EN, DE et ZH
 - [ ] Améliorer la version mobile du dashboard administrateur : navigation compacte terminée, adaptation des contenus denses restante
-- [ ] Auditer et ajuster les tableaux de candidatures, réservations et fichiers candidats pour une lecture mobile sans débordement
+- [x] Auditer et ajuster les tableaux de candidatures, réservations et fichiers candidats pour une lecture mobile sans débordement
 - [x] Agrandir et répartir les actions du tableau Candidatures pour une utilisation tactile sans débordement
 - [x] Auditer et ajuster la revue administrative des fichiers candidats pour une lecture mobile sans débordement
 - [x] Ajouter un mode haute lisibilité et une gestion complète de prefers-reduced-motion
@@ -245,8 +245,8 @@
 - [x] Ajouter une version imprimable et accessible des pages légales, RGPD et FAQ
 - [ ] Vérifier le rendu sur Chrome, Safari et Firefox
 - [x] Vérifier la coexistence du bandeau cookies, du bouton WhatsApp et de la navigation mobile
-- [ ] Auditer fichier par fichier tous les visuels médicaux actifs sur les parcours publics et ventures afin de confirmer l’absence de promesse thérapeutique
-- [ ] Construire un inventaire asset par asset des visuels médicaux publics et vérifier localement leurs contextes adjacents par test
+- [x] Auditer fichier par fichier tous les visuels médicaux actifs sur les parcours publics et ventures afin de confirmer l’absence de promesse thérapeutique
+- [x] Construire un inventaire asset par asset des visuels médicaux publics et vérifier localement leurs contextes adjacents par test
 - [ ] Vérifier que les contenus longs en allemand et chinois ne débordent pas des composants
 - [x] Étendre les tests de longueur aux libellés publics critiques des quatre langues actives
 - [x] Vérifier l’alignement des titres, CTA et formulaires sur desktop, tablette et mobile
@@ -271,7 +271,8 @@
 - [x] Ajouter une notice visible indiquant que le site ne remplace pas les urgences médicales
 - [x] Vérifier l’accessibilité des couleurs cyan, gris et doré sur les deux thèmes
 - [x] Ajouter un test automatisé de contraste pour les paires de tokens textuels et interactifs des thèmes clair et sombre
-- [ ] Évaluer la réduction des effets décoratifs sur les formulaires et pages légales
+- [x] Évaluer la réduction des effets décoratifs sur les formulaires et pages légales
+- [x] Réduire les animations de fond non essentielles des formulaires et pages légales lorsque la lisibilité renforcée est active
 - [ ] Préparer un kit de marque exportable pour les documents et réseaux sociaux
 - [ ] Mettre en place une validation graphique avant chaque checkpoint
 - [ ] Ajouter une documentation d’utilisation des composants pour les futures évolutions

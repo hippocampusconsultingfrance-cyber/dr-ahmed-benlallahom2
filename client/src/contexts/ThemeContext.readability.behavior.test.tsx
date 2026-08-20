@@ -44,5 +44,8 @@ describe("mode lisibilité renforcée", () => {
     expect(css).toContain("font-size: 106.25%;");
     expect(css).toContain("line-height: 1.62;");
     expect(css).toContain("min-width: 0;");
+    expect(css).toContain("html.high-readability .fade-in-up");
+    expect(css).toContain("html.high-readability .pulse-dot::after");
+    expect(css).toContain("animation: none;");
   });
 });

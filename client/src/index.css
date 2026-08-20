@@ -112,6 +112,17 @@ html.high-readability textarea {
   line-height: 1.62;
 }
 
+html.high-readability .fade-in-up {
+  opacity: 1;
+  transform: none;
+  transition: none;
+}
+
+html.high-readability .pulse-dot::after {
+  animation: none;
+  opacity: 0.35;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

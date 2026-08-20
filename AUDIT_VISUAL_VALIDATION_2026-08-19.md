@@ -170,6 +170,10 @@ La revue administrative des documents candidats suit le même principe : noms de
 
 Les états de chargement, d’erreur et d’absence des onglets administratifs historiques sont alimentés par les copies FR/EN/DE/ZH : shell d’accès, vue d’ensemble, réservations, messages, demandes RGPD, témoignages, disponibilités, candidatures, vivier, mailing, documents et briefs. La vérification des sources confirme que ces états ne s’appuient pas sur des messages techniques exposés à l’utilisateur.
 
+## Sobriété visuelle renforcée
+
+Lorsque le mode de lisibilité renforcée est activé, les entrées animées et les pulsations décoratives sont neutralisées. Cette règle s’applique notamment aux formulaires et pages légales, sans retirer les états de succès ou les messages utiles. La préférence reste mémorisée et une non-régression protège ces règles CSS.
+
 ## Vérification visuelle des parcours publics critiques
 
 Les pages Accueil, Réservation, RGPD, Recrutement et Employeurs ont été capturées en vue bureau. Les en-têtes, formulaires, CTAs et pieds de page restent lisibles, structurés et sans chevauchement visible. Les formulaires Réservation, RGPD et Brief Employeur présentent leurs champs à une largeur cohérente, avec une hiérarchie claire entre contenu informatif et action principale. La vérification équivalente sur mobile reste planifiée séparément.
