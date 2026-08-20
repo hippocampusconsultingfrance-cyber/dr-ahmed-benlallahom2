@@ -216,7 +216,7 @@
 - [x] Capturer et vérifier les parcours Accueil, Réservation, RGPD, Recrutement et Employeurs en vue mobile
 - [x] Capturer et vérifier les parcours Accueil, Réservation, RGPD, Recrutement et Employeurs aux formats desktop et mobile
 - [x] Documenter les tests clavier, lecteur d’écran, contraste renforcé et zoom à 200 % nécessitant un appareil réel
-- [ ] Vérifier la longueur des textes et des boutons dans FR, EN, DE et ZH
+- [x] Vérifier la longueur des textes et des boutons dans FR, EN, DE et ZH : garde-fous Unicode et scénarios visuels allemands/chinois sur les parcours à risque
 - [ ] Améliorer la version mobile du dashboard administrateur : navigation compacte terminée, adaptation des contenus denses restante
 - [x] Auditer et ajuster les tableaux de candidatures, réservations et fichiers candidats pour une lecture mobile sans débordement
 - [x] Agrandir et répartir les actions du tableau Candidatures pour une utilisation tactile sans débordement
@@ -249,7 +249,7 @@
 - [x] Vérifier la coexistence du bandeau cookies, du bouton WhatsApp et de la navigation mobile
 - [x] Auditer fichier par fichier tous les visuels médicaux actifs sur les parcours publics et ventures afin de confirmer l’absence de promesse thérapeutique
 - [x] Construire un inventaire asset par asset des visuels médicaux publics et vérifier localement leurs contextes adjacents par test
-- [ ] Vérifier que les contenus longs en allemand et chinois ne débordent pas des composants
+- [x] Vérifier que les contenus longs en allemand et chinois ne débordent pas des composants : captures automatisées Réservation/Ressources en desktop et mobile
 - [x] Étendre les tests de longueur aux libellés publics critiques des quatre langues actives
 - [x] Vérifier l’alignement des titres, CTA et formulaires sur desktop, tablette et mobile
 - [ ] Ajouter une procédure de revue UX basée sur les retours utilisateurs réels
@@ -310,7 +310,7 @@
 - [ ] Vérifier la compatibilité avec un lecteur d’écran
 - [ ] Vérifier la navigation au clavier uniquement
 - [ ] Vérifier les pages à 200 % de zoom
-- [ ] Vérifier les textes et CTA dans les quatre langues
+- [x] Vérifier les textes et CTA dans les quatre langues : libellés critiques et scénarios de régression visuelle FR/DE/ZH couverts
 - [x] Vérifier le positionnement des éléments flottants sur petits écrans
 - [x] Ajouter une non-régression empêchant le chevauchement du bandeau cookies et du bouton WhatsApp
 - [x] Vérifier les états de chargement des appels tRPC : squelettes, erreurs localisées et paiement bloqué en cas d’indisponibilité

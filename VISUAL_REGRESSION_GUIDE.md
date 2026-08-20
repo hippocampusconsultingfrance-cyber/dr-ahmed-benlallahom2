@@ -13,6 +13,8 @@ Le contrôle `pnpm test:visual` compare le premier viewport des routes publiques
 | `/resources` | 1280 × 720 | 375 × 812 | Recherche, filtres et cartes institutionnelles. |
 | `/gdpr` | 1280 × 720 | 375 × 812 | Parcours de droits, consentement et mise en page du formulaire. |
 
+En complément, la matrice comprend quatre contrôles de texte long : Réservation en allemand et chinois sur bureau, ainsi que Ressources en allemand et chinois sur mobile. Ils ciblent les libellés les plus susceptibles de s’étendre, tout en conservant les tests Unicode unitaires des contrôles compacts.
+
 Les étalons PNG sont stockés hors du dépôt dans le stockage statique du projet. Ils ne sont donc ni livrés au navigateur comme des assets de production, ni dupliqués dans l’arborescence applicative.
 
 ## Exécution et mise à jour

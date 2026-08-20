@@ -9,9 +9,11 @@ describe("harness de régression visuelle", () => {
     for (const route of ["/booking", "/recruitment", "/employers", "/resources", "/gdpr"]) {
       expect(source).toContain(`path: "${route}"`);
     }
-    for (const scenario of ["home-desktop", "booking-desktop", "recruitment-desktop", "employers-desktop", "resources-desktop", "gdpr-desktop", "home-mobile", "booking-mobile", "recruitment-mobile", "employers-mobile", "resources-mobile", "gdpr-mobile"]) {
+    for (const scenario of ["home-desktop", "booking-desktop", "recruitment-desktop", "employers-desktop", "resources-desktop", "gdpr-desktop", "home-mobile", "booking-mobile", "recruitment-mobile", "employers-mobile", "resources-mobile", "gdpr-mobile", "booking-de-desktop", "resources-de-mobile", "booking-zh-desktop", "resources-zh-mobile"]) {
       expect(source).toContain(`"${scenario}": \`${"${baseUrl}"}/manus-storage/`);
     }
+    expect(source).toContain('language: "de"');
+    expect(source).toContain('language: "zh"');
     expect(source).toContain("reducedMotion: \"reduce\"");
     expect(source).toContain("mismatchLimit = 0.008");
   });

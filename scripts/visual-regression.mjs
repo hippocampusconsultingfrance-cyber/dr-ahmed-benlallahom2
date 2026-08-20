@@ -22,6 +22,10 @@ const scenarios = [
   { id: "employers-mobile", path: "/employers", viewport: { width: 375, height: 812 } },
   { id: "resources-mobile", path: "/resources", viewport: { width: 375, height: 812 } },
   { id: "gdpr-mobile", path: "/gdpr", viewport: { width: 375, height: 812 } },
+  { id: "booking-de-desktop", path: "/booking", viewport: { width: 1280, height: 720 }, language: "de", locale: "de-DE" },
+  { id: "resources-de-mobile", path: "/resources", viewport: { width: 375, height: 812 }, language: "de", locale: "de-DE" },
+  { id: "booking-zh-desktop", path: "/booking", viewport: { width: 1280, height: 720 }, language: "zh", locale: "zh-CN" },
+  { id: "resources-zh-mobile", path: "/resources", viewport: { width: 375, height: 812 }, language: "zh", locale: "zh-CN" },
 ];
 
 // Les images étalons sont publiées hors du dépôt dans le stockage statique du projet.
@@ -39,6 +43,10 @@ const baselineUrls = {
   "employers-mobile": `${baseUrl}/manus-storage/employers-mobile_df40a85a.png`,
   "resources-mobile": `${baseUrl}/manus-storage/resources-mobile_a60f5a6e.png`,
   "gdpr-mobile": `${baseUrl}/manus-storage/gdpr-mobile_f47a18c5.png`,
+  "booking-de-desktop": `${baseUrl}/manus-storage/booking-de-desktop_d984e5a4.png`,
+  "resources-de-mobile": `${baseUrl}/manus-storage/resources-de-mobile_9c30508d.png`,
+  "booking-zh-desktop": `${baseUrl}/manus-storage/booking-zh-desktop_8f221bb9.png`,
+  "resources-zh-mobile": `${baseUrl}/manus-storage/resources-zh-mobile_ddfb486b.png`,
 };
 
 function assertSameDimensions(current, baseline, id) {
@@ -51,15 +59,15 @@ async function captureScenario(browser, scenario) {
   const context = await browser.newContext({
     viewport: scenario.viewport,
     deviceScaleFactor: 1,
-    locale: "fr-FR",
+    locale: scenario.locale ?? "fr-FR",
     timezoneId: "Europe/Paris",
     colorScheme: "dark",
     reducedMotion: "reduce",
   });
-  await context.addInitScript(() => {
+  await context.addInitScript((language) => {
     localStorage.setItem("cookieConsent", JSON.stringify({ essential: true, performance: false, preferences: false }));
-    localStorage.setItem("language", "fr");
-  });
+    localStorage.setItem("language", language);
+  }, scenario.language ?? "fr");
   const page = await context.newPage();
   await page.goto(`${baseUrl}${scenario.path}`, { waitUntil: "domcontentloaded", timeout: 20_000 });
   await page.evaluate(async () => {

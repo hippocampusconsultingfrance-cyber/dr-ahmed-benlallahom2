@@ -331,6 +331,10 @@ Le script `pnpm test:visual` compare désormais le viewport initial des routes p
 
 Cette couverture détecte les ruptures de hiérarchie, de cadrage et de premier viewport sans simuler paiement, e-mail, session administrateur ni données candidat. La validation visuelle de page entière, les technologies d’assistance et les états nécessitant une session autorisée restent régis par la checklist préproduction et la recette manuelle.
 
+## Textes longs allemand et chinois
+
+La matrice de régression visuelle inclut désormais la Réservation en allemand et chinois sur bureau, ainsi que la page Ressources en allemand et chinois sur mobile. Les quatre captures ont été comparées à leurs étalons approuvés sans différence significative ; elles complètent les garde-fous Unicode existants sur les boutons, filtres et appels à l’action compacts. Ce périmètre cible les écrans où les formulations allemandes sont les plus longues et ceux où le chinois impose une vérification distincte de l’affichage typographique.
+
 ## Données de recrutement normalisées
 
 Les certifications, langues et expériences extraites sont conservées à la fois dans les champs de synthèse du dossier et dans des tables relationnelles dédiées. Le matching de brief consomme les certifications et langues normalisées ; le vivier conserve les structures normalisées et les expose dans l’administration. Les filtres restent compatibles avec les données déjà déposées en utilisant également les champs de déclaration initiaux.
