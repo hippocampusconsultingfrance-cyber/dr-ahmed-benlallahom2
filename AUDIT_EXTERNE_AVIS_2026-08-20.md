@@ -39,5 +39,17 @@ Le contrôle TypeScript s’est terminé sans erreur. Quatre fichiers de tests c
 
 ## Décision conseillée
 
-Il est pertinent de lancer immédiatement le lot **P0 + P1**, qui est circonscrit et ne modifie pas les parcours visuels. Les actions P2 et P3 peuvent être planifiées ensuite. Avant toute suppression, les artefacts générés par la plateforme doivent être identifiés comme requis ou non.
+Le lot **P0 + P1** a été mis en œuvre le 20 août 2026 sans modifier les parcours visuels. Les actions P2 et P3 peuvent être planifiées ensuite. Avant toute suppression, les artefacts générés par la plateforme doivent être identifiés comme requis ou non.
 
+## Remédiations appliquées après l’évaluation
+
+| Remédiation | Résultat |
+|---|---|
+| Webhook Stripe | Le bypass `evt_test_` a été supprimé. Les erreurs de signature ou de données deviennent génériques côté public. Un échec de traitement interne renvoie désormais un 5xx afin que Stripe rejoue l’événement ; la file de confirmation/facture est réenfilée de façon idempotente lors d’un rejeu. |
+| Configuration de production | Les secrets et paramètres critiques sont validés au démarrage en environnement de production. Un déploiement incomplet échoue immédiatement avec la liste des variables manquantes. |
+| MFA administrateur | La comparaison de hash utilise une comparaison à temps constant ; l’incrément des tentatives est conditionnel et atomique. |
+| En-têtes | `trust proxy` et HSTS sont définis explicitement ; la CSP existante est conservée, avec une évolution vers des nonces à planifier. |
+| CI GitHub | Un workflow exécute TypeScript et la suite Vitest à chaque push/pull request sur `main`. L’audit des dépendances est publié de façon non bloquante pendant la phase de maintenance. |
+| Dépendances | Axios, Drizzle ORM, Express et Nanoid ont été mis à jour vers des versions corrigées compatibles. Streamdown a été migré vers la v2 ; Recharts conserve son API v2 et utilise Lodash 4.18.1 corrigé. L’audit final ne détecte **aucune vulnérabilité connue** dans les dépendances de production. |
+
+La validation finale a réussi : **329 tests réussis, 2 ignorés**, TypeScript valide, build de production réussi et audit de dépendances de production sans vulnérabilité connue.

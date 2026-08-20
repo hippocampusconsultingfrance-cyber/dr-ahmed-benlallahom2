@@ -1,3 +1,26 @@
+export const PRODUCTION_REQUIRED_ENVIRONMENT_VARIABLES = [
+  "JWT_SECRET",
+  "DATABASE_URL",
+  "STRIPE_SECRET_KEY",
+  "STRIPE_WEBHOOK_SECRET",
+  "RESEND_API_KEY",
+  "TURNSTILE_SECRET_KEY",
+  "CANDIDATE_AUTH_PEPPER",
+  "CANDIDATE_DOCUMENT_ENCRYPTION_KEY",
+] as const;
+
+export function getMissingCriticalProductionEnvironment(environment: NodeJS.ProcessEnv = process.env) {
+  return PRODUCTION_REQUIRED_ENVIRONMENT_VARIABLES.filter(name => !environment[name]?.trim());
+}
+
+export function assertCriticalProductionEnvironment(environment: NodeJS.ProcessEnv = process.env) {
+  if (environment.NODE_ENV !== "production") return;
+  const missing = getMissingCriticalProductionEnvironment(environment);
+  if (missing.length > 0) {
+    throw new Error(`Missing critical production configuration: ${missing.join(", ")}`);
+  }
+}
+
 export const ENV = {
   appId: process.env.VITE_APP_ID ?? "",
   cookieSecret: process.env.JWT_SECRET ?? "",

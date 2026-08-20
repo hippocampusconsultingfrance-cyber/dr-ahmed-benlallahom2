@@ -7,6 +7,7 @@ import { createServer } from "http";
 import net from "net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "./oauth";
+import { assertCriticalProductionEnvironment } from "./env";
 import { registerGoogleDriveOAuthRoutes } from "../googleDriveOAuthRoutes";
 import { registerStorageProxy } from "./storageProxy";
 import { appRouter } from "../routers";
@@ -120,7 +121,9 @@ function safeFileName(value: string): string {
 }
 
 async function startServer() {
+  assertCriticalProductionEnvironment();
   const app = express();
+  app.set("trust proxy", 1);
   const server = createServer(app);
 
   // Browser-side defense in depth. Origins are restricted to the application and
@@ -129,6 +132,7 @@ async function startServer() {
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
     res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=(self)");
+    res.setHeader("Strict-Transport-Security", "max-age=63072000; includeSubDomains; preload");
     res.setHeader("Content-Security-Policy", [
       "default-src 'self'",
       "base-uri 'self'",
@@ -152,74 +156,69 @@ async function startServer() {
     const sig = req.headers["stripe-signature"] as string;
     const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET || "";
     
+    let event;
     try {
       const Stripe = (await import("stripe")).default;
       const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "");
-      
-      const event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
-      
-      if (event.id.startsWith("evt_test_")) {
-        return res.json({ verified: true });
-      }
-      
+
+      event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
+    } catch (error) {
+      console.error("Stripe webhook signature validation failed", error);
+      return res.status(400).json({ error: "Invalid webhook" });
+    }
+
+    try {
       if (event.type === "checkout.session.completed") {
         const session = event.data.object as any;
         console.log("Payment successful:", session.id);
-        
-        // Update appointment payment status
-        try {
-          const { drizzle } = await import("drizzle-orm/mysql2");
-          const { appointments } = await import("../../drizzle/schema");
-          const { eq } = await import("drizzle-orm");
-          
-          const db = drizzle(process.env.DATABASE_URL!);
-          const trackingId = session.metadata?.trackingId;
+        const { drizzle } = await import("drizzle-orm/mysql2");
+        const { appointments } = await import("../../drizzle/schema");
+        const { eq } = await import("drizzle-orm");
+        const db = drizzle(process.env.DATABASE_URL!);
+        const trackingId = session.metadata?.trackingId;
 
-          if (!trackingId) {
-            return res.status(400).send("Webhook Error: missing trackingId");
-          }
-
-          if (trackingId) {
-            const appointmentResult = await db
-              .select()
-              .from(appointments)
-              .where(eq(appointments.trackingId, trackingId))
-              .limit(1);
-            const appointment = appointmentResult[0];
-
-            if (!appointment) {
-              return res.status(400).send("Webhook Error: appointment not found");
-            }
-
-            if (appointment.paymentStatus === "completed") {
-              return res.json({ received: true, duplicate: true });
-            }
-
-            const paidAmount = Number(session.amount_total);
-            const expectedAmount = Math.round(Number(appointment.finalPrice) * 100);
-            if (!Number.isFinite(paidAmount) || paidAmount !== expectedAmount) {
-              console.error(`Stripe amount mismatch for ${trackingId}: paid=${paidAmount}, expected=${expectedAmount}`);
-              return res.status(400).send("Webhook Error: amount mismatch");
-            }
-
-            await db
-              .update(appointments)
-              .set({
-                paymentStatus: "completed",
-                stripePaymentIntentId: session.payment_intent as string,
-              })
-              .where(eq(appointments.trackingId, trackingId));
-
-            console.log(`Payment confirmed for appointment: ${trackingId}`);
-            
-            // Keep webhook acknowledgement fast: work is persisted then retried
-            // independently if notification or invoice delivery has a transient failure.
-            const { enqueueAppointmentFulfillment } = await import("../appointmentFulfillment");
-            await enqueueAppointmentFulfillment(appointment.id);
-          }
-        } catch (error) {
-          console.error("Failed to update appointment after payment:", error);
+        if (!trackingId) {
+          console.error("Stripe webhook rejected: missing appointment reference");
+          return res.status(400).json({ error: "Invalid webhook" });
         }
+
+        const appointmentResult = await db
+          .select()
+          .from(appointments)
+          .where(eq(appointments.trackingId, trackingId))
+          .limit(1);
+        const appointment = appointmentResult[0];
+
+        if (!appointment) {
+          console.error("Stripe webhook rejected: appointment not found");
+          return res.status(400).json({ error: "Invalid webhook" });
+        }
+
+        // Persisted fulfillment is idempotent. Re-enqueueing on a Stripe retry
+        // protects a payment whose previous acknowledgement failed after the DB update.
+        const { enqueueAppointmentFulfillment } = await import("../appointmentFulfillment");
+        if (appointment.paymentStatus === "completed") {
+          await enqueueAppointmentFulfillment(appointment.id);
+          return res.json({ received: true, duplicate: true });
+        }
+
+        const paidAmount = Number(session.amount_total);
+        const expectedAmount = Math.round(Number(appointment.finalPrice) * 100);
+        if (!Number.isFinite(paidAmount) || paidAmount !== expectedAmount) {
+          console.error("Stripe webhook rejected: amount mismatch");
+          return res.status(400).json({ error: "Invalid webhook" });
+        }
+
+        await db
+          .update(appointments)
+          .set({
+            paymentStatus: "completed",
+            stripePaymentIntentId: session.payment_intent as string,
+          })
+          .where(eq(appointments.trackingId, trackingId));
+
+        console.log(`Payment confirmed for appointment: ${trackingId}`);
+        await enqueueAppointmentFulfillment(appointment.id);
       } else if (event.type === "checkout.session.expired") {
         const session = event.data.object as any;
         const trackingId = session.metadata?.trackingId;
@@ -249,8 +248,8 @@ async function startServer() {
       
       res.json({ received: true });
     } catch (error) {
-      console.error("Webhook error:", error);
-      res.status(400).send(`Webhook Error: ${error}`);
+      console.error("Stripe webhook processing failed", error);
+      res.status(500).json({ received: false });
     }
   });
 

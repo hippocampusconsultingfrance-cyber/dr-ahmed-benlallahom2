@@ -2506,3 +2506,8 @@
 - [x] Exporter le code du projet vers un dépôt GitHub privé après vérification des exclusions sensibles
 - [x] Tester la connexion GitHub en lecture et présenter les capacités du dépôt synchronisé
 - [x] Évaluer l’audit de code externe et vérifier ses constats critiques dans le projet actuel
+- [x] Durcir le webhook Stripe : supprimer le bypass de test en production, éviter les erreurs détaillées et garantir le rejeu après échec métier
+- [x] Ajouter une validation stricte des variables d’environnement critiques au démarrage
+- [x] Renforcer la vérification MFA administrateur avec comparaison en temps constant et compteur atomique
+- [x] Ajouter une intégration continue GitHub pour TypeScript, tests et audit de dépendances
+- [x] Qualifier puis mettre à jour les dépendances de production signalées à risque élevé par l’audit automatisé
