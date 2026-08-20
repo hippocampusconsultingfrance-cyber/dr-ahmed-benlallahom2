@@ -1,10 +1,11 @@
-import { FormEvent, useRef, useState } from "react";
+import { FormEvent, useMemo, useRef, useState } from "react";
 import { CheckCircle2, Clock3, FileUp, Globe2, Loader2, ShieldCheck, UserCheck, Zap, Award, Compass, Lock } from "lucide-react";
 import { Link } from "wouter";
 import { SEOHead } from "@/components/SEOHead";
 import Navigation from "@/components/Navigation";
 import Footer from "@/components/Footer";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { getWorldwideCountries } from "./RecruitmentPage";
 
 const copy = {
   fr: {
@@ -28,6 +29,8 @@ const copy = {
     experiencePlaceholder: "Ex. 8 ans",
     certifications: "Certifications détenues (ex. ATLS, ACLS, PHTLS, HUET)",
     certificationsPlaceholder: "ATLS, ACLS, HUET, etc.",
+    diplomaCountry: "Pays d’obtention du diplôme",
+    selectCountry: "Sélectionner le pays",
     cv: "CV détaillé (PDF, DOC ou DOCX — 5 Mo max)",
     fileHint: "PDF, DOC ou DOCX — 5 Mo max",
     chooseFile: "Choisir un fichier",
@@ -93,6 +96,8 @@ const copy = {
     experiencePlaceholder: "e.g. 8 years",
     certifications: "Held certifications (e.g. ATLS, ACLS, PHTLS, HUET)",
     certificationsPlaceholder: "ATLS, ACLS, HUET, etc.",
+    diplomaCountry: "Country where diploma was obtained",
+    selectCountry: "Select country",
     cv: "Detailed CV (PDF, DOC or DOCX — 5 MB max)",
     fileHint: "PDF, DOC or DOCX — 5 MB max",
     chooseFile: "Choose a file",
@@ -158,6 +163,8 @@ const copy = {
     experiencePlaceholder: "z. B. 8 Jahre",
     certifications: "Zertifikate (z.B. ATLS, ACLS, PHTLS, HUET)",
     certificationsPlaceholder: "ATLS, ACLS, HUET usw.",
+    diplomaCountry: "Land des Diplomabschlusses",
+    selectCountry: "Land auswählen",
     cv: "Detaillierter Lebenslauf (PDF, DOC oder DOCX — max. 5 MB)",
     fileHint: "PDF, DOC oder DOCX — max. 5 MB",
     chooseFile: "Datei auswählen",
@@ -223,6 +230,8 @@ const copy = {
     experiencePlaceholder: "例如 8 年",
     certifications: "相关专业认证（如 ATLS, ACLS, PHTLS, HUET）",
     certificationsPlaceholder: "ATLS、ACLS、HUET 等",
+    diplomaCountry: "文凭获得国家",
+    selectCountry: "选择国家",
     cv: "详细简历（PDF、DOC 或 DOCX，最大 5 MB）",
     fileHint: "PDF、DOC 或 DOCX，最大 5 MB",
     chooseFile: "选择文件",
@@ -308,6 +317,7 @@ type FormState = {
   phone: string;
   specialty: string;
   environment: string;
+  diplomaCountry: string;
   yearsExperience: string;
   certifications: string;
   gdprConsent: boolean;
@@ -321,11 +331,22 @@ const createInitialForm = (language: Language): FormState => ({
   phone: "",
   specialty: copy[language].specialties[0],
   environment: "Moyen-Orient (Gouvernement / VVIP)",
+  diplomaCountry: "",
   yearsExperience: "",
   certifications: "",
   gdprConsent: false,
   website: "",
 });
+
+const MAX_VVIP_CV_BYTES = 5 * 1024 * 1024;
+const acceptedVvipCvMimeTypes = new Set(["application/pdf", "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"]);
+const acceptedVvipCvFilename = /\.(pdf|doc|docx)$/i;
+
+/** Android and iOS file pickers may provide a generic MIME type for a valid CV. */
+export function isAcceptedVvipCvFile(file: Pick<File, "name" | "size" | "type"> | null): boolean {
+  if (!file || file.size > MAX_VVIP_CV_BYTES) return false;
+  return acceptedVvipCvMimeTypes.has(file.type) || acceptedVvipCvFilename.test(file.name);
+}
 
 export default function VvipOffshorePage() {
   const { language } = useLanguage();
@@ -338,6 +359,7 @@ export default function VvipOffshorePage() {
   const [errorMessage, setErrorMessage] = useState("");
   const [trackingId, setTrackingId] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const diplomaCountries = useMemo(() => getWorldwideCountries(lang), [lang]);
 
   const update = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -346,7 +368,7 @@ export default function VvipOffshorePage() {
     event.preventDefault();
     setErrorMessage("");
 
-    if (!file || file.size > 5 * 1024 * 1024 || !["application/pdf", "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"].includes(file.type)) {
+    if (!file || !isAcceptedVvipCvFile(file)) {
       setStatus("error");
       setErrorMessage(t.fileError);
       return;
@@ -356,7 +378,7 @@ export default function VvipOffshorePage() {
       setErrorMessage(t.required);
       return;
     }
-    if (!form.firstName || !form.lastName || !form.email || !form.specialty) {
+    if (!form.firstName || !form.lastName || !form.email || !form.specialty || !form.diplomaCountry) {
       setStatus("error");
       setErrorMessage(t.required);
       return;
@@ -371,6 +393,7 @@ export default function VvipOffshorePage() {
       body.append("email", form.email);
       body.append("phone", form.phone);
       body.append("specialty", `[VVIP / Offshore] ${form.specialty} (${form.environment})`);
+      body.append("diplomaCountry", form.diplomaCountry);
       body.append("targetCountries", JSON.stringify([form.environment]));
       body.append("languages", JSON.stringify(["Français", "Anglais"]));
       body.append("yearsExperience", form.yearsExperience ? String(Number(form.yearsExperience)) : "5");
@@ -392,7 +415,8 @@ export default function VvipOffshorePage() {
     } catch (err) {
       setStatus("error");
       console.error("VVIP application submission error:", err);
-      setErrorMessage(t.genericError);
+      const serverMessage = err instanceof Error ? err.message : "";
+      setErrorMessage(serverMessage.includes("CV") ? t.fileError : serverMessage.includes("informations") ? t.required : t.genericError);
     }
   }
 
@@ -499,6 +523,14 @@ export default function VvipOffshorePage() {
                         </select>
                       </label>
                     </div>
+
+                    <label className="block w-full space-y-1.5 text-sm text-foreground">
+                      <span className="block font-medium">{t.diplomaCountry} *</span>
+                      <select required value={form.diplomaCountry} onChange={(e) => update("diplomaCountry", e.target.value)} className="form-control block w-full">
+                        <option value="">{t.selectCountry}</option>
+                        {diplomaCountries.map(country => <option key={country.code} value={country.label}>{country.label}</option>)}
+                      </select>
+                    </label>
 
                     <div className="grid gap-4 sm:grid-cols-2">
                       <label className="block w-full space-y-1.5 text-sm text-foreground">
