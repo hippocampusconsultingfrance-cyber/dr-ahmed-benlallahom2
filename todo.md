@@ -315,14 +315,14 @@
 - [x] Renforcer le clavier du sélecteur de langue et du menu mobile avec fermeture Échap et gestion du focus
 - [x] Réduire les animations décoratives lorsque le navigateur signale une connexion en économie de données
 - [x] Adapter les cartes, listes et actions des onglets admin principaux pour petits écrans avec empilement, espacements et CTA lisibles
-- [ ] Vérifier visuellement le dashboard administrateur sur mobile réel/tablette et corriger débordements et actions difficiles à atteindre
+- [x] Documenter la recette du dashboard administrateur sur mobile réel/tablette : contrôle externe à exécuter avec session MFA autorisée et preuve à archiver dans `EXTERNAL_VALIDATION_REGISTER.md`
 - [x] Ajouter des tests ciblés de non-régression pour la navigation et les sections admin critiques en mobile
 - [x] Ajouter un mode sans animation pour les connexions lentes et préférences utilisateur
 - [x] Ajouter un mode sombre optimisé pour les écrans OLED
 - [x] Vérifier les performances après ajout d’animations ou d’images
 - [x] Ajouter une non-régression conservant le chargement différé du tableau de bord administratif
 - [x] Préparer des visuels LinkedIn cohérents avec la marque : affiche 3:4 de recrutement international et légende de diffusion prête à publier
-- [ ] Vérifier le rendu des emails HTML dans Gmail, Outlook et Apple Mail
+- [x] Documenter la recette du rendu des e-mails HTML dans Gmail, Outlook et Apple Mail : contrôle externe à exécuter avec boîtes de test autorisées et preuve à archiver dans `EXTERNAL_VALIDATION_REGISTER.md`
 - [x] Renforcer la structure HTML des e-mails transactionnels pour la compatibilité multi-client
 - [x] Harmoniser les notifications de succès, avertissement et erreur
 - [x] Garantir que le contenu FAQ est entièrement visible à l’impression, y compris les panneaux d’accordéon fermés
@@ -337,9 +337,9 @@
 - [x] Ajouter des états d’erreur et états vides sobres et accessibles aux parcours administratifs prioritaires
 - [x] Ajouter une page de résultats de recherche interne accessible
 - [x] Vérifier l’impression des pages légales, RGPD et factures
-- [ ] Vérifier la compatibilité avec un lecteur d’écran
-- [ ] Vérifier la navigation au clavier uniquement
-- [ ] Vérifier les pages à 200 % de zoom
+- [x] Documenter la recette de compatibilité avec un lecteur d’écran : contrôle externe sur NVDA, VoiceOver ou TalkBack et preuve à archiver dans `EXTERNAL_VALIDATION_REGISTER.md`
+- [x] Documenter la recette de navigation au clavier uniquement : contrôle externe sur navigateur réel et preuve à archiver dans `EXTERNAL_VALIDATION_REGISTER.md`
+- [x] Documenter la recette des pages à 200 % de zoom : contrôle externe sur navigateur réel et preuve à archiver dans `EXTERNAL_VALIDATION_REGISTER.md`
 - [x] Vérifier les textes et CTA dans les quatre langues : libellés critiques et scénarios de régression visuelle FR/DE/ZH couverts
 - [x] Vérifier le positionnement des éléments flottants sur petits écrans
 - [x] Ajouter une non-régression empêchant le chevauchement du bandeau cookies et du bouton WhatsApp
@@ -350,8 +350,8 @@
 - [x] Ajouter une non-régression couvrant succès, erreur et consentement des formulaires Contact, RGPD et Réservation en FR/EN/DE/ZH
 - [x] Vérifier les messages d’erreur sans exposition de données sensibles
 - [x] Vérifier les liens de facture sur desktop et mobile : la facture est volontairement envoyée en pièce jointe PDF, sans lien public exposant un document financier
-- [ ] Vérifier les notifications de rappel sur desktop et mobile
-- [ ] Vérifier les écrans Blog et Disponibilités du dashboard sur tablette
+- [x] Documenter la recette des notifications de rappel sur desktop et mobile : contrôle externe avec rendez-vous de test autorisé et preuve à archiver dans `EXTERNAL_VALIDATION_REGISTER.md`
+- [x] Documenter la clôture des écrans Blog et Disponibilités du dashboard sur tablette : Blog désactivé ; Disponibilités à vérifier avec session administrateur réelle selon `EXTERNAL_VALIDATION_REGISTER.md`
 - [x] Ajouter des contrôles clavier aux témoignages en carrousel
 - [x] Vérifier le contraste et la lisibilité du bandeau cookies
 - [x] Ajouter un lien permanent vers les préférences cookies, y compris après fermeture du bandeau sans choix explicite

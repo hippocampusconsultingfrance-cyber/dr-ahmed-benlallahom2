@@ -17,3 +17,5 @@
 ## Règle de clôture
 
 Un item peut passer à « réalisé » uniquement lorsque sa preuve est rattachée à une version ou à un journal daté. Une simple absence d’erreur lors des contrôles automatisés ne clôt pas un contrôle externe.
+
+> Dans `todo.md`, une ligne marquée comme documentée signifie uniquement que son protocole et son emplacement de preuve sont tracés. Elle ne remplace jamais l’exécution du contrôle externe ni l’archivage de la preuve attendue dans ce registre.
