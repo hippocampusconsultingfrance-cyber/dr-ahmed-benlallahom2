@@ -62,6 +62,46 @@ export function createCandidateToken(): string {
   return randomBytes(32).toString("base64url");
 }
 
+export type CandidateInvitationTokenPayload = {
+  applicationId: number;
+  expiresAt: number;
+};
+
+/**
+ * Issues a short-lived, signed bearer token for the candidate-portal enrollment
+ * flow. The token contains no email address; the server resolves the application
+ * only after checking its signature and expiry.
+ */
+export function createCandidateInvitationToken(
+  applicationId: number,
+  expiresAt = Date.now() + CANDIDATE_TOKEN_MAX_AGE_MS,
+): string {
+  if (!Number.isSafeInteger(applicationId) || applicationId < 1) throw new Error("candidate_invitation_application_invalid");
+  if (!Number.isSafeInteger(expiresAt)) throw new Error("candidate_invitation_expiry_invalid");
+  const payload = Buffer.from(JSON.stringify({ applicationId, expiresAt }), "utf8").toString("base64url");
+  const signature = createHmac("sha256", candidateAuthPepper()).update(`candidate_invitation:${payload}`, "utf8").digest("base64url");
+  return `${payload}.${signature}`;
+}
+
+export function verifyCandidateInvitationToken(token: string): CandidateInvitationTokenPayload | null {
+  const [payload, signature, extra] = token.split(".");
+  if (!payload || !signature || extra) return null;
+  const expected = createHmac("sha256", candidateAuthPepper()).update(`candidate_invitation:${payload}`, "utf8").digest("base64url");
+  const suppliedBytes = Buffer.from(signature, "utf8");
+  const expectedBytes = Buffer.from(expected, "utf8");
+  if (suppliedBytes.length !== expectedBytes.length || !timingSafeEqual(suppliedBytes, expectedBytes)) return null;
+  try {
+    const parsed = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as Partial<CandidateInvitationTokenPayload>;
+    const applicationId = parsed.applicationId;
+    const expiresAt = parsed.expiresAt;
+    if (typeof applicationId !== "number" || !Number.isSafeInteger(applicationId) || applicationId < 1) return null;
+    if (typeof expiresAt !== "number" || !Number.isSafeInteger(expiresAt) || expiresAt <= Date.now()) return null;
+    return { applicationId, expiresAt };
+  } catch {
+    return null;
+  }
+}
+
 export function hashCandidateToken(token: string, purpose: "session" | "verification" | "reset"): string {
   return createHash("sha256")
     .update(`${purpose}:${token}:${candidateAuthPepper()}`, "utf8")

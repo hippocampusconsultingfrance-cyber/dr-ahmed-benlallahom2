@@ -2470,3 +2470,6 @@
 - [x] Localiser les filtres, contrôles de campagne et historique de l’espace Mailing administratif dans les quatre langues actives
 - [x] Localiser les libellés, états et horodatages de l’observabilité de sécurité administrative dans les quatre langues actives
 - [x] Localiser les statuts, actions et messages de shortlist des briefs Employeurs dans les quatre langues actives
+
+- [x] Ajouter à l’e-mail de confirmation de candidature un lien sécurisé de création d’espace candidat avec e-mail prérempli et activation obligatoire
+- [x] Ajouter dans l’administration une invitation ciblée de création d’espace candidat pour les profils sélectionnés, avec journalisation et tests d’accès

@@ -18,6 +18,7 @@ import { validateCvFile } from "../recruitmentFileValidation";
 import { getDb } from "../db";
 import { candidateDocumentAuditLogs, candidateDocumentProcessingJobs, candidateDocuments, cvApplications, recruitmentCampaignRecipients, recruitmentEmailEvents } from "../../drizzle/schema";
 import { CANDIDATE_DOCUMENT_MAX_BYTES, candidateDocumentMimeTypes, safeCandidateDocumentName, validateCandidateDocument } from "../candidateDocumentValidation";
+import { createCandidateInvitationToken } from "../candidateAuth";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -44,6 +45,18 @@ const RECRUITMENT_ALLOWED_MIME_TYPES = new Set([
   "application/msword",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 ]);
+
+function getRecruitmentPortalOrigin(req: express.Request): string {
+  const candidate = req.get("origin") || req.get("referer") || "";
+  try {
+    const url = new URL(candidate);
+    const host = url.hostname.toLowerCase();
+    const trusted = host === "drahmedbenlallahom.com" || host === "www.drahmedbenlallahom.com" || host === "drbenlallah-esc8d3hd.manus.space" || host === "localhost" || host === "127.0.0.1" || host.endsWith(".manus.computer");
+    return trusted ? url.origin : "https://drahmedbenlallahom.com";
+  } catch {
+    return "https://drahmedbenlallahom.com";
+  }
+}
 
 const recruitmentUpload = multer({
   storage: multer.memoryStorage(),
@@ -461,6 +474,9 @@ async function startServer() {
         const insertedId = (insertResult[0] as any)?.insertId;
 
         const candidateName = `${parsed.data.firstName} ${parsed.data.lastName}`;
+        const candidatePortalInviteUrl = insertedId
+          ? `${getRecruitmentPortalOrigin(req)}/candidate/access?invite=${encodeURIComponent(createCandidateInvitationToken(Number(insertedId)))}`
+          : undefined;
         await Promise.allSettled([
           (async () => {
             const { sendCvApplicationConfirmationEmail } = await import("./notifications");
@@ -470,6 +486,7 @@ async function startServer() {
               trackingId,
               parsed.data.specialty,
               parsed.data.targetCountries.join(", "),
+              candidatePortalInviteUrl,
             );
           })(),
           notifyOwner({

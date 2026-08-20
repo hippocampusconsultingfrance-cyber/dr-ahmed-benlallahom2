@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { BrainCircuit, ClipboardList, Download, FileSearch, Loader2, Mail, RefreshCw, Sparkles, Trash2, UserRound } from "lucide-react";
+import { BrainCircuit, ClipboardList, Download, FileSearch, Loader2, Mail, RefreshCw, Sparkles, Trash2, UserRound, UserRoundPlus } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import PublicContentSkeleton from "@/components/PublicContentSkeleton";
@@ -164,6 +164,14 @@ export default function RecruitmentTab() {
       toast.success("Email envoyé au candidat");
       setEmailComposer(null);
       setCustomRequest("");
+    },
+    onError: mutationError => toast.error(mutationError.message),
+  });
+
+  const sendPortalInvitation = trpc.admin.recruitment.candidate.sendPortalInvitation.useMutation({
+    onSuccess: () => {
+      toast.success("Invitation de création d’espace candidat envoyée");
+      utils.admin.recruitment.list.invalidate();
     },
     onError: mutationError => toast.error(mutationError.message),
   });
@@ -348,6 +356,10 @@ export default function RecruitmentTab() {
                           <Button size="sm" variant="outline" onClick={() => reanalyze.mutate({ id: application.id })} disabled={reanalyze.isPending || eraseApplication.isPending}>
                             {reanalyze.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
                             {application.aiAnalyzedAt ? "Relancer l’analyse" : "Analyser le CV"}
+                          </Button>
+                          <Button size="sm" variant="outline" onClick={() => sendPortalInvitation.mutate({ id: application.id })} disabled={Boolean(application.candidatePortalActive) || sendPortalInvitation.isPending || eraseApplication.isPending || reanalyze.isPending} title={application.candidatePortalActive ? "Cet email possède déjà un espace candidat actif." : "Envoyer une invitation sécurisée de création d’espace candidat."}>
+                            {sendPortalInvitation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <UserRoundPlus className="mr-2 h-4 w-4" />}
+                            {application.candidatePortalActive ? "Espace candidat actif" : "Inviter à créer l’espace"}
                           </Button>
                           <Button size="sm" variant="outline" onClick={() => openEmailComposer(application.id, `${application.firstName} ${application.lastName}`, "profile_interest")} disabled={sendTemplateEmail.isPending || eraseApplication.isPending || reanalyze.isPending}>
                             <Mail className="mr-2 h-4 w-4" /> Proposer un échange

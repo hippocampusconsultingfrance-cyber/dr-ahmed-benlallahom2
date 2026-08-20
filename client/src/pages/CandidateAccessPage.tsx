@@ -1,4 +1,4 @@
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { FileLock2, KeyRound, Loader2, LogIn, ShieldCheck, UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -50,6 +50,8 @@ export const candidateAccessCopy = {
     genericError: "Cette action n’a pas pu être finalisée. Vérifiez vos informations et réessayez.",
     registerSuccess: "Votre demande d’accès a été enregistrée. Vérifiez votre email, y compris vos courriers indésirables, pour activer votre compte.",
     resetSuccess: "Si un compte correspond à cet email, un lien sécurisé de réinitialisation vous sera envoyé.",
+    invitationWelcome: "Votre invitation a été vérifiée. Créez maintenant votre mot de passe ; l’activation de votre adresse email restera obligatoire.",
+    invitationInvalid: "Cette invitation est invalide ou expirée. Vous pouvez demander un nouveau lien à notre équipe.",
   },
   en: {
     metaTitle: "Secure candidate portal | Hippocampus Consulting",
@@ -87,6 +89,8 @@ export const candidateAccessCopy = {
     genericError: "This action could not be completed. Check your information and try again.",
     registerSuccess: "Your access request has been registered. Check your email, including your spam folder, to activate your account.",
     resetSuccess: "If an account matches this email, a secure reset link will be sent to you.",
+    invitationWelcome: "Your invitation has been verified. Create your password now; email activation will still be required.",
+    invitationInvalid: "This invitation is invalid or expired. You can request a new link from our team.",
   },
   de: {
     metaTitle: "Sicheres Kandidatenportal | Hippocampus Consulting",
@@ -124,6 +128,8 @@ export const candidateAccessCopy = {
     genericError: "Diese Aktion konnte nicht abgeschlossen werden. Prüfen Sie Ihre Angaben und versuchen Sie es erneut.",
     registerSuccess: "Ihre Zugangsanfrage wurde registriert. Prüfen Sie Ihre E-Mails einschließlich Spam-Ordner, um Ihr Konto zu aktivieren.",
     resetSuccess: "Wenn ein Konto zu dieser E-Mail passt, erhalten Sie einen sicheren Link zum Zurücksetzen.",
+    invitationWelcome: "Ihre Einladung wurde geprüft. Erstellen Sie jetzt Ihr Passwort; die E-Mail-Aktivierung bleibt verpflichtend.",
+    invitationInvalid: "Diese Einladung ist ungültig oder abgelaufen. Sie können unser Team um einen neuen Link bitten.",
   },
   zh: {
     metaTitle: "安全候选人门户 | Hippocampus Consulting",
@@ -161,6 +167,8 @@ export const candidateAccessCopy = {
     genericError: "无法完成此操作。请检查您的信息后重试。",
     registerSuccess: "您的访问请求已登记。请检查您的邮箱（包括垃圾邮件文件夹）以激活账户。",
     resetSuccess: "如果此电子邮件对应账户，我们将向您发送安全的重置链接。",
+    invitationWelcome: "您的邀请已验证。现在请创建密码；仍必须完成电子邮件激活。",
+    invitationInvalid: "此邀请无效或已过期。您可以向我们的团队申请新的链接。",
   },
 } as const;
 
@@ -175,10 +183,16 @@ export function candidateNotice(message: string, copy: CandidateCopy) {
   return copy.genericError;
 }
 
+export function getCandidateInvitationToken(search: string): string | null {
+  const token = new URLSearchParams(search).get("invite")?.trim() || "";
+  return /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(token) ? token : null;
+}
+
 export default function CandidateAccessPage() {
   const [, navigate] = useLocation();
   const { language } = useLanguage();
   const copy = candidateAccessCopy[(language in candidateAccessCopy ? language : "fr") as CandidateLanguage];
+  const [invitationToken] = useState(() => getCandidateInvitationToken(typeof window === "undefined" ? "" : window.location.search));
   const [mode, setMode] = useState<Mode>("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -202,6 +216,21 @@ export default function CandidateAccessPage() {
     onSuccess: () => setNotice(copy.resetSuccess),
     onError: error => setNotice(candidateNotice(error.message, copy)),
   });
+  const invitation = trpc.candidatePortal.resolveInvitation.useQuery(
+    { token: invitationToken || "invalid" },
+    { enabled: Boolean(invitationToken), retry: false },
+  );
+  useEffect(() => {
+    if (invitation.data) {
+      setMode("register");
+      setEmail(invitation.data.email);
+      setFirstName(invitation.data.firstName);
+      setLastName(invitation.data.lastName);
+      setNotice(copy.invitationWelcome);
+    } else if (invitationToken && invitation.isError) {
+      setNotice(copy.invitationInvalid);
+    }
+  }, [copy.invitationInvalid, copy.invitationWelcome, invitation.data, invitation.isError, invitationToken]);
   const pending = login.isPending || register.isPending || reset.isPending;
 
   function submit(event: FormEvent<HTMLFormElement>) {
@@ -216,7 +245,7 @@ export default function CandidateAccessPage() {
         return;
       }
       if (!turnstileToken) { setNotice(copy.turnstileRegisterMissing); return; }
-      register.mutate({ email, password, firstName, lastName, termsAccepted: terms, documentConsent, turnstileToken });
+      register.mutate({ email, password, firstName, lastName, termsAccepted: terms, documentConsent, turnstileToken, invitationToken: invitationToken || undefined });
     } else {
       if (!turnstileToken) { setNotice(copy.turnstileResetMissing); return; }
       reset.mutate({ email, turnstileToken });
@@ -248,7 +277,7 @@ export default function CandidateAccessPage() {
             <CardContent className="px-0">
               <form className="space-y-5" onSubmit={submit}>
                 {mode === "register" && <div className="grid gap-4 sm:grid-cols-2"><div className="space-y-2"><Label htmlFor="candidate-first-name">{copy.firstName}</Label><Input id="candidate-first-name" value={firstName} onChange={event => setFirstName(event.target.value)} required /></div><div className="space-y-2"><Label htmlFor="candidate-last-name">{copy.lastName}</Label><Input id="candidate-last-name" value={lastName} onChange={event => setLastName(event.target.value)} required /></div></div>}
-                <div className="space-y-2"><Label htmlFor="candidate-email">{copy.email}</Label><Input id="candidate-email" type="email" autoComplete="email" value={email} onChange={event => setEmail(event.target.value)} required /></div>
+                <div className="space-y-2"><Label htmlFor="candidate-email">{copy.email}</Label><Input id="candidate-email" type="email" autoComplete="email" value={email} onChange={event => setEmail(event.target.value)} readOnly={mode === "register" && Boolean(invitationToken && invitation.data)} required /></div>
                 {mode !== "forgot" && <div className="space-y-2"><Label htmlFor="candidate-password">{copy.password}</Label><Input id="candidate-password" type="password" autoComplete={mode === "login" ? "current-password" : "new-password"} value={password} onChange={event => setPassword(event.target.value)} minLength={15} required /><p className="text-xs text-slate-500">{copy.passwordHint}</p></div>}
                 {mode === "register" && <div className="space-y-2"><Label htmlFor="candidate-password-confirmation">{copy.confirmPassword}</Label><Input id="candidate-password-confirmation" type="password" autoComplete="new-password" value={passwordConfirmation} onChange={event => setPasswordConfirmation(event.target.value)} minLength={15} required /></div>}
                 {mode === "register" && <div className="space-y-3 rounded-xl border border-slate-800 bg-slate-900/45 p-4 text-sm"><label className="flex cursor-pointer gap-3"><Checkbox checked={terms} onCheckedChange={value => setTerms(value === true)} /><span>{copy.terms}</span></label><label className="flex cursor-pointer gap-3"><Checkbox checked={documentConsent} onCheckedChange={value => setDocumentConsent(value === true)} /><span>{copy.documentConsent}</span></label></div>}

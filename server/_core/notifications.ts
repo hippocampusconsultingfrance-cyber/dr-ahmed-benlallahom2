@@ -338,8 +338,12 @@ export async function sendCvApplicationConfirmationEmail(
   trackingId: string,
   specialty: string,
   targetCountries: string,
+  candidatePortalInviteUrl?: string,
 ) {
   try {
+    const candidatePortalInvitation = candidatePortalInviteUrl
+      ? `<div style="margin:24px 0;padding:18px;border:1px solid #bae6fd;border-radius:10px;background:#f0f9ff;"><h3 style="margin:0 0 8px;color:#0e7490;">Votre espace candidat sécurisé</h3><p style="margin:0 0 14px;">Vous pouvez créer un accès pour déposer ultérieurement vos documents administratifs dans votre coffre privé. L’activation de votre adresse email restera obligatoire.</p><p style="margin:0;"><a href="${escapeHtml(candidatePortalInviteUrl)}" style="display:inline-block;background:#0891b2;color:#ffffff;text-decoration:none;padding:12px 18px;border-radius:7px;font-weight:700;">Créer mon espace candidat</a></p></div>`
+      : "";
     const emailContent = buildHippocampusEmailShell(`
       <h2 style="color: #0891b2;">Candidature reçue — Hippocampus Consulting</h2>
       <p>Bonjour ${escapeHtml(candidateName)},</p>
@@ -350,7 +354,9 @@ export async function sendCvApplicationConfirmationEmail(
         <p><strong>Pays ciblés :</strong> ${escapeHtml(targetCountries)}</p>
       </div>
       <p>Votre profil sera examiné selon les opportunités disponibles et les critères du pays concerné. Nous vous contacterons si votre profil correspond à une recherche.</p>
+      ${candidatePortalInvitation}
       <p>Ne transmettez pas de données de patients, de dossiers médicaux ou de documents cliniques dans votre candidature.</p>
+      <p style="color:#64748b;font-size:13px;">Si vous ne retrouvez pas cet email, vérifiez votre dossier Spam ou Courriers indésirables, puis ajoutez recrutement@drahmedbenlallahom.com à vos contacts.</p>
     `);
 
     const { data, error } = await resend.emails.send({
@@ -482,36 +488,61 @@ export async function sendRecruitmentCampaignEmail(input: {
   return { id: data?.id };
 }
 
-export async function sendCandidatePortalAccessEmail(input: {
+export type CandidatePortalAccessEmailInput = {
   to: string;
   firstName: string;
-  kind: "verify" | "reset";
+  kind: "verify" | "reset" | "invite";
   actionUrl: string;
-}): Promise<{ id?: string }> {
-  const verification = input.kind === "verify";
-  const subject = verification
-    ? "Activez votre espace candidat sécurisé — Hippocampus Consulting"
-    : "Réinitialisez votre mot de passe — Hippocampus Consulting";
-  const title = verification ? "Activez votre espace candidat" : "Réinitialisez votre mot de passe";
-  const instruction = verification
-    ? "Pour activer votre coffre documentaire sécurisé, confirmez votre adresse email en cliquant sur le bouton ci-dessous."
-    : "Une demande de réinitialisation a été reçue. Choisissez un nouveau mot de passe en cliquant sur le bouton ci-dessous.";
-  const action = verification ? "Activer mon espace" : "Réinitialiser mon mot de passe";
+};
+
+export function buildCandidatePortalAccessEmail(input: CandidatePortalAccessEmailInput) {
+  const copy = input.kind === "verify"
+    ? {
+        subject: "Activez votre espace candidat sécurisé — Hippocampus Consulting",
+        title: "Activez votre espace candidat",
+        instruction: "Pour activer votre coffre documentaire sécurisé, confirmez votre adresse email en cliquant sur le bouton ci-dessous.",
+        action: "Activer mon espace",
+        securityNote: "Ce lien est personnel et temporaire. Si vous n’êtes pas à l’origine de cette demande, vous pouvez ignorer cet email.",
+      }
+    : input.kind === "reset"
+      ? {
+          subject: "Réinitialisez votre mot de passe — Hippocampus Consulting",
+          title: "Réinitialisez votre mot de passe",
+          instruction: "Une demande de réinitialisation a été reçue. Choisissez un nouveau mot de passe en cliquant sur le bouton ci-dessous.",
+          action: "Réinitialiser mon mot de passe",
+          securityNote: "Ce lien est personnel et temporaire. Si vous n’êtes pas à l’origine de cette demande, vous pouvez ignorer cet email.",
+        }
+      : {
+          subject: "Créez votre espace candidat — Hippocampus Consulting",
+          title: "Créez votre espace candidat",
+          instruction: "Notre équipe vous invite à créer votre espace candidat sécurisé pour déposer et suivre vos documents administratifs. Vous choisirez votre mot de passe et devrez ensuite activer votre adresse email.",
+          action: "Créer mon espace candidat",
+          securityNote: "Ce lien sécurisé est personnel et temporaire. Il ne donne aucun accès sans création de mot de passe ni activation de votre adresse email.",
+        };
+  return {
+    subject: copy.subject,
+    html: buildHippocampusEmailShell(`
+        <h2 style="color:#0891b2;">${copy.title}</h2>
+        <p>Bonjour ${escapeHtml(input.firstName || "")},</p>
+        <p>${copy.instruction}</p>
+        <p style="margin:24px 0;"><a href="${escapeHtml(input.actionUrl)}" style="display:inline-block;background:#0891b2;color:#ffffff;text-decoration:none;padding:12px 18px;border-radius:7px;font-weight:700;">${copy.action}</a></p>
+        <p style="color:#64748b;font-size:13px;">${copy.securityNote}</p>
+        <p style="color:#64748b;font-size:13px;">Si vous ne retrouvez pas cet email, vérifiez votre dossier Spam ou Courriers indésirables, puis ajoutez recrutement@drahmedbenlallahom.com à vos contacts.</p>
+    `),
+    text: `${copy.title}\n\nBonjour ${input.firstName || ""},\n\n${copy.instruction}\n\n${input.actionUrl}\n\n${copy.securityNote}\n\nSi vous ne retrouvez pas cet email, vérifiez votre dossier Spam ou Courriers indésirables, puis ajoutez recrutement@drahmedbenlallahom.com à vos contacts.`,
+  };
+}
+
+export async function sendCandidatePortalAccessEmail(input: CandidatePortalAccessEmailInput): Promise<{ id?: string }> {
+  const message = buildCandidatePortalAccessEmail(input);
 
   const { data, error } = await resend.emails.send({
     from: FROM_EMAIL,
     to: [input.to],
     replyTo: RECRUITMENT_REPLY_TO,
-    subject,
-    html: buildHippocampusEmailShell(`
-        <h2 style="color:#0891b2;">${title}</h2>
-        <p>Bonjour ${escapeHtml(input.firstName || "")},</p>
-        <p>${instruction}</p>
-        <p style="margin:24px 0;"><a href="${escapeHtml(input.actionUrl)}" style="display:inline-block;background:#0891b2;color:#ffffff;text-decoration:none;padding:12px 18px;border-radius:7px;font-weight:700;">${action}</a></p>
-        <p style="color:#64748b;font-size:13px;">Ce lien est personnel et temporaire. Si vous n’êtes pas à l’origine de cette demande, vous pouvez ignorer cet email.</p>
-        <p style="color:#64748b;font-size:13px;">Si vous ne retrouvez pas cet email, vérifiez votre dossier Spam ou Courriers indésirables, puis ajoutez recrutement@drahmedbenlallahom.com à vos contacts.</p>
-    `),
-    text: `${title}\n\nBonjour ${input.firstName || ""},\n\n${instruction}\n\n${input.actionUrl}\n\nCe lien est personnel et temporaire. Si vous ne retrouvez pas cet email, vérifiez votre dossier Spam ou Courriers indésirables, puis ajoutez recrutement@drahmedbenlallahom.com à vos contacts.`,
+    subject: message.subject,
+    html: message.html,
+    text: message.text,
   });
   if (error) throw new Error(`Resend candidate access email failed: ${error.message}`);
   return { id: data?.id };

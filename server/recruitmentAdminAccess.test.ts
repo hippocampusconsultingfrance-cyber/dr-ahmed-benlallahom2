@@ -17,4 +17,9 @@ describe("accès administratif aux briefs Employeurs", () => {
     const caller = appRouter.createCaller(publicContext());
     await expect(caller.admin.clientBriefs.list()).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
+
+  it("refuse l’envoi d’une invitation de portail sans administrateur authentifié", async () => {
+    const caller = appRouter.createCaller(publicContext());
+    await expect(caller.admin.recruitment.candidate.sendPortalInvitation({ id: 1 })).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
 });

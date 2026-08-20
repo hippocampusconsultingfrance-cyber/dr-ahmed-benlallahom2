@@ -19,6 +19,7 @@ import {
   sendOwnerNotificationSMS,
   sendCustomerConfirmationSMS,
   sendRefundConfirmationEmail,
+  sendCandidatePortalAccessEmail,
   sendRecruitmentCampaignEmail,
   sendRecruitmentTemplateEmail,
   type RecruitmentEmailLanguage,
@@ -29,6 +30,7 @@ import { computeBriefCandidateMatch } from "./clientBriefMatching";
 import { candidatePortalRouter } from "./candidatePortalRouter";
 import { issueAdminMfaChallenge, isAdminMfaVerified, verifyAdminMfaChallenge } from "./adminMfa";
 import { enforcePersistentRateLimit, logSecurityEvent, requestIpHash } from "./candidateSecurity";
+import { createCandidateInvitationToken } from "./candidateAuth";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "");
 
@@ -1070,7 +1072,15 @@ export const appRouter = router({
                 profile,
               }))
             : rawItems;
-          const items = profile ? matchedItems.slice(input.offset, input.offset + input.limit) : matchedItems;
+          const applicationIds = rawItems.map(item => item.id);
+          const portalAccounts = applicationIds.length
+            ? await db.select({ linkedApplicationId: candidateAccounts.linkedApplicationId, emailVerifiedAt: candidateAccounts.emailVerifiedAt })
+              .from(candidateAccounts)
+              .where(inArray(candidateAccounts.linkedApplicationId, applicationIds))
+            : [];
+          const activePortalApplicationIds = new Set(portalAccounts.filter(account => account.emailVerifiedAt && account.linkedApplicationId).map(account => account.linkedApplicationId as number));
+          const items = (profile ? matchedItems.slice(input.offset, input.offset + input.limit) : matchedItems)
+            .map(item => ({ ...item, candidatePortalActive: activePortalApplicationIds.has(item.id) }));
           const countResult = profile ? [{ count: matchedItems.length }] : await db.select({ count: sql<number>`COUNT(*)` }).from(cvApplications).where(whereClause);
           return { items, total: countResult[0]?.count || 0 };
         }),
@@ -1280,6 +1290,25 @@ export const appRouter = router({
       }),
 
       candidate: router({
+        sendPortalInvitation: adminProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ input, ctx }) => {
+          const db = await getDb();
+          if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Base de données indisponible." });
+          const application = (await db.select({ id: cvApplications.id, firstName: cvApplications.firstName, email: cvApplications.email, trackingId: cvApplications.trackingId })
+            .from(cvApplications)
+            .where(eq(cvApplications.id, input.id))
+            .limit(1))[0];
+          if (!application) throw new TRPCError({ code: "NOT_FOUND", message: "Candidature introuvable." });
+          const existingAccount = (await db.select({ emailVerifiedAt: candidateAccounts.emailVerifiedAt })
+            .from(candidateAccounts)
+            .where(sql`LOWER(${candidateAccounts.email}) = LOWER(${application.email})`)
+            .limit(1))[0];
+          if (existingAccount?.emailVerifiedAt) throw new TRPCError({ code: "CONFLICT", message: "Un espace candidat actif existe déjà pour cette adresse email." });
+          const invitationToken = createCandidateInvitationToken(application.id);
+          const invitationUrl = `${getSafeCheckoutOrigin(ctx.req)}/candidate/access?invite=${encodeURIComponent(invitationToken)}`;
+          const result = await sendCandidatePortalAccessEmail({ to: application.email, firstName: application.firstName, kind: "invite", actionUrl: invitationUrl });
+          await logRecruitmentAction({ applicationId: application.id, adminOpenId: ctx.user.openId, action: "email", metadata: { template: "candidate_portal_invitation", resendId: result.id, trackingId: application.trackingId } });
+          return { success: true };
+        }),
         detail: adminProcedure.input(z.object({ id: z.number().int().positive() })).query(async ({ input }) => {
           const db = await getDb();
           if (!db) return null;

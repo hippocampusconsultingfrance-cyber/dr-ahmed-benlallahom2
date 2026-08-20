@@ -20,6 +20,7 @@ import {
   hashCandidateToken,
   normalizeCandidateEmail,
   validateCandidatePassword,
+  verifyCandidateInvitationToken,
   verifyCandidatePassword,
 } from "./candidateAuth";
 import { sendCandidatePortalAccessEmail } from "./_core/notifications";
@@ -142,6 +143,7 @@ export const candidatePortalRouter = router({
       lastName: z.string().trim().min(1).max(120),
       termsAccepted: z.boolean().refine(value => value, "L’acceptation des conditions est requise."),
       documentConsent: z.boolean().refine(value => value, "Le consentement au traitement documentaire est requis."),
+      invitationToken: z.string().min(24).max(600).optional(),
     }).merge(turnstileInput))
     .mutation(async ({ input, ctx }) => {
       const email = normalizeCandidateEmail(input.email);
@@ -170,6 +172,15 @@ export const candidatePortalRouter = router({
       const now = new Date();
       const verificationToken = createCandidateToken();
       const verificationExpiresAt = new Date(now.getTime() + CANDIDATE_TOKEN_MAX_AGE_MS);
+      const invitation = input.invitationToken ? verifyCandidateInvitationToken(input.invitationToken) : null;
+      if (input.invitationToken && !invitation) throw new TRPCError({ code: "BAD_REQUEST", message: "Cette invitation est invalide ou expirée. Demandez un nouveau lien à notre équipe." });
+      const invitedApplication = invitation
+        ? (await candidateDatabaseOperation(() => db.select({ id: cvApplications.id, email: cvApplications.email }).from(cvApplications).where(eq(cvApplications.id, invitation.applicationId)).limit(1)))[0]
+        : null;
+      if (invitation && (!invitedApplication || normalizeCandidateEmail(invitedApplication.email) !== email)) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Cette invitation ne correspond pas à cette adresse email." });
+      }
+      const matchingApplicationId = invitedApplication?.id ?? (await candidateDatabaseOperation(() => db.select({ id: cvApplications.id }).from(cvApplications).where(eq(cvApplications.email, email)).limit(1)))[0]?.id ?? null;
       const existing = await candidateDatabaseOperation(() => db.select().from(candidateAccounts).where(eq(candidateAccounts.email, email)).limit(1));
 
       let candidateId: number | null = null;
@@ -184,11 +195,11 @@ export const candidatePortalRouter = router({
             verificationExpiresAt,
             termsAcceptedAt: now,
             documentConsentAt: now,
+            linkedApplicationId: matchingApplicationId,
           }).where(eq(candidateAccounts.id, existing[0].id)));
           candidateId = existing[0].id;
         }
       } else {
-        const matchingApplication = await candidateDatabaseOperation(() => db.select({ id: cvApplications.id }).from(cvApplications).where(eq(cvApplications.email, email)).limit(1));
         const passwordHash = await hashCandidatePassword(input.password);
         const result = await candidateDatabaseOperation(() => db.insert(candidateAccounts).values({
           email,
@@ -197,7 +208,7 @@ export const candidatePortalRouter = router({
           passwordHash,
           verificationTokenHash: hashCandidateToken(verificationToken, "verification"),
           verificationExpiresAt,
-          linkedApplicationId: matchingApplication[0]?.id ?? null,
+          linkedApplicationId: matchingApplicationId,
           termsAcceptedAt: now,
           documentConsentAt: now,
         }));
@@ -210,6 +221,17 @@ export const candidatePortalRouter = router({
         await logSecurityEvent({ actorKind: "candidate", actorReference: String(candidateId), category: "candidate_account_created", outcome: "allowed", ipHash });
       }
       return { message: genericAccessMessage };
+    }),
+
+  resolveInvitation: publicProcedure
+    .input(z.object({ token: z.string().min(24).max(600) }))
+    .query(async ({ input }) => {
+      const invitation = verifyCandidateInvitationToken(input.token);
+      if (!invitation) throw new TRPCError({ code: "BAD_REQUEST", message: "Cette invitation est invalide ou expirée." });
+      const db = databaseOrThrow(await getDb());
+      const application = (await db.select({ email: cvApplications.email, firstName: cvApplications.firstName, lastName: cvApplications.lastName }).from(cvApplications).where(eq(cvApplications.id, invitation.applicationId)).limit(1))[0];
+      if (!application) throw new TRPCError({ code: "NOT_FOUND", message: "Cette candidature n’est plus disponible." });
+      return application;
     }),
 
   verifyEmail: publicProcedure
