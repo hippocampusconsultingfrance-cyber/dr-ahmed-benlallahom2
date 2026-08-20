@@ -16,4 +16,12 @@ describe("candidature VVIP — erreurs publiques", () => {
     expect(isAcceptedVvipCvFile({ name: "cv-vvip.docx", size: 400_000, type: "application/octet-stream" })).toBe(true);
     expect(isAcceptedVvipCvFile({ name: "archive.zip", size: 400_000, type: "" })).toBe(false);
   });
+
+  it("uses checkbox environments and sends every selected environment", async () => {
+    const source = await readFile(new URL("./VvipOffshorePage.tsx", import.meta.url), "utf8");
+    expect(source).toContain("environments: string[]");
+    expect(source).toContain("toggleEnvironment");
+    expect(source).toContain("type=\"checkbox\"");
+    expect(source).toContain("JSON.stringify(form.environments)");
+  });
 });

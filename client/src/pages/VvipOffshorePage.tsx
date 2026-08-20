@@ -317,7 +317,7 @@ type FormState = {
   email: string;
   phone: string;
   specialty: string;
-  environment: string;
+  environments: string[];
   diplomaCountry: string;
   yearsExperience: string;
   certifications: string;
@@ -331,7 +331,7 @@ const createInitialForm = (language: Language): FormState => ({
   email: "",
   phone: "",
   specialty: copy[language].specialties[0],
-  environment: "Moyen-Orient (Gouvernement / VVIP)",
+  environments: [],
   diplomaCountry: "",
   yearsExperience: "",
   certifications: "",
@@ -363,12 +363,19 @@ export default function VvipOffshorePage() {
   const [trackingId, setTrackingId] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const diplomaCountries = useMemo(() => getWorldwideCountries(lang), [lang]);
+  const environmentOptions = [
+    { value: "Moyen-Orient (Gouvernement / VVIP)", label: t.env1 },
+    { value: "Plateformes pétrolières & gazières (Onshore / Offshore)", label: t.env2 },
+    { value: "Sociétés minières & industrielles isolées", label: t.env3 },
+    { value: "Événements internationaux de prestige", label: t.env4 },
+  ];
 
   const update = <K extends keyof FormState>(key: K, value: FormState[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }));
     setInvalidFields(previous => { const next = new Set(previous); next.delete(key); return next; });
   };
   const isInvalid = (field: string) => validationAttempted && invalidFields.has(field);
+  const toggleEnvironment = (environment: string) => update("environments", form.environments.includes(environment) ? form.environments.filter(item => item !== environment) : [...form.environments, environment]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -381,6 +388,7 @@ export default function VvipOffshorePage() {
     if (!form.lastName.trim()) nextInvalidFields.add("lastName");
     if (!form.email.trim() || !/^\S+@\S+\.\S+$/.test(form.email)) nextInvalidFields.add("email");
     if (!form.specialty) nextInvalidFields.add("specialty");
+    if (!form.environments.length) nextInvalidFields.add("environments");
     if (!submittedDiplomaCountry) nextInvalidFields.add("diplomaCountry");
     if (!file || !isAcceptedVvipCvFile(file)) nextInvalidFields.add("cv");
     if (!form.gdprConsent) nextInvalidFields.add("gdprConsent");
@@ -401,13 +409,14 @@ export default function VvipOffshorePage() {
       body.append("lastName", form.lastName);
       body.append("email", form.email);
       body.append("phone", form.phone);
-      body.append("specialty", `[VVIP / Offshore] ${form.specialty} (${form.environment})`);
+      const environmentSummary = form.environments.join(", ");
+      body.append("specialty", `[VVIP / Offshore] ${form.specialty} (${environmentSummary})`);
       body.append("diplomaCountry", submittedDiplomaCountry);
-      body.append("targetCountries", JSON.stringify([form.environment]));
+      body.append("targetCountries", JSON.stringify(form.environments));
       body.append("languages", JSON.stringify(["Français", "Anglais"]));
       body.append("yearsExperience", form.yearsExperience ? String(Number(form.yearsExperience)) : "5");
       body.append("certifications", form.certifications);
-      body.append("message", `Mission VVIP / Offshore. Environnement: ${form.environment}. Certifications: ${form.certifications}`);
+      body.append("message", `Mission VVIP / Offshore. Environnements: ${environmentSummary}. Certifications: ${form.certifications}`);
       body.append("gdprConsent", "1");
       body.append("marketingConsent", "0");
       body.append("website", form.website);
@@ -523,15 +532,12 @@ export default function VvipOffshorePage() {
                           ))}
                         </select>
                       </label>
-                      <label className="block w-full space-y-1.5 text-sm text-foreground">
-                        <span className="block font-medium">{t.environment} *</span>
-                        <select value={form.environment} onChange={(e) => update("environment", e.target.value)} className="form-control block w-full">
-                          <option value="Moyen-Orient (Gouvernement / VVIP)">{t.env1}</option>
-                          <option value="Plateformes pétrolières & gazières (Onshore / Offshore)">{t.env2}</option>
-                          <option value="Sociétés minières & industrielles isolées">{t.env3}</option>
-                          <option value="Événements internationaux de prestige">{t.env4}</option>
-                        </select>
-                      </label>
+                      <fieldset className={`block w-full space-y-2 text-sm text-foreground ${isInvalid("environments") ? "form-consent-group-invalid" : ""}`}>
+                        <legend className="block font-medium">{t.environment} *</legend>
+                        <div className="grid gap-2">
+                          {environmentOptions.map(option => <label key={option.value} className="form-consent-item flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-foreground"><input type="checkbox" checked={form.environments.includes(option.value)} aria-invalid={isInvalid("environments")} onChange={() => toggleEnvironment(option.value)} className="form-consent-checkbox" />{option.label}</label>)}
+                        </div>
+                      </fieldset>
                     </div>
 
                     <label className="block w-full space-y-1.5 text-sm text-foreground">
