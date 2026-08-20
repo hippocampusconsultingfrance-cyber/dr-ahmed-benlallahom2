@@ -12,6 +12,16 @@ Cette checklist complète les contrôles automatisés et visuels déjà réalis�
 | Paiement réel | Utiliser un créneau de test et une carte Stripe de test sur le domaine publié, sans soumettre de données médicales réelles. | Redirection Stripe, confirmation, email et facture correspondent au statut de paiement. |
 | Administration | Se connecter avec le compte administrateur, passer la validation MFA et vérifier les onglets prioritaires sur mobile. | Aucune donnée n’est affichée avant MFA ; les actions et tableaux restent utilisables après validation. |
 
+## Correspondance avec les contrôles automatisés
+
+| Contrôle manuel | Garanties déjà automatisées | Ce qui reste impérativement à constater sur un appareil réel |
+|---|---|---|
+| Clavier seul | Navigation, carrousel, dialogues et consentement cookies disposent de tests de touches et de restitution du focus. | L’ordre de tabulation entre composants réels, l’indicateur visible et l’absence de piège de focus. |
+| Lecteur d’écran | Les libellés, alternatives, régions d’état et titres sont couverts par des tests de structure. | La qualité effective des annonces et les répétitions propres au lecteur d’écran et au navigateur. |
+| Zoom et contraste | Les tokens de thème sont testés pour le contraste AA ; les conteneurs et grilles critiques sont contrôlés. | Le reflow à 200 %, les préférences utilisateur et la perception sur écran réel. |
+| Mobile administratif | Les actions du tableau Candidatures et de la revue documentaire disposent de contraintes tactiles et de rupture de texte testées. | La précision tactile, l’usage du clavier virtuel et le comportement sur le matériel cible. |
+| Paiement | Les états de réservation et de confirmation sont couverts sans transaction réelle. | Le flux Stripe, l’e-mail, la facture et l’annulation avec carte de test sur le domaine publié. |
+
 > Ne saisissez jamais de données médicales, documents ou identifiants réels lors des tests. Les contrôles doivent être interrompus immédiatement en cas d’anomalie de confidentialité, d’accès inattendu ou de paiement non souhaité.
 
 ## Traçabilité recommandée
