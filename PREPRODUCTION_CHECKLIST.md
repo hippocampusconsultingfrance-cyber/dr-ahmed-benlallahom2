@@ -6,6 +6,7 @@ Ce document accompagne toute évolution avant publication sur `drahmedbenlallaho
 |---|---|---|---|
 | Compilation | Exécuter `pnpm test` puis `pnpm build`. | Suite de tests verte et build sans erreur TypeScript. | [ ] |
 | Parcours publics | Vérifier accueil, réservation, recrutement standard, VVIP, Employeurs, FAQ, pages légales et 404 sur desktop et mobile. | Captures ou recette consignée ; aucune route publique inattendue. | [ ] |
+| Revue graphique | Vérifier les étalons visuels, l’absence de chevauchement, les variantes DE/ZH, les `alt` utiles et les droits des nouveaux visuels. | `pnpm test:visual` vert, revue manuelle des écarts, registre de droits à jour. | [ ] |
 | Réservation | Tester un créneau sans réaliser de paiement réel, puis vérifier date/heure, tarif, annulation et retour Stripe. | Session créée avec le bon montant ; aucun effet post-paiement avant confirmation Stripe. | [ ] |
 | Emails | Vérifier le sujet, l’expéditeur, la réponse, le rendu du shell Hippocampus et les liens d’un échantillon transactionnel. | Réception contrôlée dans une boîte de test ; aucun lien cassé. | [ ] |
 | Recrutement | Contrôler consentement, revue humaine, absence de décision automatisée, filtres et désinscription. | Données fictives uniquement ; trace d’audit disponible. | [ ] |

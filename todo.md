@@ -199,7 +199,7 @@
 - [x] Ajouter une non-régression confirmant que les illustrations Services et Réservation restent décoratives et correctement intégrées
 - [ ] Exécuter de façon autonome les améliorations restantes réalisables et documenter sans blocage les contrôles nécessitant un appareil ou un service externe
 - [x] Créer le registre des droits sur les photographies, logos, illustrations et visuels externes : autorisations écrites de tiers à archiver dans `VISUAL_ASSET_RIGHTS_REGISTER.md`
-- [ ] Mettre en place une revue graphique trimestrielle et une checklist avant publication
+- [x] Mettre en place une revue graphique trimestrielle et une checklist avant publication : cadence T1–T4, critères de blocage et contrôle graphique ajoutés à `PREPRODUCTION_CHECKLIST.md`
 - [ ] Centraliser les libellés d’interface afin d’éviter les chaînes de texte hardcodées : lot Contact/RGPD migré vers `publicFormCopy.ts` avec repli français et exports compatibles ; audit et migration des pages publiques restantes à poursuivre
 - [x] Ajouter une stratégie de compression responsive sans recadrage destructif : variantes WebP 640/1280, `srcSet`, `sizes` et décodage asynchrone pour Services et Réservation
 - [x] Vérifier et compléter la navigation clavier sur menus, carrousels, modales et contrôles de réservation
