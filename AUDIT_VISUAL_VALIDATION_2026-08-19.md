@@ -321,6 +321,10 @@ Les autres images du site restent hébergées dans le stockage statique et ne di
 
 Les libellés compacts de la page Ressources — recherche, filtres, format de document et appel à l’ouverture d’une source externe — sont désormais contrôlés dans les quatre langues. Le garde-fou compte les caractères Unicode sans tronquer le chinois et impose une limite conservatrice de quarante-deux caractères sur ces commandes. Les paragraphes éditoriaux restent volontairement fluides et passent à la ligne dans des conteneurs à largeur contrainte ; leur validation sur lecteurs d’écran, zoom natif et navigateurs distincts demeure un contrôle sur appareil réel documenté dans la checklist manuelle.
 
+## Accès administratif sur mobile
+
+Le point d’entrée `/admin` a été contrôlé à 375 × 812 px sans ouvrir de session sensible. L’étape de validation de sécurité conserve une hiérarchie lisible, une explication concise, des actions pleine largeur, un champ de code à six chiffres et une sortie vers le site, sans chevauchement observé. La vérification des onglets et données administratives après authentification demeure volontairement un contrôle de recette sur tablette ou mobile réel, avec un compte administrateur autorisé ; aucun code de sécurité ni accès ne doit être sollicité uniquement pour une capture automatisée.
+
 ## Données de recrutement normalisées
 
 Les certifications, langues et expériences extraites sont conservées à la fois dans les champs de synthèse du dossier et dans des tables relationnelles dédiées. Le matching de brief consomme les certifications et langues normalisées ; le vivier conserve les structures normalisées et les expose dans l’administration. Les filtres restent compatibles avec les données déjà déposées en utilisant également les champs de déclaration initiaux.
