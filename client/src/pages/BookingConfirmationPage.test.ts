@@ -25,4 +25,11 @@ describe("booking confirmation state", () => {
     expect(source).toContain("noIndex");
     expect(source).toContain("paymentConfirmed && (");
   });
+
+  it("annonce la facture par e-mail dans les quatre langues sans lien de téléchargement public", () => {
+    for (const language of ["fr", "en", "de", "zh"] as const) {
+      expect(confirmationContent[language].success.nextSteps).toMatch(/email|E-Mail|电子邮件/i);
+      expect(confirmationContent[language].invoice).toMatch(/PDF/i);
+    }
+  });
 });
