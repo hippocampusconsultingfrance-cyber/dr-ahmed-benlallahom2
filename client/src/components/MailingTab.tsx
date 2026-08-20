@@ -142,8 +142,8 @@ export default function MailingTab({ initialSelectedIds }: MailingTabProps) {
                 ["all_eligible", copy.allEligible],
                 ["filtered", copy.filteredPool],
               ] as Array<[AudienceMode, string]>).map(([value, label]) => (
-                <label key={value} className={`flex cursor-pointer items-center gap-2 rounded-lg border p-3 text-sm transition-colors ${mode === value ? "border-primary bg-primary/5 text-foreground" : "border-border text-muted-foreground"}`}>
-                  <input type="radio" name="audience-mode" value={value} checked={mode === value} onChange={() => setMode(value)} /> {label}
+                <label key={value} className={`flex cursor-pointer items-start gap-2 rounded-lg border p-3 text-sm transition-colors ${mode === value ? "border-primary bg-primary/5 text-foreground" : "border-border text-muted-foreground"}`}>
+                  <input className="mt-0.5 shrink-0" type="radio" name="audience-mode" value={value} checked={mode === value} onChange={() => setMode(value)} /> <span className="break-words">{label}</span>
                 </label>
               ))}
             </div>
@@ -169,7 +169,7 @@ export default function MailingTab({ initialSelectedIds }: MailingTabProps) {
           <p className="mt-5 text-3xl font-semibold text-foreground">{audienceQuery.isLoading ? "…" : audience.length}</p>
           <p className="text-sm text-muted-foreground">{audience.length} {copy.eligibleRecipients}</p>
           <ul className="mt-4 max-h-48 space-y-2 overflow-y-auto text-sm text-muted-foreground">
-            {audience.slice(0, 8).map(candidate => <li key={candidate.id}><strong className="text-foreground">{candidate.firstName} {candidate.lastName}</strong><span className="block text-xs">{candidate.specialty} · {candidate.aiScore === null ? copy.scoreUnavailable : `${candidate.aiScore}/100`}</span></li>)}
+            {audience.slice(0, 8).map(candidate => <li key={candidate.id}><strong className="break-words text-foreground">{candidate.firstName} {candidate.lastName}</strong><span className="block break-words text-xs">{candidate.specialty} · {candidate.aiScore === null ? copy.scoreUnavailable : `${candidate.aiScore}/100`}</span></li>)}
             {audience.length > 8 && <li className="text-xs">… {audience.length - 8} {copy.otherProfiles}.</li>}
           </ul>
           <Button className="mt-5 w-full" onClick={() => setConfirmationOpen(true)} disabled={!canReview || !audience.length || audienceQuery.isLoading}>
@@ -191,14 +191,14 @@ export default function MailingTab({ initialSelectedIds }: MailingTabProps) {
               const total = Number(delivery.total || campaign.recipientCount || 0);
               return <article key={campaign.id} className="flex flex-col gap-4 rounded-xl border border-border p-4">
                 <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                  <div><h4 className="font-semibold text-foreground">{campaign.title}</h4><p className="mt-1 text-sm text-muted-foreground">{campaign.subject} · {campaign.language.toUpperCase()} · {campaign.recipientCount} {copy.recipients}</p><p className="mt-1 text-xs text-muted-foreground">{copy.createdOn} {new Date(campaign.createdAt).toLocaleString(interfaceLanguage === "zh" ? "zh-CN" : interfaceLanguage === "de" ? "de-DE" : interfaceLanguage === "en" ? "en-GB" : "fr-FR", { timeZone: "Europe/Paris" })}</p></div>
-                  <span className={`w-fit rounded-full border px-2.5 py-1 text-xs font-medium ${campaignStatusTone(campaign.status)}`}>{campaignStatusLabel(campaign.status, copy.statuses)}</span>
+                  <div className="min-w-0"><h4 className="break-words font-semibold text-foreground">{campaign.title}</h4><p className="mt-1 break-words text-sm text-muted-foreground">{campaign.subject} · {campaign.language.toUpperCase()} · {campaign.recipientCount} {copy.recipients}</p><p className="mt-1 break-words text-xs text-muted-foreground">{copy.createdOn} {new Date(campaign.createdAt).toLocaleString(interfaceLanguage === "zh" ? "zh-CN" : interfaceLanguage === "de" ? "de-DE" : interfaceLanguage === "en" ? "en-GB" : "fr-FR", { timeZone: "Europe/Paris" })}</p></div>
+                  <span className={`w-fit max-w-full break-words rounded-full border px-2.5 py-1 text-xs font-medium ${campaignStatusTone(campaign.status)}`}>{campaignStatusLabel(campaign.status, copy.statuses)}</span>
                 </div>
                 <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4" aria-label={`Suivi de la campagne ${campaign.title}`}>
-                  <div className="rounded-lg bg-emerald-500/10 p-3 text-sm"><span className="flex items-center gap-1.5 text-emerald-700 dark:text-emerald-300"><CheckCircle2 className="h-4 w-4" /> {copy.delivered}</span><p className="mt-1 font-semibold text-foreground">{delivered} <span className="text-xs font-normal text-muted-foreground">/ {total}</span></p></div>
-                  <div className="rounded-lg bg-cyan-500/10 p-3 text-sm"><span className="flex items-center gap-1.5 text-cyan-700 dark:text-cyan-300"><Eye className="h-4 w-4" /> {copy.opened}</span><p className="mt-1 font-semibold text-foreground">{opened} <span className="text-xs font-normal text-muted-foreground">· {deliveryRateLabel(opened, delivered)}</span></p></div>
-                  <div className="rounded-lg bg-amber-500/10 p-3 text-sm"><span className="flex items-center gap-1.5 text-amber-700 dark:text-amber-300"><Clock3 className="h-4 w-4" /> {copy.delayed}</span><p className="mt-1 font-semibold text-foreground">{delayed}</p></div>
-                  <div className="rounded-lg bg-destructive/10 p-3 text-sm"><span className="flex items-center gap-1.5 text-destructive"><CircleAlert className="h-4 w-4" /> {copy.errors}</span><p className="mt-1 font-semibold text-foreground">{failed}</p></div>
+                  <div className="min-w-0 rounded-lg bg-emerald-500/10 p-3 text-sm"><span className="flex items-start gap-1.5 break-words text-emerald-700 dark:text-emerald-300"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" /> {copy.delivered}</span><p className="mt-1 font-semibold text-foreground">{delivered} <span className="text-xs font-normal text-muted-foreground">/ {total}</span></p></div>
+                  <div className="min-w-0 rounded-lg bg-cyan-500/10 p-3 text-sm"><span className="flex items-start gap-1.5 break-words text-cyan-700 dark:text-cyan-300"><Eye className="mt-0.5 h-4 w-4 shrink-0" /> {copy.opened}</span><p className="mt-1 font-semibold text-foreground">{opened} <span className="text-xs font-normal text-muted-foreground">· {deliveryRateLabel(opened, delivered)}</span></p></div>
+                  <div className="min-w-0 rounded-lg bg-amber-500/10 p-3 text-sm"><span className="flex items-start gap-1.5 break-words text-amber-700 dark:text-amber-300"><Clock3 className="mt-0.5 h-4 w-4 shrink-0" /> {copy.delayed}</span><p className="mt-1 font-semibold text-foreground">{delayed}</p></div>
+                  <div className="min-w-0 rounded-lg bg-destructive/10 p-3 text-sm"><span className="flex items-start gap-1.5 break-words text-destructive"><CircleAlert className="mt-0.5 h-4 w-4 shrink-0" /> {copy.errors}</span><p className="mt-1 font-semibold text-foreground">{failed}</p></div>
                 </div>
                 <p className="text-xs text-muted-foreground">{copy.deliveryNotice}</p>
               </article>;

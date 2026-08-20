@@ -223,6 +223,7 @@
 - [x] Améliorer le reflow des créneaux et dates bloquées dans l’onglet Disponibilités
 - [x] Améliorer le reflow des cartes de témoignages administratives sur mobile
 - [x] Améliorer le reflow des indicateurs et événements de sécurité sur mobile
+- [x] Améliorer le reflow des audiences et historiques de campagne Mailing sur mobile
 - [x] Renforcer le reflow mobile des en-têtes, badges et coordonnées dans les listes administratives historiques
 - [x] Auditer et ajuster les tableaux de candidatures, réservations et fichiers candidats pour une lecture mobile sans débordement
 - [x] Agrandir et répartir les actions du tableau Candidatures pour une utilisation tactile sans débordement
