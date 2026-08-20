@@ -27,7 +27,7 @@ describe("garde-fou de longueur des traductions", () => {
         { ...content.nav, ...PUBLIC_NAVIGATION[language] },
         32,
       );
-      const ctaIssues = findTranslationLengthIssues({ bookConsultation: content.hero.bookConsultation }, 40);
+      const ctaIssues = findTranslationLengthIssues({ bookConsultation: content.hero.bookConsultation, contact: content.nav.contact }, 40);
       expect(navigationIssues, language).toEqual([]);
       expect(ctaIssues, language).toEqual([]);
     }

@@ -15,4 +15,13 @@ describe("localisation de la réservation", () => {
       expect(content.emergencyNote).toContain("112");
     });
   });
+
+  it("conserve les CTA et états de paiement actionnables dans les quatre langues", () => {
+    Object.values(bookingContent).forEach(content => {
+      expect(content.form.submit).toBeTruthy();
+      expect(content.form.loading).toBeTruthy();
+      expect(content.form.availabilityError).toBeTruthy();
+      expect(content.restartBooking).toBeTruthy();
+    });
+  });
 });

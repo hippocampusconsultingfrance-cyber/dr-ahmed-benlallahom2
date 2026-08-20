@@ -269,7 +269,7 @@
 - [ ] Vérifier la compatibilité avec un lecteur d’écran
 - [ ] Vérifier la navigation au clavier uniquement
 - [ ] Vérifier les pages à 200 % de zoom
-- [ ] Vérifier les textes et CTA dans les quatre langues
+- [x] Vérifier les textes et CTA dans les quatre langues : navigation, CTA de consultation et états de paiement vérifiés en FR/EN/DE/ZH avec contrôle de longueur
 - [x] Vérifier le positionnement des éléments flottants sur petits écrans : bouton WhatsApp en zone sûre sous le bandeau cookies, navigation prioritaire et capture mobile validée
 - [x] Vérifier les états de chargement des appels tRPC : Réservation, Coffre candidat et Vérification e-mail audités ; chargement, erreur sûre, vide et blocage d’action explicitement distingués
 - [x] Vérifier les états anti-double-clic du paiement
