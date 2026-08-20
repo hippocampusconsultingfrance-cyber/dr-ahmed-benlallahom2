@@ -778,6 +778,53 @@ body {
   opacity: 0.82;
 }
 
+.site-search-shell {
+  position: relative;
+  width: 100%;
+}
+
+.site-search-icon {
+  pointer-events: none;
+  position: absolute;
+  z-index: 1;
+  top: 50%;
+  left: 1rem;
+  width: 1.15rem;
+  height: 1.15rem;
+  transform: translateY(-50%);
+  color: var(--muted-foreground);
+}
+
+.site-search-input {
+  padding-left: 3.35rem;
+}
+
+.site-search-input-with-clear {
+  padding-right: 3.35rem;
+}
+
+.site-search-clear {
+  position: absolute;
+  z-index: 2;
+  top: 50%;
+  right: 0.8rem;
+  display: inline-flex;
+  width: 2rem;
+  height: 2rem;
+  transform: translateY(-50%);
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.5rem;
+  color: var(--muted-foreground);
+  transition: color 160ms ease, background 160ms ease;
+}
+
+.site-search-clear:hover,
+.site-search-clear:focus-visible {
+  color: var(--foreground);
+  background: color-mix(in oklch, var(--primary) 12%, transparent);
+}
+
 .recruitment-country-options {
   position: absolute;
   z-index: 30;

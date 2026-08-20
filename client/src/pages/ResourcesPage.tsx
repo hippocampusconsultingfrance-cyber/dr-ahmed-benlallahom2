@@ -49,7 +49,7 @@ export default function ResourcesPage() {
 
         <section className="mt-6 rounded-2xl border border-border bg-card/70 p-5 sm:p-6" aria-label={text.search}>
           <label className="sr-only" htmlFor="resource-search">{text.search}</label>
-          <div className="relative"><Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" /><input id="resource-search" value={query} onChange={event => setQuery(event.target.value)} placeholder={text.search} className="h-11 w-full rounded-xl border border-border bg-background py-2 pl-11 pr-4 text-sm text-foreground outline-none focus:ring-2 focus:ring-primary" /></div>
+          <div className="site-search-shell"><Search className="site-search-icon" aria-hidden="true" /><input id="resource-search" value={query} onChange={event => setQuery(event.target.value)} placeholder={text.search} className="site-search-input h-11 w-full rounded-xl border border-border bg-background py-2 text-sm text-foreground outline-none focus:ring-2 focus:ring-primary" /></div>
           <div className="mt-4 flex flex-wrap gap-2">{filters.map(([id, label]) => <button key={id} type="button" onClick={() => setCategory(id)} className={`min-h-10 rounded-lg px-4 text-sm font-medium transition-colors ${category === id ? "bg-primary text-primary-foreground" : "border border-border bg-background text-muted-foreground hover:text-foreground"}`}>{label}</button>)}</div>
         </section>
 

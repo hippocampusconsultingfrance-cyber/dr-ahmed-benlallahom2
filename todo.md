@@ -2476,3 +2476,4 @@
 - [x] Corriger le chevauchement des liens, du sélecteur de langue et des actions dans l’en-tête desktop aux largeurs intermédiaires
 - [x] Réaligner les libellés et champs du formulaire de candidature afin que chaque zone de saisie apparaisse sous son intitulé
 - [x] Remplacer la liste ouverte des pays d’obtention du diplôme par un sélecteur recherché fermé par défaut
+- [x] Éliminer le chevauchement entre icônes, texte saisi et actions d’effacement dans les recherches du formulaire et normaliser les recherches du site

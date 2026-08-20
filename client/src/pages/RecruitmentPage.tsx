@@ -349,20 +349,21 @@ export default function RecruitmentPage() {
                   <div className="grid gap-5 sm:grid-cols-2">
                     <div className="recruitment-field-group">
                       <span>{t.specialty} *</span>
-                      <div className="relative">
-                        <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                      <div className="site-search-shell">
+                        <Search className="site-search-icon" aria-hidden="true" />
                         <input
                           type="text"
                           value={specialtyQuery}
                           onChange={event => setSpecialtyQuery(event.target.value)}
                           placeholder={t.specialtySearch}
-                          className="recruitment-field pl-9 pr-8 text-sm"
+                          className={`recruitment-field site-search-input text-sm ${specialtyQuery ? "site-search-input-with-clear" : ""}`}
                         />
                         {specialtyQuery && (
                           <button
                             type="button"
                             onClick={() => setSpecialtyQuery("")}
-                            className="absolute right-2.5 top-2.5 text-muted-foreground hover:text-foreground"
+                            className="site-search-clear"
+                            aria-label="Effacer la recherche de spécialité"
                           >
                             <X className="h-4 w-4" />
                           </button>
@@ -393,8 +394,8 @@ export default function RecruitmentPage() {
 
                   <div ref={diplomaCountryPickerRef} className="recruitment-field-group relative">
                     <span>{diplomaCopy.label} *</span>
-                    <div className="relative">
-                      <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" aria-hidden="true" />
+                    <div className="site-search-shell">
+                      <Search className="site-search-icon" aria-hidden="true" />
                       <input
                         id="recruitment-diploma-country-search"
                         type="search"
@@ -403,13 +404,13 @@ export default function RecruitmentPage() {
                         onChange={event => { setDiplomaCountryQuery(event.target.value); setDiplomaCountryOpen(true); }}
                         onKeyDown={event => { if (event.key === "Escape") setDiplomaCountryOpen(false); }}
                         placeholder={diplomaCopy.search}
-                        className="recruitment-field pl-9 pr-10"
+                        className={`recruitment-field site-search-input ${diplomaCountryQuery ? "site-search-input-with-clear" : ""}`}
                         role="combobox"
                         aria-expanded={diplomaCountryOpen}
                         aria-controls="recruitment-diploma-country-options"
                         aria-autocomplete="list"
                       />
-                      {diplomaCountryQuery && <button type="button" onClick={() => { setDiplomaCountryQuery(""); setDiplomaCountryOpen(true); }} className="absolute right-2.5 top-2.5 text-muted-foreground hover:text-foreground" aria-label="Effacer la recherche"><X className="h-4 w-4" /></button>}
+                      {diplomaCountryQuery && <button type="button" onClick={() => { setDiplomaCountryQuery(""); setDiplomaCountryOpen(true); }} className="site-search-clear" aria-label="Effacer la recherche"><X className="h-4 w-4" /></button>}
                     </div>
                     {form.diplomaCountry && <p className="text-xs font-medium text-primary">{diplomaCopy.label} : {form.diplomaCountry}</p>}
                     {diplomaCountryOpen && (
