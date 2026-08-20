@@ -263,7 +263,8 @@
 - [x] Ne pas ajouter de progression de lecture pour des articles Blog non publiés
 - [x] Ne pas ajouter de recherche Blog tant que la section Actualités reste désactivée
 - [x] Ne pas ajouter de filtres de catégories Blog tant que la section Actualités reste désactivée
-- [ ] Ajouter une grille responsive commune à toutes les pages publiques
+- [x] Vérifier et maintenir une grille responsive commune sur les pages publiques prioritaires
+- [x] Ajouter une non-régression des conteneurs et grilles communs sur les pages publiques prioritaires
 - [ ] Ajouter une animation de transition de page courte et désactivable
 - [x] Ajouter un contrôle de taille de police sans rupture de mise en page
 - [x] Ajouter un test comportemental de persistance et d’application du mode lisibilité renforcée

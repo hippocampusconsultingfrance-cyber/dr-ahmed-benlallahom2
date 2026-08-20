@@ -182,6 +182,10 @@ Le projet contient désormais `COMPONENTS_GUIDE.md`, qui décrit les composants 
 
 Le composant `MedicalCitation` permet d’afficher une citation générale avec un lien de source, une date de mise à jour, un contexte éventuel et un avertissement de non-substitution à l’avis médical personnalisé ou aux urgences. Son format, son libellé et sa date sont localisés en français, anglais, allemand et chinois ; il ne publie aucune recommandation clinique par défaut.
 
+## Grille responsive publique
+
+Le conteneur partagé conserve des marges progressives de 16 px, 24 px puis 32 px, ainsi qu’une largeur maximale sur grand écran. Les parcours Réservation, Recrutement et Employeurs restent empilés avant leur mise en colonnes, tandis que les pages légales utilisent le même conteneur de lecture. Une non-régression vérifie ces contrats de structure.
+
 ## Vérification visuelle des parcours publics critiques
 
 Les pages Accueil, Réservation, RGPD, Recrutement et Employeurs ont été capturées en vue bureau. Les en-têtes, formulaires, CTAs et pieds de page restent lisibles, structurés et sans chevauchement visible. Les formulaires Réservation, RGPD et Brief Employeur présentent leurs champs à une largeur cohérente, avec une hiérarchie claire entre contenu informatif et action principale. La vérification équivalente sur mobile reste planifiée séparément.
