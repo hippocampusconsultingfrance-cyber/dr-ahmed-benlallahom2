@@ -24,6 +24,8 @@ Le gabarit transactionnel Hippocampus utilise désormais un document HTML comple
 
 Le 19 août 2026, la page `https://drahmedbenlallahom.com/booking` a été contrôlée après la publication. Après le chargement différé normal, le formulaire de réservation est visible avec ses libellés associés pour le nom, l’email et le téléphone ; la tarification jour/nuit, l’avertissement d’urgence et les informations de paiement sont également présents. Aucun écran d’erreur ni absence de contenu n’a été constaté.
 
+Le 20 août 2026, la page d’accueil `https://drahmedbenlallahom.com/` a également été contrôlée sur le domaine publié. Après l’état de chargement différé normal, l’en-tête, les entrées Leadership, Services, Formation, Contact, Recrutement et Employeurs, les actions « Réserver une Consultation » et « Me Contacter », ainsi que les sections publiques principales se sont affichés. Aucune soumission de formulaire, paiement, ni consultation de donnée privée n’a été réalisée pendant ce contrôle passif.
+
 ## Alternatives textuelles des images
 
 Un contrôle du code recense les balises image des composants et pages concernés. Chaque image porte désormais une politique explicite : texte alternatif contextuel pour les visuels informatifs (portrait, logo, illustration de service, contenu de venture) ou alternative vide uniquement pour l’illustration strictement décorative du formulaire RGPD. Un test de non-régression empêche l’ajout d’une balise image sans attribut `alt`.
