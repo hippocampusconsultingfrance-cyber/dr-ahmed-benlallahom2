@@ -276,6 +276,10 @@ Le fichier `UX_FEEDBACK_REVIEW_PROTOCOL.md` formalise une revue trimestrielle re
 
 Les en-têtes des listes Réservations, Messages et demandes RGPD appliquent désormais le retour à la ligne aux noms, badges et identifiants, ainsi qu’une coupure contrôlée aux e-mails et références longues. Les actions conservent des cibles tactiles et l’affichage ne dépend pas d’une largeur fixe. Cette protection est couverte par `AdminDashboard.mobileReflow.test.ts` ; la vérification des données réelles et des onglets authentifiés sur mobile/tablette reste explicitement inscrite dans le registre de validations externes.
 
+## Authenticité des témoignages
+
+L’audit a détecté des entrées de test « Test User / Excellent Service » créées par une ancienne suite de tests. Elles ont été supprimées de la base ; la suite ne crée désormais plus de témoignage ni de fixture d’avis. Les contrats de schéma et de modération sont validés sans écrire dans la base, et une non-régression interdit explicitement toute semence d’avis fictif. Les témoignages publiés restent limités aux contributions validées fournies pour le site.
+
 ## Couverture de validation d’accessibilité
 
 La suite automatisée couvre le lien d’accès direct au contenu, la navigation clavier, les libellés accessibles du menu, les alternatives d’images, les préférences de cookies, les contrôles mobiles du tableau de bord, les longueurs de traduction, l’impression et les états de chargement ou d’erreur. Les vérifications de rendu ont également été réalisées sur mobile, tablette, bureau et largeur réduite.

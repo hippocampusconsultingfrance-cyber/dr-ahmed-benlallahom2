@@ -88,7 +88,8 @@
 - [x] Créer les procédures tRPC pour gérer les avis (testimonials.list)
 - [x] Créer le composant TestimonialsSection pour la page d'accueil
 - [x] Créer la page dédiée Testimonials avec tous les avis et filtrage par note
-- [x] Ajouter les avis de démonstration multilingues (FR, EN, DE, ZH) - 10 avis total
+- [x] Instruction historique d’avis de démonstration remplacée : tous les avis fictifs ont été retirés ; seuls les témoignages validés sont conservés
+- [x] Retirer les données de témoignages fictifs et empêcher leur recréation par les tests
 - [x] Ajouter le Review Schema (JSON-LD) pour Google Rich Snippets
 - [x] Intégrer tRPC dans les composants frontend
 - [x] Ajouter support du schéma structuré au composant SEOHead
