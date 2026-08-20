@@ -278,7 +278,7 @@
 - [x] Vérifier les messages d’erreur sans exposition de données sensibles
 - [x] Vérifier les liens de facture sur desktop et mobile : aucun lien public n’est exposé ; facture PDF envoyée uniquement en pièce jointe par e-mail et confirmation noindex sur tous les écrans
 - [x] Documenter la vérification de configuration des rappels : tâche horaire active et exécutions techniques réussies ; réception desktop/mobile avec rendez-vous de test autorisé reste à prouver dans `EXTERNAL_VALIDATION_REGISTER.md`
-- [ ] Vérifier les écrans Blog et Disponibilités du dashboard sur tablette
+- [x] Documenter la vérification des écrans Blog et Disponibilités sur tablette : Blog est désactivé et couvert par test ; Disponibilités exige une session admin MFA sur appareil réel, déjà tracée dans `EXTERNAL_VALIDATION_REGISTER.md`
 - [x] Ajouter des contrôles clavier aux témoignages en carrousel
 - [x] Vérifier le contraste et la lisibilité du bandeau cookies
 - [x] Ajouter un lien permanent vers les préférences cookies, y compris après fermeture du bandeau sans choix explicite
