@@ -82,6 +82,10 @@ Le fichier `robots.txt` publié référence le sitemap officiel, autorise les co
 
 Les pages d’accueil, réservation, RGPD, recrutement, brief employeur, accès candidat, FAQ et méthode employeurs ont été revues à 640 px de largeur, une contrainte comparable à un affichage zoomé sur un écran de bureau. Les titres, contrôles de formulaire, cartes, appels à l’action et pieds de page restent lisibles sans débordement horizontal visible. Ce contrôle de rendu ne remplace pas une validation manuelle au zoom natif de 200 % avec un navigateur et un lecteur d’écran.
 
+## Vérification des libellés longs DE/ZH
+
+Les étalons multilingues de la réservation allemande sur bureau et du brief employeur chinois sur mobile ont été examinés. Les titres, étapes, libellés de formulaire, descriptions et actions restent contenus dans leurs zones sans chevauchement apparent ; les caractères chinois conservent une hauteur de ligne lisible. La matrice automatise également la candidature standard allemande sur mobile et la réservation chinoise sur bureau. Cette vérification de rendu ne remplace pas la recette avec lecteur d’écran, zoom natif et appareils réels, qui demeure consignée dans `EXTERNAL_VALIDATION_REGISTER.md`.
+
 ## Journaux d’exécution
 
 Les journaux locaux récents ne présentent ni erreur serveur, ni réponse réseau en 4xx/5xx dans l’échantillon contrôlé. Une ancienne erreur de développement relative au provider de langue est encore visible dans l’historique du navigateur, mais elle correspond à un état déjà corrigé et suivi d’un rendu public valide. La consultation des journaux du conteneur publié n’était pas disponible lors du contrôle, le service de journaux renvoyant `cloudrun service not found`; la disponibilité HTTP et les parcours publics ont donc été utilisés comme contrôle de substitution.

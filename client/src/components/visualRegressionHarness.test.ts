@@ -11,7 +11,10 @@ describe("harness de régression visuelle", () => {
       expect(source).toContain(`"${route}"`);
     }
     const publishedBaselines = source.match(/\/manus-storage\/[a-z0-9-]+_[a-f0-9]+\.png/g) ?? [];
-    expect(publishedBaselines).toHaveLength(34);
+    expect(publishedBaselines).toHaveLength(38);
+    for (const multilingualScenario of ["booking-de-desktop", "recruitment-standard-de-mobile", "booking-zh-desktop", "employers-zh-mobile"]) {
+      expect(source).toContain(`"${multilingualScenario}"`);
+    }
     expect(source).toContain("mismatchLimit = 0.008");
     expect(source).toContain('reducedMotion: "reduce"');
     expect(source).toContain('cookieConsent');

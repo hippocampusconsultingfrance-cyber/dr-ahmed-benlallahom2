@@ -34,6 +34,11 @@ const routes = [
 const scenarios = routes.flatMap(([id, route]) => [
   { id: `${id}-desktop`, path: route, viewport: desktop },
   { id: `${id}-mobile`, path: route, viewport: mobile },
+]).concat([
+  { id: "booking-de-desktop", path: "/booking", viewport: desktop, language: "de" },
+  { id: "recruitment-standard-de-mobile", path: "/recruitment/standard", viewport: mobile, language: "de" },
+  { id: "booking-zh-desktop", path: "/booking", viewport: desktop, language: "zh" },
+  { id: "employers-zh-mobile", path: "/employers", viewport: mobile, language: "zh" },
 ]);
 
 // Les étalons approuvés sont publiés hors du dépôt dans le stockage statique du projet.
@@ -72,6 +77,10 @@ const baselineUrls = {
   "not-found-mobile": `${baseUrl}/manus-storage/not-found-mobile_34e7a6a9.png`,
   "service-error-desktop": `${baseUrl}/manus-storage/service-error-desktop_892004ab.png`,
   "service-error-mobile": `${baseUrl}/manus-storage/service-error-mobile_569851c0.png`,
+  "booking-de-desktop": `${baseUrl}/manus-storage/booking-de-desktop_418b9fd4.png`,
+  "recruitment-standard-de-mobile": `${baseUrl}/manus-storage/recruitment-standard-de-mobile_3d2297b5.png`,
+  "booking-zh-desktop": `${baseUrl}/manus-storage/booking-zh-desktop_b3cfce00.png`,
+  "employers-zh-mobile": `${baseUrl}/manus-storage/employers-zh-mobile_7b35cfe2.png`,
 };
 
 function assertSameDimensions(current, baseline, id) {
@@ -89,10 +98,10 @@ async function captureScenario(browser, scenario) {
     colorScheme: "dark",
     reducedMotion: "reduce",
   });
-  await context.addInitScript(() => {
+  await context.addInitScript((language) => {
     localStorage.setItem("cookieConsent", JSON.stringify({ essential: true, performance: false, preferences: false }));
-    localStorage.setItem("language", "fr");
-  });
+    localStorage.setItem("language", language);
+  }, scenario.language ?? "fr");
   const page = await context.newPage();
   await page.goto(`${baseUrl}${scenario.path}`, { waitUntil: "domcontentloaded", timeout: 20_000 });
   await page.evaluate(async () => {

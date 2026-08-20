@@ -188,7 +188,7 @@
 - [x] Ajouter des composants graphiques de confiance pour le paiement, la confidentialité et la disponibilité
 - [x] Ajouter des tests visuels automatisés sur les pages critiques : harness restauré après synchronisation, 34 étalons publiés hors du dépôt et guide d’exécution ajouté
 - [x] Documenter la recette clavier, lecteur d’écran, contraste renforcé et zoom à 200 % : exécution sur appareil réel et preuve requise dans `EXTERNAL_VALIDATION_REGISTER.md`
-- [ ] Vérifier la longueur des textes et des boutons dans FR, EN, DE et ZH
+- [x] Vérifier la longueur des textes et des boutons dans FR, EN, DE et ZH : tests de traduction et quatre scénarios visuels DE/ZH sur les parcours denses
 - [ ] Améliorer la version mobile du dashboard administrateur : navigation compacte terminée, adaptation des contenus denses restante
 - [x] Ajouter un mode haute lisibilité et une gestion complète de prefers-reduced-motion
 - [x] Ajouter une page d’erreur serveur et une page de maintenance cohérentes avec la marque
