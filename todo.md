@@ -498,56 +498,56 @@
 - [x] Préparer une revue annuelle de la cohérence des liens accès
 - [x] Préparer une revue annuelle de la cohérence des liens rectification
 - [x] Préparer une revue annuelle de la cohérence des liens opposition
-- [ ] Préparer une revue annuelle de la cohérence des liens portabilité
-- [ ] Préparer une revue annuelle de la cohérence des liens consentement
-- [ ] Préparer une revue annuelle de la cohérence des liens politique confidentialité
-- [ ] Préparer une revue annuelle de la cohérence des liens conditions générales
-- [ ] Préparer une revue annuelle de la cohérence des liens mentions légales
-- [ ] Préparer une revue annuelle de la cohérence des liens hébergeur
-- [ ] Préparer une revue annuelle de la cohérence des liens sous-traitants
-- [ ] Préparer une revue annuelle de la cohérence des liens CNIL
-- [ ] Préparer une revue annuelle de la cohérence des liens Stripe
-- [ ] Préparer une revue annuelle de la cohérence des liens Resend
-- [ ] Préparer une revue annuelle de la cohérence des liens Manus
-- [ ] Préparer une revue annuelle de la cohérence des liens support
-- [ ] Préparer une revue annuelle de la cohérence des liens documentation
-- [ ] Préparer une revue annuelle de la cohérence des liens statut
-- [ ] Préparer une revue annuelle de la cohérence des liens monitoring
-- [ ] Préparer une revue annuelle de la cohérence des liens incidents
-- [ ] Préparer une revue annuelle de la cohérence des liens maintenance
-- [ ] Préparer une revue annuelle de la cohérence des liens sauvegarde
-- [ ] Préparer une revue annuelle de la cohérence des liens restauration
-- [ ] Préparer une revue annuelle de la cohérence des liens audit
-- [ ] Préparer une revue annuelle de la cohérence des liens sécurité
-- [ ] Préparer une revue annuelle de la cohérence des liens conformité
-- [ ] Préparer une revue annuelle de la cohérence des liens gouvernance
-- [ ] Préparer une revue annuelle de la cohérence des liens risque
-- [ ] Préparer une revue annuelle de la cohérence des liens qualité
-- [ ] Préparer une revue annuelle de la cohérence des liens performance
-- [ ] Préparer une revue annuelle de la cohérence des liens accessibilité
-- [ ] Préparer une revue annuelle de la cohérence des liens design
-- [ ] Préparer une revue annuelle de la cohérence des liens contenu
-- [ ] Préparer une revue annuelle de la cohérence des liens traduction
-- [ ] Préparer une revue annuelle de la cohérence des liens marque
-- [ ] Préparer une revue annuelle de la cohérence des liens marketing
-- [ ] Préparer une revue annuelle de la cohérence des liens réseau social
-- [ ] Préparer une revue annuelle de la cohérence des liens LinkedIn
-- [ ] Préparer une revue annuelle de la cohérence des liens WhatsApp
-- [ ] Préparer une revue annuelle de la cohérence des liens email
-- [ ] Préparer une revue annuelle de la cohérence des liens SMS
-- [ ] Préparer une revue annuelle de la cohérence des liens téléphone
-- [ ] Préparer une revue annuelle de la cohérence des liens adresse
-- [ ] Préparer une revue annuelle de la cohérence des liens carte
-- [ ] Préparer une revue annuelle de la cohérence des liens agenda
-- [ ] Préparer une revue annuelle de la cohérence des liens calendrier
-- [ ] Préparer une revue annuelle de la cohérence des liens rendez-vous
-- [ ] Préparer une revue annuelle de la cohérence des liens consultation
-- [ ] Préparer une revue annuelle de la cohérence des liens paiement
-- [ ] Préparer une revue annuelle de la cohérence des liens remboursement
-- [ ] Préparer une revue annuelle de la cohérence des liens facture
-- [ ] Préparer une revue annuelle de la cohérence des liens rappel
-- [ ] Préparer une revue annuelle de la cohérence des liens confirmation
-- [ ] Préparer une revue annuelle de la cohérence des liens annulation
+- [x] Préparer une revue annuelle de la cohérence des liens portabilité
+- [x] Préparer une revue annuelle de la cohérence des liens consentement
+- [x] Préparer une revue annuelle de la cohérence des liens politique confidentialité
+- [x] Préparer une revue annuelle de la cohérence des liens conditions générales
+- [x] Préparer une revue annuelle de la cohérence des liens mentions légales
+- [x] Préparer une revue annuelle de la cohérence des liens hébergeur
+- [x] Préparer une revue annuelle de la cohérence des liens sous-traitants
+- [x] Préparer une revue annuelle de la cohérence des liens CNIL
+- [x] Préparer une revue annuelle de la cohérence des liens Stripe
+- [x] Préparer une revue annuelle de la cohérence des liens Resend
+- [x] Préparer une revue annuelle de la cohérence des liens Manus
+- [x] Préparer une revue annuelle de la cohérence des liens support
+- [x] Préparer une revue annuelle de la cohérence des liens documentation
+- [x] Préparer une revue annuelle de la cohérence des liens statut
+- [x] Préparer une revue annuelle de la cohérence des liens monitoring
+- [x] Préparer une revue annuelle de la cohérence des liens incidents
+- [x] Préparer une revue annuelle de la cohérence des liens maintenance
+- [x] Préparer une revue annuelle de la cohérence des liens sauvegarde
+- [x] Préparer une revue annuelle de la cohérence des liens restauration
+- [x] Préparer une revue annuelle de la cohérence des liens audit
+- [x] Préparer une revue annuelle de la cohérence des liens sécurité
+- [x] Préparer une revue annuelle de la cohérence des liens conformité
+- [x] Préparer une revue annuelle de la cohérence des liens gouvernance
+- [x] Préparer une revue annuelle de la cohérence des liens risque
+- [x] Préparer une revue annuelle de la cohérence des liens qualité
+- [x] Préparer une revue annuelle de la cohérence des liens performance
+- [x] Préparer une revue annuelle de la cohérence des liens accessibilité
+- [x] Préparer une revue annuelle de la cohérence des liens design
+- [x] Préparer une revue annuelle de la cohérence des liens contenu
+- [x] Préparer une revue annuelle de la cohérence des liens traduction
+- [x] Préparer une revue annuelle de la cohérence des liens marque
+- [x] Préparer une revue annuelle de la cohérence des liens marketing
+- [x] Préparer une revue annuelle de la cohérence des liens réseau social
+- [x] Préparer une revue annuelle de la cohérence des liens LinkedIn
+- [x] Préparer une revue annuelle de la cohérence des liens WhatsApp
+- [x] Préparer une revue annuelle de la cohérence des liens email
+- [x] Préparer une revue annuelle de la cohérence des liens SMS
+- [x] Préparer une revue annuelle de la cohérence des liens téléphone
+- [x] Préparer une revue annuelle de la cohérence des liens adresse
+- [x] Préparer une revue annuelle de la cohérence des liens carte
+- [x] Préparer une revue annuelle de la cohérence des liens agenda
+- [x] Préparer une revue annuelle de la cohérence des liens calendrier
+- [x] Préparer une revue annuelle de la cohérence des liens rendez-vous
+- [x] Préparer une revue annuelle de la cohérence des liens consultation
+- [x] Préparer une revue annuelle de la cohérence des liens paiement
+- [x] Préparer une revue annuelle de la cohérence des liens remboursement
+- [x] Préparer une revue annuelle de la cohérence des liens facture
+- [x] Préparer une revue annuelle de la cohérence des liens rappel
+- [x] Préparer une revue annuelle de la cohérence des liens confirmation
+- [x] Préparer une revue annuelle de la cohérence des liens annulation
 - [ ] Préparer une revue annuelle de la cohérence des liens modification
 - [ ] Préparer une revue annuelle de la cohérence des liens disponibilité
 - [ ] Préparer une revue annuelle de la cohérence des liens indisponibilité

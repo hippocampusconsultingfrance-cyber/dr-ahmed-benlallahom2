@@ -50,6 +50,14 @@ Ce calendrier organise les vérifications annuelles du site et de ses parcours c
 | Liens de service | Liens internes/externes, téléchargement, paiement, visioconférence, contact, aide, légal, social, partenaire, ressource, recherche, filtres, pagination et breadcrumbs. | Résultat de contrôle de liens, routes de destination et propriétaire du lien externe. | Réparer, remplacer ou supprimer les liens obsolètes. |
 | Navigation et droits | Navigation, footer, menu mobile, langue, thème, cookies, RGPD, suppression, export, accès, rectification et opposition. | Parcours clavier, captures mobile et tests d’autorisation. | Préserver une sortie claire et empêcher tout lien vers une action non autorisée. |
 
+## Liens légaux, fournisseurs et services
+
+| Domaine | Périmètre annuel | Preuves à archiver | Décision attendue |
+|---|---|---|---|
+| Liens légaux et droits | Portabilité, consentement, confidentialité, conditions, mentions légales, hébergeur, sous-traitants, CNIL, suppression, rectification et opposition. | Destination, version de page, langue, date de vérification et responsable. | Corriger tout lien qui ne décrit plus la politique effectivement appliquée. |
+| Fournisseurs et exploitation | Stripe, Resend, Manus, support, documentation, statut, monitoring, incident, maintenance, sauvegarde, restauration, audit, sécurité, conformité, gouvernance, risque, qualité et performance. | Destination publique, statut contractuel et responsable opérationnel. | Retirer les liens non pertinents et mettre à jour les références fournisseur. |
+| Contact et service | Réseaux sociaux, LinkedIn, WhatsApp, e-mail, SMS, téléphone, adresse, carte, agenda, calendrier, rendez-vous, consultation, paiement, remboursement, facture, rappel, confirmation et annulation. | Test de destination, droit d’usage, langue et cohérence avec les politiques affichées. | Corriger les liens cassés ou toute divergence entre action et information présentée. |
+
 ## Déroulement recommandé
 
 La revue doit être planifiée une fois par an, puis renouvelée après une évolution majeure de paiement, authentification, stockage documentaire, fournisseur externe ou politique de données. Commencer par l’inventaire de la version publiée et terminer par une liste d’actions datées. Les éléments nécessitant un appareil réel, une boîte e-mail tierce ou un compte fournisseur ne doivent jamais être déclarés réalisés sans preuve correspondante.

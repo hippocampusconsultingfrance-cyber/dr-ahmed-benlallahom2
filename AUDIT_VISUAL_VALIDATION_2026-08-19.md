@@ -202,6 +202,8 @@ Elle couvre désormais les états d’interface, composants visuels, canaux de d
 
 Le calendrier inclut maintenant les pages éditoriales et métier, les routes et l’indexation, les liens de service ainsi que la navigation et les droits associés.
 
+Il couvre également les liens légaux, les fournisseurs et l’exploitation, ainsi que les destinations de contact et de service transactionnel.
+
 ## Kit de marque exportable
 
 Le fichier `BRAND_KIT.md` centralise la signature, les tokens de palette, les typographies, les règles de ton, les formats d’export LinkedIn, documentaires et e-mail, ainsi que les contrôles de droits et d’accessibilité à effectuer avant diffusion.
