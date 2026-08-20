@@ -9,11 +9,15 @@ export function getAdminStatePanelClassName(kind: "empty" | "error") {
     : "border-border bg-card/70";
 }
 
+export function getAdminEmptyIllustrationClassName() {
+  return "relative isolate mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl border border-primary/25 bg-primary/10 text-primary before:absolute before:-inset-2 before:-z-10 before:rounded-[1.35rem] before:border before:border-dashed before:border-primary/20 after:absolute after:-inset-4 after:-z-10 after:rounded-[1.8rem] after:bg-primary/5";
+}
+
 export function AdminEmptyState({ icon: Icon, title, description }: { icon: IconComponent; title: string; description: string }) {
   return (
     <section className={`rounded-xl border p-6 text-center ${getAdminStatePanelClassName("empty")}`} aria-label={title}>
-      <span className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-primary/10 text-primary">
-        <Icon className="h-5 w-5" aria-hidden={true} />
+      <span className={getAdminEmptyIllustrationClassName()} aria-hidden={true}>
+        <Icon className="h-7 w-7" aria-hidden={true} />
       </span>
       <h2 className="font-semibold text-foreground">{title}</h2>
       <p className="mx-auto mt-1 max-w-md text-sm text-muted-foreground">{description}</p>

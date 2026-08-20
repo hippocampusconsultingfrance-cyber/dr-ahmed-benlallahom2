@@ -700,7 +700,8 @@ export default function BookingPage() {
               <p className="mt-2 text-xs leading-5 text-muted-foreground">{content.form.dateHint}</p>
               {dateError && <p id="booking-date-error" className="mt-2 text-sm text-destructive" role="alert">{dateError}</p>}
               {localizedDate && <p className="mt-2 text-sm font-medium text-primary" aria-live="polite">{localizedDate}</p>}
-              <div id="availability-status" className={`availability-status availability-${availabilityState} mt-3`} role="status" aria-live="polite" data-state={availabilityState}>
+              <div id="availability-status" className={`availability-status availability-${availabilityState} mt-3 flex items-center gap-2`} role="status" aria-live="polite" data-state={availabilityState}>
+                {availabilityState === "select" && <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-primary/20 bg-primary/10 text-primary" aria-hidden="true"><Calendar className="h-4 w-4" /></span>}
                 <span className="availability-dot" aria-hidden="true" />
                 <span>{availabilityLabel}</span>
               </div>

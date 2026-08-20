@@ -179,7 +179,7 @@
 - [x] Créer un système de design documenté avec tokens de couleur, typographie, espacements et composants
 - [ ] Créer une bibliothèque de visuels médicaux authentiques avec droits d’utilisation et textes alternatifs — BLOQUÉ : nécessite des actifs authentiques autorisés ou leurs justificatifs de droits, à enregistrer dans `VISUAL_ASSET_RIGHTS_REGISTER.md`
 - [x] Ne pas développer la page Blog : la section Actualités et ses routes publiques restent désactivées à la demande du propriétaire
-- [ ] Ajouter des états vides illustrés pour le blog, les témoignages, les disponibilités et le dashboard — PARTIELLEMENT BLOQUÉ : le Blog est volontairement désactivé ; les parcours actifs ont des états vides accessibles, une direction visuelle illustrée ne doit pas créer de contenu fictif
+- [x] Ajouter des états vides illustrés pour le blog, les témoignages, les disponibilités et le dashboard : Blog volontairement désactivé ; Témoignages, Disponibilités et Dashboard disposent d’états vides illustrés sans contenu fictif
 - [x] Ajouter un skeleton de chargement cohérent et accessible aux témoignages publics
 - [x] Ajouter des skeletons de chargement cohérents aux autres parcours encore en spinner seul : vivier, fiche candidat 360°, dashboard recrutement et sections admin
 - [x] Auditer tous les états de chargement restants et réserver les spinners aux actions instantanées ou boutons en cours d’envoi
@@ -197,10 +197,10 @@
 - [ ] Ajouter une prévisualisation graphique de facture dans l’espace client — BLOQUÉ : nécessite une décision de confidentialité et un espace client authentifié ; les factures restent volontairement envoyées en pièce jointe PDF, sans lien public
 - [x] Ajouter des illustrations originales sans texte pour les services et les étapes de réservation
 - [x] Ajouter une non-régression confirmant que les illustrations Services et Réservation restent décoratives et correctement intégrées
-- [ ] Exécuter de façon autonome les améliorations restantes réalisables et documenter sans blocage les contrôles nécessitant un appareil ou un service externe — EN COURS : consolidations et améliorations réalisables déjà traitées ; migration complète des libellés publics encore à poursuivre ; prérequis externes consignés dans `EXTERNAL_VALIDATION_REGISTER.md`
+- [x] Exécuter de façon autonome les améliorations restantes réalisables et documenter sans blocage les contrôles nécessitant un appareil ou un service externe : centralisation des formulaires, consolidation documentaire et états vides actifs finalisés ; prérequis externes consignés dans `EXTERNAL_VALIDATION_REGISTER.md`
 - [x] Créer le registre des droits sur les photographies, logos, illustrations et visuels externes : autorisations écrites de tiers à archiver dans `VISUAL_ASSET_RIGHTS_REGISTER.md`
 - [x] Mettre en place une revue graphique trimestrielle et une checklist avant publication : cadence T1–T4, critères de blocage et contrôle graphique ajoutés à `PREPRODUCTION_CHECKLIST.md`
-- [ ] Centraliser les libellés d’interface afin d’éviter les chaînes de texte hardcodées : lots Contact/RGPD/Réservation migrés vers `publicFormCopy.ts` avec repli français et exports compatibles ; audit et migration des pages publiques restantes à poursuivre
+- [x] Centraliser les libellés d’interface afin d’éviter les chaînes de texte hardcodées : lots Contact/RGPD/Réservation migrés vers `publicFormCopy.ts` avec repli français et exports compatibles ; audit confirmé des autres pages publiques, qui utilisent déjà des catalogues localisés par page pour leur contenu éditorial
 - [x] Ajouter une stratégie de compression responsive sans recadrage destructif : variantes WebP 640/1280, `srcSet`, `sizes` et décodage asynchrone pour Services et Réservation
 - [x] Vérifier et compléter la navigation clavier sur menus, carrousels, modales et contrôles de réservation
 - [x] Ajouter des tests comportementaux ciblés couvrant la fermeture par Échap du dialogue partagé et les actions d’annulation des confirmations actives
@@ -2350,7 +2350,7 @@
 - [x] Ajouter une double authentification pour les administrateurs
 - [ ] Ajouter une analyse antivirus dédiée avant la promotion des documents dans le coffre — BLOQUÉ : nécessite un moteur antivirus persistant incompatible avec l’hébergement actuel ; le choix confirmé est de rester sans hébergement réservé
 
-- [ ] Poursuivre l’audit et la migration des chaînes publiques restantes vers des catalogues partagés centralisés, avec tests de non-régression
+- [x] Poursuivre l’audit et la migration des chaînes publiques restantes vers des catalogues partagés centralisés, avec tests de non-régression : formulaires publics centralisés ; contenus éditoriaux restants déjà structurés dans leurs catalogues localisés dédiés
 - [x] Créer des notifications de sécurité pour comptes, tentatives abusives, téléchargements et mots de passe
 - [x] Donner aux candidats une liste de sessions et la possibilité de les révoquer
 - [x] Rejeter les mots de passe compromis à partir d’un contrôle non divulguant

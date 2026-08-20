@@ -1,5 +1,5 @@
 import { useLanguage } from "@/contexts/LanguageContext";
-import { Star, ChevronLeft, ChevronRight } from "lucide-react";
+import { Star, ChevronLeft, ChevronRight, Quote } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { useState, useEffect, useCallback } from "react";
 import PublicContentSkeleton from "./PublicContentSkeleton";
@@ -18,6 +18,10 @@ export function getTestimonialsCarouselIndex({
   if (key === "End") return length - 1;
   if (key === "ArrowLeft") return (currentIndex - 1 + length) % length;
   return (currentIndex + 1) % length;
+}
+
+export function getTestimonialEmptyHeading(language: string) {
+  return ({ fr: "Les retours seront publiés ici", en: "Partner feedback will appear here", de: "Partnerfeedback wird hier angezeigt", zh: "合作伙伴反馈将在此显示" } as const)[language as "fr" | "en" | "de" | "zh"] ?? "Les retours seront publiés ici";
 }
 
 export default function TestimonialsSection() {
@@ -158,7 +162,11 @@ export default function TestimonialsSection() {
           <h2 className="font-display text-3xl md:text-5xl font-bold text-foreground mb-4">
             {currentContent.title}
           </h2>
-          <p className="text-muted-foreground">{currentContent.empty}</p>
+          <div className="mx-auto mt-6 flex max-w-md flex-col items-center rounded-3xl border border-primary/15 bg-card/60 px-6 py-8 shadow-[0_18px_46px_-34px_hsl(var(--primary)/0.65)]">
+            <span className="mb-4 inline-flex h-14 w-14 items-center justify-center rounded-2xl border border-primary/25 bg-primary/10 text-primary" aria-hidden="true"><Quote className="h-7 w-7" /></span>
+            <h3 className="font-display text-xl font-semibold text-foreground">{getTestimonialEmptyHeading(language)}</h3>
+            <p className="mt-2 text-muted-foreground">{currentContent.empty}</p>
+          </div>
         </div>
       </section>
     );

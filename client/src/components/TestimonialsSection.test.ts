@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getTestimonialsCarouselIndex } from "./TestimonialsSection";
+import { getTestimonialsCarouselIndex, getTestimonialEmptyHeading } from "./TestimonialsSection";
 
 describe("testimonial carousel keyboard navigation", () => {
   it("cycles through testimonials with the arrow keys", () => {
@@ -14,5 +14,13 @@ describe("testimonial carousel keyboard navigation", () => {
 
   it("keeps a one-item carousel stable", () => {
     expect(getTestimonialsCarouselIndex({ key: "ArrowRight", currentIndex: 0, length: 1 })).toBe(0);
+  });
+});
+
+describe("testimonial empty state copy", () => {
+  it("provides an illustrated empty-state heading in every public language", () => {
+    for (const language of ["fr", "en", "de", "zh"] as const) {
+      expect(getTestimonialEmptyHeading(language)).toBeTruthy();
+    }
   });
 });
