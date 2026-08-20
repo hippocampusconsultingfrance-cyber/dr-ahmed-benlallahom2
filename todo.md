@@ -214,6 +214,7 @@
 - [x] Ajouter des composants graphiques de confiance pour le paiement, la confidentialité et la disponibilité
 - [x] Ajouter des tests visuels automatisés sur les pages critiques
 - [x] Étendre les tests visuels automatisés à la confirmation de paiement sécurisée, en desktop et mobile
+- [x] Étendre les tests visuels automatisés à la page Presse institutionnelle, en desktop et mobile
 - [x] Étendre les tests visuels automatisés à la page RGPD en desktop et mobile
 - [x] Capturer et vérifier les parcours Accueil, Réservation, RGPD, Recrutement et Employeurs en vue bureau
 - [x] Capturer et vérifier les parcours Accueil, Réservation, RGPD, Recrutement et Employeurs en vue mobile
