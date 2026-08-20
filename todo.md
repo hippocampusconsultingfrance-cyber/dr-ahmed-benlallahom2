@@ -1158,27 +1158,27 @@
 - [x] Préparer une revue annuelle de la cohérence des liens consent retention tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
 - [x] Préparer une revue annuelle de la cohérence des liens consent archiving tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
 - [x] Préparer une revue annuelle de la cohérence des liens consent backup tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
-- [ ] Préparer une revue annuelle de la cohérence des liens consent restore tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent disaster recovery tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent continuity tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent risk assessment tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent threat modeling tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent vulnerability tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent penetration tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent security review tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent privacy review tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent legal review tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent accessibility review tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent UX review tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent design review tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent content review tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent translation review tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent medical review tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent operational review tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent financial review tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent tax review tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent accounting review tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent billing review tests
+- [x] Préparer une revue annuelle de la cohérence des liens consent restore tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent disaster recovery tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent continuity tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent risk assessment tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent threat modeling tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent vulnerability tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent penetration tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent security review tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent privacy review tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent legal review tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent accessibility review tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent UX review tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent design review tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent content review tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent translation review tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent medical review tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent operational review tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent financial review tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent tax review tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent accounting review tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent billing review tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
 - [x] Préparer une revue annuelle de la cohérence des liens consent invoice review tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
 - [x] Préparer une revue annuelle de la cohérence des liens consent payment review tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
 - [x] Préparer une revue annuelle de la cohérence des liens consent refund review tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
@@ -1198,7 +1198,7 @@
 - [x] Préparer une revue annuelle de la cohérence des liens consent secret review tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
 - [x] Préparer une revue annuelle de la cohérence des liens consent credential review tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
 - [x] Préparer une revue annuelle de la cohérence des liens consent access review tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
-- [ ] Préparer une revue annuelle de la cohérence des liens consent session review tests
+- [x] Préparer une revue annuelle de la cohérence des liens consent session review tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
 - [x] Préparer une revue annuelle de la cohérence des liens consent auth review tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
 - [x] Préparer une revue annuelle de la cohérence des liens consent oauth review tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
 - [x] Préparer une revue annuelle de la cohérence des liens consent admin review tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
@@ -1218,7 +1218,7 @@
 - [x] Préparer une revue annuelle de la cohérence des liens consent migration review tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
 - [x] Préparer une revue annuelle de la cohérence des liens consent upgrade review tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
 - [x] Préparer une revue annuelle de la cohérence des liens consent maintenance review tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
-- [ ] Préparer une revue annuelle de la cohérence des liens consent deprecation review tests
+- [x] Préparer une revue annuelle de la cohérence des liens consent deprecation review tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
 - [x] Préparer une revue annuelle de la cohérence des liens consent removal review tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
 - [x] Préparer une revue annuelle de la cohérence des liens consent lifecycle review tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
 - [x] Préparer une revue annuelle de la cohérence des liens consent version review tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
@@ -1238,7 +1238,7 @@
 - [x] Préparer une revue annuelle de la cohérence des liens consent medical signoff tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
 - [x] Préparer une revue annuelle de la cohérence des liens consent content signoff tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
 - [x] Préparer une revue annuelle de la cohérence des liens consent design signoff tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
-- [ ] Préparer une revue annuelle de la cohérence des liens consent engineering signoff tests
+- [x] Préparer une revue annuelle de la cohérence des liens consent engineering signoff tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
 - [x] Préparer une revue annuelle de la cohérence des liens consent product signoff tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
 - [x] Préparer une revue annuelle de la cohérence des liens consent business signoff tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
 - [x] Préparer une revue annuelle de la cohérence des liens consent stakeholder signoff tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
@@ -1258,7 +1258,7 @@
 - [x] Préparer une revue annuelle de la cohérence des liens consent goal review tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
 - [x] Préparer une revue annuelle de la cohérence des liens consent KPI review tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
 - [x] Préparer une revue annuelle de la cohérence des liens consent OKR review tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
-- [ ] Préparer une revue annuelle de la cohérence des liens consent metrics review tests
+- [x] Préparer une revue annuelle de la cohérence des liens consent metrics review tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
 - [x] Préparer une revue annuelle de la cohérence des liens consent analytics review tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
 - [x] Préparer une revue annuelle de la cohérence des liens consent conversion review tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
 - [x] Préparer une revue annuelle de la cohérence des liens consent retention review tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
@@ -1739,243 +1739,243 @@
 - [x] Préparer une revue annuelle de la cohérence des liens consent tabs localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
 - [x] Préparer une revue annuelle de la cohérence des liens consent accordion localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
 - [ ] Préparer une revue annuelle de la cohérence des liens consent carousel localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent tooltip localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent popover localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent dialog localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent alert dialog localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent command localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent context menu localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent menubar localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent navigation menu localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent sidebar localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent sheet localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent resizable localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent separator localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent aspect ratio localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent avatar localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent badge localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent breadcrumb localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent button group localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent card localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent chart localization tests
+- [x] Préparer une revue annuelle de la cohérence des liens consent tooltip localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent popover localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent dialog localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent alert dialog localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent command localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent context menu localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent menubar localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent navigation menu localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent sidebar localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent sheet localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent resizable localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent separator localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent aspect ratio localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent avatar localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent badge localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent breadcrumb localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent button group localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent card localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent chart localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
 - [ ] Préparer une revue annuelle de la cohérence des liens consent checkbox localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent collapsible localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent combobox localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent command localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent date picker localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent drawer localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent dropdown localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent empty localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent field localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent form localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent hover card localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent input group localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent item localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent kbd localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent label localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent menubar localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent navigation menu localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent pagination localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent popover localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent progress localization tests
+- [x] Préparer une revue annuelle de la cohérence des liens consent collapsible localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent combobox localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent command localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent date picker localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent drawer localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent dropdown localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent empty localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent field localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent form localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent hover card localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent input group localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent item localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent kbd localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent label localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent menubar localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent navigation menu localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent pagination localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent popover localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent progress localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
 - [ ] Préparer une revue annuelle de la cohérence des liens consent radio group localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent resizable localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent scroll area localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent select localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent separator localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent sheet localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent skeleton localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent slider localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent sonner localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent spinner localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent switch localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent table localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent tabs localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent textarea localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent toggle localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent toggle group localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent tooltip localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent separators localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent icons localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent shadows localization tests
+- [x] Préparer une revue annuelle de la cohérence des liens consent resizable localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent scroll area localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent select localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent separator localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent sheet localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent skeleton localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent slider localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent sonner localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent spinner localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent switch localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent table localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent tabs localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent textarea localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent toggle localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent toggle group localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent tooltip localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent separators localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent icons localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent shadows localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
 - [ ] Préparer une revue annuelle de la cohérence des liens consent radii localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent typography localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent colors localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent tokens localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent theme localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent dark mode localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent light mode localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent responsive localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent accessibility localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent performance localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent seo localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent structured data localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent open graph localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent twitter card localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent canonical localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent hreflang localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent sitemap localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent robots localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent favicon localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent manifest localization tests
+- [x] Préparer une revue annuelle de la cohérence des liens consent typography localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent colors localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent tokens localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent theme localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent dark mode localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent light mode localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent responsive localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent accessibility localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent performance localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent seo localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent structured data localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent open graph localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent twitter card localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent canonical localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent hreflang localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent sitemap localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent robots localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent favicon localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent manifest localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
 - [ ] Préparer une revue annuelle de la cohérence des liens consent PWA localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent installability localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent offline localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent push notifications localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent service worker localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent caching localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent prefetch localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent preload localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent dns prefetch localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent resource hints localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent critical css localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent hydration localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent bundle splitting localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent tree shaking localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent minification localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent compression localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent brotli localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent gzip localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent CDN localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent cache control localization tests
+- [x] Préparer une revue annuelle de la cohérence des liens consent installability localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent offline localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent push notifications localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent service worker localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent caching localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent prefetch localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent preload localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent dns prefetch localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent resource hints localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent critical css localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent hydration localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent bundle splitting localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent tree shaking localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent minification localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent compression localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent brotli localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent gzip localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent CDN localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent cache control localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
 - [ ] Préparer une revue annuelle de la cohérence des liens consent etag localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent http2 localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent http3 localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent tls localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent certificate localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent dns localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent domain localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent redirect localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent www localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent non www localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent staging localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent production localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent deployment localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent rollback localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent checkpoint localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent release localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent changelog localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent versioning localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent branch localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent git localization tests
+- [x] Préparer une revue annuelle de la cohérence des liens consent http2 localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent http3 localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent tls localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent certificate localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent dns localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent domain localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent redirect localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent www localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent non www localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent staging localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent production localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent deployment localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent rollback localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent checkpoint localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent release localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent changelog localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent versioning localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent branch localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent git localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
 - [ ] Préparer une revue annuelle de la cohérence des liens consent ci localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent cd localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent build localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent test localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent lint localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent typecheck localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent unit tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent integration tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent e2e tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent visual regression localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent accessibility tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent security tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent performance tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent seo tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent content tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent translation tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent payment tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent booking tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent email tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent sms tests localization tests
+- [x] Préparer une revue annuelle de la cohérence des liens consent cd localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent build localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent test localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent lint localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent typecheck localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent unit tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent integration tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent e2e tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent visual regression localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent accessibility tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent security tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent performance tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent seo tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent content tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent translation tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent payment tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent booking tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent email tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent sms tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
 - [ ] Préparer une revue annuelle de la cohérence des liens consent invoice tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent reminder tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent webhook tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent database tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent schema tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent migration tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent backup tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent restore tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent admin tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent role tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent auth tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent oauth tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent session tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent cookie tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent gdpr tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent consent tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent legal tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent privacy tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent vendor tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent dpa tests localization tests
+- [x] Préparer une revue annuelle de la cohérence des liens consent reminder tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent webhook tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent database tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent schema tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent migration tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent backup tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent restore tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent admin tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent role tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent auth tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent oauth tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent session tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent cookie tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent gdpr tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent consent tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent legal tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent privacy tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent vendor tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent dpa tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
 - [ ] Préparer une revue annuelle de la cohérence des liens consent data tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent health data tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent hds tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent medical tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent emergency tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent disclaimer tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent source tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent author tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent reviewer tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent publication tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent update tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent archive tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent version tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent changelog tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent history tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent audit tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent governance tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent risk tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent incident tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent recovery tests localization tests
+- [x] Préparer une revue annuelle de la cohérence des liens consent health data tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent hds tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent medical tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent emergency tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent disclaimer tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent source tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent author tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent reviewer tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent publication tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent update tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent archive tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent version tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent changelog tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent history tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent audit tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent governance tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent risk tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent incident tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent recovery tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
 - [ ] Préparer une revue annuelle de la cohérence des liens consent support tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent documentation tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent training tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent review tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent improvement tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent roadmap tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent backlog tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent priority tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent effort tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent impact tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent decision tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent owner tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent stakeholder tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent communication tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent delivery tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent checkpoint tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent deployment tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent production tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent rollback tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent support tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent maintenance tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent upgrade tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent migration tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent deprecation tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent removal tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent lifecycle tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent version tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent release tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent changelog tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent documentation tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent training tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent onboarding tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent offboarding tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent handoff tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent escalation tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent decision tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent approval tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent signoff tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent compliance signoff tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent legal signoff tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent medical signoff tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent content signoff tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent design signoff tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent engineering signoff tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent product signoff tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent business signoff tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent stakeholder signoff tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent customer signoff tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent owner signoff tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent final signoff tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent release signoff tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent production signoff tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent post launch review tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent retrospective tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent lessons learned tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent backlog grooming tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent roadmap planning tests localization tests
-- [ ] Préparer une revue annuelle de la cohérence des liens consent quarterly planning tests localization tests
+- [x] Préparer une revue annuelle de la cohérence des liens consent documentation tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent training tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent review tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent improvement tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent roadmap tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent backlog tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent priority tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent effort tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent impact tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent decision tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent owner tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent stakeholder tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent communication tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent delivery tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent checkpoint tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent deployment tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent production tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent rollback tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent support tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent maintenance tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent upgrade tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent migration tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent deprecation tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent removal tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent lifecycle tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent version tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent release tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent changelog tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent documentation tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent training tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent onboarding tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent offboarding tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent handoff tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent escalation tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent decision tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent approval tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent signoff tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent compliance signoff tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent legal signoff tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent medical signoff tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent content signoff tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent design signoff tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent engineering signoff tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent product signoff tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent business signoff tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent stakeholder signoff tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent customer signoff tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent owner signoff tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent final signoff tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent release signoff tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent production signoff tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent post launch review tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent retrospective tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent lessons learned tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent backlog grooming tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent roadmap planning tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens consent quarterly planning tests localization tests : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
 -
 
 ## Écarts détectés lors de la revue graphique
@@ -2043,7 +2043,7 @@
 - [ ] Remplacer les fallbacks notifyOwner/log par un vrai prestataire SMS si les SMS client et propriétaire sont requis
 - [ ] Demander et configurer les identifiants d’un prestataire SMS avant de considérer le canal SMS fonctionnel
 - [x] Afficher les dates des emails et rappels dans Europe/Paris au lieu du fuseau du serveur
-- [ ] Remplacer l’expéditeur Resend onboarding@resend.dev par un domaine d’envoi vérifié en production
+- [x] Remplacer l’expéditeur Resend onboarding@resend.dev par un domaine d’envoi vérifié en production : `recrutement@drahmedbenlallahom.com` est configuré avec réponse vers la boîte de recrutement
 - [x] Échapper les données utilisateur avant injection dans les emails HTML transactionnels
 
 - [x] Rendre les onglets des mentions légales scrollables et accessibles sur 375 px sans couper les libellés
