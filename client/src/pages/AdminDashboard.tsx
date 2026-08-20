@@ -7,7 +7,6 @@ import { Input } from "@/components/ui/input";
 import { Calendar, MessageSquare, Shield, DollarSign, Eye, CheckCircle, XCircle, Clock, ArrowLeft, Star, Trash2, FileText, CalendarDays, Plus, Edit, Trash, Globe, UserRound, BriefcaseBusiness, Send, UsersRound } from "lucide-react";
 import { toast } from "sonner";
 import { useLocation } from "wouter";
-import { useLanguage } from "@/contexts/LanguageContext";
 import RecruitmentTab from "@/components/RecruitmentTab";
 import EmployerBriefsTab from "@/components/EmployerBriefsTab";
 import VivierTab from "@/components/VivierTab";
@@ -22,72 +21,21 @@ import { buildAppointmentsAgenda } from "./appointmentsAgenda";
 
 type Tab = "overview" | "appointments" | "contacts" | "gdpr" | "testimonials" | "availability" | "recruitment" | "candidateDocuments" | "security" | "vivier" | "mailing" | "employerBriefs";
 
-export const adminShellCopy = {
-  fr: { title: "Administration", site: "Site", section: "Section d’administration", access: { loading: "Chargement de l’accès administrateur", loginRequired: "Connexion administrateur requise", loginDescription: "Connectez-vous avec le compte propriétaire pour accéder aux candidatures et aux missions.", login: "Se connecter", forbidden: "Accès refusé", forbiddenDescription: "Votre session ne possède pas les permissions nécessaires. Si votre rôle vient d’être mis à jour, actualisez l’accès ou reconnectez-vous.", refresh: "Actualiser l’accès", reconnect: "Se reconnecter", home: "Accueil", checking: "Vérification de sécurité", mfaTitle: "Validation de sécurité", mfaDescription: "Une seconde vérification protège les documents et CV sensibles.", mfaInstructions: "Demandez un code à six chiffres sur votre email administrateur, puis saisissez-le ci-dessous.", sendCode: "Envoyer un code de sécurité", sending: "Envoi en cours…", codeLabel: "Code à 6 chiffres", verifying: "Vérification…", verify: "Valider le code", backToSite: "Retour au site", codeSent: "Un code de sécurité a été envoyé à votre email administrateur.", mfaVerified: "Double authentification validée." }, tabs: { overview: "Vue d’ensemble", appointments: "Réservations", contacts: "Messages", gdpr: "RGPD", testimonials: "Témoignages", availability: "Disponibilités", recruitment: "Candidatures", candidateDocuments: "Documents candidats", security: "Sécurité", vivier: "Vivier", mailing: "Mailing", employerBriefs: "Missions" } },
-  en: { title: "Administration", site: "Website", section: "Administration section", access: { loading: "Loading administrator access", loginRequired: "Administrator sign-in required", loginDescription: "Sign in with the owner account to access applications and assignments.", login: "Sign in", forbidden: "Access denied", forbiddenDescription: "Your session does not have the required permissions. If your role was updated, refresh access or sign in again.", refresh: "Refresh access", reconnect: "Sign in again", home: "Home", checking: "Security verification", mfaTitle: "Security verification", mfaDescription: "A second check protects sensitive documents and CVs.", mfaInstructions: "Request a six-digit code at your administrator email address, then enter it below.", sendCode: "Send a security code", sending: "Sending…", codeLabel: "6-digit code", verifying: "Verifying…", verify: "Verify code", backToSite: "Back to website", codeSent: "A security code was sent to your administrator email.", mfaVerified: "Two-factor authentication verified." }, tabs: { overview: "Overview", appointments: "Appointments", contacts: "Messages", gdpr: "GDPR", testimonials: "Testimonials", availability: "Availability", recruitment: "Applications", candidateDocuments: "Candidate documents", security: "Security", vivier: "Talent pool", mailing: "Mailing", employerBriefs: "Missions" } },
-  de: { title: "Verwaltung", site: "Website", section: "Verwaltungsbereich", access: { loading: "Administratorzugang wird geladen", loginRequired: "Administratoranmeldung erforderlich", loginDescription: "Melden Sie sich mit dem Eigentümerkonto an, um auf Bewerbungen und Aufträge zuzugreifen.", login: "Anmelden", forbidden: "Zugriff verweigert", forbiddenDescription: "Ihre Sitzung besitzt nicht die erforderlichen Berechtigungen. Wenn Ihre Rolle aktualisiert wurde, aktualisieren Sie den Zugang oder melden Sie sich erneut an.", refresh: "Zugang aktualisieren", reconnect: "Erneut anmelden", home: "Startseite", checking: "Sicherheitsüberprüfung", mfaTitle: "Sicherheitsüberprüfung", mfaDescription: "Eine zweite Prüfung schützt sensible Dokumente und Lebensläufe.", mfaInstructions: "Fordern Sie einen sechsstelligen Code über Ihre Administrator-E-Mail an und geben Sie ihn unten ein.", sendCode: "Sicherheitscode senden", sending: "Wird gesendet…", codeLabel: "6-stelliger Code", verifying: "Wird überprüft…", verify: "Code bestätigen", backToSite: "Zur Website zurück", codeSent: "Ein Sicherheitscode wurde an Ihre Administrator-E-Mail gesendet.", mfaVerified: "Zwei-Faktor-Authentifizierung bestätigt." }, tabs: { overview: "Übersicht", appointments: "Termine", contacts: "Nachrichten", gdpr: "DSGVO", testimonials: "Bewertungen", availability: "Verfügbarkeiten", recruitment: "Bewerbungen", candidateDocuments: "Kandidatendokumente", security: "Sicherheit", vivier: "Talentpool", mailing: "Mailing", employerBriefs: "Aufträge" } },
-  zh: { title: "管理后台", site: "网站", section: "管理栏目", access: { loading: "正在加载管理员访问权限", loginRequired: "需要管理员登录", loginDescription: "请使用所有者账户登录，以访问申请和任务。", login: "登录", forbidden: "访问被拒绝", forbiddenDescription: "当前会话没有所需权限。若您的角色刚刚更新，请刷新访问权限或重新登录。", refresh: "刷新访问权限", reconnect: "重新登录", home: "首页", checking: "安全验证", mfaTitle: "安全验证", mfaDescription: "第二次验证可保护敏感文件和简历。", mfaInstructions: "请向管理员邮箱申请六码验证码，然后在下方输入。", sendCode: "发送安全验证码", sending: "正在发送…", codeLabel: "6 位验证码", verifying: "正在验证…", verify: "验证代码", backToSite: "返回网站", codeSent: "安全验证码已发送至您的管理员邮箱。", mfaVerified: "双重身份验证已完成。" }, tabs: { overview: "概览", appointments: "预约", contacts: "消息", gdpr: "隐私保护", testimonials: "合作伙伴评价", availability: "可用时间", recruitment: "申请", candidateDocuments: "候选人文件", security: "安全", vivier: "人才库", mailing: "邮件活动", employerBriefs: "任务需求" } },
-} as const;
-
-export const adminOverviewCopy = {
-  fr: { loading: "Chargement des indicateurs administratifs", error: "Erreur de chargement", bookings: "Réservations", messages: "Messages", gdpr: "Demandes RGPD", revenue: "Revenus", eyebrow: "Accès rapide", title: "Recrutement & Missions", intro: "Accédez directement aux CV déposés et aux besoins transmis par les employeurs.", applications: "Candidatures", applicationsDescription: "Consulter les CV, analyses IA, disponibilités et certifications.", missions: "Missions", missionsDescription: "Gérer les briefs Employeurs et créer des shortlists de candidats." },
-  en: { loading: "Loading administration indicators", error: "Loading error", bookings: "Appointments", messages: "Messages", gdpr: "GDPR requests", revenue: "Revenue", eyebrow: "Quick access", title: "Recruitment & missions", intro: "Access submitted CVs and needs shared by employers directly.", applications: "Applications", applicationsDescription: "Review CVs, AI analyses, availability and certifications.", missions: "Missions", missionsDescription: "Manage employer briefs and create candidate shortlists." },
-  de: { loading: "Verwaltungsindikatoren werden geladen", error: "Ladefehler", bookings: "Termine", messages: "Nachrichten", gdpr: "DSGVO-Anfragen", revenue: "Umsatz", eyebrow: "Schnellzugriff", title: "Recruiting & Aufträge", intro: "Greifen Sie direkt auf eingereichte Lebensläufe und Arbeitgeberanforderungen zu.", applications: "Bewerbungen", applicationsDescription: "Lebensläufe, KI-Analysen, Verfügbarkeiten und Zertifikate prüfen.", missions: "Aufträge", missionsDescription: "Arbeitgeber-Briefs verwalten und Kandidaten-Shortlists erstellen." },
-  zh: { loading: "正在加载管理指标", error: "加载出错", bookings: "预约", messages: "消息", gdpr: "隐私请求", revenue: "收入", eyebrow: "快速入口", title: "招聘与任务", intro: "直接查看已提交的简历和雇主需求。", applications: "申请", applicationsDescription: "查看简历、AI 分析、可入职时间和认证。", missions: "任务", missionsDescription: "管理雇主需求并创建候选人短名单。" },
-} as const;
-
-export const adminAppointmentsCopy = {
-  fr: { statusUpdated: "Statut mis à jour", refundConfirmed: (amount: string | number) => `Remboursement confirmé : ${amount} €`, loading: "Chargement des rendez-vous", all: "Tous", paymentStatus: { pending: "En attente", completed: "Payé", failed: "Échoué", refunded: "Remboursé" }, appointmentStatus: { confirmed: "Confirmé", cancelled: "Annulé", completed: "Terminé", no_show: "Absent" }, total: (count: number) => `${count} réservation${count > 1 ? "s" : ""}`, agenda: "Prochains rendez-vous", timezone: "Fuseau Europe/Paris", noUpcoming: "Aucun rendez-vous confirmé à venir pour le moment.", complete: "Terminer", refund: "Rembourser", confirmRefund: (amount: string | number, trackingId: string) => `Confirmer le remboursement de ${amount} € pour ${trackingId} ?`, refundReason: "Remboursement demandé par l’administration", emptyTitle: "Aucune réservation", emptyDescription: "Les nouvelles réservations apparaîtront ici dès leur confirmation." },
-  en: { statusUpdated: "Status updated", refundConfirmed: (amount: string | number) => `Refund confirmed: €${amount}`, loading: "Loading appointments", all: "All", paymentStatus: { pending: "Pending", completed: "Paid", failed: "Failed", refunded: "Refunded" }, appointmentStatus: { confirmed: "Confirmed", cancelled: "Cancelled", completed: "Completed", no_show: "No-show" }, total: (count: number) => `${count} appointment${count > 1 ? "s" : ""}`, agenda: "Upcoming appointments", timezone: "Europe/Paris time zone", noUpcoming: "There are no confirmed upcoming appointments at the moment.", complete: "Complete", refund: "Refund", confirmRefund: (amount: string | number, trackingId: string) => `Confirm the €${amount} refund for ${trackingId}?`, refundReason: "Refund requested by administration", emptyTitle: "No appointments", emptyDescription: "New appointments will appear here once confirmed." },
-  de: { statusUpdated: "Status aktualisiert", refundConfirmed: (amount: string | number) => `Rückerstattung bestätigt: ${amount} €`, loading: "Termine werden geladen", all: "Alle", paymentStatus: { pending: "Ausstehend", completed: "Bezahlt", failed: "Fehlgeschlagen", refunded: "Erstattet" }, appointmentStatus: { confirmed: "Bestätigt", cancelled: "Storniert", completed: "Abgeschlossen", no_show: "Nicht erschienen" }, total: (count: number) => `${count} Termin${count === 1 ? "" : "e"}`, agenda: "Kommende Termine", timezone: "Zeitzone Europa/Paris", noUpcoming: "Derzeit gibt es keine bestätigten kommenden Termine.", complete: "Abschließen", refund: "Erstatten", confirmRefund: (amount: string | number, trackingId: string) => `Rückerstattung von ${amount} € für ${trackingId} bestätigen?`, refundReason: "Rückerstattung von der Verwaltung angefordert", emptyTitle: "Keine Termine", emptyDescription: "Neue Termine werden hier nach der Bestätigung angezeigt." },
-  zh: { statusUpdated: "状态已更新", refundConfirmed: (amount: string | number) => `退款已确认：${amount} 欧元`, loading: "正在加载预约", all: "全部", paymentStatus: { pending: "待处理", completed: "已付款", failed: "失败", refunded: "已退款" }, appointmentStatus: { confirmed: "已确认", cancelled: "已取消", completed: "已完成", no_show: "未到场" }, total: (count: number) => `${count} 个预约`, agenda: "即将到来的预约", timezone: "欧洲/巴黎时区", noUpcoming: "目前没有已确认的即将到来的预约。", complete: "完成", refund: "退款", confirmRefund: (amount: string | number, trackingId: string) => `确认向 ${trackingId} 退款 ${amount} 欧元？`, refundReason: "管理端请求退款", emptyTitle: "暂无预约", emptyDescription: "新的预约确认后将显示在这里。" },
-} as const;
-
-export const adminContactsCopy = {
-  fr: { markedRead: "Marqué comme lu", loading: "Chargement des messages", total: (count: number) => `${count} message${count > 1 ? "s" : ""}`, read: "Lu", emptyTitle: "Aucun message", emptyDescription: "Les demandes de contact reçues sur le site seront affichées dans cette section." },
-  en: { markedRead: "Marked as read", loading: "Loading messages", total: (count: number) => `${count} message${count > 1 ? "s" : ""}`, read: "Read", emptyTitle: "No messages", emptyDescription: "Contact requests received through the website will appear in this section." },
-  de: { markedRead: "Als gelesen markiert", loading: "Nachrichten werden geladen", total: (count: number) => `${count} Nachricht${count === 1 ? "" : "en"}`, read: "Gelesen", emptyTitle: "Keine Nachrichten", emptyDescription: "Über die Website eingegangene Kontaktanfragen werden in diesem Bereich angezeigt." },
-  zh: { markedRead: "已标记为已读", loading: "正在加载消息", total: (count: number) => `${count} 条消息`, read: "已读", emptyTitle: "暂无消息", emptyDescription: "通过网站收到的联系请求将显示在此区域。" },
-} as const;
-
-export const adminGdprCopy = {
-  fr: { statusUpdated: "Statut mis à jour", loading: "Chargement des demandes RGPD", total: (count: number) => `${count} demande${count > 1 ? "s" : ""} RGPD`, types: { access: "Accès", rectification: "Rectification", deletion: "Suppression", portability: "Portabilité", objection: "Opposition" }, statuses: { pending: "En attente", in_progress: "En cours", completed: "Traité", rejected: "Rejeté" }, start: "En cours", complete: "Traité", emptyTitle: "Aucune demande RGPD", emptyDescription: "Les demandes d’accès, rectification ou suppression apparaîtront ici." },
-  en: { statusUpdated: "Status updated", loading: "Loading GDPR requests", total: (count: number) => `${count} GDPR request${count > 1 ? "s" : ""}`, types: { access: "Access", rectification: "Rectification", deletion: "Erasure", portability: "Portability", objection: "Objection" }, statuses: { pending: "Pending", in_progress: "In progress", completed: "Completed", rejected: "Rejected" }, start: "Start", complete: "Complete", emptyTitle: "No GDPR requests", emptyDescription: "Access, rectification or erasure requests will appear here." },
-  de: { statusUpdated: "Status aktualisiert", loading: "DSGVO-Anfragen werden geladen", total: (count: number) => `${count} DSGVO-Anfrage${count === 1 ? "" : "n"}`, types: { access: "Auskunft", rectification: "Berichtigung", deletion: "Löschung", portability: "Datenübertragbarkeit", objection: "Widerspruch" }, statuses: { pending: "Ausstehend", in_progress: "In Bearbeitung", completed: "Erledigt", rejected: "Abgelehnt" }, start: "Bearbeiten", complete: "Abschließen", emptyTitle: "Keine DSGVO-Anfragen", emptyDescription: "Anfragen auf Auskunft, Berichtigung oder Löschung werden hier angezeigt." },
-  zh: { statusUpdated: "状态已更新", loading: "正在加载隐私请求", total: (count: number) => `${count} 个隐私请求`, types: { access: "访问", rectification: "更正", deletion: "删除", portability: "数据可携带", objection: "异议" }, statuses: { pending: "待处理", in_progress: "处理中", completed: "已处理", rejected: "已拒绝" }, start: "开始处理", complete: "完成", emptyTitle: "暂无隐私请求", emptyDescription: "访问、更正或删除请求将显示在这里。" },
-} as const;
-
-export const adminTestimonialsCopy = {
-  fr: { updated: "Témoignage mis à jour", deleted: "Témoignage supprimé", loading: "Chargement des témoignages administratifs", total: (count: number) => `${count} témoignage${count > 1 ? "s" : ""}`, statuses: { pending: "En attente", approved: "Approuvé", rejected: "Rejeté" }, featured: "Mis en avant", approve: "Approuver", reject: "Rejeter", unfeature: "Retirer", feature: "Mettre en avant", confirmDelete: "Supprimer ce témoignage ?", emptyTitle: "Aucun témoignage", emptyDescription: "Les témoignages partenaires soumis ou importés apparaîtront ici pour validation." },
-  en: { updated: "Testimonial updated", deleted: "Testimonial deleted", loading: "Loading administrative testimonials", total: (count: number) => `${count} testimonial${count > 1 ? "s" : ""}`, statuses: { pending: "Pending", approved: "Approved", rejected: "Rejected" }, featured: "Featured", approve: "Approve", reject: "Reject", unfeature: "Remove feature", feature: "Feature", confirmDelete: "Delete this testimonial?", emptyTitle: "No testimonials", emptyDescription: "Submitted or imported partner testimonials will appear here for review." },
-  de: { updated: "Bewertung aktualisiert", deleted: "Bewertung gelöscht", loading: "Administrative Bewertungen werden geladen", total: (count: number) => `${count} Bewertung${count === 1 ? "" : "en"}`, statuses: { pending: "Ausstehend", approved: "Freigegeben", rejected: "Abgelehnt" }, featured: "Hervorgehoben", approve: "Freigeben", reject: "Ablehnen", unfeature: "Hervorhebung entfernen", feature: "Hervorheben", confirmDelete: "Diese Bewertung löschen?", emptyTitle: "Keine Bewertungen", emptyDescription: "Eingereichte oder importierte Partnerbewertungen werden hier zur Prüfung angezeigt." },
-  zh: { updated: "评价已更新", deleted: "评价已删除", loading: "正在加载管理端评价", total: (count: number) => `${count} 条评价`, statuses: { pending: "待处理", approved: "已批准", rejected: "已拒绝" }, featured: "精选", approve: "批准", reject: "拒绝", unfeature: "取消精选", feature: "设为精选", confirmDelete: "删除此评价？", emptyTitle: "暂无评价", emptyDescription: "提交或导入的合作伙伴评价将在此显示以供审核。" },
-} as const;
-
-export const adminAvailabilityCopy = {
-  fr: { slotAdded: "Créneau ajouté", slotDeleted: "Créneau supprimé", dateBlocked: "Date bloquée", dateUnblocked: "Date débloquée", loading: "Chargement des disponibilités", days: ["Dimanche", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi"], weeklyTitle: "Créneaux hebdomadaires", addSlot: "Ajouter un créneau", day: "Jour", start: "Début", end: "Fin", add: "Ajouter", deleteSlot: "Supprimer le créneau", slotsEmptyTitle: "Aucun créneau configuré", slotsEmptyDescription: "Ajoutez un créneau hebdomadaire pour le rendre disponible à la réservation.", blockedTitle: "Dates bloquées", blockDate: "Bloquer une date", date: "Date", reason: "Raison (optionnel)", reasonPlaceholder: "Congés, formation...", block: "Bloquer", unblockDate: "Débloquer la date", blockedEmptyTitle: "Aucune date bloquée", blockedEmptyDescription: "Les jours bloqués pour congés, formation ou indisponibilité apparaîtront ici." },
-  en: { slotAdded: "Time slot added", slotDeleted: "Time slot deleted", dateBlocked: "Date blocked", dateUnblocked: "Date unblocked", loading: "Loading availability", days: ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"], weeklyTitle: "Weekly time slots", addSlot: "Add a time slot", day: "Day", start: "Start", end: "End", add: "Add", deleteSlot: "Delete time slot", slotsEmptyTitle: "No time slots configured", slotsEmptyDescription: "Add a weekly time slot to make it available for booking.", blockedTitle: "Blocked dates", blockDate: "Block a date", date: "Date", reason: "Reason (optional)", reasonPlaceholder: "Leave, training...", block: "Block", unblockDate: "Unblock date", blockedEmptyTitle: "No blocked dates", blockedEmptyDescription: "Days blocked for leave, training or unavailability will appear here." },
-  de: { slotAdded: "Zeitfenster hinzugefügt", slotDeleted: "Zeitfenster gelöscht", dateBlocked: "Datum gesperrt", dateUnblocked: "Datum entsperrt", loading: "Verfügbarkeiten werden geladen", days: ["Sonntag", "Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag"], weeklyTitle: "Wöchentliche Zeitfenster", addSlot: "Zeitfenster hinzufügen", day: "Tag", start: "Beginn", end: "Ende", add: "Hinzufügen", deleteSlot: "Zeitfenster löschen", slotsEmptyTitle: "Keine Zeitfenster eingerichtet", slotsEmptyDescription: "Fügen Sie ein wöchentliches Zeitfenster hinzu, um es für Buchungen verfügbar zu machen.", blockedTitle: "Gesperrte Daten", blockDate: "Datum sperren", date: "Datum", reason: "Grund (optional)", reasonPlaceholder: "Urlaub, Fortbildung...", block: "Sperren", unblockDate: "Datum entsperren", blockedEmptyTitle: "Keine gesperrten Daten", blockedEmptyDescription: "Für Urlaub, Fortbildung oder Nichtverfügbarkeit gesperrte Tage werden hier angezeigt." },
-  zh: { slotAdded: "时段已添加", slotDeleted: "时段已删除", dateBlocked: "日期已屏蔽", dateUnblocked: "日期已解除屏蔽", loading: "正在加载可用时间", days: ["星期日", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六"], weeklyTitle: "每周时段", addSlot: "添加时段", day: "星期", start: "开始", end: "结束", add: "添加", deleteSlot: "删除时段", slotsEmptyTitle: "尚未设置时段", slotsEmptyDescription: "添加每周时段以开放预约。", blockedTitle: "已屏蔽日期", blockDate: "屏蔽日期", date: "日期", reason: "原因（可选）", reasonPlaceholder: "休假、培训...", block: "屏蔽", unblockDate: "解除日期屏蔽", blockedEmptyTitle: "暂无已屏蔽日期", blockedEmptyDescription: "因休假、培训或不可用而屏蔽的日期将显示在这里。" },
-} as const;
-
 export default function AdminDashboard() {
   const { user, loading, refresh } = useAuth();
-  const { language } = useLanguage();
-  const shell = adminShellCopy[language as keyof typeof adminShellCopy] ?? adminShellCopy.fr;
   const [, setLocation] = useLocation();
   const [activeTab, setActiveTab] = useState<Tab>("overview");
   const [mailingSelectedIds, setMailingSelectedIds] = useState<number[]>([]);
   const [mfaCode, setMfaCode] = useState("");
   const adminSecurity = trpc.adminSecurity.status.useQuery(undefined, { enabled: Boolean(user?.role === "admin") });
-  const requestMfa = trpc.adminSecurity.begin.useMutation({ onSuccess: () => toast.success(shell.access.codeSent), onError: error => toast.error(error.message) });
-  const verifyMfa = trpc.adminSecurity.verify.useMutation({ onSuccess: () => { void adminSecurity.refetch(); toast.success(shell.access.mfaVerified); }, onError: error => toast.error(error.message) });
+  const requestMfa = trpc.adminSecurity.begin.useMutation({ onSuccess: () => toast.success("Un code de sécurité a été envoyé à votre email administrateur."), onError: error => toast.error(error.message) });
+  const verifyMfa = trpc.adminSecurity.verify.useMutation({ onSuccess: () => { void adminSecurity.refetch(); toast.success("Double authentification validée."); }, onError: error => toast.error(error.message) });
 
   if (loading) {
     return (
       <div className="min-h-screen bg-background px-4 py-16">
         <div className="mx-auto max-w-3xl">
-          <PublicContentSkeleton cards={1} label={shell.access.loading} />
+          <PublicContentSkeleton cards={1} label="Chargement de l’accès administrateur" />
         </div>
       </div>
     );
@@ -97,10 +45,10 @@ export default function AdminDashboard() {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center px-4">
         <div className="max-w-md text-center">
-          <h1 className="text-2xl font-bold text-foreground mb-4">{shell.access.loginRequired}</h1>
-          <p className="text-muted-foreground mb-6">{shell.access.loginDescription}</p>
+          <h1 className="text-2xl font-bold text-foreground mb-4">Connexion administrateur requise</h1>
+          <p className="text-muted-foreground mb-6">Connectez-vous avec le compte propriétaire pour accéder aux candidatures et aux missions.</p>
           <Button onClick={startLogin}>
-            {shell.access.login}
+            Se connecter
           </Button>
         </div>
       </div>
@@ -111,16 +59,16 @@ export default function AdminDashboard() {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center px-4">
         <div className="max-w-md text-center">
-          <h1 className="text-2xl font-bold text-foreground mb-4">{shell.access.forbidden}</h1>
-          <p className="text-muted-foreground mb-6">{shell.access.forbiddenDescription}</p>
+          <h1 className="text-2xl font-bold text-foreground mb-4">Accès refusé</h1>
+          <p className="text-muted-foreground mb-6">Votre session ne possède pas les permissions nécessaires. Si votre rôle vient d’être mis à jour, actualisez l’accès ou reconnectez-vous.</p>
           <div className="flex flex-wrap justify-center gap-3">
             <Button variant="outline" onClick={() => void refresh()}>
-              {shell.access.refresh}
+              Actualiser l’accès
             </Button>
-            <Button onClick={startLogin}>{shell.access.reconnect}</Button>
+            <Button onClick={startLogin}>Se reconnecter</Button>
             <Button variant="ghost" onClick={() => setLocation("/")}>
               <ArrowLeft className="w-4 h-4 mr-2" />
-              {shell.access.home}
+              Accueil
             </Button>
           </div>
         </div>
@@ -129,26 +77,26 @@ export default function AdminDashboard() {
   }
 
   if (adminSecurity.isLoading) {
-    return <div className="min-h-screen bg-background px-4 py-16"><div className="mx-auto max-w-3xl"><PublicContentSkeleton cards={1} label={shell.access.checking} /></div></div>;
+    return <div className="min-h-screen bg-background px-4 py-16"><div className="mx-auto max-w-3xl"><PublicContentSkeleton cards={1} label="Vérification de sécurité" /></div></div>;
   }
 
   if (!adminSecurity.data?.verified) {
-    return <div className="min-h-screen bg-background flex items-center justify-center px-4"><div className="w-full max-w-md rounded-2xl border border-cyan-900/50 bg-card p-7 shadow-2xl"><div className="mb-5 flex items-center gap-3"><span className="grid h-11 w-11 place-items-center rounded-xl bg-cyan-400/10 text-cyan-300"><Shield className="h-6 w-6"/></span><div><h1 className="text-xl font-bold text-foreground">{shell.access.mfaTitle}</h1><p className="text-sm text-muted-foreground">{shell.access.mfaDescription}</p></div></div><p className="mb-4 text-sm text-muted-foreground">{shell.access.mfaInstructions}</p><Button className="mb-5 w-full" onClick={() => requestMfa.mutate()} disabled={requestMfa.isPending}>{requestMfa.isPending ? shell.access.sending : shell.access.sendCode}</Button><div className="space-y-2"><label htmlFor="admin-mfa-code" className="text-sm font-medium text-foreground">{shell.access.codeLabel}</label><Input id="admin-mfa-code" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={mfaCode} onChange={event => setMfaCode(event.target.value.replace(/\D/g, ""))} placeholder="123456"/><Button className="mt-2 w-full" variant="outline" disabled={mfaCode.length !== 6 || verifyMfa.isPending} onClick={() => verifyMfa.mutate({ code: mfaCode })}>{verifyMfa.isPending ? shell.access.verifying : shell.access.verify}</Button></div><Button variant="ghost" className="mt-3 w-full" onClick={() => setLocation("/")}>{shell.access.backToSite}</Button></div></div>;
+    return <div className="min-h-screen bg-background flex items-center justify-center px-4"><div className="w-full max-w-md rounded-2xl border border-cyan-900/50 bg-card p-7 shadow-2xl"><div className="mb-5 flex items-center gap-3"><span className="grid h-11 w-11 place-items-center rounded-xl bg-cyan-400/10 text-cyan-300"><Shield className="h-6 w-6"/></span><div><h1 className="text-xl font-bold text-foreground">Validation de sécurité</h1><p className="text-sm text-muted-foreground">Une seconde vérification protège les documents et CV sensibles.</p></div></div><p className="mb-4 text-sm text-muted-foreground">Demandez un code à six chiffres sur votre email administrateur, puis saisissez-le ci-dessous.</p><Button className="mb-5 w-full" onClick={() => requestMfa.mutate()} disabled={requestMfa.isPending}>{requestMfa.isPending ? "Envoi en cours…" : "Envoyer un code de sécurité"}</Button><div className="space-y-2"><label htmlFor="admin-mfa-code" className="text-sm font-medium text-foreground">Code à 6 chiffres</label><Input id="admin-mfa-code" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={mfaCode} onChange={event => setMfaCode(event.target.value.replace(/\D/g, ""))} placeholder="123456"/><Button className="mt-2 w-full" variant="outline" disabled={mfaCode.length !== 6 || verifyMfa.isPending} onClick={() => verifyMfa.mutate({ code: mfaCode })}>{verifyMfa.isPending ? "Vérification…" : "Valider le code"}</Button></div><Button variant="ghost" className="mt-3 w-full" onClick={() => setLocation("/")}>Retour au site</Button></div></div>;
   }
 
   const tabs = [
-    { id: "overview" as Tab, label: shell.tabs.overview, icon: DollarSign },
-    { id: "appointments" as Tab, label: shell.tabs.appointments, icon: Calendar },
-    { id: "contacts" as Tab, label: shell.tabs.contacts, icon: MessageSquare },
-    { id: "gdpr" as Tab, label: shell.tabs.gdpr, icon: Shield },
-    { id: "testimonials" as Tab, label: shell.tabs.testimonials, icon: Star },
-    { id: "availability" as Tab, label: shell.tabs.availability, icon: CalendarDays },
-    { id: "recruitment" as Tab, label: shell.tabs.recruitment, icon: UserRound },
-    { id: "candidateDocuments" as Tab, label: shell.tabs.candidateDocuments, icon: Shield },
-    { id: "security" as Tab, label: shell.tabs.security, icon: Shield },
-    { id: "vivier" as Tab, label: shell.tabs.vivier, icon: UsersRound },
-    { id: "mailing" as Tab, label: shell.tabs.mailing, icon: Send },
-    { id: "employerBriefs" as Tab, label: shell.tabs.employerBriefs, icon: BriefcaseBusiness },
+    { id: "overview" as Tab, label: "Vue d'ensemble", icon: DollarSign },
+    { id: "appointments" as Tab, label: "Réservations", icon: Calendar },
+    { id: "contacts" as Tab, label: "Messages", icon: MessageSquare },
+    { id: "gdpr" as Tab, label: "RGPD", icon: Shield },
+    { id: "testimonials" as Tab, label: "Témoignages", icon: Star },
+    { id: "availability" as Tab, label: "Disponibilités", icon: CalendarDays },
+    { id: "recruitment" as Tab, label: "Candidatures", icon: UserRound },
+    { id: "candidateDocuments" as Tab, label: "Documents candidats", icon: Shield },
+    { id: "security" as Tab, label: "Sécurité", icon: Shield },
+    { id: "vivier" as Tab, label: "Vivier", icon: UsersRound },
+    { id: "mailing" as Tab, label: "Mailing", icon: Send },
+    { id: "employerBriefs" as Tab, label: "Missions", icon: BriefcaseBusiness },
   ];
 
   return (
@@ -159,9 +107,9 @@ export default function AdminDashboard() {
           <div className="flex items-center gap-4">
             <Button variant="ghost" size="sm" onClick={() => setLocation("/")}>
               <ArrowLeft className="w-4 h-4 mr-2" />
-              {shell.site}
+              Site
             </Button>
-            <h1 className="text-xl font-bold text-foreground">{shell.title}</h1>
+            <h1 className="text-xl font-bold text-foreground">Administration</h1>
           </div>
           <span className="max-w-full truncate text-sm text-muted-foreground">{user.name}</span>
         </div>
@@ -170,14 +118,14 @@ export default function AdminDashboard() {
       {/* Tabs */}
       <nav className="border-b border-border bg-card/30">
         <div className="max-w-7xl mx-auto px-4">
-          <label className="sr-only" htmlFor="admin-active-tab">{shell.section}</label>
+          <label className="sr-only" htmlFor="admin-active-tab">Section d’administration</label>
           <div className="py-2 sm:hidden">
             <select
               id="admin-active-tab"
               value={activeTab}
               onChange={event => setActiveTab(event.target.value as Tab)}
               className="h-11 w-full rounded-lg border border-border bg-background px-3 text-sm font-medium text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-              aria-label={`${shell.section} : ${getActiveAdminTabLabel(tabs, activeTab)}`}
+              aria-label={`Section d’administration : ${getActiveAdminTabLabel(tabs, activeTab)}`}
             >
               {tabs.map(tab => <option key={tab.id} value={tab.id}>{tab.label}</option>)}
             </select>
@@ -224,23 +172,21 @@ export default function AdminDashboard() {
 }
 
 function OverviewTab({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
-  const { language } = useLanguage();
-  const copy = adminOverviewCopy[language as keyof typeof adminOverviewCopy] ?? adminOverviewCopy.fr;
   const { data: stats, isLoading, error } = trpc.admin.stats.useQuery();
 
   if (error) {
-    return <div className="text-center py-8 text-red-400">{copy.error} : {error.message}</div>;
+    return <div className="text-center py-8 text-red-400">Erreur de chargement : {error.message}</div>;
   }
 
   if (isLoading) {
-    return <PublicContentSkeleton cards={4} columns={4} label={copy.loading} />;
+    return <PublicContentSkeleton cards={4} columns={4} label="Chargement des indicateurs administratifs" />;
   }
 
   const cards = [
-    { label: copy.bookings, value: stats?.appointments || 0, icon: Calendar, color: "text-cyan-400" },
-    { label: copy.messages, value: stats?.contacts || 0, icon: MessageSquare, color: "text-green-400" },
-    { label: copy.gdpr, value: stats?.gdpr || 0, icon: Shield, color: "text-yellow-400" },
-    { label: copy.revenue, value: `${stats?.revenue || 0}€`, icon: DollarSign, color: "text-emerald-400" },
+    { label: "Réservations", value: stats?.appointments || 0, icon: Calendar, color: "text-cyan-400" },
+    { label: "Messages", value: stats?.contacts || 0, icon: MessageSquare, color: "text-green-400" },
+    { label: "Demandes RGPD", value: stats?.gdpr || 0, icon: Shield, color: "text-yellow-400" },
+    { label: "Revenus", value: `${stats?.revenue || 0}€`, icon: DollarSign, color: "text-emerald-400" },
   ];
 
   return (
@@ -264,9 +210,9 @@ function OverviewTab({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
 
       <section aria-labelledby="recruitment-shortcuts-title" className="rounded-2xl border border-primary/25 bg-primary/5 p-5 sm:p-6">
         <div className="mb-5">
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">{copy.eyebrow}</p>
-          <h2 id="recruitment-shortcuts-title" className="mt-1 text-xl font-semibold text-foreground">{copy.title}</h2>
-          <p className="mt-1 text-sm text-muted-foreground">{copy.intro}</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">Accès rapide</p>
+          <h2 id="recruitment-shortcuts-title" className="mt-1 text-xl font-semibold text-foreground">Recrutement & Missions</h2>
+          <p className="mt-1 text-sm text-muted-foreground">Accédez directement aux CV déposés et aux besoins transmis par les employeurs.</p>
         </div>
         <div className="grid gap-4 md:grid-cols-2">
           <button
@@ -275,8 +221,8 @@ function OverviewTab({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
             className="group flex items-center justify-between rounded-xl border border-border bg-card p-5 text-left transition-colors hover:border-primary/60 hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
           >
             <span>
-              <span className="flex items-center gap-2 font-semibold text-foreground"><UserRound className="h-5 w-5 text-primary" /> {copy.applications}</span>
-              <span className="mt-1 block text-sm text-muted-foreground">{copy.applicationsDescription}</span>
+              <span className="flex items-center gap-2 font-semibold text-foreground"><UserRound className="h-5 w-5 text-primary" /> Candidatures</span>
+              <span className="mt-1 block text-sm text-muted-foreground">Consulter les CV, analyses IA, disponibilités et certifications.</span>
             </span>
             <span aria-hidden="true" className="text-lg text-primary transition-transform group-hover:translate-x-0.5">→</span>
           </button>
@@ -286,8 +232,8 @@ function OverviewTab({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
             className="group flex items-center justify-between rounded-xl border border-border bg-card p-5 text-left transition-colors hover:border-primary/60 hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
           >
             <span>
-              <span className="flex items-center gap-2 font-semibold text-foreground"><BriefcaseBusiness className="h-5 w-5 text-primary" /> {copy.missions}</span>
-              <span className="mt-1 block text-sm text-muted-foreground">{copy.missionsDescription}</span>
+              <span className="flex items-center gap-2 font-semibold text-foreground"><BriefcaseBusiness className="h-5 w-5 text-primary" /> Missions</span>
+              <span className="mt-1 block text-sm text-muted-foreground">Gérer les briefs Employeurs et créer des shortlists de candidats.</span>
             </span>
             <span aria-hidden="true" className="text-lg text-primary transition-transform group-hover:translate-x-0.5">→</span>
           </button>
@@ -298,9 +244,6 @@ function OverviewTab({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
 }
 
 function AppointmentsTab() {
-  const { language } = useLanguage();
-  const copy = adminAppointmentsCopy[language as keyof typeof adminAppointmentsCopy] ?? adminAppointmentsCopy.fr;
-  const locale = language === "zh" ? "zh-CN" : language === "de" ? "de-DE" : language === "en" ? "en-GB" : "fr-FR";
   const [statusFilter, setStatusFilter] = useState<string | undefined>(undefined);
   const utils = trpc.useUtils();
   const { data, isLoading, error } = trpc.admin.appointments.list.useQuery({
@@ -308,14 +251,14 @@ function AppointmentsTab() {
   });
   const updateStatus = trpc.admin.appointments.updateStatus.useMutation({
     onSuccess: () => {
-      toast.success(copy.statusUpdated);
+      toast.success("Statut mis à jour");
       utils.admin.appointments.list.invalidate();
       utils.admin.stats.invalidate();
     },
   });
   const refundAppointment = trpc.admin.appointments.refund.useMutation({
     onSuccess: ({ refundAmount }) => {
-      toast.success(copy.refundConfirmed(refundAmount));
+      toast.success(`Remboursement confirmé : ${refundAmount} €`);
       utils.admin.appointments.list.invalidate();
       utils.admin.stats.invalidate();
     },
@@ -344,7 +287,7 @@ function AppointmentsTab() {
   const agenda = buildAppointmentsAgenda(data?.items ?? []);
 
   if (isLoading) {
-    return <PublicContentSkeleton label={copy.loading} />;
+    return <PublicContentSkeleton label="Chargement des rendez-vous" />;
   }
 
   return (
@@ -359,20 +302,20 @@ function AppointmentsTab() {
               statusFilter === s ? "bg-primary text-primary-foreground" : "bg-card border border-border text-muted-foreground hover:text-foreground"
             }`}
           >
-            {s === undefined ? copy.all : copy.paymentStatus[s as keyof typeof copy.paymentStatus]}
+            {s === undefined ? "Tous" : s === "pending" ? "En attente" : s === "completed" ? "Payé" : s === "failed" ? "Échoué" : "Remboursé"}
           </button>
         ))}
       </div>
 
-      <p className="text-sm text-muted-foreground mb-4">{copy.total(data?.total || 0)}</p>
+      <p className="text-sm text-muted-foreground mb-4">{data?.total || 0} réservation(s)</p>
 
       <section aria-labelledby="appointments-agenda-title" className="mb-6 rounded-xl border border-primary/20 bg-primary/5 p-4 sm:p-5">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <CalendarDays className="h-5 w-5 text-primary" aria-hidden="true" />
-            <h2 id="appointments-agenda-title" className="font-semibold text-foreground">{copy.agenda}</h2>
+            <h2 id="appointments-agenda-title" className="font-semibold text-foreground">Prochains rendez-vous</h2>
           </div>
-          <span className="text-xs text-muted-foreground">{copy.timezone}</span>
+          <span className="text-xs text-muted-foreground">Fuseau Europe/Paris</span>
         </div>
         {agenda.length > 0 ? (
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -383,7 +326,7 @@ function AppointmentsTab() {
                   {day.items.map((apt) => (
                     <div key={apt.id} className="flex items-center justify-between gap-2 text-sm">
                       <span className="min-w-0 truncate text-foreground"><span className="font-mono text-primary">{apt.time}</span> · {apt.customerName}</span>
-                      <span className={`shrink-0 rounded px-2 py-0.5 text-[11px] font-medium ${appointmentStatusColors[apt.appointmentStatus] || "bg-muted text-muted-foreground"}`}>{copy.appointmentStatus[apt.appointmentStatus as keyof typeof copy.appointmentStatus] ?? apt.appointmentStatus}</span>
+                      <span className={`shrink-0 rounded px-2 py-0.5 text-[11px] font-medium ${appointmentStatusColors[apt.appointmentStatus] || "bg-muted text-muted-foreground"}`}>{apt.appointmentStatus}</span>
                     </div>
                   ))}
                 </div>
@@ -391,7 +334,7 @@ function AppointmentsTab() {
             ))}
           </div>
         ) : (
-          <p className="text-sm text-muted-foreground">{copy.noUpcoming}</p>
+          <p className="text-sm text-muted-foreground">Aucun rendez-vous à venir confirmé pour le moment.</p>
         )}
       </section>
 
@@ -401,23 +344,23 @@ function AppointmentsTab() {
           <div key={apt.id} className="bg-card border border-border rounded-lg p-4">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
               <div className="flex-1 min-w-0">
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-1">
-                  <span className="min-w-0 break-words font-semibold text-foreground">{apt.customerName}</span>
-                  <span className="max-w-full break-all text-xs text-muted-foreground font-mono">{apt.trackingId}</span>
+                <div className="flex items-center gap-3 mb-1">
+                  <span className="font-semibold text-foreground">{apt.customerName}</span>
+                  <span className="text-xs text-muted-foreground font-mono">{apt.trackingId}</span>
                 </div>
                 <div className="flex flex-wrap gap-3 text-sm text-muted-foreground">
-                  <span className="break-all">{apt.customerEmail}</span>
-                  <span className="break-words">{apt.customerPhone}</span>
-                  <span>{new Date(apt.appointmentDate).toLocaleString(locale, { timeZone: "Europe/Paris" })}</span>
+                  <span>{apt.customerEmail}</span>
+                  <span>{apt.customerPhone}</span>
+                  <span>{new Date(apt.appointmentDate).toLocaleString("fr-FR", { timeZone: "Europe/Paris" })}</span>
                   <span className="font-semibold text-foreground">{apt.finalPrice}€</span>
                 </div>
               </div>
               <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:flex-nowrap">
                 <span className={`px-2 py-1 rounded text-xs font-medium ${statusColors[apt.paymentStatus] || ""}`}>
-                  {copy.paymentStatus[apt.paymentStatus as keyof typeof copy.paymentStatus] ?? apt.paymentStatus}
+                  {apt.paymentStatus}
                 </span>
                 <span className={`px-2 py-1 rounded text-xs font-medium ${appointmentStatusColors[apt.appointmentStatus] || ""}`}>
-                  {copy.appointmentStatus[apt.appointmentStatus as keyof typeof copy.appointmentStatus] ?? apt.appointmentStatus}
+                  {apt.appointmentStatus}
                 </span>
                 {apt.appointmentStatus === "confirmed" && (
                   <Button
@@ -427,7 +370,7 @@ function AppointmentsTab() {
                     onClick={() => updateStatus.mutate({ trackingId: apt.trackingId, appointmentStatus: "completed" })}
                   >
                     <CheckCircle className="w-3 h-3 mr-1" />
-                    {copy.complete}
+                    Terminer
                   </Button>
                 )}
                 {apt.paymentStatus === "completed" && apt.appointmentStatus === "confirmed" && (
@@ -437,15 +380,15 @@ function AppointmentsTab() {
                     className="min-h-10 flex-1 sm:min-h-0 sm:flex-none"
                     disabled={refundAppointment.isPending}
                     onClick={() => {
-                      if (!window.confirm(copy.confirmRefund(apt.finalPrice, apt.trackingId))) return;
+                      if (!window.confirm(`Confirmer le remboursement de ${apt.finalPrice} € pour ${apt.trackingId} ?`)) return;
                       refundAppointment.mutate({
                         trackingId: apt.trackingId,
-                        reason: copy.refundReason,
+                        reason: "Remboursement demandé par l’administration",
                       });
                     }}
                   >
                     <DollarSign className="w-3 h-3 mr-1" />
-                    {copy.refund}
+                    Rembourser
                   </Button>
                 )}
               </div>
@@ -456,7 +399,7 @@ function AppointmentsTab() {
           </div>
         ))}
         {(!data?.items || data.items.length === 0) && (
-          <AdminEmptyState icon={CalendarDays} title={copy.emptyTitle} description={copy.emptyDescription} />
+          <AdminEmptyState icon={CalendarDays} title="Aucune réservation" description="Les nouvelles réservations apparaîtront ici dès leur confirmation." />
         )}
       </div>
     </div>
@@ -464,14 +407,11 @@ function AppointmentsTab() {
 }
 
 function ContactsTab() {
-  const { language } = useLanguage();
-  const copy = adminContactsCopy[language as keyof typeof adminContactsCopy] ?? adminContactsCopy.fr;
-  const locale = language === "zh" ? "zh-CN" : language === "de" ? "de-DE" : language === "en" ? "en-GB" : "fr-FR";
   const utils = trpc.useUtils();
   const { data, isLoading, error } = trpc.admin.contacts.list.useQuery({});
   const markRead = trpc.admin.contacts.markRead.useMutation({
     onSuccess: () => {
-      toast.success(copy.markedRead);
+      toast.success("Marqué comme lu");
       utils.admin.contacts.list.invalidate();
     },
   });
@@ -481,40 +421,40 @@ function ContactsTab() {
   }
 
   if (isLoading) {
-    return <PublicContentSkeleton label={copy.loading} />;
+    return <PublicContentSkeleton label="Chargement des messages" />;
   }
 
   return (
     <div>
-      <p className="text-sm text-muted-foreground mb-4">{copy.total(data?.total || 0)}</p>
+      <p className="text-sm text-muted-foreground mb-4">{data?.total || 0} message(s)</p>
       <div className="space-y-3">
         {data?.items.map((msg) => (
           <div key={msg.id} className={`bg-card border rounded-lg p-4 ${msg.read === 0 ? "border-primary/50" : "border-border"}`}>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div className="flex-1 min-w-0">
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-1">
-                  <span className="min-w-0 break-words font-semibold text-foreground">{msg.name}</span>
+                <div className="flex items-center gap-3 mb-1">
+                  <span className="font-semibold text-foreground">{msg.name}</span>
                   {msg.read === 0 && <span className="w-2 h-2 rounded-full bg-primary" />}
-                  <span className="max-w-full break-all text-xs text-muted-foreground font-mono">{msg.trackingId}</span>
+                  <span className="text-xs text-muted-foreground font-mono">{msg.trackingId}</span>
                 </div>
                 <div className="flex flex-wrap gap-x-3 gap-y-1 text-sm text-muted-foreground mb-2">
-                  <span className="break-all">{msg.email}</span>
-                  {msg.phone && <span className="break-words">{msg.phone}</span>}
-                  <span>{new Date(msg.createdAt).toLocaleString(locale)}</span>
+                  <span>{msg.email}</span>
+                  {msg.phone && <span>{msg.phone}</span>}
+                  <span>{new Date(msg.createdAt).toLocaleString("fr-FR")}</span>
                 </div>
                 <p className="text-sm text-foreground">{msg.message}</p>
               </div>
               {msg.read === 0 && (
                 <Button size="sm" variant="outline" className="min-h-10 self-start sm:min-h-0" onClick={() => markRead.mutate({ id: msg.id })}>
                   <Eye className="w-3 h-3 mr-1" />
-                  {copy.read}
+                  Lu
                 </Button>
               )}
             </div>
           </div>
         ))}
         {(!data?.items || data.items.length === 0) && (
-          <AdminEmptyState icon={MessageSquare} title={copy.emptyTitle} description={copy.emptyDescription} />
+          <AdminEmptyState icon={MessageSquare} title="Aucun message" description="Les demandes de contact reçues sur le site seront affichées dans cette section." />
         )}
       </div>
     </div>
@@ -522,14 +462,11 @@ function ContactsTab() {
 }
 
 function GdprTab() {
-  const { language } = useLanguage();
-  const copy = adminGdprCopy[language as keyof typeof adminGdprCopy] ?? adminGdprCopy.fr;
-  const locale = language === "zh" ? "zh-CN" : language === "de" ? "de-DE" : language === "en" ? "en-GB" : "fr-FR";
   const utils = trpc.useUtils();
   const { data, isLoading, error } = trpc.admin.gdprRequests.list.useQuery({});
   const updateStatus = trpc.admin.gdprRequests.updateStatus.useMutation({
     onSuccess: () => {
-      toast.success(copy.statusUpdated);
+      toast.success("Statut mis à jour");
       utils.admin.gdprRequests.list.invalidate();
     },
   });
@@ -545,30 +482,38 @@ function GdprTab() {
     rejected: "bg-red-500/20 text-red-400",
   };
 
+  const typeLabels: Record<string, string> = {
+    access: "Accès",
+    rectification: "Rectification",
+    deletion: "Suppression",
+    portability: "Portabilité",
+    objection: "Opposition",
+  };
+
   if (isLoading) {
-    return <PublicContentSkeleton label={copy.loading} />;
+    return <PublicContentSkeleton label="Chargement des demandes RGPD" />;
   }
 
   return (
     <div>
-      <p className="text-sm text-muted-foreground mb-4">{copy.total(data?.total || 0)}</p>
+      <p className="text-sm text-muted-foreground mb-4">{data?.total || 0} demande(s) RGPD</p>
       <div className="space-y-3">
         {data?.items.map((req) => (
           <div key={req.id} className="bg-card border border-border rounded-lg p-4">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
               <div className="flex-1 min-w-0">
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-1">
-                  <span className="min-w-0 break-words font-semibold text-foreground">{req.name}</span>
+                <div className="flex items-center gap-3 mb-1">
+                  <span className="font-semibold text-foreground">{req.name}</span>
                   <span className="px-2 py-0.5 rounded text-xs font-medium bg-slate-700 text-slate-200">
-                    {copy.types[req.requestType as keyof typeof copy.types] ?? req.requestType}
+                    {typeLabels[req.requestType] || req.requestType}
                   </span>
                   <span className={`px-2 py-0.5 rounded text-xs font-medium ${statusColors[req.status] || ""}`}>
-                    {copy.statuses[req.status as keyof typeof copy.statuses] ?? req.status}
+                    {req.status}
                   </span>
                 </div>
-                <div className="flex flex-wrap gap-x-3 gap-y-1 text-sm text-muted-foreground">
-                  <span className="break-all">{req.email}</span>
-                  <span>{new Date(req.createdAt).toLocaleString(locale)}</span>
+                <div className="flex gap-3 text-sm text-muted-foreground">
+                  <span>{req.email}</span>
+                  <span>{new Date(req.createdAt).toLocaleString("fr-FR")}</span>
                 </div>
                 {req.description && (
                   <p className="text-sm text-foreground mt-2">{req.description}</p>
@@ -578,13 +523,13 @@ function GdprTab() {
                 {req.status === "pending" && (
                   <Button size="sm" variant="outline" className="min-h-10 flex-1 sm:min-h-0 sm:flex-none" onClick={() => updateStatus.mutate({ id: req.id, status: "in_progress" })}>
                     <Clock className="w-3 h-3 mr-1" />
-                    {copy.start}
+                    En cours
                   </Button>
                 )}
                 {(req.status === "pending" || req.status === "in_progress") && (
                   <Button size="sm" className="min-h-10 flex-1 sm:min-h-0 sm:flex-none" onClick={() => updateStatus.mutate({ id: req.id, status: "completed" })}>
                     <CheckCircle className="w-3 h-3 mr-1" />
-                    {copy.complete}
+                    Traité
                   </Button>
                 )}
               </div>
@@ -592,7 +537,7 @@ function GdprTab() {
           </div>
         ))}
         {(!data?.items || data.items.length === 0) && (
-          <AdminEmptyState icon={Shield} title={copy.emptyTitle} description={copy.emptyDescription} />
+          <AdminEmptyState icon={Shield} title="Aucune demande RGPD" description="Les demandes d’accès, rectification ou suppression apparaîtront ici." />
         )}
       </div>
     </div>
@@ -600,19 +545,17 @@ function GdprTab() {
 }
 
 function TestimonialsTab() {
-  const { language } = useLanguage();
-  const copy = adminTestimonialsCopy[language as keyof typeof adminTestimonialsCopy] ?? adminTestimonialsCopy.fr;
   const { data: testimonialsList, isLoading } = trpc.admin.testimonials.list.useQuery();
   const utils = trpc.useUtils();
   const updateStatus = trpc.admin.testimonials.updateStatus.useMutation({
     onSuccess: () => {
-      toast.success(copy.updated);
+      toast.success("Témoignage mis à jour");
       utils.admin.testimonials.list.invalidate();
     },
   });
   const deleteTestimonial = trpc.admin.testimonials.delete.useMutation({
     onSuccess: () => {
-      toast.success(copy.deleted);
+      toast.success("Témoignage supprimé");
       utils.admin.testimonials.list.invalidate();
     },
   });
@@ -624,43 +567,43 @@ function TestimonialsTab() {
   };
 
   if (isLoading) {
-    return <PublicContentSkeleton label={copy.loading} />;
+    return <PublicContentSkeleton label="Chargement des témoignages administratifs" />;
   }
 
   return (
     <div>
-      <p className="text-sm text-muted-foreground mb-4">{copy.total(testimonialsList?.length || 0)}</p>
+      <p className="text-sm text-muted-foreground mb-4">{testimonialsList?.length || 0} témoignage(s)</p>
       <div className="space-y-3">
         {testimonialsList?.map((t) => (
           <div key={t.id} className="bg-card border border-border rounded-lg p-4">
             <div className="flex flex-col md:flex-row md:items-start justify-between gap-3">
               <div className="flex-1 min-w-0">
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-1">
-                  <span className="min-w-0 break-words font-semibold text-foreground">{t.authorName}</span>
+                <div className="flex items-center gap-3 mb-1">
+                  <span className="font-semibold text-foreground">{t.authorName}</span>
                   <div className="flex">
                     {Array.from({ length: t.rating }).map((_, i) => (
                       <Star key={i} className="w-3 h-3 fill-cyan-400 text-cyan-400" />
                     ))}
                   </div>
                   <span className={`px-2 py-0.5 rounded text-xs font-medium ${statusColors[t.status] || ""}`}>
-                    {copy.statuses[t.status as keyof typeof copy.statuses] ?? t.status}
+                    {t.status}
                   </span>
-                  {t.featured === 1 && <span className="px-2 py-0.5 rounded text-xs font-medium bg-cyan-500/20 text-cyan-400">{copy.featured}</span>}
+                  {t.featured === 1 && <span className="px-2 py-0.5 rounded text-xs font-medium bg-cyan-500/20 text-cyan-400">Featured</span>}
                 </div>
-                <p className="break-words text-sm font-medium text-foreground">{t.title}</p>
-                <p className="break-words text-sm text-muted-foreground mt-1 line-clamp-2">{t.content}</p>
+                <p className="text-sm font-medium text-foreground">{t.title}</p>
+                <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{t.content}</p>
               </div>
               <div className="flex w-full flex-wrap gap-2 sm:w-auto sm:flex-nowrap">
                 {t.status !== "approved" && (
                   <Button size="sm" className="min-h-10 flex-1 sm:min-h-0 sm:flex-none" onClick={() => updateStatus.mutate({ id: t.id, status: "approved" })}>
                     <CheckCircle className="w-3 h-3 mr-1" />
-                    {copy.approve}
+                    Approuver
                   </Button>
                 )}
                 {t.status !== "rejected" && (
                   <Button size="sm" variant="outline" className="min-h-10 flex-1 sm:min-h-0 sm:flex-none" onClick={() => updateStatus.mutate({ id: t.id, status: "rejected" })}>
                     <XCircle className="w-3 h-3 mr-1" />
-                    {copy.reject}
+                    Rejeter
                   </Button>
                 )}
                 <Button
@@ -669,14 +612,14 @@ function TestimonialsTab() {
                   className="min-h-10 flex-1 sm:min-h-0 sm:flex-none"
                   onClick={() => updateStatus.mutate({ id: t.id, status: t.status, featured: t.featured === 1 ? 0 : 1 })}
                 >
-                  {t.featured === 1 ? copy.unfeature : copy.feature}
+                  {t.featured === 1 ? "Retirer" : "Mettre en avant"}
                 </Button>
                 <Button
                   size="sm"
                   variant="destructive"
-                  className="min-h-10 flex-1 sm:min-h-0 sm:flex-none"
+                  className="min-h-10 sm:min-h-0 sm:flex-none"
                   onClick={() => {
-                    if (confirm(copy.confirmDelete)) {
+                    if (confirm("Supprimer ce témoignage ?")) {
                       deleteTestimonial.mutate({ id: t.id });
                     }
                   }}
@@ -688,7 +631,7 @@ function TestimonialsTab() {
           </div>
         ))}
         {(!testimonialsList || testimonialsList.length === 0) && (
-          <AdminEmptyState icon={Star} title={copy.emptyTitle} description={copy.emptyDescription} />
+          <p className="text-center text-muted-foreground py-8">Aucun témoignage</p>
         )}
       </div>
     </div>
@@ -949,9 +892,6 @@ function BlogTab() {
 }
 
 function AvailabilityTab() {
-  const { language } = useLanguage();
-  const copy = adminAvailabilityCopy[language as keyof typeof adminAvailabilityCopy] ?? adminAvailabilityCopy.fr;
-  const locale = language === "zh" ? "zh-CN" : language === "de" ? "de-DE" : language === "en" ? "en-GB" : "fr-FR";
   const utils = trpc.useUtils();
   const { data: slots, isLoading: slotsLoading } = trpc.admin.availability.listSlots.useQuery();
   const { data: blockedDates, isLoading: blockedLoading } = trpc.admin.availability.listBlockedDates.useQuery();
@@ -963,7 +903,7 @@ function AvailabilityTab() {
 
   const createSlot = trpc.admin.availability.addSlot.useMutation({
     onSuccess: () => {
-      toast.success(copy.slotAdded);
+      toast.success("Créneau ajouté");
       utils.admin.availability.listSlots.invalidate();
       setShowSlotForm(false);
       setSlotForm({ dayOfWeek: 1, startTime: "09:00", endTime: "10:00" });
@@ -973,14 +913,14 @@ function AvailabilityTab() {
 
   const deleteSlot = trpc.admin.availability.deleteSlot.useMutation({
     onSuccess: () => {
-      toast.success(copy.slotDeleted);
+      toast.success("Créneau supprimé");
       utils.admin.availability.listSlots.invalidate();
     },
   });
 
   const blockDate = trpc.admin.availability.addBlockedDate.useMutation({
     onSuccess: () => {
-      toast.success(copy.dateBlocked);
+      toast.success("Date bloquée");
       utils.admin.availability.listBlockedDates.invalidate();
       setShowBlockForm(false);
       setBlockForm({ date: "", reason: "" });
@@ -990,14 +930,16 @@ function AvailabilityTab() {
 
   const unblockDate = trpc.admin.availability.removeBlockedDate.useMutation({
     onSuccess: () => {
-      toast.success(copy.dateUnblocked);
+      toast.success("Date débloquée");
       utils.admin.availability.listBlockedDates.invalidate();
     },
     onError: (e: any) => toast.error(e.message),
   });
 
+  const dayNames = ["Dimanche", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi"];
+
   if (slotsLoading || blockedLoading) {
-    return <PublicContentSkeleton label={copy.loading} />;
+    return <PublicContentSkeleton label="Chargement des disponibilités" />;
   }
 
   return (
@@ -1005,10 +947,10 @@ function AvailabilityTab() {
       {/* Créneaux hebdomadaires */}
       <section>
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <h3 className="text-lg font-semibold text-foreground">{copy.weeklyTitle}</h3>
+          <h3 className="text-lg font-semibold text-foreground">Créneaux hebdomadaires</h3>
           <Button size="sm" className="min-h-10 w-full sm:w-auto sm:min-h-0" onClick={() => setShowSlotForm(!showSlotForm)}>
             <Plus className="w-4 h-4 mr-2" />
-            {copy.addSlot}
+            Ajouter un créneau
           </Button>
         </div>
 
@@ -1016,19 +958,19 @@ function AvailabilityTab() {
           <div className="bg-card border border-border rounded-lg p-4 mb-4">
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
               <div>
-                <label className="text-sm text-muted-foreground block mb-1">{copy.day}</label>
+                <label className="text-sm text-muted-foreground block mb-1">Jour</label>
                 <select
                   className="w-full px-3 py-2 rounded-lg bg-background border border-border text-foreground"
                   value={slotForm.dayOfWeek}
                   onChange={(e) => setSlotForm({ ...slotForm, dayOfWeek: parseInt(e.target.value) })}
                 >
-                  {copy.days.map((name, i) => (
+                  {dayNames.map((name, i) => (
                     <option key={i} value={i}>{name}</option>
                   ))}
                 </select>
               </div>
               <div>
-                <label className="text-sm text-muted-foreground block mb-1">{copy.start}</label>
+                <label className="text-sm text-muted-foreground block mb-1">Début</label>
                 <input
                   type="time"
                   className="w-full px-3 py-2 rounded-lg bg-background border border-border text-foreground"
@@ -1037,7 +979,7 @@ function AvailabilityTab() {
                 />
               </div>
               <div>
-                <label className="text-sm text-muted-foreground block mb-1">{copy.end}</label>
+                <label className="text-sm text-muted-foreground block mb-1">Fin</label>
                 <input
                   type="time"
                   className="w-full px-3 py-2 rounded-lg bg-background border border-border text-foreground"
@@ -1046,7 +988,7 @@ function AvailabilityTab() {
                 />
               </div>
               <Button className="min-h-11 w-full md:w-auto md:min-h-0" onClick={() => createSlot.mutate(slotForm)} disabled={createSlot.isPending}>
-                {copy.add}
+                Ajouter
               </Button>
             </div>
           </div>
@@ -1055,23 +997,22 @@ function AvailabilityTab() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
           {slots?.map((slot) => (
             <div key={slot.id} className="bg-card border border-border rounded-lg p-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <div className="min-w-0 flex flex-wrap gap-x-2 gap-y-1">
-                <span className="break-words font-medium text-foreground">{copy.days[slot.dayOfWeek]}</span>
-                <span className="text-sm text-muted-foreground">{slot.startTime} - {slot.endTime}</span>
+              <div className="flex flex-wrap gap-x-2 gap-y-1">
+                <span className="font-medium text-foreground">{dayNames[slot.dayOfWeek]}</span>
+                <span className="text-sm text-muted-foreground ml-2">{slot.startTime} - {slot.endTime}</span>
               </div>
               <Button
                 size="sm"
                 variant="ghost"
+                className="min-h-10 self-start sm:min-h-0"
                 onClick={() => deleteSlot.mutate({ id: slot.id })}
-                className="min-h-10 w-full self-stretch sm:w-auto sm:self-start sm:min-h-0"
-                aria-label={copy.deleteSlot}
               >
                 <Trash className="w-3 h-3 text-red-400" />
               </Button>
             </div>
           ))}
           {(!slots || slots.length === 0) && (
-            <div className="col-span-full"><AdminEmptyState icon={CalendarDays} title={copy.slotsEmptyTitle} description={copy.slotsEmptyDescription} /></div>
+            <p className="text-muted-foreground col-span-full text-center py-4">Aucun créneau configuré</p>
           )}
         </div>
       </section>
@@ -1079,10 +1020,10 @@ function AvailabilityTab() {
       {/* Dates bloquées */}
       <section>
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <h3 className="text-lg font-semibold text-foreground">{copy.blockedTitle}</h3>
+          <h3 className="text-lg font-semibold text-foreground">Dates bloquées</h3>
           <Button size="sm" className="min-h-10 w-full sm:w-auto sm:min-h-0" onClick={() => setShowBlockForm(!showBlockForm)}>
             <Plus className="w-4 h-4 mr-2" />
-            {copy.blockDate}
+            Bloquer une date
           </Button>
         </div>
 
@@ -1090,7 +1031,7 @@ function AvailabilityTab() {
           <div className="bg-card border border-border rounded-lg p-4 mb-4">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
               <div>
-                <label className="text-sm text-muted-foreground block mb-1">{copy.date}</label>
+                <label className="text-sm text-muted-foreground block mb-1">Date</label>
                 <input
                   type="date"
                   className="w-full px-3 py-2 rounded-lg bg-background border border-border text-foreground"
@@ -1099,16 +1040,16 @@ function AvailabilityTab() {
                 />
               </div>
               <div>
-                <label className="text-sm text-muted-foreground block mb-1">{copy.reason}</label>
+                <label className="text-sm text-muted-foreground block mb-1">Raison (optionnel)</label>
                 <input
                   className="w-full px-3 py-2 rounded-lg bg-background border border-border text-foreground"
                   value={blockForm.reason}
                   onChange={(e) => setBlockForm({ ...blockForm, reason: e.target.value })}
-                  placeholder={copy.reasonPlaceholder}
+                  placeholder="Congés, formation..."
                 />
               </div>
               <Button className="min-h-11 w-full md:w-auto md:min-h-0" onClick={() => blockDate.mutate(blockForm)} disabled={blockDate.isPending || !blockForm.date}>
-                {copy.block}
+                Bloquer
               </Button>
             </div>
           </div>
@@ -1117,23 +1058,22 @@ function AvailabilityTab() {
         <div className="space-y-2">
           {blockedDates?.map((bd) => (
             <div key={bd.id} className="bg-card border border-border rounded-lg p-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <div className="min-w-0 flex flex-col gap-1 sm:flex-row sm:items-center">
-                <span className="break-words font-medium text-foreground">{new Date(bd.date + "T00:00:00").toLocaleDateString(locale, { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</span>
-                {bd.reason && <span className="break-words text-sm text-muted-foreground sm:ml-3">{bd.reason}</span>}
+              <div className="flex flex-col gap-1 sm:flex-row sm:items-center">
+                <span className="font-medium text-foreground">{new Date(bd.date + "T00:00:00").toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</span>
+                {bd.reason && <span className="text-sm text-muted-foreground ml-3">{bd.reason}</span>}
               </div>
               <Button
                 size="sm"
                 variant="ghost"
+                className="min-h-10 self-start sm:min-h-0"
                 onClick={() => unblockDate.mutate({ id: bd.id })}
-                className="min-h-10 w-full self-stretch sm:w-auto sm:self-start sm:min-h-0"
-                aria-label={copy.unblockDate}
               >
                 <XCircle className="w-4 h-4 text-red-400" />
               </Button>
             </div>
           ))}
           {(!blockedDates || blockedDates.length === 0) && (
-            <AdminEmptyState icon={CalendarDays} title={copy.blockedEmptyTitle} description={copy.blockedEmptyDescription} />
+            <p className="text-muted-foreground text-center py-4">Aucune date bloquée</p>
           )}
         </div>
       </section>

@@ -9,6 +9,6 @@ export function findTranslationLengthIssues(
   maxLength: number,
 ): TranslationLengthIssue[] {
   return Object.entries(labels)
-    .map(([key, value]) => ({ key, length: Array.from(value).length, maxLength }))
-    .filter(({ length }) => length > maxLength);
+    .filter(([, value]) => value.length > maxLength)
+    .map(([key, value]) => ({ key, length: value.length, maxLength }));
 }

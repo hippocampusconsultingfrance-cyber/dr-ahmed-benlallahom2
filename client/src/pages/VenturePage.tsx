@@ -9,10 +9,10 @@ import Footer from "@/components/Footer";
 import { SEOHead } from "@/components/SEOHead";
 
 export const venturePageCopy = {
-  fr: { notFound: "Page non trouvée", home: "Accueil", homeBack: "Retour à l'accueil", visit: "Visiter le site web", leadership: "Direction", services: "Services & Expertises", highlights: "Informations clés", back: "Retour aux entreprises", others: "Autres entreprises", logo: "logo" },
-  en: { notFound: "Page not found", home: "Home", homeBack: "Back to home", visit: "Visit website", leadership: "Leadership team", services: "Services & expertise", highlights: "Key information", back: "Back to ventures", others: "Other ventures", logo: "logo" },
-  de: { notFound: "Seite nicht gefunden", home: "Startseite", homeBack: "Zur Startseite", visit: "Website besuchen", leadership: "Leitungsteam", services: "Leistungen & Expertise", highlights: "Wichtige Informationen", back: "Zurück zu den Unternehmen", others: "Weitere Unternehmen", logo: "Logo" },
-  zh: { notFound: "页面未找到", home: "首页", homeBack: "返回首页", visit: "访问网站", leadership: "管理团队", services: "服务与专长", highlights: "关键信息", back: "返回企业列表", others: "其他企业", logo: "徽标" },
+  fr: { notFound: "Page non trouvée", home: "Accueil", homeBack: "Retour à l'accueil", visit: "Visiter le site web", leadership: "Direction", services: "Services & Expertises", highlights: "Informations clés", back: "Retour aux entreprises", others: "Autres entreprises" },
+  en: { notFound: "Page not found", home: "Home", homeBack: "Back to home", visit: "Visit website", leadership: "Leadership team", services: "Services & expertise", highlights: "Key information", back: "Back to ventures", others: "Other ventures" },
+  de: { notFound: "Seite nicht gefunden", home: "Startseite", homeBack: "Zur Startseite", visit: "Website besuchen", leadership: "Leitungsteam", services: "Leistungen & Expertise", highlights: "Wichtige Informationen", back: "Zurück zu den Unternehmen", others: "Weitere Unternehmen" },
+  zh: { notFound: "页面未找到", home: "首页", homeBack: "返回首页", visit: "访问网站", leadership: "管理团队", services: "服务与专长", highlights: "关键信息", back: "返回企业列表", others: "其他企业" },
 } as const;
 
 export default function VenturePage() {
@@ -74,7 +74,7 @@ export default function VenturePage() {
               <div className="mb-6">
                 <img
                   src={venture.logo}
-                  alt={`${venture.company} ${copy.logo}`}
+                  alt={`${venture.company} logo`}
                   className="h-16 sm:h-20 w-auto object-contain"
                 />
               </div>

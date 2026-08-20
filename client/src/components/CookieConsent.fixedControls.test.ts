@@ -30,14 +30,4 @@ describe("coordination des contrôles fixes", () => {
     expect(source).toContain("const closePreferences = () => {");
     expect(source).toContain("onClick={closePreferences}");
   });
-
-  it("retire le bouton WhatsApp lorsque le bandeau cookies prioritaire est ouvert", async () => {
-    const css = await import("node:fs/promises").then(fs =>
-      fs.readFile(new URL("../index.css", import.meta.url), "utf8")
-    );
-
-    expect(css).toContain('html[data-cookie-banner-open="true"] .whatsapp-contact-float');
-    expect(css).toContain("display: none;");
-    expect(css).toContain("max-height: min(46vh, 22rem);");
-  });
 });

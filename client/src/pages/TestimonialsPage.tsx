@@ -122,7 +122,7 @@ export default function TestimonialsPage() {
   }, [testimonials, currentContent]);
 
   return (
-    <div data-visual-state={loading ? "loading" : "resolved"} className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-950 pt-24 pb-16">
+    <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-950 pt-24 pb-16">
       <SEOHead
         title={currentContent.title}
         description={currentContent.subtitle}

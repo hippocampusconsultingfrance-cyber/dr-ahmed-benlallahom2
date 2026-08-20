@@ -1,7 +1,7 @@
 export type FaqLocale = "fr" | "en" | "de" | "zh";
 
 export type FaqEntry = { question: string; answer: string };
-export type FaqContent = { eyebrow: string; title: string; description: string; note: string; booking: string; recruitment: string; humanReview: string; entries: FaqEntry[] };
+export type FaqContent = { eyebrow: string; title: string; description: string; note: string; booking: string; entries: FaqEntry[] };
 
 const faq: Record<FaqLocale, FaqContent> = {
   fr: {
@@ -10,8 +10,6 @@ const faq: Record<FaqLocale, FaqContent> = {
     description: "Retrouvez les informations essentielles sur la consultation, la réservation, la confidentialité et les parcours Hippocampus Consulting.",
     note: "Cette page donne des informations pratiques et ne remplace pas un avis médical personnalisé ni les services d’urgence.",
     booking: "Réserver une consultation",
-    recruitment: "Hippocampus Consulting",
-    humanReview: "Hippocampus Consulting · revue humaine obligatoire pour le recrutement",
     entries: [
       { question: "À quoi sert la consultation en santé ?", answer: "La consultation permet d’échanger sur votre demande dans un cadre professionnel. Elle ne constitue pas un service d’urgence et ne remplace pas une prise en charge immédiate." },
       { question: "Quelle est la durée et le tarif d’une consultation ?", answer: "La durée habituelle est de 30 minutes. Le tarif de base est de 100 € ; entre 18 h et 8 h, le tarif majoré est de 150 €." },
@@ -27,8 +25,6 @@ const faq: Record<FaqLocale, FaqContent> = {
     description: "Find essential information about consultations, booking, confidentiality and Hippocampus Consulting pathways.",
     note: "This page provides practical information. It does not replace personalised medical advice or emergency services.",
     booking: "Book a consultation",
-    recruitment: "Hippocampus Consulting",
-    humanReview: "Hippocampus Consulting · human review is mandatory for recruitment",
     entries: [
       { question: "What is the purpose of a health consultation?", answer: "A consultation provides a professional setting to discuss your request. It is not an emergency service and does not replace immediate care." },
       { question: "How long is a consultation and what does it cost?", answer: "A standard consultation lasts 30 minutes. The base fee is €100; between 6 pm and 8 am, the enhanced fee is €150." },
@@ -44,8 +40,6 @@ const faq: Record<FaqLocale, FaqContent> = {
     description: "Hier finden Sie wichtige Informationen zu Beratung, Buchung, Vertraulichkeit und den Angeboten von Hippocampus Consulting.",
     note: "Diese Seite bietet praktische Informationen. Sie ersetzt weder eine persönliche medizinische Beratung noch den Notdienst.",
     booking: "Beratung buchen",
-    recruitment: "Hippocampus Consulting",
-    humanReview: "Hippocampus Consulting · menschliche Prüfung ist für Recruiting verpflichtend",
     entries: [
       { question: "Wozu dient die Gesundheitsberatung?", answer: "Die Beratung bietet einen professionellen Rahmen, um Ihr Anliegen zu besprechen. Sie ist kein Notdienst und ersetzt keine sofortige Versorgung." },
       { question: "Wie lange dauert eine Beratung und was kostet sie?", answer: "Eine Standardberatung dauert 30 Minuten. Der Grundpreis beträgt 100 €; zwischen 18 und 8 Uhr beträgt der erhöhte Preis 150 €." },
@@ -61,8 +55,6 @@ const faq: Record<FaqLocale, FaqContent> = {
     description: "了解咨询、预约、保密和 Hippocampus Consulting 服务流程的必要信息。",
     note: "本页仅提供实用信息，不能替代个性化医疗意见或紧急服务。",
     booking: "预约咨询",
-    recruitment: "Hippocampus Consulting",
-    humanReview: "Hippocampus Consulting · 招聘必须进行人工审核",
     entries: [
       { question: "健康咨询的用途是什么？", answer: "咨询为讨论您的需求提供专业环境。它不是紧急服务，也不能替代即时医疗照护。" },
       { question: "咨询时长和费用是多少？", answer: "标准咨询时长为 30 分钟。基础费用为 100 欧元；18 时至 8 时的加价费用为 150 欧元。" },

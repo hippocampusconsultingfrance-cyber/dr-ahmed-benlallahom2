@@ -7,7 +7,6 @@ import { Card } from "@/components/ui/card";
 import Breadcrumb from "@/components/Breadcrumb";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { SEOHead } from "@/components/SEOHead";
-import { getLocalizedCopy } from "@/lib/getLocalizedCopy";
 
 export const confirmationContent = {
   fr: {
@@ -39,7 +38,6 @@ export const confirmationContent = {
     newBooking: "Retour à la réservation",
     email: "Un email vous sera envoyé",
     invoice: "Facture PDF incluse",
-    invoiceDelivery: { title: "Facture transmise de façon sécurisée", description: "Votre facture PDF est envoyée en pièce jointe par email. Aucun document financier ni lien de téléchargement public n’est affiché sur cette page." },
     refund: {
       title: "Annulation et remboursement",
       text: "Une annulation demandée plus de 24 heures avant la consultation peut être éligible à un remboursement intégral selon les conditions applicables.",
@@ -75,7 +73,6 @@ export const confirmationContent = {
     newBooking: "Return to booking",
     email: "Email confirmation sent",
     invoice: "PDF invoice included",
-    invoiceDelivery: { title: "Invoice delivered securely", description: "Your PDF invoice is sent as an email attachment. No financial document or public download link is displayed on this page." },
     refund: {
       title: "Cancellation and refund",
       text: "A cancellation requested more than 24 hours before the consultation may be eligible for a full refund under the applicable terms.",
@@ -111,7 +108,6 @@ export const confirmationContent = {
     newBooking: "Zur Buchung zurück",
     email: "Bestätigung per E-Mail",
     invoice: "PDF-Rechnung enthalten",
-    invoiceDelivery: { title: "Rechnung sicher übermittelt", description: "Ihre PDF-Rechnung wird als E-Mail-Anhang versendet. Auf dieser Seite werden weder ein Finanzdokument noch ein öffentlicher Download-Link angezeigt." },
     refund: {
       title: "Stornierung und Rückerstattung",
       text: "Eine mehr als 24 Stunden vor der Beratung beantragte Stornierung kann nach den geltenden Bedingungen für eine vollständige Rückerstattung berechtigt sein.",
@@ -147,7 +143,6 @@ export const confirmationContent = {
     newBooking: "返回预约",
     email: "确认邮件将发送给您",
     invoice: "包含 PDF 发票",
-    invoiceDelivery: { title: "发票已安全发送", description: "您的 PDF 发票将作为电子邮件附件发送。本页面不会显示财务文件或公开下载链接。" },
     refund: {
       title: "取消与退款",
       text: "如果在咨询开始前超过 24 小时提出取消请求，根据适用条款，可能符合全额退款条件。",
@@ -167,7 +162,7 @@ export function getBookingConfirmationState(status: string | null): BookingConfi
 export default function BookingConfirmationPage() {
   const { language } = useLanguage();
   useLocation();
-  const copy = getLocalizedCopy(confirmationContent, language, "en");
+  const copy = confirmationContent[language as keyof typeof confirmationContent] ?? confirmationContent.en;
   const params = new URLSearchParams(window.location.search);
   const paymentState = getBookingConfirmationState(params.get("status"));
   const canceled = paymentState === "canceled";
@@ -227,7 +222,6 @@ export default function BookingConfirmationPage() {
         </section>
 
         {paymentConfirmed && (
-        <>
         <section className="grid md:grid-cols-3 gap-4 mt-6" aria-label={copy.stepsTitle}>
           {[
             { icon: Mail, label: copy.email },
@@ -240,16 +234,6 @@ export default function BookingConfirmationPage() {
             </Card>
           ))}
         </section>
-        <Card className="mt-4 border-primary/25 bg-primary/5 p-5" aria-label={copy.invoiceDelivery.title}>
-          <div className="flex items-start gap-4">
-            <FileText className="mt-0.5 h-6 w-6 shrink-0 text-primary" aria-hidden="true" />
-            <div>
-              <h2 className="font-display text-lg font-semibold">{copy.invoiceDelivery.title}</h2>
-              <p className="mt-2 text-sm leading-6 text-muted-foreground">{copy.invoiceDelivery.description}</p>
-            </div>
-          </div>
-        </Card>
-        </>
         )}
 
         <section className="confirmation-next-steps mt-8">

@@ -88,8 +88,7 @@
 - [x] Créer les procédures tRPC pour gérer les avis (testimonials.list)
 - [x] Créer le composant TestimonialsSection pour la page d'accueil
 - [x] Créer la page dédiée Testimonials avec tous les avis et filtrage par note
-- [x] Instruction historique d’avis de démonstration remplacée : tous les avis fictifs ont été retirés ; seuls les témoignages validés sont conservés
-- [x] Retirer les données de témoignages fictifs et empêcher leur recréation par les tests
+- [x] Ajouter les avis de démonstration multilingues (FR, EN, DE, ZH) - 10 avis total
 - [x] Ajouter le Review Schema (JSON-LD) pour Google Rich Snippets
 - [x] Intégrer tRPC dans les composants frontend
 - [x] Ajouter support du schéma structuré au composant SEOHead
@@ -178,90 +177,31 @@
 ## Améliorations graphiques avancées à planifier
 
 - [x] Créer un système de design documenté avec tokens de couleur, typographie, espacements et composants
-- [ ] Créer une bibliothèque de visuels médicaux authentiques avec droits d’utilisation et textes alternatifs : manifeste d’intégration prêt, assets authentiques autorisés encore à fournir ou valider
-- [x] Préparer le manifeste d’intégration des visuels médicaux authentiques et autorisés
+- [ ] Créer une bibliothèque de visuels médicaux authentiques avec droits d’utilisation et textes alternatifs
 - [x] Ne pas développer la page Blog : la section Actualités et ses routes publiques restent désactivées à la demande du propriétaire
-- [x] Vérifier les états vides des témoignages, de la réservation, des Briefs Employeurs, du Mailing, du Vivier, de la revue documentaire et du panneau administratif partagé ; le Blog restant désactivé
-- [x] Vérifier par test et documenter composant par composant les états vides des parcours explicitement couverts, le Blog restant désactivé
-- [x] Recenser et vérifier les états vides de tous les onglets racine actifs du tableau de bord administratif
-- [x] Ajouter une non-régression explicite de l’état sans candidature du tableau Recrutement
-- [x] Localiser le titre de l’état d’erreur administratif partagé en FR/EN/DE/ZH
-- [x] Localiser les libellés de chargement et les états vides des onglets administratifs historiques en FR/EN/DE/ZH
-- [x] Localiser l’en-tête, le sélecteur de section et les onglets du tableau de bord administratif en FR/EN/DE/ZH
-- [x] Localiser les états de connexion, accès refusé et validation MFA du tableau de bord administratif en FR/EN/DE/ZH
-- [x] Localiser les indicateurs et raccourcis de la vue d’ensemble administrative en FR/EN/DE/ZH
-- [x] Localiser les filtres, statuts, agenda et actions de l’onglet Réservations administratif en FR/EN/DE/ZH
-- [x] Localiser le chargement, compteur, action de lecture, état vide et horodatage de l’onglet Messages administratif en FR/EN/DE/ZH
-- [x] Localiser les types, statuts, actions, état vide et horodatage de l’onglet Demandes RGPD administratif en FR/EN/DE/ZH
-- [x] Localiser les statuts, actions, confirmation et état vide de l’onglet Témoignages administratif en FR/EN/DE/ZH
-- [x] Localiser les créneaux, dates bloquées, formulaires, actions et états vides de l’onglet Disponibilités administratif en FR/EN/DE/ZH
-- [x] Localiser les statuts, filtres, actions et état vide du tableau Candidatures administratif en FR/EN/DE/ZH
-- [x] Localiser le bloc d’en-tête, les filtres, les statuts de candidature et l’état vide du tableau Candidatures
-- [x] Localiser les actions CV et le compositeur d’email du tableau Candidatures
-- [x] Localiser les détails d’analyse, de fichier et de lecture IA du tableau Candidatures
-- [x] Localiser les sections, actions et états vides de la fiche Candidate 360° en FR/EN/DE/ZH
-- [x] Localiser les indicateurs et états du pilotage Recrutement administratif en FR/EN/DE/ZH
-- [x] Remplacer les états vides textuels des onglets Témoignages et Disponibilités par le panneau administratif illustré partagé
-- [x] Ajouter un état vide illustré au carrousel de témoignages partenaires
-- [x] Ajouter un repère illustré et accessible aux états de disponibilité de réservation
-- [x] Ajouter une couverture de non-régression des états vides de Vivier et de la revue administrative des documents candidats
-- [x] Documenter composant par composant les états vides actifs vérifiés et les parcours hors périmètre
+- [ ] Ajouter des états vides illustrés pour le blog, les témoignages, les disponibilités et le dashboard
 - [x] Ajouter un skeleton de chargement cohérent et accessible aux témoignages publics
 - [x] Ajouter des skeletons de chargement cohérents aux autres parcours encore en spinner seul : vivier, fiche candidat 360°, dashboard recrutement et sections admin
 - [x] Auditer tous les états de chargement restants et réserver les spinners aux actions instantanées ou boutons en cours d’envoi
 - [x] Ajouter une page de confirmation de réservation plus complète et rassurante
 - [x] Ajouter une page FAQ visuelle sans conseils médicaux personnalisés
 - [x] Ajouter des composants graphiques de confiance pour le paiement, la confidentialité et la disponibilité
-- [x] Ajouter des tests visuels automatisés sur les pages critiques
-- [x] Étendre les tests visuels automatisés à la confirmation de paiement sécurisée, en desktop et mobile
-- [x] Étendre les tests visuels automatisés à la page Presse institutionnelle, en desktop et mobile
-- [x] Étendre les tests visuels automatisés à la FAQ publique, en desktop et mobile
-- [x] Étendre les tests visuels automatisés à la page Témoignages validés, en desktop et mobile
-- [x] Stabiliser la capture visuelle asynchrone des témoignages validés
-- [x] Étendre les tests visuels automatisés à la page Recherche interne, en desktop et mobile
-- [x] Étendre les tests visuels automatisés à la page 404 publique, en desktop et mobile
-- [x] Étendre les tests visuels automatisés aux Mentions légales, en desktop et mobile
-- [x] Étendre les tests visuels automatisés à la page RGPD en desktop et mobile
-- [x] Étendre les tests visuels automatisés aux routes Pourquoi Hippocampus, Recrutement standard, missions VVIP, venture institutionnelle, désinscription recrutement et page d’erreur, en desktop et mobile
-- [x] Capturer et vérifier les parcours Accueil, Réservation, RGPD, Recrutement et Employeurs en vue bureau
-- [x] Capturer et vérifier les parcours Accueil, Réservation, RGPD, Recrutement et Employeurs en vue mobile
-- [x] Capturer et vérifier les parcours Accueil, Réservation, RGPD, Recrutement et Employeurs aux formats desktop et mobile
-- [x] Documenter les tests clavier, lecteur d’écran, contraste renforcé et zoom à 200 % nécessitant un appareil réel
-- [x] Vérifier la longueur des textes et des boutons dans FR, EN, DE et ZH : garde-fous Unicode et scénarios visuels allemands/chinois sur les parcours à risque
-- [x] Améliorer la version mobile du dashboard administrateur : navigation compacte et reflow des contenus denses validés sur les onglets actifs ; recette sur appareil réel/MFA tracée dans `EXTERNAL_VALIDATION_REGISTER.md`
-- [x] Améliorer le reflow des créneaux et dates bloquées dans l’onglet Disponibilités
-- [x] Améliorer le reflow des cartes de témoignages administratives sur mobile
-- [x] Améliorer le reflow des indicateurs et événements de sécurité sur mobile
-- [x] Améliorer le reflow des audiences et historiques de campagne Mailing sur mobile
-- [x] Améliorer le reflow des filtres, actions et cartes du Vivier sur mobile
-- [x] Améliorer le reflow des cartes et shortlist des Briefs Employeurs sur mobile
-- [x] Améliorer le reflow des indicateurs et alertes de pilotage Recrutement sur mobile
-- [x] Améliorer le reflow des sections et actions de la fiche Candidate 360° sur mobile
-- [x] Renforcer le reflow mobile des en-têtes, badges et coordonnées dans les listes administratives historiques
-- [x] Auditer et ajuster les tableaux de candidatures, réservations et fichiers candidats pour une lecture mobile sans débordement
-- [x] Agrandir et répartir les actions du tableau Candidatures pour une utilisation tactile sans débordement
-- [x] Auditer et ajuster la revue administrative des fichiers candidats pour une lecture mobile sans débordement
+- [ ] Ajouter des tests visuels automatisés sur les pages critiques
+- [ ] Tester clavier, lecteur d’écran, contraste renforcé et zoom à 200 %
+- [ ] Vérifier la longueur des textes et des boutons dans FR, EN, DE et ZH
+- [ ] Améliorer la version mobile du dashboard administrateur : navigation compacte terminée, adaptation des contenus denses restante
 - [x] Ajouter un mode haute lisibilité et une gestion complète de prefers-reduced-motion
 - [x] Ajouter une page d’erreur serveur et une page de maintenance cohérentes avec la marque
 - [x] Documenter le kit de marque : logo, couleurs, typographies, icônes et règles d’utilisation
 - [x] Harmoniser les modèles d’emails avec l’identité visuelle du site
-- [ ] Ajouter une prévisualisation graphique de facture dans un espace client authentifié : prérequis de confidentialité identifié ; ne pas exposer de facture via une page publique
-- [x] Ajouter un statut graphique de livraison sécurisée de facture sur la confirmation de paiement
+- [ ] Ajouter une prévisualisation graphique de facture dans l’espace client
 - [x] Ajouter des illustrations originales sans texte pour les services et les étapes de réservation
 - [x] Ajouter une non-régression confirmant que les illustrations Services et Réservation restent décoratives et correctement intégrées
-- [x] Exécuter de façon autonome les améliorations restantes réalisables et documenter sans blocage les contrôles nécessitant un appareil ou un service externe : tâches réalisables exécutées ; seuls les assets autorisés, droits tiers, accès client authentifié et validations écrites restent conditionnels et tracés dans leurs registres
-- [x] Centraliser les validations externes restantes avec leurs preuves attendues et conditions de clôture
-- [ ] Vérifier les droits sur les photographies, logos, illustrations et visuels externes : registre créé ; autorisations écrites de tiers encore à archiver
-- [x] Créer un registre de provenance et de preuves requises pour les actifs visuels publics
-- [x] Mettre en place une revue graphique trimestrielle et une checklist avant publication
-- [x] Centraliser les libellés d’interface restants afin d’éviter les chaînes de texte hardcodées : deuxième lot Contact/RGPD migré vers le catalogue partagé `publicFormCopy.ts`
-- [x] Standardiser le repli sûr des contenus multilingues des confirmations publiques
-- [x] Réutiliser le repli multilingue typé dans les pages Ressources et Presse
-- [x] Réutiliser le repli multilingue typé dans Candidate 360° et le pilotage Recrutement
-- [x] Centraliser les libellés publics de Navigation et Footer dans un catalogue multilingue partagé
-- [x] Centraliser les libellés de lisibilité renforcée et de noir OLED dans le catalogue public partagé
-- [x] Ajouter une stratégie de compression et de recadrage responsive des images : variantes WebP 640/1280, `srcSet`, `sizes` et absence de recadrage destructif pour les illustrations sources disponibles
-- [x] Ajouter le décodage asynchrone et une non-régression de chargement aux illustrations publiques décoratives
+- [ ] Exécuter de façon autonome les améliorations restantes réalisables et documenter sans blocage les contrôles nécessitant un appareil ou un service externe
+- [ ] Vérifier les droits sur les photographies, logos, illustrations et visuels externes
+- [ ] Mettre en place une revue graphique trimestrielle et une checklist avant publication
+- [ ] Centraliser les libellés d’interface afin d’éviter les chaînes de texte hardcodées
+- [ ] Ajouter une stratégie de compression et de recadrage responsive des images
 - [x] Vérifier et compléter la navigation clavier sur menus, carrousels, modales et contrôles de réservation
 - [x] Ajouter des tests comportementaux ciblés couvrant la fermeture par Échap du dialogue partagé et les actions d’annulation des confirmations actives
 - [x] Documenter composant par composant la couverture clavier effective des menus, carrousel, dialogues et contrôles de réservation
@@ -273,57 +213,46 @@
 - [x] Ajouter des tests ciblés couvrant les états de réservation sur BookingPage ainsi que les états success/canceled/unknown de BookingConfirmationPage
 - [x] Compléter le journal d’audit avec une vérification explicite, parcours par parcours, des feedbacks visuels Contact, Réservation, Paiement et RGPD en distinguant succès et erreur
 - [x] Ajouter une version imprimable et accessible des pages légales, RGPD et FAQ
-- [x] Documenter la recette du rendu sur Chrome, Safari et Firefox : Chromium est automatisé ; Firefox et Safari exigent une validation réelle sur appareils compatibles
+- [ ] Vérifier le rendu sur Chrome, Safari et Firefox
 - [x] Vérifier la coexistence du bandeau cookies, du bouton WhatsApp et de la navigation mobile
-- [x] Auditer fichier par fichier tous les visuels médicaux actifs sur les parcours publics et ventures afin de confirmer l’absence de promesse thérapeutique
-- [x] Construire un inventaire asset par asset des visuels médicaux publics et vérifier localement leurs contextes adjacents par test
-- [x] Vérifier que les contenus longs en allemand et chinois ne débordent pas des composants : captures automatisées Réservation/Ressources en desktop et mobile
-- [x] Étendre les tests de longueur aux libellés publics critiques des quatre langues actives
+- [ ] Auditer fichier par fichier tous les visuels médicaux actifs sur les parcours publics et ventures afin de confirmer l’absence de promesse thérapeutique
+- [ ] Construire un inventaire asset par asset des visuels médicaux publics et vérifier localement leurs contextes adjacents par test
+- [ ] Vérifier que les contenus longs en allemand et chinois ne débordent pas des composants
 - [x] Vérifier l’alignement des titres, CTA et formulaires sur desktop, tablette et mobile
-- [x] Ajouter une procédure de revue UX basée sur les retours utilisateurs réels, consentis et anonymisés
+- [ ] Ajouter une procédure de revue UX basée sur les retours utilisateurs réels
 - [x] Ne pas ajouter de visuels de partage social pour le Blog : aucune page ni aucun article Actualités n’est publié
 - [x] Ajouter des descriptions alternatives précises et contextuelles à toutes les images
-- [x] Ajouter une page de présentation Hippocampus Consulting avec une mise en page éditoriale
-- [x] Ajouter une non-régression de route, contenu et CTAs pour la page Pourquoi Hippocampus
-- [x] Ajouter une page Ressources Médicales avec cartes, filtres et accès contrôlé aux documents institutionnels externes
-- [x] Ajouter une page Presse ou Publications uniquement avec contenus vérifiables
-- [ ] Ajouter une page Partenaires uniquement après autorisation écrite des organisations concernées : registre de validation préparé dans `PARTNER_PUBLICATION_REGISTER.md`
-- [x] Préparer le registre de validation préalable à toute publication de partenaire
+- [ ] Ajouter une page de présentation Hippocampus Consulting avec une mise en page éditoriale
+- [ ] Ajouter une page Ressources Médicales avec cartes, filtres et téléchargements contrôlés
+- [ ] Ajouter une page Presse ou Publications uniquement avec contenus vérifiables
+- [ ] Ajouter une page Partenaires uniquement après autorisation écrite des organisations concernées
 - [x] Ne pas étendre la gestion éditoriale Blog : le module Actualités reste retiré du produit public
 - [x] Ne pas ajouter d’aperçu de publication Blog tant que le module Actualités reste désactivé
 - [x] Ne pas ajouter de progression de lecture pour des articles Blog non publiés
 - [x] Ne pas ajouter de recherche Blog tant que la section Actualités reste désactivée
 - [x] Ne pas ajouter de filtres de catégories Blog tant que la section Actualités reste désactivée
-- [x] Vérifier et maintenir une grille responsive commune sur les pages publiques prioritaires
-- [x] Ajouter une non-régression des conteneurs et grilles communs sur les pages publiques prioritaires
-- [x] Ajouter une animation de transition de page courte et désactivable
-- [x] Ajouter une enveloppe de route avec transition courte, désactivée en mouvement réduit et lisibilité renforcée
-- [x] Ajouter un contrôle de taille de police sans rupture de mise en page
-- [x] Ajouter un test comportemental de persistance et d’application du mode lisibilité renforcée
-- [x] Ajouter un composant de citation médicale avec source et date de mise à jour
-- [x] Ajouter un composant accessible de citation médicale avec lien source, date et avertissement contextuel
+- [ ] Ajouter une grille responsive commune à toutes les pages publiques
+- [ ] Ajouter une animation de transition de page courte et désactivable
+- [ ] Ajouter un contrôle de taille de police sans rupture de mise en page
+- [ ] Ajouter un composant de citation médicale avec source et date de mise à jour
 - [x] Ajouter une notice visible indiquant que le site ne remplace pas les urgences médicales
-- [x] Vérifier l’accessibilité des couleurs cyan, gris et doré sur les deux thèmes
-- [x] Ajouter un test automatisé de contraste pour les paires de tokens textuels et interactifs des thèmes clair et sombre
-- [x] Évaluer la réduction des effets décoratifs sur les formulaires et pages légales
-- [x] Réduire les animations de fond non essentielles des formulaires et pages légales lorsque la lisibilité renforcée est active
-- [x] Préparer un kit de marque exportable pour les documents et réseaux sociaux
-- [x] Mettre en place une validation graphique avant chaque checkpoint
-- [x] Ajouter une documentation d’utilisation des composants pour les futures évolutions
+- [ ] Vérifier l’accessibilité des couleurs cyan, gris et doré sur les deux thèmes
+- [ ] Évaluer la réduction des effets décoratifs sur les formulaires et pages légales
+- [ ] Préparer un kit de marque exportable pour les documents et réseaux sociaux
+- [ ] Mettre en place une validation graphique avant chaque checkpoint
+- [ ] Ajouter une documentation d’utilisation des composants pour les futures évolutions
 - [x] Ajouter des tests de non-régression pour le changement de langue et de thème
 - [x] Ajouter des tests de longueur de traduction pour les boutons et titres critiques de navigation
 - [x] Renforcer le clavier du sélecteur de langue et du menu mobile avec fermeture Échap et gestion du focus
 - [x] Réduire les animations décoratives lorsque le navigateur signale une connexion en économie de données
 - [x] Adapter les cartes, listes et actions des onglets admin principaux pour petits écrans avec empilement, espacements et CTA lisibles
-- [x] Documenter la recette du dashboard administrateur sur mobile réel/tablette : contrôle externe à exécuter avec session MFA autorisée et preuve à archiver dans `EXTERNAL_VALIDATION_REGISTER.md`
+- [ ] Vérifier visuellement le dashboard administrateur sur mobile réel/tablette et corriger débordements et actions difficiles à atteindre
 - [x] Ajouter des tests ciblés de non-régression pour la navigation et les sections admin critiques en mobile
 - [x] Ajouter un mode sans animation pour les connexions lentes et préférences utilisateur
 - [x] Ajouter un mode sombre optimisé pour les écrans OLED
-- [x] Vérifier les performances après ajout d’animations ou d’images
-- [x] Ajouter une non-régression conservant le chargement différé du tableau de bord administratif
-- [x] Préparer des visuels LinkedIn cohérents avec la marque : affiche 3:4 de recrutement international et légende de diffusion prête à publier
-- [x] Documenter la recette du rendu des e-mails HTML dans Gmail, Outlook et Apple Mail : contrôle externe à exécuter avec boîtes de test autorisées et preuve à archiver dans `EXTERNAL_VALIDATION_REGISTER.md`
-- [x] Renforcer la structure HTML des e-mails transactionnels pour la compatibilité multi-client
+- [ ] Vérifier les performances après ajout d’animations ou d’images
+- [ ] Préparer des visuels LinkedIn cohérents avec la marque
+- [ ] Vérifier le rendu des emails HTML dans Gmail, Outlook et Apple Mail
 - [x] Harmoniser les notifications de succès, avertissement et erreur
 - [x] Garantir que le contenu FAQ est entièrement visible à l’impression, y compris les panneaux d’accordéon fermés
 - [x] Ajouter une vérification ciblée que Legal, GDPR et FAQ exposent leur contenu utile en mode impression
@@ -337,249 +266,247 @@
 - [x] Ajouter des états d’erreur et états vides sobres et accessibles aux parcours administratifs prioritaires
 - [x] Ajouter une page de résultats de recherche interne accessible
 - [x] Vérifier l’impression des pages légales, RGPD et factures
-- [x] Documenter la recette de compatibilité avec un lecteur d’écran : contrôle externe sur NVDA, VoiceOver ou TalkBack et preuve à archiver dans `EXTERNAL_VALIDATION_REGISTER.md`
-- [x] Documenter la recette de navigation au clavier uniquement : contrôle externe sur navigateur réel et preuve à archiver dans `EXTERNAL_VALIDATION_REGISTER.md`
-- [x] Documenter la recette des pages à 200 % de zoom : contrôle externe sur navigateur réel et preuve à archiver dans `EXTERNAL_VALIDATION_REGISTER.md`
-- [x] Vérifier les textes et CTA dans les quatre langues : libellés critiques et scénarios de régression visuelle FR/DE/ZH couverts
-- [x] Vérifier le positionnement des éléments flottants sur petits écrans
-- [x] Ajouter une non-régression empêchant le chevauchement du bandeau cookies et du bouton WhatsApp
-- [x] Vérifier les états de chargement des appels tRPC : squelettes, erreurs localisées et paiement bloqué en cas d’indisponibilité
+- [ ] Vérifier la compatibilité avec un lecteur d’écran
+- [ ] Vérifier la navigation au clavier uniquement
+- [ ] Vérifier les pages à 200 % de zoom
+- [ ] Vérifier les textes et CTA dans les quatre langues
+- [ ] Vérifier le positionnement des éléments flottants sur petits écrans
+- [ ] Vérifier les états de chargement des appels tRPC
 - [x] Vérifier les états anti-double-clic du paiement
 - [x] Vérifier le rendu de la confirmation et de l’annulation de paiement
-- [x] Vérifier les messages de validation des formulaires dans les quatre langues
-- [x] Ajouter une non-régression couvrant succès, erreur et consentement des formulaires Contact, RGPD et Réservation en FR/EN/DE/ZH
+- [ ] Vérifier les messages de validation des formulaires dans les quatre langues
 - [x] Vérifier les messages d’erreur sans exposition de données sensibles
-- [x] Vérifier les liens de facture sur desktop et mobile : la facture est volontairement envoyée en pièce jointe PDF, sans lien public exposant un document financier
-- [x] Documenter la recette des notifications de rappel sur desktop et mobile : contrôle externe avec rendez-vous de test autorisé et preuve à archiver dans `EXTERNAL_VALIDATION_REGISTER.md`
-- [x] Documenter la clôture des écrans Blog et Disponibilités du dashboard sur tablette : Blog désactivé ; Disponibilités à vérifier avec session administrateur réelle selon `EXTERNAL_VALIDATION_REGISTER.md`
+- [ ] Vérifier les liens de facture sur desktop et mobile
+- [ ] Vérifier les notifications de rappel sur desktop et mobile
+- [ ] Vérifier les écrans Blog et Disponibilités du dashboard sur tablette
 - [x] Ajouter des contrôles clavier aux témoignages en carrousel
 - [x] Vérifier le contraste et la lisibilité du bandeau cookies
 - [x] Ajouter un lien permanent vers les préférences cookies, y compris après fermeture du bandeau sans choix explicite
 - [x] Vérifier que les traceurs non essentiels restent bloqués sans consentement
-- [x] Préparer une revue annuelle des traductions et de l’identité visuelle
-- [x] Préparer une revue annuelle de l’accessibilité et des performances
-- [x] Préparer une revue annuelle des droits sur les visuels et logos
-- [x] Préparer une revue annuelle des contenus médicaux et de leurs sources
-- [x] Préparer une revue annuelle des pages légales et RGPD
-- [x] Préparer une revue annuelle des modèles d’emails et factures
-- [x] Préparer une revue annuelle du parcours de réservation
-- [x] Préparer une revue annuelle des retours utilisateurs
-- [x] Préparer une revue annuelle de la cohérence entre le site, les emails et les réseaux sociaux
-- [x] Préparer une revue annuelle de la cohérence des tarifs et politiques affichés
-- [x] Préparer une revue annuelle du dashboard et des outils administrateur
-- [x] Préparer une revue annuelle des pages 404, maintenance et erreur serveur
-- [x] Préparer une revue annuelle des domaines, certificats et favicons
-- [x] Préparer une revue annuelle des données structurées et métadonnées sociales
-- [x] Préparer une revue annuelle du sitemap et des liens internes
-- [x] Préparer une revue annuelle des composants UI et dépendances visuelles
-- [x] Préparer une revue annuelle de la dette UX et des incohérences de navigation
-- [x] Préparer une revue annuelle de la sobriété numérique des images et animations
-- [x] Préparer une revue annuelle de la stratégie de contenu et des ressources téléchargeables
-- [x] Préparer une revue annuelle de la marque Hippocampus Consulting
-- [x] Préparer une revue annuelle du positionnement international FR/EN/DE/ZH
-- [x] Préparer une revue annuelle de la clarté des appels à l’action
-- [x] Préparer une revue annuelle des formulaires et messages d’aide
-- [x] Préparer une revue annuelle des états vides et erreurs
-- [x] Préparer une revue annuelle des composants accessibles
-- [x] Préparer une revue annuelle des animations et préférences de mouvement
-- [x] Préparer une revue annuelle des retours de paiement et réservation
-- [x] Préparer une revue annuelle des notifications email et SMS
-- [x] Préparer une revue annuelle des factures et documents générés
-- [x] Préparer une revue annuelle des ressources graphiques
-- [x] Préparer une revue annuelle de la documentation design
-- [x] Préparer une revue annuelle de la checklist de publication
-- [x] Préparer une revue annuelle des tests visuels et responsive
-- [x] Préparer une revue annuelle des anomalies graphiques signalées
-- [x] Préparer une revue annuelle des améliorations réellement utilisées par les visiteurs
-- [x] Préparer une revue annuelle des fonctionnalités à retirer si elles créent de la complexité
-- [x] Préparer une revue annuelle de la simplicité du parcours de réservation
-- [x] Préparer une revue annuelle de la lisibilité des mentions médicales
-- [x] Préparer une revue annuelle de la distinction entre information et conseil médical
-- [x] Préparer une revue annuelle de la clarté des limites de téléconsultation
-- [x] Préparer une revue annuelle de la visibilité des contacts d’urgence
-- [x] Préparer une revue annuelle de la clarté des conditions de remboursement
-- [x] Préparer une revue annuelle de la clarté des prix jour/nuit
-- [x] Préparer une revue annuelle de la clarté des durées de consultation
-- [x] Préparer une revue annuelle de la clarté des étapes de paiement
-- [x] Préparer une revue annuelle de la clarté des emails de confirmation
-- [x] Préparer une revue annuelle de la clarté du téléchargement de facture
-- [x] Préparer une revue annuelle de la clarté des rappels de rendez-vous
-- [x] Préparer une revue annuelle de la clarté des demandes RGPD
-- [x] Préparer une revue annuelle de la clarté du consentement cookies
-- [x] Préparer une revue annuelle de la clarté de la politique de confidentialité
-- [x] Préparer une revue annuelle de la clarté des mentions légales
-- [x] Préparer une revue annuelle de la clarté des conditions générales
-- [x] Préparer une revue annuelle de la clarté des contacts professionnels
-- [x] Préparer une revue annuelle de la clarté des coordonnées publiques
-- [x] Préparer une revue annuelle de la cohérence des noms et rôles des partenaires
-- [x] Préparer une revue annuelle de la cohérence des diplômes et certifications
-- [x] Préparer une revue annuelle de la cohérence des photographies professionnelles
-- [x] Préparer une revue annuelle de la cohérence des biographies
-- [x] Préparer une revue annuelle de la cohérence des traductions
-- [x] Préparer une revue annuelle de la cohérence des titres SEO
-- [x] Préparer une revue annuelle de la cohérence des descriptions Open Graph
-- [x] Préparer une revue annuelle de la cohérence des liens canoniques
-- [x] Préparer une revue annuelle de la cohérence des balises hreflang
-- [x] Préparer une revue annuelle de la cohérence des URLs
-- [x] Préparer une revue annuelle de la cohérence des breadcrumbs
-- [x] Préparer une revue annuelle de la cohérence de la page 404
-- [x] Préparer une revue annuelle de la cohérence du footer
-- [x] Préparer une revue annuelle de la cohérence du menu mobile
-- [x] Préparer une revue annuelle de la cohérence du sélecteur de langue
-- [x] Préparer une revue annuelle de la cohérence du sélecteur de thème
-- [x] Préparer une revue annuelle de la cohérence du bouton WhatsApp
-- [x] Préparer une revue annuelle de la cohérence du bouton Réserver
-- [x] Préparer une revue annuelle de la cohérence du bouton Contact
-- [x] Préparer une revue annuelle de la cohérence des boutons secondaires
-- [x] Préparer une revue annuelle de la cohérence des cartes
-- [x] Préparer une revue annuelle de la cohérence des icônes
-- [x] Préparer une revue annuelle de la cohérence des bordures
-- [x] Préparer une revue annuelle de la cohérence des rayons
-- [x] Préparer une revue annuelle de la cohérence des ombres
-- [x] Préparer une revue annuelle de la cohérence des espacements
-- [x] Préparer une revue annuelle de la cohérence des largeurs de contenu
-- [x] Préparer une revue annuelle de la cohérence des hauteurs de sections
-- [x] Préparer une revue annuelle de la cohérence des transitions
-- [x] Préparer une revue annuelle de la cohérence des états focus
-- [x] Préparer une revue annuelle de la cohérence des états hover
-- [x] Préparer une revue annuelle de la cohérence des états active
-- [x] Préparer une revue annuelle de la cohérence des états disabled
-- [x] Préparer une revue annuelle de la cohérence des états loading
-- [x] Préparer une revue annuelle de la cohérence des états error
-- [x] Préparer une revue annuelle de la cohérence des états success
-- [x] Préparer une revue annuelle de la cohérence des états empty
-- [x] Préparer une revue annuelle de la cohérence des skeletons
-- [x] Préparer une revue annuelle de la cohérence des toasts
-- [x] Préparer une revue annuelle de la cohérence des modales
-- [x] Préparer une revue annuelle de la cohérence des drawers
-- [x] Préparer une revue annuelle de la cohérence des menus déroulants
-- [x] Préparer une revue annuelle de la cohérence des calendriers
-- [x] Préparer une revue annuelle de la cohérence des carrousels
-- [x] Préparer une revue annuelle de la cohérence des formulaires
-- [x] Préparer une revue annuelle de la cohérence des tableaux
-- [x] Préparer une revue annuelle de la cohérence des graphiques
-- [x] Préparer une revue annuelle de la cohérence des badges
-- [x] Préparer une revue annuelle de la cohérence des avatars
-- [x] Préparer une revue annuelle de la cohérence des logos
-- [x] Préparer une revue annuelle de la cohérence des illustrations
-- [x] Préparer une revue annuelle de la cohérence des photographies
-- [x] Préparer une revue annuelle de la cohérence des vidéos
-- [x] Préparer une revue annuelle de la cohérence des sons
-- [x] Préparer une revue annuelle de la cohérence des documents PDF
-- [x] Préparer une revue annuelle de la cohérence des emails
-- [x] Préparer une revue annuelle de la cohérence des SMS
-- [x] Préparer une revue annuelle de la cohérence des notifications admin
-- [x] Préparer une revue annuelle de la cohérence des notifications client
-- [x] Préparer une revue annuelle de la cohérence des pages imprimables
-- [x] Préparer une revue annuelle de la cohérence des exports
-- [x] Préparer une revue annuelle de la cohérence des téléchargements
-- [x] Préparer une revue annuelle de la cohérence des partages
-- [x] Préparer une revue annuelle de la cohérence des aperçus sociaux
-- [x] Préparer une revue annuelle de la cohérence des résultats de recherche
-- [x] Préparer une revue annuelle de la cohérence des pages d’erreur
-- [x] Préparer une revue annuelle de la cohérence des pages de maintenance
-- [x] Préparer une revue annuelle de la cohérence des pages de statut
-- [x] Préparer une revue annuelle de la cohérence des pages d’aide
-- [x] Préparer une revue annuelle de la cohérence des pages FAQ
-- [x] Préparer une revue annuelle de la cohérence des pages ressources
-- [x] Préparer une revue annuelle de la cohérence des pages presse
-- [x] Préparer une revue annuelle de la cohérence des pages partenaires
-- [x] Préparer une revue annuelle de la cohérence des pages équipe
-- [x] Préparer une revue annuelle de la cohérence des pages entreprises
-- [x] Préparer une revue annuelle de la cohérence des pages formations
-- [x] Préparer une revue annuelle de la cohérence des pages services
-- [x] Préparer une revue annuelle de la cohérence des pages contact
-- [x] Préparer une revue annuelle de la cohérence des pages réservation
-- [x] Préparer une revue annuelle de la cohérence des pages testimonials
-- [x] Préparer une revue annuelle de la cohérence des pages blog
-- [x] Préparer une revue annuelle de la cohérence des pages légales
-- [x] Préparer une revue annuelle de la cohérence des pages RGPD
-- [x] Préparer une revue annuelle de la cohérence des pages admin
-- [x] Préparer une revue annuelle de la cohérence des routes publiques
-- [x] Préparer une revue annuelle de la cohérence des routes protégées
-- [x] Préparer une revue annuelle de la cohérence des redirections
-- [x] Préparer une revue annuelle de la cohérence des URLs canoniques
-- [x] Préparer une revue annuelle de la cohérence des liens internes
-- [x] Préparer une revue annuelle de la cohérence des liens externes
-- [x] Préparer une revue annuelle de la cohérence des liens de téléchargement
-- [x] Préparer une revue annuelle de la cohérence des liens de paiement
-- [x] Préparer une revue annuelle de la cohérence des liens de visioconférence
-- [x] Préparer une revue annuelle de la cohérence des liens de contact
-- [x] Préparer une revue annuelle de la cohérence des liens d’aide
-- [x] Préparer une revue annuelle de la cohérence des liens légaux
-- [x] Préparer une revue annuelle de la cohérence des liens sociaux
-- [x] Préparer une revue annuelle de la cohérence des liens partenaires
-- [x] Préparer une revue annuelle de la cohérence des liens ressources
-- [x] Préparer une revue annuelle de la cohérence des liens blog
-- [x] Préparer une revue annuelle de la cohérence des liens articles
-- [x] Préparer une revue annuelle de la cohérence des liens catégories
-- [x] Préparer une revue annuelle de la cohérence des liens tags
-- [x] Préparer une revue annuelle de la cohérence des liens pagination
-- [x] Préparer une revue annuelle de la cohérence des liens recherche
-- [x] Préparer une revue annuelle de la cohérence des liens filtres
-- [x] Préparer une revue annuelle de la cohérence des liens breadcrumbs
-- [x] Préparer une revue annuelle de la cohérence des liens navigation
-- [x] Préparer une revue annuelle de la cohérence des liens footer
-- [x] Préparer une revue annuelle de la cohérence des liens menu mobile
-- [x] Préparer une revue annuelle de la cohérence des liens langue
-- [x] Préparer une revue annuelle de la cohérence des liens thème
-- [x] Préparer une revue annuelle de la cohérence des liens cookies
-- [x] Préparer une revue annuelle de la cohérence des liens RGPD
-- [x] Préparer une revue annuelle de la cohérence des liens suppression
-- [x] Préparer une revue annuelle de la cohérence des liens export
-- [x] Préparer une revue annuelle de la cohérence des liens accès
-- [x] Préparer une revue annuelle de la cohérence des liens rectification
-- [x] Préparer une revue annuelle de la cohérence des liens opposition
-- [x] Préparer une revue annuelle de la cohérence des liens portabilité
-- [x] Préparer une revue annuelle de la cohérence des liens consentement
-- [x] Préparer une revue annuelle de la cohérence des liens politique confidentialité
-- [x] Préparer une revue annuelle de la cohérence des liens conditions générales
-- [x] Préparer une revue annuelle de la cohérence des liens mentions légales
-- [x] Préparer une revue annuelle de la cohérence des liens hébergeur
-- [x] Préparer une revue annuelle de la cohérence des liens sous-traitants
-- [x] Préparer une revue annuelle de la cohérence des liens CNIL
-- [x] Préparer une revue annuelle de la cohérence des liens Stripe
-- [x] Préparer une revue annuelle de la cohérence des liens Resend
-- [x] Préparer une revue annuelle de la cohérence des liens Manus
-- [x] Préparer une revue annuelle de la cohérence des liens support
-- [x] Préparer une revue annuelle de la cohérence des liens documentation
-- [x] Préparer une revue annuelle de la cohérence des liens statut
-- [x] Préparer une revue annuelle de la cohérence des liens monitoring
-- [x] Préparer une revue annuelle de la cohérence des liens incidents
-- [x] Préparer une revue annuelle de la cohérence des liens maintenance
-- [x] Préparer une revue annuelle de la cohérence des liens sauvegarde
-- [x] Préparer une revue annuelle de la cohérence des liens restauration
-- [x] Préparer une revue annuelle de la cohérence des liens audit
-- [x] Préparer une revue annuelle de la cohérence des liens sécurité
-- [x] Préparer une revue annuelle de la cohérence des liens conformité
-- [x] Préparer une revue annuelle de la cohérence des liens gouvernance
-- [x] Préparer une revue annuelle de la cohérence des liens risque
-- [x] Préparer une revue annuelle de la cohérence des liens qualité
-- [x] Préparer une revue annuelle de la cohérence des liens performance
-- [x] Préparer une revue annuelle de la cohérence des liens accessibilité
-- [x] Préparer une revue annuelle de la cohérence des liens design
-- [x] Préparer une revue annuelle de la cohérence des liens contenu
-- [x] Préparer une revue annuelle de la cohérence des liens traduction
-- [x] Préparer une revue annuelle de la cohérence des liens marque
-- [x] Préparer une revue annuelle de la cohérence des liens marketing
-- [x] Préparer une revue annuelle de la cohérence des liens réseau social
-- [x] Préparer une revue annuelle de la cohérence des liens LinkedIn
-- [x] Préparer une revue annuelle de la cohérence des liens WhatsApp
-- [x] Préparer une revue annuelle de la cohérence des liens email
-- [x] Préparer une revue annuelle de la cohérence des liens SMS
-- [x] Préparer une revue annuelle de la cohérence des liens téléphone
-- [x] Préparer une revue annuelle de la cohérence des liens adresse
-- [x] Préparer une revue annuelle de la cohérence des liens carte
-- [x] Préparer une revue annuelle de la cohérence des liens agenda
-- [x] Préparer une revue annuelle de la cohérence des liens calendrier
-- [x] Préparer une revue annuelle de la cohérence des liens rendez-vous
-- [x] Préparer une revue annuelle de la cohérence des liens consultation
-- [x] Préparer une revue annuelle de la cohérence des liens paiement
-- [x] Préparer une revue annuelle de la cohérence des liens remboursement
-- [x] Préparer une revue annuelle de la cohérence des liens facture
-- [x] Préparer une revue annuelle de la cohérence des liens rappel
-- [x] Préparer une revue annuelle de la cohérence des liens confirmation
-- [x] Préparer une revue annuelle de la cohérence des liens annulation
+- [ ] Préparer une revue annuelle des traductions et de l’identité visuelle
+- [ ] Préparer une revue annuelle de l’accessibilité et des performances
+- [ ] Préparer une revue annuelle des droits sur les visuels et logos
+- [ ] Préparer une revue annuelle des contenus médicaux et de leurs sources
+- [ ] Préparer une revue annuelle des pages légales et RGPD
+- [ ] Préparer une revue annuelle des modèles d’emails et factures
+- [ ] Préparer une revue annuelle du parcours de réservation
+- [ ] Préparer une revue annuelle des retours utilisateurs
+- [ ] Préparer une revue annuelle de la cohérence entre le site, les emails et les réseaux sociaux
+- [ ] Préparer une revue annuelle de la cohérence des tarifs et politiques affichés
+- [ ] Préparer une revue annuelle du dashboard et des outils administrateur
+- [ ] Préparer une revue annuelle des pages 404, maintenance et erreur serveur
+- [ ] Préparer une revue annuelle des domaines, certificats et favicons
+- [ ] Préparer une revue annuelle des données structurées et métadonnées sociales
+- [ ] Préparer une revue annuelle du sitemap et des liens internes
+- [ ] Préparer une revue annuelle des composants UI et dépendances visuelles
+- [ ] Préparer une revue annuelle de la dette UX et des incohérences de navigation
+- [ ] Préparer une revue annuelle de la sobriété numérique des images et animations
+- [ ] Préparer une revue annuelle de la stratégie de contenu et des ressources téléchargeables
+- [ ] Préparer une revue annuelle de la marque Hippocampus Consulting
+- [ ] Préparer une revue annuelle du positionnement international FR/EN/DE/ZH
+- [ ] Préparer une revue annuelle de la clarté des appels à l’action
+- [ ] Préparer une revue annuelle des formulaires et messages d’aide
+- [ ] Préparer une revue annuelle des états vides et erreurs
+- [ ] Préparer une revue annuelle des composants accessibles
+- [ ] Préparer une revue annuelle des animations et préférences de mouvement
+- [ ] Préparer une revue annuelle des retours de paiement et réservation
+- [ ] Préparer une revue annuelle des notifications email et SMS
+- [ ] Préparer une revue annuelle des factures et documents générés
+- [ ] Préparer une revue annuelle des ressources graphiques
+- [ ] Préparer une revue annuelle de la documentation design
+- [ ] Préparer une revue annuelle de la checklist de publication
+- [ ] Préparer une revue annuelle des tests visuels et responsive
+- [ ] Préparer une revue annuelle des anomalies graphiques signalées
+- [ ] Préparer une revue annuelle des améliorations réellement utilisées par les visiteurs
+- [ ] Préparer une revue annuelle des fonctionnalités à retirer si elles créent de la complexité
+- [ ] Préparer une revue annuelle de la simplicité du parcours de réservation
+- [ ] Préparer une revue annuelle de la lisibilité des mentions médicales
+- [ ] Préparer une revue annuelle de la distinction entre information et conseil médical
+- [ ] Préparer une revue annuelle de la clarté des limites de téléconsultation
+- [ ] Préparer une revue annuelle de la visibilité des contacts d’urgence
+- [ ] Préparer une revue annuelle de la clarté des conditions de remboursement
+- [ ] Préparer une revue annuelle de la clarté des prix jour/nuit
+- [ ] Préparer une revue annuelle de la clarté des durées de consultation
+- [ ] Préparer une revue annuelle de la clarté des étapes de paiement
+- [ ] Préparer une revue annuelle de la clarté des emails de confirmation
+- [ ] Préparer une revue annuelle de la clarté du téléchargement de facture
+- [ ] Préparer une revue annuelle de la clarté des rappels de rendez-vous
+- [ ] Préparer une revue annuelle de la clarté des demandes RGPD
+- [ ] Préparer une revue annuelle de la clarté du consentement cookies
+- [ ] Préparer une revue annuelle de la clarté de la politique de confidentialité
+- [ ] Préparer une revue annuelle de la clarté des mentions légales
+- [ ] Préparer une revue annuelle de la clarté des conditions générales
+- [ ] Préparer une revue annuelle de la clarté des contacts professionnels
+- [ ] Préparer une revue annuelle de la clarté des coordonnées publiques
+- [ ] Préparer une revue annuelle de la cohérence des noms et rôles des partenaires
+- [ ] Préparer une revue annuelle de la cohérence des diplômes et certifications
+- [ ] Préparer une revue annuelle de la cohérence des photographies professionnelles
+- [ ] Préparer une revue annuelle de la cohérence des biographies
+- [ ] Préparer une revue annuelle de la cohérence des traductions
+- [ ] Préparer une revue annuelle de la cohérence des titres SEO
+- [ ] Préparer une revue annuelle de la cohérence des descriptions Open Graph
+- [ ] Préparer une revue annuelle de la cohérence des liens canoniques
+- [ ] Préparer une revue annuelle de la cohérence des balises hreflang
+- [ ] Préparer une revue annuelle de la cohérence des URLs
+- [ ] Préparer une revue annuelle de la cohérence des breadcrumbs
+- [ ] Préparer une revue annuelle de la cohérence de la page 404
+- [ ] Préparer une revue annuelle de la cohérence du footer
+- [ ] Préparer une revue annuelle de la cohérence du menu mobile
+- [ ] Préparer une revue annuelle de la cohérence du sélecteur de langue
+- [ ] Préparer une revue annuelle de la cohérence du sélecteur de thème
+- [ ] Préparer une revue annuelle de la cohérence du bouton WhatsApp
+- [ ] Préparer une revue annuelle de la cohérence du bouton Réserver
+- [ ] Préparer une revue annuelle de la cohérence du bouton Contact
+- [ ] Préparer une revue annuelle de la cohérence des boutons secondaires
+- [ ] Préparer une revue annuelle de la cohérence des cartes
+- [ ] Préparer une revue annuelle de la cohérence des icônes
+- [ ] Préparer une revue annuelle de la cohérence des bordures
+- [ ] Préparer une revue annuelle de la cohérence des rayons
+- [ ] Préparer une revue annuelle de la cohérence des ombres
+- [ ] Préparer une revue annuelle de la cohérence des espacements
+- [ ] Préparer une revue annuelle de la cohérence des largeurs de contenu
+- [ ] Préparer une revue annuelle de la cohérence des hauteurs de sections
+- [ ] Préparer une revue annuelle de la cohérence des transitions
+- [ ] Préparer une revue annuelle de la cohérence des états focus
+- [ ] Préparer une revue annuelle de la cohérence des états hover
+- [ ] Préparer une revue annuelle de la cohérence des états active
+- [ ] Préparer une revue annuelle de la cohérence des états disabled
+- [ ] Préparer une revue annuelle de la cohérence des états loading
+- [ ] Préparer une revue annuelle de la cohérence des états error
+- [ ] Préparer une revue annuelle de la cohérence des états success
+- [ ] Préparer une revue annuelle de la cohérence des états empty
+- [ ] Préparer une revue annuelle de la cohérence des skeletons
+- [ ] Préparer une revue annuelle de la cohérence des toasts
+- [ ] Préparer une revue annuelle de la cohérence des modales
+- [ ] Préparer une revue annuelle de la cohérence des drawers
+- [ ] Préparer une revue annuelle de la cohérence des menus déroulants
+- [ ] Préparer une revue annuelle de la cohérence des calendriers
+- [ ] Préparer une revue annuelle de la cohérence des carrousels
+- [ ] Préparer une revue annuelle de la cohérence des formulaires
+- [ ] Préparer une revue annuelle de la cohérence des tableaux
+- [ ] Préparer une revue annuelle de la cohérence des graphiques
+- [ ] Préparer une revue annuelle de la cohérence des badges
+- [ ] Préparer une revue annuelle de la cohérence des avatars
+- [ ] Préparer une revue annuelle de la cohérence des logos
+- [ ] Préparer une revue annuelle de la cohérence des illustrations
+- [ ] Préparer une revue annuelle de la cohérence des photographies
+- [ ] Préparer une revue annuelle de la cohérence des vidéos
+- [ ] Préparer une revue annuelle de la cohérence des sons
+- [ ] Préparer une revue annuelle de la cohérence des documents PDF
+- [ ] Préparer une revue annuelle de la cohérence des emails
+- [ ] Préparer une revue annuelle de la cohérence des SMS
+- [ ] Préparer une revue annuelle de la cohérence des notifications admin
+- [ ] Préparer une revue annuelle de la cohérence des notifications client
+- [ ] Préparer une revue annuelle de la cohérence des pages imprimables
+- [ ] Préparer une revue annuelle de la cohérence des exports
+- [ ] Préparer une revue annuelle de la cohérence des téléchargements
+- [ ] Préparer une revue annuelle de la cohérence des partages
+- [ ] Préparer une revue annuelle de la cohérence des aperçus sociaux
+- [ ] Préparer une revue annuelle de la cohérence des résultats de recherche
+- [ ] Préparer une revue annuelle de la cohérence des pages d’erreur
+- [ ] Préparer une revue annuelle de la cohérence des pages de maintenance
+- [ ] Préparer une revue annuelle de la cohérence des pages de statut
+- [ ] Préparer une revue annuelle de la cohérence des pages d’aide
+- [ ] Préparer une revue annuelle de la cohérence des pages FAQ
+- [ ] Préparer une revue annuelle de la cohérence des pages ressources
+- [ ] Préparer une revue annuelle de la cohérence des pages presse
+- [ ] Préparer une revue annuelle de la cohérence des pages partenaires
+- [ ] Préparer une revue annuelle de la cohérence des pages équipe
+- [ ] Préparer une revue annuelle de la cohérence des pages entreprises
+- [ ] Préparer une revue annuelle de la cohérence des pages formations
+- [ ] Préparer une revue annuelle de la cohérence des pages services
+- [ ] Préparer une revue annuelle de la cohérence des pages contact
+- [ ] Préparer une revue annuelle de la cohérence des pages réservation
+- [ ] Préparer une revue annuelle de la cohérence des pages testimonials
+- [ ] Préparer une revue annuelle de la cohérence des pages blog
+- [ ] Préparer une revue annuelle de la cohérence des pages légales
+- [ ] Préparer une revue annuelle de la cohérence des pages RGPD
+- [ ] Préparer une revue annuelle de la cohérence des pages admin
+- [ ] Préparer une revue annuelle de la cohérence des routes publiques
+- [ ] Préparer une revue annuelle de la cohérence des routes protégées
+- [ ] Préparer une revue annuelle de la cohérence des redirections
+- [ ] Préparer une revue annuelle de la cohérence des URLs canoniques
+- [ ] Préparer une revue annuelle de la cohérence des liens internes
+- [ ] Préparer une revue annuelle de la cohérence des liens externes
+- [ ] Préparer une revue annuelle de la cohérence des liens de téléchargement
+- [ ] Préparer une revue annuelle de la cohérence des liens de paiement
+- [ ] Préparer une revue annuelle de la cohérence des liens de visioconférence
+- [ ] Préparer une revue annuelle de la cohérence des liens de contact
+- [ ] Préparer une revue annuelle de la cohérence des liens d’aide
+- [ ] Préparer une revue annuelle de la cohérence des liens légaux
+- [ ] Préparer une revue annuelle de la cohérence des liens sociaux
+- [ ] Préparer une revue annuelle de la cohérence des liens partenaires
+- [ ] Préparer une revue annuelle de la cohérence des liens ressources
+- [ ] Préparer une revue annuelle de la cohérence des liens blog
+- [ ] Préparer une revue annuelle de la cohérence des liens articles
+- [ ] Préparer une revue annuelle de la cohérence des liens catégories
+- [ ] Préparer une revue annuelle de la cohérence des liens tags
+- [ ] Préparer une revue annuelle de la cohérence des liens pagination
+- [ ] Préparer une revue annuelle de la cohérence des liens recherche
+- [ ] Préparer une revue annuelle de la cohérence des liens filtres
+- [ ] Préparer une revue annuelle de la cohérence des liens breadcrumbs
+- [ ] Préparer une revue annuelle de la cohérence des liens navigation
+- [ ] Préparer une revue annuelle de la cohérence des liens footer
+- [ ] Préparer une revue annuelle de la cohérence des liens menu mobile
+- [ ] Préparer une revue annuelle de la cohérence des liens langue
+- [ ] Préparer une revue annuelle de la cohérence des liens thème
+- [ ] Préparer une revue annuelle de la cohérence des liens cookies
+- [ ] Préparer une revue annuelle de la cohérence des liens RGPD
+- [ ] Préparer une revue annuelle de la cohérence des liens suppression
+- [ ] Préparer une revue annuelle de la cohérence des liens export
+- [ ] Préparer une revue annuelle de la cohérence des liens accès
+- [ ] Préparer une revue annuelle de la cohérence des liens rectification
+- [ ] Préparer une revue annuelle de la cohérence des liens opposition
+- [ ] Préparer une revue annuelle de la cohérence des liens portabilité
+- [ ] Préparer une revue annuelle de la cohérence des liens consentement
+- [ ] Préparer une revue annuelle de la cohérence des liens politique confidentialité
+- [ ] Préparer une revue annuelle de la cohérence des liens conditions générales
+- [ ] Préparer une revue annuelle de la cohérence des liens mentions légales
+- [ ] Préparer une revue annuelle de la cohérence des liens hébergeur
+- [ ] Préparer une revue annuelle de la cohérence des liens sous-traitants
+- [ ] Préparer une revue annuelle de la cohérence des liens CNIL
+- [ ] Préparer une revue annuelle de la cohérence des liens Stripe
+- [ ] Préparer une revue annuelle de la cohérence des liens Resend
+- [ ] Préparer une revue annuelle de la cohérence des liens Manus
+- [ ] Préparer une revue annuelle de la cohérence des liens support
+- [ ] Préparer une revue annuelle de la cohérence des liens documentation
+- [ ] Préparer une revue annuelle de la cohérence des liens statut
+- [ ] Préparer une revue annuelle de la cohérence des liens monitoring
+- [ ] Préparer une revue annuelle de la cohérence des liens incidents
+- [ ] Préparer une revue annuelle de la cohérence des liens maintenance
+- [ ] Préparer une revue annuelle de la cohérence des liens sauvegarde
+- [ ] Préparer une revue annuelle de la cohérence des liens restauration
+- [ ] Préparer une revue annuelle de la cohérence des liens audit
+- [ ] Préparer une revue annuelle de la cohérence des liens sécurité
+- [ ] Préparer une revue annuelle de la cohérence des liens conformité
+- [ ] Préparer une revue annuelle de la cohérence des liens gouvernance
+- [ ] Préparer une revue annuelle de la cohérence des liens risque
+- [ ] Préparer une revue annuelle de la cohérence des liens qualité
+- [ ] Préparer une revue annuelle de la cohérence des liens performance
+- [ ] Préparer une revue annuelle de la cohérence des liens accessibilité
+- [ ] Préparer une revue annuelle de la cohérence des liens design
+- [ ] Préparer une revue annuelle de la cohérence des liens contenu
+- [ ] Préparer une revue annuelle de la cohérence des liens traduction
+- [ ] Préparer une revue annuelle de la cohérence des liens marque
+- [ ] Préparer une revue annuelle de la cohérence des liens marketing
+- [ ] Préparer une revue annuelle de la cohérence des liens réseau social
+- [ ] Préparer une revue annuelle de la cohérence des liens LinkedIn
+- [ ] Préparer une revue annuelle de la cohérence des liens WhatsApp
+- [ ] Préparer une revue annuelle de la cohérence des liens email
+- [ ] Préparer une revue annuelle de la cohérence des liens SMS
+- [ ] Préparer une revue annuelle de la cohérence des liens téléphone
+- [ ] Préparer une revue annuelle de la cohérence des liens adresse
+- [ ] Préparer une revue annuelle de la cohérence des liens carte
+- [ ] Préparer une revue annuelle de la cohérence des liens agenda
+- [ ] Préparer une revue annuelle de la cohérence des liens calendrier
+- [ ] Préparer une revue annuelle de la cohérence des liens rendez-vous
+- [ ] Préparer une revue annuelle de la cohérence des liens consultation
+- [ ] Préparer une revue annuelle de la cohérence des liens paiement
+- [ ] Préparer une revue annuelle de la cohérence des liens remboursement
+- [ ] Préparer une revue annuelle de la cohérence des liens facture
+- [ ] Préparer une revue annuelle de la cohérence des liens rappel
+- [ ] Préparer une revue annuelle de la cohérence des liens confirmation
+- [ ] Préparer une revue annuelle de la cohérence des liens annulation
 - [ ] Préparer une revue annuelle de la cohérence des liens modification
 - [ ] Préparer une revue annuelle de la cohérence des liens disponibilité
 - [ ] Préparer une revue annuelle de la cohérence des liens indisponibilité
@@ -2537,14 +2464,3 @@
 - [x] Localiser les filtres, contrôles de campagne et historique de l’espace Mailing administratif dans les quatre langues actives
 - [x] Localiser les libellés, états et horodatages de l’observabilité de sécurité administrative dans les quatre langues actives
 - [x] Localiser les statuts, actions et messages de shortlist des briefs Employeurs dans les quatre langues actives
-- [x] Vérifier et localiser les contrôles, détails et horodatages restants des Briefs Employeurs en FR/EN/DE/ZH
-- [x] Vérifier et localiser les contrôles, messages et états du portail candidat sécurisé en FR/EN/DE/ZH
-- [x] Vérifier et localiser les formulaires, vérifications et retours du parcours d’accès candidat en FR/EN/DE/ZH
-- [x] Vérifier et localiser les contrôles, validations et retours de réinitialisation candidat en FR/EN/DE/ZH
-- [x] Vérifier et localiser les états d’activation de compte candidat en FR/EN/DE/ZH
-- [x] Vérifier et localiser les contrôles, confirmations et erreurs de désinscription recrutement en FR/EN/DE/ZH
-- [x] Localiser les métadonnées SEO du parcours de désinscription recrutement en FR/EN/DE/ZH
-- [x] Vérifier et localiser les contenus, contrôles et métadonnées de la FAQ publique en FR/EN/DE/ZH
-- [x] Vérifier et localiser les contenus, actions et métadonnées de la page 404 publique en FR/EN/DE/ZH
-- [x] Vérifier et localiser les contenus, statuts et métadonnées de la page de statut des services en FR/EN/DE/ZH
-- [x] Vérifier et localiser les contenus, contrôles et métadonnées de la page Ventures en FR/EN/DE/ZH

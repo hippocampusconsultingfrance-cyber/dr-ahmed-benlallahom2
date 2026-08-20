@@ -14,11 +14,8 @@ Ce document accompagne toute évolution avant publication sur `drahmedbenlallaho
 | Accessibilité | Vérifier navigation clavier, focus, lien d’évitement, taille tactile, contraste et mouvement réduit. | Test clavier et capture mobile ; aucun élément interactif inaccessible. | [ ] |
 | Référencement | Vérifier titre, description, canonical, sitemap, robots et `noindex` des parcours privés. | Lecture du HTML rendu et contrôle du sitemap publié. | [ ] |
 | Résilience | Vérifier `/error`, `/maintenance`, réponse 404 et en-têtes de sécurité. | Pages sans détail technique ; codes HTTP cohérents. | [ ] |
-| Validation graphique obligatoire | Avant chaque checkpoint, capturer au minimum la route modifiée en vue desktop et mobile ; contrôler cadrage, lisibilité, débordement, superposition, contraste, état vide/chargement et cohérence avec le système de marque. | Captures datées ou journal d’audit mentionnant les routes, tailles d’écran et anomalies corrigées. | [ ] |
 
 > Toute anomalie P0 ou P1 bloque la publication. Les vérifications nécessitant une session, une boîte mail ou un paiement doivent utiliser des données de recette et être consignées dans le journal d’audit.
-
-> Une publication peut être autorisée sans contrôle graphique uniquement lorsqu’elle ne modifie ni le code client, ni les styles, ni les ressources visuelles. La dérogation doit indiquer la raison et la version concernée.
 
 ## Décision de publication
 

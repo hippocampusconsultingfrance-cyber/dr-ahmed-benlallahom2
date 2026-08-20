@@ -15,15 +15,4 @@ describe("contenus des états de service", () => {
     expect(getServiceStatusContent("maintenance", "fr").title).toContain("maintenance");
     expect(getServiceStatusContent("error", "fr").title).toContain("technique");
   });
-
-  it("couvre les actions de reprise pour les deux états dans chaque langue", () => {
-    for (const kind of ["error", "maintenance"] as const) {
-      for (const locale of ["fr", "en", "de", "zh"] as const) {
-        const copy = getServiceStatusContent(kind, locale);
-        expect(copy.eyebrow.length, `${kind}:${locale}`).toBeGreaterThan(0);
-        expect(copy.home.length, `${kind}:${locale}`).toBeGreaterThan(0);
-        expect(copy.retry.length, `${kind}:${locale}`).toBeGreaterThan(0);
-      }
-    }
-  });
 });

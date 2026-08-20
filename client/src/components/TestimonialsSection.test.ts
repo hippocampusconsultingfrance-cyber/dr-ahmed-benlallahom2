@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import { getTestimonialsCarouselIndex } from "./TestimonialsSection";
-import { readFile } from "node:fs/promises";
 
 describe("testimonial carousel keyboard navigation", () => {
   it("cycles through testimonials with the arrow keys", () => {
@@ -15,13 +14,5 @@ describe("testimonial carousel keyboard navigation", () => {
 
   it("keeps a one-item carousel stable", () => {
     expect(getTestimonialsCarouselIndex({ key: "ArrowRight", currentIndex: 0, length: 1 })).toBe(0);
-  });
-
-  it("conserve un état vide illustré sans annoncer l’icône décorative", async () => {
-    const source = await readFile(new URL("./TestimonialsSection.tsx", import.meta.url), "utf8");
-    expect(source).toContain("MessageCircleHeart");
-    expect(source).toContain('aria-hidden="true"');
-    expect(source).toContain("border-dashed border-border");
-    expect(source).toContain("currentContent.empty");
   });
 });

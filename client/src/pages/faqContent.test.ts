@@ -7,14 +7,10 @@ describe("contenu FAQ public", () => {
       const content = getFaqContent(locale);
       expect(content.entries).toHaveLength(6);
       expect(content.note).toMatch(/urgence|emergency|Notdienst|紧急/);
-      expect(content.recruitment.length, locale).toBeGreaterThan(0);
-      expect(content.humanReview.length, locale).toBeGreaterThan(0);
     }
   });
 
   it("rappelle que l’analyse recrutement ne décide pas seule", () => {
     expect(getFaqContent("fr").entries.at(-1)?.answer).toMatch(/revue humaine/);
-    expect(getFaqContent("en").humanReview).toContain("human review");
-    expect(getFaqContent("de").humanReview).toContain("menschliche Prüfung");
   });
 });

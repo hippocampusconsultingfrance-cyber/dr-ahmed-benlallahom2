@@ -32,7 +32,6 @@ export const bookingContent = {
       blocked: "Date indisponible",
       alreadyBooked: "Ce créneau est déjà réservé",
       selectDate: "Sélectionnez une date et une heure",
-      availabilityError: "La disponibilité ne peut pas être vérifiée pour le moment. Réessayez avant de poursuivre.",
     },
     pricing: {
       title: "Tarification",
@@ -40,7 +39,6 @@ export const bookingContent = {
       nightRate: "Tarif nuit (18h-8h)",
       eur: "€",
       total: "Total",
-      unavailable: "Le tarif ne peut pas être chargé pour le moment. Réessayez avant de poursuivre.",
     },
     success: "Réservation créée avec succès!",
     error: "Erreur lors de la création de la réservation",
@@ -82,7 +80,6 @@ export const bookingContent = {
       blocked: "Date unavailable",
       alreadyBooked: "This time slot is already booked",
       selectDate: "Select a date and time",
-      availabilityError: "Availability cannot be checked at the moment. Please try again before continuing.",
     },
     pricing: {
       title: "Pricing",
@@ -90,7 +87,6 @@ export const bookingContent = {
       nightRate: "Night Rate (6pm-8am)",
       eur: "€",
       total: "Total",
-      unavailable: "The price cannot be loaded at the moment. Please try again before continuing.",
     },
     success: "Booking created successfully!",
     error: "Error creating booking",
@@ -132,7 +128,6 @@ export const bookingContent = {
       blocked: "Datum nicht verfügbar",
       alreadyBooked: "Dieser Termin ist bereits reserviert",
       selectDate: "Wählen Sie Datum und Uhrzeit",
-      availabilityError: "Die Verfügbarkeit kann derzeit nicht geprüft werden. Versuchen Sie es vor dem Fortfahren erneut.",
     },
     pricing: {
       title: "Preisgestaltung",
@@ -140,7 +135,6 @@ export const bookingContent = {
       nightRate: "Nachtsatz (18:00-8:00)",
       eur: "€",
       total: "Gesamt",
-      unavailable: "Der Preis kann derzeit nicht geladen werden. Versuchen Sie es vor dem Fortfahren erneut.",
     },
     success: "Buchung erfolgreich erstellt!",
     error: "Fehler beim Erstellen der Buchung",
@@ -182,7 +176,6 @@ export const bookingContent = {
       blocked: "日期不可用",
       alreadyBooked: "该时间段已被预订",
       selectDate: "请选择日期和时间",
-      availabilityError: "目前无法检查时间段可用性。请重试后再继续。",
     },
     pricing: {
       title: "价格",
@@ -190,7 +183,6 @@ export const bookingContent = {
       nightRate: "夜间费率 (18:00-8:00)",
       eur: "€",
       total: "总计",
-      unavailable: "目前无法加载价格。请重试后再继续。",
     },
     success: "预订成功创建!",
     error: "创建预订时出错",
@@ -233,15 +225,6 @@ export function parseBookingDateTime(dateValue: string, timeValue: string): Date
 }
 
 export type BookingAvailabilityState = "select" | "checking" | "unavailable" | "available";
-
-export type BookingAvailabilityIcon = "calendar" | "clock" | "alert" | "check";
-
-export function getBookingAvailabilityIcon(state: BookingAvailabilityState): BookingAvailabilityIcon {
-  if (state === "checking") return "clock";
-  if (state === "unavailable") return "alert";
-  if (state === "available") return "check";
-  return "calendar";
-}
 
 export function getBookingAvailabilityState({
   selected,
@@ -332,13 +315,10 @@ export default function BookingPage() {
       bookedSlots.data?.some((slot) => new Date(slot).toISOString().slice(0, 16) === selectedDate.toISOString().slice(0, 16))
   );
   const availabilityPending = blockedDates.isLoading || bookedSlots.isLoading || availabilitySlots.isLoading;
-  const availabilityError = Boolean(blockedDates.error || bookedSlots.error || availabilitySlots.error);
   const availabilityLabel = !selectedDate
     ? content.form.selectDate
     : availabilityPending
       ? content.form.checkingAvailability
-      : availabilityError
-      ? content.form.availabilityError
       : isBlockedDate
       ? content.form.blocked
       : isBookedSlot
@@ -347,7 +327,7 @@ export default function BookingPage() {
   const availabilityState = getBookingAvailabilityState({
     selected: Boolean(selectedDate),
     pending: availabilityPending,
-    blocked: isBlockedDate || availabilityError,
+    blocked: isBlockedDate,
     booked: isBookedSlot,
   });
 
@@ -409,13 +389,13 @@ export default function BookingPage() {
       return;
     }
 
-    if (availabilityError || isBlockedDate || isBookedSlot) {
+    if (isBlockedDate || isBookedSlot) {
       alert(availabilityLabel);
       return;
     }
 
     if (!calculatePrice.data) {
-      alert(calculatePrice.error ? content.pricing.unavailable : content.error);
+      alert(content.error);
       return;
     }
 
@@ -572,13 +552,10 @@ export default function BookingPage() {
             <p className="text-sm text-muted-foreground leading-relaxed mb-6">
               {bookingRailCopy.note}
             </p>
-              <img
-                src="/manus-storage/booking-care-path-1280_7edc0ae2.webp"
-                srcSet="/manus-storage/booking-care-path-640_5e900505.webp 640w, /manus-storage/booking-care-path-1280_7edc0ae2.webp 1280w"
-                sizes="(max-width: 640px) 100vw, 360px"
-                loading="lazy"
-                decoding="async"
-                alt=""
+            <img
+              src="/manus-storage/booking-care-path_b41c3403.jpg"
+              loading="lazy"
+              alt=""
               aria-hidden="true"
               className="mb-6 h-32 w-full rounded-xl border border-border/40 object-cover opacity-90"
             />
@@ -710,11 +687,7 @@ export default function BookingPage() {
               {dateError && <p id="booking-date-error" className="mt-2 text-sm text-destructive" role="alert">{dateError}</p>}
               {localizedDate && <p className="mt-2 text-sm font-medium text-primary" aria-live="polite">{localizedDate}</p>}
               <div id="availability-status" className={`availability-status availability-${availabilityState} mt-3`} role="status" aria-live="polite" data-state={availabilityState}>
-                {(() => {
-                  const icon = getBookingAvailabilityIcon(availabilityState);
-                  const AvailabilityIcon = icon === "check" ? CheckCircle : icon === "alert" ? AlertCircle : icon === "clock" ? Clock : Calendar;
-                  return <AvailabilityIcon className="h-4 w-4 shrink-0" aria-hidden="true" />;
-                })()}
+                <span className="availability-dot" aria-hidden="true" />
                 <span>{availabilityLabel}</span>
               </div>
             </div>
@@ -739,11 +712,6 @@ export default function BookingPage() {
                 </div>
               </Card>
             )}
-            {calculatePrice.error && (
-              <p className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive" role="alert">
-                {content.pricing.unavailable}
-              </p>
-            )}
 
             {/* Details */}
             <div>
@@ -766,7 +734,7 @@ export default function BookingPage() {
             {/* Submit Button */}
             <Button
               type="submit"
-              disabled={isLoading || availabilityPending || availabilityError || isBlockedDate || isBookedSlot || !selectedDate || !calculatePrice.data}
+              disabled={isLoading || availabilityPending || isBlockedDate || isBookedSlot || !selectedDate || !calculatePrice.data}
               className="cta-primary w-full"
               size="lg"
             >

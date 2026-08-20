@@ -22,7 +22,7 @@ Les variables ci-dessous sont les valeurs de production au format OKLCH. Elles d
 | Fond | `oklch(0.12 0.02 250)` | `oklch(0.98 0.005 250)` | Arrière-plan général. |
 | Surface | `oklch(0.15 0.025 250)` | `oklch(1 0 0)` | Cartes, panneaux et dialogues. |
 | Texte principal | `oklch(0.95 0.005 250)` | `oklch(0.15 0.02 250)` | Titres et contenus prioritaires. |
-| Cyan ABL | `oklch(0.75 0.15 220)` | `oklch(0.53 0.2 220)` | CTA principal, focus, icônes et repères interactifs. |
+| Cyan ABL | `oklch(0.75 0.15 220)` | `oklch(0.55 0.2 220)` | CTA principal, focus, icônes et repères interactifs. |
 | Or médical | `oklch(0.72 0.1 75)` | `oklch(0.65 0.12 75)` | Badge de statut ou signature, avec parcimonie. |
 | Erreur | `oklch(0.577 0.245 27.325)` | Identique | Validation critique et sécurité. |
 
@@ -63,14 +63,3 @@ Le ton doit être direct, respectueux et compréhensible dans les quatre langues
 Avant toute publication, vérifier que les actions disposent d’un libellé explicite, d’un focus visible et d’une zone tactile adaptée. L’interface doit rester lisible en thème clair, sombre, OLED et lisibilité renforcée. Les visuels doivent avoir une alternative descriptive ou une alternative vide lorsqu’ils sont purement décoratifs.
 
 La checklist de contrôle doit inclure l’affichage mobile, la navigation clavier, l’absence de détail technique dans les erreurs, le respect du consentement analytique et l’absence de contenu fabriqué tel que témoignage, note ou résultat clinique.
-
-## 8. Formats d’export
-
-| Support | Format conseillé | Éléments à conserver |
-|---|---|---|
-| Publication LinkedIn portrait | 1080 × 1350 px | Signature, titre court, contexte et CTA ou URL lisible. |
-| Publication LinkedIn paysage | 1200 × 627 px | Message unique, signature et espace de sécurité autour des bords. |
-| Bannière de document | 1600 × 500 px | Signature, titre du document et date ou version. |
-| E-mail Hippocampus | Largeur maximale 600 px | Signature texte, objet explicite, contenu HTML et désinscription. |
-
-Exporter une version PNG pour les réseaux sociaux et conserver une source éditable dans l’outil de conception retenu. Vérifier l’orthographe, le contraste, les droits sur les éléments tiers et les avertissements requis avant diffusion. Les textes juridiquement exacts, fréquemment mis à jour ou utiles à un lecteur d’écran doivent aussi être disponibles en HTML ; ils ne doivent pas exister uniquement dans une image.

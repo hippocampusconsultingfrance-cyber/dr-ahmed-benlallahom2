@@ -51,7 +51,7 @@ export default function EmployerBriefsTab() {
   const activeBrief = matches.data?.brief ?? null;
 
   if (isLoading) return <PublicContentSkeleton label={copy.loading} />;
-  if (error) return <p className="py-8 text-center text-red-400">{copy.loadError}</p>;
+  if (error) return <p className="py-8 text-center text-red-400">{copy.loadError}: {error.message}</p>;
 
   return (
     <div className="grid gap-6 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
@@ -67,18 +67,18 @@ export default function EmployerBriefsTab() {
           <article key={brief.id} className={`rounded-xl border p-4 transition-colors ${selectedBriefId === brief.id ? "border-primary bg-primary/5" : "border-border bg-card"}`}>
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <p className="break-words font-semibold text-foreground">{brief.organizationName}</p>
-                <p className="mt-1 break-words text-sm text-muted-foreground">{brief.specialtyNeeded} · {brief.country}</p>
-                <p className="mt-1 break-words text-xs text-muted-foreground">{brief.targetEnvironment} · {brief.timeline || copy.timelineUnknown}</p>
+                <p className="font-semibold text-foreground">{brief.organizationName}</p>
+                <p className="mt-1 text-sm text-muted-foreground">{brief.specialtyNeeded} · {brief.country}</p>
+                <p className="mt-1 text-xs text-muted-foreground">{brief.targetEnvironment} · {brief.timeline || copy.timelineUnknown}</p>
               </div>
-              <span className="max-w-[45%] break-words rounded-full bg-muted px-2 py-1 text-xs text-muted-foreground">{copy.statuses[brief.status as keyof typeof copy.statuses] ?? brief.status}</span>
+              <span className="shrink-0 rounded-full bg-muted px-2 py-1 text-xs text-muted-foreground">{copy.statuses[brief.status as keyof typeof copy.statuses] ?? brief.status}</span>
             </div>
             <div className="mt-4 flex flex-wrap gap-2">
-              <Button className="min-h-10 w-full sm:w-auto sm:min-h-0" size="sm" variant="outline" onClick={() => { setSelectedBriefId(brief.id); setMatchPage(0); }}>
+              <Button size="sm" variant="outline" onClick={() => { setSelectedBriefId(brief.id); setMatchPage(0); }}>
                 <UsersRound className="mr-1 h-3.5 w-3.5" />{copy.viewProfiles}
               </Button>
-              {brief.status === "new" && <Button className="min-h-10 w-full sm:w-auto sm:min-h-0" size="sm" onClick={() => updateStatus.mutate({ id: brief.id, status: "reviewing" })}>{copy.qualify}</Button>}
-              {brief.status === "reviewing" && <Button className="min-h-10 w-full sm:w-auto sm:min-h-0" size="sm" onClick={() => updateStatus.mutate({ id: brief.id, status: "shortlist_sent" })}>{copy.statuses.shortlist_sent}</Button>}
+              {brief.status === "new" && <Button size="sm" onClick={() => updateStatus.mutate({ id: brief.id, status: "reviewing" })}>{copy.qualify}</Button>}
+              {brief.status === "reviewing" && <Button size="sm" onClick={() => updateStatus.mutate({ id: brief.id, status: "shortlist_sent" })}>{copy.statuses.shortlist_sent}</Button>}
             </div>
           </article>
         ))}
@@ -89,19 +89,19 @@ export default function EmployerBriefsTab() {
         {!selectedBriefId && <div className="flex min-h-72 flex-col items-center justify-center text-center"><UsersRound className="mb-3 h-8 w-8 text-primary" /><h2 className="font-semibold text-foreground">{copy.shortlistAssisted}</h2><p className="mt-2 max-w-sm text-sm text-muted-foreground">{copy.selectBrief}</p></div>}
         {selectedBriefId && matches.isLoading && <PublicContentSkeleton cards={2} columns={2} label={copy.calculating} />}
         {matches.data && activeBrief && <>
-          <div className="mb-5 flex flex-col gap-3 border-b border-border pb-4 sm:flex-row sm:items-start sm:justify-between"><div className="min-w-0"><p className="break-all text-sm text-primary">{activeBrief.briefId}</p><h2 className="break-words text-xl font-semibold text-foreground">{activeBrief.specialtyNeeded} — {activeBrief.country}</h2><p className="mt-1 break-words text-sm text-muted-foreground">{copy.humanReview}</p></div><Button className="min-h-10 w-full sm:w-auto sm:min-h-0" size="sm" variant="outline" disabled={exportShortlist.isPending} onClick={() => exportShortlist.mutate({ type: "shortlist", briefId: activeBrief.id })}>{exportShortlist.isPending ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Download className="mr-1.5 h-3.5 w-3.5" />}{copy.export}</Button></div>
+          <div className="mb-5 flex flex-col gap-3 border-b border-border pb-4 sm:flex-row sm:items-start sm:justify-between"><div><p className="text-sm text-primary">{activeBrief.briefId}</p><h2 className="text-xl font-semibold text-foreground">{activeBrief.specialtyNeeded} — {activeBrief.country}</h2><p className="mt-1 text-sm text-muted-foreground">{copy.humanReview}</p></div><Button size="sm" variant="outline" disabled={exportShortlist.isPending} onClick={() => exportShortlist.mutate({ type: "shortlist", briefId: activeBrief.id })}>{exportShortlist.isPending ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Download className="mr-1.5 h-3.5 w-3.5" />}{copy.export}</Button></div>
           <div className="space-y-3">
             {matches.data.candidates.map(candidate => (
               <article key={candidate.id} className="rounded-lg border border-border bg-background p-4">
                 <div className="flex flex-col justify-between gap-3 sm:flex-row">
-                  <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><p className="break-words font-medium text-foreground">{candidate.firstName} {candidate.lastName}</p><span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">{candidate.match.score}/100</span></div><p className="mt-1 break-words text-sm text-muted-foreground">{candidate.specialty} · {candidate.availability || copy.availabilityUnknown}</p>{candidate.match.reasons.length > 0 ? <p className="mt-2 break-words text-xs text-muted-foreground">{candidate.match.reasons.join(" · ")}</p> : <p className="mt-2 break-words text-xs text-muted-foreground">{copy.noMatch}</p>}{getPositiveMatchBreakdown(candidate.match.breakdown).length > 0 && <div className="mt-3 flex flex-wrap gap-1.5" aria-label={copy.scoreDetail}>{getPositiveMatchBreakdown(candidate.match.breakdown).map(item => <span key={item.key} className="max-w-full break-words rounded-full border border-primary/20 bg-primary/5 px-2 py-1 text-[11px] font-medium text-foreground">{item.label} +{item.points}</span>)}</div>}</div>
-                  <Button className="min-h-10 w-full sm:w-auto sm:min-h-0" size="sm" disabled={associate.isPending} onClick={() => associate.mutate({ briefId: activeBrief.id, applicationId: candidate.id, matchScore: candidate.match.score, status: "shortlisted" })}>{candidate.association?.status === "shortlisted" ? <><CheckCircle2 className="mr-1 h-3.5 w-3.5" />{copy.shortlisted}</> : <>{copy.shortlist}<ChevronRight className="ml-1 h-3.5 w-3.5" /></>}</Button>
+                  <div><div className="flex items-center gap-2"><p className="font-medium text-foreground">{candidate.firstName} {candidate.lastName}</p><span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">{candidate.match.score}/100</span></div><p className="mt-1 text-sm text-muted-foreground">{candidate.specialty} · {candidate.availability || copy.availabilityUnknown}</p>{candidate.match.reasons.length > 0 ? <p className="mt-2 text-xs text-muted-foreground">{candidate.match.reasons.join(" · ")}</p> : <p className="mt-2 text-xs text-muted-foreground">{copy.noMatch}</p>}{getPositiveMatchBreakdown(candidate.match.breakdown).length > 0 && <div className="mt-3 flex flex-wrap gap-1.5" aria-label={copy.scoreDetail}>{getPositiveMatchBreakdown(candidate.match.breakdown).map(item => <span key={item.key} className="rounded-full border border-primary/20 bg-primary/5 px-2 py-1 text-[11px] font-medium text-foreground">{item.label} +{item.points}</span>)}</div>}</div>
+                  <Button size="sm" disabled={associate.isPending} onClick={() => associate.mutate({ briefId: activeBrief.id, applicationId: candidate.id, matchScore: candidate.match.score, status: "shortlisted" })}>{candidate.association?.status === "shortlisted" ? <><CheckCircle2 className="mr-1 h-3.5 w-3.5" />{copy.shortlisted}</> : <>{copy.shortlist}<ChevronRight className="ml-1 h-3.5 w-3.5" /></>}</Button>
                 </div>
               </article>
             ))}
             {matches.data.candidates.length === 0 && <p className="py-10 text-center text-sm text-muted-foreground">{copy.noCandidate}</p>}
           </div>
-          {matches.data.pagination.totalPages > 1 && <div className="mt-5 flex flex-col gap-3 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between"><p className="break-words text-sm text-muted-foreground">{copy.page} {matches.data.pagination.page + 1} {copy.of} {matches.data.pagination.totalPages} · {matches.data.pagination.total} {copy.profiles}</p><div className="flex gap-2"><Button className="min-h-10 flex-1 sm:min-h-0 sm:flex-none" size="sm" variant="outline" disabled={matches.data.pagination.page === 0 || matches.isFetching} onClick={() => setMatchPage(current => Math.max(0, current - 1))}>{copy.previous}</Button><Button className="min-h-10 flex-1 sm:min-h-0 sm:flex-none" size="sm" variant="outline" disabled={matches.data.pagination.page + 1 >= matches.data.pagination.totalPages || matches.isFetching} onClick={() => setMatchPage(current => current + 1)}>{copy.next}</Button></div></div>}
+          {matches.data.pagination.totalPages > 1 && <div className="mt-5 flex flex-col gap-3 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between"><p className="text-sm text-muted-foreground">{copy.page} {matches.data.pagination.page + 1} {copy.of} {matches.data.pagination.totalPages} · {matches.data.pagination.total} {copy.profiles}</p><div className="flex gap-2"><Button size="sm" variant="outline" disabled={matches.data.pagination.page === 0 || matches.isFetching} onClick={() => setMatchPage(current => Math.max(0, current - 1))}>{copy.previous}</Button><Button size="sm" variant="outline" disabled={matches.data.pagination.page + 1 >= matches.data.pagination.totalPages || matches.isFetching} onClick={() => setMatchPage(current => current + 1)}>{copy.next}</Button></div></div>}
         </>}
       </section>
     </div>

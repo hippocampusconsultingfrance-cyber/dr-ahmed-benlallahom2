@@ -1,6 +1,6 @@
 import { Toaster } from "@/components/ui/sonner";
 import { lazy, Suspense } from "react";
-import { Route, Switch, useLocation } from "wouter";
+import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { LanguageProvider } from "./contexts/LanguageContext";
@@ -41,8 +41,6 @@ const AdminDashboard = lazy(() => import("./pages/AdminDashboard"));
 const ServiceStatusPage = lazy(() => import("./pages/ServiceStatusPage"));
 const FAQPage = lazy(() => import("./pages/FAQPage"));
 const SearchPage = lazy(() => import("./pages/SearchPage"));
-const ResourcesPage = lazy(() => import("./pages/ResourcesPage"));
-const PressPage = lazy(() => import("./pages/PressPage"));
 
 function RouteLoading() {
   const { language } = useLanguage();
@@ -64,11 +62,8 @@ function CandidatePortalPrivateRoute() {
 }
 
 function Router() {
-  const [location] = useLocation();
-
   return (
     <Suspense fallback={<RouteLoading />}>
-      <div key={location} className="page-transition">
       <Switch>
       <Route path="/" component={Home} />
       <Route path="/venture/:slug" component={VenturePage} />
@@ -93,12 +88,9 @@ function Router() {
       <Route path="/maintenance" component={() => <ServiceStatusPage kind="maintenance" />} />
       <Route path="/faq" component={FAQPage} />
       <Route path="/search" component={SearchPage} />
-      <Route path="/resources" component={ResourcesPage} />
-      <Route path="/press" component={PressPage} />
       <Route path="/404" component={NotFound} />
-      <Route component={NotFound} />
+        <Route component={NotFound} />
       </Switch>
-      </div>
     </Suspense>
   );
 }

@@ -16,15 +16,15 @@ La réservation conserve des champs accessibles, des informations tarifaires jou
 
 Cette vérification porte sur le rendu et le chargement. Les tests de clavier, lecteur d’écran, contrastes instrumentés, zoom à 200 % et les quatre traductions restent des contrôles complémentaires à exécuter séparément.
 
-## Compatibilité structurelle des e-mails
-
-Le gabarit transactionnel Hippocampus utilise désormais un document HTML complet, un viewport mobile, une structure de présentation tabulaire de 600 px avec largeur fluide et des styles inline. Cette structure commune est appliquée aux confirmations, factures, rappels, accès candidat, campagnes et communications administratives qui passent par le gabarit. Une non-régression vérifie ces garde-fous sans envoyer d’e-mail. Le rendu effectif dans Gmail, Outlook et Apple Mail demeure une validation externe distincte, à réaliser avec une boîte de test autorisée conformément à `EXTERNAL_VALIDATION_REGISTER.md`.
-
 ## Vérification sur le domaine publié
 
 Le 19 août 2026, la page `https://drahmedbenlallahom.com/booking` a été contrôlée après la publication. Après le chargement différé normal, le formulaire de réservation est visible avec ses libellés associés pour le nom, l’email et le téléphone ; la tarification jour/nuit, l’avertissement d’urgence et les informations de paiement sont également présents. Aucun écran d’erreur ni absence de contenu n’a été constaté.
 
-Le 20 août 2026, la page d’accueil `https://drahmedbenlallahom.com/` a également été contrôlée sur le domaine publié. Après l’état de chargement différé normal, l’en-tête, les entrées Leadership, Services, Formation, Contact, Recrutement et Employeurs, les actions « Réserver une Consultation » et « Me Contacter », ainsi que les sections publiques principales se sont affichés. Aucune soumission de formulaire, paiement, ni consultation de donnée privée n’a été réalisée pendant ce contrôle passif.
+## Vérification sur les domaines publiés
+
+Le 20 août 2026, la page d’accueil `https://drahmedbenlallahom.com/` a été contrôlée sur le domaine publié. Après l’état de chargement différé normal, l’en-tête, les entrées Leadership, Services, Formation, Contact, Recrutement et Employeurs, les actions « Réserver une Consultation » et « Me Contacter », ainsi que les sections publiques principales se sont affichés. Aucune soumission de formulaire, paiement, ni consultation de donnée privée n’a été réalisée pendant ce contrôle passif.
+
+Le même jour, l’alias `https://www.drahmedbenlallahom.com/` a redirigé vers `https://drahmedbenlallahom.com/` et a affiché la même page d’accueil publique. La redirection canonique et le chargement de la navigation principale ont donc été confirmés sans interaction sensible.
 
 ## Alternatives textuelles des images
 
@@ -45,23 +45,9 @@ Les composants interactifs restants ont été cartographiés. Le carrousel de t�
 | Préférences cookies | Échap ferme la fenêtre et rend le focus à l’élément qui l’a ouverte. | `CookieConsent.fixedControls.test.ts`. |
 | Réservation | Les champs date et heure restent des contrôles visibles et atteignables au clavier ; les états de disponibilité sont explicites. | `BookingPage.test.ts`. |
 
-## Garde-fou de longueur multilingue
-
-Les libellés publics compacts de navigation et de réservation sont contrôlés dans les quatre langues actives. Le garde-fou compte désormais les caractères Unicode par point de code, ce qui évite un traitement incohérent des libellés chinois. Les contrôles automatisés couvrent les liens de navigation, les CTA critiques et les libellés allemands et chinois à risque. La vérification visuelle complète des contenus très longs sur appareil réel reste documentée séparément.
-
-## Contraste des thèmes
-
-Les paires textuelles centrales des thèmes sombre et clair sont soumises à un seuil automatisé de contraste AA de 4,5:1 : texte principal, texte secondaire gris, texte sur primaire cyan et texte sur accent doré. Le primaire du thème clair a été légèrement assombri afin d’atteindre ce seuil avec son texte clair. Le calcul s’effectue à partir des tokens OKLCH, ce qui protège les futures modifications de palette contre une régression de lisibilité.
-
-## Lisibilité renforcée
-
-Le contrôle de lisibilité renforcée applique une taille de police racine de 106,25 %, une hauteur de ligne augmentée et des couleurs secondaires adaptées, tout en conservant des conteneurs flexibles pouvant rétrécir sans débordement. Son état est exposé aux technologies d’assistance, appliqué à la racine du document et mémorisé localement. Un test comportemental protège l’activation, la désactivation et la persistance de ce réglage.
-
 ## Messages de validation publics
 
 Les formulaires Contact, RGPD, brief employeur, accès candidat et candidature VVIP disposent de retours localisés dans les quatre langues. La candidature VVIP a été corrigée afin qu’un message renvoyé par le serveur ne soit jamais affiché directement au visiteur : le détail est conservé dans la console de diagnostic et l’interface affiche uniquement son message localisé générique. Un test de non-régression protège ce comportement.
-
-Les parcours Contact, RGPD et Réservation sont également couverts par une vérification explicite de leurs retours d’état en français, anglais, allemand et chinois : succès, erreur, consentement requis et attente lorsque le parcours l’emploie. Cette couverture vérifie que chaque message public reste présent et non vide dans les quatre langues, sans exposer les détails techniques d’un échec.
 
 ## Feedbacks visuels des parcours critiques
 
@@ -79,156 +65,6 @@ Cette vérification est statique et automatisée ; elle ne soumet aucun formulai
 ## Contrôle mobile complémentaire des parcours critiques
 
 Une revue complémentaire à la largeur de 375 px confirme que les premières étapes des pages Réservation, RGPD, Recrutement et Employeurs restent lisibles et sans chevauchement visible. Les appels à l’action de navigation et le sélecteur de langue restent atteignables. Le bandeau de consentement est volontairement affiché dans cette session sans choix enregistré : il recouvre le bas de l’écran comme prévu, mais ne masque pas le titre, le contexte ni le début du formulaire. Sa coexistence avec la navigation mobile est déjà couverte par un test dédié.
-
-Le contrôle flottant WhatsApp est volontairement masqué pendant l’affichage du bandeau cookies, qui reste prioritaire pour la conformité et la lisibilité. Sur mobile, le bandeau est borné en hauteur, peut défiler si nécessaire et conserve des actions de taille suffisante. Cette règle de non-chevauchement est protégée par test.
-
-## Page Pourquoi Hippocampus
-
-La page éditoriale publique `/why-hippocampus` présente la méthode employeurs, les zones couvertes, les garanties de confidentialité et conformité, ainsi que les parcours explicites vers le brief de mission et le recrutement. Une vérification visuelle pleine page sur bureau confirme une hiérarchie lisible, des cartes régulières et des appels à l’action distingués. La route, les quatre variantes linguistiques, les garanties, les CTA et les métadonnées de service sont protégés par une non-régression dédiée.
-
-## États vides des espaces actifs
-
-Les témoignages partenaires, les briefs Employeurs, l’espace Mailing et les tableaux administratifs conservent des états vides explicites, localisés ou contextualisés selon le parcours. Le composant partagé des tableaux de bord fournit une icône décorative, un titre et une explication accessibles. Les disponibilités de réservation restent couvertes par leur test de statut existant. La section Blog demeure volontairement désactivée à la demande du propriétaire ; elle n’est donc pas traitée comme un parcours actif nécessitant un état vide.
-
-| Parcours actif | État vide ou d’absence vérifié | Couverture associée |
-|---|---|---|
-| Témoignages partenaires | Carte vide illustrée, icône décorative masquée aux technologies d’assistance et libellé localisé. | `TestimonialsSection.test.ts` |
-| Réservation | Quatre états de disponibilité avec un repère visuel distinct : saisie, vérification, indisponible et disponible. | `BookingPage.test.ts` |
-| Briefs Employeurs | Absence de brief, de correspondance ou de candidat disponible. | `ActiveEmptyStates.test.ts` |
-| Mailing recrutement | Audience sélectionnée vide et historique de campagne vide. | `ActiveEmptyStates.test.ts` |
-| Vivier candidats | Résultat de filtre sans candidat avec icône et message localisé. | `ActiveEmptyStates.test.ts` |
-| Revue documentaire candidat | Aucun document correspondant au filtre actif. | `ActiveEmptyStates.test.ts` |
-| Tableau administratif partagé | Icône, titre et explication accessibles. | `AdminStatePanel.test.tsx` |
-| Blog | Hors périmètre : section et routes désactivées à la demande du propriétaire. | Suivi de désactivation existant. |
-
-Les onglets racine restants du tableau de bord ont aussi été recensés. Les Réservations, Messages et Demandes RGPD utilisent le panneau illustré partagé ; les Témoignages, Créneaux hebdomadaires et Dates bloquées ont été alignés sur ce même composant. La Sécurité garde son état sans événement illustré et le pilotage Recrutement affiche des indicateurs à zéro explicites plutôt qu’une zone vide. La boîte Candidate 360 est un détail contextuel, non un onglet de collecte ; ses absences de notes, relances, demandes ou chronologie sont présentées à l’intérieur de sections déjà libellées.
-
-| Onglet administratif racine | Comportement en l’absence de données | Couverture associée |
-|---|---|---|
-| Réservations | Panneau illustré « Aucune réservation » et agenda sans rendez-vous confirmé. | `ActiveEmptyStates.test.ts`, `appointmentsAgenda.test.ts` |
-| Messages | Panneau illustré « Aucun message ». | `ActiveEmptyStates.test.ts` |
-| Demandes RGPD | Panneau illustré « Aucune demande RGPD ». | `ActiveEmptyStates.test.ts` |
-| Témoignages administratifs | Panneau illustré « Aucun témoignage ». | `ActiveEmptyStates.test.ts` |
-| Disponibilités | Panneaux illustrés pour aucun créneau et aucune date bloquée. | `ActiveEmptyStates.test.ts` |
-| Candidatures | Carte illustrée lorsqu’aucun dossier ne correspond aux filtres, avec icône décorative. | `ActiveEmptyStates.test.ts` |
-| Pilotage recrutement | Compteurs non négatifs et explicites, y compris à zéro. | `ActiveEmptyStates.test.ts`, `recruitmentDashboardMetrics.test.ts` |
-| Sécurité | Illustration positive lorsqu’aucun événement n’est journalisé. | `ActiveEmptyStates.test.ts`, `SecurityOperationsTab.localization.test.ts` |
-
-## État d’erreur administratif partagé
-
-Le titre de repli affiché par le panneau d’erreur administratif partagé est désormais défini en français, anglais, allemand et chinois. Les descriptions d’erreur restent fournies par l’onglet appelant et ne sont pas exposées dans les parcours publics. Une non-régression vérifie les quatre variantes du titre.
-
-## Navigation administrative localisée
-
-L’en-tête du tableau de bord et ses douze onglets racine sont maintenant alimentés par une copie partagée en français, anglais, allemand et chinois. Le sélecteur mobile, son nom accessible et l’intitulé de la section active réemploient les mêmes libellés afin d’éviter une divergence entre bureau, mobile et lecteur d’écran. Une non-régression contrôle la présence des douze intitulés pour chaque langue.
-
-Les écrans historiques d’accès administratif sont alignés sur cette même copie multilingue : chargement, connexion requise, accès refusé, vérification de sécurité et code MFA. Les retours de succès d’envoi et de validation MFA suivent également la langue active. Une non-régression protège le contenu de ces états en français, anglais, allemand et chinois.
-
-La vue d’ensemble administrative localise également ses quatre indicateurs, son état de chargement et les raccourcis vers les candidatures et les missions. Les comptages et règles métier restent inchangés ; seuls les libellés visibles et les descriptions d’orientation s’adaptent à la langue active. Une non-régression garantit la présence des contenus français, anglais, allemands et chinois.
-
-L’onglet Réservations adapte maintenant ses filtres de paiement, ses statuts, son agenda, ses confirmations de remboursement, ses actions et son état vide aux quatre langues actives. Les dates affichées suivent aussi la locale de l’interface tout en conservant le fuseau Europe/Paris. Les règles métier de remboursement et les statuts persistés ne sont pas modifiés.
-
-L’onglet Messages localise son chargement, son décompte, son action de lecture, son retour de succès, son état vide et la présentation de ses horodatages. Le contenu envoyé par un visiteur est naturellement conservé dans sa langue d’origine ; seules les commandes et informations d’interface suivent la langue administrative active.
-
-L’onglet Demandes RGPD localise désormais ses types de demande, statuts de traitement, actions, compteurs, chargement, état vide et horodatages. Les valeurs de statut persistées restent inchangées : seules leur présentation et les actions administratives visibles s’adaptent à la langue active.
-
-L’onglet Témoignages localise ses statuts de modération, labels de mise en avant, actions d’approbation et de rejet, confirmation de suppression, compteur, chargement et état vide. Les témoignages publiés eux-mêmes restent inchangés et conservent leur langue de rédaction d’origine.
-
-L’onglet Disponibilités localise les jours, créneaux hebdomadaires, formulaires de blocage, retours de succès, actions de suppression, états vides et dates affichées. Les boutons composés uniquement d’icônes portent désormais un nom accessible localisé. Les règles de création, suppression et blocage de créneaux restent strictement inchangées.
-
-Le tableau Candidatures dispose désormais d’un premier lot localisé : titre, information de gouvernance IA, reprise des analyses, filtres, statuts de candidature, statuts d’analyse, chargement, score et état vide. Les valeurs persistées et les critères de recherche ne changent pas ; seule leur présentation visible est traduite dans les quatre langues actives.
-
-Les actions opérationnelles du tableau Candidatures — téléchargement du CV, ouverture de la fiche 360°, analyse ou relance, prise de contact, demande de complément, effacement RGPD et compositeur d’email — sont elles aussi localisées. Le contenu du message, le choix d’email FR/EN et les opérations de traitement restent inchangés ; les détails de lecture IA font l’objet du lot suivant.
-
-Les détails de fichier, dates de conservation, états d’analyse, métadonnées de pipeline, lecture IA, indicateurs d’extraction et comptes rendus associés sont maintenant localisés à leur tour. Les horodatages suivent la langue active, tout en conservant le fuseau Europe/Paris ; les données de candidat et les sorties d’analyse sont conservées sans transformation.
-
-Enfin, les profils de matching et leurs champs de création sont alignés sur les quatre langues actives. Le tableau Candidatures couvre ainsi ses filtres, statut, critères de matching, actions, messagerie, détails d’analyse et état vide. La boîte Candidate 360° conserve son propre composant et sera traitée séparément si nécessaire.
-
-La fiche Candidate 360° est désormais localisée : aperçu sécurisé, statuts, dates, notes, pièces demandées, relances, chronologie, actions et états d’absence. Les titres et détails archivés dans la chronologie restent préservés dans leur langue d’enregistrement afin de conserver leur valeur de traçabilité.
-
-Le pilotage Recrutement localise à présent ses indicateurs, relances manuelles, métriques de vivier, états d’analyse et délivrabilité des campagnes. Les calculs et données sources restent inchangés ; les ratios affichés conservent leur rôle informatif et ne fondent aucune décision automatisée.
-
-L’espace Briefs Employeurs a fait l’objet d’un contrôle complémentaire. Ses contrôles, détails et pagination restent sur la copie multilingue existante, et l’état d’erreur affiche désormais uniquement un message localisé générique, sans exposer de détail technique retourné par le serveur.
-
-Le portail candidat sécurisé est déjà couvert de bout en bout par une copie française, anglaise, allemande et chinoise. La vérification de non-régression étend la couverture aux sessions actives, révocations, dépôt protégé, retours d’envoi, catégories documentaires, états d’analyse et absence de document.
-
-Le parcours d’accès candidat est lui aussi couvert dans les quatre langues : connexion, création de compte, réinitialisation, consentements, vérification anti-bot, messages de réussite et erreurs génériques masquant les détails serveur. Les libellés de protection, contraintes de mot de passe et liens de navigation sont inclus dans la non-régression.
-
-La page de réinitialisation de mot de passe candidat réutilise une copie dédiée en français, anglais, allemand et chinois. La couverture vérifie les métadonnées, consignes de mot de passe, confirmation, messages de validation, action de sauvegarde et message d’erreur générique.
-
-Le parcours d’activation de compte candidat est couvert dans ces mêmes langues : attente de vérification, activation réussie avec redirection, lien manquant, lien invalide ou expiré, et retour sécurisé à la connexion. Aucun détail d’erreur serveur n’est exposé sur cette page.
-
-Le parcours public de désinscription des communications de recrutement est localisé en français, anglais, allemand et chinois. Il couvre les métadonnées no-index, la confirmation explicite, le traitement en cours, la préférence enregistrée, le lien invalide et le retour vers l’accueil.
-
-La FAQ publique dispose désormais de commandes et garanties entièrement localisées : réservation, accès au parcours Hippocampus, avertissement pratique, métadonnées et rappel explicite qu’un recrutement nécessite une revue humaine. Les réponses ne formulent pas de conseil médical personnalisé.
-
-La page 404 publique est couverte dans les quatre langues : métadonnées no-index, contexte de page introuvable, explication, retour à l’accueil et retour à la page précédente. Les copies sont maintenant exportées et testées pour empêcher une régression de traduction.
-
-Les pages publiques d’incident et de maintenance sont couvertes en français, anglais, allemand et chinois. Les messages restent volontairement non techniques, distinguent l’incident de la maintenance et proposent un retour à l’accueil ainsi qu’une action de nouvelle tentative.
-
-La page Ventures est couverte dans les quatre langues : interface de récupération, fil d’Ariane, sections de présentation, navigation, métadonnées et descriptions allemande et chinoise. Les logos de sociétés disposent également d’un texte alternatif dans la langue active.
-
-Le tableau Candidatures renforce sa lecture mobile : actions regroupées sur toute la largeur avant le point de rupture, cibles tactiles de hauteur minimale, retour au format compact sur écran large et rupture des noms de fichier longs. Une non-régression protège ces contraintes de mise en page.
-
-La revue administrative des documents candidats suit le même principe : noms de fichier et courriels peuvent se rompre, les contrôles d’analyse et d’ouverture occupent la largeur disponible sur mobile, et les actions de décision conservent des cibles tactiles distinctes.
-
-## États administratifs localisés
-
-Les états de chargement, d’erreur et d’absence des onglets administratifs historiques sont alimentés par les copies FR/EN/DE/ZH : shell d’accès, vue d’ensemble, réservations, messages, demandes RGPD, témoignages, disponibilités, candidatures, vivier, mailing, documents et briefs. La vérification des sources confirme que ces états ne s’appuient pas sur des messages techniques exposés à l’utilisateur.
-
-## Sobriété visuelle renforcée
-
-Lorsque le mode de lisibilité renforcée est activé, les entrées animées et les pulsations décoratives sont neutralisées. Cette règle s’applique notamment aux formulaires et pages légales, sans retirer les états de succès ou les messages utiles. La préférence reste mémorisée et une non-régression protège ces règles CSS.
-
-## Guide des composants
-
-Le projet contient désormais `COMPONENTS_GUIDE.md`, qui décrit les composants partagés, conventions de localisation, états d’interface, protections des données sensibles et étapes de validation avant publication. Un test de présence protège cette documentation afin qu’elle reste disponible lors des évolutions futures.
-
-## Citation médicale sourcée
-
-Le composant `MedicalCitation` permet d’afficher une citation générale avec un lien de source, une date de mise à jour, un contexte éventuel et un avertissement de non-substitution à l’avis médical personnalisé ou aux urgences. Son format, son libellé et sa date sont localisés en français, anglais, allemand et chinois ; il ne publie aucune recommandation clinique par défaut.
-
-## Grille responsive publique
-
-Le conteneur partagé conserve des marges progressives de 16 px, 24 px puis 32 px, ainsi qu’une largeur maximale sur grand écran. Les parcours Réservation, Recrutement et Employeurs restent empilés avant leur mise en colonnes, tandis que les pages légales utilisent le même conteneur de lecture. Une non-régression vérifie ces contrats de structure.
-
-## Transition de route
-
-Les routes disposent d’une entrée courte de 180 ms, limitée à l’opacité et à une translation verticale de 6 px. La transition est désactivée lorsque le système demande une réduction des mouvements ou lorsque la lisibilité renforcée est active.
-
-## Calendrier de revue annuelle
-
-Le fichier `ANNUAL_REVIEW_CALENDAR.md` prépare une revue annuelle des traductions, de l’accessibilité, des visuels, des contenus médicaux, du RGPD et de la sécurité des espaces privés. Il distingue les preuves à archiver et les contrôles nécessitant un appareil réel ou un fournisseur tiers.
-
-Le calendrier inclut également les revues des communications, documents et factures, réservation et paiement, administration, domaines, données structurées, marque, expérience utilisateur, simplicité et clarté des informations médicales.
-
-La matrice annuelle couvre aussi la clarté médicale et transactionnelle, l’identité et les contenus, le référencement et la navigation, le système visuel, ainsi que la simplification fondée sur les retours d’usage disponibles.
-
-Elle couvre désormais les états d’interface, composants visuels, canaux de diffusion et pages de support, avec les preuves à conserver et les décisions de correction attendues.
-
-Le calendrier inclut maintenant les pages éditoriales et métier, les routes et l’indexation, les liens de service ainsi que la navigation et les droits associés.
-
-Il couvre également les liens légaux, les fournisseurs et l’exploitation, ainsi que les destinations de contact et de service transactionnel.
-
-Les contrôles annuels incluent maintenant les parcours de réservation, les calendriers, les limites de téléconsultation et les références relatives aux données sensibles et aux droits RGPD.
-
-## Kit de marque exportable
-
-Le fichier `BRAND_KIT.md` centralise la signature, les tokens de palette, les typographies, les règles de ton, les formats d’export LinkedIn, documentaires et e-mail, ainsi que les contrôles de droits et d’accessibilité à effectuer avant diffusion.
-
-## Contrôle de performance de production
-
-La compilation de production réussit avec un découpage par route. Les pages publiques critiques restent chargées dynamiquement, et le bundle administratif demeure isolé du parcours public initial. Le principal bundle client compressé est d’environ 134 kB ; le tableau de bord administratif compressé est d’environ 57 kB. Aucun fractionnement supplémentaire n’est justifié par cette vérification statique ; les mesures de navigation sur appareil réel restent à réaliser séparément.
-
-Une non-régression vérifie que les parcours Administration, Portail candidat et Réservation restent chargés de manière différée. Cela protège le chargement initial du parcours public contre une importation accidentelle de l’interface administrative.
-
-## Vérification visuelle des parcours publics critiques
-
-Les pages Accueil, Réservation, RGPD, Recrutement et Employeurs ont été capturées en vue bureau. Les en-têtes, formulaires, CTAs et pieds de page restent lisibles, structurés et sans chevauchement visible. Les formulaires Réservation, RGPD et Brief Employeur présentent leurs champs à une largeur cohérente, avec une hiérarchie claire entre contenu informatif et action principale. La vérification équivalente sur mobile reste planifiée séparément.
-
-La même série a été vérifiée à 375 px de large. Les pages empilent correctement leurs contenus : les champs de réservation et RGPD conservent une largeur complète, les cartes Recrutement restent séparées, et le brief Employeur garde des champs et CTA accessibles sans défilement horizontal. Aucun chevauchement bloquant n’a été observé dans les parcours capturés.
-
-Les deux illustrations décoratives publiques se chargent désormais en différé avec décodage asynchrone, restent masquées des lecteurs d’écran et utilisent un recadrage de couverture. Une non-régression protège ces attributs pour les sections Services et Réservation.
 
 ## Disponibilité de production
 
@@ -261,30 +97,6 @@ Un contrôle statique des composants et pages visibles n’a trouvé aucun lien 
 ## Alternative de marque localisée
 
 L’alternative textuelle du logo du pied de page est désormais définie en français, anglais, allemand et chinois, avec une couverture automatisée. Le logo placé dans le bouton d’accueil de la navigation est explicitement décoratif : le bouton porte déjà un nom accessible localisé et ne répète donc plus l’information au lecteur d’écran.
-
-## Registre des droits visuels
-
-Le fichier `ASSET_RIGHTS_REGISTER.md` cartographie les actifs de marque, visuels générés, portraits, logos de tiers, ressources institutionnelles externes et contenus éditoriaux. Il distingue explicitement une provenance technique d’une autorisation de diffusion : les autorisations des personnes, photographes, titulaires de marques et partenaires restent à archiver avant toute diffusion externe qui le nécessite. Le registre n’affirme aucune licence inexistante et son maintien est protégé par une non-régression documentaire.
-
-## Validations externes restantes
-
-Le fichier `EXTERNAL_VALIDATION_REGISTER.md` centralise les contrôles qui nécessitent une boîte e-mail, un appareil réel, une session MFA autorisée, une autorisation de tiers ou du retour d’usage réel. Chaque entrée précise une procédure non intrusive, une preuve attendue et reste ouverte jusqu’à la conservation de cette preuve. Les validations automatisées ne sont donc pas présentées comme une substitution au lecteur d’écran, aux clients de messagerie, aux navigateurs non disponibles ou aux accords de droits.
-
-## Confirmation de paiement et facture
-
-La matrice de régression visuelle couvre désormais la confirmation de paiement avec un identifiant de démonstration stable, en bureau et mobile. Les deux étalons vérifient la référence de suivi, les cartes de réassurance et le panneau localisé précisant que la facture est délivrée en pièce jointe e-mail, sans lien public ni document financier affiché. Cette extension porte la matrice à dix-huit comparaisons déterministes ; le paiement réel, l’e-mail et la facture effective restent exclus de la capture conformément au registre de validations externes.
-
-## Revue UX fondée sur les retours réels
-
-Le fichier `UX_FEEDBACK_REVIEW_PROTOCOL.md` formalise une revue trimestrielle reposant sur des retours volontaires, minimisés et anonymisés. Il exclut les données de santé, de paiement, de candidature et les informations personnelles inutiles ; les constats doivent être synthétisés sans identifiant, reproduits avant priorisation et reliés aux décisions de correction ou de suivi. La collecte effective reste soumise au consentement et aux contrôles externes documentés.
-
-## Reflow mobile des listes administratives
-
-Les en-têtes des listes Réservations, Messages et demandes RGPD appliquent désormais le retour à la ligne aux noms, badges et identifiants, ainsi qu’une coupure contrôlée aux e-mails et références longues. Les actions conservent des cibles tactiles et l’affichage ne dépend pas d’une largeur fixe. Cette protection est couverte par `AdminDashboard.mobileReflow.test.ts` ; la vérification des données réelles et des onglets authentifiés sur mobile/tablette reste explicitement inscrite dans le registre de validations externes.
-
-## Authenticité des témoignages
-
-L’audit a détecté des entrées de test « Test User / Excellent Service » créées par une ancienne suite de tests. Elles ont été supprimées de la base ; la suite ne crée désormais plus de témoignage ni de fixture d’avis. Les contrats de schéma et de modération sont validés sans écrire dans la base, et une non-régression interdit explicitement toute semence d’avis fictif. Les témoignages publiés restent limités aux contributions validées fournies pour le site.
 
 ## Couverture de validation d’accessibilité
 
@@ -323,47 +135,6 @@ Les CV entrants sont placés en quarantaine avant toute analyse. La validation v
 ## Couverture des chemins critiques de recrutement
 
 La suite couvre les chemins de succès et d’échec du pipeline : validation de fichier, quarantaine, extraction, repli OCR, échec IA, reprise contrôlée, rétention non destructive, notifications, téléchargement, chiffrement documentaire, accès candidat et restrictions administratives. Les tests dédiés restent séparés par responsabilité afin de signaler rapidement la frontière affectée lorsqu’un fournisseur externe ou une règle métier évolue.
-
-## États de chargement tRPC prioritaires
-
-Les parcours actifs contrôlés utilisent un état d’attente explicite plutôt qu’une zone vide : disponibilité et tarif de la réservation, coffre documentaire candidat, sessions de sécurité, candidatures, vivier, briefs Employeurs, historique Mailing, revue documentaire, sécurité et indicateurs de recrutement. Les tableaux administratifs existants disposent d’un squelette ou d’un panneau dédié ; les actions asynchrones affichent un état indisponible pendant leur traitement.
-
-La réservation bloque désormais le paiement tant que la disponibilité est en cours de vérification ou lorsque la disponibilité et le tarif ne peuvent pas être obtenus. Elle affiche alors un message localisé, sans considérer par défaut un créneau comme disponible. Le portail candidat distingue aussi un coffre temporairement indisponible d’un coffre réellement vide : en cas d’erreur de profil, de documents ou de sessions, il n’affiche aucune donnée partielle et propose une nouvelle tentative localisée. Les tests `BookingPage.test.ts` et `CandidatePortalPage.test.ts` couvrent ces garde-fous en français, anglais, allemand et chinois.
-
-## Factures et rappels de rendez-vous
-
-Après paiement confirmé, le traitement durable `appointment-fulfillment` produit une facture PDF A4, la dépose dans le stockage privé et l’envoie en pièce jointe à l’e-mail de facture. Il n’expose donc pas de lien public de téléchargement de facture à vérifier sur ordinateur ou mobile ; cette décision évite de publier une URL contenant un document financier. Le PDF, la pièce jointe et le mécanisme de reprise sont couverts par des tests dédiés.
-
-La tâche de rappel `appointment-reminder-24h` est active et recherche chaque heure les rendez-vous payés, confirmés, non encore notifiés, compris dans la fenêtre de 22 à 26 heures. L’exécution la plus récente observée a répondu avec succès ; le worker de facture a également répondu avec succès, sans travail à traiter. Des réponses 403 ponctuelles liées au cookie de la tâche planifiée ont été relevées dans l’historique, puis la configuration des deux tâches a été rafraîchie sans créer de tâche parallèle ; aucune configuration concurrente ne subsiste. La réception effective d’un e-mail de rappel sur un client desktop et mobile reste volontairement une vérification manuelle sur un rendez-vous de test payé, afin de ne pas envoyer de notification non sollicitée.
-
-## Compression et recadrage responsive des illustrations
-
-Les deux illustrations décoratives dont les sources sont disponibles ont été converties sans recadrage en variantes WebP de 640 px et 1 280 px. Elles remplacent des fichiers PNG de 2 560 × 1 440 px, auparavant nommés avec une extension `.jpg`, et sont désormais servies avec `srcSet` et `sizes`. Le navigateur choisit ainsi une variante cohérente avec la largeur d’affichage tout en conservant le chargement différé, le décodage asynchrone, l’alternative vide et le statut décoratif.
-
-| Illustration | Variantes publiées | Règle de dimensionnement | Décision de recadrage |
-|---|---:|---|---|
-| Étapes de réservation | 640 px, 1 280 px | `100vw` sous 640 px, 360 px au-delà | Aucune coupe de la source ; le conteneur conserve son rendu `object-cover`. |
-| Repère visuel des services | 640 px, 1 280 px | `100vw` sous 640 px, 1 280 px au-delà | Aucune coupe de la source ; l’image reste un fond décoratif avec contraste superposé. |
-
-Les autres images du site restent hébergées dans le stockage statique et ne disposent pas toutes de sources locales exportables. Elles conservent leur politique de chargement actuelle. Toute future illustration devra être déposée avec au moins une source 640 px et une source 1 280 px, au format WebP, puis référencée avec `srcSet` et `sizes` ; un recadrage ne doit être appliqué qu’après validation explicite du cadrage éditorial.
-
-## Longueur des contrôles multilingues de la page Ressources
-
-Les libellés compacts de la page Ressources — recherche, filtres, format de document et appel à l’ouverture d’une source externe — sont désormais contrôlés dans les quatre langues. Le garde-fou compte les caractères Unicode sans tronquer le chinois et impose une limite conservatrice de quarante-deux caractères sur ces commandes. Les paragraphes éditoriaux restent volontairement fluides et passent à la ligne dans des conteneurs à largeur contrainte ; leur validation sur lecteurs d’écran, zoom natif et navigateurs distincts demeure un contrôle sur appareil réel documenté dans la checklist manuelle.
-
-## Accès administratif sur mobile
-
-Le point d’entrée `/admin` a été contrôlé à 375 × 812 px sans ouvrir de session sensible. L’étape de validation de sécurité conserve une hiérarchie lisible, une explication concise, des actions pleine largeur, un champ de code à six chiffres et une sortie vers le site, sans chevauchement observé. La vérification des onglets et données administratives après authentification demeure volontairement un contrôle de recette sur tablette ou mobile réel, avec un compte administrateur autorisé ; aucun code de sécurité ni accès ne doit être sollicité uniquement pour une capture automatisée.
-
-## Régression visuelle automatisée
-
-Le script `pnpm test:visual` compare désormais le viewport initial des routes publiques critiques `/`, `/booking`, `/recruitment`, `/employers`, `/resources` et `/gdpr` en 1280 × 720 et 375 × 812. Les douze scénarios sont stabilisés en français, thème sombre, consentement essentiel, mouvement réduit, fuseau Europe/Paris et échelle de pixels unitaire ; les étalons sont stockés hors dépôt dans le stockage statique du projet. La dernière exécution a validé les douze comparaisons, avec une tolérance maximale de 0,8 % de pixels différents.
-
-Cette couverture détecte les ruptures de hiérarchie, de cadrage et de premier viewport sans simuler paiement, e-mail, session administrateur ni données candidat. La validation visuelle de page entière, les technologies d’assistance et les états nécessitant une session autorisée restent régis par la checklist préproduction et la recette manuelle.
-
-## Textes longs allemand et chinois
-
-La matrice de régression visuelle inclut désormais la Réservation en allemand et chinois sur bureau, ainsi que la page Ressources en allemand et chinois sur mobile. Les quatre captures ont été comparées à leurs étalons approuvés sans différence significative ; elles complètent les garde-fous Unicode existants sur les boutons, filtres et appels à l’action compacts. Ce périmètre cible les écrans où les formulations allemandes sont les plus longues et ceux où le chinois impose une vérification distincte de l’affichage typographique.
 
 ## Données de recrutement normalisées
 

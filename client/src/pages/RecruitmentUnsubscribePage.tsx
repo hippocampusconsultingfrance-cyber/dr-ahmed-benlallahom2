@@ -10,8 +10,6 @@ type SupportedLanguage = "fr" | "en" | "de" | "zh";
 export function getRecruitmentUnsubscribeCopy(language: SupportedLanguage) {
   const copy = {
     fr: {
-      metaTitle: "Désinscription recrutement | Hippocampus Consulting",
-      metaDescription: "Gérez vos préférences de communications de recrutement.",
       title: "Préférences de recrutement",
       intro: "Vous pouvez arrêter à tout moment les communications concernant les opportunités de recrutement.",
       confirm: "Ne plus recevoir ces opportunités",
@@ -23,8 +21,6 @@ export function getRecruitmentUnsubscribeCopy(language: SupportedLanguage) {
       home: "Retour à l’accueil",
     },
     en: {
-      metaTitle: "Recruitment unsubscribe | Hippocampus Consulting",
-      metaDescription: "Manage your recruitment communication preferences.",
       title: "Recruitment preferences",
       intro: "You can stop receiving recruitment opportunity communications at any time.",
       confirm: "Unsubscribe from these opportunities",
@@ -36,8 +32,6 @@ export function getRecruitmentUnsubscribeCopy(language: SupportedLanguage) {
       home: "Back to home",
     },
     de: {
-      metaTitle: "Recruiting abbestellen | Hippocampus Consulting",
-      metaDescription: "Verwalten Sie Ihre Einstellungen für Recruiting-Mitteilungen.",
       title: "Recruiting-Einstellungen",
       intro: "Sie können Mitteilungen über Recruiting-Möglichkeiten jederzeit abbestellen.",
       confirm: "Diese Möglichkeiten nicht mehr erhalten",
@@ -49,8 +43,6 @@ export function getRecruitmentUnsubscribeCopy(language: SupportedLanguage) {
       home: "Zur Startseite",
     },
     zh: {
-      metaTitle: "取消招聘订阅 | Hippocampus Consulting",
-      metaDescription: "管理您的招聘通信偏好。",
       title: "招聘订阅偏好",
       intro: "您可以随时停止接收与招聘机会相关的通信。",
       confirm: "不再接收此类机会",
@@ -80,7 +72,7 @@ export default function RecruitmentUnsubscribePage() {
 
   return (
     <>
-      <SEOHead title={copy.metaTitle} description={copy.metaDescription} noIndex />
+      <SEOHead title="Désinscription recrutement | Hippocampus Consulting" description="Gérez vos préférences de communications de recrutement." noIndex />
       <main className="grid min-h-screen place-items-center bg-[#030a12] p-6 text-center text-white">
         <section className="w-full max-w-lg rounded-3xl border border-cyan-950 bg-slate-950/80 p-8 shadow-2xl sm:p-10" aria-live="polite">
           {unsubscribe.isSuccess ? (
