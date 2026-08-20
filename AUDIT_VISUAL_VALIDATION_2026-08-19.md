@@ -194,6 +194,8 @@ Les routes disposent d’une entrée courte de 180 ms, limitée à l’opacité 
 
 Le fichier `ANNUAL_REVIEW_CALENDAR.md` prépare une revue annuelle des traductions, de l’accessibilité, des visuels, des contenus médicaux, du RGPD et de la sécurité des espaces privés. Il distingue les preuves à archiver et les contrôles nécessitant un appareil réel ou un fournisseur tiers.
 
+Le calendrier inclut également les revues des communications, documents et factures, réservation et paiement, administration, domaines, données structurées, marque, expérience utilisateur, simplicité et clarté des informations médicales.
+
 ## Kit de marque exportable
 
 Le fichier `BRAND_KIT.md` centralise la signature, les tokens de palette, les typographies, les règles de ton, les formats d’export LinkedIn, documentaires et e-mail, ainsi que les contrôles de droits et d’accessibilité à effectuer avant diffusion.

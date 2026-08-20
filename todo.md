@@ -329,34 +329,34 @@
 - [x] Préparer une revue annuelle des droits sur les visuels et logos
 - [x] Préparer une revue annuelle des contenus médicaux et de leurs sources
 - [x] Préparer une revue annuelle des pages légales et RGPD
-- [ ] Préparer une revue annuelle des modèles d’emails et factures
-- [ ] Préparer une revue annuelle du parcours de réservation
-- [ ] Préparer une revue annuelle des retours utilisateurs
-- [ ] Préparer une revue annuelle de la cohérence entre le site, les emails et les réseaux sociaux
-- [ ] Préparer une revue annuelle de la cohérence des tarifs et politiques affichés
-- [ ] Préparer une revue annuelle du dashboard et des outils administrateur
-- [ ] Préparer une revue annuelle des pages 404, maintenance et erreur serveur
-- [ ] Préparer une revue annuelle des domaines, certificats et favicons
-- [ ] Préparer une revue annuelle des données structurées et métadonnées sociales
-- [ ] Préparer une revue annuelle du sitemap et des liens internes
-- [ ] Préparer une revue annuelle des composants UI et dépendances visuelles
-- [ ] Préparer une revue annuelle de la dette UX et des incohérences de navigation
-- [ ] Préparer une revue annuelle de la sobriété numérique des images et animations
-- [ ] Préparer une revue annuelle de la stratégie de contenu et des ressources téléchargeables
-- [ ] Préparer une revue annuelle de la marque Hippocampus Consulting
-- [ ] Préparer une revue annuelle du positionnement international FR/EN/DE/ZH
-- [ ] Préparer une revue annuelle de la clarté des appels à l’action
-- [ ] Préparer une revue annuelle des formulaires et messages d’aide
-- [ ] Préparer une revue annuelle des états vides et erreurs
-- [ ] Préparer une revue annuelle des composants accessibles
-- [ ] Préparer une revue annuelle des animations et préférences de mouvement
-- [ ] Préparer une revue annuelle des retours de paiement et réservation
-- [ ] Préparer une revue annuelle des notifications email et SMS
-- [ ] Préparer une revue annuelle des factures et documents générés
-- [ ] Préparer une revue annuelle des ressources graphiques
-- [ ] Préparer une revue annuelle de la documentation design
-- [ ] Préparer une revue annuelle de la checklist de publication
-- [ ] Préparer une revue annuelle des tests visuels et responsive
+- [x] Préparer une revue annuelle des modèles d’emails et factures
+- [x] Préparer une revue annuelle du parcours de réservation
+- [x] Préparer une revue annuelle des retours utilisateurs
+- [x] Préparer une revue annuelle de la cohérence entre le site, les emails et les réseaux sociaux
+- [x] Préparer une revue annuelle de la cohérence des tarifs et politiques affichés
+- [x] Préparer une revue annuelle du dashboard et des outils administrateur
+- [x] Préparer une revue annuelle des pages 404, maintenance et erreur serveur
+- [x] Préparer une revue annuelle des domaines, certificats et favicons
+- [x] Préparer une revue annuelle des données structurées et métadonnées sociales
+- [x] Préparer une revue annuelle du sitemap et des liens internes
+- [x] Préparer une revue annuelle des composants UI et dépendances visuelles
+- [x] Préparer une revue annuelle de la dette UX et des incohérences de navigation
+- [x] Préparer une revue annuelle de la sobriété numérique des images et animations
+- [x] Préparer une revue annuelle de la stratégie de contenu et des ressources téléchargeables
+- [x] Préparer une revue annuelle de la marque Hippocampus Consulting
+- [x] Préparer une revue annuelle du positionnement international FR/EN/DE/ZH
+- [x] Préparer une revue annuelle de la clarté des appels à l’action
+- [x] Préparer une revue annuelle des formulaires et messages d’aide
+- [x] Préparer une revue annuelle des états vides et erreurs
+- [x] Préparer une revue annuelle des composants accessibles
+- [x] Préparer une revue annuelle des animations et préférences de mouvement
+- [x] Préparer une revue annuelle des retours de paiement et réservation
+- [x] Préparer une revue annuelle des notifications email et SMS
+- [x] Préparer une revue annuelle des factures et documents générés
+- [x] Préparer une revue annuelle des ressources graphiques
+- [x] Préparer une revue annuelle de la documentation design
+- [x] Préparer une revue annuelle de la checklist de publication
+- [x] Préparer une revue annuelle des tests visuels et responsive
 - [ ] Préparer une revue annuelle des anomalies graphiques signalées
 - [ ] Préparer une revue annuelle des améliorations réellement utilisées par les visiteurs
 - [ ] Préparer une revue annuelle des fonctionnalités à retirer si elles créent de la complexité

@@ -11,5 +11,9 @@ describe("calendrier annuel de revue", () => {
     expect(calendar).toContain("Droits sur visuels et logos");
     expect(calendar).toContain("Contenus médicaux et sources");
     expect(calendar).toContain("Pages légales et RGPD");
+    expect(calendar).toContain("Communications et documents");
+    expect(calendar).toContain("Réservation et paiement");
+    expect(calendar).toContain("Administration et qualité technique");
+    expect(calendar).toContain("Expérience utilisateur");
   });
 });
