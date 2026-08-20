@@ -155,7 +155,6 @@ export default function Navigation() {
             { id: "experience", label: content.nav.experience },
             { id: "services", label: content.nav.services },
             { id: "education", label: content.nav.education },
-            { id: "contact", label: content.nav.contact },
           ].map((item) => (
             <button
               key={item.id}
@@ -167,6 +166,7 @@ export default function Navigation() {
           ))}
           <a href="/recruitment" className="nav-link inline-flex h-10 items-center whitespace-nowrap text-sm font-medium text-muted-foreground hover:text-foreground transition-colors duration-200 relative after:absolute after:bottom-[2px] after:left-0 after:w-0 after:h-[2px] after:bg-primary after:transition-all hover:after:w-full">{recruitmentLabel}</a>
           <a href="/employers" className="nav-link inline-flex h-10 items-center whitespace-nowrap text-sm font-medium text-muted-foreground hover:text-foreground transition-colors duration-200 relative after:absolute after:bottom-[2px] after:left-0 after:w-0 after:h-[2px] after:bg-primary after:transition-all hover:after:w-full">{employersLabel}</a>
+          <button onClick={() => scrollTo("contact")} className="nav-link inline-flex h-10 items-center whitespace-nowrap text-sm font-medium text-muted-foreground transition-colors duration-200 relative after:absolute after:bottom-[2px] after:left-0 after:h-[2px] after:w-0 after:bg-primary after:transition-all hover:text-foreground hover:after:w-full">{content.nav.contact}</button>
         </nav>
 
         {/* Actions */}
@@ -279,7 +279,6 @@ export default function Navigation() {
               { id: "experience", label: content.nav.experience },
               { id: "services", label: content.nav.services },
               { id: "education", label: content.nav.education },
-              { id: "contact", label: content.nav.contact },
             ].map((item) => (
               <button
                 key={item.id}
@@ -291,6 +290,7 @@ export default function Navigation() {
             ))}
             <a href="/recruitment" onClick={() => setMobileOpen(false)} className="nav-mobile-link text-left text-lg font-medium text-foreground py-2 border-b border-border/20">{recruitmentLabel}</a>
             <a href="/employers" onClick={() => setMobileOpen(false)} className="nav-mobile-link text-left text-lg font-medium text-foreground py-2 border-b border-border/20">{employersLabel}</a>
+            <button onClick={() => scrollTo("contact")} className="nav-mobile-link text-left text-lg font-medium text-foreground py-2 border-b border-border/20">{content.nav.contact}</button>
             <a href="/search" onClick={() => setMobileOpen(false)} className="nav-mobile-link flex items-center gap-2 text-left text-lg font-medium text-foreground py-2 border-b border-border/20"><Search className="h-4 w-4" />{language === "fr" ? "Rechercher" : language === "en" ? "Search" : language === "de" ? "Suche" : "搜索"}</a>
             {toggleHighReadability && readabilityCopy && <button onClick={toggleHighReadability} className="nav-mobile-link flex items-center gap-2 text-left text-lg font-medium text-foreground py-2 border-b border-border/20" aria-pressed={highReadability}><Accessibility className="h-4 w-4" />{readabilityCopy.label}</button>}
             {theme === "dark" && toggleOledDark && oledCopy && <button onClick={toggleOledDark} className="nav-mobile-link flex items-center gap-2 text-left text-lg font-medium text-foreground py-2 border-b border-border/20" aria-pressed={oledDark}><CircleDot className="h-4 w-4" />{oledCopy.label}</button>}

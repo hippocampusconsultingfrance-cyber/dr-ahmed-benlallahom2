@@ -91,8 +91,10 @@ export default function RecruitmentHubPage() {
     <div className="min-h-screen bg-background text-foreground">
       <SEOHead title={t.metaTitle} description={t.metaDescription} ogUrl="https://drahmedbenlallahom.com/recruitment" />
       <Navigation />
-      <main className="pt-32 md:pt-40 pb-24">
-        <section className="container max-w-5xl">
+      <main className="relative isolate overflow-hidden pt-32 pb-24 md:pt-40">
+        <img src="/manus-storage/hippocampus-recruitment-earth_f3124b59.png" alt="" aria-hidden="true" className="pointer-events-none absolute left-1/2 top-10 h-[34rem] w-[34rem] -translate-x-1/2 rounded-full object-cover opacity-25 mix-blend-screen md:top-8 md:h-[50rem] md:w-[50rem] [mask-image:radial-gradient(ellipse_at_center,black_34%,transparent_73%)]" />
+        <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_28%,transparent_0%,hsl(var(--background)/0.34)_48%,hsl(var(--background))_88%)]" />
+        <section className="container relative z-10 max-w-5xl">
           <div className="text-center max-w-3xl mx-auto mb-16">
             <p className="section-kicker">{t.eyebrow}</p>
             <h1 className="mt-4 font-display text-4xl leading-tight md:text-6xl text-foreground">{t.title}</h1>
