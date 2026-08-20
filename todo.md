@@ -292,7 +292,7 @@
 - [x] Ajouter un mode sombre optimisé pour les écrans OLED
 - [x] Vérifier les performances après ajout d’animations ou d’images
 - [x] Ajouter une non-régression conservant le chargement différé du tableau de bord administratif
-- [ ] Préparer des visuels LinkedIn cohérents avec la marque
+- [x] Préparer des visuels LinkedIn cohérents avec la marque : affiche 3:4 de recrutement international et légende de diffusion prête à publier
 - [ ] Vérifier le rendu des emails HTML dans Gmail, Outlook et Apple Mail
 - [x] Harmoniser les notifications de succès, avertissement et erreur
 - [x] Garantir que le contenu FAQ est entièrement visible à l’impression, y compris les panneaux d’accordéon fermés
