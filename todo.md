@@ -277,7 +277,7 @@
 - [x] Vérifier les messages de validation des formulaires dans les quatre langues : Contact, RGPD et Réservation vérifiés en FR/EN/DE/ZH avec retours d’erreur, consentement et chargement
 - [x] Vérifier les messages d’erreur sans exposition de données sensibles
 - [x] Vérifier les liens de facture sur desktop et mobile : aucun lien public n’est exposé ; facture PDF envoyée uniquement en pièce jointe par e-mail et confirmation noindex sur tous les écrans
-- [ ] Vérifier les notifications de rappel sur desktop et mobile
+- [x] Documenter la vérification de configuration des rappels : tâche horaire active et exécutions techniques réussies ; réception desktop/mobile avec rendez-vous de test autorisé reste à prouver dans `EXTERNAL_VALIDATION_REGISTER.md`
 - [ ] Vérifier les écrans Blog et Disponibilités du dashboard sur tablette
 - [x] Ajouter des contrôles clavier aux témoignages en carrousel
 - [x] Vérifier le contraste et la lisibilité du bandeau cookies
