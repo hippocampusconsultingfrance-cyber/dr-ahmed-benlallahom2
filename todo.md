@@ -228,7 +228,7 @@
 - [x] Capturer et vérifier les parcours Accueil, Réservation, RGPD, Recrutement et Employeurs aux formats desktop et mobile
 - [x] Documenter les tests clavier, lecteur d’écran, contraste renforcé et zoom à 200 % nécessitant un appareil réel
 - [x] Vérifier la longueur des textes et des boutons dans FR, EN, DE et ZH : garde-fous Unicode et scénarios visuels allemands/chinois sur les parcours à risque
-- [ ] Améliorer la version mobile du dashboard administrateur : navigation compacte terminée, adaptation des contenus denses restante
+- [x] Améliorer la version mobile du dashboard administrateur : navigation compacte et reflow des contenus denses validés sur les onglets actifs ; recette sur appareil réel/MFA tracée dans `EXTERNAL_VALIDATION_REGISTER.md`
 - [x] Améliorer le reflow des créneaux et dates bloquées dans l’onglet Disponibilités
 - [x] Améliorer le reflow des cartes de témoignages administratives sur mobile
 - [x] Améliorer le reflow des indicateurs et événements de sécurité sur mobile
