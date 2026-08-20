@@ -24,10 +24,10 @@ function MetricCard({ icon: Icon, label, value, detail, tone }: MetricCardProps)
     <article className="rounded-xl border border-border bg-card p-4 shadow-sm">
       <div className="flex items-start justify-between gap-3">
         <span className={`grid h-9 w-9 place-items-center rounded-lg ${tone}`}><Icon className="h-4 w-4" aria-hidden="true" /></span>
-        <span className="text-2xl font-semibold tracking-tight text-foreground">{value}</span>
+        <span className="max-w-[65%] break-words text-right text-2xl font-semibold tracking-tight text-foreground">{value}</span>
       </div>
-      <h3 className="mt-4 text-sm font-medium text-foreground">{label}</h3>
-      <p className="mt-1 text-xs leading-5 text-muted-foreground">{detail}</p>
+      <h3 className="mt-4 break-words text-sm font-medium text-foreground">{label}</h3>
+      <p className="mt-1 break-words text-xs leading-5 text-muted-foreground">{detail}</p>
     </article>
   );
 }
@@ -71,7 +71,7 @@ export default function RecruitmentDashboardPanel() {
           <h2 id="recruitment-dashboard-title" className="mt-1 text-xl font-semibold text-foreground">{copy.title}</h2>
           <p className="mt-1 max-w-3xl text-sm text-muted-foreground">{copy.intro}</p>
         </div>
-        <div className="rounded-full border border-primary/25 bg-background/70 px-3 py-1.5 text-xs text-muted-foreground">{copy.dueFollowUps(nonNegativeCount(data.followUpStats.due))}</div>
+        <div className="max-w-full break-words rounded-full border border-primary/25 bg-background/70 px-3 py-1.5 text-xs text-muted-foreground">{copy.dueFollowUps(nonNegativeCount(data.followUpStats.due))}</div>
       </div>
 
       <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -83,17 +83,17 @@ export default function RecruitmentDashboardPanel() {
 
       <div className="mt-5 grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
         <section className="rounded-xl border border-border bg-card p-4" aria-labelledby="analysis-status-title">
-          <div className="flex items-center justify-between gap-3"><h3 id="analysis-status-title" className="text-sm font-semibold text-foreground">{copy.analysis.title}</h3><span className="text-xs text-muted-foreground">{copy.analysis.support}</span></div>
+          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1"><h3 id="analysis-status-title" className="break-words text-sm font-semibold text-foreground">{copy.analysis.title}</h3><span className="break-words text-xs text-muted-foreground">{copy.analysis.support}</span></div>
           <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-5">
-            {analysisStates.map(state => { const Icon = state.icon; return <div key={state.label} className="rounded-lg bg-muted/40 p-3"><Icon className={`h-4 w-4 ${state.tone}`} aria-hidden="true" /><p className="mt-3 text-lg font-semibold text-foreground">{state.value}</p><p className="text-xs text-muted-foreground">{state.label}</p></div>; })}
+            {analysisStates.map(state => { const Icon = state.icon; return <div key={state.label} className="min-w-0 rounded-lg bg-muted/40 p-3"><Icon className={`h-4 w-4 ${state.tone}`} aria-hidden="true" /><p className="mt-3 text-lg font-semibold text-foreground">{state.value}</p><p className="break-words text-xs text-muted-foreground">{state.label}</p></div>; })}
           </div>
         </section>
         <section className="rounded-xl border border-border bg-card p-4" aria-labelledby="delivery-status-title">
           <h3 id="delivery-status-title" className="text-sm font-semibold text-foreground">{copy.delivery.title}</h3>
           <dl className="mt-4 space-y-3 text-sm">
-            <div className="flex items-center justify-between gap-4"><dt className="text-muted-foreground">{copy.delivery.delivered}</dt><dd className="font-semibold text-foreground">{nonNegativeCount(delivery.delivered)}</dd></div>
-            <div className="flex items-center justify-between gap-4"><dt className="text-muted-foreground">{copy.delivery.delayed}</dt><dd className="font-semibold text-foreground">{nonNegativeCount(delivery.delayed)}</dd></div>
-            <div className="flex items-center justify-between gap-4"><dt className="text-muted-foreground">{copy.delivery.failed}</dt><dd className="font-semibold text-foreground">{nonNegativeCount(delivery.failed)}</dd></div>
+            <div className="flex items-center justify-between gap-4"><dt className="min-w-0 break-words text-muted-foreground">{copy.delivery.delivered}</dt><dd className="shrink-0 font-semibold text-foreground">{nonNegativeCount(delivery.delivered)}</dd></div>
+            <div className="flex items-center justify-between gap-4"><dt className="min-w-0 break-words text-muted-foreground">{copy.delivery.delayed}</dt><dd className="shrink-0 font-semibold text-foreground">{nonNegativeCount(delivery.delayed)}</dd></div>
+            <div className="flex items-center justify-between gap-4"><dt className="min-w-0 break-words text-muted-foreground">{copy.delivery.failed}</dt><dd className="shrink-0 font-semibold text-foreground">{nonNegativeCount(delivery.failed)}</dd></div>
           </dl>
         </section>
       </div>
