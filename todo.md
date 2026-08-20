@@ -504,105 +504,105 @@
 - [x] Préparer une revue annuelle de la cohérence des liens paiement : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
 - [x] Préparer une revue annuelle de la cohérence des liens remboursement : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
 - [ ] Préparer une revue annuelle de la cohérence des liens facture
-- [ ] Préparer une revue annuelle de la cohérence des liens rappel
-- [ ] Préparer une revue annuelle de la cohérence des liens confirmation
-- [ ] Préparer une revue annuelle de la cohérence des liens annulation
-- [ ] Préparer une revue annuelle de la cohérence des liens modification
-- [ ] Préparer une revue annuelle de la cohérence des liens disponibilité
-- [ ] Préparer une revue annuelle de la cohérence des liens indisponibilité
-- [ ] Préparer une revue annuelle de la cohérence des liens horaires
-- [ ] Préparer une revue annuelle de la cohérence des liens fuseau horaire
-- [ ] Préparer une revue annuelle de la cohérence des liens jours fériés
-- [ ] Préparer une revue annuelle de la cohérence des liens vacances
-- [ ] Préparer une revue annuelle de la cohérence des liens liste d’attente
-- [ ] Préparer une revue annuelle de la cohérence des liens récurrence
-- [ ] Préparer une revue annuelle de la cohérence des liens iCalendar
-- [ ] Préparer une revue annuelle de la cohérence des liens Google Calendar
-- [ ] Préparer une revue annuelle de la cohérence des liens Microsoft Calendar
-- [ ] Préparer une revue annuelle de la cohérence des liens Meet
-- [ ] Préparer une revue annuelle de la cohérence des liens téléconsultation
-- [ ] Préparer une revue annuelle de la cohérence des liens préparation
-- [ ] Préparer une revue annuelle de la cohérence des liens urgence
-- [ ] Préparer une revue annuelle de la cohérence des liens limites
-- [ ] Préparer une revue annuelle de la cohérence des liens confidentialité médicale
-- [ ] Préparer une revue annuelle de la cohérence des liens données sensibles
-- [ ] Préparer une revue annuelle de la cohérence des liens minimisation
-- [ ] Préparer une revue annuelle de la cohérence des liens conservation
-- [ ] Préparer une revue annuelle de la cohérence des liens suppression
-- [ ] Préparer une revue annuelle de la cohérence des liens audit
-- [ ] Préparer une revue annuelle de la cohérence des liens registre
-- [ ] Préparer une revue annuelle de la cohérence des liens sous-traitants
-- [ ] Préparer une revue annuelle de la cohérence des liens DPA
-- [ ] Préparer une revue annuelle de la cohérence des liens transferts
-- [ ] Préparer une revue annuelle de la cohérence des liens sécurité
-- [ ] Préparer une revue annuelle de la cohérence des liens incident
-- [ ] Préparer une revue annuelle de la cohérence des liens notification violation
-- [ ] Préparer une revue annuelle de la cohérence des liens CNIL
-- [ ] Préparer une revue annuelle de la cohérence des liens droits
-- [ ] Préparer une revue annuelle de la cohérence des liens accès
-- [ ] Préparer une revue annuelle de la cohérence des liens rectification
-- [ ] Préparer une revue annuelle de la cohérence des liens suppression
-- [ ] Préparer une revue annuelle de la cohérence des liens portabilité
-- [ ] Préparer une revue annuelle de la cohérence des liens opposition
-- [ ] Préparer une revue annuelle de la cohérence des liens limitation
-- [ ] Préparer une revue annuelle de la cohérence des liens retrait consentement
-- [ ] Préparer une revue annuelle de la cohérence des liens plainte
-- [ ] Préparer une revue annuelle de la cohérence des liens responsable traitement
-- [ ] Préparer une revue annuelle de la cohérence des liens contact
-- [ ] Préparer une revue annuelle de la cohérence des liens sécurité
-- [ ] Préparer une revue annuelle de la cohérence des liens hébergement
-- [ ] Préparer une revue annuelle de la cohérence des liens stockage
-- [ ] Préparer une revue annuelle de la cohérence des liens base données
-- [ ] Préparer une revue annuelle de la cohérence des liens backups
-- [ ] Préparer une revue annuelle de la cohérence des liens secrets
-- [ ] Préparer une revue annuelle de la cohérence des liens OAuth
-- [ ] Préparer une revue annuelle de la cohérence des liens admin
-- [ ] Préparer une revue annuelle de la cohérence des liens roles
-- [ ] Préparer une revue annuelle de la cohérence des liens sessions
-- [ ] Préparer une revue annuelle de la cohérence des liens 2FA
-- [ ] Préparer une revue annuelle de la cohérence des liens audit logs
-- [ ] Préparer une revue annuelle de la cohérence des liens rate limiting
-- [ ] Préparer une revue annuelle de la cohérence des liens CAPTCHA
-- [ ] Préparer une revue annuelle de la cohérence des liens CSP
-- [ ] Préparer une revue annuelle de la cohérence des liens HSTS
-- [ ] Préparer une revue annuelle de la cohérence des liens permissions policy
-- [ ] Préparer une revue annuelle de la cohérence des liens anti DDoS
-- [ ] Préparer une revue annuelle de la cohérence des liens monitoring
-- [ ] Préparer une revue annuelle de la cohérence des liens alerting
-- [ ] Préparer une revue annuelle de la cohérence des liens logs
-- [ ] Préparer une revue annuelle de la cohérence des liens traces
-- [ ] Préparer une revue annuelle de la cohérence des liens metrics
-- [ ] Préparer une revue annuelle de la cohérence des liens uptime
-- [ ] Préparer une revue annuelle de la cohérence des liens performance
-- [ ] Préparer une revue annuelle de la cohérence des liens lighthouse
-- [ ] Préparer une revue annuelle de la cohérence des liens web vitals
-- [ ] Préparer une revue annuelle de la cohérence des liens bundle
-- [ ] Préparer une revue annuelle de la cohérence des liens images
-- [ ] Préparer une revue annuelle de la cohérence des liens fonts
-- [ ] Préparer une revue annuelle de la cohérence des liens cache
-- [ ] Préparer une revue annuelle de la cohérence des liens CDN
-- [ ] Préparer une revue annuelle de la cohérence des liens compression
-- [ ] Préparer une revue annuelle de la cohérence des liens lazy loading
-- [ ] Préparer une revue annuelle de la cohérence des liens responsive
-- [ ] Préparer une revue annuelle de la cohérence des liens mobile
-- [ ] Préparer une revue annuelle de la cohérence des liens tablet
-- [ ] Préparer une revue annuelle de la cohérence des liens desktop
-- [ ] Préparer une revue annuelle de la cohérence des liens browser
-- [ ] Préparer une revue annuelle de la cohérence des liens screen reader
-- [ ] Préparer une revue annuelle de la cohérence des liens keyboard
-- [ ] Préparer une revue annuelle de la cohérence des liens contrast
-- [ ] Préparer une revue annuelle de la cohérence des liens zoom
-- [ ] Préparer une revue annuelle de la cohérence des liens reduced motion
-- [ ] Préparer une revue annuelle de la cohérence des liens high contrast
-- [ ] Préparer une revue annuelle de la cohérence des liens text size
-- [ ] Préparer une revue annuelle de la cohérence des liens labels
-- [ ] Préparer une revue annuelle de la cohérence des liens alt text
-- [ ] Préparer une revue annuelle de la cohérence des liens focus
-- [ ] Préparer une revue annuelle de la cohérence des liens hover
-- [ ] Préparer une revue annuelle de la cohérence des liens active
-- [ ] Préparer une revue annuelle de la cohérence des liens disabled
-- [ ] Préparer une revue annuelle de la cohérence des liens loading
-- [ ] Préparer une revue annuelle de la cohérence des liens error
+- [x] Préparer une revue annuelle de la cohérence des liens rappel : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens confirmation : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens annulation : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens modification : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens disponibilité : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens indisponibilité : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens horaires : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens fuseau horaire : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens jours fériés : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens vacances : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens liste d’attente : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens récurrence : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens iCalendar : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens Google Calendar : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens Microsoft Calendar : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens Meet : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens téléconsultation : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens préparation : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens urgence : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens limites : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens confidentialité médicale : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens données sensibles : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens minimisation : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens conservation : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens suppression : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens audit : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens registre : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens sous-traitants : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens DPA : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens transferts : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens sécurité : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens incident : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens notification violation : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens CNIL : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens droits : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens accès : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens rectification : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens suppression : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens portabilité : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens opposition : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens limitation : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens retrait consentement : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens plainte : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens responsable traitement : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens contact : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens sécurité : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens hébergement : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens stockage : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens base données : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens backups : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens secrets : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens OAuth : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens admin : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens roles : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens sessions : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens 2FA : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens audit logs : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens rate limiting : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens CAPTCHA : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens CSP : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens HSTS : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens permissions policy : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens anti DDoS : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens monitoring : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens alerting : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens logs : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens traces : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens metrics : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens uptime : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens performance : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens lighthouse : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens web vitals : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens bundle : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens images : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens fonts : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens cache : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens CDN : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens compression : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens lazy loading : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens responsive : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens mobile : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens tablet : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens desktop : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens browser : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens screen reader : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens keyboard : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens contrast : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens zoom : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens reduced motion : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens high contrast : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens text size : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens labels : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens alt text : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens focus : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens hover : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens active : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens disabled : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens loading : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens error : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
 - [ ] Préparer une revue annuelle de la cohérence des liens success
 - [ ] Préparer une revue annuelle de la cohérence des liens empty
 - [ ] Préparer une revue annuelle de la cohérence des liens skeleton
