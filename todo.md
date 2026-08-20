@@ -2485,3 +2485,4 @@
 - [ ] Exporter automatiquement chaque CV déposé vers un dossier Google Drive privé, avec journalisation, reprise sur échec et contrôle d’accès
 - [x] Ajouter la Terre en fond de la page de recrutement principale
 - [x] Placer Contact en dernière position dans la navigation publique
+- [x] Renforcer la visibilité de la Terre en fond de la page Recrutement publiée

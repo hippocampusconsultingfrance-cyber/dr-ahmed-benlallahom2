@@ -92,8 +92,8 @@ export default function RecruitmentHubPage() {
       <SEOHead title={t.metaTitle} description={t.metaDescription} ogUrl="https://drahmedbenlallahom.com/recruitment" />
       <Navigation />
       <main className="relative isolate overflow-hidden pt-32 pb-24 md:pt-40">
-        <img src="/manus-storage/hippocampus-recruitment-earth_f3124b59.png" alt="" aria-hidden="true" className="pointer-events-none absolute left-1/2 top-10 h-[34rem] w-[34rem] -translate-x-1/2 rounded-full object-cover opacity-25 mix-blend-screen md:top-8 md:h-[50rem] md:w-[50rem] [mask-image:radial-gradient(ellipse_at_center,black_34%,transparent_73%)]" />
-        <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_28%,transparent_0%,hsl(var(--background)/0.34)_48%,hsl(var(--background))_88%)]" />
+        <img src="/manus-storage/hippocampus-recruitment-earth_f3124b59.png" alt="" aria-hidden="true" className="pointer-events-none absolute left-1/2 top-8 h-[38rem] w-[38rem] -translate-x-1/2 rounded-full object-cover opacity-55 brightness-110 contrast-125 md:top-2 md:h-[56rem] md:w-[56rem] [mask-image:radial-gradient(ellipse_at_center,black_42%,transparent_78%)]" />
+        <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_28%,transparent_0%,hsl(var(--background)/0.16)_52%,hsl(var(--background))_92%)]" />
         <section className="container relative z-10 max-w-5xl">
           <div className="text-center max-w-3xl mx-auto mb-16">
             <p className="section-kicker">{t.eyebrow}</p>
