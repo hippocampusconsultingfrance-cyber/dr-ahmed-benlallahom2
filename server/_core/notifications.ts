@@ -21,16 +21,20 @@ const RECRUITMENT_REPLY_TO = "hippocampusconsultingfrance@gmail.com";
 
 export function buildHippocampusEmailShell(content: string) {
   return `
-    <div style="margin:0;padding:24px 12px;background:#f1f5f9;font-family:Arial,sans-serif;color:#0f172a;">
-      <div style="max-width:600px;margin:0 auto;background:#ffffff;border:1px solid #dbe4ee;border-radius:14px;overflow:hidden;">
-        <div style="padding:22px 28px;background:#071827;border-bottom:3px solid #0891b2;">
-          <div style="font-size:11px;letter-spacing:2px;font-weight:700;color:#38bdf8;">ABL / HIPPOCAMPUS</div>
-          <div style="margin-top:5px;font-size:19px;font-weight:700;color:#ffffff;">Hippocampus Consulting</div>
-        </div>
-        <div style="padding:28px;">${content}</div>
-        <div style="padding:18px 28px;border-top:1px solid #e2e8f0;background:#f8fafc;font-size:12px;line-height:1.5;color:#64748b;">Dr. Ahmed Ben Lallahom · Hippocampus Consulting<br />Communication professionnelle et confidentielle</div>
-      </div>
-    </div>
+    <!doctype html>
+    <html lang="fr"><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /></head>
+    <body style="margin:0;padding:0;background:#f1f5f9;font-family:Arial,Helvetica,sans-serif;color:#0f172a;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;border-collapse:collapse;background:#f1f5f9;"><tr><td align="center" style="padding:24px 12px;">
+        <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:600px;border-collapse:separate;border-spacing:0;background:#ffffff;border:1px solid #dbe4ee;border-radius:14px;overflow:hidden;">
+          <tr><td style="padding:22px 28px;background:#071827;border-bottom:3px solid #0891b2;">
+            <div style="font-size:11px;letter-spacing:2px;font-weight:700;color:#38bdf8;">ABL / HIPPOCAMPUS</div>
+            <div style="margin-top:5px;font-size:19px;font-weight:700;color:#ffffff;">Hippocampus Consulting</div>
+          </td></tr>
+          <tr><td style="padding:28px;">${content}</td></tr>
+          <tr><td style="padding:18px 28px;border-top:1px solid #e2e8f0;background:#f8fafc;font-size:12px;line-height:1.5;color:#64748b;">Dr. Ahmed Ben Lallahom · Hippocampus Consulting<br />Communication professionnelle et confidentielle</td></tr>
+        </table>
+      </td></tr></table>
+    </body></html>
   `;
 }
 

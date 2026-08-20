@@ -16,6 +16,10 @@ La réservation conserve des champs accessibles, des informations tarifaires jou
 
 Cette vérification porte sur le rendu et le chargement. Les tests de clavier, lecteur d’écran, contrastes instrumentés, zoom à 200 % et les quatre traductions restent des contrôles complémentaires à exécuter séparément.
 
+## Compatibilité structurelle des e-mails
+
+Le gabarit transactionnel Hippocampus utilise désormais un document HTML complet, un viewport mobile, une structure de présentation tabulaire de 600 px avec largeur fluide et des styles inline. Cette structure commune est appliquée aux confirmations, factures, rappels, accès candidat, campagnes et communications administratives qui passent par le gabarit. Une non-régression vérifie ces garde-fous sans envoyer d’e-mail. Le rendu effectif dans Gmail, Outlook et Apple Mail demeure une validation externe distincte, à réaliser avec une boîte de test autorisée conformément à `EXTERNAL_VALIDATION_REGISTER.md`.
+
 ## Vérification sur le domaine publié
 
 Le 19 août 2026, la page `https://drahmedbenlallahom.com/booking` a été contrôlée après la publication. Après le chargement différé normal, le formulaire de réservation est visible avec ses libellés associés pour le nom, l’email et le téléphone ; la tarification jour/nuit, l’avertissement d’urgence et les informations de paiement sont également présents. Aucun écran d’erreur ni absence de contenu n’a été constaté.
