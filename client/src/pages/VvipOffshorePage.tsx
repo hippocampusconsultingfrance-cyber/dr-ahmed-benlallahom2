@@ -6,6 +6,7 @@ import Navigation from "@/components/Navigation";
 import Footer from "@/components/Footer";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { getWorldwideCountries } from "./RecruitmentPage";
+import { resolveCountryForSubmission } from "@/lib/countrySubmission";
 
 const copy = {
   fr: {
@@ -367,6 +368,7 @@ export default function VvipOffshorePage() {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setErrorMessage("");
+    const submittedDiplomaCountry = resolveCountryForSubmission(form.diplomaCountry, new FormData(event.currentTarget).get("diplomaCountry"), diplomaCountries.map(country => country.label));
 
     if (!file || !isAcceptedVvipCvFile(file)) {
       setStatus("error");
@@ -378,7 +380,7 @@ export default function VvipOffshorePage() {
       setErrorMessage(t.required);
       return;
     }
-    if (!form.firstName || !form.lastName || !form.email || !form.specialty || !form.diplomaCountry) {
+    if (!form.firstName || !form.lastName || !form.email || !form.specialty || !submittedDiplomaCountry) {
       setStatus("error");
       setErrorMessage(t.required);
       return;
@@ -393,7 +395,7 @@ export default function VvipOffshorePage() {
       body.append("email", form.email);
       body.append("phone", form.phone);
       body.append("specialty", `[VVIP / Offshore] ${form.specialty} (${form.environment})`);
-      body.append("diplomaCountry", form.diplomaCountry);
+      body.append("diplomaCountry", submittedDiplomaCountry);
       body.append("targetCountries", JSON.stringify([form.environment]));
       body.append("languages", JSON.stringify(["Français", "Anglais"]));
       body.append("yearsExperience", form.yearsExperience ? String(Number(form.yearsExperience)) : "5");
@@ -526,7 +528,7 @@ export default function VvipOffshorePage() {
 
                     <label className="block w-full space-y-1.5 text-sm text-foreground">
                       <span className="block font-medium">{t.diplomaCountry} *</span>
-                      <select required value={form.diplomaCountry} onChange={(e) => update("diplomaCountry", e.target.value)} className="form-control block w-full">
+                      <select name="diplomaCountry" required value={form.diplomaCountry} onInput={(e) => update("diplomaCountry", e.currentTarget.value)} onChange={(e) => update("diplomaCountry", e.target.value)} className="form-control block w-full" autoComplete="country-name">
                         <option value="">{t.selectCountry}</option>
                         {diplomaCountries.map(country => <option key={country.code} value={country.label}>{country.label}</option>)}
                       </select>

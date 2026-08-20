@@ -7,7 +7,8 @@ describe("candidature VVIP — erreurs publiques", () => {
 
     expect(source).toContain("serverMessage.includes(\"CV\") ? t.fileError");
     expect(source).toContain("serverMessage.includes(\"informations\") ? t.required");
-    expect(source).toContain("body.append(\"diplomaCountry\", form.diplomaCountry);");
+    expect(source).toContain("body.append(\"diplomaCountry\", submittedDiplomaCountry);");
+    expect(source).toContain("resolveCountryForSubmission(form.diplomaCountry");
   });
 
   it("accepts valid mobile CV filenames even with a generic MIME type", async () => {

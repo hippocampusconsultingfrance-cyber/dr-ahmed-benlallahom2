@@ -5,6 +5,7 @@ import { SEOHead } from "@/components/SEOHead";
 import Navigation from "@/components/Navigation";
 import Footer from "@/components/Footer";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { resolveCountryForSubmission } from "@/lib/countrySubmission";
 
 export const employerCopy = {
   fr: {
@@ -225,8 +226,9 @@ export default function EmployersPage() {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setErrorMessage("");
+    const submittedCountry = resolveCountryForSubmission(form.country, new FormData(event.currentTarget).get("country"));
 
-    if (!form.organizationName || !form.contactName || !form.email || !form.specialtyNeeded || !form.country) {
+    if (!form.organizationName || !form.contactName || !form.email || !form.specialtyNeeded || !submittedCountry) {
       setStatus("error");
       setErrorMessage(t.required);
       return;
@@ -237,7 +239,7 @@ export default function EmployersPage() {
       const res = await fetch("/api/client-briefs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify({ ...form, country: submittedCountry }),
       });
       const payload = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(payload.error || t.genericError);
@@ -354,7 +356,7 @@ export default function EmployersPage() {
                   <div className="grid gap-4 sm:grid-cols-2">
                     <label className="block w-full space-y-2 text-sm text-foreground">
                       <span className="block mb-1 font-medium">{t.country} *</span>
-                      <input required value={form.country} onChange={(e) => update("country", e.target.value)} className="form-control block w-full" placeholder={t.countryPlaceholder} />
+                      <input name="country" required value={form.country} onInput={(e) => update("country", e.currentTarget.value)} onChange={(e) => update("country", e.target.value)} autoComplete="country-name" className="form-control block w-full" placeholder={t.countryPlaceholder} />
                     </label>
                     <label className="block w-full space-y-2 text-sm text-foreground">
                       <span className="block mb-1 font-medium">{t.timeline}</span>

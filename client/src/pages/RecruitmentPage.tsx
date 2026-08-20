@@ -5,6 +5,7 @@ import { SEOHead } from "@/components/SEOHead";
 import Navigation from "@/components/Navigation";
 import Footer from "@/components/Footer";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { resolveCountryForSubmission } from "@/lib/countrySubmission";
 
 const countryOptions = [
   { value: "France", labels: { fr: "France", en: "France", de: "Frankreich", zh: "法国" } },
@@ -291,13 +292,14 @@ export default function RecruitmentPage() {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setErrorMessage("");
+    const submittedDiplomaCountry = resolveCountryForSubmission(form.diplomaCountry, new FormData(event.currentTarget).get("diplomaCountry"), worldwideCountries.map(country => country.label));
     if (!file || !isAcceptedCvFile(file)) {
       setStatus("error"); setErrorMessage(t.fileError); return;
     }
     if (!form.gdprConsent) { setStatus("error"); setErrorMessage(t.consentError); return; }
     
     const finalSpecialty = form.specialty === "Autre spécialité ou profession" ? form.specialtyCustom.trim() : form.specialty;
-    if (!form.targetCountries.length || !finalSpecialty || !form.diplomaCountry || !form.firstName || !form.lastName || !form.email) {
+    if (!form.targetCountries.length || !finalSpecialty || !submittedDiplomaCountry || !form.firstName || !form.lastName || !form.email) {
       setStatus("error"); setErrorMessage(`${t.required}.`); return;
     }
 
@@ -308,7 +310,7 @@ export default function RecruitmentPage() {
     body.append("email", form.email);
     body.append("phone", form.phone);
     body.append("specialty", finalSpecialty);
-    body.append("diplomaCountry", form.diplomaCountry);
+    body.append("diplomaCountry", submittedDiplomaCountry);
     body.append("targetCountries", JSON.stringify(form.targetCountries));
     const submittedLanguages = form.languages.flatMap(languageValue => languageValue === "Other"
       ? form.otherLanguage.split(",").map(item => item.trim()).filter(Boolean)
@@ -431,9 +433,11 @@ export default function RecruitmentPage() {
                       <Search className="site-search-icon" aria-hidden="true" />
                       <input
                         id="recruitment-diploma-country-search"
+                        name="diplomaCountry"
                         type="search"
                         value={diplomaCountryQuery}
                         onFocus={() => setDiplomaCountryOpen(true)}
+                        onInput={event => { const visibleCountry = event.currentTarget.value; const matchingCountry = worldwideCountries.find(country => country.label === visibleCountry); if (matchingCountry) update("diplomaCountry", matchingCountry.label); }}
                         onChange={event => { setDiplomaCountryQuery(event.target.value); setDiplomaCountryOpen(true); }}
                         onKeyDown={event => { if (event.key === "Escape") setDiplomaCountryOpen(false); }}
                         placeholder={diplomaCopy.search}
