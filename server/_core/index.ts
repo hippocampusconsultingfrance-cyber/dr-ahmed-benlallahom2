@@ -77,6 +77,7 @@ const candidateDocumentUpload = multer({
           email: z.string().trim().email().max(320),
           phone: z.string().trim().max(50).optional().default(""),
           specialty: z.string().trim().min(1).max(160),
+          diplomaCountry: z.string().trim().min(1).max(100),
           targetCountries: z.array(z.string().trim().min(1).max(80)).min(1).max(12),
           languages: z.array(z.string().trim().min(1).max(80)).max(12).default([]),
           yearsExperience: z.number().int().min(0).max(70).optional(),
@@ -394,6 +395,7 @@ async function startServer() {
 
         const parsed = recruitmentApplicationSchema.safeParse({
           ...req.body,
+          diplomaCountry: req.body.diplomaCountry,
           targetCountries: parseListField(req.body.targetCountries),
           languages: parseListField(req.body.languages),
           yearsExperience: req.body.yearsExperience === "" || req.body.yearsExperience === undefined
@@ -441,14 +443,14 @@ async function startServer() {
         }
 
         const insertResult = await db.execute(sql`INSERT INTO cv_applications (
-          tracking_id, first_name, last_name, email, phone, specialty,
+          tracking_id, first_name, last_name, email, phone, specialty, diploma_country,
           target_countries, languages, years_experience, availability, mobility, certifications, message,
           cv_file_key, cv_original_name, cv_mime_type, cv_size_bytes,
           file_validation_status, file_checksum, file_validation_notes,
           gdpr_consent, marketing_consent, status, consent_at, retention_until
         ) VALUES (
           ${trackingId}, ${parsed.data.firstName}, ${parsed.data.lastName}, ${parsed.data.email},
-          ${parsed.data.phone || null}, ${parsed.data.specialty}, ${JSON.stringify(parsed.data.targetCountries)},
+          ${parsed.data.phone || null}, ${parsed.data.specialty}, ${parsed.data.diplomaCountry}, ${JSON.stringify(parsed.data.targetCountries)},
           ${JSON.stringify(parsed.data.languages)}, ${parsed.data.yearsExperience ?? null},
           ${parsed.data.availability || null}, ${parsed.data.mobility || null}, ${parsed.data.certifications || null},
           ${parsed.data.message || null}, ${storageResult.key}, ${originalName}, ${file.mimetype}, ${file.size},
@@ -472,7 +474,7 @@ async function startServer() {
           })(),
           notifyOwner({
             title: `Nouvelle candidature recrutement — ${candidateName}`,
-            content: `**Référence:** ${trackingId}\n**Email:** ${parsed.data.email}\n**Spécialité:** ${parsed.data.specialty}\n**Pays ciblés:** ${parsed.data.targetCountries.join(", ")}\n**CV:** reçu et stocké de manière privée`,
+            content: `**Référence:** ${trackingId}\n**Email:** ${parsed.data.email}\n**Spécialité:** ${parsed.data.specialty}\n**Pays du diplôme:** ${parsed.data.diplomaCountry}\n**Pays ciblés:** ${parsed.data.targetCountries.join(", ")}\n**CV:** reçu et stocké de manière privée`,
           }),
         ]);
 

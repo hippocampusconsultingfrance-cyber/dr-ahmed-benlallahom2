@@ -1004,6 +1004,7 @@ export const appRouter = router({
               email: cvApplications.email,
               phone: cvApplications.phone,
               specialty: cvApplications.specialty,
+              diplomaCountry: cvApplications.diplomaCountry,
               targetCountries: cvApplications.targetCountries,
               languages: cvApplications.languages,
               yearsExperience: cvApplications.yearsExperience,

@@ -288,6 +288,7 @@ export default function RecruitmentTab() {
                         <h3 className="font-semibold text-foreground">{application.firstName} {application.lastName}</h3>
                         <p className="text-sm text-muted-foreground">{application.specialty} · {application.trackingId}</p>
                         <p className="mt-1 text-sm text-muted-foreground">{countries.join(", ") || "Pays non précisés"}</p>
+                        {application.diplomaCountry ? <p className="mt-1 text-sm text-muted-foreground">Diplôme obtenu : {application.diplomaCountry}</p> : null}
                       </div>
                     </div>
                   </button>

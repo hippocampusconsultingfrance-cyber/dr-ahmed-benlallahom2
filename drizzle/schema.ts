@@ -210,6 +210,7 @@ export const cvApplications = mysqlTable("cv_applications", {
   email: varchar("email", { length: 320 }).notNull(),
   phone: varchar("phone", { length: 50 }),
   specialty: varchar("specialty", { length: 160 }).notNull(),
+  diplomaCountry: varchar("diploma_country", { length: 100 }),
   targetCountries: text("target_countries").notNull(),
   languages: text("languages"),
   yearsExperience: int("years_experience"),

@@ -178,27 +178,61 @@ const publicTrustCopy = {
   },
 } as const;
 
+const diplomaCountryCopy = {
+  fr: { label: "Pays d’obtention du diplôme", search: "Rechercher un pays dans le monde…" },
+  en: { label: "Country where the diploma was obtained", search: "Search any country…" },
+  de: { label: "Land des Diplomerwerbs", search: "Land weltweit suchen…" },
+  zh: { label: "获得文凭的国家", search: "搜索世界各地的国家…" },
+} as const;
+
 type Language = keyof typeof copy;
 type FormState = {
-  firstName: string; lastName: string; email: string; phone: string; specialty: string; specialtyCustom: string; targetCountries: string[]; languages: string; yearsExperience: string; message: string; gdprConsent: boolean; marketingConsent: boolean; website: string;
+  firstName: string; lastName: string; email: string; phone: string; specialty: string; specialtyCustom: string; diplomaCountry: string; targetCountries: string[]; languages: string; yearsExperience: string; message: string; gdprConsent: boolean; marketingConsent: boolean; website: string;
 };
 
-const initialForm: FormState = { firstName: "", lastName: "", email: "", phone: "", specialty: "", specialtyCustom: "", targetCountries: [], languages: "", yearsExperience: "", message: "", gdprConsent: false, marketingConsent: false, website: "" };
+const initialForm: FormState = { firstName: "", lastName: "", email: "", phone: "", specialty: "", specialtyCustom: "", diplomaCountry: "", targetCountries: [], languages: "", yearsExperience: "", message: "", gdprConsent: false, marketingConsent: false, website: "" };
+
+const WORLDWIDE_COUNTRY_CODES = "AF,AX,AL,DZ,AS,AD,AO,AI,AQ,AG,AR,AM,AW,AU,AT,AZ,BS,BH,BD,BB,BY,BE,BZ,BJ,BM,BT,BO,BQ,BA,BW,BV,BR,IO,BN,BG,BF,BI,CV,KH,CM,CA,KY,CF,TD,CL,CN,CX,CC,CO,KM,CG,CD,CK,CR,CI,HR,CU,CW,CY,CZ,DK,DJ,DM,DO,EC,EG,SV,GQ,ER,EE,SZ,ET,FK,FO,FJ,FI,FR,GF,PF,TF,GA,GM,GE,DE,GH,GI,GR,GL,GD,GP,GU,GT,GG,GN,GW,GY,HT,HM,VA,HN,HK,HU,IS,IN,ID,IR,IQ,IE,IM,IL,IT,JM,JP,JE,JO,KZ,KE,KI,KP,KR,KW,KG,LA,LV,LB,LS,LR,LY,LI,LT,LU,MO,MG,MW,MY,MV,ML,MT,MH,MQ,MR,MU,YT,MX,FM,MD,MC,MN,ME,MS,MA,MZ,MM,NA,NR,NP,NL,NC,NZ,NI,NE,NG,NU,NF,MK,MP,NO,OM,PK,PW,PS,PA,PG,PY,PE,PH,PN,PL,PT,PR,QA,RE,RO,RU,RW,BL,SH,KN,LC,MF,PM,VC,WS,SM,ST,SA,SN,RS,SC,SL,SG,SX,SK,SI,SB,SO,ZA,GS,SS,ES,LK,SD,SR,SJ,SE,CH,SY,TW,TJ,TZ,TH,TL,TG,TK,TO,TT,TN,TR,TM,TC,TV,UG,UA,AE,GB,US,UM,UY,UZ,VU,VE,VN,VG,VI,WF,EH,YE,ZM,ZW".split(",");
+
+export function getWorldwideCountries(locale: string) {
+  const supportedRegions = WORLDWIDE_COUNTRY_CODES;
+  const names = new Intl.DisplayNames([locale], { type: "region" });
+  return supportedRegions.filter(code => code !== "ZZ").map(code => ({ code, label: names.of(code) || code })).sort((a, b) => a.label.localeCompare(b.label, locale));
+}
+
+function normalizeCountrySearch(value: string, locale: string) {
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase(locale).trim();
+}
+
+export function filterWorldwideCountries(countries: ReturnType<typeof getWorldwideCountries>, query: string, locale: string) {
+  const search = normalizeCountrySearch(query, locale);
+  if (!search) return countries;
+
+  const aliases = ["fr", "en", "de", "zh"];
+  return countries.filter(country => {
+    const values = [country.code, country.label, ...aliases.map(alias => new Intl.DisplayNames([alias], { type: "region" }).of(country.code) || country.code)];
+    return values.some(value => normalizeCountrySearch(value, locale).includes(search));
+  });
+}
 
 export default function RecruitmentPage() {
   const { language } = useLanguage();
   const lang = (language in copy ? language : "fr") as Language;
   const t = copy[lang];
   const trust = publicTrustCopy[lang];
+  const diplomaCopy = diplomaCountryCopy[lang];
   const [form, setForm] = useState<FormState>(initialForm);
   const [file, setFile] = useState<File | null>(null);
   const [status, setStatus] = useState<"idle" | "sending" | "success" | "error">("idle");
   const [errorMessage, setErrorMessage] = useState("");
   const [trackingId, setTrackingId] = useState("");
   const [specialtyQuery, setSpecialtyQuery] = useState("");
+  const [diplomaCountryQuery, setDiplomaCountryQuery] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const selectedCountryLabels = useMemo(() => countryOptions.filter(country => form.targetCountries.includes(country.value)).map(country => country.labels[lang]).join(", "), [form.targetCountries, lang]);
+  const worldwideCountries = useMemo(() => getWorldwideCountries(lang), [lang]);
+  const filteredDiplomaCountries = useMemo(() => filterWorldwideCountries(worldwideCountries, diplomaCountryQuery, lang).slice(0, 30), [worldwideCountries, diplomaCountryQuery, lang]);
 
   const filteredSpecialtyCategories = useMemo(() => {
     const q = specialtyQuery.trim().toLowerCase();
@@ -224,7 +258,7 @@ export default function RecruitmentPage() {
     if (!form.gdprConsent) { setStatus("error"); setErrorMessage(t.consentError); return; }
     
     const finalSpecialty = form.specialty === "Autre spécialité ou profession" ? form.specialtyCustom.trim() : form.specialty;
-    if (!form.targetCountries.length || !finalSpecialty || !form.firstName || !form.lastName || !form.email) {
+    if (!form.targetCountries.length || !finalSpecialty || !form.diplomaCountry || !form.firstName || !form.lastName || !form.email) {
       setStatus("error"); setErrorMessage(`${t.required}.`); return;
     }
 
@@ -235,6 +269,7 @@ export default function RecruitmentPage() {
     body.append("email", form.email);
     body.append("phone", form.phone);
     body.append("specialty", finalSpecialty);
+    body.append("diplomaCountry", form.diplomaCountry);
     body.append("targetCountries", JSON.stringify(form.targetCountries));
     body.append("languages", JSON.stringify(form.languages.split(",").map(item => item.trim()).filter(Boolean)));
     body.append("yearsExperience", form.yearsExperience);
@@ -344,6 +379,18 @@ export default function RecruitmentPage() {
                       <span className="block mb-2 font-medium">{t.experience}</span>
                       <input id="recruitment-experience" type="number" min="0" max="70" value={form.yearsExperience} onChange={event => update("yearsExperience", event.target.value)} className="form-control block w-full mt-1" />
                     </label>
+                  </div>
+
+                  <div className="block w-full space-y-2 text-sm text-foreground">
+                    <span className="block font-medium">{diplomaCopy.label} *</span>
+                    <div className="relative">
+                      <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" aria-hidden="true" />
+                      <input id="recruitment-diploma-country-search" type="search" value={diplomaCountryQuery} onChange={event => setDiplomaCountryQuery(event.target.value)} placeholder={diplomaCopy.search} className="form-control w-full pl-9" />
+                    </div>
+                    <select id="recruitment-diploma-country" required value={form.diplomaCountry} onChange={event => update("diplomaCountry", event.target.value)} className="form-control w-full" size={Math.min(6, Math.max(2, filteredDiplomaCountries.length))} aria-label={diplomaCopy.label}>
+                      <option value="">{t.select}</option>
+                      {filteredDiplomaCountries.map(country => <option key={country.code} value={country.label}>{country.label}</option>)}
+                    </select>
                   </div>
 
                   {form.specialty === "Autre spécialité ou profession" && (
