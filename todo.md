@@ -229,7 +229,8 @@
 - [x] Ajouter des illustrations originales sans texte pour les services et les étapes de réservation
 - [x] Ajouter une non-régression confirmant que les illustrations Services et Réservation restent décoratives et correctement intégrées
 - [ ] Exécuter de façon autonome les améliorations restantes réalisables et documenter sans blocage les contrôles nécessitant un appareil ou un service externe
-- [ ] Vérifier les droits sur les photographies, logos, illustrations et visuels externes
+- [ ] Vérifier les droits sur les photographies, logos, illustrations et visuels externes : registre créé ; autorisations écrites de tiers encore à archiver
+- [x] Créer un registre de provenance et de preuves requises pour les actifs visuels publics
 - [x] Mettre en place une revue graphique trimestrielle et une checklist avant publication
 - [ ] Centraliser les libellés d’interface afin d’éviter les chaînes de texte hardcodées
 - [x] Ajouter une stratégie de compression et de recadrage responsive des images : variantes WebP 640/1280, `srcSet`, `sizes` et absence de recadrage destructif pour les illustrations sources disponibles

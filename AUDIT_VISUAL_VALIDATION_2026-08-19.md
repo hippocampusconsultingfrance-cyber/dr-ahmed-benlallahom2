@@ -256,6 +256,10 @@ Un contrôle statique des composants et pages visibles n’a trouvé aucun lien 
 
 L’alternative textuelle du logo du pied de page est désormais définie en français, anglais, allemand et chinois, avec une couverture automatisée. Le logo placé dans le bouton d’accueil de la navigation est explicitement décoratif : le bouton porte déjà un nom accessible localisé et ne répète donc plus l’information au lecteur d’écran.
 
+## Registre des droits visuels
+
+Le fichier `ASSET_RIGHTS_REGISTER.md` cartographie les actifs de marque, visuels générés, portraits, logos de tiers, ressources institutionnelles externes et contenus éditoriaux. Il distingue explicitement une provenance technique d’une autorisation de diffusion : les autorisations des personnes, photographes, titulaires de marques et partenaires restent à archiver avant toute diffusion externe qui le nécessite. Le registre n’affirme aucune licence inexistante et son maintien est protégé par une non-régression documentaire.
+
 ## Couverture de validation d’accessibilité
 
 La suite automatisée couvre le lien d’accès direct au contenu, la navigation clavier, les libellés accessibles du menu, les alternatives d’images, les préférences de cookies, les contrôles mobiles du tableau de bord, les longueurs de traduction, l’impression et les états de chargement ou d’erreur. Les vérifications de rendu ont également été réalisées sur mobile, tablette, bureau et largeur réduite.
