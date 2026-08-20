@@ -27,4 +27,11 @@ describe("répertoire mondial du pays de diplôme", () => {
     expect(source).toContain('className="recruitment-field-group"');
     expect(source).toContain('className="recruitment-field"');
   });
+
+  it("récupère un pays reconnu affiché par un navigateur mobile au moment de l’envoi", async () => {
+    const source = await readFile(new URL("./RecruitmentPage.tsx", import.meta.url), "utf8");
+    expect(source).toContain('resolveCountryForSubmission(form.diplomaCountry');
+    expect(source).toContain('name="diplomaCountry"');
+    expect(source).toContain('body.append("diplomaCountry", submittedDiplomaCountry);');
+  });
 });

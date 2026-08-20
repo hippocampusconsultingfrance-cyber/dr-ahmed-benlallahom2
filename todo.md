@@ -2492,3 +2492,4 @@
 - [x] Corriger l’échec de transmission des candidatures VVIP sur téléphone et exposer un message d’erreur actionnable
 - [x] Fiabiliser la synchronisation du pays de diplôme VVIP prérempli sur téléphone avant la soumission
 - [x] Appliquer la synchronisation fiable des valeurs de pays préremplies à tous les formulaires du site
+- [x] Confirmer la synchronisation des pays préremplis sur le parcours de recrutement mobilité
