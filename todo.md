@@ -210,7 +210,8 @@
 - [x] Ajouter une page de confirmation de réservation plus complète et rassurante
 - [x] Ajouter une page FAQ visuelle sans conseils médicaux personnalisés
 - [x] Ajouter des composants graphiques de confiance pour le paiement, la confidentialité et la disponibilité
-- [ ] Ajouter des tests visuels automatisés sur les pages critiques
+- [x] Ajouter des tests visuels automatisés sur les pages critiques
+- [x] Étendre les tests visuels automatisés à la page RGPD en desktop et mobile
 - [x] Capturer et vérifier les parcours Accueil, Réservation, RGPD, Recrutement et Employeurs en vue bureau
 - [x] Capturer et vérifier les parcours Accueil, Réservation, RGPD, Recrutement et Employeurs en vue mobile
 - [x] Capturer et vérifier les parcours Accueil, Réservation, RGPD, Recrutement et Employeurs aux formats desktop et mobile

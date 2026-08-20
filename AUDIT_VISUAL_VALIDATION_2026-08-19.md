@@ -325,6 +325,12 @@ Les libellés compacts de la page Ressources — recherche, filtres, format de d
 
 Le point d’entrée `/admin` a été contrôlé à 375 × 812 px sans ouvrir de session sensible. L’étape de validation de sécurité conserve une hiérarchie lisible, une explication concise, des actions pleine largeur, un champ de code à six chiffres et une sortie vers le site, sans chevauchement observé. La vérification des onglets et données administratives après authentification demeure volontairement un contrôle de recette sur tablette ou mobile réel, avec un compte administrateur autorisé ; aucun code de sécurité ni accès ne doit être sollicité uniquement pour une capture automatisée.
 
+## Régression visuelle automatisée
+
+Le script `pnpm test:visual` compare désormais le viewport initial des routes publiques critiques `/`, `/booking`, `/recruitment`, `/employers`, `/resources` et `/gdpr` en 1280 × 720 et 375 × 812. Les douze scénarios sont stabilisés en français, thème sombre, consentement essentiel, mouvement réduit, fuseau Europe/Paris et échelle de pixels unitaire ; les étalons sont stockés hors dépôt dans le stockage statique du projet. La dernière exécution a validé les douze comparaisons, avec une tolérance maximale de 0,8 % de pixels différents.
+
+Cette couverture détecte les ruptures de hiérarchie, de cadrage et de premier viewport sans simuler paiement, e-mail, session administrateur ni données candidat. La validation visuelle de page entière, les technologies d’assistance et les états nécessitant une session autorisée restent régis par la checklist préproduction et la recette manuelle.
+
 ## Données de recrutement normalisées
 
 Les certifications, langues et expériences extraites sont conservées à la fois dans les champs de synthèse du dossier et dans des tables relationnelles dédiées. Le matching de brief consomme les certifications et langues normalisées ; le vivier conserve les structures normalisées et les expose dans l’administration. Les filtres restent compatibles avec les données déjà déposées en utilisant également les champs de déclaration initiaux.
