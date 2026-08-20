@@ -2487,3 +2487,5 @@
 - [x] Placer Contact en dernière position dans la navigation publique
 - [x] Renforcer la visibilité de la Terre en fond de la page Recrutement publiée
 - [x] Corriger le blocage de soumission des candidatures sur téléphone et couvrir le parcours mobile par des tests
+- [x] Corriger l’échec de création d’espace candidat depuis une invitation administrative et renforcer le message d’erreur utilisateur
+- [x] Forcer le mode « Créer un accès » dès l’ouverture d’une invitation candidat, y compris sur mobile

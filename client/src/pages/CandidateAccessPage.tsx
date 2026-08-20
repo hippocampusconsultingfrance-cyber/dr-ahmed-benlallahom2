@@ -180,21 +180,42 @@ export function candidateNotice(message: string, copy: CandidateCopy) {
   if (message.includes("termsAccepted")) return copy.termsMissing;
   if (message.includes("documentConsent")) return copy.documentConsentMissing;
   if (message.includes("candidate_turnstile")) return copy.turnstileError;
+  if (message.toLowerCase().includes("invitation")) return copy.invitationInvalid;
   return copy.genericError;
 }
 
+export type CandidateInvitationEntry = {
+  token: string | null;
+  legacyEmail: string | null;
+};
+
+/**
+ * Supports the current signed invitation format and old links already delivered
+ * to candidates. The legacy email is only used to prefill registration; account
+ * activation and all authorization still happen server-side.
+ */
+export function getCandidateInvitationEntry(search: string): CandidateInvitationEntry {
+  const params = new URLSearchParams(search);
+  const invite = params.get("invite")?.trim() || "";
+  const token = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(invite) ? invite : null;
+  const legacyEmail = invite === "1"
+    ? (params.get("email")?.trim().toLowerCase() || null)
+    : null;
+  return { token, legacyEmail };
+}
+
 export function getCandidateInvitationToken(search: string): string | null {
-  const token = new URLSearchParams(search).get("invite")?.trim() || "";
-  return /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(token) ? token : null;
+  return getCandidateInvitationEntry(search).token;
 }
 
 export default function CandidateAccessPage() {
   const [, navigate] = useLocation();
   const { language } = useLanguage();
   const copy = candidateAccessCopy[(language in candidateAccessCopy ? language : "fr") as CandidateLanguage];
-  const [invitationToken] = useState(() => getCandidateInvitationToken(typeof window === "undefined" ? "" : window.location.search));
-  const [mode, setMode] = useState<Mode>("login");
-  const [email, setEmail] = useState("");
+  const [invitationEntry] = useState(() => getCandidateInvitationEntry(typeof window === "undefined" ? "" : window.location.search));
+  const invitationToken = invitationEntry.token;
+  const [mode, setMode] = useState<Mode>(() => invitationToken || invitationEntry.legacyEmail ? "register" : "login");
+  const [email, setEmail] = useState(() => invitationEntry.legacyEmail || "");
   const [password, setPassword] = useState("");
   const [passwordConfirmation, setPasswordConfirmation] = useState("");
   const [firstName, setFirstName] = useState("");
@@ -221,16 +242,20 @@ export default function CandidateAccessPage() {
     { enabled: Boolean(invitationToken), retry: false },
   );
   useEffect(() => {
+    if (invitationToken || invitationEntry.legacyEmail) setMode("register");
     if (invitation.data) {
       setMode("register");
       setEmail(invitation.data.email);
       setFirstName(invitation.data.firstName);
       setLastName(invitation.data.lastName);
       setNotice(copy.invitationWelcome);
+    } else if (invitationEntry.legacyEmail) {
+      setEmail(invitationEntry.legacyEmail);
+      setNotice(copy.invitationWelcome);
     } else if (invitationToken && invitation.isError) {
       setNotice(copy.invitationInvalid);
     }
-  }, [copy.invitationInvalid, copy.invitationWelcome, invitation.data, invitation.isError, invitationToken]);
+  }, [copy.invitationInvalid, copy.invitationWelcome, invitation.data, invitation.isError, invitationEntry.legacyEmail, invitationToken]);
   const pending = login.isPending || register.isPending || reset.isPending;
 
   function submit(event: FormEvent<HTMLFormElement>) {
