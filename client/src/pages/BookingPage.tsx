@@ -8,6 +8,7 @@ import { Calendar, Clock, User, Mail, Phone, FileText, CheckCircle, AlertCircle 
 import Breadcrumb from "@/components/Breadcrumb";
 import PublicContentSkeleton from "@/components/PublicContentSkeleton";
 import { SEOHead } from "@/components/SEOHead";
+import { getBookingFormCopy } from "@/lib/publicFormCopy";
 
 export const bookingContent = {
   fr: {
@@ -252,6 +253,7 @@ export default function BookingPage() {
   const { language } = useLanguage();
   const [location, setLocation] = useLocation();
   const content = bookingContent[language as keyof typeof bookingContent] || bookingContent.en;
+  const bookingFormCopy = getBookingFormCopy(language);
   const bookingRailCopy = {
     fr: { label: "Consultation", note: "Une consultation structurée, confidentielle et adaptée à votre demande." },
     en: { label: "Consultation", note: "A structured, confidential consultation tailored to your request." },
@@ -322,16 +324,16 @@ export default function BookingPage() {
   const availabilityPending = blockedDates.isLoading || bookedSlots.isLoading || availabilitySlots.isLoading;
   const availabilityQueryError = blockedDates.isError || bookedSlots.isError || availabilitySlots.isError;
   const availabilityLabel = availabilityQueryError
-    ? content.form.availabilityError
+    ? bookingFormCopy.availabilityError
     : !selectedDate
-    ? content.form.selectDate
+    ? bookingFormCopy.selectDate
     : availabilityPending
-      ? content.form.checkingAvailability
+      ? bookingFormCopy.checkingAvailability
       : isBlockedDate
-      ? content.form.blocked
+      ? bookingFormCopy.blocked
       : isBookedSlot
-        ? content.form.alreadyBooked
-        : content.form.available;
+        ? bookingFormCopy.alreadyBooked
+        : bookingFormCopy.available;
   const availabilityState = getBookingAvailabilityState({
     selected: Boolean(selectedDate),
     pending: availabilityPending,
@@ -378,7 +380,7 @@ export default function BookingPage() {
     const parsed = parseBookingDateTime(nextDateText, nextTimeText);
     if (!parsed) {
       setSelectedDate(null);
-      setDateError(content.form.invalidDate);
+      setDateError(bookingFormCopy.invalidDate);
       setFormData((current) => ({ ...current, date: "" }));
       return;
     }
@@ -705,8 +707,8 @@ export default function BookingPage() {
             </div>
 
             {/* Price Display */}
-            {selectedDate && calculatePrice.isLoading && <PublicContentSkeleton cards={1} label={content.form.checkingAvailability} />}
-            {selectedDate && availabilityError && <p className="rounded-xl border border-destructive/35 bg-destructive/5 p-4 text-sm text-destructive" role="alert">{content.form.availabilityError}</p>}
+            {selectedDate && calculatePrice.isLoading && <PublicContentSkeleton cards={1} label={bookingFormCopy.checkingAvailability} />}
+            {selectedDate && availabilityError && <p className="rounded-xl border border-destructive/35 bg-destructive/5 p-4 text-sm text-destructive" role="alert">{bookingFormCopy.availabilityError}</p>}
             {calculatePrice.data && (
               <Card className="summary-card-premium p-4 sm:p-5">
                 <h3 className="font-semibold mb-3">{content.pricing.title}</h3>
@@ -752,7 +754,7 @@ export default function BookingPage() {
               className="cta-primary w-full"
               size="lg"
             >
-              {isLoading ? content.form.loading : content.form.submit}
+              {isLoading ? bookingFormCopy.loading : bookingFormCopy.submit}
             </Button>
             <div className="booking-notes grid gap-3 sm:grid-cols-2 mt-2" aria-label={content.pricing.title}>
               <div className="booking-note">
