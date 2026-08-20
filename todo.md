@@ -236,7 +236,7 @@
 - [x] Ajouter un contrôle de taille de police sans rupture de mise en page : mode Lisibilité renforcée persistant (+6,25 %), lignes ajustées et commande accessible dans la navigation
 - [x] Ajouter un composant de citation médicale avec source et date de mise à jour : `MedicalCitation` impose la source et la date, distingue le niveau d’information et protège les liens externes
 - [x] Ajouter une notice visible indiquant que le site ne remplace pas les urgences médicales
-- [ ] Vérifier l’accessibilité des couleurs cyan, gris et doré sur les deux thèmes
+- [x] Vérifier l’accessibilité des couleurs cyan, gris et doré sur les deux thèmes : contrôle reproductible ajouté ; contraste renforcé du texte sur CTA cyan et seuils validés
 - [ ] Évaluer la réduction des effets décoratifs sur les formulaires et pages légales
 - [ ] Préparer un kit de marque exportable pour les documents et réseaux sociaux
 - [ ] Mettre en place une validation graphique avant chaque checkpoint
