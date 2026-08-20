@@ -16,6 +16,7 @@ describe("intégration continue GitHub", () => {
     expect(workflow).toContain("pnpm test");
     expect(workflow).toContain("pnpm audit --prod --audit-level=high");
     expect(pnpmVersion).toBeTruthy();
-    expect(workflow).toContain(`version: ${pnpmVersion}`);
+    expect(packageManager).toMatch(/^pnpm@[0-9.]+\+sha512\./);
+    expect(workflow).not.toMatch(/pnpm\/action-setup@v4\s+with:\s+version:/);
   });
 });

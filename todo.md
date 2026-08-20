@@ -2512,3 +2512,4 @@
 - [x] Ajouter une intégration continue GitHub pour TypeScript, tests et audit de dépendances
 - [x] Qualifier puis mettre à jour les dépendances de production signalées à risque élevé par l’audit automatisé
 - [x] Corriger le conflit de version pnpm qui empêche le workflow GitHub CI de démarrer
+- [x] Retirer la version pnpm du workflow CI et laisser l’action utiliser la déclaration packageManager du projet
