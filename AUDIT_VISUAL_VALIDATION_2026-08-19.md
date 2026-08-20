@@ -194,6 +194,10 @@ Les routes disposent d’une entrée courte de 180 ms, limitée à l’opacité 
 
 Le fichier `ANNUAL_REVIEW_CALENDAR.md` prépare une revue annuelle des traductions, de l’accessibilité, des visuels, des contenus médicaux, du RGPD et de la sécurité des espaces privés. Il distingue les preuves à archiver et les contrôles nécessitant un appareil réel ou un fournisseur tiers.
 
+## Kit de marque exportable
+
+Le fichier `BRAND_KIT.md` centralise la signature, les tokens de palette, les typographies, les règles de ton, les formats d’export LinkedIn, documentaires et e-mail, ainsi que les contrôles de droits et d’accessibilité à effectuer avant diffusion.
+
 ## Contrôle de performance de production
 
 La compilation de production réussit avec un découpage par route. Les pages publiques critiques restent chargées dynamiquement, et le bundle administratif demeure isolé du parcours public initial. Le principal bundle client compressé est d’environ 134 kB ; le tableau de bord administratif compressé est d’environ 57 kB. Aucun fractionnement supplémentaire n’est justifié par cette vérification statique ; les mesures de navigation sur appareil réel restent à réaliser séparément.

@@ -276,7 +276,7 @@
 - [x] Ajouter un test automatisé de contraste pour les paires de tokens textuels et interactifs des thèmes clair et sombre
 - [x] Évaluer la réduction des effets décoratifs sur les formulaires et pages légales
 - [x] Réduire les animations de fond non essentielles des formulaires et pages légales lorsque la lisibilité renforcée est active
-- [ ] Préparer un kit de marque exportable pour les documents et réseaux sociaux
+- [x] Préparer un kit de marque exportable pour les documents et réseaux sociaux
 - [ ] Mettre en place une validation graphique avant chaque checkpoint
 - [x] Ajouter une documentation d’utilisation des composants pour les futures évolutions
 - [x] Ajouter des tests de non-régression pour le changement de langue et de thème
