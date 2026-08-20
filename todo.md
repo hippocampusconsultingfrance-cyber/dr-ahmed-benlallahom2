@@ -265,7 +265,8 @@
 - [x] Ne pas ajouter de filtres de catégories Blog tant que la section Actualités reste désactivée
 - [x] Vérifier et maintenir une grille responsive commune sur les pages publiques prioritaires
 - [x] Ajouter une non-régression des conteneurs et grilles communs sur les pages publiques prioritaires
-- [ ] Ajouter une animation de transition de page courte et désactivable
+- [x] Ajouter une animation de transition de page courte et désactivable
+- [x] Ajouter une enveloppe de route avec transition courte, désactivée en mouvement réduit et lisibilité renforcée
 - [x] Ajouter un contrôle de taille de police sans rupture de mise en page
 - [x] Ajouter un test comportemental de persistance et d’application du mode lisibilité renforcée
 - [x] Ajouter un composant de citation médicale avec source et date de mise à jour

@@ -186,6 +186,10 @@ Le composant `MedicalCitation` permet d’afficher une citation générale avec 
 
 Le conteneur partagé conserve des marges progressives de 16 px, 24 px puis 32 px, ainsi qu’une largeur maximale sur grand écran. Les parcours Réservation, Recrutement et Employeurs restent empilés avant leur mise en colonnes, tandis que les pages légales utilisent le même conteneur de lecture. Une non-régression vérifie ces contrats de structure.
 
+## Transition de route
+
+Les routes disposent d’une entrée courte de 180 ms, limitée à l’opacité et à une translation verticale de 6 px. La transition est désactivée lorsque le système demande une réduction des mouvements ou lorsque la lisibilité renforcée est active.
+
 ## Vérification visuelle des parcours publics critiques
 
 Les pages Accueil, Réservation, RGPD, Recrutement et Employeurs ont été capturées en vue bureau. Les en-têtes, formulaires, CTAs et pieds de page restent lisibles, structurés et sans chevauchement visible. Les formulaires Réservation, RGPD et Brief Employeur présentent leurs champs à une largeur cohérente, avec une hiérarchie claire entre contenu informatif et action principale. La vérification équivalente sur mobile reste planifiée séparément.
