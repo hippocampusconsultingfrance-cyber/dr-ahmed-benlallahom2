@@ -11,5 +11,10 @@ describe("mise en page mobile du dashboard", () => {
     expect(source).toContain("min-h-10 flex-1 sm:min-h-0 sm:flex-none");
     expect(source).toContain("min-h-11 w-full md:w-auto md:min-h-0");
     expect(source).toContain("flex flex-col-reverse gap-2 sm:flex-row");
+    expect(source).toContain("flex flex-wrap items-center gap-x-3 gap-y-1 mb-1");
+    expect(source).toContain('className="break-all">{apt.customerEmail}</span>');
+    expect(source).toContain('className="break-all">{msg.email}</span>');
+    expect(source).toContain('className="break-all">{req.email}</span>');
+    expect(source).toContain('className="break-words text-sm font-medium text-foreground">{t.title}</p>');
   });
 });

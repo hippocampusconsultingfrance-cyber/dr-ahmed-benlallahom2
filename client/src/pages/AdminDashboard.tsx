@@ -344,12 +344,12 @@ function AppointmentsTab() {
           <div key={apt.id} className="bg-card border border-border rounded-lg p-4">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-3 mb-1">
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-1">
                   <span className="font-semibold text-foreground">{apt.customerName}</span>
-                  <span className="text-xs text-muted-foreground font-mono">{apt.trackingId}</span>
+                  <span className="max-w-full break-all text-xs text-muted-foreground font-mono">{apt.trackingId}</span>
                 </div>
-                <div className="flex flex-wrap gap-3 text-sm text-muted-foreground">
-                  <span>{apt.customerEmail}</span>
+                <div className="flex flex-wrap gap-x-3 gap-y-1 text-sm text-muted-foreground">
+                  <span className="break-all">{apt.customerEmail}</span>
                   <span>{apt.customerPhone}</span>
                   <span>{new Date(apt.appointmentDate).toLocaleString("fr-FR", { timeZone: "Europe/Paris" })}</span>
                   <span className="font-semibold text-foreground">{apt.finalPrice}€</span>
@@ -432,13 +432,13 @@ function ContactsTab() {
           <div key={msg.id} className={`bg-card border rounded-lg p-4 ${msg.read === 0 ? "border-primary/50" : "border-border"}`}>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-3 mb-1">
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-1">
                   <span className="font-semibold text-foreground">{msg.name}</span>
                   {msg.read === 0 && <span className="w-2 h-2 rounded-full bg-primary" />}
                   <span className="text-xs text-muted-foreground font-mono">{msg.trackingId}</span>
                 </div>
                 <div className="flex flex-wrap gap-x-3 gap-y-1 text-sm text-muted-foreground mb-2">
-                  <span>{msg.email}</span>
+                  <span className="break-all">{msg.email}</span>
                   {msg.phone && <span>{msg.phone}</span>}
                   <span>{new Date(msg.createdAt).toLocaleString("fr-FR")}</span>
                 </div>
@@ -502,7 +502,7 @@ function GdprTab() {
           <div key={req.id} className="bg-card border border-border rounded-lg p-4">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-3 mb-1">
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-1">
                   <span className="font-semibold text-foreground">{req.name}</span>
                   <span className="px-2 py-0.5 rounded text-xs font-medium bg-slate-700 text-slate-200">
                     {typeLabels[req.requestType] || req.requestType}
@@ -511,8 +511,8 @@ function GdprTab() {
                     {req.status}
                   </span>
                 </div>
-                <div className="flex gap-3 text-sm text-muted-foreground">
-                  <span>{req.email}</span>
+                <div className="flex flex-wrap gap-x-3 gap-y-1 text-sm text-muted-foreground">
+                  <span className="break-all">{req.email}</span>
                   <span>{new Date(req.createdAt).toLocaleString("fr-FR")}</span>
                 </div>
                 {req.description && (
@@ -578,7 +578,7 @@ function TestimonialsTab() {
           <div key={t.id} className="bg-card border border-border rounded-lg p-4">
             <div className="flex flex-col md:flex-row md:items-start justify-between gap-3">
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-3 mb-1">
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-1">
                   <span className="font-semibold text-foreground">{t.authorName}</span>
                   <div className="flex">
                     {Array.from({ length: t.rating }).map((_, i) => (
@@ -590,7 +590,7 @@ function TestimonialsTab() {
                   </span>
                   {t.featured === 1 && <span className="px-2 py-0.5 rounded text-xs font-medium bg-cyan-500/20 text-cyan-400">Featured</span>}
                 </div>
-                <p className="text-sm font-medium text-foreground">{t.title}</p>
+                <p className="break-words text-sm font-medium text-foreground">{t.title}</p>
                 <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{t.content}</p>
               </div>
               <div className="flex w-full flex-wrap gap-2 sm:w-auto sm:flex-nowrap">
@@ -617,7 +617,7 @@ function TestimonialsTab() {
                 <Button
                   size="sm"
                   variant="destructive"
-                  className="min-h-10 sm:min-h-0 sm:flex-none"
+                  className="min-h-10 flex-1 sm:min-h-0 sm:flex-none"
                   onClick={() => {
                     if (confirm("Supprimer ce témoignage ?")) {
                       deleteTestimonial.mutate({ id: t.id });
