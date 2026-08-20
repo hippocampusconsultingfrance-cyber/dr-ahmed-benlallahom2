@@ -561,10 +561,11 @@ export default function BookingPage() {
             <p className="text-sm text-muted-foreground leading-relaxed mb-6">
               {bookingRailCopy.note}
             </p>
-            <img
-              src="/manus-storage/booking-care-path_b41c3403.jpg"
-              loading="lazy"
-              alt=""
+              <img
+                src="/manus-storage/booking-care-path_b41c3403.jpg"
+                loading="lazy"
+                decoding="async"
+                alt=""
               aria-hidden="true"
               className="mb-6 h-32 w-full rounded-xl border border-border/40 object-cover opacity-90"
             />

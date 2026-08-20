@@ -232,6 +232,7 @@
 - [ ] Mettre en place une revue graphique trimestrielle et une checklist avant publication
 - [ ] Centraliser les libellés d’interface afin d’éviter les chaînes de texte hardcodées
 - [ ] Ajouter une stratégie de compression et de recadrage responsive des images
+- [x] Ajouter le décodage asynchrone et une non-régression de chargement aux illustrations publiques décoratives
 - [x] Vérifier et compléter la navigation clavier sur menus, carrousels, modales et contrôles de réservation
 - [x] Ajouter des tests comportementaux ciblés couvrant la fermeture par Échap du dialogue partagé et les actions d’annulation des confirmations actives
 - [x] Documenter composant par composant la couverture clavier effective des menus, carrousel, dialogues et contrôles de réservation

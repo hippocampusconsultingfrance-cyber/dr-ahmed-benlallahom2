@@ -10,6 +10,7 @@ export default function ServicesSection() {
         <img
           src="/manus-storage/services-medical-compass_333540df.jpg"
           loading="lazy"
+          decoding="async"
           alt=""
           aria-hidden="true"
           className="w-full h-full object-cover"

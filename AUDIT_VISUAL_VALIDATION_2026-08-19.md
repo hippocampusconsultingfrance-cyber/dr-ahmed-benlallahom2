@@ -222,6 +222,8 @@ Les pages Accueil, Réservation, RGPD, Recrutement et Employeurs ont été captu
 
 La même série a été vérifiée à 375 px de large. Les pages empilent correctement leurs contenus : les champs de réservation et RGPD conservent une largeur complète, les cartes Recrutement restent séparées, et le brief Employeur garde des champs et CTA accessibles sans défilement horizontal. Aucun chevauchement bloquant n’a été observé dans les parcours capturés.
 
+Les deux illustrations décoratives publiques se chargent désormais en différé avec décodage asynchrone, restent masquées des lecteurs d’écran et utilisent un recadrage de couverture. Une non-régression protège ces attributs pour les sections Services et Réservation.
+
 ## Disponibilité de production
 
 Le 19 août 2026, les routes publiques `/`, `/booking`, `/gdpr`, `/faq`, `/search`, `/error`, `/maintenance`, `/recruitment`, `/employers` et `/why-hippocampus` ont toutes répondu en HTTP 200 sur le domaine principal. L’accès `www.drahmedbenlallahom.com` redirige correctement vers `drahmedbenlallahom.com` et sert ensuite la page d’accueil en HTTP 200. Aucun écart de disponibilité n’a été observé sur cet échantillon.
