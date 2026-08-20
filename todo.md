@@ -222,6 +222,7 @@
 - [x] Étendre les tests visuels automatisés à la page 404 publique, en desktop et mobile
 - [x] Étendre les tests visuels automatisés aux Mentions légales, en desktop et mobile
 - [x] Étendre les tests visuels automatisés à la page RGPD en desktop et mobile
+- [x] Étendre les tests visuels automatisés aux routes Pourquoi Hippocampus, Recrutement standard, missions VVIP, venture institutionnelle, désinscription recrutement et page d’erreur, en desktop et mobile
 - [x] Capturer et vérifier les parcours Accueil, Réservation, RGPD, Recrutement et Employeurs en vue bureau
 - [x] Capturer et vérifier les parcours Accueil, Réservation, RGPD, Recrutement et Employeurs en vue mobile
 - [x] Capturer et vérifier les parcours Accueil, Réservation, RGPD, Recrutement et Employeurs aux formats desktop et mobile

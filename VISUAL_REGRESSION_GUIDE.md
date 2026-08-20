@@ -19,6 +19,12 @@ Le contrôle `pnpm test:visual` compare le premier viewport des routes publiques
 | `/testimonials` | 1280 × 720 | 375 × 812 | Témoignages validés, filtres de consultation et état de contenu public. |
 | `/gdpr` | 1280 × 720 | 375 × 812 | Parcours de droits, consentement et mise en page du formulaire. |
 | `/booking/confirmation?status=success` | 1280 × 720 | 375 × 812 | Confirmation non indexée, référence de suivi de démonstration et statut sécurisé de livraison de facture. |
+| `/why-hippocampus` | 1280 × 720 | 375 × 812 | Argumentaire employeurs, méthode, garanties de confidentialité et appels à l’action. |
+| `/recruitment/standard` | 1280 × 720 | 375 × 812 | Dépôt de candidature général, spécialités, zones et contrôles de formulaire. |
+| `/recruitment/vvip-offshore` | 1280 × 720 | 375 × 812 | Parcours spécifique aux missions VVIP, industrielles et offshore. |
+| `/venture/hippocampus-consulting` | 1280 × 720 | 375 × 812 | Page institutionnelle d’une venture, repères d’identité et contenu éditorial. |
+| `/recruitment/unsubscribe` | 1280 × 720 | 375 × 812 | Désinscription de campagnes, état initial et accès au support. |
+| `/error` | 1280 × 720 | 375 × 812 | Page d’erreur de service, continuité de navigation et information de contact. |
 
 En complément, la matrice comprend quatre contrôles de texte long : Réservation en allemand et chinois sur bureau, ainsi que Ressources en allemand et chinois sur mobile. Ils ciblent les libellés les plus susceptibles de s’étendre, tout en conservant les tests Unicode unitaires des contrôles compacts.
 
