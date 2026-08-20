@@ -17,6 +17,10 @@ Ce registre distingue les contrôles réalisables automatiquement de ceux qui ex
 
 Les tests automatisés couvrent le cycle du menu de langue, la fermeture avec Échap et les dialogues. La recette sur navigateur réel doit compléter ces garde-fous en vérifiant, sans souris, le lien d’évitement, l’ordre de tabulation de la navigation, l’ouverture/fermeture des menus, les préférences de consentement, les formulaires Contact/RGPD/Réservation, les messages d’erreur et le retour de focus après une fenêtre modale. Consigner le navigateur, le système, la route, la version et toute anomalie avant de marquer le contrôle comme réalisé.
 
+## Recette de zoom à 200 %
+
+Les garde-fous automatisés vérifient les gouttières de la grille publique, les wrappers centrés et le mode Lisibilité renforcée. Sur un navigateur réel de bureau, régler le zoom à 200 % et contrôler l’accueil, la réservation, les ressources, la presse, les mentions légales et le recrutement. Vérifier l’absence de défilement horizontal, la lisibilité des CTA, l’accès aux formulaires, les menus et le bandeau cookies. Consigner le navigateur, le système, les captures, les routes et toute correction avant de passer le statut à « Réalisé ».
+
 ## Règle de clôture
 
 Une absence d’erreur dans les tests unitaires, TypeScript ou les captures automatisées ne remplace jamais la preuve externe demandée ci-dessus. En cas de doute, le contrôle reste « À réaliser ».
