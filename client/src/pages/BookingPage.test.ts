@@ -58,6 +58,20 @@ describe("booking date placeholders", () => {
     expect(getBookingAvailabilityIcon("available")).toBe("check");
   });
 
+  it("bloque le paiement si les données de disponibilité ou de tarif échouent", async () => {
+    const source = await import("node:fs/promises").then((fs) =>
+      fs.readFile(new URL("./BookingPage.tsx", import.meta.url), "utf8")
+    );
+
+    for (const language of ["fr", "en", "de", "zh"] as const) {
+      expect(bookingContent[language].form.availabilityError.length).toBeGreaterThan(0);
+      expect(bookingContent[language].pricing.unavailable.length).toBeGreaterThan(0);
+    }
+    expect(source).toContain("const availabilityError = Boolean");
+    expect(source).toContain("disabled={isLoading || availabilityPending || availabilityError");
+    expect(source).toContain("calculatePrice.error ? content.pricing.unavailable : content.error");
+  });
+
   it("verrouille immédiatement une soumission de paiement répétée avant le rendu du bouton désactivé", async () => {
     const source = await import("node:fs/promises").then((fs) =>
       fs.readFile(new URL("./BookingPage.tsx", import.meta.url), "utf8")

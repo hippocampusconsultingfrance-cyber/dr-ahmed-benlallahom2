@@ -294,6 +294,12 @@ Les CV entrants sont placés en quarantaine avant toute analyse. La validation v
 
 La suite couvre les chemins de succès et d’échec du pipeline : validation de fichier, quarantaine, extraction, repli OCR, échec IA, reprise contrôlée, rétention non destructive, notifications, téléchargement, chiffrement documentaire, accès candidat et restrictions administratives. Les tests dédiés restent séparés par responsabilité afin de signaler rapidement la frontière affectée lorsqu’un fournisseur externe ou une règle métier évolue.
 
+## États de chargement tRPC prioritaires
+
+Les parcours actifs contrôlés utilisent un état d’attente explicite plutôt qu’une zone vide : disponibilité et tarif de la réservation, coffre documentaire candidat, sessions de sécurité, candidatures, vivier, briefs Employeurs, historique Mailing, revue documentaire, sécurité et indicateurs de recrutement. Les tableaux administratifs existants disposent d’un squelette ou d’un panneau dédié ; les actions asynchrones affichent un état indisponible pendant leur traitement.
+
+La réservation bloque désormais le paiement tant que la disponibilité est en cours de vérification ou lorsque la disponibilité et le tarif ne peuvent pas être obtenus. Elle affiche alors un message localisé, sans considérer par défaut un créneau comme disponible. Le portail candidat distingue aussi un coffre temporairement indisponible d’un coffre réellement vide : en cas d’erreur de profil, de documents ou de sessions, il n’affiche aucune donnée partielle et propose une nouvelle tentative localisée. Les tests `BookingPage.test.ts` et `CandidatePortalPage.test.ts` couvrent ces garde-fous en français, anglais, allemand et chinois.
+
 ## Données de recrutement normalisées
 
 Les certifications, langues et expériences extraites sont conservées à la fois dans les champs de synthèse du dossier et dans des tables relationnelles dédiées. Le matching de brief consomme les certifications et langues normalisées ; le vivier conserve les structures normalisées et les expose dans l’administration. Les filtres restent compatibles avec les données déjà déposées en utilisant également les champs de déclaration initiaux.
