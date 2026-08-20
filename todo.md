@@ -380,31 +380,31 @@
 - [x] Préparer une revue annuelle de la cohérence des modales : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
 - [x] Préparer une revue annuelle de la cohérence des drawers : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
 - [x] Préparer une revue annuelle de la cohérence des menus déroulants : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
-- [ ] Préparer une revue annuelle de la cohérence des calendriers
-- [ ] Préparer une revue annuelle de la cohérence des carrousels
-- [ ] Préparer une revue annuelle de la cohérence des formulaires
-- [ ] Préparer une revue annuelle de la cohérence des tableaux
-- [ ] Préparer une revue annuelle de la cohérence des graphiques
-- [ ] Préparer une revue annuelle de la cohérence des badges
-- [ ] Préparer une revue annuelle de la cohérence des avatars
-- [ ] Préparer une revue annuelle de la cohérence des logos
-- [ ] Préparer une revue annuelle de la cohérence des illustrations
-- [ ] Préparer une revue annuelle de la cohérence des photographies
-- [ ] Préparer une revue annuelle de la cohérence des vidéos
-- [ ] Préparer une revue annuelle de la cohérence des sons
-- [ ] Préparer une revue annuelle de la cohérence des documents PDF
-- [ ] Préparer une revue annuelle de la cohérence des emails
-- [ ] Préparer une revue annuelle de la cohérence des SMS
-- [ ] Préparer une revue annuelle de la cohérence des notifications admin
-- [ ] Préparer une revue annuelle de la cohérence des notifications client
-- [ ] Préparer une revue annuelle de la cohérence des pages imprimables
-- [ ] Préparer une revue annuelle de la cohérence des exports
-- [ ] Préparer une revue annuelle de la cohérence des téléchargements
-- [ ] Préparer une revue annuelle de la cohérence des partages
-- [ ] Préparer une revue annuelle de la cohérence des aperçus sociaux
-- [ ] Préparer une revue annuelle de la cohérence des résultats de recherche
-- [ ] Préparer une revue annuelle de la cohérence des pages d’erreur
-- [ ] Préparer une revue annuelle de la cohérence des pages de maintenance
+- [x] Préparer une revue annuelle de la cohérence des calendriers : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des carrousels : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des formulaires : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des tableaux : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des graphiques : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des badges : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des avatars : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des logos : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des illustrations : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des photographies : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des vidéos : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des sons : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des documents PDF : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des emails : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des SMS : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des notifications admin : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des notifications client : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des pages imprimables : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des exports : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des téléchargements : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des partages : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des aperçus sociaux : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des résultats de recherche : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des pages d’erreur : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des pages de maintenance : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
 - [ ] Préparer une revue annuelle de la cohérence des pages de statut
 - [ ] Préparer une revue annuelle de la cohérence des pages d’aide
 - [ ] Préparer une revue annuelle de la cohérence des pages FAQ

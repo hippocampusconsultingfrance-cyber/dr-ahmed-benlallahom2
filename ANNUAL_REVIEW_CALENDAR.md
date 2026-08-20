@@ -25,5 +25,7 @@ La revue graphique trimestrielle complète les contrôles automatiques et ne rem
 | SEO et découverte | Titres SEO, descriptions Open Graph, liens canoniques, hreflang, URLs, breadcrumbs, page 404, footer et liens internes. |
 | Navigation et actions | Menu mobile, sélecteurs de langue et thème, boutons WhatsApp/Réserver/Contact et actions secondaires. |
 | Système visuel | Cartes, icônes, bordures, rayons, ombres, espacements, largeurs de contenu, hauteurs de section, transitions, états focus/hover/active, états disabled/loading/error/success, retours empty/skeletons/toasts et composants modales/drawers/menus déroulants. |
+| Composants et médias | Calendriers, carrousels, formulaires, tableaux, graphiques, badges, avatars, logos, illustrations, photographies, vidéos, sons et documents PDF. |
+| Diffusion et résilience | E-mails, SMS, notifications admin/client, pages imprimables, exports, téléchargements, partages, aperçus sociaux, recherche, pages d’erreur et maintenance. |
 
 > Un écart P0/P1 — contenu illisible, élément interactif masqué, divulgation de donnée, visuel sans droit vérifiable ou dégradation majeure d’un parcours — bloque la publication jusqu’à correction ou dérogation écrite et datée.
