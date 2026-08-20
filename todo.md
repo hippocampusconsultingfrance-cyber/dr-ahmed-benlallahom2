@@ -2505,3 +2505,4 @@
 - [x] Remplacer « Email professionnel » par « Email » dans les formulaires de candidature
 - [x] Exporter le code du projet vers un dépôt GitHub privé après vérification des exclusions sensibles
 - [x] Tester la connexion GitHub en lecture et présenter les capacités du dépôt synchronisé
+- [x] Évaluer l’audit de code externe et vérifier ses constats critiques dans le projet actuel
