@@ -2503,3 +2503,5 @@
 - [x] Remplacer l’environnement de prédilection VVIP par des choix à cocher
 - [x] Ajouter un champ de précision conditionnel lorsque « Autre pays / Mobilité mondiale » est sélectionné
 - [x] Remplacer « Email professionnel » par « Email » dans les formulaires de candidature
+- [x] Exporter le code du projet vers un dépôt GitHub privé après vérification des exclusions sensibles
+- [x] Tester la connexion GitHub en lecture et présenter les capacités du dépôt synchronisé
