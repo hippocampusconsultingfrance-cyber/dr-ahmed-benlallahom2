@@ -63,3 +63,11 @@ Le ton doit être direct, respectueux et compréhensible dans les quatre langues
 Avant toute publication, vérifier que les actions disposent d’un libellé explicite, d’un focus visible et d’une zone tactile adaptée. L’interface doit rester lisible en thème clair, sombre, OLED et lisibilité renforcée. Les visuels doivent avoir une alternative descriptive ou une alternative vide lorsqu’ils sont purement décoratifs.
 
 La checklist de contrôle doit inclure l’affichage mobile, la navigation clavier, l’absence de détail technique dans les erreurs, le respect du consentement analytique et l’absence de contenu fabriqué tel que témoignage, note ou résultat clinique.
+
+## 8. Livrables exportables
+
+Le dossier exportable `brand-kit` contient `brand-tokens.json` et `brand-kit.css`. Ces fichiers reprennent la palette et les typographies de production pour les documents, les maquettes et les supports sociaux compatibles. Le cyan reste réservé aux actions et repères principaux ; l’or demeure un accent secondaire, jamais le seul vecteur d’information. Les seuils à conserver sont définis dans `CONTRAST_GUARDRAIL.md`. L’archive exportable est disponible à l’adresse `/manus-storage/brand-kit-abl-hippocampus_7e4f016c.zip`.
+
+Le monogramme et la signature visibles dans l’interface ne doivent pas être recréés, redessinés ou remplacés à partir de ce kit. Tout usage isolé du logo exige un **fichier vectoriel validé** par son titulaire, ainsi qu’un contrôle de contraste sur le support final. Cette limite évite toute altération de l’identité ou toute diffusion d’une variante non approuvée.
+
+Le kit ne doit pas être employé pour produire une promesse thérapeutique, un résultat clinique garanti, une publication partenaire non autorisée ou un témoignage fabriqué.
