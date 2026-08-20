@@ -401,13 +401,13 @@ function AppointmentsTab() {
           <div key={apt.id} className="bg-card border border-border rounded-lg p-4">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-3 mb-1">
-                  <span className="font-semibold text-foreground">{apt.customerName}</span>
-                  <span className="text-xs text-muted-foreground font-mono">{apt.trackingId}</span>
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-1">
+                  <span className="min-w-0 break-words font-semibold text-foreground">{apt.customerName}</span>
+                  <span className="max-w-full break-all text-xs text-muted-foreground font-mono">{apt.trackingId}</span>
                 </div>
                 <div className="flex flex-wrap gap-3 text-sm text-muted-foreground">
-                  <span>{apt.customerEmail}</span>
-                  <span>{apt.customerPhone}</span>
+                  <span className="break-all">{apt.customerEmail}</span>
+                  <span className="break-words">{apt.customerPhone}</span>
                   <span>{new Date(apt.appointmentDate).toLocaleString(locale, { timeZone: "Europe/Paris" })}</span>
                   <span className="font-semibold text-foreground">{apt.finalPrice}€</span>
                 </div>
@@ -492,14 +492,14 @@ function ContactsTab() {
           <div key={msg.id} className={`bg-card border rounded-lg p-4 ${msg.read === 0 ? "border-primary/50" : "border-border"}`}>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-3 mb-1">
-                  <span className="font-semibold text-foreground">{msg.name}</span>
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-1">
+                  <span className="min-w-0 break-words font-semibold text-foreground">{msg.name}</span>
                   {msg.read === 0 && <span className="w-2 h-2 rounded-full bg-primary" />}
-                  <span className="text-xs text-muted-foreground font-mono">{msg.trackingId}</span>
+                  <span className="max-w-full break-all text-xs text-muted-foreground font-mono">{msg.trackingId}</span>
                 </div>
                 <div className="flex flex-wrap gap-x-3 gap-y-1 text-sm text-muted-foreground mb-2">
-                  <span>{msg.email}</span>
-                  {msg.phone && <span>{msg.phone}</span>}
+                  <span className="break-all">{msg.email}</span>
+                  {msg.phone && <span className="break-words">{msg.phone}</span>}
                   <span>{new Date(msg.createdAt).toLocaleString(locale)}</span>
                 </div>
                 <p className="text-sm text-foreground">{msg.message}</p>
@@ -557,8 +557,8 @@ function GdprTab() {
           <div key={req.id} className="bg-card border border-border rounded-lg p-4">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-3 mb-1">
-                  <span className="font-semibold text-foreground">{req.name}</span>
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-1">
+                  <span className="min-w-0 break-words font-semibold text-foreground">{req.name}</span>
                   <span className="px-2 py-0.5 rounded text-xs font-medium bg-slate-700 text-slate-200">
                     {copy.types[req.requestType as keyof typeof copy.types] ?? req.requestType}
                   </span>
@@ -566,8 +566,8 @@ function GdprTab() {
                     {copy.statuses[req.status as keyof typeof copy.statuses] ?? req.status}
                   </span>
                 </div>
-                <div className="flex gap-3 text-sm text-muted-foreground">
-                  <span>{req.email}</span>
+                <div className="flex flex-wrap gap-x-3 gap-y-1 text-sm text-muted-foreground">
+                  <span className="break-all">{req.email}</span>
                   <span>{new Date(req.createdAt).toLocaleString(locale)}</span>
                 </div>
                 {req.description && (

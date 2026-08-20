@@ -272,6 +272,10 @@ La matrice de régression visuelle couvre désormais la confirmation de paiement
 
 Le fichier `UX_FEEDBACK_REVIEW_PROTOCOL.md` formalise une revue trimestrielle reposant sur des retours volontaires, minimisés et anonymisés. Il exclut les données de santé, de paiement, de candidature et les informations personnelles inutiles ; les constats doivent être synthétisés sans identifiant, reproduits avant priorisation et reliés aux décisions de correction ou de suivi. La collecte effective reste soumise au consentement et aux contrôles externes documentés.
 
+## Reflow mobile des listes administratives
+
+Les en-têtes des listes Réservations, Messages et demandes RGPD appliquent désormais le retour à la ligne aux noms, badges et identifiants, ainsi qu’une coupure contrôlée aux e-mails et références longues. Les actions conservent des cibles tactiles et l’affichage ne dépend pas d’une largeur fixe. Cette protection est couverte par `AdminDashboard.mobileReflow.test.ts` ; la vérification des données réelles et des onglets authentifiés sur mobile/tablette reste explicitement inscrite dans le registre de validations externes.
+
 ## Couverture de validation d’accessibilité
 
 La suite automatisée couvre le lien d’accès direct au contenu, la navigation clavier, les libellés accessibles du menu, les alternatives d’images, les préférences de cookies, les contrôles mobiles du tableau de bord, les longueurs de traduction, l’impression et les états de chargement ou d’erreur. Les vérifications de rendu ont également été réalisées sur mobile, tablette, bureau et largeur réduite.
