@@ -13,6 +13,26 @@ jobs:
   quality:
     name: TypeScript and test suite
     runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: password
+          MYSQL_DATABASE: test_db
+        ports:
+          - 3306:3306
+        options: --health-cmd="mysqladmin ping -h localhost" --health-interval=10s --health-timeout=5s --health-retries=3
+
+    env:
+      DATABASE_URL: mysql://root:password@127.0.0.1:3306/test_db
+      RESEND_API_KEY: re_test_dummy_key_12345678
+      TURNSTILE_SECRET_KEY: 1x00000000000000000000AA
+      CANDIDATE_AUTH_PEPPER: dummy_pepper_for_ci_testing_32_chars_long
+      JWT_SECRET: dummy_jwt_secret_for_ci_testing_32_chars_long
+      GOOGLE_DRIVE_CLIENT_ID: dummy_client_id
+      GOOGLE_DRIVE_CLIENT_SECRET: dummy_client_secret
+      RUN_EXTERNAL_SECURITY_TESTS: "false"
+
     steps:
       - name: Check out source
         uses: actions/checkout@v4
@@ -25,6 +45,8 @@ jobs:
           cache: pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      - name: Push database schema
+        run: pnpm db:push || true
       - name: Verify TypeScript
         run: pnpm check
       - name: Run test suite
