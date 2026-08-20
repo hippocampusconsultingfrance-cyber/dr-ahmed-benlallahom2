@@ -323,11 +323,11 @@
 - [x] Vérifier le contraste et la lisibilité du bandeau cookies
 - [x] Ajouter un lien permanent vers les préférences cookies, y compris après fermeture du bandeau sans choix explicite
 - [x] Vérifier que les traceurs non essentiels restent bloqués sans consentement
-- [ ] Préparer une revue annuelle des traductions et de l’identité visuelle
-- [ ] Préparer une revue annuelle de l’accessibilité et des performances
-- [ ] Préparer une revue annuelle des droits sur les visuels et logos
-- [ ] Préparer une revue annuelle des contenus médicaux et de leurs sources
-- [ ] Préparer une revue annuelle des pages légales et RGPD
+- [x] Préparer une revue annuelle des traductions et de l’identité visuelle
+- [x] Préparer une revue annuelle de l’accessibilité et des performances
+- [x] Préparer une revue annuelle des droits sur les visuels et logos
+- [x] Préparer une revue annuelle des contenus médicaux et de leurs sources
+- [x] Préparer une revue annuelle des pages légales et RGPD
 - [ ] Préparer une revue annuelle des modèles d’emails et factures
 - [ ] Préparer une revue annuelle du parcours de réservation
 - [ ] Préparer une revue annuelle des retours utilisateurs

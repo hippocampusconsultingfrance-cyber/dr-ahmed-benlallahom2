@@ -190,6 +190,10 @@ Le conteneur partagé conserve des marges progressives de 16 px, 24 px puis 32 p
 
 Les routes disposent d’une entrée courte de 180 ms, limitée à l’opacité et à une translation verticale de 6 px. La transition est désactivée lorsque le système demande une réduction des mouvements ou lorsque la lisibilité renforcée est active.
 
+## Calendrier de revue annuelle
+
+Le fichier `ANNUAL_REVIEW_CALENDAR.md` prépare une revue annuelle des traductions, de l’accessibilité, des visuels, des contenus médicaux, du RGPD et de la sécurité des espaces privés. Il distingue les preuves à archiver et les contrôles nécessitant un appareil réel ou un fournisseur tiers.
+
 ## Vérification visuelle des parcours publics critiques
 
 Les pages Accueil, Réservation, RGPD, Recrutement et Employeurs ont été capturées en vue bureau. Les en-têtes, formulaires, CTAs et pieds de page restent lisibles, structurés et sans chevauchement visible. Les formulaires Réservation, RGPD et Brief Employeur présentent leurs champs à une largeur cohérente, avec une hiérarchie claire entre contenu informatif et action principale. La vérification équivalente sur mobile reste planifiée séparément.
