@@ -264,6 +264,10 @@ Le fichier `ASSET_RIGHTS_REGISTER.md` cartographie les actifs de marque, visuels
 
 Le fichier `EXTERNAL_VALIDATION_REGISTER.md` centralise les contrôles qui nécessitent une boîte e-mail, un appareil réel, une session MFA autorisée, une autorisation de tiers ou du retour d’usage réel. Chaque entrée précise une procédure non intrusive, une preuve attendue et reste ouverte jusqu’à la conservation de cette preuve. Les validations automatisées ne sont donc pas présentées comme une substitution au lecteur d’écran, aux clients de messagerie, aux navigateurs non disponibles ou aux accords de droits.
 
+## Confirmation de paiement et facture
+
+La matrice de régression visuelle couvre désormais la confirmation de paiement avec un identifiant de démonstration stable, en bureau et mobile. Les deux étalons vérifient la référence de suivi, les cartes de réassurance et le panneau localisé précisant que la facture est délivrée en pièce jointe e-mail, sans lien public ni document financier affiché. Cette extension porte la matrice à dix-huit comparaisons déterministes ; le paiement réel, l’e-mail et la facture effective restent exclus de la capture conformément au registre de validations externes.
+
 ## Couverture de validation d’accessibilité
 
 La suite automatisée couvre le lien d’accès direct au contenu, la navigation clavier, les libellés accessibles du menu, les alternatives d’images, les préférences de cookies, les contrôles mobiles du tableau de bord, les longueurs de traduction, l’impression et les états de chargement ou d’erreur. Les vérifications de rendu ont également été réalisées sur mobile, tablette, bureau et largeur réduite.

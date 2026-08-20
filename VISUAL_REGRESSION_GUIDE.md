@@ -12,6 +12,7 @@ Le contrôle `pnpm test:visual` compare le premier viewport des routes publiques
 | `/employers` | 1280 × 720 | 375 × 812 | Formulaire et repères de la page Employeurs. |
 | `/resources` | 1280 × 720 | 375 × 812 | Recherche, filtres et cartes institutionnelles. |
 | `/gdpr` | 1280 × 720 | 375 × 812 | Parcours de droits, consentement et mise en page du formulaire. |
+| `/booking/confirmation?status=success` | 1280 × 720 | 375 × 812 | Confirmation non indexée, référence de suivi de démonstration et statut sécurisé de livraison de facture. |
 
 En complément, la matrice comprend quatre contrôles de texte long : Réservation en allemand et chinois sur bureau, ainsi que Ressources en allemand et chinois sur mobile. Ils ciblent les libellés les plus susceptibles de s’étendre, tout en conservant les tests Unicode unitaires des contrôles compacts.
 
