@@ -235,7 +235,8 @@
 - [ ] Vérifier les droits sur les photographies, logos, illustrations et visuels externes : registre créé ; autorisations écrites de tiers encore à archiver
 - [x] Créer un registre de provenance et de preuves requises pour les actifs visuels publics
 - [x] Mettre en place une revue graphique trimestrielle et une checklist avant publication
-- [ ] Centraliser les libellés d’interface afin d’éviter les chaînes de texte hardcodées
+- [ ] Centraliser les libellés d’interface restants afin d’éviter les chaînes de texte hardcodées : premier lot Navigation/Footer migré vers un catalogue partagé
+- [x] Centraliser les libellés publics de Navigation et Footer dans un catalogue multilingue partagé
 - [x] Ajouter une stratégie de compression et de recadrage responsive des images : variantes WebP 640/1280, `srcSet`, `sizes` et absence de recadrage destructif pour les illustrations sources disponibles
 - [x] Ajouter le décodage asynchrone et une non-régression de chargement aux illustrations publiques décoratives
 - [x] Vérifier et compléter la navigation clavier sur menus, carrousels, modales et contrôles de réservation

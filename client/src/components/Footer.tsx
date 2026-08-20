@@ -1,6 +1,7 @@
 import { useLanguage } from "@/contexts/LanguageContext";
 import { siteConfig } from "@/data/site-config";
 import { Link } from "wouter";
+import { getPublicInterfaceCopy } from "./publicInterfaceCopy";
 
 export const getHomeSectionHref = (sectionId: string) => `/#${sectionId}`;
 export const footerBrandLogoAltCopy = {
@@ -10,12 +11,10 @@ export const footerBrandLogoAltCopy = {
   zh: "Ahmed Ben Lallahom 医生标志",
 } as const;
 
-const resourcesLabel = { fr: "Ressources médicales", en: "Medical resources", de: "Medizinische Ressourcen", zh: "医疗资源" } as const;
-const pressLabel = { fr: "Presse & publications", en: "Press & publications", de: "Presse & Publikationen", zh: "媒体与出版物" } as const;
-
 export default function Footer() {
   const { content, language } = useLanguage();
   const logoAlt = footerBrandLogoAltCopy[language as keyof typeof footerBrandLogoAltCopy] ?? footerBrandLogoAltCopy.fr;
+  const interfaceCopy = getPublicInterfaceCopy(language);
 
   return (
     <footer className="relative border-t border-border/20 bg-card/30">
@@ -81,13 +80,13 @@ export default function Footer() {
                 {content.footer.terms}
               </Link>
               <Link href="/faq" className="block text-sm text-muted-foreground hover:text-primary transition-colors">
-                FAQ
+                {interfaceCopy.faq}
               </Link>
               <Link href="/resources" className="block text-sm text-muted-foreground hover:text-primary transition-colors">
-                {resourcesLabel[language as keyof typeof resourcesLabel] ?? resourcesLabel.fr}
+                {interfaceCopy.resources}
               </Link>
               <Link href="/press" className="block text-sm text-muted-foreground hover:text-primary transition-colors">
-                {pressLabel[language as keyof typeof pressLabel] ?? pressLabel.fr}
+                {interfaceCopy.press}
               </Link>
             </nav>
           </div>
@@ -114,7 +113,7 @@ export default function Footer() {
                 rel="noopener noreferrer"
                 className="block text-sm text-muted-foreground hover:text-primary transition-colors"
               >
-                LinkedIn
+                {interfaceCopy.linkedin}
               </a>
             </div>
           </div>
