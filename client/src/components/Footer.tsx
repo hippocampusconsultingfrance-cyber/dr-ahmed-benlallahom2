@@ -10,6 +10,8 @@ export const footerBrandLogoAltCopy = {
   zh: "Ahmed Ben Lallahom 医生标志",
 } as const;
 
+const resourcesLabel = { fr: "Ressources médicales", en: "Medical resources", de: "Medizinische Ressourcen", zh: "医疗资源" } as const;
+
 export default function Footer() {
   const { content, language } = useLanguage();
   const logoAlt = footerBrandLogoAltCopy[language as keyof typeof footerBrandLogoAltCopy] ?? footerBrandLogoAltCopy.fr;
@@ -79,6 +81,9 @@ export default function Footer() {
               </Link>
               <Link href="/faq" className="block text-sm text-muted-foreground hover:text-primary transition-colors">
                 FAQ
+              </Link>
+              <Link href="/resources" className="block text-sm text-muted-foreground hover:text-primary transition-colors">
+                {resourcesLabel[language as keyof typeof resourcesLabel] ?? resourcesLabel.fr}
               </Link>
             </nav>
           </div>
