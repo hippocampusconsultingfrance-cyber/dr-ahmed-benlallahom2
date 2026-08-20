@@ -177,9 +177,9 @@
 ## Améliorations graphiques avancées à planifier
 
 - [x] Créer un système de design documenté avec tokens de couleur, typographie, espacements et composants
-- [ ] Créer une bibliothèque de visuels médicaux authentiques avec droits d’utilisation et textes alternatifs
+- [ ] Créer une bibliothèque de visuels médicaux authentiques avec droits d’utilisation et textes alternatifs — BLOQUÉ : nécessite des actifs authentiques autorisés ou leurs justificatifs de droits, à enregistrer dans `VISUAL_ASSET_RIGHTS_REGISTER.md`
 - [x] Ne pas développer la page Blog : la section Actualités et ses routes publiques restent désactivées à la demande du propriétaire
-- [ ] Ajouter des états vides illustrés pour le blog, les témoignages, les disponibilités et le dashboard
+- [ ] Ajouter des états vides illustrés pour le blog, les témoignages, les disponibilités et le dashboard — PARTIELLEMENT BLOQUÉ : le Blog est volontairement désactivé ; les parcours actifs ont des états vides accessibles, une direction visuelle illustrée ne doit pas créer de contenu fictif
 - [x] Ajouter un skeleton de chargement cohérent et accessible aux témoignages publics
 - [x] Ajouter des skeletons de chargement cohérents aux autres parcours encore en spinner seul : vivier, fiche candidat 360°, dashboard recrutement et sections admin
 - [x] Auditer tous les états de chargement restants et réserver les spinners aux actions instantanées ou boutons en cours d’envoi
@@ -194,10 +194,10 @@
 - [x] Ajouter une page d’erreur serveur et une page de maintenance cohérentes avec la marque
 - [x] Documenter le kit de marque : logo, couleurs, typographies, icônes et règles d’utilisation
 - [x] Harmoniser les modèles d’emails avec l’identité visuelle du site
-- [ ] Ajouter une prévisualisation graphique de facture dans l’espace client
+- [ ] Ajouter une prévisualisation graphique de facture dans l’espace client — BLOQUÉ : nécessite une décision de confidentialité et un espace client authentifié ; les factures restent volontairement envoyées en pièce jointe PDF, sans lien public
 - [x] Ajouter des illustrations originales sans texte pour les services et les étapes de réservation
 - [x] Ajouter une non-régression confirmant que les illustrations Services et Réservation restent décoratives et correctement intégrées
-- [ ] Exécuter de façon autonome les améliorations restantes réalisables et documenter sans blocage les contrôles nécessitant un appareil ou un service externe
+- [ ] Exécuter de façon autonome les améliorations restantes réalisables et documenter sans blocage les contrôles nécessitant un appareil ou un service externe — EN COURS : consolidations et améliorations réalisables déjà traitées ; migration complète des libellés publics encore à poursuivre ; prérequis externes consignés dans `EXTERNAL_VALIDATION_REGISTER.md`
 - [x] Créer le registre des droits sur les photographies, logos, illustrations et visuels externes : autorisations écrites de tiers à archiver dans `VISUAL_ASSET_RIGHTS_REGISTER.md`
 - [x] Mettre en place une revue graphique trimestrielle et une checklist avant publication : cadence T1–T4, critères de blocage et contrôle graphique ajoutés à `PREPRODUCTION_CHECKLIST.md`
 - [ ] Centraliser les libellés d’interface afin d’éviter les chaînes de texte hardcodées : lots Contact/RGPD/Réservation migrés vers `publicFormCopy.ts` avec repli français et exports compatibles ; audit et migration des pages publiques restantes à poursuivre
@@ -2040,8 +2040,8 @@
 - [x] Ajouter une action administrateur de remboursement Stripe avec traçabilité et contrôles d’éligibilité
 - [x] Ajouter une communication localisée expliquant la procédure de demande d’annulation après paiement
 
-- [ ] Remplacer les fallbacks notifyOwner/log par un vrai prestataire SMS si les SMS client et propriétaire sont requis
-- [ ] Demander et configurer les identifiants d’un prestataire SMS avant de considérer le canal SMS fonctionnel
+- [ ] Remplacer les fallbacks notifyOwner/log par un vrai prestataire SMS si les SMS client et propriétaire sont requis — BLOQUÉ : aucun prestataire SMS ni identifiant de production n’est configuré
+- [ ] Demander et configurer les identifiants d’un prestataire SMS avant de considérer le canal SMS fonctionnel — BLOQUÉ : nécessite le choix d’un prestataire et des identifiants transmis de manière sécurisée
 - [x] Afficher les dates des emails et rappels dans Europe/Paris au lieu du fuseau du serveur
 - [x] Remplacer l’expéditeur Resend onboarding@resend.dev par un domaine d’envoi vérifié en production : `recrutement@drahmedbenlallahom.com` est configuré avec réponse vers la boîte de recrutement
 - [x] Échapper les données utilisateur avant injection dans les emails HTML transactionnels
@@ -2110,7 +2110,7 @@
 - [x] Générer et appliquer la migration des colonnes IA de `cv_applications`
 - [x] Ajouter des tests unitaires sur les formats non supportés et les textes insuffisants
 - [x] Valider typecheck, build de production et suite Vitest
-- [ ] Vérifier en production une candidature de test avec un CV PDF ou DOCX non sensible
+- [ ] Vérifier en production une candidature de test avec un CV PDF ou DOCX non sensible — BLOQUÉ : nécessite une soumission réelle explicitement autorisée et un document non sensible
 - [x] Définir une procédure métier de suppression anticipée et de revue des scores IA
 
 ## Historique technique — recrutement intelligent
@@ -2348,7 +2348,9 @@
 - [x] Intégrer Cloudflare Turnstile aux inscriptions, réinitialisations et dépôts publics avec validation serveur
 - [x] Mettre en place une limitation persistante des tentatives et documenter la règle WAF/IP externe
 - [x] Ajouter une double authentification pour les administrateurs
-- [ ] Ajouter une analyse antivirus dédiée avant la promotion des documents dans le coffre
+- [ ] Ajouter une analyse antivirus dédiée avant la promotion des documents dans le coffre — BLOQUÉ : nécessite un moteur antivirus persistant incompatible avec l’hébergement actuel ; le choix confirmé est de rester sans hébergement réservé
+
+- [ ] Poursuivre l’audit et la migration des chaînes publiques restantes vers des catalogues partagés centralisés, avec tests de non-régression
 - [x] Créer des notifications de sécurité pour comptes, tentatives abusives, téléchargements et mots de passe
 - [x] Donner aux candidats une liste de sessions et la possibilité de les révoquer
 - [x] Rejeter les mots de passe compromis à partir d’un contrôle non divulguant
