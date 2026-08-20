@@ -103,6 +103,7 @@ export default function RecruitmentTab() {
   const [customRequest, setCustomRequest] = useState("");
   const utils = trpc.useUtils();
   const profilesQuery = trpc.admin.recruitment.profiles.list.useQuery();
+  const driveExportStatus = trpc.admin.recruitment.driveExport.status.useQuery();
 
   const { data, isLoading, error, refetch } = trpc.admin.recruitment.list.useQuery({
     status: statusFilter || undefined,
@@ -206,6 +207,12 @@ export default function RecruitmentTab() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <a
+            href="/api/google-drive/oauth/connect"
+            className="inline-flex h-9 items-center rounded-md border border-primary/30 bg-primary/10 px-3 text-sm font-medium text-primary transition-colors hover:bg-primary/20"
+          >
+            {driveExportStatus.data?.connected ? "Google Drive connecté" : "Connecter Google Drive"}
+          </a>
           <Button variant="outline" onClick={() => reanalyzeFailed.mutate({ limit: 10 })} disabled={reanalyzeFailed.isPending}>
             <BrainCircuit className={`mr-2 h-4 w-4 ${reanalyzeFailed.isPending ? "animate-pulse" : ""}`} />
             Reprendre les échecs IA

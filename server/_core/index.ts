@@ -7,6 +7,7 @@ import { createServer } from "http";
 import net from "net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "./oauth";
+import { registerGoogleDriveOAuthRoutes } from "../googleDriveOAuthRoutes";
 import { registerStorageProxy } from "./storageProxy";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
@@ -497,7 +498,11 @@ async function startServer() {
 
         if (insertedId) {
           const { enqueueCvAnalysis } = await import("../recruitmentProcessing");
-          await enqueueCvAnalysis(Number(insertedId));
+          const { enqueueCvGoogleDriveExport } = await import("../googleDriveExport");
+          await Promise.all([
+            enqueueCvAnalysis(Number(insertedId)),
+            enqueueCvGoogleDriveExport(Number(insertedId)),
+          ]);
         }
 
         res.status(201).json({ success: true, trackingId });
@@ -692,6 +697,7 @@ async function startServer() {
 
   registerStorageProxy(app);
   registerOAuthRoutes(app);
+  registerGoogleDriveOAuthRoutes(app);
   
   // tRPC API
   app.use(
@@ -783,8 +789,10 @@ async function startServer() {
       const user = await sdkInstance.authenticateRequest(req);
       if (!user.isCron || !user.taskUid) return res.status(403).json({ error: "cron-only" });
       const { processDueCvAnalysisJobs } = await import("../recruitmentProcessing");
-      const result = await processDueCvAnalysisJobs(2);
-      return res.json({ ok: true, taskUid: user.taskUid, ...result });
+      const { processDueCvGoogleDriveExports } = await import("../googleDriveExport");
+      const analysis = await processDueCvAnalysisJobs(2);
+      const driveExports = await processDueCvGoogleDriveExports(2);
+      return res.json({ ok: true, taskUid: user.taskUid, analysis, driveExports });
     } catch (error: any) {
       console.error("[RecruitmentProcessing] Handler error:", error);
       return res.status(500).json({ error: error.message, timestamp: new Date().toISOString() });

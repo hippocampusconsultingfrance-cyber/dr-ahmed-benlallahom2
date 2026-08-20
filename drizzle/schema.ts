@@ -344,6 +344,44 @@ export const cvProcessingJobs = mysqlTable("cv_processing_jobs", {
 export type CvProcessingJob = typeof cvProcessingJobs.$inferSelect;
 export type InsertCvProcessingJob = typeof cvProcessingJobs.$inferInsert;
 
+/** One encrypted Google Drive authorization dedicated to recruitment CV exports. */
+export const googleDriveConnections = mysqlTable("google_drive_connections", {
+  id: int("id").autoincrement().primaryKey(),
+  connectionKey: varchar("connection_key", { length: 64 }).notNull().unique(),
+  authorizedByOpenId: varchar("authorized_by_open_id", { length: 128 }).notNull(),
+  folderId: varchar("folder_id", { length: 128 }).notNull(),
+  refreshTokenCiphertext: text("refresh_token_ciphertext").notNull(),
+  refreshTokenIv: varchar("refresh_token_iv", { length: 32 }).notNull(),
+  refreshTokenAuthTag: varchar("refresh_token_auth_tag", { length: 32 }).notNull(),
+  grantedScopes: text("granted_scopes"),
+  connectedAt: timestamp("connected_at").defaultNow().notNull(),
+  lastUsedAt: timestamp("last_used_at"),
+  lastError: text("last_error"),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+});
+
+/** Durable, idempotent copies of accepted CVs into the private Google Drive folder. */
+export const cvGoogleDriveExportJobs = mysqlTable("cv_google_drive_export_jobs", {
+  id: int("id").autoincrement().primaryKey(),
+  applicationId: int("application_id").notNull().unique(),
+  status: mysqlEnum("status", ["queued", "running", "retry", "completed", "failed"]).default("queued").notNull(),
+  attempts: int("attempts").default(0).notNull(),
+  maxAttempts: int("max_attempts").default(5).notNull(),
+  scheduledFor: timestamp("scheduled_for").defaultNow().notNull(),
+  startedAt: timestamp("started_at"),
+  finishedAt: timestamp("finished_at"),
+  lastError: text("last_error"),
+  driveFileId: varchar("drive_file_id", { length: 128 }),
+  driveFileUrl: varchar("drive_file_url", { length: 500 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+}, table => ({
+  dueJobs: index("cv_drive_export_due_idx").on(table.status, table.scheduledFor),
+}));
+
+export type GoogleDriveConnection = typeof googleDriveConnections.$inferSelect;
+export type CvGoogleDriveExportJob = typeof cvGoogleDriveExportJobs.$inferSelect;
+
 /**
  * Immutable administrative audit trail for sensitive recruitment actions.
  */

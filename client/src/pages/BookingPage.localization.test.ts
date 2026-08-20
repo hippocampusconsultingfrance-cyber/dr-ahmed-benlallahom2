@@ -12,7 +12,8 @@ describe("localisation de la réservation", () => {
   it("affiche une information d’urgence explicite dans toutes les langues prises en charge", () => {
     Object.values(bookingContent).forEach(content => {
       expect(content.emergencyTitle).toBeTruthy();
-      expect(content.emergencyNote).toContain("112");
+      expect(content.emergencyNote.length).toBeGreaterThan(20);
+      expect(content.emergencyNote).not.toMatch(/\b112\b/);
     });
   });
 

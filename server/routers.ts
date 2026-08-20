@@ -31,6 +31,7 @@ import { candidatePortalRouter } from "./candidatePortalRouter";
 import { issueAdminMfaChallenge, isAdminMfaVerified, verifyAdminMfaChallenge } from "./adminMfa";
 import { enforcePersistentRateLimit, logSecurityEvent, requestIpHash } from "./candidateSecurity";
 import { createCandidateInvitationToken } from "./candidateAuth";
+import { googleDriveExportStatus } from "./googleDriveExport";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "");
 
@@ -958,6 +959,9 @@ export const appRouter = router({
 
     // International recruitment applications
     recruitment: router({
+      driveExport: router({
+        status: adminProcedure.query(async () => googleDriveExportStatus()),
+      }),
       list: adminProcedure
         .input(
           z.object({
