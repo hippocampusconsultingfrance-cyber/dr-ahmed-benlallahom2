@@ -1,0 +1,12 @@
+# Régression visuelle des routes publiques
+
+Le contrôle `pnpm test:visual` compare 34 captures de premier viewport à leurs étalons validés. Chaque scénario fixe le français, le thème sombre, le fuseau Europe/Paris, le mouvement réduit et le consentement aux seuls cookies essentiels. Cette normalisation évite que les animations, les préférences locales ou le bandeau cookies ne produisent un faux écart.
+
+| Groupe de routes | Bureau | Mobile | Exemples couverts |
+|---|---:|---:|---|
+| Consultation et droits | 1280 × 720 | 375 × 812 | Réservation, confirmation, RGPD, Mentions légales. |
+| Recrutement | 1280 × 720 | 375 × 812 | Hub, parcours standard, VVIP/offshore, désinscription. |
+| Informations publiques | 1280 × 720 | 375 × 812 | Accueil, Employeurs, Pourquoi Hippocampus, venture, FAQ et recherche. |
+| Résilience | 1280 × 720 | 375 × 812 | Témoignages, 404 et page d’erreur de service. |
+
+Les PNG de référence restent hors du dépôt, dans le stockage statique privé du projet. Pour une évolution visuelle légitime, enregistrer d’abord les candidats avec `pnpm test:visual:record`, les examiner sur les deux formats, les publier avec le stockage du projet, puis mettre à jour les URL du script. Un étalon ne doit jamais être remplacé simplement pour masquer une différence non comprise.

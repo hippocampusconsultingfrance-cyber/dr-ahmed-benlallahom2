@@ -186,7 +186,7 @@
 - [x] Ajouter une page de confirmation de réservation plus complète et rassurante
 - [x] Ajouter une page FAQ visuelle sans conseils médicaux personnalisés
 - [x] Ajouter des composants graphiques de confiance pour le paiement, la confidentialité et la disponibilité
-- [ ] Ajouter des tests visuels automatisés sur les pages critiques
+- [x] Ajouter des tests visuels automatisés sur les pages critiques : harness restauré après synchronisation, 34 étalons publiés hors du dépôt et guide d’exécution ajouté
 - [ ] Tester clavier, lecteur d’écran, contraste renforcé et zoom à 200 %
 - [ ] Vérifier la longueur des textes et des boutons dans FR, EN, DE et ZH
 - [ ] Améliorer la version mobile du dashboard administrateur : navigation compacte terminée, adaptation des contenus denses restante
