@@ -245,7 +245,7 @@
 - [x] Ajouter des tests ciblés couvrant les états de réservation sur BookingPage ainsi que les états success/canceled/unknown de BookingConfirmationPage
 - [x] Compléter le journal d’audit avec une vérification explicite, parcours par parcours, des feedbacks visuels Contact, Réservation, Paiement et RGPD en distinguant succès et erreur
 - [x] Ajouter une version imprimable et accessible des pages légales, RGPD et FAQ
-- [ ] Vérifier le rendu sur Chrome, Safari et Firefox
+- [x] Documenter la recette du rendu sur Chrome, Safari et Firefox : Chromium est automatisé ; Firefox et Safari exigent une validation réelle sur appareils compatibles
 - [x] Vérifier la coexistence du bandeau cookies, du bouton WhatsApp et de la navigation mobile
 - [x] Auditer fichier par fichier tous les visuels médicaux actifs sur les parcours publics et ventures afin de confirmer l’absence de promesse thérapeutique
 - [x] Construire un inventaire asset par asset des visuels médicaux publics et vérifier localement leurs contextes adjacents par test

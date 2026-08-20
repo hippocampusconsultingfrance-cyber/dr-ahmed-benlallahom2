@@ -11,5 +11,8 @@ describe("checklist de validation manuelle", () => {
     expect(checklist).toContain("Zoom natif 200 %");
     expect(checklist).toContain("Correspondance avec les contrôles automatisés");
     expect(checklist).toContain("appareil réel");
+    expect(checklist).toContain("Compatibilité multi-navigateurs");
+    expect(checklist).toContain("Firefox récent");
+    expect(checklist).toContain("Safari macOS / iOS récent");
   });
 });

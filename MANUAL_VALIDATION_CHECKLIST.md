@@ -28,6 +28,18 @@ Cette checklist complète les contrôles automatisés et visuels déjà réalis�
 
 Pour chaque contrôle, conserver la date, le navigateur, l’appareil, la page concernée, le résultat et, en cas d’écart, une capture d’écran non sensible. Les anomalies doivent être reproduites une seconde fois avant toute conclusion.
 
+## Compatibilité multi-navigateurs
+
+Le contrôle automatisé disponible dans l’environnement utilise Chromium et couvre les routes publiques prioritaires, leurs formats desktop/mobile, ainsi que des scénarios allemands et chinois. Firefox et Safari ne sont pas présents dans cet environnement ; une validation réelle est requise avant de déclarer une compatibilité complète.
+
+| Navigateur | Statut automatisé | Recette à effectuer sur le domaine publié | Priorité |
+|---|---|---|---|
+| Chrome / Chromium récent | Couvert par la régression visuelle automatisée et les tests fonctionnels locaux. | Rejouer au minimum réservation, RGPD, recrutement et Ressources après une évolution majeure. | Haute |
+| Firefox récent | Non disponible localement. | Vérifier menu, langue, thème, formulaires, validation et absence de débordement à 200 %. | Haute |
+| Safari macOS / iOS récent | Non disponible localement et nécessite un appareil Apple. | Vérifier navigation, clavier/VoiceOver, paiement de test, formulaires et comportement tactile. | Haute |
+
+> L’absence de Firefox ou Safari local ne constitue pas une validation négative : elle impose une recette complémentaire documentée. Une anomalie spécifique à un navigateur doit être consignée avec sa version et son système d’exploitation avant correction.
+
 ## Statut de suivi
 
 La localisation des parcours publics et administratifs a été vérifiée par compilation et tests automatisés. Les vérifications d’accessibilité et de rendu qui dépendent d’un navigateur réel, d’un système d’assistance ou d’un moyen de paiement restent volontairement consignées dans cette checklist : elles ne sont ni simulées ni déclarées exécutées par le projet. Cette tâche de développement est donc clôturée comme **documentée**, avec exécution opérationnelle à réaliser sur le domaine publié.
