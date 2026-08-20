@@ -204,6 +204,8 @@ Le calendrier inclut maintenant les pages éditoriales et métier, les routes et
 
 Il couvre également les liens légaux, les fournisseurs et l’exploitation, ainsi que les destinations de contact et de service transactionnel.
 
+Les contrôles annuels incluent maintenant les parcours de réservation, les calendriers, les limites de téléconsultation et les références relatives aux données sensibles et aux droits RGPD.
+
 ## Kit de marque exportable
 
 Le fichier `BRAND_KIT.md` centralise la signature, les tokens de palette, les typographies, les règles de ton, les formats d’export LinkedIn, documentaires et e-mail, ainsi que les contrôles de droits et d’accessibilité à effectuer avant diffusion.
