@@ -12,20 +12,10 @@ export default function Navigation() {
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
-  const readabilityCopy = {
-    fr: { enable: "Activer la lisibilité renforcée", disable: "Désactiver la lisibilité renforcée", label: "Lisibilité renforcée" },
-    en: { enable: "Enable high readability", disable: "Disable high readability", label: "High readability" },
-    de: { enable: "Verbesserte Lesbarkeit aktivieren", disable: "Verbesserte Lesbarkeit deaktivieren", label: "Verbesserte Lesbarkeit" },
-    zh: { enable: "启用高可读性模式", disable: "关闭高可读性模式", label: "高可读性模式" },
-  }[language as "fr" | "en" | "de" | "zh"];
-  const oledCopy = {
-    fr: { enable: "Activer le noir OLED", disable: "Désactiver le noir OLED", label: "Noir OLED" },
-    en: { enable: "Enable OLED black", disable: "Disable OLED black", label: "OLED black" },
-    de: { enable: "OLED-Schwarz aktivieren", disable: "OLED-Schwarz deaktivieren", label: "OLED-Schwarz" },
-    zh: { enable: "启用 OLED 黑色", disable: "关闭 OLED 黑色", label: "OLED 黑色" },
-  }[language as "fr" | "en" | "de" | "zh"];
   const accessibilityCopy = navigationAccessibilityCopy[language as keyof typeof navigationAccessibilityCopy] ?? navigationAccessibilityCopy.fr;
   const interfaceCopy = getPublicInterfaceCopy(language);
+  const readabilityCopy = interfaceCopy.readability;
+  const oledCopy = interfaceCopy.oled;
   const dropdownRef = useRef<HTMLDivElement>(null);
   const languageButtonRef = useRef<HTMLButtonElement>(null);
   const mobileMenuButtonRef = useRef<HTMLButtonElement>(null);

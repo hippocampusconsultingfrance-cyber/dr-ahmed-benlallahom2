@@ -10,6 +10,8 @@ describe("catalogue des libellés publics", () => {
       expect(copy.search.length).toBeGreaterThan(0);
       expect(copy.resources.length).toBeGreaterThan(0);
       expect(copy.press.length).toBeGreaterThan(0);
+      expect(copy.readability.label.length).toBeGreaterThan(0);
+      expect(copy.oled.enable.length).toBeGreaterThan(0);
     }
   });
 
