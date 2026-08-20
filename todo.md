@@ -217,9 +217,9 @@
 - [x] Vérifier la coexistence du bandeau cookies, du bouton WhatsApp et de la navigation mobile
 - [x] Auditer fichier par fichier les visuels médicaux actifs des parcours publics afin de confirmer l’absence de promesse thérapeutique : inventaire et garde-fou statique ajoutés ; actifs tiers/ventures restent soumis à leur registre de droits
 - [x] Construire un inventaire asset par asset des visuels médicaux publics et vérifier localement leurs contextes adjacents par test
-- [ ] Vérifier que les contenus longs en allemand et chinois ne débordent pas des composants
+- [x] Vérifier que les contenus longs en allemand et chinois ne débordent pas des composants : 4 scénarios visuels DE/ZH ajoutés aux parcours denses et validés dans la matrice de régression
 - [x] Vérifier l’alignement des titres, CTA et formulaires sur desktop, tablette et mobile
-- [ ] Ajouter une procédure de revue UX basée sur les retours utilisateurs réels
+- [x] Ajouter une procédure de revue UX basée sur les retours utilisateurs réels : consentement, anonymisation, droit de retrait, priorisation et exclusion des faux avis formalisés dans `UX_REVIEW_PROTOCOL.md`
 - [x] Ne pas ajouter de visuels de partage social pour le Blog : aucune page ni aucun article Actualités n’est publié
 - [x] Ajouter des descriptions alternatives précises et contextuelles à toutes les images
 - [ ] Ajouter une page de présentation Hippocampus Consulting avec une mise en page éditoriale
