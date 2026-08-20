@@ -560,7 +560,7 @@ export default function BookingPage() {
               decoding="async"
               alt=""
               aria-hidden="true"
-              className="mb-6 h-32 w-full rounded-xl border border-border/40 object-cover opacity-90"
+              className="mb-6 h-32 w-full rounded-xl border border-border/40 object-cover opacity-70 saturate-75"
             />
             <div className="booking-rail-list">
               {steps.map((step, index) => {

@@ -72,4 +72,13 @@ describe("booking date placeholders", () => {
     expect(source).not.toContain("alert(`${content.paymentError} ${error.message}`)");
     expect(source).not.toContain("alert(`${content.bookingError} ${error instanceof Error ? error.message : \"Unknown error\"}`)");
   });
+
+  it("réduit le poids visuel de l’illustration purement décorative", async () => {
+    const source = await import("node:fs/promises").then((fs) =>
+      fs.readFile(new URL("./BookingPage.tsx", import.meta.url), "utf8")
+    );
+
+    expect(source).toContain('aria-hidden="true"');
+    expect(source).toContain("opacity-70 saturate-75");
+  });
 });
