@@ -2486,3 +2486,4 @@
 - [x] Ajouter la Terre en fond de la page de recrutement principale
 - [x] Placer Contact en dernière position dans la navigation publique
 - [x] Renforcer la visibilité de la Terre en fond de la page Recrutement publiée
+- [x] Corriger le blocage de soumission des candidatures sur téléphone et couvrir le parcours mobile par des tests
