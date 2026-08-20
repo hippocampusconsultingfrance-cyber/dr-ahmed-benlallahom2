@@ -1055,15 +1055,15 @@ function AvailabilityTab() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
           {slots?.map((slot) => (
             <div key={slot.id} className="bg-card border border-border rounded-lg p-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex flex-wrap gap-x-2 gap-y-1">
-                <span className="font-medium text-foreground">{copy.days[slot.dayOfWeek]}</span>
-                <span className="text-sm text-muted-foreground ml-2">{slot.startTime} - {slot.endTime}</span>
+              <div className="min-w-0 flex flex-wrap gap-x-2 gap-y-1">
+                <span className="break-words font-medium text-foreground">{copy.days[slot.dayOfWeek]}</span>
+                <span className="text-sm text-muted-foreground">{slot.startTime} - {slot.endTime}</span>
               </div>
               <Button
                 size="sm"
                 variant="ghost"
-                className="min-h-10 self-start sm:min-h-0"
                 onClick={() => deleteSlot.mutate({ id: slot.id })}
+                className="min-h-10 w-full self-stretch sm:w-auto sm:self-start sm:min-h-0"
                 aria-label={copy.deleteSlot}
               >
                 <Trash className="w-3 h-3 text-red-400" />
@@ -1117,15 +1117,15 @@ function AvailabilityTab() {
         <div className="space-y-2">
           {blockedDates?.map((bd) => (
             <div key={bd.id} className="bg-card border border-border rounded-lg p-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex flex-col gap-1 sm:flex-row sm:items-center">
-                <span className="font-medium text-foreground">{new Date(bd.date + "T00:00:00").toLocaleDateString(locale, { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</span>
-                {bd.reason && <span className="text-sm text-muted-foreground ml-3">{bd.reason}</span>}
+              <div className="min-w-0 flex flex-col gap-1 sm:flex-row sm:items-center">
+                <span className="break-words font-medium text-foreground">{new Date(bd.date + "T00:00:00").toLocaleDateString(locale, { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</span>
+                {bd.reason && <span className="break-words text-sm text-muted-foreground sm:ml-3">{bd.reason}</span>}
               </div>
               <Button
                 size="sm"
                 variant="ghost"
-                className="min-h-10 self-start sm:min-h-0"
                 onClick={() => unblockDate.mutate({ id: bd.id })}
+                className="min-h-10 w-full self-stretch sm:w-auto sm:self-start sm:min-h-0"
                 aria-label={copy.unblockDate}
               >
                 <XCircle className="w-4 h-4 text-red-400" />

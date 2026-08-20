@@ -12,4 +12,12 @@ describe("reflow mobile des listes administratives", () => {
     expect(source).toContain('className="break-all">{req.email}</span>');
     expect(source).toContain('className="max-w-full break-all text-xs text-muted-foreground font-mono">{apt.trackingId}</span>');
   });
+
+  it("préserve les actions tactiles et le reflow des créneaux et dates bloquées", async () => {
+    const source = await readFile(path.resolve(process.cwd(), "client/src/pages/AdminDashboard.tsx"), "utf8");
+
+    expect(source).toContain('className="min-w-0 flex flex-wrap gap-x-2 gap-y-1"');
+    expect(source).toContain('className="min-h-10 w-full self-stretch sm:w-auto sm:self-start sm:min-h-0"');
+    expect(source).toContain('className="break-words text-sm text-muted-foreground sm:ml-3">{bd.reason}</span>');
+  });
 });
