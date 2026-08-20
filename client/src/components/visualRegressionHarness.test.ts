@@ -7,11 +7,11 @@ describe("harness de régression visuelle", () => {
     const source = await readFile(path.resolve(process.cwd(), "scripts/visual-regression.mjs"), "utf8");
     const packageJson = await readFile(path.resolve(process.cwd(), "package.json"), "utf8");
 
-    for (const route of ["/booking", "/booking/confirmation?status=success&trackingId=VISUAL-TEST-2026", "/recruitment", "/recruitment/standard", "/recruitment/vvip-offshore", "/employers", "/why-hippocampus", "/venture/hippocampus-consulting", "/recruitment/unsubscribe", "/faq", "/search", "/testimonials", "/gdpr", "/legal", "/visual-not-found", "/error"]) {
+    for (const route of ["/booking", "/booking/confirmation?status=success&trackingId=VISUAL-TEST-2026", "/recruitment", "/recruitment/standard", "/recruitment/vvip-offshore", "/employers", "/why-hippocampus", "/venture/hippocampus-consulting", "/recruitment/unsubscribe", "/faq", "/search", "/resources", "/testimonials", "/gdpr", "/legal", "/visual-not-found", "/error"]) {
       expect(source).toContain(`"${route}"`);
     }
     const publishedBaselines = source.match(/\/manus-storage\/[a-z0-9-]+_[a-f0-9]+\.png/g) ?? [];
-    expect(publishedBaselines).toHaveLength(38);
+    expect(publishedBaselines).toHaveLength(40);
     for (const multilingualScenario of ["booking-de-desktop", "recruitment-standard-de-mobile", "booking-zh-desktop", "employers-zh-mobile"]) {
       expect(source).toContain(`"${multilingualScenario}"`);
     }

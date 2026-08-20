@@ -41,6 +41,7 @@ const AdminDashboard = lazy(() => import("./pages/AdminDashboard"));
 const ServiceStatusPage = lazy(() => import("./pages/ServiceStatusPage"));
 const FAQPage = lazy(() => import("./pages/FAQPage"));
 const SearchPage = lazy(() => import("./pages/SearchPage"));
+const ResourcesPage = lazy(() => import("./pages/ResourcesPage"));
 
 function RouteLoading() {
   const { language } = useLanguage();
@@ -88,6 +89,7 @@ function Router() {
       <Route path="/maintenance" component={() => <ServiceStatusPage kind="maintenance" />} />
       <Route path="/faq" component={FAQPage} />
       <Route path="/search" component={SearchPage} />
+      <Route path="/resources" component={ResourcesPage} />
       <Route path="/404" component={NotFound} />
         <Route component={NotFound} />
       </Switch>

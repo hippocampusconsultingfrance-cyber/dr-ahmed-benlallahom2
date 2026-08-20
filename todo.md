@@ -223,7 +223,7 @@
 - [x] Ne pas ajouter de visuels de partage social pour le Blog : aucune page ni aucun article Actualités n’est publié
 - [x] Ajouter des descriptions alternatives précises et contextuelles à toutes les images
 - [ ] Ajouter une page de présentation Hippocampus Consulting avec une mise en page éditoriale
-- [ ] Ajouter une page Ressources Médicales avec cartes, filtres et téléchargements contrôlés
+- [x] Ajouter une page Ressources Médicales avec cartes, filtres et téléchargements contrôlés : page institutionnelle avec filtres et liens officiels vérifiés ; aucun téléchargement tiers n’est hébergé, afin de conserver le contrôle des sources et des droits
 - [ ] Ajouter une page Presse ou Publications uniquement avec contenus vérifiables
 - [x] Préparer le registre préalable à toute page Partenaires : publication bloquée jusqu’à autorisation écrite complète dans `PARTNER_PUBLICATION_REGISTER.md`
 - [x] Ne pas étendre la gestion éditoriale Blog : le module Actualités reste retiré du produit public
