@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/card";
 import Breadcrumb from "@/components/Breadcrumb";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { SEOHead } from "@/components/SEOHead";
+import { getLocalizedCopy } from "@/lib/getLocalizedCopy";
 
 export const confirmationContent = {
   fr: {
@@ -166,7 +167,7 @@ export function getBookingConfirmationState(status: string | null): BookingConfi
 export default function BookingConfirmationPage() {
   const { language } = useLanguage();
   useLocation();
-  const copy = confirmationContent[language as keyof typeof confirmationContent] ?? confirmationContent.en;
+  const copy = getLocalizedCopy(confirmationContent, language, "en");
   const params = new URLSearchParams(window.location.search);
   const paymentState = getBookingConfirmationState(params.get("status"));
   const canceled = paymentState === "canceled";
