@@ -201,7 +201,7 @@
 - [x] Créer le registre des droits sur les photographies, logos, illustrations et visuels externes : autorisations écrites de tiers à archiver dans `VISUAL_ASSET_RIGHTS_REGISTER.md`
 - [ ] Mettre en place une revue graphique trimestrielle et une checklist avant publication
 - [ ] Centraliser les libellés d’interface afin d’éviter les chaînes de texte hardcodées
-- [ ] Ajouter une stratégie de compression et de recadrage responsive des images
+- [x] Ajouter une stratégie de compression responsive sans recadrage destructif : variantes WebP 640/1280, `srcSet`, `sizes` et décodage asynchrone pour Services et Réservation
 - [x] Vérifier et compléter la navigation clavier sur menus, carrousels, modales et contrôles de réservation
 - [x] Ajouter des tests comportementaux ciblés couvrant la fermeture par Échap du dialogue partagé et les actions d’annulation des confirmations actives
 - [x] Documenter composant par composant la couverture clavier effective des menus, carrousel, dialogues et contrôles de réservation
