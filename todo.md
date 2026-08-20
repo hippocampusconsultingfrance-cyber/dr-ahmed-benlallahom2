@@ -250,7 +250,7 @@
 - [x] Ajouter des tests ciblés de non-régression pour la navigation et les sections admin critiques en mobile
 - [x] Ajouter un mode sans animation pour les connexions lentes et préférences utilisateur
 - [x] Ajouter un mode sombre optimisé pour les écrans OLED
-- [ ] Vérifier les performances après ajout d’animations ou d’images
+- [x] Vérifier les performances après ajout d’animations ou d’images : budgets gzip de l’entrée, des routes différées et du dashboard admin ajoutés ; vérification WebP et animations désactivables documentée
 - [ ] Préparer des visuels LinkedIn cohérents avec la marque
 - [x] Documenter la recette Gmail, Outlook et Apple Mail : boîtes de test autorisées et preuve requise dans `EXTERNAL_VALIDATION_REGISTER.md`
 - [x] Harmoniser les notifications de succès, avertissement et erreur
