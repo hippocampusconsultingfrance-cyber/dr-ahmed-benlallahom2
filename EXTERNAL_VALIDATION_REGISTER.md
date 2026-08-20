@@ -21,6 +21,10 @@ Les tests automatisés couvrent le cycle du menu de langue, la fermeture avec É
 
 Les garde-fous automatisés vérifient les gouttières de la grille publique, les wrappers centrés et le mode Lisibilité renforcée. Sur un navigateur réel de bureau, régler le zoom à 200 % et contrôler l’accueil, la réservation, les ressources, la presse, les mentions légales et le recrutement. Vérifier l’absence de défilement horizontal, la lisibilité des CTA, l’accès aux formulaires, les menus et le bandeau cookies. Consigner le navigateur, le système, les captures, les routes et toute correction avant de passer le statut à « Réalisé ».
 
+## Recette lecteur d’écran
+
+Les garde-fous de code vérifient la cible `main-content` du lien d’évitement, les messages d’alerte et les étiquettes de champs. La validation réelle doit être menée avec NVDA, VoiceOver ou TalkBack sur un navigateur compatible. Contrôler l’annonce du titre de page, le lien d’évitement, les régions de navigation, les titres, les CTA, les erreurs des formulaires Contact/RGPD/Réservation, le coffre candidat et les fenêtres modales. Archiver l’outil, la version, le navigateur, les routes, les annonces observées et les corrections avant de passer le statut à « Réalisé ».
+
 ## Règle de clôture
 
 Une absence d’erreur dans les tests unitaires, TypeScript ou les captures automatisées ne remplace jamais la preuve externe demandée ci-dessus. En cas de doute, le contrôle reste « À réaliser ».
