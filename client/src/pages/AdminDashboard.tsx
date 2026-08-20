@@ -635,8 +635,8 @@ function TestimonialsTab() {
           <div key={t.id} className="bg-card border border-border rounded-lg p-4">
             <div className="flex flex-col md:flex-row md:items-start justify-between gap-3">
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-3 mb-1">
-                  <span className="font-semibold text-foreground">{t.authorName}</span>
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-1">
+                  <span className="min-w-0 break-words font-semibold text-foreground">{t.authorName}</span>
                   <div className="flex">
                     {Array.from({ length: t.rating }).map((_, i) => (
                       <Star key={i} className="w-3 h-3 fill-cyan-400 text-cyan-400" />
@@ -647,8 +647,8 @@ function TestimonialsTab() {
                   </span>
                   {t.featured === 1 && <span className="px-2 py-0.5 rounded text-xs font-medium bg-cyan-500/20 text-cyan-400">{copy.featured}</span>}
                 </div>
-                <p className="text-sm font-medium text-foreground">{t.title}</p>
-                <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{t.content}</p>
+                <p className="break-words text-sm font-medium text-foreground">{t.title}</p>
+                <p className="break-words text-sm text-muted-foreground mt-1 line-clamp-2">{t.content}</p>
               </div>
               <div className="flex w-full flex-wrap gap-2 sm:w-auto sm:flex-nowrap">
                 {t.status !== "approved" && (
@@ -674,7 +674,7 @@ function TestimonialsTab() {
                 <Button
                   size="sm"
                   variant="destructive"
-                  className="min-h-10 sm:min-h-0 sm:flex-none"
+                  className="min-h-10 flex-1 sm:min-h-0 sm:flex-none"
                   onClick={() => {
                     if (confirm(copy.confirmDelete)) {
                       deleteTestimonial.mutate({ id: t.id });

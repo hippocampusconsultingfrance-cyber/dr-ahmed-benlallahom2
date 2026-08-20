@@ -221,6 +221,7 @@
 - [x] Vérifier la longueur des textes et des boutons dans FR, EN, DE et ZH : garde-fous Unicode et scénarios visuels allemands/chinois sur les parcours à risque
 - [ ] Améliorer la version mobile du dashboard administrateur : navigation compacte terminée, adaptation des contenus denses restante
 - [x] Améliorer le reflow des créneaux et dates bloquées dans l’onglet Disponibilités
+- [x] Améliorer le reflow des cartes de témoignages administratives sur mobile
 - [x] Renforcer le reflow mobile des en-têtes, badges et coordonnées dans les listes administratives historiques
 - [x] Auditer et ajuster les tableaux de candidatures, réservations et fichiers candidats pour une lecture mobile sans débordement
 - [x] Agrandir et répartir les actions du tableau Candidatures pour une utilisation tactile sans débordement
