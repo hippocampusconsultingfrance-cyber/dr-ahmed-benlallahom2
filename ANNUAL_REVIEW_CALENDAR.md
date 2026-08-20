@@ -22,6 +22,16 @@ Ce calendrier organise les vérifications annuelles du site et de ses parcours c
 | Expérience utilisateur | CTA, formulaires, aides, états vides, erreurs, composants accessibles, animations, responsive et anomalies graphiques. | Retours utilisateurs disponibles, captures, résultats des tests visuels et liste de dettes UX. | Prioriser les irritants qui empêchent la compréhension ou l’action. |
 | Simplicité et informations médicales | Fonctions peu utilisées, simplicité de réservation, mentions médicales, distinction information/conseil, limites de téléconsultation et contacts d’urgence. | Données d’usage anonymisées lorsqu’elles existent, revue des parcours et validation des textes. | Retirer la complexité inutile et nuancer les contenus à risque de mauvaise interprétation. |
 
+## Clarté médicale, transactionnelle et cohérence d’interface
+
+| Domaine | Périmètre annuel | Preuves à archiver | Décision attendue |
+|---|---|---|---|
+| Clarté des parcours médicaux et transactionnels | Prix jour/nuit, durée, étapes de paiement, remboursement, confirmation, facture, rappels, téléconsultation, urgence et demandes RGPD. | Parcours de test, captures des politiques, exemples d’e-mails et vérification de la lisibilité à chaque langue active. | Clarifier ou corriger toute information pouvant induire une action, une attente ou une interprétation erronée. |
+| Identité, contenus et contacts | Coordonnées publiques, contacts professionnels, partenaires, diplômes, certifications, photographies, biographies et traductions. | Inventaire de sources autorisées, dates de vérification et historique des corrections. | Retirer ou mettre à jour les informations non confirmées. |
+| Référencement et navigation | Titres SEO, Open Graph, canonical, hreflang, URLs, fil d’Ariane, page 404, footer, menu mobile et sélecteurs. | Extraction de métadonnées, contrôle de routes et captures desktop/mobile. | Corriger les divergences qui affectent l’indexation ou l’orientation de l’utilisateur. |
+| Système visuel et interactions | CTA Réserver/Contact/WhatsApp, boutons secondaires, cartes, icônes, bordures, rayons, ombres, espacements, largeur, hauteur et transitions. | Échantillons de composants, résultat des tests responsive et anomalies signalées. | Préserver les conventions ou documenter toute évolution volontaire. |
+| Retour d’usage et simplification | Anomalies graphiques, fonctionnalités réellement utilisées, fonctionnalités à retirer et complexité de parcours. | Retours qualifiés, données agrégées disponibles et décision documentée. | Corriger les irritants ou retirer les éléments dont le coût dépasse le bénéfice. |
+
 ## Déroulement recommandé
 
 La revue doit être planifiée une fois par an, puis renouvelée après une évolution majeure de paiement, authentification, stockage documentaire, fournisseur externe ou politique de données. Commencer par l’inventaire de la version publiée et terminer par une liste d’actions datées. Les éléments nécessitant un appareil réel, une boîte e-mail tierce ou un compte fournisseur ne doivent jamais être déclarés réalisés sans preuve correspondante.

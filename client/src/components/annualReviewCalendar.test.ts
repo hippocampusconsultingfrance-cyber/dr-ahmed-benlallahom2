@@ -15,5 +15,8 @@ describe("calendrier annuel de revue", () => {
     expect(calendar).toContain("Réservation et paiement");
     expect(calendar).toContain("Administration et qualité technique");
     expect(calendar).toContain("Expérience utilisateur");
+    expect(calendar).toContain("Clarté des parcours médicaux et transactionnels");
+    expect(calendar).toContain("Référencement et navigation");
+    expect(calendar).toContain("Système visuel et interactions");
   });
 });

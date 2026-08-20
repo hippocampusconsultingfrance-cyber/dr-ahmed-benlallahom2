@@ -357,57 +357,57 @@
 - [x] Préparer une revue annuelle de la documentation design
 - [x] Préparer une revue annuelle de la checklist de publication
 - [x] Préparer une revue annuelle des tests visuels et responsive
-- [ ] Préparer une revue annuelle des anomalies graphiques signalées
-- [ ] Préparer une revue annuelle des améliorations réellement utilisées par les visiteurs
-- [ ] Préparer une revue annuelle des fonctionnalités à retirer si elles créent de la complexité
-- [ ] Préparer une revue annuelle de la simplicité du parcours de réservation
-- [ ] Préparer une revue annuelle de la lisibilité des mentions médicales
-- [ ] Préparer une revue annuelle de la distinction entre information et conseil médical
-- [ ] Préparer une revue annuelle de la clarté des limites de téléconsultation
-- [ ] Préparer une revue annuelle de la visibilité des contacts d’urgence
-- [ ] Préparer une revue annuelle de la clarté des conditions de remboursement
-- [ ] Préparer une revue annuelle de la clarté des prix jour/nuit
-- [ ] Préparer une revue annuelle de la clarté des durées de consultation
-- [ ] Préparer une revue annuelle de la clarté des étapes de paiement
-- [ ] Préparer une revue annuelle de la clarté des emails de confirmation
-- [ ] Préparer une revue annuelle de la clarté du téléchargement de facture
-- [ ] Préparer une revue annuelle de la clarté des rappels de rendez-vous
-- [ ] Préparer une revue annuelle de la clarté des demandes RGPD
-- [ ] Préparer une revue annuelle de la clarté du consentement cookies
-- [ ] Préparer une revue annuelle de la clarté de la politique de confidentialité
-- [ ] Préparer une revue annuelle de la clarté des mentions légales
-- [ ] Préparer une revue annuelle de la clarté des conditions générales
-- [ ] Préparer une revue annuelle de la clarté des contacts professionnels
-- [ ] Préparer une revue annuelle de la clarté des coordonnées publiques
-- [ ] Préparer une revue annuelle de la cohérence des noms et rôles des partenaires
-- [ ] Préparer une revue annuelle de la cohérence des diplômes et certifications
-- [ ] Préparer une revue annuelle de la cohérence des photographies professionnelles
-- [ ] Préparer une revue annuelle de la cohérence des biographies
-- [ ] Préparer une revue annuelle de la cohérence des traductions
-- [ ] Préparer une revue annuelle de la cohérence des titres SEO
-- [ ] Préparer une revue annuelle de la cohérence des descriptions Open Graph
-- [ ] Préparer une revue annuelle de la cohérence des liens canoniques
-- [ ] Préparer une revue annuelle de la cohérence des balises hreflang
-- [ ] Préparer une revue annuelle de la cohérence des URLs
-- [ ] Préparer une revue annuelle de la cohérence des breadcrumbs
-- [ ] Préparer une revue annuelle de la cohérence de la page 404
-- [ ] Préparer une revue annuelle de la cohérence du footer
-- [ ] Préparer une revue annuelle de la cohérence du menu mobile
-- [ ] Préparer une revue annuelle de la cohérence du sélecteur de langue
-- [ ] Préparer une revue annuelle de la cohérence du sélecteur de thème
-- [ ] Préparer une revue annuelle de la cohérence du bouton WhatsApp
-- [ ] Préparer une revue annuelle de la cohérence du bouton Réserver
-- [ ] Préparer une revue annuelle de la cohérence du bouton Contact
-- [ ] Préparer une revue annuelle de la cohérence des boutons secondaires
-- [ ] Préparer une revue annuelle de la cohérence des cartes
-- [ ] Préparer une revue annuelle de la cohérence des icônes
-- [ ] Préparer une revue annuelle de la cohérence des bordures
-- [ ] Préparer une revue annuelle de la cohérence des rayons
-- [ ] Préparer une revue annuelle de la cohérence des ombres
-- [ ] Préparer une revue annuelle de la cohérence des espacements
-- [ ] Préparer une revue annuelle de la cohérence des largeurs de contenu
-- [ ] Préparer une revue annuelle de la cohérence des hauteurs de sections
-- [ ] Préparer une revue annuelle de la cohérence des transitions
+- [x] Préparer une revue annuelle des anomalies graphiques signalées
+- [x] Préparer une revue annuelle des améliorations réellement utilisées par les visiteurs
+- [x] Préparer une revue annuelle des fonctionnalités à retirer si elles créent de la complexité
+- [x] Préparer une revue annuelle de la simplicité du parcours de réservation
+- [x] Préparer une revue annuelle de la lisibilité des mentions médicales
+- [x] Préparer une revue annuelle de la distinction entre information et conseil médical
+- [x] Préparer une revue annuelle de la clarté des limites de téléconsultation
+- [x] Préparer une revue annuelle de la visibilité des contacts d’urgence
+- [x] Préparer une revue annuelle de la clarté des conditions de remboursement
+- [x] Préparer une revue annuelle de la clarté des prix jour/nuit
+- [x] Préparer une revue annuelle de la clarté des durées de consultation
+- [x] Préparer une revue annuelle de la clarté des étapes de paiement
+- [x] Préparer une revue annuelle de la clarté des emails de confirmation
+- [x] Préparer une revue annuelle de la clarté du téléchargement de facture
+- [x] Préparer une revue annuelle de la clarté des rappels de rendez-vous
+- [x] Préparer une revue annuelle de la clarté des demandes RGPD
+- [x] Préparer une revue annuelle de la clarté du consentement cookies
+- [x] Préparer une revue annuelle de la clarté de la politique de confidentialité
+- [x] Préparer une revue annuelle de la clarté des mentions légales
+- [x] Préparer une revue annuelle de la clarté des conditions générales
+- [x] Préparer une revue annuelle de la clarté des contacts professionnels
+- [x] Préparer une revue annuelle de la clarté des coordonnées publiques
+- [x] Préparer une revue annuelle de la cohérence des noms et rôles des partenaires
+- [x] Préparer une revue annuelle de la cohérence des diplômes et certifications
+- [x] Préparer une revue annuelle de la cohérence des photographies professionnelles
+- [x] Préparer une revue annuelle de la cohérence des biographies
+- [x] Préparer une revue annuelle de la cohérence des traductions
+- [x] Préparer une revue annuelle de la cohérence des titres SEO
+- [x] Préparer une revue annuelle de la cohérence des descriptions Open Graph
+- [x] Préparer une revue annuelle de la cohérence des liens canoniques
+- [x] Préparer une revue annuelle de la cohérence des balises hreflang
+- [x] Préparer une revue annuelle de la cohérence des URLs
+- [x] Préparer une revue annuelle de la cohérence des breadcrumbs
+- [x] Préparer une revue annuelle de la cohérence de la page 404
+- [x] Préparer une revue annuelle de la cohérence du footer
+- [x] Préparer une revue annuelle de la cohérence du menu mobile
+- [x] Préparer une revue annuelle de la cohérence du sélecteur de langue
+- [x] Préparer une revue annuelle de la cohérence du sélecteur de thème
+- [x] Préparer une revue annuelle de la cohérence du bouton WhatsApp
+- [x] Préparer une revue annuelle de la cohérence du bouton Réserver
+- [x] Préparer une revue annuelle de la cohérence du bouton Contact
+- [x] Préparer une revue annuelle de la cohérence des boutons secondaires
+- [x] Préparer une revue annuelle de la cohérence des cartes
+- [x] Préparer une revue annuelle de la cohérence des icônes
+- [x] Préparer une revue annuelle de la cohérence des bordures
+- [x] Préparer une revue annuelle de la cohérence des rayons
+- [x] Préparer une revue annuelle de la cohérence des ombres
+- [x] Préparer une revue annuelle de la cohérence des espacements
+- [x] Préparer une revue annuelle de la cohérence des largeurs de contenu
+- [x] Préparer une revue annuelle de la cohérence des hauteurs de sections
+- [x] Préparer une revue annuelle de la cohérence des transitions
 - [ ] Préparer une revue annuelle de la cohérence des états focus
 - [ ] Préparer une revue annuelle de la cohérence des états hover
 - [ ] Préparer une revue annuelle de la cohérence des états active

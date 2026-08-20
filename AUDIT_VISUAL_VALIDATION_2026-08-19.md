@@ -196,6 +196,8 @@ Le fichier `ANNUAL_REVIEW_CALENDAR.md` prépare une revue annuelle des traductio
 
 Le calendrier inclut également les revues des communications, documents et factures, réservation et paiement, administration, domaines, données structurées, marque, expérience utilisateur, simplicité et clarté des informations médicales.
 
+La matrice annuelle couvre aussi la clarté médicale et transactionnelle, l’identité et les contenus, le référencement et la navigation, le système visuel, ainsi que la simplification fondée sur les retours d’usage disponibles.
+
 ## Kit de marque exportable
 
 Le fichier `BRAND_KIT.md` centralise la signature, les tokens de palette, les typographies, les règles de ton, les formats d’export LinkedIn, documentaires et e-mail, ainsi que les contrôles de droits et d’accessibilité à effectuer avant diffusion.
