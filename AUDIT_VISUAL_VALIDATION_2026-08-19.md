@@ -174,6 +174,10 @@ Les états de chargement, d’erreur et d’absence des onglets administratifs h
 
 Lorsque le mode de lisibilité renforcée est activé, les entrées animées et les pulsations décoratives sont neutralisées. Cette règle s’applique notamment aux formulaires et pages légales, sans retirer les états de succès ou les messages utiles. La préférence reste mémorisée et une non-régression protège ces règles CSS.
 
+## Guide des composants
+
+Le projet contient désormais `COMPONENTS_GUIDE.md`, qui décrit les composants partagés, conventions de localisation, états d’interface, protections des données sensibles et étapes de validation avant publication. Un test de présence protège cette documentation afin qu’elle reste disponible lors des évolutions futures.
+
 ## Vérification visuelle des parcours publics critiques
 
 Les pages Accueil, Réservation, RGPD, Recrutement et Employeurs ont été capturées en vue bureau. Les en-têtes, formulaires, CTAs et pieds de page restent lisibles, structurés et sans chevauchement visible. Les formulaires Réservation, RGPD et Brief Employeur présentent leurs champs à une largeur cohérente, avec une hiérarchie claire entre contenu informatif et action principale. La vérification équivalente sur mobile reste planifiée séparément.

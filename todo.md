@@ -275,7 +275,7 @@
 - [x] Réduire les animations de fond non essentielles des formulaires et pages légales lorsque la lisibilité renforcée est active
 - [ ] Préparer un kit de marque exportable pour les documents et réseaux sociaux
 - [ ] Mettre en place une validation graphique avant chaque checkpoint
-- [ ] Ajouter une documentation d’utilisation des composants pour les futures évolutions
+- [x] Ajouter une documentation d’utilisation des composants pour les futures évolutions
 - [x] Ajouter des tests de non-régression pour le changement de langue et de thème
 - [x] Ajouter des tests de longueur de traduction pour les boutons et titres critiques de navigation
 - [x] Renforcer le clavier du sélecteur de langue et du menu mobile avec fermeture Échap et gestion du focus
