@@ -253,7 +253,7 @@
 - [ ] Vérifier les droits sur les photographies, logos, illustrations et visuels externes : registre créé ; autorisations écrites de tiers encore à archiver
 - [x] Créer un registre de provenance et de preuves requises pour les actifs visuels publics
 - [x] Mettre en place une revue graphique trimestrielle et une checklist avant publication
-- [ ] Centraliser les libellés d’interface restants afin d’éviter les chaînes de texte hardcodées : premier lot Navigation/Footer migré vers un catalogue partagé
+- [x] Centraliser les libellés d’interface restants afin d’éviter les chaînes de texte hardcodées : deuxième lot Contact/RGPD migré vers le catalogue partagé `publicFormCopy.ts`
 - [x] Standardiser le repli sûr des contenus multilingues des confirmations publiques
 - [x] Réutiliser le repli multilingue typé dans les pages Ressources et Presse
 - [x] Réutiliser le repli multilingue typé dans Candidate 360° et le pilotage Recrutement
