@@ -260,6 +260,10 @@ L’alternative textuelle du logo du pied de page est désormais définie en fra
 
 Le fichier `ASSET_RIGHTS_REGISTER.md` cartographie les actifs de marque, visuels générés, portraits, logos de tiers, ressources institutionnelles externes et contenus éditoriaux. Il distingue explicitement une provenance technique d’une autorisation de diffusion : les autorisations des personnes, photographes, titulaires de marques et partenaires restent à archiver avant toute diffusion externe qui le nécessite. Le registre n’affirme aucune licence inexistante et son maintien est protégé par une non-régression documentaire.
 
+## Validations externes restantes
+
+Le fichier `EXTERNAL_VALIDATION_REGISTER.md` centralise les contrôles qui nécessitent une boîte e-mail, un appareil réel, une session MFA autorisée, une autorisation de tiers ou du retour d’usage réel. Chaque entrée précise une procédure non intrusive, une preuve attendue et reste ouverte jusqu’à la conservation de cette preuve. Les validations automatisées ne sont donc pas présentées comme une substitution au lecteur d’écran, aux clients de messagerie, aux navigateurs non disponibles ou aux accords de droits.
+
 ## Couverture de validation d’accessibilité
 
 La suite automatisée couvre le lien d’accès direct au contenu, la navigation clavier, les libellés accessibles du menu, les alternatives d’images, les préférences de cookies, les contrôles mobiles du tableau de bord, les longueurs de traduction, l’impression et les états de chargement ou d’erreur. Les vérifications de rendu ont également été réalisées sur mobile, tablette, bureau et largeur réduite.
