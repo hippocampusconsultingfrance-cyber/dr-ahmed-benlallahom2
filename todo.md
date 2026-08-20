@@ -2511,3 +2511,4 @@
 - [x] Renforcer la vérification MFA administrateur avec comparaison en temps constant et compteur atomique
 - [x] Ajouter une intégration continue GitHub pour TypeScript, tests et audit de dépendances
 - [x] Qualifier puis mettre à jour les dépendances de production signalées à risque élevé par l’audit automatisé
+- [x] Corriger le conflit de version pnpm qui empêche le workflow GitHub CI de démarrer
