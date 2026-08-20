@@ -342,44 +342,44 @@
 - [x] Préparer une revue annuelle de la cohérence des diplômes et certifications : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
 - [x] Préparer une revue annuelle de la cohérence des photographies professionnelles : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
 - [x] Préparer une revue annuelle de la cohérence des biographies : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
-- [ ] Préparer une revue annuelle de la cohérence des traductions
-- [ ] Préparer une revue annuelle de la cohérence des titres SEO
-- [ ] Préparer une revue annuelle de la cohérence des descriptions Open Graph
-- [ ] Préparer une revue annuelle de la cohérence des liens canoniques
-- [ ] Préparer une revue annuelle de la cohérence des balises hreflang
-- [ ] Préparer une revue annuelle de la cohérence des URLs
-- [ ] Préparer une revue annuelle de la cohérence des breadcrumbs
-- [ ] Préparer une revue annuelle de la cohérence de la page 404
-- [ ] Préparer une revue annuelle de la cohérence du footer
-- [ ] Préparer une revue annuelle de la cohérence du menu mobile
-- [ ] Préparer une revue annuelle de la cohérence du sélecteur de langue
-- [ ] Préparer une revue annuelle de la cohérence du sélecteur de thème
-- [ ] Préparer une revue annuelle de la cohérence du bouton WhatsApp
-- [ ] Préparer une revue annuelle de la cohérence du bouton Réserver
-- [ ] Préparer une revue annuelle de la cohérence du bouton Contact
-- [ ] Préparer une revue annuelle de la cohérence des boutons secondaires
-- [ ] Préparer une revue annuelle de la cohérence des cartes
-- [ ] Préparer une revue annuelle de la cohérence des icônes
-- [ ] Préparer une revue annuelle de la cohérence des bordures
-- [ ] Préparer une revue annuelle de la cohérence des rayons
-- [ ] Préparer une revue annuelle de la cohérence des ombres
-- [ ] Préparer une revue annuelle de la cohérence des espacements
-- [ ] Préparer une revue annuelle de la cohérence des largeurs de contenu
-- [ ] Préparer une revue annuelle de la cohérence des hauteurs de sections
-- [ ] Préparer une revue annuelle de la cohérence des transitions
-- [ ] Préparer une revue annuelle de la cohérence des états focus
-- [ ] Préparer une revue annuelle de la cohérence des états hover
-- [ ] Préparer une revue annuelle de la cohérence des états active
-- [ ] Préparer une revue annuelle de la cohérence des états disabled
-- [ ] Préparer une revue annuelle de la cohérence des états loading
-- [ ] Préparer une revue annuelle de la cohérence des états error
-- [ ] Préparer une revue annuelle de la cohérence des états success
-- [ ] Préparer une revue annuelle de la cohérence des états empty
-- [ ] Préparer une revue annuelle de la cohérence des skeletons
-- [ ] Préparer une revue annuelle de la cohérence des toasts
-- [ ] Préparer une revue annuelle de la cohérence des modales
-- [ ] Préparer une revue annuelle de la cohérence des drawers
-- [ ] Préparer une revue annuelle de la cohérence des menus déroulants
+- [x] Préparer une revue annuelle de la cohérence des traductions : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des titres SEO : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des descriptions Open Graph : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens canoniques : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des balises hreflang : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des URLs : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des breadcrumbs : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence de la page 404 : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence du footer : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence du menu mobile : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence du sélecteur de langue : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence du sélecteur de thème : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence du bouton WhatsApp : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence du bouton Réserver : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence du bouton Contact : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des boutons secondaires : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des cartes : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des icônes : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des bordures : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des rayons : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des ombres : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des espacements : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des largeurs de contenu : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des hauteurs de sections : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des transitions : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des états focus : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des états hover : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des états active : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des états disabled : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des états loading : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des états error : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des états success : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des états empty : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des skeletons : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des toasts : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des modales : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des drawers : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des menus déroulants : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
 - [ ] Préparer une revue annuelle de la cohérence des calendriers
 - [ ] Préparer une revue annuelle de la cohérence des carrousels
 - [ ] Préparer une revue annuelle de la cohérence des formulaires

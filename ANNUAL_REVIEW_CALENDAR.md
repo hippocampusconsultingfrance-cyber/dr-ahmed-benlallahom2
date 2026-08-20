@@ -22,5 +22,8 @@ La revue graphique trimestrielle complète les contrôles automatiques et ne rem
 | Interactions et langues | Positionnement FR/EN/DE/ZH, CTA, formulaires, aides, états vides/erreurs, composants accessibles et préférences de mouvement. |
 | Réservation et suivi | Paiement, notifications e-mail/SMS, factures, rappels, prix jour/nuit, durée, annulation, remboursement et étapes de confirmation. |
 | Information médicale et consentement | Mentions médicales, séparation information/conseil, limites de téléconsultation, urgence, demandes RGPD et consentement cookies. |
+| SEO et découverte | Titres SEO, descriptions Open Graph, liens canoniques, hreflang, URLs, breadcrumbs, page 404, footer et liens internes. |
+| Navigation et actions | Menu mobile, sélecteurs de langue et thème, boutons WhatsApp/Réserver/Contact et actions secondaires. |
+| Système visuel | Cartes, icônes, bordures, rayons, ombres, espacements, largeurs de contenu, hauteurs de section, transitions, états focus/hover/active, états disabled/loading/error/success, retours empty/skeletons/toasts et composants modales/drawers/menus déroulants. |
 
 > Un écart P0/P1 — contenu illisible, élément interactif masqué, divulgation de donnée, visuel sans droit vérifiable ou dégradation majeure d’un parcours — bloque la publication jusqu’à correction ou dérogation écrite et datée.
