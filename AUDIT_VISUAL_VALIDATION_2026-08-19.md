@@ -166,6 +166,12 @@ Le tableau Candidatures renforce sa lecture mobile : actions regroupées sur tou
 
 La revue administrative des documents candidats suit le même principe : noms de fichier et courriels peuvent se rompre, les contrôles d’analyse et d’ouverture occupent la largeur disponible sur mobile, et les actions de décision conservent des cibles tactiles distinctes.
 
+## Vérification visuelle des parcours publics critiques
+
+Les pages Accueil, Réservation, RGPD, Recrutement et Employeurs ont été capturées en vue bureau. Les en-têtes, formulaires, CTAs et pieds de page restent lisibles, structurés et sans chevauchement visible. Les formulaires Réservation, RGPD et Brief Employeur présentent leurs champs à une largeur cohérente, avec une hiérarchie claire entre contenu informatif et action principale. La vérification équivalente sur mobile reste planifiée séparément.
+
+La même série a été vérifiée à 375 px de large. Les pages empilent correctement leurs contenus : les champs de réservation et RGPD conservent une largeur complète, les cartes Recrutement restent séparées, et le brief Employeur garde des champs et CTA accessibles sans défilement horizontal. Aucun chevauchement bloquant n’a été observé dans les parcours capturés.
+
 ## Disponibilité de production
 
 Le 19 août 2026, les routes publiques `/`, `/booking`, `/gdpr`, `/faq`, `/search`, `/error`, `/maintenance`, `/recruitment`, `/employers` et `/why-hippocampus` ont toutes répondu en HTTP 200 sur le domaine principal. L’accès `www.drahmedbenlallahom.com` redirige correctement vers `drahmedbenlallahom.com` et sert ensuite la page d’accueil en HTTP 200. Aucun écart de disponibilité n’a été observé sur cet échantillon.
