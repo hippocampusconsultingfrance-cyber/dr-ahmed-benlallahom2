@@ -215,6 +215,7 @@
 - [x] Ajouter des tests visuels automatisés sur les pages critiques
 - [x] Étendre les tests visuels automatisés à la confirmation de paiement sécurisée, en desktop et mobile
 - [x] Étendre les tests visuels automatisés à la page Presse institutionnelle, en desktop et mobile
+- [x] Étendre les tests visuels automatisés à la FAQ publique, en desktop et mobile
 - [x] Étendre les tests visuels automatisés à la page RGPD en desktop et mobile
 - [x] Capturer et vérifier les parcours Accueil, Réservation, RGPD, Recrutement et Employeurs en vue bureau
 - [x] Capturer et vérifier les parcours Accueil, Réservation, RGPD, Recrutement et Employeurs en vue mobile
