@@ -2482,8 +2482,8 @@
 - [x] Ajouter une illustration terrestre professionnelle à la page de recrutement
 - [x] Retirer le titre et le texte d’introduction de la page de recherche générale
 - [x] Recentrer toute la rédaction de la recherche générale sur les informations publiques visibles, sans référence aux consultations ou parcours
-- [ ] Exporter automatiquement chaque CV déposé vers un dossier Google Drive privé, avec journalisation, reprise sur échec et contrôle d’accès
-- [ ] Connecter le compte Google Drive du propriétaire et autoriser le dossier privé de destination des CV
+- [x] Exporter automatiquement chaque CV déposé vers un dossier Google Drive privé, avec journalisation, reprise sur échec et contrôle d’accès
+- [x] Connecter le compte Google Drive du propriétaire et autoriser le dossier privé de destination des CV
 - [x] Ajouter la Terre en fond de la page de recrutement principale
 - [x] Placer Contact en dernière position dans la navigation publique
 - [x] Renforcer la visibilité de la Terre en fond de la page Recrutement publiée
