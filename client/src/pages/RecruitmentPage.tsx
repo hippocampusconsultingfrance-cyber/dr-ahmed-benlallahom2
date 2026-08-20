@@ -1,4 +1,4 @@
-import { FormEvent, useMemo, useRef, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { CheckCircle2, Clock3, FileUp, Globe2, Loader2, Search, ShieldCheck, UserCheck, UsersRound, X } from "lucide-react";
 import { Link } from "wouter";
 import { SEOHead } from "@/components/SEOHead";
@@ -228,7 +228,9 @@ export default function RecruitmentPage() {
   const [trackingId, setTrackingId] = useState("");
   const [specialtyQuery, setSpecialtyQuery] = useState("");
   const [diplomaCountryQuery, setDiplomaCountryQuery] = useState("");
+  const [diplomaCountryOpen, setDiplomaCountryOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const diplomaCountryPickerRef = useRef<HTMLDivElement>(null);
 
   const selectedCountryLabels = useMemo(() => countryOptions.filter(country => form.targetCountries.includes(country.value)).map(country => country.labels[lang]).join(", "), [form.targetCountries, lang]);
   const worldwideCountries = useMemo(() => getWorldwideCountries(lang), [lang]);
@@ -244,6 +246,14 @@ export default function RecruitmentPage() {
   }, [specialtyQuery]);
 
   const update = <K extends keyof FormState>(key: K, value: FormState[K]) => setForm(previous => ({ ...previous, [key]: value }));
+
+  useEffect(() => {
+    const closePicker = (event: MouseEvent) => {
+      if (!diplomaCountryPickerRef.current?.contains(event.target as Node)) setDiplomaCountryOpen(false);
+    };
+    document.addEventListener("mousedown", closePicker);
+    return () => document.removeEventListener("mousedown", closePicker);
+  }, []);
 
   const toggleCountry = (country: string) => {
     update("targetCountries", form.targetCountries.includes(country) ? form.targetCountries.filter(item => item !== country) : [...form.targetCountries, country]);
@@ -329,24 +339,24 @@ export default function RecruitmentPage() {
                 <h2 className="font-display text-3xl text-foreground">{t.formTitle}</h2>
                 <p className="mt-3 text-sm leading-6 text-muted-foreground">{t.formIntro}</p>
                 <form onSubmit={handleSubmit} className="mt-8 space-y-6" noValidate>
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    {[{ key: "firstName" as const, label: t.firstName }, { key: "lastName" as const, label: t.lastName }].map(field => <label key={field.key} className="space-y-2 text-sm text-foreground"><span>{field.label} *</span><input id={`recruitment-${field.key}`} required value={form[field.key]} onChange={event => update(field.key, event.target.value)} className="form-control" autoComplete={field.key === "firstName" ? "given-name" : "family-name"} /></label>)}
+                  <div className="grid gap-5 sm:grid-cols-2">
+                    {[{ key: "firstName" as const, label: t.firstName }, { key: "lastName" as const, label: t.lastName }].map(field => <label key={field.key} className="recruitment-field-group"><span>{field.label} *</span><input id={`recruitment-${field.key}`} required value={form[field.key]} onChange={event => update(field.key, event.target.value)} className="recruitment-field" autoComplete={field.key === "firstName" ? "given-name" : "family-name"} /></label>)}
                   </div>
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <label className="space-y-2 text-sm text-foreground"><span>{t.email} *</span><input id="recruitment-email" type="email" required value={form.email} onChange={event => update("email", event.target.value)} className="form-control" autoComplete="email" /></label>
-                    <label className="space-y-2 text-sm text-foreground"><span>{t.phone}</span><input id="recruitment-phone" type="tel" value={form.phone} onChange={event => update("phone", event.target.value)} className="form-control" autoComplete="tel" /></label>
+                  <div className="grid gap-5 sm:grid-cols-2">
+                    <label className="recruitment-field-group"><span>{t.email} *</span><input id="recruitment-email" type="email" required value={form.email} onChange={event => update("email", event.target.value)} className="recruitment-field" autoComplete="email" /></label>
+                    <label className="recruitment-field-group"><span>{t.phone}</span><input id="recruitment-phone" type="tel" value={form.phone} onChange={event => update("phone", event.target.value)} className="recruitment-field" autoComplete="tel" /></label>
                   </div>
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <div className="block w-full space-y-2 text-sm text-foreground">
-                      <span className="block mb-2 font-medium">{t.specialty} *</span>
-                      <div className="relative mb-2">
+                  <div className="grid gap-5 sm:grid-cols-2">
+                    <div className="recruitment-field-group">
+                      <span>{t.specialty} *</span>
+                      <div className="relative">
                         <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                         <input
                           type="text"
                           value={specialtyQuery}
                           onChange={event => setSpecialtyQuery(event.target.value)}
                           placeholder={t.specialtySearch}
-                          className="form-control block w-full pl-9 pr-8 text-sm"
+                          className="recruitment-field pl-9 pr-8 text-sm"
                         />
                         {specialtyQuery && (
                           <button
@@ -358,7 +368,7 @@ export default function RecruitmentPage() {
                           </button>
                         )}
                       </div>
-                      <select id="recruitment-specialty" required value={form.specialty} onChange={event => update("specialty", event.target.value)} className="form-control block w-full mt-1">
+                      <select id="recruitment-specialty" required value={form.specialty} onChange={event => update("specialty", event.target.value)} className="recruitment-field">
                         <option value="">{t.select}</option>
                         {filteredSpecialtyCategories.length === 0 ? (
                           <option value="" disabled>{t.noMatch}</option>
@@ -375,41 +385,61 @@ export default function RecruitmentPage() {
                       )}
                     </div>
                     
-                    <label className="block w-full space-y-2 text-sm text-foreground">
-                      <span className="block mb-2 font-medium">{t.experience}</span>
-                      <input id="recruitment-experience" type="number" min="0" max="70" value={form.yearsExperience} onChange={event => update("yearsExperience", event.target.value)} className="form-control block w-full mt-1" />
+                    <label className="recruitment-field-group">
+                      <span>{t.experience}</span>
+                      <input id="recruitment-experience" type="number" min="0" max="70" value={form.yearsExperience} onChange={event => update("yearsExperience", event.target.value)} className="recruitment-field" />
                     </label>
                   </div>
 
-                  <div className="block w-full space-y-2 text-sm text-foreground">
-                    <span className="block font-medium">{diplomaCopy.label} *</span>
+                  <div ref={diplomaCountryPickerRef} className="recruitment-field-group relative">
+                    <span>{diplomaCopy.label} *</span>
                     <div className="relative">
                       <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" aria-hidden="true" />
-                      <input id="recruitment-diploma-country-search" type="search" value={diplomaCountryQuery} onChange={event => setDiplomaCountryQuery(event.target.value)} placeholder={diplomaCopy.search} className="form-control w-full pl-9" />
+                      <input
+                        id="recruitment-diploma-country-search"
+                        type="search"
+                        value={diplomaCountryQuery}
+                        onFocus={() => setDiplomaCountryOpen(true)}
+                        onChange={event => { setDiplomaCountryQuery(event.target.value); setDiplomaCountryOpen(true); }}
+                        onKeyDown={event => { if (event.key === "Escape") setDiplomaCountryOpen(false); }}
+                        placeholder={diplomaCopy.search}
+                        className="recruitment-field pl-9 pr-10"
+                        role="combobox"
+                        aria-expanded={diplomaCountryOpen}
+                        aria-controls="recruitment-diploma-country-options"
+                        aria-autocomplete="list"
+                      />
+                      {diplomaCountryQuery && <button type="button" onClick={() => { setDiplomaCountryQuery(""); setDiplomaCountryOpen(true); }} className="absolute right-2.5 top-2.5 text-muted-foreground hover:text-foreground" aria-label="Effacer la recherche"><X className="h-4 w-4" /></button>}
                     </div>
-                    <select id="recruitment-diploma-country" required value={form.diplomaCountry} onChange={event => update("diplomaCountry", event.target.value)} className="form-control w-full" size={Math.min(6, Math.max(2, filteredDiplomaCountries.length))} aria-label={diplomaCopy.label}>
-                      <option value="">{t.select}</option>
-                      {filteredDiplomaCountries.map(country => <option key={country.code} value={country.label}>{country.label}</option>)}
-                    </select>
+                    {form.diplomaCountry && <p className="text-xs font-medium text-primary">{diplomaCopy.label} : {form.diplomaCountry}</p>}
+                    {diplomaCountryOpen && (
+                      <div id="recruitment-diploma-country-options" role="listbox" aria-label={diplomaCopy.label} className="recruitment-country-options">
+                        {filteredDiplomaCountries.length > 0 ? filteredDiplomaCountries.map(country => (
+                          <button key={country.code} type="button" role="option" aria-selected={form.diplomaCountry === country.label} className="recruitment-country-option" onClick={() => { update("diplomaCountry", country.label); setDiplomaCountryQuery(country.label); setDiplomaCountryOpen(false); }}>
+                            <span>{country.label}</span><span className="text-xs text-muted-foreground">{country.code}</span>
+                          </button>
+                        )) : <p className="px-4 py-3 text-sm text-muted-foreground">{t.noMatch}</p>}
+                      </div>
+                    )}
                   </div>
 
                   {form.specialty === "Autre spécialité ou profession" && (
-                    <label className="block w-full space-y-2 text-sm text-foreground animate-in fade-in duration-200">
-                      <span className="block mb-2 font-medium">{t.specialtyCustom} *</span>
-                      <input id="recruitment-specialty-custom" required value={form.specialtyCustom} onChange={event => update("specialtyCustom", event.target.value)} placeholder="Ex. Perfusionniste, Audioprothésiste, etc." className="form-control block w-full mt-1" />
+                    <label className="recruitment-field-group animate-in fade-in duration-200">
+                      <span>{t.specialtyCustom} *</span>
+                      <input id="recruitment-specialty-custom" required value={form.specialtyCustom} onChange={event => update("specialtyCustom", event.target.value)} placeholder="Ex. Perfusionniste, Audioprothésiste, etc." className="recruitment-field" />
                     </label>
                   )}
 
                   <fieldset><legend className="mb-3 text-sm font-medium text-foreground">{t.countries} *</legend><div className="grid gap-2 sm:grid-cols-2">{countryOptions.map(country => <label key={country.value} className="flex items-center gap-3 rounded-lg border border-border/70 px-3 py-2 text-sm text-foreground"><input type="checkbox" checked={form.targetCountries.includes(country.value)} onChange={() => toggleCountry(country.value)} className="h-4 w-4 accent-primary" />{country.labels[lang]}</label>)}</div><p className="sr-only">{selectedCountryLabels}</p></fieldset>
                   
-                  <label className="block w-full space-y-2 text-sm text-foreground">
-                    <span className="block mb-2 font-medium">{t.languages}</span>
-                    <input id="recruitment-languages" value={form.languages} onChange={event => update("languages", event.target.value)} placeholder="Français, English, Deutsch" className="form-control block w-full mt-1" />
+                  <label className="recruitment-field-group">
+                    <span>{t.languages}</span>
+                    <input id="recruitment-languages" value={form.languages} onChange={event => update("languages", event.target.value)} placeholder="Français, English, Deutsch" className="recruitment-field" />
                   </label>
                   
-                  <label className="block w-full space-y-2 text-sm text-foreground">
-                    <span className="block mb-2 font-medium">{t.message}</span>
-                    <textarea id="recruitment-message" value={form.message} onChange={event => update("message", event.target.value)} className="form-control block min-h-28 w-full mt-1" maxLength={5000} />
+                  <label className="recruitment-field-group">
+                    <span>{t.message}</span>
+                    <textarea id="recruitment-message" value={form.message} onChange={event => update("message", event.target.value)} className="recruitment-field min-h-28 resize-y" maxLength={5000} />
                   </label>
                   
                   <div className="rounded-xl border border-dashed border-primary/40 bg-primary/5 p-4"><label htmlFor="recruitment-cv" className="flex cursor-pointer items-center gap-3 text-sm font-medium text-foreground"><FileUp className="h-5 w-5 text-primary" /><span>{file ? file.name : t.chooseFile}</span><input ref={fileInputRef} id="recruitment-cv" type="file" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={event => setFile(event.target.files?.[0] || null)} className="sr-only" required /></label><p className="mt-2 text-xs text-muted-foreground">{file ? `${(file.size / (1024 * 1024)).toFixed(2)} MB` : t.cv}</p></div>
