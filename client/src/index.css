@@ -181,6 +181,10 @@ html[lang="zh"] .font-display,
   .form-consent-checkbox:focus-visible { outline: 3px solid rgb(56 189 248 / 45%); outline-offset: 3px; }
   .form-consent-item-invalid, .form-consent-group-invalid .form-consent-item { border-color: rgb(248 113 113 / 90%); background: linear-gradient(135deg, rgb(127 29 29 / 38%), rgb(69 10 10 / 52%)); }
   .form-consent-item-invalid .form-consent-checkbox, .form-consent-group-invalid .form-consent-checkbox, .form-consent-checkbox[aria-invalid="true"] { border-color: #fb7185; background: #3f111b; box-shadow: 0 0 0 3px rgb(251 113 133 / 18%); }
+  .form-field-invalid, .recruitment-field.form-field-invalid, .form-control.form-field-invalid, .form-field-premium.form-field-invalid, [aria-invalid="true"].form-control, [aria-invalid="true"].recruitment-field { border-color: #fb7185 !important; background-color: rgb(69 10 10 / 52%) !important; box-shadow: 0 0 0 3px rgb(251 113 133 / 18%) !important; }
+  .form-field-invalid:focus, [aria-invalid="true"].form-control:focus, [aria-invalid="true"].recruitment-field:focus { border-color: #fb7185 !important; outline: none; }
+  .form-file-invalid { border-color: #fb7185 !important; background: linear-gradient(135deg, rgb(127 29 29 / 38%), rgb(69 10 10 / 52%)) !important; box-shadow: 0 0 0 3px rgb(251 113 133 / 14%); }
+  input[required]:user-invalid, select[required]:user-invalid, textarea[required]:user-invalid { border-color: #fb7185 !important; background-color: rgb(69 10 10 / 52%) !important; box-shadow: 0 0 0 3px rgb(251 113 133 / 18%) !important; }
 
   .candidate-consent-item {
     display: flex;

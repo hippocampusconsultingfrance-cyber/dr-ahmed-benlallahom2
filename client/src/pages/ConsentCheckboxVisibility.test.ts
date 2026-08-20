@@ -21,4 +21,17 @@ describe("consentements obligatoires visibles", () => {
     expect(source).toContain("setConsentAttempted(true)");
     expect(source).toContain("form-consent-item-invalid");
   });
+
+  it("applique les états rouges aux champs requis et au fichier des candidatures", async () => {
+    const [css, recruitment, vvip] = await Promise.all([
+      readFile(new URL("../index.css", import.meta.url), "utf8"),
+      readFile(new URL("./RecruitmentPage.tsx", import.meta.url), "utf8"),
+      readFile(new URL("./VvipOffshorePage.tsx", import.meta.url), "utf8"),
+    ]);
+    expect(css).toContain(".form-field-invalid");
+    expect(css).toContain(".form-file-invalid");
+    expect(css).toContain("input[required]:user-invalid");
+    expect(recruitment).toContain("const [invalidFields, setInvalidFields]");
+    expect(vvip).toContain("const [invalidFields, setInvalidFields]");
+  });
 });

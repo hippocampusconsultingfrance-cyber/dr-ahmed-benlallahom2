@@ -251,6 +251,7 @@ export default function RecruitmentPage() {
   const [file, setFile] = useState<File | null>(null);
   const [status, setStatus] = useState<"idle" | "sending" | "success" | "error">("idle");
   const [validationAttempted, setValidationAttempted] = useState(false);
+  const [invalidFields, setInvalidFields] = useState<Set<string>>(() => new Set());
   const [errorMessage, setErrorMessage] = useState("");
   const [trackingId, setTrackingId] = useState("");
   const [specialtyQuery, setSpecialtyQuery] = useState("");
@@ -272,7 +273,11 @@ export default function RecruitmentPage() {
     }).filter(group => group.items.length > 0);
   }, [specialtyQuery]);
 
-  const update = <K extends keyof FormState>(key: K, value: FormState[K]) => setForm(previous => ({ ...previous, [key]: value }));
+  const update = <K extends keyof FormState>(key: K, value: FormState[K]) => {
+    setForm(previous => ({ ...previous, [key]: value }));
+    setInvalidFields(previous => { const next = new Set(previous); next.delete(key); return next; });
+  };
+  const isInvalid = (field: string) => validationAttempted && invalidFields.has(field);
 
   useEffect(() => {
     const closePicker = (event: MouseEvent) => {
@@ -295,15 +300,22 @@ export default function RecruitmentPage() {
     setErrorMessage("");
     setValidationAttempted(true);
     const submittedDiplomaCountry = resolveCountryForSubmission(form.diplomaCountry, new FormData(event.currentTarget).get("diplomaCountry"), worldwideCountries.map(country => country.label));
-    if (!file || !isAcceptedCvFile(file)) {
-      setStatus("error"); setErrorMessage(t.fileError); return;
-    }
-    if (!form.gdprConsent) { setStatus("error"); setErrorMessage(t.consentError); return; }
-    
     const finalSpecialty = form.specialty === "Autre spécialité ou profession" ? form.specialtyCustom.trim() : form.specialty;
-    if (!form.targetCountries.length || !finalSpecialty || !submittedDiplomaCountry || !form.firstName || !form.lastName || !form.email) {
+    const nextInvalidFields = new Set<string>();
+    if (!form.firstName.trim()) nextInvalidFields.add("firstName");
+    if (!form.lastName.trim()) nextInvalidFields.add("lastName");
+    if (!form.email.trim() || !/^\S+@\S+\.\S+$/.test(form.email)) nextInvalidFields.add("email");
+    if (!finalSpecialty) nextInvalidFields.add("specialty");
+    if (!submittedDiplomaCountry) nextInvalidFields.add("diplomaCountry");
+    if (!form.targetCountries.length) nextInvalidFields.add("targetCountries");
+    if (!file || !isAcceptedCvFile(file)) nextInvalidFields.add("cv");
+    if (!form.gdprConsent) nextInvalidFields.add("gdprConsent");
+    if (nextInvalidFields.size) {
+      setInvalidFields(nextInvalidFields);
       setStatus("error"); setErrorMessage(`${t.required}.`); return;
     }
+    setInvalidFields(new Set());
+    if (!file) return;
 
     const body = new FormData();
     body.append("cv", file);
@@ -378,10 +390,10 @@ export default function RecruitmentPage() {
                 <p className="mt-3 text-sm leading-6 text-muted-foreground">{t.formIntro}</p>
                 <form onSubmit={handleSubmit} className="mt-8 space-y-6" noValidate>
                   <div className="grid gap-5 sm:grid-cols-2">
-                    {[{ key: "firstName" as const, label: t.firstName }, { key: "lastName" as const, label: t.lastName }].map(field => <label key={field.key} className="recruitment-field-group"><span>{field.label} *</span><input id={`recruitment-${field.key}`} required value={form[field.key]} onChange={event => update(field.key, event.target.value)} className="recruitment-field" autoComplete={field.key === "firstName" ? "given-name" : "family-name"} /></label>)}
+                    {[{ key: "firstName" as const, label: t.firstName }, { key: "lastName" as const, label: t.lastName }].map(field => <label key={field.key} className="recruitment-field-group"><span>{field.label} *</span><input id={`recruitment-${field.key}`} required value={form[field.key]} aria-invalid={isInvalid(field.key)} onChange={event => update(field.key, event.target.value)} className={`recruitment-field ${isInvalid(field.key) ? "form-field-invalid" : ""}`} autoComplete={field.key === "firstName" ? "given-name" : "family-name"} /></label>)}
                   </div>
                   <div className="grid gap-5 sm:grid-cols-2">
-                    <label className="recruitment-field-group"><span>{lang === "fr" ? "Email" : t.email} *</span><input id="recruitment-email" type="email" required value={form.email} onChange={event => update("email", event.target.value)} className="recruitment-field" autoComplete="email" /></label>
+                    <label className="recruitment-field-group"><span>{lang === "fr" ? "Email" : t.email} *</span><input id="recruitment-email" type="email" required value={form.email} aria-invalid={isInvalid("email")} onChange={event => update("email", event.target.value)} className={`recruitment-field ${isInvalid("email") ? "form-field-invalid" : ""}`} autoComplete="email" /></label>
                     <label className="recruitment-field-group"><span>{t.phone}</span><input id="recruitment-phone" type="tel" value={form.phone} onChange={event => update("phone", event.target.value)} className="recruitment-field" autoComplete="tel" /></label>
                   </div>
                   <div className="grid gap-5 sm:grid-cols-2">
@@ -407,7 +419,7 @@ export default function RecruitmentPage() {
                           </button>
                         )}
                       </div>
-                      <select id="recruitment-specialty" required value={form.specialty} onChange={event => update("specialty", event.target.value)} className="recruitment-field">
+                      <select id="recruitment-specialty" required value={form.specialty} aria-invalid={isInvalid("specialty")} onChange={event => update("specialty", event.target.value)} className={`recruitment-field ${isInvalid("specialty") ? "form-field-invalid" : ""}`}>
                         <option value="">{t.select}</option>
                         {filteredSpecialtyCategories.length === 0 ? (
                           <option value="" disabled>{t.noMatch}</option>
@@ -444,7 +456,8 @@ export default function RecruitmentPage() {
                         onChange={event => { setDiplomaCountryQuery(event.target.value); setDiplomaCountryOpen(true); }}
                         onKeyDown={event => { if (event.key === "Escape") setDiplomaCountryOpen(false); }}
                         placeholder={diplomaCopy.search}
-                        className={`recruitment-field site-search-input ${diplomaCountryQuery ? "site-search-input-with-clear" : ""}`}
+                        aria-invalid={isInvalid("diplomaCountry")}
+                        className={`recruitment-field site-search-input ${diplomaCountryQuery ? "site-search-input-with-clear" : ""} ${isInvalid("diplomaCountry") ? "form-field-invalid" : ""}`}
                         role="combobox"
                         aria-expanded={diplomaCountryOpen}
                         aria-controls="recruitment-diploma-country-options"
@@ -467,11 +480,11 @@ export default function RecruitmentPage() {
                   {form.specialty === "Autre spécialité ou profession" && (
                     <label className="recruitment-field-group animate-in fade-in duration-200">
                       <span>{t.specialtyCustom} *</span>
-                      <input id="recruitment-specialty-custom" required value={form.specialtyCustom} onChange={event => update("specialtyCustom", event.target.value)} placeholder="Ex. Perfusionniste, Audioprothésiste, etc." className="recruitment-field" />
+                      <input id="recruitment-specialty-custom" required value={form.specialtyCustom} aria-invalid={isInvalid("specialty")} onChange={event => update("specialtyCustom", event.target.value)} placeholder="Ex. Perfusionniste, Audioprothésiste, etc." className={`recruitment-field ${isInvalid("specialty") ? "form-field-invalid" : ""}`} />
                     </label>
                   )}
 
-                  <fieldset className={validationAttempted && !form.targetCountries.length ? "form-consent-group-invalid" : ""}><legend className="mb-3 text-sm font-medium text-foreground">{t.countries} *</legend><div className="grid gap-2 sm:grid-cols-2">{countryOptions.map(country => <label key={country.value} className="form-consent-item flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-foreground"><input type="checkbox" checked={form.targetCountries.includes(country.value)} onChange={() => toggleCountry(country.value)} className="form-consent-checkbox" />{country.labels[lang]}</label>)}</div><p className="sr-only">{selectedCountryLabels}</p></fieldset>
+                  <fieldset className={isInvalid("targetCountries") ? "form-consent-group-invalid" : ""}><legend className="mb-3 text-sm font-medium text-foreground">{t.countries} *</legend><div className="grid gap-2 sm:grid-cols-2">{countryOptions.map(country => <label key={country.value} className="form-consent-item flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-foreground"><input type="checkbox" checked={form.targetCountries.includes(country.value)} onChange={() => toggleCountry(country.value)} className="form-consent-checkbox" />{country.labels[lang]}</label>)}</div><p className="sr-only">{selectedCountryLabels}</p></fieldset>
                   
                   <fieldset>
                     <legend className="mb-3 text-sm font-medium text-foreground">{t.languages}</legend>
@@ -489,8 +502,8 @@ export default function RecruitmentPage() {
                     <textarea id="recruitment-message" value={form.message} onChange={event => update("message", event.target.value)} className="recruitment-field min-h-28 resize-y" maxLength={5000} />
                   </label>
                   
-                  <div className="rounded-xl border border-dashed border-primary/40 bg-primary/5 p-4"><label htmlFor="recruitment-cv" className="flex cursor-pointer items-center gap-3 text-sm font-medium text-foreground"><FileUp className="h-5 w-5 text-primary" /><span>{file ? file.name : t.chooseFile}</span><input ref={fileInputRef} id="recruitment-cv" type="file" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={event => setFile(event.target.files?.[0] || null)} className="sr-only" required /></label><p className="mt-2 text-xs text-muted-foreground">{file ? `${(file.size / (1024 * 1024)).toFixed(2)} MB` : t.cv}</p></div>
-                  <label className={`form-consent-item flex items-start gap-3 text-sm text-muted-foreground ${validationAttempted && !form.gdprConsent ? "form-consent-item-invalid" : ""}`}><input type="checkbox" checked={form.gdprConsent} aria-invalid={validationAttempted && !form.gdprConsent} onChange={event => update("gdprConsent", event.target.checked)} className="form-consent-checkbox mt-1" required /><span>{t.gdpr}</span></label>
+                  <div className={`rounded-xl border border-dashed border-primary/40 bg-primary/5 p-4 ${isInvalid("cv") ? "form-file-invalid" : ""}`}><label htmlFor="recruitment-cv" className="flex cursor-pointer items-center gap-3 text-sm font-medium text-foreground"><FileUp className="h-5 w-5 text-primary" /><span>{file ? file.name : t.chooseFile}</span><input ref={fileInputRef} id="recruitment-cv" type="file" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={event => { setFile(event.target.files?.[0] || null); setInvalidFields(previous => { const next = new Set(previous); next.delete("cv"); return next; }); }} className="sr-only" required /></label><p className="mt-2 text-xs text-muted-foreground">{file ? `${(file.size / (1024 * 1024)).toFixed(2)} MB` : t.cv}</p></div>
+                  <label className={`form-consent-item flex items-start gap-3 text-sm text-muted-foreground ${isInvalid("gdprConsent") ? "form-consent-item-invalid" : ""}`}><input type="checkbox" checked={form.gdprConsent} aria-invalid={isInvalid("gdprConsent")} onChange={event => update("gdprConsent", event.target.checked)} className="form-consent-checkbox mt-1" required /><span>{t.gdpr}</span></label>
                   <label className="form-consent-item flex items-start gap-3 text-sm text-muted-foreground"><input type="checkbox" checked={form.marketingConsent} onChange={event => update("marketingConsent", event.target.checked)} className="form-consent-checkbox mt-1" /><span>{t.marketing}</span></label>
                   <label className="absolute -left-[10000px] h-px w-px overflow-hidden" aria-hidden="true"><span>Website</span><input tabIndex={-1} autoComplete="off" value={form.website} onChange={event => update("website", event.target.value)} /></label>
                   {status === "error" && <p className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive" role="alert">{errorMessage}</p>}

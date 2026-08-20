@@ -2494,3 +2494,4 @@
 - [x] Appliquer la synchronisation fiable des valeurs de pays préremplies à tous les formulaires du site
 - [x] Confirmer la synchronisation des pays préremplis sur le parcours de recrutement mobilité
 - [x] Rendre les cases à cocher obligatoires contrastées et visibles, avec un état rouge actionnable lorsqu’elles ne sont pas validées
+- [x] Mettre en rouge tous les champs obligatoires vides ou invalides lors de la soumission, avec un message précis par champ

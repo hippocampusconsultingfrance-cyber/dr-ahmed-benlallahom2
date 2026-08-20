@@ -359,12 +359,16 @@ export default function VvipOffshorePage() {
   const [status, setStatus] = useState<"idle" | "sending" | "success" | "error">("idle");
   const [errorMessage, setErrorMessage] = useState("");
   const [validationAttempted, setValidationAttempted] = useState(false);
+  const [invalidFields, setInvalidFields] = useState<Set<string>>(() => new Set());
   const [trackingId, setTrackingId] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const diplomaCountries = useMemo(() => getWorldwideCountries(lang), [lang]);
 
-  const update = <K extends keyof FormState>(key: K, value: FormState[K]) =>
+  const update = <K extends keyof FormState>(key: K, value: FormState[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }));
+    setInvalidFields(previous => { const next = new Set(previous); next.delete(key); return next; });
+  };
+  const isInvalid = (field: string) => validationAttempted && invalidFields.has(field);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -372,21 +376,22 @@ export default function VvipOffshorePage() {
     setValidationAttempted(true);
     const submittedDiplomaCountry = resolveCountryForSubmission(form.diplomaCountry, new FormData(event.currentTarget).get("diplomaCountry"), diplomaCountries.map(country => country.label));
 
-    if (!file || !isAcceptedVvipCvFile(file)) {
+    const nextInvalidFields = new Set<string>();
+    if (!form.firstName.trim()) nextInvalidFields.add("firstName");
+    if (!form.lastName.trim()) nextInvalidFields.add("lastName");
+    if (!form.email.trim() || !/^\S+@\S+\.\S+$/.test(form.email)) nextInvalidFields.add("email");
+    if (!form.specialty) nextInvalidFields.add("specialty");
+    if (!submittedDiplomaCountry) nextInvalidFields.add("diplomaCountry");
+    if (!file || !isAcceptedVvipCvFile(file)) nextInvalidFields.add("cv");
+    if (!form.gdprConsent) nextInvalidFields.add("gdprConsent");
+    if (nextInvalidFields.size) {
+      setInvalidFields(nextInvalidFields);
       setStatus("error");
-      setErrorMessage(t.fileError);
+      setErrorMessage(nextInvalidFields.has("cv") ? t.fileError : t.required);
       return;
     }
-    if (!form.gdprConsent) {
-      setStatus("error");
-      setErrorMessage(t.required);
-      return;
-    }
-    if (!form.firstName || !form.lastName || !form.email || !form.specialty || !submittedDiplomaCountry) {
-      setStatus("error");
-      setErrorMessage(t.required);
-      return;
-    }
+    setInvalidFields(new Set());
+    if (!file) return;
 
     setStatus("sending");
     try {
@@ -490,18 +495,18 @@ export default function VvipOffshorePage() {
                     <div className="grid gap-4 sm:grid-cols-2">
                       <label className="block w-full space-y-1.5 text-sm text-foreground">
                         <span className="block font-medium">{t.firstName} *</span>
-                        <input required value={form.firstName} onChange={(e) => update("firstName", e.target.value)} className="form-control block w-full" />
+                        <input required value={form.firstName} aria-invalid={isInvalid("firstName")} onChange={(e) => update("firstName", e.target.value)} className={`form-control block w-full ${isInvalid("firstName") ? "form-field-invalid" : ""}`} />
                       </label>
                       <label className="block w-full space-y-1.5 text-sm text-foreground">
                         <span className="block font-medium">{t.lastName} *</span>
-                        <input required value={form.lastName} onChange={(e) => update("lastName", e.target.value)} className="form-control block w-full" />
+                        <input required value={form.lastName} aria-invalid={isInvalid("lastName")} onChange={(e) => update("lastName", e.target.value)} className={`form-control block w-full ${isInvalid("lastName") ? "form-field-invalid" : ""}`} />
                       </label>
                     </div>
 
                     <div className="grid gap-4 sm:grid-cols-2">
                       <label className="block w-full space-y-1.5 text-sm text-foreground">
                         <span className="block font-medium">{t.email} *</span>
-                        <input type="email" required value={form.email} onChange={(e) => update("email", e.target.value)} className="form-control block w-full" autoComplete="email" />
+                        <input type="email" required value={form.email} aria-invalid={isInvalid("email")} onChange={(e) => update("email", e.target.value)} className={`form-control block w-full ${isInvalid("email") ? "form-field-invalid" : ""}`} autoComplete="email" />
                       </label>
                       <label className="block w-full space-y-1.5 text-sm text-foreground">
                         <span className="block font-medium">{t.phone}</span>
@@ -512,7 +517,7 @@ export default function VvipOffshorePage() {
                     <div className="grid gap-4 sm:grid-cols-2">
                       <label className="block w-full space-y-1.5 text-sm text-foreground">
                         <span className="block font-medium">{t.specialty} *</span>
-                        <select value={form.specialty} onChange={(e) => update("specialty", e.target.value)} className="form-control block w-full">
+                        <select value={form.specialty} aria-invalid={isInvalid("specialty")} onChange={(e) => update("specialty", e.target.value)} className={`form-control block w-full ${isInvalid("specialty") ? "form-field-invalid" : ""}`}>
                           {t.specialties.map((opt) => (
                             <option key={opt} value={opt}>{opt}</option>
                           ))}
@@ -531,7 +536,7 @@ export default function VvipOffshorePage() {
 
                     <label className="block w-full space-y-1.5 text-sm text-foreground">
                       <span className="block font-medium">{t.diplomaCountry} *</span>
-                      <select name="diplomaCountry" required value={form.diplomaCountry} onInput={(e) => update("diplomaCountry", e.currentTarget.value)} onChange={(e) => update("diplomaCountry", e.target.value)} className="form-control block w-full" autoComplete="country-name">
+                      <select name="diplomaCountry" required value={form.diplomaCountry} aria-invalid={isInvalid("diplomaCountry")} onInput={(e) => update("diplomaCountry", e.currentTarget.value)} onChange={(e) => update("diplomaCountry", e.target.value)} className={`form-control block w-full ${isInvalid("diplomaCountry") ? "form-field-invalid" : ""}`} autoComplete="country-name">
                         <option value="">{t.selectCountry}</option>
                         {diplomaCountries.map(country => <option key={country.code} value={country.label}>{country.label}</option>)}
                       </select>
@@ -552,7 +557,7 @@ export default function VvipOffshorePage() {
                       <span className="block text-sm font-medium text-foreground">{t.cv} *</span>
                       <div
                         onClick={() => fileInputRef.current?.click()}
-                        className="group relative flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-border/70 bg-card/50 p-6 text-center transition-all hover:border-primary/60 hover:bg-card cursor-pointer"
+                        className={`group relative flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-border/70 bg-card/50 p-6 text-center transition-all hover:border-primary/60 hover:bg-card cursor-pointer ${isInvalid("cv") ? "form-file-invalid" : ""}`}
                       >
                         <FileUp className="h-8 w-8 text-primary transition-transform group-hover:scale-110" />
                         <span className="mt-3 text-sm font-medium text-foreground">
@@ -564,17 +569,17 @@ export default function VvipOffshorePage() {
                           type="file"
                           accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                           className="hidden"
-                          onChange={(e) => setFile(e.target.files?.[0] || null)}
+                          onChange={(e) => { setFile(e.target.files?.[0] || null); setInvalidFields(previous => { const next = new Set(previous); next.delete("cv"); return next; }); }}
                         />
                       </div>
                     </div>
 
-                    <label className={`form-consent-item flex items-start gap-3 cursor-pointer text-xs text-muted-foreground ${validationAttempted && !form.gdprConsent ? "form-consent-item-invalid" : ""}`}>
+                    <label className={`form-consent-item flex items-start gap-3 cursor-pointer text-xs text-muted-foreground ${isInvalid("gdprConsent") ? "form-consent-item-invalid" : ""}`}>
                       <input
                         type="checkbox"
                         required
                         checked={form.gdprConsent}
-                        aria-invalid={validationAttempted && !form.gdprConsent}
+                        aria-invalid={isInvalid("gdprConsent")}
                         onChange={(e) => update("gdprConsent", e.target.checked)}
                         className="form-consent-checkbox mt-0.5"
                       />
