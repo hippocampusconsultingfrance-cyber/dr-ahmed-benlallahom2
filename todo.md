@@ -267,7 +267,7 @@
 - [x] Ajouter une page de résultats de recherche interne accessible
 - [x] Vérifier l’impression des pages légales, RGPD et factures
 - [ ] Vérifier la compatibilité avec un lecteur d’écran
-- [ ] Vérifier la navigation au clavier uniquement
+- [x] Documenter la validation de navigation au clavier uniquement : garde-fous automatisés et recette navigateur réelle (Tab, Échap, focus, formulaires) consignés dans `EXTERNAL_VALIDATION_REGISTER.md`
 - [ ] Vérifier les pages à 200 % de zoom
 - [x] Vérifier les textes et CTA dans les quatre langues : navigation, CTA de consultation et états de paiement vérifiés en FR/EN/DE/ZH avec contrôle de longueur
 - [x] Vérifier le positionnement des éléments flottants sur petits écrans : bouton WhatsApp en zone sûre sous le bandeau cookies, navigation prioritaire et capture mobile validée

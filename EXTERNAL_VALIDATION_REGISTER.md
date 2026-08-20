@@ -13,6 +13,10 @@ Ce registre distingue les contrôles réalisables automatiquement de ceux qui ex
 | Rappels de rendez-vous | Rendez-vous de test explicitement autorisé. | Horodatage de planification, réception et appareil destinataire. | À réaliser. |
 | Compatibilité navigateur | Chrome, Firefox et Safari compatibles. | Versions, routes contrôlées et anomalies éventuelles. | À réaliser. |
 
+## Recette de navigation clavier
+
+Les tests automatisés couvrent le cycle du menu de langue, la fermeture avec Échap et les dialogues. La recette sur navigateur réel doit compléter ces garde-fous en vérifiant, sans souris, le lien d’évitement, l’ordre de tabulation de la navigation, l’ouverture/fermeture des menus, les préférences de consentement, les formulaires Contact/RGPD/Réservation, les messages d’erreur et le retour de focus après une fenêtre modale. Consigner le navigateur, le système, la route, la version et toute anomalie avant de marquer le contrôle comme réalisé.
+
 ## Règle de clôture
 
 Une absence d’erreur dans les tests unitaires, TypeScript ou les captures automatisées ne remplace jamais la preuve externe demandée ci-dessus. En cas de doute, le contrôle reste « À réaliser ».
