@@ -24,5 +24,14 @@ describe("booking confirmation state", () => {
 
     expect(source).toContain("noIndex");
     expect(source).toContain("paymentConfirmed && (");
+    expect(source).toContain("invoiceDelivery");
+    expect(source).toContain("Aucun document financier ni lien de téléchargement public");
+  });
+
+  it("explains secure invoice delivery without exposing a public document in every language", () => {
+    for (const language of ["fr", "en", "de", "zh"] as const) {
+      expect(confirmationContent[language].invoiceDelivery.title.length).toBeGreaterThan(0);
+      expect(confirmationContent[language].invoiceDelivery.description.length).toBeGreaterThan(0);
+    }
   });
 });

@@ -225,7 +225,8 @@
 - [x] Ajouter une page d’erreur serveur et une page de maintenance cohérentes avec la marque
 - [x] Documenter le kit de marque : logo, couleurs, typographies, icônes et règles d’utilisation
 - [x] Harmoniser les modèles d’emails avec l’identité visuelle du site
-- [ ] Ajouter une prévisualisation graphique de facture dans l’espace client
+- [ ] Ajouter une prévisualisation graphique de facture dans un espace client authentifié : prérequis de confidentialité identifié ; ne pas exposer de facture via une page publique
+- [x] Ajouter un statut graphique de livraison sécurisée de facture sur la confirmation de paiement
 - [x] Ajouter des illustrations originales sans texte pour les services et les étapes de réservation
 - [x] Ajouter une non-régression confirmant que les illustrations Services et Réservation restent décoratives et correctement intégrées
 - [ ] Exécuter de façon autonome les améliorations restantes réalisables et documenter sans blocage les contrôles nécessitant un appareil ou un service externe : contrôles externes centralisés dans `EXTERNAL_VALIDATION_REGISTER.md`
