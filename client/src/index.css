@@ -683,6 +683,12 @@ body {
   }
 }
 
+@media (min-width: 1536px) {
+  .site-nav-container {
+    max-width: 1600px;
+  }
+}
+
 .site-nav {
   transition-property: background-color, border-color, box-shadow, backdrop-filter;
 }

@@ -123,11 +123,11 @@ export default function Navigation() {
           : "bg-transparent"
       }`}
     >
-      <div className="container grid h-18 grid-cols-[minmax(0,1fr)_auto] items-center gap-4 md:h-20 min-[1350px]:grid-cols-[minmax(280px,1fr)_auto_minmax(280px,1fr)]">
+      <div className="container site-nav-container grid h-18 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 md:h-20 min-[1536px]:grid-cols-[auto_minmax(0,1fr)_auto]">
         {/* Logo — larger, more prominent */}
         <button
           onClick={() => scrollTo("hero")}
-          className="brand-lockup flex shrink-0 items-center gap-3 group min-[1350px]:justify-self-start"
+          className="brand-lockup flex shrink-0 items-center gap-3 group min-[1536px]:justify-self-start"
           aria-label={accessibilityCopy.home}
         >
           <img
@@ -150,7 +150,7 @@ export default function Navigation() {
         </button>
 
         {/* Desktop Nav */}
-        <nav className="hidden min-[1350px]:flex min-w-0 items-center justify-self-center gap-6" aria-label={accessibilityCopy.mainNavigation}>
+        <nav className="hidden min-[1536px]:flex min-w-0 items-center justify-self-center gap-5" aria-label={accessibilityCopy.mainNavigation}>
           {[
             { id: "experience", label: content.nav.experience },
             { id: "services", label: content.nav.services },
@@ -170,7 +170,7 @@ export default function Navigation() {
         </nav>
 
         {/* Actions */}
-        <div className="flex shrink-0 items-center gap-3 min-[1350px]:justify-self-end">
+        <div className="flex shrink-0 items-center gap-2 min-[1536px]:justify-self-end">
           {/* Language Dropdown */}
           <div ref={dropdownRef} className="relative">
             <button
@@ -252,7 +252,7 @@ export default function Navigation() {
 
           <button
             onClick={() => scrollTo("contact")}
-            className="nav-cta cta-primary hidden min-[1350px]:flex px-5 py-2.5 text-sm"
+            className="nav-cta cta-primary hidden min-[1536px]:flex px-4 py-2.5 text-sm"
           >
             {content.nav.getInTouch}
           </button>
@@ -261,7 +261,7 @@ export default function Navigation() {
           <button
             onClick={() => setMobileOpen(!mobileOpen)}
             ref={mobileMenuButtonRef}
-            className="nav-control min-[1350px]:hidden p-2 text-foreground"
+            className="nav-control min-[1536px]:hidden p-2 text-foreground"
             aria-label={mobileOpen ? accessibilityCopy.closeMenu : accessibilityCopy.openMenu}
             aria-expanded={mobileOpen}
             aria-controls="mobile-navigation"
@@ -273,7 +273,7 @@ export default function Navigation() {
 
       {/* Mobile Menu */}
       {mobileOpen && (
-        <div id="mobile-navigation" className="mobile-navigation min-[1350px]:hidden bg-background/95 backdrop-blur-xl border-b border-border">
+        <div id="mobile-navigation" className="mobile-navigation min-[1536px]:hidden bg-background/95 backdrop-blur-xl border-b border-border">
           <nav className="container py-6 flex flex-col gap-4" aria-label={accessibilityCopy.mobileNavigation}>
             {[
               { id: "experience", label: content.nav.experience },
