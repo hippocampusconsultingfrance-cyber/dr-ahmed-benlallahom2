@@ -215,8 +215,8 @@
 - [x] Ajouter une version imprimable et accessible des pages légales, RGPD et FAQ
 - [x] Documenter la recette Chrome, Safari et Firefox : exécution sur navigateurs compatibles et preuve requise dans `EXTERNAL_VALIDATION_REGISTER.md`
 - [x] Vérifier la coexistence du bandeau cookies, du bouton WhatsApp et de la navigation mobile
-- [ ] Auditer fichier par fichier tous les visuels médicaux actifs sur les parcours publics et ventures afin de confirmer l’absence de promesse thérapeutique
-- [ ] Construire un inventaire asset par asset des visuels médicaux publics et vérifier localement leurs contextes adjacents par test
+- [x] Auditer fichier par fichier les visuels médicaux actifs des parcours publics afin de confirmer l’absence de promesse thérapeutique : inventaire et garde-fou statique ajoutés ; actifs tiers/ventures restent soumis à leur registre de droits
+- [x] Construire un inventaire asset par asset des visuels médicaux publics et vérifier localement leurs contextes adjacents par test
 - [ ] Vérifier que les contenus longs en allemand et chinois ne débordent pas des composants
 - [x] Vérifier l’alignement des titres, CTA et formulaires sur desktop, tablette et mobile
 - [ ] Ajouter une procédure de revue UX basée sur les retours utilisateurs réels
