@@ -16,6 +16,7 @@ describe("page Ressources médicales", () => {
     expect(source).toContain('rel="noopener noreferrer"');
     expect(source).toContain("aria-pressed");
     expect(source).toContain("aria-live=\"polite\"");
+    expect(source).toContain('getLocalizedCopy(resourcesCopy, language, "fr")');
   });
 
   it("reste déclarée dans les routes et l’index de recherche publics", async () => {

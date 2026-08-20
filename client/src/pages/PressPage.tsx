@@ -4,6 +4,7 @@ import Navigation from "@/components/Navigation";
 import Footer from "@/components/Footer";
 import { SEOHead } from "@/components/SEOHead";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { getLocalizedCopy } from "@/lib/getLocalizedCopy";
 
 type PressLanguage = "fr" | "en" | "de" | "zh";
 
@@ -18,8 +19,7 @@ const pressCopy: Record<PressLanguage, {
 
 export default function PressPage() {
   const { language } = useLanguage();
-  const locale = (language in pressCopy ? language : "fr") as PressLanguage;
-  const copy = pressCopy[locale];
+  const copy = getLocalizedCopy(pressCopy, language, "fr");
 
   return (
     <div className="min-h-screen bg-background text-foreground">

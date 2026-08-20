@@ -4,6 +4,7 @@ import Navigation from "@/components/Navigation";
 import Footer from "@/components/Footer";
 import { SEOHead } from "@/components/SEOHead";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { getLocalizedCopy } from "@/lib/getLocalizedCopy";
 
 type ResourceLanguage = "fr" | "en" | "de" | "zh";
 type ResourceCategory = "safety" | "guidance";
@@ -64,7 +65,7 @@ export const resourcesCopy: Record<ResourceLanguage, {
 export default function ResourcesPage() {
   const { language } = useLanguage();
   const locale = (language in resourcesCopy ? language : "fr") as ResourceLanguage;
-  const strings = resourcesCopy[locale];
+  const strings = getLocalizedCopy(resourcesCopy, language, "fr");
   const [category, setCategory] = useState<"all" | ResourceCategory>("all");
   const [query, setQuery] = useState("");
   const visibleResources = useMemo(() => {

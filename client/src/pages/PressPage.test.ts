@@ -13,6 +13,7 @@ describe("page Presse", () => {
     for (const language of ["fr:", "en:", "de:", "zh:"]) expect(page).toContain(language);
     expect(page).toContain("Aucune publication tierce n’est actuellement référencée");
     expect(page).toContain("sans une source stable et vérifiable");
+    expect(page).toContain('getLocalizedCopy(pressCopy, language, "fr")');
     expect(app).toContain('path="/press"');
     expect(search).toContain('href: "/press"');
     expect(footer).toContain('href="/press"');
