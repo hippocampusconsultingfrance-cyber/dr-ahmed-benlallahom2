@@ -603,61 +603,61 @@
 - [x] Préparer une revue annuelle de la cohérence des liens disabled : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
 - [x] Préparer une revue annuelle de la cohérence des liens loading : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
 - [x] Préparer une revue annuelle de la cohérence des liens error : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
-- [ ] Préparer une revue annuelle de la cohérence des liens success
-- [ ] Préparer une revue annuelle de la cohérence des liens empty
-- [ ] Préparer une revue annuelle de la cohérence des liens skeleton
-- [ ] Préparer une revue annuelle de la cohérence des liens toast
-- [ ] Préparer une revue annuelle de la cohérence des liens modal
-- [ ] Préparer une revue annuelle de la cohérence des liens drawer
-- [ ] Préparer une revue annuelle de la cohérence des liens dropdown
-- [ ] Préparer une revue annuelle de la cohérence des liens select
-- [ ] Préparer une revue annuelle de la cohérence des liens input
-- [ ] Préparer une revue annuelle de la cohérence des liens textarea
-- [ ] Préparer une revue annuelle de la cohérence des liens checkbox
-- [ ] Préparer une revue annuelle de la cohérence des liens radio
-- [ ] Préparer une revue annuelle de la cohérence des liens switch
-- [ ] Préparer une revue annuelle de la cohérence des liens slider
-- [ ] Préparer une revue annuelle de la cohérence des liens datepicker
-- [ ] Préparer une revue annuelle de la cohérence des liens calendar
-- [ ] Préparer une revue annuelle de la cohérence des liens table
-- [ ] Préparer une revue annuelle de la cohérence des liens pagination
-- [ ] Préparer une revue annuelle de la cohérence des liens tabs
-- [ ] Préparer une revue annuelle de la cohérence des liens accordion
-- [ ] Préparer une revue annuelle de la cohérence des liens carousel
-- [ ] Préparer une revue annuelle de la cohérence des liens tooltip
-- [ ] Préparer une revue annuelle de la cohérence des liens popover
-- [ ] Préparer une revue annuelle de la cohérence des liens dialog
-- [ ] Préparer une revue annuelle de la cohérence des liens alert dialog
-- [ ] Préparer une revue annuelle de la cohérence des liens command
-- [ ] Préparer une revue annuelle de la cohérence des liens context menu
-- [ ] Préparer une revue annuelle de la cohérence des liens menubar
-- [ ] Préparer une revue annuelle de la cohérence des liens navigation menu
-- [ ] Préparer une revue annuelle de la cohérence des liens sidebar
-- [ ] Préparer une revue annuelle de la cohérence des liens sheet
-- [ ] Préparer une revue annuelle de la cohérence des liens resizable
-- [ ] Préparer une revue annuelle de la cohérence des liens separator
-- [ ] Préparer une revue annuelle de la cohérence des liens aspect ratio
-- [ ] Préparer une revue annuelle de la cohérence des liens avatar
-- [ ] Préparer une revue annuelle de la cohérence des liens badge
-- [ ] Préparer une revue annuelle de la cohérence des liens breadcrumb
-- [ ] Préparer une revue annuelle de la cohérence des liens button group
-- [ ] Préparer une revue annuelle de la cohérence des liens card
-- [ ] Préparer une revue annuelle de la cohérence des liens chart
-- [ ] Préparer une revue annuelle de la cohérence des liens checkbox
-- [ ] Préparer une revue annuelle de la cohérence des liens collapsible
-- [ ] Préparer une revue annuelle de la cohérence des liens combobox
-- [ ] Préparer une revue annuelle de la cohérence des liens command
-- [ ] Préparer une revue annuelle de la cohérence des liens date picker
-- [ ] Préparer une revue annuelle de la cohérence des liens drawer
-- [ ] Préparer une revue annuelle de la cohérence des liens dropdown
-- [ ] Préparer une revue annuelle de la cohérence des liens empty
-- [ ] Préparer une revue annuelle de la cohérence des liens field
-- [ ] Préparer une revue annuelle de la cohérence des liens form
-- [ ] Préparer une revue annuelle de la cohérence des liens hover card
-- [ ] Préparer une revue annuelle de la cohérence des liens input group
-- [ ] Préparer une revue annuelle de la cohérence des liens item
-- [ ] Préparer une revue annuelle de la cohérence des liens kbd
-- [ ] Préparer une revue annuelle de la cohérence des liens label
+- [x] Préparer une revue annuelle de la cohérence des liens success : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens empty : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens skeleton : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens toast : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens modal : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens drawer : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens dropdown : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens select : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens input : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens textarea : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens checkbox : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens radio : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens switch : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens slider : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens datepicker : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens calendar : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens table : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens pagination : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens tabs : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens accordion : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens carousel : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens tooltip : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens popover : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens dialog : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens alert dialog : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens command : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens context menu : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens menubar : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens navigation menu : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens sidebar : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens sheet : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens resizable : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens separator : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens aspect ratio : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens avatar : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens badge : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens breadcrumb : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens button group : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens card : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens chart : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens checkbox : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens collapsible : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens combobox : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens command : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens date picker : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens drawer : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens dropdown : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens empty : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens field : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens form : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens hover card : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens input group : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens item : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens kbd : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
+- [x] Préparer une revue annuelle de la cohérence des liens label : planifiée dans `ANNUAL_REVIEW_CALENDAR.md`
 - [ ] Préparer une revue annuelle de la cohérence des liens menubar
 - [ ] Préparer une revue annuelle de la cohérence des liens navigation menu
 - [ ] Préparer une revue annuelle de la cohérence des liens pagination
