@@ -57,7 +57,7 @@ export const bookingContent = {
       paymentTrust: "Paiement sécurisé par Stripe · Confirmation et facture envoyées par email",
       availabilityLabel: "Disponibilité",
       emergencyTitle: "En cas d’urgence",
-      emergencyNote: "En cas d’urgence médicale ou de danger immédiat, appelez le 112 ou les services d’urgence locaux. Cette consultation programmée ne remplace pas une prise en charge d’urgence.",
+      emergencyNote: "En cas d’urgence médicale ou de danger immédiat, appelez immédiatement les secours. Cette consultation programmée ne remplace pas une prise en charge d’urgence.",
 
   },
   en: {
@@ -106,7 +106,7 @@ export const bookingContent = {
       paymentTrust: "Secure payment by Stripe · Confirmation and invoice sent by email",
       availabilityLabel: "Availability",
       emergencyTitle: "In an emergency",
-      emergencyNote: "For a medical emergency or immediate danger, call 112 or your local emergency services. This scheduled consultation does not replace emergency care.",
+      emergencyNote: "For a medical emergency or immediate danger, call emergency services immediately. This scheduled consultation does not replace emergency care.",
 
   },
   de: {
@@ -155,7 +155,7 @@ export const bookingContent = {
       paymentTrust: "Sichere Zahlung über Stripe · Bestätigung und Rechnung per E-Mail",
       availabilityLabel: "Verfügbarkeit",
       emergencyTitle: "Im Notfall",
-      emergencyNote: "Bei einem medizinischen Notfall oder unmittelbarer Gefahr rufen Sie 112 oder den örtlichen Rettungsdienst an. Diese geplante Beratung ersetzt keine Notfallversorgung.",
+      emergencyNote: "Bei einem medizinischen Notfall oder unmittelbarer Gefahr rufen Sie sofort den Rettungsdienst an. Diese geplante Beratung ersetzt keine Notfallversorgung.",
 
   },
   zh: {
@@ -204,7 +204,7 @@ export const bookingContent = {
       paymentTrust: "Stripe安全支付 · 确认信息和发票将通过电子邮件发送",
       availabilityLabel: "可用性",
       emergencyTitle: "紧急情况",
-      emergencyNote: "如遇医疗紧急情况或面临即时危险，请拨打 112 或当地急救服务。本次预约咨询不能替代紧急医疗救治。",
+      emergencyNote: "如遇医疗紧急情况或面临即时危险，请立即联系急救服务。本次预约咨询不能替代紧急医疗救治。",
 
   },
 };
