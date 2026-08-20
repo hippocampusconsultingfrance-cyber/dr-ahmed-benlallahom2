@@ -257,7 +257,7 @@
 - [x] Vérifier que les contenus longs en allemand et chinois ne débordent pas des composants : captures automatisées Réservation/Ressources en desktop et mobile
 - [x] Étendre les tests de longueur aux libellés publics critiques des quatre langues actives
 - [x] Vérifier l’alignement des titres, CTA et formulaires sur desktop, tablette et mobile
-- [ ] Ajouter une procédure de revue UX basée sur les retours utilisateurs réels
+- [x] Ajouter une procédure de revue UX basée sur les retours utilisateurs réels, consentis et anonymisés
 - [x] Ne pas ajouter de visuels de partage social pour le Blog : aucune page ni aucun article Actualités n’est publié
 - [x] Ajouter des descriptions alternatives précises et contextuelles à toutes les images
 - [x] Ajouter une page de présentation Hippocampus Consulting avec une mise en page éditoriale

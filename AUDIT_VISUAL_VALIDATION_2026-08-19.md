@@ -268,6 +268,10 @@ Le fichier `EXTERNAL_VALIDATION_REGISTER.md` centralise les contrôles qui néce
 
 La matrice de régression visuelle couvre désormais la confirmation de paiement avec un identifiant de démonstration stable, en bureau et mobile. Les deux étalons vérifient la référence de suivi, les cartes de réassurance et le panneau localisé précisant que la facture est délivrée en pièce jointe e-mail, sans lien public ni document financier affiché. Cette extension porte la matrice à dix-huit comparaisons déterministes ; le paiement réel, l’e-mail et la facture effective restent exclus de la capture conformément au registre de validations externes.
 
+## Revue UX fondée sur les retours réels
+
+Le fichier `UX_FEEDBACK_REVIEW_PROTOCOL.md` formalise une revue trimestrielle reposant sur des retours volontaires, minimisés et anonymisés. Il exclut les données de santé, de paiement, de candidature et les informations personnelles inutiles ; les constats doivent être synthétisés sans identifiant, reproduits avant priorisation et reliés aux décisions de correction ou de suivi. La collecte effective reste soumise au consentement et aux contrôles externes documentés.
+
 ## Couverture de validation d’accessibilité
 
 La suite automatisée couvre le lien d’accès direct au contenu, la navigation clavier, les libellés accessibles du menu, les alternatives d’images, les préférences de cookies, les contrôles mobiles du tableau de bord, les longueurs de traduction, l’impression et les états de chargement ou d’erreur. Les vérifications de rendu ont également été réalisées sur mobile, tablette, bureau et largeur réduite.
