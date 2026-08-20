@@ -408,46 +408,46 @@
 - [x] Préparer une revue annuelle de la cohérence des largeurs de contenu
 - [x] Préparer une revue annuelle de la cohérence des hauteurs de sections
 - [x] Préparer une revue annuelle de la cohérence des transitions
-- [ ] Préparer une revue annuelle de la cohérence des états focus
-- [ ] Préparer une revue annuelle de la cohérence des états hover
-- [ ] Préparer une revue annuelle de la cohérence des états active
-- [ ] Préparer une revue annuelle de la cohérence des états disabled
-- [ ] Préparer une revue annuelle de la cohérence des états loading
-- [ ] Préparer une revue annuelle de la cohérence des états error
-- [ ] Préparer une revue annuelle de la cohérence des états success
-- [ ] Préparer une revue annuelle de la cohérence des états empty
-- [ ] Préparer une revue annuelle de la cohérence des skeletons
-- [ ] Préparer une revue annuelle de la cohérence des toasts
-- [ ] Préparer une revue annuelle de la cohérence des modales
-- [ ] Préparer une revue annuelle de la cohérence des drawers
-- [ ] Préparer une revue annuelle de la cohérence des menus déroulants
-- [ ] Préparer une revue annuelle de la cohérence des calendriers
-- [ ] Préparer une revue annuelle de la cohérence des carrousels
-- [ ] Préparer une revue annuelle de la cohérence des formulaires
-- [ ] Préparer une revue annuelle de la cohérence des tableaux
-- [ ] Préparer une revue annuelle de la cohérence des graphiques
-- [ ] Préparer une revue annuelle de la cohérence des badges
-- [ ] Préparer une revue annuelle de la cohérence des avatars
-- [ ] Préparer une revue annuelle de la cohérence des logos
-- [ ] Préparer une revue annuelle de la cohérence des illustrations
-- [ ] Préparer une revue annuelle de la cohérence des photographies
-- [ ] Préparer une revue annuelle de la cohérence des vidéos
-- [ ] Préparer une revue annuelle de la cohérence des sons
-- [ ] Préparer une revue annuelle de la cohérence des documents PDF
-- [ ] Préparer une revue annuelle de la cohérence des emails
-- [ ] Préparer une revue annuelle de la cohérence des SMS
-- [ ] Préparer une revue annuelle de la cohérence des notifications admin
-- [ ] Préparer une revue annuelle de la cohérence des notifications client
-- [ ] Préparer une revue annuelle de la cohérence des pages imprimables
-- [ ] Préparer une revue annuelle de la cohérence des exports
-- [ ] Préparer une revue annuelle de la cohérence des téléchargements
-- [ ] Préparer une revue annuelle de la cohérence des partages
-- [ ] Préparer une revue annuelle de la cohérence des aperçus sociaux
-- [ ] Préparer une revue annuelle de la cohérence des résultats de recherche
-- [ ] Préparer une revue annuelle de la cohérence des pages d’erreur
-- [ ] Préparer une revue annuelle de la cohérence des pages de maintenance
-- [ ] Préparer une revue annuelle de la cohérence des pages de statut
-- [ ] Préparer une revue annuelle de la cohérence des pages d’aide
+- [x] Préparer une revue annuelle de la cohérence des états focus
+- [x] Préparer une revue annuelle de la cohérence des états hover
+- [x] Préparer une revue annuelle de la cohérence des états active
+- [x] Préparer une revue annuelle de la cohérence des états disabled
+- [x] Préparer une revue annuelle de la cohérence des états loading
+- [x] Préparer une revue annuelle de la cohérence des états error
+- [x] Préparer une revue annuelle de la cohérence des états success
+- [x] Préparer une revue annuelle de la cohérence des états empty
+- [x] Préparer une revue annuelle de la cohérence des skeletons
+- [x] Préparer une revue annuelle de la cohérence des toasts
+- [x] Préparer une revue annuelle de la cohérence des modales
+- [x] Préparer une revue annuelle de la cohérence des drawers
+- [x] Préparer une revue annuelle de la cohérence des menus déroulants
+- [x] Préparer une revue annuelle de la cohérence des calendriers
+- [x] Préparer une revue annuelle de la cohérence des carrousels
+- [x] Préparer une revue annuelle de la cohérence des formulaires
+- [x] Préparer une revue annuelle de la cohérence des tableaux
+- [x] Préparer une revue annuelle de la cohérence des graphiques
+- [x] Préparer une revue annuelle de la cohérence des badges
+- [x] Préparer une revue annuelle de la cohérence des avatars
+- [x] Préparer une revue annuelle de la cohérence des logos
+- [x] Préparer une revue annuelle de la cohérence des illustrations
+- [x] Préparer une revue annuelle de la cohérence des photographies
+- [x] Préparer une revue annuelle de la cohérence des vidéos
+- [x] Préparer une revue annuelle de la cohérence des sons
+- [x] Préparer une revue annuelle de la cohérence des documents PDF
+- [x] Préparer une revue annuelle de la cohérence des emails
+- [x] Préparer une revue annuelle de la cohérence des SMS
+- [x] Préparer une revue annuelle de la cohérence des notifications admin
+- [x] Préparer une revue annuelle de la cohérence des notifications client
+- [x] Préparer une revue annuelle de la cohérence des pages imprimables
+- [x] Préparer une revue annuelle de la cohérence des exports
+- [x] Préparer une revue annuelle de la cohérence des téléchargements
+- [x] Préparer une revue annuelle de la cohérence des partages
+- [x] Préparer une revue annuelle de la cohérence des aperçus sociaux
+- [x] Préparer une revue annuelle de la cohérence des résultats de recherche
+- [x] Préparer une revue annuelle de la cohérence des pages d’erreur
+- [x] Préparer une revue annuelle de la cohérence des pages de maintenance
+- [x] Préparer une revue annuelle de la cohérence des pages de statut
+- [x] Préparer une revue annuelle de la cohérence des pages d’aide
 - [ ] Préparer une revue annuelle de la cohérence des pages FAQ
 - [ ] Préparer une revue annuelle de la cohérence des pages ressources
 - [ ] Préparer une revue annuelle de la cohérence des pages presse

@@ -32,6 +32,15 @@ Ce calendrier organise les vérifications annuelles du site et de ses parcours c
 | Système visuel et interactions | CTA Réserver/Contact/WhatsApp, boutons secondaires, cartes, icônes, bordures, rayons, ombres, espacements, largeur, hauteur et transitions. | Échantillons de composants, résultat des tests responsive et anomalies signalées. | Préserver les conventions ou documenter toute évolution volontaire. |
 | Retour d’usage et simplification | Anomalies graphiques, fonctionnalités réellement utilisées, fonctionnalités à retirer et complexité de parcours. | Retours qualifiés, données agrégées disponibles et décision documentée. | Corriger les irritants ou retirer les éléments dont le coût dépasse le bénéfice. |
 
+## États d’interface, composants et diffusion
+
+| Domaine | Périmètre annuel | Preuves à archiver | Décision attendue |
+|---|---|---|---|
+| États et primitives d’interface | Focus, survol, actif, désactivé, chargement, erreur, succès, vide, skeletons, toasts, modales, drawers, menus, calendriers et carrousels. | Parcours clavier, captures des états et tests de composants. | Corriger les états sans retour visible ou sans chemin de sortie clair. |
+| Composants et système visuel | Formulaires, tableaux, graphiques, badges, avatars, logos, illustrations, photographies, vidéos et sons. | Inventaire des composants, droits d’usage et exemples de rendu. | Conserver une hiérarchie cohérente, accessible et attribuée. |
+| Canaux et artefacts | Documents PDF, e-mails, SMS, notifications administrateur/client, vues imprimables, exports, téléchargements, partages et aperçus sociaux. | Échantillons rendus, liens vérifiés et résultats des tests de génération. | Réparer tout artefact incomplet, ambigu ou inaccessible. |
+| Pages de support | Résultats de recherche, erreurs, maintenance, statut et aide. | Liste de routes, captures et contrôle de disponibilité. | Garder un message clair, une action de reprise et une indexation appropriée. |
+
 ## Déroulement recommandé
 
 La revue doit être planifiée une fois par an, puis renouvelée après une évolution majeure de paiement, authentification, stockage documentaire, fournisseur externe ou politique de données. Commencer par l’inventaire de la version publiée et terminer par une liste d’actions datées. Les éléments nécessitant un appareil réel, une boîte e-mail tierce ou un compte fournisseur ne doivent jamais être déclarés réalisés sans preuve correspondante.

@@ -18,5 +18,9 @@ describe("calendrier annuel de revue", () => {
     expect(calendar).toContain("Clarté des parcours médicaux et transactionnels");
     expect(calendar).toContain("Référencement et navigation");
     expect(calendar).toContain("Système visuel et interactions");
+    expect(calendar).toContain("États et primitives d’interface");
+    expect(calendar).toContain("Composants et système visuel");
+    expect(calendar).toContain("Canaux et artefacts");
+    expect(calendar).toContain("Pages de support");
   });
 });
