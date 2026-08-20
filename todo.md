@@ -231,7 +231,7 @@
 - [x] Ne pas ajouter de progression de lecture pour des articles Blog non publiés
 - [x] Ne pas ajouter de recherche Blog tant que la section Actualités reste désactivée
 - [x] Ne pas ajouter de filtres de catégories Blog tant que la section Actualités reste désactivée
-- [ ] Ajouter une grille responsive commune à toutes les pages publiques
+- [x] Ajouter une grille responsive commune à toutes les pages publiques : primitive `.container`, paliers de gouttières et garde-fou sur les routes représentatives documentés dans `PUBLIC_LAYOUT_GRID.md`
 - [ ] Ajouter une animation de transition de page courte et désactivable
 - [ ] Ajouter un contrôle de taille de police sans rupture de mise en page
 - [ ] Ajouter un composant de citation médicale avec source et date de mise à jour
