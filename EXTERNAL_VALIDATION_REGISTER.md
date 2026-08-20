@@ -12,6 +12,11 @@ Ce registre distingue les contrôles réalisables automatiquement de ceux qui ex
 | E-mails transactionnels | Boîtes de test Gmail, Outlook et Apple Mail. | Source du message, rendus, clients et écarts constatés. | À réaliser. |
 | Rappels de rendez-vous | Rendez-vous de test explicitement autorisé. | Horodatage de planification, réception et appareil destinataire. | À réaliser. |
 | Compatibilité navigateur | Chrome, Firefox et Safari compatibles. | Versions, routes contrôlées et anomalies éventuelles. | À réaliser. |
+| Visuels médicaux authentiques | Actifs fournis avec autorisation écrite ou licence vérifiable, texte alternatif contextualisé. | Fichier source, licence/autorisation, date et entrée correspondante dans `VISUAL_ASSET_RIGHTS_REGISTER.md`. | À réaliser. |
+| Prévisualisation de facture dans l’espace client | Décision de confidentialité, parcours d’authentification client et validation de la rétention des documents. | Décision écrite, contrôle d’accès, capture non sensible et test d’absence de lien public. | À réaliser. |
+| Notifications SMS | Prestataire choisi, clés de production configurées de manière sécurisée et numéros de test autorisés. | Référence de configuration, journal de livraison et résultat de réception sur un appareil autorisé. | À réaliser. |
+| Dépôt de candidature de production | Document PDF/DOCX fictif ou non sensible et autorisation explicite de soumettre le test. | Horodatage, identifiant de candidature, statut de traitement et aucune donnée sensible dans les preuves. | À réaliser. |
+| Antivirus du coffre candidat | Choix d’un moteur antivirus et hébergement compatible avec un service persistant. | Décision d’architecture, test de fichier de contrôle sans malware réel et journal de quarantaine. | À réaliser — nécessite un hébergement réservé. |
 
 ## Recette de navigation clavier
 
