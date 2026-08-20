@@ -1,15 +1,11 @@
 import { useLanguage } from "@/contexts/LanguageContext";
 import { trpc } from "@/lib/trpc";
+import { getGdprRequestCopy, publicFormCopy } from "@/lib/publicFormCopy";
 import { CheckCircle, Loader2, ArrowLeft } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
-export const gdprRequestCopy = {
-  fr: { submitted: "Demande RGPD soumise avec succès !", error: "La demande n’a pas pu être envoyée. Veuillez réessayer.", back: "Retour", received: "Demande reçue !", another: "Soumettre une autre demande", sending: "Envoi en cours..." },
-  en: { submitted: "GDPR request submitted successfully!", error: "The request could not be sent. Please try again.", back: "Back", received: "Request received!", another: "Submit another request", sending: "Submitting..." },
-  de: { submitted: "DSGVO-Anfrage erfolgreich übermittelt!", error: "Die Anfrage konnte nicht gesendet werden. Bitte versuchen Sie es erneut.", back: "Zurück", received: "Anfrage eingegangen!", another: "Weitere Anfrage senden", sending: "Wird gesendet..." },
-  zh: { submitted: "GDPR 请求已成功提交！", error: "无法发送请求，请重试。", back: "返回", received: "已收到请求！", another: "提交另一项请求", sending: "正在提交..." },
-} as const;
+export const gdprRequestCopy = publicFormCopy.gdpr;
 
 export const gdprFieldIds = {
   name: "gdpr-request-name",
@@ -25,7 +21,7 @@ interface GDPRRequestFormProps {
 
 export default function GDPRRequestForm({ onBack }: GDPRRequestFormProps) {
   const { content, language } = useLanguage();
-  const copy = gdprRequestCopy[(language in gdprRequestCopy ? language : "fr") as keyof typeof gdprRequestCopy];
+  const copy = getGdprRequestCopy(language);
   const [formData, setFormData] = useState({
     name: "",
     email: "",

@@ -1,20 +1,16 @@
 import { useLanguage } from "@/contexts/LanguageContext";
 import { siteConfig } from "@/data/site-config";
+import { getContactFormCopy, publicFormCopy } from "@/lib/publicFormCopy";
 import { trpc } from "@/lib/trpc";
 import { Phone, Mail, Linkedin, Send, CheckCircle, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
-export const contactCopy = {
-  fr: { phone: "Téléphone", email: "Email", sent: "Message envoyé avec succès !", sendError: "L’envoi du message a échoué. Veuillez réessayer.", consentRequired: "Veuillez accepter la politique de confidentialité.", successTitle: "Message envoyé !", successDescription: "Merci pour votre message. Je vous répondrai dans les meilleurs délais.", sendAnother: "Envoyer un autre message", sending: "Envoi en cours..." },
-  en: { phone: "Phone", email: "Email", sent: "Message sent successfully!", sendError: "The message could not be sent. Please try again.", consentRequired: "Please accept the privacy policy.", successTitle: "Message sent!", successDescription: "Thank you for your message. I will get back to you as soon as possible.", sendAnother: "Send another message", sending: "Sending..." },
-  de: { phone: "Telefon", email: "E-Mail", sent: "Nachricht erfolgreich gesendet!", sendError: "Die Nachricht konnte nicht gesendet werden. Bitte versuchen Sie es erneut.", consentRequired: "Bitte akzeptieren Sie die Datenschutzerklärung.", successTitle: "Nachricht gesendet!", successDescription: "Vielen Dank für Ihre Nachricht. Ich werde Ihnen schnellstmöglich antworten.", sendAnother: "Weitere Nachricht senden", sending: "Wird gesendet..." },
-  zh: { phone: "电话", email: "电子邮箱", sent: "消息发送成功！", sendError: "无法发送消息，请重试。", consentRequired: "请接受隐私政策。", successTitle: "消息已发送！", successDescription: "感谢您的留言，我会尽快回复您。", sendAnother: "发送另一条消息", sending: "正在发送..." },
-} as const;
+export const contactCopy = publicFormCopy.contact;
 
 export default function ContactSection() {
   const { content, language } = useLanguage();
-  const copy = contactCopy[(language in contactCopy ? language : "fr") as keyof typeof contactCopy];
+  const copy = getContactFormCopy(language);
   const [formData, setFormData] = useState({
     name: "",
     phone: "",
