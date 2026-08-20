@@ -81,4 +81,17 @@ describe("booking date placeholders", () => {
     expect(source).toContain('aria-hidden="true"');
     expect(source).toContain("opacity-70 saturate-75");
   });
+
+  it("bloque le paiement et informe sans détail technique quand les données asynchrones échouent", async () => {
+    const source = await import("node:fs/promises").then((fs) =>
+      fs.readFile(new URL("./BookingPage.tsx", import.meta.url), "utf8")
+    );
+
+    expect(source).toContain("availabilityError");
+    expect(source).toContain("blockedDates.isError || bookedSlots.isError || availabilitySlots.isError");
+    expect(source).toContain("availabilityQueryError || calculatePrice.isError");
+    expect(source).toContain("disabled={isLoading || availabilityPending || availabilityError");
+    expect(source).toContain("PublicContentSkeleton cards={1}");
+    expect(source).toContain('role="alert"');
+  });
 });

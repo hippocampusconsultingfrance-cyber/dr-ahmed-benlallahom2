@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/card";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { Calendar, Clock, User, Mail, Phone, FileText, CheckCircle, AlertCircle } from "lucide-react";
 import Breadcrumb from "@/components/Breadcrumb";
+import PublicContentSkeleton from "@/components/PublicContentSkeleton";
 import { SEOHead } from "@/components/SEOHead";
 
 export const bookingContent = {
@@ -28,6 +29,7 @@ export const bookingContent = {
       submit: "Procéder au paiement",
       loading: "Traitement...",
       checkingAvailability: "Vérification du créneau...",
+      availabilityError: "La disponibilité ne peut pas être confirmée pour le moment. Veuillez réessayer avant de procéder au paiement.",
       available: "Créneau disponible",
       blocked: "Date indisponible",
       alreadyBooked: "Ce créneau est déjà réservé",
@@ -76,6 +78,7 @@ export const bookingContent = {
       submit: "Proceed to Payment",
       loading: "Processing...",
       checkingAvailability: "Checking availability...",
+      availabilityError: "Availability cannot be confirmed at the moment. Please try again before proceeding to payment.",
       available: "Time slot available",
       blocked: "Date unavailable",
       alreadyBooked: "This time slot is already booked",
@@ -124,6 +127,7 @@ export const bookingContent = {
       submit: "Zur Zahlung übergehen",
       loading: "Verarbeitung...",
       checkingAvailability: "Verfügbarkeit wird geprüft...",
+      availabilityError: "Die Verfügbarkeit kann derzeit nicht bestätigt werden. Bitte versuchen Sie es erneut, bevor Sie zur Zahlung übergehen.",
       available: "Termin verfügbar",
       blocked: "Datum nicht verfügbar",
       alreadyBooked: "Dieser Termin ist bereits reserviert",
@@ -172,6 +176,7 @@ export const bookingContent = {
       submit: "继续付款",
       loading: "处理中...",
       checkingAvailability: "正在检查可用性...",
+      availabilityError: "目前无法确认可用性。请重试后再继续付款。",
       available: "时间段可用",
       blocked: "日期不可用",
       alreadyBooked: "该时间段已被预订",
@@ -315,7 +320,10 @@ export default function BookingPage() {
       bookedSlots.data?.some((slot) => new Date(slot).toISOString().slice(0, 16) === selectedDate.toISOString().slice(0, 16))
   );
   const availabilityPending = blockedDates.isLoading || bookedSlots.isLoading || availabilitySlots.isLoading;
-  const availabilityLabel = !selectedDate
+  const availabilityQueryError = blockedDates.isError || bookedSlots.isError || availabilitySlots.isError;
+  const availabilityLabel = availabilityQueryError
+    ? content.form.availabilityError
+    : !selectedDate
     ? content.form.selectDate
     : availabilityPending
       ? content.form.checkingAvailability
@@ -327,7 +335,7 @@ export default function BookingPage() {
   const availabilityState = getBookingAvailabilityState({
     selected: Boolean(selectedDate),
     pending: availabilityPending,
-    blocked: isBlockedDate,
+    blocked: isBlockedDate || availabilityQueryError,
     booked: isBookedSlot,
   });
 
@@ -335,6 +343,7 @@ export default function BookingPage() {
     { appointmentDate: selectedDate?.toISOString() || "" },
     { enabled: !!selectedDate }
   );
+  const availabilityError = availabilityQueryError || calculatePrice.isError;
 
   const createAppointment = trpc.appointments.create.useMutation();
 
@@ -389,7 +398,7 @@ export default function BookingPage() {
       return;
     }
 
-    if (isBlockedDate || isBookedSlot) {
+    if (isBlockedDate || isBookedSlot || availabilityError) {
       alert(availabilityLabel);
       return;
     }
@@ -696,6 +705,8 @@ export default function BookingPage() {
             </div>
 
             {/* Price Display */}
+            {selectedDate && calculatePrice.isLoading && <PublicContentSkeleton cards={1} label={content.form.checkingAvailability} />}
+            {selectedDate && availabilityError && <p className="rounded-xl border border-destructive/35 bg-destructive/5 p-4 text-sm text-destructive" role="alert">{content.form.availabilityError}</p>}
             {calculatePrice.data && (
               <Card className="summary-card-premium p-4 sm:p-5">
                 <h3 className="font-semibold mb-3">{content.pricing.title}</h3>
@@ -737,7 +748,7 @@ export default function BookingPage() {
             {/* Submit Button */}
             <Button
               type="submit"
-              disabled={isLoading || availabilityPending || isBlockedDate || isBookedSlot || !selectedDate || !calculatePrice.data}
+              disabled={isLoading || availabilityPending || availabilityError || isBlockedDate || isBookedSlot || !selectedDate || !calculatePrice.data}
               className="cta-primary w-full"
               size="lg"
             >

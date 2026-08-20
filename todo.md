@@ -271,7 +271,7 @@
 - [ ] Vérifier les pages à 200 % de zoom
 - [ ] Vérifier les textes et CTA dans les quatre langues
 - [x] Vérifier le positionnement des éléments flottants sur petits écrans : bouton WhatsApp en zone sûre sous le bandeau cookies, navigation prioritaire et capture mobile validée
-- [ ] Vérifier les états de chargement des appels tRPC
+- [x] Vérifier les états de chargement des appels tRPC : Réservation, Coffre candidat et Vérification e-mail audités ; chargement, erreur sûre, vide et blocage d’action explicitement distingués
 - [x] Vérifier les états anti-double-clic du paiement
 - [x] Vérifier le rendu de la confirmation et de l’annulation de paiement
 - [ ] Vérifier les messages de validation des formulaires dans les quatre langues
