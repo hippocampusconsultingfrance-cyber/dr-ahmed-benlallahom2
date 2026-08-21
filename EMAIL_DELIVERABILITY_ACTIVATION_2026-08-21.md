@@ -32,6 +32,20 @@ L’ajout suivant est recommandé dans Cloudflare afin de publier DMARC sans mod
 
 La politique `p=none` n’ordonne pas le rejet ou la mise en quarantaine des messages ; elle publie l’authentification DMARC nécessaire aux fournisseurs de messagerie. Toute montée ultérieure vers `quarantine` ou `reject` doit être effectuée seulement après examen de rapports DMARC. [1] [2]
 
+## Publication DNS : prérequis externe identifié
+
+La publication a été tentée dans le compte Cloudflare connecté, mais ce compte ne contient actuellement aucune zone DNS accessible pour `drahmedbenlallahom.com`. L’enregistrement ne peut donc pas être ajouté depuis cette connexion, sans que cela ne modifie les emails existants.
+
+Le DNS actif doit être administré depuis le fournisseur qui héberge réellement la zone — historiquement Namecheap pour ce domaine. Dans **Namecheap → Domain List → Manage → Advanced DNS**, ajouter un enregistrement **TXT Record** avec :
+
+| Champ Namecheap | Valeur |
+|---|---|
+| Host | `_dmarc` |
+| Value | `v=DMARC1; p=none; adkim=r; aspf=r; pct=100` |
+| TTL | Automatic |
+
+Après enregistrement, la vérification peut être relancée depuis Resend et par une résolution DNS publique. Aucun envoi réel ne doit être forcé avant la propagation du TXT.
+
 ## Conseils destinataire
 
 Lorsqu’un message légitime est arrivé dans le spam, le destinataire peut l’ouvrir puis choisir **« Non spam »** et ajouter `recrutement@drahmedbenlallahom.com` à ses contacts. Gmail indique que les messages provenant d’une adresse enregistrée dans les contacts sont moins susceptibles d’être classés comme spam. [2]
