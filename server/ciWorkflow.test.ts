@@ -17,6 +17,8 @@ describe("intégration continue GitHub", () => {
     expect(workflow).toContain("pnpm audit --prod --audit-level=high");
     expect(workflow).toContain("STRIPE_SECRET_KEY: sk_test_");
     expect(workflow).toContain("CANDIDATE_DOCUMENT_ENCRYPTION_KEY:");
+    expect(workflow).not.toContain("services:");
+    expect(workflow).not.toContain("pnpm db:push");
     expect(pnpmVersion).toBeTruthy();
     expect(packageManager).toMatch(/^pnpm@[0-9.]+\+sha512\./);
     expect(workflow).not.toMatch(/pnpm\/action-setup@v4\s+with:\s+version:/);
