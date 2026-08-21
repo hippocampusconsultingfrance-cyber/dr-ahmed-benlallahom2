@@ -35,6 +35,10 @@ Le 21 août 2026, un email de test explicitement autorisé par le propriétaire 
 
 La réponse privée doit contenir au moins vingt caractères avant tout envoi : cette règle est contrôlée côté interface et côté serveur. L’interface affiche désormais le nombre de caractères, le nombre restant et une explication lisible de la condition manquante. Les boutons indisponibles sont gris et non cliquables. Une réponse comme `jdldldld` doit donc être complétée avec une réponse générale relue avant de pouvoir envoyer ou publier.
 
+## Retrait d’une publication
+
+Lorsqu’une question est publiée, l’onglet **Questions santé** affiche le bouton rouge **« Retirer de la bibliothèque publique »**. Après confirmation, la question et la réponse anonymisées disparaissent immédiatement de la page publique. La réponse privée, les coordonnées et le journal d’audit restent conservés dans l’administration ; aucun email n’est renvoyé et aucune donnée privée n’est supprimée par cette action.
+
 ## Références
 
 [1] [CNIL — Formalités applicables aux traitements de données de santé](https://www.cnil.fr/fr/quelles-formalites-pour-les-traitements-de-donnees-de-sante)  

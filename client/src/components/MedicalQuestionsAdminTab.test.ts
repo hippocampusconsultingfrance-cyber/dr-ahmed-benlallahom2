@@ -10,5 +10,7 @@ describe("validation administrative des réponses Questions santé", () => {
     expect(source).toContain("Ajoutez encore");
     expect(source).toContain("disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-40");
     expect(source).toContain("La réponse privée doit comporter au moins");
+    expect(source).toContain("Retirer de la bibliothèque publique");
+    expect(source).toContain("unpublish.mutate");
   });
 });

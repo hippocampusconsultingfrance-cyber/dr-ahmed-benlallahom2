@@ -157,5 +157,21 @@ export const medicalQuestionsRouter = router({
       await auditQuestion({ questionId: input.id, actorOpenId: ctx.user.openId, action: input.publish ? "response_sent_and_published" : "response_sent", metadata: { published: input.publish } });
       return { success: true, published: input.publish };
     }),
+    unpublish: adminProcedure.input(questionIdInput).mutation(async ({ input, ctx }) => {
+      await requireMfa(ctx);
+      const db = await requireDb();
+      const [question] = await db.select().from(medicalQuestions).where(eq(medicalQuestions.id, input.id)).limit(1);
+      if (!question) throw new TRPCError({ code: "NOT_FOUND", message: "Question introuvable." });
+      if (question.status !== "published") throw new TRPCError({ code: "BAD_REQUEST", message: "Cette question n’est pas publiée." });
+
+      await db.update(medicalQuestions).set({
+        status: "answered",
+        publicQuestion: null,
+        publicResponse: null,
+        publishedAt: null,
+      }).where(eq(medicalQuestions.id, input.id));
+      await auditQuestion({ questionId: input.id, actorOpenId: ctx.user.openId, action: "unpublished", metadata: { retainedPrivateRecord: true } });
+      return { success: true };
+    }),
   }),
 });

@@ -41,6 +41,15 @@ export default function MedicalQuestionsAdminTab() {
     },
     onError: mutationError => toast.error(mutationError.message),
   });
+  const unpublish = trpc.medicalQuestions.admin.unpublish.useMutation({
+    onSuccess: () => {
+      setPublish(false);
+      void utils.medicalQuestions.admin.get.invalidate();
+      void utils.medicalQuestions.admin.list.invalidate();
+      toast.success("La question a été retirée de la bibliothèque publique. Le dossier privé et son journal sont conservés.");
+    },
+    onError: mutationError => toast.error(mutationError.message),
+  });
 
   useEffect(() => {
     if (!selected.data) return;
@@ -192,6 +201,20 @@ export default function MedicalQuestionsAdminTab() {
                   <Send className="h-4 w-4" />
                   {sendValidated.isPending ? "Envoi…" : publish ? "Valider, envoyer et publier" : "Valider et envoyer"}
                 </button>
+                {selected.data.status === "published" && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (window.confirm("Retirer cette question de la bibliothèque publique ? La réponse privée, les coordonnées et le journal d’audit resteront conservés.")) {
+                        unpublish.mutate({ id: selected.data!.id });
+                      }
+                    }}
+                    disabled={unpublish.isPending}
+                    className="inline-flex items-center gap-2 rounded-lg border border-destructive/60 px-4 py-2 text-sm font-medium text-destructive transition-colors hover:bg-destructive/10 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    {unpublish.isPending ? "Retrait…" : "Retirer de la bibliothèque publique"}
+                  </button>
+                )}
               </div>
             </div>
           </div>

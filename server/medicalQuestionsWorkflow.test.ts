@@ -23,4 +23,12 @@ describe("workflow de questions-réponses médicales", () => {
     expect(publishedBlock).not.toContain("medicalQuestions.email");
     expect(publishedBlock).not.toContain("medicalQuestions.phone");
   });
+
+  it("permet de retirer une publication sans supprimer le dossier privé ni son audit", async () => {
+    const router = await readFile(path.join(process.cwd(), "server/medicalQuestionsRouter.ts"), "utf8");
+    expect(router).toContain("unpublish: adminProcedure");
+    expect(router).toContain('status: "answered"');
+    expect(router).toContain("action: \"unpublished\"");
+    expect(router).toContain("retainedPrivateRecord: true");
+  });
 });

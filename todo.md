@@ -2536,3 +2536,4 @@
 - [x] Corriger le chevauchement et la lisibilité des onglets de navigation de l’espace administrateur
 - [x] Vérifier et restaurer si nécessaire la visibilité de l’onglet Questions santé dans l’administration
 - [x] Diagnostiquer et corriger le bouton Valider, envoyer et publier des réponses Questions santé
+- [x] Ajouter un bouton de dépublication sécurisée dans l'espace administrateur Questions santé
