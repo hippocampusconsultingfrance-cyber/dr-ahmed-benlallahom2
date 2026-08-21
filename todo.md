@@ -2513,6 +2513,6 @@
 - [x] Qualifier puis mettre à jour les dépendances de production signalées à risque élevé par l’audit automatisé
 - [x] Corriger le conflit de version pnpm qui empêche le workflow GitHub CI de démarrer
 - [x] Retirer la version pnpm du workflow CI et laisser l’action utiliser la déclaration packageManager du projet
-- [ ] Distinguer dans la CI GitHub les tests unitaires reproductibles des recettes dépendantes de secrets, d’intégrations externes ou de données de production
-- [ ] Corriger les prérequis de la CI GitHub sans injecter de secrets réels ni créer de faux avis, données candidates ou données métier
-- [ ] Documenter l’évaluation du rapport externe sur HDS, uploads, contrôle serveur, messageries et IA de recrutement
+- [x] Distinguer dans la CI GitHub les tests unitaires reproductibles des recettes dépendantes de secrets, d’intégrations externes ou de données de production
+- [x] Corriger les prérequis de la CI GitHub sans injecter de secrets réels ni créer de faux avis, données candidates ou données métier
+- [x] Documenter l’évaluation du rapport externe sur HDS, uploads, contrôle serveur, messageries et IA de recrutement
