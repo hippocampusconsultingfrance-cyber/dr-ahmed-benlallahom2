@@ -2527,3 +2527,4 @@
 - [x] Ajouter la page publique valorisant le service, le formulaire privé et la bibliothèque de questions-réponses publiées
 - [x] Ajouter l’assistance IA rédactionnelle côté serveur, sans réponse ni envoi automatique sans validation médicale
 - [x] Ajouter le tableau de bord administrateur de traitement, les tests et la documentation des limites médicales
+- [x] Rendre l’accès public au service de questions médicales immédiatement visible dans la navigation et vérifier la route publiée

@@ -38,6 +38,7 @@ export default function Navigation() {
   const currentLang = languages.find((l) => l.code === language);
   const recruitmentLabel = { fr: "Recrutement", en: "Recruitment", de: "Recruiting", zh: "招聘" }[language];
   const employersLabel = { fr: "Employeurs", en: "Employers", de: "Arbeitgeber", zh: "雇主专区" }[language];
+  const medicalQuestionsLabel = { fr: "Questions santé", en: "Health questions", de: "Gesundheitsfragen", zh: "健康问答" }[language];
 
   const handleLanguageChange = (code: string) => {
     if (code !== language) {
@@ -166,6 +167,7 @@ export default function Navigation() {
           ))}
           <a href="/recruitment" className="nav-link inline-flex h-10 items-center whitespace-nowrap text-sm font-medium text-muted-foreground hover:text-foreground transition-colors duration-200 relative after:absolute after:bottom-[2px] after:left-0 after:w-0 after:h-[2px] after:bg-primary after:transition-all hover:after:w-full">{recruitmentLabel}</a>
           <a href="/employers" className="nav-link inline-flex h-10 items-center whitespace-nowrap text-sm font-medium text-muted-foreground hover:text-foreground transition-colors duration-200 relative after:absolute after:bottom-[2px] after:left-0 after:w-0 after:h-[2px] after:bg-primary after:transition-all hover:after:w-full">{employersLabel}</a>
+          <a href="/questions-anesthesie" className="nav-link inline-flex h-10 items-center whitespace-nowrap text-sm font-medium text-primary transition-colors duration-200 hover:text-foreground relative after:absolute after:bottom-[2px] after:left-0 after:h-[2px] after:w-full after:bg-primary after:transition-all hover:after:bg-foreground">{medicalQuestionsLabel}</a>
           <button onClick={() => scrollTo("contact")} className="nav-link inline-flex h-10 items-center whitespace-nowrap text-sm font-medium text-muted-foreground transition-colors duration-200 relative after:absolute after:bottom-[2px] after:left-0 after:h-[2px] after:w-0 after:bg-primary after:transition-all hover:text-foreground hover:after:w-full">{content.nav.contact}</button>
         </nav>
 
@@ -290,6 +292,7 @@ export default function Navigation() {
             ))}
             <a href="/recruitment" onClick={() => setMobileOpen(false)} className="nav-mobile-link text-left text-lg font-medium text-foreground py-2 border-b border-border/20">{recruitmentLabel}</a>
             <a href="/employers" onClick={() => setMobileOpen(false)} className="nav-mobile-link text-left text-lg font-medium text-foreground py-2 border-b border-border/20">{employersLabel}</a>
+            <a href="/questions-anesthesie" onClick={() => setMobileOpen(false)} className="nav-mobile-link text-left text-lg font-medium text-primary py-2 border-b border-border/20">{medicalQuestionsLabel}</a>
             <button onClick={() => scrollTo("contact")} className="nav-mobile-link text-left text-lg font-medium text-foreground py-2 border-b border-border/20">{content.nav.contact}</button>
             <a href="/search" onClick={() => setMobileOpen(false)} className="nav-mobile-link flex items-center gap-2 text-left text-lg font-medium text-foreground py-2 border-b border-border/20"><Search className="h-4 w-4" />{language === "fr" ? "Rechercher" : language === "en" ? "Search" : language === "de" ? "Suche" : "搜索"}</a>
             {toggleHighReadability && readabilityCopy && <button onClick={toggleHighReadability} className="nav-mobile-link flex items-center gap-2 text-left text-lg font-medium text-foreground py-2 border-b border-border/20" aria-pressed={highReadability}><Accessibility className="h-4 w-4" />{readabilityCopy.label}</button>}
