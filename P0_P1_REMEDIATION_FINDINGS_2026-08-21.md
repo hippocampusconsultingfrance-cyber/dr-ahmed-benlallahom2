@@ -31,3 +31,7 @@
 ## Validation technique
 
 La migration non destructive a été appliquée en trois opérations compatibles avec TiDB : extension de l’énumération, ajout de `hold_expires_at`, puis création de l’index composite. La validation complète a réussi : **161 fichiers de test, 335 tests réussis, 2 ignorés**, TypeScript valide et build de production réussi.
+
+## Activation en production
+
+La tâche planifiée `appointment-hold-cleanup` est active en production depuis le 21 août 2026. Son identifiant est `cTXxodMiJ5mAQYfWfkoonH`; elle appelle `POST /api/scheduled/appointment-hold-cleanup` toutes les cinq minutes. Le handler est authentifié, idempotent et ne modifie que les maintiens impayés expirés.

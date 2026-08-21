@@ -2517,8 +2517,8 @@
 - [x] Corriger les prérequis de la CI GitHub sans injecter de secrets réels ni créer de faux avis, données candidates ou données métier
 - [x] Documenter l’évaluation du rapport externe sur HDS, uploads, contrôle serveur, messageries et IA de recrutement
 - [x] Éliminer le blocage de finalisation du job CI GitHub en retirant les services et migrations non requis par le profil de tests reproductible
-- [ ] Empêcher le blocage de créneaux avant paiement avec un état temporaire expirant et un flux Stripe atomique
-- [ ] Ajouter Turnstile, limitation persistante, déduplication de fichier et garde-fous de file sur la candidature publique
-- [ ] Générer les URLs d’invitation candidat depuis une origine publique serveur fixe, jamais depuis Origin, Referer ou Host
-- [ ] Corriger la gestion des promotions Stripe pour éviter les paiements encaissés sans confirmation de rendez-vous
-- [ ] Réduire les limites JSON et URL-encoded globales tout en préservant les uploads Multer dédiés
+- [x] Empêcher le blocage de créneaux avant paiement avec un état temporaire expirant et un flux Stripe atomique
+- [x] Ajouter Turnstile, limitation persistante, déduplication de fichier et garde-fous de file sur la candidature publique
+- [x] Générer les URLs d’invitation candidat depuis une origine publique serveur fixe, jamais depuis Origin, Referer ou Host
+- [x] Corriger la gestion des promotions Stripe pour éviter les paiements encaissés sans confirmation de rendez-vous
+- [x] Réduire les limites JSON et URL-encoded globales tout en préservant les uploads Multer dédiés
