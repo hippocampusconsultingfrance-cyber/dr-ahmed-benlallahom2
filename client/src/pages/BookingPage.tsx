@@ -349,22 +349,6 @@ export default function BookingPage() {
 
   const createAppointment = trpc.appointments.create.useMutation();
 
-  const createCheckoutSession = trpc.appointments.createCheckoutSession.useMutation({
-    onSuccess: (data) => {
-      if (data.checkoutUrl) {
-        // Use window.location.assign instead of window.open to avoid popup blocking
-        window.location.assign(data.checkoutUrl);
-      } else {
-        paymentSubmissionRef.current = false;
-        alert(content.paymentError);
-      }
-    },
-    onError: (error) => {
-      paymentSubmissionRef.current = false;
-      alert(content.paymentError);
-      console.error("Checkout session error:", error);
-    },
-  });
 
   const synchronizeDateTime = (nextDateText: string, nextTimeText: string) => {
     setDateText(nextDateText);
@@ -420,13 +404,11 @@ export default function BookingPage() {
         requestDetails: formData.details,
       });
 
-      if (appointmentResult.success) {
-        await createCheckoutSession.mutateAsync({
-          trackingId: appointmentResult.trackingId,
-          finalPrice: appointmentResult.finalPrice,
-          customerEmail: formData.email,
-          customerName: formData.name,
-        });
+      if (appointmentResult.success && appointmentResult.checkoutUrl) {
+        window.location.assign(appointmentResult.checkoutUrl);
+      } else {
+        paymentSubmissionRef.current = false;
+        alert(content.paymentError);
       }
     } catch (error) {
       paymentSubmissionRef.current = false;
@@ -446,7 +428,7 @@ export default function BookingPage() {
     setTrackingId(null);
   };
 
-  const isLoading = createAppointment.isPending || createCheckoutSession.isPending;
+  const isLoading = createAppointment.isPending;
 
   // Progress steps
   const steps = [

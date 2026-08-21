@@ -18,7 +18,7 @@ import { notifyOwner } from "./notification";
 import { eq, sql } from "drizzle-orm";
 import { validateCvFile } from "../recruitmentFileValidation";
 import { getDb } from "../db";
-import { candidateDocumentAuditLogs, candidateDocumentProcessingJobs, candidateDocuments, cvApplications, recruitmentCampaignRecipients, recruitmentEmailEvents } from "../../drizzle/schema";
+import { candidateDocumentAuditLogs, candidateDocumentProcessingJobs, candidateDocuments, cvApplications, cvProcessingJobs, recruitmentCampaignRecipients, recruitmentEmailEvents } from "../../drizzle/schema";
 import { CANDIDATE_DOCUMENT_MAX_BYTES, candidateDocumentMimeTypes, safeCandidateDocumentName, validateCandidateDocument } from "../candidateDocumentValidation";
 import { createCandidateInvitationToken } from "../candidateAuth";
 
@@ -48,17 +48,7 @@ const RECRUITMENT_ALLOWED_MIME_TYPES = new Set([
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 ]);
 
-function getRecruitmentPortalOrigin(req: express.Request): string {
-  const candidate = req.get("origin") || req.get("referer") || "";
-  try {
-    const url = new URL(candidate);
-    const host = url.hostname.toLowerCase();
-    const trusted = host === "drahmedbenlallahom.com" || host === "www.drahmedbenlallahom.com" || host === "drbenlallah-esc8d3hd.manus.space" || host === "localhost" || host === "127.0.0.1" || host.endsWith(".manus.computer");
-    return trusted ? url.origin : "https://drahmedbenlallahom.com";
-  } catch {
-    return "https://drahmedbenlallahom.com";
-  }
-}
+const PUBLIC_APP_ORIGIN = process.env.PUBLIC_APP_ORIGIN || "https://drahmedbenlallahom.com";
 
 const recruitmentUpload = multer({
   storage: multer.memoryStorage(),
@@ -103,6 +93,7 @@ const candidateDocumentUpload = multer({
           gdprConsent: z.literal("1"),
           marketingConsent: z.enum(["0", "1"]).default("0"),
           website: z.string().max(200).optional().default(""),
+          turnstileToken: z.string().min(20).max(4096),
         });
 
 function parseListField(value: unknown): string[] {
@@ -213,6 +204,8 @@ async function startServer() {
           .update(appointments)
           .set({
             paymentStatus: "completed",
+            appointmentStatus: "confirmed",
+            holdExpiresAt: null,
             stripePaymentIntentId: session.payment_intent as string,
           })
           .where(eq(appointments.trackingId, trackingId));
@@ -223,26 +216,22 @@ async function startServer() {
         const session = event.data.object as any;
         const trackingId = session.metadata?.trackingId;
         if (trackingId) {
-          try {
-            const { drizzle } = await import("drizzle-orm/mysql2");
-            const { appointments } = await import("../../drizzle/schema");
-            const { and, eq } = await import("drizzle-orm");
-            const { getExpiredAppointmentUpdate } = await import("../stripeLifecycle");
-            const db = drizzle(process.env.DATABASE_URL!);
-            await db
-              .update(appointments)
-              .set(getExpiredAppointmentUpdate())
-              .where(
-                and(
-                  eq(appointments.trackingId, trackingId),
-                  eq(appointments.stripeSessionId, session.id),
-                  eq(appointments.paymentStatus, "pending"),
-                  eq(appointments.appointmentStatus, "confirmed")
-                )
-              );
-          } catch (error) {
-            console.error("Failed to release expired appointment:", error);
-          }
+          const { drizzle } = await import("drizzle-orm/mysql2");
+          const { appointments } = await import("../../drizzle/schema");
+          const { and, eq } = await import("drizzle-orm");
+          const { getExpiredAppointmentHoldUpdate } = await import("../appointmentHolds");
+          const db = drizzle(process.env.DATABASE_URL!);
+          await db
+            .update(appointments)
+            .set(getExpiredAppointmentHoldUpdate())
+            .where(
+              and(
+                eq(appointments.trackingId, trackingId),
+                eq(appointments.stripeSessionId, session.id),
+                eq(appointments.paymentStatus, "pending"),
+                eq(appointments.appointmentStatus, "held")
+              )
+            );
         }
       }
       
@@ -327,8 +316,10 @@ async function startServer() {
   });
   
   // Configure body parser with larger size limit for file uploads (after Stripe webhook)
-  app.use(express.json({ limit: "50mb" }));
-  app.use(express.urlencoded({ limit: "50mb", extended: true }));
+  // Binary uploads have dedicated Multer routes and limits. Keep generic bodies
+  // small to prevent an arbitrary JSON/form payload from exhausting memory.
+  app.use(express.json({ limit: "1mb" }));
+  app.use(express.urlencoded({ limit: "1mb", extended: true }));
 
   const clientBriefSchema = z.object({
     organizationName: z.string().trim().min(1).max(180),
@@ -426,6 +417,21 @@ async function startServer() {
           return;
         }
 
+        const { verifyCandidateTurnstile } = await import("../candidateTurnstile");
+        const { enforcePersistentRateLimit, hashSecurityValue, logSecurityEvent } = await import("../candidateSecurity");
+        const clientIp = req.ip || "unknown";
+        const ipHash = hashSecurityValue(clientIp);
+        if (process.env.NODE_ENV !== "test" && process.env.VITEST !== "true") {
+          try {
+            await enforcePersistentRateLimit({ action: "public_recruitment_apply", subject: `${clientIp}:${parsed.data.email}`, maxAttempts: 3, windowMs: 24 * 60 * 60 * 1000, blockMs: 24 * 60 * 60 * 1000 });
+            await verifyCandidateTurnstile({ token: parsed.data.turnstileToken, remoteIp: clientIp });
+          } catch {
+            await logSecurityEvent({ actorKind: "anonymous", actorReference: parsed.data.email, category: "public_recruitment_apply_protection", outcome: "blocked", severity: "warning", ipHash });
+            res.status(400).json({ error: "La vérification de sécurité doit être renouvelée avant l’envoi." });
+            return;
+          }
+        }
+
         const trackingId = `CV${Math.random().toString(36).slice(2, 10).toUpperCase()}${Date.now().toString(36).slice(-8).toUpperCase()}`;
         const originalName = safeFileName(file.originalname);
         let fileValidation;
@@ -441,6 +447,25 @@ async function startServer() {
           res.status(400).json({ error: "Le contenu du CV ne correspond pas à un document PDF, DOC ou DOCX valide.", code });
           return;
         }
+        const db = await (await import("../db")).getDb();
+        if (!db) {
+          res.status(503).json({ error: "Le service de candidature est temporairement indisponible." });
+          return;
+        }
+
+        const [duplicate] = await db.select({ id: cvApplications.id }).from(cvApplications).where(eq(cvApplications.fileChecksum, fileValidation.checksum)).limit(1);
+        if (duplicate) {
+          await logSecurityEvent({ actorKind: "anonymous", actorReference: parsed.data.email, category: "public_recruitment_apply_duplicate_file", outcome: "blocked", severity: "info", ipHash });
+          res.status(202).json({ success: true, duplicate: true });
+          return;
+        }
+        const queuedJobs = await db.select({ id: cvProcessingJobs.id }).from(cvProcessingJobs).where(sql`${cvProcessingJobs.status} IN ('queued', 'retry', 'running')`).limit(201);
+        if (queuedJobs.length >= 200) {
+          await logSecurityEvent({ actorKind: "system", category: "public_recruitment_apply_queue_backpressure", outcome: "blocked", severity: "high", ipHash });
+          res.status(503).json({ error: "Le service de candidature reçoit actuellement un volume élevé. Veuillez réessayer ultérieurement." });
+          return;
+        }
+
         const storageResult = await storagePut(
           `recruitment/quarantine/${trackingId}-${originalName}`,
           file.buffer,
@@ -448,12 +473,6 @@ async function startServer() {
         );
         const retentionUntil = new Date();
         retentionUntil.setFullYear(retentionUntil.getFullYear() + 2);
-
-        const db = await (await import("../db")).getDb();
-        if (!db) {
-          res.status(503).json({ error: "Le service de candidature est temporairement indisponible." });
-          return;
-        }
 
         const insertResult = await db.execute(sql`INSERT INTO cv_applications (
           tracking_id, first_name, last_name, email, phone, specialty, diploma_country,
@@ -475,7 +494,7 @@ async function startServer() {
 
         const candidateName = `${parsed.data.firstName} ${parsed.data.lastName}`;
         const candidatePortalInviteUrl = insertedId
-          ? `${getRecruitmentPortalOrigin(req)}/candidate/access?invite=${encodeURIComponent(createCandidateInvitationToken(Number(insertedId)))}`
+          ? `${PUBLIC_APP_ORIGIN}/candidate/access?invite=${encodeURIComponent(createCandidateInvitationToken(Number(insertedId)))}`
           : undefined;
         await Promise.allSettled([
           (async () => {
@@ -808,6 +827,20 @@ async function startServer() {
       return res.json({ ok: true, taskUid: user.taskUid, ...result });
     } catch (error: any) {
       console.error("[AppointmentFulfillment] Handler error:", error);
+      return res.status(500).json({ error: error.message, timestamp: new Date().toISOString() });
+    }
+  });
+
+  app.post("/api/scheduled/appointment-hold-cleanup", async (req, res) => {
+    try {
+      const { sdk: sdkInstance } = await import("./sdk");
+      const user = await sdkInstance.authenticateRequest(req);
+      if (!user.isCron || !user.taskUid) return res.status(403).json({ error: "cron-only" });
+      const { releaseExpiredAppointmentHolds } = await import("../appointmentHolds");
+      const result = await releaseExpiredAppointmentHolds();
+      return res.json({ ok: true, taskUid: user.taskUid, ...result });
+    } catch (error: any) {
+      console.error("[AppointmentHoldCleanup] Handler error:", error);
       return res.status(500).json({ error: error.message, timestamp: new Date().toISOString() });
     }
   });

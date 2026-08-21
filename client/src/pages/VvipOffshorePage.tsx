@@ -7,6 +7,7 @@ import Footer from "@/components/Footer";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { getWorldwideCountries } from "./RecruitmentPage";
 import { resolveCountryForSubmission } from "@/lib/countrySubmission";
+import { TurnstileWidget } from "@/components/TurnstileWidget";
 
 const copy = {
   fr: {
@@ -361,6 +362,7 @@ export default function VvipOffshorePage() {
   const [validationAttempted, setValidationAttempted] = useState(false);
   const [invalidFields, setInvalidFields] = useState<Set<string>>(() => new Set());
   const [trackingId, setTrackingId] = useState("");
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const diplomaCountries = useMemo(() => getWorldwideCountries(lang), [lang]);
   const environmentOptions = [
@@ -392,6 +394,7 @@ export default function VvipOffshorePage() {
     if (!submittedDiplomaCountry) nextInvalidFields.add("diplomaCountry");
     if (!file || !isAcceptedVvipCvFile(file)) nextInvalidFields.add("cv");
     if (!form.gdprConsent) nextInvalidFields.add("gdprConsent");
+    if (!turnstileToken) nextInvalidFields.add("turnstile");
     if (nextInvalidFields.size) {
       setInvalidFields(nextInvalidFields);
       setStatus("error");
@@ -400,6 +403,7 @@ export default function VvipOffshorePage() {
     }
     setInvalidFields(new Set());
     if (!file) return;
+    if (!turnstileToken) return;
 
     setStatus("sending");
     try {
@@ -420,6 +424,7 @@ export default function VvipOffshorePage() {
       body.append("gdprConsent", "1");
       body.append("marketingConsent", "0");
       body.append("website", form.website);
+      body.append("turnstileToken", turnstileToken);
 
       const res = await fetch("/api/recruitment/apply", {
         method: "POST",
@@ -429,6 +434,7 @@ export default function VvipOffshorePage() {
       if (!res.ok) throw new Error(payload.error || t.genericError);
 
       setTrackingId(payload.trackingId || "VVIP-OK");
+      setTurnstileToken(null);
       setValidationAttempted(false);
       setStatus("success");
     } catch (err) {
@@ -500,7 +506,7 @@ export default function VvipOffshorePage() {
                     </ul>
                   </section>
 
-                  <form onSubmit={handleSubmit} className="mt-6 space-y-5" noValidate>
+                    <form onSubmit={handleSubmit} className="mt-6 space-y-5" noValidate>
                     <div className="grid gap-4 sm:grid-cols-2">
                       <label className="block w-full space-y-1.5 text-sm text-foreground">
                         <span className="block font-medium">{t.firstName} *</span>
@@ -604,7 +610,8 @@ export default function VvipOffshorePage() {
                     <button type="submit" disabled={status === "sending"} className="cta-primary w-full justify-center">
                       {status === "sending" ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />{t.sending}</> : t.submit}
                     </button>
-                  </form>
+                      <div className={isInvalid("turnstile") ? "rounded-xl border border-destructive/50 p-2" : ""}><TurnstileWidget onToken={setTurnstileToken} /></div>
+                    </form>
                 </>
               )}
             </div>

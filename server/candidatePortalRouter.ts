@@ -39,14 +39,8 @@ function getRequestProtocol(req: { protocol?: string; headers: Record<string, un
   return req.protocol === "https" || forwardedText === "https";
 }
 
-function portalOrigin(req: { protocol?: string; headers: Record<string, unknown> }): string {
-  const forwardedHost = req.headers["x-forwarded-host"];
-  const host = (Array.isArray(forwardedHost) ? forwardedHost[0] : forwardedHost) || req.headers.host;
-  const textHost = typeof host === "string" ? host.split(",")[0].trim() : "";
-  if (textHost && /^(?:drahmedbenlallahom\.com|www\.drahmedbenlallahom\.com|drbenlallah-esc8d3hd\.manus\.space|localhost(?::\d+)?|127\.0\.0\.1(?::\d+)?)$/i.test(textHost)) {
-    return `${getRequestProtocol(req) ? "https" : "http"}://${textHost}`;
-  }
-  return "https://drahmedbenlallahom.com";
+function portalOrigin(): string {
+  return process.env.PUBLIC_APP_ORIGIN || "https://drahmedbenlallahom.com";
 }
 
 function databaseOrThrow(db: Awaited<ReturnType<typeof getDb>>) {
@@ -216,7 +210,7 @@ export const candidatePortalRouter = router({
       }
 
       if (candidateId) {
-        const verifyUrl = `${portalOrigin(ctx.req)}/candidate/verify?email=${encodeURIComponent(email)}&token=${encodeURIComponent(verificationToken)}`;
+        const verifyUrl = `${portalOrigin()}/candidate/verify?email=${encodeURIComponent(email)}&token=${encodeURIComponent(verificationToken)}`;
         await sendCandidatePortalAccessEmail({ to: email, firstName: input.firstName, kind: "verify", actionUrl: verifyUrl }).catch((error: unknown) => console.error("candidate_verification_email_failed", error));
         await logSecurityEvent({ actorKind: "candidate", actorReference: String(candidateId), category: "candidate_account_created", outcome: "allowed", ipHash });
       }
@@ -323,7 +317,7 @@ export const candidatePortalRouter = router({
         passwordResetTokenHash: hashCandidateToken(token, "reset"),
         passwordResetExpiresAt: new Date(Date.now() + CANDIDATE_TOKEN_MAX_AGE_MS),
       }).where(eq(candidateAccounts.id, candidate.id));
-      const resetUrl = `${portalOrigin(ctx.req)}/candidate/reset-password?email=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}`;
+      const resetUrl = `${portalOrigin()}/candidate/reset-password?email=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}`;
       await sendCandidatePortalAccessEmail({ to: email, firstName: candidate.firstName ?? "", kind: "reset", actionUrl: resetUrl }).catch((error: unknown) => console.error("candidate_reset_email_failed", error));
       await logSecurityEvent({ actorKind: "candidate", actorReference: String(candidate.id), category: "candidate_password_reset_requested", outcome: "allowed", ipHash });
     }

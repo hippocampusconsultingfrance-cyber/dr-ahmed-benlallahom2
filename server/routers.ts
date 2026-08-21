@@ -35,14 +35,8 @@ import { googleDriveExportStatus } from "./googleDriveExport";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "");
 
-const DEFAULT_PUBLIC_ORIGIN = "https://drahmedbenlallahom.com";
-const TRUSTED_HOSTS = new Set([
-  "drahmedbenlallahom.com",
-  "www.drahmedbenlallahom.com",
-  "drbenlallah-esc8d3hd.manus.space",
-  "localhost",
-  "127.0.0.1",
-]);
+// Secret-bearing URLs must never be assembled from browser-controlled headers.
+const DEFAULT_PUBLIC_ORIGIN = process.env.PUBLIC_APP_ORIGIN || "https://drahmedbenlallahom.com";
 
 const PARIS_TIME_ZONE = "Europe/Paris";
 const CV_APPLICATION_STATUSES = ["new", "reviewing", "shortlisted", "placed", "rejected", "archived"] as const;
@@ -239,23 +233,8 @@ export function isWithinAvailability(
   });
 }
 
-function getSafeCheckoutOrigin(req: { headers: Record<string, string | string[] | undefined> }): string {
-  const originHeader = req.headers.origin;
-  const refererHeader = req.headers.referer;
-  const candidate = typeof originHeader === "string"
-    ? originHeader
-    : typeof refererHeader === "string"
-      ? refererHeader
-      : "";
-
-  try {
-    const url = new URL(candidate);
-    const host = url.hostname.toLowerCase();
-    const trusted = TRUSTED_HOSTS.has(host) || host.endsWith(".manus.computer");
-    return trusted ? url.origin : DEFAULT_PUBLIC_ORIGIN;
-  } catch {
-    return DEFAULT_PUBLIC_ORIGIN;
-  }
+function getSafeCheckoutOrigin(): string {
+  return DEFAULT_PUBLIC_ORIGIN;
 }
 
 export const appRouter = router({
@@ -497,7 +476,7 @@ export const appRouter = router({
         const isNightRate = isNightRateForParis(date);
         const finalPrice = isNightRate ? "150.00" : "100.00";
 
-        const trackingId = `APT${Math.random().toString(36).substring(2, 10).toUpperCase()}${Date.now().toString(36).slice(-4).toUpperCase()}`;
+        const trackingId = `APT${randomUUID().replace(/-/g, "").slice(0, 12).toUpperCase()}`;
 
         const db = await getDb();
         if (!db) {
@@ -505,6 +484,8 @@ export const appRouter = router({
         }
 
         try {
+          const { getAppointmentHoldExpiry, getExpiredAppointmentHoldUpdate, releaseExpiredAppointmentHolds } = await import("./appointmentHolds");
+          await releaseExpiredAppointmentHolds();
           const dateKey = parisDateKey(date);
           const blockedDate = await db
             .select({ id: blockedDates.id })
@@ -533,8 +514,11 @@ export const appRouter = router({
               and(
                 sql`appointment_date < ${appointmentEnd}`,
                 sql`DATE_ADD(appointment_date, INTERVAL duration MINUTE) > ${date}`,
-                sql`payment_status IN ('pending', 'completed')`,
-                sql`appointment_status IN ('confirmed', 'completed')`
+                sql`(
+                  (payment_status = 'pending' AND appointment_status = 'held' AND hold_expires_at > NOW())
+                  OR (payment_status = 'pending' AND appointment_status = 'confirmed')
+                  OR (payment_status = 'completed' AND appointment_status IN ('confirmed', 'completed'))
+                )`
               )
             )
             .limit(1);
@@ -545,9 +529,29 @@ export const appRouter = router({
 
           const appointmentDateFormatted = date.toISOString().slice(0, 19).replace('T', ' ');
           const slotKey = date.toISOString();
+          const holdExpiresAt = getAppointmentHoldExpiry();
           await db.execute(
-            sql`INSERT INTO appointments (tracking_id, customer_name, customer_email, customer_phone, consultation_type, request_details, appointment_date, slot_key, duration, base_price, final_price, is_night_rate, payment_status, appointment_status) VALUES (${trackingId}, ${input.customerName}, ${input.customerEmail}, ${input.customerPhone}, ${'health_advice'}, ${input.requestDetails}, ${appointmentDateFormatted}, ${slotKey}, ${30}, ${basePrice}, ${finalPrice}, ${isNightRate ? 1 : 0}, ${'pending'}, ${'confirmed'})`
+            sql`INSERT INTO appointments (tracking_id, customer_name, customer_email, customer_phone, consultation_type, request_details, appointment_date, slot_key, duration, base_price, final_price, is_night_rate, payment_status, appointment_status, hold_expires_at) VALUES (${trackingId}, ${input.customerName}, ${input.customerEmail}, ${input.customerPhone}, ${'health_advice'}, ${input.requestDetails}, ${appointmentDateFormatted}, ${slotKey}, ${30}, ${basePrice}, ${finalPrice}, ${isNightRate ? 1 : 0}, ${'pending'}, ${'held'}, ${holdExpiresAt})`
           );
+
+          try {
+            const session = await stripe.checkout.sessions.create({
+              payment_method_types: ["card"],
+              line_items: [{ price_data: { currency: "eur", product_data: { name: "Health Consultation - 30 minutes", description: `Appointment: ${trackingId}` }, unit_amount: Math.round(Number(finalPrice) * 100) }, quantity: 1 }],
+              mode: "payment",
+              customer_email: input.customerEmail,
+              metadata: { trackingId, customerName: input.customerName },
+              expires_at: Math.floor(holdExpiresAt.getTime() / 1000),
+              success_url: `${getSafeCheckoutOrigin()}/booking/confirmation?status=success&trackingId=${encodeURIComponent(trackingId)}`,
+              cancel_url: `${getSafeCheckoutOrigin()}/booking/confirmation?status=canceled&session_id={CHECKOUT_SESSION_ID}`,
+            });
+            if (!session.id || !session.url) throw new Error("stripe_checkout_session_unavailable");
+            await db.update(appointments).set({ stripeSessionId: session.id }).where(and(eq(appointments.trackingId, trackingId), eq(appointments.appointmentStatus, "held")));
+            return { success: true, trackingId, finalPrice: parseFloat(finalPrice), checkoutUrl: session.url };
+          } catch (stripeError) {
+            await db.update(appointments).set(getExpiredAppointmentHoldUpdate()).where(and(eq(appointments.trackingId, trackingId), eq(appointments.paymentStatus, "pending"), eq(appointments.appointmentStatus, "held")));
+            throw stripeError;
+          }
         } catch (dbError) {
           console.error("Database insert error:", dbError);
           if (dbError instanceof TRPCError) throw dbError;
@@ -557,14 +561,7 @@ export const appRouter = router({
           throw new Error(`Failed to create appointment: ${dbError instanceof Error ? dbError.message : "Unknown error"}`);
         }
 
-        // Notifications will be sent AFTER payment confirmation via webhook
-        // (see webhook handler in server/_core/index.ts)
-
-        return {
-          success: true,
-          trackingId,
-          finalPrice: parseFloat(finalPrice),
-        };
+        // Unreachable: the successful branch returns a Stripe Checkout URL.
       }),
 
     createCheckoutSession: publicProcedure
@@ -576,7 +573,7 @@ export const appRouter = router({
           customerName: z.string(),
         })
       )
-      .mutation(async ({ input, ctx }) => {
+      .mutation(async ({ input }) => {
         try {
           const db = await getDb();
           if (!db) throw new Error("Database connection failed");
@@ -589,6 +586,8 @@ export const appRouter = router({
               finalPrice: appointments.finalPrice,
               paymentStatus: appointments.paymentStatus,
               appointmentStatus: appointments.appointmentStatus,
+              stripeSessionId: appointments.stripeSessionId,
+              holdExpiresAt: appointments.holdExpiresAt,
             })
             .from(appointments)
             .where(eq(appointments.trackingId, input.trackingId))
@@ -598,7 +597,7 @@ export const appRouter = router({
           if (!appointment) {
             throw new TRPCError({ code: "NOT_FOUND", message: "Rendez-vous introuvable" });
           }
-          if (appointment.paymentStatus !== "pending" || appointment.appointmentStatus !== "confirmed") {
+          if (appointment.paymentStatus !== "pending" || appointment.appointmentStatus !== "held" || !appointment.holdExpiresAt || appointment.holdExpiresAt <= new Date()) {
             throw new TRPCError({ code: "CONFLICT", message: "Ce rendez-vous ne peut plus être payé" });
           }
 
@@ -608,6 +607,12 @@ export const appRouter = router({
           }
           if (appointment.customerEmail !== input.customerEmail || appointment.customerName !== input.customerName) {
             throw new TRPCError({ code: "BAD_REQUEST", message: "Les informations du paiement ne correspondent pas au rendez-vous" });
+          }
+
+          if (appointment.stripeSessionId) {
+            const existingSession = await stripe.checkout.sessions.retrieve(appointment.stripeSessionId);
+            if (existingSession.status === "open" && existingSession.url) return { success: true, checkoutUrl: existingSession.url };
+            throw new TRPCError({ code: "CONFLICT", message: "La session de paiement a expiré" });
           }
 
           const amountInCents = Math.round(expectedPrice * 100);
@@ -628,21 +633,21 @@ export const appRouter = router({
               },
             ],
             mode: "payment",
-            allow_promotion_codes: true,
             customer_email: input.customerEmail,
             metadata: {
               trackingId: input.trackingId,
               customerName: input.customerName,
             },
-            success_url: `${getSafeCheckoutOrigin(ctx.req)}/booking/confirmation?status=success&trackingId=${encodeURIComponent(input.trackingId)}`,
-            cancel_url: `${getSafeCheckoutOrigin(ctx.req)}/booking/confirmation?status=canceled&session_id={CHECKOUT_SESSION_ID}`,
+            expires_at: Math.floor(appointment.holdExpiresAt.getTime() / 1000),
+            success_url: `${getSafeCheckoutOrigin()}/booking/confirmation?status=success&trackingId=${encodeURIComponent(input.trackingId)}`,
+            cancel_url: `${getSafeCheckoutOrigin()}/booking/confirmation?status=canceled&session_id={CHECKOUT_SESSION_ID}`,
           });
 
           if (session.id) {
             await db
               .update(appointments)
               .set({ stripeSessionId: session.id })
-              .where(eq(appointments.trackingId, input.trackingId));
+              .where(and(eq(appointments.trackingId, input.trackingId), eq(appointments.appointmentStatus, "held")));
           }
 
           return {
@@ -775,8 +780,11 @@ export const appRouter = router({
             and(
               gte(appointments.appointmentDate, start),
               lt(appointments.appointmentDate, end),
-              sql`payment_status IN ('pending', 'completed')`,
-              sql`appointment_status IN ('confirmed', 'completed')`
+              sql`(
+                (payment_status = 'pending' AND appointment_status = 'held' AND hold_expires_at > NOW())
+                OR (payment_status = 'pending' AND appointment_status = 'confirmed')
+                OR (payment_status = 'completed' AND appointment_status IN ('confirmed', 'completed'))
+              )`
             )
           );
 
@@ -1308,7 +1316,7 @@ export const appRouter = router({
             .limit(1))[0];
           if (existingAccount?.emailVerifiedAt) throw new TRPCError({ code: "CONFLICT", message: "Un espace candidat actif existe déjà pour cette adresse email." });
           const invitationToken = createCandidateInvitationToken(application.id);
-          const invitationUrl = `${getSafeCheckoutOrigin(ctx.req)}/candidate/access?invite=${encodeURIComponent(invitationToken)}`;
+          const invitationUrl = `${getSafeCheckoutOrigin()}/candidate/access?invite=${encodeURIComponent(invitationToken)}`;
           const result = await sendCandidatePortalAccessEmail({ to: application.email, firstName: application.firstName, kind: "invite", actionUrl: invitationUrl });
           await logRecruitmentAction({ applicationId: application.id, adminOpenId: ctx.user.openId, action: "email", metadata: { template: "candidate_portal_invitation", resendId: result.id, trackingId: application.trackingId } });
           return { success: true };

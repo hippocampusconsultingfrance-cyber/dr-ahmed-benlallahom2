@@ -110,7 +110,8 @@ export const appointments = mysqlTable("appointments", {
   stripePaymentIntentId: varchar("stripe_payment_intent_id", { length: 255 }), // Stripe Payment Intent ID
   stripeSessionId: varchar("stripe_session_id", { length: 255 }), // Stripe Checkout Session ID
   paymentStatus: mysqlEnum("payment_status", ["pending", "completed", "failed", "refunded"]).default("pending").notNull(),
-  appointmentStatus: mysqlEnum("appointment_status", ["confirmed", "cancelled", "completed", "no_show"]).default("confirmed").notNull(),
+  appointmentStatus: mysqlEnum("appointment_status", ["held", "confirmed", "cancelled", "completed", "no_show"]).default("held").notNull(),
+  holdExpiresAt: timestamp("hold_expires_at"), // Temporary unpaid booking lock; cleared once paid or released.
   meetLink: varchar("meet_link", { length: 500 }), // Google Meet link
   cancellationReason: text("cancellation_reason"), // Reason for cancellation if applicable
   cancelledAt: timestamp("cancelled_at"), // Timestamp of cancellation
@@ -123,6 +124,7 @@ export const appointments = mysqlTable("appointments", {
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 }, table => ({
   activeSlotUnique: uniqueIndex("appointments_active_slot_unique").on(table.slotKey),
+  holdExpiry: index("appointments_hold_expiry_idx").on(table.appointmentStatus, table.paymentStatus, table.holdExpiresAt),
 }));
 
 export type Appointment = typeof appointments.$inferSelect;

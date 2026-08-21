@@ -6,6 +6,7 @@ import Navigation from "@/components/Navigation";
 import Footer from "@/components/Footer";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { resolveCountryForSubmission } from "@/lib/countrySubmission";
+import { TurnstileWidget } from "@/components/TurnstileWidget";
 
 const countryOptions = [
   { value: "France", labels: { fr: "France", en: "France", de: "Frankreich", zh: "法国" } },
@@ -145,7 +146,7 @@ const copy = {
     nav: "Recrutement",
     formTitle: "Déposer votre candidature",
     formIntro: "Envoyez-nous votre profil. Une candidature complète nous permet de vous orienter vers les opportunités pertinentes.",
-    firstName: "Prénom", lastName: "Nom", email: "Email", phone: "Téléphone", specialty: "Spécialité / profession", specialtySearch: "Rechercher une spécialité…", standardPathTitle: "Mobilité médicale internationale", standardPathText: "Hôpitaux, cliniques et établissements de santé en Europe, au Canada et au Moyen-Orient.", vvipPathTitle: "Missions VVIP & Offshore", vvipPathText: "Plateformes pétrolières, sites isolés, entreprises offshore et environnements critiques.", vvipPathCta: "Découvrir le parcours VVIP", specialtyCustom: "Précisez votre spécialité ou profession", countries: "Pays ciblés", otherTargetCountry: "Autre pays à préciser", languages: "Langues professionnelles", experience: "Années d’expérience", message: "Message ou projet professionnel", cv: "CV (PDF, DOC ou DOCX — 5 Mo maximum)", chooseFile: "Choisir un fichier", noFile: "Aucun fichier sélectionné", gdpr: "J’accepte que mes données soient traitées pour l’examen de ma candidature, y compris par une analyse automatisée d’aide à la présélection, conformément à la politique de confidentialité. Une revue humaine est toujours requise et aucune décision n’est prise uniquement par l’IA.", marketing: "J’accepte de recevoir occasionnellement des informations sur des opportunités professionnelles.", submit: "Envoyer ma candidature", sending: "Envoi en cours…", successTitle: "Candidature reçue", successText: "Votre profil a bien été enregistré. Conservez votre numéro de suivi :", backHome: "Retour au site", required: "Champ obligatoire", consentError: "Votre consentement RGPD est requis.", fileError: "Veuillez joindre un CV au format PDF, DOC ou DOCX de 5 Mo maximum.", genericError: "La candidature n’a pas pu être envoyée. Vérifiez les informations et réessayez.", privacyNote: "Ne transmettez aucune donnée de patient, dossier médical ou information clinique dans ce formulaire.", confidentiality: "Données traitées de manière confidentielle", international: "Opportunités internationales sélectionnées", humanReview: "Examen humain de chaque profil", select: "Sélectionner dans la liste", otherSpecialty: "Autre spécialité ou profession", noMatch: "Aucune spécialité ne correspond à votre recherche.",
+    firstName: "Prénom", lastName: "Nom", email: "Email", phone: "Téléphone", specialty: "Spécialité / profession", specialtySearch: "Rechercher une spécialité…", standardPathTitle: "Mobilité médicale internationale", standardPathText: "Hôpitaux, cliniques et établissements de santé en Europe, au Canada et au Moyen-Orient.", vvipPathTitle: "Missions VVIP & Offshore", vvipPathText: "Plateformes pétrolières, sites isolés, entreprises offshore et environnements critiques.", vvipPathCta: "Découvrir le parcours VVIP", specialtyCustom: "Précisez votre spécialité ou profession", countries: "Pays ciblés", otherTargetCountry: "Autre pays à préciser", languages: "Langues professionnelles", experience: "Années d’expérience", message: "Message ou projet professionnel", cv: "CV (PDF, DOC ou DOCX — 5 Mo maximum)", chooseFile: "Choisir un fichier", noFile: "Aucun fichier sélectionné", gdpr: "J’accepte que mes données soient traitées pour l’examen de ma candidature, y compris par une analyse automatisée d’aide à la présélection, conformément à la politique de confidentialité. Une revue humaine est toujours requise et aucune décision n’est prise uniquement par l’IA.", marketing: "J’accepte de recevoir occasionnellement des informations sur des opportunités professionnelles.", submit: "Envoyer ma candidature", sending: "Envoi en cours…", successTitle: "Candidature reçue", successText: "Votre profil a bien été enregistré. Conservez votre numéro de suivi :", backHome: "Retour au site", required: "Champ obligatoire", consentError: "Votre consentement RGPD est requis.", fileError: "Veuillez joindre un CV au format PDF, DOC ou DOCX de 5 Mo maximum.", turnstile: "Veuillez valider la vérification de sécurité avant l’envoi.", genericError: "La candidature n’a pas pu être envoyée. Vérifiez les informations et réessayez.", privacyNote: "Ne transmettez aucune donnée de patient, dossier médical ou information clinique dans ce formulaire.", confidentiality: "Données traitées de manière confidentielle", international: "Opportunités internationales sélectionnées", humanReview: "Examen humain de chaque profil", select: "Sélectionner dans la liste", otherSpecialty: "Autre spécialité ou profession", noMatch: "Aucune spécialité ne correspond à votre recherche.",
     metaTitle: "Recrutement international de professionnels de santé | Hippocampus Consulting", metaDescription: "Déposez votre CV pour être considéré pour des opportunités de recrutement médical en Europe, au Canada et au Moyen-Orient.",
   },
   en: {
@@ -259,6 +260,7 @@ export default function RecruitmentPage() {
   const [specialtyQuery, setSpecialtyQuery] = useState("");
   const [diplomaCountryQuery, setDiplomaCountryQuery] = useState("");
   const [diplomaCountryOpen, setDiplomaCountryOpen] = useState(false);
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const diplomaCountryPickerRef = useRef<HTMLDivElement>(null);
 
@@ -315,12 +317,14 @@ export default function RecruitmentPage() {
     if (form.targetCountries.includes(OTHER_TARGET_COUNTRY) && !form.otherTargetCountry.trim()) nextInvalidFields.add("otherTargetCountry");
     if (!file || !isAcceptedCvFile(file)) nextInvalidFields.add("cv");
     if (!form.gdprConsent) nextInvalidFields.add("gdprConsent");
+    if (!turnstileToken) nextInvalidFields.add("turnstile");
     if (nextInvalidFields.size) {
       setInvalidFields(nextInvalidFields);
       setStatus("error"); setErrorMessage(`${t.required}.`); return;
     }
     setInvalidFields(new Set());
     if (!file) return;
+    if (!turnstileToken) return;
 
     const body = new FormData();
     body.append("cv", file);
@@ -341,6 +345,7 @@ export default function RecruitmentPage() {
     body.append("gdprConsent", form.gdprConsent ? "1" : "0");
     body.append("marketingConsent", form.marketingConsent ? "1" : "0");
     body.append("website", form.website);
+    body.append("turnstileToken", turnstileToken);
 
     setStatus("sending");
     try {
@@ -348,6 +353,7 @@ export default function RecruitmentPage() {
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(payload.error || t.genericError);
       setTrackingId(payload.trackingId || "");
+      setTurnstileToken(null);
       setValidationAttempted(false);
       setStatus("success");
     } catch (submissionError) {
@@ -511,6 +517,7 @@ export default function RecruitmentPage() {
                   <div className={`rounded-xl border border-dashed border-primary/40 bg-primary/5 p-4 ${isInvalid("cv") ? "form-file-invalid" : ""}`}><label htmlFor="recruitment-cv" className="flex cursor-pointer items-center gap-3 text-sm font-medium text-foreground"><FileUp className="h-5 w-5 text-primary" /><span>{file ? file.name : t.chooseFile}</span><input ref={fileInputRef} id="recruitment-cv" type="file" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={event => { setFile(event.target.files?.[0] || null); setInvalidFields(previous => { const next = new Set(previous); next.delete("cv"); return next; }); }} className="sr-only" required /></label><p className="mt-2 text-xs text-muted-foreground">{file ? `${(file.size / (1024 * 1024)).toFixed(2)} MB` : t.cv}</p></div>
                   <label className={`form-consent-item flex items-start gap-3 text-sm text-muted-foreground ${isInvalid("gdprConsent") ? "form-consent-item-invalid" : ""}`}><input type="checkbox" checked={form.gdprConsent} aria-invalid={isInvalid("gdprConsent")} onChange={event => update("gdprConsent", event.target.checked)} className="form-consent-checkbox mt-1" required /><span>{t.gdpr}</span></label>
                   <label className="form-consent-item flex items-start gap-3 text-sm text-muted-foreground"><input type="checkbox" checked={form.marketingConsent} onChange={event => update("marketingConsent", event.target.checked)} className="form-consent-checkbox mt-1" /><span>{t.marketing}</span></label>
+                  <div className={isInvalid("turnstile") ? "rounded-xl border border-destructive/50 p-2" : ""}><TurnstileWidget onToken={setTurnstileToken} /></div>
                   <label className="absolute -left-[10000px] h-px w-px overflow-hidden" aria-hidden="true"><span>Website</span><input tabIndex={-1} autoComplete="off" value={form.website} onChange={event => update("website", event.target.value)} /></label>
                   {status === "error" && <p className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive" role="alert">{errorMessage}</p>}
                   <button type="submit" disabled={status === "sending"} className="cta-primary w-full justify-center">{status === "sending" ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />{t.sending}</> : t.submit}</button>
