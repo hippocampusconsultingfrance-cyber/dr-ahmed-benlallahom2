@@ -24,4 +24,17 @@ describe("invitations signées au portail candidat", () => {
     expect(message.html).toContain("activer votre adresse email");
     expect(message.html).toContain("signed-token");
   });
+
+  it("explique clairement la confirmation d’email sans formulation trompeuse", () => {
+    const message = buildCandidatePortalAccessEmail({
+      to: "candidate@example.com",
+      firstName: "Amina",
+      kind: "verify",
+      actionUrl: "https://drahmedbenlallahom.com/candidate/verify?token=signed-token",
+    });
+    expect(message.subject).toContain("Confirmez votre adresse email");
+    expect(message.html).toContain("Vous recevez cet email parce qu’un espace candidat vient d’être créé");
+    expect(message.html).toContain("Confirmer mon adresse email");
+    expect(message.text).toContain("recrutement@drahmedbenlallahom.com");
+  });
 });

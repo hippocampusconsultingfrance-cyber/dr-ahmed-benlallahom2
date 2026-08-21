@@ -517,11 +517,11 @@ export type CandidatePortalAccessEmailInput = {
 export function buildCandidatePortalAccessEmail(input: CandidatePortalAccessEmailInput) {
   const copy = input.kind === "verify"
     ? {
-        subject: "Activez votre espace candidat sécurisé — Hippocampus Consulting",
-        title: "Activez votre espace candidat",
-        instruction: "Pour activer votre coffre documentaire sécurisé, confirmez votre adresse email en cliquant sur le bouton ci-dessous.",
-        action: "Activer mon espace",
-        securityNote: "Ce lien est personnel et temporaire. Si vous n’êtes pas à l’origine de cette demande, vous pouvez ignorer cet email.",
+        subject: "Confirmez votre adresse email — Espace candidat Hippocampus",
+        title: "Confirmez votre adresse email",
+        instruction: "Vous recevez cet email parce qu’un espace candidat vient d’être créé avec cette adresse. Pour finaliser son activation, confirmez simplement votre adresse email en cliquant sur le bouton ci-dessous.",
+        action: "Confirmer mon adresse email",
+        securityNote: "Ce lien personnel et temporaire finalise uniquement l’activation de votre adresse. Si vous n’avez pas créé cet espace candidat, ignorez cet email : aucun accès ne sera activé.",
       }
     : input.kind === "reset"
       ? {
@@ -546,9 +546,9 @@ export function buildCandidatePortalAccessEmail(input: CandidatePortalAccessEmai
         <p>${copy.instruction}</p>
         <p style="margin:24px 0;"><a href="${escapeHtml(input.actionUrl)}" style="display:inline-block;background:#0891b2;color:#ffffff;text-decoration:none;padding:12px 18px;border-radius:7px;font-weight:700;">${copy.action}</a></p>
         <p style="color:#64748b;font-size:13px;">${copy.securityNote}</p>
-        <p style="color:#64748b;font-size:13px;">Si vous ne retrouvez pas cet email, vérifiez votre dossier Spam ou Courriers indésirables, puis ajoutez recrutement@drahmedbenlallahom.com à vos contacts.</p>
+        <p style="color:#64748b;font-size:13px;">Cet email est envoyé par Hippocampus Consulting depuis recrutement@drahmedbenlallahom.com. Si vous ne retrouvez pas cet email, vérifiez votre dossier Spam ou Courriers indésirables, puis ajoutez cette adresse à vos contacts.</p>
     `),
-    text: `${copy.title}\n\nBonjour ${input.firstName || ""},\n\n${copy.instruction}\n\n${input.actionUrl}\n\n${copy.securityNote}\n\nSi vous ne retrouvez pas cet email, vérifiez votre dossier Spam ou Courriers indésirables, puis ajoutez recrutement@drahmedbenlallahom.com à vos contacts.`,
+    text: `${copy.title}\n\nBonjour ${input.firstName || ""},\n\n${copy.instruction}\n\n${input.actionUrl}\n\n${copy.securityNote}\n\nCet email est envoyé par Hippocampus Consulting depuis recrutement@drahmedbenlallahom.com. Si vous ne retrouvez pas cet email, vérifiez votre dossier Spam ou Courriers indésirables, puis ajoutez cette adresse à vos contacts.`,
   };
 }
 
