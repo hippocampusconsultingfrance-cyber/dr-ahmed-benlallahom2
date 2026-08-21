@@ -2532,3 +2532,4 @@
 - [x] Envoyer une réponse email de test après confirmation explicite du destinataire par le propriétaire
 - [x] Diagnostiquer et corriger toute redirection involontaire de l’accueil vers Questions santé
 - [x] Rendre obligatoires les trois confirmations du formulaire Questions santé avec validation visuelle et serveur
+- [x] Diagnostiquer et corriger le lien d’activation candidat envoyé depuis l’administration
