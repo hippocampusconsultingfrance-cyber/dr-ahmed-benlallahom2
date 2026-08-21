@@ -29,6 +29,8 @@ En France, le Service-Public indique que le 15 ou le 112 permettent une orientat
 
 Le modèle de reformulation a été vérifié avec un brouillon générique non personnel ; il a renvoyé une reformulation sans ajout clinique. Les tests dédiés vérifient la suppression des coordonnées du contenu transmis au modèle, la nécessité de MFA, de consentement de publication, de Turnstile et d’un envoi explicite. La compilation TypeScript, les tests ciblés et le build de production ont été validés.
 
+Le 21 août 2026, un email de test explicitement autorisé par le propriétaire a été envoyé à `hippocampusconsultingfrance@gmail.com`, sans question médicale ni donnée personnelle fictive. Resend a confirmé le statut **delivered**. Le contrôle a validé l’expéditeur, la réponse à l’adresse de contact, le logo, le texte alternatif, l’avertissement médical et la référence confidentielle.
+
 ## Références
 
 [1] [CNIL — Formalités applicables aux traitements de données de santé](https://www.cnil.fr/fr/quelles-formalites-pour-les-traitements-de-donnees-de-sante)  

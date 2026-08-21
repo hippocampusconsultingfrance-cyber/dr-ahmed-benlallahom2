@@ -2528,3 +2528,5 @@
 - [x] Ajouter l’assistance IA rédactionnelle côté serveur, sans réponse ni envoi automatique sans validation médicale
 - [x] Ajouter le tableau de bord administrateur de traitement, les tests et la documentation des limites médicales
 - [x] Rendre l’accès public au service de questions médicales immédiatement visible dans la navigation et vérifier la route publiée
+- [x] Tester le parcours du formulaire Questions santé et préparer une réponse email sans envoi externe
+- [x] Envoyer une réponse email de test après confirmation explicite du destinataire par le propriétaire
