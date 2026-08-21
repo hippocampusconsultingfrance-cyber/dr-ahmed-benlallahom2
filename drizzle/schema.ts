@@ -68,6 +68,50 @@ export type GdprRequest = typeof gdprRequests.$inferSelect;
 export type InsertGdprRequest = typeof gdprRequests.$inferInsert;
 
 /**
+ * Private medical information requests, moderated by an administrator before any response or publication.
+ * Personal contact details are never part of the public query shape.
+ */
+export const medicalQuestions = mysqlTable("medical_questions", {
+  id: int("id").autoincrement().primaryKey(),
+  trackingId: varchar("tracking_id", { length: 32 }).notNull().unique(),
+  firstName: varchar("first_name", { length: 120 }).notNull(),
+  lastName: varchar("last_name", { length: 120 }).notNull(),
+  email: varchar("email", { length: 320 }).notNull(),
+  phone: varchar("phone", { length: 50 }).notNull(),
+  question: text("question").notNull(),
+  language: varchar("language", { length: 10 }).default("fr").notNull(),
+  privacyConsent: int("privacy_consent").default(0).notNull(),
+  publicationConsent: int("publication_consent").default(0).notNull(),
+  urgencyAcknowledged: int("urgency_acknowledged").default(0).notNull(),
+  status: mysqlEnum("status", ["submitted", "drafting", "answered", "published", "rejected"]).default("submitted").notNull(),
+  adminResponse: text("admin_response"),
+  publicQuestion: text("public_question"),
+  publicResponse: text("public_response"),
+  respondedByOpenId: varchar("responded_by_open_id", { length: 64 }),
+  responseSentAt: timestamp("response_sent_at"),
+  publishedAt: timestamp("published_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+}, table => ({
+  privateStatusCreated: index("medical_questions_status_created_idx").on(table.status, table.createdAt),
+  publicPublication: index("medical_questions_publication_idx").on(table.status, table.publishedAt),
+}));
+
+export const medicalQuestionAuditLogs = mysqlTable("medical_question_audit_logs", {
+  id: int("id").autoincrement().primaryKey(),
+  medicalQuestionId: int("medical_question_id").notNull(),
+  actorOpenId: varchar("actor_open_id", { length: 64 }),
+  action: varchar("action", { length: 80 }).notNull(),
+  metadata: text("metadata"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, table => ({
+  questionCreated: index("medical_question_audit_question_created_idx").on(table.medicalQuestionId, table.createdAt),
+}));
+
+export type MedicalQuestion = typeof medicalQuestions.$inferSelect;
+export type InsertMedicalQuestion = typeof medicalQuestions.$inferInsert;
+
+/**
  * Testimonials/Reviews table.
  * Stores patient testimonials and reviews with privacy protection (initials/first names only).
  */

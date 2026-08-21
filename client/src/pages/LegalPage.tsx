@@ -153,7 +153,7 @@ function LegalPageFr() {
                 <h2 className="text-2xl font-bold text-foreground">Politique de Confidentialité</h2>
                 <div className="text-muted-foreground space-y-4">
                   <h3 className="font-semibold text-foreground">1. Collecte de données personnelles</h3>
-                  <p>Ce site traite des données personnelles dans le cadre des formulaires de contact, des candidatures et du portail candidat, du recrutement pour les établissements, de la réservation et du paiement d’une consultation, de l’émission de factures et du traitement des demandes RGPD. Les données collectées incluent :</p>
+                  <p>Ce site traite des données personnelles dans le cadre des formulaires de contact, des candidatures et du portail candidat, du recrutement pour les établissements, de la réservation et du paiement d’une consultation, de l’émission de factures, du service gratuit de questions-réponses sur l’anesthésie et l’opération, et du traitement des demandes RGPD. Les données collectées incluent :</p>
                   <ul className="list-disc list-inside space-y-2 ml-2">
                     <li>Nom complet</li>
                     <li>Adresse email</li>
@@ -165,6 +165,7 @@ function LegalPageFr() {
                     <li>Informations nécessaires à la facture ; les données de carte sont traitées directement par Stripe</li>
                     <li>Données de candidature : CV, spécialité, pays de diplôme, expériences, langues, certifications, mobilité et préférences de mission</li>
                     <li>Documents déposés volontairement dans le portail candidat, protégés par des mesures techniques adaptées</li>
+                    <li>Pour le service gratuit de questions : nom, prénom, email, téléphone, question libre, consentements et version éventuelle anonymisée destinée à la publication</li>
                   </ul>
 
                   <h3 className="font-semibold text-foreground mt-4">2. Base légale du traitement</h3>
@@ -186,11 +187,13 @@ function LegalPageFr() {
                   </ul>
                   <p className="mt-4"><strong>Aucune vente ni utilisation commerciale :</strong> Vos données ne sont pas vendues ni utilisées à des fins commerciales. Elles peuvent être transmises aux sous-traitants strictement nécessaires au fonctionnement du service, conformément à la section dédiée ci-dessous.</p>
                   <p className="mt-4"><strong>Recrutement et IA :</strong> l’analyse automatisée des candidatures sert uniquement d’aide à la lecture et au rapprochement de profils. Elle ne produit aucune décision d’embauche ou de rejet sans revue humaine.</p>
+                  <p className="mt-4"><strong>Questions médicales et IA :</strong> le service gratuit fournit uniquement une information générale. La réponse est rédigée et validée par le médecin ; l’assistance IA peut améliorer la syntaxe d’un brouillon administrateur sans répondre directement à la personne, ajouter un contenu médical nouveau, ni déclencher un envoi ou une publication automatique. Les coordonnées ne sont pas transmises à cette assistance.</p>
 
                   <h3 className="font-semibold text-foreground mt-4">4. Durée de conservation</h3>
                   <p>Les données personnelles sont conservées :</p>
                   <ul className="list-disc list-inside space-y-2 ml-2">
                     <li><strong>Données de contact :</strong> 3 ans après votre dernier contact ou jusqu'à votre demande de suppression</li>
+                    <li><strong>Questions médicales gratuites :</strong> 3 ans après le dernier échange ou jusqu’à l’exercice du droit de suppression ; les versions publiques ne sont conservées qu’avec accord distinct et peuvent être retirées sur demande</li>
                     <li><strong>Logs d'accès :</strong> 90 jours maximum</li>
                     <li><strong>Cookies :</strong> Selon votre consentement (jusqu'à 13 mois)</li>
                   </ul>
@@ -239,7 +242,7 @@ function LegalPageFr() {
                     <li><strong>Google Drive :</strong> Copie privée, journalisée et contrôlée des CV déposés, après autorisation du responsable</li>
                     <li><strong>Manus (Butterfly Effect Pte. Ltd.) :</strong> Hébergement, infrastructure cloud, authentification et composants d’analyse technique</li>
                   </ul>
-                  <p className="mt-4">Ces sous-traitants traitent uniquement les catégories nécessaires : coordonnées et références de réservation pour la gestion des rendez-vous, informations de facturation et statut de paiement pour Stripe, CV et documents de candidature pour l’export privé Google Drive, et données techniques ou de contact pour l'hébergement, l'authentification, les communications et l’assistance à l’analyse. Selon l'infrastructure utilisée par chaque prestataire, un traitement peut avoir lieu hors de l'Espace économique européen. Les garanties applicables sont celles prévues par leurs engagements contractuels et leurs accords de traitement, y compris les clauses contractuelles types lorsqu'elles sont requises. Les données de carte bancaire ne sont pas stockées par ce site.</p>
+                  <p className="mt-4">Ces sous-traitants traitent uniquement les catégories nécessaires : coordonnées et références de réservation pour la gestion des rendez-vous, informations de facturation et statut de paiement pour Stripe, CV et documents de candidature pour l’export privé Google Drive, et données techniques ou de contact pour l'hébergement, l'authentification, les communications et l’assistance à l’analyse. Pour le service gratuit de questions, toute éventuelle assistance rédactionnelle reçoit exclusivement un brouillon administrateur sans coordonnées. Selon l'infrastructure utilisée par chaque prestataire, un traitement peut avoir lieu hors de l'Espace économique européen. Les garanties applicables sont celles prévues par leurs engagements contractuels et leurs accords de traitement, y compris les clauses contractuelles types lorsqu'elles sont requises. Les données de carte bancaire ne sont pas stockées par ce site.</p>
 
                   <h3 className="font-semibold text-foreground mt-4">10. Registre des traitements</h3>
                   <p>Conformément aux exigences de la CNIL, nous maintenons un registre des traitements de données personnelles :</p>
@@ -249,6 +252,7 @@ function LegalPageFr() {
                     <li><strong>Traitement 3 - Demande GDPR :</strong> Collecte des données pour traiter les demandes d'accès, rectification ou suppression. Base légale : obligation légale. Durée : 1 an.</li>
                     <li><strong>Traitement 4 - Logs d'accès :</strong> Collecte automatique de l'adresse IP et des données de navigation. Base légale : intérêt légitime. Durée : 90 jours.</li>
                     <li><strong>Traitement 5 - Cookies :</strong> Stockage des préférences utilisateur (langue, thème). Base légale : consentement. Durée : 13 mois.</li>
+                    <li><strong>Traitement 6 - Questions médicales gratuites :</strong> Collecte des coordonnées, question, consentements et réponse afin de transmettre une information générale par email. Base légale : consentement explicite ; la publication d’une version anonymisée repose sur un consentement séparé. Durée : 3 ans après le dernier échange ou jusqu’à suppression.</li>
                   </ul>
 
                   <h3 className="font-semibold text-foreground mt-4">11. Droit de plainte</h3>

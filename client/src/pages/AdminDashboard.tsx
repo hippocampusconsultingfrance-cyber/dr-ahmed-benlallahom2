@@ -14,12 +14,13 @@ import MailingTab from "@/components/MailingTab";
 import CandidateDocumentsAdminTab from "@/components/CandidateDocumentsAdminTab";
 import SecurityOperationsTab from "@/components/SecurityOperationsTab";
 import RecruitmentDashboardPanel from "@/components/RecruitmentDashboardPanel";
+import MedicalQuestionsAdminTab from "@/components/MedicalQuestionsAdminTab";
 import { AdminEmptyState, AdminErrorState } from "@/components/AdminStatePanel";
 import PublicContentSkeleton from "@/components/PublicContentSkeleton";
 import { getActiveAdminTabLabel } from "./adminDashboardMobileTabs";
 import { buildAppointmentsAgenda } from "./appointmentsAgenda";
 
-type Tab = "overview" | "appointments" | "contacts" | "gdpr" | "testimonials" | "availability" | "recruitment" | "candidateDocuments" | "security" | "vivier" | "mailing" | "employerBriefs";
+type Tab = "overview" | "appointments" | "contacts" | "gdpr" | "testimonials" | "availability" | "recruitment" | "candidateDocuments" | "security" | "vivier" | "mailing" | "employerBriefs" | "medicalQuestions";
 
 export default function AdminDashboard() {
   const { user, loading, refresh } = useAuth();
@@ -97,6 +98,7 @@ export default function AdminDashboard() {
     { id: "vivier" as Tab, label: "Vivier", icon: UsersRound },
     { id: "mailing" as Tab, label: "Mailing", icon: Send },
     { id: "employerBriefs" as Tab, label: "Missions", icon: BriefcaseBusiness },
+    { id: "medicalQuestions" as Tab, label: "Questions santé", icon: MessageSquare },
   ];
 
   return (
@@ -166,6 +168,7 @@ export default function AdminDashboard() {
         {activeTab === "vivier" && <VivierTab onCompose={candidateIds => { setMailingSelectedIds(candidateIds); setActiveTab("mailing"); }} />}
         {activeTab === "mailing" && <MailingTab initialSelectedIds={mailingSelectedIds} />}
         {activeTab === "employerBriefs" && <EmployerBriefsTab />}
+        {activeTab === "medicalQuestions" && <MedicalQuestionsAdminTab />}
       </main>
     </div>
   );

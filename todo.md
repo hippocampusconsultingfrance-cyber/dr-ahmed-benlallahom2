@@ -2522,3 +2522,8 @@
 - [x] Générer les URLs d’invitation candidat depuis une origine publique serveur fixe, jamais depuis Origin, Referer ou Host
 - [x] Corriger la gestion des promotions Stripe pour éviter les paiements encaissés sans confirmation de rendez-vous
 - [x] Réduire les limites JSON et URL-encoded globales tout en préservant les uploads Multer dédiés
+- [x] Définir les règles de sécurité, anonymisation, consentement et modération du service gratuit de questions-réponses médicales
+- [x] Créer le stockage sécurisé et les procédures administrateur pour les questions, réponses, email et publication anonymisée
+- [x] Ajouter la page publique valorisant le service, le formulaire privé et la bibliothèque de questions-réponses publiées
+- [x] Ajouter l’assistance IA rédactionnelle côté serveur, sans réponse ni envoi automatique sans validation médicale
+- [x] Ajouter le tableau de bord administrateur de traitement, les tests et la documentation des limites médicales

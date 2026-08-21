@@ -39,6 +39,20 @@ export function buildHippocampusEmailShell(content: string) {
   `;
 }
 
+export async function sendMedicalQuestionResponseEmail(input: { email: string; firstName: string; trackingId: string; response: string }) {
+  const html = buildHippocampusEmailShell(`
+    <h2 style="color:#0891b2">Réponse à votre question</h2>
+    <p>Bonjour ${escapeHtml(input.firstName)},</p>
+    <p>Votre question a été examinée. Vous trouverez ci-dessous une réponse d’information générale relue et validée par le Dr. Ahmed Ben Lallahom.</p>
+    <div style="margin:20px 0;padding:18px;border-radius:10px;background:#f1f5f9;white-space:pre-line;line-height:1.65;color:#0f172a;">${escapeHtml(input.response)}</div>
+    <p style="font-size:13px;line-height:1.55;color:#475569;"><strong>Information importante :</strong> cette réponse générale ne remplace pas une consultation, une évaluation préopératoire ni une prise en charge urgente. En cas d’urgence ou de symptôme inquiétant, contactez les secours ou un professionnel de santé sans attendre.</p>
+    <p style="font-size:12px;color:#64748b;">Référence confidentielle : ${escapeHtml(input.trackingId)}</p>
+  `);
+  const text = `Bonjour ${input.firstName},\n\nVotre question a été examinée.\n\n${input.response}\n\nInformation importante : cette réponse générale ne remplace pas une consultation, une évaluation préopératoire ni une prise en charge urgente. En cas d’urgence ou de symptôme inquiétant, contactez les secours ou un professionnel de santé sans attendre.\n\nRéférence confidentielle : ${input.trackingId}`;
+  const { error } = await resend.emails.send({ from: FROM_EMAIL, to: [input.email], replyTo: RECRUITMENT_REPLY_TO, subject: `Réponse à votre question — ${input.trackingId}`, html, text });
+  if (error) throw new Error(`medical_question_response_email_failed:${error.message}`);
+}
+
 export async function sendAdminMfaCodeEmail(email: string, code: string) {
   const html = buildHippocampusEmailShell(`<h2 style="color:#0891b2">Validation de sécurité administrateur</h2><p>Un accès au tableau de bord Hippocampus Consulting vient d’être demandé.</p><p style="margin:24px 0;padding:18px;text-align:center;border-radius:10px;background:#f1f5f9;font-size:28px;letter-spacing:7px;font-weight:700;color:#0f172a">${escapeHtml(code)}</p><p>Ce code expire dans 10 minutes et ne doit être communiqué à personne. Si vous n’êtes pas à l’origine de cette demande, ignorez cet email.</p>`);
   const text = `Validation de sécurité administrateur\n\nCode : ${code}\n\nCe code expire dans 10 minutes. Ne le communiquez à personne.`;

@@ -32,6 +32,7 @@ import { issueAdminMfaChallenge, isAdminMfaVerified, verifyAdminMfaChallenge } f
 import { enforcePersistentRateLimit, logSecurityEvent, requestIpHash } from "./candidateSecurity";
 import { createCandidateInvitationToken } from "./candidateAuth";
 import { googleDriveExportStatus } from "./googleDriveExport";
+import { medicalQuestionsRouter } from "./medicalQuestionsRouter";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "");
 
@@ -240,6 +241,7 @@ function getSafeCheckoutOrigin(): string {
 export const appRouter = router({
   system: systemRouter,
   candidatePortal: candidatePortalRouter,
+  medicalQuestions: medicalQuestionsRouter,
   adminSecurity: router({
     status: protectedProcedure.query(async ({ ctx }) => {
       if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN", message: "Accès administrateur requis." });

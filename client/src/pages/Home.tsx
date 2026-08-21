@@ -7,6 +7,7 @@ import ServicesSection from "@/components/ServicesSection";
 import EducationSection from "@/components/EducationSection";
 import ContactSection from "@/components/ContactSection";
 import TestimonialsSection from "@/components/TestimonialsSection";
+import MedicalQuestionsTeaser from "@/components/MedicalQuestionsTeaser";
 import Footer from "@/components/Footer";
 import { useScrollReveal } from "@/hooks/useScrollReveal";
 import { SEOHead } from "@/components/SEOHead";
@@ -60,6 +61,9 @@ export default function Home() {
         </div>
         <div className="fade-in-up parallax-subtle">
           <TestimonialsSection />
+        </div>
+        <div className="fade-in-up">
+          <MedicalQuestionsTeaser />
         </div>
         <div className="fade-in-up">
           <ContactSection />

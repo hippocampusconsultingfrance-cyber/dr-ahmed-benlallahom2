@@ -44,6 +44,7 @@ const FAQPage = lazy(() => import("./pages/FAQPage"));
 const SearchPage = lazy(() => import("./pages/SearchPage"));
 const ResourcesPage = lazy(() => import("./pages/ResourcesPage"));
 const PressPage = lazy(() => import("./pages/PressPage"));
+const MedicalQuestionsPage = lazy(() => import("./pages/MedicalQuestionsPage"));
 
 function RouteLoading() {
   const { language } = useLanguage();
@@ -93,6 +94,7 @@ function Router() {
       <Route path="/search" component={SearchPage} />
       <Route path="/resources" component={ResourcesPage} />
       <Route path="/press" component={PressPage} />
+      <Route path="/questions-anesthesie" component={MedicalQuestionsPage} />
       <Route path="/404" component={NotFound} />
         <Route component={NotFound} />
       </Switch>
