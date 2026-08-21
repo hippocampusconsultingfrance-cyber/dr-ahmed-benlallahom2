@@ -306,12 +306,13 @@ export default function RecruitmentPage() {
     setErrorMessage("");
     setValidationAttempted(true);
     const submittedDiplomaCountry = resolveCountryForSubmission(form.diplomaCountry, new FormData(event.currentTarget).get("diplomaCountry"), worldwideCountries.map(country => country.label));
-    const finalSpecialty = form.specialty === "Autre spécialité ou profession" ? form.specialtyCustom.trim() : form.specialty;
+    const isCustomSpecialty = form.specialty === "Autre spécialité ou profession";
+    const finalSpecialty = isCustomSpecialty ? form.specialtyCustom.trim() : form.specialty;
     const nextInvalidFields = new Set<string>();
     if (!form.firstName.trim()) nextInvalidFields.add("firstName");
     if (!form.lastName.trim()) nextInvalidFields.add("lastName");
     if (!form.email.trim() || !/^\S+@\S+\.\S+$/.test(form.email)) nextInvalidFields.add("email");
-    if (!finalSpecialty) nextInvalidFields.add("specialty");
+    if (!finalSpecialty) nextInvalidFields.add(isCustomSpecialty ? "specialtyCustom" : "specialty");
     if (!submittedDiplomaCountry) nextInvalidFields.add("diplomaCountry");
     if (!form.targetCountries.length) nextInvalidFields.add("targetCountries");
     if (form.targetCountries.includes(OTHER_TARGET_COUNTRY) && !form.otherTargetCountry.trim()) nextInvalidFields.add("otherTargetCountry");
@@ -445,6 +446,20 @@ export default function RecruitmentPage() {
                       </select>
                       {form.specialty && form.specialty !== "Autre spécialité ou profession" && (
                         <p className="mt-1.5 text-xs text-primary font-medium">Sélectionné : {form.specialty}</p>
+                      )}
+                      {form.specialty === "Autre spécialité ou profession" && (
+                        <label className="mt-3 block">
+                          <span className="sr-only">{t.specialtyCustom}</span>
+                          <input
+                            id="recruitment-specialty-custom"
+                            required
+                            value={form.specialtyCustom}
+                            aria-invalid={isInvalid("specialtyCustom")}
+                            onChange={event => update("specialtyCustom", event.target.value)}
+                            className={`recruitment-field ${isInvalid("specialtyCustom") ? "form-field-invalid" : ""}`}
+                            placeholder={`${t.specialtyCustom} *`}
+                          />
+                        </label>
                       )}
                     </div>
                     

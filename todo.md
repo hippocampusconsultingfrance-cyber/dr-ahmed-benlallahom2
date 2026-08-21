@@ -2540,3 +2540,4 @@
 - [x] Diagnostiquer et améliorer la délivrabilité des emails d’activation du portail candidat
 - [x] Publier l’enregistrement DNS DMARC recommandé après confirmation explicite du propriétaire
 - [x] Vérifier la valeur complète et la propagation publique de l’enregistrement DMARC déjà présent dans Namecheap
+- [x] Permettre la saisie d’une spécialité médicale ou paramédicale absente des listes, avec conservation et visibilité administratives

@@ -280,6 +280,13 @@ const copy = {
   },
 } as const;
 
+const customSpecialtyCopy = {
+  fr: "Précisez votre spécialité médicale ou paramédicale",
+  en: "Specify your medical or allied-health specialty",
+  de: "Geben Sie Ihr medizinisches oder paramedizinisches Fachgebiet an",
+  zh: "请注明您的医疗或医护专业方向",
+} as const;
+
 const publicTrustCopy = {
   fr: {
     title: "Traitement confidentiel de votre dossier",
@@ -318,6 +325,7 @@ type FormState = {
   email: string;
   phone: string;
   specialty: string;
+  specialtyCustom: string;
   environments: string[];
   diplomaCountry: string;
   yearsExperience: string;
@@ -332,6 +340,7 @@ const createInitialForm = (language: Language): FormState => ({
   email: "",
   phone: "",
   specialty: copy[language].specialties[0],
+  specialtyCustom: "",
   environments: [],
   diplomaCountry: "",
   yearsExperience: "",
@@ -354,6 +363,7 @@ export default function VvipOffshorePage() {
   const { language } = useLanguage();
   const lang = (language in copy ? language : "fr") as Language;
   const t = copy[lang];
+  const customSpecialtyLabel = customSpecialtyCopy[lang];
   const trust = publicTrustCopy[lang];
   const [form, setForm] = useState<FormState>(() => createInitialForm(lang));
   const [file, setFile] = useState<File | null>(null);
@@ -389,7 +399,9 @@ export default function VvipOffshorePage() {
     if (!form.firstName.trim()) nextInvalidFields.add("firstName");
     if (!form.lastName.trim()) nextInvalidFields.add("lastName");
     if (!form.email.trim() || !/^\S+@\S+\.\S+$/.test(form.email)) nextInvalidFields.add("email");
-    if (!form.specialty) nextInvalidFields.add("specialty");
+    const isCustomSpecialty = form.specialty === t.specialties[t.specialties.length - 1];
+    const finalSpecialty = isCustomSpecialty ? form.specialtyCustom.trim() : form.specialty;
+    if (!finalSpecialty) nextInvalidFields.add(isCustomSpecialty ? "specialtyCustom" : "specialty");
     if (!form.environments.length) nextInvalidFields.add("environments");
     if (!submittedDiplomaCountry) nextInvalidFields.add("diplomaCountry");
     if (!file || !isAcceptedVvipCvFile(file)) nextInvalidFields.add("cv");
@@ -414,7 +426,7 @@ export default function VvipOffshorePage() {
       body.append("email", form.email);
       body.append("phone", form.phone);
       const environmentSummary = form.environments.join(", ");
-      body.append("specialty", `[VVIP / Offshore] ${form.specialty} (${environmentSummary})`);
+      body.append("specialty", `[VVIP / Offshore] ${finalSpecialty} (${environmentSummary})`);
       body.append("diplomaCountry", submittedDiplomaCountry);
       body.append("targetCountries", JSON.stringify(form.environments));
       body.append("languages", JSON.stringify(["Français", "Anglais"]));
@@ -537,6 +549,17 @@ export default function VvipOffshorePage() {
                             <option key={opt} value={opt}>{opt}</option>
                           ))}
                         </select>
+                        {form.specialty === t.specialties[t.specialties.length - 1] && (
+                          <input
+                            id="vvip-specialty-custom"
+                            required
+                            value={form.specialtyCustom}
+                            aria-invalid={isInvalid("specialtyCustom")}
+                            onChange={(e) => update("specialtyCustom", e.target.value)}
+                            className={`form-control block w-full ${isInvalid("specialtyCustom") ? "form-field-invalid" : ""}`}
+                            placeholder={`${customSpecialtyLabel} *`}
+                          />
+                        )}
                       </label>
                       <fieldset className={`block w-full space-y-2 text-sm text-foreground ${isInvalid("environments") ? "form-consent-group-invalid" : ""}`}>
                         <legend className="block font-medium">{t.environment} *</legend>
