@@ -2538,4 +2538,5 @@
 - [x] Diagnostiquer et corriger le bouton Valider, envoyer et publier des réponses Questions santé
 - [x] Ajouter un bouton de dépublication sécurisée dans l'espace administrateur Questions santé
 - [x] Diagnostiquer et améliorer la délivrabilité des emails d’activation du portail candidat
-- [ ] Publier l’enregistrement DNS DMARC recommandé après confirmation explicite du propriétaire
+- [x] Publier l’enregistrement DNS DMARC recommandé après confirmation explicite du propriétaire
+- [x] Vérifier la valeur complète et la propagation publique de l’enregistrement DMARC déjà présent dans Namecheap

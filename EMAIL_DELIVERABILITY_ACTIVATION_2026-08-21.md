@@ -46,6 +46,10 @@ Le DNS actif doit être administré depuis le fournisseur qui héberge réelleme
 
 Après enregistrement, la vérification peut être relancée depuis Resend et par une résolution DNS publique. Aucun envoi réel ne doit être forcé avant la propagation du TXT.
 
+### Mise à jour après contrôle Namecheap
+
+La capture fournie par le propriétaire confirme qu’un enregistrement **TXT `_dmarc`** existe déjà dans Namecheap et commence bien par `v=DMARC1; p=none; rua=mailto:…`. Il ne faut pas créer de seconde ligne DMARC, car un domaine ne doit publier qu’un seul enregistrement DMARC. La zone Cloudflare connectée n’était pas la zone DNS active, ce qui explique son absence lors de la tentative de lecture dans ce compte.
+
 ## Conseils destinataire
 
 Lorsqu’un message légitime est arrivé dans le spam, le destinataire peut l’ouvrir puis choisir **« Non spam »** et ajouter `recrutement@drahmedbenlallahom.com` à ses contacts. Gmail indique que les messages provenant d’une adresse enregistrée dans les contacts sont moins susceptibles d’être classés comme spam. [2]
