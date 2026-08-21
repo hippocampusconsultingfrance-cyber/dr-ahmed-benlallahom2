@@ -2516,4 +2516,4 @@
 - [x] Distinguer dans la CI GitHub les tests unitaires reproductibles des recettes dépendantes de secrets, d’intégrations externes ou de données de production
 - [x] Corriger les prérequis de la CI GitHub sans injecter de secrets réels ni créer de faux avis, données candidates ou données métier
 - [x] Documenter l’évaluation du rapport externe sur HDS, uploads, contrôle serveur, messageries et IA de recrutement
-- [ ] Éliminer le blocage de finalisation du job CI GitHub en retirant les services et migrations non requis par le profil de tests reproductible
+- [x] Éliminer le blocage de finalisation du job CI GitHub en retirant les services et migrations non requis par le profil de tests reproductible

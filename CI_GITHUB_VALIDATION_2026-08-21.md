@@ -27,3 +27,8 @@ Chaque push ou pull request vers `main` déclenche automatiquement la vérificat
 
 Les recettes externes doivent continuer d’être réalisées de manière contrôlée, sur des comptes de test autorisés et sans insérer de données fictives présentées comme réelles.
 
+## Validation finale du profil allégé
+
+Le workflow a été relancé après retrait du service MySQL et de la migration non nécessaires au profil de tests reproductible. Le run GitHub `32453652721`, associé au commit `2fb0415f`, est terminé avec le statut global **success**. Les jobs `TypeScript and test suite` et `Dependency vulnerability report` sont tous deux terminés avec succès.
+
+Cette vérification confirme que le temps d’exécution observé provenait de la progression normale de l’ensemble des fichiers Vitest sur le runner GitHub, et non d’une base de données ou d’une migration requise par ce profil CI.
