@@ -2535,3 +2535,4 @@
 - [x] Diagnostiquer et corriger le lien d’activation candidat envoyé depuis l’administration
 - [x] Corriger le chevauchement et la lisibilité des onglets de navigation de l’espace administrateur
 - [x] Vérifier et restaurer si nécessaire la visibilité de l’onglet Questions santé dans l’administration
+- [x] Diagnostiquer et corriger le bouton Valider, envoyer et publier des réponses Questions santé

@@ -31,6 +31,10 @@ Le modèle de reformulation a été vérifié avec un brouillon générique non 
 
 Le 21 août 2026, un email de test explicitement autorisé par le propriétaire a été envoyé à `hippocampusconsultingfrance@gmail.com`, sans question médicale ni donnée personnelle fictive. Resend a confirmé le statut **delivered**. Le contrôle a validé l’expéditeur, la réponse à l’adresse de contact, le logo, le texte alternatif, l’avertissement médical et la référence confidentielle.
 
+## Clarification du bouton de validation
+
+La réponse privée doit contenir au moins vingt caractères avant tout envoi : cette règle est contrôlée côté interface et côté serveur. L’interface affiche désormais le nombre de caractères, le nombre restant et une explication lisible de la condition manquante. Les boutons indisponibles sont gris et non cliquables. Une réponse comme `jdldldld` doit donc être complétée avec une réponse générale relue avant de pouvoir envoyer ou publier.
+
 ## Références
 
 [1] [CNIL — Formalités applicables aux traitements de données de santé](https://www.cnil.fr/fr/quelles-formalites-pour-les-traitements-de-donnees-de-sante)  
