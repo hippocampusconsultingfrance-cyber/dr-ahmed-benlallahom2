@@ -10,5 +10,12 @@ describe("navigation de l’administration", () => {
     expect(source).toContain("shrink-0 flex items-center");
     expect(source).toContain('aria-label="Navigation des sections d’administration"');
     expect(source).toContain('aria-current={activeTab === tab.id ? "page" : undefined}');
+
+    const messagesIndex = source.indexOf('{ id: "contacts" as Tab, label: "Messages"');
+    const questionsIndex = source.indexOf('{ id: "medicalQuestions" as Tab, label: "Questions santé"');
+    const gdprIndex = source.indexOf('{ id: "gdpr" as Tab, label: "RGPD"');
+    expect(messagesIndex).toBeGreaterThan(-1);
+    expect(questionsIndex).toBeGreaterThan(messagesIndex);
+    expect(questionsIndex).toBeLessThan(gdprIndex);
   });
 });

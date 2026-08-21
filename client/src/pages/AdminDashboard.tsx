@@ -89,6 +89,7 @@ export default function AdminDashboard() {
     { id: "overview" as Tab, label: "Vue d'ensemble", icon: DollarSign },
     { id: "appointments" as Tab, label: "Réservations", icon: Calendar },
     { id: "contacts" as Tab, label: "Messages", icon: MessageSquare },
+    { id: "medicalQuestions" as Tab, label: "Questions santé", icon: MessageSquare },
     { id: "gdpr" as Tab, label: "RGPD", icon: Shield },
     { id: "testimonials" as Tab, label: "Témoignages", icon: Star },
     { id: "availability" as Tab, label: "Disponibilités", icon: CalendarDays },
@@ -98,7 +99,6 @@ export default function AdminDashboard() {
     { id: "vivier" as Tab, label: "Vivier", icon: UsersRound },
     { id: "mailing" as Tab, label: "Mailing", icon: Send },
     { id: "employerBriefs" as Tab, label: "Missions", icon: BriefcaseBusiness },
-    { id: "medicalQuestions" as Tab, label: "Questions santé", icon: MessageSquare },
   ];
 
   return (
