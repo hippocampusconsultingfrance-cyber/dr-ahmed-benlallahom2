@@ -8,5 +8,8 @@ describe("accès navigation aux questions médicales", () => {
     expect(navigation).toContain('href="/questions-anesthesie"');
     expect(navigation).toContain('fr: "Questions santé"');
     expect((navigation.match(/href="\/questions-anesthesie"/g) ?? [])).toHaveLength(2);
+    expect(navigation).toContain('window.location.pathname === "/questions-anesthesie"');
+    expect(navigation).toContain("medicalQuestionsDesktopClass");
+    expect(navigation).toContain("medicalQuestionsMobileClass");
   });
 });

@@ -2530,3 +2530,4 @@
 - [x] Rendre l’accès public au service de questions médicales immédiatement visible dans la navigation et vérifier la route publiée
 - [x] Tester le parcours du formulaire Questions santé et préparer une réponse email sans envoi externe
 - [x] Envoyer une réponse email de test après confirmation explicite du destinataire par le propriétaire
+- [x] Diagnostiquer et corriger toute redirection involontaire de l’accueil vers Questions santé
