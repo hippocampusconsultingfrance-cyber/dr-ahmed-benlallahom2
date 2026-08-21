@@ -132,14 +132,19 @@ export default function AdminDashboard() {
               {tabs.map(tab => <option key={tab.id} value={tab.id}>{tab.label}</option>)}
             </select>
           </div>
-          <div className="hidden gap-1 overflow-x-auto sm:flex">
+          <div
+            className="hidden max-w-full gap-3 overflow-x-auto overscroll-x-contain px-1 py-2 [scrollbar-width:thin] sm:flex"
+            aria-label="Navigation des sections d’administration"
+          >
             {tabs.map((tab) => {
               const Icon = tab.icon;
               return (
                 <button
+                  type="button"
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+                  aria-current={activeTab === tab.id ? "page" : undefined}
+                  className={`shrink-0 flex items-center gap-2 rounded-t-md border-b-2 px-4 py-3 text-sm font-medium transition-colors whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-card ${
                     activeTab === tab.id
                       ? "border-primary text-primary"
                       : "border-transparent text-muted-foreground hover:text-foreground"
