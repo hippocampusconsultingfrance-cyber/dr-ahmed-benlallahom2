@@ -18,7 +18,7 @@ const privateQuestionInput = z.object({
   question: z.string().trim().min(30).max(3000),
   language: z.enum(["fr", "en", "de", "zh"]).default("fr"),
   privacyConsent: z.literal(true),
-  publicationConsent: z.boolean().default(false),
+  publicationConsent: z.literal(true),
   urgencyAcknowledged: z.literal(true),
   turnstileToken: z.string().min(20).max(4096),
   website: z.string().max(200).optional().default(""),

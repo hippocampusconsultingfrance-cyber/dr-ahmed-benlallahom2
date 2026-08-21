@@ -9,5 +9,8 @@ describe("page de questions médicales", () => {
     expect(page).toContain("urgencyAcknowledged");
     expect(page).toContain("Ce service ne traite pas les urgences");
     expect(page).toContain("TurnstileWidget");
+    expect(page).toContain("if (!form.publication)");
+    expect(page).toContain('invalid={bad("publication")}');
+    expect(page).toContain('aria-required="true"');
   });
 });

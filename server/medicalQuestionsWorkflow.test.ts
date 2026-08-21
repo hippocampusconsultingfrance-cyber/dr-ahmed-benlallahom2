@@ -10,6 +10,7 @@ describe("workflow de questions-réponses médicales", () => {
     expect(router).toContain("sendMedicalQuestionResponseEmail");
     expect(router).toContain("response_sent_and_published");
     expect(router).toContain("verifyCandidateTurnstile");
+    expect(router).toContain("publicationConsent: z.literal(true)");
   });
 
   it("versionne un stockage privé sans coordonnées dans la requête publique", async () => {
