@@ -19,3 +19,6 @@ Un journal historique contenait une erreur d’import sur `sendMedicalQuestionRe
 | Redémarrage du serveur | Réussi |
 | Chargement de la page publique | Réussi |
 
+## Incident de maintenance observé après publication
+
+Après la publication suivante, le 22 août 2026, les deux domaines `drbenlallah-esc8d3hd.manus.space` et `drahmedbenlallahom.com` ont servi la même page générique **« Site under maintenance »** sur la route Questions santé. L’incident concerne donc la publication/instance de production elle-même et non le DNS du domaine personnalisé ni le routage de cette page.

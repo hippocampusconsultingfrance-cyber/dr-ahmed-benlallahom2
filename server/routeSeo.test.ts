@@ -21,9 +21,18 @@ describe("route SEO initial head", () => {
   });
 
   it("reconnaît les routes publiques profondes sans les marquer introuvables", () => {
-    for (const path of ["/faq", "/search", "/error", "/maintenance", "/vvip-offshore", "/recruitment/unsubscribe"]) {
+    for (const path of ["/faq", "/search", "/error", "/maintenance", "/vvip-offshore", "/recruitment/unsubscribe", "/questions-anesthesie"]) {
       expect(getRouteSeo(path).notFound, path).not.toBe(true);
     }
+  });
+
+  it("conserve une page Questions santé indexable avec une balise canonique dédiée", () => {
+    const seo = getRouteSeo("/questions-anesthesie");
+    const head = renderRouteSeoHead("/questions-anesthesie");
+
+    expect(seo.noIndex).not.toBe(true);
+    expect(seo.title).toContain("Questions santé");
+    expect(head).toContain("https://drahmedbenlallahom.com/questions-anesthesie");
   });
 
   it("exclut les outils et pages de statut de l’indexation", () => {

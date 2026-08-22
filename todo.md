@@ -2546,3 +2546,4 @@
 - [x] Créer cinq affiches LinkedIn professionnelles destinées aux employeurs et établissements
 - [x] Rédiger quinze textes LinkedIn prêts à publier pour les campagnes Questions santé, Candidats et Employeurs
 - [x] Diagnostiquer et rétablir le déploiement après l’échec sans journaux applicatifs
+- [ ] Rétablir l’accès public à Questions santé après l’affichage de maintenance sur le domaine personnalisé

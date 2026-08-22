@@ -22,6 +22,11 @@ const PUBLIC_ROUTES: Record<string, Omit<RouteSeo, "canonicalPath">> = {
     description: "Réservez en ligne une consultation de conseil en santé avec le Dr. Ahmed Ben Lallahom.",
     keywords: "réservation consultation santé, téléconsultation, conseil médical",
   },
+  "/questions-anesthesie": {
+    title: "Questions santé | Anesthésie et opération",
+    description: "Posez une question générale sur l’anesthésie ou une opération et recevez une réponse relue par email.",
+    keywords: "questions anesthésie, information opération, information santé, préparation intervention",
+  },
   "/recruitment": {
     title: "Recrutement santé international | Hippocampus",
     description: "Découvrez les opportunités internationales pour professionnels médicaux et paramédicaux.",
