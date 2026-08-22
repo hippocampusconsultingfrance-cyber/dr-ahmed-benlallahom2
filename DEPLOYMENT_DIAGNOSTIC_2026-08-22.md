@@ -22,3 +22,9 @@ Un journal historique contenait une erreur d’import sur `sendMedicalQuestionRe
 ## Incident de maintenance observé après publication
 
 Après la publication suivante, le 22 août 2026, les deux domaines `drbenlallah-esc8d3hd.manus.space` et `drahmedbenlallahom.com` ont servi la même page générique **« Site under maintenance »** sur la route Questions santé. L’incident concerne donc la publication/instance de production elle-même et non le DNS du domaine personnalisé ni le routage de cette page.
+
+## Cause et rétablissement
+
+La route `/questions-anesthesie` n’était pas déclarée dans `server/routeSeo.ts`. Le fallback statique lui attribuait donc un statut HTTP 404 ; la passerelle d’hébergement le convertissait ensuite en page de maintenance 503. La route a été ajoutée aux routes publiques avec ses métadonnées dédiées, ainsi qu’un test empêchant toute régression.
+
+Après publication du correctif `dedd2093`, la page Questions santé a de nouveau été chargée avec son titre, ses informations de confidentialité, le formulaire et la bibliothèque publique. Le domaine personnalisé est donc rétabli.

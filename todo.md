@@ -2546,4 +2546,5 @@
 - [x] Créer cinq affiches LinkedIn professionnelles destinées aux employeurs et établissements
 - [x] Rédiger quinze textes LinkedIn prêts à publier pour les campagnes Questions santé, Candidats et Employeurs
 - [x] Diagnostiquer et rétablir le déploiement après l’échec sans journaux applicatifs
-- [ ] Rétablir l’accès public à Questions santé après l’affichage de maintenance sur le domaine personnalisé
+- [x] Rétablir l’accès public à Questions santé après l’affichage de maintenance sur le domaine personnalisé
+- [x] Réaliser un audit final complet du site sans correction et livrer les anomalies priorisées pour décision — rapport `AUDIT_FINAL_2026-08-22.md` archivé ; aucune correction appliquée.
