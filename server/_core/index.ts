@@ -42,6 +42,7 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
 }
 
 const RECRUITMENT_MAX_FILE_SIZE = 5 * 1024 * 1024;
+const RECRUITMENT_MAX_TARGET_COUNTRIES = 18;
 const RECRUITMENT_ALLOWED_MIME_TYPES = new Set([
   "application/pdf",
   "application/msword",
@@ -83,7 +84,7 @@ const candidateDocumentUpload = multer({
           phone: z.string().trim().max(50).optional().default(""),
           specialty: z.string().trim().min(1).max(160),
           diplomaCountry: z.string().trim().min(1).max(100),
-          targetCountries: z.array(z.string().trim().min(1).max(80)).min(1).max(12),
+          targetCountries: z.array(z.string().trim().min(1).max(80)).min(1).max(RECRUITMENT_MAX_TARGET_COUNTRIES),
           languages: z.array(z.string().trim().min(1).max(80)).max(12).default([]),
           yearsExperience: z.number().int().min(0).max(70).optional(),
           availability: z.string().trim().max(100).optional().default(""),
@@ -408,7 +409,12 @@ async function startServer() {
         });
 
         if (!parsed.success) {
-          res.status(400).json({ error: "Les informations de candidature sont invalides." });
+          const targetCountriesTooMany = parsed.error.issues.some(issue => issue.path[0] === "targetCountries" && issue.code === "too_big");
+          res.status(400).json({
+            error: targetCountriesTooMany
+              ? `Vous pouvez sélectionner jusqu’à ${RECRUITMENT_MAX_TARGET_COUNTRIES} pays ciblés.`
+              : "Les informations de candidature sont invalides.",
+          });
           return;
         }
 
