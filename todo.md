@@ -2553,6 +2553,7 @@
 - [x] Diagnostiquer puis corriger le module Questions santé du tableau de bord administrateur : les questions longues ne peuvent plus pousser la fiche de traitement hors écran, et une erreur de chargement est désormais visible avec une action de reprise.
 - [x] Finaliser la configuration Cloudflare Turnstile : le domaine Manus direct est autorisé sur le widget existant, sans rotation de clé ni modification du mode de challenge.
 - [ ] Valider les trois widgets Turnstile en production depuis un navigateur utilisateur réel, sans soumettre de données ; le navigateur de contrôle ne reçoit pas de jeton malgré une CSP et des domaines autorisés corrects.
+- [x] Exécuter la recette Turnstile non destructive demandée sur Recrutement standard et VVIP, puis consigner précisément les états observés : chargement contrôlé et soumission correctement verrouillée sans jeton.
 - [x] Renforcer l’effacement RGPD manuel avec preuve d’audit et documentation explicite de la limite de suppression physique du stockage géré, sans supprimer automatiquement les CV.
 - [x] Revalider visuellement le parcours VVIP desktop et actualiser son étalon uniquement après validation du rendu stable.
 - [x] Clarifier et documenter la source de vérité des migrations Drizzle sans altérer la base de production.
