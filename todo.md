@@ -2548,3 +2548,8 @@
 - [x] Diagnostiquer et rétablir le déploiement après l’échec sans journaux applicatifs
 - [x] Rétablir l’accès public à Questions santé après l’affichage de maintenance sur le domaine personnalisé
 - [x] Réaliser un audit final complet du site sans correction et livrer les anomalies priorisées pour décision — rapport `AUDIT_FINAL_2026-08-22.md` archivé ; aucune correction appliquée.
+- [x] Empêcher toute soumission publique sans jeton Turnstile, préserver le challenge lors des re-rendus et afficher un état de reprise accessible.
+- [ ] Finaliser la configuration Cloudflare Turnstile (accès de compte requis) pour autoriser le domaine Manus direct, puis valider les trois widgets en production sans soumettre de données.
+- [x] Renforcer l’effacement RGPD manuel avec preuve d’audit et documentation explicite de la limite de suppression physique du stockage géré, sans supprimer automatiquement les CV.
+- [x] Revalider visuellement le parcours VVIP desktop et actualiser son étalon uniquement après validation du rendu stable.
+- [x] Clarifier et documenter la source de vérité des migrations Drizzle sans altérer la base de production.

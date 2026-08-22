@@ -55,7 +55,7 @@ const baselineUrls = {
   "recruitment-mobile": `${baseUrl}/manus-storage/recruitment-mobile_bc0f22fa.png`,
   "recruitment-standard-desktop": `${baseUrl}/manus-storage/recruitment-standard-desktop_54bd6392.png`,
   "recruitment-standard-mobile": `${baseUrl}/manus-storage/recruitment-standard-mobile_96b5f63c.png`,
-  "vvip-offshore-desktop": `${baseUrl}/manus-storage/vvip-offshore-desktop_8215ab48.png`,
+  "vvip-offshore-desktop": `${baseUrl}/manus-storage/vvip-offshore-desktop-2026-08-22_d6854b4a.png`,
   "vvip-offshore-mobile": `${baseUrl}/manus-storage/vvip-offshore-mobile_36550b97.png`,
   "employers-desktop": `${baseUrl}/manus-storage/employers-desktop_232959d2.png`,
   "employers-mobile": `${baseUrl}/manus-storage/employers-mobile_dbb45919.png`,

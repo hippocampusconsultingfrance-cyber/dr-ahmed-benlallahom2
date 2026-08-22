@@ -1,5 +1,5 @@
 import { getSessionCookieOptions } from "./_core/cookies";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { COOKIE_NAME } from "../shared/const";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, adminProcedure, router } from "./_core/trpc";
@@ -1590,16 +1590,29 @@ export const appRouter = router({
           const db = await getDb();
           if (!db) throw new Error("Database connection failed");
           const [application] = await db
-            .select({ id: cvApplications.id, trackingId: cvApplications.trackingId })
+            .select({ id: cvApplications.id, trackingId: cvApplications.trackingId, cvFileKey: cvApplications.cvFileKey })
             .from(cvApplications)
             .where(eq(cvApplications.id, input.id))
             .limit(1);
           if (!application) throw new TRPCError({ code: "NOT_FOUND", message: "Candidature introuvable" });
-          await logRecruitmentAction({ applicationId: input.id, adminOpenId: ctx.user.openId, action: "erase", metadata: { trackingId: application.trackingId } });
-          // The storage contract has no object-delete endpoint. Removing the only
-          // database reference makes the private object unreachable in the app.
+          const storageKeyFingerprint = createHash("sha256").update(application.cvFileKey).digest("hex");
+          // The managed storage contract intentionally exposes no delete-object API.
+          // Revoking the only application reference removes all app access without
+          // scheduling any automatic CV deletion. The audit proof retains no raw key.
+          await logRecruitmentAction({
+            applicationId: input.id,
+            adminOpenId: ctx.user.openId,
+            action: "erase",
+            metadata: {
+              trackingId: application.trackingId,
+              storageKeyFingerprint,
+              storageDisposition: "dereferenced_managed_storage_no_delete_api",
+              erasureMode: "manual_rgpd",
+              performedAt: new Date().toISOString(),
+            },
+          });
           await db.delete(cvApplications).where(eq(cvApplications.id, input.id));
-          return { success: true };
+          return { success: true, storageDisposition: "dereferenced", physicalDeletionAvailable: false };
         }),
     }),
 

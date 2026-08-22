@@ -626,14 +626,14 @@ export default function VvipOffshorePage() {
                       <input tabIndex={-1} autoComplete="off" value={form.website} onChange={(e) => update("website", e.target.value)} />
                     </label>
 
+                    <div className={isInvalid("turnstile") ? "rounded-xl border border-destructive/50 p-2" : ""}><TurnstileWidget onToken={setTurnstileToken} /></div>
                     {status === "error" && (
                       <p className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive" role="alert">{errorMessage}</p>
                     )}
 
-                    <button type="submit" disabled={status === "sending"} className="cta-primary w-full justify-center">
+                    <button type="submit" disabled={status === "sending" || !turnstileToken} className="cta-primary w-full justify-center">
                       {status === "sending" ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />{t.sending}</> : t.submit}
                     </button>
-                      <div className={isInvalid("turnstile") ? "rounded-xl border border-destructive/50 p-2" : ""}><TurnstileWidget onToken={setTurnstileToken} /></div>
                     </form>
                 </>
               )}

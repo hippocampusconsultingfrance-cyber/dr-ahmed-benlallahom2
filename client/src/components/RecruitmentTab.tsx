@@ -184,8 +184,8 @@ export default function RecruitmentTab() {
   };
 
   const eraseApplication = trpc.admin.recruitment.erase.useMutation({
-    onSuccess: () => {
-      toast.success("Dossier candidat effacé");
+    onSuccess: result => {
+      toast.success(result.physicalDeletionAvailable ? "Dossier candidat et objet privé effacés" : "Dossier effacé et accès au document révoqué ; preuve RGPD ajoutée au journal");
       setExpandedId(null);
       utils.admin.recruitment.list.invalidate();
     },
@@ -374,9 +374,9 @@ export default function RecruitmentTab() {
                           <Button size="sm" variant="outline" onClick={() => openEmailComposer(application.id, `${application.firstName} ${application.lastName}`, "additional_information")} disabled={sendTemplateEmail.isPending || eraseApplication.isPending || reanalyze.isPending}>
                             <Mail className="mr-2 h-4 w-4" /> Demander un complément
                           </Button>
-                          <Button size="sm" variant="outline" className="text-destructive hover:text-destructive" onClick={() => { if (window.confirm("Confirmer l’effacement définitif du dossier candidat et de ses résultats IA ?")) eraseApplication.mutate({ id: application.id }); }} disabled={eraseApplication.isPending || reanalyze.isPending}>
+                          <Button size="sm" variant="outline" className="text-destructive hover:text-destructive" onClick={() => { if (window.confirm("Confirmer l’effacement manuel RGPD du dossier, de ses résultats IA et la révocation immédiate de l’accès au document ? Une preuve d’audit sera conservée.")) eraseApplication.mutate({ id: application.id }); }} disabled={eraseApplication.isPending || reanalyze.isPending}>
                             {eraseApplication.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
-                            Effacer RGPD
+                            Effacer RGPD + preuve
                           </Button>
                         </div>
                       </div>
