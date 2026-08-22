@@ -95,8 +95,8 @@ export default function MedicalQuestionsAdminTab() {
   if (error) return <p className="text-destructive">{error.message}</p>;
 
   return (
-    <section className="grid gap-6 lg:grid-cols-[.9fr_1.1fr]">
-      <div>
+    <section className="grid gap-6 lg:grid-cols-[minmax(0,.9fr)_minmax(0,1.1fr)]">
+      <div className="min-w-0">
         <p className="section-kicker">Service gratuit</p>
         <h2 className="mt-2 font-display text-3xl">Questions médicales</h2>
         <p className="mt-3 text-sm leading-6 text-muted-foreground">
@@ -108,13 +108,13 @@ export default function MedicalQuestionsAdminTab() {
               type="button"
               key={question.id}
               onClick={() => setSelectedId(question.id)}
-              className={`w-full rounded-2xl border p-4 text-left transition-colors ${selectedId === question.id ? "border-primary bg-primary/10" : "border-border bg-card hover:border-primary/40"}`}
+              className={`min-w-0 w-full rounded-2xl border p-4 text-left transition-colors ${selectedId === question.id ? "border-primary bg-primary/10" : "border-border bg-card hover:border-primary/40"}`}
             >
               <div className="flex items-center justify-between gap-3">
-                <span className="font-semibold text-foreground">{question.firstName} {question.lastName}</span>
+                <span className="min-w-0 truncate font-semibold text-foreground">{question.firstName} {question.lastName}</span>
                 <span className="rounded-full border border-border px-2 py-1 text-xs text-muted-foreground">{question.status}</span>
               </div>
-              <p className="mt-2 line-clamp-2 text-sm text-muted-foreground">{question.question}</p>
+              <p className="mt-2 line-clamp-2 break-words text-sm text-muted-foreground [overflow-wrap:anywhere]">{question.question}</p>
               <p className="mt-3 flex items-center gap-1.5 text-xs text-muted-foreground">
                 <Clock3 className="h-3.5 w-3.5" />
                 {new Date(question.createdAt).toLocaleString("fr-FR")}
@@ -125,9 +125,17 @@ export default function MedicalQuestionsAdminTab() {
         </div>
       </div>
 
-      <div className="rounded-3xl border border-border bg-card/50 p-6">
+      <div className="min-w-0 rounded-3xl border border-border bg-card/50 p-6">
         {selected.isLoading ? (
           <PublicContentSkeleton cards={1} label="Chargement de la demande" />
+        ) : selected.error ? (
+          <div className="grid min-h-80 place-items-center text-center">
+            <div className="max-w-md space-y-3" role="alert">
+              <p className="font-medium text-destructive">Impossible de charger cette demande privée.</p>
+              <p className="text-sm text-muted-foreground">{selected.error.message}</p>
+              <button type="button" onClick={() => void selected.refetch()} className="rounded-lg border border-primary/40 px-4 py-2 text-sm font-medium text-primary hover:bg-primary/10">Réessayer le chargement</button>
+            </div>
+          </div>
         ) : selected.data ? (
           <div>
             <div className="flex items-center gap-2 text-primary">
