@@ -17,7 +17,10 @@ export default function CandidateResetPasswordPage() {
   const [password, setPassword] = useState("");
   const [passwordConfirmation, setPasswordConfirmation] = useState("");
   const [notice, setNotice] = useState("");
-  const reset = trpc.candidatePortal.resetPassword.useMutation({ onSuccess: () => navigate("/candidate/portal"), onError: () => setNotice(copy.genericError) });
+  const reset = trpc.candidatePortal.resetPassword.useMutation({
+    onSuccess: () => navigate("/candidate/portal"),
+    onError: error => setNotice(error.message || copy.genericError),
+  });
   const email = params.get("email") ?? "";
   const token = params.get("token") ?? "";
   const submit = (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); setNotice(""); if (password !== passwordConfirmation) { setNotice(copy.passwordMismatch); return; } reset.mutate({ email, token, password }); };
