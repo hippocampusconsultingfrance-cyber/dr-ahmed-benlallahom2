@@ -24,7 +24,6 @@ declare global {
 }
 
 const SCRIPT_ID = "cloudflare-turnstile-script";
-const WIDGET_WATCHDOG_MS = 4_000;
 
 /**
  * Renders one explicit Cloudflare challenge and exposes only its short-lived token.
@@ -45,7 +44,6 @@ export function TurnstileWidget({ onToken }: { onToken: (token: string | null) =
   useEffect(() => {
     if (!siteKey || !containerRef.current) return;
 
-    let watchdog: number | undefined;
     let script: HTMLScriptElement | null = null;
 
     const reportError = (code: string) => {
@@ -88,11 +86,6 @@ export function TurnstileWidget({ onToken }: { onToken: (token: string | null) =
         },
       });
 
-      watchdog = window.setTimeout(() => {
-        const activeContainer = containerRef.current;
-        const hasChallengeFrame = Boolean(activeContainer?.querySelector("iframe"));
-        if (widgetIdRef.current && !hasChallengeFrame) reportError("widget_unavailable");
-      }, WIDGET_WATCHDOG_MS);
     };
 
     const reportScriptLoadError = () => reportError("script_load_failed");
@@ -113,7 +106,6 @@ export function TurnstileWidget({ onToken }: { onToken: (token: string | null) =
     }
 
     return () => {
-      if (watchdog) window.clearTimeout(watchdog);
       form?.removeEventListener("submit", blockSubmitWithoutToken, true);
       script?.removeEventListener("load", render);
       script?.removeEventListener("error", reportScriptLoadError);

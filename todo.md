@@ -2549,6 +2549,7 @@
 - [x] Rétablir l’accès public à Questions santé après l’affichage de maintenance sur le domaine personnalisé
 - [x] Réaliser un audit final complet du site sans correction et livrer les anomalies priorisées pour décision — rapport `AUDIT_FINAL_2026-08-22.md` archivé ; aucune correction appliquée.
 - [x] Empêcher toute soumission publique sans jeton Turnstile, préserver le challenge lors des re-rendus et afficher un état de reprise accessible.
+- [x] Corriger le faux message d’échec Turnstile affiché après une vérification Cloudflare réussie : le watchdog prématuré est supprimé, le défi reste actif jusqu’à son rappel Cloudflare et la non-régression est testée.
 - [x] Finaliser la configuration Cloudflare Turnstile : le domaine Manus direct est autorisé sur le widget existant, sans rotation de clé ni modification du mode de challenge.
 - [ ] Valider les trois widgets Turnstile en production depuis un navigateur utilisateur réel, sans soumettre de données ; le navigateur de contrôle ne reçoit pas de jeton malgré une CSP et des domaines autorisés corrects.
 - [x] Renforcer l’effacement RGPD manuel avec preuve d’audit et documentation explicite de la limite de suppression physique du stockage géré, sans supprimer automatiquement les CV.
