@@ -2545,4 +2545,4 @@
 - [x] Créer cinq affiches LinkedIn professionnelles destinées aux candidats médicaux et paramédicaux
 - [x] Créer cinq affiches LinkedIn professionnelles destinées aux employeurs et établissements
 - [x] Rédiger quinze textes LinkedIn prêts à publier pour les campagnes Questions santé, Candidats et Employeurs
-- [ ] Diagnostiquer et rétablir le déploiement après l’échec sans journaux applicatifs
+- [x] Diagnostiquer et rétablir le déploiement après l’échec sans journaux applicatifs
