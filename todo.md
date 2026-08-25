@@ -2551,6 +2551,7 @@
 - [x] Empêcher toute soumission publique sans jeton Turnstile, préserver le challenge lors des re-rendus et afficher un état de reprise accessible.
 - [x] Corriger le faux message d’échec Turnstile affiché après une vérification Cloudflare réussie : le watchdog prématuré est supprimé, le défi reste actif jusqu’à son rappel Cloudflare et la non-régression est testée.
 - [x] Diagnostiquer puis corriger le rejet « informations de candidature invalides » après un succès Turnstile : la limite serveur accepte désormais les 18 pays proposés et tout dépassement reçoit un message explicite.
+- [x] Réaliser un audit complet non destructif de la version actuelle : parcours, sécurité, données, accessibilité, mobile, rendu visuel et erreurs techniques ; anomalies priorisées archivées dans `AUDIT_CURRENT_2026-08-25.md` avant toute correction.
 - [x] Diagnostiquer puis corriger l’échec de réinitialisation de mot de passe candidat : la page affiche désormais la cause sûre renvoyée par le serveur plutôt qu’un message d’échec générique.
 - [x] Diagnostiquer puis corriger le module Questions santé du tableau de bord administrateur : les questions longues ne peuvent plus pousser la fiche de traitement hors écran, et une erreur de chargement est désormais visible avec une action de reprise.
 - [x] Finaliser la configuration Cloudflare Turnstile : le domaine Manus direct est autorisé sur le widget existant, sans rotation de clé ni modification du mode de challenge.
