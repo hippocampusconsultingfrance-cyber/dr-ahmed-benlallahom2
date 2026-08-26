@@ -7,7 +7,7 @@ const readSource = (relativePath: string) => readFileSync(resolve(process.cwd(),
 describe("recrutement et ordre de navigation", () => {
   it("place une Terre décorative derrière la page de recrutement principale", () => {
     const source = readSource("client/src/pages/RecruitmentHubPage.tsx");
-    expect(source).toContain("hippocampus-recruitment-earth_f3124b59.png");
+    expect(source).toContain("/assets/medical-hero.svg");
     expect(source).toContain('aria-hidden="true"');
   });
 
