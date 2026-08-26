@@ -32,5 +32,5 @@ export async function releaseExpiredAppointmentHolds(now = new Date()) {
       eq(appointments.appointmentStatus, "held"),
       lte(appointments.holdExpiresAt, now)
     ));
-  return { released: Number(result[0]?.affectedRows ?? 0) };
+  return { released: Number(result.rowCount ?? 0) };
 }

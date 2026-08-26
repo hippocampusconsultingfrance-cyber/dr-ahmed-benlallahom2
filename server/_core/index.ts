@@ -4,6 +4,7 @@ import multer from "multer";
 import { Webhook } from "svix";
 import { z } from "zod";
 import { createServer } from "http";
+import { serveStatic } from "./static";
 import net from "net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "./oauth";
@@ -12,7 +13,6 @@ import { registerGoogleDriveOAuthRoutes } from "../googleDriveOAuthRoutes";
 import { registerStorageProxy } from "./storageProxy";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
-import { serveStatic, setupVite } from "./vite";
 import { storageGetSignedUrl, storagePut } from "../storage";
 import { notifyOwner } from "./notification";
 import { eq, sql } from "drizzle-orm";
@@ -112,8 +112,7 @@ function safeFileName(value: string): string {
   return value.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 180) || "cv";
 }
 
-async function startServer() {
-  assertCriticalProductionEnvironment();
+export async function createApp() {
   const app = express();
   app.set("trust proxy", 1);
   const server = createServer(app);
@@ -163,10 +162,11 @@ async function startServer() {
       if (event.type === "checkout.session.completed") {
         const session = event.data.object as any;
         console.log("Payment successful:", session.id);
-        const { drizzle } = await import("drizzle-orm/mysql2");
+        const { getDb } = await import("../db");
         const { appointments } = await import("../../drizzle/schema");
         const { eq } = await import("drizzle-orm");
-        const db = drizzle(process.env.DATABASE_URL!);
+        const db = await getDb();
+        if (!db) throw new Error("Database connection failed");
         const trackingId = session.metadata?.trackingId;
 
         if (!trackingId) {
@@ -217,11 +217,12 @@ async function startServer() {
         const session = event.data.object as any;
         const trackingId = session.metadata?.trackingId;
         if (trackingId) {
-          const { drizzle } = await import("drizzle-orm/mysql2");
+          const { getDb } = await import("../db");
           const { appointments } = await import("../../drizzle/schema");
           const { and, eq } = await import("drizzle-orm");
           const { getExpiredAppointmentHoldUpdate } = await import("../appointmentHolds");
-          const db = drizzle(process.env.DATABASE_URL!);
+          const db = await getDb();
+          if (!db) throw new Error("Database connection failed");
           await db
             .update(appointments)
             .set(getExpiredAppointmentHoldUpdate())
@@ -493,10 +494,10 @@ async function startServer() {
           ${parsed.data.availability || null}, ${parsed.data.mobility || null}, ${parsed.data.certifications || null},
           ${parsed.data.message || null}, ${storageResult.key}, ${originalName}, ${file.mimetype}, ${file.size},
           'quarantined', ${fileValidation.checksum}, ${fileValidation.notes}, 1,
-          ${parsed.data.marketingConsent === "1" ? 1 : 0}, "new", NOW(), ${retentionUntil}
-        )`);
+          ${parsed.data.marketingConsent === "1" ? 1 : 0}, 'new', NOW(), ${retentionUntil}
+        ) RETURNING id`);
 
-        const insertedId = (insertResult[0] as any)?.insertId;
+        const insertedId = Number((insertResult.rows[0] as { id?: number } | undefined)?.id || 0);
 
         const candidateName = `${parsed.data.firstName} ${parsed.data.lastName}`;
         const candidatePortalInviteUrl = insertedId
@@ -613,8 +614,8 @@ async function startServer() {
           status: "uploaded",
           analysisStatus: "queued",
           retentionUntil,
-        });
-        const documentId = Number(result[0].insertId);
+        }).returning({ id: candidateDocuments.id });
+        const documentId = Number(result[0].id);
         await db.insert(candidateDocumentProcessingJobs).values({ documentId, status: "queued" });
         await db.insert(candidateDocumentAuditLogs).values({
           candidateId: candidate.id,
@@ -740,11 +741,12 @@ async function startServer() {
         return res.status(403).json({ error: "cron-only" });
       }
 
-      const { drizzle } = await import("drizzle-orm/mysql2");
+      const { getDb } = await import("../db");
       const { appointments } = await import("../../drizzle/schema");
       const { and, eq, gte, lte, sql } = await import("drizzle-orm");
 
-      const db = drizzle(process.env.DATABASE_URL!);
+      const db = await getDb();
+      if (!db) throw new Error("Database connection failed");
 
       // Find appointments in the next 22-26 hours that haven't been reminded
       const now = new Date();
@@ -887,12 +889,24 @@ async function startServer() {
     }
   });
 
-  // development mode uses Vite, production mode uses static files
+  // Development uses Vite. On Vercel, public files are served by the CDN and
+  // only /api requests reach this Express application.
   if (process.env.NODE_ENV === "development") {
+    // Keep the development toolchain out of the Vercel server bundle.
+    const viteModulePath = "./vite";
+    const { setupVite } = await import(viteModulePath);
     await setupVite(app, server);
-  } else {
+  } else if (process.env.VERCEL !== "1") {
     serveStatic(app);
   }
+
+  return app;
+}
+
+async function startServer() {
+  assertCriticalProductionEnvironment();
+  const app = await createApp();
+  const server = createServer(app);
 
   const preferredPort = parseInt(process.env.PORT || "3000");
   const port = await findAvailablePort(preferredPort);
@@ -906,4 +920,6 @@ async function startServer() {
   });
 }
 
-startServer().catch(console.error);
+if (process.env.VERCEL !== "1") {
+  startServer().catch(console.error);
+}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { shouldLoadAnalytics } from "./analyticsConsent";
+import { shouldLoadAnalytics } from "./analyticsConsentLogic";
 
 describe("chargement de l’analytique selon le consentement", () => {
   it("bloque l’analytique en l’absence de consentement ou de préférence de performance", () => {

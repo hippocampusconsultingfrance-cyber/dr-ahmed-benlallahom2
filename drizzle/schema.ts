@@ -1,4 +1,12 @@
-import { index, int, mysqlEnum, mysqlTable, text, timestamp, uniqueIndex, varchar } from "drizzle-orm/mysql-core";
+import { index, integer as int, pgTable as mysqlTable, serial, text, timestamp, uniqueIndex, varchar } from "drizzle-orm/pg-core";
+
+// Keep the existing schema declarations readable while storing enum-like
+// values as typed PostgreSQL varchar columns. This avoids global enum-name
+// collisions because several tables intentionally use a column named status.
+function mysqlEnum<const T extends readonly [string, ...string[]]>(name: string, values: T) {
+  const length = Math.max(32, ...values.map(value => value.length));
+  return varchar(name, { length }).$type<T[number]>();
+}
 
 /**
  * Core user table backing auth flow.
@@ -10,7 +18,7 @@ export const users = mysqlTable("users", {
    * Surrogate primary key. Auto-incremented numeric value managed by the database.
    * Use this for relations between tables.
    */
-  id: int("id").autoincrement().primaryKey(),
+  id: serial("id").primaryKey(),
   /** Manus OAuth identifier (openId) returned from the OAuth callback. Unique per user. */
   openId: varchar("openId", { length: 64 }).notNull().unique(),
   name: text("name"),
@@ -18,7 +26,7 @@ export const users = mysqlTable("users", {
   loginMethod: varchar("loginMethod", { length: 64 }),
   role: mysqlEnum("role", ["user", "admin"]).default("user").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
 });
 
@@ -30,7 +38,7 @@ export type InsertUser = typeof users.$inferInsert;
  * Stores all messages sent via the website contact form.
  */
 export const contactMessages = mysqlTable("contact_messages", {
-  id: int("id").autoincrement().primaryKey(),
+  id: serial("id").primaryKey(),
   trackingId: varchar("tracking_id", { length: 20 }).notNull().unique(), // Unique tracking number for the user
   name: varchar("name", { length: 255 }).notNull(),
   email: varchar("email", { length: 320 }).notNull(),
@@ -49,7 +57,7 @@ export type InsertContactMessage = typeof contactMessages.$inferInsert;
  * Stores requests for data access, rectification, or deletion (right to be forgotten).
  */
 export const gdprRequests = mysqlTable("gdpr_requests", {
-  id: int("id").autoincrement().primaryKey(),
+  id: serial("id").primaryKey(),
   trackingId: varchar("tracking_id", { length: 20 }).notNull().unique(), // Unique tracking number for the user
   name: varchar("name", { length: 255 }).notNull(),
   email: varchar("email", { length: 320 }).notNull(),
@@ -61,7 +69,7 @@ export const gdprRequests = mysqlTable("gdpr_requests", {
   notes: text("notes"),
   read: int("read").default(0).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
 
 export type GdprRequest = typeof gdprRequests.$inferSelect;
@@ -72,7 +80,7 @@ export type InsertGdprRequest = typeof gdprRequests.$inferInsert;
  * Personal contact details are never part of the public query shape.
  */
 export const medicalQuestions = mysqlTable("medical_questions", {
-  id: int("id").autoincrement().primaryKey(),
+  id: serial("id").primaryKey(),
   trackingId: varchar("tracking_id", { length: 32 }).notNull().unique(),
   firstName: varchar("first_name", { length: 120 }).notNull(),
   lastName: varchar("last_name", { length: 120 }).notNull(),
@@ -91,14 +99,14 @@ export const medicalQuestions = mysqlTable("medical_questions", {
   responseSentAt: timestamp("response_sent_at"),
   publishedAt: timestamp("published_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, table => ({
   privateStatusCreated: index("medical_questions_status_created_idx").on(table.status, table.createdAt),
   publicPublication: index("medical_questions_publication_idx").on(table.status, table.publishedAt),
 }));
 
 export const medicalQuestionAuditLogs = mysqlTable("medical_question_audit_logs", {
-  id: int("id").autoincrement().primaryKey(),
+  id: serial("id").primaryKey(),
   medicalQuestionId: int("medical_question_id").notNull(),
   actorOpenId: varchar("actor_open_id", { length: 64 }),
   action: varchar("action", { length: 80 }).notNull(),
@@ -116,7 +124,7 @@ export type InsertMedicalQuestion = typeof medicalQuestions.$inferInsert;
  * Stores patient testimonials and reviews with privacy protection (initials/first names only).
  */
 export const testimonials = mysqlTable("testimonials", {
-  id: int("id").autoincrement().primaryKey(),
+  id: serial("id").primaryKey(),
   authorName: varchar("author_name", { length: 100 }).notNull(), // Initials or first name only
   rating: int("rating").notNull(), // 1-5 stars
   title: varchar("title", { length: 255 }).notNull(), // Short title
@@ -127,7 +135,7 @@ export const testimonials = mysqlTable("testimonials", {
   language: varchar("language", { length: 10 }).default("fr").notNull(), // Language code
   status: mysqlEnum("status", ["pending", "approved", "rejected"]).default("pending").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
 
 export type Testimonial = typeof testimonials.$inferSelect;
@@ -138,7 +146,7 @@ export type InsertTestimonial = typeof testimonials.$inferInsert;
  * Stores health consultation appointments with payment and status tracking.
  */
 export const appointments = mysqlTable("appointments", {
-  id: int("id").autoincrement().primaryKey(),
+  id: serial("id").primaryKey(),
   trackingId: varchar("tracking_id", { length: 20 }).notNull().unique(), // Unique booking reference
   customerName: varchar("customer_name", { length: 255 }).notNull(),
   customerEmail: varchar("customer_email", { length: 320 }).notNull(),
@@ -165,7 +173,7 @@ export const appointments = mysqlTable("appointments", {
   smsSent: int("sms_sent").default(0).notNull(), // 1 = SMS notification sent
   reminderSent: int("reminder_sent").default(0).notNull(), // 1 = 24h reminder sent
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 }, table => ({
   activeSlotUnique: uniqueIndex("appointments_active_slot_unique").on(table.slotKey),
   holdExpiry: index("appointments_hold_expiry_idx").on(table.appointmentStatus, table.paymentStatus, table.holdExpiresAt),
@@ -176,7 +184,7 @@ export type InsertAppointment = typeof appointments.$inferInsert;
 
 /** Durable post-payment work. Stripe webhooks only enqueue work; notifications and invoices are retried safely. */
 export const appointmentFulfillmentJobs = mysqlTable("appointment_fulfillment_jobs", {
-  id: int("id").autoincrement().primaryKey(),
+  id: serial("id").primaryKey(),
   appointmentId: int("appointment_id").notNull(),
   jobType: mysqlEnum("job_type", ["confirmation", "invoice"]).notNull(),
   status: mysqlEnum("status", ["queued", "running", "retry", "completed", "failed"]).default("queued").notNull(),
@@ -187,7 +195,7 @@ export const appointmentFulfillmentJobs = mysqlTable("appointment_fulfillment_jo
   startedAt: timestamp("started_at"),
   finishedAt: timestamp("finished_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, table => ({
   appointmentJobUnique: uniqueIndex("appointment_fulfillment_unique").on(table.appointmentId, table.jobType),
   dueJobs: index("appointment_fulfillment_due_idx").on(table.status, table.scheduledFor),
@@ -198,7 +206,7 @@ export const appointmentFulfillmentJobs = mysqlTable("appointment_fulfillment_jo
  * Admin can publish articles, veille scientifique, etc.
  */
 export const blogPosts = mysqlTable("blog_posts", {
-  id: int("id").autoincrement().primaryKey(),
+  id: serial("id").primaryKey(),
   slug: varchar("slug", { length: 255 }).notNull().unique(),
   title: varchar("title", { length: 500 }).notNull(),
   excerpt: text("excerpt"), // Short summary for cards
@@ -210,7 +218,7 @@ export const blogPosts = mysqlTable("blog_posts", {
   published: int("published").default(0).notNull(), // 1 = published, 0 = draft
   authorId: int("author_id"), // Reference to users table
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
 
 export type BlogPost = typeof blogPosts.$inferSelect;
@@ -221,7 +229,7 @@ export type InsertBlogPost = typeof blogPosts.$inferInsert;
  * Defines when the doctor is available for consultations.
  */
 export const availabilitySlots = mysqlTable("availability_slots", {
-  id: int("id").autoincrement().primaryKey(),
+  id: serial("id").primaryKey(),
   dayOfWeek: int("day_of_week").notNull(), // 0=Sunday, 1=Monday, ..., 6=Saturday
   startTime: varchar("start_time", { length: 5 }).notNull(), // HH:MM format
   endTime: varchar("end_time", { length: 5 }).notNull(), // HH:MM format
@@ -236,7 +244,7 @@ export type InsertAvailabilitySlot = typeof availabilitySlots.$inferInsert;
  * Blocked dates (holidays, vacations, etc.)
  */
 export const blockedDates = mysqlTable("blocked_dates", {
-  id: int("id").autoincrement().primaryKey(),
+  id: serial("id").primaryKey(),
   date: varchar("date", { length: 10 }).notNull(), // YYYY-MM-DD format
   reason: varchar("reason", { length: 255 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
@@ -249,7 +257,7 @@ export type InsertBlockedDate = typeof blockedDates.$inferInsert;
  * International healthcare recruitment applications with AI intelligence metadata.
  */
 export const cvApplications = mysqlTable("cv_applications", {
-  id: int("id").autoincrement().primaryKey(),
+  id: serial("id").primaryKey(),
   trackingId: varchar("tracking_id", { length: 20 }).notNull().unique(),
   firstName: varchar("first_name", { length: 120 }).notNull(),
   lastName: varchar("last_name", { length: 120 }).notNull(),
@@ -310,7 +318,7 @@ export const cvApplications = mysqlTable("cv_applications", {
   extractionWarnings: text("extraction_warnings"),
   analysisRequestedAt: timestamp("analysis_requested_at"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
 
 export type CvApplication = typeof cvApplications.$inferSelect;
@@ -318,7 +326,7 @@ export type InsertCvApplication = typeof cvApplications.$inferInsert;
 
 /** Normalized certifications extracted from or declared in a candidate CV. */
 export const cvCandidateCertifications = mysqlTable("cv_candidate_certifications", {
-  id: int("id").autoincrement().primaryKey(),
+  id: serial("id").primaryKey(),
   applicationId: int("application_id").notNull(),
   name: varchar("name", { length: 180 }).notNull(),
   issuingBody: varchar("issuing_body", { length: 180 }),
@@ -334,7 +342,7 @@ export const cvCandidateCertifications = mysqlTable("cv_candidate_certifications
 
 /** Normalized languages with a controlled level or unknown when no level is stated. */
 export const cvCandidateLanguages = mysqlTable("cv_candidate_languages", {
-  id: int("id").autoincrement().primaryKey(),
+  id: serial("id").primaryKey(),
   applicationId: int("application_id").notNull(),
   language: varchar("language", { length: 80 }).notNull(),
   proficiency: mysqlEnum("proficiency", ["basic", "working", "professional", "fluent", "native", "unknown"]).default("unknown").notNull(),
@@ -348,7 +356,7 @@ export const cvCandidateLanguages = mysqlTable("cv_candidate_languages", {
 
 /** Structured professional experience used for transparent human-reviewed matching. */
 export const cvCandidateExperiences = mysqlTable("cv_candidate_experiences", {
-  id: int("id").autoincrement().primaryKey(),
+  id: serial("id").primaryKey(),
   applicationId: int("application_id").notNull(),
   role: varchar("role", { length: 180 }).notNull(),
   organization: varchar("organization", { length: 180 }).notNull(),
@@ -370,7 +378,7 @@ export const cvCandidateExperiences = mysqlTable("cv_candidate_experiences", {
  * holding the candidate HTTP request while parsing files and calling the model.
  */
 export const cvProcessingJobs = mysqlTable("cv_processing_jobs", {
-  id: int("id").autoincrement().primaryKey(),
+  id: serial("id").primaryKey(),
   applicationId: int("application_id").notNull(),
   jobType: mysqlEnum("job_type", ["analyze_cv"]).default("analyze_cv").notNull(),
   status: mysqlEnum("job_status", ["queued", "running", "completed", "retry", "failed"]).default("queued").notNull(),
@@ -381,7 +389,7 @@ export const cvProcessingJobs = mysqlTable("cv_processing_jobs", {
   finishedAt: timestamp("finished_at"),
   lastError: text("last_error"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, table => ({
   jobScheduleIdx: index("cv_processing_jobs_schedule_idx").on(table.status, table.scheduledFor),
   applicationIdx: index("cv_processing_jobs_application_idx").on(table.applicationId),
@@ -392,7 +400,7 @@ export type InsertCvProcessingJob = typeof cvProcessingJobs.$inferInsert;
 
 /** One encrypted Google Drive authorization dedicated to recruitment CV exports. */
 export const googleDriveConnections = mysqlTable("google_drive_connections", {
-  id: int("id").autoincrement().primaryKey(),
+  id: serial("id").primaryKey(),
   connectionKey: varchar("connection_key", { length: 64 }).notNull().unique(),
   authorizedByOpenId: varchar("authorized_by_open_id", { length: 128 }).notNull(),
   folderId: varchar("folder_id", { length: 128 }).notNull(),
@@ -403,12 +411,12 @@ export const googleDriveConnections = mysqlTable("google_drive_connections", {
   connectedAt: timestamp("connected_at").defaultNow().notNull(),
   lastUsedAt: timestamp("last_used_at"),
   lastError: text("last_error"),
-  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
 /** Durable, idempotent copies of accepted CVs into the private Google Drive folder. */
 export const cvGoogleDriveExportJobs = mysqlTable("cv_google_drive_export_jobs", {
-  id: int("id").autoincrement().primaryKey(),
+  id: serial("id").primaryKey(),
   applicationId: int("application_id").notNull().unique(),
   status: mysqlEnum("status", ["queued", "running", "retry", "completed", "failed"]).default("queued").notNull(),
   attempts: int("attempts").default(0).notNull(),
@@ -420,7 +428,7 @@ export const cvGoogleDriveExportJobs = mysqlTable("cv_google_drive_export_jobs",
   driveFileId: varchar("drive_file_id", { length: 128 }),
   driveFileUrl: varchar("drive_file_url", { length: 500 }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, table => ({
   dueJobs: index("cv_drive_export_due_idx").on(table.status, table.scheduledFor),
 }));
@@ -432,7 +440,7 @@ export type CvGoogleDriveExportJob = typeof cvGoogleDriveExportJobs.$inferSelect
  * Immutable administrative audit trail for sensitive recruitment actions.
  */
 export const recruitmentAuditLogs = mysqlTable("recruitment_audit_logs", {
-  id: int("id").autoincrement().primaryKey(),
+  id: serial("id").primaryKey(),
   applicationId: int("application_id"),
   adminOpenId: varchar("admin_open_id", { length: 128 }).notNull(),
   action: mysqlEnum("action", ["download", "reanalyze", "erase", "email", "status_update", "retention_cleanup", "export", "unsubscribe"]).notNull(),
@@ -450,7 +458,7 @@ export type InsertRecruitmentAuditLog = typeof recruitmentAuditLogs.$inferInsert
  * Admin-defined matching profiles for country/specialty/language/score screening.
  */
 export const recruitmentMatchProfiles = mysqlTable("recruitment_match_profiles", {
-  id: int("id").autoincrement().primaryKey(),
+  id: serial("id").primaryKey(),
   name: varchar("name", { length: 160 }).notNull(),
   targetCountry: varchar("target_country", { length: 120 }),
   specialty: varchar("specialty", { length: 160 }),
@@ -459,7 +467,7 @@ export const recruitmentMatchProfiles = mysqlTable("recruitment_match_profiles",
   requiredSkills: text("required_skills"),
   active: int("active").default(1).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
 export type RecruitmentMatchProfile = typeof recruitmentMatchProfiles.$inferSelect;
@@ -470,7 +478,7 @@ export type InsertRecruitmentMatchProfile = typeof recruitmentMatchProfiles.$inf
  * drift between the public brief endpoint and the administrative workflow.
  */
 export const clientBriefs = mysqlTable("client_briefs", {
-  id: int("id").autoincrement().primaryKey(),
+  id: serial("id").primaryKey(),
   briefId: varchar("brief_id", { length: 20 }).notNull().unique(),
   organizationName: varchar("organization_name", { length: 180 }).notNull(),
   contactName: varchar("contact_name", { length: 120 }).notNull(),
@@ -497,7 +505,7 @@ export type InsertClientBrief = typeof clientBriefs.$inferInsert;
 
 /** Shortlist and review state connecting an employer mission to selected candidates. */
 export const clientBriefCandidates = mysqlTable("client_brief_candidates", {
-  id: int("id").autoincrement().primaryKey(),
+  id: serial("id").primaryKey(),
   briefId: int("brief_id").notNull(),
   applicationId: int("application_id").notNull(),
   matchScore: int("match_score"),
@@ -505,7 +513,7 @@ export const clientBriefCandidates = mysqlTable("client_brief_candidates", {
   status: mysqlEnum("association_status", ["suggested", "reviewing", "shortlisted", "declined"]).default("suggested").notNull(),
   notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, table => ({
   briefIdx: index("client_brief_candidates_brief_idx").on(table.briefId),
   applicationIdx: index("client_brief_candidates_application_idx").on(table.applicationId),
@@ -519,7 +527,7 @@ export type ClientBriefCandidate = typeof clientBriefCandidates.$inferSelect;
  * deliberately out of scope.
  */
 export const recruitmentCampaigns = mysqlTable("recruitment_campaigns", {
-  id: int("id").autoincrement().primaryKey(),
+  id: serial("id").primaryKey(),
   title: varchar("title", { length: 180 }).notNull(),
   subject: varchar("subject", { length: 255 }).notNull(),
   body: text("body").notNull(),
@@ -539,7 +547,7 @@ export type RecruitmentCampaign = typeof recruitmentCampaigns.$inferSelect;
 
 /** Reusable, admin-owned copy blocks for recurring medical recruitment offers. */
 export const recruitmentOfferTemplates = mysqlTable("recruitment_offer_templates", {
-  id: int("id").autoincrement().primaryKey(),
+  id: serial("id").primaryKey(),
   name: varchar("name", { length: 180 }).notNull(),
   category: mysqlEnum("category", ["europe", "canada", "middle_east", "vvip_offshore", "paramedical", "general"]).default("general").notNull(),
   language: mysqlEnum("language", ["fr", "en"]).default("fr").notNull(),
@@ -548,7 +556,7 @@ export const recruitmentOfferTemplates = mysqlTable("recruitment_offer_templates
   active: int("active").default(1).notNull(),
   createdByOpenId: varchar("created_by_open_id", { length: 128 }).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, table => ({
   activeIdx: index("recruitment_offer_templates_active_idx").on(table.active, table.updatedAt),
 }));
@@ -557,7 +565,7 @@ export type RecruitmentOfferTemplate = typeof recruitmentOfferTemplates.$inferSe
 
 /** Immutable delivery log for a campaign recipient. */
 export const recruitmentCampaignRecipients = mysqlTable("recruitment_campaign_recipients", {
-  id: int("id").autoincrement().primaryKey(),
+  id: serial("id").primaryKey(),
   campaignId: int("campaign_id").notNull(),
   applicationId: int("application_id").notNull(),
   recipientEmail: varchar("recipient_email", { length: 320 }).notNull(),
@@ -577,7 +585,7 @@ export type RecruitmentCampaignRecipient = typeof recruitmentCampaignRecipients.
 
 /** Manual follow-up worklist; reminders are suggestions only and never send email by themselves. */
 export const recruitmentFollowUpTasks = mysqlTable("recruitment_follow_up_tasks", {
-  id: int("id").autoincrement().primaryKey(),
+  id: serial("id").primaryKey(),
   applicationId: int("application_id").notNull(),
   campaignId: int("campaign_id"),
   kind: mysqlEnum("kind", ["follow_up_7", "follow_up_14", "custom"]).notNull(),
@@ -587,7 +595,7 @@ export const recruitmentFollowUpTasks = mysqlTable("recruitment_follow_up_tasks"
   completedAt: timestamp("completed_at"),
   completedByOpenId: varchar("completed_by_open_id", { length: 128 }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, table => ({
   applicationIdx: index("recruitment_follow_up_tasks_application_idx").on(table.applicationId, table.status, table.dueAt),
   campaignIdx: index("recruitment_follow_up_tasks_campaign_idx").on(table.campaignId),
@@ -597,7 +605,7 @@ export type RecruitmentFollowUpTask = typeof recruitmentFollowUpTasks.$inferSele
 
 /** Idempotent provider event archive used for delivery reporting and bounce suppression. */
 export const recruitmentEmailEvents = mysqlTable("recruitment_email_events", {
-  id: int("id").autoincrement().primaryKey(),
+  id: serial("id").primaryKey(),
   providerEventId: varchar("provider_event_id", { length: 120 }).notNull().unique(),
   providerEmailId: varchar("provider_email_id", { length: 120 }),
   campaignRecipientId: int("campaign_recipient_id"),
@@ -616,7 +624,7 @@ export type RecruitmentEmailEvent = typeof recruitmentEmailEvents.$inferSelect;
 
 /** Candidate-owned account, activated by a one-time email verification link. */
 export const candidateAccounts = mysqlTable("candidate_accounts", {
-  id: int("id").autoincrement().primaryKey(),
+  id: serial("id").primaryKey(),
   email: varchar("email", { length: 320 }).notNull().unique(),
   firstName: varchar("first_name", { length: 120 }),
   lastName: varchar("last_name", { length: 120 }),
@@ -634,7 +642,7 @@ export const candidateAccounts = mysqlTable("candidate_accounts", {
   documentConsentAt: timestamp("document_consent_at"),
   status: mysqlEnum("status", ["active", "disabled", "erased"]).default("active").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, table => ({
   emailVerifiedIdx: index("candidate_accounts_email_verified_idx").on(table.email, table.emailVerifiedAt),
   applicationIdx: index("candidate_accounts_application_idx").on(table.linkedApplicationId),
@@ -644,7 +652,7 @@ export type CandidateAccount = typeof candidateAccounts.$inferSelect;
 
 /** Opaque, hashed, expiring candidate sessions. */
 export const candidateSessions = mysqlTable("candidate_sessions", {
-  id: int("id").autoincrement().primaryKey(),
+  id: serial("id").primaryKey(),
   candidateId: int("candidate_id").notNull(),
   tokenHash: varchar("token_hash", { length: 128 }).notNull().unique(),
   deviceLabel: varchar("device_label", { length: 180 }),
@@ -659,7 +667,7 @@ export const candidateSessions = mysqlTable("candidate_sessions", {
 
 /** Private administrative documents owned by an authenticated candidate. */
 export const candidateDocuments = mysqlTable("candidate_documents", {
-  id: int("id").autoincrement().primaryKey(),
+  id: serial("id").primaryKey(),
   candidateId: int("candidate_id").notNull(),
   applicationId: int("application_id"),
   category: mysqlEnum("category", ["identity_document", "medical_license", "diploma", "certificate", "professional_insurance", "vaccination_record", "criminal_record", "employment_evidence", "proof_of_address", "other"]).notNull(),
@@ -693,7 +701,7 @@ export const candidateDocuments = mysqlTable("candidate_documents", {
   reviewNotes: text("review_notes"),
   retentionUntil: timestamp("retention_until"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, table => ({
   candidateCreatedIdx: index("candidate_documents_candidate_created_idx").on(table.candidateId, table.createdAt),
   reviewQueueIdx: index("candidate_documents_review_queue_idx").on(table.status, table.analysisStatus),
@@ -704,7 +712,7 @@ export type CandidateDocument = typeof candidateDocuments.$inferSelect;
 
 /** Durable queue for private-document analysis; requests never wait for an LLM. */
 export const candidateDocumentProcessingJobs = mysqlTable("candidate_document_processing_jobs", {
-  id: int("id").autoincrement().primaryKey(),
+  id: serial("id").primaryKey(),
   documentId: int("document_id").notNull(),
   status: mysqlEnum("status", ["queued", "running", "completed", "retry", "failed"]).default("queued").notNull(),
   attempts: int("attempts").default(0).notNull(),
@@ -714,7 +722,7 @@ export const candidateDocumentProcessingJobs = mysqlTable("candidate_document_pr
   finishedAt: timestamp("finished_at"),
   lastError: text("last_error"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, table => ({
   documentScheduleIdx: index("candidate_document_jobs_schedule_idx").on(table.status, table.scheduledFor),
   documentIdx: index("candidate_document_jobs_document_idx").on(table.documentId),
@@ -722,7 +730,7 @@ export const candidateDocumentProcessingJobs = mysqlTable("candidate_document_pr
 
 /** Audit trail for candidate and administrator access to private documents. */
 export const candidateDocumentAuditLogs = mysqlTable("candidate_document_audit_logs", {
-  id: int("id").autoincrement().primaryKey(),
+  id: serial("id").primaryKey(),
   documentId: int("document_id"),
   candidateId: int("candidate_id"),
   actorType: mysqlEnum("actor_type", ["candidate", "admin", "system"]).notNull(),
@@ -737,7 +745,7 @@ export const candidateDocumentAuditLogs = mysqlTable("candidate_document_audit_l
 
 /** Persistent rate limits survive process restarts and capture abuse by action and opaque identity key. */
 export const candidateSecurityRateLimits = mysqlTable("candidate_security_rate_limits", {
-  id: int("id").autoincrement().primaryKey(),
+  id: serial("id").primaryKey(),
   action: varchar("action", { length: 80 }).notNull(),
   subjectHash: varchar("subject_hash", { length: 128 }).notNull(),
   windowStartedAt: timestamp("window_started_at").notNull(),
@@ -751,7 +759,7 @@ export const candidateSecurityRateLimits = mysqlTable("candidate_security_rate_l
 
 /** Security-relevant candidate and administrator events, with privacy-preserving IP hashes. */
 export const securityEvents = mysqlTable("security_events", {
-  id: int("id").autoincrement().primaryKey(),
+  id: serial("id").primaryKey(),
   actorKind: mysqlEnum("security_event_actor_kind", ["candidate", "admin", "anonymous", "system"]).notNull(),
   actorReference: varchar("actor_reference", { length: 160 }),
   category: varchar("category", { length: 100 }).notNull(),
@@ -768,7 +776,7 @@ export const securityEvents = mysqlTable("security_events", {
 
 /** One-time email MFA challenges issued only to already authenticated administrators. */
 export const adminMfaChallenges = mysqlTable("admin_mfa_challenges", {
-  id: int("id").autoincrement().primaryKey(),
+  id: serial("id").primaryKey(),
   openId: varchar("open_id", { length: 128 }).notNull(),
   codeHash: varchar("code_hash", { length: 128 }).notNull(),
   expiresAt: timestamp("expires_at").notNull(),
@@ -781,7 +789,7 @@ export const adminMfaChallenges = mysqlTable("admin_mfa_challenges", {
 
 /** Opaque, expiring proof that an administrator completed the second factor. */
 export const adminMfaSessions = mysqlTable("admin_mfa_sessions", {
-  id: int("id").autoincrement().primaryKey(),
+  id: serial("id").primaryKey(),
   openId: varchar("open_id", { length: 128 }).notNull(),
   tokenHash: varchar("token_hash", { length: 128 }).notNull().unique(),
   expiresAt: timestamp("expires_at").notNull(),

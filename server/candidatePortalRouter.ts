@@ -205,8 +205,8 @@ export const candidatePortalRouter = router({
           linkedApplicationId: matchingApplicationId,
           termsAcceptedAt: now,
           documentConsentAt: now,
-        }));
-        candidateId = Number(result[0].insertId);
+        }).returning({ id: candidateAccounts.id }));
+        candidateId = Number(result[0].id);
       }
 
       if (candidateId) {

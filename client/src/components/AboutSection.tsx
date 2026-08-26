@@ -57,7 +57,7 @@ export default function AboutSection() {
           <div className="lg:col-span-5 lg:-mt-12 relative">
             <div className="about-visual relative rounded-2xl overflow-hidden aspect-[3/4] max-w-sm mx-auto lg:mx-0 shadow-2xl shadow-primary/10">
               <img
-                src="/manus-storage/hero-ahmed-medical_4adb9653.png"
+                src="/assets/profile-placeholder.svg"
                 loading="lazy"
                 alt="Dr. Ahmed Ben Lallahom"
                 className="w-full h-full object-cover"

@@ -546,8 +546,7 @@ export default function BookingPage() {
               {bookingRailCopy.note}
             </p>
             <img
-              src="/manus-storage/booking-care-path-1280_c6d0ae6a.webp"
-              srcSet="/manus-storage/booking-care-path-640_ef9fbde5.webp 640w, /manus-storage/booking-care-path-1280_c6d0ae6a.webp 1280w"
+              src="/assets/booking-care.svg"
               sizes="(min-width: 1024px) 30vw, 100vw"
               loading="lazy"
               decoding="async"

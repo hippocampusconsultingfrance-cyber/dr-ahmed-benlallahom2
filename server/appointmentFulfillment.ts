@@ -16,11 +16,17 @@ export async function enqueueAppointmentFulfillment(appointmentId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database connection failed");
   for (const jobType of ["confirmation", "invoice"] as const) {
-    await db.execute(sql`
-      INSERT INTO appointment_fulfillment_jobs (appointment_id, job_type, status, attempts, max_attempts, scheduled_for)
-      VALUES (${appointmentId}, ${jobType}, 'queued', 0, 3, NOW())
-      ON DUPLICATE KEY UPDATE updated_at = NOW()
-    `);
+    await db.insert(appointmentFulfillmentJobs).values({
+      appointmentId,
+      jobType,
+      status: "queued",
+      attempts: 0,
+      maxAttempts: 3,
+      scheduledFor: new Date(),
+    }).onConflictDoUpdate({
+      target: [appointmentFulfillmentJobs.appointmentId, appointmentFulfillmentJobs.jobType],
+      set: { updatedAt: new Date() },
+    });
   }
 }
 

@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { COOKIE_CONSENT_STORAGE_KEY } from "./cookieConsentState";
-import { COOKIE_CONSENT_CHANGE_EVENT, shouldLoadAnalytics } from "./analyticsConsent";
+import { COOKIE_CONSENT_CHANGE_EVENT, shouldLoadAnalytics } from "./analyticsConsentLogic";
 
 const ANALYTICS_SCRIPT_ID = "consent-managed-analytics";
 

@@ -86,8 +86,8 @@ export const medicalQuestionsRouter = router({
       privacyConsent: 1,
       publicationConsent: input.publicationConsent ? 1 : 0,
       urgencyAcknowledged: 1,
-    });
-    const questionId = Number(result[0].insertId);
+    }).returning({ id: medicalQuestions.id });
+    const questionId = Number(result[0].id);
     await auditQuestion({ questionId, action: "submitted", metadata: { publicationConsent: input.publicationConsent, language: input.language } });
     await logSecurityEvent({ actorKind: "anonymous", actorReference: input.email, category: "public_medical_question_submitted", outcome: "allowed", severity: "info", ipHash });
     return { trackingId };

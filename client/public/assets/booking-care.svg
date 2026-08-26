@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 800" role="img" aria-labelledby="title desc">
+  <title id="title">Consultation programmée</title><desc id="desc">Calendrier et horloge symbolisant la réservation d’une consultation</desc>
+  <rect width="1280" height="800" rx="48" fill="#071722"/>
+  <rect x="230" y="150" width="620" height="500" rx="48" fill="#0d3040" stroke="#55c9ef" stroke-width="8"/>
+  <path d="M230 285h620M370 100v110M710 100v110" stroke="#c7a66a" stroke-width="22" stroke-linecap="round"/>
+  <g fill="#55c9ef" opacity=".8"><circle cx="370" cy="400" r="28"/><circle cx="510" cy="400" r="28"/><circle cx="650" cy="400" r="28"/><circle cx="370" cy="525" r="28"/><circle cx="510" cy="525" r="28"/></g>
+  <circle cx="900" cy="520" r="170" fill="#06131f" stroke="#c7a66a" stroke-width="9"/>
+  <path d="M900 520V405M900 520l88 58" stroke="#e9f8ff" stroke-width="18" stroke-linecap="round"/>
+</svg>

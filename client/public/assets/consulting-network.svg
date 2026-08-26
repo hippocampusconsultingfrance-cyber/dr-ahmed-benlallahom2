@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 800" role="img" aria-labelledby="title desc">
+  <title id="title">Réseau international de santé</title><desc id="desc">Illustration abstraite de collaboration médicale internationale</desc>
+  <defs><radialGradient id="bg"><stop stop-color="#174c60"/><stop offset="1" stop-color="#05121d"/></radialGradient></defs>
+  <rect width="1280" height="800" rx="48" fill="url(#bg)"/>
+  <g stroke="#55c9ef" stroke-width="3" opacity=".55"><path d="M175 530L380 250 635 390 870 180 1105 475"/><path d="M175 530L635 390 1105 475M380 250L870 180"/></g>
+  <g fill="#06131f" stroke="#c7a66a" stroke-width="6"><circle cx="175" cy="530" r="48"/><circle cx="380" cy="250" r="48"/><circle cx="635" cy="390" r="66"/><circle cx="870" cy="180" r="48"/><circle cx="1105" cy="475" r="48"/></g>
+  <g transform="translate(595 350)" fill="#e9f8ff"><rect x="25" width="30" height="80" rx="7"/><rect y="25" width="80" height="30" rx="7"/></g>
+</svg>

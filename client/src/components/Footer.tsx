@@ -29,7 +29,7 @@ export default function Footer() {
           <div className="sm:col-span-2 lg:col-span-1">
             <div className="flex items-center gap-3 mb-4">
               <img
-                src="/manus-storage/logo-abl_2afbc5e0.png"
+                src="/assets/abl-logo.svg"
                 alt={logoAlt}
                 className="w-9 h-9"
               />

@@ -1,6 +1,3 @@
-import { PDFParse } from "pdf-parse";
-import mammoth from "mammoth";
-import WordExtractor from "word-extractor";
 import { eq } from "drizzle-orm";
 import { cvApplications, cvCandidateCertifications, cvCandidateExperiences, cvCandidateLanguages } from "../drizzle/schema";
 import { getDb } from "./db";
@@ -183,6 +180,7 @@ export type CvExtractionResult = {
 };
 
 async function extractPdfWithVision(buffer: Buffer): Promise<{ text: string; confidence: number | null; warnings: string[] }> {
+  const { PDFParse } = await import("pdf-parse");
   const parser = new PDFParse({ data: buffer });
   try {
     const screenshots = await parser.getScreenshot({ first: 3, desiredWidth: 1400, imageDataUrl: true, imageBuffer: false });
@@ -218,6 +216,7 @@ async function extractPdfWithVision(buffer: Buffer): Promise<{ text: string; con
 
 export async function extractCvDocument(buffer: Buffer, mimeType: string): Promise<CvExtractionResult> {
   if (mimeType === "application/pdf") {
+    const { PDFParse } = await import("pdf-parse");
     const parser = new PDFParse({ data: buffer });
     let extracted = "";
     let totalPages: number | null = null;
@@ -242,11 +241,13 @@ export async function extractCvDocument(buffer: Buffer, mimeType: string): Promi
   }
 
   if (mimeType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") {
+    const mammoth = (await import("mammoth")).default;
     const result = await mammoth.extractRawText({ buffer });
     return { text: cleanText(result.value), method: "docx", totalPages: null, ocrConfidence: null, ocrModelVersion: null, warnings: result.messages.map(message => `${message.type}:${message.message}`) };
   }
 
   if (mimeType === "application/msword") {
+    const WordExtractor = (await import("word-extractor")).default;
     const document = await new WordExtractor().extract(buffer);
     return { text: cleanText(document.getBody()), method: "doc", totalPages: null, ocrConfidence: null, ocrModelVersion: null, warnings: ["legacy_doc_format_limited_extraction"] };
   }

@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">Monogramme ABL</title>
+  <desc id="desc">Monogramme bleu et or du Dr Ahmed Ben Lallahom</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#071521"/><stop offset="1" stop-color="#0d2635"/></linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#66d9ff"/><stop offset="1" stop-color="#2a9dcc"/></linearGradient>
+  </defs>
+  <rect x="12" y="12" width="488" height="488" rx="112" fill="url(#bg)" stroke="#2b5264" stroke-width="12"/>
+  <circle cx="256" cy="256" r="176" fill="none" stroke="#c7a66a" stroke-width="5" opacity=".8"/>
+  <path d="M112 269h73l25-74 45 143 37-104 27 35h81" fill="none" stroke="url(#accent)" stroke-width="15" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="256" y="166" fill="#f6f2e9" font-family="Georgia,serif" font-size="74" text-anchor="middle" letter-spacing="12">ABL</text>
+  <text x="256" y="405" fill="#c7a66a" font-family="Arial,sans-serif" font-size="25" text-anchor="middle" letter-spacing="8">MD · DESAIC</text>
+</svg>

@@ -139,7 +139,7 @@ export default function Navigation() {
           aria-label={accessibilityCopy.home}
         >
           <img
-            src="/manus-storage/logo-abl_2afbc5e0.png"
+            src="/assets/abl-logo.svg"
             alt=""
             className="w-10 h-10 md:w-11 md:h-11 transition-transform group-hover:scale-105"
             loading="lazy"

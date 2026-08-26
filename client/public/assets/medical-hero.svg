@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1000" role="img" aria-labelledby="title desc">
+  <title id="title">Illustration médicale abstraite</title>
+  <desc id="desc">Formes médicales et tracé cardiaque dans des tons bleu nuit</desc>
+  <defs>
+    <radialGradient id="glow"><stop stop-color="#27b7e8" stop-opacity=".38"/><stop offset="1" stop-color="#03101b" stop-opacity="0"/></radialGradient>
+    <linearGradient id="line" x1="0" y1="0" x2="1" y2="0"><stop stop-color="#61d8ff" stop-opacity="0"/><stop offset=".5" stop-color="#61d8ff"/><stop offset="1" stop-color="#c7a66a" stop-opacity="0"/></linearGradient>
+  </defs>
+  <rect width="1600" height="1000" fill="#030b13"/>
+  <circle cx="1160" cy="410" r="520" fill="url(#glow)"/>
+  <g fill="none" stroke="#2c6175" opacity=".32">
+    <circle cx="1160" cy="410" r="285"/><circle cx="1160" cy="410" r="220"/><circle cx="1160" cy="410" r="155"/>
+    <path d="M1160 80v660M830 410h660"/>
+  </g>
+  <path d="M720 560h155l45-132 76 250 65-190 55 72h310" fill="none" stroke="url(#line)" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"/>
+  <g transform="translate(1070 270)" fill="#e9f8ff" opacity=".8"><rect x="55" width="70" height="180" rx="18"/><rect y="55" width="180" height="70" rx="18"/></g>
+</svg>
