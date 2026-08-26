@@ -369,7 +369,7 @@ export default function RecruitmentPage() {
       <main className="recruitment-page pt-28 md:pt-36">
         <section className="container grid gap-12 pb-16 lg:grid-cols-[0.9fr_1.1fr] lg:items-start">
           <div className="relative isolate overflow-hidden rounded-3xl lg:sticky lg:top-32">
-            <img src="/manus-storage/hippocampus-recruitment-earth_f3124b59.png" alt="" aria-hidden="true" className="pointer-events-none absolute -right-28 top-4 h-[30rem] w-[23rem] rounded-full object-cover opacity-35 mix-blend-screen [mask-image:radial-gradient(ellipse_at_center,black_36%,transparent_72%)]" />
+            <img src="/assets/medical-hero.svg" alt="" aria-hidden="true" className="pointer-events-none absolute -right-28 top-4 h-[30rem] w-[23rem] rounded-full object-cover opacity-35 mix-blend-screen [mask-image:radial-gradient(ellipse_at_center,black_36%,transparent_72%)]" />
             <p className="section-kicker">{t.eyebrow}</p>
             <h1 className="mt-5 max-w-2xl font-display text-4xl leading-tight text-foreground md:text-6xl">{t.title}</h1>
             <p className="mt-6 max-w-xl text-lg leading-8 text-muted-foreground">{t.intro}</p>
