@@ -56,7 +56,7 @@ export default function ContactSection() {
       {/* Background subtle */}
       <div className="absolute inset-0 opacity-10">
         <img
-          src="/manus-storage/hero-consulting_b0a2cb5b.png"
+          src="/assets/consulting-network.svg"
           loading="lazy"
           alt="Consultation médicale et accompagnement professionnel par le Dr. Ahmed Ben Lallahom"
           className="w-full h-full object-cover"

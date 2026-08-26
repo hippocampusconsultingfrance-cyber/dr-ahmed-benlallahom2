@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 1100" role="img" aria-labelledby="title desc">
+  <title id="title">Emplacement réservé au portrait du Dr Ahmed Ben Lallahom</title>
+  <desc id="desc">Visuel graphique ABL utilisé en attendant le portrait officiel</desc>
+  <defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#071725"/><stop offset="1" stop-color="#123b4d"/></linearGradient></defs>
+  <rect width="900" height="1100" fill="url(#bg)"/>
+  <circle cx="450" cy="390" r="210" fill="#164d63" stroke="#55c9ef" stroke-width="5" opacity=".9"/>
+  <path d="M180 1030c18-265 118-405 270-405s252 140 270 405" fill="#0a2230" stroke="#c7a66a" stroke-width="6"/>
+  <text x="450" y="430" fill="#f5f1e9" font-family="Georgia,serif" font-size="150" text-anchor="middle">ABL</text>
+  <path d="M300 760h90l26-74 48 151 38-109 30 32h78" fill="none" stroke="#55c9ef" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="450" y="970" fill="#c7a66a" font-family="Arial,sans-serif" font-size="28" text-anchor="middle" letter-spacing="7">PORTRAIT OFFICIEL À AJOUTER</text>
+</svg>

@@ -15,7 +15,7 @@ export function SEOHead({
   title,
   description,
   keywords,
-  ogImage = "https://drahmedbenlallahom.com/manus-storage/logo-abl_2afbc5e0.png",
+  ogImage = "https://drahmedbenlallahom.com/assets/abl-logo.svg",
   ogUrl = "https://drahmedbenlallahom.com",
   twitterHandle = "@drahmedbenlallahom",
   structuredData,

@@ -1,6 +1,6 @@
 const ORIGIN = "https://drahmedbenlallahom.com";
 const SITE_NAME = "Dr. Ahmed Ben Lallahom";
-const DEFAULT_IMAGE = `${ORIGIN}/manus-storage/logo-abl_2afbc5e0.png`;
+const DEFAULT_IMAGE = `${ORIGIN}/assets/abl-logo.svg`;
 
 type RouteSeo = {
   title: string;

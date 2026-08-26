@@ -1,8 +1,14 @@
 import { Resend } from "resend";
 import { notifyOwner } from "./notification";
 
-// Initialize Resend client
-const resend = new Resend(process.env.RESEND_API_KEY);
+let resendClient: Resend | undefined;
+
+function getResendClient(): Resend {
+  const apiKey = process.env.RESEND_API_KEY?.trim();
+  if (!apiKey) throw new Error("resend_api_key_missing");
+  resendClient ??= new Resend(apiKey);
+  return resendClient;
+}
 
 function escapeHtml(value: unknown): string {
   return String(value ?? "")
@@ -18,7 +24,7 @@ function escapeHtml(value: unknown): string {
 // réponses des candidats restent dirigées vers la boîte de recrutement active.
 const FROM_EMAIL = "Hippocampus Consulting <recrutement@drahmedbenlallahom.com>";
 const RECRUITMENT_REPLY_TO = "hippocampusconsultingfrance@gmail.com";
-const HIPPOCAMPUS_LOGO_URL = "https://drahmedbenlallahom.com/manus-storage/hippocampus-consulting-logo-fr_94dc2977.png";
+const HIPPOCAMPUS_LOGO_URL = "https://drahmedbenlallahom.com/assets/abl-logo.svg";
 
 export function buildHippocampusEmailShell(content: string) {
   return `
@@ -49,14 +55,14 @@ export async function sendMedicalQuestionResponseEmail(input: { email: string; f
     <p style="font-size:12px;color:#64748b;">Référence confidentielle : ${escapeHtml(input.trackingId)}</p>
   `);
   const text = `Bonjour ${input.firstName},\n\nVotre question a été examinée.\n\n${input.response}\n\nInformation importante : cette réponse générale ne remplace pas une consultation, une évaluation préopératoire ni une prise en charge urgente. En cas d’urgence ou de symptôme inquiétant, contactez les secours ou un professionnel de santé sans attendre.\n\nRéférence confidentielle : ${input.trackingId}`;
-  const { error } = await resend.emails.send({ from: FROM_EMAIL, to: [input.email], replyTo: RECRUITMENT_REPLY_TO, subject: `Réponse à votre question — ${input.trackingId}`, html, text });
+  const { error } = await getResendClient().emails.send({ from: FROM_EMAIL, to: [input.email], replyTo: RECRUITMENT_REPLY_TO, subject: `Réponse à votre question — ${input.trackingId}`, html, text });
   if (error) throw new Error(`medical_question_response_email_failed:${error.message}`);
 }
 
 export async function sendAdminMfaCodeEmail(email: string, code: string) {
   const html = buildHippocampusEmailShell(`<h2 style="color:#0891b2">Validation de sécurité administrateur</h2><p>Un accès au tableau de bord Hippocampus Consulting vient d’être demandé.</p><p style="margin:24px 0;padding:18px;text-align:center;border-radius:10px;background:#f1f5f9;font-size:28px;letter-spacing:7px;font-weight:700;color:#0f172a">${escapeHtml(code)}</p><p>Ce code expire dans 10 minutes et ne doit être communiqué à personne. Si vous n’êtes pas à l’origine de cette demande, ignorez cet email.</p>`);
   const text = `Validation de sécurité administrateur\n\nCode : ${code}\n\nCe code expire dans 10 minutes. Ne le communiquez à personne.`;
-  const { error } = await resend.emails.send({ from: FROM_EMAIL, to: [email], replyTo: RECRUITMENT_REPLY_TO, subject: "Code de sécurité — Hippocampus Consulting", html, text });
+  const { error } = await getResendClient().emails.send({ from: FROM_EMAIL, to: [email], replyTo: RECRUITMENT_REPLY_TO, subject: "Code de sécurité — Hippocampus Consulting", html, text });
   if (error) throw new Error(`admin_mfa_email_failed:${error.message}`);
 }
 
@@ -96,7 +102,7 @@ export async function sendConfirmationEmail(
       <p>Merci de votre confiance.</p>
     `);
 
-    const { data, error } = await resend.emails.send({
+    const { data, error } = await getResendClient().emails.send({
       from: FROM_EMAIL,
       to: [customerEmail],
       subject: `Confirmation de réservation - ${trackingId}`,
@@ -208,7 +214,7 @@ export async function sendInvoiceEmail(
       <p>Merci de votre confiance.</p>
     `);
 
-    const { data, error } = await resend.emails.send({
+    const { data, error } = await getResendClient().emails.send({
       from: FROM_EMAIL,
       to: [customerEmail],
       subject: `Facture - Consultation ${trackingId}`,
@@ -284,7 +290,7 @@ export async function sendRefundConfirmationEmail(
       <p>Le délai d’apparition du remboursement dépend de votre établissement bancaire.</p>
     `);
 
-    const { data, error } = await resend.emails.send({
+    const { data, error } = await getResendClient().emails.send({
       from: FROM_EMAIL,
       to: [customerEmail],
       subject: `Remboursement confirmé - ${trackingId}`,
@@ -333,7 +339,7 @@ export async function sendReminderEmail(
       <p>À demain !</p>
     `);
 
-    const { data, error } = await resend.emails.send({
+    const { data, error } = await getResendClient().emails.send({
       from: FROM_EMAIL,
       to: [customerEmail],
       subject: `Rappel - Consultation demain (${trackingId})`,
@@ -378,7 +384,7 @@ export async function sendCvApplicationConfirmationEmail(
       <p style="color:#64748b;font-size:13px;">Si vous ne retrouvez pas cet email, vérifiez votre dossier Spam ou Courriers indésirables, puis ajoutez recrutement@drahmedbenlallahom.com à vos contacts.</p>
     `);
 
-    const { data, error } = await resend.emails.send({
+    const { data, error } = await getResendClient().emails.send({
       from: FROM_EMAIL,
       to: [candidateEmail],
       replyTo: RECRUITMENT_REPLY_TO,
@@ -467,7 +473,7 @@ export async function sendRecruitmentTemplateEmail(
 ): Promise<{ id?: string }> {
   const message = buildRecruitmentTemplateEmail(candidateName, trackingId, template, options);
 
-  const { data, error } = await resend.emails.send({
+  const { data, error } = await getResendClient().emails.send({
     from: FROM_EMAIL,
     to: [candidateEmail],
     replyTo: RECRUITMENT_REPLY_TO,
@@ -490,7 +496,7 @@ export async function sendRecruitmentCampaignEmail(input: {
   const copy = input.language === "en"
     ? { greeting: "Hello", footer: "This offer concerns your professional profile.", unsubscribe: "Unsubscribe from future recruitment opportunities" }
     : { greeting: "Bonjour", footer: "Cette offre concerne votre profil professionnel.", unsubscribe: "Ne plus recevoir d’opportunités de recrutement" };
-  const { data, error } = await resend.emails.send({
+  const { data, error } = await getResendClient().emails.send({
     from: FROM_EMAIL,
     to: [input.candidateEmail],
     replyTo: RECRUITMENT_REPLY_TO,
@@ -555,7 +561,7 @@ export function buildCandidatePortalAccessEmail(input: CandidatePortalAccessEmai
 export async function sendCandidatePortalAccessEmail(input: CandidatePortalAccessEmailInput): Promise<{ id?: string }> {
   const message = buildCandidatePortalAccessEmail(input);
 
-  const { data, error } = await resend.emails.send({
+  const { data, error } = await getResendClient().emails.send({
     from: FROM_EMAIL,
     to: [input.to],
     replyTo: RECRUITMENT_REPLY_TO,

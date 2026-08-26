@@ -28,7 +28,7 @@ export default function HeroSection() {
       {/* Background Image */}
       <div className="absolute inset-0">
         <img
-          src="/manus-storage/hero-bg-ahmed_156f3568.png"
+          src="/assets/medical-hero.svg"
           alt="Dr. Ahmed Ben Lallahom - Anesthésiste-Réanimateur et Entrepreneur en Santé"
           className="w-full h-full object-cover sm:object-right"
           loading="eager"

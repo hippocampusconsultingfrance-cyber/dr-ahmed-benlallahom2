@@ -3,7 +3,7 @@ import { useEffect, useRef, useState, type MouseEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { COOKIE_CONSENT_STORAGE_KEY, normalizeCookieConsent, shouldShowCookiePreferences, type CookieConsentValue } from "./cookieConsentState";
-import { COOKIE_CONSENT_CHANGE_EVENT } from "./analyticsConsent";
+import { COOKIE_CONSENT_CHANGE_EVENT } from "./analyticsConsentLogic";
 
 export const COOKIE_BANNER_OPEN_ATTRIBUTE = "data-cookie-banner-open";
 

@@ -65,7 +65,7 @@ export default function GDPRRequestForm({ onBack }: GDPRRequestFormProps) {
       {/* Background subtle */}
       <div className="absolute inset-0 opacity-10">
         <img
-          src="/manus-storage/hero-consulting_b0a2cb5b.png"
+          src="/assets/consulting-network.svg"
           loading="lazy"
           alt=""
           className="w-full h-full object-cover"

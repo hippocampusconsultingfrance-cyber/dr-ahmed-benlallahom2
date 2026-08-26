@@ -73,8 +73,8 @@ export default function VenturePage() {
             {venture.logo && (
               <div className="mb-6">
                 <img
-                  src={venture.logo}
-                  alt={`${venture.company} logo`}
+                  src="/assets/venture-placeholder.svg"
+                  alt={`${venture.company} — identité visuelle temporaire`}
                   className="h-16 sm:h-20 w-auto object-contain"
                 />
               </div>
@@ -134,8 +134,8 @@ export default function VenturePage() {
                         <div className="w-24 h-24 mx-auto mb-4 rounded-full overflow-hidden border-2 border-border/40 group-hover:border-primary/50 transition-colors">
                           {member.photo ? (
                             <img
-                              src={member.photo}
-                              alt={member.name}
+                              src="/assets/team-placeholder.svg"
+                              alt={`Portrait officiel de ${member.name} à ajouter`}
                               className="w-full h-full object-cover"
                             />
                           ) : (

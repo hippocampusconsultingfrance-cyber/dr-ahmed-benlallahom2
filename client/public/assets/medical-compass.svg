@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 800" role="img" aria-labelledby="title desc">
+  <title id="title">Boussole médicale</title><desc id="desc">Illustration abstraite associant orientation et santé</desc>
+  <defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#06131f"/><stop offset="1" stop-color="#0e3444"/></linearGradient></defs>
+  <rect width="1280" height="800" rx="48" fill="url(#bg)"/>
+  <g transform="translate(640 400)" fill="none"><circle r="255" stroke="#55c9ef" stroke-width="5" opacity=".65"/><circle r="205" stroke="#c7a66a" stroke-width="3" opacity=".7"/><path d="M0-310v58M310 0h-58M0 310v-58M-310 0h58" stroke="#eaf8fd" stroke-width="9" stroke-linecap="round"/><path d="M-75 90L45-185 82-75 185-42-75 90Z" fill="#55c9ef" fill-opacity=".72" stroke="#f3f8f9" stroke-width="5"/><path d="M-175 72h72l26-75 48 151L10 39l28 33h138" stroke="#c7a66a" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/></g>
+</svg>

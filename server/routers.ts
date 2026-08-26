@@ -34,7 +34,14 @@ import { createCandidateInvitationToken } from "./candidateAuth";
 import { googleDriveExportStatus } from "./googleDriveExport";
 import { medicalQuestionsRouter } from "./medicalQuestionsRouter";
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "");
+let stripeClient: Stripe | undefined;
+
+function getStripeClient(): Stripe {
+  const apiKey = process.env.STRIPE_SECRET_KEY?.trim();
+  if (!apiKey) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Le service de paiement n’est pas configuré." });
+  stripeClient ??= new Stripe(apiKey);
+  return stripeClient;
+}
 
 // Secret-bearing URLs must never be assembled from browser-controlled headers.
 const DEFAULT_PUBLIC_ORIGIN = process.env.PUBLIC_APP_ORIGIN || "https://drahmedbenlallahom.com";
@@ -515,7 +522,7 @@ export const appRouter = router({
             .where(
               and(
                 sql`appointment_date < ${appointmentEnd}`,
-                sql`DATE_ADD(appointment_date, INTERVAL duration MINUTE) > ${date}`,
+                sql`appointment_date + (duration * INTERVAL '1 minute') > ${date}`,
                 sql`(
                   (payment_status = 'pending' AND appointment_status = 'held' AND hold_expires_at > NOW())
                   OR (payment_status = 'pending' AND appointment_status = 'confirmed')
@@ -537,7 +544,7 @@ export const appRouter = router({
           );
 
           try {
-            const session = await stripe.checkout.sessions.create({
+            const session = await getStripeClient().checkout.sessions.create({
               payment_method_types: ["card"],
               line_items: [{ price_data: { currency: "eur", product_data: { name: "Health Consultation - 30 minutes", description: `Appointment: ${trackingId}` }, unit_amount: Math.round(Number(finalPrice) * 100) }, quantity: 1 }],
               mode: "payment",
@@ -612,14 +619,14 @@ export const appRouter = router({
           }
 
           if (appointment.stripeSessionId) {
-            const existingSession = await stripe.checkout.sessions.retrieve(appointment.stripeSessionId);
+            const existingSession = await getStripeClient().checkout.sessions.retrieve(appointment.stripeSessionId);
             if (existingSession.status === "open" && existingSession.url) return { success: true, checkoutUrl: existingSession.url };
             throw new TRPCError({ code: "CONFLICT", message: "La session de paiement a expiré" });
           }
 
           const amountInCents = Math.round(expectedPrice * 100);
 
-          const session = await stripe.checkout.sessions.create({
+          const session = await getStripeClient().checkout.sessions.create({
             payment_method_types: ["card"],
             line_items: [
               {
@@ -671,7 +678,7 @@ export const appRouter = router({
 
         let session: Stripe.Checkout.Session;
         try {
-          session = await stripe.checkout.sessions.retrieve(input.sessionId);
+          session = await getStripeClient().checkout.sessions.retrieve(input.sessionId);
         } catch {
           throw new TRPCError({ code: "BAD_REQUEST", message: "Session Stripe invalide" });
         }
@@ -693,7 +700,7 @@ export const appRouter = router({
             )
           );
 
-        return { success: true, cancelled: Number(result[0]?.affectedRows ?? 0) > 0 };
+        return { success: true, cancelled: Number(result.rowCount ?? 0) > 0 };
       }),
   }),
 
@@ -919,7 +926,7 @@ export const appRouter = router({
           }
 
           try {
-            const refund = await stripe.refunds.create(
+            const refund = await getStripeClient().refunds.create(
               {
                 payment_intent: appointment.stripePaymentIntentId,
                 metadata: {
@@ -1229,8 +1236,8 @@ export const appRouter = router({
               recipientCount: audience.length,
               status: "sending",
               createdByOpenId: ctx.user.openId,
-            });
-            const campaignId = Number((campaignResult as any).insertId);
+            }).returning({ id: recruitmentCampaigns.id });
+            const campaignId = Number(campaignResult.id);
             let sent = 0;
             let failed = 0;
             for (const candidate of audience) {
@@ -1238,8 +1245,8 @@ export const appRouter = router({
               if (!candidate.marketingUnsubscribeToken) {
                 await db.update(cvApplications).set({ marketingUnsubscribeToken: unsubscribeToken }).where(eq(cvApplications.id, candidate.id));
               }
-              const [recipientResult] = await db.insert(recruitmentCampaignRecipients).values({ campaignId, applicationId: candidate.id, recipientEmail: candidate.email, deliveryStatus: "queued" });
-              const recipientId = Number((recipientResult as any).insertId);
+              const [recipientResult] = await db.insert(recruitmentCampaignRecipients).values({ campaignId, applicationId: candidate.id, recipientEmail: candidate.email, deliveryStatus: "queued" }).returning({ id: recruitmentCampaignRecipients.id });
+              const recipientId = Number(recipientResult.id);
               try {
                 const email = await sendRecruitmentCampaignEmail({
                   candidateEmail: candidate.email,
@@ -1400,8 +1407,8 @@ export const appRouter = router({
         create: adminProcedure.input(z.object({ name: z.string().trim().min(3).max(180), category: z.enum(["europe", "canada", "middle_east", "vvip_offshore", "paramedical", "general"]), language: z.enum(["fr", "en"]), subject: z.string().trim().min(3).max(255), body: z.string().trim().min(10).max(8000) })).mutation(async ({ input, ctx }) => {
           const db = await getDb();
           if (!db) throw new Error("Database connection failed");
-          const [result] = await db.insert(recruitmentOfferTemplates).values({ ...input, createdByOpenId: ctx.user.openId });
-          return { success: true, id: Number((result as any).insertId) };
+          const [result] = await db.insert(recruitmentOfferTemplates).values({ ...input, createdByOpenId: ctx.user.openId }).returning({ id: recruitmentOfferTemplates.id });
+          return { success: true, id: Number(result.id) };
         }),
         update: adminProcedure.input(z.object({ id: z.number().int().positive(), name: z.string().trim().min(3).max(180), category: z.enum(["europe", "canada", "middle_east", "vvip_offshore", "paramedical", "general"]), language: z.enum(["fr", "en"]), subject: z.string().trim().min(3).max(255), body: z.string().trim().min(10).max(8000), active: z.number().int().min(0).max(1) })).mutation(async ({ input }) => {
           const db = await getDb();
@@ -1457,8 +1464,8 @@ export const appRouter = router({
               minimumScore: input.minimumScore,
               requiredLanguages: JSON.stringify(input.requiredLanguages),
               requiredSkills: JSON.stringify(input.requiredSkills),
-            });
-            return { success: true, id: Number((result[0] as any)?.insertId || 0) };
+            }).returning({ id: recruitmentMatchProfiles.id });
+            return { success: true, id: Number(result[0]?.id || 0) };
           }),
         delete: adminProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ input }) => {
           const db = await getDb();

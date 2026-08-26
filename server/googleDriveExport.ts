@@ -206,7 +206,8 @@ export async function saveGoogleDriveConnection(input: { authorizedByOpenId: str
     grantedScopes: input.grantedScopes ?? null,
     connectedAt: new Date(),
     lastError: null,
-  }).onDuplicateKeyUpdate({
+  }).onConflictDoUpdate({
+    target: googleDriveConnections.connectionKey,
     set: {
       authorizedByOpenId: input.authorizedByOpenId,
       folderId: ENV.googleDriveCvFolderId,
@@ -234,7 +235,10 @@ export async function enqueueCvGoogleDriveExport(applicationId: number, schedule
   const db = await getDb();
   if (!db) throw new Error("Database connection failed");
   await db.insert(cvGoogleDriveExportJobs).values({ applicationId, status: "queued", attempts: 0, maxAttempts: MAX_ATTEMPTS, scheduledFor })
-    .onDuplicateKeyUpdate({ set: { status: "queued", scheduledFor, lastError: null, finishedAt: null } });
+    .onConflictDoUpdate({
+      target: cvGoogleDriveExportJobs.applicationId,
+      set: { status: "queued", scheduledFor, lastError: null, finishedAt: null },
+    });
 }
 
 async function processGoogleDriveExportJob(jobId: number) {

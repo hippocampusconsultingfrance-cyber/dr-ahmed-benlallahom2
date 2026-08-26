@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 700" role="img" aria-labelledby="title desc">
+  <title id="title">Portrait non disponible</title><desc id="desc">Avatar neutre utilisé en attendant la photographie officielle</desc>
+  <rect width="600" height="700" fill="#0a2230"/><circle cx="300" cy="245" r="125" fill="#19546a"/><path d="M95 700c18-205 90-315 205-315s187 110 205 315" fill="#123849"/><circle cx="300" cy="350" r="240" fill="none" stroke="#c7a66a" stroke-width="5" opacity=".65"/>
+</svg>
