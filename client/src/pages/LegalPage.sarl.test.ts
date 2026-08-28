@@ -15,7 +15,10 @@ describe("mentions légales Hippocampus Consulting SARL", () => {
 
   it("qualifie les prestataires de données et la revue humaine de l’IA", () => {
     expect(legalPageSource).toContain("Google Drive");
-    expect(legalPageSource).toContain("Butterfly Effect Pte. Ltd.");
+    for (const provider of ["Vercel", "Neon", "Clerk", "Cloudflare Turnstile", "Resend", "Stripe"]) {
+      expect(legalPageSource).toContain(provider);
+    }
+    expect(legalPageSource).not.toContain("Butterfly Effect Pte. Ltd.");
     expect(legalPageSource).toContain("aucune décision d’embauche ou de rejet sans revue humaine");
   });
 });
