@@ -128,9 +128,9 @@ function LegalPageFr() {
                   <div>
                     <h3 className="font-semibold text-foreground mb-3">Hébergeur</h3>
                     <div className="space-y-2">
-                      <p><strong>Service :</strong> Manus, opéré par Butterfly Effect Pte. Ltd.</p>
-                      <p><strong>Rôle :</strong> Plateforme technique, hébergement et déploiement du site</p>
-                      <p><strong>Informations du prestataire :</strong> <a className="text-primary underline" href="https://manus.im/terms" target="_blank" rel="noreferrer">conditions de service Manus</a></p>
+                      <p><strong>Service :</strong> Vercel Inc.</p>
+                      <p><strong>Rôle :</strong> Hébergement, déploiement, réseau de diffusion et fonctions serveur du site</p>
+                      <p><strong>Informations du prestataire :</strong> <a className="text-primary underline" href="https://vercel.com/legal/privacy-policy" target="_blank" rel="noreferrer">politique de confidentialité Vercel</a></p>
                     </div>
                   </div>
 
@@ -237,12 +237,15 @@ function LegalPageFr() {
                   <h3 className="font-semibold text-foreground mt-4">9. Sous-traitants et transferts de données</h3>
                   <p>Nous utilisons les sous-traitants suivants pour traiter vos données :</p>
                   <ul className="list-disc list-inside space-y-2 ml-2">
+                    <li><strong>Vercel :</strong> Hébergement, déploiement, fonctions serveur, réseau de diffusion et stockage de fichiers Vercel Blob</li>
+                    <li><strong>Neon :</strong> Hébergement de la base de données applicative PostgreSQL</li>
+                    <li><strong>Clerk :</strong> Authentification et gestion sécurisée des comptes administrateur</li>
+                    <li><strong>Cloudflare Turnstile :</strong> Protection anti-abus et vérification anti-robot des formulaires</li>
                     <li><strong>Resend :</strong> Service d'envoi d'emails transactionnels (confirmations, factures, rappels)</li>
                     <li><strong>Stripe :</strong> Plateforme de paiement pour les réservations de consultations</li>
-                    <li><strong>Google Drive :</strong> Copie privée, journalisée et contrôlée des CV déposés, après autorisation du responsable</li>
-                    <li><strong>Manus (Butterfly Effect Pte. Ltd.) :</strong> Hébergement, infrastructure cloud, authentification et composants d’analyse technique</li>
+                    <li><strong>Google Drive :</strong> Le cas échéant, copie privée, journalisée et contrôlée des CV déposés, après autorisation du responsable</li>
                   </ul>
-                  <p className="mt-4">Ces sous-traitants traitent uniquement les catégories nécessaires : coordonnées et références de réservation pour la gestion des rendez-vous, informations de facturation et statut de paiement pour Stripe, CV et documents de candidature pour l’export privé Google Drive, et données techniques ou de contact pour l'hébergement, l'authentification, les communications et l’assistance à l’analyse. Pour le service gratuit de questions, toute éventuelle assistance rédactionnelle reçoit exclusivement un brouillon administrateur sans coordonnées. Selon l'infrastructure utilisée par chaque prestataire, un traitement peut avoir lieu hors de l'Espace économique européen. Les garanties applicables sont celles prévues par leurs engagements contractuels et leurs accords de traitement, y compris les clauses contractuelles types lorsqu'elles sont requises. Les données de carte bancaire ne sont pas stockées par ce site.</p>
+                  <p className="mt-4">Ces sous-traitants traitent uniquement les catégories nécessaires : données techniques pour l’hébergement et la sécurité, données de compte pour l’authentification, coordonnées et références de réservation pour la gestion des rendez-vous et des communications, informations de facturation et statut de paiement pour Stripe, ainsi que CV et documents de candidature pour leur stockage privé. Pour le service gratuit de questions, toute éventuelle assistance rédactionnelle reçoit exclusivement un brouillon administrateur sans coordonnées. Selon l'infrastructure utilisée par chaque prestataire, un traitement peut avoir lieu hors de l'Espace économique européen. Les garanties applicables sont celles prévues par leurs engagements contractuels et leurs accords de traitement, y compris les clauses contractuelles types lorsqu'elles sont requises. Les données de carte bancaire ne sont pas stockées par ce site.</p>
 
                   <h3 className="font-semibold text-foreground mt-4">10. Registre des traitements</h3>
                   <p>Conformément aux exigences de la CNIL, nous maintenons un registre des traitements de données personnelles :</p>
@@ -422,9 +425,9 @@ function LegalPageEn() {
                   <div>
                     <h3 className="font-semibold text-foreground mb-3">Hosting Provider</h3>
                     <div className="space-y-2">
-                      <p><strong>Service:</strong> Manus, operated by Butterfly Effect Pte. Ltd.</p>
-                      <p><strong>Role:</strong> Technical platform, website hosting and deployment</p>
-                      <p><strong>Provider information:</strong> <a className="text-primary underline" href="https://manus.im/terms" target="_blank" rel="noreferrer">Manus terms of service</a></p>
+                      <p><strong>Service:</strong> Vercel Inc.</p>
+                      <p><strong>Role:</strong> Website hosting, deployment, content delivery network and server functions</p>
+                      <p><strong>Provider information:</strong> <a className="text-primary underline" href="https://vercel.com/legal/privacy-policy" target="_blank" rel="noreferrer">Vercel privacy policy</a></p>
                     </div>
                   </div>
 
@@ -523,7 +526,7 @@ function LegalPageEn() {
                   <p><strong>Controller:</strong> {HIPPOCAMPUS_LEGAL.name}<br /><strong>Registered office:</strong> {HIPPOCAMPUS_LEGAL.registeredOffice}<br /><strong>Manager:</strong> {HIPPOCAMPUS_LEGAL.director}<br /><strong>Contact:</strong> {HIPPOCAMPUS_LEGAL.contactEmail}</p>
 
                   <h3 className="font-semibold text-foreground mt-4">9. Processors and international transfers</h3>
-                  <p>Resend sends transactional emails, Stripe processes consultation payments, Google Drive stores private copies of CVs after authorization by the controller, and Manus (Butterfly Effect Pte. Ltd.) provides hosting and technical infrastructure. Depending on the provider infrastructure, processing may take place outside the European Economic Area. The applicable safeguards are those provided by the providers' data processing agreements, including Standard Contractual Clauses where required. Only data necessary for booking, invoicing, recruitment, authentication, hosting and communications is shared, and this website does not store card data. AI-supported recruitment analysis is subject to human review and does not make automated hiring decisions.</p>
+                  <p>Vercel provides hosting, deployment, server functions, content delivery and Vercel Blob file storage; Neon hosts the PostgreSQL application database; Clerk provides administrator authentication; Cloudflare Turnstile protects forms against abuse; Resend sends transactional emails; Stripe processes consultation payments; and Google Drive may store controlled private CV copies after authorisation by the controller. Depending on the provider infrastructure, processing may take place outside the European Economic Area. The applicable safeguards are those provided by the providers' data processing agreements, including Standard Contractual Clauses where required. Only data necessary for booking, invoicing, recruitment, authentication, hosting, security and communications is shared, and this website does not store card data. AI-supported recruitment analysis is subject to human review and does not make automated hiring decisions.</p>
 
                   <h3 className="font-semibold text-foreground mt-4">10. Right to lodge a complaint</h3>
                   <p>If you believe your GDPR rights are not being respected, you have the right to lodge a complaint with the competent supervisory authority.</p>
@@ -692,9 +695,9 @@ function LegalPageDe() {
                   <div>
                     <h3 className="font-semibold text-foreground mb-3">Hosting-Anbieter</h3>
                     <div className="space-y-2">
-                      <p><strong>Service:</strong> Manus, betrieben von Butterfly Effect Pte. Ltd.</p>
-                      <p><strong>Rolle:</strong> Technische Plattform, Website-Hosting und Bereitstellung</p>
-                      <p><strong>Informationen zum Anbieter:</strong> <a className="text-primary underline" href="https://manus.im/terms" target="_blank" rel="noreferrer">Manus-Nutzungsbedingungen</a></p>
+                      <p><strong>Service:</strong> Vercel Inc.</p>
+                      <p><strong>Rolle:</strong> Website-Hosting, Bereitstellung, Inhaltsauslieferung und Serverfunktionen</p>
+                      <p><strong>Informationen zum Anbieter:</strong> <a className="text-primary underline" href="https://vercel.com/legal/privacy-policy" target="_blank" rel="noreferrer">Vercel-Datenschutzerklärung</a></p>
                     </div>
                   </div>
 
@@ -793,7 +796,7 @@ function LegalPageDe() {
                   <p><strong>Verantwortlicher:</strong> {HIPPOCAMPUS_LEGAL.name}<br /><strong>Sitz:</strong> {HIPPOCAMPUS_LEGAL.registeredOffice}<br /><strong>Geschäftsführer:</strong> {HIPPOCAMPUS_LEGAL.director}<br /><strong>Kontakt:</strong> {HIPPOCAMPUS_LEGAL.contactEmail}</p>
 
                   <h3 className="font-semibold text-foreground mt-4">9. Auftragsverarbeiter und internationale Übermittlungen</h3>
-                  <p>Resend versendet Transaktions-E-Mails, Stripe verarbeitet Zahlungen, Google Drive speichert nach Autorisierung des Verantwortlichen private CV-Kopien und Manus (Butterfly Effect Pte. Ltd.) stellt Hosting sowie technische Infrastruktur bereit. Je nach Infrastruktur des jeweiligen Anbieters kann eine Verarbeitung außerhalb des Europäischen Wirtschaftsraums erfolgen. Die geltenden Garantien ergeben sich aus den Auftragsverarbeitungsverträgen der Anbieter, einschließlich Standardvertragsklauseln, sofern erforderlich. Es werden nur für Buchung, Rechnungsstellung, Recruiting, Authentifizierung, Hosting und Kommunikation erforderliche Daten weitergegeben; diese Website speichert keine Kartendaten. Die KI-gestützte Bewerbungsanalyse wird menschlich überprüft und trifft keine automatisierten Einstellungsentscheidungen.</p>
+                  <p>Vercel stellt Hosting, Bereitstellung, Serverfunktionen, Inhaltsauslieferung und Vercel-Blob-Dateispeicher bereit; Neon hostet die PostgreSQL-Anwendungsdatenbank; Clerk übernimmt die Administrator-Authentifizierung; Cloudflare Turnstile schützt Formulare vor Missbrauch; Resend versendet Transaktions-E-Mails; Stripe verarbeitet Zahlungen; und Google Drive kann nach Autorisierung des Verantwortlichen kontrollierte private CV-Kopien speichern. Je nach Infrastruktur des jeweiligen Anbieters kann eine Verarbeitung außerhalb des Europäischen Wirtschaftsraums erfolgen. Die geltenden Garantien ergeben sich aus den Auftragsverarbeitungsverträgen der Anbieter, einschließlich Standardvertragsklauseln, sofern erforderlich. Es werden nur für Buchung, Rechnungsstellung, Recruiting, Authentifizierung, Hosting, Sicherheit und Kommunikation erforderliche Daten weitergegeben; diese Website speichert keine Kartendaten. Die KI-gestützte Bewerbungsanalyse wird menschlich überprüft und trifft keine automatisierten Einstellungsentscheidungen.</p>
 
                   <h3 className="font-semibold text-foreground mt-4">10. Beschwerderecht</h3>
                   <p>Wenn Sie der Ansicht sind, dass Ihre DSGVO-Rechte nicht respektiert werden, haben Sie das Recht, eine Beschwerde bei der zuständigen Aufsichtsbehörde einzureichen.</p>
@@ -962,9 +965,9 @@ function LegalPageZh() {
                   <div>
                     <h3 className="font-semibold text-foreground mb-3">托管服务商</h3>
                     <div className="space-y-2">
-                      <p><strong>服务：</strong>Manus，由 Butterfly Effect Pte. Ltd. 运营</p>
-                      <p><strong>角色：</strong>技术平台、网站托管和部署</p>
-                      <p><strong>服务商信息：</strong><a className="text-primary underline" href="https://manus.im/terms" target="_blank" rel="noreferrer">Manus 服务条款</a></p>
+                      <p><strong>服务：</strong>Vercel Inc.</p>
+                      <p><strong>角色：</strong>网站托管、部署、内容分发网络和服务器功能</p>
+                      <p><strong>服务商信息：</strong><a className="text-primary underline" href="https://vercel.com/legal/privacy-policy" target="_blank" rel="noreferrer">Vercel 隐私政策</a></p>
                     </div>
                   </div>
 
@@ -1063,7 +1066,7 @@ function LegalPageZh() {
                   <p><strong>控制者：</strong>{HIPPOCAMPUS_LEGAL.name}<br /><strong>注册地址：</strong>{HIPPOCAMPUS_LEGAL.registeredOffice}<br /><strong>经理：</strong>{HIPPOCAMPUS_LEGAL.director}<br /><strong>联系：</strong>{HIPPOCAMPUS_LEGAL.contactEmail}</p>
 
                   <h3 className="font-semibold text-foreground mt-4">9. 处理者与国际传输</h3>
-                  <p>Resend 用于发送交易邮件，Stripe 处理付款，Google Drive 在控制者授权后保存私有 CV 副本，Manus（Butterfly Effect Pte. Ltd.）提供网站托管和技术基础设施。根据各服务商使用的基础设施，数据可能在欧洲经济区以外处理。适用的保障措施以服务商的数据处理协议为准；在需要时包括标准合同条款。仅共享预约、发票、招聘、身份验证、托管和通信所必需的数据；本网站不保存银行卡数据。AI 辅助的候选人分析始终经人工复核，不作出自动招聘决定。</p>
+                  <p>Vercel 提供托管、部署、服务器功能、内容分发和 Vercel Blob 文件存储；Neon 托管 PostgreSQL 应用数据库；Clerk 提供管理员身份验证；Cloudflare Turnstile 保护表单免受滥用；Resend 发送交易邮件；Stripe 处理付款；Google Drive 可在控制者授权后保存受控的私有 CV 副本。根据各服务商使用的基础设施，数据可能在欧洲经济区以外处理。适用的保障措施以服务商的数据处理协议为准；在需要时包括标准合同条款。仅共享预约、发票、招聘、身份验证、托管、安全和通信所必需的数据；本网站不保存银行卡数据。AI 辅助的候选人分析始终经人工复核，不作出自动招聘决定。</p>
 
                   <h3 className="font-semibold text-foreground mt-4">10. 投诉权</h3>
                   <p>如果您认为您的GDPR权利未得到尊重，您有权向主管监管机构提出投诉。</p>

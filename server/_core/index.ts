@@ -7,7 +7,7 @@ import { createServer } from "http";
 import { serveStatic } from "./static";
 import net from "net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
-import { registerOAuthRoutes } from "./oauth";
+import { clerkMiddleware } from "@clerk/express";
 import { assertCriticalProductionEnvironment } from "./env";
 import { registerGoogleDriveOAuthRoutes } from "../googleDriveOAuthRoutes";
 import { registerStorageProxy } from "./storageProxy";
@@ -117,6 +117,10 @@ export async function createApp() {
   app.set("trust proxy", 1);
   const server = createServer(app);
 
+  app.use(clerkMiddleware({
+    authorizedParties: [PUBLIC_APP_ORIGIN, "http://localhost:3000", "http://127.0.0.1:3000"],
+  }));
+
   // Browser-side defense in depth. Origins are restricted to the application and
   // the third parties genuinely required for checkout and bot protection.
   app.use((_req, res, next) => {
@@ -130,12 +134,12 @@ export async function createApp() {
       "object-src 'none'",
       "frame-ancestors 'self'",
       "form-action 'self'",
-      "script-src 'self' 'unsafe-inline' https://js.stripe.com https://challenges.cloudflare.com",
+      "script-src 'self' 'unsafe-inline' https://js.stripe.com https://challenges.cloudflare.com https://clerk.drahmedbenlallahom.com https://*.clerk.accounts.dev https://*.clerk.com",
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
       "font-src 'self' data: https://fonts.gstatic.com",
       "img-src 'self' data: blob: https:",
-      "connect-src 'self' ws: wss: https://api.stripe.com https://challenges.cloudflare.com",
-      "frame-src https://js.stripe.com https://hooks.stripe.com https://challenges.cloudflare.com",
+      "connect-src 'self' ws: wss: https://api.stripe.com https://challenges.cloudflare.com https://clerk.drahmedbenlallahom.com https://*.clerk.accounts.dev https://*.clerk.com",
+      "frame-src https://js.stripe.com https://hooks.stripe.com https://challenges.cloudflare.com https://clerk.drahmedbenlallahom.com https://*.clerk.accounts.dev https://*.clerk.com",
       "worker-src 'self' blob:",
       "upgrade-insecure-requests",
     ].join("; "));
@@ -669,8 +673,7 @@ export async function createApp() {
     try {
       const requestContext = await createContext({ req, res, info: {} as any });
       if (!requestContext.user || requestContext.user.role !== "admin") return res.status(403).json({ error: "Accès administrateur requis." });
-      const { isAdminMfaVerified } = await import("../adminMfa");
-      if (!await isAdminMfaVerified(req, requestContext.user.openId)) return res.status(403).json({ error: "Double authentification requise." });
+      if (!requestContext.mfaVerified) return res.status(403).json({ error: "Double authentification requise." });
       const documentId = Number(req.params.id);
       if (!Number.isSafeInteger(documentId) || documentId <= 0) return res.status(400).json({ error: "Document invalide." });
       const db = await getDb();
@@ -721,7 +724,6 @@ export async function createApp() {
   });
 
   registerStorageProxy(app);
-  registerOAuthRoutes(app);
   registerGoogleDriveOAuthRoutes(app);
   
   // tRPC API
