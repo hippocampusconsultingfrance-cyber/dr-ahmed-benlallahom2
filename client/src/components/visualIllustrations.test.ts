@@ -9,8 +9,10 @@ describe("illustrations originales des parcours", () => {
       readFile(new URL("../pages/BookingPage.tsx", import.meta.url), "utf8"),
     ]);
 
-    expect(services).toContain("/manus-storage/services-medical-compass-1280_0a913727.webp");
-    expect(booking).toContain("/manus-storage/booking-care-path-1280_c6d0ae6a.webp");
+    expect(services).toContain("/assets/medical-compass.svg");
+    expect(booking).toContain("/assets/booking-care.svg");
+    expect(services).not.toContain("/manus-storage/");
+    expect(booking).not.toContain("/manus-storage/");
     expect(services).toContain('alt=""');
     expect(booking).toContain('alt=""');
   });
@@ -40,9 +42,9 @@ describe("illustrations originales des parcours", () => {
     const contextualSources = (await Promise.all(files.map(async file => ({ file, source: await readFile(file, "utf8") })))).filter(item => item.source.includes("/manus-storage/"));
     const context = contextualSources.map(item => item.source).join("\n").toLowerCase();
 
-    expect(contextualSources.length).toBeGreaterThan(3);
-    expect(context).toContain("services-medical-compass-1280_0a913727.webp");
-    expect(context).toContain("booking-care-path-1280_c6d0ae6a.webp");
+    expect(contextualSources.length).toBeGreaterThan(1);
+    expect(context).toContain("logo-hippocampus-consulting_0f90baeb.png");
+    expect(context).toContain("photo-ahmed-new_b06c9b06.png");
     expect(context).not.toMatch(/guérison|guerison|résultat garanti|resultat garanti|traitement garanti|\bguaranteed\s+(?:cure|result)\b/);
   });
 
@@ -50,11 +52,10 @@ describe("illustrations originales des parcours", () => {
     const root = resolve(import.meta.dirname, "..");
     const ventureSources = ["data/ventures-fr.ts", "data/ventures-en.ts"];
     const assets: Record<string, string[]> = {
-      "booking-care-path-1280_c6d0ae6a.webp": ["pages/BookingPage.tsx"],
-      "hero-ahmed-medical_4adb9653.png": ["components/AboutSection.tsx"],
-      "hero-bg-ahmed_156f3568.png": ["components/HeroSection.tsx"],
-      "hero-consulting_b0a2cb5b.png": ["components/ContactSection.tsx", "components/GDPRRequestForm.tsx"],
-      "logo-abl_2afbc5e0.png": ["components/Footer.tsx", "components/Navigation.tsx", "components/SEOHead.tsx"],
+      "profile-placeholder.svg": ["components/AboutSection.tsx"],
+      "abl-logo.svg": ["components/Footer.tsx", "components/Navigation.tsx", "components/SEOHead.tsx"],
+      "medical-compass.svg": ["components/ServicesSection.tsx"],
+      "booking-care.svg": ["pages/BookingPage.tsx"],
       "logo-appel-medical-tunisie_9b8e3246.png": ventureSources,
       "logo-hippocampus-consulting_0f90baeb.png": ventureSources,
       "logo-laska-corporate_35bcff90.png": ventureSources,
@@ -68,7 +69,6 @@ describe("illustrations originales des parcours", () => {
       "photo-sonia-new_cbb12509.png": ventureSources,
       "photo-wafa-clean_fe6f20ad.png": ventureSources,
       "photo-youssef-new_dc020979.png": ventureSources,
-      "services-medical-compass-1280_0a913727.webp": ["components/ServicesSection.tsx"],
     };
     const prohibitedClaims = /guérison|guerison|résultat garanti|resultat garanti|traitement garanti|\bguaranteed\s+(?:cure|result)\b/i;
 
