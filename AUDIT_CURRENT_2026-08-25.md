@@ -22,7 +22,6 @@ Le **code applicatif actuel est techniquement cohérent en local**, mais la vers
 | **P2** | Recherche publique non fiable | La recherche de `anesthésie` retourne zéro résultat alors que le site présente des contenus correspondants | Test de recherche sur le domaine public | Revalider l’index de recherche après rétablissement du bon bundle/runtimes |
 | **P2** | Faux code HTTP de route inconnue | L’écran graphique 404 est affiché, mais Vercel répond HTTP 200 | Test d’une URL volontairement inconnue | Renvoyer un véritable HTTP 404 au niveau de l’hébergement/routage pour le SEO et la supervision |
 | **P2** | En-têtes de protection manquants sur Vercel | HSTS présent, mais CSP, `X-Content-Type-Options`, `Referrer-Policy` et `Permissions-Policy` absents dans la réponse contrôlée | Inspection d’en-têtes HTTP | Appliquer la politique d’en-têtes au niveau de l’origine de production retenue |
-| **P3** | Textes alternatifs incomplets | Deux images de l’accueil n’ont pas d’alternative textuelle : logo d’en-tête et illustration Services | Inspection DOM des six images rendues | Ajouter des alternatives pertinentes ou déclarer explicitement les images décoratives |
 | **P3** | Prévisualisateur non autorisé par Turnstile | Le prévisualisateur temporaire reçoit le code `110200` | Journal navigateur local ; ce code signifie « domaine non autorisé » dans la documentation Cloudflare [1] | Prévoir une recette sur domaine autorisé, ou ajouter une stratégie de test dédiée sans ouvrir inutilement la liste des hôtes |
 
 ## Périmètre des conséquences en production
@@ -62,7 +61,7 @@ Les recommandations purement esthétiques suivantes sont **des pistes d’améli
 3. **Rétablir les actifs `/manus-storage/`.** Vérifier systématiquement le logo, les visuels Accueil, Services, Contact, Réservation et VVIP sur desktop et mobile.
 4. **Refaire la recette Turnstile sur le domaine réellement servi.** Elle doit obtenir un jeton avant d’autoriser les soumissions ; aucun formulaire réel n’est nécessaire pour confirmer l’apparition du widget et l’obtention du jeton.
 5. **Recontrôler les parcours fonctionnels.** Témoignages, Questions santé, création/réinitialisation d’espace candidat, recrutement standard/VVIP, disponibilité de réservation et accès administrateur doivent alors être réévalués sans soumission réelle.
-6. **Traiter les finitions.** Corriger le statut HTTP 404, les en-têtes de sécurité, la recherche et les deux alternatives textuelles, puis rapprocher les rendez-vous `confirmed/pending`.
+6. **Traiter les finitions.** Corriger le statut HTTP 404, les en-têtes de sécurité et la recherche, puis rapprocher les rendez-vous `confirmed/pending`.
 
 ## Actions explicitement exclues
 
@@ -82,3 +81,15 @@ Les recommandations purement esthétiques suivantes sont **des pistes d’améli
 [4]: https://drbenlallah-esc8d3hd.manus.space/api/trpc/auth.me "Endpoint Manus direct contrôlé"
 
 > **État à la clôture :** audit terminé, aucun correctif appliqué. La priorité est de résoudre le déploiement/routage unique avant de traiter les anomalies secondaires.
+
+## Complément de diagnostic de remédiation — 25 août 2026
+
+Le projet Vercel qui sert `drahmedbenlallahom.com` a pu être identifié après connexion du propriétaire. Il est **déconnecté de Git** (« Connect Git Repository »), sa production a été créée il y a deux jours par `vercel deploy`, et l’observabilité remonte un taux d’erreur de fonction de **100 %**. Cette configuration explique que les checkpoints du dépôt ne soient pas automatiquement publiés sur Vercel et confirme que le runtime actuellement servi n’est pas synchronisé avec la branche `main` du dépôt.
+
+Les journaux de runtime Vercel identifient la cause exacte des HTTP 500 : `api/index.js` tente d’importer `/var/task/server/_core/index`, fichier absent du bundle serverless. La fonction s’arrête donc avant l’initialisation d’Express et tRPC. La remédiation doit fournir un point d’entrée Vercel autonome, incluant le runtime serveur nécessaire, et relier le projet au dépôt pour éviter un nouveau décalage de version.
+
+La source du déploiement confirme un ancien adaptateur `api/index.ts` minimal qui appelle `createApp()` depuis `../server/_core/index`. Il n’est plus présent dans le dépôt actuel, mais demeure dans l’archive Vercel. Le correctif sera conçu en conformité avec la documentation Vercel : une application Express doit être exportée par l’entrée de fonction et les fichiers de runtime doivent être inclus dans le bundle par analyse statique ou configuration explicite.
+
+Le projet Vercel ne contient **aucune variable d’environnement**. Même après correction de son import, il ne disposerait donc ni de l’accès base de données, ni des clés de sécurité, ni des paramètres Turnstile, Stripe, Resend, stockage, OAuth et services de plateforme requis par l’application. Le rétablissement complet sur Vercel exige une migration contrôlée des variables et des intégrations ; la voie la plus sûre reste la remise en service de l’hébergement full-stack Manus, puis la bascule du domaine vers cette unique origine.
+
+Une relecture des composants et de leurs tests corrige un point du rapport initial : le logo placé dans le bouton de retour Accueil et l’illustration de fond Services sont explicitement **décoratifs** (`alt=""`, et l’illustration est `aria-hidden`). Le bouton porte déjà un nom accessible. Ces deux absences de texte alternatif ne sont donc pas des défauts d’accessibilité et ne requièrent aucun changement de contenu.

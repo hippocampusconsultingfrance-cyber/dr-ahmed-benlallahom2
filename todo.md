@@ -2560,3 +2560,8 @@
 - [x] Renforcer l’effacement RGPD manuel avec preuve d’audit et documentation explicite de la limite de suppression physique du stockage géré, sans supprimer automatiquement les CV.
 - [x] Revalider visuellement le parcours VVIP desktop et actualiser son étalon uniquement après validation du rendu stable.
 - [x] Clarifier et documenter la source de vérité des migrations Drizzle sans altérer la base de production.
+- [ ] Établir l’origine de production unique et la configuration de domaine active pour éliminer la divergence Vercel–Manus.
+- [ ] Rétablir l’API tRPC et les actifs manus-storage sur le domaine public retenu.
+- [ ] Revalider Turnstile et les parcours publics après réparation du runtime, sans créer de données métier.
+- [ ] Corriger le statut HTTP 404, les en-têtes de sécurité et la recherche publique après remise en service de l’origine de production ; les alternatives vides concernées sont décoratives et conformes.
+- [ ] Rapprocher les rendez-vous confirmés avec paiement en attente avant de conclure la remédiation Stripe.
