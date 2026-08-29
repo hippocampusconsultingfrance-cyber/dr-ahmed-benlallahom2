@@ -3,6 +3,7 @@ import type { User } from "../../drizzle/schema";
 import { clerkClient, getAuth } from "@clerk/express";
 import * as db from "../db";
 import { isAdminMfaVerified } from "../adminMfa";
+import { isConfiguredAdminOpenId } from "./env";
 
 export type TrpcContext = {
   req: CreateExpressContextOptions["req"];
@@ -32,7 +33,10 @@ export async function createContext(
         loginMethod: "clerk",
         lastSignedIn: new Date(),
       });
-      user = (await db.getUserByOpenId(auth.userId)) ?? null;
+      const synchronizedUser = (await db.getUserByOpenId(auth.userId)) ?? null;
+      user = synchronizedUser
+        ? { ...synchronizedUser, role: isConfiguredAdminOpenId(auth.userId) ? "admin" : "user" }
+        : null;
 
       mfaVerified = await isAdminMfaVerified(opts.req, auth.userId);
     } catch (error) {
