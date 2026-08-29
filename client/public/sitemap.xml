@@ -61,6 +61,30 @@
     <priority>0.4</priority>
   </url>
   <url>
+    <loc>https://drahmedbenlallahom.com/faq</loc>
+    <lastmod>2026-08-29</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://drahmedbenlallahom.com/resources</loc>
+    <lastmod>2026-08-29</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://drahmedbenlallahom.com/press</loc>
+    <lastmod>2026-08-29</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://drahmedbenlallahom.com/questions-anesthesie</loc>
+    <lastmod>2026-08-29</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
     <loc>https://drahmedbenlallahom.com/venture/hippocampus-consulting</loc>
     <lastmod>2026-08-15</lastmod>
     <changefreq>monthly</changefreq>
