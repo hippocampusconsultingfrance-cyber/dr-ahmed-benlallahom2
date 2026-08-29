@@ -16,4 +16,10 @@ describe("langues professionnelles de la candidature", () => {
     expect(source).toContain("const submittedLanguages = form.languages.flatMap");
     expect(source).toContain('body.append("languages", JSON.stringify(submittedLanguages))');
   });
+
+  it("publie une adresse canonique dédiée et ne contient aucun caractère nul", async () => {
+    const source = await readFile(new URL("./RecruitmentPage.tsx", import.meta.url), "utf8");
+    expect(source).toContain('ogUrl="https://drahmedbenlallahom.com/recruitment/standard"');
+    expect(source).not.toContain("\0");
+  });
 });

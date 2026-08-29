@@ -158,7 +158,7 @@ const copy = {
     metaTitle: "Internationales Recruiting von Gesundheitsfachkräften | Hippocampus Consulting", metaDescription: "Reichen Sie Ihren Lebenslauf für internationale Recruiting-Möglichkeiten in Europa, Kanada und dem Nahen Osten ein.",
   },
   zh: {
-    eyebrow: "Hippocampus Consulting · 国际医疗人才流动", title: "让您的专业能力走向国际。", intro: "我们正在建立医疗专业人员国际网络，匹配欧洲、加拿大和中东地区经过筛选的职业机会。", nav: "招聘", standardPathTitle: "国际医疗人才流动", standardPathText: "欧洲、加拿大和中东地区的医院、诊所及医疗机构。 ", vvipPathTitle: "VVIP 与离岸任务", vvipPathText: "石油平台、偏远驻地、离岸企业和高风险环境。", vvipPathCta: "了解 VVIP 任务", formTitle: "提交申请", formIntro: "请分享您的职业资料。完整的申请有助于我们识别合适的机会。", firstName: "名", lastName: "姓", email: "职业邮箱", phone: "电话", specialty: "专业 / 职业", specialtySearch: "搜索专业…", specialtyCustom: "请输入您的专业或职业", countries: "目标国家", languages: "职业语言", experience: "工作年限", message: "留言或职业项目", cv: "简历（PDF、DOC 或 DOCX，最大 5 MB）", chooseFile: "选择文件", noFile: "未选择文件", gdpr: "我同意根据隐私政策处理我的个人数据以审核申请，包括使用自动化分析辅助初步筛选。始终需要人工审核，不会仅依据人工智能作出决定。", marketing: "我同意偶尔接收职业机会相关信息。", submit: "提交申请", sending: "正在发送…", successTitle: "已收到申请", successText: "您的资料已登记。请保存您的跟踪编号：", backHome: "返回网站", required: "必填项", consentError: "需要您的隐私同意。", fileError: "请附加不超过 5 MB 的 PDF、DOC 或 DOCX 简历。", genericError: "申请无法发送。请检查信息后重试。", privacyNote: "请勿在此表单中提交患者数据、病历或临床信息。", confidentiality: "机密数据处理", international: "精选国际机会", humanReview: "人工审核每份资料", select: "从列表中选择", otherSpecialty: "其他专业或职业", noMatch: "未找到符合条件的专业。",
+    eyebrow: "Hippocampus Consulting · 国际医疗人才流动", title: "让您的专业能力走向国际。", intro: "我们正在建立医疗专业人员国际网络，匹配欧洲、加拿大和中东地区经过筛选的职业机会。", nav: "招聘", standardPathTitle: "国际医疗人才流动", standardPathText: "欧洲、加拿大和中东地区的医院、诊所及医疗机构。", vvipPathTitle: "VVIP 与离岸任务", vvipPathText: "石油平台、偏远驻地、离岸企业和高风险环境。", vvipPathCta: "了解 VVIP 任务", formTitle: "提交申请", formIntro: "请分享您的职业资料。完整的申请有助于我们识别合适的机会。", firstName: "名", lastName: "姓", email: "职业邮箱", phone: "电话", specialty: "专业 / 职业", specialtySearch: "搜索专业…", specialtyCustom: "请输入您的专业或职业", countries: "目标国家", languages: "职业语言", experience: "工作年限", message: "留言或职业项目", cv: "简历（PDF、DOC 或 DOCX，最大 5 MB）", chooseFile: "选择文件", noFile: "未选择文件", gdpr: "我同意根据隐私政策处理我的个人数据以审核申请，包括使用自动化分析辅助初步筛选。始终需要人工审核，不会仅依据人工智能作出决定。", marketing: "我同意偶尔接收职业机会相关信息。", submit: "提交申请", sending: "正在发送…", successTitle: "已收到申请", successText: "您的资料已登记。请保存您的跟踪编号：", backHome: "返回网站", required: "必填项", consentError: "需要您的隐私同意。", fileError: "请附加不超过 5 MB 的 PDF、DOC 或 DOCX 简历。", genericError: "申请无法发送。请检查信息后重试。", privacyNote: "请勿在此表单中提交患者数据、病历或临床信息。", confidentiality: "机密数据处理", international: "精选国际机会", humanReview: "人工审核每份资料", select: "从列表中选择", otherSpecialty: "其他专业或职业", noMatch: "未找到符合条件的专业。",
     metaTitle: "International healthcare recruitment | Hippocampus Consulting", metaDescription: "Submit your CV to be considered for healthcare recruitment opportunities in Europe, Canada and the Middle East.",
   },
 } as const;
@@ -364,7 +364,7 @@ export default function RecruitmentPage() {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <SEOHead title={t.metaTitle} description={t.metaDescription} ogUrl="https://drahmedbenlallahom.com/recruitment" />
+      <SEOHead title={t.metaTitle} description={t.metaDescription} ogUrl="https://drahmedbenlallahom.com/recruitment/standard" />
       <Navigation />
       <main className="recruitment-page pt-28 md:pt-36">
         <section className="container grid gap-12 pb-16 lg:grid-cols-[0.9fr_1.1fr] lg:items-start">
