@@ -35,6 +35,8 @@ export const bookingContent = {
       blocked: "Date indisponible",
       alreadyBooked: "Ce créneau est déjà réservé",
       selectDate: "Sélectionnez une date et une heure",
+      noAvailability: "Aucun créneau de consultation n’est configuré pour le moment.",
+      outsideSchedule: "Ce créneau est en dehors des horaires de consultation disponibles.",
     },
     pricing: {
       title: "Tarification",
@@ -84,6 +86,8 @@ export const bookingContent = {
       blocked: "Date unavailable",
       alreadyBooked: "This time slot is already booked",
       selectDate: "Select a date and time",
+      noAvailability: "No consultation time slots are currently configured.",
+      outsideSchedule: "This time slot is outside the available consultation hours.",
     },
     pricing: {
       title: "Pricing",
@@ -133,6 +137,8 @@ export const bookingContent = {
       blocked: "Datum nicht verfügbar",
       alreadyBooked: "Dieser Termin ist bereits reserviert",
       selectDate: "Wählen Sie Datum und Uhrzeit",
+      noAvailability: "Derzeit sind keine Beratungszeiten konfiguriert.",
+      outsideSchedule: "Dieser Termin liegt außerhalb der verfügbaren Beratungszeiten.",
     },
     pricing: {
       title: "Preisgestaltung",
@@ -182,6 +188,8 @@ export const bookingContent = {
       blocked: "日期不可用",
       alreadyBooked: "该时间段已被预订",
       selectDate: "请选择日期和时间",
+      noAvailability: "目前尚未配置可预约的咨询时段。",
+      outsideSchedule: "该时间不在可预约的咨询时间范围内。",
     },
     pricing: {
       title: "价格",
