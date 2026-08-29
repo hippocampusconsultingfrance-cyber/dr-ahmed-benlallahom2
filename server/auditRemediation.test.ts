@@ -3,6 +3,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   getMissingCriticalProductionEnvironment,
+  isConfiguredAdminOpenId,
   PRODUCTION_REQUIRED_ENVIRONMENT_VARIABLES,
 } from "./_core/env";
 import { secureMfaHashEquals } from "./adminMfa";
@@ -22,6 +23,14 @@ describe("remédiations de l’audit externe", () => {
     expect(secureMfaHashEquals(expected, expected)).toBe(true);
     expect(secureMfaHashEquals(expected, "b".repeat(64))).toBe(false);
     expect(secureMfaHashEquals(expected, "short")).toBe(false);
+  });
+
+  it("réserve le rôle administrateur au seul propriétaire Clerk configuré", () => {
+    const environment = { CLERK_OWNER_USER_ID: "user_owner" } as NodeJS.ProcessEnv;
+
+    expect(isConfiguredAdminOpenId("user_owner", environment)).toBe(true);
+    expect(isConfiguredAdminOpenId("user_previous_account", environment)).toBe(false);
+    expect(isConfiguredAdminOpenId("user_owner", {})).toBe(false);
   });
 
   it("n’expose pas le bypass de test Stripe ni le détail des exceptions de webhook", async () => {
