@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import { neon } from "@neondatabase/serverless";
 import { drizzle } from "drizzle-orm/neon-http";
 import { InsertUser, users } from "../drizzle/schema";
-import { ENV } from './_core/env';
+import { isConfiguredAdminOpenId } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -53,13 +53,11 @@ export async function upsertUser(user: InsertUser): Promise<void> {
       values.lastSignedIn = user.lastSignedIn;
       updateSet.lastSignedIn = user.lastSignedIn;
     }
-    if (user.role !== undefined) {
-      values.role = user.role;
-      updateSet.role = user.role;
-    } else if (user.openId === ENV.ownerOpenId) {
-      values.role = 'admin';
-      updateSet.role = 'admin';
-    }
+    // Clerk authentication alone must never preserve a historical admin role.
+    // The single configured owner is promoted; every other account is demoted.
+    const configuredRole = isConfiguredAdminOpenId(user.openId) ? 'admin' : 'user';
+    values.role = configuredRole;
+    updateSet.role = configuredRole;
 
     if (!values.lastSignedIn) {
       values.lastSignedIn = new Date();
