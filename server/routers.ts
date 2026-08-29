@@ -1,6 +1,4 @@
-import { getSessionCookieOptions } from "./_core/cookies";
 import { createHash, randomUUID } from "node:crypto";
-import { COOKIE_NAME } from "../shared/const";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, adminProcedure, router } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
@@ -28,11 +26,11 @@ import {
 import { logRecruitmentAction, matchesRecruitmentProfile, parseRecruitmentJsonArray } from "./recruitmentAudit";
 import { computeBriefCandidateMatch } from "./clientBriefMatching";
 import { candidatePortalRouter } from "./candidatePortalRouter";
-import { issueAdminMfaChallenge, isAdminMfaVerified, verifyAdminMfaChallenge } from "./adminMfa";
 import { enforcePersistentRateLimit, logSecurityEvent, requestIpHash } from "./candidateSecurity";
 import { createCandidateInvitationToken } from "./candidateAuth";
 import { googleDriveExportStatus } from "./googleDriveExport";
 import { medicalQuestionsRouter } from "./medicalQuestionsRouter";
+import { issueAdminMfaChallenge, verifyAdminMfaChallenge } from "./adminMfa";
 
 let stripeClient: Stripe | undefined;
 
@@ -157,7 +155,9 @@ function parisWallClockToUtc(value: string): Date {
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const local = getParisParts(new Date(utcMs));
     const representedWallClockMs = Date.UTC(local.year, local.month - 1, local.day, local.hour, local.minute, local.second);
-    utcMs = wallClockMs - (representedWallClockMs - wallClockMs);
+    const offsetErrorMs = representedWallClockMs - wallClockMs;
+    if (offsetErrorMs === 0) break;
+    utcMs -= offsetErrorMs;
   }
 
   return new Date(utcMs);
@@ -223,22 +223,41 @@ export function isWithinAvailability(
 ): boolean {
   const parts = getParisParts(date);
   const dayOfWeek = PARIS_DAY_INDEX[parts.weekday];
+  const previousDayOfWeek = (dayOfWeek + 6) % 7;
   const candidateStart = parts.hour * 60 + parts.minute;
 
   return slots.some(slot => {
-    if (slot.dayOfWeek !== dayOfWeek) return false;
     const slotStart = timeToMinutes(slot.startTime);
     const rawSlotEnd = timeToMinutes(slot.endTime);
     if (!Number.isFinite(slotStart) || !Number.isFinite(rawSlotEnd)) return false;
 
     const crossesMidnight = rawSlotEnd <= slotStart;
     const slotEnd = crossesMidnight ? rawSlotEnd + 24 * 60 : rawSlotEnd;
-    const normalizedCandidateStart = crossesMidnight && candidateStart < slotStart
-      ? candidateStart + 24 * 60
-      : candidateStart;
+    let normalizedCandidateStart = candidateStart;
 
-    return normalizedCandidateStart >= slotStart && normalizedCandidateStart + durationMinutes <= slotEnd;
+    if (!crossesMidnight) {
+      if (slot.dayOfWeek !== dayOfWeek) return false;
+    } else if (slot.dayOfWeek === dayOfWeek && candidateStart >= slotStart) {
+      normalizedCandidateStart = candidateStart;
+    } else if (slot.dayOfWeek === previousDayOfWeek && candidateStart < rawSlotEnd) {
+      normalizedCandidateStart = candidateStart + 24 * 60;
+    } else {
+      return false;
+    }
+
+    const offsetFromStart = normalizedCandidateStart - slotStart;
+    return offsetFromStart >= 0
+      && normalizedCandidateStart + durationMinutes <= slotEnd
+      && offsetFromStart % durationMinutes === 0;
   });
+}
+
+export function isBookableAppointmentTime(
+  date: Date,
+  slots: Array<{ dayOfWeek: number; startTime: string; endTime: string }>,
+  durationMinutes = 30
+): boolean {
+  return slots.length > 0 && isWithinAvailability(date, slots, durationMinutes);
 }
 
 function getSafeCheckoutOrigin(): string {
@@ -252,7 +271,7 @@ export const appRouter = router({
   adminSecurity: router({
     status: protectedProcedure.query(async ({ ctx }) => {
       if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN", message: "Accès administrateur requis." });
-      return { verified: await isAdminMfaVerified(ctx.req, ctx.user.openId), email: ctx.user.email ?? null };
+      return { verified: ctx.mfaVerified, email: ctx.user.email ?? null };
     }),
     begin: protectedProcedure.mutation(async ({ ctx }) => {
       if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN", message: "Accès administrateur requis." });
@@ -271,7 +290,7 @@ export const appRouter = router({
     }),
     events: protectedProcedure.input(z.object({ limit: z.number().int().min(1).max(100).default(50) }).optional()).query(async ({ input, ctx }) => {
       if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN", message: "Accès administrateur requis." });
-      if (!(await isAdminMfaVerified(ctx.req, ctx.user.openId))) throw new TRPCError({ code: "FORBIDDEN", message: "Double authentification administrateur requise." });
+      if (!ctx.mfaVerified) throw new TRPCError({ code: "FORBIDDEN", message: "Double authentification administrateur requise." });
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Base de données indisponible." });
       const events = await db.select({
@@ -286,14 +305,8 @@ export const appRouter = router({
     }),
   }),
   auth: router({
-    me: publicProcedure.query(opts => opts.ctx.user),
-    logout: publicProcedure.mutation(({ ctx }) => {
-      const cookieOptions = getSessionCookieOptions(ctx.req);
-      ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
-      return {
-        success: true,
-      } as const;
-    }),
+    me: publicProcedure.query(opts => opts.ctx.user ? { ...opts.ctx.user, mfaVerified: opts.ctx.mfaVerified } : null),
+    logout: publicProcedure.mutation(() => ({ success: true } as const)),
   }),
 
   contact: router({
@@ -511,8 +524,13 @@ export const appRouter = router({
             .from(availabilitySlots)
             .where(eq(availabilitySlots.isActive, 1));
 
-          if (activeSlots.length > 0 && !isWithinAvailability(date, activeSlots, 30)) {
-            throw new TRPCError({ code: "CONFLICT", message: "Ce créneau ne correspond pas aux disponibilités configurées" });
+          if (!isBookableAppointmentTime(date, activeSlots, 30)) {
+            throw new TRPCError({
+              code: "CONFLICT",
+              message: activeSlots.length === 0
+                ? "Aucun créneau de consultation n’est actuellement ouvert"
+                : "Ce créneau ne correspond pas aux disponibilités configurées",
+            });
           }
 
           const appointmentEnd = new Date(date.getTime() + 30 * 60 * 1000);
@@ -690,13 +708,13 @@ export const appRouter = router({
 
         const result = await db
           .update(appointments)
-          .set({ appointmentStatus: "cancelled", slotKey: null })
+          .set({ appointmentStatus: "cancelled", slotKey: null, holdExpiresAt: null, cancelledAt: new Date() })
           .where(
             and(
               eq(appointments.trackingId, trackingId),
               eq(appointments.stripeSessionId, input.sessionId),
               eq(appointments.paymentStatus, "pending"),
-              eq(appointments.appointmentStatus, "confirmed")
+              eq(appointments.appointmentStatus, "held")
             )
           );
 
