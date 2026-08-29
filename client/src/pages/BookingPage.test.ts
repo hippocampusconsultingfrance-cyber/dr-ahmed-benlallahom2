@@ -7,6 +7,10 @@ describe("booking date placeholders", () => {
     expect(bookingContent.en.form.datePlaceholder).toBe("DD/MM/YYYY · HH:MM");
     expect(bookingContent.de.form.datePlaceholder).toBe("TT.MM.JJJJ · HH:MM");
     expect(bookingContent.zh.form.datePlaceholder).toBe("年/月/日 · 时:分");
+    for (const language of ["fr", "en", "de", "zh"] as const) {
+      expect(bookingContent[language].form.noAvailability).toBeTruthy();
+      expect(bookingContent[language].form.outsideSchedule).toBeTruthy();
+    }
   });
 
   it("keeps date and time controls visible and keyboard accessible", async () => {
