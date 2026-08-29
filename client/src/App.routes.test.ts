@@ -20,4 +20,9 @@ describe("routes publiques Employeurs et recrutement", () => {
     ].forEach(path => expect(sitemap).toContain(`https://drahmedbenlallahom.com${path}`));
   });
 
+  it("référence toutes les ressources publiques indexables dans le sitemap", () => {
+    ["/faq", "/resources", "/press", "/questions-anesthesie"].forEach(path =>
+      expect(sitemap).toContain(`https://drahmedbenlallahom.com${path}`)
+    );
+  });
 });
