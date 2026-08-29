@@ -13,11 +13,15 @@ describe("garde-fous Turnstile des parcours publics", () => {
     expect(source).toContain("L’envoi reste bloqué afin de protéger vos données");
   });
 
-  it("bloque les trois soumissions publiques sans jeton Turnstile", () => {
+  it("bloque toutes les soumissions publiques sensibles sans jeton Turnstile", () => {
     const widget = project("client/src/components/TurnstileWidget.tsx");
     expect(widget).toContain("const tokenRef = useRef(false)");
     expect(widget).toContain("blockSubmitWithoutToken");
     expect(project("client/src/pages/RecruitmentPage.tsx")).toContain('disabled={status === "sending" || !turnstileToken}');
     expect(project("client/src/pages/VvipOffshorePage.tsx")).toContain('disabled={status === "sending" || !turnstileToken}');
+    expect(project("client/src/components/ContactSection.tsx")).toContain('disabled={submitMutation.isPending || !turnstileToken}');
+    expect(project("client/src/components/GDPRRequestForm.tsx")).toContain('disabled={submitMutation.isPending || !turnstileToken}');
+    const routers = project("server/routers.ts");
+    expect(routers.match(/verifyCandidateTurnstile/g)?.length).toBeGreaterThanOrEqual(3);
   });
 });
