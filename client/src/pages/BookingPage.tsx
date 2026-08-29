@@ -35,6 +35,8 @@ export const bookingContent = {
       blocked: "Date indisponible",
       alreadyBooked: "Ce créneau est déjà réservé",
       selectDate: "Sélectionnez une date et une heure",
+      noAvailability: "Aucun créneau de consultation n’est configuré pour le moment.",
+      outsideSchedule: "Ce créneau est en dehors des horaires de consultation disponibles.",
     },
     pricing: {
       title: "Tarification",
@@ -84,6 +86,8 @@ export const bookingContent = {
       blocked: "Date unavailable",
       alreadyBooked: "This time slot is already booked",
       selectDate: "Select a date and time",
+      noAvailability: "No consultation time slots are currently configured.",
+      outsideSchedule: "This time slot is outside the available consultation hours.",
     },
     pricing: {
       title: "Pricing",
@@ -133,6 +137,8 @@ export const bookingContent = {
       blocked: "Datum nicht verfügbar",
       alreadyBooked: "Dieser Termin ist bereits reserviert",
       selectDate: "Wählen Sie Datum und Uhrzeit",
+      noAvailability: "Derzeit sind keine Beratungszeiten konfiguriert.",
+      outsideSchedule: "Dieser Termin liegt außerhalb der verfügbaren Beratungszeiten.",
     },
     pricing: {
       title: "Preisgestaltung",
@@ -182,6 +188,8 @@ export const bookingContent = {
       blocked: "日期不可用",
       alreadyBooked: "该时间段已被预订",
       selectDate: "请选择日期和时间",
+      noAvailability: "目前尚未配置可预约的咨询时段。",
+      outsideSchedule: "该时间不在可预约的咨询时间范围内。",
     },
     pricing: {
       title: "价格",
@@ -223,11 +231,85 @@ export function parseBookingDateTime(dateValue: string, timeValue: string): Date
   const year = Number(yearText);
   const hour = Number(hourText);
   const minute = Number(minuteText);
-  const parsed = new Date(year, month - 1, day, hour, minute, 0, 0);
+  const wallClockMs = Date.UTC(year, month - 1, day, hour, minute, 0);
+  let utcMs = wallClockMs;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const parts = getParisBookingParts(new Date(utcMs));
+    const representedWallClockMs = Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, 0);
+    const offsetErrorMs = representedWallClockMs - wallClockMs;
+    if (offsetErrorMs === 0) break;
+    utcMs -= offsetErrorMs;
+  }
 
-  return parsed.getFullYear() === year && parsed.getMonth() === month - 1 && parsed.getDate() === day && parsed.getHours() === hour && parsed.getMinutes() === minute
+  const parsed = new Date(utcMs);
+  const verified = getParisBookingParts(parsed);
+  return verified.year === year && verified.month === month && verified.day === day && verified.hour === hour && verified.minute === minute
     ? parsed
     : null;
+}
+
+const PARIS_BOOKING_DAY_INDEX: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+
+function getParisBookingParts(date: Date) {
+  const values = Object.fromEntries(new Intl.DateTimeFormat("en-US", {
+    timeZone: "Europe/Paris",
+    weekday: "short",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date).filter(part => part.type !== "literal").map(part => [part.type, part.value]));
+  return {
+    year: Number(values.year), month: Number(values.month), day: Number(values.day),
+    hour: Number(values.hour), minute: Number(values.minute), weekday: String(values.weekday),
+  };
+}
+
+export function toParisBookingDateKey(date: Date): string {
+  const parts = getParisBookingParts(date);
+  return `${parts.year}-${String(parts.month).padStart(2, "0")}-${String(parts.day).padStart(2, "0")}`;
+}
+
+function bookingTimeToMinutes(value: string): number {
+  const match = /^(\d{2}):(\d{2})$/.exec(value);
+  if (!match) return Number.NaN;
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+  return hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59 ? hour * 60 + minute : Number.NaN;
+}
+
+export function isWithinBookingAvailability(
+  date: Date,
+  slots: Array<{ dayOfWeek: number; startTime: string; endTime: string }>,
+  durationMinutes = 30
+): boolean {
+  if (slots.length === 0) return false;
+  const parts = getParisBookingParts(date);
+  const dayOfWeek = PARIS_BOOKING_DAY_INDEX[parts.weekday];
+  const previousDayOfWeek = (dayOfWeek + 6) % 7;
+  const candidateStart = parts.hour * 60 + parts.minute;
+
+  return slots.some(slot => {
+    const slotStart = bookingTimeToMinutes(slot.startTime);
+    const rawSlotEnd = bookingTimeToMinutes(slot.endTime);
+    if (!Number.isFinite(slotStart) || !Number.isFinite(rawSlotEnd)) return false;
+    const crossesMidnight = rawSlotEnd <= slotStart;
+    const slotEnd = crossesMidnight ? rawSlotEnd + 24 * 60 : rawSlotEnd;
+    let normalizedCandidateStart = candidateStart;
+    if (!crossesMidnight) {
+      if (slot.dayOfWeek !== dayOfWeek) return false;
+    } else if (slot.dayOfWeek === dayOfWeek && candidateStart >= slotStart) {
+      normalizedCandidateStart = candidateStart;
+    } else if (slot.dayOfWeek === previousDayOfWeek && candidateStart < rawSlotEnd) {
+      normalizedCandidateStart = candidateStart + 24 * 60;
+    } else {
+      return false;
+    }
+    const offsetFromStart = normalizedCandidateStart - slotStart;
+    return offsetFromStart >= 0 && normalizedCandidateStart + durationMinutes <= slotEnd && offsetFromStart % durationMinutes === 0;
+  });
 }
 
 export type BookingAvailabilityState = "select" | "checking" | "unavailable" | "available";
@@ -308,7 +390,7 @@ export default function BookingPage() {
     }
   }, []);
 
-  const dateKey = formData.date ? formData.date.slice(0, 10) : "";
+  const dateKey = selectedDate ? toParisBookingDateKey(selectedDate) : "";
   const blockedDates = trpc.availability.getBlockedDates.useQuery();
   const bookedSlots = trpc.availability.getBookedSlots.useQuery(
     { date: dateKey },
@@ -323,6 +405,11 @@ export default function BookingPage() {
   );
   const availabilityPending = blockedDates.isLoading || bookedSlots.isLoading || availabilitySlots.isLoading;
   const availabilityQueryError = blockedDates.isError || bookedSlots.isError || availabilitySlots.isError;
+  const configuredSlots = availabilitySlots.data ?? [];
+  const hasConfiguredSlots = configuredSlots.length > 0;
+  const isOutsideConfiguredAvailability = Boolean(
+    selectedDate && availabilitySlots.data && !isWithinBookingAvailability(selectedDate, configuredSlots, 30)
+  );
   const availabilityLabel = availabilityQueryError
     ? bookingFormCopy.availabilityError
     : !selectedDate
@@ -333,11 +420,15 @@ export default function BookingPage() {
       ? bookingFormCopy.blocked
       : isBookedSlot
         ? bookingFormCopy.alreadyBooked
-        : bookingFormCopy.available;
+        : !hasConfiguredSlots
+          ? bookingFormCopy.noAvailability
+          : isOutsideConfiguredAvailability
+            ? bookingFormCopy.outsideSchedule
+            : bookingFormCopy.available;
   const availabilityState = getBookingAvailabilityState({
     selected: Boolean(selectedDate),
     pending: availabilityPending,
-    blocked: isBlockedDate || availabilityQueryError,
+    blocked: isBlockedDate || availabilityQueryError || isOutsideConfiguredAvailability,
     booked: isBookedSlot,
   });
 
@@ -371,7 +462,7 @@ export default function BookingPage() {
 
     setDateError(null);
     setSelectedDate(parsed);
-    setFormData((current) => ({ ...current, date: `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, "0")}-${String(parsed.getDate()).padStart(2, "0")}T${String(parsed.getHours()).padStart(2, "0")}:${String(parsed.getMinutes()).padStart(2, "0")}` }));
+    setFormData((current) => ({ ...current, date: parsed.toISOString() }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -384,7 +475,7 @@ export default function BookingPage() {
       return;
     }
 
-    if (isBlockedDate || isBookedSlot || availabilityError) {
+    if (isBlockedDate || isBookedSlot || isOutsideConfiguredAvailability || availabilityError) {
       alert(availabilityLabel);
       return;
     }
@@ -732,7 +823,7 @@ export default function BookingPage() {
             {/* Submit Button */}
             <Button
               type="submit"
-              disabled={isLoading || availabilityPending || availabilityError || isBlockedDate || isBookedSlot || !selectedDate || !calculatePrice.data}
+              disabled={isLoading || availabilityPending || availabilityError || isBlockedDate || isBookedSlot || isOutsideConfiguredAvailability || !selectedDate || !calculatePrice.data}
               className="cta-primary w-full"
               size="lg"
             >
