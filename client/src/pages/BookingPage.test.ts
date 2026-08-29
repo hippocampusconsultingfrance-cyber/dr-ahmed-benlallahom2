@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bookingContent, getBookingAvailabilityState, parseBookingDateTime } from "./BookingPage";
+import { bookingContent, getBookingAvailabilityState, isWithinBookingAvailability, parseBookingDateTime, toParisBookingDateKey } from "./BookingPage";
 
 describe("booking date placeholders", () => {
   it("uses an explicit localized placeholder for every supported language", () => {
@@ -32,15 +32,21 @@ describe("booking date placeholders", () => {
     expect(source).toContain('enterKeyHint="done"');
   });
 
-  it("parses a valid French date and time and rejects invalid calendar values", () => {
+  it("interprète toujours la saisie en heure de Paris", () => {
     const parsed = parseBookingDateTime("21/08/2026", "10:00");
-
-    expect(parsed?.getFullYear()).toBe(2026);
-    expect(parsed?.getMonth()).toBe(7);
-    expect(parsed?.getDate()).toBe(21);
-    expect(parsed?.getHours()).toBe(10);
+    expect(parsed?.toISOString()).toBe("2026-08-21T08:00:00.000Z");
+    expect(parseBookingDateTime("03/09/2026", "10:30")?.toISOString()).toBe("2026-09-03T08:30:00.000Z");
+    expect(parseBookingDateTime("15/01/2026", "10:00")?.toISOString()).toBe("2026-01-15T09:00:00.000Z");
+    expect(toParisBookingDateKey(parsed!)).toBe("2026-08-21");
     expect(parseBookingDateTime("31/02/2026", "10:00")).toBeNull();
     expect(parseBookingDateTime("21/08/2026", "25:00")).toBeNull();
+  });
+
+  it("refuse une liste vide et les heures hors des créneaux de 30 minutes", () => {
+    const mondaySlot = [{ dayOfWeek: 1, startTime: "09:00", endTime: "11:00" }];
+    expect(isWithinBookingAvailability(parseBookingDateTime("17/08/2026", "09:30")!, mondaySlot)).toBe(true);
+    expect(isWithinBookingAvailability(parseBookingDateTime("17/08/2026", "09:15")!, mondaySlot)).toBe(false);
+    expect(isWithinBookingAvailability(parseBookingDateTime("17/08/2026", "09:30")!, [])).toBe(false);
   });
 
   it("distingue explicitement les états de disponibilité du créneau", () => {
