@@ -155,3 +155,30 @@ Le contrôle direct des actifs confirme que `/assets/abl-logo.svg`, `/assets/med
 ### Fichiers SEO et actifs racine — 29 août 2026
 
 `/robots.txt` et `/sitemap.xml` répondent correctement HTTP 200 et le robots.txt interdit les zones sensibles (`/admin`, `/candidate/`, `/api/`, etc.). En revanche, `/manifest.json` et `/favicon.ico` renvoient HTTP 200 avec `Content-Type: text/html` et le shell applicatif au lieu de leurs types attendus. Ces deux ressources sont donc confirmées comme incorrectement routées sur Vercel, ce qui peut dégrader l’installation PWA, l’icône d’onglet et certains contrôles SEO.
+
+## Synthèse exécutive — version Codex/Vercel
+
+| Priorité | Constat confirmé | Impact | Action recommandée, sans exécution pendant cet audit |
+|---|---|---|---|
+| P0 | La réponse HTML initiale des routes publiques ne contient pas de `title`, description, canonical ou Open Graph ; ces éléments apparaissent seulement après JavaScript. | Indexation, partage social et accessibilité dégradés pour les robots ou clients sans JavaScript. | Mettre en place un rendu ou une injection SEO côté serveur/edge, puis contrôler chaque route. |
+| P0 | Une route inconnue renvoie HTTP 200 au lieu de HTTP 404. | Mauvais signal SEO et supervision ; les erreurs sont servies comme une page valide. | Ajouter une vraie réponse 404 et conserver l’écran graphique côté client. |
+| P1 | `/manifest.json` et `/favicon.ico` renvoient le shell HTML au lieu de leurs types attendus. | Icône, manifest et éventuelle installation PWA incorrects. | Servir explicitement les fichiers statiques avec leurs MIME types. |
+| P1 | Les anciens chemins `/manus-storage/*.png` et `.webp` renvoient le shell HTML. | Toute page ou ancien lien utilisant ces chemins affiche un actif cassé. | Cartographier les références historiques et migrer ou rediriger chaque actif. |
+| P1 | La base contrôlée contient 43 témoignages approuvés et 2 Questions santé répondues, alors que les lectures publiques Vercel renvoient des listes vides. | Risque de perte de visibilité des contenus et de divergence de base ou de filtre de publication. | Comparer les variables DB et les filtres de publication Vercel, sans resynchronisation destructive. |
+| P1 | Le dépôt local n’a pas de clé publique Clerk dans le prévisualisateur ; cinq captures mobiles montrent l’erreur Clerk au lieu du site. | Recette locale responsive et authentifiée impossible dans cet environnement. | Injecter la configuration de recette via le gestionnaire de secrets, puis refaire les tests. |
+| P2 | Les tests locaux comptent 14 échecs dans `server/testimonials.test.ts` car `getDb()` vaut `null`; 176 fichiers réussissent, 347 tests réussissent et 2 sont ignorés. | La validation complète du dépôt n’est pas reproductible localement sans DB configurée. | Corriger le prérequis de test ou isoler explicitement les tests nécessitant une DB, sans données factices. |
+| P2 | La connexion Google Drive est présente en base sans erreur enregistrée, mais la table historique `google_drive_exports` n’existe pas. | Suivi des exports possiblement différent entre le modèle attendu et la base active. | Cartographier le nom réel des jobs/export et vérifier le dashboard sans toucher aux fichiers. |
+| P2 | Les événements email agrégés incluent 3 rebonds, 1 suppression et 10 retards de livraison. | Risque de délivrabilité pour certaines communications. | Examiner les événements dans l’outil d’email et la réputation du domaine, sans renvoi automatique. |
+| P2 | Cinq rendez-vous sont `pending/confirmed` dans l’agrégat paiement/statut. | Possible incohérence paiement–confirmation à qualifier. | Réconcilier avec les événements Stripe en lecture seule avant toute action. |
+
+### Contrôles réussis
+
+Le domaine public répond sur les routes principales et les lectures publiques tRPC contrôlées ne renvoient plus HTTP 500. Les procédures administratives testées sans session renvoient HTTP 401 et n’exposent pas de données. Les en-têtes CSP, HSTS, `X-Content-Type-Options`, `Referrer-Policy` et `Permissions-Policy` sont présents. Les actifs `/assets/*.svg` utilisés par la version actuelle répondent avec un type MIME image correct. Le build de production réussit et l’audit de dépendances de production ne trouve aucune vulnérabilité connue.
+
+### Limites et exclusions
+
+Les formulaires de candidature, Questions santé, contact, réservation, paiement, activation, réinitialisation, upload CV, export Drive, envoi email/SMS et actions administrateur n’ont pas été soumis ou déclenchés. Aucun CV, document, témoignage, question ou rendez-vous n’a été créé, supprimé ou modifié. La recette responsive locale est non concluante tant que la clé publique Clerk n’est pas disponible ; la recette d’un compte utilisateur réel et la vérification des variables Vercel restent à faire par le propriétaire ou dans un environnement autorisé.
+
+### Ordre de décision recommandé
+
+La première décision est de confirmer que Vercel/Codex est bien la source de production définitive. Ensuite, il faut corriger le routage des fichiers statiques et du 404, restaurer les métadonnées SEO dans le HTML initial, puis vérifier que Vercel utilise la même base et les mêmes filtres de publication que l’environnement administré. Après seulement, les parcours Turnstile, candidature, Questions santé, portail candidat et paiement devront être testés avec les autorisations appropriées.
