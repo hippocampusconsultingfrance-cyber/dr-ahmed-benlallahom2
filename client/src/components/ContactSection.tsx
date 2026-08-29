@@ -5,6 +5,7 @@ import { trpc } from "@/lib/trpc";
 import { Phone, Mail, Linkedin, Send, CheckCircle, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { TurnstileWidget } from "./TurnstileWidget";
 
 export const contactCopy = publicFormCopy.contact;
 
@@ -19,11 +20,13 @@ export default function ContactSection() {
     gdprConsent: false,
   });
   const [submitted, setSubmitted] = useState(false);
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
 
   const submitMutation = trpc.contact.submit.useMutation({
     onSuccess: () => {
       setSubmitted(true);
       setFormData({ name: "", phone: "", email: "", message: "", gdprConsent: false });
+      setTurnstileToken(null);
       toast.success(copy.sent);
     },
     onError: (error) => {
@@ -41,6 +44,7 @@ export default function ContactSection() {
       toast.error(copy.consentRequired);
       return;
     }
+    if (!turnstileToken) return;
     setConsentAttempted(false);
     submitMutation.mutate({
       name: formData.name,
@@ -48,6 +52,7 @@ export default function ContactSection() {
       phone: formData.phone || undefined,
       message: formData.message,
       gdprConsent: formData.gdprConsent ? 1 : 0,
+      turnstileToken,
     });
   };
 
@@ -230,9 +235,11 @@ export default function ContactSection() {
                   </p>
                 )}
 
+                <TurnstileWidget onToken={setTurnstileToken} />
+
                 <button
                   type="submit"
-                  disabled={submitMutation.isPending}
+                  disabled={submitMutation.isPending || !turnstileToken}
                   className="cta-primary w-full disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   {submitMutation.isPending ? (
