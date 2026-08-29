@@ -93,3 +93,65 @@ La source du déploiement confirme un ancien adaptateur `api/index.ts` minimal q
 Le projet Vercel ne contient **aucune variable d’environnement**. Même après correction de son import, il ne disposerait donc ni de l’accès base de données, ni des clés de sécurité, ni des paramètres Turnstile, Stripe, Resend, stockage, OAuth et services de plateforme requis par l’application. Le rétablissement complet sur Vercel exige une migration contrôlée des variables et des intégrations ; la voie la plus sûre reste la remise en service de l’hébergement full-stack Manus, puis la bascule du domaine vers cette unique origine.
 
 Une relecture des composants et de leurs tests corrige un point du rapport initial : le logo placé dans le bouton de retour Accueil et l’illustration de fond Services sont explicitement **décoratifs** (`alt=""`, et l’illustration est `aria-hidden`). Le bouton porte déjà un nom accessible. Ces deux absences de texte alternatif ne sont donc pas des défauts d’accessibilité et ne requièrent aucun changement de contenu.
+
+## Nouvelle campagne d’audit Codex/Vercel — 29 août 2026
+
+Le propriétaire indique que Codex et Vercel gèrent désormais le site. Le domaine `drahmedbenlallahom.com` répond actuellement depuis Vercel, tandis que `www` redirige vers le domaine racine. Les routes publiques contrôlées renvoient HTTP 200, y compris une route inconnue ; ce dernier point reste à confirmer visuellement et constitue potentiellement un défaut SEO si aucun écran 404 ni statut 404 n’est produit par la version active.
+
+Les lectures tRPC publiques contrôlées (`testimonials.list`, `medicalQuestions.published` et `auth.me`) renvoient HTTP 200 avec des résultats vides ou `null`, sans erreur serveur. Cela confirme la disparition du HTTP 500 observé avant la migration. Les chemins `/manus-storage/booking-care-path-1280_c6d0ae6a.webp` et `/manus-storage/logo-abl_2afbc5e0.png` renvoient toutefois encore `index.html` avec `Content-Type: text/html`, et non une image : le défaut d’actifs est donc confirmé sur le domaine public actuel.
+
+La version locale du dépôt contient désormais une migration d’authentification Clerk/Codex (`@clerk/express`, `@clerk/react`) et un point d’entrée Vercel (`server/vercelEntry.ts`). Après installation des dépendances déclarées, TypeScript ne signale plus d’erreur, mais le serveur local affiche l’absence de clé Clerk publique. Ce point est à distinguer d’une panne publique : la production Vercel répond, mais la configuration locale ne permet pas une recette authentifiée complète sans variable d’environnement.
+
+Aucune soumission, création de compte, upload, paiement, email, modification DNS, action administrateur ou mutation de donnée n’a été exécutée pendant cette campagne.
+
+### Contrôle visuel public — 29 août 2026
+
+La page d’accueil Codex/Vercel affiche brièvement un écran « Loading your space », puis se stabilise correctement. Le rendu desktop est sombre, lisible et cohérent avec le système visuel ABL/Hippocampus ; la navigation, le bouton de contact, le bouton WhatsApp, le consentement cookies et les sections principales sont visibles. Le contenu initial est majoritairement en anglais alors que le titre SEO reste en français (« Dr. Ahmed Ben Lallahom | Anesthésie et Santé ») : ce mélange de langue doit être qualifié comme choix éditorial ou incohérence lors du contrôle multilingue.
+
+La page publique utilise désormais des actifs `/assets/*.svg` (logo, illustrations) dans le bundle Vercel, contrairement aux chemins historiques `/manus-storage/`. Le test visuel n’a pas déclenché de formulaire ni d’action métier. Une vérification mobile et une inspection DOM des images restent nécessaires.
+
+La page `/recruitment` est accessible sur Vercel et présente deux parcours distincts, international et VVIP/offshore, avec un positionnement « Medical & Allied Health ». Le lien vers `/recruitment/standard` navigue correctement, mais affiche d’abord l’écran de chargement ; sa stabilisation doit être surveillée avant de conclure sur le formulaire. Aucun champ n’a été rempli et aucun envoi n’a été déclenché.
+
+Sur `/recruitment/standard`, le formulaire se stabilise et affiche les champs attendus, la liste des spécialités médicales et paramédicales, la recherche de pays, les langues professionnelles et le contrôle anti-bot. Le bouton d’envoi reste non utilisé. L’inspection DOM indique que les trois images `/assets/*.svg` sont chargées avec des dimensions naturelles non nulles et que le widget Turnstile n’est pas détecté dans ce navigateur de contrôle (`turnstile: false`). Ce dernier résultat est une limite de recette navigateur, pas encore une preuve de panne côté domaine ; il doit être recoupé avec les logs et une session utilisateur autorisée.
+
+Le contrôle navigateur de `/recruitment/vvip-offshore` n’a pas fourni de rendu exploitable : après navigation, seuls les éléments flottants apparaissaient et la vue suivante a rencontré une indisponibilité du navigateur. Ce résultat ne suffit pas à qualifier la page comme défaillante ; une vérification HTTP et une nouvelle recette visuelle seront nécessaires.
+
+Le contrôle HTTP de `/recruitment/vvip-offshore`, `/questions-anesthesie`, `/candidate/access`, `/booking` et `/search` renvoie HTTP 200 avec le shell applicatif. Le bundle public Vercel (`index-BSUGfnKW.js`, environ 433 Ko) contient les références à l’API tRPC, aux routes Questions santé et portail candidat, ainsi qu’au parcours VVIP. Il ne contient pas de référence littérale à `turnstile`, `medicalQuestions.published` ni `manus-storage`, ce qui suggère une implémentation ou un nommage différent de la version Manus historique ; cela doit être rapproché du dépôt Codex avant toute conclusion.
+
+L’historique Git montre un commit `1e9e49f` intitulé « Fix Vercel runtime dependency bundling (#3) ». Il a modifié le script de build Vercel pour bundler l’entrée serverless avec esbuild, ajouté Clerk et Vercel Blob aux dépendances et ajusté des tests visuels. Le dépôt actuel contient donc déjà une tentative de migration vers une architecture Vercel/Codex ; cette campagne n’en modifie aucune partie. La synchronisation locale des dépendances a seulement rétabli les paquets déclarés pour permettre l’analyse ; aucun fichier applicatif n’a été changé.
+
+### Contrôle agrégé des données — 29 août 2026
+
+La base active contient notamment 18 candidatures `new`, 22 jobs CV `completed` et 4 `failed`, 4 documents candidats traités (`reviewed`) et 1 `needs_review`, ainsi que 4 jobs documentaires `completed`. Les Questions santé comptent 1 entrée `submitted` et 2 `answered`. Les rendez-vous agrégés comprennent 5 `pending/confirmed`, 1 `completed/confirmed` et 1 `pending/cancelled` ; la combinaison `pending/confirmed` doit être vérifiée métier avant toute conclusion sur la cohérence paiement–confirmation, sans modifier les lignes.
+
+Les événements email comprennent 47 `email.sent`, 44 `email.delivered`, 10 `email.delivery_delayed`, 3 `email.bounced` et 1 `email.suppressed`. Les 4 jobs CV en échec et les événements de rebond/suppression sont des anomalies opérationnelles à examiner dans le dashboard, sans ouvrir le contenu ni relancer les traitements pendant l’audit. La table attendue `google_drive_exports` n’existe pas dans ce schéma ; seule `google_drive_connections` et les tables de campagne/email ont été trouvées, ce qui révèle un écart de nommage ou de modèle à documenter.
+
+La table `google_drive_connections` contient une connexion, sans erreur enregistrée ; la dernière utilisation agrégée remonte au 22 août 2026. La structure conserve le refresh token chiffré, ses paramètres cryptographiques, les scopes et les dates d’utilisation. L’intégration paraît configurée au niveau base, mais la version Codex/Vercel devra être testée séparément en lecture seule ; aucun export ni rafraîchissement de jeton n’a été déclenché.
+
+### Validation locale Codex — 29 août 2026
+
+`pnpm check` passe sans erreur après installation des dépendances déclarées. La suite Vitest ne passe pas intégralement dans l’environnement local : 176 fichiers réussissent, 1 fichier échoue, 347 tests réussissent, 14 échouent et 2 sont ignorés. Les 14 échecs proviennent de `server/testimonials.test.ts`, où `getDb()` retourne `null` avant les lectures de la table `testimonials`. Il s’agit d’un défaut de prérequis/configuration de recette locale ou de disponibilité DB, pas d’une modification appliquée pendant cet audit. Les tests existants ne sont pas modifiés.
+
+La base contrôlée contient 43 témoignages `approved`, alors que la lecture publique Vercel de `testimonials.list` renvoie actuellement une liste vide. Elle contient également 2 Questions santé `answered` et 1 `submitted`, tandis que `medicalQuestions.published` renvoie une liste vide. Cet écart est un **point critique à investiguer** : il peut provenir d’une base Vercel différente, d’un filtre de publication différent ou d’une migration de données incomplète. Aucun contenu n’a été modifié et aucun témoignage/question n’a été publié ou supprimé.
+
+Les procédures administratives `adminSecurity.status` et `adminSecurity.events` renvoient HTTP 401 sans session, avec `x-clerk-auth-status: signed-out` et le message sûr « Please login (10001) ». La CSP, `X-Content-Type-Options`, `Permissions-Policy` et les autres en-têtes de défense sont présents sur ces réponses. Le contrôle confirme qu’aucune donnée administrative n’est exposée publiquement par ces endpoints.
+
+### Contrôle responsive local — 29 août 2026
+
+Les captures mobiles du dépôt local sur `/`, `/recruitment`, `/recruitment/standard`, `/questions-anesthesie` et `/candidate/access` affichent une erreur Clerk « Publishable key is missing » au lieu du rendu. Le contrôle responsive local est donc **non concluant** tant que la variable publique Clerk attendue n’est pas injectée dans le prévisualisateur. Cette anomalie concerne l’environnement de développement/reprise locale ; elle ne prouve pas une panne de la version Vercel, dont l’accueil public s’est rendu correctement.
+
+### SEO du HTML initial — 29 août 2026
+
+Une lecture brute des réponses HTML Vercel sur `/`, `/recruitment`, `/recruitment/standard`, `/questions-anesthesie`, `/legal` et `/gdpr` ne trouve aucune balise `<title>` ni métadonnée `description`, `canonical`, `og:title` ou `robots`. Le titre apparaît ensuite après exécution JavaScript dans le navigateur. Il s’agit d’un **défaut SEO/accessibilité potentiellement important** pour les robots, aperçus sociaux et navigateurs sans JavaScript ; il reste à distinguer d’une éventuelle stratégie SSR non observée dans cette version.
+
+Le contrôle de la version Vercel active renvoie HTTP 200 pour `/route-inconnue-audit-20260829` au lieu d’un statut 404. La route affiche le shell SPA ; aucun statut 404 n’est donc exposé aux robots ou aux outils de supervision. Ce défaut est confirmé indépendamment de l’ancien déploiement et doit être priorisé avec la stratégie SEO du HTML initial.
+
+### Build et dépendances — 29 août 2026
+
+Le build de production passe : les bundles client et serveur sont générés, dont `api/index.js` à environ 9,5 Mo. `pnpm audit --prod --audit-level=high` ne signale aucune vulnérabilité connue. Le script affiche toutefois un avertissement : les champs `pnpm.overrides` et `pnpm.patchedDependencies` placés dans `package.json` ne sont plus lus par la version de pnpm utilisée ; ces règles doivent être déplacées vers la configuration pnpm attendue, mais aucune correction n’est appliquée pendant cet audit. Le poids élevé de la fonction Vercel est un risque de déploiement à surveiller, pas une panne confirmée.
+
+Le contrôle direct des actifs confirme que `/assets/abl-logo.svg`, `/assets/medical-hero.svg` et `/assets/profile-placeholder.svg` répondent HTTP 200 avec un type MIME image et `nosniff`. Les anciens chemins `/manus-storage/logo-abl_2afbc5e0.png` et `/manus-storage/booking-care-path-1280_c6d0ae6a.webp` répondent encore HTTP 200 mais avec `Content-Type: text/html` et la taille du shell : ils sont fonctionnellement cassés si une page ou un ancien lien les référence. Les en-têtes actuels du domaine comprennent CSP, HSTS, `Permissions-Policy`, `Referrer-Policy` et `X-Content-Type-Options`.
+
+### Fichiers SEO et actifs racine — 29 août 2026
+
+`/robots.txt` et `/sitemap.xml` répondent correctement HTTP 200 et le robots.txt interdit les zones sensibles (`/admin`, `/candidate/`, `/api/`, etc.). En revanche, `/manifest.json` et `/favicon.ico` renvoient HTTP 200 avec `Content-Type: text/html` et le shell applicatif au lieu de leurs types attendus. Ces deux ressources sont donc confirmées comme incorrectement routées sur Vercel, ce qui peut dégrader l’installation PWA, l’icône d’onglet et certains contrôles SEO.

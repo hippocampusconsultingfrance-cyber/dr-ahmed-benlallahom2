@@ -2565,3 +2565,10 @@
 - [ ] Revalider Turnstile et les parcours publics après réparation du runtime, sans créer de données métier.
 - [ ] Corriger le statut HTTP 404, les en-têtes de sécurité et la recherche publique après remise en service de l’origine de production ; les alternatives vides concernées sont décoratives et conformes.
 - [ ] Rapprocher les rendez-vous confirmés avec paiement en attente avant de conclure la remédiation Stripe.
+- [ ] Auditer la migration Codex/Vercel : dépôt source, commit servi, variables, runtime API, stockage et compatibilité avec les données existantes.
+- [ ] Réparer uniquement les écarts confirmés de la version Vercel active, sans modifier le DNS ni supprimer de CV ou de données.
+- [ ] Valider sur le domaine public les routes, l’API tRPC, les images, Turnstile et les parcours principaux après la migration.
+- [ ] Archiver le diagnostic et les corrections spécifiques à la migration Codex/Vercel.
+- [x] Audit uniquement demandé : ne modifier ni architecture, ni code, ni DNS, ni variables, ni données, ni déploiement ; comparer et documenter la version Codex/Vercel réellement servie.
+- [x] Tester de façon non destructive les routes, API, actifs, sécurité, intégrations, responsive, accessibilité, SEO et rendu visuel de la version active.
+- [x] Livrer un rapport final distinguant anomalies confirmées, contrôles réussis, limites de test et recommandations, sans correction automatique.
