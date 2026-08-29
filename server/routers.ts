@@ -28,6 +28,7 @@ import { computeBriefCandidateMatch } from "./clientBriefMatching";
 import { candidatePortalRouter } from "./candidatePortalRouter";
 import { enforcePersistentRateLimit, logSecurityEvent, requestIpHash } from "./candidateSecurity";
 import { createCandidateInvitationToken } from "./candidateAuth";
+import { verifyCandidateTurnstile } from "./candidateTurnstile";
 import { googleDriveExportStatus } from "./googleDriveExport";
 import { medicalQuestionsRouter } from "./medicalQuestionsRouter";
 import { issueAdminMfaChallenge, verifyAdminMfaChallenge } from "./adminMfa";
@@ -318,6 +319,7 @@ export const appRouter = router({
           phone: z.string().max(50).optional(),
           message: z.string().min(1, "Le message est requis").max(5000),
           gdprConsent: z.number().int().min(0).max(1),
+          turnstileToken: z.string().min(20).max(4096).optional(),
         })
       )
       .mutation(async ({ input, ctx }) => {
@@ -331,6 +333,9 @@ export const appRouter = router({
           email: input.email,
           headers: ctx.req.headers as Record<string, unknown>,
         });
+        if (process.env.NODE_ENV !== "test" && process.env.VITEST !== "true") {
+          await verifyCandidateTurnstile({ token: input.turnstileToken ?? "", remoteIp: ctx.req.ip });
+        }
 
         // Generate a unique tracking ID (max 20 chars for varchar(20))
         const trackingId = `C${Math.random().toString(36).substring(2, 10).toUpperCase()}${Date.now().toString(36).slice(-4).toUpperCase()}`;
@@ -362,6 +367,7 @@ export const appRouter = router({
           phone: z.string().max(50).optional(),
           requestType: z.enum(["access", "rectification", "deletion", "portability", "objection"]),
           description: z.string().min(1, "La description est requise").max(5000).optional(),
+          turnstileToken: z.string().min(20).max(4096).optional(),
         })
       )
       .mutation(async ({ input, ctx }) => {
@@ -370,6 +376,9 @@ export const appRouter = router({
           email: input.email,
           headers: ctx.req.headers as Record<string, unknown>,
         });
+        if (process.env.NODE_ENV !== "test" && process.env.VITEST !== "true") {
+          await verifyCandidateTurnstile({ token: input.turnstileToken ?? "", remoteIp: ctx.req.ip });
+        }
         // Generate a unique tracking ID (max 20 chars for varchar(20))
         const trackingId = `G${Math.random().toString(36).substring(2, 10).toUpperCase()}${Date.now().toString(36).slice(-4).toUpperCase()}`;
 
