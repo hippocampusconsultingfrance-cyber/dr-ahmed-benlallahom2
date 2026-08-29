@@ -4,6 +4,7 @@ import { getGdprRequestCopy, publicFormCopy } from "@/lib/publicFormCopy";
 import { CheckCircle, Loader2, ArrowLeft } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { TurnstileWidget } from "./TurnstileWidget";
 
 export const gdprRequestCopy = publicFormCopy.gdpr;
 
@@ -30,6 +31,7 @@ export default function GDPRRequestForm({ onBack }: GDPRRequestFormProps) {
     description: "",
   });
   const [submitted, setSubmitted] = useState(false);
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
 
   const submitMutation = trpc.gdpr.submit.useMutation({
     onSuccess: () => {
@@ -41,6 +43,7 @@ export default function GDPRRequestForm({ onBack }: GDPRRequestFormProps) {
         requestType: "access",
         description: "",
       });
+      setTurnstileToken(null);
       toast.success(copy.submitted);
     },
     onError: (error) => {
@@ -51,12 +54,14 @@ export default function GDPRRequestForm({ onBack }: GDPRRequestFormProps) {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!turnstileToken) return;
     submitMutation.mutate({
       name: formData.name,
       email: formData.email,
       phone: formData.phone || undefined,
       requestType: formData.requestType,
       description: formData.description || undefined,
+      turnstileToken,
     });
   };
 
@@ -197,9 +202,11 @@ export default function GDPRRequestForm({ onBack }: GDPRRequestFormProps) {
                 />
               </div>
 
+              <TurnstileWidget onToken={setTurnstileToken} />
+
               <button
                 type="submit"
-                disabled={submitMutation.isPending}
+                disabled={submitMutation.isPending || !turnstileToken}
                 className="w-full flex items-center justify-center gap-2 px-7 py-4 rounded-lg bg-primary text-primary-foreground font-semibold hover:bg-primary/90 transition-all duration-200 active:scale-[0.97] shadow-lg shadow-primary/20 disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 {submitMutation.isPending ? (
