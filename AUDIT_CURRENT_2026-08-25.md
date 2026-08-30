@@ -182,3 +182,7 @@ Les formulaires de candidature, Questions santé, contact, réservation, paiemen
 ### Ordre de décision recommandé
 
 La première décision est de confirmer que Vercel/Codex est bien la source de production définitive. Ensuite, il faut corriger le routage des fichiers statiques et du 404, restaurer les métadonnées SEO dans le HTML initial, puis vérifier que Vercel utilise la même base et les mêmes filtres de publication que l’environnement administré. Après seulement, les parcours Turnstile, candidature, Questions santé, portail candidat et paiement devront être testés avec les autorisations appropriées.
+
+### Recontrôle public le 29 août 2026
+
+Le domaine racine `drahmedbenlallahom.com` répond HTTP 200 et `www` redirige correctement vers le domaine racine. `auth.me` répond HTTP 200 avec une session absente (`null`). Les procédures `testimonials.list` et `medicalQuestions.published`, appelées avec l’entrée attendue `{}`, répondent désormais HTTP 200 mais renvoient chacune une liste vide. La précédente réponse HTTP 500 n’est donc plus observée sur le domaine public ; le point restant est la divergence de contenu avec les agrégats de base relevés pendant l’audit. L’origine directe Manus répond actuellement HTTP 500 sur la racine et ne doit pas être utilisée comme origine publique sans diagnostic séparé.
