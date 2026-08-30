@@ -24,4 +24,10 @@ describe("garde-fous Turnstile des parcours publics", () => {
     const routers = project("server/routers.ts");
     expect(routers.match(/verifyCandidateTurnstile/g)?.length).toBeGreaterThanOrEqual(3);
   });
+
+  it("renouvelle automatiquement le contrôle recrutement après un échec serveur", () => {
+    const page = project("client/src/pages/RecruitmentPage.tsx");
+    expect(page).toContain("setTurnstileAttempt(value => value + 1)");
+    expect(page).toContain("<TurnstileWidget key={turnstileAttempt} onToken={setTurnstileToken} />");
+  });
 });
