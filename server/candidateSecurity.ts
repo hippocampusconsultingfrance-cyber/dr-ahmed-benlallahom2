@@ -62,7 +62,11 @@ export async function enforcePersistentRateLimit(input: {
     await db.insert(candidateSecurityRateLimits).values({ action: input.action, subjectHash, windowStartedAt: now, attemptCount: 1, lastAttemptAt: now });
     return;
   }
-  if (existing.blockedUntil && existing.blockedUntil > now) throw new Error("candidate_security_rate_limited");
+  // A policy can be relaxed after a false positive or an infrastructure incident.
+  // In that case, do not preserve a block created under the older, lower threshold.
+  if (existing.blockedUntil && existing.blockedUntil > now && existing.attemptCount > input.maxAttempts) {
+    throw new Error("candidate_security_rate_limited");
+  }
   const sameWindow = now.getTime() - existing.windowStartedAt.getTime() < input.windowMs;
   const attempts = sameWindow ? existing.attemptCount + 1 : 1;
   const blockedUntil = attempts > input.maxAttempts ? new Date(now.getTime() + input.blockMs) : null;

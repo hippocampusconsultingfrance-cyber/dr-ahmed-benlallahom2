@@ -453,13 +453,18 @@ export async function createApp() {
         const ipHash = hashSecurityValue(clientIp);
         if (process.env.NODE_ENV !== "test" && process.env.VITEST !== "true") {
           try {
-            await enforcePersistentRateLimit({ action: "public_recruitment_apply", subject: `${clientIp}:${parsed.data.email}`, maxAttempts: 3, windowMs: 24 * 60 * 60 * 1000, blockMs: 24 * 60 * 60 * 1000 });
             await verifyCandidateTurnstile({ token: parsed.data.turnstileToken, remoteIp: clientIp });
+            await enforcePersistentRateLimit({ action: "public_recruitment_apply", subject: `${clientIp}:${parsed.data.email}`, maxAttempts: 10, windowMs: 24 * 60 * 60 * 1000, blockMs: 60 * 60 * 1000 });
           } catch (protectionError) {
             await logSecurityEvent({ actorKind: "anonymous", actorReference: parsed.data.email, category: "public_recruitment_apply_protection", outcome: "blocked", severity: "warning", ipHash })
               .catch(securityLogError => console.error("Recruitment protection log error:", safeErrorName(securityLogError)));
             console.warn("Recruitment protection rejected:", safeErrorName(protectionError));
-            res.status(400).json({ error: "La vérification de sécurité doit être renouvelée avant l’envoi." });
+            const rateLimited = protectionError instanceof Error && protectionError.message === "candidate_security_rate_limited";
+            res.status(400).json({
+              error: rateLimited
+                ? "Trop de tentatives ont été effectuées. Patientez une heure avant de réessayer."
+                : "La vérification de sécurité doit être renouvelée avant l’envoi.",
+            });
             return;
           }
         }
