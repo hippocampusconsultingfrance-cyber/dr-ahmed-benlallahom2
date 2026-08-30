@@ -46,4 +46,17 @@ describe("remédiations de l’audit externe", () => {
     expect(source).toContain('app.set("trust proxy", 1)');
     expect(source).toContain("Strict-Transport-Security");
   });
+
+  it("ne marque pas comme envoyés les emails refusés et ne journalise pas les destinataires", async () => {
+    const notifications = await readFile(path.join(process.cwd(), "server/_core/notifications.ts"), "utf8");
+    const fulfillment = await readFile(path.join(process.cwd(), "server/appointmentFulfillment.ts"), "utf8");
+
+    expect(notifications).toContain("confirmation_email_rejected");
+    expect(notifications).toContain("invoice_email_rejected");
+    expect(notifications).toContain("reminder_email_rejected");
+    expect(notifications).not.toContain("sent to ${customerEmail}");
+    expect(notifications).not.toContain("sent to ${candidateEmail}");
+    expect(fulfillment).toContain("smsSent: smsSent ? 1 : 0");
+    expect(fulfillment).not.toContain("smsSent: 1");
+  });
 });
