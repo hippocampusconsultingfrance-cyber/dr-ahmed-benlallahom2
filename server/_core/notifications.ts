@@ -102,7 +102,7 @@ export async function sendConfirmationEmail(
       <p>Merci de votre confiance.</p>
     `);
 
-    const { data, error } = await getResendClient().emails.send({
+    const { error } = await getResendClient().emails.send({
       from: FROM_EMAIL,
       to: [customerEmail],
       subject: `Confirmation de réservation - ${trackingId}`,
@@ -110,13 +110,12 @@ export async function sendConfirmationEmail(
     });
 
     if (error) {
-      console.error("Resend error sending confirmation email:", error);
-      return;
+      throw new Error(`confirmation_email_rejected:${error.message}`);
     }
 
-    console.log(`Confirmation email sent to ${customerEmail} (id: ${data?.id})`);
+    console.log("Confirmation email sent successfully");
   } catch (error) {
-    console.error("Error sending confirmation email:", error);
+    throw new Error("confirmation_email_failed", { cause: error });
   }
 }
 
@@ -157,8 +156,8 @@ Demande: ${requestDetails}
     });
 
     console.log("Owner notification sent via Manus notification service");
-  } catch (error) {
-    console.error("Error sending owner notification:", error);
+  } catch {
+    console.error("Owner notification delivery failed");
   }
 }
 
@@ -186,8 +185,8 @@ export async function sendOwnerNotificationSMS(
     });
 
     console.log("Owner SMS notification sent via Manus notification service");
-  } catch (error) {
-    console.error("Error sending owner notification SMS:", error);
+  } catch {
+    console.error("Owner SMS fallback delivery failed");
   }
 }
 
@@ -214,7 +213,7 @@ export async function sendInvoiceEmail(
       <p>Merci de votre confiance.</p>
     `);
 
-    const { data, error } = await getResendClient().emails.send({
+    const { error } = await getResendClient().emails.send({
       from: FROM_EMAIL,
       to: [customerEmail],
       subject: `Facture - Consultation ${trackingId}`,
@@ -228,13 +227,12 @@ export async function sendInvoiceEmail(
     });
 
     if (error) {
-      console.error("Resend error sending invoice email:", error);
-      return;
+      throw new Error(`invoice_email_rejected:${error.message}`);
     }
 
-    console.log(`Invoice email sent to ${customerEmail} (id: ${data?.id})`);
+    console.log("Invoice email sent successfully");
   } catch (error) {
-    console.error("Error sending invoice email:", error);
+    throw new Error("invoice_email_failed", { cause: error });
   }
 }
 
@@ -242,23 +240,13 @@ export async function sendCustomerConfirmationSMS(
   customerPhone: string,
   trackingId: string,
   appointmentDate: Date
-) {
-  try {
-    const formattedDate = appointmentDate.toLocaleString("fr-FR", {
-      timeZone: "Europe/Paris",
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-
-    // SMS not available directly - use owner notification as fallback
-    // The customer receives their confirmation via email
-    console.log(`Customer SMS notification for ${trackingId} - customer receives email confirmation instead`);
-  } catch (error) {
-    console.error("Error sending confirmation SMS:", error);
-  }
+): Promise<boolean> {
+  // No customer SMS provider is configured. Keep the status truthful rather
+  // than recording a delivery that never happened.
+  void customerPhone;
+  void trackingId;
+  void appointmentDate;
+  return false;
 }
 
 export async function sendRefundConfirmationEmail(
@@ -290,7 +278,7 @@ export async function sendRefundConfirmationEmail(
       <p>Le délai d’apparition du remboursement dépend de votre établissement bancaire.</p>
     `);
 
-    const { data, error } = await getResendClient().emails.send({
+    const { error } = await getResendClient().emails.send({
       from: FROM_EMAIL,
       to: [customerEmail],
       subject: `Remboursement confirmé - ${trackingId}`,
@@ -298,13 +286,13 @@ export async function sendRefundConfirmationEmail(
     });
 
     if (error) {
-      console.error("Resend error sending refund email:", error);
+      console.error("Refund email was rejected by the delivery provider");
       return;
     }
 
-    console.log(`Refund email sent to ${customerEmail} (id: ${data?.id})`);
-  } catch (error) {
-    console.error("Error sending refund email:", error);
+    console.log("Refund email sent successfully");
+  } catch {
+    console.error("Refund email delivery failed");
   }
 }
 
@@ -339,7 +327,7 @@ export async function sendReminderEmail(
       <p>À demain !</p>
     `);
 
-    const { data, error } = await getResendClient().emails.send({
+    const { error } = await getResendClient().emails.send({
       from: FROM_EMAIL,
       to: [customerEmail],
       subject: `Rappel - Consultation demain (${trackingId})`,
@@ -347,13 +335,12 @@ export async function sendReminderEmail(
     });
 
     if (error) {
-      console.error("Resend error sending reminder email:", error);
-      return;
+      throw new Error(`reminder_email_rejected:${error.message}`);
     }
 
-    console.log(`Reminder email sent to ${customerEmail} (id: ${data?.id})`);
+    console.log("Reminder email sent successfully");
   } catch (error) {
-    console.error("Error sending reminder email:", error);
+    throw new Error("reminder_email_failed", { cause: error });
   }
 }
 
@@ -384,7 +371,7 @@ export async function sendCvApplicationConfirmationEmail(
       <p style="color:#64748b;font-size:13px;">Si vous ne retrouvez pas cet email, vérifiez votre dossier Spam ou Courriers indésirables, puis ajoutez recrutement@drahmedbenlallahom.com à vos contacts.</p>
     `);
 
-    const { data, error } = await getResendClient().emails.send({
+    const { error } = await getResendClient().emails.send({
       from: FROM_EMAIL,
       to: [candidateEmail],
       replyTo: RECRUITMENT_REPLY_TO,
@@ -393,13 +380,13 @@ export async function sendCvApplicationConfirmationEmail(
     });
 
     if (error) {
-      console.error("Resend error sending CV application confirmation:", error);
+      console.error("CV application confirmation was rejected by the delivery provider");
       return;
     }
 
-    console.log(`CV application confirmation sent to ${candidateEmail} (id: ${data?.id})`);
-  } catch (error) {
-    console.error("Error sending CV application confirmation:", error);
+    console.log("CV application confirmation sent successfully");
+  } catch {
+    console.error("CV application confirmation delivery failed");
   }
 }
 
