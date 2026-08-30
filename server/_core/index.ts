@@ -440,8 +440,10 @@ export async function createApp() {
           try {
             await enforcePersistentRateLimit({ action: "public_recruitment_apply", subject: `${clientIp}:${parsed.data.email}`, maxAttempts: 3, windowMs: 24 * 60 * 60 * 1000, blockMs: 24 * 60 * 60 * 1000 });
             await verifyCandidateTurnstile({ token: parsed.data.turnstileToken, remoteIp: clientIp });
-          } catch {
-            await logSecurityEvent({ actorKind: "anonymous", actorReference: parsed.data.email, category: "public_recruitment_apply_protection", outcome: "blocked", severity: "warning", ipHash });
+          } catch (protectionError) {
+            await logSecurityEvent({ actorKind: "anonymous", actorReference: parsed.data.email, category: "public_recruitment_apply_protection", outcome: "blocked", severity: "warning", ipHash })
+              .catch(securityLogError => console.error("Recruitment protection log error:", safeErrorName(securityLogError)));
+            console.warn("Recruitment protection rejected:", safeErrorName(protectionError));
             res.status(400).json({ error: "La vérification de sécurité doit être renouvelée avant l’envoi." });
             return;
           }
@@ -532,10 +534,15 @@ export async function createApp() {
         if (insertedId) {
           const { enqueueCvAnalysis } = await import("../recruitmentProcessing");
           const { enqueueCvGoogleDriveExport } = await import("../googleDriveExport");
-          await Promise.all([
+          const queueResults = await Promise.allSettled([
             enqueueCvAnalysis(Number(insertedId)),
             enqueueCvGoogleDriveExport(Number(insertedId)),
           ]);
+          for (const queueResult of queueResults) {
+            if (queueResult.status === "rejected") {
+              console.error("Recruitment follow-up queue error:", safeErrorName(queueResult.reason));
+            }
+          }
         }
 
         res.status(201).json({ success: true, trackingId });
