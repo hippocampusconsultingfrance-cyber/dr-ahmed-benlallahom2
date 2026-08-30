@@ -47,13 +47,13 @@ async function runJob(id: number) {
   try {
     const finalPrice = Number(appointment.finalPrice);
     if (job.jobType === "confirmation") {
-      await Promise.all([
-        sendConfirmationEmail(appointment.customerEmail, appointment.customerName, appointment.trackingId, appointment.appointmentDate, finalPrice, appointment.requestDetails),
-        sendCustomerConfirmationSMS(appointment.customerPhone, appointment.trackingId, appointment.appointmentDate),
+      await sendConfirmationEmail(appointment.customerEmail, appointment.customerName, appointment.trackingId, appointment.appointmentDate, finalPrice, appointment.requestDetails);
+      const smsSent = await sendCustomerConfirmationSMS(appointment.customerPhone, appointment.trackingId, appointment.appointmentDate);
+      await Promise.allSettled([
         sendOwnerNotificationEmail(appointment.customerName, appointment.customerEmail, appointment.customerPhone, appointment.trackingId, appointment.appointmentDate, finalPrice, appointment.requestDetails),
         sendOwnerNotificationSMS(appointment.customerName, appointment.customerPhone, appointment.trackingId, appointment.appointmentDate, finalPrice),
       ]);
-      await db.update(appointments).set({ emailSent: 1, smsSent: 1 }).where(eq(appointments.id, appointment.id));
+      await db.update(appointments).set({ emailSent: 1, smsSent: smsSent ? 1 : 0 }).where(eq(appointments.id, appointment.id));
     } else {
       const invoice = await generateInvoicePDF({
         trackingId: appointment.trackingId,
