@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 
 const serverSource = readFileSync(new URL("./_core/index.ts", import.meta.url), "utf8");
+const packageSource = readFileSync(new URL("../package.json", import.meta.url), "utf8");
 
 describe("fiabilité du dépôt de candidature", () => {
   it("retourne une erreur de vérification exploitable même si le journal de sécurité échoue", () => {
@@ -21,5 +22,10 @@ describe("fiabilité du dépôt de candidature", () => {
     expect(serverSource).toContain('recruitmentStage = "application-insert"');
     expect(serverSource).toContain("...safeErrorMetadata(error)");
     expect(serverSource).not.toContain("message: safeText(candidate.message)");
+  });
+
+  it("laisse Vercel charger le client Blob depuis ses dépendances serveur", () => {
+    const buildScript = JSON.parse(packageSource).scripts.build as string;
+    expect(buildScript).toMatch(/server\/vercelEntry\.ts --platform=node --packages=external --bundle/);
   });
 });
