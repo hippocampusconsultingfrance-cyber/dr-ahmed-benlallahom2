@@ -261,6 +261,7 @@ export default function RecruitmentPage() {
   const [diplomaCountryQuery, setDiplomaCountryQuery] = useState("");
   const [diplomaCountryOpen, setDiplomaCountryOpen] = useState(false);
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  const [turnstileAttempt, setTurnstileAttempt] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const diplomaCountryPickerRef = useRef<HTMLDivElement>(null);
 
@@ -358,6 +359,8 @@ export default function RecruitmentPage() {
       setValidationAttempted(false);
       setStatus("success");
     } catch (submissionError) {
+      setTurnstileToken(null);
+      setTurnstileAttempt(value => value + 1);
       setStatus("error"); setErrorMessage(submissionError instanceof Error ? submissionError.message : t.genericError);
     }
   }
@@ -532,7 +535,7 @@ export default function RecruitmentPage() {
                   <div className={`rounded-xl border border-dashed border-primary/40 bg-primary/5 p-4 ${isInvalid("cv") ? "form-file-invalid" : ""}`}><label htmlFor="recruitment-cv" className="flex cursor-pointer items-center gap-3 text-sm font-medium text-foreground"><FileUp className="h-5 w-5 text-primary" /><span>{file ? file.name : t.chooseFile}</span><input ref={fileInputRef} id="recruitment-cv" type="file" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={event => { setFile(event.target.files?.[0] || null); setInvalidFields(previous => { const next = new Set(previous); next.delete("cv"); return next; }); }} className="sr-only" required /></label><p className="mt-2 text-xs text-muted-foreground">{file ? `${(file.size / (1024 * 1024)).toFixed(2)} MB` : t.cv}</p></div>
                   <label className={`form-consent-item flex items-start gap-3 text-sm text-muted-foreground ${isInvalid("gdprConsent") ? "form-consent-item-invalid" : ""}`}><input type="checkbox" checked={form.gdprConsent} aria-invalid={isInvalid("gdprConsent")} onChange={event => update("gdprConsent", event.target.checked)} className="form-consent-checkbox mt-1" required /><span>{t.gdpr}</span></label>
                   <label className="form-consent-item flex items-start gap-3 text-sm text-muted-foreground"><input type="checkbox" checked={form.marketingConsent} onChange={event => update("marketingConsent", event.target.checked)} className="form-consent-checkbox mt-1" /><span>{t.marketing}</span></label>
-                  <div className={isInvalid("turnstile") ? "rounded-xl border border-destructive/50 p-2" : ""}><TurnstileWidget onToken={setTurnstileToken} /></div>
+                  <div className={isInvalid("turnstile") ? "rounded-xl border border-destructive/50 p-2" : ""}><TurnstileWidget key={turnstileAttempt} onToken={setTurnstileToken} /></div>
                   <label className="absolute -left-[10000px] h-px w-px overflow-hidden" aria-hidden="true"><span>Website</span><input tabIndex={-1} autoComplete="off" value={form.website} onChange={event => update("website", event.target.value)} /></label>
                   {status === "error" && <p className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive" role="alert">{errorMessage}</p>}
                   <button type="submit" disabled={status === "sending" || !turnstileToken} className="cta-primary w-full justify-center">{status === "sending" ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />{t.sending}</> : t.submit}</button>
