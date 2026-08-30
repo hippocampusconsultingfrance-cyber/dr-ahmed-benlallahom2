@@ -22,6 +22,10 @@ import { candidateDocumentAuditLogs, candidateDocumentProcessingJobs, candidateD
 import { CANDIDATE_DOCUMENT_MAX_BYTES, candidateDocumentMimeTypes, safeCandidateDocumentName, validateCandidateDocument } from "../candidateDocumentValidation";
 import { createCandidateInvitationToken } from "../candidateAuth";
 
+function safeErrorName(error: unknown) {
+  return error instanceof Error ? error.name : "UnknownError";
+}
+
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
     const server = net.createServer();
@@ -158,14 +162,14 @@ export async function createApp() {
 
       event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
     } catch (error) {
-      console.error("Stripe webhook signature validation failed", error);
+      console.error("Stripe webhook signature validation failed", safeErrorName(error));
       return res.status(400).json({ error: "Invalid webhook" });
     }
 
     try {
       if (event.type === "checkout.session.completed") {
         const session = event.data.object as any;
-        console.log("Payment successful:", session.id);
+        console.log("Stripe checkout completion received");
         const { getDb } = await import("../db");
         const { appointments } = await import("../../drizzle/schema");
         const { eq } = await import("drizzle-orm");
@@ -215,7 +219,7 @@ export async function createApp() {
           })
           .where(eq(appointments.trackingId, trackingId));
 
-        console.log(`Payment confirmed for appointment: ${trackingId}`);
+        console.log("Payment confirmed for appointment");
         await enqueueAppointmentFulfillment(appointment.id);
       } else if (event.type === "checkout.session.expired") {
         const session = event.data.object as any;
@@ -243,7 +247,7 @@ export async function createApp() {
       
       res.json({ received: true });
     } catch (error) {
-      console.error("Stripe webhook processing failed", error);
+      console.error("Stripe webhook processing failed", safeErrorName(error));
       res.status(500).json({ received: false });
     }
   });
@@ -316,7 +320,7 @@ export async function createApp() {
       }
       res.status(200).json({ received: true });
     } catch (error) {
-      console.error("Resend webhook verification failed:", error);
+      console.error("Resend webhook verification failed:", safeErrorName(error));
       res.status(400).send("Invalid Resend webhook");
     }
   });
@@ -381,7 +385,7 @@ export async function createApp() {
 
       res.json({ success: true, briefId });
     } catch (error) {
-      console.error("Client brief error:", error);
+      console.error("Client brief error:", safeErrorName(error));
       res.status(500).json({ error: "Échec de l'enregistrement du brief." });
     }
   });
@@ -536,7 +540,7 @@ export async function createApp() {
 
         res.status(201).json({ success: true, trackingId });
       } catch (error) {
-        console.error("Recruitment application error:", error);
+        console.error("Recruitment application error:", safeErrorName(error));
         res.status(500).json({ error: "La candidature n’a pas pu être enregistrée." });
       }
     });
@@ -631,7 +635,7 @@ export async function createApp() {
         });
         res.status(201).json({ success: true, documentId });
       } catch (error) {
-        console.error("Candidate document upload error:", error);
+        console.error("Candidate document upload error:", safeErrorName(error));
         res.status(500).json({ error: "Le document n’a pas pu être enregistré dans le coffre." });
       }
     });
@@ -664,7 +668,7 @@ export async function createApp() {
       res.setHeader("Cache-Control", "no-store, private");
       res.send(content);
     } catch (error) {
-      console.error("Candidate document secure download error:", error);
+      console.error("Candidate document secure download error:", safeErrorName(error));
       res.status(500).json({ error: "Le document n’a pas pu être téléchargé de manière sécurisée." });
     }
   });
@@ -696,7 +700,7 @@ export async function createApp() {
       res.setHeader("Cache-Control", "no-store, private");
       res.send(content);
     } catch (error) {
-      console.error("Admin candidate document secure download error:", error);
+      console.error("Admin candidate document secure download error:", safeErrorName(error));
       res.status(500).json({ error: "Le document n’a pas pu être téléchargé de manière sécurisée." });
     }
   });
@@ -780,15 +784,15 @@ export async function createApp() {
           await db.update(appointments)
             .set({ reminderSent: 1 })
             .where(eq(appointments.id, apt.id));
-          console.log(`[Reminder] Sent to ${apt.customerEmail} for ${apt.trackingId}`);
+          console.log("[Reminder] Sent successfully");
         } catch (e) {
-          console.error(`[Reminder] Failed for ${apt.trackingId}:`, e);
+          console.error("[Reminder] Delivery failed:", safeErrorName(e));
         }
       }
 
       res.json({ ok: true, reminded: upcoming.length });
     } catch (error: any) {
-      console.error("[Reminder] Handler error:", error);
+      console.error("[Reminder] Handler error:", safeErrorName(error));
       res.status(500).json({ error: error.message, timestamp: new Date().toISOString() });
     }
   });
@@ -804,7 +808,7 @@ export async function createApp() {
       const result = await runRecruitmentRetentionCleanup(`heartbeat:${user.taskUid}`);
       return res.json({ ok: true, ...result });
     } catch (error: any) {
-      console.error("[RecruitmentRetention] Handler error:", error);
+      console.error("[RecruitmentRetention] Handler error:", safeErrorName(error));
       return res.status(500).json({ error: error.message, timestamp: new Date().toISOString() });
     }
   });
@@ -822,7 +826,7 @@ export async function createApp() {
       const driveExports = await processDueCvGoogleDriveExports(2);
       return res.json({ ok: true, taskUid: user.taskUid, analysis, driveExports });
     } catch (error: any) {
-      console.error("[RecruitmentProcessing] Handler error:", error);
+      console.error("[RecruitmentProcessing] Handler error:", safeErrorName(error));
       return res.status(500).json({ error: error.message, timestamp: new Date().toISOString() });
     }
   });
@@ -836,7 +840,7 @@ export async function createApp() {
       const result = await processDueAppointmentFulfillmentJobs(3);
       return res.json({ ok: true, taskUid: user.taskUid, ...result });
     } catch (error: any) {
-      console.error("[AppointmentFulfillment] Handler error:", error);
+      console.error("[AppointmentFulfillment] Handler error:", safeErrorName(error));
       return res.status(500).json({ error: error.message, timestamp: new Date().toISOString() });
     }
   });
@@ -850,7 +854,7 @@ export async function createApp() {
       const result = await releaseExpiredAppointmentHolds();
       return res.json({ ok: true, taskUid: user.taskUid, ...result });
     } catch (error: any) {
-      console.error("[AppointmentHoldCleanup] Handler error:", error);
+      console.error("[AppointmentHoldCleanup] Handler error:", safeErrorName(error));
       return res.status(500).json({ error: error.message, timestamp: new Date().toISOString() });
     }
   });
@@ -864,7 +868,7 @@ export async function createApp() {
       const result = await processDueCandidateDocumentAnalysisJobs(2);
       return res.json({ ok: true, taskUid: user.taskUid, ...result });
     } catch (error: any) {
-      console.error("[CandidateDocumentProcessing] Handler error:", error);
+      console.error("[CandidateDocumentProcessing] Handler error:", safeErrorName(error));
       return res.status(500).json({ error: error.message, timestamp: new Date().toISOString() });
     }
   });
@@ -886,7 +890,7 @@ export async function createApp() {
       if (recentAlerts.length > 0) await notifyOwner({ title: "Bilan quotidien de sécurité", content: `${recentAlerts.length} événement(s) de sécurité à gravité élevée ont été détectés sur les dernières 24 heures. Consultez le journal administrateur.` });
       return res.json({ ok: true, taskUid: user.taskUid, highSeverityEvents24h: recentAlerts.length });
     } catch (error: any) {
-      console.error("[SecurityPosture] Handler error:", error);
+      console.error("[SecurityPosture] Handler error:", safeErrorName(error));
       return res.status(500).json({ error: error.message, timestamp: new Date().toISOString() });
     }
   });
