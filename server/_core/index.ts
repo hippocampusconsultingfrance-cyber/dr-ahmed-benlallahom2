@@ -26,6 +26,19 @@ function safeErrorName(error: unknown) {
   return error instanceof Error ? error.name : "UnknownError";
 }
 
+function safeErrorMetadata(error: unknown) {
+  if (!error || typeof error !== "object") return { name: "UnknownError" };
+  const candidate = error as Record<string, unknown>;
+  const safeText = (value: unknown) => typeof value === "string" ? value.slice(0, 120) : undefined;
+  const safeNumber = (value: unknown) => typeof value === "number" ? value : undefined;
+  return {
+    name: error instanceof Error ? error.name : "UnknownError",
+    code: safeText(candidate.code),
+    status: safeNumber(candidate.status),
+    constraint: safeText(candidate.constraint),
+  };
+}
+
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
     const server = net.createServer();
@@ -400,6 +413,7 @@ export async function createApp() {
         return;
       }
 
+      let recruitmentStage = "request-validation";
       try {
         const file = req.file;
         if (!file) {
@@ -432,6 +446,7 @@ export async function createApp() {
           return;
         }
 
+        recruitmentStage = "security-protection";
         const { verifyCandidateTurnstile } = await import("../candidateTurnstile");
         const { enforcePersistentRateLimit, hashSecurityValue, logSecurityEvent } = await import("../candidateSecurity");
         const clientIp = req.ip || "unknown";
@@ -449,6 +464,7 @@ export async function createApp() {
           }
         }
 
+        recruitmentStage = "file-validation";
         const trackingId = `CV${Math.random().toString(36).slice(2, 10).toUpperCase()}${Date.now().toString(36).slice(-8).toUpperCase()}`;
         const originalName = safeFileName(file.originalname);
         let fileValidation;
@@ -464,18 +480,21 @@ export async function createApp() {
           res.status(400).json({ error: "Le contenu du CV ne correspond pas à un document PDF, DOC ou DOCX valide.", code });
           return;
         }
+        recruitmentStage = "database-connect";
         const db = await (await import("../db")).getDb();
         if (!db) {
           res.status(503).json({ error: "Le service de candidature est temporairement indisponible." });
           return;
         }
 
+        recruitmentStage = "duplicate-check";
         const [duplicate] = await db.select({ id: cvApplications.id }).from(cvApplications).where(eq(cvApplications.fileChecksum, fileValidation.checksum)).limit(1);
         if (duplicate) {
           await logSecurityEvent({ actorKind: "anonymous", actorReference: parsed.data.email, category: "public_recruitment_apply_duplicate_file", outcome: "blocked", severity: "info", ipHash });
           res.status(202).json({ success: true, duplicate: true });
           return;
         }
+        recruitmentStage = "queue-capacity-check";
         const queuedJobs = await db.select({ id: cvProcessingJobs.id }).from(cvProcessingJobs).where(sql`${cvProcessingJobs.status} IN ('queued', 'retry', 'running')`).limit(201);
         if (queuedJobs.length >= 200) {
           await logSecurityEvent({ actorKind: "system", category: "public_recruitment_apply_queue_backpressure", outcome: "blocked", severity: "high", ipHash });
@@ -483,6 +502,7 @@ export async function createApp() {
           return;
         }
 
+        recruitmentStage = "storage-upload";
         const storageResult = await storagePut(
           `recruitment/quarantine/${trackingId}-${originalName}`,
           file.buffer,
@@ -491,6 +511,7 @@ export async function createApp() {
         const retentionUntil = new Date();
         retentionUntil.setFullYear(retentionUntil.getFullYear() + 2);
 
+        recruitmentStage = "application-insert";
         const insertResult = await db.execute(sql`INSERT INTO cv_applications (
           tracking_id, first_name, last_name, email, phone, specialty, diploma_country,
           target_countries, languages, years_experience, availability, mobility, certifications, message,
@@ -509,6 +530,7 @@ export async function createApp() {
 
         const insertedId = Number((insertResult.rows[0] as { id?: number } | undefined)?.id || 0);
 
+        recruitmentStage = "notifications";
         const candidateName = `${parsed.data.firstName} ${parsed.data.lastName}`;
         const candidatePortalInviteUrl = insertedId
           ? `${PUBLIC_APP_ORIGIN}/candidate/access?invite=${encodeURIComponent(createCandidateInvitationToken(Number(insertedId)))}`
@@ -531,6 +553,7 @@ export async function createApp() {
           }),
         ]);
 
+        recruitmentStage = "follow-up-queues";
         if (insertedId) {
           const { enqueueCvAnalysis } = await import("../recruitmentProcessing");
           const { enqueueCvGoogleDriveExport } = await import("../googleDriveExport");
@@ -545,9 +568,13 @@ export async function createApp() {
           }
         }
 
+        recruitmentStage = "response";
         res.status(201).json({ success: true, trackingId });
       } catch (error) {
-        console.error("Recruitment application error:", safeErrorName(error));
+        console.error("Recruitment application error:", {
+          stage: recruitmentStage,
+          ...safeErrorMetadata(error),
+        });
         res.status(500).json({ error: "La candidature n’a pas pu être enregistrée." });
       }
     });

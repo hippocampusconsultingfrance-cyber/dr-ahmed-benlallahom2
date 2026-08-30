@@ -15,4 +15,11 @@ describe("fiabilité du dépôt de candidature", () => {
     expect(serverSource).toContain('console.error("Recruitment follow-up queue error:", safeErrorName(queueResult.reason))');
     expect(serverSource).toContain("res.status(201).json({ success: true, trackingId })");
   });
+
+  it("journalise l’étape technique sans inclure le message potentiellement sensible", () => {
+    expect(serverSource).toContain('recruitmentStage = "storage-upload"');
+    expect(serverSource).toContain('recruitmentStage = "application-insert"');
+    expect(serverSource).toContain("...safeErrorMetadata(error)");
+    expect(serverSource).not.toContain("message: safeText(candidate.message)");
+  });
 });
