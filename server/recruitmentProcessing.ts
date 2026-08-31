@@ -88,8 +88,18 @@ export function retryDelayMs(attempt: number) {
 /** Accept only the worker whose conditional status update actually claimed the row. */
 export function didClaimProcessingJob(result: unknown): boolean {
   const header = Array.isArray(result) ? result[0] : result;
-  if (!header || typeof header !== "object" || !("affectedRows" in header)) return false;
-  return typeof header.affectedRows === "number" && header.affectedRows === 1;
+  if (!header || typeof header !== "object") return false;
+  if ("rowCount" in header) return header.rowCount === 1;
+  if ("affectedRows" in header) return header.affectedRows === 1;
+  return false;
+}
+
+function mutationRowCount(result: unknown): number {
+  const header = Array.isArray(result) ? result[0] : result;
+  if (!header || typeof header !== "object") return 0;
+  if ("rowCount" in header && typeof header.rowCount === "number") return header.rowCount;
+  if ("affectedRows" in header && typeof header.affectedRows === "number") return header.affectedRows;
+  return 0;
 }
 
 export function extractionMethodFor(mimeType: string) {
@@ -177,8 +187,7 @@ export async function recoverStaleCvAnalysisJobs(staleAfterMs = 15 * 60_000) {
     eq(cvProcessingJobs.status, "running"),
     lte(cvProcessingJobs.startedAt, new Date(now.getTime() - staleAfterMs)),
   ));
-  const header = Array.isArray(result) ? result[0] : result;
-  return { recovered: header && typeof header === "object" && "affectedRows" in header && typeof header.affectedRows === "number" ? header.affectedRows : 0 };
+  return { recovered: mutationRowCount(result) };
 }
 
 async function processCvAnalysisJob(jobId: number) {
