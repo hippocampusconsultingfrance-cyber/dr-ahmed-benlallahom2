@@ -1,6 +1,6 @@
 import { useAuth } from "@/_core/hooks/useAuth";
+import { SignInButton, UserButton } from "@clerk/react";
 import { trpc } from "@/lib/trpc";
-import { startLogin } from "@/const";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -48,9 +48,9 @@ export default function AdminDashboard() {
         <div className="max-w-md text-center">
           <h1 className="text-2xl font-bold text-foreground mb-4">Connexion administrateur requise</h1>
           <p className="text-muted-foreground mb-6">Connectez-vous avec le compte propriétaire pour accéder aux candidatures et aux missions.</p>
-          <Button onClick={startLogin}>
-            Se connecter
-          </Button>
+          <SignInButton mode="modal" forceRedirectUrl="/admin">
+            <Button>Se connecter</Button>
+          </SignInButton>
         </div>
       </div>
     );
@@ -66,7 +66,7 @@ export default function AdminDashboard() {
             <Button variant="outline" onClick={() => void refresh()}>
               Actualiser l’accès
             </Button>
-            <Button onClick={startLogin}>Se reconnecter</Button>
+            <UserButton showName />
             <Button variant="ghost" onClick={() => setLocation("/")}>
               <ArrowLeft className="w-4 h-4 mr-2" />
               Accueil
