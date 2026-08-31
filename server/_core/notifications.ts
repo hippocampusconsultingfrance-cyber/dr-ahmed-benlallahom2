@@ -138,7 +138,7 @@ export async function sendOwnerNotificationEmail(
       minute: "2-digit",
     });
 
-    // Use Manus built-in notification for owner
+    // Send the owner notification through the configured private email channel
     const notificationContent = `
 Nouvelle Réservation - ${trackingId}
 
@@ -155,7 +155,7 @@ Demande: ${requestDetails}
       content: notificationContent,
     });
 
-    console.log("Owner notification sent via Manus notification service");
+    console.log("Owner notification dispatched");
   } catch {
     console.error("Owner notification delivery failed");
   }
@@ -178,13 +178,13 @@ export async function sendOwnerNotificationSMS(
       minute: "2-digit",
     });
 
-    // Use Manus notification as SMS alternative
+    // Use the private owner notification as the SMS fallback
     await notifyOwner({
       title: `📱 Réservation ${trackingId}`,
       content: `${customerName} (${customerPhone}) - ${formattedDate} - ${finalPrice}€`,
     });
 
-    console.log("Owner SMS notification sent via Manus notification service");
+    console.log("Owner SMS fallback notification dispatched");
   } catch {
     console.error("Owner SMS fallback delivery failed");
   }
