@@ -860,8 +860,10 @@ export async function createApp() {
       return res.status(403).json({ error: "cron-only" });
     }
     try {
-      const { backfillLegacyCvAnalysisJobs, processDueCvAnalysisJobs } = await import("../recruitmentProcessing");
-      const { backfillCvGoogleDriveExportJobs, processDueCvGoogleDriveExports } = await import("../googleDriveExport");
+      const { backfillLegacyCvAnalysisJobs, processDueCvAnalysisJobs, recoverStaleCvAnalysisJobs } = await import("../recruitmentProcessing");
+      const { backfillCvGoogleDriveExportJobs, processDueCvGoogleDriveExports, recoverStaleCvGoogleDriveExportJobs } = await import("../googleDriveExport");
+      const analysisRecovery = await recoverStaleCvAnalysisJobs();
+      const driveRecovery = await recoverStaleCvGoogleDriveExportJobs();
       const analysisBackfill = await backfillLegacyCvAnalysisJobs(5);
       const driveBackfill = await backfillCvGoogleDriveExportJobs(25);
       const analysis = await processDueCvAnalysisJobs(5);
@@ -869,10 +871,12 @@ export async function createApp() {
       console.info("[RecruitmentProcessing] Vercel cron summary", {
         analysisBackfill,
         driveBackfill,
+        analysisRecovery,
+        driveRecovery,
         analysisProcessed: analysis.processed,
         driveExportsProcessed: driveExports.processed,
       });
-      return res.json({ ok: true, scheduler: "vercel-cron", analysisBackfill, driveBackfill, analysis, driveExports });
+      return res.json({ ok: true, scheduler: "vercel-cron", analysisRecovery, driveRecovery, analysisBackfill, driveBackfill, analysis, driveExports });
     } catch (error: any) {
       console.error("[RecruitmentProcessing] Vercel cron error:", safeErrorName(error));
       return res.status(500).json({ error: error.message, timestamp: new Date().toISOString() });
