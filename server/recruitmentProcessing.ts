@@ -155,6 +155,25 @@ export async function backfillLegacyCvAnalysisJobs(limit = PROCESSING_BATCH_SIZE
   return { inspected: applications.length, queued };
 }
 
+/** Release jobs left in `running` when an earlier serverless invocation stopped. */
+export async function recoverStaleCvAnalysisJobs(staleAfterMs = 15 * 60_000) {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+  const now = new Date();
+  const result = await db.update(cvProcessingJobs).set({
+    status: "retry",
+    scheduledFor: now,
+    startedAt: null,
+    finishedAt: null,
+    lastError: "worker_interrupted",
+  }).where(and(
+    eq(cvProcessingJobs.status, "running"),
+    lte(cvProcessingJobs.startedAt, new Date(now.getTime() - staleAfterMs)),
+  ));
+  const header = Array.isArray(result) ? result[0] : result;
+  return { recovered: header && typeof header === "object" && "affectedRows" in header && typeof header.affectedRows === "number" ? header.affectedRows : 0 };
+}
+
 async function processCvAnalysisJob(jobId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database connection failed");
