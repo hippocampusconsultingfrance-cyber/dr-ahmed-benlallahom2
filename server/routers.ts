@@ -348,7 +348,7 @@ export const appRouter = router({
           );
         }
 
-        // Notify the owner via Manus notification system
+        // Notify the owner through the configured private email channel
         await notifyOwner({
           title: `Nouveau message de contact de ${input.name} (${trackingId})`,
           content: `**Numéro de suivi:** ${trackingId}\n**De:** ${input.name}\n**Email:** ${input.email}\n**Téléphone:** ${input.phone || "Non renseigné"}\n**Consentement RGPD:** ${input.gdprConsent === 1 ? "✅ Accepté" : "❌ Refusé"}\n\n**Message:**\n${input.message}`,
@@ -390,7 +390,7 @@ export const appRouter = router({
           );
         }
 
-        // Notify the owner via Manus notification system
+        // Notify the owner through the configured private email channel
         const requestTypeLabels: Record<string, string> = {
           access: "Accès aux données",
           rectification: "Rectification de données",

@@ -1,5 +1,5 @@
 import { TRPCError } from "@trpc/server";
-import { ENV } from "./env";
+import { Resend } from "resend";
 
 export type NotificationPayload = {
   title: string;
@@ -13,15 +13,25 @@ const trimValue = (value: string): string => value.trim();
 const isNonEmptyString = (value: unknown): value is string =>
   typeof value === "string" && value.trim().length > 0;
 
-const buildEndpointUrl = (baseUrl: string): string => {
-  const normalizedBase = baseUrl.endsWith("/")
-    ? baseUrl
-    : `${baseUrl}/`;
-  return new URL(
-    "webdevtoken.v1.WebDevService/SendNotification",
-    normalizedBase
-  ).toString();
-};
+const OWNER_NOTIFICATION_EMAIL = process.env.OWNER_NOTIFICATION_EMAIL?.trim() || "hippocampusconsultingfrance@gmail.com";
+const FROM_EMAIL = "Hippocampus Consulting <recrutement@drahmedbenlallahom.com>";
+let resendClient: Resend | undefined;
+
+function getResendClient(): Resend | undefined {
+  const apiKey = process.env.RESEND_API_KEY?.trim();
+  if (!apiKey) return undefined;
+  resendClient ??= new Resend(apiKey);
+  return resendClient;
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
 
 const validatePayload = (input: NotificationPayload): NotificationPayload => {
   if (!isNonEmptyString(input.title)) {
@@ -57,54 +67,33 @@ const validatePayload = (input: NotificationPayload): NotificationPayload => {
   return { title, content };
 };
 
-/**
- * Dispatches a project-owner notification through the Manus Notification Service.
- * Returns `true` if the request was accepted, `false` when the upstream service
- * cannot be reached (callers can fall back to email/slack). Validation errors
- * bubble up as TRPC errors so callers can fix the payload.
- */
+/** Dispatches a private project-owner notification through Resend. */
 export async function notifyOwner(
   payload: NotificationPayload
 ): Promise<boolean> {
   const { title, content } = validatePayload(payload);
-
-  if (!ENV.forgeApiUrl) {
-    console.warn("[Notification] Manus notification service is not configured; the database record remains available.");
+  const resend = getResendClient();
+  if (!resend) {
+    console.warn("[Notification] Resend is not configured; the database record remains available.");
     return false;
   }
-
-  if (!ENV.forgeApiKey) {
-    console.warn("[Notification] Manus notification key is not configured; the database record remains available.");
-    return false;
-  }
-
-  const endpoint = buildEndpointUrl(ENV.forgeApiUrl);
 
   try {
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: {
-        accept: "application/json",
-        authorization: `Bearer ${ENV.forgeApiKey}`,
-        "content-type": "application/json",
-        "connect-protocol-version": "1",
-      },
-      body: JSON.stringify({ title, content }),
+    const { error } = await resend.emails.send({
+      from: FROM_EMAIL,
+      to: [OWNER_NOTIFICATION_EMAIL],
+      replyTo: OWNER_NOTIFICATION_EMAIL,
+      subject: title.slice(0, 200),
+      html: `<div style="font-family:Arial,sans-serif;max-width:640px;margin:0 auto;color:#0f172a"><div style="padding:18px 22px;background:#071827;color:#fff;border-bottom:3px solid #0891b2"><strong>Hippocampus Consulting</strong></div><div style="padding:24px;border:1px solid #dbe4ee;border-top:0"><h2 style="margin-top:0;color:#0e7490">${escapeHtml(title)}</h2><div style="white-space:pre-wrap;line-height:1.6">${escapeHtml(content)}</div><p style="margin-top:24px;font-size:12px;color:#64748b">Notification privée générée par drahmedbenlallahom.com</p></div></div>`,
+      text: `${title}\n\n${content}\n\nNotification privée générée par drahmedbenlallahom.com`,
     });
-
-    if (!response.ok) {
-      const detail = await response.text().catch(() => "");
-      console.warn(
-        `[Notification] Failed to notify owner (${response.status} ${response.statusText})${
-          detail ? `: ${detail}` : ""
-        }`
-      );
+    if (error) {
+      console.warn(`[Notification] Resend rejected the owner notification: ${error.message}`);
       return false;
     }
-
     return true;
-  } catch (error) {
-    console.warn("[Notification] Error calling notification service:", error);
+  } catch {
+    console.warn("[Notification] Owner email delivery failed.");
     return false;
   }
 }
