@@ -259,7 +259,19 @@ export async function backfillCvGoogleDriveExportJobs(limit = 25) {
     .limit(Math.min(Math.max(limit, 1), 100));
 
   let queued = 0;
+  let accelerated = 0;
   for (const application of applications) {
+    const [existingJob] = await db.select({ status: cvGoogleDriveExportJobs.status })
+      .from(cvGoogleDriveExportJobs)
+      .where(eq(cvGoogleDriveExportJobs.applicationId, application.id))
+      .limit(1);
+    if (existingJob && ["queued", "retry"].includes(existingJob.status)) {
+      await db.update(cvGoogleDriveExportJobs).set({ scheduledFor: new Date() })
+        .where(and(eq(cvGoogleDriveExportJobs.applicationId, application.id), inArray(cvGoogleDriveExportJobs.status, ["queued", "retry"])));
+      accelerated += 1;
+      continue;
+    }
+    if (existingJob) continue;
     const result = await db.insert(cvGoogleDriveExportJobs).values({
       applicationId: application.id,
       status: "queued",
@@ -271,7 +283,7 @@ export async function backfillCvGoogleDriveExportJobs(limit = 25) {
     if (header && typeof header === "object" && "affectedRows" in header && header.affectedRows === 1) queued += 1;
   }
 
-  return { inspected: applications.length, queued };
+  return { inspected: applications.length, queued, accelerated };
 }
 
 /** Release export jobs left in `running` by an interrupted serverless worker. */
