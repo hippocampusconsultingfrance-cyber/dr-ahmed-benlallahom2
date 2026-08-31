@@ -1,4 +1,4 @@
-import { and, eq, inArray, lte } from "drizzle-orm";
+import { and, desc, eq, inArray, lte } from "drizzle-orm";
 import { cvApplications, cvProcessingJobs } from "../drizzle/schema";
 import { getDb } from "./db";
 import { extractCvDocument, analyzeCvText, saveCvAnalysis } from "./recruitmentAnalysis";
@@ -121,6 +121,38 @@ export async function enqueueCvAnalysis(applicationId: number, requestedAt = new
     analysisRequestedAt: requestedAt,
     updatedAt: requestedAt,
   }).where(eq(cvApplications.id, applicationId));
+}
+
+/**
+ * Recreates a processing job for legacy applications left in quarantine before
+ * the Vercel worker replaced Manus. Active jobs are never duplicated.
+ */
+export async function backfillLegacyCvAnalysisJobs(limit = PROCESSING_BATCH_SIZE) {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+
+  const applications = await db.select({ id: cvApplications.id })
+    .from(cvApplications)
+    .where(and(
+      eq(cvApplications.fileValidationStatus, "quarantined"),
+      inArray(cvApplications.status, ["new", "reviewing", "shortlisted", "placed"]),
+    ))
+    .orderBy(cvApplications.createdAt)
+    .limit(Math.min(Math.max(limit, 1), PROCESSING_BATCH_SIZE));
+
+  let queued = 0;
+  for (const application of applications) {
+    const [latestJob] = await db.select({ status: cvProcessingJobs.status })
+      .from(cvProcessingJobs)
+      .where(eq(cvProcessingJobs.applicationId, application.id))
+      .orderBy(desc(cvProcessingJobs.id))
+      .limit(1);
+    if (latestJob && ["queued", "retry", "running"].includes(latestJob.status)) continue;
+    await enqueueCvAnalysis(application.id);
+    queued += 1;
+  }
+
+  return { inspected: applications.length, queued };
 }
 
 async function processCvAnalysisJob(jobId: number) {
