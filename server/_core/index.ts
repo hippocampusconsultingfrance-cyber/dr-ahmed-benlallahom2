@@ -854,6 +854,23 @@ export async function createApp() {
 
   // CV processing worker: Heartbeat invokes a small idempotent batch so uploads
   // remain fast and failures can be retried without losing the candidate dossier.
+  app.get("/api/scheduled/recruitment-processing", async (req, res) => {
+    const cronSecret = process.env.CRON_SECRET?.trim();
+    if (!cronSecret || req.headers.authorization !== `Bearer ${cronSecret}`) {
+      return res.status(403).json({ error: "cron-only" });
+    }
+    try {
+      const { processDueCvAnalysisJobs } = await import("../recruitmentProcessing");
+      const { processDueCvGoogleDriveExports } = await import("../googleDriveExport");
+      const analysis = await processDueCvAnalysisJobs(5);
+      const driveExports = await processDueCvGoogleDriveExports(3);
+      return res.json({ ok: true, scheduler: "vercel-cron", analysis, driveExports });
+    } catch (error: any) {
+      console.error("[RecruitmentProcessing] Vercel cron error:", safeErrorName(error));
+      return res.status(500).json({ error: error.message, timestamp: new Date().toISOString() });
+    }
+  });
+
   app.post("/api/scheduled/recruitment-processing", async (req, res) => {
     try {
       const { sdk: sdkInstance } = await import("./sdk");
