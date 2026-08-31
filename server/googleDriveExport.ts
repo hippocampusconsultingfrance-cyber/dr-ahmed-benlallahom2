@@ -241,6 +241,39 @@ export async function enqueueCvGoogleDriveExport(applicationId: number, schedule
     });
 }
 
+/**
+ * Creates missing export jobs for applications submitted before Google Drive
+ * was connected. The unique application id keeps this operation idempotent.
+ */
+export async function backfillCvGoogleDriveExportJobs(limit = 25) {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+
+  const applications = await db.select({ id: cvApplications.id })
+    .from(cvApplications)
+    .where(and(
+      inArray(cvApplications.status, ["new", "reviewing", "shortlisted", "placed"]),
+      inArray(cvApplications.fileValidationStatus, ["quarantined", "accepted"]),
+    ))
+    .orderBy(cvApplications.createdAt)
+    .limit(Math.min(Math.max(limit, 1), 100));
+
+  let queued = 0;
+  for (const application of applications) {
+    const result = await db.insert(cvGoogleDriveExportJobs).values({
+      applicationId: application.id,
+      status: "queued",
+      attempts: 0,
+      maxAttempts: MAX_ATTEMPTS,
+      scheduledFor: new Date(),
+    }).onConflictDoNothing();
+    const header = Array.isArray(result) ? result[0] : result;
+    if (header && typeof header === "object" && "affectedRows" in header && header.affectedRows === 1) queued += 1;
+  }
+
+  return { inspected: applications.length, queued };
+}
+
 async function processGoogleDriveExportJob(jobId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database connection failed");
