@@ -63,7 +63,9 @@ describe("règles déterministes du pipeline de traitement CV", () => {
 
   it("ne traite que le job effectivement revendiqué par la mise à jour conditionnelle", () => {
     expect(didClaimProcessingJob([{ affectedRows: 1 }])).toBe(true);
+    expect(didClaimProcessingJob({ rowCount: 1 })).toBe(true);
     expect(didClaimProcessingJob([{ affectedRows: 0 }])).toBe(false);
+    expect(didClaimProcessingJob({ rowCount: 0 })).toBe(false);
     expect(didClaimProcessingJob({ affectedRows: 0 })).toBe(false);
     expect(didClaimProcessingJob(undefined)).toBe(false);
   });

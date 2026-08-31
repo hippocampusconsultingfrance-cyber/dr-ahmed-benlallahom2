@@ -16,6 +16,14 @@ const MAX_ATTEMPTS = 5;
 const BATCH_SIZE = 3;
 const STATE_MAX_AGE_MS = 10 * 60 * 1000;
 
+export function googleDriveMutationRowCount(result: unknown): number {
+  const header = Array.isArray(result) ? result[0] : result;
+  if (!header || typeof header !== "object") return 0;
+  if ("rowCount" in header && typeof header.rowCount === "number") return header.rowCount;
+  if ("affectedRows" in header && typeof header.affectedRows === "number") return header.affectedRows;
+  return 0;
+}
+
 type DriveTokenResponse = {
   access_token?: string;
   refresh_token?: string;
@@ -279,8 +287,7 @@ export async function backfillCvGoogleDriveExportJobs(limit = 25) {
       maxAttempts: MAX_ATTEMPTS,
       scheduledFor: new Date(),
     }).onConflictDoNothing();
-    const header = Array.isArray(result) ? result[0] : result;
-    if (header && typeof header === "object" && "affectedRows" in header && header.affectedRows === 1) queued += 1;
+    if (googleDriveMutationRowCount(result) === 1) queued += 1;
   }
 
   return { inspected: applications.length, queued, accelerated };
@@ -301,8 +308,7 @@ export async function recoverStaleCvGoogleDriveExportJobs(staleAfterMs = 15 * 60
     eq(cvGoogleDriveExportJobs.status, "running"),
     lte(cvGoogleDriveExportJobs.startedAt, new Date(now.getTime() - staleAfterMs)),
   ));
-  const header = Array.isArray(result) ? result[0] : result;
-  return { recovered: header && typeof header === "object" && "affectedRows" in header && typeof header.affectedRows === "number" ? header.affectedRows : 0 };
+  return { recovered: googleDriveMutationRowCount(result) };
 }
 
 async function processGoogleDriveExportJob(jobId: number) {
@@ -361,8 +367,7 @@ export async function processDueCvGoogleDriveExports(limit = BATCH_SIZE) {
   for (const candidate of candidates) {
     const startedAt = new Date();
     const claimed = await db.update(cvGoogleDriveExportJobs).set({ status: "running", attempts: candidate.attempts + 1, startedAt, finishedAt: null }).where(and(eq(cvGoogleDriveExportJobs.id, candidate.id), inArray(cvGoogleDriveExportJobs.status, ["queued", "retry"])));
-    const header = Array.isArray(claimed) ? claimed[0] : claimed;
-    if (!header || typeof header !== "object" || !("affectedRows" in header) || header.affectedRows !== 1) continue;
+    if (googleDriveMutationRowCount(claimed) !== 1) continue;
     results.push(await processGoogleDriveExportJob(candidate.id));
   }
   return { processed: results.length, waitingForAuthorization: false, results };

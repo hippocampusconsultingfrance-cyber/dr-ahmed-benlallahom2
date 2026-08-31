@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildGoogleDriveAuthorizationUrl, createGoogleDriveOAuthState, googleDriveCvFileName, googleDriveRetryDelayMs } from "./googleDriveExport";
+import { buildGoogleDriveAuthorizationUrl, createGoogleDriveOAuthState, googleDriveCvFileName, googleDriveMutationRowCount, googleDriveRetryDelayMs } from "./googleDriveExport";
 
 describe("export Google Drive des CV", () => {
   it("construit un nom de copie traçable sans caractères de chemin dangereux", () => {
@@ -10,6 +10,12 @@ describe("export Google Drive des CV", () => {
     expect(googleDriveRetryDelayMs(1)).toBe(60_000);
     expect(googleDriveRetryDelayMs(2)).toBe(120_000);
     expect(googleDriveRetryDelayMs(10)).toBe(3_600_000);
+  });
+
+  it("reconnaît les résultats de mutation Neon et MySQL", () => {
+    expect(googleDriveMutationRowCount({ rowCount: 1 })).toBe(1);
+    expect(googleDriveMutationRowCount([{ affectedRows: 1 }])).toBe(1);
+    expect(googleDriveMutationRowCount({ rowCount: 0 })).toBe(0);
   });
 
   it("demande uniquement le périmètre Drive requis avec un accès hors ligne", () => {
