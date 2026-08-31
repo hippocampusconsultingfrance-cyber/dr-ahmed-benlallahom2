@@ -87,4 +87,14 @@ describe("règles déterministes du pipeline de traitement CV", () => {
     await expect(executeCvExternalPipeline(input, { ...steps, extract: async () => { throw new Error("ocr_engine_failed"); } })).rejects.toThrow("ocr_engine_failed");
     await expect(executeCvExternalPipeline(input, { ...steps, analyze: async () => { throw new Error("ai_provider_failed"); } })).rejects.toThrow("ai_provider_failed");
   });
+
+  it("rend le CV exportable avant une éventuelle panne de l’analyse IA", async () => {
+    let validatedKey: string | null = null;
+    await expect(executeCvExternalPipeline(
+      input,
+      { ...steps, analyze: async () => { throw new Error("ai_provider_failed"); } },
+      async ({ promotedStorage }) => { validatedKey = promotedStorage?.key ?? null; },
+    )).rejects.toThrow("ai_provider_failed");
+    expect(validatedKey).toBe("recruitment/cv/CV-001-cv.pdf");
+  });
 });
