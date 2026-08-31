@@ -48,7 +48,11 @@ const defaultCvPipelineSteps: CvPipelineSteps = {
 };
 
 /** External-boundary pipeline, dependency-injected for deterministic integration tests. */
-export async function executeCvExternalPipeline(input: CvPipelineInput, steps: CvPipelineSteps = defaultCvPipelineSteps) {
+export async function executeCvExternalPipeline(
+  input: CvPipelineInput,
+  steps: CvPipelineSteps = defaultCvPipelineSteps,
+  onValidated?: (artifact: { validation: ReturnType<typeof validateCvFile>; promotedStorage: { key: string } | null }) => Promise<void>,
+) {
   const buffer = await steps.download(input.cvFileKey);
   const validation = steps.validate({
     buffer,
@@ -62,6 +66,7 @@ export async function executeCvExternalPipeline(input: CvPipelineInput, steps: C
   const promotedStorage = input.fileValidationStatus === "quarantined"
     ? await steps.promote(`recruitment/cv/${input.trackingId}-${input.cvOriginalName}`, buffer, input.cvMimeType)
     : null;
+  await onValidated?.({ validation, promotedStorage });
   const extraction = await steps.extract(buffer, input.cvMimeType);
   const analysisExecution = await steps.analyze({
     firstName: input.firstName,
@@ -140,18 +145,18 @@ async function processCvAnalysisJob(jobId: number) {
     await db.update(cvApplications).set({ analysisStatus: "extracting", updatedAt: new Date() })
       .where(eq(cvApplications.id, application.id));
 
-    const pipeline = await executeCvExternalPipeline(application);
-    if (pipeline.promotedStorage) {
+    const pipeline = await executeCvExternalPipeline(application, defaultCvPipelineSteps, async ({ validation, promotedStorage }) => {
+      if (!promotedStorage) return;
       await db.update(cvApplications).set({
-        cvFileKey: pipeline.promotedStorage.key,
+        cvFileKey: promotedStorage.key,
         fileValidationStatus: "accepted",
-        fileChecksum: pipeline.validation.checksum,
-        fileValidationNotes: `${pipeline.validation.notes}; promoted_from_quarantine`,
+        fileChecksum: validation.checksum,
+        fileValidationNotes: `${validation.notes}; promoted_from_quarantine`,
         fileValidatedAt: new Date(),
-        fileSecurityScanVersion: pipeline.validation.securityScanVersion,
+        fileSecurityScanVersion: validation.securityScanVersion,
         updatedAt: new Date(),
       }).where(eq(cvApplications.id, application.id));
-    }
+    });
 
       await db.update(cvApplications).set({
         analysisStatus: "analyzing",
