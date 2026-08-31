@@ -141,18 +141,25 @@ export async function backfillLegacyCvAnalysisJobs(limit = PROCESSING_BATCH_SIZE
     .limit(Math.min(Math.max(limit, 1), PROCESSING_BATCH_SIZE));
 
   let queued = 0;
+  let accelerated = 0;
   for (const application of applications) {
     const [latestJob] = await db.select({ status: cvProcessingJobs.status })
       .from(cvProcessingJobs)
       .where(eq(cvProcessingJobs.applicationId, application.id))
       .orderBy(desc(cvProcessingJobs.id))
       .limit(1);
-    if (latestJob && ["queued", "retry", "running"].includes(latestJob.status)) continue;
+    if (latestJob && ["queued", "retry"].includes(latestJob.status)) {
+      await db.update(cvProcessingJobs).set({ scheduledFor: new Date() })
+        .where(and(eq(cvProcessingJobs.applicationId, application.id), inArray(cvProcessingJobs.status, ["queued", "retry"])));
+      accelerated += 1;
+      continue;
+    }
+    if (latestJob?.status === "running") continue;
     await enqueueCvAnalysis(application.id);
     queued += 1;
   }
 
-  return { inspected: applications.length, queued };
+  return { inspected: applications.length, queued, accelerated };
 }
 
 /** Release jobs left in `running` when an earlier serverless invocation stopped. */
