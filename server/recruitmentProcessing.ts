@@ -7,7 +7,7 @@ import { validateCvFile } from "./recruitmentFileValidation";
 
 const MAX_ATTEMPTS = 3;
 const PROCESSING_BATCH_SIZE = 5;
-const ANALYSIS_PROMPT_VERSION = "recruitment-v2";
+const ANALYSIS_PROMPT_VERSION = "recruitment-v3-evidence";
 
 type CvPipelineInput = {
   cvFileKey: string;
@@ -78,7 +78,15 @@ export async function executeCvExternalPipeline(
     message: input.message ?? undefined,
     extractedText: extraction.text,
   });
-  return { validation, promotedStorage, extraction, analysis: analysisExecution.result, analysisModel: analysisExecution.model };
+  return {
+    validation,
+    promotedStorage,
+    extraction,
+    analysis: analysisExecution.result,
+    analysisModel: analysisExecution.model,
+    analysisGenerationId: analysisExecution.generationId,
+    analysisUsage: analysisExecution.usage,
+  };
 }
 
 export function retryDelayMs(attempt: number) {
@@ -238,7 +246,11 @@ async function processCvAnalysisJob(jobId: number) {
     }).where(eq(cvApplications.id, application.id));
 
     const analysis = pipeline.analysis;
-    await saveCvAnalysis(application.id, analysis);
+    await saveCvAnalysis(application.id, analysis, {
+      model: pipeline.analysisModel,
+      generationId: pipeline.analysisGenerationId,
+      usage: pipeline.analysisUsage,
+    });
 
     const now = new Date();
     const completionStatus = analysisCompletionStatus(analysis);
