@@ -27,6 +27,16 @@ type ExtractedProfile = {
   countriesOfInterest?: string[];
   yearsExperience?: number | null;
   normalizedExperiences?: Array<{ role?: string; organization?: string; startDate?: string | null; endDate?: string | null; employmentType?: string; durationMonths?: number | null }>;
+  confidence?: number;
+  evidenceCoverage?: number;
+  requiredFollowUps?: string[];
+  scoreBreakdown?: {
+    specialtyMatch?: number;
+    experienceEvidence?: number;
+    skillsEvidence?: number;
+    languageReadiness?: number;
+    credentialReadiness?: number;
+  };
 };
 
 function parseJsonList(value: string | null): string[] {
@@ -395,6 +405,24 @@ export default function RecruitmentTab() {
                               <p className="text-foreground">{extracted.skills?.join(", ") || "Compétences non identifiées"}</p>
                             </div>
                           </div>
+                          {(typeof extracted.confidence === "number" || typeof extracted.evidenceCoverage === "number") && (
+                            <div className="grid gap-3 rounded-lg border border-primary/10 bg-background/50 p-3 sm:grid-cols-2">
+                              <p className="text-muted-foreground"><strong className="text-foreground">Confiance de lecture :</strong> {typeof extracted.confidence === "number" ? `${extracted.confidence}%` : "—"}</p>
+                              <p className="text-muted-foreground"><strong className="text-foreground">Couverture des preuves :</strong> {typeof extracted.evidenceCoverage === "number" ? `${extracted.evidenceCoverage}%` : "—"}</p>
+                            </div>
+                          )}
+                          {extracted.scoreBreakdown && (
+                            <div>
+                              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Détail du score professionnel</p>
+                              <div className="grid gap-2 text-xs text-muted-foreground sm:grid-cols-2 lg:grid-cols-5">
+                                <p>Spécialité <strong className="text-foreground">{extracted.scoreBreakdown.specialtyMatch ?? 0}/30</strong></p>
+                                <p>Expérience <strong className="text-foreground">{extracted.scoreBreakdown.experienceEvidence ?? 0}/25</strong></p>
+                                <p>Compétences <strong className="text-foreground">{extracted.scoreBreakdown.skillsEvidence ?? 0}/20</strong></p>
+                                <p>Langues <strong className="text-foreground">{extracted.scoreBreakdown.languageReadiness ?? 0}/15</strong></p>
+                                <p>Diplômes <strong className="text-foreground">{extracted.scoreBreakdown.credentialReadiness ?? 0}/10</strong></p>
+                              </div>
+                            </div>
+                          )}
                           <div className="grid gap-3 md:grid-cols-2">
                             <div>
                               <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Points forts</p>
