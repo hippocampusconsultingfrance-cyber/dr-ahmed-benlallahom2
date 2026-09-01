@@ -34,10 +34,25 @@ const analysis = {
   strengths: ["Expérience"],
   gaps: [],
   dataQualityWarnings: [],
+  requiredFollowUps: [],
+  confidence: 92,
+  evidenceCoverage: 100,
+  scoreBreakdown: {
+    specialtyMatch: 25,
+    experienceEvidence: 20,
+    skillsEvidence: 15,
+    languageReadiness: 12,
+    credentialReadiness: 8,
+  },
   reasoning: "Revue humaine requise.",
 };
 
-const analysisExecution = { result: analysis, model: "gpt-5-mini" as const };
+const analysisExecution = {
+  result: analysis,
+  model: "openai/gpt-5.6-sol",
+  generationId: "generation-test",
+  usage: { inputTokens: 120, outputTokens: 80, totalTokens: 200 },
+};
 
 const steps = {
   download: async () => Buffer.alloc(320, 1),
@@ -81,7 +96,9 @@ describe("règles déterministes du pipeline de traitement CV", () => {
     expect(result.promotedStorage?.key).toContain("recruitment/cv/");
     expect(result.extraction.method).toBe("pdf_text");
     expect(result.analysis.relevanceScore).toBe(80);
-    expect(result.analysisModel).toBe("gpt-5-mini");
+    expect(result.analysisModel).toBe("openai/gpt-5.6-sol");
+    expect(result.analysisGenerationId).toBe("generation-test");
+    expect(result.analysisUsage.totalTokens).toBe(200);
   });
 
   it("propage de manière contrôlée les échecs de stockage, OCR et IA pour la logique de reprise", async () => {
