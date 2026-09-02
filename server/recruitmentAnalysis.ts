@@ -142,9 +142,16 @@ export type CvExtractionResult = {
   warnings: string[];
 };
 
-async function extractPdfWithVision(buffer: Buffer): Promise<{ text: string; confidence: number | null; warnings: string[] }> {
+async function createPdfParser(buffer: Buffer) {
+  // pdf.js expects browser geometry primitives. The worker entrypoint installs
+  // the Node-compatible canvas implementation and must load before pdf-parse.
+  const { CanvasFactory } = await import("pdf-parse/worker");
   const { PDFParse } = await import("pdf-parse");
-  const parser = new PDFParse({ data: buffer });
+  return new PDFParse({ data: buffer, CanvasFactory });
+}
+
+async function extractPdfWithVision(buffer: Buffer): Promise<{ text: string; confidence: number | null; warnings: string[] }> {
+  const parser = await createPdfParser(buffer);
   try {
     const screenshots = await parser.getScreenshot({ first: 3, desiredWidth: 1400, imageDataUrl: true, imageBuffer: false });
     const pages = screenshots.pages
@@ -179,8 +186,7 @@ async function extractPdfWithVision(buffer: Buffer): Promise<{ text: string; con
 
 export async function extractCvDocument(buffer: Buffer, mimeType: string): Promise<CvExtractionResult> {
   if (mimeType === "application/pdf") {
-    const { PDFParse } = await import("pdf-parse");
-    const parser = new PDFParse({ data: buffer });
+    const parser = await createPdfParser(buffer);
     let extracted = "";
     let totalPages: number | null = null;
     try {
