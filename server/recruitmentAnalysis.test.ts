@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { analyzeCvText, extractCvText, normalizeRecruitmentAnalysis } from "./recruitmentAnalysis";
+import {
+  analyzeCvText,
+  buildManualReviewFallback,
+  extractCvText,
+  isAiGatewayBillingUnavailable,
+  normalizeRecruitmentAnalysis,
+} from "./recruitmentAnalysis";
 
 describe("recruitment analysis safeguards", () => {
   it("refuses unknown formats instead of pretending they were analyzed", async () => {
@@ -45,5 +51,32 @@ describe("recruitment analysis safeguards", () => {
     expect(result.relevanceScore).toBe(90);
     expect(result.evidenceCoverage).toBe(100);
     expect(result.specialties).toEqual(["Anesthésie"]);
+  });
+
+  it("reconnaît uniquement le blocage de facturation explicite du Gateway", () => {
+    expect(isAiGatewayBillingUnavailable(new Error(
+      "AI Gateway requires a valid credit card on file to service requests. Please add a card and unlock your free credits.",
+    ))).toBe(true);
+    expect(isAiGatewayBillingUnavailable(new Error("ai_provider_timeout"))).toBe(false);
+  });
+
+  it("préserve un CV pour revue humaine sans produire de score quand le Gateway est bloqué", () => {
+    const execution = buildManualReviewFallback({
+      firstName: "Amina",
+      lastName: "Martin",
+      specialty: "Anesthésie",
+      targetCountries: ["France", "France"],
+      languages: ["Français"],
+      yearsExperience: 8,
+      extractedText: "CV professionnel extrait avec suffisamment de texte pour une revue humaine complète.",
+    });
+
+    expect(execution.model).toBe("local/manual-review-fallback");
+    expect(execution.result.relevanceScore).toBe(0);
+    expect(execution.result.confidence).toBe(0);
+    expect(execution.result.countriesOfInterest).toEqual(["France"]);
+    expect(execution.result.dataQualityWarnings).toContain(
+      "Mode dégradé : seules les données déclarées dans le formulaire ont été structurées.",
+    );
   });
 });
