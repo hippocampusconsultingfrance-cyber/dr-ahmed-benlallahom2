@@ -328,15 +328,22 @@ async function processCvAnalysisJob(jobId: number) {
 }
 
 /** Process a small, durable batch. Safe to invoke repeatedly from Heartbeat. */
-export async function processDueCvAnalysisJobs(limit = PROCESSING_BATCH_SIZE) {
+export async function processDueCvAnalysisJobs(limit = PROCESSING_BATCH_SIZE, applicationIds?: number[]) {
   const db = await getDb();
   if (!db) throw new Error("Database connection failed");
   const now = new Date();
+  const dueJobs = applicationIds?.length
+    ? and(
+        inArray(cvProcessingJobs.status, ["queued", "retry"]),
+        lte(cvProcessingJobs.scheduledFor, now),
+        inArray(cvProcessingJobs.applicationId, applicationIds),
+      )
+    : and(
+        inArray(cvProcessingJobs.status, ["queued", "retry"]),
+        lte(cvProcessingJobs.scheduledFor, now),
+      );
   const candidates = await db.select().from(cvProcessingJobs)
-    .where(and(
-      inArray(cvProcessingJobs.status, ["queued", "retry"]),
-      lte(cvProcessingJobs.scheduledFor, now),
-    ))
+    .where(dueJobs)
     .orderBy(cvProcessingJobs.scheduledFor)
     .limit(Math.min(Math.max(limit, 1), PROCESSING_BATCH_SIZE));
 

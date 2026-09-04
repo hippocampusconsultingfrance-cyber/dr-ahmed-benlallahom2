@@ -348,7 +348,7 @@ export const appRouter = router({
           );
         }
 
-        // Notify the owner through the configured private email channel
+        // Notify the owner via Manus notification system
         await notifyOwner({
           title: `Nouveau message de contact de ${input.name} (${trackingId})`,
           content: `**Numéro de suivi:** ${trackingId}\n**De:** ${input.name}\n**Email:** ${input.email}\n**Téléphone:** ${input.phone || "Non renseigné"}\n**Consentement RGPD:** ${input.gdprConsent === 1 ? "✅ Accepté" : "❌ Refusé"}\n\n**Message:**\n${input.message}`,
@@ -390,7 +390,7 @@ export const appRouter = router({
           );
         }
 
-        // Notify the owner through the configured private email channel
+        // Notify the owner via Manus notification system
         const requestTypeLabels: Record<string, string> = {
           access: "Accès aux données",
           rectification: "Rectification de données",
@@ -1565,10 +1565,16 @@ export const appRouter = router({
             .limit(1);
           if (!application) throw new TRPCError({ code: "NOT_FOUND", message: "Candidature introuvable" });
 
-          const { enqueueCvAnalysis } = await import("./recruitmentProcessing");
-          await enqueueCvAnalysis(application.id);
-          await logRecruitmentAction({ applicationId: application.id, adminOpenId: ctx.user.openId, action: "reanalyze", metadata: { queued: true } });
-          return { success: true, queued: true };
+          const { enqueueCvAnalysis, processDueCvAnalysisJobs } = await import("./recruitmentProcessing");
+          const queue = await enqueueCvAnalysis(application.id);
+          const processing = await processDueCvAnalysisJobs(1, [application.id]);
+          await logRecruitmentAction({
+            applicationId: application.id,
+            adminOpenId: ctx.user.openId,
+            action: "reanalyze",
+            metadata: { queued: queue.queued, accelerated: queue.accelerated, alreadyRunning: queue.alreadyRunning, processed: processing.processed },
+          });
+          return { success: true, queued: queue.queued || queue.accelerated, processed: processing.processed };
         }),
 
       reanalyzeFailed: adminProcedure
@@ -1576,19 +1582,23 @@ export const appRouter = router({
         .mutation(async ({ input, ctx }) => {
           const db = await getDb();
           if (!db) throw new Error("Database connection failed");
-          const failedApplications = await db
+          const resumableApplications = await db
             .select({ id: cvApplications.id, trackingId: cvApplications.trackingId })
             .from(cvApplications)
-            .where(and(eq(cvApplications.analysisStatus, "failed"), ne(cvApplications.status, "rejected"), ne(cvApplications.status, "archived")))
+            .where(and(inArray(cvApplications.analysisStatus, ["failed", "queued"]), ne(cvApplications.status, "rejected"), ne(cvApplications.status, "archived")))
             .orderBy(cvApplications.updatedAt)
             .limit(input?.limit ?? 10);
 
-          const { enqueueCvAnalysis } = await import("./recruitmentProcessing");
-          for (const application of failedApplications) {
+          const { enqueueCvAnalysis, processDueCvAnalysisJobs } = await import("./recruitmentProcessing");
+          for (const application of resumableApplications) {
             await enqueueCvAnalysis(application.id);
             await logRecruitmentAction({ applicationId: application.id, adminOpenId: ctx.user.openId, action: "reanalyze", metadata: { queued: true, batch: true } });
           }
-          return { success: true, queued: failedApplications.length };
+          const applicationIds = resumableApplications.map(application => application.id);
+          const processing = applicationIds.length > 0
+            ? await processDueCvAnalysisJobs(Math.min(applicationIds.length, 2), applicationIds)
+            : { processed: 0, results: [] };
+          return { success: true, queued: resumableApplications.length, processed: processing.processed };
         }),
 
       sendTemplateEmail: adminProcedure

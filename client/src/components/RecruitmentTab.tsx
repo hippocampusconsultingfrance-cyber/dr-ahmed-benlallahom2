@@ -146,16 +146,19 @@ export default function RecruitmentTab() {
   });
 
   const reanalyze = trpc.admin.recruitment.reanalyze.useMutation({
-    onSuccess: () => {
-      toast.success("Analyse IA mise en file : le profil sera actualisé automatiquement");
+    onSuccess: ({ processed }) => {
+      toast.success(processed > 0 ? "Analyse relancée et résultat actualisé" : "Analyse déjà en cours de traitement");
       utils.admin.recruitment.list.invalidate();
     },
     onError: mutationError => toast.error(mutationError.message),
   });
 
   const reanalyzeFailed = trpc.admin.recruitment.reanalyzeFailed.useMutation({
-    onSuccess: ({ queued }) => {
-      toast.success(`${queued} analyse${queued > 1 ? "s" : ""} IA mise${queued > 1 ? "s" : ""} en reprise contrôlée`);
+    onSuccess: ({ queued, processed }) => {
+      const remaining = Math.max(0, queued - processed);
+      toast.success(processed > 0
+        ? `${processed} analyse${processed > 1 ? "s" : ""} traitée${processed > 1 ? "s" : ""} immédiatement${remaining > 0 ? ` · ${remaining} encore en file` : ""}`
+        : "Aucune analyse en échec à reprendre");
       utils.admin.recruitment.list.invalidate();
     },
     onError: mutationError => toast.error(mutationError.message),
