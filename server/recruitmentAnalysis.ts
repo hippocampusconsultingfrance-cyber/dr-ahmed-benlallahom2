@@ -45,7 +45,8 @@ export type RecruitmentAnalysisResult = {
   countriesOfInterest: string[];
   yearsExperience: number | null;
   normalizedExperiences: NormalizedExperience[];
-  relevanceScore: number;
+  /** Null means that no trustworthy score was produced. */
+  relevanceScore: number | null;
   strengths: string[];
   gaps: string[];
   dataQualityWarnings: string[];
@@ -308,7 +309,7 @@ export function buildManualReviewFallback(input: RecruitmentAnalysisInput): Recr
       countriesOfInterest: targetCountries,
       yearsExperience: input.yearsExperience ?? null,
       normalizedExperiences: [],
-      relevanceScore: 0,
+      relevanceScore: null,
       strengths: [],
       gaps: ["Analyse IA complète indisponible ; aucune conclusion automatique n’a été produite."],
       dataQualityWarnings: ["Mode dégradé : seules les données déclarées dans le formulaire ont été structurées."],
