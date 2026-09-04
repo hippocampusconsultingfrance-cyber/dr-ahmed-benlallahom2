@@ -121,9 +121,48 @@ export function analysisCompletionStatus(input: { gaps: string[]; dataQualityWar
   return input.dataQualityWarnings.length > 0 || input.gaps.length > 0 ? "needs_review" as const : "completed" as const;
 }
 
+type CvProcessingJobStatus = typeof cvProcessingJobs.$inferSelect["status"];
+
+/**
+ * Reuse an existing active job instead of creating concurrent analyses for the
+ * same CV when an administrator clicks the retry action more than once.
+ */
+export function cvAnalysisEnqueueDisposition(latestStatus: CvProcessingJobStatus | null) {
+  if (latestStatus === "queued" || latestStatus === "retry") return "accelerate" as const;
+  if (latestStatus === "running") return "already_running" as const;
+  return "create" as const;
+}
+
 export async function enqueueCvAnalysis(applicationId: number, requestedAt = new Date()) {
   const db = await getDb();
   if (!db) throw new Error("Database connection failed");
+
+  const [latestJob] = await db.select({ id: cvProcessingJobs.id, status: cvProcessingJobs.status })
+    .from(cvProcessingJobs)
+    .where(eq(cvProcessingJobs.applicationId, applicationId))
+    .orderBy(desc(cvProcessingJobs.id))
+    .limit(1);
+  const disposition = cvAnalysisEnqueueDisposition(latestJob?.status ?? null);
+
+  if (latestJob && disposition === "accelerate") {
+    await db.update(cvProcessingJobs).set({
+      status: "queued",
+      scheduledFor: requestedAt,
+      finishedAt: null,
+      lastError: null,
+    }).where(eq(cvProcessingJobs.id, latestJob.id));
+    await db.update(cvApplications).set({
+      analysisStatus: "queued",
+      analysisLastError: null,
+      analysisRequestedAt: requestedAt,
+      updatedAt: requestedAt,
+    }).where(eq(cvApplications.id, applicationId));
+    return { queued: false, accelerated: true, alreadyRunning: false };
+  }
+
+  if (disposition === "already_running") {
+    return { queued: false, accelerated: false, alreadyRunning: true };
+  }
 
   await db.insert(cvProcessingJobs).values({
     applicationId,
@@ -139,6 +178,7 @@ export async function enqueueCvAnalysis(applicationId: number, requestedAt = new
     analysisRequestedAt: requestedAt,
     updatedAt: requestedAt,
   }).where(eq(cvApplications.id, applicationId));
+  return { queued: true, accelerated: false, alreadyRunning: false };
 }
 
 /**

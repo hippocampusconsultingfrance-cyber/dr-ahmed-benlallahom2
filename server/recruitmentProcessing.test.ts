@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { analysisCompletionStatus, didClaimProcessingJob, executeCvExternalPipeline, extractionMethodFor, retryDelayMs } from "./recruitmentProcessing";
+import { analysisCompletionStatus, cvAnalysisEnqueueDisposition, didClaimProcessingJob, executeCvExternalPipeline, extractionMethodFor, retryDelayMs } from "./recruitmentProcessing";
 
 const checksum = "a".repeat(64);
 const input = {
@@ -74,6 +74,15 @@ describe("règles déterministes du pipeline de traitement CV", () => {
     expect(retryDelayMs(1)).toBe(60_000);
     expect(retryDelayMs(2)).toBe(120_000);
     expect(retryDelayMs(10)).toBe(3_600_000);
+  });
+
+  it("empêche les analyses concurrentes lors de relances répétées", () => {
+    expect(cvAnalysisEnqueueDisposition(null)).toBe("create");
+    expect(cvAnalysisEnqueueDisposition("completed")).toBe("create");
+    expect(cvAnalysisEnqueueDisposition("failed")).toBe("create");
+    expect(cvAnalysisEnqueueDisposition("queued")).toBe("accelerate");
+    expect(cvAnalysisEnqueueDisposition("retry")).toBe("accelerate");
+    expect(cvAnalysisEnqueueDisposition("running")).toBe("already_running");
   });
 
   it("ne traite que le job effectivement revendiqué par la mise à jour conditionnelle", () => {
