@@ -72,7 +72,7 @@ describe("recruitment analysis safeguards", () => {
     });
 
     expect(execution.model).toBe("local/manual-review-fallback");
-    expect(execution.result.relevanceScore).toBe(0);
+    expect(execution.result.relevanceScore).toBeNull();
     expect(execution.result.confidence).toBe(0);
     expect(execution.result.countriesOfInterest).toEqual(["France"]);
     expect(execution.result.dataQualityWarnings).toContain(
