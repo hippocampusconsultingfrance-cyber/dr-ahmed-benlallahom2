@@ -9,6 +9,8 @@ describe("candidature VVIP — erreurs publiques", () => {
     expect(source).toContain("serverMessage.includes(\"informations\") ? t.required");
     expect(source).toContain("body.append(\"diplomaCountry\", submittedDiplomaCountry);");
     expect(source).toContain("resolveCountryForSubmission(form.diplomaCountry");
+    expect(source).toContain('typeof payload.trackingId !== "string"');
+    expect(source).not.toContain('payload.trackingId || "VVIP-OK"');
   });
 
   it("accepts valid mobile CV filenames even with a generic MIME type", async () => {
