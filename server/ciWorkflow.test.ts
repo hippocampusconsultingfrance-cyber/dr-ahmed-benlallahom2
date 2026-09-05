@@ -15,6 +15,7 @@ describe("intégration continue GitHub", () => {
     expect(workflow).toContain("pnpm check");
     expect(workflow).toContain("pnpm test:ci");
     expect(workflow).toContain("pnpm audit --prod --audit-level=high");
+    expect(workflow).not.toContain("continue-on-error: true");
     expect(workflow).toContain("STRIPE_SECRET_KEY: sk_test_");
     expect(workflow).toContain("CANDIDATE_DOCUMENT_ENCRYPTION_KEY:");
     expect(workflow).not.toContain("services:");
