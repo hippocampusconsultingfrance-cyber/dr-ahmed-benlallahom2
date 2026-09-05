@@ -354,7 +354,8 @@ export default function RecruitmentPage() {
       const response = await fetch("/api/recruitment/apply", { method: "POST", body });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(payload.error || t.genericError);
-      setTrackingId(payload.trackingId || "");
+      if (typeof payload.trackingId !== "string" || !payload.trackingId) throw new Error(t.genericError);
+      setTrackingId(payload.trackingId);
       setTurnstileToken(null);
       setValidationAttempted(false);
       setStatus("success");
