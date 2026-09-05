@@ -445,7 +445,8 @@ export default function VvipOffshorePage() {
       const payload = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(payload.error || t.genericError);
 
-      setTrackingId(payload.trackingId || "VVIP-OK");
+      if (typeof payload.trackingId !== "string" || !payload.trackingId) throw new Error(t.genericError);
+      setTrackingId(payload.trackingId);
       setTurnstileToken(null);
       setValidationAttempted(false);
       setStatus("success");

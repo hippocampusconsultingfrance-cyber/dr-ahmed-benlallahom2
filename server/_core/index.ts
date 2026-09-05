@@ -21,6 +21,7 @@ import { getDb } from "../db";
 import { candidateDocumentAuditLogs, candidateDocumentProcessingJobs, candidateDocuments, cvApplications, cvProcessingJobs, recruitmentCampaignRecipients, recruitmentEmailEvents } from "../../drizzle/schema";
 import { CANDIDATE_DOCUMENT_MAX_BYTES, candidateDocumentMimeTypes, safeCandidateDocumentName, validateCandidateDocument } from "../candidateDocumentValidation";
 import { createCandidateInvitationToken } from "../candidateAuth";
+import { isSameRecruitmentSubmission } from "../recruitmentSubmissionDeduplication";
 
 function safeErrorName(error: unknown) {
   return error instanceof Error ? error.name : "UnknownError";
@@ -493,10 +494,27 @@ export async function createApp() {
         }
 
         recruitmentStage = "duplicate-check";
-        const [duplicate] = await db.select({ id: cvApplications.id }).from(cvApplications).where(eq(cvApplications.fileChecksum, fileValidation.checksum)).limit(1);
+        const duplicateCandidates = await db.select({
+          id: cvApplications.id,
+          trackingId: cvApplications.trackingId,
+          email: cvApplications.email,
+          specialty: cvApplications.specialty,
+        }).from(cvApplications).where(eq(cvApplications.fileChecksum, fileValidation.checksum)).limit(20);
+        const duplicate = duplicateCandidates.find(candidate => isSameRecruitmentSubmission(candidate, parsed.data));
         if (duplicate) {
-          await logSecurityEvent({ actorKind: "anonymous", actorReference: parsed.data.email, category: "public_recruitment_apply_duplicate_file", outcome: "blocked", severity: "info", ipHash });
-          res.status(202).json({ success: true, duplicate: true });
+          const candidateName = `${parsed.data.firstName} ${parsed.data.lastName}`;
+          const candidatePortalInviteUrl = `${PUBLIC_APP_ORIGIN}/candidate/access?invite=${encodeURIComponent(createCandidateInvitationToken(Number(duplicate.id)))}`;
+          const { sendCvApplicationConfirmationEmail } = await import("./notifications");
+          await sendCvApplicationConfirmationEmail(
+            parsed.data.email,
+            candidateName,
+            duplicate.trackingId,
+            parsed.data.specialty,
+            parsed.data.targetCountries.join(", "),
+            candidatePortalInviteUrl,
+          );
+          await logSecurityEvent({ actorKind: "anonymous", actorReference: parsed.data.email, category: "public_recruitment_apply_duplicate_file", outcome: "allowed", severity: "info", ipHash });
+          res.status(200).json({ success: true, duplicate: true, trackingId: duplicate.trackingId });
           return;
         }
         recruitmentStage = "queue-capacity-check";
