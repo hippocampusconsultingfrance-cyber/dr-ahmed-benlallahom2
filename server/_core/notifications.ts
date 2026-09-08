@@ -138,7 +138,7 @@ export async function sendOwnerNotificationEmail(
       minute: "2-digit",
     });
 
-    // Send the owner notification through the configured private email channel
+    // Use Manus built-in notification for owner
     const notificationContent = `
 Nouvelle Réservation - ${trackingId}
 
@@ -155,7 +155,7 @@ Demande: ${requestDetails}
       content: notificationContent,
     });
 
-    console.log("Owner notification dispatched");
+    console.log("Owner notification sent via Manus notification service");
   } catch {
     console.error("Owner notification delivery failed");
   }
@@ -178,13 +178,13 @@ export async function sendOwnerNotificationSMS(
       minute: "2-digit",
     });
 
-    // Use the private owner notification as the SMS fallback
+    // Use Manus notification as SMS alternative
     await notifyOwner({
       title: `📱 Réservation ${trackingId}`,
       content: `${customerName} (${customerPhone}) - ${formattedDate} - ${finalPrice}€`,
     });
 
-    console.log("Owner SMS fallback notification dispatched");
+    console.log("Owner SMS notification sent via Manus notification service");
   } catch {
     console.error("Owner SMS fallback delivery failed");
   }
@@ -351,7 +351,7 @@ export async function sendCvApplicationConfirmationEmail(
   specialty: string,
   targetCountries: string,
   candidatePortalInviteUrl?: string,
-) {
+): Promise<CvApplicationConfirmationDelivery> {
   try {
     const candidatePortalInvitation = candidatePortalInviteUrl
       ? `<div style="margin:24px 0;padding:18px;border:1px solid #bae6fd;border-radius:10px;background:#f0f9ff;"><h3 style="margin:0 0 8px;color:#0e7490;">Votre espace candidat sécurisé</h3><p style="margin:0 0 14px;">Vous pouvez créer un accès pour déposer ultérieurement vos documents administratifs dans votre coffre privé. L’activation de votre adresse email restera obligatoire.</p><p style="margin:0;"><a href="${escapeHtml(candidatePortalInviteUrl)}" style="display:inline-block;background:#0891b2;color:#ffffff;text-decoration:none;padding:12px 18px;border-radius:7px;font-weight:700;">Créer mon espace candidat</a></p></div>`
@@ -371,24 +371,35 @@ export async function sendCvApplicationConfirmationEmail(
       <p style="color:#64748b;font-size:13px;">Si vous ne retrouvez pas cet email, vérifiez votre dossier Spam ou Courriers indésirables, puis ajoutez recrutement@drahmedbenlallahom.com à vos contacts.</p>
     `);
 
-    const { error } = await getResendClient().emails.send({
-      from: FROM_EMAIL,
-      to: [candidateEmail],
-      replyTo: RECRUITMENT_REPLY_TO,
-      subject: `Candidature reçue - ${trackingId}`,
-      html: emailContent,
-    });
+    const { data, error } = await getResendClient().emails.send(
+      {
+        from: FROM_EMAIL,
+        to: [candidateEmail],
+        replyTo: RECRUITMENT_REPLY_TO,
+        subject: `Candidature reçue - ${trackingId}`,
+        html: emailContent,
+      },
+      { idempotencyKey: `cv-application-confirmation-${trackingId}` },
+    );
 
     if (error) {
       console.error("CV application confirmation was rejected by the delivery provider");
-      return;
+      return { status: "failed", providerEmailId: null, failureCode: "provider_rejected" };
     }
 
     console.log("CV application confirmation sent successfully");
+    return { status: "sent", providerEmailId: data?.id || null, failureCode: null };
   } catch {
     console.error("CV application confirmation delivery failed");
+    return { status: "failed", providerEmailId: null, failureCode: "delivery_exception" };
   }
 }
+
+export type CvApplicationConfirmationDelivery = {
+  status: "sent" | "failed";
+  providerEmailId: string | null;
+  failureCode: "provider_rejected" | "delivery_exception" | null;
+};
 
 export type RecruitmentEmailTemplate = "profile_interest" | "additional_information";
 export type RecruitmentEmailLanguage = "fr" | "en";
