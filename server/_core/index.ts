@@ -15,13 +15,14 @@ import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { storageGetSignedUrl, storagePut } from "../storage";
 import { notifyOwner } from "./notification";
-import { eq, sql } from "drizzle-orm";
+import { desc, eq, sql } from "drizzle-orm";
 import { validateCvFile } from "../recruitmentFileValidation";
 import { getDb } from "../db";
 import { candidateDocumentAuditLogs, candidateDocumentProcessingJobs, candidateDocuments, cvApplications, cvProcessingJobs, recruitmentCampaignRecipients, recruitmentEmailEvents } from "../../drizzle/schema";
 import { CANDIDATE_DOCUMENT_MAX_BYTES, candidateDocumentMimeTypes, safeCandidateDocumentName, validateCandidateDocument } from "../candidateDocumentValidation";
 import { createCandidateInvitationToken } from "../candidateAuth";
 import { isSameRecruitmentSubmission } from "../recruitmentSubmissionDeduplication";
+import { sendTrackedCvApplicationConfirmationEmail } from "../recruitmentEmailTrace";
 
 function safeErrorName(error: unknown) {
   return error instanceof Error ? error.name : "UnknownError";
@@ -309,12 +310,20 @@ export async function createApp() {
         ? await db.select().from(recruitmentCampaignRecipients).where(eq(recruitmentCampaignRecipients.providerEmailId, providerEmailId)).limit(5)
         : [];
       const recipient = recipients[0];
+      const [trackedEmail] = !recipient && providerEmailId
+        ? await db.select({ applicationId: recruitmentEmailEvents.applicationId })
+          .from(recruitmentEmailEvents)
+          .where(eq(recruitmentEmailEvents.providerEmailId, providerEmailId))
+          .orderBy(desc(recruitmentEmailEvents.occurredAt))
+          .limit(1)
+        : [];
+      const applicationId = recipient?.applicationId || trackedEmail?.applicationId || null;
       const occurredAt = event.created_at && Number.isFinite(new Date(event.created_at).getTime()) ? new Date(event.created_at) : new Date();
       await db.insert(recruitmentEmailEvents).values({
         providerEventId,
         providerEmailId,
         campaignRecipientId: recipient?.id || null,
-        applicationId: recipient?.applicationId || null,
+        applicationId,
         eventType: event.type,
         recipientEmail,
         payload: payload.slice(0, 20_000),
@@ -328,9 +337,9 @@ export async function createApp() {
           deliveredAt: deliveryStatus === "delivered" ? occurredAt : recipient.deliveredAt,
           lastEventAt: occurredAt,
         }).where(eq(recruitmentCampaignRecipients.id, recipient.id));
-        if (["bounced", "complained", "suppressed"].includes(deliveryStatus)) {
-          await db.update(cvApplications).set({ marketingConsent: 0, marketingSuppressedAt: occurredAt, updatedAt: new Date() }).where(eq(cvApplications.id, recipient.applicationId));
-        }
+      }
+      if (applicationId && deliveryStatus && ["bounced", "complained", "suppressed"].includes(deliveryStatus)) {
+        await db.update(cvApplications).set({ marketingConsent: 0, marketingSuppressedAt: occurredAt, updatedAt: new Date() }).where(eq(cvApplications.id, applicationId));
       }
       res.status(200).json({ received: true });
     } catch (error) {
@@ -504,15 +513,15 @@ export async function createApp() {
         if (duplicate) {
           const candidateName = `${parsed.data.firstName} ${parsed.data.lastName}`;
           const candidatePortalInviteUrl = `${PUBLIC_APP_ORIGIN}/candidate/access?invite=${encodeURIComponent(createCandidateInvitationToken(Number(duplicate.id)))}`;
-          const { sendCvApplicationConfirmationEmail } = await import("./notifications");
-          await sendCvApplicationConfirmationEmail(
-            parsed.data.email,
+          await sendTrackedCvApplicationConfirmationEmail({
+            applicationId: Number(duplicate.id),
+            candidateEmail: parsed.data.email,
             candidateName,
-            duplicate.trackingId,
-            parsed.data.specialty,
-            parsed.data.targetCountries.join(", "),
+            trackingId: duplicate.trackingId,
+            specialty: parsed.data.specialty,
+            targetCountries: parsed.data.targetCountries.join(", "),
             candidatePortalInviteUrl,
-          );
+          });
           await logSecurityEvent({ actorKind: "anonymous", actorReference: parsed.data.email, category: "public_recruitment_apply_duplicate_file", outcome: "allowed", severity: "info", ipHash });
           res.status(200).json({ success: true, duplicate: true, trackingId: duplicate.trackingId });
           return;
@@ -560,15 +569,15 @@ export async function createApp() {
           : undefined;
         await Promise.allSettled([
           (async () => {
-            const { sendCvApplicationConfirmationEmail } = await import("./notifications");
-            await sendCvApplicationConfirmationEmail(
-              parsed.data.email,
+            await sendTrackedCvApplicationConfirmationEmail({
+              applicationId: insertedId,
+              candidateEmail: parsed.data.email,
               candidateName,
               trackingId,
-              parsed.data.specialty,
-              parsed.data.targetCountries.join(", "),
+              specialty: parsed.data.specialty,
+              targetCountries: parsed.data.targetCountries.join(", "),
               candidatePortalInviteUrl,
-            );
+            });
           })(),
           notifyOwner({
             title: `Nouvelle candidature recrutement — ${candidateName}`,

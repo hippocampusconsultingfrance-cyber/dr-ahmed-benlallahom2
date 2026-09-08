@@ -5,7 +5,7 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { canRequestCandidateDocumentReanalysis } from "../shared/candidateDocumentReanalysis";
 import { getDb } from "./db";
-import { candidateAccounts, candidateDocumentAuditLogs, candidateDocuments, contactMessages, gdprRequests, testimonials, appointments, blogPosts, availabilitySlots, blockedDates, cvApplications, cvCandidateCertifications, cvCandidateLanguages, recruitmentAuditLogs, recruitmentMatchProfiles, clientBriefs, clientBriefCandidates, recruitmentCampaigns, recruitmentCampaignRecipients, recruitmentEmailEvents, recruitmentFollowUpTasks, recruitmentOfferTemplates, securityEvents } from "../drizzle/schema";
+import { candidateAccounts, candidateDocumentAuditLogs, candidateDocuments, contactMessages, gdprRequests, testimonials, appointments, blogPosts, availabilitySlots, blockedDates, cvApplications, cvCandidateCertifications, cvCandidateLanguages, cvGoogleDriveExportJobs, recruitmentAuditLogs, recruitmentMatchProfiles, clientBriefs, clientBriefCandidates, recruitmentCampaigns, recruitmentCampaignRecipients, recruitmentEmailEvents, recruitmentFollowUpTasks, recruitmentOfferTemplates, securityEvents } from "../drizzle/schema";
 import { notifyOwner } from "./_core/notification";
 import { storageGetSignedUrl } from "./storage";
 import { canAdminDownloadCv, CV_DOWNLOAD_UNAVAILABLE_MESSAGE } from "./recruitmentDownloadPolicy";
@@ -1126,9 +1126,41 @@ export const appRouter = router({
               .from(candidateAccounts)
               .where(inArray(candidateAccounts.linkedApplicationId, applicationIds))
             : [];
+          const driveExportJobs = applicationIds.length
+            ? await db.select({
+                applicationId: cvGoogleDriveExportJobs.applicationId,
+                status: cvGoogleDriveExportJobs.status,
+                attempts: cvGoogleDriveExportJobs.attempts,
+                maxAttempts: cvGoogleDriveExportJobs.maxAttempts,
+                driveFileUrl: cvGoogleDriveExportJobs.driveFileUrl,
+                finishedAt: cvGoogleDriveExportJobs.finishedAt,
+                updatedAt: cvGoogleDriveExportJobs.updatedAt,
+              }).from(cvGoogleDriveExportJobs).where(inArray(cvGoogleDriveExportJobs.applicationId, applicationIds))
+            : [];
+          const emailEvents = applicationIds.length
+            ? await db.select({
+                applicationId: recruitmentEmailEvents.applicationId,
+                eventType: recruitmentEmailEvents.eventType,
+                occurredAt: recruitmentEmailEvents.occurredAt,
+              }).from(recruitmentEmailEvents)
+                .where(inArray(recruitmentEmailEvents.applicationId, applicationIds))
+                .orderBy(desc(recruitmentEmailEvents.occurredAt))
+            : [];
           const activePortalApplicationIds = new Set(portalAccounts.filter(account => account.emailVerifiedAt && account.linkedApplicationId).map(account => account.linkedApplicationId as number));
+          const driveExportByApplicationId = new Map(driveExportJobs.map(job => [job.applicationId, job]));
+          const emailDeliveryByApplicationId = new Map<number, (typeof emailEvents)[number]>();
+          for (const event of emailEvents) {
+            if (event.applicationId && !emailDeliveryByApplicationId.has(event.applicationId)) {
+              emailDeliveryByApplicationId.set(event.applicationId, event);
+            }
+          }
           const items = (profile ? matchedItems.slice(input.offset, input.offset + input.limit) : matchedItems)
-            .map(item => ({ ...item, candidatePortalActive: activePortalApplicationIds.has(item.id) }));
+            .map(item => ({
+              ...item,
+              candidatePortalActive: activePortalApplicationIds.has(item.id),
+              driveExport: driveExportByApplicationId.get(item.id) || null,
+              emailDelivery: emailDeliveryByApplicationId.get(item.id) || null,
+            }));
           const countResult = profile ? [{ count: matchedItems.length }] : await db.select({ count: sql<number>`COUNT(*)` }).from(cvApplications).where(whereClause);
           return { items, total: countResult[0]?.count || 0 };
         }),
