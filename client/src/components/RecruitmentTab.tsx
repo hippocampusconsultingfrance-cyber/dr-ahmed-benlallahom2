@@ -6,6 +6,12 @@ import PublicContentSkeleton from "@/components/PublicContentSkeleton";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import Candidate360Dialog from "./Candidate360Dialog";
+import {
+  recruitmentDriveExportLabel,
+  recruitmentDriveExportTone,
+  recruitmentEmailDeliveryLabel,
+  recruitmentEmailDeliveryTone,
+} from "@/lib/recruitmentTraceability";
 
 const statusOptions = [
   { value: "new", label: "Nouvelle" },
@@ -361,6 +367,37 @@ export default function RecruitmentTab() {
                       {application.ocrModelVersion && <p><strong className="text-foreground">OCR :</strong> {application.ocrModelVersion}{application.ocrConfidence !== null ? ` · confiance ${application.ocrConfidence}%` : ""}</p>}
                       {application.analysisLastError && <p className="text-destructive"><strong>Dernière erreur :</strong> {application.analysisLastError}</p>}
                       {application.message && <p className="pt-2"><strong className="text-foreground">Message :</strong> {application.message}</p>}
+                    </div>
+
+                    <div className="rounded-xl border border-border bg-background/60 p-4 md:col-span-2" aria-label={`Traçabilité de la candidature ${application.trackingId}`}>
+                      <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+                        <div>
+                          <h4 className="font-semibold text-foreground">Traçabilité du dépôt</h4>
+                          <p className="text-xs text-muted-foreground">Contrôle de bout en bout, du formulaire jusqu’aux traitements externes.</p>
+                        </div>
+                        <span className="text-xs text-muted-foreground">Référence {application.trackingId}</span>
+                      </div>
+                      <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                        <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3">
+                          <p className="text-xs font-medium text-muted-foreground">Base de données</p>
+                          <p className="mt-1 font-semibold text-emerald-700 dark:text-emerald-300">Enregistrée</p>
+                        </div>
+                        <div className={`rounded-lg border p-3 ${recruitmentEmailDeliveryTone(application.emailDelivery?.eventType)}`}>
+                          <p className="text-xs font-medium opacity-80">Dernier e-mail candidat</p>
+                          <p className="mt-1 font-semibold">{recruitmentEmailDeliveryLabel(application.emailDelivery?.eventType)}</p>
+                        </div>
+                        <div className={`rounded-lg border p-3 ${recruitmentDriveExportTone(application.driveExport?.status)}`}>
+                          <p className="text-xs font-medium opacity-80">Google Drive</p>
+                          <p className="mt-1 font-semibold">{recruitmentDriveExportLabel(application.driveExport?.status)}</p>
+                          {application.driveExport ? <p className="mt-1 text-xs opacity-80">Tentative {application.driveExport.attempts}/{application.driveExport.maxAttempts}</p> : null}
+                          {application.driveExport?.driveFileUrl ? <a href={application.driveExport.driveFileUrl} target="_blank" rel="noopener noreferrer" className="mt-2 inline-flex text-xs font-medium underline underline-offset-2">Ouvrir le CV dans Drive</a> : null}
+                        </div>
+                        <div className={`rounded-lg border p-3 ${analysisStatusTone(application.analysisStatus)}`}>
+                          <p className="text-xs font-medium opacity-80">Lecture intelligente</p>
+                          <p className="mt-1 font-semibold">{analysisStatusLabel(application.analysisStatus)}</p>
+                          <p className="mt-1 text-xs opacity-80">Tentative {application.analysisAttempts ?? 0}</p>
+                        </div>
+                      </div>
                     </div>
 
                     <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 md:col-span-2">
