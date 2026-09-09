@@ -13,6 +13,10 @@ import { useLanguage } from "@/contexts/LanguageContext";
 
 type Mode = "login" | "register" | "forgot";
 
+export function candidateModeFocusTarget(mode: Mode): string {
+  return mode === "register" ? "candidate-first-name" : "candidate-email";
+}
+
 export const candidateAccessCopy = {
   fr: {
     metaTitle: "Espace candidat sécurisé | Hippocampus Consulting",
@@ -259,6 +263,14 @@ export default function CandidateAccessPage() {
   }, [copy.invitationInvalid, copy.invitationWelcome, invitation.data, invitation.isError, invitationEntry.legacyEmail, invitationToken]);
   const pending = login.isPending || register.isPending || reset.isPending;
 
+  function changeMode(nextMode: Mode) {
+    setMode(nextMode);
+    setTurnstileToken(null);
+    setNotice("");
+    setConsentAttempted(false);
+    window.requestAnimationFrame(() => document.getElementById(candidateModeFocusTarget(nextMode))?.focus());
+  }
+
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setNotice("");
@@ -284,18 +296,18 @@ export default function CandidateAccessPage() {
   const description = mode === "login" ? copy.loginDescription : mode === "register" ? copy.registerDescription : copy.forgotDescription;
 
   return (
-    <main className="min-h-screen bg-[#030a12] px-4 py-10 text-slate-100 sm:py-16">
+    <main id="main-content" tabIndex={-1} className="min-h-screen bg-[#030a12] px-4 py-10 text-slate-100 sm:py-16">
       <SEOHead title={copy.metaTitle} description={copy.metaDescription} noIndex />
       <div className="mx-auto grid max-w-5xl overflow-hidden rounded-3xl border border-cyan-950/80 bg-slate-950/60 shadow-2xl shadow-cyan-950/20 lg:grid-cols-[0.9fr_1.1fr]">
         <section className="relative overflow-hidden border-b border-cyan-950/70 bg-[radial-gradient(circle_at_25%_15%,rgba(8,145,178,0.26),transparent_42%),linear-gradient(150deg,#06243a,#06121e)] p-7 sm:p-10 lg:border-b-0 lg:border-r">
           <div className="absolute -right-16 -top-12 h-56 w-56 rounded-full border border-cyan-300/20" />
           <div className="relative">
-            <div className="mb-8 flex h-12 w-12 items-center justify-center rounded-2xl border border-cyan-300/30 bg-cyan-400/10 text-cyan-300"><FileLock2 size={24} /></div>
+            <div className="mb-8 flex h-12 w-12 items-center justify-center rounded-2xl border border-cyan-300/30 bg-cyan-400/10 text-cyan-300"><FileLock2 size={24} aria-hidden="true" /></div>
             <p className="text-xs font-bold uppercase tracking-[0.22em] text-cyan-300">Hippocampus Consulting</p>
             <h1 className="mt-3 font-serif text-4xl leading-tight text-white">{copy.brandTitle}</h1>
             <p className="mt-5 max-w-md text-sm leading-7 text-slate-300">{copy.brandDescription}</p>
             <div className="mt-8 space-y-4 text-sm text-slate-200">
-              {copy.safeguards.map(item => <div key={item} className="flex gap-3"><ShieldCheck className="mt-0.5 shrink-0 text-cyan-300" size={18} /><span>{item}</span></div>)}
+              {copy.safeguards.map(item => <div key={item} className="flex gap-3"><ShieldCheck className="mt-0.5 shrink-0 text-cyan-300" size={18} aria-hidden="true" /><span>{item}</span></div>)}
             </div>
           </div>
         </section>
@@ -303,17 +315,17 @@ export default function CandidateAccessPage() {
           <Card className="border-0 bg-transparent shadow-none">
             <CardHeader className="px-0 pt-0"><CardTitle className="text-2xl text-white">{title}</CardTitle><CardDescription className="mt-2 leading-6 text-slate-400">{description}</CardDescription></CardHeader>
             <CardContent className="px-0">
-              <form className="space-y-5" onSubmit={submit}>
+              <form id="candidate-access-form" className="space-y-5" onSubmit={submit}>
                 {mode === "register" && <div className="grid gap-4 sm:grid-cols-2"><div className="space-y-2"><Label htmlFor="candidate-first-name">{copy.firstName}</Label><Input id="candidate-first-name" value={firstName} onChange={event => setFirstName(event.target.value)} required /></div><div className="space-y-2"><Label htmlFor="candidate-last-name">{copy.lastName}</Label><Input id="candidate-last-name" value={lastName} onChange={event => setLastName(event.target.value)} required /></div></div>}
                 <div className="space-y-2"><Label htmlFor="candidate-email">{copy.email}</Label><Input id="candidate-email" type="email" autoComplete="email" value={email} onChange={event => setEmail(event.target.value)} readOnly={mode === "register" && Boolean(invitationToken && invitation.data)} required /></div>
-                {mode !== "forgot" && <div className="space-y-2"><Label htmlFor="candidate-password">{copy.password}</Label><Input id="candidate-password" type="password" autoComplete={mode === "login" ? "current-password" : "new-password"} value={password} onChange={event => setPassword(event.target.value)} minLength={15} required /><p className="text-xs text-slate-500">{copy.passwordHint}</p></div>}
+                {mode !== "forgot" && <div className="space-y-2"><Label htmlFor="candidate-password">{copy.password}</Label><Input id="candidate-password" type="password" autoComplete={mode === "login" ? "current-password" : "new-password"} aria-describedby="candidate-password-hint" value={password} onChange={event => setPassword(event.target.value)} minLength={15} required /><p id="candidate-password-hint" className="text-xs text-slate-500">{copy.passwordHint}</p></div>}
                 {mode === "register" && <div className="space-y-2"><Label htmlFor="candidate-password-confirmation">{copy.confirmPassword}</Label><Input id="candidate-password-confirmation" type="password" autoComplete="new-password" value={passwordConfirmation} onChange={event => setPasswordConfirmation(event.target.value)} minLength={15} required /></div>}
                 {mode === "register" && <div className="candidate-consent-panel space-y-3 rounded-xl border border-slate-700/90 bg-slate-900/75 p-4 text-sm"><label className={`candidate-consent-item ${consentAttempted && !terms ? "candidate-consent-item-invalid" : ""}`}><Checkbox className="candidate-consent-checkbox" checked={terms} aria-invalid={consentAttempted && !terms} onCheckedChange={value => { const next = value === true; setTerms(next); if (next && documentConsent) setConsentAttempted(false); }} /><span>{copy.terms}</span></label><label className={`candidate-consent-item ${consentAttempted && !documentConsent ? "candidate-consent-item-invalid" : ""}`}><Checkbox className="candidate-consent-checkbox" checked={documentConsent} aria-invalid={consentAttempted && !documentConsent} onCheckedChange={value => { const next = value === true; setDocumentConsent(next); if (next && terms) setConsentAttempted(false); }} /><span>{copy.documentConsent}</span></label></div>}
                 {(mode === "register" || mode === "forgot") && <TurnstileWidget onToken={setTurnstileToken} />}
                 {notice && <p role="status" className="rounded-lg border border-cyan-800/50 bg-cyan-950/30 p-3 text-sm text-cyan-100">{notice}</p>}
-                <Button type="submit" className="w-full bg-cyan-500 text-slate-950 hover:bg-cyan-400" disabled={pending}>{pending ? <Loader2 className="animate-spin" /> : mode === "login" ? <LogIn /> : mode === "register" ? <UserPlus /> : <KeyRound />}{mode === "login" ? copy.login : mode === "register" ? copy.register : copy.reset}</Button>
+                <Button type="submit" className="w-full bg-cyan-500 text-slate-950 hover:bg-cyan-400" disabled={pending}>{pending ? <Loader2 className="animate-spin" aria-hidden="true" /> : mode === "login" ? <LogIn aria-hidden="true" /> : mode === "register" ? <UserPlus aria-hidden="true" /> : <KeyRound aria-hidden="true" />}{mode === "login" ? copy.login : mode === "register" ? copy.register : copy.reset}</Button>
               </form>
-              <div className="mt-6 flex flex-wrap justify-center gap-x-5 gap-y-3 text-sm"><button type="button" onClick={() => { setMode("login"); setTurnstileToken(null); setNotice(""); }} className="text-cyan-300 hover:text-cyan-200">{copy.navigationLogin}</button><button type="button" onClick={() => { setMode("register"); setTurnstileToken(null); setNotice(""); }} className="text-cyan-300 hover:text-cyan-200">{copy.navigationRegister}</button><button type="button" onClick={() => { setMode("forgot"); setTurnstileToken(null); setNotice(""); }} className="text-slate-400 hover:text-white">{copy.navigationForgot}</button></div>
+              <div role="group" aria-label={copy.brandTitle} className="mt-6 flex flex-wrap justify-center gap-x-5 gap-y-3 text-sm"><button type="button" aria-controls="candidate-access-form" aria-pressed={mode === "login"} onClick={() => changeMode("login")} className={mode === "login" ? "font-semibold text-white underline decoration-cyan-300 underline-offset-4" : "text-cyan-300 hover:text-cyan-200"}>{copy.navigationLogin}</button><button type="button" aria-controls="candidate-access-form" aria-pressed={mode === "register"} onClick={() => changeMode("register")} className={mode === "register" ? "font-semibold text-white underline decoration-cyan-300 underline-offset-4" : "text-cyan-300 hover:text-cyan-200"}>{copy.navigationRegister}</button><button type="button" aria-controls="candidate-access-form" aria-pressed={mode === "forgot"} onClick={() => changeMode("forgot")} className={mode === "forgot" ? "font-semibold text-white underline decoration-cyan-300 underline-offset-4" : "text-slate-400 hover:text-white"}>{copy.navigationForgot}</button></div>
             </CardContent>
           </Card>
         </section>
