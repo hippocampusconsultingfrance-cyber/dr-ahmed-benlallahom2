@@ -7,8 +7,8 @@ import {
 
 describe("réponse IA recrutement", () => {
   it("utilise des identifiants AI Gateway explicites et versionnés", () => {
-    expect(RECRUITMENT_ANALYSIS_PRIMARY_MODEL).toMatch(/^openai\/gpt-5\.6-/);
-    expect(RECRUITMENT_ANALYSIS_FALLBACK_MODEL).toMatch(/^google\/gemini-3\.7-/);
+    expect(RECRUITMENT_ANALYSIS_PRIMARY_MODEL).toBe("openai/gpt-6-astra");
+    expect(RECRUITMENT_ANALYSIS_FALLBACK_MODEL).toBe("google/gemini-3.8-flash");
     expect(RECRUITMENT_OCR_MODEL).toBe(RECRUITMENT_ANALYSIS_FALLBACK_MODEL);
   });
 

@@ -25,7 +25,7 @@ const analysis = {
   specialties: ["Anesthésie"],
   skills: ["ACLS"],
   languages: ["Français"],
-  normalizedLanguages: [{ language: "Français", proficiency: "unknown" as const, evidence: "CV" }],
+  normalizedLanguages: [{ language: "Français", proficiency: "unknown" as const, evidence: "Français", sourceLocation: "page 1", confidence: 90 }],
   certifications: [],
   countriesOfInterest: ["France"],
   yearsExperience: 8,
@@ -35,6 +35,8 @@ const analysis = {
   gaps: [],
   dataQualityWarnings: [],
   requiredFollowUps: [],
+  fieldEvidence: [{ field: "language", value: "Français", evidence: "Français", sourceLocation: "page 1", confidence: 90 }],
+  contradictions: [],
   confidence: 92,
   evidenceCoverage: 100,
   scoreBreakdown: {

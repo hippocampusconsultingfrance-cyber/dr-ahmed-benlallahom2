@@ -7,7 +7,7 @@ import { validateCvFile } from "./recruitmentFileValidation";
 
 const MAX_ATTEMPTS = 3;
 const PROCESSING_BATCH_SIZE = 5;
-const ANALYSIS_PROMPT_VERSION = "recruitment-v3-evidence";
+const ANALYSIS_PROMPT_VERSION = "recruitment-v4-sourced-fields";
 
 type CvPipelineInput = {
   cvFileKey: string;
