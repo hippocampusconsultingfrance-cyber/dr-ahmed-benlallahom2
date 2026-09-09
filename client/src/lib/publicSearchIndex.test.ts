@@ -11,4 +11,9 @@ describe("recherche publique", () => {
     expect(searchPublicPages("recruitment", "en")[0]?.entry.href).toBe("/recruitment");
     expect(searchPublicPages("常见问题", "zh")[0]?.entry.href).toBe("/faq");
   });
+
+  it("oriente les recherches candidat et VVIP vers les routes réellement déclarées", () => {
+    expect(searchPublicPages("espace candidat", "fr")[0]?.entry.href).toBe("/candidate/access");
+    expect(searchPublicPages("VVIP offshore", "fr")[0]?.entry.href).toBe("/recruitment/vvip-offshore");
+  });
 });
