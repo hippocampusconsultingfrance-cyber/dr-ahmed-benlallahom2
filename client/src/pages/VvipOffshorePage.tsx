@@ -523,11 +523,11 @@ export default function VvipOffshorePage() {
                     <div className="grid gap-4 sm:grid-cols-2">
                       <label className="block w-full space-y-1.5 text-sm text-foreground">
                         <span className="block font-medium">{t.firstName} *</span>
-                        <input required value={form.firstName} aria-invalid={isInvalid("firstName")} onChange={(e) => update("firstName", e.target.value)} className={`form-control block w-full ${isInvalid("firstName") ? "form-field-invalid" : ""}`} />
+                        <input required value={form.firstName} aria-invalid={isInvalid("firstName")} onChange={(e) => update("firstName", e.target.value)} className={`form-control block w-full ${isInvalid("firstName") ? "form-field-invalid" : ""}`} autoComplete="given-name" />
                       </label>
                       <label className="block w-full space-y-1.5 text-sm text-foreground">
                         <span className="block font-medium">{t.lastName} *</span>
-                        <input required value={form.lastName} aria-invalid={isInvalid("lastName")} onChange={(e) => update("lastName", e.target.value)} className={`form-control block w-full ${isInvalid("lastName") ? "form-field-invalid" : ""}`} />
+                        <input required value={form.lastName} aria-invalid={isInvalid("lastName")} onChange={(e) => update("lastName", e.target.value)} className={`form-control block w-full ${isInvalid("lastName") ? "form-field-invalid" : ""}`} autoComplete="family-name" />
                       </label>
                     </div>
 
@@ -590,24 +590,28 @@ export default function VvipOffshorePage() {
                     </div>
 
                     <div className="space-y-2">
-                      <span className="block text-sm font-medium text-foreground">{t.cv} *</span>
-                      <div
-                        onClick={() => fileInputRef.current?.click()}
-                        className={`group relative flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-border/70 bg-card/50 p-6 text-center transition-all hover:border-primary/60 hover:bg-card cursor-pointer ${isInvalid("cv") ? "form-file-invalid" : ""}`}
+                      <input
+                        ref={fileInputRef}
+                        id="vvip-cv"
+                        type="file"
+                        required
+                        accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                        className="peer sr-only"
+                        aria-invalid={isInvalid("cv")}
+                        aria-describedby="vvip-cv-hint"
+                        onChange={(e) => { setFile(e.target.files?.[0] || null); setInvalidFields(previous => { const next = new Set(previous); next.delete("cv"); return next; }); }}
+                      />
+                      <label
+                        htmlFor="vvip-cv"
+                        className={`group relative flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-border/70 bg-card/50 p-6 text-center transition-all hover:border-primary/60 hover:bg-card peer-focus-visible:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-primary peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-background ${isInvalid("cv") ? "form-file-invalid" : ""}`}
                       >
-                        <FileUp className="h-8 w-8 text-primary transition-transform group-hover:scale-110" />
+                        <span className="block text-sm font-medium text-foreground">{t.cv} *</span>
+                        <FileUp className="mt-3 h-8 w-8 text-primary transition-transform group-hover:scale-110" aria-hidden="true" />
                         <span className="mt-3 text-sm font-medium text-foreground">
                           {file ? file.name : t.chooseFile}
                         </span>
-                        <span className="mt-1 text-xs text-muted-foreground">{t.fileHint}</span>
-                        <input
-                          ref={fileInputRef}
-                          type="file"
-                          accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                          className="hidden"
-                          onChange={(e) => { setFile(e.target.files?.[0] || null); setInvalidFields(previous => { const next = new Set(previous); next.delete("cv"); return next; }); }}
-                        />
-                      </div>
+                        <span id="vvip-cv-hint" className="mt-1 text-xs text-muted-foreground">{t.fileHint}</span>
+                      </label>
                     </div>
 
                     <label className={`form-consent-item flex items-start gap-3 cursor-pointer text-xs text-muted-foreground ${isInvalid("gdprConsent") ? "form-consent-item-invalid" : ""}`}>
