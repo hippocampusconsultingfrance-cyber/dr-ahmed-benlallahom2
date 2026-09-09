@@ -34,15 +34,17 @@ describe("recruitment analysis safeguards", () => {
       specialties: ["Anesthésie", "Anesthésie"],
       skills: ["Réanimation"],
       languages: ["Français"],
-      normalizedLanguages: [{ language: "Français", proficiency: "fluent", evidence: "Français : courant" }],
-      certifications: [{ name: "ACLS", issuingBody: null, country: null, expiresAt: null, evidence: "Certification ACLS" }],
+      normalizedLanguages: [{ language: "Français", proficiency: "fluent", evidence: "Français : courant", sourceLocation: "page 2", confidence: 98 }],
+      certifications: [{ name: "ACLS", issuingBody: null, country: null, expiresAt: null, evidence: "Certification ACLS", sourceLocation: "page 2", confidence: 95 }],
       countriesOfInterest: ["France"],
       yearsExperience: 8,
-      normalizedExperiences: [{ role: "Médecin", organization: "Hôpital", startDate: "2018-01", endDate: "2026-01", employmentType: "permanent", specialty: "Anesthésie", country: "Tunisie", durationMonths: 96, evidence: "Médecin anesthésiste, Hôpital, 2018-2026" }],
+      normalizedExperiences: [{ role: "Médecin", organization: "Hôpital", startDate: "2018-01", endDate: "2026-01", employmentType: "permanent", specialty: "Anesthésie", country: "Tunisie", durationMonths: 96, evidence: "Médecin anesthésiste, Hôpital, 2018-2026", sourceLocation: "page 1", confidence: 96 }],
       strengths: ["Expérience documentée"],
       gaps: [],
       dataQualityWarnings: [],
       requiredFollowUps: ["Confirmer l’inscription ordinale"],
+      fieldEvidence: [{ field: "professionalTitle", value: "Médecin anesthésiste", evidence: "Médecin anesthésiste", sourceLocation: "page 1", confidence: 97 }],
+      contradictions: [{ field: "yearsExperience", declaredValue: "8", documentValue: "7", evidence: "2019-2026", sourceLocation: "page 1", confidence: 90 }],
       confidence: 91,
       scoreBreakdown: { specialtyMatch: 29, experienceEvidence: 23, skillsEvidence: 18, languageReadiness: 13, credentialReadiness: 7 },
       reasoning: "Score fondé uniquement sur les éléments professionnels cités.",
@@ -51,6 +53,8 @@ describe("recruitment analysis safeguards", () => {
     expect(result.relevanceScore).toBe(90);
     expect(result.evidenceCoverage).toBe(100);
     expect(result.specialties).toEqual(["Anesthésie"]);
+    expect(result.fieldEvidence[0]?.sourceLocation).toBe("page 1");
+    expect(result.contradictions).toHaveLength(1);
   });
 
   it("reconnaît uniquement le blocage de facturation explicite du Gateway", () => {
