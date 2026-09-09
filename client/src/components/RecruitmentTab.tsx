@@ -32,7 +32,9 @@ type ExtractedProfile = {
   languages?: string[];
   countriesOfInterest?: string[];
   yearsExperience?: number | null;
-  normalizedExperiences?: Array<{ role?: string; organization?: string; startDate?: string | null; endDate?: string | null; employmentType?: string; durationMonths?: number | null }>;
+  normalizedExperiences?: Array<{ role?: string; organization?: string; startDate?: string | null; endDate?: string | null; employmentType?: string; durationMonths?: number | null; evidence?: string; sourceLocation?: string; confidence?: number }>;
+  fieldEvidence?: Array<{ field?: string; value?: string; evidence?: string; sourceLocation?: string; confidence?: number }>;
+  contradictions?: Array<{ field?: string; declaredValue?: string; documentValue?: string; evidence?: string; sourceLocation?: string; confidence?: number }>;
   confidence?: number;
   evidenceCoverage?: number;
   requiredFollowUps?: string[];
@@ -461,6 +463,32 @@ export default function RecruitmentTab() {
                                 <p>Langues <strong className="text-foreground">{extracted.scoreBreakdown.languageReadiness ?? 0}/15</strong></p>
                                 <p>Diplômes <strong className="text-foreground">{extracted.scoreBreakdown.credentialReadiness ?? 0}/10</strong></p>
                               </div>
+                            </div>
+                          )}
+                          {extracted.fieldEvidence && extracted.fieldEvidence.length > 0 && (
+                            <div>
+                              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Preuves issues du CV</p>
+                              <div className="space-y-2">
+                                {extracted.fieldEvidence.slice(0, 16).map((item, index) => (
+                                  <div key={`${item.field}-${item.value}-${index}`} className="rounded-lg border border-primary/10 bg-background/50 p-3 text-xs">
+                                    <p className="font-medium text-foreground">{item.value || "Information extraite"}</p>
+                                    <p className="mt-1 text-muted-foreground">« {item.evidence || "Preuve non fournie"} »</p>
+                                    <p className="mt-1 text-muted-foreground">Source : {item.sourceLocation || "non localisée"} · confiance {typeof item.confidence === "number" ? `${item.confidence}%` : "—"}</p>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          {extracted.contradictions && extracted.contradictions.length > 0 && (
+                            <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3">
+                              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-200">Contradictions à vérifier humainement</p>
+                              <ul className="space-y-2 text-xs text-amber-900 dark:text-amber-100">
+                                {extracted.contradictions.map((item, index) => (
+                                  <li key={`${item.field}-${index}`}>
+                                    <strong>{item.field || "Champ"} :</strong> formulaire « {item.declaredValue || "—"} » / CV « {item.documentValue || "—"} » — {item.sourceLocation || "source non localisée"}
+                                  </li>
+                                ))}
+                              </ul>
                             </div>
                           )}
                           <div className="grid gap-3 md:grid-cols-2">
