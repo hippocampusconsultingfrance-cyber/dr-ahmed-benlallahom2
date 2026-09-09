@@ -26,6 +26,7 @@ describe("recruitment PDF extraction", () => {
     expect(result.method).toBe("pdf_text");
     expect(result.text).toContain("Curriculum vitae fictif");
     expect(result.text).toContain("aucune donnée personnelle");
+    expect(result.text).toContain("[PAGE 1]");
     expect(result.totalPages).toBe(1);
   });
 });
