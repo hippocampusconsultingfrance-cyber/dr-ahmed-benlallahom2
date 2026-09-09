@@ -26,4 +26,15 @@ describe("candidature VVIP — erreurs publiques", () => {
     expect(source).toContain("type=\"checkbox\"");
     expect(source).toContain("JSON.stringify(form.environments)");
   });
+
+  it("rend le sélecteur de CV utilisable au clavier et correctement décrit", async () => {
+    const source = await readFile(new URL("./VvipOffshorePage.tsx", import.meta.url), "utf8");
+    expect(source).toContain('id="vvip-cv"');
+    expect(source).toContain('htmlFor="vvip-cv"');
+    expect(source).toContain('className="peer sr-only"');
+    expect(source).toContain('aria-describedby="vvip-cv-hint"');
+    expect(source).toContain('peer-focus-visible:ring-2');
+    expect(source).toContain('autoComplete="given-name"');
+    expect(source).toContain('autoComplete="family-name"');
+  });
 });
