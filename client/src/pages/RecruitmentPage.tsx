@@ -415,7 +415,7 @@ export default function RecruitmentPage() {
                   </div>
                   <div className="grid gap-5 sm:grid-cols-2">
                     <div className="recruitment-field-group">
-                      <span>{t.specialty} *</span>
+                      <span id="recruitment-specialty-label">{t.specialty} *</span>
                       <div className="site-search-shell">
                         <Search className="site-search-icon" aria-hidden="true" />
                         <input
@@ -423,6 +423,7 @@ export default function RecruitmentPage() {
                           value={specialtyQuery}
                           onChange={event => setSpecialtyQuery(event.target.value)}
                           placeholder={t.specialtySearch}
+                          aria-label={t.specialtySearch}
                           className={`recruitment-field site-search-input text-sm ${specialtyQuery ? "site-search-input-with-clear" : ""}`}
                         />
                         {specialtyQuery && (
@@ -436,7 +437,7 @@ export default function RecruitmentPage() {
                           </button>
                         )}
                       </div>
-                      <select id="recruitment-specialty" required value={form.specialty} aria-invalid={isInvalid("specialty")} onChange={event => update("specialty", event.target.value)} className={`recruitment-field ${isInvalid("specialty") ? "form-field-invalid" : ""}`}>
+                      <select id="recruitment-specialty" required value={form.specialty} aria-labelledby="recruitment-specialty-label" aria-invalid={isInvalid("specialty")} onChange={event => update("specialty", event.target.value)} className={`recruitment-field ${isInvalid("specialty") ? "form-field-invalid" : ""}`}>
                         <option value="">{t.select}</option>
                         {filteredSpecialtyCategories.length === 0 ? (
                           <option value="" disabled>{t.noMatch}</option>
@@ -474,7 +475,7 @@ export default function RecruitmentPage() {
                   </div>
 
                   <div ref={diplomaCountryPickerRef} className="recruitment-field-group relative">
-                    <span>{diplomaCopy.label} *</span>
+                    <span id="recruitment-diploma-country-label">{diplomaCopy.label} *</span>
                     <div className="site-search-shell">
                       <Search className="site-search-icon" aria-hidden="true" />
                       <input
@@ -487,6 +488,7 @@ export default function RecruitmentPage() {
                         onChange={event => { setDiplomaCountryQuery(event.target.value); setDiplomaCountryOpen(true); }}
                         onKeyDown={event => { if (event.key === "Escape") setDiplomaCountryOpen(false); }}
                         placeholder={diplomaCopy.search}
+                        aria-labelledby="recruitment-diploma-country-label"
                         aria-invalid={isInvalid("diplomaCountry")}
                         className={`recruitment-field site-search-input ${diplomaCountryQuery ? "site-search-input-with-clear" : ""} ${isInvalid("diplomaCountry") ? "form-field-invalid" : ""}`}
                         role="combobox"
