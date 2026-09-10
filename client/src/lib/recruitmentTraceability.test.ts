@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   recruitmentDriveExportLabel,
+  recruitmentDriveExportErrorLabel,
   recruitmentEmailDeliveryLabel,
 } from "./recruitmentTraceability";
 
@@ -15,5 +16,7 @@ describe("libellés de traçabilité des candidatures", () => {
     expect(recruitmentDriveExportLabel("completed")).toBe("Copié dans Drive");
     expect(recruitmentDriveExportLabel("retry")).toBe("Nouvelle tentative prévue");
     expect(recruitmentDriveExportLabel("failed")).toBe("Échec de la copie");
+    expect(recruitmentDriveExportErrorLabel("google_drive_token_invalid_grant")).toBe("Connexion Google Drive à renouveler");
+    expect(recruitmentDriveExportErrorLabel("google_drive_upload_429")).toBe("Google Drive a refusé temporairement la copie");
   });
 });
