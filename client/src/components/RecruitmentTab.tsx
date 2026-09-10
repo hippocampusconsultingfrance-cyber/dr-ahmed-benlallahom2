@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import Candidate360Dialog from "./Candidate360Dialog";
 import {
   recruitmentDriveExportLabel,
+  recruitmentDriveExportErrorLabel,
   recruitmentDriveExportTone,
   recruitmentEmailDeliveryLabel,
   recruitmentEmailDeliveryTone,
@@ -168,6 +169,21 @@ export default function RecruitmentTab() {
         ? `${processed} analyse${processed > 1 ? "s" : ""} traitée${processed > 1 ? "s" : ""} immédiatement${remaining > 0 ? ` · ${remaining} encore en file` : ""}`
         : "Aucune analyse en échec à reprendre");
       utils.admin.recruitment.list.invalidate();
+    },
+    onError: mutationError => toast.error(mutationError.message),
+  });
+
+  const retryDriveExport = trpc.admin.recruitment.driveExport.retry.useMutation({
+    onSuccess: result => {
+      toast.success(result.alreadyCompleted
+        ? "Le CV est déjà présent dans Google Drive"
+        : result.alreadyRunning
+          ? "La copie Google Drive est déjà en cours"
+          : result.processed > 0
+            ? "Copie Google Drive relancée"
+            : "Copie Google Drive remise en file");
+      utils.admin.recruitment.list.invalidate();
+      driveExportStatus.refetch();
     },
     onError: mutationError => toast.error(mutationError.message),
   });
@@ -392,7 +408,14 @@ export default function RecruitmentTab() {
                           <p className="text-xs font-medium opacity-80">Google Drive</p>
                           <p className="mt-1 font-semibold">{recruitmentDriveExportLabel(application.driveExport?.status)}</p>
                           {application.driveExport ? <p className="mt-1 text-xs opacity-80">Tentative {application.driveExport.attempts}/{application.driveExport.maxAttempts}</p> : null}
+                          {recruitmentDriveExportErrorLabel(application.driveExport?.lastError) ? <p className="mt-1 text-xs opacity-90">{recruitmentDriveExportErrorLabel(application.driveExport?.lastError)}</p> : null}
                           {application.driveExport?.driveFileUrl ? <a href={application.driveExport.driveFileUrl} target="_blank" rel="noopener noreferrer" className="mt-2 inline-flex text-xs font-medium underline underline-offset-2">Ouvrir le CV dans Drive</a> : null}
+                          {application.driveExport?.status === "failed" ? (
+                            <Button size="sm" variant="outline" className="mt-2 h-8" onClick={() => retryDriveExport.mutate({ id: application.id })} disabled={retryDriveExport.isPending}>
+                              <RefreshCw className={`mr-2 h-3.5 w-3.5 ${retryDriveExport.isPending ? "animate-spin" : ""}`} />
+                              Relancer la copie
+                            </Button>
+                          ) : null}
                         </div>
                         <div className={`rounded-lg border p-3 ${analysisStatusTone(application.analysisStatus)}`}>
                           <p className="text-xs font-medium opacity-80">Lecture intelligente</p>
