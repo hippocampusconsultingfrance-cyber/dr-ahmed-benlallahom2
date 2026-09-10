@@ -1,32 +1,99 @@
 import { useLanguage } from "@/contexts/LanguageContext";
 import { venturesFr } from "@/data/ventures-fr";
 import { venturesEn } from "@/data/ventures-en";
-import { ventureNarrativesDe, ventureNarrativesZh } from "@/data/ventureNarratives";
+import {
+  ventureNarrativesDe,
+  ventureNarrativesZh,
+} from "@/data/ventureNarratives";
 import { useParams, Link } from "wouter";
-import { ArrowLeft, ExternalLink, ChevronRight, Linkedin, User } from "lucide-react";
+import { ArrowLeft, ExternalLink, Linkedin, User } from "lucide-react";
 import Navigation from "@/components/Navigation";
 import Footer from "@/components/Footer";
 import { SEOHead } from "@/components/SEOHead";
+import Breadcrumb from "@/components/Breadcrumb";
 
 export const venturePageCopy = {
-  fr: { notFound: "Page non trouvée", home: "Accueil", homeBack: "Retour à l'accueil", visit: "Visiter le site web", leadership: "Direction", services: "Services & Expertises", highlights: "Informations clés", back: "Retour aux entreprises", others: "Autres entreprises" },
-  en: { notFound: "Page not found", home: "Home", homeBack: "Back to home", visit: "Visit website", leadership: "Leadership team", services: "Services & expertise", highlights: "Key information", back: "Back to ventures", others: "Other ventures" },
-  de: { notFound: "Seite nicht gefunden", home: "Startseite", homeBack: "Zur Startseite", visit: "Website besuchen", leadership: "Leitungsteam", services: "Leistungen & Expertise", highlights: "Wichtige Informationen", back: "Zurück zu den Unternehmen", others: "Weitere Unternehmen" },
-  zh: { notFound: "页面未找到", home: "首页", homeBack: "返回首页", visit: "访问网站", leadership: "管理团队", services: "服务与专长", highlights: "关键信息", back: "返回企业列表", others: "其他企业" },
+  fr: {
+    notFound: "Page non trouvée",
+    home: "Accueil",
+    homeBack: "Retour à l'accueil",
+    visit: "Visiter le site web",
+    leadership: "Direction",
+    services: "Services & Expertises",
+    highlights: "Informations clés",
+    back: "Retour aux entreprises",
+    others: "Autres entreprises",
+  },
+  en: {
+    notFound: "Page not found",
+    home: "Home",
+    homeBack: "Back to home",
+    visit: "Visit website",
+    leadership: "Leadership team",
+    services: "Services & expertise",
+    highlights: "Key information",
+    back: "Back to ventures",
+    others: "Other ventures",
+  },
+  de: {
+    notFound: "Seite nicht gefunden",
+    home: "Startseite",
+    homeBack: "Zur Startseite",
+    visit: "Website besuchen",
+    leadership: "Leitungsteam",
+    services: "Leistungen & Expertise",
+    highlights: "Wichtige Informationen",
+    back: "Zurück zu den Unternehmen",
+    others: "Weitere Unternehmen",
+  },
+  zh: {
+    notFound: "页面未找到",
+    home: "首页",
+    homeBack: "返回首页",
+    visit: "访问网站",
+    leadership: "管理团队",
+    services: "服务与专长",
+    highlights: "关键信息",
+    back: "返回企业列表",
+    others: "其他企业",
+  },
 } as const;
+
+export function ventureMetaDescription(description: string[]) {
+  const text = description[0]?.replace(/\s+/g, " ").trim() ?? "";
+  if (text.length <= 160) return text;
+
+  const excerpt = text.slice(0, 159);
+  const lastWordBoundary = excerpt.lastIndexOf(" ");
+  const end = lastWordBoundary >= 120 ? lastWordBoundary : 159;
+  return `${excerpt.slice(0, end).trimEnd()}…`;
+}
 
 export default function VenturePage() {
   const { language, content } = useLanguage();
-  const copy = venturePageCopy[(language in venturePageCopy ? language : "fr") as keyof typeof venturePageCopy];
+  const copy =
+    venturePageCopy[
+      (language in venturePageCopy
+        ? language
+        : "fr") as keyof typeof venturePageCopy
+    ];
   const params = useParams<{ slug: string }>();
   const slug = params.slug;
 
   const baseVentures = language === "fr" ? venturesFr : venturesEn;
-  const narratives = language === "de" ? ventureNarrativesDe : language === "zh" ? ventureNarrativesZh : undefined;
+  const narratives =
+    language === "de"
+      ? ventureNarrativesDe
+      : language === "zh"
+        ? ventureNarrativesZh
+        : undefined;
   const ventures = narratives
-    ? baseVentures.map((venture) => ({ ...venture, ...(narratives[venture.slug] ?? {}) }))
+    ? baseVentures.map(venture => ({
+        ...venture,
+        ...(narratives[venture.slug] ?? {}),
+      }))
     : baseVentures;
-  const venture = ventures.find((v) => v.slug === slug);
+  const venture = ventures.find(v => v.slug === slug);
 
   if (!venture) {
     return (
@@ -47,24 +114,19 @@ export default function VenturePage() {
     <div className="min-h-screen bg-background">
       <SEOHead
         title={`${venture.company} — ${venture.role} | Dr. Ahmed Ben Lallahom`}
-        description={Array.isArray(venture.description) ? venture.description.join(' ') : venture.description}
+        description={ventureMetaDescription(venture.description)}
         ogUrl={`https://drahmedbenlallahom.com/venture/${venture.slug}`}
       />
       <Navigation />
-      <main className="pt-24 pb-20">
+      <main id="main-content" tabIndex={-1} className="pt-24 pb-20">
         {/* Breadcrumb */}
         <div className="container mb-8">
-          <nav className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Link href="/" className="hover:text-primary transition-colors">
-              {copy.home}
-            </Link>
-            <ChevronRight className="w-3.5 h-3.5" />
-            <Link href="/#experience" className="hover:text-primary transition-colors">
-              {content.experiences.title}
-            </Link>
-            <ChevronRight className="w-3.5 h-3.5" />
-            <span className="text-foreground">{venture.company}</span>
-          </nav>
+          <Breadcrumb
+            items={[
+              { label: content.experiences.title, href: "/#experience" },
+              { label: venture.company },
+            ]}
+          />
         </div>
 
         {/* Hero */}
@@ -74,7 +136,9 @@ export default function VenturePage() {
               <div className="mb-6">
                 <img
                   src="/assets/venture-placeholder.svg"
-                  alt={`${venture.company} — identité visuelle temporaire`}
+                  alt=""
+                  aria-hidden="true"
+                  decoding="async"
                   className="h-16 sm:h-20 w-auto object-contain"
                 />
               </div>
@@ -97,7 +161,7 @@ export default function VenturePage() {
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-primary/10 text-primary border border-primary/30 hover:bg-primary/20 transition-all text-sm font-medium"
               >
-                <ExternalLink className="w-4 h-4" />
+                <ExternalLink className="w-4 h-4" aria-hidden="true" />
                 {copy.visit}
               </a>
             )}
@@ -111,8 +175,11 @@ export default function VenturePage() {
             <div className="lg:col-span-8">
               {/* Description */}
               <div className="space-y-5 mb-12">
-                {venture.description.map((paragraph, i) => (
-                  <p key={i} className="text-muted-foreground text-lg leading-relaxed">
+                {venture.description.map(paragraph => (
+                  <p
+                    key={paragraph}
+                    className="text-muted-foreground text-lg leading-relaxed"
+                  >
                     {paragraph}
                   </p>
                 ))}
@@ -120,14 +187,20 @@ export default function VenturePage() {
 
               {/* Team Section */}
               {venture.team && venture.team.length > 0 && (
-                <div className="mb-12">
-                  <h3 className="font-display text-2xl font-bold text-foreground mb-8">
+                <section
+                  className="mb-12"
+                  aria-labelledby="venture-leadership-title"
+                >
+                  <h2
+                    id="venture-leadership-title"
+                    className="font-display text-2xl font-bold text-foreground mb-8"
+                  >
                     {copy.leadership}
-                  </h3>
+                  </h2>
                   <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {venture.team.map((member, i) => (
+                    {venture.team.map(member => (
                       <div
-                        key={i}
+                        key={member.name}
                         className="group relative p-6 rounded-2xl bg-card/50 border border-border/30 hover:border-primary/40 transition-all duration-300 text-center"
                       >
                         {/* Photo / Silhouette */}
@@ -135,20 +208,26 @@ export default function VenturePage() {
                           {member.photo ? (
                             <img
                               src="/assets/team-placeholder.svg"
-                              alt={`Portrait officiel de ${member.name} à ajouter`}
+                              alt=""
+                              aria-hidden="true"
+                              loading="lazy"
+                              decoding="async"
                               className="w-full h-full object-cover"
                             />
                           ) : (
                             <div className="w-full h-full bg-gradient-to-br from-slate-700 to-slate-900 flex items-center justify-center">
-                              <User className="w-10 h-10 text-slate-400" />
+                              <User
+                                className="w-10 h-10 text-slate-400"
+                                aria-hidden="true"
+                              />
                             </div>
                           )}
                         </div>
 
                         {/* Name */}
-                        <h4 className="font-semibold text-foreground text-sm mb-1">
+                        <h3 className="font-semibold text-foreground text-sm mb-1">
                           {member.name}
-                        </h4>
+                        </h3>
 
                         {/* Role */}
                         <p className="text-xs text-primary font-medium mb-3">
@@ -163,44 +242,66 @@ export default function VenturePage() {
                             rel="noopener noreferrer"
                             className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary transition-colors"
                           >
-                            <Linkedin className="w-3.5 h-3.5" />
+                            <Linkedin
+                              className="w-3.5 h-3.5"
+                              aria-hidden="true"
+                            />
                             LinkedIn
                           </a>
                         )}
                       </div>
                     ))}
                   </div>
-                </div>
+                </section>
               )}
 
               {/* Services */}
-              <div className="p-8 rounded-2xl bg-card/50 border border-border/30">
-                <h3 className="font-display text-xl font-bold text-foreground mb-6">
+              <section
+                className="p-8 rounded-2xl bg-card/50 border border-border/30"
+                aria-labelledby="venture-services-title"
+              >
+                <h2
+                  id="venture-services-title"
+                  className="font-display text-xl font-bold text-foreground mb-6"
+                >
                   {copy.services}
-                </h3>
+                </h2>
                 <ul className="space-y-3">
-                  {venture.services.map((service, i) => (
-                    <li key={i} className="flex items-start gap-3">
+                  {venture.services.map(service => (
+                    <li key={service} className="flex items-start gap-3">
                       <div className="w-1.5 h-1.5 rounded-full bg-primary mt-2.5 shrink-0" />
                       <span className="text-muted-foreground">{service}</span>
                     </li>
                   ))}
                 </ul>
-              </div>
+              </section>
             </div>
 
             {/* Sidebar — 4 cols */}
             <div className="lg:col-span-4">
               {/* Highlights card */}
-              <div className="p-6 rounded-2xl bg-card/60 border border-border/30 mb-6 sticky top-28">
-                <h4 className="font-semibold text-foreground mb-5 text-sm uppercase tracking-wide">
+              <section
+                className="p-6 rounded-2xl bg-card/60 border border-border/30 mb-6 sticky top-28"
+                aria-labelledby="venture-highlights-title"
+              >
+                <h2
+                  id="venture-highlights-title"
+                  className="font-semibold text-foreground mb-5 text-sm uppercase tracking-wide"
+                >
                   {copy.highlights}
-                </h4>
+                </h2>
                 <div className="space-y-4">
-                  {venture.highlights.map((h, i) => (
-                    <div key={i} className="flex justify-between items-center py-2 border-b border-border/20 last:border-0">
-                      <span className="text-sm text-muted-foreground">{h.label}</span>
-                      <span className="text-sm font-medium text-foreground">{h.value}</span>
+                  {venture.highlights.map(h => (
+                    <div
+                      key={h.label}
+                      className="flex justify-between items-center py-2 border-b border-border/20 last:border-0"
+                    >
+                      <span className="text-sm text-muted-foreground">
+                        {h.label}
+                      </span>
+                      <span className="text-sm font-medium text-foreground">
+                        {h.value}
+                      </span>
                     </div>
                   ))}
                 </div>
@@ -208,9 +309,9 @@ export default function VenturePage() {
                 {/* Tags */}
                 <div className="mt-6 pt-4 border-t border-border/20">
                   <div className="flex flex-wrap gap-2">
-                    {venture.tags.map((tag, i) => (
+                    {venture.tags.map(tag => (
                       <span
-                        key={i}
+                        key={tag}
                         className="px-2.5 py-1 text-xs rounded-md bg-primary/10 text-primary border border-primary/20"
                       >
                         {tag}
@@ -218,14 +319,17 @@ export default function VenturePage() {
                     ))}
                   </div>
                 </div>
-              </div>
+              </section>
 
               {/* Back link */}
               <Link
                 href="/#experience"
                 className="flex items-center gap-2 text-sm text-muted-foreground hover:text-primary transition-colors group"
               >
-                <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
+                <ArrowLeft
+                  className="w-4 h-4 group-hover:-translate-x-1 transition-transform"
+                  aria-hidden="true"
+                />
                 {copy.back}
               </Link>
             </div>
@@ -235,13 +339,13 @@ export default function VenturePage() {
         {/* Other ventures */}
         <div className="container mt-20">
           <div className="ecg-divider mb-12" />
-          <h3 className="font-display text-2xl font-bold text-foreground mb-8">
+          <h2 className="font-display text-2xl font-bold text-foreground mb-8">
             {copy.others}
-          </h3>
+          </h2>
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {ventures
-              .filter((v) => v.slug !== slug)
-              .map((v) => (
+              .filter(v => v.slug !== slug)
+              .map(v => (
                 <Link
                   key={v.slug}
                   href={`/venture/${v.slug}`}
