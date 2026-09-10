@@ -1005,6 +1005,24 @@ export const appRouter = router({
     recruitment: router({
       driveExport: router({
         status: adminProcedure.query(async () => googleDriveExportStatus()),
+        retry: adminProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ input, ctx }) => {
+          const db = await getDb();
+          if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Base de données indisponible." });
+          const [application] = await db.select({ id: cvApplications.id }).from(cvApplications).where(eq(cvApplications.id, input.id)).limit(1);
+          if (!application) throw new TRPCError({ code: "NOT_FOUND", message: "Candidature introuvable." });
+          const { processDueCvGoogleDriveExports, retryCvGoogleDriveExport } = await import("./googleDriveExport");
+          const queue = await retryCvGoogleDriveExport(application.id);
+          const processing = queue.alreadyCompleted || queue.alreadyRunning
+            ? { processed: 0 }
+            : await processDueCvGoogleDriveExports(1, [application.id]);
+          await logRecruitmentAction({
+            applicationId: application.id,
+            adminOpenId: ctx.user.openId,
+            action: "export",
+            metadata: { event: "google_drive_retry", ...queue, processed: processing.processed },
+          });
+          return { success: true, ...queue, processed: processing.processed };
+        }),
       }),
       list: adminProcedure
         .input(
@@ -1132,6 +1150,7 @@ export const appRouter = router({
                 status: cvGoogleDriveExportJobs.status,
                 attempts: cvGoogleDriveExportJobs.attempts,
                 maxAttempts: cvGoogleDriveExportJobs.maxAttempts,
+                lastError: cvGoogleDriveExportJobs.lastError,
                 driveFileUrl: cvGoogleDriveExportJobs.driveFileUrl,
                 finishedAt: cvGoogleDriveExportJobs.finishedAt,
                 updatedAt: cvGoogleDriveExportJobs.updatedAt,

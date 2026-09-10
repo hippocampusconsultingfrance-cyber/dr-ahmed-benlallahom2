@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildGoogleDriveAuthorizationUrl, createGoogleDriveOAuthState, googleDriveCvFileName, googleDriveMutationRowCount, googleDriveRetryDelayMs } from "./googleDriveExport";
+import { buildGoogleDriveAuthorizationUrl, createGoogleDriveOAuthState, googleDriveCvFileName, googleDriveExportRetryDisposition, googleDriveMutationRowCount, googleDriveRetryDelayMs } from "./googleDriveExport";
 
 describe("export Google Drive des CV", () => {
   it("construit un nom de copie traçable sans caractères de chemin dangereux", () => {
@@ -16,6 +16,15 @@ describe("export Google Drive des CV", () => {
     expect(googleDriveMutationRowCount({ rowCount: 1 })).toBe(1);
     expect(googleDriveMutationRowCount([{ affectedRows: 1 }])).toBe(1);
     expect(googleDriveMutationRowCount({ rowCount: 0 })).toBe(0);
+  });
+
+  it("ne recrée jamais une copie déjà terminée et réarme uniquement un échec terminal", () => {
+    expect(googleDriveExportRetryDisposition("completed")).toBe("already_completed");
+    expect(googleDriveExportRetryDisposition("running")).toBe("already_running");
+    expect(googleDriveExportRetryDisposition("queued")).toBe("accelerate");
+    expect(googleDriveExportRetryDisposition("retry")).toBe("accelerate");
+    expect(googleDriveExportRetryDisposition("failed")).toBe("reset_failed");
+    expect(googleDriveExportRetryDisposition(null)).toBe("create");
   });
 
   it("demande uniquement le périmètre Drive requis avec un accès hors ligne", () => {

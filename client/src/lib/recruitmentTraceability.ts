@@ -37,3 +37,12 @@ export function recruitmentDriveExportTone(status: string | null | undefined) {
   if (status === "queued" || status === "running") return "border-primary/25 bg-primary/10 text-primary";
   return "border-border bg-muted/30 text-muted-foreground";
 }
+
+export function recruitmentDriveExportErrorLabel(error: string | null | undefined) {
+  if (!error) return null;
+  if (/token|unauthorized|401|403|invalid_grant/i.test(error)) return "Connexion Google Drive à renouveler";
+  if (/configuration|connection_missing/i.test(error)) return "Connexion Google Drive indisponible";
+  if (/download|storage|404/i.test(error)) return "CV privé temporairement indisponible";
+  if (/upload|quota|rate|429/i.test(error)) return "Google Drive a refusé temporairement la copie";
+  return "Échec technique à examiner";
+}
