@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { ventureNarrativesDe, ventureNarrativesZh } from "@/data/ventureNarratives";
+import {
+  ventureNarrativesDe,
+  ventureNarrativesZh,
+} from "@/data/ventureNarratives";
 import { venturesEn } from "@/data/ventures-en";
-import { venturePageCopy } from "./VenturePage";
+import { ventureMetaDescription, venturePageCopy } from "./VenturePage";
 
 describe("Venture page translations", () => {
   it("provides all visible interface labels in every supported language", () => {
@@ -21,5 +24,22 @@ describe("Venture page translations", () => {
         expect(narrative?.description.join(" ").length).toBeGreaterThan(80);
       }
     }
+  });
+
+  it("creates a concise SEO description without cutting a word", () => {
+    const description = ventureMetaDescription([
+      "Hippocampus Consulting accompagne les organisations dans leur transformation digitale, leur développement international et leur croissance durable avec une approche exigeante et adaptée.",
+      "Ce second paragraphe ne doit pas être inclus.",
+    ]);
+
+    expect(description.length).toBeLessThanOrEqual(160);
+    expect(description).toMatch(/…$/);
+    expect(description).not.toContain("second paragraphe");
+  });
+
+  it("keeps an already concise SEO description unchanged", () => {
+    expect(
+      ventureMetaDescription(["Une présentation claire et concise."])
+    ).toBe("Une présentation claire et concise.");
   });
 });
