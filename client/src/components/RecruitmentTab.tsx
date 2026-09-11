@@ -10,6 +10,7 @@ import {
   recruitmentDriveExportLabel,
   recruitmentDriveExportErrorLabel,
   recruitmentDriveExportTone,
+  recruitmentEmailDeliveryErrorLabel,
   recruitmentEmailDeliveryLabel,
   recruitmentEmailDeliveryTone,
 } from "@/lib/recruitmentTraceability";
@@ -184,6 +185,16 @@ export default function RecruitmentTab() {
             : "Copie Google Drive remise en file");
       utils.admin.recruitment.list.invalidate();
       driveExportStatus.refetch();
+    },
+    onError: mutationError => toast.error(mutationError.message),
+  });
+
+  const retryConfirmationEmail = trpc.admin.recruitment.confirmationEmail.retry.useMutation({
+    onSuccess: result => {
+      if (result.outcome === "already_sent") toast.success("L’accusé de dépôt a déjà été envoyé");
+      else if (result.outcome === "sent") toast.success("Accusé de dépôt renvoyé");
+      else toast.error("Resend n’a pas accepté l’e-mail. Une nouvelle tentative automatique reste programmée.");
+      utils.admin.recruitment.list.invalidate();
     },
     onError: mutationError => toast.error(mutationError.message),
   });
@@ -403,6 +414,14 @@ export default function RecruitmentTab() {
                         <div className={`rounded-lg border p-3 ${recruitmentEmailDeliveryTone(application.emailDelivery?.eventType)}`}>
                           <p className="text-xs font-medium opacity-80">Dernier e-mail candidat</p>
                           <p className="mt-1 font-semibold">{recruitmentEmailDeliveryLabel(application.emailDelivery?.eventType)}</p>
+                          {application.emailDelivery?.attempts ? <p className="mt-1 text-xs opacity-80">Tentative {application.emailDelivery.attempts}/3</p> : null}
+                          {recruitmentEmailDeliveryErrorLabel(application.emailDelivery?.failureCode) ? <p className="mt-1 text-xs opacity-90">{recruitmentEmailDeliveryErrorLabel(application.emailDelivery?.failureCode)}</p> : null}
+                          {application.emailDelivery?.eventType === "email.failed" ? (
+                            <Button size="sm" variant="outline" className="mt-2 h-8" onClick={() => retryConfirmationEmail.mutate({ id: application.id })} disabled={retryConfirmationEmail.isPending}>
+                              <RefreshCw className={`mr-2 h-3.5 w-3.5 ${retryConfirmationEmail.isPending ? "animate-spin" : ""}`} />
+                              Renvoyer l’accusé
+                            </Button>
+                          ) : null}
                         </div>
                         <div className={`rounded-lg border p-3 ${recruitmentDriveExportTone(application.driveExport?.status)}`}>
                           <p className="text-xs font-medium opacity-80">Google Drive</p>
