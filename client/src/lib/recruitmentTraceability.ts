@@ -19,6 +19,13 @@ export function recruitmentEmailDeliveryTone(eventType: string | null | undefine
   return "border-border bg-muted/30 text-muted-foreground";
 }
 
+export function recruitmentEmailDeliveryErrorLabel(failureCode: string | null | undefined) {
+  if (!failureCode) return null;
+  if (failureCode === "provider_rejected") return "Resend a refusé temporairement l’envoi";
+  if (failureCode === "delivery_exception") return "Le service d’e-mail était temporairement indisponible";
+  return "Échec technique à examiner";
+}
+
 export function recruitmentDriveExportLabel(status: string | null | undefined) {
   const labels: Record<string, string> = {
     queued: "En attente de copie",
