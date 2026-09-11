@@ -14,5 +14,6 @@ describe("planification Vercel du traitement des CV", () => {
     const source = readFileSync(new URL("./_core/index.ts", import.meta.url), "utf8");
     expect(source).toContain("process.env.CRON_SECRET?.trim()");
     expect(source).toContain("req.headers.authorization !== `Bearer ${cronSecret}`");
+    expect(source).toContain("retryDueFailedCvConfirmationEmails");
   });
 });
