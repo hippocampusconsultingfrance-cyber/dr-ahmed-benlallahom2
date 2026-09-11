@@ -351,6 +351,7 @@ export async function sendCvApplicationConfirmationEmail(
   specialty: string,
   targetCountries: string,
   candidatePortalInviteUrl?: string,
+  idempotencyKey = `cv-application-confirmation-${trackingId}-attempt-1`,
 ): Promise<CvApplicationConfirmationDelivery> {
   try {
     const candidatePortalInvitation = candidatePortalInviteUrl
@@ -379,7 +380,7 @@ export async function sendCvApplicationConfirmationEmail(
         subject: `Candidature reçue - ${trackingId}`,
         html: emailContent,
       },
-      { idempotencyKey: `cv-application-confirmation-${trackingId}` },
+      { idempotencyKey },
     );
 
     if (error) {
