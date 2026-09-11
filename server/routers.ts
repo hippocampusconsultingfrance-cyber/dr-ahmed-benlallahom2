@@ -30,6 +30,7 @@ import { enforcePersistentRateLimit, logSecurityEvent, requestIpHash } from "./c
 import { createCandidateInvitationToken } from "./candidateAuth";
 import { verifyCandidateTurnstile } from "./candidateTurnstile";
 import { googleDriveExportStatus } from "./googleDriveExport";
+import { resolveCvConfirmationDelivery, retryCvConfirmationEmail } from "./recruitmentEmailTrace";
 import { medicalQuestionsRouter } from "./medicalQuestionsRouter";
 import { issueAdminMfaChallenge, verifyAdminMfaChallenge } from "./adminMfa";
 
@@ -1003,6 +1004,17 @@ export const appRouter = router({
 
     // International recruitment applications
     recruitment: router({
+      confirmationEmail: router({
+        retry: adminProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ input, ctx }) => {
+          const result = await retryCvConfirmationEmail(input.id);
+          if (result.outcome === "not_found") throw new TRPCError({ code: "NOT_FOUND", message: "Candidature introuvable." });
+          if (result.outcome === "blocked") throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Cette adresse a rejeté ou bloqué l’e-mail. Vérifiez-la avant tout nouvel envoi." });
+          if (result.outcome === "untracked") throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Le suivi de cet accusé est indisponible : aucun renvoi automatique n’a été effectué." });
+          if (result.outcome === "exhausted") throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Les tentatives automatiques sont épuisées. Vérifiez la configuration Resend avant un nouvel essai." });
+          await logRecruitmentAction({ applicationId: input.id, adminOpenId: ctx.user.openId, action: "email", metadata: { template: "application_confirmation_retry", outcome: result.outcome } });
+          return result;
+        }),
+      }),
       driveExport: router({
         status: adminProcedure.query(async () => googleDriveExportStatus()),
         retry: adminProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ input, ctx }) => {
@@ -1160,6 +1172,8 @@ export const appRouter = router({
             ? await db.select({
                 applicationId: recruitmentEmailEvents.applicationId,
                 eventType: recruitmentEmailEvents.eventType,
+                providerEmailId: recruitmentEmailEvents.providerEmailId,
+                payload: recruitmentEmailEvents.payload,
                 occurredAt: recruitmentEmailEvents.occurredAt,
               }).from(recruitmentEmailEvents)
                 .where(inArray(recruitmentEmailEvents.applicationId, applicationIds))
@@ -1167,18 +1181,19 @@ export const appRouter = router({
             : [];
           const activePortalApplicationIds = new Set(portalAccounts.filter(account => account.emailVerifiedAt && account.linkedApplicationId).map(account => account.linkedApplicationId as number));
           const driveExportByApplicationId = new Map(driveExportJobs.map(job => [job.applicationId, job]));
-          const emailDeliveryByApplicationId = new Map<number, (typeof emailEvents)[number]>();
+          const emailEventsByApplicationId = new Map<number, typeof emailEvents>();
           for (const event of emailEvents) {
-            if (event.applicationId && !emailDeliveryByApplicationId.has(event.applicationId)) {
-              emailDeliveryByApplicationId.set(event.applicationId, event);
-            }
+            if (!event.applicationId) continue;
+            const current = emailEventsByApplicationId.get(event.applicationId) || [];
+            current.push(event);
+            emailEventsByApplicationId.set(event.applicationId, current);
           }
           const items = (profile ? matchedItems.slice(input.offset, input.offset + input.limit) : matchedItems)
             .map(item => ({
               ...item,
               candidatePortalActive: activePortalApplicationIds.has(item.id),
               driveExport: driveExportByApplicationId.get(item.id) || null,
-              emailDelivery: emailDeliveryByApplicationId.get(item.id) || null,
+              emailDelivery: resolveCvConfirmationDelivery(emailEventsByApplicationId.get(item.id) || []),
             }));
           const countResult = profile ? [{ count: matchedItems.length }] : await db.select({ count: sql<number>`COUNT(*)` }).from(cvApplications).where(whereClause);
           return { items, total: countResult[0]?.count || 0 };

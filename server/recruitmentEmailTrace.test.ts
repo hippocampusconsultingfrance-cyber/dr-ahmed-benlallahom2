@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildCvConfirmationEmailEvent } from "./recruitmentEmailTrace";
+import { buildCvConfirmationEmailEvent, canRetryCvConfirmation, resolveCvConfirmationDelivery } from "./recruitmentEmailTrace";
 
 describe("traçabilité de l'email de confirmation de candidature", () => {
   const input = {
@@ -43,5 +43,36 @@ describe("traçabilité de l'email de confirmation de candidature", () => {
     expect(event.eventType).toBe("email.failed");
     expect(event.payload).not.toContain("Candidate@Example.COM");
     expect(event.payload).not.toContain("cvFile");
+  });
+
+  it("isole l'accusé de dépôt des autres emails et suit ses webhooks Resend", () => {
+    const events = [
+      { eventType: "email.failed", providerEmailId: "campaign_1", payload: JSON.stringify({ kind: "campaign" }), occurredAt: new Date("2026-09-08T10:00:00Z") },
+      { eventType: "email.delivered", providerEmailId: "confirmation_1", payload: JSON.stringify({ type: "email.delivered" }), occurredAt: new Date("2026-09-08T09:05:00Z") },
+      { eventType: "email.sent", providerEmailId: "confirmation_1", payload: JSON.stringify({ kind: "application_confirmation", outcome: "sent", failureCode: null }), occurredAt: new Date("2026-09-08T09:00:00Z") },
+    ];
+
+    expect(resolveCvConfirmationDelivery(events)).toMatchObject({
+      eventType: "email.delivered",
+      attempts: 1,
+      providerEmailId: "confirmation_1",
+    });
+  });
+
+  it("attend cinq minutes avant la deuxième tentative et s'arrête après trois", () => {
+    const occurredAt = new Date("2026-09-08T09:00:00Z");
+    const failed = resolveCvConfirmationDelivery([
+      { eventType: "email.failed", providerEmailId: null, payload: JSON.stringify({ kind: "application_confirmation", outcome: "failed", failureCode: "delivery_exception" }), occurredAt },
+    ]);
+    expect(canRetryCvConfirmation(failed, new Date("2026-09-08T09:04:59Z"))).toBe(false);
+    expect(canRetryCvConfirmation(failed, new Date("2026-09-08T09:05:00Z"))).toBe(true);
+
+    const exhausted = resolveCvConfirmationDelivery([1, 2, 3].map(attempt => ({
+      eventType: "email.failed",
+      providerEmailId: null,
+      payload: JSON.stringify({ kind: "application_confirmation", outcome: "failed", attempt }),
+      occurredAt: new Date(`2026-09-08T0${attempt}:00:00Z`),
+    })));
+    expect(canRetryCvConfirmation(exhausted, new Date("2026-09-10T09:00:00Z"))).toBe(false);
   });
 });

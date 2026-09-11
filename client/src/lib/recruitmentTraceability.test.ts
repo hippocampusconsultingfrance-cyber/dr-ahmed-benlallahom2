@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   recruitmentDriveExportLabel,
   recruitmentDriveExportErrorLabel,
+  recruitmentEmailDeliveryErrorLabel,
   recruitmentEmailDeliveryLabel,
 } from "./recruitmentTraceability";
 
@@ -18,5 +19,10 @@ describe("libellés de traçabilité des candidatures", () => {
     expect(recruitmentDriveExportLabel("failed")).toBe("Échec de la copie");
     expect(recruitmentDriveExportErrorLabel("google_drive_token_invalid_grant")).toBe("Connexion Google Drive à renouveler");
     expect(recruitmentDriveExportErrorLabel("google_drive_upload_429")).toBe("Google Drive a refusé temporairement la copie");
+  });
+
+  it("explique les échecs d'accusé sans exposer le détail du fournisseur", () => {
+    expect(recruitmentEmailDeliveryErrorLabel("provider_rejected")).toBe("Resend a refusé temporairement l’envoi");
+    expect(recruitmentEmailDeliveryErrorLabel("delivery_exception")).toBe("Le service d’e-mail était temporairement indisponible");
   });
 });
