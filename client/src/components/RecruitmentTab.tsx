@@ -419,10 +419,14 @@ export default function RecruitmentTab() {
                           <p className="mt-1 font-semibold">{recruitmentEmailDeliveryLabel(application.emailDelivery?.eventType)}</p>
                           {application.emailDelivery?.attempts ? <p className="mt-1 text-xs opacity-80">Tentative {application.emailDelivery.attempts}/3</p> : null}
                           {recruitmentEmailDeliveryErrorLabel(application.emailDelivery?.failureCode) ? <p className="mt-1 text-xs opacity-90">{recruitmentEmailDeliveryErrorLabel(application.emailDelivery?.failureCode)}</p> : null}
-                          {application.emailDelivery?.eventType === "email.failed" ? (
-                            <Button size="sm" variant="outline" className="mt-2 h-8" onClick={() => retryConfirmationEmail.mutate({ id: application.id })} disabled={retryConfirmationEmail.isPending}>
+                          {application.emailDelivery?.eventType === "email.failed" || !application.emailDelivery?.eventType ? (
+                            <Button size="sm" variant="outline" className="mt-2 h-8" onClick={() => {
+                              const untracked = !application.emailDelivery?.eventType;
+                              if (untracked && !window.confirm("Aucune preuve d’envoi n’est disponible. Confirmez l’envoi de l’accusé de dépôt ; un doublon reste possible si le premier e-mail a été accepté sans être journalisé.")) return;
+                              retryConfirmationEmail.mutate({ id: application.id });
+                            }} disabled={retryConfirmationEmail.isPending}>
                               <RefreshCw className={`mr-2 h-3.5 w-3.5 ${retryConfirmationEmail.isPending ? "animate-spin" : ""}`} />
-                              Renvoyer l’accusé
+                              {application.emailDelivery?.eventType === "email.failed" ? "Renvoyer l’accusé" : "Envoyer l’accusé"}
                             </Button>
                           ) : null}
                         </div>
