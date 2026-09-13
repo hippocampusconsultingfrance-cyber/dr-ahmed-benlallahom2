@@ -141,7 +141,7 @@ async function loadConfirmationEvents(applicationId: number): Promise<CvConfirma
 
 export async function retryCvConfirmationEmail(
   applicationId: number,
-  options: { requireDue?: boolean; now?: Date } = {},
+  options: { requireDue?: boolean; now?: Date; allowUntracked?: boolean } = {},
 ) {
   const db = await getDb();
   if (!db) throw new Error("Database connection failed");
@@ -163,13 +163,14 @@ export async function retryCvConfirmationEmail(
   if (current.eventType && TERMINAL_DELIVERY_EVENTS.has(current.eventType)) {
     return { outcome: "blocked" as const, attempted: false, current };
   }
-  if (current.eventType !== "email.failed") {
+  const maySendUntracked = !current.eventType && options.allowUntracked;
+  if (current.eventType !== "email.failed" && !maySendUntracked) {
     return { outcome: "untracked" as const, attempted: false, current };
   }
-  if (current.attempts >= MAX_CONFIRMATION_ATTEMPTS) {
+  if (current.eventType === "email.failed" && current.attempts >= MAX_CONFIRMATION_ATTEMPTS) {
     return { outcome: "exhausted" as const, attempted: false, current };
   }
-  if (options.requireDue && !canRetryCvConfirmation(current, options.now)) {
+  if (current.eventType === "email.failed" && options.requireDue && !canRetryCvConfirmation(current, options.now)) {
     return { outcome: "not_due" as const, attempted: false, current };
   }
 
@@ -189,7 +190,9 @@ export async function retryCvConfirmationEmail(
     specialty: application.specialty,
     targetCountries,
     candidatePortalInviteUrl: `${publicOrigin}/candidate/access?invite=${encodeURIComponent(createCandidateInvitationToken(application.id))}`,
-    deliveryAttempt: current.attempts + 1,
+    // Reuse attempt 1 for an untracked submission so Resend can deduplicate a
+    // previous, unrecorded request during its idempotency window.
+    deliveryAttempt: current.eventType === "email.failed" ? current.attempts + 1 : 1,
   });
   return { outcome: delivery.status, attempted: true, delivery };
 }
