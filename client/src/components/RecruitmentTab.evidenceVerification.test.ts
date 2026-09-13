@@ -7,6 +7,7 @@ describe("vérification des preuves IA dans l’administration", () => {
     const source = await readFile(path.join(process.cwd(), "client/src/components/RecruitmentTab.tsx"), "utf8");
     expect(source).toContain("Citation vérifiée dans le texte");
     expect(source).toContain("Citation à vérifier manuellement");
+    expect(source).toContain("Donnée déclarée, non vérifiée dans le CV");
     expect(source).toContain("application.aiScore !== null && extracted.scoreBreakdown");
     expect(source).toContain("Score non fiable");
   });

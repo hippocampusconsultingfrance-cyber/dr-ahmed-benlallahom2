@@ -155,5 +155,6 @@ Certification ACLS`);
     expect(execution.result.dataQualityWarnings).toContain(
       "Mode dégradé : seules les données déclarées dans le formulaire ont été structurées.",
     );
+    expect(execution.result.fieldEvidence.every(item => !item.evidenceVerified)).toBe(true);
   });
 });

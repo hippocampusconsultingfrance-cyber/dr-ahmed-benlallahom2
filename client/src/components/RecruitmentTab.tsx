@@ -517,7 +517,9 @@ export default function RecruitmentTab() {
                                     <p className="mt-1 text-muted-foreground">« {item.evidence || "Preuve non fournie"} »</p>
                                     <p className="mt-1 text-muted-foreground">Source : {item.sourceLocation || "non localisée"} · confiance {typeof item.confidence === "number" ? `${item.confidence}%` : "—"}</p>
                                     <p className={`mt-1 font-medium ${item.evidenceVerified ? "text-emerald-700 dark:text-emerald-300" : "text-amber-700 dark:text-amber-300"}`}>
-                                      {item.evidenceVerified ? "Citation vérifiée dans le texte" : "Citation à vérifier manuellement"}
+                                      {item.sourceLocation === "formulaire de candidature"
+                                        ? "Donnée déclarée, non vérifiée dans le CV"
+                                        : item.evidenceVerified ? "Citation vérifiée dans le texte" : "Citation à vérifier manuellement"}
                                     </p>
                                   </div>
                                 ))}
