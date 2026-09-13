@@ -1009,10 +1009,9 @@ export const appRouter = router({
     recruitment: router({
       confirmationEmail: router({
         retry: adminProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ input, ctx }) => {
-          const result = await retryCvConfirmationEmail(input.id);
+          const result = await retryCvConfirmationEmail(input.id, { allowUntracked: true });
           if (result.outcome === "not_found") throw new TRPCError({ code: "NOT_FOUND", message: "Candidature introuvable." });
           if (result.outcome === "blocked") throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Cette adresse a rejeté ou bloqué l’e-mail. Vérifiez-la avant tout nouvel envoi." });
-          if (result.outcome === "untracked") throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Le suivi de cet accusé est indisponible : aucun renvoi automatique n’a été effectué." });
           if (result.outcome === "exhausted") throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Les tentatives automatiques sont épuisées. Vérifiez la configuration Resend avant un nouvel essai." });
           await logRecruitmentAction({ applicationId: input.id, adminOpenId: ctx.user.openId, action: "email", metadata: { template: "application_confirmation_retry", outcome: result.outcome } });
           return result;
