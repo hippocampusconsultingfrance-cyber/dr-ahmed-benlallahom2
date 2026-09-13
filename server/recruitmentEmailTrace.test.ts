@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { buildCvConfirmationEmailEvent, canRetryCvConfirmation, resolveCvConfirmationDelivery } from "./recruitmentEmailTrace";
+import { readFileSync } from "node:fs";
+
+const traceSource = readFileSync(new URL("./recruitmentEmailTrace.ts", import.meta.url), "utf8");
+const routerSource = readFileSync(new URL("./routers.ts", import.meta.url), "utf8");
 
 describe("traçabilité de l'email de confirmation de candidature", () => {
   const input = {
@@ -74,5 +78,12 @@ describe("traçabilité de l'email de confirmation de candidature", () => {
       occurredAt: new Date(`2026-09-08T0${attempt}:00:00Z`),
     })));
     expect(canRetryCvConfirmation(exhausted, new Date("2026-09-10T09:00:00Z"))).toBe(false);
+  });
+
+  it("autorise uniquement l'administrateur à reprendre un accusé sans trace", () => {
+    expect(routerSource).toContain("retryCvConfirmationEmail(input.id, { allowUntracked: true })");
+    expect(traceSource).toContain("const maySendUntracked = !current.eventType && options.allowUntracked");
+    expect(traceSource).toContain('current.eventType !== "email.failed" && !maySendUntracked');
+    expect(traceSource).toContain('current.eventType === "email.failed" ? current.attempts + 1 : 1');
   });
 });
