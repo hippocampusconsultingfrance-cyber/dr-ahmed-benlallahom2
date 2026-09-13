@@ -8,7 +8,8 @@ describe("vérification des preuves IA dans l’administration", () => {
     expect(source).toContain("Citation vérifiée dans le texte");
     expect(source).toContain("Citation à vérifier manuellement");
     expect(source).toContain("Donnée déclarée, non vérifiée dans le CV");
-    expect(source).toContain("application.aiScore !== null && extracted.scoreBreakdown");
-    expect(source).toContain("Score non fiable");
+    expect(source).toContain("verifiedScore !== null && extracted.scoreBreakdown");
+    expect(source).toContain("recruitment-v5-verified-evidence");
+    expect(source).toContain("Score à recalculer");
   });
 });

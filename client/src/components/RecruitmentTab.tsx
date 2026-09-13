@@ -26,6 +26,7 @@ const statusOptions = [
 
 type Status = (typeof statusOptions)[number]["value"];
 type RecruitmentEmailTemplate = "profile_interest" | "additional_information";
+const VERIFIED_ANALYSIS_VERSION = "recruitment-v5-verified-evidence";
 
 type ExtractedProfile = {
   professionalTitle?: string;
@@ -340,6 +341,8 @@ export default function RecruitmentTab() {
             const weaknesses = parseJsonList(application.aiWeaknesses);
             const extractionWarnings = parseJsonList(application.extractionWarnings);
             const extracted = parseJsonObject(application.aiExtractedSkills);
+            const hasVerifiedAnalysis = application.analysisPromptVersion === VERIFIED_ANALYSIS_VERSION;
+            const verifiedScore = hasVerifiedAnalysis ? application.aiScore : null;
             const expanded = expandedId === application.id;
             return (
               <article key={application.id} className="rounded-xl border border-border bg-card p-4 shadow-sm">
@@ -356,8 +359,8 @@ export default function RecruitmentTab() {
                     </div>
                   </button>
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className={`rounded-full border px-2.5 py-1 text-xs font-medium ${scoreTone(application.aiScore)}`}>
-                      {application.aiScore === null ? (application.aiSummary ? "Score non fiable" : "IA en attente") : `Score IA ${application.aiScore}/100`}
+                    <span className={`rounded-full border px-2.5 py-1 text-xs font-medium ${scoreTone(verifiedScore)}`}>
+                      {verifiedScore === null ? (application.aiSummary ? "Score à recalculer" : "IA en attente") : `Score IA ${verifiedScore}/100`}
                     </span>
                     <span className={`rounded-full border px-2.5 py-1 text-xs font-medium ${analysisStatusTone(application.analysisStatus)}`}>
                       {analysisStatusLabel(application.analysisStatus)}
@@ -495,7 +498,7 @@ export default function RecruitmentTab() {
                               <p className="text-muted-foreground"><strong className="text-foreground">Couverture des preuves :</strong> {typeof extracted.evidenceCoverage === "number" ? `${extracted.evidenceCoverage}%` : "—"}</p>
                             </div>
                           )}
-                          {application.aiScore !== null && extracted.scoreBreakdown && (
+                          {verifiedScore !== null && extracted.scoreBreakdown && (
                             <div>
                               <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Détail du score professionnel</p>
                               <div className="grid gap-2 text-xs text-muted-foreground sm:grid-cols-2 lg:grid-cols-5">
@@ -549,7 +552,7 @@ export default function RecruitmentTab() {
                               <ul className="list-disc space-y-1 pl-5 text-muted-foreground">{weaknesses.length ? weaknesses.map(item => <li key={item}>{item}</li>) : <li>Non renseigné</li>}</ul>
                             </div>
                           </div>
-                          {application.aiMatchReasoning && <p className="border-t border-primary/10 pt-3 text-xs leading-5 text-muted-foreground"><strong className="text-foreground">{application.aiScore === null ? "Conclusion de l’analyse :" : "Justification du score :"}</strong> {application.aiMatchReasoning}</p>}
+                          {application.aiMatchReasoning && <p className="border-t border-primary/10 pt-3 text-xs leading-5 text-muted-foreground"><strong className="text-foreground">{verifiedScore === null ? "Conclusion de l’analyse :" : "Justification du score :"}</strong> {application.aiMatchReasoning}</p>}
                           {extractionWarnings.length > 0 && <p className="border-t border-primary/10 pt-3 text-xs leading-5 text-amber-700 dark:text-amber-300"><strong>Qualité d’extraction :</strong> {extractionWarnings.join(" · ")}</p>}
                           {application.aiAnalyzedAt && <p className="text-[11px] text-muted-foreground">Analysé le {new Date(application.aiAnalyzedAt).toLocaleString("fr-FR", { timeZone: "Europe/Paris" })}</p>}
                         </div>

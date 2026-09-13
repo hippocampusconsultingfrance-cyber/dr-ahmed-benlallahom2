@@ -1,13 +1,12 @@
 import { and, desc, eq, inArray, lte } from "drizzle-orm";
 import { cvApplications, cvProcessingJobs } from "../drizzle/schema";
 import { getDb } from "./db";
-import { extractCvDocument, analyzeCvText, saveCvAnalysis } from "./recruitmentAnalysis";
+import { extractCvDocument, analyzeCvText, RECRUITMENT_ANALYSIS_PROMPT_VERSION, saveCvAnalysis } from "./recruitmentAnalysis";
 import { storageGetSignedUrl, storagePut } from "./storage";
 import { validateCvFile } from "./recruitmentFileValidation";
 
 const MAX_ATTEMPTS = 3;
 const PROCESSING_BATCH_SIZE = 5;
-const ANALYSIS_PROMPT_VERSION = "recruitment-v4-sourced-fields";
 
 type CvPipelineInput = {
   cvFileKey: string;
@@ -299,7 +298,7 @@ async function processCvAnalysisJob(jobId: number) {
       analysisAttempts: job.attempts,
       analysisLastError: null,
         analysisModel: pipeline.analysisModel,
-      analysisPromptVersion: ANALYSIS_PROMPT_VERSION,
+      analysisPromptVersion: RECRUITMENT_ANALYSIS_PROMPT_VERSION,
       updatedAt: now,
     }).where(eq(cvApplications.id, application.id));
     await db.update(cvProcessingJobs).set({ status: "completed", finishedAt: now, lastError: null })
