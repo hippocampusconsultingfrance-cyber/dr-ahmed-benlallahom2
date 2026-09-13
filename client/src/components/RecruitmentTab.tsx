@@ -34,9 +34,9 @@ type ExtractedProfile = {
   languages?: string[];
   countriesOfInterest?: string[];
   yearsExperience?: number | null;
-  normalizedExperiences?: Array<{ role?: string; organization?: string; startDate?: string | null; endDate?: string | null; employmentType?: string; durationMonths?: number | null; evidence?: string; sourceLocation?: string; confidence?: number }>;
-  fieldEvidence?: Array<{ field?: string; value?: string; evidence?: string; sourceLocation?: string; confidence?: number }>;
-  contradictions?: Array<{ field?: string; declaredValue?: string; documentValue?: string; evidence?: string; sourceLocation?: string; confidence?: number }>;
+  normalizedExperiences?: Array<{ role?: string; organization?: string; startDate?: string | null; endDate?: string | null; employmentType?: string; durationMonths?: number | null; evidence?: string; sourceLocation?: string; confidence?: number; evidenceVerified?: boolean }>;
+  fieldEvidence?: Array<{ field?: string; value?: string; evidence?: string; sourceLocation?: string; confidence?: number; evidenceVerified?: boolean }>;
+  contradictions?: Array<{ field?: string; declaredValue?: string; documentValue?: string; evidence?: string; sourceLocation?: string; confidence?: number; evidenceVerified?: boolean }>;
   confidence?: number;
   evidenceCoverage?: number;
   requiredFollowUps?: string[];
@@ -357,7 +357,7 @@ export default function RecruitmentTab() {
                   </button>
                   <div className="flex flex-wrap items-center gap-2">
                     <span className={`rounded-full border px-2.5 py-1 text-xs font-medium ${scoreTone(application.aiScore)}`}>
-                      {application.aiScore === null ? "IA en attente" : `Score IA ${application.aiScore}/100`}
+                      {application.aiScore === null ? (application.aiSummary ? "Score non fiable" : "IA en attente") : `Score IA ${application.aiScore}/100`}
                     </span>
                     <span className={`rounded-full border px-2.5 py-1 text-xs font-medium ${analysisStatusTone(application.analysisStatus)}`}>
                       {analysisStatusLabel(application.analysisStatus)}
@@ -495,7 +495,7 @@ export default function RecruitmentTab() {
                               <p className="text-muted-foreground"><strong className="text-foreground">Couverture des preuves :</strong> {typeof extracted.evidenceCoverage === "number" ? `${extracted.evidenceCoverage}%` : "—"}</p>
                             </div>
                           )}
-                          {extracted.scoreBreakdown && (
+                          {application.aiScore !== null && extracted.scoreBreakdown && (
                             <div>
                               <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Détail du score professionnel</p>
                               <div className="grid gap-2 text-xs text-muted-foreground sm:grid-cols-2 lg:grid-cols-5">
@@ -516,6 +516,11 @@ export default function RecruitmentTab() {
                                     <p className="font-medium text-foreground">{item.value || "Information extraite"}</p>
                                     <p className="mt-1 text-muted-foreground">« {item.evidence || "Preuve non fournie"} »</p>
                                     <p className="mt-1 text-muted-foreground">Source : {item.sourceLocation || "non localisée"} · confiance {typeof item.confidence === "number" ? `${item.confidence}%` : "—"}</p>
+                                    <p className={`mt-1 font-medium ${item.evidenceVerified ? "text-emerald-700 dark:text-emerald-300" : "text-amber-700 dark:text-amber-300"}`}>
+                                      {item.sourceLocation === "formulaire de candidature"
+                                        ? "Donnée déclarée, non vérifiée dans le CV"
+                                        : item.evidenceVerified ? "Citation vérifiée dans le texte" : "Citation à vérifier manuellement"}
+                                    </p>
                                   </div>
                                 ))}
                               </div>
@@ -528,6 +533,7 @@ export default function RecruitmentTab() {
                                 {extracted.contradictions.map((item, index) => (
                                   <li key={`${item.field}-${index}`}>
                                     <strong>{item.field || "Champ"} :</strong> formulaire « {item.declaredValue || "—"} » / CV « {item.documentValue || "—"} » — {item.sourceLocation || "source non localisée"}
+                                    <span className="ml-1 font-medium">({item.evidenceVerified ? "citation vérifiée" : "citation à vérifier"})</span>
                                   </li>
                                 ))}
                               </ul>
@@ -543,7 +549,7 @@ export default function RecruitmentTab() {
                               <ul className="list-disc space-y-1 pl-5 text-muted-foreground">{weaknesses.length ? weaknesses.map(item => <li key={item}>{item}</li>) : <li>Non renseigné</li>}</ul>
                             </div>
                           </div>
-                          {application.aiMatchReasoning && <p className="border-t border-primary/10 pt-3 text-xs leading-5 text-muted-foreground"><strong className="text-foreground">Justification du score :</strong> {application.aiMatchReasoning}</p>}
+                          {application.aiMatchReasoning && <p className="border-t border-primary/10 pt-3 text-xs leading-5 text-muted-foreground"><strong className="text-foreground">{application.aiScore === null ? "Conclusion de l’analyse :" : "Justification du score :"}</strong> {application.aiMatchReasoning}</p>}
                           {extractionWarnings.length > 0 && <p className="border-t border-primary/10 pt-3 text-xs leading-5 text-amber-700 dark:text-amber-300"><strong>Qualité d’extraction :</strong> {extractionWarnings.join(" · ")}</p>}
                           {application.aiAnalyzedAt && <p className="text-[11px] text-muted-foreground">Analysé le {new Date(application.aiAnalyzedAt).toLocaleString("fr-FR", { timeZone: "Europe/Paris" })}</p>}
                         </div>

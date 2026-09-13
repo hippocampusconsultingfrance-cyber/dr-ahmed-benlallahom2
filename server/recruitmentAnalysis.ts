@@ -14,6 +14,7 @@ export type CvEvidenceReference = {
   evidence: string;
   sourceLocation: string;
   confidence: number;
+  evidenceVerified: boolean;
 };
 
 export type CvContradiction = {
@@ -23,6 +24,7 @@ export type CvContradiction = {
   evidence: string;
   sourceLocation: string;
   confidence: number;
+  evidenceVerified: boolean;
 };
 
 export type NormalizedExperience = {
@@ -37,6 +39,7 @@ export type NormalizedExperience = {
   evidence: string;
   sourceLocation: string;
   confidence: number;
+  evidenceVerified: boolean;
 };
 
 export type NormalizedCertification = {
@@ -47,6 +50,7 @@ export type NormalizedCertification = {
   evidence: string;
   sourceLocation: string;
   confidence: number;
+  evidenceVerified: boolean;
 };
 
 export type NormalizedLanguage = {
@@ -55,6 +59,7 @@ export type NormalizedLanguage = {
   evidence: string;
   sourceLocation: string;
   confidence: number;
+  evidenceVerified: boolean;
 };
 
 export type RecruitmentAnalysisResult = {
@@ -307,43 +312,90 @@ type RawRecruitmentAnalysis = z.infer<typeof analysisSchema>;
 
 const uniqueStrings = (values: string[]) => Array.from(new Set(values.map(value => value.trim()).filter(Boolean)));
 
-function evidenceCoverageOf(analysis: RawRecruitmentAnalysis): number {
-  const evidence = [
-    ...analysis.normalizedExperiences,
-    ...analysis.normalizedLanguages,
-    ...analysis.certifications,
-    ...analysis.fieldEvidence,
-  ];
+type EvidenceBearing = { evidence: string; sourceLocation: string; confidence: number; evidenceVerified: boolean };
+
+const normalizeEvidenceText = (value: string) => value
+  .normalize("NFKD")
+  .replace(/[\u0300-\u036f]/g, "")
+  .toLocaleLowerCase()
+  .replace(/[\s.,;:!?()[\]{}'"«»“”‘’/\\|_+=*•·—–-]+/g, " ")
+  .trim();
+
+/** Confirm that the quote exists in the extracted CV and that any cited page was actually extracted. */
+export function verifyCvEvidence(evidence: string, sourceLocation: string, sourceText: string) {
+  const normalizedEvidence = normalizeEvidenceText(evidence);
+  const normalizedSource = normalizeEvidenceText(sourceText);
+  if (normalizedEvidence.length < 6 || !normalizedSource.includes(normalizedEvidence)) return false;
+  const pageMatch = sourceLocation.match(/\bpage\s*(\d+)\b/i);
+  if (!pageMatch) return true;
+  return new RegExp(`\\[PAGE\\s+${Number(pageMatch[1])}\\]`, "i").test(sourceText);
+}
+
+function markEvidence<T extends { evidence: string; sourceLocation: string; confidence: number }>(item: T, sourceText: string): T & { evidenceVerified: boolean } {
+  const evidenceVerified = verifyCvEvidence(item.evidence, item.sourceLocation, sourceText);
+  return {
+    ...item,
+    evidenceVerified,
+    confidence: evidenceVerified ? item.confidence : Math.min(item.confidence, 25),
+  };
+}
+
+function evidenceCoverageOf(evidence: EvidenceBearing[]): number {
   if (evidence.length === 0) return 0;
-  const supported = evidence.filter(item => item.evidence.trim().length >= 8 && item.sourceLocation.trim().length >= 3).length;
+  const supported = evidence.filter(item => item.evidenceVerified).length;
   return Math.round((supported / evidence.length) * 100);
 }
 
 /** Converts model output into a deterministic, bounded and deduplicated result. */
-export function normalizeRecruitmentAnalysis(analysis: RawRecruitmentAnalysis): RecruitmentAnalysisResult {
+export function normalizeRecruitmentAnalysis(analysis: RawRecruitmentAnalysis, sourceText: string): RecruitmentAnalysisResult {
+  const normalizedExperiences = analysis.normalizedExperiences.map(item => markEvidence(item, sourceText));
+  const normalizedLanguages = analysis.normalizedLanguages.map(item => markEvidence(item, sourceText));
+  const certifications = analysis.certifications.map(item => markEvidence(item, sourceText));
+  const fieldEvidence = analysis.fieldEvidence
+    .filter((item, index, values) => values.findIndex(candidate =>
+      candidate.field.toLocaleLowerCase() === item.field.toLocaleLowerCase()
+      && candidate.value.toLocaleLowerCase() === item.value.toLocaleLowerCase(),
+    ) === index)
+    .map(item => markEvidence(item, sourceText));
+  const contradictions = analysis.contradictions
+    .filter((item, index, values) => values.findIndex(candidate =>
+      candidate.field.toLocaleLowerCase() === item.field.toLocaleLowerCase()
+      && candidate.declaredValue.toLocaleLowerCase() === item.declaredValue.toLocaleLowerCase()
+      && candidate.documentValue.toLocaleLowerCase() === item.documentValue.toLocaleLowerCase(),
+    ) === index)
+    .map(item => markEvidence(item, sourceText));
+  const allEvidence = [...normalizedExperiences, ...normalizedLanguages, ...certifications, ...fieldEvidence];
+  const evidenceCoverage = evidenceCoverageOf(allEvidence);
+  const unverifiedCount = allEvidence.filter(item => !item.evidenceVerified).length + contradictions.filter(item => !item.evidenceVerified).length;
   const score = Object.values(analysis.scoreBreakdown).reduce((total, value) => total + value, 0);
+  const scoreIsTrustworthy = allEvidence.length >= 3 && evidenceCoverage >= 80;
+  const verificationWarning = unverifiedCount > 0
+    ? `${unverifiedCount} preuve(s) proposée(s) par l’IA ne correspondent pas exactement au texte extrait ou à la page indiquée.`
+    : null;
   return {
     ...analysis,
-    relevanceScore: Math.max(0, Math.min(100, score)),
-    confidence: Math.max(0, Math.min(100, analysis.confidence)),
-    evidenceCoverage: evidenceCoverageOf(analysis),
+    relevanceScore: scoreIsTrustworthy ? Math.max(0, Math.min(100, score)) : null,
+    confidence: Math.min(Math.max(0, Math.min(100, analysis.confidence)), evidenceCoverage),
+    evidenceCoverage,
+    normalizedExperiences,
+    normalizedLanguages,
+    certifications,
     specialties: uniqueStrings(analysis.specialties),
     skills: uniqueStrings(analysis.skills),
     languages: uniqueStrings(analysis.languages),
     countriesOfInterest: uniqueStrings(analysis.countriesOfInterest),
     strengths: uniqueStrings(analysis.strengths),
     gaps: uniqueStrings(analysis.gaps),
-    dataQualityWarnings: uniqueStrings(analysis.dataQualityWarnings),
-    requiredFollowUps: uniqueStrings(analysis.requiredFollowUps),
-    fieldEvidence: analysis.fieldEvidence.filter((item, index, values) => values.findIndex(candidate =>
-      candidate.field.toLocaleLowerCase() === item.field.toLocaleLowerCase()
-      && candidate.value.toLocaleLowerCase() === item.value.toLocaleLowerCase(),
-    ) === index),
-    contradictions: analysis.contradictions.filter((item, index, values) => values.findIndex(candidate =>
-      candidate.field.toLocaleLowerCase() === item.field.toLocaleLowerCase()
-      && candidate.declaredValue.toLocaleLowerCase() === item.declaredValue.toLocaleLowerCase()
-      && candidate.documentValue.toLocaleLowerCase() === item.documentValue.toLocaleLowerCase(),
-    ) === index),
+    dataQualityWarnings: uniqueStrings([...analysis.dataQualityWarnings, ...(verificationWarning ? [verificationWarning] : [])]),
+    requiredFollowUps: uniqueStrings([
+      ...analysis.requiredFollowUps,
+      ...(!scoreIsTrustworthy ? ["Vérifier manuellement les preuves avant d’utiliser le score professionnel."] : []),
+    ]),
+    fieldEvidence,
+    contradictions,
+    reasoning: scoreIsTrustworthy
+      ? analysis.reasoning
+      : `Score non présenté : la couverture de preuves vérifiées est insuffisante (${evidenceCoverage} %). ${analysis.reasoning}`,
   };
 }
 
@@ -379,6 +431,7 @@ export function buildManualReviewFallback(input: RecruitmentAnalysisInput): Recr
         evidence: `Langue déclarée dans le formulaire : ${language}`,
         sourceLocation: "formulaire de candidature",
         confidence: 100,
+        evidenceVerified: false,
       })),
       certifications: [],
       countriesOfInterest: targetCountries,
@@ -390,9 +443,9 @@ export function buildManualReviewFallback(input: RecruitmentAnalysisInput): Recr
       dataQualityWarnings: ["Mode dégradé : seules les données déclarées dans le formulaire ont été structurées."],
       requiredFollowUps: ["Lire le CV et vérifier manuellement les expériences, diplômes, certifications et langues."],
       fieldEvidence: [
-        ...(specialty ? [{ field: "specialty", value: specialty, evidence: specialty, sourceLocation: "formulaire de candidature", confidence: 100 }] : []),
-        ...languages.map(language => ({ field: "language", value: language, evidence: language, sourceLocation: "formulaire de candidature", confidence: 100 })),
-        ...targetCountries.map(country => ({ field: "targetCountry", value: country, evidence: country, sourceLocation: "formulaire de candidature", confidence: 100 })),
+        ...(specialty ? [{ field: "specialty", value: specialty, evidence: specialty, sourceLocation: "formulaire de candidature", confidence: 100, evidenceVerified: false }] : []),
+        ...languages.map(language => ({ field: "language", value: language, evidence: language, sourceLocation: "formulaire de candidature", confidence: 100, evidenceVerified: false })),
+        ...targetCountries.map(country => ({ field: "targetCountry", value: country, evidence: country, sourceLocation: "formulaire de candidature", confidence: 100, evidenceVerified: false })),
       ],
       contradictions: [],
       confidence: 0,
@@ -463,7 +516,7 @@ Consignes de normalisation :
 Barème professionnel, sans caractéristique protégée : specialtyMatch /30, experienceEvidence /25, skillsEvidence /20, languageReadiness /15, credentialReadiness /10. Ne fournis pas de total : il sera recalculé par le serveur. Le score aide à organiser la revue humaine et ne constitue jamais une décision de recrutement.`,
     });
 
-    const normalized = normalizeRecruitmentAnalysis(response.output);
+    const normalized = normalizeRecruitmentAnalysis(response.output, cvText);
     const inputTokens = response.usage.inputTokens ?? null;
     const outputTokens = response.usage.outputTokens ?? null;
     return {
@@ -531,8 +584,12 @@ export async function saveCvAnalysis(
   await db.delete(cvCandidateLanguages).where(eq(cvCandidateLanguages.applicationId, applicationId));
   await db.delete(cvCandidateExperiences).where(eq(cvCandidateExperiences.applicationId, applicationId));
 
-  if (analysis.certifications.length > 0) {
-    await db.insert(cvCandidateCertifications).values(analysis.certifications.map(certification => ({
+  const verifiedCertifications = analysis.certifications.filter(item => item.evidenceVerified);
+  const verifiedLanguages = analysis.normalizedLanguages.filter(item => item.evidenceVerified);
+  const verifiedExperiences = analysis.normalizedExperiences.filter(item => item.evidenceVerified);
+
+  if (verifiedCertifications.length > 0) {
+    await db.insert(cvCandidateCertifications).values(verifiedCertifications.map(certification => ({
       applicationId,
       name: certification.name.slice(0, 180),
       issuingBody: certification.issuingBody?.slice(0, 180) ?? null,
@@ -542,8 +599,8 @@ export async function saveCvAnalysis(
       source: "extracted" as const,
     })));
   }
-  if (analysis.normalizedLanguages.length > 0) {
-    await db.insert(cvCandidateLanguages).values(analysis.normalizedLanguages.map(language => ({
+  if (verifiedLanguages.length > 0) {
+    await db.insert(cvCandidateLanguages).values(verifiedLanguages.map(language => ({
       applicationId,
       language: language.language.slice(0, 80),
       proficiency: language.proficiency,
@@ -551,8 +608,8 @@ export async function saveCvAnalysis(
       source: "extracted" as const,
     })));
   }
-  if (analysis.normalizedExperiences.length > 0) {
-    await db.insert(cvCandidateExperiences).values(analysis.normalizedExperiences.map(experience => ({
+  if (verifiedExperiences.length > 0) {
+    await db.insert(cvCandidateExperiences).values(verifiedExperiences.map(experience => ({
       applicationId,
       role: experience.role.slice(0, 180),
       organization: experience.organization.slice(0, 180),
