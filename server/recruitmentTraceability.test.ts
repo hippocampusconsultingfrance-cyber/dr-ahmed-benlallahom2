@@ -14,6 +14,6 @@ describe("traçabilité reproductible des analyses CV", () => {
     expect(schema).toContain("extractionMethod:");
     expect(processing).toContain("extractedText: pipeline.extraction.text");
     expect(processing).toContain("analysisModel: pipeline.analysisModel");
-    expect(processing).toContain("analysisPromptVersion: ANALYSIS_PROMPT_VERSION");
+    expect(processing).toContain("analysisPromptVersion: RECRUITMENT_ANALYSIS_PROMPT_VERSION");
   });
 });

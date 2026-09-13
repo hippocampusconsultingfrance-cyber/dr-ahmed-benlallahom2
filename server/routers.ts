@@ -31,6 +31,7 @@ import { createCandidateInvitationToken } from "./candidateAuth";
 import { verifyCandidateTurnstile } from "./candidateTurnstile";
 import { googleDriveExportStatus } from "./googleDriveExport";
 import { resolveCvConfirmationDelivery, retryCvConfirmationEmail } from "./recruitmentEmailTrace";
+import { RECRUITMENT_ANALYSIS_PROMPT_VERSION } from "./recruitmentAnalysis";
 import { medicalQuestionsRouter } from "./medicalQuestionsRouter";
 import { issueAdminMfaChallenge, verifyAdminMfaChallenge } from "./adminMfa";
 
@@ -90,6 +91,8 @@ export const recruitmentPoolFiltersInput = z.object({
   minimumScore: z.number().int().min(0).max(100).optional(),
   limit: z.number().int().min(1).max(200).optional().default(200),
 }).optional();
+
+const verifiedRecruitmentScore = sql<number | null>`CASE WHEN ${cvApplications.analysisPromptVersion} = ${RECRUITMENT_ANALYSIS_PROMPT_VERSION} THEN ${cvApplications.aiScore} ELSE NULL END`;
 
 function csvCell(value: unknown): string {
   const text = value === null || value === undefined ? "" : String(value);
@@ -1058,8 +1061,8 @@ export const appRouter = router({
           if (input.status) conditions.push(eq(cvApplications.status, input.status));
           if (input.specialty) conditions.push(sql`LOWER(${cvApplications.specialty}) LIKE LOWER(${`%${input.specialty}%`})`);
           if (input.country) conditions.push(sql`${cvApplications.targetCountries} LIKE ${`%${input.country}%`}`);
-          if (input.language) conditions.push(sql`(${cvApplications.normalizedLanguages} LIKE ${`%${input.language}%`} OR ${cvApplications.languages} LIKE ${`%${input.language}%`})`);
-          if (input.certification) conditions.push(sql`(${cvApplications.normalizedCertifications} LIKE ${`%${input.certification}%`} OR ${cvApplications.certifications} LIKE ${`%${input.certification}%`})`);
+          if (input.language) conditions.push(sql`((${cvApplications.analysisPromptVersion} = ${RECRUITMENT_ANALYSIS_PROMPT_VERSION} AND ${cvApplications.normalizedLanguages} LIKE ${`%${input.language}%`}) OR ${cvApplications.languages} LIKE ${`%${input.language}%`})`);
+          if (input.certification) conditions.push(sql`((${cvApplications.analysisPromptVersion} = ${RECRUITMENT_ANALYSIS_PROMPT_VERSION} AND ${cvApplications.normalizedCertifications} LIKE ${`%${input.certification}%`}) OR ${cvApplications.certifications} LIKE ${`%${input.certification}%`})`);
 
           let profile: typeof recruitmentMatchProfiles.$inferSelect | null = null;
           if (input.profileId) {
@@ -1073,6 +1076,7 @@ export const appRouter = router({
             if (selectedProfile.targetCountry) conditions.push(sql`${cvApplications.targetCountries} LIKE ${`%${selectedProfile.targetCountry}%`}`);
           }
           if (input.minimumScore !== undefined) conditions.push(sql`${cvApplications.aiScore} >= ${input.minimumScore}`);
+          if (input.profileId || input.minimumScore !== undefined) conditions.push(eq(cvApplications.analysisPromptVersion, RECRUITMENT_ANALYSIS_PROMPT_VERSION));
           const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
           const rawItems = await db
@@ -1108,7 +1112,7 @@ export const appRouter = router({
               consentAt: cvApplications.consentAt,
               retentionUntil: cvApplications.retentionUntil,
               aiSummary: cvApplications.aiSummary,
-              aiScore: cvApplications.aiScore,
+              aiScore: verifiedRecruitmentScore,
               aiStrengths: cvApplications.aiStrengths,
               aiWeaknesses: cvApplications.aiWeaknesses,
               aiExtractedSkills: cvApplications.aiExtractedSkills,
@@ -1215,8 +1219,11 @@ export const appRouter = router({
             if (input?.country) conditions.push(sql`${cvApplications.targetCountries} LIKE ${`%${input.country}%`}`);
             if (input?.availability) conditions.push(sql`LOWER(COALESCE(${cvApplications.availability}, '')) LIKE LOWER(${`%${input.availability}%`})`);
             if (input?.mobility) conditions.push(sql`(LOWER(COALESCE(${cvApplications.mobility}, '')) LIKE LOWER(${`%${input.mobility}%`}) OR LOWER(COALESCE(${cvApplications.targetCountries}, '')) LIKE LOWER(${`%${input.mobility}%`}))`);
-            if (input?.certification) conditions.push(sql`(LOWER(COALESCE(${cvApplications.certifications}, '')) LIKE LOWER(${`%${input.certification}%`}) OR LOWER(COALESCE(${cvApplications.normalizedCertifications}, '')) LIKE LOWER(${`%${input.certification}%`}))`);
-            if (input?.minimumScore !== undefined) conditions.push(sql`${cvApplications.aiScore} >= ${input.minimumScore}`);
+            if (input?.certification) conditions.push(sql`(LOWER(COALESCE(${cvApplications.certifications}, '')) LIKE LOWER(${`%${input.certification}%`}) OR (${cvApplications.analysisPromptVersion} = ${RECRUITMENT_ANALYSIS_PROMPT_VERSION} AND LOWER(COALESCE(${cvApplications.normalizedCertifications}, '')) LIKE LOWER(${`%${input.certification}%`})))`);
+            if (input?.minimumScore !== undefined) {
+              conditions.push(sql`${cvApplications.aiScore} >= ${input.minimumScore}`);
+              conditions.push(eq(cvApplications.analysisPromptVersion, RECRUITMENT_ANALYSIS_PROMPT_VERSION));
+            }
             return db.select({
               id: cvApplications.id,
               firstName: cvApplications.firstName,
@@ -1228,11 +1235,11 @@ export const appRouter = router({
               availability: cvApplications.availability,
               mobility: cvApplications.mobility,
               certifications: cvApplications.certifications,
-              aiScore: cvApplications.aiScore,
+              aiScore: verifiedRecruitmentScore,
               status: cvApplications.status,
               marketingConsent: cvApplications.marketingConsent,
               createdAt: cvApplications.createdAt,
-            }).from(cvApplications).where(and(...conditions)).orderBy(desc(cvApplications.aiScore), desc(cvApplications.createdAt)).limit(input?.limit || 200);
+            }).from(cvApplications).where(and(...conditions)).orderBy(desc(verifiedRecruitmentScore), desc(cvApplications.createdAt)).limit(input?.limit || 200);
           }),
       }),
 
@@ -1256,7 +1263,10 @@ export const appRouter = router({
             if (input.mode === "filtered") {
               if (input.specialty) conditions.push(sql`LOWER(${cvApplications.specialty}) LIKE LOWER(${`%${input.specialty}%`})`);
               if (input.country) conditions.push(sql`${cvApplications.targetCountries} LIKE ${`%${input.country}%`}`);
-              if (input.minimumScore !== undefined) conditions.push(sql`${cvApplications.aiScore} >= ${input.minimumScore}`);
+              if (input.minimumScore !== undefined) {
+                conditions.push(sql`${cvApplications.aiScore} >= ${input.minimumScore}`);
+                conditions.push(eq(cvApplications.analysisPromptVersion, RECRUITMENT_ANALYSIS_PROMPT_VERSION));
+              }
             }
             return db.select({
               id: cvApplications.id,
@@ -1264,8 +1274,8 @@ export const appRouter = router({
               lastName: cvApplications.lastName,
               email: cvApplications.email,
               specialty: cvApplications.specialty,
-              aiScore: cvApplications.aiScore,
-            }).from(cvApplications).where(and(...conditions)).orderBy(desc(cvApplications.aiScore), desc(cvApplications.createdAt)).limit(200);
+              aiScore: verifiedRecruitmentScore,
+            }).from(cvApplications).where(and(...conditions)).orderBy(desc(verifiedRecruitmentScore), desc(cvApplications.createdAt)).limit(200);
           }),
 
         list: adminProcedure.query(async () => {
@@ -1313,7 +1323,10 @@ export const appRouter = router({
             if (input.mode === "filtered") {
               if (input.specialty) conditions.push(sql`LOWER(${cvApplications.specialty}) LIKE LOWER(${`%${input.specialty}%`})`);
               if (input.country) conditions.push(sql`${cvApplications.targetCountries} LIKE ${`%${input.country}%`}`);
-              if (input.minimumScore !== undefined) conditions.push(sql`${cvApplications.aiScore} >= ${input.minimumScore}`);
+              if (input.minimumScore !== undefined) {
+                conditions.push(sql`${cvApplications.aiScore} >= ${input.minimumScore}`);
+                conditions.push(eq(cvApplications.analysisPromptVersion, RECRUITMENT_ANALYSIS_PROMPT_VERSION));
+              }
             }
             const audience = await db.select({ id: cvApplications.id, firstName: cvApplications.firstName, lastName: cvApplications.lastName, email: cvApplications.email, marketingUnsubscribeToken: cvApplications.marketingUnsubscribeToken })
               .from(cvApplications).where(and(...conditions)).limit(200);
@@ -1525,7 +1538,7 @@ export const appRouter = router({
         if (input.type === "pool") {
           conditions.push(eq(cvApplications.marketingConsent, 1), isNull(cvApplications.marketingUnsubscribedAt), isNull(cvApplications.marketingSuppressedAt));
         }
-        const rows = await db.select({ id: cvApplications.id, firstName: cvApplications.firstName, lastName: cvApplications.lastName, email: cvApplications.email, phone: cvApplications.phone, specialty: cvApplications.specialty, targetCountries: cvApplications.targetCountries, languages: cvApplications.languages, yearsExperience: cvApplications.yearsExperience, availability: cvApplications.availability, mobility: cvApplications.mobility, certifications: cvApplications.certifications, aiScore: cvApplications.aiScore, status: cvApplications.status }).from(cvApplications).where(and(...conditions)).orderBy(desc(cvApplications.aiScore), desc(cvApplications.createdAt)).limit(200);
+        const rows = await db.select({ id: cvApplications.id, firstName: cvApplications.firstName, lastName: cvApplications.lastName, email: cvApplications.email, phone: cvApplications.phone, specialty: cvApplications.specialty, targetCountries: cvApplications.targetCountries, languages: cvApplications.languages, yearsExperience: cvApplications.yearsExperience, availability: cvApplications.availability, mobility: cvApplications.mobility, certifications: cvApplications.certifications, aiScore: verifiedRecruitmentScore, status: cvApplications.status }).from(cvApplications).where(and(...conditions)).orderBy(desc(verifiedRecruitmentScore), desc(cvApplications.createdAt)).limit(200);
         const header = ["Prénom", "Nom", "Email", "Téléphone", "Spécialité", "Pays ciblés", "Langues", "Expérience (ans)", "Disponibilité", "Mobilité", "Certifications", "Score IA", "Statut"];
         const csv = [header.map(csvCell).join(";"), ...rows.map(row => [row.firstName, row.lastName, row.email, row.phone, row.specialty, row.targetCountries, row.languages, row.yearsExperience, row.availability, row.mobility, row.certifications, row.aiScore, row.status].map(csvCell).join(";"))].join("\n");
         await Promise.all(rows.map(row => logRecruitmentAction({ applicationId: row.id, adminOpenId: ctx.user.openId, action: "export", metadata: { type: input.type, briefId: input.briefId || null } })));
@@ -1762,17 +1775,17 @@ export const appRouter = router({
             specialty: cvApplications.specialty,
             targetCountries: cvApplications.targetCountries,
             certifications: cvApplications.certifications,
-            normalizedCertifications: cvApplications.normalizedCertifications,
+            normalizedCertifications: sql<string | null>`CASE WHEN ${cvApplications.analysisPromptVersion} = ${RECRUITMENT_ANALYSIS_PROMPT_VERSION} THEN ${cvApplications.normalizedCertifications} ELSE NULL END`,
             languages: cvApplications.languages,
-            normalizedLanguages: cvApplications.normalizedLanguages,
+            normalizedLanguages: sql<string | null>`CASE WHEN ${cvApplications.analysisPromptVersion} = ${RECRUITMENT_ANALYSIS_PROMPT_VERSION} THEN ${cvApplications.normalizedLanguages} ELSE NULL END`,
             yearsExperience: cvApplications.yearsExperience,
             availability: cvApplications.availability,
             mobility: cvApplications.mobility,
-            aiScore: cvApplications.aiScore,
+            aiScore: verifiedRecruitmentScore,
             status: cvApplications.status,
           }).from(cvApplications)
             .where(and(...candidateConditions))
-            .orderBy(desc(cvApplications.aiScore), desc(cvApplications.createdAt), desc(cvApplications.id))
+            .orderBy(desc(verifiedRecruitmentScore), desc(cvApplications.createdAt), desc(cvApplications.id))
             .limit(input.limit)
             .offset(input.page * input.limit);
           const applicationIds = applications.map(application => application.id);
