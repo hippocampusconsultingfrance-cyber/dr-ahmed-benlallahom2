@@ -102,6 +102,34 @@ Certification ACLS`);
     expect(verifyCvEvidence("Médecin-réanimateur", "page 7", source)).toBe(false);
   });
 
+  it("ne calcule pas de score à partir d’une seule citation même vérifiée", () => {
+    const result = normalizeRecruitmentAnalysis({
+      summary: "Information professionnelle trop limitée pour un score.",
+      professionalTitle: "Médecin",
+      specialties: [],
+      skills: [],
+      languages: [],
+      normalizedLanguages: [],
+      certifications: [],
+      countriesOfInterest: [],
+      yearsExperience: null,
+      normalizedExperiences: [],
+      strengths: [],
+      gaps: [],
+      dataQualityWarnings: [],
+      requiredFollowUps: [],
+      fieldEvidence: [{ field: "professionalTitle", value: "Médecin", evidence: "Médecin urgentiste", sourceLocation: "page 1", confidence: 90 }],
+      contradictions: [],
+      confidence: 90,
+      scoreBreakdown: { specialtyMatch: 20, experienceEvidence: 0, skillsEvidence: 0, languageReadiness: 0, credentialReadiness: 0 },
+      reasoning: "Une seule information a été trouvée.",
+    }, "[PAGE 1]\nMédecin urgentiste");
+
+    expect(result.evidenceCoverage).toBe(100);
+    expect(result.relevanceScore).toBeNull();
+    expect(result.reasoning).toContain("Score non présenté");
+  });
+
   it("reconnaît uniquement le blocage de facturation explicite du Gateway", () => {
     expect(isAiGatewayBillingUnavailable(new Error(
       "AI Gateway requires a valid credit card on file to service requests. Please add a card and unlock your free credits.",
