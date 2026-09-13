@@ -436,10 +436,10 @@ export default function RecruitmentTab() {
                           {application.driveExport ? <p className="mt-1 text-xs opacity-80">Tentative {application.driveExport.attempts}/{application.driveExport.maxAttempts}</p> : null}
                           {recruitmentDriveExportErrorLabel(application.driveExport?.lastError) ? <p className="mt-1 text-xs opacity-90">{recruitmentDriveExportErrorLabel(application.driveExport?.lastError)}</p> : null}
                           {application.driveExport?.driveFileUrl ? <a href={application.driveExport.driveFileUrl} target="_blank" rel="noopener noreferrer" className="mt-2 inline-flex text-xs font-medium underline underline-offset-2">Ouvrir le CV dans Drive</a> : null}
-                          {application.driveExport?.status === "failed" ? (
+                          {application.driveExport?.status === "failed" || !application.driveExport ? (
                             <Button size="sm" variant="outline" className="mt-2 h-8" onClick={() => retryDriveExport.mutate({ id: application.id })} disabled={retryDriveExport.isPending}>
                               <RefreshCw className={`mr-2 h-3.5 w-3.5 ${retryDriveExport.isPending ? "animate-spin" : ""}`} />
-                              Relancer la copie
+                              {application.driveExport?.status === "failed" ? "Relancer la copie" : "Planifier la copie"}
                             </Button>
                           ) : null}
                         </div>
