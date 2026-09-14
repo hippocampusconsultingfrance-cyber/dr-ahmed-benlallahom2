@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useState } from "react";
 import { useLocation } from "wouter";
-import { FileLock2, KeyRound, Loader2, LogIn, ShieldCheck, UserPlus } from "lucide-react";
+import { FileLock2, KeyRound, Loader2, LogIn, MailCheck, ShieldCheck, UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -11,7 +11,7 @@ import { TurnstileWidget } from "@/components/TurnstileWidget";
 import { SEOHead } from "@/components/SEOHead";
 import { useLanguage } from "@/contexts/LanguageContext";
 
-type Mode = "login" | "register" | "forgot";
+type Mode = "login" | "register" | "forgot" | "activation";
 
 export function candidateModeFocusTarget(mode: Mode): string {
   return mode === "register" ? "candidate-first-name" : "candidate-email";
@@ -27,9 +27,11 @@ export const candidateAccessCopy = {
     loginTitle: "Accéder à mon espace",
     registerTitle: "Créer mon espace candidat",
     forgotTitle: "Réinitialiser mon accès",
+    activationTitle: "Renvoyer l’e-mail d’activation",
     loginDescription: "Consultez et déposez vos documents administratifs en toute confidentialité.",
     registerDescription: "Créez un accès personnel pour transmettre et suivre vos documents.",
     forgotDescription: "Nous vous enverrons un lien sécurisé si un compte correspond à cet email.",
+    activationDescription: "Demandez un nouveau lien si votre compte a été créé mais n’est pas encore activé.",
     firstName: "Prénom",
     lastName: "Nom",
     email: "Email",
@@ -41,19 +43,23 @@ export const candidateAccessCopy = {
     login: "Se connecter",
     register: "Créer mon accès",
     reset: "Recevoir un lien sécurisé",
+    resendActivation: "Renvoyer le lien d’activation",
     navigationLogin: "Connexion",
     navigationRegister: "Créer un accès",
     navigationForgot: "Mot de passe oublié",
+    navigationActivation: "E-mail d’activation non reçu",
     passwordMismatch: "Les deux mots de passe doivent être identiques.",
     termsMissing: "Veuillez accepter les conditions d’utilisation et la politique de confidentialité pour continuer.",
     documentConsentMissing: "Veuillez consentir au traitement confidentiel de vos documents pour continuer.",
     bothConsentMissing: "Veuillez accepter les conditions d’utilisation et consentir au traitement confidentiel de vos documents avant de créer votre accès.",
     turnstileRegisterMissing: "Veuillez effectuer la vérification anti-bot avant de créer votre accès.",
     turnstileResetMissing: "Veuillez effectuer la vérification anti-bot avant de demander un lien.",
+    turnstileActivationMissing: "Veuillez effectuer la vérification anti-bot avant de renvoyer le lien d’activation.",
     turnstileError: "La vérification anti-bot n’a pas abouti. Réessayez le contrôle avant de soumettre le formulaire.",
     genericError: "Cette action n’a pas pu être finalisée. Vérifiez vos informations et réessayez.",
     registerSuccess: "Votre demande d’accès a été enregistrée. Vérifiez votre email, y compris vos courriers indésirables, pour activer votre compte.",
     resetSuccess: "Si un compte correspond à cet email, un lien sécurisé de réinitialisation vous sera envoyé.",
+    activationSuccess: "Si un compte non activé correspond à cet email, un nouveau lien d’activation vous sera envoyé. Vérifiez aussi vos courriers indésirables.",
     invitationWelcome: "Votre invitation a été vérifiée. Créez maintenant votre mot de passe ; l’activation de votre adresse email restera obligatoire.",
     invitationInvalid: "Cette invitation est invalide ou expirée. Vous pouvez demander un nouveau lien à notre équipe.",
   },
@@ -66,9 +72,11 @@ export const candidateAccessCopy = {
     loginTitle: "Access my portal",
     registerTitle: "Create my candidate portal",
     forgotTitle: "Reset my access",
+    activationTitle: "Resend the activation email",
     loginDescription: "View and upload your administrative documents confidentially.",
     registerDescription: "Create personal access to send and follow your documents.",
     forgotDescription: "We will send you a secure link if an account matches this email.",
+    activationDescription: "Request a new link if your account was created but has not yet been activated.",
     firstName: "First name",
     lastName: "Last name",
     email: "Professional email",
@@ -80,19 +88,23 @@ export const candidateAccessCopy = {
     login: "Sign in",
     register: "Create my access",
     reset: "Receive a secure link",
+    resendActivation: "Resend activation link",
     navigationLogin: "Sign in",
     navigationRegister: "Create access",
     navigationForgot: "Forgot password",
+    navigationActivation: "Activation email not received",
     passwordMismatch: "Both passwords must match.",
     termsMissing: "Please accept the terms of use and privacy policy to continue.",
     documentConsentMissing: "Please consent to the confidential processing of your documents to continue.",
     bothConsentMissing: "Please accept the terms of use and consent to the confidential processing of your documents before creating your access.",
     turnstileRegisterMissing: "Please complete the anti-bot verification before creating your access.",
     turnstileResetMissing: "Please complete the anti-bot verification before requesting a link.",
+    turnstileActivationMissing: "Please complete the anti-bot verification before resending the activation link.",
     turnstileError: "Anti-bot verification did not complete. Please try the check again before submitting the form.",
     genericError: "This action could not be completed. Check your information and try again.",
     registerSuccess: "Your access request has been registered. Check your email, including your spam folder, to activate your account.",
     resetSuccess: "If an account matches this email, a secure reset link will be sent to you.",
+    activationSuccess: "If an unverified account matches this email, a new activation link will be sent. Please also check your spam folder.",
     invitationWelcome: "Your invitation has been verified. Create your password now; email activation will still be required.",
     invitationInvalid: "This invitation is invalid or expired. You can request a new link from our team.",
   },
@@ -105,9 +117,11 @@ export const candidateAccessCopy = {
     loginTitle: "Mein Portal öffnen",
     registerTitle: "Mein Kandidatenportal erstellen",
     forgotTitle: "Zugang zurücksetzen",
+    activationTitle: "Aktivierungs-E-Mail erneut senden",
     loginDescription: "Sehen Sie Ihre Verwaltungsdokumente ein und laden Sie sie vertraulich hoch.",
     registerDescription: "Erstellen Sie einen persönlichen Zugang, um Ihre Dokumente zu übermitteln und zu verfolgen.",
     forgotDescription: "Wir senden Ihnen einen sicheren Link, wenn ein Konto zu dieser E-Mail passt.",
+    activationDescription: "Fordern Sie einen neuen Link an, wenn Ihr Konto erstellt, aber noch nicht aktiviert wurde.",
     firstName: "Vorname",
     lastName: "Nachname",
     email: "Berufliche E-Mail",
@@ -119,19 +133,23 @@ export const candidateAccessCopy = {
     login: "Anmelden",
     register: "Zugang erstellen",
     reset: "Sicheren Link erhalten",
+    resendActivation: "Aktivierungslink erneut senden",
     navigationLogin: "Anmelden",
     navigationRegister: "Zugang erstellen",
     navigationForgot: "Passwort vergessen",
+    navigationActivation: "Aktivierungs-E-Mail nicht erhalten",
     passwordMismatch: "Die beiden Passwörter müssen übereinstimmen.",
     termsMissing: "Bitte akzeptieren Sie die Nutzungsbedingungen und Datenschutzrichtlinie, um fortzufahren.",
     documentConsentMissing: "Bitte stimmen Sie der vertraulichen Verarbeitung Ihrer Dokumente zu, um fortzufahren.",
     bothConsentMissing: "Bitte akzeptieren Sie die Nutzungsbedingungen und stimmen Sie der vertraulichen Verarbeitung Ihrer Dokumente zu, bevor Sie Ihren Zugang erstellen.",
     turnstileRegisterMissing: "Bitte schließen Sie die Bot-Prüfung ab, bevor Sie Ihren Zugang erstellen.",
     turnstileResetMissing: "Bitte schließen Sie die Bot-Prüfung ab, bevor Sie einen Link anfordern.",
+    turnstileActivationMissing: "Bitte schließen Sie die Bot-Prüfung ab, bevor Sie den Aktivierungslink erneut anfordern.",
     turnstileError: "Die Bot-Prüfung wurde nicht abgeschlossen. Bitte versuchen Sie die Prüfung erneut, bevor Sie das Formular senden.",
     genericError: "Diese Aktion konnte nicht abgeschlossen werden. Prüfen Sie Ihre Angaben und versuchen Sie es erneut.",
     registerSuccess: "Ihre Zugangsanfrage wurde registriert. Prüfen Sie Ihre E-Mails einschließlich Spam-Ordner, um Ihr Konto zu aktivieren.",
     resetSuccess: "Wenn ein Konto zu dieser E-Mail passt, erhalten Sie einen sicheren Link zum Zurücksetzen.",
+    activationSuccess: "Wenn ein nicht aktiviertes Konto zu dieser E-Mail passt, wird ein neuer Aktivierungslink gesendet. Prüfen Sie bitte auch Ihren Spam-Ordner.",
     invitationWelcome: "Ihre Einladung wurde geprüft. Erstellen Sie jetzt Ihr Passwort; die E-Mail-Aktivierung bleibt verpflichtend.",
     invitationInvalid: "Diese Einladung ist ungültig oder abgelaufen. Sie können unser Team um einen neuen Link bitten.",
   },
@@ -144,9 +162,11 @@ export const candidateAccessCopy = {
     loginTitle: "访问我的门户",
     registerTitle: "创建我的候选人门户",
     forgotTitle: "重置我的访问权限",
+    activationTitle: "重新发送激活邮件",
     loginDescription: "以保密方式查看和上传您的行政文件。",
     registerDescription: "创建个人访问权限，以提交和跟踪您的文件。",
     forgotDescription: "如果此电子邮件对应账户，我们将向您发送安全链接。",
+    activationDescription: "如果账户已经创建但尚未激活，请申请新的激活链接。",
     firstName: "名字",
     lastName: "姓氏",
     email: "职业邮箱",
@@ -158,19 +178,23 @@ export const candidateAccessCopy = {
     login: "登录",
     register: "创建访问权限",
     reset: "接收安全链接",
+    resendActivation: "重新发送激活链接",
     navigationLogin: "登录",
     navigationRegister: "创建访问权限",
     navigationForgot: "忘记密码",
+    navigationActivation: "未收到激活邮件",
     passwordMismatch: "两次输入的密码必须一致。",
     termsMissing: "请接受使用条款和隐私政策以继续。",
     documentConsentMissing: "请同意对您的文件进行保密处理以继续。",
     bothConsentMissing: "创建访问权限前，请接受使用条款并同意对您的文件进行保密处理。",
     turnstileRegisterMissing: "创建访问权限前，请完成反机器人验证。",
     turnstileResetMissing: "请求链接前，请完成反机器人验证。",
+    turnstileActivationMissing: "重新发送激活链接前，请完成反机器人验证。",
     turnstileError: "反机器人验证未完成。提交表单前请重新验证。",
     genericError: "无法完成此操作。请检查您的信息后重试。",
     registerSuccess: "您的访问请求已登记。请检查您的邮箱（包括垃圾邮件文件夹）以激活账户。",
     resetSuccess: "如果此电子邮件对应账户，我们将向您发送安全的重置链接。",
+    activationSuccess: "如果此电子邮件对应尚未激活的账户，我们将发送新的激活链接。也请检查垃圾邮件文件夹。",
     invitationWelcome: "您的邀请已验证。现在请创建密码；仍必须完成电子邮件激活。",
     invitationInvalid: "此邀请无效或已过期。您可以向我们的团队申请新的链接。",
   },
@@ -242,6 +266,10 @@ export default function CandidateAccessPage() {
     onSuccess: () => setNotice(copy.resetSuccess),
     onError: error => setNotice(candidateNotice(error.message, copy)),
   });
+  const resendActivation = trpc.candidatePortal.resendVerification.useMutation({
+    onSuccess: () => setNotice(copy.activationSuccess),
+    onError: error => setNotice(candidateNotice(error.message, copy)),
+  });
   const invitation = trpc.candidatePortal.resolveInvitation.useQuery(
     { token: invitationToken || "invalid" },
     { enabled: Boolean(invitationToken), retry: false },
@@ -261,7 +289,7 @@ export default function CandidateAccessPage() {
       setNotice(copy.invitationInvalid);
     }
   }, [copy.invitationInvalid, copy.invitationWelcome, invitation.data, invitation.isError, invitationEntry.legacyEmail, invitationToken]);
-  const pending = login.isPending || register.isPending || reset.isPending;
+  const pending = login.isPending || register.isPending || reset.isPending || resendActivation.isPending;
 
   function changeMode(nextMode: Mode) {
     setMode(nextMode);
@@ -286,14 +314,17 @@ export default function CandidateAccessPage() {
       setConsentAttempted(false);
       if (!turnstileToken) { setNotice(copy.turnstileRegisterMissing); return; }
       register.mutate({ email, password, firstName, lastName, termsAccepted: terms, documentConsent, turnstileToken, invitationToken: invitationToken || undefined });
-    } else {
+    } else if (mode === "forgot") {
       if (!turnstileToken) { setNotice(copy.turnstileResetMissing); return; }
       reset.mutate({ email, turnstileToken });
+    } else {
+      if (!turnstileToken) { setNotice(copy.turnstileActivationMissing); return; }
+      resendActivation.mutate({ email, turnstileToken });
     }
   }
 
-  const title = mode === "login" ? copy.loginTitle : mode === "register" ? copy.registerTitle : copy.forgotTitle;
-  const description = mode === "login" ? copy.loginDescription : mode === "register" ? copy.registerDescription : copy.forgotDescription;
+  const title = mode === "login" ? copy.loginTitle : mode === "register" ? copy.registerTitle : mode === "forgot" ? copy.forgotTitle : copy.activationTitle;
+  const description = mode === "login" ? copy.loginDescription : mode === "register" ? copy.registerDescription : mode === "forgot" ? copy.forgotDescription : copy.activationDescription;
 
   return (
     <main id="main-content" tabIndex={-1} className="min-h-screen bg-[#030a12] px-4 py-10 text-slate-100 sm:py-16">
@@ -318,14 +349,14 @@ export default function CandidateAccessPage() {
               <form id="candidate-access-form" className="space-y-5" onSubmit={submit}>
                 {mode === "register" && <div className="grid gap-4 sm:grid-cols-2"><div className="space-y-2"><Label htmlFor="candidate-first-name">{copy.firstName}</Label><Input id="candidate-first-name" value={firstName} onChange={event => setFirstName(event.target.value)} required /></div><div className="space-y-2"><Label htmlFor="candidate-last-name">{copy.lastName}</Label><Input id="candidate-last-name" value={lastName} onChange={event => setLastName(event.target.value)} required /></div></div>}
                 <div className="space-y-2"><Label htmlFor="candidate-email">{copy.email}</Label><Input id="candidate-email" type="email" autoComplete="email" value={email} onChange={event => setEmail(event.target.value)} readOnly={mode === "register" && Boolean(invitationToken && invitation.data)} required /></div>
-                {mode !== "forgot" && <div className="space-y-2"><Label htmlFor="candidate-password">{copy.password}</Label><Input id="candidate-password" type="password" autoComplete={mode === "login" ? "current-password" : "new-password"} aria-describedby="candidate-password-hint" value={password} onChange={event => setPassword(event.target.value)} minLength={15} required /><p id="candidate-password-hint" className="text-xs text-slate-500">{copy.passwordHint}</p></div>}
+                {(mode === "login" || mode === "register") && <div className="space-y-2"><Label htmlFor="candidate-password">{copy.password}</Label><Input id="candidate-password" type="password" autoComplete={mode === "login" ? "current-password" : "new-password"} aria-describedby="candidate-password-hint" value={password} onChange={event => setPassword(event.target.value)} minLength={15} required /><p id="candidate-password-hint" className="text-xs text-slate-500">{copy.passwordHint}</p></div>}
                 {mode === "register" && <div className="space-y-2"><Label htmlFor="candidate-password-confirmation">{copy.confirmPassword}</Label><Input id="candidate-password-confirmation" type="password" autoComplete="new-password" value={passwordConfirmation} onChange={event => setPasswordConfirmation(event.target.value)} minLength={15} required /></div>}
                 {mode === "register" && <div className="candidate-consent-panel space-y-3 rounded-xl border border-slate-700/90 bg-slate-900/75 p-4 text-sm"><label className={`candidate-consent-item ${consentAttempted && !terms ? "candidate-consent-item-invalid" : ""}`}><Checkbox className="candidate-consent-checkbox" checked={terms} aria-invalid={consentAttempted && !terms} onCheckedChange={value => { const next = value === true; setTerms(next); if (next && documentConsent) setConsentAttempted(false); }} /><span>{copy.terms}</span></label><label className={`candidate-consent-item ${consentAttempted && !documentConsent ? "candidate-consent-item-invalid" : ""}`}><Checkbox className="candidate-consent-checkbox" checked={documentConsent} aria-invalid={consentAttempted && !documentConsent} onCheckedChange={value => { const next = value === true; setDocumentConsent(next); if (next && terms) setConsentAttempted(false); }} /><span>{copy.documentConsent}</span></label></div>}
-                {(mode === "register" || mode === "forgot") && <TurnstileWidget onToken={setTurnstileToken} />}
+                {(mode === "register" || mode === "forgot" || mode === "activation") && <TurnstileWidget onToken={setTurnstileToken} />}
                 {notice && <p role="status" className="rounded-lg border border-cyan-800/50 bg-cyan-950/30 p-3 text-sm text-cyan-100">{notice}</p>}
-                <Button type="submit" className="w-full bg-cyan-500 text-slate-950 hover:bg-cyan-400" disabled={pending}>{pending ? <Loader2 className="animate-spin" aria-hidden="true" /> : mode === "login" ? <LogIn aria-hidden="true" /> : mode === "register" ? <UserPlus aria-hidden="true" /> : <KeyRound aria-hidden="true" />}{mode === "login" ? copy.login : mode === "register" ? copy.register : copy.reset}</Button>
+                <Button type="submit" className="w-full bg-cyan-500 text-slate-950 hover:bg-cyan-400" disabled={pending}>{pending ? <Loader2 className="animate-spin" aria-hidden="true" /> : mode === "login" ? <LogIn aria-hidden="true" /> : mode === "register" ? <UserPlus aria-hidden="true" /> : mode === "activation" ? <MailCheck aria-hidden="true" /> : <KeyRound aria-hidden="true" />}{mode === "login" ? copy.login : mode === "register" ? copy.register : mode === "activation" ? copy.resendActivation : copy.reset}</Button>
               </form>
-              <div role="group" aria-label={copy.brandTitle} className="mt-6 flex flex-wrap justify-center gap-x-5 gap-y-3 text-sm"><button type="button" aria-controls="candidate-access-form" aria-pressed={mode === "login"} onClick={() => changeMode("login")} className={mode === "login" ? "font-semibold text-white underline decoration-cyan-300 underline-offset-4" : "text-cyan-300 hover:text-cyan-200"}>{copy.navigationLogin}</button><button type="button" aria-controls="candidate-access-form" aria-pressed={mode === "register"} onClick={() => changeMode("register")} className={mode === "register" ? "font-semibold text-white underline decoration-cyan-300 underline-offset-4" : "text-cyan-300 hover:text-cyan-200"}>{copy.navigationRegister}</button><button type="button" aria-controls="candidate-access-form" aria-pressed={mode === "forgot"} onClick={() => changeMode("forgot")} className={mode === "forgot" ? "font-semibold text-white underline decoration-cyan-300 underline-offset-4" : "text-slate-400 hover:text-white"}>{copy.navigationForgot}</button></div>
+              <div role="group" aria-label={copy.brandTitle} className="mt-6 flex flex-wrap justify-center gap-x-5 gap-y-3 text-sm"><button type="button" aria-controls="candidate-access-form" aria-pressed={mode === "login"} onClick={() => changeMode("login")} className={mode === "login" ? "font-semibold text-white underline decoration-cyan-300 underline-offset-4" : "text-cyan-300 hover:text-cyan-200"}>{copy.navigationLogin}</button><button type="button" aria-controls="candidate-access-form" aria-pressed={mode === "register"} onClick={() => changeMode("register")} className={mode === "register" ? "font-semibold text-white underline decoration-cyan-300 underline-offset-4" : "text-cyan-300 hover:text-cyan-200"}>{copy.navigationRegister}</button><button type="button" aria-controls="candidate-access-form" aria-pressed={mode === "forgot"} onClick={() => changeMode("forgot")} className={mode === "forgot" ? "font-semibold text-white underline decoration-cyan-300 underline-offset-4" : "text-slate-400 hover:text-white"}>{copy.navigationForgot}</button><button type="button" aria-controls="candidate-access-form" aria-pressed={mode === "activation"} onClick={() => changeMode("activation")} className={mode === "activation" ? "font-semibold text-white underline decoration-cyan-300 underline-offset-4" : "text-slate-400 hover:text-white"}>{copy.navigationActivation}</button></div>
             </CardContent>
           </Card>
         </section>
