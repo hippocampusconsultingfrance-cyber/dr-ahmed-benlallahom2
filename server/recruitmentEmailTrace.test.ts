@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildCvConfirmationEmailEvent, canRetryCvConfirmation, resolveCvConfirmationDelivery } from "./recruitmentEmailTrace";
+import { buildCandidatePortalInvitationEmailEvent, buildCvConfirmationEmailEvent, canRetryCvConfirmation, resolveCandidatePortalInvitationDelivery, resolveCvConfirmationDelivery } from "./recruitmentEmailTrace";
 import { readFileSync } from "node:fs";
 
 const traceSource = readFileSync(new URL("./recruitmentEmailTrace.ts", import.meta.url), "utf8");
@@ -78,6 +78,33 @@ describe("traçabilité de l'email de confirmation de candidature", () => {
       occurredAt: new Date(`2026-09-08T0${attempt}:00:00Z`),
     })));
     expect(canRetryCvConfirmation(exhausted, new Date("2026-09-10T09:00:00Z"))).toBe(false);
+  });
+
+  it("relie l’invitation de l’espace candidat et ses webhooks à la candidature", () => {
+    const sent = buildCandidatePortalInvitationEmailEvent(input, {
+      status: "sent",
+      providerEmailId: "portal_123",
+      failureCode: null,
+    }, { now: new Date("2026-09-08T10:00:00Z") });
+    const events = [
+      { eventType: "email.delivered", providerEmailId: "portal_123", payload: JSON.stringify({ type: "email.delivered" }), occurredAt: new Date("2026-09-08T10:05:00Z") },
+      sent,
+    ];
+
+    expect(resolveCandidatePortalInvitationDelivery(events)).toMatchObject({
+      eventType: "email.delivered",
+      attempts: 1,
+      providerEmailId: "portal_123",
+    });
+    expect(JSON.parse(sent.payload)).toMatchObject({ kind: "candidate_portal_invitation", trackingId: "CV-TRACE-42" });
+  });
+
+  it("considère l’accusé de dépôt comme une invitation au portail", () => {
+    expect(resolveCandidatePortalInvitationDelivery([buildCvConfirmationEmailEvent(input, {
+      status: "sent",
+      providerEmailId: "confirmation_with_invite",
+      failureCode: null,
+    })])).toMatchObject({ eventType: "email.sent", attempts: 1 });
   });
 
   it("autorise uniquement l'administrateur à reprendre un accusé sans trace", () => {
