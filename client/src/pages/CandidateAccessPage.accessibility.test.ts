@@ -7,6 +7,7 @@ describe("accessibilité du parcours candidat", () => {
     expect(candidateModeFocusTarget("login")).toBe("candidate-email");
     expect(candidateModeFocusTarget("register")).toBe("candidate-first-name");
     expect(candidateModeFocusTarget("forgot")).toBe("candidate-email");
+    expect(candidateModeFocusTarget("activation")).toBe("candidate-email");
   });
 
   it("annonce le mode actif et associe les aides aux champs concernés", async () => {
@@ -15,6 +16,7 @@ describe("accessibilité du parcours candidat", () => {
     expect(source).toContain('aria-pressed={mode === "login"}');
     expect(source).toContain('aria-pressed={mode === "register"}');
     expect(source).toContain('aria-pressed={mode === "forgot"}');
+    expect(source).toContain('aria-pressed={mode === "activation"}');
     expect(source).toContain('aria-describedby="candidate-password-hint"');
   });
 
