@@ -38,9 +38,9 @@ describe("sendCandidatePortalAccessEmail", () => {
       firstName: "Camille",
       kind: "invite",
       actionUrl: "https://drahmedbenlallahom.com/candidate/access?invite=test",
-      idempotencyKey: "candidate-portal-invitation-CV-TEST",
+      idempotencyKey: "candidate-portal-invitation-CV-TEST-attempt-2",
     });
 
-    expect(sendEmail.mock.calls[0][1]).toEqual({ idempotencyKey: "candidate-portal-invitation-CV-TEST" });
+    expect(sendEmail.mock.calls[0][1]).toEqual({ idempotencyKey: "candidate-portal-invitation-CV-TEST-attempt-2" });
   });
 });
