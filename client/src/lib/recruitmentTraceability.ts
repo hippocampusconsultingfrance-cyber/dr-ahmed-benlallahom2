@@ -26,6 +26,15 @@ export function recruitmentEmailDeliveryErrorLabel(failureCode: string | null | 
   return "Échec technique à examiner";
 }
 
+export function recruitmentCandidatePortalLabel(active: boolean, eventType: string | null | undefined) {
+  if (active) return "Espace actif";
+  if (eventType === "email.delivered") return "Invitation distribuée";
+  if (eventType === "email.sent") return "Invitation acceptée par Resend";
+  if (eventType === "email.delivery_delayed") return "Invitation retardée";
+  if (["email.bounced", "email.complained", "email.failed", "email.suppressed"].includes(eventType || "")) return "Échec de l’invitation";
+  return "Invitation non suivie";
+}
+
 export function recruitmentDriveExportLabel(status: string | null | undefined) {
   const labels: Record<string, string> = {
     queued: "En attente de copie",
