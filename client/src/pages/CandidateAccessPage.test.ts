@@ -9,6 +9,8 @@ describe("candidate access translations", () => {
       expect(copy.passwordMismatch.length, language).toBeGreaterThan(0);
       expect(copy.bothConsentMissing.length, language).toBeGreaterThan(0);
       expect(copy.turnstileRegisterMissing.length, language).toBeGreaterThan(0);
+      expect(copy.turnstileActivationMissing.length, language).toBeGreaterThan(0);
+      expect(copy.activationSuccess.length, language).toBeGreaterThan(0);
       expect(copy.genericError.length, language).toBeGreaterThan(0);
     }
   });
