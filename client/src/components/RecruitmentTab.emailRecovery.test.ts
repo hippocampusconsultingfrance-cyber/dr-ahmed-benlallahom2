@@ -15,3 +15,12 @@ describe("reprise manuelle de l'accusé de candidature", () => {
     expect(source).toContain("un doublon reste possible");
   });
 });
+
+describe("traçabilité de l’invitation à l’espace candidat", () => {
+  it("affiche l’état de livraison et adapte l’action de reprise", () => {
+    expect(source).toContain("application.candidatePortalInvitation?.eventType");
+    expect(source).toContain("recruitmentCandidatePortalLabel");
+    expect(source).toContain("Renvoyer l’invitation");
+    expect(source).toContain("Inviter à créer l’espace");
+  });
+});
