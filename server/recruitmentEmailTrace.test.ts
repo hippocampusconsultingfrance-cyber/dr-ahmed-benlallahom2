@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildCandidatePortalInvitationEmailEvent, buildCvConfirmationEmailEvent, canRetryCvConfirmation, resolveCandidatePortalInvitationDelivery, resolveCvConfirmationDelivery } from "./recruitmentEmailTrace";
+import { buildCandidatePortalInvitationEmailEvent, buildCvConfirmationEmailEvent, canRetryCvConfirmation, candidatePortalAccountMatchesApplication, resolveCandidatePortalInvitationDelivery, resolveCvConfirmationDelivery } from "./recruitmentEmailTrace";
 import { readFileSync } from "node:fs";
 
 const traceSource = readFileSync(new URL("./recruitmentEmailTrace.ts", import.meta.url), "utf8");
@@ -105,6 +105,13 @@ describe("traçabilité de l'email de confirmation de candidature", () => {
       providerEmailId: "confirmation_with_invite",
       failureCode: null,
     })])).toMatchObject({ eventType: "email.sent", attempts: 1 });
+  });
+
+  it("reconnaît un espace actif par candidature liée ou par adresse vérifiée", () => {
+    const application = { id: 42, email: "Candidate@Example.COM" };
+    expect(candidatePortalAccountMatchesApplication({ linkedApplicationId: 42, email: "other@example.com", emailVerifiedAt: new Date() }, application)).toBe(true);
+    expect(candidatePortalAccountMatchesApplication({ linkedApplicationId: null, email: "candidate@example.com", emailVerifiedAt: new Date() }, application)).toBe(true);
+    expect(candidatePortalAccountMatchesApplication({ linkedApplicationId: null, email: "candidate@example.com", emailVerifiedAt: null }, application)).toBe(false);
   });
 
   it("autorise uniquement l'administrateur à reprendre un accusé sans trace", () => {

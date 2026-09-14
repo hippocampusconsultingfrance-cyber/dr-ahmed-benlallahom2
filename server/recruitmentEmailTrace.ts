@@ -99,6 +99,15 @@ export function resolveCandidatePortalInvitationDelivery(events: CvConfirmationT
   };
 }
 
+export function candidatePortalAccountMatchesApplication(
+  account: { linkedApplicationId: number | null; email: string; emailVerifiedAt: Date | null },
+  application: { id: number; email: string },
+) {
+  if (!account.emailVerifiedAt) return false;
+  if (account.linkedApplicationId === application.id) return true;
+  return account.email.trim().toLowerCase() === application.email.trim().toLowerCase();
+}
+
 export function buildCandidatePortalInvitationEmailEvent(
   input: { applicationId: number; candidateEmail: string; trackingId: string; deliveryAttempt?: number },
   delivery: { status: "sent" | "failed"; providerEmailId: string | null; failureCode: "provider_rejected" | "delivery_exception" | null },
