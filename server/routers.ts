@@ -9,7 +9,7 @@ import { candidateAccounts, candidateDocumentAuditLogs, candidateDocuments, cont
 import { notifyOwner } from "./_core/notification";
 import { storageGetSignedUrl } from "./storage";
 import { canAdminDownloadCv, CV_DOWNLOAD_UNAVAILABLE_MESSAGE } from "./recruitmentDownloadPolicy";
-import { eq, and, sql, desc, gte, inArray, isNull, lt, ne } from "drizzle-orm";
+import { eq, and, or, sql, desc, gte, inArray, isNull, lt, ne } from "drizzle-orm";
 import Stripe from "stripe";
 import {
   sendConfirmationEmail,
@@ -30,7 +30,7 @@ import { enforcePersistentRateLimit, logSecurityEvent, requestIpHash } from "./c
 import { createCandidateInvitationToken } from "./candidateAuth";
 import { verifyCandidateTurnstile } from "./candidateTurnstile";
 import { googleDriveExportStatus } from "./googleDriveExport";
-import { buildCandidatePortalInvitationEmailEvent, resolveCandidatePortalInvitationDelivery, resolveCvConfirmationDelivery, retryCvConfirmationEmail } from "./recruitmentEmailTrace";
+import { buildCandidatePortalInvitationEmailEvent, candidatePortalAccountMatchesApplication, resolveCandidatePortalInvitationDelivery, resolveCvConfirmationDelivery, retryCvConfirmationEmail } from "./recruitmentEmailTrace";
 import { RECRUITMENT_ANALYSIS_PROMPT_VERSION } from "./recruitmentAnalysis";
 import { medicalQuestionsRouter } from "./medicalQuestionsRouter";
 import { issueAdminMfaChallenge, verifyAdminMfaChallenge } from "./adminMfa";
@@ -1154,10 +1154,14 @@ export const appRouter = router({
               }))
             : rawItems;
           const applicationIds = rawItems.map(item => item.id);
+          const applicationEmails = Array.from(new Set(rawItems.map(item => item.email.trim().toLowerCase())));
           const portalAccounts = applicationIds.length
-            ? await db.select({ linkedApplicationId: candidateAccounts.linkedApplicationId, emailVerifiedAt: candidateAccounts.emailVerifiedAt })
+            ? await db.select({ linkedApplicationId: candidateAccounts.linkedApplicationId, email: candidateAccounts.email, emailVerifiedAt: candidateAccounts.emailVerifiedAt })
               .from(candidateAccounts)
-              .where(inArray(candidateAccounts.linkedApplicationId, applicationIds))
+              .where(or(
+                inArray(candidateAccounts.linkedApplicationId, applicationIds),
+                inArray(candidateAccounts.email, applicationEmails),
+              ))
             : [];
           const driveExportJobs = applicationIds.length
             ? await db.select({
@@ -1182,7 +1186,6 @@ export const appRouter = router({
                 .where(inArray(recruitmentEmailEvents.applicationId, applicationIds))
                 .orderBy(desc(recruitmentEmailEvents.occurredAt))
             : [];
-          const activePortalApplicationIds = new Set(portalAccounts.filter(account => account.emailVerifiedAt && account.linkedApplicationId).map(account => account.linkedApplicationId as number));
           const driveExportByApplicationId = new Map(driveExportJobs.map(job => [job.applicationId, job]));
           const emailEventsByApplicationId = new Map<number, typeof emailEvents>();
           for (const event of emailEvents) {
@@ -1194,7 +1197,7 @@ export const appRouter = router({
           const items = (profile ? matchedItems.slice(input.offset, input.offset + input.limit) : matchedItems)
             .map(item => ({
               ...item,
-              candidatePortalActive: activePortalApplicationIds.has(item.id),
+              candidatePortalActive: portalAccounts.some(account => candidatePortalAccountMatchesApplication(account, item)),
               candidatePortalInvitation: resolveCandidatePortalInvitationDelivery(emailEventsByApplicationId.get(item.id) || []),
               driveExport: driveExportByApplicationId.get(item.id) || null,
               emailDelivery: resolveCvConfirmationDelivery(emailEventsByApplicationId.get(item.id) || []),
