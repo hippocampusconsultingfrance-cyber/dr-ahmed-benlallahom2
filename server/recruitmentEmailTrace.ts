@@ -100,7 +100,7 @@ export function resolveCandidatePortalInvitationDelivery(events: CvConfirmationT
 }
 
 export function buildCandidatePortalInvitationEmailEvent(
-  input: { applicationId: number; candidateEmail: string; trackingId: string },
+  input: { applicationId: number; candidateEmail: string; trackingId: string; deliveryAttempt?: number },
   delivery: { status: "sent" | "failed"; providerEmailId: string | null; failureCode: "provider_rejected" | "delivery_exception" | null },
   options: { now?: Date; localEventId?: string } = {},
 ) {
@@ -118,6 +118,7 @@ export function buildCandidatePortalInvitationEmailEvent(
       outcome: delivery.status,
       failureCode: delivery.failureCode,
       trackingId: input.trackingId,
+      attempt: input.deliveryAttempt,
     }),
     occurredAt: options.now || new Date(),
   };
