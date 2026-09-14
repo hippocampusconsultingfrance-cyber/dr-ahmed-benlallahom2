@@ -130,6 +130,26 @@ const passwordInput = z.string().min(1).max(128);
 const genericAuthInput = z.object({ email: z.string().email().max(320), password: passwordInput });
 const turnstileInput = z.object({ turnstileToken: z.string().min(20).max(4096) });
 
+async function logCandidateEmailDelivery(input: {
+  candidateId: number;
+  category: "candidate_verification_delivery" | "candidate_password_reset_delivery";
+  outcome: "allowed" | "failed";
+  ipHash: string | null;
+  providerMessageId?: string;
+}) {
+  await logSecurityEvent({
+    actorKind: "candidate",
+    actorReference: String(input.candidateId),
+    category: input.category,
+    outcome: input.outcome,
+    severity: input.outcome === "failed" ? "warning" : "info",
+    ipHash: input.ipHash,
+    metadata: input.providerMessageId ? { providerMessageId: input.providerMessageId } : undefined,
+  }).catch((error: unknown) => {
+    console.error("candidate_email_delivery_audit_failed", error instanceof Error ? error.name : "UnknownError");
+  });
+}
+
 export const candidatePortalRouter = router({
   register: publicProcedure
     .input(genericAuthInput.extend({
@@ -165,6 +185,7 @@ export const candidatePortalRouter = router({
       const db = databaseOrThrow(await getDb());
       const now = new Date();
       const verificationToken = createCandidateToken();
+      const verificationTokenHash = hashCandidateToken(verificationToken, "verification");
       const verificationExpiresAt = new Date(now.getTime() + CANDIDATE_TOKEN_MAX_AGE_MS);
       const invitation = input.invitationToken ? verifyCandidateInvitationToken(input.invitationToken) : null;
       if (input.invitationToken && !invitation) throw new TRPCError({ code: "BAD_REQUEST", message: "Cette invitation est invalide ou expirée. Demandez un nouveau lien à notre équipe." });
@@ -178,14 +199,19 @@ export const candidatePortalRouter = router({
       const existing = await candidateDatabaseOperation(() => db.select().from(candidateAccounts).where(eq(candidateAccounts.email, email)).limit(1));
 
       let candidateId: number | null = null;
+      let previousVerificationState: { tokenHash: string | null; expiresAt: Date | null } | null = null;
       if (existing[0]) {
         if (!existing[0].emailVerifiedAt && existing[0].status === "active") {
+          previousVerificationState = {
+            tokenHash: existing[0].verificationTokenHash,
+            expiresAt: existing[0].verificationExpiresAt,
+          };
           const passwordHash = await hashCandidatePassword(input.password);
           await candidateDatabaseOperation(() => db.update(candidateAccounts).set({
             firstName: input.firstName,
             lastName: input.lastName,
             passwordHash,
-            verificationTokenHash: hashCandidateToken(verificationToken, "verification"),
+            verificationTokenHash,
             verificationExpiresAt,
             termsAcceptedAt: now,
             documentConsentAt: now,
@@ -200,7 +226,7 @@ export const candidatePortalRouter = router({
           firstName: input.firstName,
           lastName: input.lastName,
           passwordHash,
-          verificationTokenHash: hashCandidateToken(verificationToken, "verification"),
+          verificationTokenHash,
           verificationExpiresAt,
           linkedApplicationId: matchingApplicationId,
           termsAcceptedAt: now,
@@ -211,7 +237,19 @@ export const candidatePortalRouter = router({
 
       if (candidateId) {
         const verifyUrl = `${portalOrigin()}/candidate/verify?email=${encodeURIComponent(email)}&token=${encodeURIComponent(verificationToken)}`;
-        await sendCandidatePortalAccessEmail({ to: email, firstName: input.firstName, kind: "verify", actionUrl: verifyUrl }).catch((error: unknown) => console.error("candidate_verification_email_failed", error));
+        try {
+          const delivery = await sendCandidatePortalAccessEmail({ to: email, firstName: input.firstName, kind: "verify", actionUrl: verifyUrl });
+          await logCandidateEmailDelivery({ candidateId, category: "candidate_verification_delivery", outcome: "allowed", ipHash, providerMessageId: delivery.id });
+        } catch (error) {
+          if (previousVerificationState) {
+            await candidateDatabaseOperation(() => db.update(candidateAccounts).set({
+              verificationTokenHash: previousVerificationState.tokenHash,
+              verificationExpiresAt: previousVerificationState.expiresAt,
+            }).where(and(eq(candidateAccounts.id, candidateId), eq(candidateAccounts.verificationTokenHash, verificationTokenHash))));
+          }
+          console.error("candidate_verification_email_failed", error instanceof Error ? error.name : "UnknownError");
+          await logCandidateEmailDelivery({ candidateId, category: "candidate_verification_delivery", outcome: "failed", ipHash });
+        }
         await logSecurityEvent({ actorKind: "candidate", actorReference: String(candidateId), category: "candidate_account_created", outcome: "allowed", ipHash });
       }
       return { message: genericAccessMessage };
@@ -353,12 +391,23 @@ export const candidatePortalRouter = router({
     const candidate = (await db.select().from(candidateAccounts).where(and(eq(candidateAccounts.email, email), eq(candidateAccounts.status, "active"))).limit(1))[0];
     if (candidate?.emailVerifiedAt) {
       const token = createCandidateToken();
+      const tokenHash = hashCandidateToken(token, "reset");
       await db.update(candidateAccounts).set({
-        passwordResetTokenHash: hashCandidateToken(token, "reset"),
+        passwordResetTokenHash: tokenHash,
         passwordResetExpiresAt: new Date(Date.now() + CANDIDATE_TOKEN_MAX_AGE_MS),
       }).where(eq(candidateAccounts.id, candidate.id));
       const resetUrl = `${portalOrigin()}/candidate/reset-password?email=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}`;
-      await sendCandidatePortalAccessEmail({ to: email, firstName: candidate.firstName ?? "", kind: "reset", actionUrl: resetUrl }).catch((error: unknown) => console.error("candidate_reset_email_failed", error));
+      try {
+        const delivery = await sendCandidatePortalAccessEmail({ to: email, firstName: candidate.firstName ?? "", kind: "reset", actionUrl: resetUrl });
+        await logCandidateEmailDelivery({ candidateId: candidate.id, category: "candidate_password_reset_delivery", outcome: "allowed", ipHash, providerMessageId: delivery.id });
+      } catch (error) {
+        await db.update(candidateAccounts).set({
+          passwordResetTokenHash: candidate.passwordResetTokenHash,
+          passwordResetExpiresAt: candidate.passwordResetExpiresAt,
+        }).where(and(eq(candidateAccounts.id, candidate.id), eq(candidateAccounts.passwordResetTokenHash, tokenHash)));
+        console.error("candidate_reset_email_failed", error instanceof Error ? error.name : "UnknownError");
+        await logCandidateEmailDelivery({ candidateId: candidate.id, category: "candidate_password_reset_delivery", outcome: "failed", ipHash });
+      }
       await logSecurityEvent({ actorKind: "candidate", actorReference: String(candidate.id), category: "candidate_password_reset_requested", outcome: "allowed", ipHash });
     }
     return { message: genericAccessMessage };
