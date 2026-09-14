@@ -19,7 +19,9 @@ describe("reprise traçable des exports Google Drive", () => {
     expect(router).toContain("retryCvGoogleDriveExport");
     expect(router).toContain('event: "google_drive_retry"');
     expect(router).toContain("processDueCvGoogleDriveExports(1, [application.id])");
+    expect(dashboard).toContain('application.driveExport?.status === "failed" || !application.driveExport');
     expect(dashboard).toContain("Relancer la copie");
+    expect(dashboard).toContain("Planifier la copie");
     expect(dashboard).toContain("recruitmentDriveExportErrorLabel");
   });
 });
