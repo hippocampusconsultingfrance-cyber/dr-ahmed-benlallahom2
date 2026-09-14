@@ -10,6 +10,7 @@ import {
   recruitmentDriveExportLabel,
   recruitmentDriveExportErrorLabel,
   recruitmentDriveExportTone,
+  recruitmentCandidatePortalLabel,
   recruitmentEmailDeliveryErrorLabel,
   recruitmentEmailDeliveryLabel,
   recruitmentEmailDeliveryTone,
@@ -409,7 +410,7 @@ export default function RecruitmentTab() {
                         </div>
                         <span className="text-xs text-muted-foreground">Référence {application.trackingId}</span>
                       </div>
-                      <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                      <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
                         <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3">
                           <p className="text-xs font-medium text-muted-foreground">Base de données</p>
                           <p className="mt-1 font-semibold text-emerald-700 dark:text-emerald-300">Enregistrée</p>
@@ -448,6 +449,12 @@ export default function RecruitmentTab() {
                           <p className="mt-1 font-semibold">{analysisStatusLabel(application.analysisStatus)}</p>
                           <p className="mt-1 text-xs opacity-80">Tentative {application.analysisAttempts ?? 0}</p>
                         </div>
+                        <div className={`rounded-lg border p-3 ${recruitmentEmailDeliveryTone(application.candidatePortalActive ? "email.delivered" : application.candidatePortalInvitation?.eventType)}`}>
+                          <p className="text-xs font-medium opacity-80">Espace candidat</p>
+                          <p className="mt-1 font-semibold">{recruitmentCandidatePortalLabel(Boolean(application.candidatePortalActive), application.candidatePortalInvitation?.eventType)}</p>
+                          {!application.candidatePortalActive && application.candidatePortalInvitation?.attempts ? <p className="mt-1 text-xs opacity-80">Envoi {application.candidatePortalInvitation.attempts}</p> : null}
+                          {!application.candidatePortalActive && recruitmentEmailDeliveryErrorLabel(application.candidatePortalInvitation?.failureCode) ? <p className="mt-1 text-xs opacity-90">{recruitmentEmailDeliveryErrorLabel(application.candidatePortalInvitation?.failureCode)}</p> : null}
+                        </div>
                       </div>
                     </div>
 
@@ -467,7 +474,7 @@ export default function RecruitmentTab() {
                           </Button>
                           <Button size="sm" variant="outline" onClick={() => sendPortalInvitation.mutate({ id: application.id })} disabled={Boolean(application.candidatePortalActive) || sendPortalInvitation.isPending || eraseApplication.isPending || reanalyze.isPending} title={application.candidatePortalActive ? "Cet email possède déjà un espace candidat actif." : "Envoyer une invitation sécurisée de création d’espace candidat."}>
                             {sendPortalInvitation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <UserRoundPlus className="mr-2 h-4 w-4" />}
-                            {application.candidatePortalActive ? "Espace candidat actif" : "Inviter à créer l’espace"}
+                            {application.candidatePortalActive ? "Espace candidat actif" : application.candidatePortalInvitation?.eventType ? "Renvoyer l’invitation" : "Inviter à créer l’espace"}
                           </Button>
                           <Button size="sm" variant="outline" onClick={() => openEmailComposer(application.id, `${application.firstName} ${application.lastName}`, "profile_interest")} disabled={sendTemplateEmail.isPending || eraseApplication.isPending || reanalyze.isPending}>
                             <Mail className="mr-2 h-4 w-4" /> Proposer un échange
