@@ -32,6 +32,12 @@ type CvConfirmationAttemptPayload = {
   failureCode?: CvApplicationConfirmationDelivery["failureCode"];
 };
 
+type CandidatePortalInvitationAttemptPayload = {
+  kind: "candidate_portal_invitation";
+  outcome?: "sent" | "failed";
+  failureCode?: "provider_rejected" | "delivery_exception";
+};
+
 const TERMINAL_DELIVERY_EVENTS = new Set(["email.delivered", "email.bounced", "email.complained", "email.suppressed"]);
 const MAX_CONFIRMATION_ATTEMPTS = 3;
 
@@ -40,6 +46,18 @@ function parseConfirmationAttempt(payload: string | null): CvConfirmationAttempt
   try {
     const parsed = JSON.parse(payload) as Record<string, unknown>;
     return parsed.kind === "application_confirmation" ? parsed as CvConfirmationAttemptPayload : null;
+  } catch {
+    return null;
+  }
+}
+
+function parseCandidatePortalInvitationAttempt(payload: string | null): CandidatePortalInvitationAttemptPayload | CvConfirmationAttemptPayload | null {
+  if (!payload) return null;
+  try {
+    const parsed = JSON.parse(payload) as Record<string, unknown>;
+    return parsed.kind === "candidate_portal_invitation" || parsed.kind === "application_confirmation"
+      ? parsed as CandidatePortalInvitationAttemptPayload | CvConfirmationAttemptPayload
+      : null;
   } catch {
     return null;
   }
@@ -60,6 +78,48 @@ export function resolveCvConfirmationDelivery(events: CvConfirmationTraceEvent[]
     failureCode: latestAttempt?.failureCode || null,
     attempts: attempts.length,
     providerEmailId: latest?.providerEmailId || null,
+  };
+}
+
+/** The confirmation email also contains the signed portal invitation link. */
+export function resolveCandidatePortalInvitationDelivery(events: CvConfirmationTraceEvent[]) {
+  const attempts = events.filter(event => parseCandidatePortalInvitationAttempt(event.payload));
+  const providerIds = new Set(attempts.map(event => event.providerEmailId).filter((value): value is string => Boolean(value)));
+  const relevantEvents = events
+    .filter(event => Boolean(parseCandidatePortalInvitationAttempt(event.payload)) || Boolean(event.providerEmailId && providerIds.has(event.providerEmailId)))
+    .sort((left, right) => right.occurredAt.getTime() - left.occurredAt.getTime());
+  const latest = relevantEvents[0] || null;
+  const latestAttempt = latest ? parseCandidatePortalInvitationAttempt(latest.payload) : null;
+  return {
+    eventType: latest?.eventType || null,
+    occurredAt: latest?.occurredAt || null,
+    failureCode: latestAttempt?.failureCode || null,
+    attempts: attempts.length,
+    providerEmailId: latest?.providerEmailId || null,
+  };
+}
+
+export function buildCandidatePortalInvitationEmailEvent(
+  input: { applicationId: number; candidateEmail: string; trackingId: string },
+  delivery: { status: "sent" | "failed"; providerEmailId: string | null; failureCode: "provider_rejected" | "delivery_exception" | null },
+  options: { now?: Date; localEventId?: string } = {},
+) {
+  return {
+    providerEventId: delivery.providerEmailId
+      ? `send:${delivery.providerEmailId}`
+      : `local:${options.localEventId || randomUUID()}`,
+    providerEmailId: delivery.providerEmailId,
+    campaignRecipientId: null,
+    applicationId: input.applicationId,
+    eventType: delivery.status === "sent" ? "email.sent" : "email.failed",
+    recipientEmail: input.candidateEmail.trim().toLowerCase(),
+    payload: JSON.stringify({
+      kind: "candidate_portal_invitation",
+      outcome: delivery.status,
+      failureCode: delivery.failureCode,
+      trackingId: input.trackingId,
+    }),
+    occurredAt: options.now || new Date(),
   };
 }
 
