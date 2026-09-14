@@ -217,6 +217,46 @@ export const candidatePortalRouter = router({
       return { message: genericAccessMessage };
     }),
 
+  resendVerification: publicProcedure
+    .input(z.object({ email: z.string().email().max(320) }).merge(turnstileInput))
+    .mutation(async ({ input, ctx }) => {
+      const email = normalizeCandidateEmail(input.email);
+      const ipHash = requestIpHash(ctx.req.headers);
+      try {
+        await enforcePersistentRateLimit({ action: "candidate_verification_resend", subject: `${email}:${ipHash ?? "unknown"}`, maxAttempts: 4, windowMs: 60 * 60 * 1000, blockMs: 60 * 60 * 1000 });
+      } catch {
+        await logSecurityEvent({ actorKind: "anonymous", actorReference: hashSecurityValue(email), category: "candidate_verification_resend_rate_limited", outcome: "blocked", severity: "warning", ipHash });
+        throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "Trop de demandes. Veuillez réessayer plus tard." });
+      }
+      try {
+        await verifyCandidateTurnstile({ token: input.turnstileToken, remoteIp: candidateRequestIp(ctx.req.headers) });
+      } catch {
+        await logSecurityEvent({ actorKind: "anonymous", actorReference: hashSecurityValue(email), category: "candidate_verification_resend_turnstile", outcome: "blocked", severity: "warning", ipHash });
+        throw new TRPCError({ code: "BAD_REQUEST", message: "La vérification anti-bot doit être renouvelée avant de demander un lien." });
+      }
+      const db = databaseOrThrow(await getDb());
+      const candidate = (await db.select().from(candidateAccounts).where(and(eq(candidateAccounts.email, email), eq(candidateAccounts.status, "active"))).limit(1))[0];
+      if (candidate && !candidate.emailVerifiedAt) {
+        const token = createCandidateToken();
+        const tokenHash = hashCandidateToken(token, "verification");
+        const expiresAt = new Date(Date.now() + CANDIDATE_TOKEN_MAX_AGE_MS);
+        await db.update(candidateAccounts).set({ verificationTokenHash: tokenHash, verificationExpiresAt: expiresAt }).where(eq(candidateAccounts.id, candidate.id));
+        const verifyUrl = `${portalOrigin()}/candidate/verify?email=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}`;
+        try {
+          await sendCandidatePortalAccessEmail({ to: email, firstName: candidate.firstName ?? "", kind: "verify", actionUrl: verifyUrl });
+          await logSecurityEvent({ actorKind: "candidate", actorReference: String(candidate.id), category: "candidate_verification_resent", outcome: "allowed", ipHash });
+        } catch (error) {
+          await db.update(candidateAccounts).set({
+            verificationTokenHash: candidate.verificationTokenHash,
+            verificationExpiresAt: candidate.verificationExpiresAt,
+          }).where(and(eq(candidateAccounts.id, candidate.id), eq(candidateAccounts.verificationTokenHash, tokenHash)));
+          console.error("candidate_verification_resend_failed", error instanceof Error ? error.name : "UnknownError");
+          await logSecurityEvent({ actorKind: "candidate", actorReference: String(candidate.id), category: "candidate_verification_resent", outcome: "failed", severity: "warning", ipHash });
+        }
+      }
+      return { message: genericAccessMessage };
+    }),
+
   resolveInvitation: publicProcedure
     .input(z.object({ token: z.string().min(24).max(600) }))
     .query(async ({ input }) => {
