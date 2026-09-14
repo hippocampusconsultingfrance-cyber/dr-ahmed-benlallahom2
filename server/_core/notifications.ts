@@ -517,6 +517,7 @@ export type CandidatePortalAccessEmailInput = {
   firstName: string;
   kind: "verify" | "reset" | "invite";
   actionUrl: string;
+  idempotencyKey?: string;
 };
 
 export function buildCandidatePortalAccessEmail(input: CandidatePortalAccessEmailInput) {
@@ -557,17 +558,21 @@ export function buildCandidatePortalAccessEmail(input: CandidatePortalAccessEmai
   };
 }
 
-export async function sendCandidatePortalAccessEmail(input: CandidatePortalAccessEmailInput): Promise<{ id?: string }> {
+export async function sendCandidatePortalAccessEmail(input: CandidatePortalAccessEmailInput): Promise<{ id: string }> {
   const message = buildCandidatePortalAccessEmail(input);
 
-  const { data, error } = await getResendClient().emails.send({
-    from: FROM_EMAIL,
-    to: [input.to],
-    replyTo: RECRUITMENT_REPLY_TO,
-    subject: message.subject,
-    html: message.html,
-    text: message.text,
-  });
+  const { data, error } = await getResendClient().emails.send(
+    {
+      from: FROM_EMAIL,
+      to: [input.to],
+      replyTo: RECRUITMENT_REPLY_TO,
+      subject: message.subject,
+      html: message.html,
+      text: message.text,
+    },
+    input.idempotencyKey ? { idempotencyKey: input.idempotencyKey } : undefined,
+  );
   if (error) throw new Error(`Resend candidate access email failed: ${error.message}`);
-  return { id: data?.id };
+  if (!data?.id) throw new Error("Resend candidate access email failed: missing provider id");
+  return { id: data.id };
 }

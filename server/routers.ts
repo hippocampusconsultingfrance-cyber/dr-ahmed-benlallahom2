@@ -30,7 +30,7 @@ import { enforcePersistentRateLimit, logSecurityEvent, requestIpHash } from "./c
 import { createCandidateInvitationToken } from "./candidateAuth";
 import { verifyCandidateTurnstile } from "./candidateTurnstile";
 import { googleDriveExportStatus } from "./googleDriveExport";
-import { resolveCvConfirmationDelivery, retryCvConfirmationEmail } from "./recruitmentEmailTrace";
+import { buildCandidatePortalInvitationEmailEvent, resolveCandidatePortalInvitationDelivery, resolveCvConfirmationDelivery, retryCvConfirmationEmail } from "./recruitmentEmailTrace";
 import { RECRUITMENT_ANALYSIS_PROMPT_VERSION } from "./recruitmentAnalysis";
 import { medicalQuestionsRouter } from "./medicalQuestionsRouter";
 import { issueAdminMfaChallenge, verifyAdminMfaChallenge } from "./adminMfa";
@@ -1195,6 +1195,7 @@ export const appRouter = router({
             .map(item => ({
               ...item,
               candidatePortalActive: activePortalApplicationIds.has(item.id),
+              candidatePortalInvitation: resolveCandidatePortalInvitationDelivery(emailEventsByApplicationId.get(item.id) || []),
               driveExport: driveExportByApplicationId.get(item.id) || null,
               emailDelivery: resolveCvConfirmationDelivery(emailEventsByApplicationId.get(item.id) || []),
             }));
@@ -1429,10 +1430,59 @@ export const appRouter = router({
             .where(sql`LOWER(${candidateAccounts.email}) = LOWER(${application.email})`)
             .limit(1))[0];
           if (existingAccount?.emailVerifiedAt) throw new TRPCError({ code: "CONFLICT", message: "Un espace candidat actif existe déjà pour cette adresse email." });
+          const invitationEvents = await db.select({
+            eventType: recruitmentEmailEvents.eventType,
+            providerEmailId: recruitmentEmailEvents.providerEmailId,
+            payload: recruitmentEmailEvents.payload,
+            occurredAt: recruitmentEmailEvents.occurredAt,
+          }).from(recruitmentEmailEvents)
+            .where(eq(recruitmentEmailEvents.applicationId, application.id))
+            .orderBy(desc(recruitmentEmailEvents.occurredAt));
+          const invitationAttempt = resolveCandidatePortalInvitationDelivery(invitationEvents).attempts + 1;
           const invitationToken = createCandidateInvitationToken(application.id);
           const invitationUrl = `${getSafeCheckoutOrigin()}/candidate/access?invite=${encodeURIComponent(invitationToken)}`;
-          const result = await sendCandidatePortalAccessEmail({ to: application.email, firstName: application.firstName, kind: "invite", actionUrl: invitationUrl });
-          await logRecruitmentAction({ applicationId: application.id, adminOpenId: ctx.user.openId, action: "email", metadata: { template: "candidate_portal_invitation", resendId: result.id, trackingId: application.trackingId } });
+          let result: { id: string };
+          try {
+            result = await sendCandidatePortalAccessEmail({
+              to: application.email,
+              firstName: application.firstName,
+              kind: "invite",
+              actionUrl: invitationUrl,
+              idempotencyKey: `candidate-portal-invitation-${application.trackingId}-attempt-${invitationAttempt}`,
+            });
+          } catch (error) {
+            const failureCode = error instanceof Error && error.message.startsWith("Resend candidate access email failed:")
+              ? "provider_rejected" as const
+              : "delivery_exception" as const;
+            await db.insert(recruitmentEmailEvents).values(buildCandidatePortalInvitationEmailEvent({
+              applicationId: application.id,
+              candidateEmail: application.email,
+              trackingId: application.trackingId,
+              deliveryAttempt: invitationAttempt,
+            }, {
+              status: "failed",
+              providerEmailId: null,
+              failureCode,
+            }, { localEventId: randomUUID() }));
+            await logRecruitmentAction({ applicationId: application.id, adminOpenId: ctx.user.openId, action: "email", metadata: { template: "candidate_portal_invitation", outcome: "failed", trackingId: application.trackingId, attempt: invitationAttempt } });
+            throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "L’invitation n’a pas pu être envoyée. L’échec est enregistré pour reprise." });
+          }
+          const invitationEvent = buildCandidatePortalInvitationEmailEvent({
+            applicationId: application.id,
+              candidateEmail: application.email,
+              trackingId: application.trackingId,
+              deliveryAttempt: invitationAttempt,
+          }, {
+            status: "sent",
+            providerEmailId: result.id,
+            failureCode: null,
+          });
+          const [existingInvitationEvent] = await db.select({ id: recruitmentEmailEvents.id })
+            .from(recruitmentEmailEvents)
+            .where(eq(recruitmentEmailEvents.providerEventId, invitationEvent.providerEventId))
+            .limit(1);
+          if (!existingInvitationEvent) await db.insert(recruitmentEmailEvents).values(invitationEvent);
+          await logRecruitmentAction({ applicationId: application.id, adminOpenId: ctx.user.openId, action: "email", metadata: { template: "candidate_portal_invitation", resendId: result.id, trackingId: application.trackingId, attempt: invitationAttempt } });
           return { success: true };
         }),
         detail: adminProcedure.input(z.object({ id: z.number().int().positive() })).query(async ({ input }) => {

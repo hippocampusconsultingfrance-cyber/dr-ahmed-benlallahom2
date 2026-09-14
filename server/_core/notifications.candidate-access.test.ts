@@ -31,4 +31,16 @@ describe("sendCandidatePortalAccessEmail", () => {
     expect(payload.html).toContain("recrutement@drahmedbenlallahom.com");
     expect(payload.text).toContain("Spam ou Courriers indésirables");
   });
+
+  it("transmet la clé d’idempotence des invitations administrateur", async () => {
+    await sendCandidatePortalAccessEmail({
+      to: "candidate@example.com",
+      firstName: "Camille",
+      kind: "invite",
+      actionUrl: "https://drahmedbenlallahom.com/candidate/access?invite=test",
+      idempotencyKey: "candidate-portal-invitation-CV-TEST-attempt-2",
+    });
+
+    expect(sendEmail.mock.calls[0][1]).toEqual({ idempotencyKey: "candidate-portal-invitation-CV-TEST-attempt-2" });
+  });
 });
