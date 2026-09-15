@@ -8,6 +8,7 @@ import {
   candidateDocuments,
   candidateSessions,
   cvApplications,
+  recruitmentEmailEvents,
 } from "../drizzle/schema";
 import { getDb } from "./db";
 import {
@@ -28,6 +29,7 @@ import { storageGetSignedUrl } from "./storage";
 import { publicProcedure, router } from "./_core/trpc";
 import { candidateRequestIp, verifyCandidateTurnstile } from "./candidateTurnstile";
 import { enforcePersistentRateLimit, hashSecurityValue, isCompromisedPassword, logSecurityEvent, requestIpHash } from "./candidateSecurity";
+import { buildCandidatePortalActivationEmailEvent } from "./recruitmentEmailTrace";
 
 type CandidateSession = typeof candidateAccounts.$inferSelect;
 
@@ -150,6 +152,28 @@ async function logCandidateEmailDelivery(input: {
   });
 }
 
+function candidateEmailFailureCode(error: unknown): "provider_rejected" | "delivery_exception" {
+  return error instanceof Error && error.message.startsWith("Resend candidate access email failed:")
+    ? "provider_rejected"
+    : "delivery_exception";
+}
+
+async function recordCandidateActivationDelivery(
+  db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
+  application: { id: number; trackingId: string } | null | undefined,
+  candidateEmail: string,
+  delivery: { status: "sent" | "failed"; providerEmailId: string | null; failureCode: "provider_rejected" | "delivery_exception" | null },
+) {
+  if (!application) return;
+  await db.insert(recruitmentEmailEvents).values(buildCandidatePortalActivationEmailEvent({
+    applicationId: application.id,
+    candidateEmail,
+    trackingId: application.trackingId,
+  }, delivery)).catch((error: unknown) => {
+    console.error("candidate_activation_delivery_trace_failed", error instanceof Error ? error.name : "UnknownError");
+  });
+}
+
 export const candidatePortalRouter = router({
   register: publicProcedure
     .input(genericAuthInput.extend({
@@ -190,12 +214,13 @@ export const candidatePortalRouter = router({
       const invitation = input.invitationToken ? verifyCandidateInvitationToken(input.invitationToken) : null;
       if (input.invitationToken && !invitation) throw new TRPCError({ code: "BAD_REQUEST", message: "Cette invitation est invalide ou expirée. Demandez un nouveau lien à notre équipe." });
       const invitedApplication = invitation
-        ? (await candidateDatabaseOperation(() => db.select({ id: cvApplications.id, email: cvApplications.email }).from(cvApplications).where(eq(cvApplications.id, invitation.applicationId)).limit(1)))[0]
+        ? (await candidateDatabaseOperation(() => db.select({ id: cvApplications.id, email: cvApplications.email, trackingId: cvApplications.trackingId }).from(cvApplications).where(eq(cvApplications.id, invitation.applicationId)).limit(1)))[0]
         : null;
       if (invitation && (!invitedApplication || normalizeCandidateEmail(invitedApplication.email) !== email)) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "Cette invitation ne correspond pas à cette adresse email." });
       }
-      const matchingApplicationId = invitedApplication?.id ?? (await candidateDatabaseOperation(() => db.select({ id: cvApplications.id }).from(cvApplications).where(eq(cvApplications.email, email)).limit(1)))[0]?.id ?? null;
+      const matchingApplication = invitedApplication ?? (await candidateDatabaseOperation(() => db.select({ id: cvApplications.id, trackingId: cvApplications.trackingId }).from(cvApplications).where(eq(cvApplications.email, email)).limit(1)))[0] ?? null;
+      const matchingApplicationId = matchingApplication?.id ?? null;
       const existing = await candidateDatabaseOperation(() => db.select().from(candidateAccounts).where(eq(candidateAccounts.email, email)).limit(1));
 
       let candidateId: number | null = null;
@@ -239,6 +264,7 @@ export const candidatePortalRouter = router({
         const verifyUrl = `${portalOrigin()}/candidate/verify?email=${encodeURIComponent(email)}&token=${encodeURIComponent(verificationToken)}`;
         try {
           const delivery = await sendCandidatePortalAccessEmail({ to: email, firstName: input.firstName, kind: "verify", actionUrl: verifyUrl });
+          await recordCandidateActivationDelivery(db, matchingApplication, email, { status: "sent", providerEmailId: delivery.id, failureCode: null });
           await logCandidateEmailDelivery({ candidateId, category: "candidate_verification_delivery", outcome: "allowed", ipHash, providerMessageId: delivery.id });
         } catch (error) {
           if (previousVerificationState) {
@@ -247,6 +273,7 @@ export const candidatePortalRouter = router({
               verificationExpiresAt: previousVerificationState.expiresAt,
             }).where(and(eq(candidateAccounts.id, candidateId), eq(candidateAccounts.verificationTokenHash, verificationTokenHash))));
           }
+          await recordCandidateActivationDelivery(db, matchingApplication, email, { status: "failed", providerEmailId: null, failureCode: candidateEmailFailureCode(error) });
           console.error("candidate_verification_email_failed", error instanceof Error ? error.name : "UnknownError");
           await logCandidateEmailDelivery({ candidateId, category: "candidate_verification_delivery", outcome: "failed", ipHash });
         }
@@ -275,19 +302,24 @@ export const candidatePortalRouter = router({
       const db = databaseOrThrow(await getDb());
       const candidate = (await db.select().from(candidateAccounts).where(and(eq(candidateAccounts.email, email), eq(candidateAccounts.status, "active"))).limit(1))[0];
       if (candidate && !candidate.emailVerifiedAt) {
+        const application = (await db.select({ id: cvApplications.id, trackingId: cvApplications.trackingId }).from(cvApplications).where(
+          candidate.linkedApplicationId ? eq(cvApplications.id, candidate.linkedApplicationId) : eq(cvApplications.email, email),
+        ).limit(1))[0] ?? null;
         const token = createCandidateToken();
         const tokenHash = hashCandidateToken(token, "verification");
         const expiresAt = new Date(Date.now() + CANDIDATE_TOKEN_MAX_AGE_MS);
         await db.update(candidateAccounts).set({ verificationTokenHash: tokenHash, verificationExpiresAt: expiresAt }).where(eq(candidateAccounts.id, candidate.id));
         const verifyUrl = `${portalOrigin()}/candidate/verify?email=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}`;
         try {
-          await sendCandidatePortalAccessEmail({ to: email, firstName: candidate.firstName ?? "", kind: "verify", actionUrl: verifyUrl });
+          const delivery = await sendCandidatePortalAccessEmail({ to: email, firstName: candidate.firstName ?? "", kind: "verify", actionUrl: verifyUrl });
+          await recordCandidateActivationDelivery(db, application, email, { status: "sent", providerEmailId: delivery.id, failureCode: null });
           await logSecurityEvent({ actorKind: "candidate", actorReference: String(candidate.id), category: "candidate_verification_resent", outcome: "allowed", ipHash });
         } catch (error) {
           await db.update(candidateAccounts).set({
             verificationTokenHash: candidate.verificationTokenHash,
             verificationExpiresAt: candidate.verificationExpiresAt,
           }).where(and(eq(candidateAccounts.id, candidate.id), eq(candidateAccounts.verificationTokenHash, tokenHash)));
+          await recordCandidateActivationDelivery(db, application, email, { status: "failed", providerEmailId: null, failureCode: candidateEmailFailureCode(error) });
           console.error("candidate_verification_resend_failed", error instanceof Error ? error.name : "UnknownError");
           await logSecurityEvent({ actorKind: "candidate", actorReference: String(candidate.id), category: "candidate_verification_resent", outcome: "failed", severity: "warning", ipHash });
         }

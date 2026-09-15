@@ -449,9 +449,11 @@ export default function RecruitmentTab() {
                           <p className="mt-1 font-semibold">{analysisStatusLabel(application.analysisStatus)}</p>
                           <p className="mt-1 text-xs opacity-80">Tentative {application.analysisAttempts ?? 0}</p>
                         </div>
-                        <div className={`rounded-lg border p-3 ${recruitmentEmailDeliveryTone(application.candidatePortalActive ? "email.delivered" : application.candidatePortalInvitation?.eventType)}`}>
+                        <div className={`rounded-lg border p-3 ${recruitmentEmailDeliveryTone(application.candidatePortalActive ? "email.delivered" : application.candidatePortalActivation?.eventType || application.candidatePortalInvitation?.eventType)}`}>
                           <p className="text-xs font-medium opacity-80">Espace candidat</p>
-                          <p className="mt-1 font-semibold">{recruitmentCandidatePortalLabel(Boolean(application.candidatePortalActive), application.candidatePortalInvitation?.eventType)}</p>
+                          <p className="mt-1 font-semibold">{recruitmentCandidatePortalLabel(Boolean(application.candidatePortalActive), application.candidatePortalInvitation?.eventType, application.candidatePortalActivation?.eventType)}</p>
+                          {!application.candidatePortalActive && application.candidatePortalActivation?.attempts ? <p className="mt-1 text-xs opacity-80">Activation {application.candidatePortalActivation.attempts}</p> : null}
+                          {!application.candidatePortalActive && recruitmentEmailDeliveryErrorLabel(application.candidatePortalActivation?.failureCode) ? <p className="mt-1 text-xs opacity-90">{recruitmentEmailDeliveryErrorLabel(application.candidatePortalActivation?.failureCode)}</p> : null}
                           {!application.candidatePortalActive && application.candidatePortalInvitation?.attempts ? <p className="mt-1 text-xs opacity-80">Envoi {application.candidatePortalInvitation.attempts}</p> : null}
                           {!application.candidatePortalActive && recruitmentEmailDeliveryErrorLabel(application.candidatePortalInvitation?.failureCode) ? <p className="mt-1 text-xs opacity-90">{recruitmentEmailDeliveryErrorLabel(application.candidatePortalInvitation?.failureCode)}</p> : null}
                         </div>

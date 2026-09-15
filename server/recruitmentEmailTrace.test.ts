@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildCandidatePortalInvitationEmailEvent, buildCvConfirmationEmailEvent, canRetryCvConfirmation, candidatePortalAccountMatchesApplication, resolveCandidatePortalInvitationDelivery, resolveCvConfirmationDelivery } from "./recruitmentEmailTrace";
+import { buildCandidatePortalActivationEmailEvent, buildCandidatePortalInvitationEmailEvent, buildCvConfirmationEmailEvent, canRetryCvConfirmation, candidatePortalAccountMatchesApplication, resolveCandidatePortalActivationDelivery, resolveCandidatePortalInvitationDelivery, resolveCvConfirmationDelivery } from "./recruitmentEmailTrace";
 import { readFileSync } from "node:fs";
 
 const traceSource = readFileSync(new URL("./recruitmentEmailTrace.ts", import.meta.url), "utf8");
@@ -105,6 +105,26 @@ describe("traçabilité de l'email de confirmation de candidature", () => {
       providerEmailId: "confirmation_with_invite",
       failureCode: null,
     })])).toMatchObject({ eventType: "email.sent", attempts: 1 });
+  });
+
+  it("relie séparément l’e-mail d’activation et ses webhooks à la candidature", () => {
+    const sent = buildCandidatePortalActivationEmailEvent(input, {
+      status: "sent",
+      providerEmailId: "activation_123",
+      failureCode: null,
+    }, { now: new Date("2026-09-08T11:00:00Z") });
+    const events = [
+      { eventType: "email.delivered", providerEmailId: "activation_123", payload: JSON.stringify({ type: "email.delivered" }), occurredAt: new Date("2026-09-08T11:05:00Z") },
+      sent,
+    ];
+
+    expect(resolveCandidatePortalActivationDelivery(events)).toMatchObject({
+      eventType: "email.delivered",
+      attempts: 1,
+      providerEmailId: "activation_123",
+    });
+    expect(JSON.parse(sent.payload)).toMatchObject({ kind: "candidate_portal_activation", trackingId: "CV-TRACE-42" });
+    expect(resolveCandidatePortalInvitationDelivery(events).eventType).toBeNull();
   });
 
   it("reconnaît un espace actif par candidature liée ou par adresse vérifiée", () => {
