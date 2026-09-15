@@ -31,5 +31,7 @@ describe("libellés de traçabilité des candidatures", () => {
     expect(recruitmentCandidatePortalLabel(false, "email.sent")).toBe("Invitation acceptée par Resend");
     expect(recruitmentCandidatePortalLabel(false, "email.delivered")).toBe("Invitation distribuée");
     expect(recruitmentCandidatePortalLabel(true, "email.failed")).toBe("Espace actif");
+    expect(recruitmentCandidatePortalLabel(false, "email.delivered", "email.sent")).toBe("Activation acceptée par Resend");
+    expect(recruitmentCandidatePortalLabel(false, "email.delivered", "email.failed")).toBe("Échec de l’activation");
   });
 });
