@@ -26,12 +26,16 @@ export function recruitmentEmailDeliveryErrorLabel(failureCode: string | null | 
   return "Échec technique à examiner";
 }
 
-export function recruitmentCandidatePortalLabel(active: boolean, eventType: string | null | undefined) {
+export function recruitmentCandidatePortalLabel(active: boolean, invitationEventType: string | null | undefined, activationEventType?: string | null) {
   if (active) return "Espace actif";
-  if (eventType === "email.delivered") return "Invitation distribuée";
-  if (eventType === "email.sent") return "Invitation acceptée par Resend";
-  if (eventType === "email.delivery_delayed") return "Invitation retardée";
-  if (["email.bounced", "email.complained", "email.failed", "email.suppressed"].includes(eventType || "")) return "Échec de l’invitation";
+  if (activationEventType === "email.delivered") return "Activation distribuée";
+  if (activationEventType === "email.sent") return "Activation acceptée par Resend";
+  if (activationEventType === "email.delivery_delayed") return "Activation retardée";
+  if (["email.bounced", "email.complained", "email.failed", "email.suppressed"].includes(activationEventType || "")) return "Échec de l’activation";
+  if (invitationEventType === "email.delivered") return "Invitation distribuée";
+  if (invitationEventType === "email.sent") return "Invitation acceptée par Resend";
+  if (invitationEventType === "email.delivery_delayed") return "Invitation retardée";
+  if (["email.bounced", "email.complained", "email.failed", "email.suppressed"].includes(invitationEventType || "")) return "Échec de l’invitation";
   return "Invitation non suivie";
 }
 
