@@ -37,7 +37,7 @@ describe("recruitment analysis safeguards", () => {
       skills: ["Réanimation"],
       languages: ["Français"],
       normalizedLanguages: [{ language: "Français", proficiency: "fluent", evidence: "Français : courant", sourceLocation: "page 2", confidence: 98 }],
-      certifications: [{ name: "ACLS", issuingBody: null, country: null, expiresAt: null, evidence: "Certification ACLS", sourceLocation: "page 2", confidence: 95 }],
+      certifications: [{ name: "ACLS", issuingBody: "American Heart Association", country: "États-Unis", expiresAt: "2027-12", evidence: "Certification ACLS", sourceLocation: "page 2", confidence: 95 }],
       countriesOfInterest: ["France"],
       yearsExperience: 8,
       normalizedExperiences: [{ role: "Médecin", organization: "Hôpital", startDate: "2018-01", endDate: "2026-01", employmentType: "permanent", specialty: "Anesthésie", country: "Tunisie", durationMonths: 96, evidence: "Médecin anesthésiste, Hôpital, 2018-2026", sourceLocation: "page 1", confidence: 96 }],
@@ -61,12 +61,33 @@ Compétence : Réanimation
 Français : courant
 Certification ACLS`);
 
-    expect(result.relevanceScore).toBe(90);
+    expect(result.relevanceScore).toBe(45);
+    expect(result.scoreBreakdown).toEqual({
+      specialtyMatch: 15,
+      experienceEvidence: 10,
+      skillsEvidence: 5,
+      languageReadiness: 10,
+      credentialReadiness: 5,
+    });
     expect(result.evidenceCoverage).toBe(100);
     expect(result.specialties).toEqual(["Anesthésie"]);
     expect(result.fieldEvidence[0]?.sourceLocation).toBe("page 1");
     expect(result.fieldEvidence[0]?.evidenceVerified).toBe(true);
     expect(result.contradictions).toHaveLength(1);
+    expect(result.normalizedLanguages[0]?.proficiency).toBe("fluent");
+    expect(result.normalizedExperiences[0]).toMatchObject({
+      startDate: null,
+      endDate: null,
+      employmentType: "unknown",
+      specialty: "",
+      country: null,
+      durationMonths: null,
+    });
+    expect(result.certifications[0]).toMatchObject({
+      issuingBody: null,
+      country: null,
+      expiresAt: null,
+    });
   });
 
   it("neutralise le score lorsque les citations IA ne sont pas vérifiables dans le CV", () => {
@@ -99,6 +120,7 @@ Certification ACLS`);
     expect(result.scoreBreakdown.skillsEvidence).toBe(0);
     expect(result.scoreBreakdown.languageReadiness).toBe(0);
     expect(result.scoreBreakdown.credentialReadiness).toBe(0);
+    expect(result.scoreBreakdown.specialtyMatch).toBe(15);
     expect(result.certifications[0]?.evidenceVerified).toBe(false);
     expect(result.certifications[0]?.confidence).toBe(25);
     expect(result.dataQualityWarnings.join(" ")).toContain("ne correspondent pas exactement");
@@ -145,6 +167,37 @@ Certification ACLS`);
     expect(result.reasoning).toContain("Score non présenté");
   });
 
+  it("refuse une preuve dont le libellé ne correspond pas au fait structuré", () => {
+    const result = normalizeRecruitmentAnalysis({
+      summary: "Une certification est citée, mais pas comme compétence.",
+      professionalTitle: "Médecin",
+      specialties: [],
+      skills: ["Réanimation"],
+      languages: [],
+      normalizedLanguages: [],
+      certifications: [],
+      countriesOfInterest: [],
+      yearsExperience: null,
+      normalizedExperiences: [],
+      strengths: [],
+      gaps: [],
+      dataQualityWarnings: [],
+      requiredFollowUps: [],
+      fieldEvidence: [{ field: "skill", value: "ACLS", evidence: "Certification ACLS", sourceLocation: "page 1", confidence: 99 }],
+      contradictions: [],
+      confidence: 99,
+      scoreBreakdown: { specialtyMatch: 0, experienceEvidence: 0, skillsEvidence: 20, languageReadiness: 0, credentialReadiness: 0 },
+      reasoning: "Score proposé par le modèle.",
+    }, "[PAGE 1]\nCertification ACLS");
+
+    expect(result.fieldEvidence[0]).toMatchObject({
+      evidenceVerified: false,
+      confidence: 25,
+    });
+    expect(result.scoreBreakdown.skillsEvidence).toBe(0);
+    expect(result.relevanceScore).toBeNull();
+  });
+
   it("reconnaît uniquement le blocage de facturation explicite du Gateway", () => {
     expect(isAiGatewayBillingUnavailable(new Error(
       "AI Gateway requires a valid credit card on file to service requests. Please add a card and unlock your free credits.",
@@ -188,6 +241,7 @@ Certification ACLS`);
       normalizedLanguages: [
         { language: "Français", proficiency: "fluent", evidence: "Français courant", sourceLocation: "page 1", confidence: 95, evidenceVerified: true },
         { language: "Anglais", proficiency: "fluent", evidence: "English fluent", sourceLocation: "page 2", confidence: 20, evidenceVerified: false },
+        { language: "Espagnol", proficiency: "working", evidence: "Espagnol intermédiaire", sourceLocation: "page 3", confidence: 69, evidenceVerified: true },
       ],
       certifications: [
         { name: "ACLS", issuingBody: null, country: null, expiresAt: null, evidence: "Certification ACLS", sourceLocation: "page 1", confidence: 90, evidenceVerified: true },
