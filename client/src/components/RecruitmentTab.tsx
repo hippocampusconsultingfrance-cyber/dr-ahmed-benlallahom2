@@ -27,7 +27,7 @@ const statusOptions = [
 
 type Status = (typeof statusOptions)[number]["value"];
 type RecruitmentEmailTemplate = "profile_interest" | "additional_information";
-const VERIFIED_ANALYSIS_VERSION = "recruitment-v7-sanitized-deterministic-score";
+const VERIFIED_ANALYSIS_VERSION = "recruitment-v7-verified-score";
 
 type ExtractedProfile = {
   professionalTitle?: string;
