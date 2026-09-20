@@ -27,7 +27,7 @@ const statusOptions = [
 
 type Status = (typeof statusOptions)[number]["value"];
 type RecruitmentEmailTemplate = "profile_interest" | "additional_information";
-const VERIFIED_ANALYSIS_VERSION = "recruitment-v6-page-scoped-evidence";
+const VERIFIED_ANALYSIS_VERSION = "recruitment-v7-sanitized-deterministic-score";
 
 type ExtractedProfile = {
   professionalTitle?: string;
@@ -520,7 +520,7 @@ export default function RecruitmentTab() {
                                 <p>Expérience <strong className="text-foreground">{extracted.scoreBreakdown.experienceEvidence ?? 0}/25</strong></p>
                                 <p>Compétences <strong className="text-foreground">{extracted.scoreBreakdown.skillsEvidence ?? 0}/20</strong></p>
                                 <p>Langues <strong className="text-foreground">{extracted.scoreBreakdown.languageReadiness ?? 0}/15</strong></p>
-                                <p>Diplômes <strong className="text-foreground">{extracted.scoreBreakdown.credentialReadiness ?? 0}/10</strong></p>
+                                <p>Certifications vérifiées <strong className="text-foreground">{extracted.scoreBreakdown.credentialReadiness ?? 0}/10</strong></p>
                               </div>
                             </div>
                           )}
