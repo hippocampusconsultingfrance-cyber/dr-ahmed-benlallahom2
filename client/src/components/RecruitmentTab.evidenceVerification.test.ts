@@ -14,5 +14,3 @@ describe("vérification des preuves IA dans l’administration", () => {
     expect(source).toContain("Compétences vérifiées");
   });
 });
-
-
