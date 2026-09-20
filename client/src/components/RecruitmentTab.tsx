@@ -27,12 +27,13 @@ const statusOptions = [
 
 type Status = (typeof statusOptions)[number]["value"];
 type RecruitmentEmailTemplate = "profile_interest" | "additional_information";
-const VERIFIED_ANALYSIS_VERSION = "recruitment-v5-verified-evidence";
+const VERIFIED_ANALYSIS_VERSION = "recruitment-v6-page-scoped-evidence";
 
 type ExtractedProfile = {
   professionalTitle?: string;
   specialties?: string[];
   skills?: string[];
+  verifiedSkills?: string[];
   languages?: string[];
   countriesOfInterest?: string[];
   yearsExperience?: number | null;
@@ -170,7 +171,7 @@ export default function RecruitmentTab() {
       const remaining = Math.max(0, queued - processed);
       toast.success(processed > 0
         ? `${processed} analyse${processed > 1 ? "s" : ""} traitée${processed > 1 ? "s" : ""} immédiatement${remaining > 0 ? ` · ${remaining} encore en file` : ""}`
-        : "Aucune analyse en échec à reprendre");
+        : "Aucune analyse à mettre à jour ou à reprendre");
       utils.admin.recruitment.list.invalidate();
     },
     onError: mutationError => toast.error(mutationError.message),
@@ -265,7 +266,7 @@ export default function RecruitmentTab() {
           </a>
           <Button variant="outline" onClick={() => reanalyzeFailed.mutate({ limit: 10 })} disabled={reanalyzeFailed.isPending}>
             <BrainCircuit className={`mr-2 h-4 w-4 ${reanalyzeFailed.isPending ? "animate-pulse" : ""}`} />
-            Reprendre les échecs IA
+            Mettre à jour / reprendre l’IA
           </Button>
           <Button variant="outline" onClick={() => refetch()} disabled={isLoading}>
             <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
@@ -501,8 +502,8 @@ export default function RecruitmentTab() {
                               <p className="text-muted-foreground">{extracted.specialties?.join(", ") || "Spécialités non identifiées"}</p>
                             </div>
                             <div>
-                              <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Compétences</p>
-                              <p className="text-foreground">{extracted.skills?.join(", ") || "Compétences non identifiées"}</p>
+                              <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Compétences vérifiées</p>
+                              <p className="text-foreground">{extracted.verifiedSkills?.join(", ") || "Aucune compétence vérifiée dans le CV"}</p>
                             </div>
                           </div>
                           {(typeof extracted.confidence === "number" || typeof extracted.evidenceCoverage === "number") && (
@@ -637,3 +638,5 @@ export default function RecruitmentTab() {
     </section>
   );
 }
+
+
