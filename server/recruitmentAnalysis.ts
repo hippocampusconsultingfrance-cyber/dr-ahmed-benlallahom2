@@ -8,7 +8,7 @@ export const RECRUITMENT_ANALYSIS_PRIMARY_MODEL = "openai/gpt-6-astra";
 export const RECRUITMENT_ANALYSIS_FALLBACK_MODEL = "google/gemini-3.8-flash";
 export const RECRUITMENT_OCR_MODEL = "google/gemini-3.8-flash";
 export const RECRUITMENT_ANALYSIS_PROMPT_VERSION =
-  "recruitment-v7-sanitized-deterministic-score";
+  "recruitment-v7-verified-score";
 
 export const CV_EVIDENCE_FIELDS = [
   "professionalTitle",
