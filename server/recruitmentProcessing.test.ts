@@ -161,5 +161,3 @@ describe("règles déterministes du pipeline de traitement CV", () => {
     expect(validatedKey).toBe("recruitment/cv/CV-001-cv.pdf");
   });
 });
-
-
