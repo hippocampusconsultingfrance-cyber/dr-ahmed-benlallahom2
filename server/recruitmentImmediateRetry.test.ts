@@ -12,6 +12,9 @@ describe("relance immédiate des analyses CV", () => {
 
   it("reprend aussi les dossiers déjà placés dans la file par une relance précédente", () => {
     expect(routerSource).toContain('inArray(cvApplications.analysisStatus, ["failed", "queued"])');
+    expect(routerSource).toContain("ne(cvApplications.analysisPromptVersion, RECRUITMENT_ANALYSIS_PROMPT_VERSION)");
     expect(routerSource).toContain("processDueCvAnalysisJobs(Math.min(applicationIds.length, 2), applicationIds)");
   });
 });
+
+
