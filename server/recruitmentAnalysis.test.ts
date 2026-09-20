@@ -30,99 +30,36 @@ describe("recruitment analysis safeguards", () => {
   });
 
   it("recalcule le score côté serveur et mesure la couverture des preuves", () => {
-    const result = normalizeRecruitmentAnalysis(
-      {
-        summary: "Profil clinique documenté.",
-        professionalTitle: "Médecin anesthésiste",
-        specialties: ["Anesthésie", "Anesthésie"],
-        skills: ["Réanimation"],
-        languages: ["Français"],
-        normalizedLanguages: [
-          {
-            language: "Français",
-            proficiency: "fluent",
-            evidence: "Français : courant",
-            sourceLocation: "page 2",
-            confidence: 98,
-          },
-        ],
-        certifications: [
-          {
-            name: "ACLS",
-            issuingBody: null,
-            country: null,
-            expiresAt: null,
-            evidence: "Certification ACLS",
-            sourceLocation: "page 2",
-            confidence: 95,
-          },
-        ],
-        countriesOfInterest: ["France"],
-        yearsExperience: 8,
-        normalizedExperiences: [
-          {
-            role: "Médecin",
-            organization: "Hôpital",
-            startDate: "2018-01",
-            endDate: "2026-01",
-            employmentType: "permanent",
-            specialty: "Anesthésie",
-            country: "Tunisie",
-            durationMonths: 96,
-            evidence: "Médecin anesthésiste, Hôpital, 2018-2026",
-            sourceLocation: "page 1",
-            confidence: 96,
-          },
-        ],
-        strengths: ["Expérience documentée"],
-        gaps: [],
-        dataQualityWarnings: [],
-        requiredFollowUps: ["Confirmer l’inscription ordinale"],
-        fieldEvidence: [
-          {
-            field: "professionalTitle",
-            value: "Médecin anesthésiste",
-            evidence: "Médecin anesthésiste",
-            sourceLocation: "page 1",
-            confidence: 97,
-          },
-          {
-            field: "skill",
-            value: "Réanimation",
-            evidence: "Compétence : Réanimation",
-            sourceLocation: "page 1",
-            confidence: 94,
-          },
-        ],
-        contradictions: [
-          {
-            field: "yearsExperience",
-            declaredValue: "8",
-            documentValue: "7 ans",
-            evidence: "7 ans (2019-2026)",
-            sourceLocation: "page 1",
-            confidence: 90,
-          },
-        ],
-        confidence: 91,
-        scoreBreakdown: {
-          specialtyMatch: 29,
-          experienceEvidence: 23,
-          skillsEvidence: 18,
-          languageReadiness: 13,
-          credentialReadiness: 7,
-        },
-        reasoning:
-          "Score fondé uniquement sur les éléments professionnels cités.",
-      },
-      `[PAGE 1]
+    const result = normalizeRecruitmentAnalysis({
+      summary: "Profil clinique documenté.",
+      professionalTitle: "Médecin anesthésiste",
+      specialties: ["Anesthésie", "Anesthésie"],
+      skills: ["Réanimation"],
+      languages: ["Français"],
+      normalizedLanguages: [{ language: "Français", proficiency: "fluent", evidence: "Français : courant", sourceLocation: "page 2", confidence: 98 }],
+      certifications: [{ name: "ACLS", issuingBody: null, country: null, expiresAt: null, evidence: "Certification ACLS", sourceLocation: "page 2", confidence: 95 }],
+      countriesOfInterest: ["France"],
+      yearsExperience: 8,
+      normalizedExperiences: [{ role: "Médecin", organization: "Hôpital", startDate: "2018-01", endDate: "2026-01", employmentType: "permanent", specialty: "Anesthésie", country: "Tunisie", durationMonths: 96, evidence: "Médecin anesthésiste, Hôpital, 2018-2026", sourceLocation: "page 1", confidence: 96 }],
+      strengths: ["Expérience documentée"],
+      gaps: [],
+      dataQualityWarnings: [],
+      requiredFollowUps: ["Confirmer l’inscription ordinale"],
+      fieldEvidence: [
+        { field: "professionalTitle", value: "Médecin anesthésiste", evidence: "Médecin anesthésiste", sourceLocation: "page 1", confidence: 97 },
+        { field: "skill", value: "Réanimation", evidence: "Compétence : Réanimation", sourceLocation: "page 1", confidence: 94 },
+      ],
+      contradictions: [{ field: "yearsExperience", declaredValue: "8", documentValue: "7 ans", evidence: "7 ans (2019-2026)", sourceLocation: "page 1", confidence: 90 }],
+      confidence: 91,
+      scoreBreakdown: { specialtyMatch: 29, experienceEvidence: 23, skillsEvidence: 18, languageReadiness: 13, credentialReadiness: 7 },
+      reasoning: "Score fondé uniquement sur les éléments professionnels cités.",
+    }, `[PAGE 1]
 Médecin anesthésiste, Hôpital, 2018-2026
 Compétence : Réanimation
 7 ans (2019-2026)
 [PAGE 2]
 Français : courant
-Certification ACLS`
-    );
+Certification ACLS`);
 
     expect(result.relevanceScore).toBe(90);
     expect(result.evidenceCoverage).toBe(100);
@@ -177,9 +114,7 @@ Certification ACLS`
   it("refuse une citation réelle lorsqu’elle est attribuée à la mauvaise page", () => {
     const source = "[PAGE 1]\nCertification ACLS\n[PAGE 2]\nFrançais courant";
     expect(verifyCvEvidence("Certification ACLS", "page 1", source)).toBe(true);
-    expect(verifyCvEvidence("Certification ACLS", "page 2", source)).toBe(
-      false
-    );
+    expect(verifyCvEvidence("Certification ACLS", "page 2", source)).toBe(false);
   });
 
   it("ne calcule pas de score à partir d’une seule citation même vérifiée", () => {
@@ -245,69 +180,22 @@ Certification ACLS`
       specialty: "Anesthésie",
       targetCountries: ["France"],
       languages: ["Français"],
-      extractedText:
-        "CV professionnel extrait avec suffisamment de texte pour une revue humaine complète.",
+      extractedText: "CV professionnel extrait avec suffisamment de texte pour une revue humaine complète.",
     }).result;
     const facts = verifiedRecruitmentFacts({
       ...base,
       skills: ["Réanimation", "Gestion d’équipe"],
       normalizedLanguages: [
-        {
-          language: "Français",
-          proficiency: "fluent",
-          evidence: "Français courant",
-          sourceLocation: "page 1",
-          confidence: 95,
-          evidenceVerified: true,
-        },
-        {
-          language: "Anglais",
-          proficiency: "fluent",
-          evidence: "English fluent",
-          sourceLocation: "page 2",
-          confidence: 20,
-          evidenceVerified: false,
-        },
+        { language: "Français", proficiency: "fluent", evidence: "Français courant", sourceLocation: "page 1", confidence: 95, evidenceVerified: true },
+        { language: "Anglais", proficiency: "fluent", evidence: "English fluent", sourceLocation: "page 2", confidence: 20, evidenceVerified: false },
       ],
       certifications: [
-        {
-          name: "ACLS",
-          issuingBody: null,
-          country: null,
-          expiresAt: null,
-          evidence: "Certification ACLS",
-          sourceLocation: "page 1",
-          confidence: 90,
-          evidenceVerified: true,
-        },
-        {
-          name: "ATLS",
-          issuingBody: null,
-          country: null,
-          expiresAt: null,
-          evidence: "ATLS",
-          sourceLocation: "page 2",
-          confidence: 20,
-          evidenceVerified: false,
-        },
+        { name: "ACLS", issuingBody: null, country: null, expiresAt: null, evidence: "Certification ACLS", sourceLocation: "page 1", confidence: 90, evidenceVerified: true },
+        { name: "ATLS", issuingBody: null, country: null, expiresAt: null, evidence: "ATLS", sourceLocation: "page 2", confidence: 20, evidenceVerified: false },
       ],
       fieldEvidence: [
-        {
-          field: "skill",
-          value: "Réanimation",
-          evidence: "Compétence : Réanimation",
-          sourceLocation: "page 1",
-          confidence: 92,
-          evidenceVerified: true,
-        },
-        {
-          field: "skill",
-          value: "Gestion d’équipe",
-          evidence: "Gestion d’équipe",
-          sourceLocation: "page 2",
-          confidence: 20,
-          evidenceVerified: false,
-        },
+        { field: "skill", value: "Réanimation", evidence: "Compétence : Réanimation", sourceLocation: "page 1", confidence: 92, evidenceVerified: true },
+        { field: "skill", value: "Gestion d’équipe", evidence: "Gestion d’équipe", sourceLocation: "page 2", confidence: 20, evidenceVerified: false },
       ],
     });
 
