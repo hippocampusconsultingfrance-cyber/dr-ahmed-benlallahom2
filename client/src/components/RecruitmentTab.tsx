@@ -638,5 +638,3 @@ export default function RecruitmentTab() {
     </section>
   );
 }
-
-
