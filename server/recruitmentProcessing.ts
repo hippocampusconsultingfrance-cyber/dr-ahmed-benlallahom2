@@ -116,8 +116,20 @@ export function extractionMethodFor(mimeType: string) {
   return "unknown";
 }
 
-export function analysisCompletionStatus(input: { gaps: string[]; dataQualityWarnings: string[] }) {
-  return input.dataQualityWarnings.length > 0 || input.gaps.length > 0 ? "needs_review" as const : "completed" as const;
+export function analysisCompletionStatus(input: {
+  gaps: string[];
+  dataQualityWarnings: string[];
+  requiredFollowUps?: string[];
+  contradictions?: unknown[];
+  relevanceScore?: number | null;
+}) {
+  return input.dataQualityWarnings.length > 0 ||
+    input.gaps.length > 0 ||
+    (input.requiredFollowUps?.length ?? 0) > 0 ||
+    (input.contradictions?.length ?? 0) > 0 ||
+    input.relevanceScore === null
+    ? ("needs_review" as const)
+    : ("completed" as const);
 }
 
 type CvProcessingJobStatus = typeof cvProcessingJobs.$inferSelect["status"];
@@ -363,3 +375,5 @@ export async function processDueCvAnalysisJobs(limit = PROCESSING_BATCH_SIZE, ap
   }
   return { processed: results.length, results };
 }
+
+
