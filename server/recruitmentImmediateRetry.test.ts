@@ -16,5 +16,3 @@ describe("relance immédiate des analyses CV", () => {
     expect(routerSource).toContain("processDueCvAnalysisJobs(Math.min(applicationIds.length, 2), applicationIds)");
   });
 });
-
-
