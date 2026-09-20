@@ -1147,7 +1147,7 @@ export const appRouter = router({
                 extractedSkills: (() => {
                   try {
                     const parsed = item.aiExtractedSkills ? JSON.parse(item.aiExtractedSkills) : {};
-                    return Array.isArray(parsed.skills) ? parsed.skills.filter((value: unknown): value is string => typeof value === "string") : [];
+                    return Array.isArray(parsed.verifiedSkills) ? parsed.verifiedSkills.filter((value: unknown): value is string => typeof value === "string") : [];
                   } catch { return []; }
                 })(),
                 profile,
@@ -1717,7 +1717,7 @@ export const appRouter = router({
           const resumableApplications = await db
             .select({ id: cvApplications.id, trackingId: cvApplications.trackingId })
             .from(cvApplications)
-            .where(and(inArray(cvApplications.analysisStatus, ["failed", "queued"]), ne(cvApplications.status, "rejected"), ne(cvApplications.status, "archived")))
+            .where(and(or(inArray(cvApplications.analysisStatus, ["failed", "queued"]), ne(cvApplications.analysisPromptVersion, RECRUITMENT_ANALYSIS_PROMPT_VERSION), isNull(cvApplications.analysisPromptVersion)), ne(cvApplications.status, "rejected"), ne(cvApplications.status, "archived")))
             .orderBy(cvApplications.updatedAt)
             .limit(input?.limit ?? 10);
 
@@ -2272,3 +2272,5 @@ export const appRouter = router({
 });
 
 export type AppRouter = typeof appRouter;
+
+
