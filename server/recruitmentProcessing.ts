@@ -375,5 +375,3 @@ export async function processDueCvAnalysisJobs(limit = PROCESSING_BATCH_SIZE, ap
   }
   return { processed: results.length, results };
 }
-
-
