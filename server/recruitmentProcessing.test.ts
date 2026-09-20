@@ -97,9 +97,42 @@ describe("règles déterministes du pipeline de traitement CV", () => {
   });
 
   it("termine une analyse propre et impose une revue humaine en cas d’incertitude", () => {
-    expect(analysisCompletionStatus({ gaps: [], dataQualityWarnings: [] })).toBe("completed");
-    expect(analysisCompletionStatus({ gaps: ["certification non vérifiée"], dataQualityWarnings: [] })).toBe("needs_review");
-    expect(analysisCompletionStatus({ gaps: [], dataQualityWarnings: ["date ambiguë"] })).toBe("needs_review");
+    expect(
+      analysisCompletionStatus({ gaps: [], dataQualityWarnings: [] })
+    ).toBe("completed");
+    expect(
+      analysisCompletionStatus({
+        gaps: ["certification non vérifiée"],
+        dataQualityWarnings: [],
+      })
+    ).toBe("needs_review");
+    expect(
+      analysisCompletionStatus({
+        gaps: [],
+        dataQualityWarnings: ["date ambiguë"],
+      })
+    ).toBe("needs_review");
+    expect(
+      analysisCompletionStatus({
+        gaps: [],
+        dataQualityWarnings: [],
+        relevanceScore: null,
+      })
+    ).toBe("needs_review");
+    expect(
+      analysisCompletionStatus({
+        gaps: [],
+        dataQualityWarnings: [],
+        requiredFollowUps: ["Vérifier le diplôme"],
+      })
+    ).toBe("needs_review");
+    expect(
+      analysisCompletionStatus({
+        gaps: [],
+        dataQualityWarnings: [],
+        contradictions: [{ field: "language" }],
+      })
+    ).toBe("needs_review");
   });
 
   it("enchaîne stockage, promotion, extraction et analyse via des dépendances isolées", async () => {
@@ -128,3 +161,5 @@ describe("règles déterministes du pipeline de traitement CV", () => {
     expect(validatedKey).toBe("recruitment/cv/CV-001-cv.pdf");
   });
 });
+
+
