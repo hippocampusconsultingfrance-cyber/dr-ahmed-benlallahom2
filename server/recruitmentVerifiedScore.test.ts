@@ -12,5 +12,3 @@ describe("scores de recrutement vérifiés", () => {
     expect(source).toContain("eq(cvApplications.analysisPromptVersion, RECRUITMENT_ANALYSIS_PROMPT_VERSION)");
   });
 });
-
-
