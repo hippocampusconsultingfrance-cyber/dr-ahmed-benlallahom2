@@ -52,6 +52,42 @@ function parseTerms(value: string | null | undefined) {
   return value.split(/[,;\n]/).map(item => item.trim()).filter(Boolean);
 }
 
+export function certificationDateIsCurrent(
+  expiresAt: string | null | undefined,
+  referenceDate = new Date()
+) {
+  if (!expiresAt) return true;
+  const match = /^(\d{4})(?:-(\d{2})(?:-(\d{2}))?)?$/.exec(expiresAt.trim());
+  if (!match) return false;
+  const year = Number(match[1]);
+  const month = match[2] ? Number(match[2]) : 12;
+  const day = match[3]
+    ? Number(match[3])
+    : new Date(Date.UTC(year, month, 0)).getUTCDate();
+  const expiry = new Date(Date.UTC(year, month - 1, day, 23, 59, 59, 999));
+  return Number.isFinite(expiry.getTime()) && expiry >= referenceDate;
+}
+
+function parseCurrentCertificationTerms(value: string | null | undefined) {
+  if (!value) return [] as string[];
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    if (Array.isArray(parsed)) {
+      return parsed.flatMap(item => {
+        if (typeof item === "string") return [item];
+        if (!item || typeof item !== "object") return [];
+        const record = item as Record<string, unknown>;
+        if (typeof record.name !== "string") return [];
+        const expiresAt = typeof record.expiresAt === "string" ? record.expiresAt : null;
+        return certificationDateIsCurrent(expiresAt) ? [record.name] : [];
+      });
+    }
+  } catch {
+    // Free-text declared certifications have no machine-readable expiry.
+  }
+  return value.split(/[,;\n]/).map(item => item.trim()).filter(Boolean);
+}
+
 function specialtyMatches(candidateSpecialty: string, requestedSpecialty: string) {
   if (containsTerm(candidateSpecialty, requestedSpecialty) || containsTerm(requestedSpecialty, candidateSpecialty)) return true;
   const roots = (value: string) => normalise(value)
@@ -85,7 +121,7 @@ export function computeBriefCandidateMatch(brief: BriefForMatching, candidate: C
   const requiredCertifications = parseTerms(brief.requiredCertifications);
   const availableCertifications = [
     ...(candidate.certificationNames || []),
-    ...parseTerms(candidate.normalizedCertifications),
+    ...parseCurrentCertificationTerms(candidate.normalizedCertifications),
     ...parseTerms(candidate.certifications),
   ];
   const matchedCertifications = matchesAny(requiredCertifications, availableCertifications);
