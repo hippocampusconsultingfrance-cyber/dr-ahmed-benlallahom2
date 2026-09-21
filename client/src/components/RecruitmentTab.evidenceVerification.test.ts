@@ -15,5 +15,8 @@ describe("vérification des preuves IA dans l’administration", () => {
     expect(source).toContain("Synthèse des preuves vérifiées");
     expect(source).toContain("Profil vérifié dans le CV");
     expect(source).toContain("Éléments professionnels vérifiés");
+    expect(source).toContain("hasVerifiedAnalysis && application.aiSummary");
+    expect(source).toContain('application.analysisModel !== "local/manual-review-fallback"');
+    expect(source).toContain("hasVerifiedAnalysis ? parseJsonList(application.aiStrengths) : []");
   });
 });
