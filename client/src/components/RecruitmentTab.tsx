@@ -494,10 +494,11 @@ export default function RecruitmentTab() {
 
                       {application.aiSummary ? (
                         <div className="mt-4 space-y-4">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Synthèse des preuves vérifiées</p>
                           <p className="leading-6 text-foreground/90">{application.aiSummary}</p>
                           <div className="grid gap-3 md:grid-cols-2">
                             <div>
-                              <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Profil extrait</p>
+                              <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Profil vérifié dans le CV</p>
                               <p className="text-foreground">{extracted.professionalTitle || "Titre non identifié"}</p>
                               <p className="text-muted-foreground">{extracted.specialties?.join(", ") || "Spécialités non identifiées"}</p>
                             </div>
@@ -558,7 +559,7 @@ export default function RecruitmentTab() {
                           )}
                           <div className="grid gap-3 md:grid-cols-2">
                             <div>
-                              <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Points forts</p>
+                              <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Éléments professionnels vérifiés</p>
                               <ul className="list-disc space-y-1 pl-5 text-muted-foreground">{strengths.length ? strengths.map(item => <li key={item}>{item}</li>) : <li>Non renseigné</li>}</ul>
                             </div>
                             <div>
