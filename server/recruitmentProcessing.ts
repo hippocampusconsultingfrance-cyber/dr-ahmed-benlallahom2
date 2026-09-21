@@ -76,6 +76,12 @@ export async function executeCvExternalPipeline(
     yearsExperience: input.yearsExperience ?? undefined,
     message: input.message ?? undefined,
     extractedText: extraction.text,
+    extractionMethod: extraction.method,
+    // A partial OCR (currently capped to the first rendered pages) must never
+    // produce a trustworthy whole-document score even if those pages are clear.
+    ocrConfidence: extraction.warnings.includes("vision_ocr_first_3_pages_only")
+      ? 0
+      : extraction.ocrConfidence,
   });
   return {
     validation,
