@@ -9,6 +9,37 @@ import {
   verifiedRecruitmentFacts,
 } from "./recruitmentAnalysis";
 
+type AnalysisInput = Parameters<typeof normalizeRecruitmentAnalysis>[0];
+
+const analysisFixture = (overrides: Partial<AnalysisInput> = {}): AnalysisInput => ({
+  summary: "Synthèse proposée par le modèle.",
+  professionalTitle: "",
+  specialties: [],
+  skills: [],
+  languages: [],
+  normalizedLanguages: [],
+  certifications: [],
+  countriesOfInterest: [],
+  yearsExperience: null,
+  normalizedExperiences: [],
+  strengths: [],
+  gaps: [],
+  dataQualityWarnings: [],
+  requiredFollowUps: [],
+  fieldEvidence: [],
+  contradictions: [],
+  confidence: 90,
+  scoreBreakdown: {
+    specialtyMatch: 0,
+    experienceEvidence: 0,
+    skillsEvidence: 0,
+    languageReadiness: 0,
+    credentialReadiness: 0,
+  },
+  reasoning: "Raisonnement proposé par le modèle.",
+  ...overrides,
+});
+
 describe("recruitment analysis safeguards", () => {
   it("refuses unknown formats instead of pretending they were analyzed", async () => {
     await expect(extractCvText(Buffer.from("unknown"), "application/octet-stream")).rejects.toThrow(
@@ -47,23 +78,30 @@ describe("recruitment analysis safeguards", () => {
       requiredFollowUps: ["Confirmer l’inscription ordinale"],
       fieldEvidence: [
         { field: "professionalTitle", value: "Médecin anesthésiste", evidence: "Médecin anesthésiste", sourceLocation: "page 1", confidence: 97 },
+        { field: "specialty", value: "Anesthésie", evidence: "Spécialité : Anesthésie", sourceLocation: "page 1", confidence: 96 },
         { field: "skill", value: "Réanimation", evidence: "Compétence : Réanimation", sourceLocation: "page 1", confidence: 94 },
       ],
-      contradictions: [{ field: "yearsExperience", declaredValue: "8", documentValue: "7 ans", evidence: "7 ans (2019-2026)", sourceLocation: "page 1", confidence: 90 }],
+      contradictions: [],
       confidence: 91,
       scoreBreakdown: { specialtyMatch: 29, experienceEvidence: 23, skillsEvidence: 18, languageReadiness: 13, credentialReadiness: 7 },
       reasoning: "Score fondé uniquement sur les éléments professionnels cités.",
     }, `[PAGE 1]
-Médecin anesthésiste, Hôpital, 2018-2026
-Compétence : Réanimation
+	Médecin anesthésiste, Hôpital, 2018-2026
+	Spécialité : Anesthésie
+	Compétence : Réanimation
 7 ans (2019-2026)
 [PAGE 2]
 Français : courant
-Certification ACLS`);
+	Certification ACLS`, {
+      specialty: "Anesthésie",
+      targetCountries: ["France"],
+      languages: ["Français"],
+      yearsExperience: 8,
+    });
 
-    expect(result.relevanceScore).toBe(45);
+    expect(result.relevanceScore).toBe(60);
     expect(result.scoreBreakdown).toEqual({
-      specialtyMatch: 15,
+      specialtyMatch: 30,
       experienceEvidence: 10,
       skillsEvidence: 5,
       languageReadiness: 10,
@@ -73,7 +111,7 @@ Certification ACLS`);
     expect(result.specialties).toEqual(["Anesthésie"]);
     expect(result.fieldEvidence[0]?.sourceLocation).toBe("page 1");
     expect(result.fieldEvidence[0]?.evidenceVerified).toBe(true);
-    expect(result.contradictions).toHaveLength(1);
+    expect(result.contradictions).toHaveLength(0);
     expect(result.normalizedLanguages[0]?.proficiency).toBe("fluent");
     expect(result.normalizedExperiences[0]).toMatchObject({
       startDate: null,
@@ -111,7 +149,11 @@ Certification ACLS`);
       confidence: 94,
       scoreBreakdown: { specialtyMatch: 30, experienceEvidence: 20, skillsEvidence: 15, languageReadiness: 10, credentialReadiness: 10 },
       reasoning: "Score proposé par le modèle.",
-    }, "[PAGE 1]\nMédecin anesthésiste en réanimation.");
+    }, "[PAGE 1]\nMédecin anesthésiste en réanimation.", {
+      specialty: "Anesthésie",
+      targetCountries: [],
+      languages: [],
+    });
 
     expect(result.evidenceCoverage).toBe(50);
     expect(result.relevanceScore).toBeNull();
@@ -120,7 +162,7 @@ Certification ACLS`);
     expect(result.scoreBreakdown.skillsEvidence).toBe(0);
     expect(result.scoreBreakdown.languageReadiness).toBe(0);
     expect(result.scoreBreakdown.credentialReadiness).toBe(0);
-    expect(result.scoreBreakdown.specialtyMatch).toBe(15);
+    expect(result.scoreBreakdown.specialtyMatch).toBe(0);
     expect(result.certifications[0]?.evidenceVerified).toBe(false);
     expect(result.certifications[0]?.confidence).toBe(25);
     expect(result.dataQualityWarnings.join(" ")).toContain("ne correspondent pas exactement");
@@ -137,6 +179,19 @@ Certification ACLS`);
     const source = "[PAGE 1]\nCertification ACLS\n[PAGE 2]\nFrançais courant";
     expect(verifyCvEvidence("Certification ACLS", "page 1", source)).toBe(true);
     expect(verifyCvEvidence("Certification ACLS", "page 2", source)).toBe(false);
+  });
+
+  it("exige une page réelle pour un PDF balisé mais accepte une section pour un document sans pages", () => {
+    expect(verifyCvEvidence(
+      "Certification ACLS",
+      "section Langues",
+      "[PAGE 1]\nCertification ACLS",
+    )).toBe(false);
+    expect(verifyCvEvidence(
+      "Certification ACLS",
+      "section Certifications",
+      "Parcours professionnel\nCertification ACLS",
+    )).toBe(true);
   });
 
   it("ne calcule pas de score à partir d’une seule citation même vérifiée", () => {
@@ -160,7 +215,11 @@ Certification ACLS`);
       confidence: 90,
       scoreBreakdown: { specialtyMatch: 20, experienceEvidence: 0, skillsEvidence: 0, languageReadiness: 0, credentialReadiness: 0 },
       reasoning: "Une seule information a été trouvée.",
-    }, "[PAGE 1]\nMédecin urgentiste");
+    }, "[PAGE 1]\nMédecin urgentiste", {
+      specialty: "Médecin",
+      targetCountries: [],
+      languages: [],
+    });
 
     expect(result.evidenceCoverage).toBe(100);
     expect(result.relevanceScore).toBeNull();
@@ -196,6 +255,95 @@ Certification ACLS`);
     });
     expect(result.scoreBreakdown.skillsEvidence).toBe(0);
     expect(result.relevanceScore).toBeNull();
+  });
+
+  it("ne transforme pas une négation en compétence ou certification vérifiée", () => {
+    const result = normalizeRecruitmentAnalysis(analysisFixture({
+      skills: ["Réanimation"],
+      certifications: [{ name: "ACLS", issuingBody: null, country: null, expiresAt: null, evidence: "ACLS non obtenue", sourceLocation: "page 1", confidence: 99 }],
+      fieldEvidence: [{ field: "skill", value: "Réanimation", evidence: "Aucune expérience en Réanimation", sourceLocation: "page 1", confidence: 99 }],
+    }), "[PAGE 1]\nAucune expérience en Réanimation\nACLS non obtenue");
+
+    expect(result.fieldEvidence[0]?.evidenceVerified).toBe(false);
+    expect(result.certifications[0]?.evidenceVerified).toBe(false);
+    expect(result.scoreBreakdown.skillsEvidence).toBe(0);
+    expect(result.scoreBreakdown.credentialReadiness).toBe(0);
+  });
+
+  it("rattache le niveau à la bonne langue dans une citation multi-entités", () => {
+    const result = normalizeRecruitmentAnalysis(analysisFixture({
+      languages: ["English"],
+      normalizedLanguages: [{ language: "English", proficiency: "fluent", evidence: "English basic; French fluent", sourceLocation: "page 1", confidence: 95 }],
+    }), "[PAGE 1]\nEnglish basic; French fluent");
+
+    expect(result.normalizedLanguages[0]).toMatchObject({
+      evidenceVerified: true,
+      proficiency: "unknown",
+    });
+    expect(result.scoreBreakdown.languageReadiness).toBe(2);
+  });
+
+  it("ne confond pas une spécialité prouvée avec la spécialité déclarée", () => {
+    const result = normalizeRecruitmentAnalysis(analysisFixture({
+      professionalTitle: "Médecin cardiologue",
+      specialties: ["Cardiologie"],
+      fieldEvidence: [
+        { field: "professionalTitle", value: "Médecin cardiologue", evidence: "Médecin cardiologue", sourceLocation: "page 1", confidence: 98 },
+        { field: "specialty", value: "Cardiologie", evidence: "Spécialité : Cardiologie", sourceLocation: "page 1", confidence: 98 },
+      ],
+    }), "[PAGE 1]\nMédecin cardiologue\nSpécialité : Cardiologie", {
+      specialty: "Anesthésie",
+      targetCountries: [],
+      languages: [],
+    });
+
+    expect(result.scoreBreakdown.specialtyMatch).toBe(0);
+    expect(result.relevanceScore).toBeNull();
+  });
+
+  it("ne compte qu’une fois deux expériences issues de la même citation", () => {
+    const sharedEvidence = "Médecin anesthésiste, Hôpital Central, 2018-2026";
+    const result = normalizeRecruitmentAnalysis(analysisFixture({
+      normalizedExperiences: [
+        { role: "Médecin", organization: "Hôpital Central", startDate: "2018", endDate: "2026", employmentType: "unknown", specialty: "", country: null, durationMonths: null, evidence: sharedEvidence, sourceLocation: "page 1", confidence: 95 },
+        { role: "Médecin anesthésiste", organization: "Hôpital Central", startDate: "2018", endDate: "2026", employmentType: "unknown", specialty: "", country: null, durationMonths: null, evidence: sharedEvidence, sourceLocation: "page 1", confidence: 95 },
+      ],
+    }), `[PAGE 1]\n${sharedEvidence}`);
+
+    expect(result.normalizedExperiences.every(item => item.evidenceVerified)).toBe(true);
+    expect(result.scoreBreakdown.experienceEvidence).toBe(10);
+  });
+
+  it("conserve les contradictions distinctes, refuse un faux déclaré et neutralise le score", () => {
+    const result = normalizeRecruitmentAnalysis(analysisFixture({
+      contradictions: [
+        { field: "yearsExperience", declaredValue: "8 ans", documentValue: "7 ans", evidence: "Cardiologie, 7 ans", sourceLocation: "page 1", confidence: 95 },
+        { field: "specialty", declaredValue: "Anesthésie", documentValue: "Cardiologie", evidence: "Cardiologie, 7 ans", sourceLocation: "page 1", confidence: 95 },
+        { field: "yearsExperience", declaredValue: "20 ans", documentValue: "7 ans", evidence: "Cardiologie, 7 ans", sourceLocation: "page 1", confidence: 95 },
+      ],
+    }), "[PAGE 1]\nCardiologie, 7 ans", {
+      specialty: "Anesthésie",
+      targetCountries: [],
+      languages: [],
+      yearsExperience: 8,
+    });
+
+    expect(result.contradictions).toHaveLength(2);
+    expect(result.contradictions.map(item => item.field)).toEqual(["yearsExperience", "specialty"]);
+    expect(result.relevanceScore).toBeNull();
+  });
+
+  it("neutralise les chronologies incohérentes et les certifications expirées", () => {
+    const result = normalizeRecruitmentAnalysis(analysisFixture({
+      certifications: [{ name: "ACLS", issuingBody: null, country: null, expiresAt: "2020", evidence: "ACLS expiration 2020", sourceLocation: "page 1", confidence: 95 }],
+      normalizedExperiences: [{ role: "Médecin", organization: "Hôpital", startDate: "2026", endDate: "2018", employmentType: "unknown", specialty: "", country: null, durationMonths: null, evidence: "Médecin, Hôpital, 2026-2018", sourceLocation: "page 1", confidence: 95 }],
+    }), "[PAGE 1]\nACLS expiration 2020\nMédecin, Hôpital, 2026-2018");
+
+    expect(result.normalizedExperiences[0]).toMatchObject({ startDate: null, endDate: null });
+    expect(result.scoreBreakdown.credentialReadiness).toBe(0);
+    expect(result.dataQualityWarnings.join(" ")).toContain("dates d’expérience inversées");
+    expect(result.dataQualityWarnings.join(" ")).toContain("Certification expirée");
+    expect(verifiedRecruitmentFacts(result).certifications).toHaveLength(0);
   });
 
   it("reconnaît uniquement le blocage de facturation explicite du Gateway", () => {
