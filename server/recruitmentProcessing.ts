@@ -67,6 +67,11 @@ export async function executeCvExternalPipeline(
     : null;
   await onValidated?.({ validation, promotedStorage });
   const extraction = await steps.extract(buffer, input.cvMimeType);
+  // A partial OCR (currently capped to the first rendered pages) must never
+  // produce a trustworthy whole-document score even if those pages are clear.
+  const analysisOcrConfidence = extraction.warnings.includes("vision_ocr_first_3_pages_only")
+    ? 0
+    : extraction.ocrConfidence;
   const analysisExecution = await steps.analyze({
     firstName: input.firstName,
     lastName: input.lastName,
@@ -76,6 +81,8 @@ export async function executeCvExternalPipeline(
     yearsExperience: input.yearsExperience ?? undefined,
     message: input.message ?? undefined,
     extractedText: extraction.text,
+    extractionMethod: extraction.method,
+    ocrConfidence: analysisOcrConfidence,
   });
   return {
     validation,
@@ -116,8 +123,20 @@ export function extractionMethodFor(mimeType: string) {
   return "unknown";
 }
 
-export function analysisCompletionStatus(input: { gaps: string[]; dataQualityWarnings: string[] }) {
-  return input.dataQualityWarnings.length > 0 || input.gaps.length > 0 ? "needs_review" as const : "completed" as const;
+export function analysisCompletionStatus(input: {
+  gaps: string[];
+  dataQualityWarnings: string[];
+  requiredFollowUps?: string[];
+  contradictions?: unknown[];
+  relevanceScore?: number | null;
+}) {
+  return input.dataQualityWarnings.length > 0 ||
+    input.gaps.length > 0 ||
+    (input.requiredFollowUps?.length ?? 0) > 0 ||
+    (input.contradictions?.length ?? 0) > 0 ||
+    input.relevanceScore === null
+    ? ("needs_review" as const)
+    : ("completed" as const);
 }
 
 type CvProcessingJobStatus = typeof cvProcessingJobs.$inferSelect["status"];

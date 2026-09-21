@@ -27,12 +27,13 @@ const statusOptions = [
 
 type Status = (typeof statusOptions)[number]["value"];
 type RecruitmentEmailTemplate = "profile_interest" | "additional_information";
-const VERIFIED_ANALYSIS_VERSION = "recruitment-v5-verified-evidence";
+const VERIFIED_ANALYSIS_VERSION = "recruitment-v7-verified-score";
 
 type ExtractedProfile = {
   professionalTitle?: string;
   specialties?: string[];
   skills?: string[];
+  verifiedSkills?: string[];
   languages?: string[];
   countriesOfInterest?: string[];
   yearsExperience?: number | null;
@@ -170,7 +171,7 @@ export default function RecruitmentTab() {
       const remaining = Math.max(0, queued - processed);
       toast.success(processed > 0
         ? `${processed} analyse${processed > 1 ? "s" : ""} traitée${processed > 1 ? "s" : ""} immédiatement${remaining > 0 ? ` · ${remaining} encore en file` : ""}`
-        : "Aucune analyse en échec à reprendre");
+        : "Aucune analyse à mettre à jour ou à reprendre");
       utils.admin.recruitment.list.invalidate();
     },
     onError: mutationError => toast.error(mutationError.message),
@@ -265,7 +266,7 @@ export default function RecruitmentTab() {
           </a>
           <Button variant="outline" onClick={() => reanalyzeFailed.mutate({ limit: 10 })} disabled={reanalyzeFailed.isPending}>
             <BrainCircuit className={`mr-2 h-4 w-4 ${reanalyzeFailed.isPending ? "animate-pulse" : ""}`} />
-            Reprendre les échecs IA
+            Mettre à jour / reprendre l’IA
           </Button>
           <Button variant="outline" onClick={() => refetch()} disabled={isLoading}>
             <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
@@ -493,16 +494,17 @@ export default function RecruitmentTab() {
 
                       {application.aiSummary ? (
                         <div className="mt-4 space-y-4">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Synthèse des preuves vérifiées</p>
                           <p className="leading-6 text-foreground/90">{application.aiSummary}</p>
                           <div className="grid gap-3 md:grid-cols-2">
                             <div>
-                              <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Profil extrait</p>
+                              <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Profil vérifié dans le CV</p>
                               <p className="text-foreground">{extracted.professionalTitle || "Titre non identifié"}</p>
                               <p className="text-muted-foreground">{extracted.specialties?.join(", ") || "Spécialités non identifiées"}</p>
                             </div>
                             <div>
-                              <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Compétences</p>
-                              <p className="text-foreground">{extracted.skills?.join(", ") || "Compétences non identifiées"}</p>
+                              <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Compétences vérifiées</p>
+                              <p className="text-foreground">{extracted.verifiedSkills?.join(", ") || "Aucune compétence vérifiée dans le CV"}</p>
                             </div>
                           </div>
                           {(typeof extracted.confidence === "number" || typeof extracted.evidenceCoverage === "number") && (
@@ -519,7 +521,7 @@ export default function RecruitmentTab() {
                                 <p>Expérience <strong className="text-foreground">{extracted.scoreBreakdown.experienceEvidence ?? 0}/25</strong></p>
                                 <p>Compétences <strong className="text-foreground">{extracted.scoreBreakdown.skillsEvidence ?? 0}/20</strong></p>
                                 <p>Langues <strong className="text-foreground">{extracted.scoreBreakdown.languageReadiness ?? 0}/15</strong></p>
-                                <p>Diplômes <strong className="text-foreground">{extracted.scoreBreakdown.credentialReadiness ?? 0}/10</strong></p>
+                                <p>Certifications vérifiées <strong className="text-foreground">{extracted.scoreBreakdown.credentialReadiness ?? 0}/10</strong></p>
                               </div>
                             </div>
                           )}
@@ -557,7 +559,7 @@ export default function RecruitmentTab() {
                           )}
                           <div className="grid gap-3 md:grid-cols-2">
                             <div>
-                              <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Points forts</p>
+                              <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Éléments professionnels vérifiés</p>
                               <ul className="list-disc space-y-1 pl-5 text-muted-foreground">{strengths.length ? strengths.map(item => <li key={item}>{item}</li>) : <li>Non renseigné</li>}</ul>
                             </div>
                             <div>

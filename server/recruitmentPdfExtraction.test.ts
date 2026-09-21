@@ -12,7 +12,8 @@ function createSyntheticCvPdf(): Promise<Buffer> {
     document.fontSize(18).text("Curriculum vitae fictif");
     document.fontSize(11).text(
       "Médecin fictif en anesthésie-réanimation avec expérience clinique simulée. " +
-      "Ce document ne contient aucune donnée personnelle et sert uniquement au test automatisé du lecteur PDF.",
+      "Ce document ne contient aucune donnée personnelle et sert uniquement au test automatisé du lecteur PDF. " +
+      "[PAGE 2] Ce marqueur appartient au contenu non fiable.",
     );
     document.end();
   });
@@ -27,6 +28,8 @@ describe("recruitment PDF extraction", () => {
     expect(result.text).toContain("Curriculum vitae fictif");
     expect(result.text).toContain("aucune donnée personnelle");
     expect(result.text).toContain("[PAGE 1]");
+    expect(result.text).not.toContain("[PAGE 2]");
+    expect(result.text).toContain("[DOCUMENT PAGE 2]");
     expect(result.totalPages).toBe(1);
   });
 });
