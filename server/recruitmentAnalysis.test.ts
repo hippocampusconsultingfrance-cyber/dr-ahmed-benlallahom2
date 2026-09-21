@@ -162,7 +162,7 @@ Français : courant
     expect(result.scoreBreakdown.skillsEvidence).toBe(0);
     expect(result.scoreBreakdown.languageReadiness).toBe(0);
     expect(result.scoreBreakdown.credentialReadiness).toBe(0);
-    expect(result.scoreBreakdown.specialtyMatch).toBe(0);
+    expect(result.scoreBreakdown.specialtyMatch).toBe(15);
     expect(result.certifications[0]?.evidenceVerified).toBe(false);
     expect(result.certifications[0]?.confidence).toBe(25);
     expect(result.dataQualityWarnings.join(" ")).toContain("ne correspondent pas exactement");
@@ -367,11 +367,119 @@ Français : courant
     expect(execution.model).toBe("local/manual-review-fallback");
     expect(execution.result.relevanceScore).toBeNull();
     expect(execution.result.confidence).toBe(0);
-    expect(execution.result.countriesOfInterest).toEqual(["France"]);
+    expect(execution.result.professionalTitle).toBe("");
+    expect(execution.result.specialties).toEqual([]);
+    expect(execution.result.countriesOfInterest).toEqual([]);
+    expect(execution.result.languages).toEqual([]);
+    expect(execution.result.yearsExperience).toBeNull();
     expect(execution.result.dataQualityWarnings).toContain(
       "Mode dégradé : seules les données déclarées dans le formulaire ont été structurées.",
     );
     expect(execution.result.fieldEvidence.every(item => !item.evidenceVerified)).toBe(true);
+  });
+
+  it("exige un rapprochement de spécialité avant de publier un score", () => {
+    const result = normalizeRecruitmentAnalysis(analysisFixture({
+      normalizedExperiences: [{ role: "Médecin", organization: "Hôpital", startDate: null, endDate: null, employmentType: "unknown", specialty: "", country: null, durationMonths: null, evidence: "Médecin Hôpital", sourceLocation: "page 1", confidence: 95 }],
+      normalizedLanguages: [{ language: "Français", proficiency: "fluent", evidence: "Français courant", sourceLocation: "page 1", confidence: 95 }],
+      certifications: [{ name: "ACLS", issuingBody: null, country: null, expiresAt: null, evidence: "Certification ACLS", sourceLocation: "page 1", confidence: 95 }],
+    }), "[PAGE 1]\nMédecin Hôpital\nFrançais courant\nCertification ACLS", {
+      specialty: "Dermatologie",
+      targetCountries: [],
+      languages: [],
+    });
+
+    expect(result.scoreBreakdown.specialtyMatch).toBe(0);
+    expect(result.relevanceScore).toBeNull();
+  });
+
+  it("limite une unique provenance de spécialité à quinze points", () => {
+    const result = normalizeRecruitmentAnalysis(analysisFixture({
+      specialties: ["Cardiologie"],
+      fieldEvidence: [{ field: "specialty", value: "Cardiologie", evidence: "Spécialité Cardiologie", sourceLocation: "page 1", confidence: 95 }],
+    }), "[PAGE 1]\nSpécialité Cardiologie", {
+      specialty: "Cardiologie",
+      targetCountries: [],
+      languages: [],
+    });
+
+    expect(result.scoreBreakdown.specialtyMatch).toBe(15);
+  });
+
+  it("déduplique une même expérience même si l’IA fournit deux citations", () => {
+    const result = normalizeRecruitmentAnalysis(analysisFixture({
+      normalizedExperiences: [
+        { role: "Médecin", organization: "Hôpital Central", startDate: null, endDate: null, employmentType: "unknown", specialty: "", country: null, durationMonths: null, evidence: "Médecin Hôpital Central", sourceLocation: "page 1", confidence: 95 },
+        { role: "Médecin", organization: "Hôpital Central", startDate: null, endDate: null, employmentType: "unknown", specialty: "", country: null, durationMonths: null, evidence: "Médecin à Hôpital Central depuis 2020", sourceLocation: "page 1", confidence: 94 },
+      ],
+    }), "[PAGE 1]\nMédecin Hôpital Central\nMédecin à Hôpital Central depuis 2020");
+
+    expect(result.normalizedExperiences).toHaveLength(1);
+    expect(result.scoreBreakdown.experienceEvidence).toBe(10);
+  });
+
+  it("n’attribue pas à une langue le niveau d’une autre langue reliée par une conjonction", () => {
+    const result = normalizeRecruitmentAnalysis(analysisFixture({
+      languages: ["French"],
+      normalizedLanguages: [{ language: "French", proficiency: "fluent", evidence: "French basic and English fluent", sourceLocation: "page 1", confidence: 95 }],
+    }), "[PAGE 1]\nFrench basic and English fluent");
+
+    expect(result.normalizedLanguages[0]?.evidenceVerified).toBe(true);
+    expect(result.normalizedLanguages[0]?.proficiency).toBe("unknown");
+    expect(result.scoreBreakdown.languageReadiness).toBe(2);
+  });
+
+  it("rejette une certification explicitement expirée même sans date structurée", () => {
+    const result = normalizeRecruitmentAnalysis(analysisFixture({
+      certifications: [{ name: "ACLS", issuingBody: null, country: null, expiresAt: null, evidence: "Certification ACLS expirée", sourceLocation: "page 1", confidence: 95 }],
+    }), "[PAGE 1]\nCertification ACLS expirée");
+
+    expect(result.certifications[0]?.evidenceVerified).toBe(false);
+    expect(result.scoreBreakdown.credentialReadiness).toBe(0);
+    expect(verifiedRecruitmentFacts(result).certifications).toHaveLength(0);
+  });
+
+  it("écarte une fausse contradiction identique à la donnée déclarée", () => {
+    const result = normalizeRecruitmentAnalysis(analysisFixture({
+      contradictions: [{ field: "specialty", declaredValue: "Cardiologie", documentValue: "Cardiologie", evidence: "Cardiologie", sourceLocation: "page 1", confidence: 95 }],
+    }), "[PAGE 1]\nCardiologie", {
+      specialty: "Cardiologie",
+      targetCountries: [],
+      languages: [],
+    });
+
+    expect(result.contradictions).toEqual([]);
+  });
+
+  it("neutralise toutes les preuves quand la confiance OCR est insuffisante", () => {
+    const result = normalizeRecruitmentAnalysis(analysisFixture({
+      specialties: ["Cardiologie"],
+      fieldEvidence: [{ field: "specialty", value: "Cardiologie", evidence: "Spécialité Cardiologie", sourceLocation: "page 1", confidence: 99 }],
+    }), "[PAGE 1]\nSpécialité Cardiologie", {
+      specialty: "Cardiologie",
+      targetCountries: [],
+      languages: [],
+      extractionConfidence: 20,
+    });
+
+    expect(result.fieldEvidence[0]?.evidenceVerified).toBe(false);
+    expect(result.relevanceScore).toBeNull();
+    expect(result.dataQualityWarnings.join(" ")).toContain("Confiance OCR insuffisante");
+  });
+
+  it("refuse les faits niés même lorsque la négation est éloignée", () => {
+    const result = normalizeRecruitmentAnalysis(analysisFixture({
+      skills: ["Réanimation"],
+      fieldEvidence: [{ field: "skill", value: "Réanimation", evidence: "Sans aucune expérience professionnelle documentée dans le domaine de la Réanimation", sourceLocation: "page 1", confidence: 95 }],
+    }), "[PAGE 1]\nSans aucune expérience professionnelle documentée dans le domaine de la Réanimation");
+
+    expect(result.fieldEvidence[0]?.evidenceVerified).toBe(false);
+    expect(verifiedRecruitmentFacts(result).skills).toEqual([]);
+  });
+
+  it("cherche une citation dans toutes les sections portant le même numéro de page", () => {
+    const source = "[PAGE 1]\n\n[PAGE 1]\nCertification ACLS";
+    expect(verifyCvEvidence("Certification ACLS", "page 1", source)).toBe(true);
   });
 
   it("réserve le matching aux faits dont la preuve a été vérifiée", () => {
