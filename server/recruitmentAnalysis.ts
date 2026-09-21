@@ -126,6 +126,11 @@ export type RecruitmentAnalysisInput = {
   extractedText: string;
 };
 
+export type RecruitmentDeclaredContext = Pick<
+  RecruitmentAnalysisInput,
+  "specialty" | "targetCountries" | "languages" | "yearsExperience"
+>;
+
 const evidenceSchema = z.string().trim().min(1).max(500);
 const sourceLocationSchema = z.string().trim().min(1).max(120);
 const fieldConfidenceSchema = z.number().int().min(0).max(100);
@@ -177,7 +182,7 @@ const contradictionSchema = z.object({
 });
 const analysisSchema = z.object({
   summary: z.string().trim().min(1).max(1_500),
-  professionalTitle: z.string().trim().min(1).max(180),
+  professionalTitle: z.string().trim().max(180),
   specialties: z.array(z.string().trim().min(1).max(160)).max(20),
   skills: z.array(z.string().trim().min(1).max(160)).max(60),
   languages: z.array(z.string().trim().min(1).max(80)).max(20),
@@ -203,11 +208,8 @@ const analysisSchema = z.object({
   reasoning: z.string().trim().min(1).max(1_500),
 });
 
-const visionOcrSchema = z.object({
-  pages: z.array(z.object({
-    pageNumber: z.number().int().min(1),
-    text: z.string(),
-  })).max(3),
+const visionOcrPageSchema = z.object({
+  text: z.string(),
   confidence: z.number().int().min(0).max(100),
   warnings: z.array(z.string().trim().min(1).max(300)).max(20),
 });
@@ -218,6 +220,10 @@ const cleanText = (value: string): string =>
     .replace(/[ \t]+/g, " ")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
+
+/** Prevent document-controlled text from impersonating our trusted page boundaries. */
+export const escapeCvPageMarkers = (value: string): string =>
+  value.replace(/\[PAGE\s+(\d+)\]/gi, "[DOCUMENT PAGE $1]");
 
 export type CvExtractionResult = {
   text: string;
@@ -243,35 +249,38 @@ async function extractPdfWithVision(buffer: Buffer): Promise<{ text: string; con
     const pages = screenshots.pages.filter(page => page.dataUrl);
     if (pages.length === 0) return { text: "", confidence: null, warnings: ["vision_ocr_no_rendered_pages"] };
 
-    const pageContent = pages.flatMap(page => ([
-      { type: "text" as const, text: `Page ${page.pageNumber} du CV :` },
-      { type: "image" as const, image: page.dataUrl, mediaType: "image/png" },
-    ]));
-
-    const response = await generateText({
-      model: RECRUITMENT_OCR_MODEL,
-      maxOutputTokens: 8_000,
-      timeout: 20_000,
-      maxRetries: 1,
-      providerOptions: { gateway: { disallowPromptTraining: true, has: ["vision"] } },
-      output: Output.object({ schema: visionOcrSchema, name: "cv_ocr_transcription" }),
-      messages: [{
-        role: "user",
-        content: [
-          { type: "text", text: "Transcris uniquement le texte professionnel visible sur les pages de CV fournies, page par page et dans l’ordre. Retourne une entrée séparée avec le bon pageNumber pour chaque page. N’infère rien, ignore les photos et toute caractéristique protégée. Si un passage est illisible, écris [illisible]." },
-          ...pageContent,
-        ],
-      }],
-    });
+    const transcriptions = await Promise.all(pages.map(async page => {
+      const response = await generateText({
+        model: RECRUITMENT_OCR_MODEL,
+        maxOutputTokens: 3_000,
+        timeout: 20_000,
+        maxRetries: 1,
+        providerOptions: { gateway: { disallowPromptTraining: true, has: ["vision"] } },
+        output: Output.object({ schema: visionOcrPageSchema, name: "cv_ocr_page_transcription" }),
+        messages: [{
+          role: "user",
+          content: [
+            { type: "text", text: "Transcris uniquement le texte professionnel visible sur cette unique page de CV. N’infère rien, ignore les photos et toute caractéristique protégée. Si un passage est illisible, écris [illisible]. Ne fournis aucun numéro de page : il sera associé par le serveur." },
+            { type: "image", image: page.dataUrl!, mediaType: "image/png" },
+          ],
+        }],
+      });
+      return {
+        pageNumber: page.pageNumber,
+        text: response.output.text,
+        confidence: response.output.confidence,
+        warnings: response.output.warnings,
+      };
+    }));
     return {
-      text: cleanText(response.output.pages
+      text: cleanText(transcriptions
         .sort((left, right) => left.pageNumber - right.pageNumber)
-        .map(page => `[PAGE ${page.pageNumber}]\n${cleanText(page.text)}`)
+        .map(page => `[PAGE ${page.pageNumber}]\n${escapeCvPageMarkers(cleanText(page.text))}`)
         .join("\n\n")),
-      confidence: response.output.confidence,
+      confidence: Math.min(...transcriptions.map(page => page.confidence)),
       warnings: [
         ...(screenshots.total > pages.length ? ["vision_ocr_first_3_pages_only"] : []),
-        ...response.output.warnings,
+        ...transcriptions.flatMap(page => page.warnings.map(warning => `page_${page.pageNumber}:${warning}`)),
       ],
     };
   } finally {
@@ -287,7 +296,7 @@ export async function extractCvDocument(buffer: Buffer, mimeType: string): Promi
     try {
       const result = await parser.getText();
       extracted = cleanText(result.pages
-        .map(page => `[PAGE ${page.num}]\n${cleanText(page.text)}`)
+        .map(page => `[PAGE ${page.num}]\n${escapeCvPageMarkers(cleanText(page.text))}`)
         .join("\n\n"));
       totalPages = Number.isInteger(result.total) ? result.total : null;
     } finally {
@@ -308,13 +317,13 @@ export async function extractCvDocument(buffer: Buffer, mimeType: string): Promi
   if (mimeType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") {
     const mammoth = (await import("mammoth")).default;
     const result = await mammoth.extractRawText({ buffer });
-    return { text: cleanText(result.value), method: "docx", totalPages: null, ocrConfidence: null, ocrModelVersion: null, warnings: result.messages.map(message => `${message.type}:${message.message}`) };
+    return { text: escapeCvPageMarkers(cleanText(result.value)), method: "docx", totalPages: null, ocrConfidence: null, ocrModelVersion: null, warnings: result.messages.map(message => `${message.type}:${message.message}`) };
   }
 
   if (mimeType === "application/msword") {
     const WordExtractor = (await import("word-extractor")).default;
     const document = await new WordExtractor().extract(buffer);
-    return { text: cleanText(document.getBody()), method: "doc", totalPages: null, ocrConfidence: null, ocrModelVersion: null, warnings: ["legacy_doc_format_limited_extraction"] };
+    return { text: escapeCvPageMarkers(cleanText(document.getBody())), method: "doc", totalPages: null, ocrConfidence: null, ocrModelVersion: null, warnings: ["legacy_doc_format_limited_extraction"] };
   }
 
   throw new Error("Format de CV non pris en charge pour l’analyse automatique.");
@@ -374,6 +383,49 @@ function evidenceContainsClaims(evidence: string, claimedValues: string[]) {
   );
 }
 
+const NEGATION_TOKENS = new Set([
+  "no", "not", "without", "none", "non", "sans", "aucun", "aucune", "pas",
+  "nicht", "kein", "keine", "ohne", "sin", "ningun", "ninguna", "nessun",
+  "nessuna", "absent", "missing", "manquant", "manquante", "unavailable",
+]);
+
+function evidenceAffirmsClaims(evidence: string, claimedValues: string[]) {
+  const evidenceTokens = normalizeEvidenceText(evidence).split(" ").filter(Boolean);
+  return claimedValues.every(claim => {
+    const claimTokens = normalizeEvidenceText(claim).split(" ").filter(Boolean);
+    if (claimTokens.length === 0) return false;
+    for (let index = 0; index <= evidenceTokens.length - claimTokens.length; index += 1) {
+      const matches = claimTokens.every((token, offset) => evidenceTokens[index + offset] === token);
+      if (!matches) continue;
+      const nearbyTokens = [
+        ...evidenceTokens.slice(Math.max(0, index - 3), index),
+        ...evidenceTokens.slice(index + claimTokens.length, index + claimTokens.length + 3),
+      ];
+      if (!nearbyTokens.some(token => NEGATION_TOKENS.has(token))) return true;
+    }
+    return false;
+  });
+}
+
+function evidenceSegmentsContainingClaims(
+  evidence: string,
+  claimedValues: string[],
+  splitCommasAndSlashes = false
+) {
+  const sentenceSeparated = evidence.replace(/([.!?])\s+/g, "$1\n");
+  const separator = splitCommasAndSlashes
+    ? /[\r\n;,/•·|]+/
+    : /[\r\n;•·|]+/;
+  return sentenceSeparated
+    .split(separator)
+    .map(segment => segment.trim())
+    .filter(segment =>
+      segment.length > 0 &&
+      evidenceContainsClaims(segment, claimedValues) &&
+      evidenceAffirmsClaims(segment, claimedValues)
+    );
+}
+
 function isVerifiedFact(item: EvidenceBearing) {
   return item.evidenceVerified && item.confidence >= VERIFIED_EVIDENCE_MIN_CONFIDENCE;
 }
@@ -395,6 +447,55 @@ function evidenceContainsDuration(evidence: string, durationMonths: number | nul
   if (durationMonths % 12 !== 0) return false;
   const years = durationMonths / 12;
   return new RegExp(`(?:^|\\s)${years}(?:\\s)+(?:an|ans|year|years)(?:\\s|$)`).test(normalizedEvidence);
+}
+
+function dateMonthIndex(date: string, endBoundary = false) {
+  const [yearText, monthText] = date.split("-");
+  const year = Number(yearText);
+  const month = monthText ? Number(monthText) : endBoundary ? 12 : 1;
+  return year * 12 + month;
+}
+
+function sanitizeExperienceTimeline(input: {
+  startDate: string | null;
+  endDate: string | null;
+  durationMonths: number | null;
+}) {
+  let { startDate, endDate, durationMonths } = input;
+  const warnings: string[] = [];
+  if (startDate && endDate) {
+    const startMonth = dateMonthIndex(startDate);
+    const endMonth = dateMonthIndex(endDate, true);
+    if (startMonth > endMonth) {
+      warnings.push("dates d’expérience inversées");
+      startDate = null;
+      endDate = null;
+      durationMonths = null;
+    } else if (durationMonths !== null) {
+      const expectedMonths = Math.max(0, endMonth - startMonth);
+      const tolerance = startDate.length === 4 || endDate.length === 4 ? 12 : 2;
+      if (Math.abs(durationMonths - expectedMonths) > tolerance) {
+        warnings.push("durée d’expérience incohérente avec les dates");
+        durationMonths = null;
+      }
+    }
+  }
+  return { startDate, endDate, durationMonths, warnings };
+}
+
+function certificationExpiryDate(expiresAt: string) {
+  const [yearText, monthText, dayText] = expiresAt.split("-");
+  const year = Number(yearText);
+  const month = monthText ? Number(monthText) : 12;
+  const day = dayText ? Number(dayText) : new Date(Date.UTC(year, month, 0)).getUTCDate();
+  return new Date(Date.UTC(year, month - 1, day, 23, 59, 59, 999));
+}
+
+function certificationIsCurrent(
+  certification: NormalizedCertification,
+  referenceDate = new Date()
+) {
+  return !certification.expiresAt || certificationExpiryDate(certification.expiresAt) >= referenceDate;
 }
 
 const employmentEvidenceTerms: Record<NormalizedExperience["employmentType"], string[]> = {
@@ -446,6 +547,39 @@ function sameNormalizedValue(left: string, right: string) {
   return normalizeEvidenceText(left) === normalizeEvidenceText(right);
 }
 
+function normalizedPhrasesOverlap(left: string, right: string) {
+  const normalizedLeft = normalizeEvidenceText(left);
+  const normalizedRight = normalizeEvidenceText(right);
+  if (normalizedLeft.length < 3 || normalizedRight.length < 3) return false;
+  const paddedLeft = ` ${normalizedLeft} `;
+  const paddedRight = ` ${normalizedRight} `;
+  return paddedLeft.includes(paddedRight) || paddedRight.includes(paddedLeft);
+}
+
+function contradictionMatchesDeclaredContext(
+  item: z.infer<typeof contradictionSchema>,
+  declared: RecruitmentDeclaredContext
+) {
+  switch (item.field) {
+    case "specialty":
+      return sameNormalizedValue(item.declaredValue, declared.specialty);
+    case "targetCountry":
+      return declared.targetCountries.some(value => sameNormalizedValue(item.declaredValue, value));
+    case "language":
+      return declared.languages.some(value => sameNormalizedValue(item.declaredValue, value));
+    case "yearsExperience":
+      return declared.yearsExperience !== undefined && new RegExp(
+        `(?:^|\\s)${declared.yearsExperience}(?:\\s|$)`
+      ).test(normalizeEvidenceText(item.declaredValue));
+    case "professionalTitle":
+    case "skill":
+    case "certification":
+    case "diploma":
+    case "employment":
+      return false;
+  }
+}
+
 function fieldEvidenceMatchesAnalysis(
   item: z.infer<typeof fieldEvidenceSchema>,
   analysis: RawRecruitmentAnalysis
@@ -491,6 +625,8 @@ export function verifyCvEvidence(
   const normalizedEvidence = normalizeEvidenceText(evidence);
   if (normalizedEvidence.length < 6) return false;
   const pageMatch = sourceLocation.match(/\bpage\s*(\d+)\b/i);
+  const sourceHasPageMarkers = /\[PAGE\s+\d+\]/i.test(sourceText);
+  if (sourceHasPageMarkers && !pageMatch) return false;
   const scopedSource = pageMatch
     ? sourcePageText(sourceText, Number(pageMatch[1]))
     : sourceText;
@@ -510,7 +646,8 @@ function markEvidence<
   const evidenceVerified =
     item.confidence >= VERIFIED_EVIDENCE_MIN_CONFIDENCE &&
     verifyCvEvidence(item.evidence, item.sourceLocation, sourceText) &&
-    evidenceContainsClaims(item.evidence, claimedValues);
+    evidenceContainsClaims(item.evidence, claimedValues) &&
+    evidenceAffirmsClaims(item.evidence, claimedValues);
   return {
     ...item,
     evidenceVerified,
@@ -538,6 +675,7 @@ function distinctEvidence<T extends EvidenceBearing>(evidence: T[]): T[] {
 }
 
 function verifiedScoreBreakdown(input: {
+  targetSpecialty: string;
   fieldEvidence: CvEvidenceReference[];
   experiences: NormalizedExperience[];
   languages: NormalizedLanguage[];
@@ -554,9 +692,7 @@ function verifiedScoreBreakdown(input: {
   const verifiedExperiences = new Set(
     input.experiences
       .filter(isVerifiedFact)
-      .map(item => [item.role, item.organization, item.startDate, item.endDate]
-        .map(value => normalizeEvidenceText(value ?? ""))
-        .join("|"))
+      .map(item => `${normalizeEvidenceText(item.evidence)}|${normalizeEvidenceText(item.sourceLocation)}`)
   );
   const languagePoints = new Map<string, number>();
   const proficiencyPoints: Record<NormalizedLanguage["proficiency"], number> = {
@@ -576,12 +712,17 @@ function verifiedScoreBreakdown(input: {
   }
   const verifiedCertifications = new Set(
     input.certifications
-      .filter(isVerifiedFact)
+      .filter(item => isVerifiedFact(item) && certificationIsCurrent(item))
       .map(item => normalizeEvidenceText(item.name))
   );
+  const specialtyMatchesTarget = verifiedFields.some(item =>
+    item.field === "specialty" && normalizedPhrasesOverlap(item.value, input.targetSpecialty)
+  );
+  const titleMatchesTarget = verifiedFields.some(item =>
+    item.field === "professionalTitle" && normalizedPhrasesOverlap(item.value, input.targetSpecialty)
+  );
   return {
-    specialtyMatch: (hasVerifiedField("professionalTitle") ? 15 : 0) +
-      (hasVerifiedField("specialty") ? 15 : 0),
+    specialtyMatch: specialtyMatchesTarget ? 30 : titleMatchesTarget ? 15 : 0,
     experienceEvidence: Math.min(
       25,
       verifiedExperiences.size * 10 + (hasVerifiedField("yearsExperience") ? 15 : 0)
@@ -598,54 +739,101 @@ function verifiedScoreBreakdown(input: {
 /** Converts model output into a deterministic, bounded and deduplicated result. */
 export function normalizeRecruitmentAnalysis(
   analysis: RawRecruitmentAnalysis,
-  sourceText: string
+  sourceText: string,
+  declared: RecruitmentDeclaredContext = {
+    specialty: "",
+    targetCountries: [],
+    languages: [],
+  }
 ): RecruitmentAnalysisResult {
+  const deterministicProcessingWarnings: string[] = [];
   const normalizedExperiences = analysis.normalizedExperiences.map(item => {
-    const marked = markEvidence(item, sourceText, [item.role, item.organization]);
+    const initiallyMarked = markEvidence(item, sourceText, [item.role, item.organization]);
+    const associatedSegments = evidenceSegmentsContainingClaims(
+      item.evidence,
+      [item.role, item.organization]
+    );
+    const marked = associatedSegments.length > 0
+      ? initiallyMarked
+      : {
+          ...initiallyMarked,
+          evidenceVerified: false,
+          confidence: Math.min(initiallyMarked.confidence, 25),
+        };
     const baseVerified = isVerifiedFact(marked);
-    return {
-      ...marked,
-      startDate: baseVerified && evidenceContainsDate(item.evidence, item.startDate)
+    const scopedEvidence = associatedSegments.join("\n");
+    const timeline = sanitizeExperienceTimeline({
+      startDate: baseVerified && evidenceContainsDate(scopedEvidence, item.startDate)
         ? item.startDate
         : null,
-      endDate: baseVerified && evidenceContainsDate(item.evidence, item.endDate)
+      endDate: baseVerified && evidenceContainsDate(scopedEvidence, item.endDate)
         ? item.endDate
         : null,
-      employmentType: baseVerified
-        ? verifiedEmploymentType(item.evidence, item.employmentType)
-        : "unknown" as const,
-      specialty: baseVerified && evidenceContainsClaims(item.evidence, [item.specialty])
-        ? item.specialty
-        : "",
-      country: baseVerified && item.country && evidenceContainsClaims(item.evidence, [item.country])
-        ? item.country
-        : null,
-      durationMonths: baseVerified && evidenceContainsDuration(item.evidence, item.durationMonths)
+      durationMonths: baseVerified && evidenceContainsDuration(scopedEvidence, item.durationMonths)
         ? item.durationMonths
         : null,
+    });
+    deterministicProcessingWarnings.push(...timeline.warnings.map(
+      warning => `${warning} pour ${item.role} chez ${item.organization}.`
+    ));
+    return {
+      ...marked,
+      startDate: timeline.startDate,
+      endDate: timeline.endDate,
+      employmentType: baseVerified
+        ? verifiedEmploymentType(scopedEvidence, item.employmentType)
+        : "unknown" as const,
+      specialty: baseVerified && evidenceContainsClaims(scopedEvidence, [item.specialty])
+        ? item.specialty
+        : "",
+      country: baseVerified && item.country && evidenceContainsClaims(scopedEvidence, [item.country])
+        ? item.country
+        : null,
+      durationMonths: timeline.durationMonths,
     };
   });
   const normalizedLanguages = analysis.normalizedLanguages.map(item => {
-    const marked = markEvidence(item, sourceText, [item.language]);
+    const initiallyMarked = markEvidence(item, sourceText, [item.language]);
+    const associatedSegments = evidenceSegmentsContainingClaims(
+      item.evidence,
+      [item.language],
+      true
+    );
+    const marked = associatedSegments.length > 0
+      ? initiallyMarked
+      : {
+          ...initiallyMarked,
+          evidenceVerified: false,
+          confidence: Math.min(initiallyMarked.confidence, 25),
+        };
     return {
       ...marked,
       proficiency: isVerifiedFact(marked)
-        ? verifiedLanguageProficiency(item.evidence, item.proficiency)
+        ? verifiedLanguageProficiency(associatedSegments.join("\n"), item.proficiency)
         : "unknown" as const,
     };
   });
   const certifications = analysis.certifications.map(item => {
-    const marked = markEvidence(item, sourceText, [item.name]);
+    const initiallyMarked = markEvidence(item, sourceText, [item.name]);
+    const associatedSegments = evidenceSegmentsContainingClaims(item.evidence, [item.name]);
+    const marked = associatedSegments.length > 0
+      ? initiallyMarked
+      : {
+          ...initiallyMarked,
+          evidenceVerified: false,
+          confidence: Math.min(initiallyMarked.confidence, 25),
+        };
     const baseVerified = isVerifiedFact(marked);
+    const scopedEvidence = associatedSegments.join("\n");
     return {
       ...marked,
-      issuingBody: baseVerified && item.issuingBody && evidenceContainsClaims(item.evidence, [item.issuingBody])
+      issuingBody: baseVerified && item.issuingBody && evidenceContainsClaims(scopedEvidence, [item.issuingBody])
         ? item.issuingBody
         : null,
-      country: baseVerified && item.country && evidenceContainsClaims(item.evidence, [item.country])
+      country: baseVerified && item.country && evidenceContainsClaims(scopedEvidence, [item.country])
         ? item.country
         : null,
-      expiresAt: baseVerified && evidenceContainsDate(item.evidence, item.expiresAt)
+      expiresAt: baseVerified && evidenceContainsDate(scopedEvidence, item.expiresAt)
         ? item.expiresAt
         : null,
     };
@@ -683,6 +871,7 @@ export function normalizeRecruitmentAnalysis(
               item.documentValue.toLocaleLowerCase()
         ) === index
     )
+    .filter(item => contradictionMatchesDeclaredContext(item, declared))
     .map(item => markEvidence(item, sourceText, [item.documentValue]));
   const allEvidence = distinctEvidence([
     ...normalizedExperiences,
@@ -691,11 +880,12 @@ export function normalizeRecruitmentAnalysis(
     ...fieldEvidence,
   ]);
   const evidenceCoverage = evidenceCoverageOf(allEvidence);
-  const uniqueContradictions = distinctEvidence(contradictions);
+  const uniqueContradictions = contradictions;
   const unverifiedCount =
-    allEvidence.filter(item => !item.evidenceVerified).length +
-    uniqueContradictions.filter(item => !item.evidenceVerified).length;
+    allEvidence.filter(item => !isVerifiedFact(item)).length +
+    uniqueContradictions.filter(item => !isVerifiedFact(item)).length;
   const scoreBreakdown = verifiedScoreBreakdown({
+    targetSpecialty: declared.specialty,
     fieldEvidence,
     experiences: normalizedExperiences,
     languages: normalizedLanguages,
@@ -708,14 +898,75 @@ export function normalizeRecruitmentAnalysis(
   const scoreIsTrustworthy =
     allEvidence.filter(isVerifiedFact).length >= 3 &&
     evidenceCoverage >= 80 &&
-    uniqueContradictions.every(isVerifiedFact) &&
+    uniqueContradictions.length === 0 &&
     score > 0;
   const verificationWarning =
     unverifiedCount > 0
       ? `${unverifiedCount} preuve(s) proposée(s) par l’IA ne correspondent pas exactement au texte extrait ou à la page indiquée.`
       : null;
+  const verifiedFields = fieldEvidence.filter(isVerifiedFact);
+  const verifiedProfessionalTitle = verifiedFields.find(
+    item => item.field === "professionalTitle"
+  )?.value ?? "";
+  const verifiedSpecialties = uniqueStrings(
+    verifiedFields.filter(item => item.field === "specialty").map(item => item.value)
+  );
+  const verifiedSkills = uniqueStrings(
+    verifiedFields.filter(item => item.field === "skill").map(item => item.value)
+  );
+  const verifiedLanguages = uniqueStrings(
+    normalizedLanguages.filter(isVerifiedFact).map(item => item.language)
+  );
+  const verifiedCountries = uniqueStrings(
+    verifiedFields.filter(item => item.field === "targetCountry").map(item => item.value)
+  );
+  const verifiedYearsExperience = verifiedFields.some(
+    item => item.field === "yearsExperience"
+  ) ? analysis.yearsExperience : null;
+  const verifiedExperiences = normalizedExperiences.filter(isVerifiedFact);
+  const verifiedCertifications = certifications.filter(
+    item => isVerifiedFact(item) && certificationIsCurrent(item)
+  );
+  const expiredVerifiedCertifications = certifications.filter(
+    item => isVerifiedFact(item) && !certificationIsCurrent(item)
+  );
+  const verifiedEvidenceCount = allEvidence.filter(isVerifiedFact).length;
+  const deterministicStrengths = uniqueStrings([
+    ...(verifiedProfessionalTitle
+      ? [`Titre professionnel vérifié : ${verifiedProfessionalTitle}.`]
+      : []),
+    ...(verifiedSpecialties.length > 0
+      ? [`Spécialité(s) vérifiée(s) : ${verifiedSpecialties.join(", ")}.`]
+      : []),
+    ...(verifiedExperiences.length > 0
+      ? [`${verifiedExperiences.length} expérience(s) professionnelle(s) sourcée(s).`]
+      : []),
+    ...(verifiedSkills.length > 0
+      ? [`Compétence(s) vérifiée(s) : ${verifiedSkills.join(", ")}.`]
+      : []),
+    ...(verifiedLanguages.length > 0
+      ? [`Langue(s) vérifiée(s) : ${verifiedLanguages.join(", ")}.`]
+      : []),
+    ...(verifiedCertifications.length > 0
+      ? [`Certification(s) vérifiée(s) : ${verifiedCertifications.map(item => item.name).join(", ")}.`]
+      : []),
+  ]);
+  const deterministicGaps = uniqueStrings([
+    ...(!verifiedProfessionalTitle && verifiedSpecialties.length === 0
+      ? ["Titre professionnel ou spécialité non vérifié automatiquement."]
+      : []),
+    ...(verifiedExperiences.length === 0
+      ? ["Expérience professionnelle non vérifiée automatiquement."]
+      : []),
+    ...(verifiedCertifications.length === 0
+      ? ["Certification professionnelle non vérifiée automatiquement."]
+      : []),
+  ]);
   return {
     ...analysis,
+    summary: `Lecture automatisée : ${verifiedEvidenceCount} citation(s) vérifiée(s) sur ${allEvidence.length}. ` +
+      `${verifiedExperiences.length} expérience(s), ${verifiedCertifications.length} certification(s) et ` +
+      `${verifiedLanguages.length} langue(s) disposent d’une preuve exploitable. Revue humaine obligatoire.`,
     relevanceScore: scoreIsTrustworthy
       ? Math.max(0, Math.min(100, score))
       : null,
@@ -728,14 +979,20 @@ export function normalizeRecruitmentAnalysis(
     normalizedExperiences,
     normalizedLanguages,
     certifications,
-    specialties: uniqueStrings(analysis.specialties),
-    skills: uniqueStrings(analysis.skills),
-    languages: uniqueStrings(analysis.languages),
-    countriesOfInterest: uniqueStrings(analysis.countriesOfInterest),
-    strengths: uniqueStrings(analysis.strengths),
-    gaps: uniqueStrings(analysis.gaps),
+    professionalTitle: verifiedProfessionalTitle,
+    specialties: verifiedSpecialties,
+    skills: verifiedSkills,
+    languages: verifiedLanguages,
+    countriesOfInterest: verifiedCountries,
+    yearsExperience: verifiedYearsExperience,
+    strengths: deterministicStrengths,
+    gaps: deterministicGaps,
     dataQualityWarnings: uniqueStrings([
       ...analysis.dataQualityWarnings,
+      ...deterministicProcessingWarnings,
+      ...expiredVerifiedCertifications.map(
+        item => `Certification expirée à confirmer : ${item.name} (${item.expiresAt}).`
+      ),
       ...(verificationWarning ? [verificationWarning] : []),
     ]),
     requiredFollowUps: uniqueStrings([
@@ -749,8 +1006,8 @@ export function normalizeRecruitmentAnalysis(
     fieldEvidence,
     contradictions: uniqueContradictions,
     reasoning: scoreIsTrustworthy
-      ? analysis.reasoning
-      : `Score non présenté : la couverture de preuves vérifiées est insuffisante (${evidenceCoverage} %). ${analysis.reasoning}`,
+      ? "Score déterministe calculé uniquement à partir de faits professionnels vérifiés et rapprochés de la spécialité déclarée."
+      : `Score non présenté : les preuves vérifiées sont insuffisantes, contradictoires ou non rapprochées de la spécialité déclarée (${evidenceCoverage} % de couverture).`,
   };
 }
 
@@ -824,7 +1081,7 @@ export function buildManualReviewFallback(input: RecruitmentAnalysisInput): Recr
 export function verifiedRecruitmentFacts(analysis: RecruitmentAnalysisResult) {
   return {
     certifications: analysis.certifications.filter(
-      isVerifiedFact
+      item => isVerifiedFact(item) && certificationIsCurrent(item)
     ),
     languages: analysis.normalizedLanguages.filter(
       isVerifiedFact
@@ -891,7 +1148,12 @@ Consignes de normalisation :
 Barème professionnel, sans caractéristique protégée : specialtyMatch /30, experienceEvidence /25, skillsEvidence /20, languageReadiness /15, credentialReadiness /10. Ne fournis pas de total : il sera recalculé par le serveur. Le score aide à organiser la revue humaine et ne constitue jamais une décision de recrutement.`,
     });
 
-    const normalized = normalizeRecruitmentAnalysis(response.output, cvText);
+    const normalized = normalizeRecruitmentAnalysis(response.output, cvText, {
+      specialty: input.specialty,
+      targetCountries: input.targetCountries,
+      languages: input.languages,
+      yearsExperience: input.yearsExperience,
+    });
     const inputTokens = response.usage.inputTokens ?? null;
     const outputTokens = response.usage.outputTokens ?? null;
     return {
