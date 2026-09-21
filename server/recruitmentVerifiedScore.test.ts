@@ -11,5 +11,9 @@ describe("scores de recrutement vérifiés", () => {
     expect(source).toContain("const verifiedRecruitmentScore");
     expect(source).toContain("aiScore: verifiedRecruitmentScore");
     expect(source).toContain("eq(cvApplications.analysisPromptVersion, RECRUITMENT_ANALYSIS_PROMPT_VERSION)");
+    expect(source).toContain("THEN ${cvApplications.aiSummary} ELSE NULL");
+    expect(source).toContain("THEN ${cvApplications.aiExtractedSkills} ELSE NULL");
+    expect(source).toContain("verifiedApplicationIds");
+    expect(source).toContain("certificationDateIsCurrent(certification.expiresAt)");
   });
 });
