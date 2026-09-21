@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { computeBriefCandidateMatch } from "./clientBriefMatching";
+import { certificationDateIsCurrent, computeBriefCandidateMatch } from "./clientBriefMatching";
 
 describe("matching mission–candidat", () => {
   const brief = { specialtyNeeded: "Anesthésie-réanimation", country: "Arabie saoudite", requiredCertifications: "ACLS, ATLS" };
@@ -45,5 +45,18 @@ describe("matching mission–candidat", () => {
     expect(result.score).toBe(100);
     expect(result.matchedLanguages).toEqual(["anglais", "arabe"]);
     expect(result.breakdown).toEqual({ specialty: 35, mobility: 15, certifications: 20, languages: 15, experience: 10, availability: 5 });
+  });
+
+  it("écarte du matching les certifications normalisées arrivées à expiration", () => {
+    const result = computeBriefCandidateMatch(brief, {
+      specialty: "Pédiatrie",
+      targetCountries: null,
+      certifications: null,
+      normalizedCertifications: '[{"name":"ACLS","expiresAt":"2020-01-01"},{"name":"ATLS","expiresAt":"2099-12-31"}]',
+    });
+
+    expect(result.matchedCertifications).toEqual(["ATLS"]);
+    expect(result.breakdown.certifications).toBe(10);
+    expect(certificationDateIsCurrent("2020-01-01", new Date("2026-01-01T00:00:00Z"))).toBe(false);
   });
 });
