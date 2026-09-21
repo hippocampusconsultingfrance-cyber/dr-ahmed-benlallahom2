@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { generateText, Output } from "ai";
 import { z } from "zod";
 import { cvApplications, cvCandidateCertifications, cvCandidateExperiences, cvCandidateLanguages } from "../drizzle/schema";
@@ -124,12 +124,14 @@ export type RecruitmentAnalysisInput = {
   yearsExperience?: number;
   message?: string;
   extractedText: string;
+  extractionMethod?: CvExtractionResult["method"];
+  ocrConfidence?: number | null;
 };
 
 export type RecruitmentDeclaredContext = Pick<
   RecruitmentAnalysisInput,
   "specialty" | "targetCountries" | "languages" | "yearsExperience"
->;
+> & { extractionConfidence?: number | null };
 
 const evidenceSchema = z.string().trim().min(1).max(500);
 const sourceLocationSchema = z.string().trim().min(1).max(120);
@@ -302,10 +304,16 @@ export async function extractCvDocument(buffer: Buffer, mimeType: string): Promi
     } finally {
       await parser.destroy();
     }
-    if (extracted.length >= 80) return { text: extracted, method: "pdf_text", totalPages, ocrConfidence: null, ocrModelVersion: null, warnings: [] };
+    const extractedContentLength = cleanText(
+      extracted.replace(/\[PAGE\s+\d+\]/gi, "")
+    ).length;
+    if (extractedContentLength >= 80) return { text: extracted, method: "pdf_text", totalPages, ocrConfidence: null, ocrModelVersion: null, warnings: [] };
     const vision = await extractPdfWithVision(buffer);
     return {
-      text: cleanText([extracted, vision.text].filter(Boolean).join("\n\n")),
+      // Vision already carries server-generated page markers. Keeping the empty
+      // text-parser markers as well would create duplicate page boundaries and
+      // could make a genuine OCR citation impossible to locate.
+      text: vision.text || extracted,
       method: "pdf_vision",
       totalPages,
       ocrConfidence: vision.confidence,
@@ -363,15 +371,15 @@ function sourcePageText(sourceText: string, pageNumber: number): string | null {
       contentStart: markerPattern.lastIndex,
     });
   }
-  const markerIndex = markers.findIndex(
-    marker => marker.pageNumber === pageNumber
+  const matchingSections = markers.flatMap((marker, markerIndex) =>
+    marker.pageNumber === pageNumber
+      ? [sourceText.slice(
+          marker.contentStart,
+          markers[markerIndex + 1]?.markerStart ?? sourceText.length
+        )]
+      : []
   );
-  if (markerIndex < 0) return null;
-  const marker = markers[markerIndex];
-  return sourceText.slice(
-    marker.contentStart,
-    markers[markerIndex + 1]?.markerStart ?? sourceText.length
-  );
+  return matchingSections.length > 0 ? matchingSections.join("\n") : null;
 }
 
 function evidenceContainsClaims(evidence: string, claimedValues: string[]) {
@@ -384,9 +392,11 @@ function evidenceContainsClaims(evidence: string, claimedValues: string[]) {
 }
 
 const NEGATION_TOKENS = new Set([
-  "no", "not", "without", "none", "non", "sans", "aucun", "aucune", "pas",
+  "no", "not", "never", "without", "none", "non", "sans", "aucun", "aucune", "pas", "jamais",
   "nicht", "kein", "keine", "ohne", "sin", "ningun", "ninguna", "nessun",
-  "nessuna", "absent", "missing", "manquant", "manquante", "unavailable",
+  "nessuna", "nunca", "absent", "missing", "manquant", "manquante", "unavailable",
+  "expired", "expire", "expiree", "revoked", "revoque", "revoquee", "suspended",
+  "suspendu", "suspendue", "lapsed", "perime", "perimee", "invalid", "invalide",
 ]);
 
 function evidenceAffirmsClaims(evidence: string, claimedValues: string[]) {
@@ -398,8 +408,8 @@ function evidenceAffirmsClaims(evidence: string, claimedValues: string[]) {
       const matches = claimTokens.every((token, offset) => evidenceTokens[index + offset] === token);
       if (!matches) continue;
       const nearbyTokens = [
-        ...evidenceTokens.slice(Math.max(0, index - 3), index),
-        ...evidenceTokens.slice(index + claimTokens.length, index + claimTokens.length + 3),
+        ...evidenceTokens.slice(Math.max(0, index - 12), index),
+        ...evidenceTokens.slice(index + claimTokens.length, index + claimTokens.length + 6),
       ];
       if (!nearbyTokens.some(token => NEGATION_TOKENS.has(token))) return true;
     }
@@ -410,13 +420,20 @@ function evidenceAffirmsClaims(evidence: string, claimedValues: string[]) {
 function evidenceSegmentsContainingClaims(
   evidence: string,
   claimedValues: string[],
-  splitCommasAndSlashes = false
+  splitCommasAndSlashes = false,
+  splitConjunctions = false
 ) {
   const sentenceSeparated = evidence.replace(/([.!?])\s+/g, "$1\n");
+  const entitySeparated = splitConjunctions
+    ? sentenceSeparated.replace(
+        /\b(?:and|et|und|y|puis|then|ensuite|followed\s+by)\b/gi,
+        "\n"
+      )
+    : sentenceSeparated;
   const separator = splitCommasAndSlashes
     ? /[\r\n;,/•·|]+/
     : /[\r\n;•·|]+/;
-  return sentenceSeparated
+  return entitySeparated
     .split(separator)
     .map(segment => segment.trim())
     .filter(segment =>
@@ -553,13 +570,20 @@ function normalizedPhrasesOverlap(left: string, right: string) {
   if (normalizedLeft.length < 3 || normalizedRight.length < 3) return false;
   const paddedLeft = ` ${normalizedLeft} `;
   const paddedRight = ` ${normalizedRight} `;
-  return paddedLeft.includes(paddedRight) || paddedRight.includes(paddedLeft);
+  if (paddedLeft.includes(paddedRight) || paddedRight.includes(paddedLeft)) return true;
+  const roots = (value: string) => value
+    .split(" ")
+    .filter(token => token.length >= 6)
+    .map(token => token.slice(0, 7));
+  const leftRoots = new Set(roots(normalizedLeft));
+  return roots(normalizedRight).some(root => leftRoots.has(root));
 }
 
 function contradictionMatchesDeclaredContext(
   item: z.infer<typeof contradictionSchema>,
   declared: RecruitmentDeclaredContext
 ) {
+  if (sameNormalizedValue(item.declaredValue, item.documentValue)) return false;
   switch (item.field) {
     case "specialty":
       return sameNormalizedValue(item.declaredValue, declared.specialty);
@@ -641,9 +665,12 @@ function markEvidence<
 >(
   item: T,
   sourceText: string,
-  claimedValues: string[]
+  claimedValues: string[],
+  sourceConfidence: number | null | undefined = null
 ): T & { evidenceVerified: boolean } {
   const evidenceVerified =
+    (sourceConfidence === null || sourceConfidence === undefined ||
+      sourceConfidence >= VERIFIED_EVIDENCE_MIN_CONFIDENCE) &&
     item.confidence >= VERIFIED_EVIDENCE_MIN_CONFIDENCE &&
     verifyCvEvidence(item.evidence, item.sourceLocation, sourceText) &&
     evidenceContainsClaims(item.evidence, claimedValues) &&
@@ -674,6 +701,24 @@ function distinctEvidence<T extends EvidenceBearing>(evidence: T[]): T[] {
   return Array.from(unique.values());
 }
 
+function experienceFactKey(item: NormalizedExperience) {
+  return `${normalizeEvidenceText(item.role)}|${normalizeEvidenceText(item.organization)}`;
+}
+
+function distinctExperiencesByFact(experiences: NormalizedExperience[]) {
+  const unique = new Map<string, NormalizedExperience>();
+  for (const experience of experiences) {
+    const key = experienceFactKey(experience);
+    const existing = unique.get(key);
+    if (!existing ||
+      (!isVerifiedFact(existing) && isVerifiedFact(experience)) ||
+      (isVerifiedFact(existing) === isVerifiedFact(experience) && experience.confidence > existing.confidence)) {
+      unique.set(key, experience);
+    }
+  }
+  return Array.from(unique.values());
+}
+
 function verifiedScoreBreakdown(input: {
   targetSpecialty: string;
   fieldEvidence: CvEvidenceReference[];
@@ -689,11 +734,9 @@ function verifiedScoreBreakdown(input: {
       .filter(item => item.field === "skill")
       .map(item => normalizeEvidenceText(item.value))
   );
-  const verifiedExperiences = new Set(
-    input.experiences
-      .filter(isVerifiedFact)
-      .map(item => `${normalizeEvidenceText(item.evidence)}|${normalizeEvidenceText(item.sourceLocation)}`)
-  );
+  const verifiedExperiences = distinctEvidence(distinctExperiencesByFact(
+    input.experiences.filter(isVerifiedFact)
+  ));
   const languagePoints = new Map<string, number>();
   const proficiencyPoints: Record<NormalizedLanguage["proficiency"], number> = {
     basic: 3,
@@ -715,17 +758,19 @@ function verifiedScoreBreakdown(input: {
       .filter(item => isVerifiedFact(item) && certificationIsCurrent(item))
       .map(item => normalizeEvidenceText(item.name))
   );
-  const specialtyMatchesTarget = verifiedFields.some(item =>
-    item.field === "specialty" && normalizedPhrasesOverlap(item.value, input.targetSpecialty)
-  );
-  const titleMatchesTarget = verifiedFields.some(item =>
-    item.field === "professionalTitle" && normalizedPhrasesOverlap(item.value, input.targetSpecialty)
+  const specialtyEvidenceProvenance = new Set(
+    verifiedFields
+      .filter(item =>
+        (item.field === "specialty" || item.field === "professionalTitle") &&
+        normalizedPhrasesOverlap(item.value, input.targetSpecialty)
+      )
+      .map(item => `${normalizeEvidenceText(item.evidence)}|${normalizeEvidenceText(item.sourceLocation)}`)
   );
   return {
-    specialtyMatch: specialtyMatchesTarget ? 30 : titleMatchesTarget ? 15 : 0,
+    specialtyMatch: Math.min(30, specialtyEvidenceProvenance.size * 15),
     experienceEvidence: Math.min(
       25,
-      verifiedExperiences.size * 10 + (hasVerifiedField("yearsExperience") ? 15 : 0)
+      verifiedExperiences.length * 10 + (hasVerifiedField("yearsExperience") ? 15 : 0)
     ),
     skillsEvidence: Math.min(20, verifiedSkills.size * 5),
     languageReadiness: Math.min(
@@ -747,11 +792,25 @@ export function normalizeRecruitmentAnalysis(
   }
 ): RecruitmentAnalysisResult {
   const deterministicProcessingWarnings: string[] = [];
+  if (declared.extractionConfidence !== null &&
+      declared.extractionConfidence !== undefined &&
+      declared.extractionConfidence < VERIFIED_EVIDENCE_MIN_CONFIDENCE) {
+    deterministicProcessingWarnings.push(
+      `Confiance OCR insuffisante (${declared.extractionConfidence} %) : toutes les preuves nécessitent une vérification manuelle.`
+    );
+  }
   const normalizedExperiences = analysis.normalizedExperiences.map(item => {
-    const initiallyMarked = markEvidence(item, sourceText, [item.role, item.organization]);
+    const initiallyMarked = markEvidence(
+      item,
+      sourceText,
+      [item.role, item.organization],
+      declared.extractionConfidence
+    );
     const associatedSegments = evidenceSegmentsContainingClaims(
       item.evidence,
-      [item.role, item.organization]
+      [item.role, item.organization],
+      false,
+      true
     );
     const marked = associatedSegments.length > 0
       ? initiallyMarked
@@ -762,14 +821,26 @@ export function normalizeRecruitmentAnalysis(
         };
     const baseVerified = isVerifiedFact(marked);
     const scopedEvidence = associatedSegments.join("\n");
+    const ambiguousWithAnotherExperience = analysis.normalizedExperiences.some(
+      other => other !== item && evidenceContainsClaims(
+        scopedEvidence,
+        [other.role, other.organization]
+      )
+    );
+    const unambiguousEvidence = ambiguousWithAnotherExperience ? "" : scopedEvidence;
+    if (baseVerified && ambiguousWithAnotherExperience) {
+      deterministicProcessingWarnings.push(
+        `Sous-champs d’expérience ambigus pour ${item.role} chez ${item.organization}.`
+      );
+    }
     const timeline = sanitizeExperienceTimeline({
-      startDate: baseVerified && evidenceContainsDate(scopedEvidence, item.startDate)
+      startDate: baseVerified && evidenceContainsDate(unambiguousEvidence, item.startDate)
         ? item.startDate
         : null,
-      endDate: baseVerified && evidenceContainsDate(scopedEvidence, item.endDate)
+      endDate: baseVerified && evidenceContainsDate(unambiguousEvidence, item.endDate)
         ? item.endDate
         : null,
-      durationMonths: baseVerified && evidenceContainsDuration(scopedEvidence, item.durationMonths)
+      durationMonths: baseVerified && evidenceContainsDuration(unambiguousEvidence, item.durationMonths)
         ? item.durationMonths
         : null,
     });
@@ -781,22 +852,28 @@ export function normalizeRecruitmentAnalysis(
       startDate: timeline.startDate,
       endDate: timeline.endDate,
       employmentType: baseVerified
-        ? verifiedEmploymentType(scopedEvidence, item.employmentType)
+        ? verifiedEmploymentType(unambiguousEvidence, item.employmentType)
         : "unknown" as const,
-      specialty: baseVerified && evidenceContainsClaims(scopedEvidence, [item.specialty])
+      specialty: baseVerified && evidenceContainsClaims(unambiguousEvidence, [item.specialty])
         ? item.specialty
         : "",
-      country: baseVerified && item.country && evidenceContainsClaims(scopedEvidence, [item.country])
+      country: baseVerified && item.country && evidenceContainsClaims(unambiguousEvidence, [item.country])
         ? item.country
         : null,
       durationMonths: timeline.durationMonths,
     };
   });
   const normalizedLanguages = analysis.normalizedLanguages.map(item => {
-    const initiallyMarked = markEvidence(item, sourceText, [item.language]);
+    const initiallyMarked = markEvidence(
+      item,
+      sourceText,
+      [item.language],
+      declared.extractionConfidence
+    );
     const associatedSegments = evidenceSegmentsContainingClaims(
       item.evidence,
       [item.language],
+      true,
       true
     );
     const marked = associatedSegments.length > 0
@@ -814,8 +891,18 @@ export function normalizeRecruitmentAnalysis(
     };
   });
   const certifications = analysis.certifications.map(item => {
-    const initiallyMarked = markEvidence(item, sourceText, [item.name]);
-    const associatedSegments = evidenceSegmentsContainingClaims(item.evidence, [item.name]);
+    const initiallyMarked = markEvidence(
+      item,
+      sourceText,
+      [item.name],
+      declared.extractionConfidence
+    );
+    const associatedSegments = evidenceSegmentsContainingClaims(
+      item.evidence,
+      [item.name],
+      true,
+      true
+    );
     const marked = associatedSegments.length > 0
       ? initiallyMarked
       : {
@@ -825,15 +912,24 @@ export function normalizeRecruitmentAnalysis(
         };
     const baseVerified = isVerifiedFact(marked);
     const scopedEvidence = associatedSegments.join("\n");
+    const ambiguousWithAnotherCertification = analysis.certifications.some(
+      other => other !== item && evidenceContainsClaims(scopedEvidence, [other.name])
+    );
+    const unambiguousEvidence = ambiguousWithAnotherCertification ? "" : scopedEvidence;
+    if (baseVerified && ambiguousWithAnotherCertification) {
+      deterministicProcessingWarnings.push(
+        `Sous-champs de certification ambigus pour ${item.name}.`
+      );
+    }
     return {
       ...marked,
-      issuingBody: baseVerified && item.issuingBody && evidenceContainsClaims(scopedEvidence, [item.issuingBody])
+      issuingBody: baseVerified && item.issuingBody && evidenceContainsClaims(unambiguousEvidence, [item.issuingBody])
         ? item.issuingBody
         : null,
-      country: baseVerified && item.country && evidenceContainsClaims(scopedEvidence, [item.country])
+      country: baseVerified && item.country && evidenceContainsClaims(unambiguousEvidence, [item.country])
         ? item.country
         : null,
-      expiresAt: baseVerified && evidenceContainsDate(scopedEvidence, item.expiresAt)
+      expiresAt: baseVerified && evidenceContainsDate(unambiguousEvidence, item.expiresAt)
         ? item.expiresAt
         : null,
     };
@@ -850,7 +946,12 @@ export function normalizeRecruitmentAnalysis(
         ) === index
     )
     .map(item => {
-      const marked = markEvidence(item, sourceText, [item.value]);
+      const marked = markEvidence(
+        item,
+        sourceText,
+        [item.value],
+        declared.extractionConfidence
+      );
       if (fieldEvidenceMatchesAnalysis(item, analysis)) return marked;
       return {
         ...marked,
@@ -872,9 +973,15 @@ export function normalizeRecruitmentAnalysis(
         ) === index
     )
     .filter(item => contradictionMatchesDeclaredContext(item, declared))
-    .map(item => markEvidence(item, sourceText, [item.documentValue]));
+    .map(item => markEvidence(
+      item,
+      sourceText,
+      [item.documentValue],
+      declared.extractionConfidence
+    ));
+  const evidenceExperiences = distinctExperiencesByFact(normalizedExperiences);
   const allEvidence = distinctEvidence([
-    ...normalizedExperiences,
+    ...evidenceExperiences,
     ...normalizedLanguages,
     ...certifications,
     ...fieldEvidence,
@@ -899,6 +1006,7 @@ export function normalizeRecruitmentAnalysis(
     allEvidence.filter(isVerifiedFact).length >= 3 &&
     evidenceCoverage >= 80 &&
     uniqueContradictions.length === 0 &&
+    scoreBreakdown.specialtyMatch > 0 &&
     score > 0;
   const verificationWarning =
     unverifiedCount > 0
@@ -923,7 +1031,7 @@ export function normalizeRecruitmentAnalysis(
   const verifiedYearsExperience = verifiedFields.some(
     item => item.field === "yearsExperience"
   ) ? analysis.yearsExperience : null;
-  const verifiedExperiences = normalizedExperiences.filter(isVerifiedFact);
+  const verifiedExperiences = evidenceExperiences.filter(isVerifiedFact);
   const verifiedCertifications = certifications.filter(
     item => isVerifiedFact(item) && certificationIsCurrent(item)
   );
@@ -976,7 +1084,7 @@ export function normalizeRecruitmentAnalysis(
     ),
     evidenceCoverage,
     scoreBreakdown,
-    normalizedExperiences,
+    normalizedExperiences: evidenceExperiences,
     normalizedLanguages,
     certifications,
     professionalTitle: verifiedProfessionalTitle,
@@ -1033,10 +1141,10 @@ export function buildManualReviewFallback(input: RecruitmentAnalysisInput): Recr
   return {
     result: {
       summary: "Le texte du CV a été extrait avec succès. L’analyse IA complète est temporairement indisponible ; ce dossier doit être examiné manuellement.",
-      professionalTitle: specialty || "Professionnel de santé",
-      specialties: specialty ? [specialty] : [],
+      professionalTitle: "",
+      specialties: [],
       skills: [],
-      languages,
+      languages: [],
       normalizedLanguages: languages.map(language => ({
         language,
         proficiency: "unknown" as const,
@@ -1046,8 +1154,8 @@ export function buildManualReviewFallback(input: RecruitmentAnalysisInput): Recr
         evidenceVerified: false,
       })),
       certifications: [],
-      countriesOfInterest: targetCountries,
-      yearsExperience: input.yearsExperience ?? null,
+      countriesOfInterest: [],
+      yearsExperience: null,
       normalizedExperiences: [],
       relevanceScore: null,
       strengths: [],
@@ -1099,7 +1207,8 @@ export function verifiedRecruitmentFacts(analysis: RecruitmentAnalysisResult) {
 
 export async function analyzeCvText(input: RecruitmentAnalysisInput): Promise<RecruitmentAnalysisExecution> {
   const cvText = cleanText(input.extractedText).slice(0, 60_000);
-  if (cvText.length < 80) throw new Error("Le texte extrait du CV est insuffisant pour une analyse fiable.");
+  const cvContentLength = cleanText(cvText.replace(/\[PAGE\s+\d+\]/gi, "")).length;
+  if (cvContentLength < 80) throw new Error("Le texte extrait du CV est insuffisant pour une analyse fiable.");
 
   try {
     const response = await generateText({
@@ -1153,6 +1262,9 @@ Barème professionnel, sans caractéristique protégée : specialtyMatch /30, ex
       targetCountries: input.targetCountries,
       languages: input.languages,
       yearsExperience: input.yearsExperience,
+      extractionConfidence: input.extractionMethod === "pdf_vision"
+        ? input.ocrConfidence ?? 0
+        : null,
     });
     const inputTokens = response.usage.inputTokens ?? null;
     const outputTokens = response.usage.outputTokens ?? null;
@@ -1183,7 +1295,10 @@ export async function saveCvAnalysis(
   const db = await getDb();
   if (!db) throw new Error("Base de données indisponible.");
   const verifiedFacts = verifiedRecruitmentFacts(analysis);
-  await db
+  const verifiedCertifications = verifiedFacts.certifications;
+  const verifiedLanguages = verifiedFacts.languages;
+  const verifiedExperiences = verifiedFacts.experiences;
+  const updateAnalysis = db
     .update(cvApplications)
     .set({
       aiSummary: analysis.summary,
@@ -1228,25 +1343,21 @@ export async function saveCvAnalysis(
       normalizedExperiences: JSON.stringify(verifiedFacts.experiences),
       aiMatchReasoning: analysis.reasoning,
       aiAnalyzedAt: new Date(),
+      analysisPromptVersion: RECRUITMENT_ANALYSIS_PROMPT_VERSION,
     })
     .where(eq(cvApplications.id, applicationId));
-
-  await db
+  const deleteCertifications = db
     .delete(cvCandidateCertifications)
     .where(eq(cvCandidateCertifications.applicationId, applicationId));
-  await db
+  const deleteLanguages = db
     .delete(cvCandidateLanguages)
     .where(eq(cvCandidateLanguages.applicationId, applicationId));
-  await db
+  const deleteExperiences = db
     .delete(cvCandidateExperiences)
     .where(eq(cvCandidateExperiences.applicationId, applicationId));
 
-  const verifiedCertifications = verifiedFacts.certifications;
-  const verifiedLanguages = verifiedFacts.languages;
-  const verifiedExperiences = verifiedFacts.experiences;
-
-  if (verifiedCertifications.length > 0) {
-    await db.insert(cvCandidateCertifications).values(
+  const insertCertifications = verifiedCertifications.length > 0
+    ? db.insert(cvCandidateCertifications).values(
       verifiedCertifications.map(certification => ({
         applicationId,
         name: certification.name.slice(0, 180),
@@ -1256,10 +1367,10 @@ export async function saveCvAnalysis(
         evidence: certification.evidence || null,
         source: "extracted" as const,
       }))
-    );
-  }
-  if (verifiedLanguages.length > 0) {
-    await db.insert(cvCandidateLanguages).values(
+    )
+    : db.select({ id: cvApplications.id }).from(cvApplications).where(sql`FALSE`);
+  const insertLanguages = verifiedLanguages.length > 0
+    ? db.insert(cvCandidateLanguages).values(
       verifiedLanguages.map(language => ({
         applicationId,
         language: language.language.slice(0, 80),
@@ -1267,10 +1378,10 @@ export async function saveCvAnalysis(
         evidence: language.evidence || null,
         source: "extracted" as const,
       }))
-    );
-  }
-  if (verifiedExperiences.length > 0) {
-    await db.insert(cvCandidateExperiences).values(
+    )
+    : db.select({ id: cvApplications.id }).from(cvApplications).where(sql`FALSE`);
+  const insertExperiences = verifiedExperiences.length > 0
+    ? db.insert(cvCandidateExperiences).values(
       verifiedExperiences.map(experience => ({
         applicationId,
         role: experience.role.slice(0, 180),
@@ -1283,6 +1394,18 @@ export async function saveCvAnalysis(
         durationMonths: experience.durationMonths,
         evidence: experience.evidence || null,
       }))
-    );
-  }
+    )
+    : db.select({ id: cvApplications.id }).from(cvApplications).where(sql`FALSE`);
+
+  // Neon HTTP executes a batch atomically. The version marker, JSON snapshot
+  // and normalized child rows therefore advance together or not at all.
+  await db.batch([
+    updateAnalysis,
+    deleteCertifications,
+    deleteLanguages,
+    deleteExperiences,
+    insertCertifications,
+    insertLanguages,
+    insertExperiences,
+  ] as const);
 }
