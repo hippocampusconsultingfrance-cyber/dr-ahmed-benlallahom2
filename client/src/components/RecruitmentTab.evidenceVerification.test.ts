@@ -12,5 +12,8 @@ describe("vérification des preuves IA dans l’administration", () => {
     expect(source).toContain("recruitment-v7-verified-score");
     expect(source).toContain("Score à recalculer");
     expect(source).toContain("Compétences vérifiées");
+    expect(source).toContain("Synthèse des preuves vérifiées");
+    expect(source).toContain("Profil vérifié dans le CV");
+    expect(source).toContain("Éléments professionnels vérifiés");
   });
 });
