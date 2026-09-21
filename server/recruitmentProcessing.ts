@@ -67,6 +67,11 @@ export async function executeCvExternalPipeline(
     : null;
   await onValidated?.({ validation, promotedStorage });
   const extraction = await steps.extract(buffer, input.cvMimeType);
+  // A partial OCR (currently capped to the first rendered pages) must never
+  // produce a trustworthy whole-document score even if those pages are clear.
+  const analysisOcrConfidence = extraction.warnings.includes("vision_ocr_first_3_pages_only")
+    ? 0
+    : extraction.ocrConfidence;
   const analysisExecution = await steps.analyze({
     firstName: input.firstName,
     lastName: input.lastName,
@@ -77,11 +82,7 @@ export async function executeCvExternalPipeline(
     message: input.message ?? undefined,
     extractedText: extraction.text,
     extractionMethod: extraction.method,
-    // A partial OCR (currently capped to the first rendered pages) must never
-    // produce a trustworthy whole-document score even if those pages are clear.
-    ocrConfidence: extraction.warnings.includes("vision_ocr_first_3_pages_only")
-      ? 0
-      : extraction.ocrConfidence,
+    ocrConfidence: analysisOcrConfidence,
   });
   return {
     validation,
