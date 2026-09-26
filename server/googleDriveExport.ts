@@ -1,5 +1,5 @@
 import { createCipheriv, createDecipheriv, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
-import { and, eq, inArray, lte } from "drizzle-orm";
+import { and, eq, inArray, isNull, lte } from "drizzle-orm";
 import { cvApplications, cvGoogleDriveExportJobs, googleDriveConnections } from "../drizzle/schema";
 import { getDb } from "./db";
 import { logRecruitmentAction } from "./recruitmentAudit";
@@ -10,8 +10,10 @@ const CONNECTION_KEY = "recruitment_cv_export";
 const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.file";
 const GOOGLE_AUTHORIZE_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
+const GOOGLE_FILES_URL = "https://www.googleapis.com/drive/v3/files";
 const GOOGLE_UPLOAD_URL = "https://www.googleapis.com/upload/drive/v3/files";
 const CALLBACK_PATH = "/api/google-drive/oauth/callback";
+const DRIVE_TRACKING_PROPERTY = "recruitmentTrackingId";
 const MAX_ATTEMPTS = 5;
 const BATCH_SIZE = 3;
 const STATE_MAX_AGE_MS = 10 * 60 * 1000;
@@ -160,6 +162,14 @@ export function googleDriveCvFileName(trackingId: string, originalName: string) 
   return `${trackingId}-${safeName}`;
 }
 
+function escapeGoogleDriveQueryValue(value: string) {
+  return value.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+}
+
+export function googleDriveFileLookupQuery(folderId: string, trackingId: string) {
+  return `'${escapeGoogleDriveQueryValue(folderId)}' in parents and trashed = false and appProperties has { key='${DRIVE_TRACKING_PROPERTY}' and value='${escapeGoogleDriveQueryValue(trackingId)}' }`;
+}
+
 type GoogleDriveExportJobStatus = typeof cvGoogleDriveExportJobs.$inferSelect["status"];
 
 export function googleDriveExportRetryDisposition(status: GoogleDriveExportJobStatus | null) {
@@ -180,12 +190,17 @@ async function downloadCvBuffer(storageKey: string) {
 async function uploadCvToGoogleDrive(input: {
   accessToken: string;
   folderId: string;
+  trackingId: string;
   fileName: string;
   mimeType: string;
   content: Buffer;
 }) {
   const boundary = `drive-export-${randomBytes(12).toString("hex")}`;
-  const metadata = JSON.stringify({ name: input.fileName, parents: [input.folderId] });
+  const metadata = JSON.stringify({
+    name: input.fileName,
+    parents: [input.folderId],
+    appProperties: { [DRIVE_TRACKING_PROPERTY]: input.trackingId },
+  });
   const body = Buffer.concat([
     Buffer.from(`--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${metadata}\r\n`, "utf8"),
     Buffer.from(`--${boundary}\r\nContent-Type: ${input.mimeType}\r\n\r\n`, "utf8"),
@@ -207,6 +222,21 @@ async function uploadCvToGoogleDrive(input: {
   const result = await response.json() as { id?: string; webViewLink?: string; error?: { message?: string } };
   if (!response.ok || !result.id) throw new Error(`google_drive_upload_${response.status}${result.error?.message ? `_${result.error.message.slice(0, 120)}` : ""}`);
   return { id: result.id, webViewLink: result.webViewLink ?? null };
+}
+
+async function findCvInGoogleDrive(input: { accessToken: string; folderId: string; trackingId: string }) {
+  const url = new URL(GOOGLE_FILES_URL);
+  url.searchParams.set("q", googleDriveFileLookupQuery(input.folderId, input.trackingId));
+  url.searchParams.set("spaces", "drive");
+  url.searchParams.set("pageSize", "1");
+  url.searchParams.set("fields", "files(id,webViewLink)");
+  const response = await fetch(url, { headers: { Authorization: `Bearer ${input.accessToken}` } });
+  const result = await response.json() as { files?: Array<{ id?: string; webViewLink?: string }>; error?: { message?: string } };
+  if (!response.ok) {
+    throw new Error(`google_drive_lookup_${response.status}${result.error?.message ? `_${result.error.message.slice(0, 120)}` : ""}`);
+  }
+  const file = result.files?.find(candidate => typeof candidate.id === "string" && candidate.id.length > 0);
+  return file?.id ? { id: file.id, webViewLink: file.webViewLink ?? null } : null;
 }
 
 export async function saveGoogleDriveConnection(input: { authorizedByOpenId: string; refreshToken: string; grantedScopes?: string }) {
@@ -253,10 +283,7 @@ export async function enqueueCvGoogleDriveExport(applicationId: number, schedule
   const db = await getDb();
   if (!db) throw new Error("Database connection failed");
   await db.insert(cvGoogleDriveExportJobs).values({ applicationId, status: "queued", attempts: 0, maxAttempts: MAX_ATTEMPTS, scheduledFor })
-    .onConflictDoUpdate({
-      target: cvGoogleDriveExportJobs.applicationId,
-      set: { status: "queued", scheduledFor, startedAt: null, lastError: null, finishedAt: null, updatedAt: scheduledFor },
-    });
+    .onConflictDoNothing();
 }
 
 /**
@@ -311,28 +338,17 @@ export async function backfillCvGoogleDriveExportJobs(limit = 25) {
 
   const applications = await db.select({ id: cvApplications.id })
     .from(cvApplications)
+    .leftJoin(cvGoogleDriveExportJobs, eq(cvGoogleDriveExportJobs.applicationId, cvApplications.id))
     .where(and(
       inArray(cvApplications.status, ["new", "reviewing", "shortlisted", "placed"]),
       inArray(cvApplications.fileValidationStatus, ["quarantined", "accepted"]),
+      isNull(cvGoogleDriveExportJobs.id),
     ))
     .orderBy(cvApplications.createdAt)
     .limit(Math.min(Math.max(limit, 1), 100));
 
   let queued = 0;
-  let accelerated = 0;
   for (const application of applications) {
-    const [existingJob] = await db.select({ status: cvGoogleDriveExportJobs.status })
-      .from(cvGoogleDriveExportJobs)
-      .where(eq(cvGoogleDriveExportJobs.applicationId, application.id))
-      .limit(1);
-    if (existingJob && ["queued", "retry"].includes(existingJob.status)) {
-      const acceleratedAt = new Date();
-      await db.update(cvGoogleDriveExportJobs).set({ scheduledFor: acceleratedAt, updatedAt: acceleratedAt })
-        .where(and(eq(cvGoogleDriveExportJobs.applicationId, application.id), inArray(cvGoogleDriveExportJobs.status, ["queued", "retry"])));
-      accelerated += 1;
-      continue;
-    }
-    if (existingJob) continue;
     const result = await db.insert(cvGoogleDriveExportJobs).values({
       applicationId: application.id,
       status: "queued",
@@ -343,7 +359,7 @@ export async function backfillCvGoogleDriveExportJobs(limit = 25) {
     if (googleDriveMutationRowCount(result) === 1) queued += 1;
   }
 
-  return { inspected: applications.length, queued, accelerated };
+  return { inspected: applications.length, queued, accelerated: 0 };
 }
 
 /** Release export jobs left in `running` by an interrupted serverless worker. */
@@ -384,19 +400,27 @@ async function processGoogleDriveExportJob(jobId: number) {
   }
   try {
     const accessToken = await getGoogleDriveAccessToken(connection);
-    const content = await downloadCvBuffer(application.cvFileKey);
-    const driveFile = await uploadCvToGoogleDrive({
+    const existingDriveFile = await findCvInGoogleDrive({
       accessToken,
       folderId: connection.folderId,
-      fileName: googleDriveCvFileName(application.trackingId, application.cvOriginalName),
-      mimeType: application.cvMimeType,
-      content,
+      trackingId: application.trackingId,
     });
+    const driveFile = existingDriveFile || await (async () => {
+      const content = await downloadCvBuffer(application.cvFileKey);
+      return uploadCvToGoogleDrive({
+        accessToken,
+        folderId: connection.folderId,
+        trackingId: application.trackingId,
+        fileName: googleDriveCvFileName(application.trackingId, application.cvOriginalName),
+        mimeType: application.cvMimeType,
+        content,
+      });
+    })();
     const now = new Date();
     await db.update(cvGoogleDriveExportJobs).set({ status: "completed", driveFileId: driveFile.id, driveFileUrl: driveFile.webViewLink, lastError: null, finishedAt: now, updatedAt: now }).where(eq(cvGoogleDriveExportJobs.id, job.id));
     await db.update(googleDriveConnections).set({ lastUsedAt: now, lastError: null }).where(eq(googleDriveConnections.id, connection.id));
-    await logRecruitmentAction({ applicationId: application.id, adminOpenId: connection.authorizedByOpenId, action: "export", metadata: { destination: "google_drive", driveFileId: driveFile.id, trackingId: application.trackingId } });
-    return { completed: true, applicationId: application.id, driveFileId: driveFile.id };
+    await logRecruitmentAction({ applicationId: application.id, adminOpenId: connection.authorizedByOpenId, action: "export", metadata: { destination: "google_drive", driveFileId: driveFile.id, trackingId: application.trackingId, reusedExistingFile: Boolean(existingDriveFile) } });
+    return { completed: true, applicationId: application.id, driveFileId: driveFile.id, reusedExistingFile: Boolean(existingDriveFile) };
   } catch (error) {
     const message = error instanceof Error ? error.message.slice(0, 500) : "google_drive_export_unknown";
     const finalFailure = job.attempts >= job.maxAttempts;
