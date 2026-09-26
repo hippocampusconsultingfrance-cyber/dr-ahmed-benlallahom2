@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, lte } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, lte } from "drizzle-orm";
 import { cvApplications, cvProcessingJobs } from "../drizzle/schema";
 import { getDb } from "./db";
 import { extractCvDocument, analyzeCvText, RECRUITMENT_ANALYSIS_PROMPT_VERSION, saveCvAnalysis } from "./recruitmentAnalysis";
@@ -209,9 +209,11 @@ export async function backfillLegacyCvAnalysisJobs(limit = PROCESSING_BATCH_SIZE
 
   const applications = await db.select({ id: cvApplications.id })
     .from(cvApplications)
+    .leftJoin(cvProcessingJobs, eq(cvProcessingJobs.applicationId, cvApplications.id))
     .where(and(
       eq(cvApplications.fileValidationStatus, "quarantined"),
       inArray(cvApplications.status, ["new", "reviewing", "shortlisted", "placed"]),
+      isNull(cvProcessingJobs.id),
     ))
     .orderBy(cvApplications.createdAt)
     .limit(Math.min(Math.max(limit, 1), PROCESSING_BATCH_SIZE));
@@ -219,20 +221,9 @@ export async function backfillLegacyCvAnalysisJobs(limit = PROCESSING_BATCH_SIZE
   let queued = 0;
   let accelerated = 0;
   for (const application of applications) {
-    const [latestJob] = await db.select({ status: cvProcessingJobs.status })
-      .from(cvProcessingJobs)
-      .where(eq(cvProcessingJobs.applicationId, application.id))
-      .orderBy(desc(cvProcessingJobs.id))
-      .limit(1);
-    if (latestJob && ["queued", "retry"].includes(latestJob.status)) {
-      await db.update(cvProcessingJobs).set({ scheduledFor: new Date() })
-        .where(and(eq(cvProcessingJobs.applicationId, application.id), inArray(cvProcessingJobs.status, ["queued", "retry"])));
-      accelerated += 1;
-      continue;
-    }
-    if (latestJob?.status === "running") continue;
-    await enqueueCvAnalysis(application.id);
-    queued += 1;
+    const result = await enqueueCvAnalysis(application.id);
+    if (result.queued) queued += 1;
+    if (result.accelerated) accelerated += 1;
   }
 
   return { inspected: applications.length, queued, accelerated };
