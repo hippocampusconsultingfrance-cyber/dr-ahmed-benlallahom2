@@ -171,6 +171,13 @@ export function googleDriveFileLookupQuery(folderId: string, trackingId: string)
 }
 
 type GoogleDriveExportJobStatus = typeof cvGoogleDriveExportJobs.$inferSelect["status"];
+type CvFileValidationStatus = typeof cvApplications.$inferSelect["fileValidationStatus"];
+
+export function googleDriveFileDisposition(status: CvFileValidationStatus) {
+  if (status === "accepted") return "ready" as const;
+  if (status === "quarantined") return "waiting" as const;
+  return "terminal_failure" as const;
+}
 
 export function googleDriveExportRetryDisposition(status: GoogleDriveExportJobStatus | null) {
   if (status === "completed") return "already_completed" as const;
@@ -390,13 +397,42 @@ async function processGoogleDriveExportJob(jobId: number) {
   const connection = (await db.select().from(googleDriveConnections).where(eq(googleDriveConnections.connectionKey, CONNECTION_KEY)).limit(1))[0];
   if (!application || !connection) {
     const updatedAt = new Date();
-    await db.update(cvGoogleDriveExportJobs).set({ status: "queued", scheduledFor: new Date(updatedAt.getTime() + 5 * 60_000), startedAt: null, updatedAt }).where(eq(cvGoogleDriveExportJobs.id, job.id));
-    return { skipped: true, reason: application ? "connection_missing" as const : "application_missing" as const };
+    if (!application) {
+      await db.update(cvGoogleDriveExportJobs).set({ status: "failed", startedAt: null, finishedAt: updatedAt, lastError: "application_missing", updatedAt }).where(eq(cvGoogleDriveExportJobs.id, job.id));
+      return { skipped: true, retry: false, reason: "application_missing" as const };
+    }
+    await db.update(cvGoogleDriveExportJobs).set({
+      status: "queued",
+      attempts: Math.max(0, job.attempts - 1),
+      scheduledFor: new Date(updatedAt.getTime() + 5 * 60_000),
+      startedAt: null,
+      updatedAt,
+    }).where(eq(cvGoogleDriveExportJobs.id, job.id));
+    return { skipped: true, retry: true, reason: "connection_missing" as const };
   }
-  if (application.fileValidationStatus !== "accepted") {
+  const fileDisposition = googleDriveFileDisposition(application.fileValidationStatus);
+  if (fileDisposition === "terminal_failure") {
     const updatedAt = new Date();
-    await db.update(cvGoogleDriveExportJobs).set({ status: "queued", scheduledFor: new Date(updatedAt.getTime() + 60_000), startedAt: null, updatedAt }).where(eq(cvGoogleDriveExportJobs.id, job.id));
-    return { skipped: true, reason: "cv_not_accepted" as const };
+    const reason = `cv_${application.fileValidationStatus}`;
+    await db.update(cvGoogleDriveExportJobs).set({
+      status: "failed",
+      startedAt: null,
+      finishedAt: updatedAt,
+      lastError: reason,
+      updatedAt,
+    }).where(eq(cvGoogleDriveExportJobs.id, job.id));
+    return { skipped: true, retry: false, reason };
+  }
+  if (fileDisposition === "waiting") {
+    const updatedAt = new Date();
+    await db.update(cvGoogleDriveExportJobs).set({
+      status: "queued",
+      attempts: Math.max(0, job.attempts - 1),
+      scheduledFor: new Date(updatedAt.getTime() + 60_000),
+      startedAt: null,
+      updatedAt,
+    }).where(eq(cvGoogleDriveExportJobs.id, job.id));
+    return { skipped: true, retry: true, reason: "cv_not_accepted" as const };
   }
   try {
     const accessToken = await getGoogleDriveAccessToken(connection);
