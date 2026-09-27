@@ -63,6 +63,22 @@ describe("traçabilité de l'email de confirmation de candidature", () => {
     });
   });
 
+  it("ignore un webhook tardif d’une ancienne tentative après la réussite de la reprise", () => {
+    const events = [
+      { eventType: "email.bounced", providerEmailId: "confirmation_1", payload: JSON.stringify({ type: "email.bounced" }), occurredAt: new Date("2026-09-08T09:20:00Z") },
+      { eventType: "email.delivered", providerEmailId: "confirmation_2", payload: JSON.stringify({ type: "email.delivered" }), occurredAt: new Date("2026-09-08T09:16:00Z") },
+      { eventType: "email.sent", providerEmailId: "confirmation_2", payload: JSON.stringify({ kind: "application_confirmation", outcome: "sent", attempt: 2 }), occurredAt: new Date("2026-09-08T09:15:00Z") },
+      { eventType: "email.failed", providerEmailId: "confirmation_1", payload: JSON.stringify({ type: "email.failed" }), occurredAt: new Date("2026-09-08T09:10:00Z") },
+      { eventType: "email.sent", providerEmailId: "confirmation_1", payload: JSON.stringify({ kind: "application_confirmation", outcome: "sent", attempt: 1 }), occurredAt: new Date("2026-09-08T09:00:00Z") },
+    ];
+
+    expect(resolveCvConfirmationDelivery(events)).toMatchObject({
+      eventType: "email.delivered",
+      attempts: 2,
+      providerEmailId: "confirmation_2",
+    });
+  });
+
   it("attend cinq minutes avant la deuxième tentative et s'arrête après trois", () => {
     const occurredAt = new Date("2026-09-08T09:00:00Z");
     const failed = resolveCvConfirmationDelivery([
@@ -139,5 +155,11 @@ describe("traçabilité de l'email de confirmation de candidature", () => {
     expect(traceSource).toContain("const maySendUntracked = !current.eventType && options.allowUntracked");
     expect(traceSource).toContain('current.eventType !== "email.failed" && !maySendUntracked');
     expect(traceSource).toContain('current.eventType === "email.failed" ? current.attempts + 1 : 1');
+  });
+
+  it("ne laisse pas les échecs de campagne évincer la file de reprise des confirmations", () => {
+    expect(traceSource).toContain('alias(recruitmentEmailEvents, "confirmation_attempt_events")');
+    expect(traceSource).toContain("like(recruitmentEmailEvents.payload, CONFIRMATION_PAYLOAD_PATTERN)");
+    expect(traceSource).toContain("exists(linkedConfirmationAttempt)");
   });
 });
