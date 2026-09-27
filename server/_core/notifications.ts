@@ -1,5 +1,6 @@
 import { Resend } from "resend";
 import { notifyOwner } from "./notification";
+import { buildResendApplicationTags } from "../resendWebhookCorrelation";
 
 let resendClient: Resend | undefined;
 
@@ -379,6 +380,7 @@ export async function sendCvApplicationConfirmationEmail(
         replyTo: RECRUITMENT_REPLY_TO,
         subject: `Candidature reçue - ${trackingId}`,
         html: emailContent,
+        tags: buildResendApplicationTags(trackingId),
       },
       { idempotencyKey },
     );
