@@ -1,12 +1,13 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { googleDriveFileLookupQuery } from "./googleDriveExport";
+import { googleDriveFileDisposition, googleDriveFileLookupQuery } from "./googleDriveExport";
 
 const analysisSource = readFileSync(new URL("./recruitmentProcessing.ts", import.meta.url), "utf8");
 const driveSource = readFileSync(new URL("./googleDriveExport.ts", import.meta.url), "utf8");
 
 function functionBody(source: string, name: string, nextMarker: string) {
-  const start = source.indexOf(`export async function ${name}`);
+  const exportedStart = source.indexOf(`export async function ${name}`);
+  const start = exportedStart >= 0 ? exportedStart : source.indexOf(`async function ${name}`);
   const end = source.indexOf(nextMarker, start);
   expect(start).toBeGreaterThanOrEqual(0);
   expect(end).toBeGreaterThan(start);
@@ -58,5 +59,21 @@ describe("rattrapage fiable des traitements de candidature", () => {
 
     expect(body).toContain(".onConflictDoNothing()");
     expect(body).not.toContain(".onConflictDoUpdate(");
+  });
+
+  it("n’épuise pas les tentatives Drive en attendant la validation du CV", () => {
+    expect(googleDriveFileDisposition("accepted")).toBe("ready");
+    expect(googleDriveFileDisposition("quarantined")).toBe("waiting");
+    expect(googleDriveFileDisposition("rejected")).toBe("terminal_failure");
+    expect(googleDriveFileDisposition("validation_failed")).toBe("terminal_failure");
+
+    const body = functionBody(
+      driveSource,
+      "processGoogleDriveExportJob",
+      "export async function processDueCvGoogleDriveExports",
+    );
+    expect(body).toContain("attempts: Math.max(0, job.attempts - 1)");
+    expect(body).toContain('status: "failed"');
+    expect(body).toContain("`cv_${application.fileValidationStatus}`");
   });
 });
