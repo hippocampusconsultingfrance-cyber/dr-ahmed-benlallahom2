@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { buildCandidatePortalActivationEmailEvent, buildCandidatePortalInvitationEmailEvent, buildCvConfirmationEmailEvent, canRetryCvConfirmation, candidatePortalAccountMatchesApplication, resolveCandidatePortalActivationDelivery, resolveCandidatePortalInvitationDelivery, resolveCvConfirmationDelivery } from "./recruitmentEmailTrace";
+import { buildCandidatePortalActivationEmailEvent, buildCandidatePortalInvitationEmailEvent, buildCvConfirmationEmailEvent, buildFailedConfirmationRetryCandidateQuery, canRetryCvConfirmation, candidatePortalAccountMatchesApplication, resolveCandidatePortalActivationDelivery, resolveCandidatePortalInvitationDelivery, resolveCvConfirmationDelivery } from "./recruitmentEmailTrace";
 import { readFileSync } from "node:fs";
+import { drizzle } from "drizzle-orm/neon-http";
 
 const traceSource = readFileSync(new URL("./recruitmentEmailTrace.ts", import.meta.url), "utf8");
 const routerSource = readFileSync(new URL("./routers.ts", import.meta.url), "utf8");
@@ -60,6 +61,22 @@ describe("traçabilité de l'email de confirmation de candidature", () => {
       eventType: "email.delivered",
       attempts: 1,
       providerEmailId: "confirmation_1",
+    });
+  });
+
+  it("ignore un webhook tardif d’une ancienne tentative après la réussite de la reprise", () => {
+    const events = [
+      { eventType: "email.bounced", providerEmailId: "confirmation_1", payload: JSON.stringify({ type: "email.bounced" }), occurredAt: new Date("2026-09-08T09:20:00Z") },
+      { eventType: "email.delivered", providerEmailId: "confirmation_2", payload: JSON.stringify({ type: "email.delivered" }), occurredAt: new Date("2026-09-08T09:16:00Z") },
+      { eventType: "email.sent", providerEmailId: "confirmation_2", payload: JSON.stringify({ kind: "application_confirmation", outcome: "sent", attempt: 2 }), occurredAt: new Date("2026-09-08T09:15:00Z") },
+      { eventType: "email.failed", providerEmailId: "confirmation_1", payload: JSON.stringify({ type: "email.failed" }), occurredAt: new Date("2026-09-08T09:10:00Z") },
+      { eventType: "email.sent", providerEmailId: "confirmation_1", payload: JSON.stringify({ kind: "application_confirmation", outcome: "sent", attempt: 1 }), occurredAt: new Date("2026-09-08T09:00:00Z") },
+    ];
+
+    expect(resolveCvConfirmationDelivery(events)).toMatchObject({
+      eventType: "email.delivered",
+      attempts: 2,
+      providerEmailId: "confirmation_2",
     });
   });
 
@@ -139,5 +156,17 @@ describe("traçabilité de l'email de confirmation de candidature", () => {
     expect(traceSource).toContain("const maySendUntracked = !current.eventType && options.allowUntracked");
     expect(traceSource).toContain('current.eventType !== "email.failed" && !maySendUntracked');
     expect(traceSource).toContain('current.eventType === "email.failed" ? current.attempts + 1 : 1');
+  });
+
+  it("ne laisse pas les échecs de campagne évincer la file de reprise des confirmations", () => {
+    const query = buildFailedConfirmationRetryCandidateQuery(drizzle.mock()).toSQL();
+    expect(query.sql).toContain('"recruitment_email_events"."payload" like');
+    expect(query.sql).toContain('exists (select "id" from "recruitment_email_events" "confirmation_attempt_events"');
+    expect(query.params).toEqual([
+      "email.failed",
+      '%"kind":"application_confirmation"%',
+      '%"kind":"application_confirmation"%',
+      100,
+    ]);
   });
 });

@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { cvApplications, recruitmentEmailEvents } from "../drizzle/schema";
 import { getDb } from "./db";
-import { and, desc, eq, isNotNull } from "drizzle-orm";
+import { and, desc, eq, exists, isNotNull, like, or } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { createCandidateInvitationToken } from "./candidateAuth";
 import {
   sendCvApplicationConfirmationEmail,
@@ -30,22 +31,26 @@ type CvConfirmationAttemptPayload = {
   kind: "application_confirmation";
   outcome?: "sent" | "failed";
   failureCode?: CvApplicationConfirmationDelivery["failureCode"];
+  attempt?: number;
 };
 
 type CandidatePortalInvitationAttemptPayload = {
   kind: "candidate_portal_invitation";
   outcome?: "sent" | "failed";
   failureCode?: "provider_rejected" | "delivery_exception";
+  attempt?: number;
 };
 
 type CandidatePortalActivationAttemptPayload = {
   kind: "candidate_portal_activation";
   outcome?: "sent" | "failed";
   failureCode?: "provider_rejected" | "delivery_exception";
+  attempt?: number;
 };
 
 const TERMINAL_DELIVERY_EVENTS = new Set(["email.delivered", "email.bounced", "email.complained", "email.suppressed"]);
 const MAX_CONFIRMATION_ATTEMPTS = 3;
+const CONFIRMATION_PAYLOAD_PATTERN = '%"kind":"application_confirmation"%';
 
 function parseConfirmationAttempt(payload: string | null): CvConfirmationAttemptPayload | null {
   if (!payload) return null;
@@ -79,58 +84,47 @@ function parseCandidatePortalActivationAttempt(payload: string | null): Candidat
   }
 }
 
-/** Resolve only the application-confirmation chain, excluding campaigns and manual emails. */
-export function resolveCvConfirmationDelivery(events: CvConfirmationTraceEvent[]) {
-  const attempts = events.filter(event => parseConfirmationAttempt(event.payload));
-  const confirmationProviderIds = new Set(attempts.map(event => event.providerEmailId).filter((value): value is string => Boolean(value)));
-  const relevantEvents = events
-    .filter(event => Boolean(parseConfirmationAttempt(event.payload)) || Boolean(event.providerEmailId && confirmationProviderIds.has(event.providerEmailId)))
-    .sort((left, right) => right.occurredAt.getTime() - left.occurredAt.getTime());
+function resolveLatestAttempt<TPayload extends { attempt?: number; failureCode?: string | null }>(
+  events: CvConfirmationTraceEvent[],
+  parseAttempt: (payload: string | null) => TPayload | null,
+) {
+  const attempts = events
+    .map(event => ({ event, payload: parseAttempt(event.payload) }))
+    .filter((attempt): attempt is { event: CvConfirmationTraceEvent; payload: TPayload } => Boolean(attempt.payload));
+  const latestAttempt = [...attempts].sort((left, right) => {
+    const sequenceDifference = (right.payload.attempt || 0) - (left.payload.attempt || 0);
+    return sequenceDifference || right.event.occurredAt.getTime() - left.event.occurredAt.getTime();
+  })[0] || null;
+  const latestProviderEmailId = latestAttempt?.event.providerEmailId || null;
+  const relevantEvents = latestAttempt
+    ? events
+      .filter(event => event === latestAttempt.event || Boolean(latestProviderEmailId && event.providerEmailId === latestProviderEmailId))
+      .sort((left, right) => right.occurredAt.getTime() - left.occurredAt.getTime())
+    : [];
   const latest = relevantEvents[0] || null;
-  const latestAttempt = latest ? parseConfirmationAttempt(latest.payload) : null;
+  const latestPayload = latest ? parseAttempt(latest.payload) : null;
   return {
     eventType: latest?.eventType || null,
     occurredAt: latest?.occurredAt || null,
-    failureCode: latestAttempt?.failureCode || null,
+    failureCode: latestPayload?.failureCode || null,
     attempts: attempts.length,
     providerEmailId: latest?.providerEmailId || null,
   };
+}
+
+/** Resolve only the application-confirmation chain, excluding campaigns and manual emails. */
+export function resolveCvConfirmationDelivery(events: CvConfirmationTraceEvent[]) {
+  return resolveLatestAttempt(events, parseConfirmationAttempt);
 }
 
 /** The confirmation email also contains the signed portal invitation link. */
 export function resolveCandidatePortalInvitationDelivery(events: CvConfirmationTraceEvent[]) {
-  const attempts = events.filter(event => parseCandidatePortalInvitationAttempt(event.payload));
-  const providerIds = new Set(attempts.map(event => event.providerEmailId).filter((value): value is string => Boolean(value)));
-  const relevantEvents = events
-    .filter(event => Boolean(parseCandidatePortalInvitationAttempt(event.payload)) || Boolean(event.providerEmailId && providerIds.has(event.providerEmailId)))
-    .sort((left, right) => right.occurredAt.getTime() - left.occurredAt.getTime());
-  const latest = relevantEvents[0] || null;
-  const latestAttempt = latest ? parseCandidatePortalInvitationAttempt(latest.payload) : null;
-  return {
-    eventType: latest?.eventType || null,
-    occurredAt: latest?.occurredAt || null,
-    failureCode: latestAttempt?.failureCode || null,
-    attempts: attempts.length,
-    providerEmailId: latest?.providerEmailId || null,
-  };
+  return resolveLatestAttempt(events, parseCandidatePortalInvitationAttempt);
 }
 
 /** Resolve the verification-email chain separately from the initial portal invitation. */
 export function resolveCandidatePortalActivationDelivery(events: CvConfirmationTraceEvent[]) {
-  const attempts = events.filter(event => parseCandidatePortalActivationAttempt(event.payload));
-  const providerIds = new Set(attempts.map(event => event.providerEmailId).filter((value): value is string => Boolean(value)));
-  const relevantEvents = events
-    .filter(event => Boolean(parseCandidatePortalActivationAttempt(event.payload)) || Boolean(event.providerEmailId && providerIds.has(event.providerEmailId)))
-    .sort((left, right) => right.occurredAt.getTime() - left.occurredAt.getTime());
-  const latest = relevantEvents[0] || null;
-  const latestAttempt = latest ? parseCandidatePortalActivationAttempt(latest.payload) : null;
-  return {
-    eventType: latest?.eventType || null,
-    occurredAt: latest?.occurredAt || null,
-    failureCode: latestAttempt?.failureCode || null,
-    attempts: attempts.length,
-    providerEmailId: latest?.providerEmailId || null,
-  };
+  return resolveLatestAttempt(events, parseCandidatePortalActivationAttempt);
 }
 
 export function candidatePortalAccountMatchesApplication(
@@ -267,6 +261,31 @@ async function loadConfirmationEvents(applicationId: number): Promise<CvConfirma
     .orderBy(desc(recruitmentEmailEvents.occurredAt));
 }
 
+type RecruitmentDb = NonNullable<Awaited<ReturnType<typeof getDb>>>;
+
+export function buildFailedConfirmationRetryCandidateQuery(db: RecruitmentDb) {
+  const confirmationAttempts = alias(recruitmentEmailEvents, "confirmation_attempt_events");
+  const linkedConfirmationAttempt = db.select({ id: confirmationAttempts.id })
+    .from(confirmationAttempts)
+    .where(and(
+      eq(confirmationAttempts.applicationId, recruitmentEmailEvents.applicationId),
+      eq(confirmationAttempts.providerEmailId, recruitmentEmailEvents.providerEmailId),
+      like(confirmationAttempts.payload, CONFIRMATION_PAYLOAD_PATTERN),
+    ));
+  return db.select({ applicationId: recruitmentEmailEvents.applicationId })
+    .from(recruitmentEmailEvents)
+    .where(and(
+      eq(recruitmentEmailEvents.eventType, "email.failed"),
+      isNotNull(recruitmentEmailEvents.applicationId),
+      or(
+        like(recruitmentEmailEvents.payload, CONFIRMATION_PAYLOAD_PATTERN),
+        exists(linkedConfirmationAttempt),
+      ),
+    ))
+    .orderBy(desc(recruitmentEmailEvents.occurredAt))
+    .limit(100);
+}
+
 export async function retryCvConfirmationEmail(
   applicationId: number,
   options: { requireDue?: boolean; now?: Date; allowUntracked?: boolean } = {},
@@ -329,11 +348,7 @@ export async function retryCvConfirmationEmail(
 export async function retryDueFailedCvConfirmationEmails(limit = 3, now = new Date()) {
   const db = await getDb();
   if (!db) throw new Error("Database connection failed");
-  const failedEvents = await db.select({ applicationId: recruitmentEmailEvents.applicationId })
-    .from(recruitmentEmailEvents)
-    .where(and(eq(recruitmentEmailEvents.eventType, "email.failed"), isNotNull(recruitmentEmailEvents.applicationId)))
-    .orderBy(desc(recruitmentEmailEvents.occurredAt))
-    .limit(100);
+  const failedEvents = await buildFailedConfirmationRetryCandidateQuery(db);
   const applicationIds = Array.from(new Set(failedEvents.map(event => event.applicationId).filter((value): value is number => typeof value === "number")));
   const results = [];
   for (const applicationId of applicationIds) {
