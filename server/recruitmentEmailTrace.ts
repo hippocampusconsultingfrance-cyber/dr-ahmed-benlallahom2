@@ -261,6 +261,31 @@ async function loadConfirmationEvents(applicationId: number): Promise<CvConfirma
     .orderBy(desc(recruitmentEmailEvents.occurredAt));
 }
 
+type RecruitmentDb = NonNullable<Awaited<ReturnType<typeof getDb>>>;
+
+export function buildFailedConfirmationRetryCandidateQuery(db: RecruitmentDb) {
+  const confirmationAttempts = alias(recruitmentEmailEvents, "confirmation_attempt_events");
+  const linkedConfirmationAttempt = db.select({ id: confirmationAttempts.id })
+    .from(confirmationAttempts)
+    .where(and(
+      eq(confirmationAttempts.applicationId, recruitmentEmailEvents.applicationId),
+      eq(confirmationAttempts.providerEmailId, recruitmentEmailEvents.providerEmailId),
+      like(confirmationAttempts.payload, CONFIRMATION_PAYLOAD_PATTERN),
+    ));
+  return db.select({ applicationId: recruitmentEmailEvents.applicationId })
+    .from(recruitmentEmailEvents)
+    .where(and(
+      eq(recruitmentEmailEvents.eventType, "email.failed"),
+      isNotNull(recruitmentEmailEvents.applicationId),
+      or(
+        like(recruitmentEmailEvents.payload, CONFIRMATION_PAYLOAD_PATTERN),
+        exists(linkedConfirmationAttempt),
+      ),
+    ))
+    .orderBy(desc(recruitmentEmailEvents.occurredAt))
+    .limit(100);
+}
+
 export async function retryCvConfirmationEmail(
   applicationId: number,
   options: { requireDue?: boolean; now?: Date; allowUntracked?: boolean } = {},
@@ -323,26 +348,7 @@ export async function retryCvConfirmationEmail(
 export async function retryDueFailedCvConfirmationEmails(limit = 3, now = new Date()) {
   const db = await getDb();
   if (!db) throw new Error("Database connection failed");
-  const confirmationAttempts = alias(recruitmentEmailEvents, "confirmation_attempt_events");
-  const linkedConfirmationAttempt = db.select({ id: confirmationAttempts.id })
-    .from(confirmationAttempts)
-    .where(and(
-      eq(confirmationAttempts.applicationId, recruitmentEmailEvents.applicationId),
-      eq(confirmationAttempts.providerEmailId, recruitmentEmailEvents.providerEmailId),
-      like(confirmationAttempts.payload, CONFIRMATION_PAYLOAD_PATTERN),
-    ));
-  const failedEvents = await db.select({ applicationId: recruitmentEmailEvents.applicationId })
-    .from(recruitmentEmailEvents)
-    .where(and(
-      eq(recruitmentEmailEvents.eventType, "email.failed"),
-      isNotNull(recruitmentEmailEvents.applicationId),
-      or(
-        like(recruitmentEmailEvents.payload, CONFIRMATION_PAYLOAD_PATTERN),
-        exists(linkedConfirmationAttempt),
-      ),
-    ))
-    .orderBy(desc(recruitmentEmailEvents.occurredAt))
-    .limit(100);
+  const failedEvents = await buildFailedConfirmationRetryCandidateQuery(db);
   const applicationIds = Array.from(new Set(failedEvents.map(event => event.applicationId).filter((value): value is number => typeof value === "number")));
   const results = [];
   for (const applicationId of applicationIds) {
