@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { buildCandidatePortalActivationEmailEvent, buildCandidatePortalInvitationEmailEvent, buildCvConfirmationEmailEvent, canRetryCvConfirmation, candidatePortalAccountMatchesApplication, resolveCandidatePortalActivationDelivery, resolveCandidatePortalInvitationDelivery, resolveCvConfirmationDelivery } from "./recruitmentEmailTrace";
+import { buildCandidatePortalActivationEmailEvent, buildCandidatePortalInvitationEmailEvent, buildCvConfirmationEmailEvent, buildFailedConfirmationRetryCandidateQuery, canRetryCvConfirmation, candidatePortalAccountMatchesApplication, resolveCandidatePortalActivationDelivery, resolveCandidatePortalInvitationDelivery, resolveCvConfirmationDelivery } from "./recruitmentEmailTrace";
 import { readFileSync } from "node:fs";
+import { drizzle } from "drizzle-orm/neon-http";
 
 const traceSource = readFileSync(new URL("./recruitmentEmailTrace.ts", import.meta.url), "utf8");
 const routerSource = readFileSync(new URL("./routers.ts", import.meta.url), "utf8");
@@ -158,8 +159,14 @@ describe("traçabilité de l'email de confirmation de candidature", () => {
   });
 
   it("ne laisse pas les échecs de campagne évincer la file de reprise des confirmations", () => {
-    expect(traceSource).toContain('alias(recruitmentEmailEvents, "confirmation_attempt_events")');
-    expect(traceSource).toContain("like(recruitmentEmailEvents.payload, CONFIRMATION_PAYLOAD_PATTERN)");
-    expect(traceSource).toContain("exists(linkedConfirmationAttempt)");
+    const query = buildFailedConfirmationRetryCandidateQuery(drizzle.mock()).toSQL();
+    expect(query.sql).toContain('"recruitment_email_events"."payload" like');
+    expect(query.sql).toContain('exists (select "id" from "recruitment_email_events" "confirmation_attempt_events"');
+    expect(query.params).toEqual([
+      "email.failed",
+      '%"kind":"application_confirmation"%',
+      '%"kind":"application_confirmation"%',
+      100,
+    ]);
   });
 });
