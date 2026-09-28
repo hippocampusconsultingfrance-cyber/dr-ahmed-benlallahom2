@@ -15,7 +15,7 @@ import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { storageGetSignedUrl, storagePut } from "../storage";
 import { notifyOwner } from "./notification";
-import { desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, isNotNull, isNull, sql } from "drizzle-orm";
 import { validateCvFile } from "../recruitmentFileValidation";
 import { getDb } from "../db";
 import { candidateDocumentAuditLogs, candidateDocumentProcessingJobs, candidateDocuments, cvApplications, cvProcessingJobs, recruitmentCampaignRecipients, recruitmentEmailEvents } from "../../drizzle/schema";
@@ -23,6 +23,7 @@ import { CANDIDATE_DOCUMENT_MAX_BYTES, candidateDocumentMimeTypes, safeCandidate
 import { createCandidateInvitationToken } from "../candidateAuth";
 import { isSameRecruitmentSubmission } from "../recruitmentSubmissionDeduplication";
 import { sendTrackedCvApplicationConfirmationEmail } from "../recruitmentEmailTrace";
+import { resendApplicationReferenceFromTags, resendRecipientMatchesApplication } from "../resendWebhookCorrelation";
 
 function safeErrorName(error: unknown) {
   return error instanceof Error ? error.name : "UnknownError";
@@ -311,14 +312,32 @@ export async function createApp() {
         : [];
       const recipient = recipients[0];
       const [trackedEmail] = !recipient && providerEmailId
-        ? await db.select({ applicationId: recruitmentEmailEvents.applicationId })
+          ? await db.select({ applicationId: recruitmentEmailEvents.applicationId })
           .from(recruitmentEmailEvents)
-          .where(eq(recruitmentEmailEvents.providerEmailId, providerEmailId))
+          .where(and(
+            eq(recruitmentEmailEvents.providerEmailId, providerEmailId),
+            isNotNull(recruitmentEmailEvents.applicationId),
+          ))
           .orderBy(desc(recruitmentEmailEvents.occurredAt))
           .limit(1)
         : [];
-      const applicationId = recipient?.applicationId || trackedEmail?.applicationId || null;
+      const taggedApplicationReference = resendApplicationReferenceFromTags(data.tags);
+      const [taggedApplication] = !recipient && !trackedEmail?.applicationId && taggedApplicationReference
+        ? await db.select({ id: cvApplications.id, email: cvApplications.email })
+          .from(cvApplications)
+          .where(eq(cvApplications.trackingId, taggedApplicationReference))
+          .limit(1)
+        : [];
+      const taggedApplicationId = taggedApplication && resendRecipientMatchesApplication(recipientEmail, taggedApplication.email)
+        ? taggedApplication.id
+        : null;
+      const applicationId = recipient?.applicationId || trackedEmail?.applicationId || taggedApplicationId || null;
       const occurredAt = event.created_at && Number.isFinite(new Date(event.created_at).getTime()) ? new Date(event.created_at) : new Date();
+      if (applicationId && providerEmailId) {
+        await db.update(recruitmentEmailEvents)
+          .set({ applicationId })
+          .where(and(eq(recruitmentEmailEvents.providerEmailId, providerEmailId), isNull(recruitmentEmailEvents.applicationId)));
+      }
       await db.insert(recruitmentEmailEvents).values({
         providerEventId,
         providerEmailId,
