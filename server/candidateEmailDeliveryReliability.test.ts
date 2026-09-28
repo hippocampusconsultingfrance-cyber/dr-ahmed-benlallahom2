@@ -17,10 +17,25 @@ describe("fiabilité des e-mails du portail candidat", () => {
     expect(source).not.toContain('console.error("candidate_reset_email_failed", error)');
   });
 
-  it("conserve le dernier lien encore valable lorsque Resend refuse le nouveau", () => {
-    expect(source).toContain("verificationTokenHash: previousVerificationState.tokenHash");
+  it("restaure le dernier lien valable uniquement après un refus explicite", () => {
+    expect(source.match(/if \(failureCode === "provider_rejected"\)/g)).toHaveLength(3);
+    expect(source).toContain("verificationTokenHash: previousVerificationState?.tokenHash ?? null");
     expect(source).toContain("eq(candidateAccounts.verificationTokenHash, verificationTokenHash)");
     expect(source).toContain("passwordResetTokenHash: candidate.passwordResetTokenHash");
     expect(source).toContain("eq(candidateAccounts.passwordResetTokenHash, tokenHash)");
+  });
+
+  it("utilise une clé d’idempotence liée au jeton pour les activations et réinitialisations", () => {
+    expect(source).toContain('buildCandidatePortalAccessIdempotencyKey("verify", verificationTokenHash)');
+    expect(source).toContain('buildCandidatePortalAccessIdempotencyKey("verify", tokenHash)');
+    expect(source).toContain('buildCandidatePortalAccessIdempotencyKey("reset", tokenHash)');
+  });
+
+  it("ne permet pas à une seconde inscription d’écraser le mot de passe d’un compte en attente", () => {
+    const existingAccountBranch = source.slice(source.indexOf("if (existing[0])"), source.indexOf("} else {", source.indexOf("if (existing[0])")));
+    expect(existingAccountBranch).not.toContain("passwordHash");
+    expect(existingAccountBranch).not.toContain("firstName: input.firstName");
+    expect(existingAccountBranch).not.toContain("lastName: input.lastName");
+    expect(existingAccountBranch).not.toContain("linkedApplicationId: matchingApplicationId");
   });
 });
