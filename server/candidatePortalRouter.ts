@@ -263,7 +263,13 @@ export const candidatePortalRouter = router({
       if (candidateId) {
         const verifyUrl = `${portalOrigin()}/candidate/verify?email=${encodeURIComponent(email)}&token=${encodeURIComponent(verificationToken)}`;
         try {
-          const delivery = await sendCandidatePortalAccessEmail({ to: email, firstName: input.firstName, kind: "verify", actionUrl: verifyUrl });
+          const delivery = await sendCandidatePortalAccessEmail({
+            to: email,
+            firstName: input.firstName,
+            kind: "verify",
+            actionUrl: verifyUrl,
+            applicationReference: matchingApplication?.trackingId,
+          });
           await recordCandidateActivationDelivery(db, matchingApplication, email, { status: "sent", providerEmailId: delivery.id, failureCode: null });
           await logCandidateEmailDelivery({ candidateId, category: "candidate_verification_delivery", outcome: "allowed", ipHash, providerMessageId: delivery.id });
         } catch (error) {
@@ -311,7 +317,13 @@ export const candidatePortalRouter = router({
         await db.update(candidateAccounts).set({ verificationTokenHash: tokenHash, verificationExpiresAt: expiresAt }).where(eq(candidateAccounts.id, candidate.id));
         const verifyUrl = `${portalOrigin()}/candidate/verify?email=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}`;
         try {
-          const delivery = await sendCandidatePortalAccessEmail({ to: email, firstName: candidate.firstName ?? "", kind: "verify", actionUrl: verifyUrl });
+          const delivery = await sendCandidatePortalAccessEmail({
+            to: email,
+            firstName: candidate.firstName ?? "",
+            kind: "verify",
+            actionUrl: verifyUrl,
+            applicationReference: application?.trackingId,
+          });
           await recordCandidateActivationDelivery(db, application, email, { status: "sent", providerEmailId: delivery.id, failureCode: null });
           await logSecurityEvent({ actorKind: "candidate", actorReference: String(candidate.id), category: "candidate_verification_resent", outcome: "allowed", ipHash });
         } catch (error) {

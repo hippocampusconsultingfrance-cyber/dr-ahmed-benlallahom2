@@ -1,6 +1,10 @@
 import { Resend } from "resend";
 import { notifyOwner } from "./notification";
-import { buildResendApplicationTags } from "../resendWebhookCorrelation";
+import {
+  buildResendApplicationTags,
+  RESEND_APPLICATION_ACTIVATION_KIND,
+  RESEND_APPLICATION_INVITATION_KIND,
+} from "../resendWebhookCorrelation";
 
 let resendClient: Resend | undefined;
 
@@ -520,7 +524,14 @@ export type CandidatePortalAccessEmailInput = {
   kind: "verify" | "reset" | "invite";
   actionUrl: string;
   idempotencyKey?: string;
+  applicationReference?: string;
 };
+
+function invitationReferenceFromIdempotencyKey(idempotencyKey?: string) {
+  if (!idempotencyKey) return null;
+  const match = /^candidate-portal-invitation-([A-Za-z0-9_-]{3,64})-attempt-[1-9]\d*$/.exec(idempotencyKey);
+  return match?.[1] || null;
+}
 
 export function buildCandidatePortalAccessEmail(input: CandidatePortalAccessEmailInput) {
   const copy = input.kind === "verify"
@@ -562,6 +573,14 @@ export function buildCandidatePortalAccessEmail(input: CandidatePortalAccessEmai
 
 export async function sendCandidatePortalAccessEmail(input: CandidatePortalAccessEmailInput): Promise<{ id: string }> {
   const message = buildCandidatePortalAccessEmail(input);
+  const applicationReference = input.applicationReference
+    || (input.kind === "invite" ? invitationReferenceFromIdempotencyKey(input.idempotencyKey) : null);
+  const correlationTags = applicationReference && input.kind !== "reset"
+    ? buildResendApplicationTags(
+        applicationReference,
+        input.kind === "verify" ? RESEND_APPLICATION_ACTIVATION_KIND : RESEND_APPLICATION_INVITATION_KIND,
+      )
+    : undefined;
 
   const { data, error } = await getResendClient().emails.send(
     {
@@ -571,6 +590,7 @@ export async function sendCandidatePortalAccessEmail(input: CandidatePortalAcces
       subject: message.subject,
       html: message.html,
       text: message.text,
+      ...(correlationTags ? { tags: correlationTags } : {}),
     },
     input.idempotencyKey ? { idempotencyKey: input.idempotencyKey } : undefined,
   );

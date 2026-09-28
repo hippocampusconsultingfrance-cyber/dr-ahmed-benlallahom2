@@ -1,4 +1,17 @@
 export const RESEND_APPLICATION_CONFIRMATION_KIND = "application_confirmation";
+export const RESEND_APPLICATION_ACTIVATION_KIND = "candidate_portal_activation";
+export const RESEND_APPLICATION_INVITATION_KIND = "candidate_portal_invitation";
+
+export type ResendApplicationEmailKind =
+  | typeof RESEND_APPLICATION_CONFIRMATION_KIND
+  | typeof RESEND_APPLICATION_ACTIVATION_KIND
+  | typeof RESEND_APPLICATION_INVITATION_KIND;
+
+const RESEND_APPLICATION_EMAIL_KINDS = new Set<ResendApplicationEmailKind>([
+  RESEND_APPLICATION_CONFIRMATION_KIND,
+  RESEND_APPLICATION_ACTIVATION_KIND,
+  RESEND_APPLICATION_INVITATION_KIND,
+]);
 
 type ResendTag = { name?: unknown; value?: unknown };
 
@@ -22,19 +35,23 @@ function safeApplicationReference(value: string) {
  * pseudonymous application reference is already present in the subject and
  * body of the same email; no candidate attribute is added to the tags.
  */
-export function buildResendApplicationTags(applicationReference: string) {
+export function buildResendApplicationTags(
+  applicationReference: string,
+  emailKind: ResendApplicationEmailKind = RESEND_APPLICATION_CONFIRMATION_KIND,
+) {
   const reference = safeApplicationReference(applicationReference);
   return reference
     ? [
-        { name: "email_kind", value: RESEND_APPLICATION_CONFIRMATION_KIND },
+        { name: "email_kind", value: emailKind },
         { name: "application_ref", value: reference },
       ]
-    : [{ name: "email_kind", value: RESEND_APPLICATION_CONFIRMATION_KIND }];
+    : [{ name: "email_kind", value: emailKind }];
 }
 
 /** Accept both Resend's webhook object shape and the API request array shape. */
 export function resendApplicationReferenceFromTags(tags: unknown): string | null {
-  if (resendTagValue(tags, "email_kind") !== RESEND_APPLICATION_CONFIRMATION_KIND) return null;
+  const emailKind = resendTagValue(tags, "email_kind");
+  if (!emailKind || !RESEND_APPLICATION_EMAIL_KINDS.has(emailKind as ResendApplicationEmailKind)) return null;
   const reference = resendTagValue(tags, "application_ref");
   return reference ? safeApplicationReference(reference) : null;
 }
