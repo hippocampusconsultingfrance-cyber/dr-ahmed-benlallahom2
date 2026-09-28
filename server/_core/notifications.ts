@@ -518,14 +518,60 @@ export async function sendRecruitmentCampaignEmail(input: {
   return { id: data?.id };
 }
 
-export type CandidatePortalAccessEmailInput = {
+export type CandidatePortalAccessEmailContentInput = {
   to: string;
   firstName: string;
   kind: "verify" | "reset" | "invite";
   actionUrl: string;
-  idempotencyKey?: string;
   applicationReference?: string;
 };
+
+export type CandidatePortalAccessEmailInput = CandidatePortalAccessEmailContentInput & {
+  idempotencyKey: string;
+};
+
+export type CandidatePortalAccessEmailFailureCode = "provider_rejected" | "delivery_exception";
+
+class CandidatePortalAccessEmailError extends Error {
+  constructor(
+    readonly failureCode: CandidatePortalAccessEmailFailureCode,
+    readonly providerErrorName: string | null,
+    readonly providerStatusCode: number | null,
+  ) {
+    super(failureCode === "provider_rejected"
+      ? "Resend candidate access email failed: provider rejected request"
+      : "Resend candidate access email delivery uncertain");
+    this.name = "CandidatePortalAccessEmailError";
+  }
+}
+
+export function candidatePortalAccessEmailFailureCode(error: unknown): CandidatePortalAccessEmailFailureCode {
+  if (error instanceof CandidatePortalAccessEmailError) return error.failureCode;
+  return "delivery_exception";
+}
+
+function resendCandidateAccessFailure(error: { name?: string; statusCode?: number | null }): CandidatePortalAccessEmailError {
+  const statusCode = typeof error.statusCode === "number" ? error.statusCode : null;
+  const providerErrorName = typeof error.name === "string" ? error.name : null;
+  const concurrentIdempotentRequest = providerErrorName === "concurrent_idempotent_requests";
+  const deliveryUncertain = statusCode === null
+    || statusCode === 408
+    || statusCode >= 500
+    || concurrentIdempotentRequest;
+  return new CandidatePortalAccessEmailError(
+    deliveryUncertain ? "delivery_exception" : "provider_rejected",
+    providerErrorName,
+    statusCode,
+  );
+}
+
+export function buildCandidatePortalAccessIdempotencyKey(
+  kind: "verify" | "reset",
+  tokenHash: string,
+): string {
+  const deliveryKind = kind === "verify" ? "activation" : "password-reset";
+  return `candidate-portal-${deliveryKind}-${tokenHash.slice(0, 40)}`;
+}
 
 function invitationReferenceFromIdempotencyKey(idempotencyKey?: string) {
   if (!idempotencyKey) return null;
@@ -533,7 +579,7 @@ function invitationReferenceFromIdempotencyKey(idempotencyKey?: string) {
   return match?.[1] || null;
 }
 
-export function buildCandidatePortalAccessEmail(input: CandidatePortalAccessEmailInput) {
+export function buildCandidatePortalAccessEmail(input: CandidatePortalAccessEmailContentInput) {
   const copy = input.kind === "verify"
     ? {
         subject: "Confirmez votre adresse email — Espace candidat Hippocampus",
@@ -582,19 +628,34 @@ export async function sendCandidatePortalAccessEmail(input: CandidatePortalAcces
       )
     : undefined;
 
-  const { data, error } = await getResendClient().emails.send(
-    {
-      from: FROM_EMAIL,
-      to: [input.to],
-      replyTo: RECRUITMENT_REPLY_TO,
-      subject: message.subject,
-      html: message.html,
-      text: message.text,
-      ...(correlationTags ? { tags: correlationTags } : {}),
-    },
-    input.idempotencyKey ? { idempotencyKey: input.idempotencyKey } : undefined,
-  );
-  if (error) throw new Error(`Resend candidate access email failed: ${error.message}`);
-  if (!data?.id) throw new Error("Resend candidate access email failed: missing provider id");
-  return { id: data.id };
+  const sendOnce = async (): Promise<{ id: string }> => {
+    const { data, error } = await getResendClient().emails.send(
+      {
+        from: FROM_EMAIL,
+        to: [input.to],
+        replyTo: RECRUITMENT_REPLY_TO,
+        subject: message.subject,
+        html: message.html,
+        text: message.text,
+        ...(correlationTags ? { tags: correlationTags } : {}),
+      },
+      { idempotencyKey: input.idempotencyKey },
+    );
+    if (error) throw resendCandidateAccessFailure(error);
+    if (!data?.id) throw new CandidatePortalAccessEmailError("delivery_exception", null, null);
+    return { id: data.id };
+  };
+
+  try {
+    return await sendOnce();
+  } catch (firstError) {
+    if (candidatePortalAccessEmailFailureCode(firstError) === "provider_rejected") {
+      throw firstError;
+    }
+    try {
+      return await sendOnce();
+    } catch (retryError) {
+      throw retryError;
+    }
+  }
 }
