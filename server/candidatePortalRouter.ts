@@ -24,7 +24,11 @@ import {
   verifyCandidateInvitationToken,
   verifyCandidatePassword,
 } from "./candidateAuth";
-import { sendCandidatePortalAccessEmail } from "./_core/notifications";
+import {
+  buildCandidatePortalAccessIdempotencyKey,
+  candidatePortalAccessEmailFailureCode,
+  sendCandidatePortalAccessEmail,
+} from "./_core/notifications";
 import { storageGetSignedUrl } from "./storage";
 import { publicProcedure, router } from "./_core/trpc";
 import { candidateRequestIp, verifyCandidateTurnstile } from "./candidateTurnstile";
@@ -152,12 +156,6 @@ async function logCandidateEmailDelivery(input: {
   });
 }
 
-function candidateEmailFailureCode(error: unknown): "provider_rejected" | "delivery_exception" {
-  return error instanceof Error && error.message.startsWith("Resend candidate access email failed:")
-    ? "provider_rejected"
-    : "delivery_exception";
-}
-
 async function recordCandidateActivationDelivery(
   db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
   application: { id: number; trackingId: string } | null | undefined,
@@ -224,6 +222,7 @@ export const candidatePortalRouter = router({
       const existing = await candidateDatabaseOperation(() => db.select().from(candidateAccounts).where(eq(candidateAccounts.email, email)).limit(1));
 
       let candidateId: number | null = null;
+      let activationFirstName = input.firstName;
       let previousVerificationState: { tokenHash: string | null; expiresAt: Date | null } | null = null;
       if (existing[0]) {
         if (!existing[0].emailVerifiedAt && existing[0].status === "active") {
@@ -231,16 +230,10 @@ export const candidatePortalRouter = router({
             tokenHash: existing[0].verificationTokenHash,
             expiresAt: existing[0].verificationExpiresAt,
           };
-          const passwordHash = await hashCandidatePassword(input.password);
+          activationFirstName = existing[0].firstName ?? input.firstName;
           await candidateDatabaseOperation(() => db.update(candidateAccounts).set({
-            firstName: input.firstName,
-            lastName: input.lastName,
-            passwordHash,
             verificationTokenHash,
             verificationExpiresAt,
-            termsAcceptedAt: now,
-            documentConsentAt: now,
-            linkedApplicationId: matchingApplicationId,
           }).where(eq(candidateAccounts.id, existing[0].id)));
           candidateId = existing[0].id;
         }
@@ -265,21 +258,23 @@ export const candidatePortalRouter = router({
         try {
           const delivery = await sendCandidatePortalAccessEmail({
             to: email,
-            firstName: input.firstName,
+            firstName: activationFirstName,
             kind: "verify",
             actionUrl: verifyUrl,
             applicationReference: matchingApplication?.trackingId,
+            idempotencyKey: buildCandidatePortalAccessIdempotencyKey("verify", verificationTokenHash),
           });
           await recordCandidateActivationDelivery(db, matchingApplication, email, { status: "sent", providerEmailId: delivery.id, failureCode: null });
           await logCandidateEmailDelivery({ candidateId, category: "candidate_verification_delivery", outcome: "allowed", ipHash, providerMessageId: delivery.id });
         } catch (error) {
-          if (previousVerificationState) {
+          const failureCode = candidatePortalAccessEmailFailureCode(error);
+          if (failureCode === "provider_rejected") {
             await candidateDatabaseOperation(() => db.update(candidateAccounts).set({
-              verificationTokenHash: previousVerificationState.tokenHash,
-              verificationExpiresAt: previousVerificationState.expiresAt,
+              verificationTokenHash: previousVerificationState?.tokenHash ?? null,
+              verificationExpiresAt: previousVerificationState?.expiresAt ?? null,
             }).where(and(eq(candidateAccounts.id, candidateId), eq(candidateAccounts.verificationTokenHash, verificationTokenHash))));
           }
-          await recordCandidateActivationDelivery(db, matchingApplication, email, { status: "failed", providerEmailId: null, failureCode: candidateEmailFailureCode(error) });
+          await recordCandidateActivationDelivery(db, matchingApplication, email, { status: "failed", providerEmailId: null, failureCode });
           console.error("candidate_verification_email_failed", error instanceof Error ? error.name : "UnknownError");
           await logCandidateEmailDelivery({ candidateId, category: "candidate_verification_delivery", outcome: "failed", ipHash });
         }
@@ -323,15 +318,19 @@ export const candidatePortalRouter = router({
             kind: "verify",
             actionUrl: verifyUrl,
             applicationReference: application?.trackingId,
+            idempotencyKey: buildCandidatePortalAccessIdempotencyKey("verify", tokenHash),
           });
           await recordCandidateActivationDelivery(db, application, email, { status: "sent", providerEmailId: delivery.id, failureCode: null });
           await logSecurityEvent({ actorKind: "candidate", actorReference: String(candidate.id), category: "candidate_verification_resent", outcome: "allowed", ipHash });
         } catch (error) {
-          await db.update(candidateAccounts).set({
-            verificationTokenHash: candidate.verificationTokenHash,
-            verificationExpiresAt: candidate.verificationExpiresAt,
-          }).where(and(eq(candidateAccounts.id, candidate.id), eq(candidateAccounts.verificationTokenHash, tokenHash)));
-          await recordCandidateActivationDelivery(db, application, email, { status: "failed", providerEmailId: null, failureCode: candidateEmailFailureCode(error) });
+          const failureCode = candidatePortalAccessEmailFailureCode(error);
+          if (failureCode === "provider_rejected") {
+            await db.update(candidateAccounts).set({
+              verificationTokenHash: candidate.verificationTokenHash,
+              verificationExpiresAt: candidate.verificationExpiresAt,
+            }).where(and(eq(candidateAccounts.id, candidate.id), eq(candidateAccounts.verificationTokenHash, tokenHash)));
+          }
+          await recordCandidateActivationDelivery(db, application, email, { status: "failed", providerEmailId: null, failureCode });
           console.error("candidate_verification_resend_failed", error instanceof Error ? error.name : "UnknownError");
           await logSecurityEvent({ actorKind: "candidate", actorReference: String(candidate.id), category: "candidate_verification_resent", outcome: "failed", severity: "warning", ipHash });
         }
@@ -442,13 +441,22 @@ export const candidatePortalRouter = router({
       }).where(eq(candidateAccounts.id, candidate.id));
       const resetUrl = `${portalOrigin()}/candidate/reset-password?email=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}`;
       try {
-        const delivery = await sendCandidatePortalAccessEmail({ to: email, firstName: candidate.firstName ?? "", kind: "reset", actionUrl: resetUrl });
+        const delivery = await sendCandidatePortalAccessEmail({
+          to: email,
+          firstName: candidate.firstName ?? "",
+          kind: "reset",
+          actionUrl: resetUrl,
+          idempotencyKey: buildCandidatePortalAccessIdempotencyKey("reset", tokenHash),
+        });
         await logCandidateEmailDelivery({ candidateId: candidate.id, category: "candidate_password_reset_delivery", outcome: "allowed", ipHash, providerMessageId: delivery.id });
       } catch (error) {
-        await db.update(candidateAccounts).set({
-          passwordResetTokenHash: candidate.passwordResetTokenHash,
-          passwordResetExpiresAt: candidate.passwordResetExpiresAt,
-        }).where(and(eq(candidateAccounts.id, candidate.id), eq(candidateAccounts.passwordResetTokenHash, tokenHash)));
+        const failureCode = candidatePortalAccessEmailFailureCode(error);
+        if (failureCode === "provider_rejected") {
+          await db.update(candidateAccounts).set({
+            passwordResetTokenHash: candidate.passwordResetTokenHash,
+            passwordResetExpiresAt: candidate.passwordResetExpiresAt,
+          }).where(and(eq(candidateAccounts.id, candidate.id), eq(candidateAccounts.passwordResetTokenHash, tokenHash)));
+        }
         console.error("candidate_reset_email_failed", error instanceof Error ? error.name : "UnknownError");
         await logCandidateEmailDelivery({ candidateId: candidate.id, category: "candidate_password_reset_delivery", outcome: "failed", ipHash });
       }
