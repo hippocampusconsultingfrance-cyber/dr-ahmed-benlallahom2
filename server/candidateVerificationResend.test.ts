@@ -17,7 +17,8 @@ describe("reprise de l’activation du compte candidat", () => {
     expect(source).toContain('category: "candidate_verification_resent"');
   });
 
-  it("restaure le précédent jeton si Resend refuse le nouveau message", () => {
+  it("restaure le précédent jeton uniquement si Resend refuse explicitement le nouveau message", () => {
+    expect(source).toContain('if (failureCode === "provider_rejected")');
     expect(source).toContain("verificationTokenHash: candidate.verificationTokenHash");
     expect(source).toContain("eq(candidateAccounts.verificationTokenHash, tokenHash)");
     expect(source).toContain('outcome: "failed"');
