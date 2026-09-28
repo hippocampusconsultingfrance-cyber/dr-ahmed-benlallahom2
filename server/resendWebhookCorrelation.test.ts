@@ -17,9 +17,13 @@ describe("Resend recruitment webhook correlation", () => {
     expect(JSON.stringify(tags)).not.toContain("@");
   });
 
-  it("reads the signed webhook object shape only for confirmation messages", () => {
+  it("reads the signed webhook object shape only for tracked application messages", () => {
     expect(resendApplicationReferenceFromTags({
       email_kind: "application_confirmation",
+      application_ref: "CVABC123XYZ",
+    })).toBe("CVABC123XYZ");
+    expect(resendApplicationReferenceFromTags({
+      email_kind: "candidate_portal_activation",
       application_ref: "CVABC123XYZ",
     })).toBe("CVABC123XYZ");
     expect(resendApplicationReferenceFromTags({
