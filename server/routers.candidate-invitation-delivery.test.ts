@@ -21,6 +21,10 @@ vi.mock("./candidateAuth", async importOriginal => ({
   ...await importOriginal<typeof import("./candidateAuth")>(),
   createCandidateInvitationToken: () => "synthetic-invitation-token",
 }));
+vi.mock("./adminMfa", async importOriginal => ({
+  ...await importOriginal<typeof import("./adminMfa")>(),
+  isAdminMfaVerified: vi.fn(async () => true),
+}));
 
 function adminContext(): TrpcContext {
   return {
