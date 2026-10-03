@@ -207,6 +207,12 @@ export function canRetryCvConfirmation(
   return delivery.occurredAt.getTime() + cvConfirmationRetryDelayMs(delivery.attempts) <= now.getTime();
 }
 
+export function cvConfirmationRetryOutcome(delivery: CvApplicationConfirmationDelivery) {
+  return delivery.status === "failed" && delivery.failureCode === "delivery_exception"
+    ? "delivery_unknown" as const
+    : delivery.status;
+}
+
 export function buildCvConfirmationEmailEvent(
   input: Pick<TrackedCvConfirmationInput, "applicationId" | "candidateEmail" | "trackingId" | "deliveryAttempt">,
   delivery: CvApplicationConfirmationDelivery,
@@ -351,7 +357,7 @@ export async function retryCvConfirmationEmail(
     // previous, unrecorded request during its idempotency window.
     deliveryAttempt: current.eventType === "email.failed" ? current.attempts + 1 : 1,
   });
-  return { outcome: delivery.status, attempted: true, delivery };
+  return { outcome: cvConfirmationRetryOutcome(delivery), attempted: true, delivery };
 }
 
 /** Durable cron retry based on the existing email-event ledger; no candidate data is copied. */
