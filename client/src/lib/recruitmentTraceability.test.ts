@@ -11,6 +11,7 @@ describe("libellés de traçabilité des candidatures", () => {
   it("distingue l'acceptation Resend de la distribution effective", () => {
     expect(recruitmentEmailDeliveryLabel("email.sent")).toBe("Accepté par Resend");
     expect(recruitmentEmailDeliveryLabel("email.delivered")).toBe("Distribué");
+    expect(recruitmentEmailDeliveryLabel("email.delivery_unknown")).toBe("Livraison à confirmer");
     expect(recruitmentEmailDeliveryLabel("email.bounced")).toBe("Adresse rejetée");
   });
 
@@ -24,7 +25,7 @@ describe("libellés de traçabilité des candidatures", () => {
 
   it("explique les échecs d'accusé sans exposer le détail du fournisseur", () => {
     expect(recruitmentEmailDeliveryErrorLabel("provider_rejected")).toBe("Resend a refusé temporairement l’envoi");
-    expect(recruitmentEmailDeliveryErrorLabel("delivery_exception")).toBe("Le service d’e-mail était temporairement indisponible");
+    expect(recruitmentEmailDeliveryErrorLabel("delivery_exception")).toContain("aucune relance automatique");
   });
 
   it("distingue l’invitation de l’activation de l’espace candidat", () => {
@@ -33,5 +34,6 @@ describe("libellés de traçabilité des candidatures", () => {
     expect(recruitmentCandidatePortalLabel(true, "email.failed")).toBe("Espace actif");
     expect(recruitmentCandidatePortalLabel(false, "email.delivered", "email.sent")).toBe("Activation acceptée par Resend");
     expect(recruitmentCandidatePortalLabel(false, "email.delivered", "email.failed")).toBe("Échec de l’activation");
+    expect(recruitmentCandidatePortalLabel(false, "email.delivery_unknown")).toBe("Invitation à confirmer");
   });
 });

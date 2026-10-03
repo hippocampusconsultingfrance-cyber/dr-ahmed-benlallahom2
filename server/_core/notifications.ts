@@ -31,6 +31,19 @@ const FROM_EMAIL = "Hippocampus Consulting <recrutement@drahmedbenlallahom.com>"
 const RECRUITMENT_REPLY_TO = "hippocampusconsultingfrance@gmail.com";
 const HIPPOCAMPUS_LOGO_URL = "https://drahmedbenlallahom.com/assets/abl-logo.svg";
 
+type ResendDeliveryFailureCode = "provider_rejected" | "delivery_exception";
+
+function resendDeliveryFailureCode(error: { name?: string; statusCode?: number | null }): ResendDeliveryFailureCode {
+  const statusCode = typeof error.statusCode === "number" ? error.statusCode : null;
+  const providerErrorName = typeof error.name === "string" ? error.name : null;
+  return statusCode === null
+    || statusCode === 408
+    || statusCode >= 500
+    || providerErrorName === "concurrent_idempotent_requests"
+    ? "delivery_exception"
+    : "provider_rejected";
+}
+
 export function buildHippocampusEmailShell(content: string) {
   return `
     <div style="margin:0;padding:24px 12px;background:#f1f5f9;font-family:Arial,sans-serif;color:#0f172a;">
@@ -358,11 +371,10 @@ export async function sendCvApplicationConfirmationEmail(
   candidatePortalInviteUrl?: string,
   idempotencyKey = `cv-application-confirmation-${trackingId}-attempt-1`,
 ): Promise<CvApplicationConfirmationDelivery> {
-  try {
-    const candidatePortalInvitation = candidatePortalInviteUrl
+  const candidatePortalInvitation = candidatePortalInviteUrl
       ? `<div style="margin:24px 0;padding:18px;border:1px solid #bae6fd;border-radius:10px;background:#f0f9ff;"><h3 style="margin:0 0 8px;color:#0e7490;">Votre espace candidat sécurisé</h3><p style="margin:0 0 14px;">Vous pouvez créer un accès pour déposer ultérieurement vos documents administratifs dans votre coffre privé. L’activation de votre adresse email restera obligatoire.</p><p style="margin:0;"><a href="${escapeHtml(candidatePortalInviteUrl)}" style="display:inline-block;background:#0891b2;color:#ffffff;text-decoration:none;padding:12px 18px;border-radius:7px;font-weight:700;">Créer mon espace candidat</a></p></div>`
       : "";
-    const emailContent = buildHippocampusEmailShell(`
+  const emailContent = buildHippocampusEmailShell(`
       <h2 style="color: #0891b2;">Candidature reçue — Hippocampus Consulting</h2>
       <p>Bonjour ${escapeHtml(candidateName)},</p>
       <p>Nous confirmons la réception de votre candidature de recrutement international.</p>
@@ -377,29 +389,28 @@ export async function sendCvApplicationConfirmationEmail(
       <p style="color:#64748b;font-size:13px;">Si vous ne retrouvez pas cet email, vérifiez votre dossier Spam ou Courriers indésirables, puis ajoutez recrutement@drahmedbenlallahom.com à vos contacts.</p>
     `);
 
-    const { data, error } = await getResendClient().emails.send(
-      {
-        from: FROM_EMAIL,
-        to: [candidateEmail],
-        replyTo: RECRUITMENT_REPLY_TO,
-        subject: `Candidature reçue - ${trackingId}`,
-        html: emailContent,
-        tags: buildResendApplicationTags(trackingId),
-      },
-      { idempotencyKey },
-    );
-
-    if (error) {
-      console.error("CV application confirmation was rejected by the delivery provider");
-      return { status: "failed", providerEmailId: null, failureCode: "provider_rejected" };
+  const message = {
+    from: FROM_EMAIL,
+    to: [candidateEmail],
+    replyTo: RECRUITMENT_REPLY_TO,
+    subject: `Candidature reçue - ${trackingId}`,
+    html: emailContent,
+    tags: buildResendApplicationTags(trackingId),
+  };
+  const sendOnce = async (): Promise<CvApplicationConfirmationDelivery> => {
+    try {
+      const { data, error } = await getResendClient().emails.send(message, { idempotencyKey });
+      if (error) return { status: "failed", providerEmailId: null, failureCode: resendDeliveryFailureCode(error) };
+      if (!data?.id) return { status: "failed", providerEmailId: null, failureCode: "delivery_exception" };
+      return { status: "sent", providerEmailId: data.id, failureCode: null };
+    } catch {
+      return { status: "failed", providerEmailId: null, failureCode: "delivery_exception" };
     }
+  };
 
-    console.log("CV application confirmation sent successfully");
-    return { status: "sent", providerEmailId: data?.id || null, failureCode: null };
-  } catch {
-    console.error("CV application confirmation delivery failed");
-    return { status: "failed", providerEmailId: null, failureCode: "delivery_exception" };
-  }
+  const firstAttempt = await sendOnce();
+  if (firstAttempt.failureCode !== "delivery_exception") return firstAttempt;
+  return sendOnce();
 }
 
 export type CvApplicationConfirmationDelivery = {
@@ -553,13 +564,8 @@ export function candidatePortalAccessEmailFailureCode(error: unknown): Candidate
 function resendCandidateAccessFailure(error: { name?: string; statusCode?: number | null }): CandidatePortalAccessEmailError {
   const statusCode = typeof error.statusCode === "number" ? error.statusCode : null;
   const providerErrorName = typeof error.name === "string" ? error.name : null;
-  const concurrentIdempotentRequest = providerErrorName === "concurrent_idempotent_requests";
-  const deliveryUncertain = statusCode === null
-    || statusCode === 408
-    || statusCode >= 500
-    || concurrentIdempotentRequest;
   return new CandidatePortalAccessEmailError(
-    deliveryUncertain ? "delivery_exception" : "provider_rejected",
+    resendDeliveryFailureCode(error),
     providerErrorName,
     statusCode,
   );

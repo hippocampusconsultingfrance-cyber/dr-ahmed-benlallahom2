@@ -142,15 +142,19 @@ async function logCandidateEmailDelivery(input: {
   outcome: "allowed" | "failed";
   ipHash: string | null;
   providerMessageId?: string;
+  failureCode?: "provider_rejected" | "delivery_exception";
 }) {
+  const deliveryUncertain = input.failureCode === "delivery_exception";
   await logSecurityEvent({
     actorKind: "candidate",
     actorReference: String(input.candidateId),
     category: input.category,
-    outcome: input.outcome,
-    severity: input.outcome === "failed" ? "warning" : "info",
+    outcome: deliveryUncertain ? "allowed" : input.outcome,
+    severity: deliveryUncertain ? "info" : input.outcome === "failed" ? "warning" : "info",
     ipHash: input.ipHash,
-    metadata: input.providerMessageId ? { providerMessageId: input.providerMessageId } : undefined,
+    metadata: input.providerMessageId
+      ? { providerMessageId: input.providerMessageId }
+      : deliveryUncertain ? { deliveryStatus: "unknown" } : undefined,
   }).catch((error: unknown) => {
     console.error("candidate_email_delivery_audit_failed", error instanceof Error ? error.name : "UnknownError");
   });
@@ -276,7 +280,7 @@ export const candidatePortalRouter = router({
           }
           await recordCandidateActivationDelivery(db, matchingApplication, email, { status: "failed", providerEmailId: null, failureCode });
           console.error("candidate_verification_email_failed", error instanceof Error ? error.name : "UnknownError");
-          await logCandidateEmailDelivery({ candidateId, category: "candidate_verification_delivery", outcome: "failed", ipHash });
+          await logCandidateEmailDelivery({ candidateId, category: "candidate_verification_delivery", outcome: "failed", failureCode, ipHash });
         }
         await logSecurityEvent({ actorKind: "candidate", actorReference: String(candidateId), category: "candidate_account_created", outcome: "allowed", ipHash });
       }
@@ -332,7 +336,15 @@ export const candidatePortalRouter = router({
           }
           await recordCandidateActivationDelivery(db, application, email, { status: "failed", providerEmailId: null, failureCode });
           console.error("candidate_verification_resend_failed", error instanceof Error ? error.name : "UnknownError");
-          await logSecurityEvent({ actorKind: "candidate", actorReference: String(candidate.id), category: "candidate_verification_resent", outcome: "failed", severity: "warning", ipHash });
+          await logSecurityEvent({
+            actorKind: "candidate",
+            actorReference: String(candidate.id),
+            category: "candidate_verification_resent",
+            outcome: failureCode === "delivery_exception" ? "allowed" : "failed",
+            severity: failureCode === "delivery_exception" ? "info" : "warning",
+            ipHash,
+            metadata: failureCode === "delivery_exception" ? { deliveryStatus: "unknown" } : undefined,
+          });
         }
       }
       return { message: genericAccessMessage };
@@ -458,7 +470,7 @@ export const candidatePortalRouter = router({
           }).where(and(eq(candidateAccounts.id, candidate.id), eq(candidateAccounts.passwordResetTokenHash, tokenHash)));
         }
         console.error("candidate_reset_email_failed", error instanceof Error ? error.name : "UnknownError");
-        await logCandidateEmailDelivery({ candidateId: candidate.id, category: "candidate_password_reset_delivery", outcome: "failed", ipHash });
+        await logCandidateEmailDelivery({ candidateId: candidate.id, category: "candidate_password_reset_delivery", outcome: "failed", failureCode, ipHash });
       }
       await logSecurityEvent({ actorKind: "candidate", actorReference: String(candidate.id), category: "candidate_password_reset_requested", outcome: "allowed", ipHash });
     }
