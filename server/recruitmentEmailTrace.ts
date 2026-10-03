@@ -29,21 +29,21 @@ export type CvConfirmationTraceEvent = {
 
 type CvConfirmationAttemptPayload = {
   kind: "application_confirmation";
-  outcome?: "sent" | "failed";
+  outcome?: "sent" | "failed" | "unknown";
   failureCode?: CvApplicationConfirmationDelivery["failureCode"];
   attempt?: number;
 };
 
 type CandidatePortalInvitationAttemptPayload = {
   kind: "candidate_portal_invitation";
-  outcome?: "sent" | "failed";
+  outcome?: "sent" | "failed" | "unknown";
   failureCode?: "provider_rejected" | "delivery_exception";
   attempt?: number;
 };
 
 type CandidatePortalActivationAttemptPayload = {
   kind: "candidate_portal_activation";
-  outcome?: "sent" | "failed";
+  outcome?: "sent" | "failed" | "unknown";
   failureCode?: "provider_rejected" | "delivery_exception";
   attempt?: number;
 };
@@ -51,6 +51,16 @@ type CandidatePortalActivationAttemptPayload = {
 const TERMINAL_DELIVERY_EVENTS = new Set(["email.delivered", "email.bounced", "email.complained", "email.suppressed"]);
 const MAX_CONFIRMATION_ATTEMPTS = 3;
 const CONFIRMATION_PAYLOAD_PATTERN = '%"kind":"application_confirmation"%';
+
+function trackedEmailEventType(delivery: { status: "sent" | "failed"; failureCode: "provider_rejected" | "delivery_exception" | null }) {
+  if (delivery.status === "sent") return "email.sent";
+  return delivery.failureCode === "delivery_exception" ? "email.delivery_unknown" : "email.failed";
+}
+
+function trackedEmailOutcome(delivery: { status: "sent" | "failed"; failureCode: "provider_rejected" | "delivery_exception" | null }) {
+  if (delivery.status === "sent") return "sent" as const;
+  return delivery.failureCode === "delivery_exception" ? "unknown" as const : "failed" as const;
+}
 
 function parseConfirmationAttempt(payload: string | null): CvConfirmationAttemptPayload | null {
   if (!payload) return null;
@@ -148,11 +158,11 @@ export function buildCandidatePortalInvitationEmailEvent(
     providerEmailId: delivery.providerEmailId,
     campaignRecipientId: null,
     applicationId: input.applicationId,
-    eventType: delivery.status === "sent" ? "email.sent" : "email.failed",
+    eventType: trackedEmailEventType(delivery),
     recipientEmail: input.candidateEmail.trim().toLowerCase(),
     payload: JSON.stringify({
       kind: "candidate_portal_invitation",
-      outcome: delivery.status,
+      outcome: trackedEmailOutcome(delivery),
       failureCode: delivery.failureCode,
       trackingId: input.trackingId,
       attempt: input.deliveryAttempt,
@@ -173,11 +183,11 @@ export function buildCandidatePortalActivationEmailEvent(
     providerEmailId: delivery.providerEmailId,
     campaignRecipientId: null,
     applicationId: input.applicationId,
-    eventType: delivery.status === "sent" ? "email.sent" : "email.failed",
+    eventType: trackedEmailEventType(delivery),
     recipientEmail: input.candidateEmail.trim().toLowerCase(),
     payload: JSON.stringify({
       kind: "candidate_portal_activation",
-      outcome: delivery.status,
+      outcome: trackedEmailOutcome(delivery),
       failureCode: delivery.failureCode,
       trackingId: input.trackingId,
     }),
@@ -209,11 +219,11 @@ export function buildCvConfirmationEmailEvent(
     providerEmailId: delivery.providerEmailId,
     campaignRecipientId: null,
     applicationId: input.applicationId,
-    eventType: delivery.status === "sent" ? "email.sent" : "email.failed",
+    eventType: trackedEmailEventType(delivery),
     recipientEmail: input.candidateEmail.trim().toLowerCase(),
     payload: JSON.stringify({
       kind: "application_confirmation",
-      outcome: delivery.status,
+      outcome: trackedEmailOutcome(delivery),
       failureCode: delivery.failureCode,
       trackingId: input.trackingId,
       attempt: input.deliveryAttempt,
