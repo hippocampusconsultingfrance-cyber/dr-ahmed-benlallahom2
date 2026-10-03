@@ -13,7 +13,11 @@ describe("traçabilité reproductible des analyses CV", () => {
     expect(schema).toContain("analysisModel:");
     expect(schema).toContain("analysisPromptVersion:");
     expect(schema).toContain("extractionMethod:");
-    expect(processing).toContain("extractedText: pipeline.extraction.text");
+    expect(processing).toContain("extractedText: extraction.text");
+    expect(processing).toContain("set(cvExtractionPersistenceFields(validation, extraction))");
+    expect(processing).toContain("await onExtracted?.({ validation, extraction });");
+    expect(processing.indexOf("await onExtracted?.({ validation, extraction });"))
+      .toBeLessThan(processing.indexOf("await steps.analyze({"));
     expect(processing).toContain("analysisModel: pipeline.analysisModel");
     expect(processing).toContain("analysisPromptVersion: RECRUITMENT_ANALYSIS_PROMPT_VERSION");
     expect(processing).toContain('extraction.warnings.includes("vision_ocr_first_3_pages_only")');
