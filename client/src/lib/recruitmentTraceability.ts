@@ -2,6 +2,7 @@ export function recruitmentEmailDeliveryLabel(eventType: string | null | undefin
   const labels: Record<string, string> = {
     "email.sent": "Accepté par Resend",
     "email.delivered": "Distribué",
+    "email.delivery_unknown": "Livraison à confirmer",
     "email.delivery_delayed": "Distribution retardée",
     "email.bounced": "Adresse rejetée",
     "email.complained": "Signalé comme indésirable",
@@ -14,7 +15,7 @@ export function recruitmentEmailDeliveryLabel(eventType: string | null | undefin
 export function recruitmentEmailDeliveryTone(eventType: string | null | undefined) {
   if (eventType === "email.delivered") return "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300";
   if (eventType === "email.sent") return "border-primary/25 bg-primary/10 text-primary";
-  if (eventType === "email.delivery_delayed") return "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300";
+  if (eventType === "email.delivery_delayed" || eventType === "email.delivery_unknown") return "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300";
   if (["email.bounced", "email.complained", "email.failed", "email.suppressed"].includes(eventType || "")) return "border-destructive/30 bg-destructive/10 text-destructive";
   return "border-border bg-muted/30 text-muted-foreground";
 }
@@ -22,7 +23,7 @@ export function recruitmentEmailDeliveryTone(eventType: string | null | undefine
 export function recruitmentEmailDeliveryErrorLabel(failureCode: string | null | undefined) {
   if (!failureCode) return null;
   if (failureCode === "provider_rejected") return "Resend a refusé temporairement l’envoi";
-  if (failureCode === "delivery_exception") return "Le service d’e-mail était temporairement indisponible";
+  if (failureCode === "delivery_exception") return "Réponse de Resend indéterminée — aucune relance automatique pour éviter un doublon";
   return "Échec technique à examiner";
 }
 
@@ -31,10 +32,12 @@ export function recruitmentCandidatePortalLabel(active: boolean, invitationEvent
   if (activationEventType === "email.delivered") return "Activation distribuée";
   if (activationEventType === "email.sent") return "Activation acceptée par Resend";
   if (activationEventType === "email.delivery_delayed") return "Activation retardée";
+  if (activationEventType === "email.delivery_unknown") return "Activation à confirmer";
   if (["email.bounced", "email.complained", "email.failed", "email.suppressed"].includes(activationEventType || "")) return "Échec de l’activation";
   if (invitationEventType === "email.delivered") return "Invitation distribuée";
   if (invitationEventType === "email.sent") return "Invitation acceptée par Resend";
   if (invitationEventType === "email.delivery_delayed") return "Invitation retardée";
+  if (invitationEventType === "email.delivery_unknown") return "Invitation à confirmer";
   if (["email.bounced", "email.complained", "email.failed", "email.suppressed"].includes(invitationEventType || "")) return "Échec de l’invitation";
   return "Invitation non suivie";
 }
