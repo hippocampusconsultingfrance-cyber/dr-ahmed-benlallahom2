@@ -39,4 +39,36 @@ describe("sendCvApplicationConfirmationEmail", () => {
     expect(JSON.stringify(sendEmail.mock.calls[0][0].tags)).not.toContain("candidate@example.com");
     expect(JSON.stringify(sendEmail.mock.calls[0][0].tags)).not.toContain("Camille Candidate");
   });
+
+  it("retries an ambiguous SDK network response with the exact same request and key", async () => {
+    sendEmail
+      .mockResolvedValueOnce({ data: null, error: { name: "application_error", statusCode: null, message: "network" } })
+      .mockResolvedValueOnce({ data: { id: "email-after-retry" }, error: null });
+
+    await expect(sendCvApplicationConfirmationEmail(
+      "candidate@example.com", "Camille Candidate", "CVABC123XYZ", "Anesthésie", "France", undefined, "cv-confirmation-test-key",
+    )).resolves.toEqual({ status: "sent", providerEmailId: "email-after-retry", failureCode: null });
+
+    expect(sendEmail).toHaveBeenCalledTimes(2);
+    expect(sendEmail.mock.calls[1][0]).toEqual(sendEmail.mock.calls[0][0]);
+    expect(sendEmail.mock.calls[1][1]).toEqual(sendEmail.mock.calls[0][1]);
+  });
+
+  it("does not retry an explicit provider rejection", async () => {
+    sendEmail.mockResolvedValueOnce({ data: null, error: { name: "validation_error", statusCode: 422, message: "rejected" } });
+
+    await expect(sendCvApplicationConfirmationEmail(
+      "candidate@example.com", "Camille Candidate", "CVABC123XYZ", "Anesthésie", "France", undefined, "cv-confirmation-test-key",
+    )).resolves.toEqual({ status: "failed", providerEmailId: null, failureCode: "provider_rejected" });
+    expect(sendEmail).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps a double ambiguous delivery distinct from a confirmed rejection", async () => {
+    sendEmail.mockResolvedValue({ data: null, error: { name: "application_error", statusCode: 503, message: "temporary" } });
+
+    await expect(sendCvApplicationConfirmationEmail(
+      "candidate@example.com", "Camille Candidate", "CVABC123XYZ", "Anesthésie", "France", undefined, "cv-confirmation-test-key",
+    )).resolves.toEqual({ status: "failed", providerEmailId: null, failureCode: "delivery_exception" });
+    expect(sendEmail).toHaveBeenCalledTimes(2);
+  });
 });
