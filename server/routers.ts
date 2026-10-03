@@ -18,6 +18,7 @@ import {
   sendCustomerConfirmationSMS,
   sendRefundConfirmationEmail,
   sendCandidatePortalAccessEmail,
+  candidatePortalAccessEmailFailureCode,
   sendRecruitmentCampaignEmail,
   sendRecruitmentTemplateEmail,
   type RecruitmentEmailLanguage,
@@ -1442,7 +1443,11 @@ export const appRouter = router({
           }).from(recruitmentEmailEvents)
             .where(eq(recruitmentEmailEvents.applicationId, application.id))
             .orderBy(desc(recruitmentEmailEvents.occurredAt));
-          const invitationAttempt = resolveCandidatePortalInvitationDelivery(invitationEvents).attempts + 1;
+          const invitationDelivery = resolveCandidatePortalInvitationDelivery(invitationEvents);
+          if (invitationDelivery.eventType === "email.delivery_unknown") {
+            throw new TRPCError({ code: "CONFLICT", message: "La livraison de l’invitation précédente est incertaine. Vérifiez son suivi avant tout nouvel envoi pour éviter un doublon." });
+          }
+          const invitationAttempt = invitationDelivery.attempts + 1;
           const invitationToken = createCandidateInvitationToken(application.id);
           const invitationUrl = `${getSafeCheckoutOrigin()}/candidate/access?invite=${encodeURIComponent(invitationToken)}`;
           let result: { id: string };
@@ -1455,9 +1460,7 @@ export const appRouter = router({
               idempotencyKey: `candidate-portal-invitation-${application.trackingId}-attempt-${invitationAttempt}`,
             });
           } catch (error) {
-            const failureCode = error instanceof Error && error.message.startsWith("Resend candidate access email failed:")
-              ? "provider_rejected" as const
-              : "delivery_exception" as const;
+            const failureCode = candidatePortalAccessEmailFailureCode(error);
             await db.insert(recruitmentEmailEvents).values(buildCandidatePortalInvitationEmailEvent({
               applicationId: application.id,
               candidateEmail: application.email,
@@ -1468,8 +1471,13 @@ export const appRouter = router({
               providerEmailId: null,
               failureCode,
             }, { localEventId: randomUUID() }));
-            await logRecruitmentAction({ applicationId: application.id, adminOpenId: ctx.user.openId, action: "email", metadata: { template: "candidate_portal_invitation", outcome: "failed", trackingId: application.trackingId, attempt: invitationAttempt } });
-            throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "L’invitation n’a pas pu être envoyée. L’échec est enregistré pour reprise." });
+            await logRecruitmentAction({ applicationId: application.id, adminOpenId: ctx.user.openId, action: "email", metadata: { template: "candidate_portal_invitation", outcome: failureCode === "delivery_exception" ? "unknown" : "failed", trackingId: application.trackingId, attempt: invitationAttempt } });
+            throw new TRPCError({
+              code: "INTERNAL_SERVER_ERROR",
+              message: failureCode === "delivery_exception"
+                ? "La livraison de l’invitation est incertaine. Vérifiez son suivi avant tout nouvel envoi pour éviter un doublon."
+                : "L’invitation a été refusée par le service d’envoi. L’échec est enregistré pour reprise.",
+            });
           }
           const invitationEvent = buildCandidatePortalInvitationEmailEvent({
             applicationId: application.id,
