@@ -46,11 +46,31 @@ const defaultCvPipelineSteps: CvPipelineSteps = {
   analyze: analyzeCvText,
 };
 
+/** Keep the extraction trace independent of any later AI-provider outcome. */
+export function cvExtractionPersistenceFields(
+  validation: ReturnType<typeof validateCvFile>,
+  extraction: Awaited<ReturnType<typeof extractCvDocument>>,
+  updatedAt = new Date(),
+) {
+  return {
+    analysisStatus: "analyzing" as const,
+    extractedText: extraction.text,
+    extractionMethod: extraction.method,
+    extractionPageCount: extraction.totalPages,
+    extractionTotalPages: extraction.totalPages,
+    ocrConfidence: extraction.ocrConfidence,
+    ocrModelVersion: extraction.ocrModelVersion,
+    extractionWarnings: JSON.stringify([...validation.warnings, ...extraction.warnings]),
+    updatedAt,
+  };
+}
+
 /** External-boundary pipeline, dependency-injected for deterministic integration tests. */
 export async function executeCvExternalPipeline(
   input: CvPipelineInput,
   steps: CvPipelineSteps = defaultCvPipelineSteps,
   onValidated?: (artifact: { validation: ReturnType<typeof validateCvFile>; promotedStorage: { key: string } | null }) => Promise<void>,
+  onExtracted?: (artifact: { validation: ReturnType<typeof validateCvFile>; extraction: Awaited<ReturnType<typeof extractCvDocument>> }) => Promise<void>,
 ) {
   const buffer = await steps.download(input.cvFileKey);
   const validation = steps.validate({
@@ -67,6 +87,9 @@ export async function executeCvExternalPipeline(
     : null;
   await onValidated?.({ validation, promotedStorage });
   const extraction = await steps.extract(buffer, input.cvMimeType);
+  // Persist the source evidence before calling the AI provider: a provider
+  // failure must not erase an otherwise successful document extraction.
+  await onExtracted?.({ validation, extraction });
   // A partial OCR (currently capped to the first rendered pages) must never
   // produce a trustworthy whole-document score even if those pages are clear.
   const analysisOcrConfidence = extraction.warnings.includes("vision_ocr_first_3_pages_only")
@@ -280,19 +303,10 @@ async function processCvAnalysisJob(jobId: number) {
         fileSecurityScanVersion: validation.securityScanVersion,
         updatedAt: new Date(),
       }).where(eq(cvApplications.id, application.id));
+    }, async ({ validation, extraction }) => {
+      await db.update(cvApplications).set(cvExtractionPersistenceFields(validation, extraction))
+        .where(eq(cvApplications.id, application.id));
     });
-
-      await db.update(cvApplications).set({
-        analysisStatus: "analyzing",
-        extractedText: pipeline.extraction.text,
-        extractionMethod: pipeline.extraction.method,
-      extractionPageCount: pipeline.extraction.totalPages,
-      extractionTotalPages: pipeline.extraction.totalPages,
-      ocrConfidence: pipeline.extraction.ocrConfidence,
-      ocrModelVersion: pipeline.extraction.ocrModelVersion,
-      extractionWarnings: JSON.stringify([...pipeline.validation.warnings, ...pipeline.extraction.warnings]),
-      updatedAt: new Date(),
-    }).where(eq(cvApplications.id, application.id));
 
     const analysis = pipeline.analysis;
     await saveCvAnalysis(application.id, analysis, {
