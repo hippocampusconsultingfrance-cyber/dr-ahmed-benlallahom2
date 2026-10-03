@@ -50,6 +50,18 @@ describe("traçabilité de l'email de confirmation de candidature", () => {
     expect(event.payload).not.toContain("cvFile");
   });
 
+  it("distingue une livraison indéterminée d’un échec confirmé", () => {
+    const event = buildCvConfirmationEmailEvent(input, {
+      status: "failed",
+      providerEmailId: null,
+      failureCode: "delivery_exception",
+    }, { localEventId: "unknown-1" });
+
+    expect(event.eventType).toBe("email.delivery_unknown");
+    expect(JSON.parse(event.payload)).toMatchObject({ outcome: "unknown", failureCode: "delivery_exception" });
+    expect(canRetryCvConfirmation(resolveCvConfirmationDelivery([event]), new Date("2026-09-09T09:00:00Z"))).toBe(false);
+  });
+
   it("isole l'accusé de dépôt des autres emails et suit ses webhooks Resend", () => {
     const events = [
       { eventType: "email.failed", providerEmailId: "campaign_1", payload: JSON.stringify({ kind: "campaign" }), occurredAt: new Date("2026-09-08T10:00:00Z") },
@@ -83,7 +95,7 @@ describe("traçabilité de l'email de confirmation de candidature", () => {
   it("attend cinq minutes avant la deuxième tentative et s'arrête après trois", () => {
     const occurredAt = new Date("2026-09-08T09:00:00Z");
     const failed = resolveCvConfirmationDelivery([
-      { eventType: "email.failed", providerEmailId: null, payload: JSON.stringify({ kind: "application_confirmation", outcome: "failed", failureCode: "delivery_exception" }), occurredAt },
+      { eventType: "email.failed", providerEmailId: null, payload: JSON.stringify({ kind: "application_confirmation", outcome: "failed", failureCode: "provider_rejected" }), occurredAt },
     ]);
     expect(canRetryCvConfirmation(failed, new Date("2026-09-08T09:04:59Z"))).toBe(false);
     expect(canRetryCvConfirmation(failed, new Date("2026-09-08T09:05:00Z"))).toBe(true);
