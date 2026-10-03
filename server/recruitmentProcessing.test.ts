@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { analysisCompletionStatus, cvAnalysisEnqueueDisposition, didClaimProcessingJob, executeCvExternalPipeline, extractionMethodFor, retryDelayMs } from "./recruitmentProcessing";
+import { analysisCompletionStatus, cvAnalysisEnqueueDisposition, cvExtractionPersistenceFields, didClaimProcessingJob, executeCvExternalPipeline, extractionMethodFor, retryDelayMs } from "./recruitmentProcessing";
 
 const checksum = "a".repeat(64);
 const input = {
@@ -129,5 +129,36 @@ describe("règles déterministes du pipeline de traitement CV", () => {
       async ({ promotedStorage }) => { validatedKey = promotedStorage?.key ?? null; },
     )).rejects.toThrow("ai_provider_failed");
     expect(validatedKey).toBe("recruitment/cv/CV-001-cv.pdf");
+  });
+
+  it("enregistre la preuve d’extraction avant l’appel IA même si celui-ci échoue", async () => {
+    const persisted: Array<ReturnType<typeof cvExtractionPersistenceFields>> = [];
+    await expect(executeCvExternalPipeline(
+      input,
+      {
+        ...steps,
+        analyze: async () => {
+          expect(persisted).toHaveLength(1);
+          expect(persisted[0].analysisStatus).toBe("analyzing");
+          throw new Error("ai_provider_failed");
+        },
+      },
+      undefined,
+      async ({ validation, extraction }) => {
+        await Promise.resolve();
+        persisted.push(cvExtractionPersistenceFields(validation, extraction, new Date("2026-10-03T00:00:00.000Z")));
+      },
+    )).rejects.toThrow("ai_provider_failed");
+
+    expect(persisted[0]).toMatchObject({
+      extractedText: "CV professionnel avec expérience clinique confirmée.",
+      extractionMethod: "pdf_text",
+      extractionPageCount: 1,
+      extractionTotalPages: 1,
+      ocrConfidence: null,
+      ocrModelVersion: null,
+      extractionWarnings: "[]",
+      updatedAt: new Date("2026-10-03T00:00:00.000Z"),
+    });
   });
 });
