@@ -196,7 +196,9 @@ export default function RecruitmentTab() {
     onSuccess: result => {
       if (result.outcome === "already_sent") toast.success("L’accusé de dépôt a déjà été envoyé");
       else if (result.outcome === "sent") toast.success("Accusé de dépôt renvoyé");
-      else toast.error("Resend n’a pas accepté l’e-mail. Une nouvelle tentative automatique reste programmée.");
+      else if (result.outcome === "delivery_unknown") toast.info("Réponse de Resend incertaine. Vérifiez le suivi avant tout nouvel envoi pour éviter un doublon.");
+      else if (result.outcome === "failed") toast.error("Resend a refusé l’e-mail. Vérifiez la configuration et le suivi.");
+      else toast.info("Aucun nouvel e-mail n’a été envoyé. Vérifiez le suivi de la candidature.");
       utils.admin.recruitment.list.invalidate();
     },
     onError: mutationError => toast.error(mutationError.message),

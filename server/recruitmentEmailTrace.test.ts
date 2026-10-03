@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildCandidatePortalActivationEmailEvent, buildCandidatePortalInvitationEmailEvent, buildCvConfirmationEmailEvent, buildFailedConfirmationRetryCandidateQuery, canRetryCvConfirmation, candidatePortalAccountMatchesApplication, resolveCandidatePortalActivationDelivery, resolveCandidatePortalInvitationDelivery, resolveCvConfirmationDelivery } from "./recruitmentEmailTrace";
+import { buildCandidatePortalActivationEmailEvent, buildCandidatePortalInvitationEmailEvent, buildCvConfirmationEmailEvent, buildFailedConfirmationRetryCandidateQuery, canRetryCvConfirmation, candidatePortalAccountMatchesApplication, cvConfirmationRetryOutcome, resolveCandidatePortalActivationDelivery, resolveCandidatePortalInvitationDelivery, resolveCvConfirmationDelivery } from "./recruitmentEmailTrace";
 import { readFileSync } from "node:fs";
 import { drizzle } from "drizzle-orm/neon-http";
 
@@ -60,6 +60,8 @@ describe("traçabilité de l'email de confirmation de candidature", () => {
     expect(event.eventType).toBe("email.delivery_unknown");
     expect(JSON.parse(event.payload)).toMatchObject({ outcome: "unknown", failureCode: "delivery_exception" });
     expect(canRetryCvConfirmation(resolveCvConfirmationDelivery([event]), new Date("2026-09-09T09:00:00Z"))).toBe(false);
+    expect(cvConfirmationRetryOutcome({ status: "failed", providerEmailId: null, failureCode: "delivery_exception" })).toBe("delivery_unknown");
+    expect(cvConfirmationRetryOutcome({ status: "failed", providerEmailId: null, failureCode: "provider_rejected" })).toBe("failed");
   });
 
   it("isole l'accusé de dépôt des autres emails et suit ses webhooks Resend", () => {
