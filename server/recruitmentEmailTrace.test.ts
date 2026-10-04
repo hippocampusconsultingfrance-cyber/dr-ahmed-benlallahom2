@@ -1,7 +1,13 @@
-import { describe, expect, it } from "vitest";
-import { buildCandidatePortalActivationEmailEvent, buildCandidatePortalInvitationEmailEvent, buildCvConfirmationEmailEvent, buildFailedConfirmationRetryCandidateQuery, canRetryCvConfirmation, candidatePortalAccountMatchesApplication, cvConfirmationRetryOutcome, resolveCandidatePortalActivationDelivery, resolveCandidatePortalInvitationDelivery, resolveCvConfirmationDelivery } from "./recruitmentEmailTrace";
+import { describe, expect, it, vi } from "vitest";
+import { buildCandidatePortalActivationEmailEvent, buildCandidatePortalInvitationEmailEvent, buildCvConfirmationEmailEvent, buildFailedConfirmationRetryCandidateQuery, canRetryCvConfirmation, candidatePortalAccountMatchesApplication, cvConfirmationRetryOutcome, resolveCandidatePortalActivationDelivery, resolveCandidatePortalInvitationDelivery, resolveCvConfirmationDelivery, retryDueFailedCvConfirmationEmails } from "./recruitmentEmailTrace";
 import { readFileSync } from "node:fs";
 import { drizzle } from "drizzle-orm/neon-http";
+
+const retryMocks = vi.hoisted(() => ({ getDb: vi.fn(), sendEmail: vi.fn() }));
+
+vi.mock("./db", () => ({ getDb: retryMocks.getDb }));
+vi.mock("./_core/notifications", () => ({ sendCvApplicationConfirmationEmail: retryMocks.sendEmail }));
+vi.mock("./candidateAuth", () => ({ createCandidateInvitationToken: () => "synthetic-invitation-token" }));
 
 const traceSource = readFileSync(new URL("./recruitmentEmailTrace.ts", import.meta.url), "utf8");
 const routerSource = readFileSync(new URL("./routers.ts", import.meta.url), "utf8");
@@ -182,5 +188,115 @@ describe("traçabilité de l'email de confirmation de candidature", () => {
       '%"kind":"application_confirmation"%',
       100,
     ]);
+  });
+
+  it("atteint un échec ancien malgré cent échecs récents non encore éligibles", async () => {
+    const now = new Date("2026-10-04T10:00:00Z");
+    const cursorEventId = "internal:cv_confirmation_retry_cursor:v1";
+    const recentFailure = new Date("2026-10-04T09:59:00Z");
+    const oldFailure = new Date("2026-10-04T08:00:00Z");
+    const failedEvents = Array.from({ length: 101 }, (_, index) => ({
+      id: index + 1,
+      applicationId: index + 1,
+      eventType: "email.failed",
+      providerEmailId: null,
+      payload: JSON.stringify({ kind: "application_confirmation", outcome: "failed", attempt: 1 }),
+      occurredAt: index === 0 ? oldFailure : recentFailure,
+    }));
+    let persistedCursor: { lastScannedFailedEventId: number | null } | null = null;
+    const cursorWrites: Array<number | null> = [];
+    const candidatePages: number[][] = [];
+    const db = drizzle.mock();
+
+    const indexedParam = (sql: string, params: unknown[], pattern: RegExp): unknown => {
+      const match = pattern.exec(sql);
+      return match ? params[Number(match[1]) - 1] : undefined;
+    };
+
+    vi.spyOn(db.session, "prepareQuery").mockImplementation(query => {
+      const prepared = {
+        setToken: () => prepared,
+        execute: async () => {
+          const { sql, params } = query;
+          if (/^select/i.test(sql) && sql.includes('from "recruitment_email_events"') && params.includes("email.failed")) {
+            const beforeId = indexedParam(sql, params, /"recruitment_email_events"\."id"\s*<\s*\$(\d+)/);
+            const pageSize = indexedParam(sql, params, /limit\s+\$(\d+)/);
+            const page = failedEvents
+              .filter(event => typeof beforeId !== "number" || event.id < beforeId)
+              .sort((left, right) => right.id - left.id)
+              .slice(0, typeof pageSize === "number" ? pageSize : 100)
+              .map(event => ({ id: event.id, applicationId: event.applicationId }));
+            candidatePages.push(page.map(event => event.id));
+            return page;
+          }
+          if (/^select/i.test(sql) && sql.includes('from "recruitment_email_events"') && params.includes(cursorEventId)) {
+            return persistedCursor ? [{ payload: JSON.stringify(persistedCursor) }] : [];
+          }
+          if (/^select/i.test(sql) && sql.includes('from "cv_applications"')) {
+            const applicationId = indexedParam(sql, params, /"cv_applications"\."id"\s*=\s*\$(\d+)/);
+            if (typeof applicationId !== "number") throw new Error(`Unexpected application query: ${sql}`);
+            return [{
+              id: applicationId, firstName: "Synthetic", lastName: "Candidate",
+              email: `candidate${applicationId}@example.invalid`, trackingId: `CV-TEST-${applicationId}`,
+              specialty: "Test", targetCountries: "[]",
+            }];
+          }
+          if (/^select/i.test(sql) && sql.includes('from "recruitment_email_events"')) {
+            const applicationId = indexedParam(sql, params, /"recruitment_email_events"\."application_id"\s*=\s*\$(\d+)/);
+            const event = failedEvents.find(entry => entry.applicationId === applicationId);
+            if (!event) throw new Error(`Unexpected event query: ${sql}`);
+            return [event];
+          }
+          if (/^(insert|update)/i.test(sql) && sql.includes('"recruitment_email_events"')) {
+            if (params.includes(cursorEventId)) {
+              const cursorPayload = params
+                .filter((value): value is string => typeof value === "string")
+                .map(value => { try { return JSON.parse(value) as { lastScannedFailedEventId?: number | null }; } catch { return null; } })
+                .find(value => value && "lastScannedFailedEventId" in value);
+              if (!cursorPayload || cursorPayload.lastScannedFailedEventId === undefined) {
+                throw new Error(`Cursor write without cursor payload: ${sql}`);
+              }
+              persistedCursor = { lastScannedFailedEventId: cursorPayload.lastScannedFailedEventId };
+              cursorWrites.push(persistedCursor.lastScannedFailedEventId);
+            }
+            return { rows: [], rowCount: 1 };
+          }
+          throw new Error(`Unexpected SQL in synthetic retry database: ${sql}`);
+        },
+      };
+      return prepared as never;
+    });
+    retryMocks.getDb.mockResolvedValue(db);
+    retryMocks.sendEmail.mockResolvedValue({ status: "sent", providerEmailId: "synthetic-email-1", failureCode: null });
+
+    const firstRun = await retryDueFailedCvConfirmationEmails(1, now);
+    const secondRun = await retryDueFailedCvConfirmationEmails(1, now);
+
+    expect(firstRun.processed + secondRun.processed).toBe(1);
+    expect(candidatePages.some(page => page.includes(1))).toBe(true);
+    expect(cursorWrites).toContain(2);
+    expect(retryMocks.sendEmail).toHaveBeenCalledOnce();
+    expect(retryMocks.sendEmail).toHaveBeenCalledWith(
+      "candidate1@example.invalid", "Synthetic Candidate", "CV-TEST-1", "Test", "Non précisé",
+      expect.stringContaining("synthetic-invitation-token"), "cv-application-confirmation-CV-TEST-1-attempt-2",
+    );
+
+    // An empty older page wraps the durable scan to the newest failures.
+    expect((await retryDueFailedCvConfirmationEmails(1, now)).processed).toBe(0);
+    expect(candidatePages.at(-1)).toEqual([]);
+    expect(cursorWrites.at(-1)).toBeNull();
+
+    // Two failures become due in the newest page. The one-send cap must leave
+    // the cursor at the last inspected row so the other one remains reachable.
+    failedEvents[1].occurredAt = oldFailure;
+    failedEvents[2].occurredAt = oldFailure;
+    expect((await retryDueFailedCvConfirmationEmails(1, now)).processed).toBe(1);
+    expect(cursorWrites.at(-1)).toBe(3);
+    expect((await retryDueFailedCvConfirmationEmails(1, now)).processed).toBe(1);
+    expect(cursorWrites.at(-1)).toBe(2);
+    expect(retryMocks.sendEmail).toHaveBeenCalledTimes(3);
+    vi.restoreAllMocks();
+    retryMocks.getDb.mockReset();
+    retryMocks.sendEmail.mockReset();
   });
 });
