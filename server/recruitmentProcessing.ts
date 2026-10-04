@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, isNull, lte } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNull, lt, lte, or } from "drizzle-orm";
 import { cvApplications, cvProcessingJobs } from "../drizzle/schema";
 import { getDb } from "./db";
 import { extractCvDocument, analyzeCvText, RECRUITMENT_ANALYSIS_PROMPT_VERSION, saveCvAnalysis } from "./recruitmentAnalysis";
@@ -257,17 +257,48 @@ export async function recoverStaleCvAnalysisJobs(staleAfterMs = 15 * 60_000) {
   const db = await getDb();
   if (!db) throw new Error("Database connection failed");
   const now = new Date();
-  const result = await db.update(cvProcessingJobs).set({
-    status: "retry",
-    scheduledFor: now,
-    startedAt: null,
-    finishedAt: null,
-    lastError: "worker_interrupted",
-  }).where(and(
-    eq(cvProcessingJobs.status, "running"),
-    lte(cvProcessingJobs.startedAt, new Date(now.getTime() - staleAfterMs)),
+  const staleBefore = new Date(now.getTime() - staleAfterMs);
+  const candidates = await db.select({
+    id: cvProcessingJobs.id,
+    applicationId: cvProcessingJobs.applicationId,
+    status: cvProcessingJobs.status,
+    attempts: cvProcessingJobs.attempts,
+    maxAttempts: cvProcessingJobs.maxAttempts,
+  }).from(cvProcessingJobs).where(or(
+    and(eq(cvProcessingJobs.status, "running"), lte(cvProcessingJobs.startedAt, staleBefore)),
+    and(inArray(cvProcessingJobs.status, ["queued", "retry"]), gte(cvProcessingJobs.attempts, cvProcessingJobs.maxAttempts)),
   ));
-  return { recovered: mutationRowCount(result) };
+
+  let recovered = 0;
+  let exhausted = 0;
+  for (const candidate of candidates) {
+    const terminal = candidate.attempts >= candidate.maxAttempts;
+    const result = await db.update(cvProcessingJobs).set({
+      status: terminal ? "failed" : "retry",
+      scheduledFor: now,
+      startedAt: null,
+      finishedAt: terminal ? now : null,
+      lastError: terminal ? "worker_interrupted_attempts_exhausted" : "worker_interrupted",
+    }).where(and(
+      eq(cvProcessingJobs.id, candidate.id),
+      eq(cvProcessingJobs.status, candidate.status),
+      eq(cvProcessingJobs.attempts, candidate.attempts),
+      ...(candidate.status === "running" ? [lte(cvProcessingJobs.startedAt, staleBefore)] : []),
+    ));
+    if (mutationRowCount(result) !== 1) continue;
+    if (terminal) {
+      exhausted += 1;
+      await db.update(cvApplications).set({
+        analysisStatus: "failed",
+        analysisAttempts: candidate.attempts,
+        analysisLastError: "worker_interrupted_attempts_exhausted",
+        updatedAt: now,
+      }).where(eq(cvApplications.id, candidate.applicationId));
+    } else {
+      recovered += 1;
+    }
+  }
+  return { recovered, exhausted };
 }
 
 async function processCvAnalysisJob(jobId: number) {
@@ -359,11 +390,13 @@ export async function processDueCvAnalysisJobs(limit = PROCESSING_BATCH_SIZE, ap
     ? and(
         inArray(cvProcessingJobs.status, ["queued", "retry"]),
         lte(cvProcessingJobs.scheduledFor, now),
+        lt(cvProcessingJobs.attempts, cvProcessingJobs.maxAttempts),
         inArray(cvProcessingJobs.applicationId, applicationIds),
       )
     : and(
         inArray(cvProcessingJobs.status, ["queued", "retry"]),
         lte(cvProcessingJobs.scheduledFor, now),
+        lt(cvProcessingJobs.attempts, cvProcessingJobs.maxAttempts),
       );
   const candidates = await db.select().from(cvProcessingJobs)
     .where(dueJobs)
@@ -381,6 +414,9 @@ export async function processDueCvAnalysisJobs(limit = PROCESSING_BATCH_SIZE, ap
     }).where(and(
       eq(cvProcessingJobs.id, candidate.id),
       inArray(cvProcessingJobs.status, ["queued", "retry"]),
+      lte(cvProcessingJobs.scheduledFor, startedAt),
+      eq(cvProcessingJobs.attempts, candidate.attempts),
+      lt(cvProcessingJobs.attempts, cvProcessingJobs.maxAttempts),
     ));
     if (!didClaimProcessingJob(claimResult)) continue;
     results.push(await processCvAnalysisJob(candidate.id));
