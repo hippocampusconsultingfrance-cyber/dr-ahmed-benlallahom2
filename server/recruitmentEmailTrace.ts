@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { cvApplications, recruitmentEmailEvents } from "../drizzle/schema";
 import { getDb } from "./db";
-import { and, desc, eq, exists, isNotNull, like, or } from "drizzle-orm";
+import { and, desc, eq, exists, isNotNull, like, lt, or } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { createCandidateInvitationToken } from "./candidateAuth";
 import {
@@ -51,6 +51,8 @@ type CandidatePortalActivationAttemptPayload = {
 const TERMINAL_DELIVERY_EVENTS = new Set(["email.delivered", "email.bounced", "email.complained", "email.suppressed"]);
 const MAX_CONFIRMATION_ATTEMPTS = 3;
 const CONFIRMATION_PAYLOAD_PATTERN = '%"kind":"application_confirmation"%';
+const RETRY_SCAN_PAGE_SIZE = 100;
+const RETRY_CURSOR_EVENT_ID = "internal:cv_confirmation_retry_cursor:v1";
 
 function trackedEmailEventType(delivery: { status: "sent" | "failed"; failureCode: "provider_rejected" | "delivery_exception" | null }) {
   if (delivery.status === "sent") return "email.sent";
@@ -279,7 +281,7 @@ async function loadConfirmationEvents(applicationId: number): Promise<CvConfirma
 
 type RecruitmentDb = NonNullable<Awaited<ReturnType<typeof getDb>>>;
 
-export function buildFailedConfirmationRetryCandidateQuery(db: RecruitmentDb) {
+export function buildFailedConfirmationRetryCandidateQuery(db: RecruitmentDb, beforeId: number | null = null) {
   const confirmationAttempts = alias(recruitmentEmailEvents, "confirmation_attempt_events");
   const linkedConfirmationAttempt = db.select({ id: confirmationAttempts.id })
     .from(confirmationAttempts)
@@ -288,7 +290,7 @@ export function buildFailedConfirmationRetryCandidateQuery(db: RecruitmentDb) {
       eq(confirmationAttempts.providerEmailId, recruitmentEmailEvents.providerEmailId),
       like(confirmationAttempts.payload, CONFIRMATION_PAYLOAD_PATTERN),
     ));
-  return db.select({ applicationId: recruitmentEmailEvents.applicationId })
+  return db.select({ id: recruitmentEmailEvents.id, applicationId: recruitmentEmailEvents.applicationId })
     .from(recruitmentEmailEvents)
     .where(and(
       eq(recruitmentEmailEvents.eventType, "email.failed"),
@@ -297,9 +299,43 @@ export function buildFailedConfirmationRetryCandidateQuery(db: RecruitmentDb) {
         like(recruitmentEmailEvents.payload, CONFIRMATION_PAYLOAD_PATTERN),
         exists(linkedConfirmationAttempt),
       ),
+      beforeId === null ? undefined : lt(recruitmentEmailEvents.id, beforeId),
     ))
-    .orderBy(desc(recruitmentEmailEvents.occurredAt))
-    .limit(100);
+    .orderBy(desc(recruitmentEmailEvents.id))
+    .limit(RETRY_SCAN_PAGE_SIZE);
+}
+
+async function loadConfirmationRetryCursor(db: RecruitmentDb) {
+  const [row] = await db.select({ payload: recruitmentEmailEvents.payload })
+    .from(recruitmentEmailEvents)
+    .where(eq(recruitmentEmailEvents.providerEventId, RETRY_CURSOR_EVENT_ID))
+    .limit(1);
+  if (!row?.payload) return null;
+  try {
+    const id = (JSON.parse(row.payload) as { lastScannedFailedEventId?: unknown }).lastScannedFailedEventId;
+    return typeof id === "number" && Number.isSafeInteger(id) && id > 0 ? id : null;
+  } catch {
+    return null;
+  }
+}
+
+async function saveConfirmationRetryCursor(db: RecruitmentDb, lastScannedFailedEventId: number | null, now: Date) {
+  const payload = JSON.stringify({ lastScannedFailedEventId });
+  // This operational checkpoint contains no candidate identity or email. It
+  // lets bounded cron runs reach older failures without a schema migration.
+  await db.insert(recruitmentEmailEvents).values({
+    providerEventId: RETRY_CURSOR_EVENT_ID,
+    providerEmailId: null,
+    campaignRecipientId: null,
+    applicationId: null,
+    eventType: "internal.cursor",
+    recipientEmail: null,
+    payload,
+    occurredAt: now,
+  }).onConflictDoUpdate({
+    target: recruitmentEmailEvents.providerEventId,
+    set: { payload, occurredAt: now },
+  });
 }
 
 export async function retryCvConfirmationEmail(
@@ -364,15 +400,29 @@ export async function retryCvConfirmationEmail(
 export async function retryDueFailedCvConfirmationEmails(limit = 3, now = new Date()) {
   const db = await getDb();
   if (!db) throw new Error("Database connection failed");
-  const failedEvents = await buildFailedConfirmationRetryCandidateQuery(db);
-  const applicationIds = Array.from(new Set(failedEvents.map(event => event.applicationId).filter((value): value is number => typeof value === "number")));
+  const cursor = await loadConfirmationRetryCursor(db);
+  const failedEvents = await buildFailedConfirmationRetryCandidateQuery(db, cursor);
+  const seenApplicationIds = new Set<number>();
   const results = [];
-  for (const applicationId of applicationIds) {
-    if (results.filter(result => result.attempted).length >= Math.min(Math.max(limit, 1), 5)) break;
-    results.push(await retryCvConfirmationEmail(applicationId, { requireDue: true, now }));
+  let attempted = 0;
+  let lastScannedFailedEventId: number | null = null;
+  const maxToAttempt = Math.min(Math.max(limit, 1), 5);
+  for (const event of failedEvents) {
+    if (attempted >= maxToAttempt) break;
+    lastScannedFailedEventId = event.id;
+    if (typeof event.applicationId !== "number" || seenApplicationIds.has(event.applicationId)) continue;
+    seenApplicationIds.add(event.applicationId);
+    const result = await retryCvConfirmationEmail(event.applicationId, { requireDue: true, now });
+    results.push(result);
+    if (result.attempted) attempted += 1;
   }
+  // Advance only past rows actually inspected. If we reached the oldest page,
+  // wrap to the newest events on the next run; a crash before this write simply
+  // repeats a page and cannot permanently skip a candidate.
+  const nextCursor = lastScannedFailedEventId ?? null;
+  if (nextCursor !== cursor) await saveConfirmationRetryCursor(db, nextCursor, now);
   const failed = results.filter(result => result.outcome === "failed").length;
   const exhausted = results.filter(result => result.outcome === "exhausted").length;
-  if (failed || exhausted) console.warn("[RecruitmentConfirmation] unresolved delivery failures", { failed, exhausted });
-  return { processed: results.filter(result => result.attempted).length, failed, exhausted };
+  if (failed) console.warn("[RecruitmentConfirmation] unresolved delivery failures", { failed, exhausted });
+  return { processed: attempted, failed, exhausted };
 }
