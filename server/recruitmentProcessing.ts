@@ -267,7 +267,7 @@ export async function recoverStaleCvAnalysisJobs(staleAfterMs = 15 * 60_000) {
   }).from(cvProcessingJobs).where(or(
     and(eq(cvProcessingJobs.status, "running"), lte(cvProcessingJobs.startedAt, staleBefore)),
     and(inArray(cvProcessingJobs.status, ["queued", "retry"]), gte(cvProcessingJobs.attempts, cvProcessingJobs.maxAttempts)),
-  ));
+  )).orderBy(cvProcessingJobs.id).limit(25);
 
   let recovered = 0;
   let exhausted = 0;
