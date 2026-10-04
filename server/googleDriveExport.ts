@@ -1,5 +1,5 @@
 import { createCipheriv, createDecipheriv, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
-import { and, eq, inArray, isNull, lte } from "drizzle-orm";
+import { and, eq, gte, inArray, isNull, lt, lte, or } from "drizzle-orm";
 import { cvApplications, cvGoogleDriveExportJobs, googleDriveConnections } from "../drizzle/schema";
 import { getDb } from "./db";
 import { logRecruitmentAction } from "./recruitmentAudit";
@@ -300,39 +300,62 @@ export async function enqueueCvGoogleDriveExport(applicationId: number, schedule
 export async function retryCvGoogleDriveExport(applicationId: number, requestedAt = new Date()) {
   const db = await getDb();
   if (!db) throw new Error("Database connection failed");
-  const [existingJob] = await db.select({ id: cvGoogleDriveExportJobs.id, status: cvGoogleDriveExportJobs.status })
-    .from(cvGoogleDriveExportJobs)
-    .where(eq(cvGoogleDriveExportJobs.applicationId, applicationId))
-    .limit(1);
-  const disposition = googleDriveExportRetryDisposition(existingJob?.status ?? null);
+  // A worker may claim the row between our read and write. Re-read after a
+  // failed compare-and-set instead of reopening a running or completed export.
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const [existingJob] = await db.select({
+      id: cvGoogleDriveExportJobs.id,
+      status: cvGoogleDriveExportJobs.status,
+      attempts: cvGoogleDriveExportJobs.attempts,
+      maxAttempts: cvGoogleDriveExportJobs.maxAttempts,
+    }).from(cvGoogleDriveExportJobs)
+      .where(eq(cvGoogleDriveExportJobs.applicationId, applicationId))
+      .limit(1);
+    const disposition = googleDriveExportRetryDisposition(existingJob?.status ?? null);
 
-  if (disposition === "already_completed") {
-    return { queued: false, accelerated: false, reset: false, alreadyRunning: false, alreadyCompleted: true };
-  }
-  if (disposition === "already_running") {
-    return { queued: false, accelerated: false, reset: false, alreadyRunning: true, alreadyCompleted: false };
-  }
-  if (!existingJob) {
-    await db.insert(cvGoogleDriveExportJobs).values({ applicationId, status: "queued", attempts: 0, maxAttempts: MAX_ATTEMPTS, scheduledFor: requestedAt });
-    return { queued: true, accelerated: false, reset: false, alreadyRunning: false, alreadyCompleted: false };
-  }
+    if (disposition === "already_completed") {
+      return { queued: false, accelerated: false, reset: false, alreadyRunning: false, alreadyCompleted: true };
+    }
+    if (disposition === "already_running") {
+      return { queued: false, accelerated: false, reset: false, alreadyRunning: true, alreadyCompleted: false };
+    }
+    if (!existingJob) {
+      const created = await db.insert(cvGoogleDriveExportJobs).values({
+        applicationId, status: "queued", attempts: 0, maxAttempts: MAX_ATTEMPTS, scheduledFor: requestedAt,
+      }).onConflictDoNothing();
+      if (googleDriveMutationRowCount(created) === 1) {
+        return { queued: true, accelerated: false, reset: false, alreadyRunning: false, alreadyCompleted: false };
+      }
+      continue;
+    }
 
-  await db.update(cvGoogleDriveExportJobs).set({
-    status: "queued",
-    ...(disposition === "reset_failed" ? { attempts: 0 } : {}),
-    scheduledFor: requestedAt,
-    startedAt: null,
-    finishedAt: null,
-    lastError: null,
-    updatedAt: requestedAt,
-  }).where(eq(cvGoogleDriveExportJobs.id, existingJob.id));
-  return {
-    queued: true,
-    accelerated: disposition === "accelerate",
-    reset: disposition === "reset_failed",
-    alreadyRunning: false,
-    alreadyCompleted: false,
-  };
+    // Older queued/retry rows can already have exhausted their budget. A
+    // manual retry must grant a fresh budget or it would remain unclaimable.
+    const resetBudget = disposition === "reset_failed" || existingJob.attempts >= existingJob.maxAttempts;
+    const updated = await db.update(cvGoogleDriveExportJobs).set({
+      status: "queued",
+      ...(resetBudget ? { attempts: 0 } : {}),
+      scheduledFor: requestedAt,
+      startedAt: null,
+      finishedAt: null,
+      lastError: null,
+      updatedAt: requestedAt,
+    }).where(and(
+      eq(cvGoogleDriveExportJobs.id, existingJob.id),
+      eq(cvGoogleDriveExportJobs.status, existingJob.status),
+      eq(cvGoogleDriveExportJobs.attempts, existingJob.attempts),
+    ));
+    if (googleDriveMutationRowCount(updated) === 1) {
+      return {
+        queued: true,
+        accelerated: disposition === "accelerate",
+        reset: resetBudget,
+        alreadyRunning: false,
+        alreadyCompleted: false,
+      };
+    }
+  }
+  throw new Error("google_drive_retry_concurrent_state_change");
 }
 
 /**
@@ -374,18 +397,48 @@ export async function recoverStaleCvGoogleDriveExportJobs(staleAfterMs = 15 * 60
   const db = await getDb();
   if (!db) throw new Error("Database connection failed");
   const now = new Date();
-  const result = await db.update(cvGoogleDriveExportJobs).set({
-    status: "retry",
-    scheduledFor: now,
-    startedAt: null,
-    finishedAt: null,
-    lastError: "worker_interrupted",
-    updatedAt: now,
-  }).where(and(
+  const staleBefore = new Date(now.getTime() - staleAfterMs);
+  const candidates = await db.select({
+    id: cvGoogleDriveExportJobs.id,
+    status: cvGoogleDriveExportJobs.status,
+    attempts: cvGoogleDriveExportJobs.attempts,
+    maxAttempts: cvGoogleDriveExportJobs.maxAttempts,
+  }).from(cvGoogleDriveExportJobs).where(or(
+    and(eq(cvGoogleDriveExportJobs.status, "running"), lte(cvGoogleDriveExportJobs.startedAt, staleBefore)),
+    and(inArray(cvGoogleDriveExportJobs.status, ["queued", "retry"]), gte(cvGoogleDriveExportJobs.attempts, cvGoogleDriveExportJobs.maxAttempts)),
+  )).orderBy(cvGoogleDriveExportJobs.id).limit(25);
+
+  let recovered = 0;
+  let exhausted = 0;
+  for (const candidate of candidates) {
+    const terminal = candidate.attempts >= candidate.maxAttempts;
+    const result = await db.update(cvGoogleDriveExportJobs).set({
+      status: terminal ? "failed" : "retry",
+      scheduledFor: now,
+      startedAt: null,
+      finishedAt: terminal ? now : null,
+      lastError: terminal ? "worker_interrupted_attempts_exhausted" : "worker_interrupted",
+      updatedAt: now,
+    }).where(and(
+      eq(cvGoogleDriveExportJobs.id, candidate.id),
+      eq(cvGoogleDriveExportJobs.status, candidate.status),
+      eq(cvGoogleDriveExportJobs.attempts, candidate.attempts),
+      ...(candidate.status === "running" ? [lte(cvGoogleDriveExportJobs.startedAt, staleBefore)] : []),
+    ));
+    if (googleDriveMutationRowCount(result) !== 1) continue;
+    if (terminal) exhausted += 1;
+    else recovered += 1;
+  }
+  return { recovered, exhausted };
+}
+
+function currentGoogleDriveClaim(job: typeof cvGoogleDriveExportJobs.$inferSelect) {
+  return and(
+    eq(cvGoogleDriveExportJobs.id, job.id),
     eq(cvGoogleDriveExportJobs.status, "running"),
-    lte(cvGoogleDriveExportJobs.startedAt, new Date(now.getTime() - staleAfterMs)),
-  ));
-  return { recovered: googleDriveMutationRowCount(result) };
+    eq(cvGoogleDriveExportJobs.attempts, job.attempts),
+    job.startedAt ? eq(cvGoogleDriveExportJobs.startedAt, job.startedAt) : isNull(cvGoogleDriveExportJobs.startedAt),
+  );
 }
 
 async function processGoogleDriveExportJob(jobId: number) {
@@ -398,40 +451,44 @@ async function processGoogleDriveExportJob(jobId: number) {
   if (!application || !connection) {
     const updatedAt = new Date();
     if (!application) {
-      await db.update(cvGoogleDriveExportJobs).set({ status: "failed", startedAt: null, finishedAt: updatedAt, lastError: "application_missing", updatedAt }).where(eq(cvGoogleDriveExportJobs.id, job.id));
+      const updated = await db.update(cvGoogleDriveExportJobs).set({ status: "failed", startedAt: null, finishedAt: updatedAt, lastError: "application_missing", updatedAt }).where(currentGoogleDriveClaim(job));
+      if (googleDriveMutationRowCount(updated) !== 1) return { skipped: true, reason: "claim_lost" as const };
       return { skipped: true, retry: false, reason: "application_missing" as const };
     }
-    await db.update(cvGoogleDriveExportJobs).set({
+    const updated = await db.update(cvGoogleDriveExportJobs).set({
       status: "queued",
       attempts: Math.max(0, job.attempts - 1),
       scheduledFor: new Date(updatedAt.getTime() + 5 * 60_000),
       startedAt: null,
       updatedAt,
-    }).where(eq(cvGoogleDriveExportJobs.id, job.id));
+    }).where(currentGoogleDriveClaim(job));
+    if (googleDriveMutationRowCount(updated) !== 1) return { skipped: true, reason: "claim_lost" as const };
     return { skipped: true, retry: true, reason: "connection_missing" as const };
   }
   const fileDisposition = googleDriveFileDisposition(application.fileValidationStatus);
   if (fileDisposition === "terminal_failure") {
     const updatedAt = new Date();
     const reason = `cv_${application.fileValidationStatus}`;
-    await db.update(cvGoogleDriveExportJobs).set({
+    const updated = await db.update(cvGoogleDriveExportJobs).set({
       status: "failed",
       startedAt: null,
       finishedAt: updatedAt,
       lastError: reason,
       updatedAt,
-    }).where(eq(cvGoogleDriveExportJobs.id, job.id));
+    }).where(currentGoogleDriveClaim(job));
+    if (googleDriveMutationRowCount(updated) !== 1) return { skipped: true, reason: "claim_lost" as const };
     return { skipped: true, retry: false, reason };
   }
   if (fileDisposition === "waiting") {
     const updatedAt = new Date();
-    await db.update(cvGoogleDriveExportJobs).set({
+    const updated = await db.update(cvGoogleDriveExportJobs).set({
       status: "queued",
       attempts: Math.max(0, job.attempts - 1),
       scheduledFor: new Date(updatedAt.getTime() + 60_000),
       startedAt: null,
       updatedAt,
-    }).where(eq(cvGoogleDriveExportJobs.id, job.id));
+    }).where(currentGoogleDriveClaim(job));
+    if (googleDriveMutationRowCount(updated) !== 1) return { skipped: true, reason: "claim_lost" as const };
     return { skipped: true, retry: true, reason: "cv_not_accepted" as const };
   }
   try {
@@ -453,21 +510,29 @@ async function processGoogleDriveExportJob(jobId: number) {
       });
     })();
     const now = new Date();
-    await db.update(cvGoogleDriveExportJobs).set({ status: "completed", driveFileId: driveFile.id, driveFileUrl: driveFile.webViewLink, lastError: null, finishedAt: now, updatedAt: now }).where(eq(cvGoogleDriveExportJobs.id, job.id));
-    await db.update(googleDriveConnections).set({ lastUsedAt: now, lastError: null }).where(eq(googleDriveConnections.id, connection.id));
-    await logRecruitmentAction({ applicationId: application.id, adminOpenId: connection.authorizedByOpenId, action: "export", metadata: { destination: "google_drive", driveFileId: driveFile.id, trackingId: application.trackingId, reusedExistingFile: Boolean(existingDriveFile) } });
+    const completed = await db.update(cvGoogleDriveExportJobs).set({ status: "completed", driveFileId: driveFile.id, driveFileUrl: driveFile.webViewLink, lastError: null, finishedAt: now, updatedAt: now }).where(currentGoogleDriveClaim(job));
+    if (googleDriveMutationRowCount(completed) !== 1) return { skipped: true, reason: "claim_lost" as const };
+    // Telemetry and audit must not reopen a successfully copied CV on failure.
+    try {
+      await db.update(googleDriveConnections).set({ lastUsedAt: now, lastError: null }).where(eq(googleDriveConnections.id, connection.id));
+      await logRecruitmentAction({ applicationId: application.id, adminOpenId: connection.authorizedByOpenId, action: "export", metadata: { destination: "google_drive", driveFileId: driveFile.id, trackingId: application.trackingId, reusedExistingFile: Boolean(existingDriveFile) } });
+    } catch {
+      console.error("google_drive_export_post_commit_failed", { applicationId: application.id });
+    }
     return { completed: true, applicationId: application.id, driveFileId: driveFile.id, reusedExistingFile: Boolean(existingDriveFile) };
   } catch (error) {
     const message = error instanceof Error ? error.message.slice(0, 500) : "google_drive_export_unknown";
     const finalFailure = job.attempts >= job.maxAttempts;
     const now = new Date();
-    await db.update(cvGoogleDriveExportJobs).set({
+    const updated = await db.update(cvGoogleDriveExportJobs).set({
       status: finalFailure ? "failed" : "retry",
       lastError: message,
       scheduledFor: new Date(now.getTime() + googleDriveRetryDelayMs(job.attempts)),
+      startedAt: null,
       finishedAt: finalFailure ? now : null,
       updatedAt: now,
-    }).where(eq(cvGoogleDriveExportJobs.id, job.id));
+    }).where(currentGoogleDriveClaim(job));
+    if (googleDriveMutationRowCount(updated) !== 1) return { skipped: true, reason: "claim_lost" as const };
     await db.update(googleDriveConnections).set({ lastError: message }).where(eq(googleDriveConnections.id, connection.id));
     return { completed: false, applicationId: job.applicationId, retry: !finalFailure, error: message };
   }
@@ -483,14 +548,26 @@ export async function processDueCvGoogleDriveExports(limit = BATCH_SIZE, applica
     ? and(
         inArray(cvGoogleDriveExportJobs.status, ["queued", "retry"]),
         lte(cvGoogleDriveExportJobs.scheduledFor, now),
+        lt(cvGoogleDriveExportJobs.attempts, cvGoogleDriveExportJobs.maxAttempts),
         inArray(cvGoogleDriveExportJobs.applicationId, applicationIds),
       )
-    : and(inArray(cvGoogleDriveExportJobs.status, ["queued", "retry"]), lte(cvGoogleDriveExportJobs.scheduledFor, now));
+    : and(
+        inArray(cvGoogleDriveExportJobs.status, ["queued", "retry"]),
+        lte(cvGoogleDriveExportJobs.scheduledFor, now),
+        lt(cvGoogleDriveExportJobs.attempts, cvGoogleDriveExportJobs.maxAttempts),
+      );
   const candidates = await db.select().from(cvGoogleDriveExportJobs).where(dueJobs).orderBy(cvGoogleDriveExportJobs.scheduledFor).limit(Math.min(Math.max(limit, 1), BATCH_SIZE));
   const results: Array<Record<string, unknown>> = [];
   for (const candidate of candidates) {
     const startedAt = new Date();
-    const claimed = await db.update(cvGoogleDriveExportJobs).set({ status: "running", attempts: candidate.attempts + 1, startedAt, finishedAt: null, updatedAt: startedAt }).where(and(eq(cvGoogleDriveExportJobs.id, candidate.id), inArray(cvGoogleDriveExportJobs.status, ["queued", "retry"])));
+    const claimed = await db.update(cvGoogleDriveExportJobs).set({ status: "running", attempts: candidate.attempts + 1, startedAt, finishedAt: null, updatedAt: startedAt }).where(and(
+      eq(cvGoogleDriveExportJobs.id, candidate.id),
+      eq(cvGoogleDriveExportJobs.status, candidate.status),
+      eq(cvGoogleDriveExportJobs.scheduledFor, candidate.scheduledFor),
+      lte(cvGoogleDriveExportJobs.scheduledFor, startedAt),
+      eq(cvGoogleDriveExportJobs.attempts, candidate.attempts),
+      lt(cvGoogleDriveExportJobs.attempts, cvGoogleDriveExportJobs.maxAttempts),
+    ));
     if (googleDriveMutationRowCount(claimed) !== 1) continue;
     results.push(await processGoogleDriveExportJob(candidate.id));
   }
