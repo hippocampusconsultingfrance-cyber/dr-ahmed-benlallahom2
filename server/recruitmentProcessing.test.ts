@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { analysisCompletionStatus, cvAnalysisEnqueueDisposition, cvExtractionPersistenceFields, didClaimProcessingJob, executeCvExternalPipeline, extractionMethodFor, retryDelayMs } from "./recruitmentProcessing";
+import { drizzle } from "drizzle-orm/neon-http";
+import { and, eq } from "drizzle-orm";
+import { cvApplications } from "../drizzle/schema";
+import { analysisCompletionStatus, cvAnalysisEnqueueDisposition, cvExtractionPersistenceFields, didClaimProcessingJob, executeCvExternalPipeline, extractionMethodFor, recoveredCvAnalysisRetryIsCurrent, retryDelayMs } from "./recruitmentProcessing";
 
 const checksum = "a".repeat(64);
 const input = {
@@ -94,6 +97,18 @@ describe("règles déterministes du pipeline de traitement CV", () => {
     expect(didClaimProcessingJob({ rowCount: 0 })).toBe(false);
     expect(didClaimProcessingJob({ affectedRows: 0 })).toBe(false);
     expect(didClaimProcessingJob(undefined)).toBe(false);
+  });
+
+  it("n'affiche un job récupéré comme en attente que s'il n'a pas déjà été revendiqué", () => {
+    const db = drizzle.mock();
+    const update = db.update(cvApplications).set({ analysisStatus: "queued" }).where(and(
+      eq(cvApplications.id, 42),
+      recoveredCvAnalysisRetryIsCurrent(db, 7, 1),
+    )).toSQL();
+    expect(update.sql).toContain('exists (select "id" from "cv_processing_jobs"');
+    expect(update.sql).toContain('"cv_processing_jobs"."job_status" =');
+    expect(update.sql).toContain('"cv_processing_jobs"."attempts" =');
+    expect(update.params).toContain("retry");
   });
 
   it("termine une analyse propre et impose une revue humaine en cas d’incertitude", () => {
