@@ -937,13 +937,16 @@ export async function createApp() {
       const { sdk: sdkInstance } = await import("./sdk");
       const user = await sdkInstance.authenticateRequest(req);
       if (!user.isCron || !user.taskUid) return res.status(403).json({ error: "cron-only" });
-      const { processDueCvAnalysisJobs } = await import("../recruitmentProcessing");
-      const { processDueCvGoogleDriveExports } = await import("../googleDriveExport");
+      const { backfillLegacyCvAnalysisJobs, processDueCvAnalysisJobs, recoverStaleCvAnalysisJobs } = await import("../recruitmentProcessing");
+      const { backfillCvGoogleDriveExportJobs, processDueCvGoogleDriveExports } = await import("../googleDriveExport");
       const { retryDueFailedCvConfirmationEmails } = await import("../recruitmentEmailTrace");
+      const analysisRecovery = await recoverStaleCvAnalysisJobs();
+      const analysisBackfill = await backfillLegacyCvAnalysisJobs(2);
+      const driveBackfill = await backfillCvGoogleDriveExportJobs(2);
       const analysis = await processDueCvAnalysisJobs(2);
       const driveExports = await processDueCvGoogleDriveExports(2);
       const confirmationEmails = await retryDueFailedCvConfirmationEmails(2);
-      return res.json({ ok: true, taskUid: user.taskUid, analysis, driveExports, confirmationEmails });
+      return res.json({ ok: true, taskUid: user.taskUid, analysisRecovery, analysisBackfill, driveBackfill, analysis, driveExports, confirmationEmails });
     } catch (error: any) {
       console.error("[RecruitmentProcessing] Handler error:", safeErrorName(error));
       return res.status(500).json({ error: error.message, timestamp: new Date().toISOString() });
