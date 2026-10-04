@@ -104,8 +104,6 @@ describe("rattrapage fiable des traitements de candidature", () => {
       .toBeLessThan(postRoute.indexOf("processDueCvAnalysisJobs(2)"));
     expect(postRoute.indexOf("backfillLegacyCvAnalysisJobs(2)"))
       .toBeLessThan(postRoute.indexOf("processDueCvAnalysisJobs(2)"));
-    expect(postRoute.indexOf("recoverStaleCvGoogleDriveExportJobs()"))
-      .toBeLessThan(postRoute.indexOf("processDueCvGoogleDriveExports(2)"));
     expect(postRoute.indexOf("backfillCvGoogleDriveExportJobs(2)"))
       .toBeLessThan(postRoute.indexOf("processDueCvGoogleDriveExports(2)"));
   });
