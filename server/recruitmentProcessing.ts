@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, inArray, isNull, lt, lte, or } from "drizzle-orm";
+import { and, desc, eq, exists, gte, inArray, isNull, lt, lte, or } from "drizzle-orm";
 import { cvApplications, cvProcessingJobs } from "../drizzle/schema";
 import { getDb } from "./db";
 import { extractCvDocument, analyzeCvText, RECRUITMENT_ANALYSIS_PROMPT_VERSION, saveCvAnalysis } from "./recruitmentAnalysis";
@@ -174,6 +174,21 @@ export function cvAnalysisEnqueueDisposition(latestStatus: CvProcessingJobStatus
   return "create" as const;
 }
 
+/** Do not show a recovered retry as pending if another worker already claimed it. */
+export function recoveredCvAnalysisRetryIsCurrent(
+  db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
+  jobId: number,
+  attempts: number,
+) {
+  return exists(db.select({ id: cvProcessingJobs.id })
+    .from(cvProcessingJobs)
+    .where(and(
+      eq(cvProcessingJobs.id, jobId),
+      eq(cvProcessingJobs.status, "retry"),
+      eq(cvProcessingJobs.attempts, attempts),
+    )));
+}
+
 export async function enqueueCvAnalysis(applicationId: number, requestedAt = new Date()) {
   const db = await getDb();
   if (!db) throw new Error("Database connection failed");
@@ -296,6 +311,15 @@ export async function recoverStaleCvAnalysisJobs(staleAfterMs = 15 * 60_000) {
       }).where(eq(cvApplications.id, candidate.applicationId));
     } else {
       recovered += 1;
+      await db.update(cvApplications).set({
+        analysisStatus: "queued",
+        analysisAttempts: candidate.attempts,
+        analysisLastError: null,
+        updatedAt: now,
+      }).where(and(
+        eq(cvApplications.id, candidate.applicationId),
+        recoveredCvAnalysisRetryIsCurrent(db, candidate.id, candidate.attempts),
+      ));
     }
   }
   return { recovered, exhausted };
