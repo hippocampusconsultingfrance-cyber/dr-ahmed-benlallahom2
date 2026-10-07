@@ -189,52 +189,82 @@ export function recoveredCvAnalysisRetryIsCurrent(
     )));
 }
 
+function queuedCvAnalysisJobIsCurrent(
+  db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
+  jobId: number,
+  attempts: number,
+) {
+  return exists(db.select({ id: cvProcessingJobs.id })
+    .from(cvProcessingJobs)
+    .where(and(
+      eq(cvProcessingJobs.id, jobId),
+      eq(cvProcessingJobs.status, "queued"),
+      eq(cvProcessingJobs.attempts, attempts),
+    )));
+}
+
 export async function enqueueCvAnalysis(applicationId: number, requestedAt = new Date()) {
   const db = await getDb();
   if (!db) throw new Error("Database connection failed");
 
-  const [latestJob] = await db.select({ id: cvProcessingJobs.id, status: cvProcessingJobs.status })
-    .from(cvProcessingJobs)
-    .where(eq(cvProcessingJobs.applicationId, applicationId))
-    .orderBy(desc(cvProcessingJobs.id))
-    .limit(1);
-  const disposition = cvAnalysisEnqueueDisposition(latestJob?.status ?? null);
+  // A worker can claim the selected row before an administrator accelerates
+  // it. Re-read after a failed compare-and-set instead of reopening running work.
+  for (let contention = 0; contention < 3; contention += 1) {
+    const [latestJob] = await db.select({
+      id: cvProcessingJobs.id,
+      status: cvProcessingJobs.status,
+      attempts: cvProcessingJobs.attempts,
+    }).from(cvProcessingJobs)
+      .where(eq(cvProcessingJobs.applicationId, applicationId))
+      .orderBy(desc(cvProcessingJobs.id))
+      .limit(1);
+    const disposition = cvAnalysisEnqueueDisposition(latestJob?.status ?? null);
 
-  if (latestJob && disposition === "accelerate") {
-    await db.update(cvProcessingJobs).set({
+    if (latestJob && disposition === "accelerate") {
+      const updated = await db.update(cvProcessingJobs).set({
+        status: "queued",
+        scheduledFor: requestedAt,
+        finishedAt: null,
+        lastError: null,
+      }).where(and(
+        eq(cvProcessingJobs.id, latestJob.id),
+        eq(cvProcessingJobs.status, latestJob.status),
+        eq(cvProcessingJobs.attempts, latestJob.attempts),
+      ));
+      if (mutationRowCount(updated) !== 1) continue;
+      await db.update(cvApplications).set({
+        analysisStatus: "queued",
+        analysisLastError: null,
+        analysisRequestedAt: requestedAt,
+        updatedAt: requestedAt,
+      }).where(and(
+        eq(cvApplications.id, applicationId),
+        queuedCvAnalysisJobIsCurrent(db, latestJob.id, latestJob.attempts),
+      ));
+      return { queued: false, accelerated: true, alreadyRunning: false };
+    }
+
+    if (disposition === "already_running") {
+      return { queued: false, accelerated: false, alreadyRunning: true };
+    }
+
+    await db.insert(cvProcessingJobs).values({
+      applicationId,
+      jobType: "analyze_cv",
       status: "queued",
+      attempts: 0,
+      maxAttempts: MAX_ATTEMPTS,
       scheduledFor: requestedAt,
-      finishedAt: null,
-      lastError: null,
-    }).where(eq(cvProcessingJobs.id, latestJob.id));
+    });
     await db.update(cvApplications).set({
       analysisStatus: "queued",
       analysisLastError: null,
       analysisRequestedAt: requestedAt,
       updatedAt: requestedAt,
     }).where(eq(cvApplications.id, applicationId));
-    return { queued: false, accelerated: true, alreadyRunning: false };
+    return { queued: true, accelerated: false, alreadyRunning: false };
   }
-
-  if (disposition === "already_running") {
-    return { queued: false, accelerated: false, alreadyRunning: true };
-  }
-
-  await db.insert(cvProcessingJobs).values({
-    applicationId,
-    jobType: "analyze_cv",
-    status: "queued",
-    attempts: 0,
-    maxAttempts: MAX_ATTEMPTS,
-    scheduledFor: requestedAt,
-  });
-  await db.update(cvApplications).set({
-    analysisStatus: "queued",
-    analysisLastError: null,
-    analysisRequestedAt: requestedAt,
-    updatedAt: requestedAt,
-  }).where(eq(cvApplications.id, applicationId));
-  return { queued: true, accelerated: false, alreadyRunning: false };
+  throw new Error("cv_analysis_enqueue_contention");
 }
 
 /**
