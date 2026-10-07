@@ -467,6 +467,32 @@ Français : courant
     expect(result.dataQualityWarnings.join(" ")).toContain("Confiance OCR insuffisante");
   });
 
+  it("masque le score d'un PDF partiellement lisible sans rejeter ses citations valides", () => {
+    const source = "[PAGE 1]\nTitre : Médecin anesthésiste. Spécialité : Anesthésie. Compétence : Réanimation.";
+    const fixture = analysisFixture({
+      professionalTitle: "Médecin anesthésiste",
+      specialties: ["Anesthésie"],
+      skills: ["Réanimation"],
+      fieldEvidence: [
+        { field: "professionalTitle", value: "Médecin anesthésiste", evidence: "Médecin anesthésiste", sourceLocation: "page 1", confidence: 95 },
+        { field: "specialty", value: "Anesthésie", evidence: "Spécialité : Anesthésie", sourceLocation: "page 1", confidence: 95 },
+        { field: "skill", value: "Réanimation", evidence: "Compétence : Réanimation", sourceLocation: "page 1", confidence: 95 },
+      ],
+    });
+    const complete = normalizeRecruitmentAnalysis(fixture, source, {
+      specialty: "Anesthésie", targetCountries: [], languages: [],
+    });
+    const incomplete = normalizeRecruitmentAnalysis(fixture, source, {
+      specialty: "Anesthésie", targetCountries: [], languages: [], extractionIncomplete: true,
+    });
+    expect(complete.relevanceScore).not.toBeNull();
+    expect(incomplete.relevanceScore).toBeNull();
+    expect(incomplete.dataQualityWarnings).toContain(
+      "Extraction incomplète du document : au moins une page nécessite une vérification manuelle."
+    );
+    expect(incomplete.fieldEvidence.every(item => item.evidenceVerified)).toBe(true);
+  });
+
   it("refuse les faits niés même lorsque la négation est éloignée", () => {
     const result = normalizeRecruitmentAnalysis(analysisFixture({
       skills: ["Réanimation"],

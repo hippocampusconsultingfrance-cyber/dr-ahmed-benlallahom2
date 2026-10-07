@@ -126,12 +126,13 @@ export type RecruitmentAnalysisInput = {
   extractedText: string;
   extractionMethod?: CvExtractionResult["method"];
   ocrConfidence?: number | null;
+  extractionIncomplete?: boolean;
 };
 
 export type RecruitmentDeclaredContext = Pick<
   RecruitmentAnalysisInput,
   "specialty" | "targetCountries" | "languages" | "yearsExperience"
-> & { extractionConfidence?: number | null };
+> & { extractionConfidence?: number | null; extractionIncomplete?: boolean };
 
 const evidenceSchema = z.string().trim().min(1).max(500);
 const sourceLocationSchema = z.string().trim().min(1).max(120);
@@ -295,19 +296,26 @@ export async function extractCvDocument(buffer: Buffer, mimeType: string): Promi
     const parser = await createPdfParser(buffer);
     let extracted = "";
     let totalPages: number | null = null;
+    let textCoverageWarnings: string[] = [];
     try {
       const result = await parser.getText();
-      extracted = cleanText(result.pages
-        .map(page => `[PAGE ${page.num}]\n${escapeCvPageMarkers(cleanText(page.text))}`)
+      const pages = result.pages.map(page => ({ number: page.num, text: cleanText(page.text) }));
+      extracted = cleanText(pages
+        .map(page => `[PAGE ${page.number}]\n${escapeCvPageMarkers(page.text)}`)
         .join("\n\n"));
       totalPages = Number.isInteger(result.total) ? result.total : null;
+      textCoverageWarnings = [
+        ...pages.filter(page => page.text.length < 20)
+          .map(page => `pdf_text_page_${page.number}_insufficient_text`),
+        ...(totalPages !== null && pages.length < totalPages ? ["pdf_text_pages_missing"] : []),
+      ];
     } finally {
       await parser.destroy();
     }
     const extractedContentLength = cleanText(
       extracted.replace(/\[PAGE\s+\d+\]/gi, "")
     ).length;
-    if (extractedContentLength >= 80) return { text: extracted, method: "pdf_text", totalPages, ocrConfidence: null, ocrModelVersion: null, warnings: [] };
+    if (extractedContentLength >= 80) return { text: extracted, method: "pdf_text", totalPages, ocrConfidence: null, ocrModelVersion: null, warnings: textCoverageWarnings };
     const vision = await extractPdfWithVision(buffer);
     return {
       // Vision already carries server-generated page markers. Keeping the empty
@@ -792,6 +800,11 @@ export function normalizeRecruitmentAnalysis(
   }
 ): RecruitmentAnalysisResult {
   const deterministicProcessingWarnings: string[] = [];
+  if (declared.extractionIncomplete) {
+    deterministicProcessingWarnings.push(
+      "Extraction incomplète du document : au moins une page nécessite une vérification manuelle."
+    );
+  }
   if (declared.extractionConfidence !== null &&
       declared.extractionConfidence !== undefined &&
       declared.extractionConfidence < VERIFIED_EVIDENCE_MIN_CONFIDENCE) {
@@ -1003,6 +1016,7 @@ export function normalizeRecruitmentAnalysis(
     0
   );
   const scoreIsTrustworthy =
+    !declared.extractionIncomplete &&
     allEvidence.filter(isVerifiedFact).length >= 3 &&
     evidenceCoverage >= 80 &&
     uniqueContradictions.length === 0 &&
@@ -1265,6 +1279,7 @@ Barème professionnel, sans caractéristique protégée : specialtyMatch /30, ex
       extractionConfidence: input.extractionMethod === "pdf_vision"
         ? input.ocrConfidence ?? 0
         : null,
+      extractionIncomplete: input.extractionIncomplete,
     });
     const inputTokens = response.usage.inputTokens ?? null;
     const outputTokens = response.usage.outputTokens ?? null;

@@ -130,6 +130,26 @@ describe("règles déterministes du pipeline de traitement CV", () => {
     expect(result.analysisUsage.totalTokens).toBe(200);
   });
 
+  it("transmet le signal de couverture incomplète pour un PDF mixte", async () => {
+    let extractionIncomplete: boolean | undefined;
+    await executeCvExternalPipeline(input, {
+      ...steps,
+      extract: async () => ({
+        text: "[PAGE 1]\nDocument fictif avec assez de texte.\n[PAGE 2]",
+        method: "pdf_text" as const,
+        totalPages: 2,
+        ocrConfidence: null,
+        ocrModelVersion: null,
+        warnings: ["pdf_text_page_2_insufficient_text"],
+      }),
+      analyze: async analysisInput => {
+        extractionIncomplete = analysisInput.extractionIncomplete;
+        return analysisExecution;
+      },
+    });
+    expect(extractionIncomplete).toBe(true);
+  });
+
   it("propage de manière contrôlée les échecs de stockage, OCR et IA pour la logique de reprise", async () => {
     await expect(executeCvExternalPipeline(input, { ...steps, download: async () => { throw new Error("cv_download_failed_503"); } })).rejects.toThrow("cv_download_failed_503");
     await expect(executeCvExternalPipeline(input, { ...steps, extract: async () => { throw new Error("ocr_engine_failed"); } })).rejects.toThrow("ocr_engine_failed");
