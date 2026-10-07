@@ -106,6 +106,11 @@ export async function executeCvExternalPipeline(
     extractedText: extraction.text,
     extractionMethod: extraction.method,
     ocrConfidence: analysisOcrConfidence,
+    extractionIncomplete: extraction.warnings.some(warning =>
+      warning.startsWith("pdf_text_page_") ||
+      warning === "pdf_text_pages_missing" ||
+      warning === "vision_ocr_first_3_pages_only"
+    ),
   });
   return {
     validation,
