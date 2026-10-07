@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from "node:crypto";
+import { createHash, randomInt, randomUUID } from "node:crypto";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, adminProcedure, router } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
@@ -27,7 +27,7 @@ import {
 import { logRecruitmentAction, matchesRecruitmentProfile, parseRecruitmentJsonArray } from "./recruitmentAudit";
 import { computeBriefCandidateMatch } from "./clientBriefMatching";
 import { candidatePortalRouter } from "./candidatePortalRouter";
-import { enforcePersistentRateLimit, logSecurityEvent, requestIpHash } from "./candidateSecurity";
+import { enforcePersistentRateLimit, hashSecurityValue, logSecurityEvent, requestIpHash } from "./candidateSecurity";
 import { createCandidateInvitationToken } from "./candidateAuth";
 import { verifyCandidateTurnstile } from "./candidateTurnstile";
 import { googleDriveExportStatus } from "./googleDriveExport";
@@ -50,27 +50,58 @@ const DEFAULT_PUBLIC_ORIGIN = process.env.PUBLIC_APP_ORIGIN || "https://drahmedb
 
 const PARIS_TIME_ZONE = "Europe/Paris";
 const CV_APPLICATION_STATUSES = ["new", "reviewing", "shortlisted", "placed", "rejected", "archived"] as const;
+type PublicFormRateLimitPolicy = {
+  action: string;
+  /** Clé de comptage : couple IP + email (formulaires), IP seule ou email seul (réservation). */
+  scope: "ip_email" | "ip" | "email";
+  maxAttempts: number;
+  windowMs: number;
+  blockMs: number;
+  blockedMessage?: string;
+};
+
+const DEFAULT_PUBLIC_FORM_BLOCKED_MESSAGE = "Veuillez patienter avant de soumettre une nouvelle demande.";
+export const BOOKING_RATE_LIMIT_MESSAGE = "Trop de tentatives de réservation ont été effectuées. Veuillez réessayer dans une heure ou nous contacter directement.";
+
 export const PUBLIC_FORM_RATE_LIMITS = {
-  contact: { action: "public_contact_submit", maxAttempts: 5, windowMs: 15 * 60 * 1000, blockMs: 60 * 60 * 1000 },
-  gdpr: { action: "public_gdpr_submit", maxAttempts: 3, windowMs: 24 * 60 * 60 * 1000, blockMs: 24 * 60 * 60 * 1000 },
-} as const;
+  contact: { action: "public_contact_submit", scope: "ip_email", maxAttempts: 5, windowMs: 15 * 60 * 1000, blockMs: 60 * 60 * 1000 },
+  gdpr: { action: "public_gdpr_submit", scope: "ip_email", maxAttempts: 3, windowMs: 24 * 60 * 60 * 1000, blockMs: 24 * 60 * 60 * 1000 },
+  // Chaque réservation bloque un créneau de 30 minutes et ouvre une session
+  // Stripe. Le compteur par IP borne un script qui change d’email à chaque
+  // appel ; le compteur par email borne une même identité qui change d’IP.
+  bookingIp: { action: "public_booking_create_ip", scope: "ip", maxAttempts: 6, windowMs: 60 * 60 * 1000, blockMs: 60 * 60 * 1000, blockedMessage: BOOKING_RATE_LIMIT_MESSAGE },
+  bookingEmail: { action: "public_booking_create_email", scope: "email", maxAttempts: 5, windowMs: 60 * 60 * 1000, blockMs: 60 * 60 * 1000, blockedMessage: BOOKING_RATE_LIMIT_MESSAGE },
+} as const satisfies Record<string, PublicFormRateLimitPolicy>;
+
+export function publicFormRateLimitSubject(scope: PublicFormRateLimitPolicy["scope"], ipHash: string | null, email: string): string | null {
+  if (scope === "ip_email") return `${ipHash ?? "unknown"}:${email}`;
+  if (scope === "email") return `email:${email}`;
+  // Sans IP identifiable, ne jamais regrouper tous les patients dans un seul
+  // compteur « unknown » : quelques appels suffiraient à bloquer l’agenda pour
+  // tout le monde. Le compteur par email et le plafond de créneaux retenus
+  // restent appliqués dans ce cas.
+  return ipHash ? `ip:${ipHash}` : null;
+}
 
 async function enforcePublicFormRateLimit(input: {
   kind: keyof typeof PUBLIC_FORM_RATE_LIMITS;
   email: string;
   headers: Record<string, unknown>;
+  remoteIp?: string | null;
 }) {
   // Les tests d’intégration réemploient volontairement les mêmes adresses dans
   // plusieurs scénarios indépendants. La protection persistante reste active
   // dans tous les environnements réels ; ses seuils sont couverts séparément.
   if (process.env.NODE_ENV === "test" || process.env.VITEST === "true") return;
 
-  const ipHash = requestIpHash(input.headers);
-  const policy = PUBLIC_FORM_RATE_LIMITS[input.kind];
+  const ipHash = requestIpHash(input.headers) ?? (input.remoteIp ? hashSecurityValue(input.remoteIp) : null);
+  const { scope, blockedMessage, ...policy }: PublicFormRateLimitPolicy = PUBLIC_FORM_RATE_LIMITS[input.kind];
+  const subject = publicFormRateLimitSubject(scope, ipHash, input.email);
+  if (!subject) return;
   try {
     await enforcePersistentRateLimit({
       ...policy,
-      subject: `${ipHash ?? "unknown"}:${input.email}`,
+      subject,
     });
   } catch {
     await logSecurityEvent({
@@ -80,8 +111,34 @@ async function enforcePublicFormRateLimit(input: {
       severity: "warning",
       ipHash,
     });
-    throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "Veuillez patienter avant de soumettre une nouvelle demande." });
+    throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: blockedMessage ?? DEFAULT_PUBLIC_FORM_BLOCKED_MESSAGE });
   }
+}
+
+/** Nombre maximal de créneaux retenus (en attente de paiement) par adresse email. */
+export const MAX_ACTIVE_APPOINTMENT_HOLDS_PER_EMAIL = 2;
+export const ACTIVE_APPOINTMENT_HOLDS_LIMIT_MESSAGE = "Vous avez déjà deux réservations en attente de paiement. Finalisez ou annulez l’un de ces paiements, ou patientez 30 minutes avant de réserver un nouveau créneau.";
+
+export const CONSULTATION_CHECKOUT_PRODUCT_NAME = "Consultation de conseil santé – 30 minutes";
+
+/** Libellé de la ligne Stripe Checkout, visible sur la page de paiement et le reçu. */
+export function consultationCheckoutProductData(trackingId: string) {
+  return { name: CONSULTATION_CHECKOUT_PRODUCT_NAME, description: `Rendez-vous : ${trackingId}` };
+}
+
+const PUBLIC_TRACKING_ID_ALPHABET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+/**
+ * Numéro de suivi imprévisible pour les formulaires publics (contact, RGPD) :
+ * préfixe + 12 caractères alphanumériques majuscules tirés par le générateur
+ * cryptographique (≈ 62 bits), soit 13 caractères pour une colonne varchar(20).
+ */
+export function createPublicTrackingId(prefix: "C" | "G"): string {
+  let suffix = "";
+  for (let index = 0; index < 12; index += 1) {
+    suffix += PUBLIC_TRACKING_ID_ALPHABET[randomInt(PUBLIC_TRACKING_ID_ALPHABET.length)];
+  }
+  return `${prefix}${suffix}`;
 }
 export const recruitmentPoolFiltersInput = z.object({
   specialty: z.string().trim().max(160).optional(),
@@ -342,8 +399,8 @@ export const appRouter = router({
           await verifyCandidateTurnstile({ token: input.turnstileToken ?? "", remoteIp: ctx.req.ip });
         }
 
-        // Generate a unique tracking ID (max 20 chars for varchar(20))
-        const trackingId = `C${Math.random().toString(36).substring(2, 10).toUpperCase()}${Date.now().toString(36).slice(-4).toUpperCase()}`;
+        // Unpredictable tracking ID (13 chars, column is varchar(20))
+        const trackingId = createPublicTrackingId("C");
 
         // Save the message to the database using raw SQL (TiDB DEFAULT bug workaround)
         const db = await getDb();
@@ -384,8 +441,8 @@ export const appRouter = router({
         if (process.env.NODE_ENV !== "test" && process.env.VITEST !== "true") {
           await verifyCandidateTurnstile({ token: input.turnstileToken ?? "", remoteIp: ctx.req.ip });
         }
-        // Generate a unique tracking ID (max 20 chars for varchar(20))
-        const trackingId = `G${Math.random().toString(36).substring(2, 10).toUpperCase()}${Date.now().toString(36).slice(-4).toUpperCase()}`;
+        // Unpredictable tracking ID (13 chars, column is varchar(20))
+        const trackingId = createPublicTrackingId("G");
 
         // Save the GDPR request to the database using raw SQL (TiDB DEFAULT bug workaround)
         const db = await getDb();
@@ -502,11 +559,19 @@ export const appRouter = router({
           requestDetails: z.string().min(1).max(5000),
         })
       )
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input, ctx }) => {
         const date = parseAppointmentDate(input.appointmentDate);
         if (date.getTime() <= Date.now()) {
           throw new TRPCError({ code: "BAD_REQUEST", message: "La date de consultation doit être future" });
         }
+
+        // Endpoint public sans Turnstile (parcours de paiement) : chaque appel
+        // retient un créneau et ouvre une session Stripe, d’où un compteur
+        // persistant par IP puis par email avant tout accès à l’agenda.
+        const customerEmailKey = input.customerEmail.trim().toLowerCase();
+        const rateLimitRequest = { email: customerEmailKey, headers: ctx.req.headers as Record<string, unknown>, remoteIp: ctx.req.ip };
+        await enforcePublicFormRateLimit({ kind: "bookingIp", ...rateLimitRequest });
+        await enforcePublicFormRateLimit({ kind: "bookingEmail", ...rateLimitRequest });
 
         const basePrice = "100.00";
         const isNightRate = isNightRateForParis(date);
@@ -522,6 +587,25 @@ export const appRouter = router({
         try {
           const { getAppointmentHoldExpiry, getExpiredAppointmentHoldUpdate, releaseExpiredAppointmentHolds } = await import("./appointmentHolds");
           await releaseExpiredAppointmentHolds();
+
+          // Plafond de créneaux retenus simultanément par une même adresse
+          // (comparaison insensible à la casse) : un patient peut relancer un
+          // paiement abandonné sans pouvoir verrouiller l’agenda en boucle.
+          const [activeHolds] = await db
+            .select({ count: sql<number>`COUNT(*)` })
+            .from(appointments)
+            .where(
+              and(
+                sql`LOWER(${appointments.customerEmail}) = ${customerEmailKey}`,
+                eq(appointments.paymentStatus, "pending"),
+                eq(appointments.appointmentStatus, "held"),
+                sql`${appointments.holdExpiresAt} > NOW()`
+              )
+            );
+          if (Number(activeHolds?.count ?? 0) >= MAX_ACTIVE_APPOINTMENT_HOLDS_PER_EMAIL) {
+            throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: ACTIVE_APPOINTMENT_HOLDS_LIMIT_MESSAGE });
+          }
+
           const dateKey = parisDateKey(date);
           const blockedDate = await db
             .select({ id: blockedDates.id })
@@ -578,7 +662,7 @@ export const appRouter = router({
           try {
             const session = await getStripeClient().checkout.sessions.create({
               payment_method_types: ["card"],
-              line_items: [{ price_data: { currency: "eur", product_data: { name: "Health Consultation - 30 minutes", description: `Appointment: ${trackingId}` }, unit_amount: Math.round(Number(finalPrice) * 100) }, quantity: 1 }],
+              line_items: [{ price_data: { currency: "eur", product_data: consultationCheckoutProductData(trackingId), unit_amount: Math.round(Number(finalPrice) * 100) }, quantity: 1 }],
               mode: "payment",
               customer_email: input.customerEmail,
               metadata: { trackingId, customerName: input.customerName },
@@ -664,10 +748,7 @@ export const appRouter = router({
               {
                 price_data: {
                   currency: "eur",
-                  product_data: {
-                    name: "Health Consultation - 30 minutes",
-                    description: `Appointment: ${input.trackingId}`,
-                  },
+                  product_data: consultationCheckoutProductData(input.trackingId),
                   unit_amount: amountInCents,
                 },
                 quantity: 1,
