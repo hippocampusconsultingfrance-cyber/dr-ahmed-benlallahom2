@@ -1,3 +1,12 @@
+import { venturesFr } from "../client/src/data/ventures-fr";
+
+/** Marqueur de client/index.html remplacé par le <head> propre à chaque route. */
+export const ROUTE_SEO_MARKER = "<!--route-seo-->";
+/** Copie intacte du shell SPA (avec marqueur) écrite au build pour Express. */
+export const SPA_TEMPLATE_FILE = "_spa-template.html";
+/** Shell SPA générique (noindex, sans canonique) servi par la réécriture Vercel. */
+export const SPA_FALLBACK_FILE = "_spa-fallback.html";
+
 const ORIGIN = "https://drahmedbenlallahom.com";
 const SITE_NAME = "Dr. Ahmed Ben Lallahom";
 const DEFAULT_IMAGE = `${ORIGIN}/assets/abl-logo.svg`;
@@ -11,7 +20,38 @@ type RouteSeo = {
   notFound?: boolean;
 };
 
-const PUBLIC_ROUTES: Record<string, Omit<RouteSeo, "canonicalPath">> = {
+type PublicRouteSeo = Omit<RouteSeo, "canonicalPath"> & {
+  /** URL canonique d'un alias (ex. /vvip-offshore → /recruitment/vvip-offshore). */
+  canonicalPath?: string;
+};
+
+// Même extrait que ventureMetaDescription (client/src/pages/VenturePage.tsx) :
+// le <head> initial et le <head> hydraté côté client restent identiques.
+function ventureDescription(description: string[]) {
+  const text = description[0]?.replace(/\s+/g, " ").trim() ?? "";
+  if (text.length <= 160) return text;
+
+  const excerpt = text.slice(0, 159);
+  const lastWordBoundary = excerpt.lastIndexOf(" ");
+  const end = lastWordBoundary >= 120 ? lastWordBoundary : 159;
+  return `${excerpt.slice(0, end).trimEnd()}…`;
+}
+
+// Les pages /venture/:slug sont générées depuis la même source que la page
+// client (ventures-fr.ts) pour qu'aucune entreprise publiée ne reste sans
+// titre, description ni balises Open Graph.
+const VENTURE_ROUTES: Record<string, PublicRouteSeo> = Object.fromEntries(
+  venturesFr.map(venture => [
+    `/venture/${venture.slug}`,
+    {
+      title: `${venture.company} — ${venture.role} | ${SITE_NAME}`,
+      description: ventureDescription(venture.description),
+      keywords: venture.tags.join(", "),
+    },
+  ]),
+);
+
+const PUBLIC_ROUTES: Record<string, PublicRouteSeo> = {
   "/": {
     title: "Dr. Ahmed Ben Lallahom | Médecine et Conseil",
     description: "Anesthésiste-réanimateur, entrepreneur en santé et consultant médical basé en France.",
@@ -51,6 +91,7 @@ const PUBLIC_ROUTES: Record<string, Omit<RouteSeo, "canonicalPath">> = {
     title: "Missions santé offshore et Moyen-Orient | Hippocampus",
     description: "Postulez pour des missions médicales spécialisées offshore, industrielles et au Moyen-Orient.",
     keywords: "mission médicale offshore, santé Moyen-Orient, plateforme pétrolière",
+    canonicalPath: "/recruitment/vvip-offshore",
   },
   "/employers": {
     title: "Recruter des soignants | Hippocampus Consulting",
@@ -78,6 +119,14 @@ const PUBLIC_ROUTES: Record<string, Omit<RouteSeo, "canonicalPath">> = {
     title: "Questions fréquentes | Dr. Ben Lallahom",
     description: "Retrouvez les informations pratiques sur la consultation, la réservation et Hippocampus Consulting.",
   },
+  "/resources": {
+    title: "Ressources médicales institutionnelles | Dr. Ben Lallahom",
+    description: "Une sélection de portails institutionnels de santé pour prolonger votre information, sans remplacer un avis médical.",
+  },
+  "/press": {
+    title: "Presse et publications | Dr. Ben Lallahom",
+    description: "Informations institutionnelles vérifiables sur le parcours et les activités du Dr. Ahmed Ben Lallahom.",
+  },
   "/search": {
     title: "Recherche | Dr. Ben Lallahom",
     description: "Recherchez les informations publiques du site.",
@@ -93,14 +142,7 @@ const PUBLIC_ROUTES: Record<string, Omit<RouteSeo, "canonicalPath">> = {
     description: "Information de maintenance du service.",
     noIndex: true,
   },
-  "/venture/novarena": {
-    title: "Novarena | Dr. Ben Lallahom",
-    description: "Découvrez Novarena, initiative entrepreneuriale en santé portée par le Dr. Ahmed Ben Lallahom.",
-  },
-  "/venture/sawa4you": {
-    title: "SAWA4YOU | Dr. Ben Lallahom",
-    description: "Découvrez SAWA4YOU, initiative entrepreneuriale en santé portée par le Dr. Ahmed Ben Lallahom.",
-  },
+  ...VENTURE_ROUTES,
 };
 
 const PRIVATE_PREFIXES = ["/candidate/", "/admin"];
@@ -116,7 +158,7 @@ const escapeHtml = (value: string) =>
 export function getRouteSeo(url: string): RouteSeo {
   const pathname = new URL(url, ORIGIN).pathname.replace(/\/+$/, "") || "/";
   const known = PUBLIC_ROUTES[pathname];
-  if (known) return { ...known, canonicalPath: pathname };
+  if (known) return { ...known, canonicalPath: known.canonicalPath ?? pathname };
 
   if (pathname === "/booking/confirmation" || PRIVATE_PREFIXES.some(prefix => pathname === prefix.slice(0, -1) || pathname.startsWith(prefix))) {
     return {
@@ -136,13 +178,30 @@ export function getRouteSeo(url: string): RouteSeo {
   };
 }
 
-export function renderRouteSeoHead(url: string): string {
-  const seo = getRouteSeo(url);
-  const title = escapeHtml(seo.title);
-  const description = escapeHtml(seo.description);
-  const canonical = escapeHtml(`${ORIGIN}${seo.canonicalPath}`);
-  const keywords = seo.keywords ? `<meta name="keywords" content="${escapeHtml(seo.keywords)}" />` : "";
-  const robots = seo.noIndex ? "noindex, follow" : "index, follow";
+/**
+ * Routes publiques pré-rendues au build (scripts/prerender-route-seo.ts) :
+ * chacune reçoit un fichier HTML statique avec son propre <head>, car Vercel
+ * sert le HTML sans passer par Express.
+ */
+export function getPrerenderRoutes(): string[] {
+  return Object.keys(PUBLIC_ROUTES);
+}
+
+type HeadInput = {
+  title: string;
+  description: string;
+  keywords?: string;
+  noIndex?: boolean;
+  /** Absent pour la page de repli SPA : aucune URL canonique ni og:url. */
+  canonicalUrl?: string;
+};
+
+function renderHead(input: HeadInput): string {
+  const title = escapeHtml(input.title);
+  const description = escapeHtml(input.description);
+  const canonical = input.canonicalUrl ? escapeHtml(input.canonicalUrl) : undefined;
+  const keywords = input.keywords ? `<meta name="keywords" content="${escapeHtml(input.keywords)}" />` : "";
+  const robots = input.noIndex ? "noindex, follow" : "index, follow";
 
   return [
     `<title>${title}</title>`,
@@ -150,17 +209,35 @@ export function renderRouteSeoHead(url: string): string {
     keywords,
     `<meta name="robots" content="${robots}" />`,
     `<meta property="og:type" content="website" />`,
-    `<meta property="og:url" content="${canonical}" />`,
+    canonical ? `<meta property="og:url" content="${canonical}" />` : "",
     `<meta property="og:title" content="${title}" />`,
     `<meta property="og:description" content="${description}" />`,
     `<meta property="og:image" content="${DEFAULT_IMAGE}" />`,
     `<meta property="og:site_name" content="${SITE_NAME}" />`,
     `<meta property="og:locale" content="fr_FR" />`,
     `<meta name="twitter:card" content="summary_large_image" />`,
-    `<meta name="twitter:url" content="${canonical}" />`,
+    canonical ? `<meta name="twitter:url" content="${canonical}" />` : "",
     `<meta name="twitter:title" content="${title}" />`,
     `<meta name="twitter:description" content="${description}" />`,
     `<meta name="twitter:image" content="${DEFAULT_IMAGE}" />`,
-    `<link rel="canonical" href="${canonical}" />`,
+    canonical ? `<link rel="canonical" href="${canonical}" />` : "",
   ].filter(Boolean).join("\n    ");
+}
+
+export function renderRouteSeoHead(url: string): string {
+  const seo = getRouteSeo(url);
+  return renderHead({ ...seo, canonicalUrl: `${ORIGIN}${seo.canonicalPath}` });
+}
+
+/**
+ * <head> de la page de repli SPA servie par Vercel pour toute URL sans
+ * fichier pré-rendu (espaces candidat/admin, confirmation de réservation,
+ * URL inconnues) : générique, non indexable, sans canonique vers l'accueil.
+ */
+export function renderFallbackSeoHead(): string {
+  return renderHead({
+    title: SITE_NAME,
+    description: "Anesthésiste-réanimateur, entrepreneur en santé et consultant médical basé en France.",
+    noIndex: true,
+  });
 }
