@@ -14,6 +14,30 @@
     {
       "path": "/api/scheduled/recruitment-processing",
       "schedule": "15 1 * * *"
+    },
+    {
+      "path": "/api/scheduled/appointment-hold-cleanup",
+      "schedule": "40 2 * * *"
+    },
+    {
+      "path": "/api/scheduled/recruitment-retention",
+      "schedule": "25 3 * * *"
+    },
+    {
+      "path": "/api/scheduled/security-posture",
+      "schedule": "50 4 * * *"
+    },
+    {
+      "path": "/api/scheduled/candidate-document-processing",
+      "schedule": "35 5 * * *"
+    },
+    {
+      "path": "/api/scheduled/appointment-fulfillment",
+      "schedule": "20 6 * * *"
+    },
+    {
+      "path": "/api/scheduled/reminder",
+      "schedule": "45 16 * * *"
     }
   ],
   "headers": [

@@ -9,6 +9,8 @@ import net from "net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { clerkMiddleware } from "@clerk/express";
 import { assertCriticalProductionEnvironment } from "./env";
+import { requireVercelCron } from "./cronAuth";
+import { secureReference } from "./secureReference";
 import { registerGoogleDriveOAuthRoutes } from "../googleDriveOAuthRoutes";
 import { registerStorageProxy } from "./storageProxy";
 import { appRouter } from "../routers";
@@ -184,59 +186,14 @@ export async function createApp() {
 
     try {
       if (event.type === "checkout.session.completed") {
-        const session = event.data.object as any;
         console.log("Stripe checkout completion received");
-        const { getDb } = await import("../db");
-        const { appointments } = await import("../../drizzle/schema");
-        const { eq } = await import("drizzle-orm");
-        const db = await getDb();
-        if (!db) throw new Error("Database connection failed");
-        const trackingId = session.metadata?.trackingId;
-
-        if (!trackingId) {
-          console.error("Stripe webhook rejected: missing appointment reference");
-          return res.status(400).json({ error: "Invalid webhook" });
-        }
-
-        const appointmentResult = await db
-          .select()
-          .from(appointments)
-          .where(eq(appointments.trackingId, trackingId))
-          .limit(1);
-        const appointment = appointmentResult[0];
-
-        if (!appointment) {
-          console.error("Stripe webhook rejected: appointment not found");
-          return res.status(400).json({ error: "Invalid webhook" });
-        }
-
-        // Persisted fulfillment is idempotent. Re-enqueueing on a Stripe retry
-        // protects a payment whose previous acknowledgement failed after the DB update.
-        const { enqueueAppointmentFulfillment } = await import("../appointmentFulfillment");
-        if (appointment.paymentStatus === "completed") {
-          await enqueueAppointmentFulfillment(appointment.id);
-          return res.json({ received: true, duplicate: true });
-        }
-
-        const paidAmount = Number(session.amount_total);
-        const expectedAmount = Math.round(Number(appointment.finalPrice) * 100);
-        if (!Number.isFinite(paidAmount) || paidAmount !== expectedAmount) {
-          console.error("Stripe webhook rejected: amount mismatch");
-          return res.status(400).json({ error: "Invalid webhook" });
-        }
-
-        await db
-          .update(appointments)
-          .set({
-            paymentStatus: "completed",
-            appointmentStatus: "confirmed",
-            holdExpiresAt: null,
-            stripePaymentIntentId: session.payment_intent as string,
-          })
-          .where(eq(appointments.trackingId, trackingId));
-
-        console.log("Payment confirmed for appointment");
-        await enqueueAppointmentFulfillment(appointment.id);
+        // Requires a paid session matching the stored one, confirms only a slot
+        // still held for this patient (conditional UPDATE), alerts the owner when
+        // money arrives for a slot that can no longer be confirmed, and sends the
+        // confirmation + invoice right away (bounded) instead of waiting for a cron.
+        const { handleCheckoutSessionCompleted } = await import("../appointmentPaymentWebhook");
+        const completion = await handleCheckoutSessionCompleted(event.data.object);
+        return res.status(completion.httpStatus).json(completion.body);
       } else if (event.type === "checkout.session.expired") {
         const session = event.data.object as any;
         const trackingId = session.metadata?.trackingId;
@@ -399,7 +356,27 @@ export async function createApp() {
         return;
       }
 
-      const briefId = `BRIEF${Math.random().toString(36).slice(2, 8).toUpperCase()}${Date.now().toString(36).slice(-6).toUpperCase()}`;
+      // No Turnstile here on purpose (the widget is unreliable on this form);
+      // persistent limits per client IP and per email contain scripted spam.
+      const { enforcePersistentRateLimit, hashSecurityValue, logSecurityEvent } = await import("../candidateSecurity");
+      const clientIp = req.ip || "unknown";
+      try {
+        await enforcePersistentRateLimit({ action: "public_client_brief_ip", subject: clientIp, maxAttempts: 5, windowMs: 60 * 60 * 1000, blockMs: 60 * 60 * 1000 });
+        await enforcePersistentRateLimit({ action: "public_client_brief_email", subject: parsed.data.email, maxAttempts: 10, windowMs: 24 * 60 * 60 * 1000, blockMs: 24 * 60 * 60 * 1000 });
+      } catch (protectionError) {
+        const rateLimited = protectionError instanceof Error && protectionError.message === "candidate_security_rate_limited";
+        if (!rateLimited) {
+          console.error("Client brief protection unavailable:", safeErrorName(protectionError));
+          res.status(503).json({ error: "Service temporairement indisponible." });
+          return;
+        }
+        await logSecurityEvent({ actorKind: "anonymous", actorReference: parsed.data.email, category: "public_client_brief_rate_limited", outcome: "blocked", severity: "warning", ipHash: hashSecurityValue(clientIp) })
+          .catch(securityLogError => console.error("Client brief protection log error:", safeErrorName(securityLogError)));
+        res.status(429).json({ error: "Trop de demandes ont été envoyées. Veuillez patienter avant de soumettre un nouveau brief." });
+        return;
+      }
+
+      const briefId = secureReference("BRIEF", 12);
       const db = await (await import("../db")).getDb();
       if (!db) {
         res.status(503).json({ error: "Service temporairement indisponible." });
@@ -499,7 +476,7 @@ export async function createApp() {
         }
 
         recruitmentStage = "file-validation";
-        const trackingId = `CV${Math.random().toString(36).slice(2, 10).toUpperCase()}${Date.now().toString(36).slice(-8).toUpperCase()}`;
+        const trackingId = secureReference("CV", 16);
         const originalName = safeFileName(file.originalname);
         let fileValidation;
         try {
@@ -790,28 +767,8 @@ export async function createApp() {
     }
   });
 
-  app.get("/sitemap.xml", async (_req, res) => {
-    const origin = "https://drahmedbenlallahom.com";
-    const publicPaths = [
-      "/",
-      "/venture/novarena",
-      "/venture/sawa4you",
-      "/legal",
-      "/gdpr",
-      "/testimonials",
-      "/booking",
-      "/recruitment",
-      "/recruitment/standard",
-      "/recruitment/vvip-offshore",
-      "/employers",
-      "/why-hippocampus",
-    ];
-
-    const staticEntries = publicPaths.map(path => `<url><loc>${origin}${path}</loc></url>`);
-
-    res.type("application/xml").send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${staticEntries.join("")}</urlset>`);
-  });
-
+  // /sitemap.xml is the static client/public/sitemap.xml (served by the Vercel
+  // CDN, or by express.static outside Vercel): a single source of truth.
   registerStorageProxy(app);
   registerGoogleDriveOAuthRoutes(app);
   
@@ -823,88 +780,57 @@ export async function createApp() {
       createContext,
     })
   );
-  // Scheduled task: 24h appointment reminder
-  app.post("/api/scheduled/reminder", async (req, res) => {
-    try {
-      const { sdk: sdkInstance } = await import("./sdk");
-      const user = await sdkInstance.authenticateRequest(req);
-      if (!user.isCron || !user.taskUid) {
-        return res.status(403).json({ error: "cron-only" });
+  // Scheduled jobs. Each job is reachable two ways:
+  // - GET, called once a day by Vercel Cron (see vercel.json "crons") with
+  //   `Authorization: Bearer ${CRON_SECRET}`, checked in constant time by requireVercelCron;
+  // - POST, the legacy Manus Heartbeat callback authenticated by the platform SDK,
+  //   kept for compatibility (it never fires on Vercel).
+  type ScheduledTrigger = { scheduler: "vercel-cron" } | { scheduler: "heartbeat"; taskUid: string };
+  type ScheduledJobResult = { httpStatus?: number } & Record<string, unknown>;
+
+  function registerScheduledJob(path: string, label: string, run: (trigger: ScheduledTrigger) => Promise<ScheduledJobResult>) {
+    app.get(path, requireVercelCron, async (_req, res) => {
+      try {
+        const { httpStatus, ...result } = await run({ scheduler: "vercel-cron" });
+        if (httpStatus) return res.status(httpStatus).json(result);
+        return res.json({ ok: true, scheduler: "vercel-cron", ...result });
+      } catch (error: any) {
+        console.error(`[${label}] Vercel cron error:`, safeErrorName(error));
+        return res.status(500).json({ error: error.message, timestamp: new Date().toISOString() });
       }
+    });
 
-      const { getDb } = await import("../db");
-      const { appointments } = await import("../../drizzle/schema");
-      const { and, eq, gte, lte, sql } = await import("drizzle-orm");
-
-      const db = await getDb();
-      if (!db) throw new Error("Database connection failed");
-
-      // Find appointments in the next 22-26 hours that haven't been reminded
-      const now = new Date();
-      const from = new Date(now.getTime() + 22 * 60 * 60 * 1000);
-      const to = new Date(now.getTime() + 26 * 60 * 60 * 1000);
-
-      const upcoming = await db.select().from(appointments).where(
-        and(
-          eq(appointments.paymentStatus, "completed"),
-          eq(appointments.appointmentStatus, "confirmed"),
-          eq(appointments.reminderSent, 0),
-          gte(appointments.appointmentDate, from),
-          lte(appointments.appointmentDate, to)
-        )
-      );
-
-      console.log(`[Reminder] Found ${upcoming.length} appointments to remind`);
-
-      const { sendReminderEmail } = await import("./notifications");
-
-      for (const apt of upcoming) {
-        try {
-          await sendReminderEmail(
-            apt.customerEmail,
-            apt.customerName,
-            apt.trackingId,
-            apt.appointmentDate
-          );
-          await db.update(appointments)
-            .set({ reminderSent: 1 })
-            .where(eq(appointments.id, apt.id));
-          console.log("[Reminder] Sent successfully");
-        } catch (e) {
-          console.error("[Reminder] Delivery failed:", safeErrorName(e));
-        }
+    app.post(path, async (req, res) => {
+      try {
+        const { sdk: sdkInstance } = await import("./sdk");
+        const user = await sdkInstance.authenticateRequest(req);
+        if (!user.isCron || !user.taskUid) return res.status(403).json({ error: "cron-only" });
+        const { httpStatus, ...result } = await run({ scheduler: "heartbeat", taskUid: user.taskUid });
+        if (httpStatus) return res.status(httpStatus).json(result);
+        return res.json({ ok: true, taskUid: user.taskUid, ...result });
+      } catch (error: any) {
+        console.error(`[${label}] Handler error:`, safeErrorName(error));
+        return res.status(500).json({ error: error.message, timestamp: new Date().toISOString() });
       }
+    });
+  }
 
-      res.json({ ok: true, reminded: upcoming.length });
-    } catch (error: any) {
-      console.error("[Reminder] Handler error:", safeErrorName(error));
-      res.status(500).json({ error: error.message, timestamp: new Date().toISOString() });
-    }
+  // Appointment reminder. The hourly Heartbeat keeps its 22–26 h window; the
+  // daily Vercel cron uses a 1–30 h window so no appointment falls between runs.
+  registerScheduledJob("/api/scheduled/reminder", "Reminder", async trigger => {
+    const { DAILY_REMINDER_WINDOW, HOURLY_REMINDER_WINDOW, sendDueAppointmentReminders } = await import("../scheduledJobs");
+    return sendDueAppointmentReminders(trigger.scheduler === "vercel-cron" ? DAILY_REMINDER_WINDOW : HOURLY_REMINDER_WINDOW);
   });
 
-  // Retention cleanup: archives expired recruitment dossiers and notifies the owner.
-  // The platform Heartbeat caller is authenticated and supplies the task UID.
-  app.post("/api/scheduled/recruitment-retention", async (req, res) => {
-    try {
-      const { sdk: sdkInstance } = await import("./sdk");
-      const user = await sdkInstance.authenticateRequest(req);
-      if (!user.isCron || !user.taskUid) return res.status(403).json({ error: "cron-only" });
-      const { runRecruitmentRetentionCleanup } = await import("../recruitmentRetention");
-      const result = await runRecruitmentRetentionCleanup(`heartbeat:${user.taskUid}`);
-      return res.json({ ok: true, ...result });
-    } catch (error: any) {
-      console.error("[RecruitmentRetention] Handler error:", safeErrorName(error));
-      return res.status(500).json({ error: error.message, timestamp: new Date().toISOString() });
-    }
+  // Retention review: flags expired recruitment dossiers and notifies the owner.
+  registerScheduledJob("/api/scheduled/recruitment-retention", "RecruitmentRetention", async trigger => {
+    const { runRecruitmentRetentionCleanup } = await import("../recruitmentRetention");
+    return runRecruitmentRetentionCleanup(trigger.scheduler === "vercel-cron" ? "vercel-cron" : `heartbeat:${trigger.taskUid}`);
   });
 
   // CV processing worker: Heartbeat invokes a small idempotent batch so uploads
   // remain fast and failures can be retried without losing the candidate dossier.
-  app.get("/api/scheduled/recruitment-processing", async (req, res) => {
-    const cronSecret = process.env.CRON_SECRET?.trim();
-    if (!cronSecret || req.headers.authorization !== `Bearer ${cronSecret}`) {
-      return res.status(403).json({ error: "cron-only" });
-    }
+  app.get("/api/scheduled/recruitment-processing", requireVercelCron, async (_req, res) => {
     try {
       const { backfillLegacyCvAnalysisJobs, processDueCvAnalysisJobs, recoverStaleCvAnalysisJobs } = await import("../recruitmentProcessing");
       const { backfillCvGoogleDriveExportJobs, processDueCvGoogleDriveExports, recoverStaleCvGoogleDriveExportJobs } = await import("../googleDriveExport");
@@ -954,68 +880,36 @@ export async function createApp() {
     }
   });
 
-  app.post("/api/scheduled/appointment-fulfillment", async (req, res) => {
-    try {
-      const { sdk: sdkInstance } = await import("./sdk");
-      const user = await sdkInstance.authenticateRequest(req);
-      if (!user.isCron || !user.taskUid) return res.status(403).json({ error: "cron-only" });
-      const { processDueAppointmentFulfillmentJobs } = await import("../appointmentFulfillment");
-      const result = await processDueAppointmentFulfillmentJobs(3);
-      return res.json({ ok: true, taskUid: user.taskUid, ...result });
-    } catch (error: any) {
-      console.error("[AppointmentFulfillment] Handler error:", safeErrorName(error));
-      return res.status(500).json({ error: error.message, timestamp: new Date().toISOString() });
-    }
+  // Post-payment confirmation + invoice. The Stripe webhook already sends them
+  // immediately; this job recovers interrupted workers and retries failures.
+  registerScheduledJob("/api/scheduled/appointment-fulfillment", "AppointmentFulfillment", async trigger => {
+    const { runAppointmentFulfillmentWorker } = await import("../scheduledJobs");
+    return runAppointmentFulfillmentWorker(trigger.scheduler === "vercel-cron"
+      ? { batchSize: 5, maxBatches: 4, budgetMs: 35_000 }
+      : { batchSize: 3, maxBatches: 1, budgetMs: 0 });
   });
 
-  app.post("/api/scheduled/appointment-hold-cleanup", async (req, res) => {
-    try {
-      const { sdk: sdkInstance } = await import("./sdk");
-      const user = await sdkInstance.authenticateRequest(req);
-      if (!user.isCron || !user.taskUid) return res.status(403).json({ error: "cron-only" });
-      const { releaseExpiredAppointmentHolds } = await import("../appointmentHolds");
-      const result = await releaseExpiredAppointmentHolds();
-      return res.json({ ok: true, taskUid: user.taskUid, ...result });
-    } catch (error: any) {
-      console.error("[AppointmentHoldCleanup] Handler error:", safeErrorName(error));
-      return res.status(500).json({ error: error.message, timestamp: new Date().toISOString() });
-    }
+  registerScheduledJob("/api/scheduled/appointment-hold-cleanup", "AppointmentHoldCleanup", async () => {
+    const { releaseExpiredAppointmentHolds } = await import("../appointmentHolds");
+    return releaseExpiredAppointmentHolds();
   });
 
-  app.post("/api/scheduled/candidate-document-processing", async (req, res) => {
-    try {
-      const { sdk: sdkInstance } = await import("./sdk");
-      const user = await sdkInstance.authenticateRequest(req);
-      if (!user.isCron || !user.taskUid) return res.status(403).json({ error: "cron-only" });
+  registerScheduledJob("/api/scheduled/candidate-document-processing", "CandidateDocumentProcessing", async trigger => {
+    if (trigger.scheduler === "heartbeat") {
       const { processDueCandidateDocumentAnalysisJobs } = await import("../candidateDocumentProcessing");
-      const result = await processDueCandidateDocumentAnalysisJobs(2);
-      return res.json({ ok: true, taskUid: user.taskUid, ...result });
-    } catch (error: any) {
-      console.error("[CandidateDocumentProcessing] Handler error:", safeErrorName(error));
-      return res.status(500).json({ error: error.message, timestamp: new Date().toISOString() });
+      return processDueCandidateDocumentAnalysisJobs(2);
     }
+    // One document at a time, and no new analysis after ~20 s, to stay well
+    // inside the 60 s function limit while still draining a daily backlog.
+    const { runCandidateDocumentProcessingWorker } = await import("../scheduledJobs");
+    return runCandidateDocumentProcessingWorker({ batchSize: 1, maxBatches: 6, budgetMs: 20_000 });
   });
 
-  app.post("/api/scheduled/security-posture", async (req, res) => {
-    try {
-      const { sdk: sdkInstance } = await import("./sdk");
-      const user = await sdkInstance.authenticateRequest(req);
-      if (!user.isCron || !user.taskUid) return res.status(403).json({ error: "cron-only" });
-      const db = await getDb();
-      if (!db) return res.status(503).json({ error: "security_database_unavailable" });
-      const { candidateSecurityRateLimits, securityEvents } = await import("../../drizzle/schema");
-      const { and, gte, lt } = await import("drizzle-orm");
-      const now = new Date();
-      const cleanupBefore = new Date(now.getTime() - 48 * 60 * 60 * 1000);
-      await db.delete(candidateSecurityRateLimits).where(and(lt(candidateSecurityRateLimits.lastAttemptAt, cleanupBefore), lt(candidateSecurityRateLimits.blockedUntil, now)));
-      const since = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-      const recentAlerts = await db.select({ id: securityEvents.id }).from(securityEvents).where(and(gte(securityEvents.createdAt, since), sql`${securityEvents.severity} IN ('high', 'critical')`));
-      if (recentAlerts.length > 0) await notifyOwner({ title: "Bilan quotidien de sécurité", content: `${recentAlerts.length} événement(s) de sécurité à gravité élevée ont été détectés sur les dernières 24 heures. Consultez le journal administrateur.` });
-      return res.json({ ok: true, taskUid: user.taskUid, highSeverityEvents24h: recentAlerts.length });
-    } catch (error: any) {
-      console.error("[SecurityPosture] Handler error:", safeErrorName(error));
-      return res.status(500).json({ error: error.message, timestamp: new Date().toISOString() });
-    }
+  registerScheduledJob("/api/scheduled/security-posture", "SecurityPosture", async () => {
+    const { runSecurityPostureReview } = await import("../scheduledJobs");
+    const review = await runSecurityPostureReview();
+    if (!review.available) return { httpStatus: 503, error: "security_database_unavailable" };
+    return { highSeverityEvents24h: review.highSeverityEvents24h };
   });
 
   // Development uses Vite. On Vercel, public files are served by the CDN and
