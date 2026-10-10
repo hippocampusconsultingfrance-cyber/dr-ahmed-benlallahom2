@@ -142,6 +142,21 @@ describe("revendication atomique des envois post-paiement", () => {
     expect(notifications.sendConfirmationEmail).not.toHaveBeenCalled();
     expect(notifications.sendOwnerNotificationSMS).not.toHaveBeenCalled();
     expect(writes.at(-1)?.values).toMatchObject({ status: "completed", lastError: "appointment_already_past_confirmation_skipped" });
+    expect(owner.notifyOwner).toHaveBeenCalledTimes(1);
+    expect(owner.notifyOwner).toHaveBeenCalledWith(expect.objectContaining({ title: expect.stringContaining("APT-42") }));
+  });
+
+  it("n’alerte pas le propriétaire pour une consultation passée dont la confirmation était déjà partie", async () => {
+    fakeDatabase({
+      jobs: [[queuedJob], [{ ...queuedJob, status: "running", attempts: 1 }]],
+      appointments: [[paidAppointment({ appointmentDate: new Date(Date.now() - 24 * 60 * 60 * 1000), emailSent: 1 })]],
+      updateRowCounts: [1],
+    });
+
+    const result = await processDueAppointmentFulfillmentJobs();
+
+    expect(result.results).toEqual([{ skipped: true }]);
+    expect(owner.notifyOwner).not.toHaveBeenCalled();
   });
 
   it("alerte le propriétaire après le dernier échec d’envoi", async () => {

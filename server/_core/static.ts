@@ -26,19 +26,21 @@ export async function readSpaTemplate(distPath: string): Promise<string> {
   );
 }
 
-export function serveStatic(app: Express) {
-  const distPath =
-    process.env.NODE_ENV === "development"
-      ? path.resolve(import.meta.dirname, "../..", "dist", "public")
-      : path.resolve(import.meta.dirname, "public");
-
+export function serveStatic(
+  app: Express,
+  distPath = process.env.NODE_ENV === "development"
+    ? path.resolve(import.meta.dirname, "../..", "dist", "public")
+    : path.resolve(import.meta.dirname, "public"),
+) {
   if (!fs.existsSync(distPath)) {
     console.error(
       `Could not find the build directory: ${distPath}, make sure to build the client first`,
     );
   }
 
-  app.use(express.static(distPath, { index: false }));
+  // Le pré-rendu crée aussi des dossiers (recruitment/, venture/) : sans
+  // `redirect: false`, /recruitment serait redirigé en 301 vers /recruitment/.
+  app.use(express.static(distPath, { index: false, redirect: false }));
   app.use("*", async (req, res, next) => {
     try {
       const template = await readSpaTemplate(distPath);

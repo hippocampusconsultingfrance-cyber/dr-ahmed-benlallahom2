@@ -121,6 +121,30 @@ describe("webhook Stripe checkout.session.completed", () => {
     expect(fulfillment.enqueueAppointmentFulfillment).not.toHaveBeenCalled();
   });
 
+  it("demande à Stripe de relivrer tant que l’alerte au propriétaire n’est pas partie, sans tracer le paiement", async () => {
+    owner.notifyOwner.mockResolvedValueOnce(false);
+    const released = heldAppointment({ appointmentStatus: "cancelled" });
+    const { writes } = fakeDatabase([[released], [released]], [0]);
+
+    const result = await handleCheckoutSessionCompleted(paidSession());
+
+    expect(result).toMatchObject({ httpStatus: 500, outcome: "unconfirmable", body: { received: false } });
+    expect(owner.notifyOwner).toHaveBeenCalledTimes(1);
+    // Seule la tentative de confirmation conditionnelle a écrit : aucun
+    // stripePaymentIntentId ne vient transformer la relivraison en doublon muet.
+    expect(writes).toHaveLength(1);
+    expect(writes.some(write => "stripePaymentIntentId" in write.values && !("paymentStatus" in write.values))).toBe(false);
+  });
+
+  it("répond aussi 5xx pour un double paiement si l’alerte échoue", async () => {
+    owner.notifyOwner.mockRejectedValueOnce(new Error("resend_down"));
+    fakeDatabase([[heldAppointment({ paymentStatus: "completed", appointmentStatus: "confirmed", stripeSessionId: "cs_first", stripePaymentIntentId: "pi_first" })]]);
+
+    const result = await handleCheckoutSessionCompleted(paidSession());
+
+    expect(result).toMatchObject({ httpStatus: 500, outcome: "unconfirmable" });
+  });
+
   it("ne confirme pas automatiquement une session différente de celle enregistrée", async () => {
     const { writes } = fakeDatabase([[heldAppointment({ stripeSessionId: "cs_other" })]]);
 

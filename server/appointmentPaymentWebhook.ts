@@ -19,7 +19,7 @@ export type CheckoutSessionPayload = {
 };
 
 export type CheckoutCompletionResult = {
-  httpStatus: 200 | 400;
+  httpStatus: 200 | 400 | 500;
   body: Record<string, unknown>;
   outcome:
     | "missing_reference"
@@ -121,18 +121,6 @@ async function acknowledgeUnconfirmablePayment(input: {
 }): Promise<CheckoutCompletionResult> {
   const db = await getDb();
   if (!db) throw new Error("Database connection failed");
-  // Keep a durable trace of the received payment on the row when it cannot
-  // clash with an active hold or an already recorded payment.
-  if (input.paymentIntentId) {
-    await db.update(appointments)
-      .set({ stripePaymentIntentId: input.paymentIntentId })
-      .where(and(
-        eq(appointments.id, input.appointment.id),
-        isNull(appointments.stripePaymentIntentId),
-        eq(appointments.paymentStatus, "pending"),
-        ne(appointments.appointmentStatus, "held"),
-      ));
-  }
   const paidAmount = Number(input.session.amount_total);
   const alert = buildUnconfirmablePaymentAlert({
     trackingId: input.appointment.trackingId,
@@ -148,7 +136,26 @@ async function acknowledgeUnconfirmablePayment(input: {
     reason: input.reason,
   });
   const delivered = await notifyOwner(alert).catch(() => false);
-  if (!delivered) console.error("Owner alert for unconfirmable payment was not delivered", { trackingId: input.appointment.trackingId });
+  if (!delivered) {
+    // The alert is the only signal that money arrived without a confirmed
+    // appointment: answer 5xx so Stripe redelivers (and flags the failing
+    // webhook) instead of acknowledging a payment nobody was told about.
+    console.error("Owner alert for unconfirmable payment was not delivered; asking Stripe to retry", { trackingId: input.appointment.trackingId });
+    return { httpStatus: 500, body: { received: false }, outcome: "unconfirmable" };
+  }
+  // Keep a durable trace of the received payment on the row when it cannot
+  // clash with an active hold or an already recorded payment. Written only once
+  // the owner knows: it makes later deliveries of this payment no-op duplicates.
+  if (input.paymentIntentId) {
+    await db.update(appointments)
+      .set({ stripePaymentIntentId: input.paymentIntentId })
+      .where(and(
+        eq(appointments.id, input.appointment.id),
+        isNull(appointments.stripePaymentIntentId),
+        eq(appointments.paymentStatus, "pending"),
+        ne(appointments.appointmentStatus, "held"),
+      ));
+  }
   return { httpStatus: 200, body: { received: true, confirmed: false, manualReviewRequired: true }, outcome: "unconfirmable" };
 }
 

@@ -78,6 +78,14 @@ async function runJob(id: number) {
   // consultation which already took place is "confirmed". The invoice is still sent.
   if (job.jobType === "confirmation" && appointment.appointmentDate.getTime() < Date.now()) {
     await db.update(appointmentFulfillmentJobs).set({ status: "completed", finishedAt: new Date(), lastError: "appointment_already_past_confirmation_skipped" }).where(eq(appointmentFulfillmentJobs.id, id));
+    // The owner's new-booking email/SMS belongs to this same job: without this
+    // alert a paid consultation would never have been announced to anyone.
+    if (appointment.emailSent !== 1) {
+      await notifyOwner({
+        title: `Confirmation non envoyée avant le rendez-vous (${appointment.trackingId})`,
+        content: `Le rendez-vous payé ${appointment.trackingId} est passé avant que sa confirmation ait pu être envoyée : ni le patient ni vous n’avez reçu la notification automatique. Le paiement est bien enregistré ; vérifiez ce rendez-vous dans le tableau de bord et contactez le patient si nécessaire.`,
+      }).catch(() => false);
+    }
     return { skipped: true };
   }
   try {

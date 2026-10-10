@@ -797,8 +797,21 @@ export const appRouter = router({
         }
 
         const trackingId = session.metadata?.trackingId;
-        if (!trackingId || session.payment_status === "paid") {
+        if (!trackingId || session.payment_status === "paid" || session.status === "complete") {
           return { success: true, cancelled: false };
+        }
+
+        // Stripe keeps the Checkout page payable until it expires: close it before
+        // releasing the hold, so going back to it can no longer charge the patient
+        // for a slot that is not reserved anymore. If Stripe refuses (the payment
+        // just completed) or is unreachable, the hold stays and the webhook or the
+        // scheduled hold expiry settles it.
+        if (session.status !== "expired") {
+          try {
+            await getStripeClient().checkout.sessions.expire(input.sessionId);
+          } catch {
+            return { success: true, cancelled: false };
+          }
         }
 
         const result = await db
