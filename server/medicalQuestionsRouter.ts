@@ -1,3 +1,4 @@
+import { randomInt } from "node:crypto";
 import { TRPCError } from "@trpc/server";
 import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
@@ -27,8 +28,17 @@ const privateQuestionInput = z.object({
 const publicQuestionInput = z.object({ limit: z.number().int().min(1).max(50).default(12) }).optional();
 const questionIdInput = z.object({ id: z.number().int().positive() });
 
-function medicalQuestionTrackingId() {
-  return `QMED-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
+const TRACKING_ID_ALPHABET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+function randomTrackingSegment(length: number) {
+  let segment = "";
+  for (let index = 0; index < length; index += 1) segment += TRACKING_ID_ALPHABET[randomInt(TRACKING_ID_ALPHABET.length)];
+  return segment;
+}
+
+/** QMED-XXXXXXXX-XXXXX : 13 caractères tirés par le générateur cryptographique (≈ 67 bits), 19 caractères pour une colonne varchar(32). */
+export function medicalQuestionTrackingId() {
+  return `QMED-${randomTrackingSegment(8)}-${randomTrackingSegment(5)}`;
 }
 
 async function requireDb() {
