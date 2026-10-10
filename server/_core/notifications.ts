@@ -331,9 +331,9 @@ export async function sendReminderEmail(
     });
 
     const emailContent = buildHippocampusEmailShell(`
-      <h2 style="color: #0891b2;">⏰ Rappel - Votre consultation est demain</h2>
+      <h2 style="color: #0891b2;">⏰ Rappel - Votre consultation approche</h2>
       <p>Bonjour ${escapeHtml(customerName)},</p>
-      <p>Nous vous rappelons que votre consultation avec le Dr. Ahmed Ben Lallahom est prévue <strong>demain</strong>.</p>
+      <p>Nous vous rappelons que votre consultation avec le Dr. Ahmed Ben Lallahom est prévue le <strong>${formattedDate}</strong> (heure de Paris).</p>
       <div style="background: #f8fafc; border-radius: 8px; padding: 16px; margin: 16px 0;">
         <h3 style="color: #334155; margin-top: 0;">Détails :</h3>
         <ul style="list-style: none; padding: 0;">
@@ -342,13 +342,13 @@ export async function sendReminderEmail(
         </ul>
       </div>
       <p>Si vous devez annuler ou reporter votre rendez-vous, veuillez nous contacter dès que possible.</p>
-      <p>À demain !</p>
+      <p>À très bientôt !</p>
     `);
 
     const { error } = await getResendClient().emails.send({
       from: FROM_EMAIL,
       to: [customerEmail],
-      subject: `Rappel - Consultation demain (${trackingId})`,
+      subject: `Rappel - Votre consultation approche (${trackingId})`,
       html: emailContent,
     });
 
