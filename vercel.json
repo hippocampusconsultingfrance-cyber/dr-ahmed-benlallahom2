@@ -4,6 +4,7 @@
   "buildCommand": "pnpm run build",
   "outputDirectory": "dist/public",
   "framework": "vite",
+  "cleanUrls": true,
   "functions": {
     "api/index.js": {
       "maxDuration": 60,
@@ -74,7 +75,7 @@
     },
     {
       "source": "/:path*",
-      "destination": "/index.html"
+      "destination": "/_spa-fallback"
     }
   ]
 }
