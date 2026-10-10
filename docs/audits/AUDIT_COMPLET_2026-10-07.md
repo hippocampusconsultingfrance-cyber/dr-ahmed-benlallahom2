@@ -121,3 +121,30 @@ Le sitemap dynamique (`server/_core/index.ts:793`) liste aussi `/venture/novaren
 1. **Semaine 1** : P0-1 (crons Vercel + envoi immédiat post-paiement), puis vérifier en base les rendez-vous payés sans email ; P0-2 (migration des images).
 2. **Semaine 2** : P1-1 à P1-5 (SEO HTML, anti-abus réservation et brief employeur, zoom, JSON-LD).
 3. **Ensuite** : P2 puis nettoyage P3.
+
+---
+
+## État des corrections — 10 octobre 2026 (branche `claude/optimistic-edison-vr8282`)
+
+Validation : `tsc` 0 erreur, Vitest 210 fichiers / 583 tests réussis, `pnpm build` OK (27 pages pré-rendues), relecture critique (logique, sécurité, déploiement) puis correction des 4 problèmes confirmés.
+
+| Point | Statut | Détail |
+| --- | --- | --- |
+| P0-1 Tâches planifiées | ✅ Corrigé | 7 crons Vercel quotidiens (`GET /api/scheduled/*`, `Authorization: Bearer CRON_SECRET`, comparaison en temps constant). Rappels sur une fenêtre 1–30 h sans double envoi. Confirmation et facture envoyées dès le webhook Stripe (15 s max), reprise par le cron sinon ; réservation atomique des jobs. **Action requise : définir `CRON_SECRET` sur Vercel.** |
+| P0-2 Images `/manus-storage/` | ⚠️ Atténué | Les photos et logos cassés affichent les visuels génériques. **Action requise : re-téléverser les images d'origine.** |
+| P1-1 SEO sans JS | ✅ Corrigé | Titre, description, canonical et Open Graph pré-rendus par page au build (`cleanUrls`) ; routes privées et inconnues → `/_spa-fallback` en noindex. |
+| P1-2 Réservation | ✅ Corrigé | Limites persistantes (6/h par IP, 5/h par email), 2 créneaux bloqués maximum par email. Sans Turnstile, volontairement. |
+| P1-3 Brief employeur | ✅ Corrigé | Limites persistantes (5/h par IP, 10/jour par email). |
+| P1-4 Zoom mobile | ✅ Corrigé | `maximum-scale=1` supprimé. |
+| P1-5 JSON-LD / sitemap | ✅ Corrigé | URL Hippocampus, `sameAs` Twitter vide et `twitter:site` retirés ; sitemap Express supprimé (le fichier statique fait foi). Reste : photo raster pour le JSON-LD. |
+| P2-1 Webhook Stripe | ✅ Corrigé | Exige `paid`, vérifie la session, ne confirme qu'un créneau encore retenu ; paiement non confirmable → alerte propriétaire (500 et relivraison Stripe si l'alerte échoue). `cancelPending` expire la session Stripe avant de libérer le créneau. |
+| P2-2 Libellé Stripe | ✅ Corrigé | « Consultation de conseil santé – 30 minutes ». |
+| P2-3 Identifiants | ✅ Corrigé | Tous les numéros de suivi générés par `node:crypto`. |
+| P2-4 Lockfile | ✅ Corrigé | `pnpm install --frozen-lockfile` sur Vercel (pnpm 10 requis). |
+| P2-5 Dépendances | 🟡 Partiel | vitest 3.2.7, streamdown 2.7, `add`/`pnpm` retirés ; audit 77 → 40 avis (prod 8 → 5). Restent : tailwind/vite (dev), qs, mysql2, multer. |
+| P2-6 Tests et secrets | ⏸️ Non traité | La CI fournit déjà des valeurs factices. |
+| P2-7 Bundle | ⏸️ Non traité | |
+| P2-8 `api/index.js` commité | ⏸️ Laissé | Référencé par `functions` dans `vercel.json`, il est régénéré à chaque build. |
+| P3 | 🟡 Partiel | Pages mortes et scripts Manus supprimés ; README, SECURITY.md, `.env.example` ajoutés ; build dans la CI. Restent : rapports à la racine, code Manus, découpage de `routers.ts`/`index.ts`, polices auto-hébergées. |
+
+À vérifier sur une preview Vercel avant de fusionner : `/booking`, `/recruitment`, `/recruitment/standard`, `/venture/sawa4you` (titre propre à chaque page), `/candidate/access` (noindex), une URL inconnue, et la présence des 7 crons dans *Settings → Cron Jobs*.
