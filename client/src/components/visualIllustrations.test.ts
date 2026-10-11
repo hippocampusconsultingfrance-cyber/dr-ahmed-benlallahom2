@@ -43,8 +43,7 @@ describe("illustrations originales des parcours", () => {
     const context = contextualSources.map(item => item.source).join("\n").toLowerCase();
 
     expect(contextualSources.length).toBeGreaterThan(1);
-    expect(context).toContain("logo-hippocampus-consulting_0f90baeb.png");
-    expect(context).toContain("photo-ahmed-new_b06c9b06.png");
+    expect(context).toContain("photo-wafa-clean_fe6f20ad.png");
     expect(context).not.toMatch(/guérison|guerison|résultat garanti|resultat garanti|traitement garanti|\bguaranteed\s+(?:cure|result)\b/);
   });
 
@@ -56,19 +55,19 @@ describe("illustrations originales des parcours", () => {
       "abl-logo.svg": ["components/Footer.tsx", "components/Navigation.tsx", "components/SEOHead.tsx"],
       "medical-compass.svg": ["components/ServicesSection.tsx"],
       "booking-care.svg": ["pages/BookingPage.tsx"],
-      "logo-appel-medical-tunisie_9b8e3246.png": ventureSources,
-      "logo-hippocampus-consulting_0f90baeb.png": ventureSources,
-      "logo-laska-corporate_35bcff90.png": ventureSources,
-      "logo-octopus-talent_27d723c7.png": ventureSources,
-      "photo-ahmed-new_b06c9b06.png": ventureSources,
-      "photo-amine-corrected_5ec26887.png": ventureSources,
-      "photo-ines-corrected_b56c31ee.png": ventureSources,
-      "photo-lotfi-new_044020b2.png": ventureSources,
-      "photo-monia-new_5b1a3785.png": ventureSources,
-      "photo-omar-new_805e25bc.png": ventureSources,
-      "photo-sonia-new_cbb12509.png": ventureSources,
+      "/assets/logos/appel-medical-tunisie.webp": ventureSources,
+      "/assets/logos/hippocampus-consulting.webp": ventureSources,
+      "/assets/logos/laska-corporate.webp": ventureSources,
+      "/assets/logos/octopus-talent.webp": ventureSources,
+      "/assets/team/ahmed-ben-lallahom.webp": ventureSources,
+      "/assets/team/amine-hachicha.webp": ventureSources,
+      "/assets/team/ines-dhaouadi.webp": ventureSources,
+      "/assets/team/lotfi-ben-lallahom.webp": ventureSources,
+      "/assets/team/monia-ben-lallahom.webp": ventureSources,
+      "/assets/team/omar-ben-lallahom.webp": ventureSources,
+      "/assets/team/sonia-siala.webp": ventureSources,
       "photo-wafa-clean_fe6f20ad.png": ventureSources,
-      "photo-youssef-new_dc020979.png": ventureSources,
+      "/assets/team/youssef-ben-lallahom.webp": ventureSources,
     };
     const prohibitedClaims = /guérison|guerison|résultat garanti|resultat garanti|traitement garanti|\bguaranteed\s+(?:cure|result)\b/i;
 

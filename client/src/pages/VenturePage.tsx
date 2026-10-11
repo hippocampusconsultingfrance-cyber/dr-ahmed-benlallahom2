@@ -87,10 +87,9 @@ export function failedSourceAfterError(
 }
 
 /**
- * Les logos et portraits de ventures-{fr,en}.ts pointent encore vers
- * /manus-storage/…, proxy Manus indisponible sur Vercel (la réécriture SPA y
- * renvoie du HTML). En cas d'échec de chargement, on affiche le visuel
- * générique local à la place d'une image cassée.
+ * Logos et portraits sont servis depuis client/public/assets ; une image encore
+ * référencée sous /manus-storage/… (proxy Manus indisponible sur Vercel) ou
+ * introuvable affiche le visuel générique local plutôt qu'une image cassée.
  */
 function ImageWithFallback({
   src,
@@ -190,7 +189,7 @@ export default function VenturePage() {
                 <ImageWithFallback
                   src={venture.logo}
                   fallbackSrc={VENTURE_LOGO_PLACEHOLDER}
-                  className="h-16 sm:h-20 w-auto object-contain"
+                  className="h-16 sm:h-20 w-auto max-w-full rounded-lg object-contain"
                 />
               </div>
             )}
