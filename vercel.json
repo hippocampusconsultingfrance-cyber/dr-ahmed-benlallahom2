@@ -1,9 +1,10 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "installCommand": "pnpm install --no-frozen-lockfile",
+  "installCommand": "pnpm install --frozen-lockfile",
   "buildCommand": "pnpm run build",
   "outputDirectory": "dist/public",
   "framework": "vite",
+  "cleanUrls": true,
   "functions": {
     "api/index.js": {
       "maxDuration": 60,
@@ -14,6 +15,30 @@
     {
       "path": "/api/scheduled/recruitment-processing",
       "schedule": "15 1 * * *"
+    },
+    {
+      "path": "/api/scheduled/appointment-hold-cleanup",
+      "schedule": "40 2 * * *"
+    },
+    {
+      "path": "/api/scheduled/recruitment-retention",
+      "schedule": "25 3 * * *"
+    },
+    {
+      "path": "/api/scheduled/security-posture",
+      "schedule": "50 4 * * *"
+    },
+    {
+      "path": "/api/scheduled/candidate-document-processing",
+      "schedule": "35 5 * * *"
+    },
+    {
+      "path": "/api/scheduled/appointment-fulfillment",
+      "schedule": "20 6 * * *"
+    },
+    {
+      "path": "/api/scheduled/reminder",
+      "schedule": "45 16 * * *"
     }
   ],
   "headers": [
@@ -41,6 +66,46 @@
           "value": "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'self'; form-action 'self'; script-src 'self' 'unsafe-inline' https://js.stripe.com https://challenges.cloudflare.com https://clerk.drahmedbenlallahom.com https://*.clerk.accounts.dev https://*.clerk.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' ws: wss: https://api.stripe.com https://challenges.cloudflare.com https://clerk.drahmedbenlallahom.com https://*.clerk.accounts.dev https://*.clerk.com; frame-src https://js.stripe.com https://hooks.stripe.com https://challenges.cloudflare.com https://clerk.drahmedbenlallahom.com https://*.clerk.accounts.dev https://*.clerk.com; worker-src 'self' blob:; upgrade-insecure-requests"
         }
       ]
+    },
+    {
+      "source": "/api/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store"
+        },
+        {
+          "key": "X-Robots-Tag",
+          "value": "noindex, nofollow"
+        }
+      ]
+    },
+    {
+      "source": "/admin",
+      "headers": [
+        {
+          "key": "X-Robots-Tag",
+          "value": "noindex, nofollow"
+        }
+      ]
+    },
+    {
+      "source": "/admin/(.*)",
+      "headers": [
+        {
+          "key": "X-Robots-Tag",
+          "value": "noindex, nofollow"
+        }
+      ]
+    },
+    {
+      "source": "/candidate/(.*)",
+      "headers": [
+        {
+          "key": "X-Robots-Tag",
+          "value": "noindex, nofollow"
+        }
+      ]
     }
   ],
   "rewrites": [
@@ -50,7 +115,7 @@
     },
     {
       "source": "/:path*",
-      "destination": "/index.html"
+      "destination": "/_spa-fallback"
     }
   ]
 }

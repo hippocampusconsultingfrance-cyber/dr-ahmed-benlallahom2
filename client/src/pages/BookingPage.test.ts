@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bookingContent, getBookingAvailabilityState, isWithinBookingAvailability, parseBookingDateTime, toParisBookingDateKey } from "./BookingPage";
+import { bookingContent, getBookingAvailabilityState, getBookingServerErrorMessage, isWithinBookingAvailability, parseBookingDateTime, toParisBookingDateKey } from "./BookingPage";
 
 describe("booking date placeholders", () => {
   it("uses an explicit localized placeholder for every supported language", () => {
@@ -81,6 +81,23 @@ describe("booking date placeholders", () => {
     expect(source).toContain("alert(content.bookingError);");
     expect(source).not.toContain("alert(`${content.paymentError} ${error.message}`)");
     expect(source).not.toContain("alert(`${content.bookingError} ${error instanceof Error ? error.message : \"Unknown error\"}`)");
+    expect(source).not.toContain("alert(error.message)");
+    expect(source).toContain("const serverMessage = getBookingServerErrorMessage(error);");
+  });
+
+  it("affiche le message français du serveur pour les refus métier attendus uniquement", () => {
+    const holdsMessage = "Vous avez déjà deux réservations en attente de paiement.";
+    expect(getBookingServerErrorMessage({ message: holdsMessage, data: { code: "TOO_MANY_REQUESTS", httpStatus: 429 } })).toBe(holdsMessage);
+    expect(getBookingServerErrorMessage({ message: " Ce créneau chevauche une réservation existante ", data: { code: "CONFLICT" } }))
+      .toBe("Ce créneau chevauche une réservation existante");
+
+    // Erreurs techniques ou de validation : rien n’est exposé, le libellé générique localisé s’applique.
+    expect(getBookingServerErrorMessage({ message: "Failed to create appointment: connection reset", data: { code: "INTERNAL_SERVER_ERROR" } })).toBeNull();
+    expect(getBookingServerErrorMessage({ message: "[{\"code\":\"invalid_string\"}]", data: { code: "BAD_REQUEST" } })).toBeNull();
+    expect(getBookingServerErrorMessage(new Error("Network request failed"))).toBeNull();
+    expect(getBookingServerErrorMessage({ message: "", data: { code: "CONFLICT" } })).toBeNull();
+    expect(getBookingServerErrorMessage(null)).toBeNull();
+    expect(getBookingServerErrorMessage("CONFLICT")).toBeNull();
   });
 
   it("réduit le poids visuel de l’illustration purement décorative", async () => {

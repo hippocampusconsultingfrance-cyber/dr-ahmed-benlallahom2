@@ -11,17 +11,26 @@ interface SEOHeadProps {
   noIndex?: boolean;
 }
 
+const DEFAULT_URL = "https://drahmedbenlallahom.com";
+
 export function SEOHead({
   title,
   description,
   keywords,
   ogImage = "https://drahmedbenlallahom.com/assets/abl-logo.svg",
-  ogUrl = "https://drahmedbenlallahom.com",
-  twitterHandle = "@drahmedbenlallahom",
+  ogUrl,
+  // Aucun compte X/Twitter officiel n'est connu : twitter:site et
+  // twitter:creator ne sont émis que si une page fournit explicitement un compte.
+  twitterHandle,
   structuredData,
   noIndex = false,
 }: SEOHeadProps) {
   useEffect(() => {
+    const pageUrl = ogUrl ?? DEFAULT_URL;
+    // Une page privée (noindex) sans URL explicite ne doit pas déclarer
+    // l'accueil comme URL canonique : signaux contradictoires pour les moteurs.
+    const canonicalUrl = ogUrl ?? (noIndex ? undefined : DEFAULT_URL);
+
     // Update title
     document.title = title;
 
@@ -55,7 +64,7 @@ export function SEOHead({
     updateMeta("og:title", title, true);
     updateMeta("og:description", description, true);
     updateMeta("og:image", ogImage, true);
-    updateMeta("og:url", ogUrl, true);
+    updateMeta("og:url", pageUrl, true);
     updateMeta("og:type", "website", true);
 
     // Twitter tags
@@ -64,17 +73,26 @@ export function SEOHead({
     updateMeta("twitter:description", description);
     updateMeta("twitter:image", ogImage);
     if (twitterHandle) {
+      updateMeta("twitter:site", twitterHandle);
       updateMeta("twitter:creator", twitterHandle);
+    } else {
+      document
+        .querySelectorAll('meta[name="twitter:site"], meta[name="twitter:creator"]')
+        .forEach(element => element.remove());
     }
 
     // Canonical URL
-    let canonical = document.querySelector("link[rel='canonical']") as HTMLLinkElement;
-    if (!canonical) {
-      canonical = document.createElement("link");
-      canonical.rel = "canonical";
-      document.head.appendChild(canonical);
+    let canonical = document.querySelector("link[rel='canonical']") as HTMLLinkElement | null;
+    if (canonicalUrl) {
+      if (!canonical) {
+        canonical = document.createElement("link");
+        canonical.rel = "canonical";
+        document.head.appendChild(canonical);
+      }
+      canonical.href = canonicalUrl;
+    } else if (canonical) {
+      canonical.remove();
     }
-    canonical.href = ogUrl;
 
     // Structured Data (JSON-LD): keep the document-level schemas intact and
     // update only the page-specific schema owned by this component.

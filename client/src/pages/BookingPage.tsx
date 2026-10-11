@@ -331,6 +331,18 @@ export function getBookingAvailabilityState({
   return "available";
 }
 
+// Refus métier attendus (créneau déjà pris, trop de tentatives, réservations
+// en attente) : le serveur renvoie un message français destiné au patient.
+// Toute autre erreur garde le message générique pour ne rien exposer de technique.
+const BOOKING_USER_FACING_ERROR_CODES = new Set(["CONFLICT", "TOO_MANY_REQUESTS"]);
+
+export function getBookingServerErrorMessage(error: unknown): string | null {
+  if (!error || typeof error !== "object") return null;
+  const { data, message } = error as { data?: { code?: unknown } | null; message?: unknown };
+  if (typeof data?.code !== "string" || !BOOKING_USER_FACING_ERROR_CODES.has(data.code)) return null;
+  return typeof message === "string" && message.trim() ? message.trim() : null;
+}
+
 export default function BookingPage() {
   const { language } = useLanguage();
   const [location, setLocation] = useLocation();
@@ -504,7 +516,14 @@ export default function BookingPage() {
     } catch (error) {
       paymentSubmissionRef.current = false;
       console.error("Booking error:", error);
-      alert(content.bookingError);
+      const serverMessage = getBookingServerErrorMessage(error);
+      if (serverMessage) {
+        // Le message serveur est rédigé en français : on le précède du libellé
+        // localisé pour les autres langues de l’interface.
+        alert(language === "fr" ? serverMessage : `${content.bookingError}\n\n${serverMessage}`);
+      } else {
+        alert(content.bookingError);
+      }
     }
   };
 

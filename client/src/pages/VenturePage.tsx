@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { venturesFr } from "@/data/ventures-fr";
 import { venturesEn } from "@/data/ventures-en";
@@ -69,6 +70,58 @@ export function ventureMetaDescription(description: string[]) {
   return `${excerpt.slice(0, end).trimEnd()}…`;
 }
 
+export const VENTURE_LOGO_PLACEHOLDER = "/assets/venture-placeholder.svg";
+export const TEAM_PHOTO_PLACEHOLDER = "/assets/team-placeholder.svg";
+
+/**
+ * Source à mémoriser comme « en échec » après un onError, ou null quand le
+ * visuel affiché est déjà le visuel générique local : on ne rebascule jamais,
+ * ce qui empêche toute boucle onError si le visuel de secours échoue aussi.
+ */
+export function failedSourceAfterError(
+  src: string,
+  shownSrc: string,
+  fallbackSrc: string
+): string | null {
+  return shownSrc === fallbackSrc ? null : src;
+}
+
+/**
+ * Les logos et portraits de ventures-{fr,en}.ts pointent encore vers
+ * /manus-storage/…, proxy Manus indisponible sur Vercel (la réécriture SPA y
+ * renvoie du HTML). En cas d'échec de chargement, on affiche le visuel
+ * générique local à la place d'une image cassée.
+ */
+function ImageWithFallback({
+  src,
+  fallbackSrc,
+  className,
+  loading,
+}: {
+  src: string;
+  fallbackSrc: string;
+  className: string;
+  loading?: "lazy" | "eager";
+}) {
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
+  const shownSrc = failedSrc === src ? fallbackSrc : src;
+
+  return (
+    <img
+      src={shownSrc}
+      alt=""
+      aria-hidden="true"
+      loading={loading}
+      decoding="async"
+      className={className}
+      onError={() => {
+        const failed = failedSourceAfterError(src, shownSrc, fallbackSrc);
+        if (failed) setFailedSrc(failed);
+      }}
+    />
+  );
+}
+
 export default function VenturePage() {
   const { language, content } = useLanguage();
   const copy =
@@ -134,11 +187,9 @@ export default function VenturePage() {
           <div className="max-w-4xl">
             {venture.logo && (
               <div className="mb-6">
-                <img
-                  src="/assets/venture-placeholder.svg"
-                  alt=""
-                  aria-hidden="true"
-                  decoding="async"
+                <ImageWithFallback
+                  src={venture.logo}
+                  fallbackSrc={VENTURE_LOGO_PLACEHOLDER}
                   className="h-16 sm:h-20 w-auto object-contain"
                 />
               </div>
@@ -206,12 +257,10 @@ export default function VenturePage() {
                         {/* Photo / Silhouette */}
                         <div className="w-24 h-24 mx-auto mb-4 rounded-full overflow-hidden border-2 border-border/40 group-hover:border-primary/50 transition-colors">
                           {member.photo ? (
-                            <img
-                              src="/assets/team-placeholder.svg"
-                              alt=""
-                              aria-hidden="true"
+                            <ImageWithFallback
+                              src={member.photo}
+                              fallbackSrc={TEAM_PHOTO_PLACEHOLDER}
                               loading="lazy"
-                              decoding="async"
                               className="w-full h-full object-cover"
                             />
                           ) : (

@@ -42,6 +42,8 @@ jobs:
         run: pnpm check
       - name: Run test suite
         run: pnpm test:ci
+      - name: Verify production build
+        run: pnpm build
 
   dependency-audit:
     name: Dependency vulnerability report
