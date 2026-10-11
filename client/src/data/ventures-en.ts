@@ -11,7 +11,7 @@ export const venturesEn: VentureDetail[] = [
     company: "Hippocampus Consulting",
     role: "CEO & Founder",
     tagline: "Export-oriented strategy and management consulting",
-    logo: "/manus-storage/logo-hippocampus-consulting_0f90baeb.png",
+    logo: "/assets/logos/hippocampus-consulting.webp",
     description: [
       "Hippocampus Consulting is a fully export-oriented strategy and management consultancy, founded and led by Dr. Ahmed Ben Lallahom. The firm supports companies in their digital transformation, international development, and sustainable growth.",
       "With a unique approach combining medical rigor and entrepreneurial vision, Hippocampus Consulting offers tailored solutions for organizations seeking to expand internationally while maintaining operational excellence.",
@@ -68,7 +68,7 @@ export const venturesEn: VentureDetail[] = [
     role: "Co-Founder",
     tagline: "Specialist medical and paramedical recruitment",
     website: "https://laskacorp.com/home",
-    logo: "/manus-storage/logo-laska-corporate_35bcff90.png",
+    logo: "/assets/logos/laska-corporate.webp",
     description: [
       "Laska Corporate is a company specializing in medical and paramedical recruitment, co-founded by Dr. Ahmed Ben Lallahom. It connects healthcare institutions with qualified professionals for permanent positions, temporary cover, and interim assignments.",
       "With deep knowledge of the medical field and the real needs of healthcare facilities, Laska Corporate offers a tailored recruitment service that ensures the right match between candidates' skills and position requirements.",
@@ -114,7 +114,7 @@ export const venturesEn: VentureDetail[] = [
     company: "Appel Médical Tunisie",
     role: "Co-Founder",
     tagline: "Medical recruitment and staffing in Tunisia",
-    logo: "/manus-storage/logo-appel-medical-tunisie_9b8e3246.png",
+    logo: "/assets/logos/appel-medical-tunisie.webp",
     description: [
       "Appel Médical Tunisie is a medical recruitment and staffing venture co-founded by Dr. Ahmed Ben Lallahom, connecting qualified healthcare professionals with the hospitals and clinics that need them.",
       "The company addresses a critical need in the Tunisian market for medical human resources, facilitating connections between healthcare facilities and available practitioners.",
@@ -160,7 +160,7 @@ export const venturesEn: VentureDetail[] = [
     role: "Co-Founder",
     tagline: "IT, Data, AI and Cybersecurity consulting",
     website: "https://www.octopustalent.io/",
-    logo: "/manus-storage/logo-octopus-talent_27d723c7.png",
+    logo: "/assets/logos/octopus-talent.webp",
     description: [
       "Octopus Talent is an IT, Data, AI, and cybersecurity consulting firm based in Paris, co-founded by Dr. Ahmed Ben Lallahom. The company supports organizations' digital transformation with tailor-made technological solutions.",
       "In a world where technology has become an essential strategic lever, Octopus Talent helps companies harness the full potential of artificial intelligence, big data, and cybersecurity to accelerate their growth.",
@@ -203,7 +203,7 @@ export const venturesEn: VentureDetail[] = [
         name: "Ines Dhaouadi",
         role: "Consultant",
         linkedin: "https://www.linkedin.com/in/ines-dhaouadi/",
-        photo: "/manus-storage/photo-ines-corrected_b56c31ee.png",
+        photo: "/assets/team/ines-dhaouadi.webp",
       },
     ],
   },
