@@ -213,7 +213,8 @@ export async function sendInvoiceEmail(
   customerName: string,
   trackingId: string,
   finalPrice: number,
-  invoicePdfBuffer: Buffer
+  invoicePdfBuffer: Buffer,
+  invoiceNumber?: string
 ) {
   try {
     const emailContent = buildHippocampusEmailShell(`
@@ -223,6 +224,7 @@ export async function sendInvoiceEmail(
       <div style="background: #f8fafc; border-radius: 8px; padding: 16px; margin: 16px 0;">
         <h3 style="color: #334155; margin-top: 0;">Récapitulatif :</h3>
         <ul style="list-style: none; padding: 0;">
+          ${invoiceNumber ? `<li style="padding: 4px 0;"><strong>Facture n° :</strong> ${escapeHtml(invoiceNumber)}</li>` : ""}
           <li style="padding: 4px 0;"><strong>Référence :</strong> ${escapeHtml(trackingId)}</li>
           <li style="padding: 4px 0;"><strong>Montant :</strong> ${finalPrice}€</li>
           <li style="padding: 4px 0;"><strong>Statut :</strong> ✅ Payé</li>

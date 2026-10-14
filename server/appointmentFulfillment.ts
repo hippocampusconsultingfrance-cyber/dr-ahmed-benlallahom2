@@ -11,6 +11,7 @@ import {
 } from "./_core/notifications";
 import { notifyOwner } from "./_core/notification";
 import { generateInvoicePDF } from "./invoice";
+import { allocateAppointmentInvoice } from "./invoiceNumbering";
 
 const MAX_BATCH = 5;
 /** Well above the 60 s function limit: a job still "running" after this was interrupted. */
@@ -99,7 +100,15 @@ async function runJob(id: number) {
       ]);
       await db.update(appointments).set({ emailSent: 1, smsSent: smsSent ? 1 : 0 }).where(eq(appointments.id, appointment.id));
     } else {
+      // Numbered once per paid appointment; a retried job reuses the same
+      // number, issue date and payment date. The job row is created by the
+      // webhook right after the payment confirmation: its creation time is the
+      // payment date.
+      const invoiceRecord = await allocateAppointmentInvoice({ appointmentId: appointment.id, paidAt: job.createdAt ?? new Date() });
       const invoice = await generateInvoicePDF({
+        invoiceNumber: invoiceRecord.invoiceNumber,
+        issueDate: invoiceRecord.issuedAt,
+        paymentDate: invoiceRecord.paidAt,
         trackingId: appointment.trackingId,
         customerName: appointment.customerName,
         customerEmail: appointment.customerEmail,
@@ -110,9 +119,8 @@ async function runJob(id: number) {
         basePrice: Number(appointment.basePrice),
         finalPrice,
         isNightRate: appointment.isNightRate === 1,
-        paymentDate: new Date(),
       });
-      await sendInvoiceEmail(appointment.customerEmail, appointment.customerName, appointment.trackingId, finalPrice, invoice.buffer);
+      await sendInvoiceEmail(appointment.customerEmail, appointment.customerName, appointment.trackingId, finalPrice, invoice.buffer, invoiceRecord.invoiceNumber);
     }
     await db.update(appointmentFulfillmentJobs).set({ status: "completed", finishedAt: new Date(), lastError: null }).where(eq(appointmentFulfillmentJobs.id, id));
     return { completed: true };

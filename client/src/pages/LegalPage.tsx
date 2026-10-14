@@ -6,15 +6,8 @@ import { Link, useSearch } from "wouter";
 import { SEOHead } from "@/components/SEOHead";
 import { useState, useEffect } from "react";
 import Breadcrumb from "@/components/Breadcrumb";
-
-const HIPPOCAMPUS_LEGAL = {
-  name: "Hippocampus Consulting SARL",
-  registeredOffice: "6 rue d’Armaillé, 75017 Paris, France",
-  rcs: "999 259 252 R.C.S. Paris",
-  capital: "1 000 €",
-  director: "Ahmed Ben Lallahom",
-  contactEmail: "hippocampusconsultingfrance@gmail.com",
-} as const;
+// Source unique de l’identité légale, partagée avec la facture PDF.
+import { HIPPOCAMPUS_LEGAL } from "@shared/legalIdentity";
 
 export default function LegalPage() {
   const { language } = useLanguage();

@@ -202,6 +202,28 @@ export const appointmentFulfillmentJobs = mysqlTable("appointment_fulfillment_jo
 }));
 
 /**
+ * One invoice per paid appointment, numbered once and without gaps inside a
+ * yearly series (FAC-2026-000001). Created at runtime by
+ * server/invoiceNumbering.ts (ensureInvoiceSchema, idempotent DDL): no manual
+ * production migration. Kept out of `appointments` so that existing selects on
+ * that table never reference a column the live database may not have yet.
+ */
+export const appointmentInvoices = mysqlTable("appointment_invoices", {
+  id: serial("id").primaryKey(),
+  appointmentId: int("appointment_id").notNull(),
+  invoiceSeries: varchar("invoice_series", { length: 16 }).notNull(),
+  invoiceSequence: int("invoice_sequence").notNull(),
+  invoiceNumber: varchar("invoice_number", { length: 32 }).notNull(),
+  issuedAt: timestamp("issued_at").notNull(),
+  paidAt: timestamp("paid_at").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, table => ({
+  appointmentUnique: uniqueIndex("appointment_invoices_appointment_unique").on(table.appointmentId),
+  numberUnique: uniqueIndex("appointment_invoices_number_unique").on(table.invoiceNumber),
+  seriesSequenceUnique: uniqueIndex("appointment_invoices_series_sequence_unique").on(table.invoiceSeries, table.invoiceSequence),
+}));
+
+/**
  * Blog posts / Medical news articles.
  * Admin can publish articles, veille scientifique, etc.
  */

@@ -15,7 +15,16 @@ const owner = vi.hoisted(() => ({ notifyOwner: vi.fn(async () => true) }));
 vi.mock("./db", () => ({ getDb: database.getDb }));
 vi.mock("./_core/notifications", () => notifications);
 vi.mock("./_core/notification", () => owner);
-vi.mock("./invoice", () => ({ generateInvoicePDF: vi.fn(async () => ({ buffer: Buffer.from("pdf") })) }));
+const invoicing = vi.hoisted(() => ({
+  generateInvoicePDF: vi.fn(async () => ({ buffer: Buffer.from("pdf") })),
+  allocateAppointmentInvoice: vi.fn(async () => ({
+    invoiceNumber: "FAC-2026-000003",
+    issuedAt: new Date("2026-10-12T08:00:00Z"),
+    paidAt: new Date("2026-10-12T07:59:00Z"),
+  })),
+}));
+vi.mock("./invoice", () => ({ generateInvoicePDF: invoicing.generateInvoicePDF }));
+vi.mock("./invoiceNumbering", () => ({ allocateAppointmentInvoice: invoicing.allocateAppointmentInvoice }));
 
 import {
   processAppointmentFulfillmentNow,
@@ -172,6 +181,28 @@ describe("revendication atomique des envois post-paiement", () => {
     expect(result.results).toEqual([{ completed: false, retry: false }]);
     expect(writes.at(-1)?.values).toMatchObject({ status: "failed" });
     expect(owner.notifyOwner).toHaveBeenCalledWith(expect.objectContaining({ title: expect.stringContaining("APT-42") }));
+  });
+
+  it("facture sous un numéro séquentiel attribué une fois, datée du paiement (création du job)", async () => {
+    const createdAt = new Date("2026-10-12T07:59:00Z");
+    const invoiceJob = { ...queuedJob, id: 8, jobType: "invoice", createdAt };
+    fakeDatabase({
+      jobs: [[invoiceJob], [{ ...invoiceJob, status: "running", attempts: 1 }]],
+      appointments: [[paidAppointment()]],
+      updateRowCounts: [1],
+    });
+
+    const result = await processDueAppointmentFulfillmentJobs();
+
+    expect(result.results).toEqual([{ completed: true }]);
+    expect(invoicing.allocateAppointmentInvoice).toHaveBeenCalledWith({ appointmentId: 42, paidAt: createdAt });
+    expect(invoicing.generateInvoicePDF).toHaveBeenCalledWith(expect.objectContaining({
+      invoiceNumber: "FAC-2026-000003",
+      issueDate: new Date("2026-10-12T08:00:00Z"),
+      paymentDate: new Date("2026-10-12T07:59:00Z"),
+      trackingId: "APT-42",
+    }));
+    expect(notifications.sendInvoiceEmail).toHaveBeenCalledWith("patient@example.com", "Patient Test", "APT-42", 100, expect.any(Buffer), "FAC-2026-000003");
   });
 
   it("remet en file un job interrompu (instance gelée après la réponse à Stripe)", async () => {
