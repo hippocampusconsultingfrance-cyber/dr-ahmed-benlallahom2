@@ -77,6 +77,7 @@ export const bookingContent = {
     restartBooking: "Nouvelle réservation",
     paymentError: "Une erreur est survenue pendant le paiement.",
     bookingError: "Une erreur est survenue pendant la création de la réservation.",
+    invalidInput: "Certaines informations sont invalides : vérifiez votre nom, votre email, votre téléphone et la date choisie.",
           trackingId: "Numéro de suivi:",
       cancellation: "Remboursement intégral au-delà de 24 h avant le rendez-vous. Après ce délai, la réservation n’est pas remboursable.",
       paymentTrust: "Paiement sécurisé par Stripe · Confirmation et facture envoyées par email",
@@ -146,6 +147,7 @@ export const bookingContent = {
     restartBooking: "Start a new booking",
     paymentError: "An error occurred during payment.",
     bookingError: "An error occurred while creating your booking.",
+    invalidInput: "Some information is invalid: please check your name, email, phone number and chosen date.",
           trackingId: "Tracking ID:",
       cancellation: "Full refund is available more than 24 hours before the appointment. After that deadline, the booking is non-refundable.",
       paymentTrust: "Secure payment by Stripe · Confirmation and invoice sent by email",
@@ -215,6 +217,7 @@ export const bookingContent = {
     restartBooking: "Neue Buchung",
     paymentError: "Bei der Zahlung ist ein Fehler aufgetreten.",
     bookingError: "Bei der Erstellung der Buchung ist ein Fehler aufgetreten.",
+    invalidInput: "Einige Angaben sind ungültig: Bitte prüfen Sie Name, E-Mail, Telefonnummer und gewähltes Datum.",
           trackingId: "Verfolgungsnummer:",
       cancellation: "Eine vollständige Rückerstattung ist mehr als 24 Stunden vor dem Termin möglich. Danach ist die Buchung nicht erstattungsfähig.",
       paymentTrust: "Sichere Zahlung über Stripe · Bestätigung und Rechnung per E-Mail",
@@ -284,6 +287,7 @@ export const bookingContent = {
     restartBooking: "新建预约",
     paymentError: "付款过程中发生错误。",
     bookingError: "创建预约时发生错误。",
+    invalidInput: "部分信息无效：请检查您的姓名、电子邮件、电话号码和所选日期。",
           trackingId: "跟踪 ID:",
       cancellation: "预约前24小时以上可全额退款，超过此期限后不可退款。",
       paymentTrust: "Stripe安全支付 · 确认信息和发票将通过电子邮件发送",
@@ -424,7 +428,13 @@ export function getBookingAvailabilityState({
 // Refus métier attendus (créneau déjà pris, trop de tentatives, réservations
 // en attente) : le serveur renvoie un message français destiné au patient.
 // Toute autre erreur garde le message générique pour ne rien exposer de technique.
-const BOOKING_USER_FACING_ERROR_CODES = new Set(["CONFLICT", "TOO_MANY_REQUESTS", "UNPROCESSABLE_CONTENT"]);
+const BOOKING_USER_FACING_ERROR_CODES = new Set(["CONFLICT", "TOO_MANY_REQUESTS", "UNPROCESSABLE_CONTENT", "SERVICE_UNAVAILABLE"]);
+
+/** Input rejected by validation (BAD_REQUEST): a localized hint instead of the raw validation report. */
+export function isBookingInputError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  return (error as { data?: { code?: unknown } | null }).data?.code === "BAD_REQUEST";
+}
 
 export function getBookingServerErrorMessage(error: unknown): string | null {
   if (!error || typeof error !== "object") return null;
@@ -698,6 +708,8 @@ export default function BookingPage() {
         // Le message serveur est rédigé en français : on le précède du libellé
         // localisé pour les autres langues de l’interface.
         alert(language === "fr" ? serverMessage : `${content.bookingError}\n\n${serverMessage}`);
+      } else if (isBookingInputError(error)) {
+        alert(content.invalidInput);
       } else {
         alert(content.bookingError);
       }

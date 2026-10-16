@@ -124,6 +124,12 @@ export const ACTIVE_APPOINTMENT_HOLDS_LIMIT_MESSAGE = "Vous avez déjà deux ré
 
 export const CONSULTATION_CHECKOUT_PRODUCT_NAME = "Consultation de conseil santé – 30 minutes";
 
+export const BOOKING_PAYMENT_UNAVAILABLE_MESSAGE = "Le service de paiement est momentanément indisponible. Votre créneau n’a pas été réservé : veuillez réessayer dans quelques minutes ou nous contacter.";
+
+/** Refuse NUL and other control characters (PostgreSQL rejects NUL in text). */
+const NO_CONTROL_CHARACTERS = /^[^\u0000-\u001F\u007F]*$/;
+const NO_CONTROL_CHARACTERS_EXCEPT_NEWLINES = /^[^\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]*$/;
+
 /** Libellé de la ligne Stripe Checkout, visible sur la page de paiement et le reçu. */
 export function consultationCheckoutProductData(trackingId: string) {
   return { name: CONSULTATION_CHECKOUT_PRODUCT_NAME, description: `Rendez-vous : ${trackingId}` };
@@ -580,13 +586,13 @@ export const appRouter = router({
     create: publicProcedure
       .input(
         z.object({
-          customerName: z.string().min(1).max(255),
+          customerName: z.string().min(1).max(255).regex(NO_CONTROL_CHARACTERS, "Caractères non autorisés"),
           customerEmail: z.string().email().max(320),
           customerPhone: z.string().trim().min(1).max(50).refine(isPlausiblePhoneNumber, BOOKING_INVALID_PHONE_MESSAGE),
           appointmentDate: appointmentDateInput,
           // Objet de la demande, sans information médicale (minimisation) :
           // conservé pour le tableau de bord, jamais recopié dans un email.
-          requestDetails: z.string().trim().min(1).max(BOOKING_REQUEST_SUBJECT_MAX_LENGTH),
+          requestDetails: z.string().trim().min(1).max(BOOKING_REQUEST_SUBJECT_MAX_LENGTH).regex(NO_CONTROL_CHARACTERS_EXCEPT_NEWLINES, "Caractères non autorisés"),
         })
       )
       .mutation(async ({ input, ctx }) => {
@@ -701,34 +707,39 @@ export const appRouter = router({
             sql`INSERT INTO appointments (tracking_id, customer_name, customer_email, customer_phone, consultation_type, request_details, appointment_date, slot_key, duration, base_price, final_price, is_night_rate, payment_status, appointment_status, hold_expires_at) VALUES (${trackingId}, ${input.customerName}, ${input.customerEmail}, ${input.customerPhone}, ${'health_advice'}, ${input.requestDetails}, ${appointmentDateFormatted}, ${slotKey}, ${30}, ${basePrice}, ${finalPrice}, ${isNightRate ? 1 : 0}, ${'pending'}, ${'held'}, ${holdExpiresAt})`
           );
 
+          let session: Stripe.Checkout.Session;
           try {
-            const session = await getStripeClient().checkout.sessions.create({
+            session = await getStripeClient().checkout.sessions.create({
               payment_method_types: ["card"],
               line_items: [{ price_data: { currency: "eur", product_data: consultationCheckoutProductData(trackingId), unit_amount: Math.round(Number(finalPrice) * 100) }, quantity: 1 }],
               mode: "payment",
               customer_email: input.customerEmail,
               metadata: { trackingId, customerName: input.customerName },
               expires_at: stripeExpiresAt(holdExpiresAt),
-              success_url: `${getSafeCheckoutOrigin()}/booking/confirmation?status=success&trackingId=${encodeURIComponent(trackingId)}`,
+              success_url: `${getSafeCheckoutOrigin()}/booking/confirmation?status=success&trackingId=${encodeURIComponent(trackingId)}&session_id={CHECKOUT_SESSION_ID}`,
               cancel_url: `${getSafeCheckoutOrigin()}/booking/confirmation?status=canceled&session_id={CHECKOUT_SESSION_ID}`,
             });
             if (!session.id || !session.url) throw new Error("stripe_checkout_session_unavailable");
-            await db.update(appointments).set({ stripeSessionId: session.id }).where(and(eq(appointments.trackingId, trackingId), eq(appointments.appointmentStatus, "held")));
-            // La page de réservation garde la session et l’expiration du maintien
-            // (sessionStorage) pour proposer « Reprendre le paiement » ou
-            // « Annuler et choisir un autre créneau » après un retour arrière.
-            return { success: true, trackingId, finalPrice: parseFloat(finalPrice), checkoutUrl: session.url, checkoutSessionId: session.id, holdExpiresAt: holdExpiresAt.toISOString() };
           } catch (stripeError) {
+            // Paiement indisponible : le créneau est libéré et le patient reçoit
+            // une consigne claire, jamais le texte technique de Stripe.
             await db.update(appointments).set(getExpiredAppointmentHoldUpdate()).where(and(eq(appointments.trackingId, trackingId), eq(appointments.paymentStatus, "pending"), eq(appointments.appointmentStatus, "held")));
-            throw stripeError;
+            console.error("Stripe checkout session creation failed:", stripeError instanceof Error ? stripeError.name : "UnknownError");
+            throw new TRPCError({ code: "SERVICE_UNAVAILABLE", message: BOOKING_PAYMENT_UNAVAILABLE_MESSAGE, cause: stripeError });
           }
+          await db.update(appointments).set({ stripeSessionId: session.id }).where(and(eq(appointments.trackingId, trackingId), eq(appointments.appointmentStatus, "held")));
+          // La page de réservation garde la session et l’expiration du maintien
+          // (sessionStorage) pour proposer « Reprendre le paiement » ou
+          // « Annuler et choisir un autre créneau » après un retour arrière.
+          return { success: true, trackingId, finalPrice: parseFloat(finalPrice), checkoutUrl: session.url!, checkoutSessionId: session.id, holdExpiresAt: holdExpiresAt.toISOString() };
         } catch (dbError) {
-          console.error("Database insert error:", dbError);
           if (dbError instanceof TRPCError) throw dbError;
+          console.error("Appointment creation failed:", dbError instanceof Error ? dbError.name : "UnknownError");
           if (String(dbError).toLowerCase().includes("appointments_active_slot_unique") || String(dbError).toLowerCase().includes("duplicate")) {
             throw new TRPCError({ code: "CONFLICT", message: "Ce créneau vient d’être réservé par un autre patient. Veuillez en choisir un autre." });
           }
-          throw new Error(`Failed to create appointment: ${dbError instanceof Error ? dbError.message : "Unknown error"}`);
+          // Jamais de requête SQL ni de message de fournisseur dans la réponse.
+          throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "La réservation n’a pas pu être enregistrée. Veuillez réessayer dans quelques instants." });
         }
 
         // Unreachable: the successful branch returns a Stripe Checkout URL.
@@ -812,7 +823,7 @@ export const appRouter = router({
               customerName: input.customerName,
             },
             expires_at: stripeExpiresAt(appointment.holdExpiresAt),
-            success_url: `${getSafeCheckoutOrigin()}/booking/confirmation?status=success&trackingId=${encodeURIComponent(input.trackingId)}`,
+            success_url: `${getSafeCheckoutOrigin()}/booking/confirmation?status=success&trackingId=${encodeURIComponent(input.trackingId)}&session_id={CHECKOUT_SESSION_ID}`,
             cancel_url: `${getSafeCheckoutOrigin()}/booking/confirmation?status=canceled&session_id={CHECKOUT_SESSION_ID}`,
           });
 
@@ -828,10 +839,24 @@ export const appRouter = router({
             checkoutUrl: session.url,
           };
         } catch (error) {
-          console.error("Stripe error:", error);
           if (error instanceof TRPCError) throw error;
-          throw new Error("Failed to create checkout session");
+          console.error("Stripe checkout session error:", error instanceof Error ? error.name : "UnknownError");
+          throw new TRPCError({ code: "SERVICE_UNAVAILABLE", message: BOOKING_PAYMENT_UNAVAILABLE_MESSAGE, cause: error });
         }
+      }),
+
+    /**
+     * État réel d’un paiement pour la page de retour Stripe (confirmé, en cours
+     * de validation, à régulariser…), sans jamais se fier au seul ?status=success.
+     */
+    publicStatus: publicProcedure
+      .input(z.object({
+        trackingId: z.string().regex(/^APT[A-Z0-9]{6,17}$/),
+        sessionId: z.string().regex(/^cs_[A-Za-z0-9_]{6,250}$/),
+      }))
+      .query(async ({ input }) => {
+        const { getPublicPaymentState } = await import("./appointmentPublicStatus");
+        return getPublicPaymentState(getStripeClient, input);
       }),
 
     cancelPending: publicProcedure

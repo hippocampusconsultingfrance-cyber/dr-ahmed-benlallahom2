@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bookingContent, getBookingAvailabilityState, getBookingServerErrorMessage, isWithinBookingAvailability, parseBookingDateTime, toParisBookingDateKey } from "./BookingPage";
+import { bookingContent, getBookingAvailabilityState, getBookingServerErrorMessage, isBookingInputError, isWithinBookingAvailability, parseBookingDateTime, toParisBookingDateKey } from "./BookingPage";
 
 describe("booking date placeholders", () => {
   it("uses an explicit localized placeholder for every supported language", () => {
@@ -115,6 +115,14 @@ describe("booking date placeholders", () => {
     expect(source).toContain("if (!isPlausiblePhoneNumber(formData.phone))");
     expect(getBookingServerErrorMessage({ message: "Ce créneau n’est plus réservable", data: { code: "UNPROCESSABLE_CONTENT" } }))
       .toBe("Ce créneau n’est plus réservable");
+  });
+
+  it("affiche la consigne « paiement indisponible » et un message localisé pour une saisie refusée", () => {
+    expect(getBookingServerErrorMessage({ message: "Le service de paiement est momentanément indisponible.", data: { code: "SERVICE_UNAVAILABLE" } }))
+      .toBe("Le service de paiement est momentanément indisponible.");
+    expect(isBookingInputError({ message: "[{\"code\":\"custom\"}]", data: { code: "BAD_REQUEST" } })).toBe(true);
+    expect(isBookingInputError({ data: { code: "CONFLICT" } })).toBe(false);
+    for (const language of ["fr", "en", "de", "zh"] as const) expect(bookingContent[language].invalidInput).toBeTruthy();
   });
 
   it("réduit le poids visuel de l’illustration purement décorative", async () => {

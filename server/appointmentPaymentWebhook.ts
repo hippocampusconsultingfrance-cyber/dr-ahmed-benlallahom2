@@ -4,6 +4,7 @@ import { getDb } from "./db";
 import { mutationRowCount } from "./dbMutation";
 import { enqueueAppointmentFulfillment, processAppointmentFulfillmentNow } from "./appointmentFulfillment";
 import { notifyOwner } from "./_core/notification";
+import { sendUnconfirmablePaymentEmail } from "./_core/notifications";
 
 /** Keeps the Stripe acknowledgement well inside Stripe's delivery timeout. */
 export const IMMEDIATE_FULFILLMENT_TIMEOUT_MS = 15_000;
@@ -143,6 +144,15 @@ async function acknowledgeUnconfirmablePayment(input: {
     console.error("Owner alert for unconfirmable payment was not delivered; asking Stripe to retry", { trackingId: input.appointment.trackingId });
     return { httpStatus: 500, body: { received: false }, outcome: "unconfirmable" };
   }
+  // The patient learns that the payment arrived but the slot could not be
+  // confirmed (the success page shows the same); best effort, one email per
+  // Checkout session.
+  await sendUnconfirmablePaymentEmail(input.appointment.customerEmail, {
+    customerName: input.appointment.customerName,
+    trackingId: input.appointment.trackingId,
+    appointmentDate: input.appointment.appointmentDate,
+    amountCents: Number.isFinite(paidAmount) ? paidAmount : null,
+  }, `appointment-unconfirmable-${input.sessionId}`).catch(() => false);
   // Keep a durable trace of the received payment on the row when it cannot
   // clash with an active hold or an already recorded payment. Written only once
   // the owner knows: it makes later deliveries of this payment no-op duplicates.

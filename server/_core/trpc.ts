@@ -1,11 +1,40 @@
 import { NOT_ADMIN_ERR_MSG, UNAUTHED_ERR_MSG } from '@shared/const';
+import { randomUUID } from "node:crypto";
 import { initTRPC, TRPCError } from "@trpc/server";
 import superjson from "superjson";
 import type { TrpcContext } from "./context";
 import { isAdminMfaVerified } from "../adminMfa";
 
+export const GENERIC_INTERNAL_ERROR_MESSAGE = "Une erreur interne est survenue. Veuillez réessayer dans quelques instants.";
+
+/**
+ * Unexpected errors (anything that is not a deliberate TRPCError: database,
+ * provider, programming errors) reach the client as a generic French message
+ * with a short reference; the original is only logged on the server. tRPC
+ * wraps such errors as INTERNAL_SERVER_ERROR with the original as `cause`;
+ * deliberate TRPCErrors carry no cause and keep their message.
+ */
+export function formatTrpcErrorShape<TShape extends { message: string; data: { code: string; stack?: string } }>(
+  shape: TShape,
+  error: { code: string; cause?: unknown },
+  reference: () => string = () => randomUUID().slice(0, 8),
+): TShape {
+  if (error.code !== "INTERNAL_SERVER_ERROR" || error.cause === undefined) return shape;
+  const ref = reference();
+  const cause = error.cause instanceof Error ? error.cause : null;
+  // Query parameters (personal data) are left out of the log line.
+  const summary = cause ? `${cause.name}: ${cause.message.split("\nparams:")[0].slice(0, 500)}` : "UnknownError";
+  console.error(`[tRPC] Internal error ref=${ref}`, summary);
+  return {
+    ...shape,
+    message: `${GENERIC_INTERNAL_ERROR_MESSAGE} (réf. ${ref})`,
+    data: { ...shape.data, stack: undefined },
+  };
+}
+
 const t = initTRPC.context<TrpcContext>().create({
   transformer: superjson,
+  errorFormatter: ({ shape, error }) => formatTrpcErrorShape(shape, error),
 });
 
 export const router = t.router;

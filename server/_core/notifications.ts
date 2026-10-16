@@ -463,6 +463,42 @@ export async function sendRefundConfirmationEmail(
   }
 }
 
+/**
+ * Patient notice when a Stripe payment could not be attached to the booked
+ * slot (hold expired or released, other session): the owner has been alerted
+ * and will refund or reschedule. Best effort, idempotent per Checkout session.
+ */
+export function buildUnconfirmablePaymentEmail(input: { customerName: string; trackingId: string; appointmentDate: Date; amountCents: number | null }, contact = resolveConsultationContact()): PatientEmail {
+  return buildPatientEmail({
+    subject: `Votre paiement a été reçu : réservation à régulariser - ${input.trackingId}`,
+    title: "Votre paiement a été reçu, réservation à régulariser",
+    customerName: input.customerName,
+    paragraphs: [
+      "Votre paiement a bien été reçu, mais le créneau choisi n’a pas pu vous être confirmé automatiquement : la réservation temporaire avait expiré ou le créneau n’était plus disponible au moment du paiement.",
+      "Notre équipe a été prévenue et vous contactera pour vous rembourser intégralement ou vous proposer un autre créneau. Vous n’avez rien à payer de plus.",
+    ],
+    details: [
+      ["Référence", input.trackingId],
+      ["Créneau demandé", formatPatientDateTime(input.appointmentDate)],
+      ...(input.amountCents === null ? [] : [["Montant reçu", formatPatientAmount(input.amountCents / 100)] as [string, string]]),
+    ],
+  }, contact);
+}
+
+export async function sendUnconfirmablePaymentEmail(
+  customerEmail: string,
+  input: { customerName: string; trackingId: string; appointmentDate: Date; amountCents: number | null },
+  idempotencyKey: string,
+): Promise<boolean> {
+  try {
+    await sendPatientEmail({ rejected: "unconfirmable_payment_email_rejected", failed: "unconfirmable_payment_email_failed" }, customerEmail, buildUnconfirmablePaymentEmail(input), { idempotencyKey });
+    return true;
+  } catch {
+    console.error("Unconfirmable payment email delivery failed");
+    return false;
+  }
+}
+
 export async function sendReminderEmail(
   customerEmail: string,
   customerName: string,
