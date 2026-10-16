@@ -25,12 +25,19 @@ declare global {
 
 const SCRIPT_ID = "cloudflare-turnstile-script";
 
+/** Distance au viewport à partir de laquelle un widget différé charge Cloudflare. */
+export const TURNSTILE_DEFER_ROOT_MARGIN = "400px 0px";
+
 /**
  * Renders one explicit Cloudflare challenge and exposes only its short-lived token.
  * The callback is held in a ref so a parent re-render cannot tear down a challenge
  * that is already being completed by a visitor.
+ *
+ * deferUntilVisible (PERF-04) : le script tiers de Cloudflare n'est chargé que lorsque le
+ * formulaire approche du viewport ou reçoit le focus, et non dès l'ouverture de la page
+ * (formulaire de contact en bas de l'accueil). Le bouton d'envoi reste bloqué sans jeton.
  */
-export function TurnstileWidget({ onToken }: { onToken: (token: string | null) => void }) {
+export function TurnstileWidget({ onToken, deferUntilVisible = false }: { onToken: (token: string | null) => void; deferUntilVisible?: boolean }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const widgetIdRef = useRef<string | null>(null);
   const onTokenRef = useRef(onToken);
@@ -38,11 +45,33 @@ export function TurnstileWidget({ onToken }: { onToken: (token: string | null) =
   const siteKey = import.meta.env.VITE_TURNSTILE_SITE_KEY as string | undefined;
   const [errorCode, setErrorCode] = useState<string | null>(null);
   const [retryNonce, setRetryNonce] = useState(0);
+  const [armed, setArmed] = useState(!deferUntilVisible);
 
   onTokenRef.current = onToken;
 
   useEffect(() => {
-    if (!siteKey || !containerRef.current) return;
+    if (armed || !siteKey) return;
+    const container = containerRef.current;
+    if (!container) return;
+    const form = container.closest("form");
+    const arm = () => setArmed(true);
+    if (typeof IntersectionObserver === "undefined") {
+      arm();
+      return;
+    }
+    const observer = new IntersectionObserver(entries => {
+      if (entries.some(entry => entry.isIntersecting)) arm();
+    }, { rootMargin: TURNSTILE_DEFER_ROOT_MARGIN });
+    observer.observe(container);
+    form?.addEventListener("focusin", arm);
+    return () => {
+      observer.disconnect();
+      form?.removeEventListener("focusin", arm);
+    };
+  }, [armed, siteKey]);
+
+  useEffect(() => {
+    if (!armed || !siteKey || !containerRef.current) return;
 
     let script: HTMLScriptElement | null = null;
 
@@ -113,7 +142,7 @@ export function TurnstileWidget({ onToken }: { onToken: (token: string | null) =
       widgetIdRef.current = null;
       onTokenRef.current(null);
     };
-  }, [siteKey, retryNonce]);
+  }, [armed, siteKey, retryNonce]);
 
   if (!siteKey) return <p className="text-xs text-amber-200" role="alert">La vérification anti-bot est indisponible. Veuillez réessayer ultérieurement.</p>;
 

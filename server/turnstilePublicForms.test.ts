@@ -7,7 +7,9 @@ describe("garde-fous Turnstile des parcours publics", () => {
   it("préserve le challenge actif lors des re-rendus sans l’invalider avant sa fin", () => {
     const source = project("client/src/components/TurnstileWidget.tsx");
     expect(source).toContain("const onTokenRef = useRef(onToken)");
-    expect(source).toContain("[siteKey, retryNonce]");
+    // « armed » ne passe qu'une fois de false à true (chargement différé, PERF-04), avant tout challenge.
+    expect(source).toContain("[armed, siteKey, retryNonce]");
+    expect(source).not.toMatch(/\[[^\]]*onToken[^\]]*\]\);/);
     expect(source).not.toContain("WIDGET_WATCHDOG_MS");
     expect(source).not.toContain("widget_unavailable");
     expect(source).toContain("L’envoi reste bloqué afin de protéger vos données");

@@ -2,7 +2,7 @@ import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { gzipSync } from "node:zlib";
 
-const assetsDirectory = path.resolve("dist/public/assets");
+const assetsDirectory = path.resolve("dist/public/static");
 const files = await readdir(assetsDirectory);
 const javascript = files.filter((file) => file.endsWith(".js"));
 const resolveLargest = (predicate) => javascript
