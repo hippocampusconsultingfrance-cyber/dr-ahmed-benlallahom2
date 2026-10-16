@@ -4,6 +4,7 @@ import { publicProcedure, protectedProcedure, adminProcedure, router } from "./_
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { canRequestCandidateDocumentReanalysis } from "../shared/candidateDocumentReanalysis";
+import { isPublicTestimonialsEnabled } from "../shared/publicFeatures";
 import { getDb } from "./db";
 import { candidateAccounts, candidateDocumentAuditLogs, candidateDocuments, contactMessages, gdprRequests, testimonials, appointments, blogPosts, availabilitySlots, blockedDates, cvApplications, cvCandidateCertifications, cvCandidateLanguages, cvGoogleDriveExportJobs, recruitmentAuditLogs, recruitmentMatchProfiles, clientBriefs, clientBriefCandidates, recruitmentCampaigns, recruitmentCampaignRecipients, recruitmentEmailEvents, recruitmentFollowUpTasks, recruitmentOfferTemplates, securityEvents } from "../drizzle/schema";
 import { notifyOwner } from "./_core/notification";
@@ -479,6 +480,8 @@ export const appRouter = router({
         })
       )
       .query(async ({ input }) => {
+        // Témoignages masqués du site public (LEGAL-08, shared/publicFeatures.ts).
+        if (!isPublicTestimonialsEnabled()) return [];
         const db = await getDb();
         if (!db) return [];
 

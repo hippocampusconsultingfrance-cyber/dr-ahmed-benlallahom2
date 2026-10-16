@@ -1,4 +1,5 @@
 import { venturesFr } from "../client/src/data/ventures-fr";
+import { isPublicTestimonialsEnabled } from "../shared/publicFeatures";
 
 /** Marqueur de client/index.html remplacé par le <head> propre à chaque route. */
 export const ROUTE_SEO_MARKER = "<!--route-seo-->";
@@ -103,10 +104,15 @@ const PUBLIC_ROUTES: Record<string, PublicRouteSeo> = {
     description: "Méthode, confidentialité et accompagnement pour vos recrutements médicaux internationaux.",
     keywords: "cabinet recrutement médical, méthode recrutement santé, Hippocampus Consulting",
   },
-  "/testimonials": {
-    title: "Témoignages de partenaires | Dr. Ben Lallahom",
-    description: "Découvrez les témoignages de partenaires ayant collaboré avec le Dr. Ahmed Ben Lallahom.",
-  },
+  // Pré-rendue (et donc publiée) uniquement si les témoignages sont réactivés (LEGAL-08).
+  ...(isPublicTestimonialsEnabled()
+    ? {
+        "/testimonials": {
+          title: "Témoignages de partenaires | Dr. Ben Lallahom",
+          description: "Découvrez les témoignages de partenaires ayant collaboré avec le Dr. Ahmed Ben Lallahom.",
+        },
+      }
+    : {}),
   "/gdpr": {
     title: "Protection des données | Dr. Ben Lallahom",
     description: "Consultez les informations de protection des données personnelles et RGPD du site.",

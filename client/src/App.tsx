@@ -12,6 +12,7 @@ import ConnectionMotionPreference from "./components/ConnectionMotionPreference"
 import { SEOHead } from "./components/SEOHead";
 import SkipToContent from "./components/SkipToContent";
 import PageTransition from "./components/PageTransition";
+import { isPublicTestimonialsEnabled } from "@shared/publicFeatures";
 
 export const routeLoadingCopy = {
   fr: { title: "Chargement de votre espace", caption: "Préparation de l’expérience médicale sécurisée…" },
@@ -73,7 +74,8 @@ function Router() {
       <Route path="/venture/:slug" component={VenturePage} />
       <Route path="/legal" component={LegalPage} />
       <Route path="/gdpr" component={GDPRPage} />
-      <Route path="/testimonials" component={TestimonialsPage} />
+      {/* Sans l'interrupteur, /testimonials tombe sur la page 404 (LEGAL-08). */}
+      {isPublicTestimonialsEnabled() && <Route path="/testimonials" component={TestimonialsPage} />}
       <Route path="/booking/confirmation" component={BookingConfirmationPage} />
       <Route path="/booking" component={BookingPage} />
       <Route path="/recruitment" component={RecruitmentHubPage} />
