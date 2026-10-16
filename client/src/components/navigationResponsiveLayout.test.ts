@@ -15,4 +15,22 @@ describe("géométrie responsive de l’en-tête", () => {
     expect(styles).toContain(".site-nav-container");
     expect(styles).toContain("max-width: 1600px;");
   });
+
+  it("garde le logo visible sur les téléphones de 360 à 430 px (M19 / PUB-UI-01)", async () => {
+    const navigation = await readFile(path.join(process.cwd(), "client/src/components/Navigation.tsx"), "utf8");
+
+    // La colonne du logo est dimensionnée par son contenu ; c'est la zone d'actions qui se contracte.
+    expect(navigation).toContain("grid-cols-[auto_minmax(0,1fr)]");
+    expect(navigation).not.toContain("grid-cols-[minmax(0,1fr)_auto]");
+    expect(navigation).toMatch(/brand-lockup flex min-w-10 shrink-0/);
+    expect(navigation).toMatch(/h-10 w-10 min-w-10 shrink-0/);
+
+    // Thème, lisibilité et OLED quittent l'en-tête sous 640 px et restent accessibles dans le menu burger.
+    const secondaryControls = navigation.match(/nav-control nav-control-secondary hidden sm:inline-flex/g) ?? [];
+    expect(secondaryControls).toHaveLength(3);
+    const mobileMenu = navigation.slice(navigation.indexOf('id="mobile-navigation"'));
+    expect(mobileMenu).toContain("onClick={toggleTheme}");
+    expect(mobileMenu).toContain("onClick={toggleHighReadability}");
+    expect(mobileMenu).toContain("onClick={toggleOledDark}");
+  });
 });

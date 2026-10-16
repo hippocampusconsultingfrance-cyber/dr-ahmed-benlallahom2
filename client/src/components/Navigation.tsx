@@ -131,17 +131,19 @@ export default function Navigation() {
           : "bg-transparent"
       }`}
     >
-      <div className="container site-nav-container grid h-18 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 md:h-20 min-[1536px]:grid-cols-[auto_minmax(0,1fr)_auto]">
+      <div className="container site-nav-container grid h-18 grid-cols-[auto_minmax(0,1fr)] items-center gap-3 md:h-20 min-[1536px]:grid-cols-[auto_minmax(0,1fr)_auto]">
         {/* Logo — larger, more prominent */}
         <button
           onClick={() => scrollTo("hero")}
-          className="brand-lockup flex shrink-0 items-center gap-3 group min-[1536px]:justify-self-start"
+          className="brand-lockup flex min-w-10 shrink-0 items-center gap-3 group justify-self-start"
           aria-label={accessibilityCopy.home}
         >
           <img
             src="/assets/abl-logo.svg"
             alt=""
-            className="w-10 h-10 md:w-11 md:h-11 transition-transform group-hover:scale-105"
+            width={44}
+            height={44}
+            className="h-10 w-10 min-w-10 shrink-0 md:h-11 md:w-11 md:min-w-11 transition-transform group-hover:scale-105"
             loading="lazy"
           />
           <div className="hidden sm:block">
@@ -179,13 +181,13 @@ export default function Navigation() {
         </nav>
 
         {/* Actions */}
-        <div className="flex shrink-0 items-center gap-2 min-[1536px]:justify-self-end">
+        <div className="flex min-w-0 items-center gap-1.5 justify-self-end sm:gap-2">
           {/* Language Dropdown */}
           <div ref={dropdownRef} className="relative">
             <button
               onClick={() => setDropdownOpen(!dropdownOpen)}
               ref={languageButtonRef}
-              className="nav-control flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-border/50 text-sm font-medium text-muted-foreground hover:text-foreground hover:border-primary/40 transition-all duration-200 hover:bg-background/50"
+              className="nav-control flex shrink-0 items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-full border border-border/50 text-sm font-medium text-muted-foreground hover:text-foreground hover:border-primary/40 transition-all duration-200 hover:bg-background/50"
               title={accessibilityCopy.changeLanguage}
               aria-label={accessibilityCopy.changeLanguage}
               aria-expanded={dropdownOpen}
@@ -225,7 +227,7 @@ export default function Navigation() {
           {toggleTheme && (
             <button
               onClick={toggleTheme}
-              className="nav-control p-2 rounded-full border border-border/50 text-muted-foreground hover:text-foreground hover:border-primary/40 transition-all duration-200"
+              className="nav-control nav-control-secondary hidden sm:inline-flex items-center justify-center p-2 rounded-full border border-border/50 text-muted-foreground hover:text-foreground hover:border-primary/40 transition-all duration-200"
               title={theme === "dark" ? accessibilityCopy.enableLight : accessibilityCopy.enableDark}
               aria-label={theme === "dark" ? accessibilityCopy.enableLight : accessibilityCopy.enableDark}
             >
@@ -236,7 +238,7 @@ export default function Navigation() {
           {toggleHighReadability && readabilityCopy && (
             <button
               onClick={toggleHighReadability}
-              className={`nav-control rounded-full border p-2 transition-all duration-200 ${highReadability ? "border-primary bg-primary/15 text-primary" : "border-border/50 text-muted-foreground hover:border-primary/40 hover:text-foreground"}`}
+              className={`nav-control nav-control-secondary hidden sm:inline-flex items-center justify-center rounded-full border p-2 transition-all duration-200 ${highReadability ? "border-primary bg-primary/15 text-primary" : "border-border/50 text-muted-foreground hover:border-primary/40 hover:text-foreground"}`}
               title={highReadability ? readabilityCopy.disable : readabilityCopy.enable}
               aria-label={highReadability ? readabilityCopy.disable : readabilityCopy.enable}
               aria-pressed={highReadability}
@@ -248,7 +250,7 @@ export default function Navigation() {
           {theme === "dark" && toggleOledDark && oledCopy && (
             <button
               onClick={toggleOledDark}
-              className={`nav-control rounded-full border p-2 transition-all duration-200 ${oledDark ? "border-primary bg-primary/15 text-primary" : "border-border/50 text-muted-foreground hover:border-primary/40 hover:text-foreground"}`}
+              className={`nav-control nav-control-secondary hidden sm:inline-flex items-center justify-center rounded-full border p-2 transition-all duration-200 ${oledDark ? "border-primary bg-primary/15 text-primary" : "border-border/50 text-muted-foreground hover:border-primary/40 hover:text-foreground"}`}
               title={oledDark ? oledCopy.disable : oledCopy.enable}
               aria-label={oledDark ? oledCopy.disable : oledCopy.enable}
               aria-pressed={oledDark}
@@ -257,7 +259,7 @@ export default function Navigation() {
             </button>
           )}
 
-          <a href="/search" className="nav-control rounded-full border border-border/50 p-2 text-muted-foreground transition-all duration-200 hover:border-primary/40 hover:text-foreground" aria-label={accessibilityCopy.search} title={accessibilityCopy.search}><Search className="h-4 w-4" /></a>
+          <a href="/search" className="nav-control inline-flex shrink-0 items-center justify-center rounded-full border border-border/50 p-2 text-muted-foreground transition-all duration-200 hover:border-primary/40 hover:text-foreground" aria-label={accessibilityCopy.search} title={accessibilityCopy.search}><Search className="h-4 w-4" /></a>
 
           <button
             onClick={() => scrollTo("contact")}
@@ -270,7 +272,7 @@ export default function Navigation() {
           <button
             onClick={() => setMobileOpen(!mobileOpen)}
             ref={mobileMenuButtonRef}
-            className="nav-control min-[1536px]:hidden p-2 text-foreground"
+            className="nav-control min-[1536px]:hidden inline-flex shrink-0 items-center justify-center p-2 text-foreground"
             aria-label={mobileOpen ? accessibilityCopy.closeMenu : accessibilityCopy.openMenu}
             aria-expanded={mobileOpen}
             aria-controls="mobile-navigation"
@@ -302,6 +304,7 @@ export default function Navigation() {
             <a href="/questions-anesthesie" onClick={() => setMobileOpen(false)} className={medicalQuestionsMobileClass}>{medicalQuestionsLabel}</a>
             <button onClick={() => scrollTo("contact")} className="nav-mobile-link text-left text-lg font-medium text-foreground py-2 border-b border-border/20">{content.nav.contact}</button>
             <a href="/search" onClick={() => setMobileOpen(false)} className="nav-mobile-link flex items-center gap-2 text-left text-lg font-medium text-foreground py-2 border-b border-border/20"><Search className="h-4 w-4" />{language === "fr" ? "Rechercher" : language === "en" ? "Search" : language === "de" ? "Suche" : "搜索"}</a>
+            {toggleTheme && <button onClick={toggleTheme} className="nav-mobile-link flex items-center gap-2 text-left text-lg font-medium text-foreground py-2 border-b border-border/20">{theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}{theme === "dark" ? accessibilityCopy.enableLight : accessibilityCopy.enableDark}</button>}
             {toggleHighReadability && readabilityCopy && <button onClick={toggleHighReadability} className="nav-mobile-link flex items-center gap-2 text-left text-lg font-medium text-foreground py-2 border-b border-border/20" aria-pressed={highReadability}><Accessibility className="h-4 w-4" />{readabilityCopy.label}</button>}
             {theme === "dark" && toggleOledDark && oledCopy && <button onClick={toggleOledDark} className="nav-mobile-link flex items-center gap-2 text-left text-lg font-medium text-foreground py-2 border-b border-border/20" aria-pressed={oledDark}><CircleDot className="h-4 w-4" />{oledCopy.label}</button>}
             <button
