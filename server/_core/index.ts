@@ -393,10 +393,8 @@ export async function createApp() {
       )`);
 
       try {
-        await notifyOwner({
-          title: `Nouveau brief employeur (${briefId})`,
-          content: `Organisation: ${parsed.data.organizationName}\nContact: ${parsed.data.contactName} (${parsed.data.email})\nEnvironnement: ${parsed.data.targetEnvironment}\nSpécialité: ${parsed.data.specialtyNeeded} (${parsed.data.country})`,
-        });
+        const { buildClientBriefOwnerNotification } = await import("../clientBriefNotification");
+        await notifyOwner(buildClientBriefOwnerNotification({ briefId, ...parsed.data, adminUrl: `${PUBLIC_APP_ORIGIN}/admin` }));
       } catch {
         // notification fail non bloquante
       }

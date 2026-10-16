@@ -5,6 +5,7 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { canRequestCandidateDocumentReanalysis } from "../shared/candidateDocumentReanalysis";
 import { getDb } from "./db";
+import { mutationRowCount } from "./dbMutation";
 import { candidateAccounts, candidateDocumentAuditLogs, candidateDocuments, contactMessages, gdprRequests, testimonials, appointments, blogPosts, availabilitySlots, blockedDates, cvApplications, cvCandidateCertifications, cvCandidateLanguages, cvGoogleDriveExportJobs, recruitmentAuditLogs, recruitmentMatchProfiles, clientBriefs, clientBriefCandidates, recruitmentCampaigns, recruitmentCampaignRecipients, recruitmentEmailEvents, recruitmentFollowUpTasks, recruitmentOfferTemplates, securityEvents } from "../drizzle/schema";
 import { notifyOwner } from "./_core/notification";
 import { storageGetSignedUrl } from "./storage";
@@ -327,6 +328,74 @@ export function isBookableAppointmentTime(
 
 function getSafeCheckoutOrigin(): string {
   return DEFAULT_PUBLIC_ORIGIN;
+}
+
+type CampaignDb = NonNullable<Awaited<ReturnType<typeof getDb>>>;
+
+/** Sends one campaign email and records the outcome; returns true when the provider accepted it. */
+async function deliverCampaignRecipient(
+  db: CampaignDb,
+  campaign: { id: number; title: string; subject: string; body: string; language: string },
+  candidate: { id: number; firstName: string; lastName: string; email: string; marketingUnsubscribeToken: string | null },
+  recipientId: number,
+  adminOpenId: string,
+) {
+  const unsubscribeToken = candidate.marketingUnsubscribeToken || randomUUID().replace(/-/g, "");
+  if (!candidate.marketingUnsubscribeToken) {
+    await db.update(cvApplications).set({ marketingUnsubscribeToken: unsubscribeToken }).where(eq(cvApplications.id, candidate.id));
+  }
+  try {
+    const email = await sendRecruitmentCampaignEmail({
+      candidateEmail: candidate.email,
+      candidateName: `${candidate.firstName} ${candidate.lastName}`,
+      campaignTitle: campaign.title,
+      subject: campaign.subject,
+      body: campaign.body,
+      language: campaign.language as RecruitmentEmailLanguage,
+      unsubscribeUrl: `${DEFAULT_PUBLIC_ORIGIN}/recruitment/unsubscribe?token=${encodeURIComponent(unsubscribeToken)}`,
+    });
+    const contactedAt = new Date();
+    await db.update(recruitmentCampaignRecipients).set({ deliveryStatus: "sent", providerEmailId: email.id || null, error: null, sentAt: contactedAt, lastEventAt: contactedAt }).where(eq(recruitmentCampaignRecipients.id, recipientId));
+    await db.update(cvApplications).set({ lastContactedAt: contactedAt }).where(eq(cvApplications.id, candidate.id));
+    await db.insert(recruitmentFollowUpTasks).values([
+      { applicationId: candidate.id, campaignId: campaign.id, kind: "follow_up_7", dueAt: new Date(contactedAt.getTime() + 7 * 24 * 60 * 60 * 1000), notes: "Relance suggérée à J+7 — aucun email n’est envoyé automatiquement." },
+      { applicationId: candidate.id, campaignId: campaign.id, kind: "follow_up_14", dueAt: new Date(contactedAt.getTime() + 14 * 24 * 60 * 60 * 1000), notes: "Relance suggérée à J+14 — aucun email n’est envoyé automatiquement." },
+    ]);
+    await logRecruitmentAction({ applicationId: candidate.id, adminOpenId, action: "email", metadata: { campaignId: campaign.id, resendId: email.id, language: campaign.language } });
+    return true;
+  } catch (error) {
+    await db.update(recruitmentCampaignRecipients).set({ deliveryStatus: "failed", error: error instanceof Error ? error.message.slice(0, 2000) : "Unknown campaign email failure" }).where(eq(recruitmentCampaignRecipients.id, recipientId));
+    return false;
+  }
+}
+
+/** What really happened to a manual CV re-analysis (ADM-REC-02). */
+export function reanalysisOutcome(
+  queue: { alreadyRunning: boolean },
+  processing: { processed: number; results: Array<Record<string, unknown>> },
+): { outcome: "completed" | "needs_review" | "retry_scheduled" | "failed" | "already_running" | "queued"; error: string | null } {
+  const result = processing.results[0];
+  if (!processing.processed || !result) return { outcome: queue.alreadyRunning ? "already_running" : "queued", error: null };
+  if (result.completed === true) return { outcome: result.needsReview ? "needs_review" : "completed", error: null };
+  const error = typeof result.error === "string" ? result.error : typeof result.reason === "string" ? result.reason : null;
+  return { outcome: result.retry ? "retry_scheduled" : "failed", error };
+}
+
+/** What really happened to a manual Google Drive copy (ADM-DRIVE-01). */
+export function driveRetryOutcome(
+  queue: { alreadyCompleted: boolean; alreadyRunning: boolean },
+  processing: { processed: number; waitingForAuthorization?: boolean; results: Array<Record<string, unknown>> },
+): { outcome: "completed" | "already_completed" | "already_running" | "not_connected" | "waiting_validation" | "retry_scheduled" | "failed" | "queued"; error: string | null } {
+  if (queue.alreadyCompleted) return { outcome: "already_completed", error: null };
+  if (queue.alreadyRunning) return { outcome: "already_running", error: null };
+  if (processing.waitingForAuthorization) return { outcome: "not_connected", error: "google_drive_not_connected" };
+  const result = processing.results[0];
+  if (!processing.processed || !result) return { outcome: "queued", error: null };
+  if (result.completed === true) return { outcome: "completed", error: null };
+  if (result.reason === "cv_not_accepted") return { outcome: "waiting_validation", error: null };
+  if (result.reason === "connection_missing") return { outcome: "not_connected", error: "google_drive_not_connected" };
+  const error = typeof result.error === "string" ? result.error : typeof result.reason === "string" ? result.reason : null;
+  return { outcome: result.retry ? "retry_scheduled" : "failed", error };
 }
 
 export const appRouter = router({
@@ -1136,15 +1205,16 @@ export const appRouter = router({
           const { processDueCvGoogleDriveExports, retryCvGoogleDriveExport } = await import("./googleDriveExport");
           const queue = await retryCvGoogleDriveExport(application.id);
           const processing = queue.alreadyCompleted || queue.alreadyRunning
-            ? { processed: 0 }
+            ? { processed: 0, waitingForAuthorization: false, results: [] as Array<Record<string, unknown>> }
             : await processDueCvGoogleDriveExports(1, [application.id]);
+          const outcome = driveRetryOutcome(queue, processing);
           await logRecruitmentAction({
             applicationId: application.id,
             adminOpenId: ctx.user.openId,
             action: "export",
-            metadata: { event: "google_drive_retry", ...queue, processed: processing.processed },
+            metadata: { event: "google_drive_retry", ...queue, processed: processing.processed, outcome: outcome.outcome },
           });
-          return { success: true, ...queue, processed: processing.processed };
+          return { success: true, ...queue, processed: processing.processed, ...outcome };
         }),
       }),
       list: adminProcedure
@@ -1402,6 +1472,8 @@ export const appRouter = router({
             delivered: sql<number>`COUNT(DISTINCT CASE WHEN ${recruitmentCampaignRecipients.deliveryStatus} = 'delivered' THEN ${recruitmentCampaignRecipients.id} END)`,
             sent: sql<number>`COUNT(DISTINCT CASE WHEN ${recruitmentCampaignRecipients.deliveryStatus} IN ('sent', 'delivered') THEN ${recruitmentCampaignRecipients.id} END)`,
             failed: sql<number>`COUNT(DISTINCT CASE WHEN ${recruitmentCampaignRecipients.deliveryStatus} IN ('failed', 'bounced', 'complained', 'suppressed') THEN ${recruitmentCampaignRecipients.id} END)`,
+            // Only a send that failed before the provider accepted it can be retried.
+            retryable: sql<number>`COUNT(DISTINCT CASE WHEN ${recruitmentCampaignRecipients.deliveryStatus} = 'failed' THEN ${recruitmentCampaignRecipients.id} END)`,
             delayed: sql<number>`COUNT(DISTINCT CASE WHEN ${recruitmentCampaignRecipients.deliveryStatus} = 'delayed' THEN ${recruitmentCampaignRecipients.id} END)`,
             opened: sql<number>`COUNT(DISTINCT CASE WHEN ${recruitmentEmailEvents.eventType} = 'email.opened' THEN ${recruitmentCampaignRecipients.id} END)`,
           }).from(recruitmentCampaignRecipients)
@@ -1409,7 +1481,7 @@ export const appRouter = router({
             .where(inArray(recruitmentCampaignRecipients.campaignId, campaigns.map(campaign => campaign.id)))
             .groupBy(recruitmentCampaignRecipients.campaignId);
           const metricByCampaign = new Map(metrics.map(metric => [metric.campaignId, metric]));
-          return campaigns.map(campaign => ({ ...campaign, delivery: metricByCampaign.get(campaign.id) || { total: 0, sent: 0, delivered: 0, failed: 0, delayed: 0, opened: 0 } }));
+          return campaigns.map(campaign => ({ ...campaign, delivery: metricByCampaign.get(campaign.id) || { total: 0, sent: 0, delivered: 0, failed: 0, retryable: 0, delayed: 0, opened: 0 } }));
         }),
 
         send: adminProcedure
@@ -1457,41 +1529,63 @@ export const appRouter = router({
               createdByOpenId: ctx.user.openId,
             }).returning({ id: recruitmentCampaigns.id });
             const campaignId = Number(campaignResult.id);
+            const campaign = { id: campaignId, title: input.title, subject: input.subject, body: input.body, language: input.language };
             let sent = 0;
             let failed = 0;
             for (const candidate of audience) {
-              const unsubscribeToken = candidate.marketingUnsubscribeToken || randomUUID().replace(/-/g, "");
-              if (!candidate.marketingUnsubscribeToken) {
-                await db.update(cvApplications).set({ marketingUnsubscribeToken: unsubscribeToken }).where(eq(cvApplications.id, candidate.id));
-              }
               const [recipientResult] = await db.insert(recruitmentCampaignRecipients).values({ campaignId, applicationId: candidate.id, recipientEmail: candidate.email, deliveryStatus: "queued" }).returning({ id: recruitmentCampaignRecipients.id });
-              const recipientId = Number(recipientResult.id);
-              try {
-                const email = await sendRecruitmentCampaignEmail({
-                  candidateEmail: candidate.email,
-                  candidateName: `${candidate.firstName} ${candidate.lastName}`,
-                  campaignTitle: input.title,
-                  subject: input.subject,
-                  body: input.body,
-                  language: input.language as RecruitmentEmailLanguage,
-                  unsubscribeUrl: `${DEFAULT_PUBLIC_ORIGIN}/recruitment/unsubscribe?token=${encodeURIComponent(unsubscribeToken)}`,
-                });
-                const contactedAt = new Date();
-                await db.update(recruitmentCampaignRecipients).set({ deliveryStatus: "sent", providerEmailId: email.id || null, sentAt: contactedAt, lastEventAt: contactedAt }).where(eq(recruitmentCampaignRecipients.id, recipientId));
-                await db.update(cvApplications).set({ lastContactedAt: contactedAt }).where(eq(cvApplications.id, candidate.id));
-                await db.insert(recruitmentFollowUpTasks).values([
-                  { applicationId: candidate.id, campaignId, kind: "follow_up_7", dueAt: new Date(contactedAt.getTime() + 7 * 24 * 60 * 60 * 1000), notes: "Relance suggérée à J+7 — aucun email n’est envoyé automatiquement." },
-                  { applicationId: candidate.id, campaignId, kind: "follow_up_14", dueAt: new Date(contactedAt.getTime() + 14 * 24 * 60 * 60 * 1000), notes: "Relance suggérée à J+14 — aucun email n’est envoyé automatiquement." },
-                ]);
-                await logRecruitmentAction({ applicationId: candidate.id, adminOpenId: ctx.user.openId, action: "email", metadata: { campaignId, resendId: email.id, language: input.language } });
-                sent += 1;
-              } catch (error) {
-                await db.update(recruitmentCampaignRecipients).set({ deliveryStatus: "failed", error: error instanceof Error ? error.message.slice(0, 2000) : "Unknown campaign email failure" }).where(eq(recruitmentCampaignRecipients.id, recipientId));
-                failed += 1;
-              }
+              if (await deliverCampaignRecipient(db, campaign, candidate, Number(recipientResult.id), ctx.user.openId)) sent += 1;
+              else failed += 1;
             }
             await db.update(recruitmentCampaigns).set({ status: failed === 0 ? "sent" : sent > 0 ? "partially_sent" : "failed", sentAt: new Date() }).where(eq(recruitmentCampaigns.id, campaignId));
             return { campaignId, total: audience.length, sent, failed };
+          }),
+
+        /**
+         * Sends the campaign again to its failed recipients only (provider
+         * error before acceptance). Bounces, complaints, suppressions and
+         * candidates who withdrew their consent are never retried; recipients
+         * already served are never emailed twice.
+         */
+        retryFailed: adminProcedure
+          .input(z.object({ campaignId: z.number().int().positive(), confirmed: z.literal(true) }))
+          .mutation(async ({ input, ctx }) => {
+            const db = await getDb();
+            if (!db) throw new Error("Database connection failed");
+            const [campaign] = await db.select({ id: recruitmentCampaigns.id, title: recruitmentCampaigns.title, subject: recruitmentCampaigns.subject, body: recruitmentCampaigns.body, language: recruitmentCampaigns.language })
+              .from(recruitmentCampaigns).where(eq(recruitmentCampaigns.id, input.campaignId)).limit(1);
+            if (!campaign) throw new TRPCError({ code: "NOT_FOUND", message: "Campagne introuvable" });
+            const failedRecipients = await db.select({ recipientId: recruitmentCampaignRecipients.id, applicationId: recruitmentCampaignRecipients.applicationId })
+              .from(recruitmentCampaignRecipients)
+              .where(and(eq(recruitmentCampaignRecipients.campaignId, campaign.id), eq(recruitmentCampaignRecipients.deliveryStatus, "failed")))
+              .limit(200);
+            const eligible = failedRecipients.length
+              ? await db.select({ id: cvApplications.id, firstName: cvApplications.firstName, lastName: cvApplications.lastName, email: cvApplications.email, marketingUnsubscribeToken: cvApplications.marketingUnsubscribeToken })
+                .from(cvApplications)
+                .where(and(inArray(cvApplications.id, failedRecipients.map(recipient => recipient.applicationId)), eq(cvApplications.marketingConsent, 1), isNull(cvApplications.marketingUnsubscribedAt), isNull(cvApplications.marketingSuppressedAt), sql`${cvApplications.status} NOT IN ('rejected', 'archived')`))
+              : [];
+            const candidateById = new Map(eligible.map(candidate => [candidate.id, candidate]));
+            let sent = 0;
+            let failed = 0;
+            let skipped = 0;
+            for (const recipient of failedRecipients) {
+              const candidate = candidateById.get(recipient.applicationId);
+              if (!candidate) {
+                await db.update(recruitmentCampaignRecipients).set({ deliveryStatus: "skipped", error: "consent_withdrawn_or_profile_closed" }).where(and(eq(recruitmentCampaignRecipients.id, recipient.recipientId), eq(recruitmentCampaignRecipients.deliveryStatus, "failed")));
+                skipped += 1;
+                continue;
+              }
+              // Claim the row: a concurrent retry cannot send the same email twice.
+              const claimed = await db.update(recruitmentCampaignRecipients).set({ deliveryStatus: "queued", error: null })
+                .where(and(eq(recruitmentCampaignRecipients.id, recipient.recipientId), eq(recruitmentCampaignRecipients.deliveryStatus, "failed")));
+              if (mutationRowCount(claimed) !== 1) continue;
+              if (await deliverCampaignRecipient(db, campaign, candidate, recipient.recipientId, ctx.user.openId)) sent += 1;
+              else failed += 1;
+            }
+            const statuses = await db.select({ deliveryStatus: recruitmentCampaignRecipients.deliveryStatus }).from(recruitmentCampaignRecipients).where(eq(recruitmentCampaignRecipients.campaignId, campaign.id));
+            const served = statuses.filter(row => ["sent", "delivered", "delayed"].includes(row.deliveryStatus)).length;
+            await db.update(recruitmentCampaigns).set({ status: served === statuses.length ? "sent" : served > 0 ? "partially_sent" : "failed" }).where(eq(recruitmentCampaigns.id, campaign.id));
+            return { campaignId: campaign.id, attempted: failedRecipients.length, sent, failed, skipped };
           }),
       }),
 
@@ -1765,9 +1859,15 @@ export const appRouter = router({
           const db = await getDb();
           if (!db) throw new Error("Database connection failed");
 
+          // A status change alone must never erase the recruiter's note: the
+          // note is only written when the client sends it (empty clears it).
           await db
             .update(cvApplications)
-            .set({ status: input.status, adminNotes: input.adminNotes ?? null, updatedAt: new Date() })
+            .set({
+              status: input.status,
+              ...(input.adminNotes !== undefined ? { adminNotes: input.adminNotes || null } : {}),
+              updatedAt: new Date(),
+            })
             .where(eq(cvApplications.id, input.id));
           await logRecruitmentAction({ applicationId: input.id, adminOpenId: ctx.user.openId, action: "status_update", metadata: { status: input.status } });
 
@@ -1819,13 +1919,14 @@ export const appRouter = router({
           const { enqueueCvAnalysis, processDueCvAnalysisJobs } = await import("./recruitmentProcessing");
           const queue = await enqueueCvAnalysis(application.id);
           const processing = await processDueCvAnalysisJobs(1, [application.id]);
+          const outcome = reanalysisOutcome(queue, processing);
           await logRecruitmentAction({
             applicationId: application.id,
             adminOpenId: ctx.user.openId,
             action: "reanalyze",
-            metadata: { queued: queue.queued, accelerated: queue.accelerated, alreadyRunning: queue.alreadyRunning, processed: processing.processed },
+            metadata: { queued: queue.queued, accelerated: queue.accelerated, alreadyRunning: queue.alreadyRunning, processed: processing.processed, outcome: outcome.outcome },
           });
-          return { success: true, queued: queue.queued || queue.accelerated, processed: processing.processed };
+          return { success: true, queued: queue.queued || queue.accelerated, processed: processing.processed, ...outcome };
         }),
 
       reanalyzeFailed: adminProcedure
@@ -1909,7 +2010,15 @@ export const appRouter = router({
         .mutation(async ({ input }) => {
           const db = await getDb();
           if (!db) throw new Error("Database connection failed");
-          await db.update(clientBriefs).set({ status: input.status }).where(eq(clientBriefs.id, input.id));
+          const [brief] = await db.select({ id: clientBriefs.id, acknowledgedAt: clientBriefs.acknowledgedAt, shortlistSentAt: clientBriefs.shortlistSentAt }).from(clientBriefs).where(eq(clientBriefs.id, input.id)).limit(1);
+          if (!brief) throw new TRPCError({ code: "NOT_FOUND", message: "Brief introuvable" });
+          const now = new Date();
+          await db.update(clientBriefs).set({
+            status: input.status,
+            // First qualification = acknowledgement; first shortlist sent is dated.
+            ...(input.status !== "new" && !brief.acknowledgedAt ? { acknowledgedAt: now } : {}),
+            ...(input.status === "shortlist_sent" && !brief.shortlistSentAt ? { shortlistSentAt: now } : {}),
+          }).where(eq(clientBriefs.id, input.id));
           return { success: true };
         }),
       candidates: adminProcedure

@@ -9,6 +9,11 @@ import Candidate360Dialog from "./Candidate360Dialog";
 import {
   recruitmentDriveExportLabel,
   recruitmentDriveExportErrorLabel,
+  recruitmentAnalysisErrorLabel,
+  reanalysisToast,
+  driveRetryToast,
+  googleDriveConnectionState,
+  type AdminToast,
   recruitmentDriveExportTone,
   recruitmentCandidatePortalLabel,
   recruitmentEmailDeliveryErrorLabel,
@@ -105,6 +110,13 @@ function analysisStatusTone(status: string | null | undefined) {
   return "border-primary/25 bg-primary/10 text-primary";
 }
 
+function showAdminToast(notice: AdminToast) {
+  if (notice.tone === "success") toast.success(notice.message);
+  else if (notice.tone === "warning") toast.warning(notice.message, { duration: 10_000 });
+  else if (notice.tone === "error") toast.error(notice.message, { duration: 10_000 });
+  else toast.info(notice.message);
+}
+
 const ERASURE_CONFIRMATION = "Effacer définitivement ce dossier ? Seront supprimés : le CV et ses copies (stockage et Google Drive), les analyses IA, les relances et historiques d’emails, la présence dans les missions, ainsi que l’espace candidat lié, ses sessions et ses documents. Seule une preuve d’effacement anonymisée est conservée. Action irréversible.";
 
 function describeErasureReport(report: { storageObjectsDeleted: number; googleDrive: { status: string; deleted: number }; candidateAccountsErased: number; candidateDocumentsDeleted: number; rowsDeleted: Record<string, number>; otherApplicationsWithSameEmail: number }) {
@@ -173,8 +185,8 @@ export default function RecruitmentTab() {
   });
 
   const reanalyze = trpc.admin.recruitment.reanalyze.useMutation({
-    onSuccess: ({ processed }) => {
-      toast.success(processed > 0 ? "Analyse relancée et résultat actualisé" : "Analyse déjà en cours de traitement");
+    onSuccess: result => {
+      showAdminToast(reanalysisToast(result));
       utils.admin.recruitment.list.invalidate();
     },
     onError: mutationError => toast.error(mutationError.message),
@@ -193,13 +205,7 @@ export default function RecruitmentTab() {
 
   const retryDriveExport = trpc.admin.recruitment.driveExport.retry.useMutation({
     onSuccess: result => {
-      toast.success(result.alreadyCompleted
-        ? "Le CV est déjà présent dans Google Drive"
-        : result.alreadyRunning
-          ? "La copie Google Drive est déjà en cours"
-          : result.processed > 0
-            ? "Copie Google Drive relancée"
-            : "Copie Google Drive remise en file");
+      showAdminToast(driveRetryToast(result));
       utils.admin.recruitment.list.invalidate();
       driveExportStatus.refetch();
     },
@@ -281,9 +287,12 @@ export default function RecruitmentTab() {
         <div className="flex flex-wrap gap-2">
           <a
             href="/api/google-drive/oauth/connect"
-            className="inline-flex h-9 items-center rounded-md border border-primary/30 bg-primary/10 px-3 text-sm font-medium text-primary transition-colors hover:bg-primary/20"
+            className={googleDriveConnectionState(driveExportStatus.data).needsAttention
+              ? "inline-flex h-9 items-center rounded-md border border-amber-500/40 bg-amber-500/10 px-3 text-sm font-medium text-amber-700 transition-colors hover:bg-amber-500/20 dark:text-amber-300"
+              : "inline-flex h-9 items-center rounded-md border border-primary/30 bg-primary/10 px-3 text-sm font-medium text-primary transition-colors hover:bg-primary/20"}
+            title={driveExportStatus.data?.lastError ? recruitmentDriveExportErrorLabel(driveExportStatus.data.lastError) ?? undefined : undefined}
           >
-            {driveExportStatus.data?.connected ? "Google Drive connecté" : "Connecter Google Drive"}
+            {googleDriveConnectionState(driveExportStatus.data).label}
           </a>
           <Button variant="outline" onClick={() => reanalyzeFailed.mutate({ limit: 10 })} disabled={reanalyzeFailed.isPending}>
             <BrainCircuit className={`mr-2 h-4 w-4 ${reanalyzeFailed.isPending ? "animate-pulse" : ""}`} />
@@ -420,7 +429,7 @@ export default function RecruitmentTab() {
                       {application.analysisModel && <p><strong className="text-foreground">Analyse :</strong> {application.analysisModel} · {application.analysisPromptVersion || "version non renseignée"}</p>}
                       {application.extractionMethod && <p><strong className="text-foreground">Extraction :</strong> {application.extractionMethod}{application.extractionTotalPages ? ` · ${application.extractionTotalPages} page${application.extractionTotalPages > 1 ? "s" : ""}` : ""}</p>}
                       {application.ocrModelVersion && <p><strong className="text-foreground">OCR :</strong> {application.ocrModelVersion}{application.ocrConfidence !== null ? ` · confiance ${application.ocrConfidence}%` : ""}</p>}
-                      {application.analysisLastError && <p className="text-destructive"><strong>Dernière erreur :</strong> {application.analysisLastError}</p>}
+                      {application.analysisLastError && <p className="text-destructive" title={application.analysisLastError}><strong>Dernière erreur :</strong> {recruitmentAnalysisErrorLabel(application.analysisLastError)}</p>}
                       {application.message && <p className="pt-2"><strong className="text-foreground">Message :</strong> {application.message}</p>}
                     </div>
 
