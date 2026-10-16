@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { and, asc, eq, gt, inArray, isNotNull, isNull, like, lt, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, like, lt, or, sql } from "drizzle-orm";
 import {
   candidateAccounts,
   candidateDocumentAuditLogs,
@@ -330,4 +330,80 @@ export async function eraseExpiredCandidateDocuments(input: { now?: Date; limit?
     await db.insert(candidateDocumentAuditLogs).values({ candidateId, documentId: null, actorType: "system", actorReference: "retention", action: "erased", metadata: JSON.stringify({ reason: "retention_expired", documentsDeleted: count, performedAt: now.toISOString() }) });
   }
   return { deleted, failed: 0 };
+}
+
+/**
+ * Retention of candidate accounts that belong to no application (opened on
+ * /candidate/access and never followed by an application, or never
+ * activated): erased with their sessions and remaining documents two years
+ * after their latest activity (sign-up, account change, sign-in; a session
+ * lasts 7 days and every vault document carries its own retention date). An
+ * unlinked account whose address matches an application is attached to it
+ * instead and then follows that dossier's retention. Stored objects first; on
+ * a storage failure nothing is removed from the database for that account.
+ */
+export async function eraseInactiveCandidateAccounts(input: { now?: Date; limit?: number; dependencies?: CandidateErasureDependencies } = {}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+  const dependencies = input.dependencies ?? defaultDependencies;
+  const now = input.now ?? new Date();
+  const inactiveSince = new Date(now);
+  inactiveSince.setFullYear(inactiveSince.getFullYear() - 2);
+  const accounts = await db.select({ id: candidateAccounts.id, email: candidateAccounts.email }).from(candidateAccounts)
+    .where(and(
+      isNull(candidateAccounts.linkedApplicationId),
+      lt(candidateAccounts.createdAt, inactiveSince),
+      lt(candidateAccounts.updatedAt, inactiveSince),
+      or(isNull(candidateAccounts.lastLoginAt), lt(candidateAccounts.lastLoginAt, inactiveSince)),
+    ))
+    .orderBy(asc(candidateAccounts.id))
+    .limit(Math.min(Math.max(input.limit ?? 25, 1), 100));
+  let erased = 0;
+  let attached = 0;
+  let failed = 0;
+  let documentsDeleted = 0;
+  let storageObjectsDeleted = 0;
+  for (const account of accounts) {
+    const [application] = await db.select({ id: cvApplications.id }).from(cvApplications)
+      .where(sql`lower(${cvApplications.email}) = ${account.email}`)
+      .orderBy(desc(cvApplications.id))
+      .limit(1);
+    if (application) {
+      await db.update(candidateAccounts).set({ linkedApplicationId: application.id })
+        .where(and(eq(candidateAccounts.id, account.id), isNull(candidateAccounts.linkedApplicationId)));
+      attached += 1;
+      continue;
+    }
+    const documents = await db.select({ id: candidateDocuments.id, storageKey: candidateDocuments.storageKey, retentionUntil: candidateDocuments.retentionUntil })
+      .from(candidateDocuments).where(eq(candidateDocuments.candidateId, account.id));
+    if (documents.some(document => !document.retentionUntil || document.retentionUntil.getTime() > now.getTime())) continue;
+    const [liveSession] = await db.select({ id: candidateSessions.id }).from(candidateSessions)
+      .where(and(eq(candidateSessions.candidateId, account.id), isNull(candidateSessions.revokedAt), gt(candidateSessions.expiresAt, now)))
+      .limit(1);
+    if (liveSession) continue;
+    try {
+      const keys = new Set(documents.map(document => document.storageKey));
+      for (const key of await dependencies.storageListKeys(`candidate-documents/quarantine/${account.id}/`)) keys.add(key);
+      if (keys.size) storageObjectsDeleted += await dependencies.storageDelete(Array.from(keys));
+    } catch (error) {
+      failed += 1;
+      console.error("[RecruitmentRetention] inactive candidate account storage deletion failed", error instanceof Error ? error.message : "unknown");
+      continue;
+    }
+    const documentIds = documents.map(document => document.id);
+    if (documentIds.length) await db.delete(candidateDocumentProcessingJobs).where(inArray(candidateDocumentProcessingJobs.documentId, documentIds));
+    await db.delete(candidateDocumentAuditLogs).where(documentIds.length
+      ? or(eq(candidateDocumentAuditLogs.candidateId, account.id), inArray(candidateDocumentAuditLogs.documentId, documentIds))
+      : eq(candidateDocumentAuditLogs.candidateId, account.id));
+    documentsDeleted += mutationRowCount(await db.delete(candidateDocuments).where(eq(candidateDocuments.candidateId, account.id)));
+    await db.delete(candidateSessions).where(eq(candidateSessions.candidateId, account.id));
+    await db.delete(securityEvents).where(or(
+      and(eq(securityEvents.actorKind, "candidate"), eq(securityEvents.actorReference, String(account.id))),
+      inArray(securityEvents.actorReference, [account.email, hashSecurityValue(account.email)]),
+    ));
+    erased += mutationRowCount(await db.delete(candidateAccounts).where(eq(candidateAccounts.id, account.id)));
+    // Minimal proof: no name, email or file name.
+    await db.insert(candidateDocumentAuditLogs).values({ candidateId: account.id, documentId: null, actorType: "system", actorReference: "retention", action: "erased", metadata: JSON.stringify({ reason: "inactive_account_retention_expired", emailHash: hashSecurityValue(account.email), documentsDeleted: documentIds.length, performedAt: now.toISOString() }) });
+  }
+  return { erased, attached, failed, documentsDeleted, storageObjectsDeleted };
 }
