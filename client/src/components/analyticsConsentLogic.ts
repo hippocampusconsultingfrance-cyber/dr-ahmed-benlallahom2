@@ -1,12 +1,8 @@
-import { normalizeCookieConsent } from "./cookieConsentState";
+import { readValidCookieConsent } from "./cookieConsentState";
 
 export const COOKIE_CONSENT_CHANGE_EVENT = "cookie-consent-change";
 
-export function shouldLoadAnalytics(storedConsent: string | null) {
-  if (!storedConsent) return false;
-  try {
-    return normalizeCookieConsent(JSON.parse(storedConsent))?.performance === true;
-  } catch {
-    return false;
-  }
+/** Mesure d'audience uniquement avec un consentement « performance » daté et non expiré. */
+export function shouldLoadAnalytics(storedConsent: string | null, now: number = Date.now()) {
+  return readValidCookieConsent(storedConsent, now)?.performance === true;
 }
