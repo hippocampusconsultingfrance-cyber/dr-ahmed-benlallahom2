@@ -91,6 +91,45 @@ export function isCandidatePasswordSet(storedHash: string | null | undefined): b
   return typeof storedHash === "string" && storedHash.startsWith("scrypt$");
 }
 
+let dummyPasswordHash: Promise<string> | null = null;
+
+/** A valid scrypt record whose password nobody knows, used to equalise response times. */
+function candidateDummyPasswordHash(): Promise<string> {
+  dummyPasswordHash ??= hashCandidatePassword(`timing-equaliser-${randomBytes(24).toString("base64url")}`).catch(error => {
+    dummyPasswordHash = null;
+    throw error;
+  });
+  return dummyPasswordHash;
+}
+
+/**
+ * Always performs one scrypt derivation, even when there is no usable hash
+ * (unknown, pending or disabled account), so that the response time of a
+ * sign-in does not reveal whether a candidate account exists (SEC-05 / CAND-13).
+ */
+export async function verifyCandidatePasswordInConstantTime(password: string, storedHash: string | null | undefined): Promise<boolean> {
+  // Awaited in every case so that the one-off cost of creating the dummy hash
+  // (first sign-in of a process) does not depend on the account either.
+  const dummyHash = await candidateDummyPasswordHash();
+  if (storedHash && isCandidatePasswordSet(storedHash)) return verifyCandidatePassword(password, storedHash);
+  await verifyCandidatePassword(password, dummyHash);
+  return false;
+}
+
+/** Minimum duration of anti-enumeration endpoints (register, resend, reset request); overridable by env. */
+export function candidateAuthResponseFloorMs(): number {
+  const configured = Number(process.env.CANDIDATE_AUTH_RESPONSE_FLOOR_MS);
+  if (Number.isFinite(configured) && configured >= 0) return Math.min(configured, 5000);
+  return process.env.NODE_ENV === "test" ? 0 : 1200;
+}
+
+/** Waits until at least floorMs (plus a little jitter) have elapsed since startedAt. */
+export async function waitForCandidateResponseFloor(startedAt: number, floorMs = candidateAuthResponseFloorMs()): Promise<void> {
+  if (floorMs <= 0) return;
+  const remaining = floorMs + randomBytes(1)[0] - (Date.now() - startedAt);
+  if (remaining > 0) await new Promise(resolve => setTimeout(resolve, remaining));
+}
+
 export function createCandidateToken(): string {
   return randomBytes(32).toString("base64url");
 }

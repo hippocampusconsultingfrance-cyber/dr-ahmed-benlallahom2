@@ -1,5 +1,5 @@
 import { parse as parseCookie } from "cookie";
-import { and, desc, eq, gt, isNotNull, isNull } from "drizzle-orm";
+import { and, desc, eq, gt, isNotNull, isNull, sql } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import {
@@ -23,7 +23,8 @@ import {
   hashCandidateToken,
   normalizeCandidateEmail,
   validateCandidatePassword,
-  verifyCandidatePassword,
+  verifyCandidatePasswordInConstantTime,
+  waitForCandidateResponseFloor,
 } from "./candidateAuth";
 import {
   buildCandidatePortalAccessIdempotencyKey,
@@ -33,10 +34,19 @@ import {
 import { storageGetSignedUrl } from "./storage";
 import { publicProcedure, router } from "./_core/trpc";
 import { candidateRequestIp, verifyCandidateTurnstile } from "./candidateTurnstile";
-import { enforcePersistentRateLimit, hashSecurityValue, isCompromisedPassword, logSecurityEvent, requestIpHash } from "./candidateSecurity";
+import { clearPersistentRateLimit, enforcePersistentRateLimit, hashSecurityValue, isCompromisedPassword, logSecurityEvent, recordPersistentRateLimitAttempt, requestIpHash } from "./candidateSecurity";
 import { buildCandidatePortalActivationEmailEvent } from "./recruitmentEmailTrace";
 
 type CandidateSession = typeof candidateAccounts.$inferSelect;
+
+const MINUTE_MS = 60 * 1000;
+
+/** Sign-in throttling settings, in one place (see the login procedure). */
+export const CANDIDATE_LOGIN_POLICY = {
+  network: { action: "candidate_login_ip", maxAttempts: 60, windowMs: 15 * MINUTE_MS, blockMs: 15 * MINUTE_MS },
+  emailNetwork: { action: "candidate_login", maxAttempts: 5, windowMs: 15 * MINUTE_MS, blockMs: 15 * MINUTE_MS },
+  email: { action: "candidate_login_email", maxAttempts: 10, windowMs: 60 * MINUTE_MS, blockMs: 60 * MINUTE_MS },
+} as const;
 
 const genericAccessMessage = "Si vos informations sont valides, vous recevrez les instructions nécessaires par email. Pensez à vérifier votre dossier Spam ou Courriers indésirables si le message n’apparaît pas dans votre boîte de réception.";
 
@@ -221,6 +231,7 @@ export const candidatePortalRouter = router({
       invitationToken: z.string().min(24).max(600).optional(),
     }).merge(turnstileInput))
     .mutation(async ({ input, ctx }) => {
+      const startedAt = Date.now();
       const email = normalizeCandidateEmail(input.email);
       const ipHash = requestIpHash(ctx.req.headers);
       try {
@@ -334,12 +345,15 @@ export const candidatePortalRouter = router({
         }
         await logSecurityEvent({ actorKind: "candidate", actorReference: String(candidateId), category: "candidate_account_created", outcome: "allowed", ipHash });
       }
+      // Same answer and similar duration whether or not an email was sent (SEC-05).
+      await waitForCandidateResponseFloor(startedAt);
       return { message: genericAccessMessage };
     }),
 
   resendVerification: publicProcedure
     .input(z.object({ email: z.string().email().max(320) }).merge(turnstileInput))
     .mutation(async ({ input, ctx }) => {
+      const startedAt = Date.now();
       const email = normalizeCandidateEmail(input.email);
       const ipHash = requestIpHash(ctx.req.headers);
       try {
@@ -397,6 +411,7 @@ export const candidatePortalRouter = router({
           });
         }
       }
+      await waitForCandidateResponseFloor(startedAt);
       return { message: genericAccessMessage };
     }),
 
@@ -473,40 +488,75 @@ export const candidatePortalRouter = router({
       return { success: true };
     }),
 
-  login: publicProcedure.input(genericAuthInput).mutation(async ({ input, ctx }) => {
+  /**
+   * Sign-in throttling (CAND-01 / CAND-12 / SEC-05 / SEC-06). Every counter is
+   * updated atomically before the password is checked, so parallel requests
+   * cannot bypass it, and none of them can lock a candidate out of their own
+   * device:
+   * - per network: CANDIDATE_LOGIN_POLICY.network (password spraying);
+   * - per email + network: a short pause after a few attempts, cleared by a
+   *   successful sign-in (a third party only blocks their own network);
+   * - per email, all networks: past a threshold the anti-bot check becomes
+   *   mandatory for this email instead of locking the account.
+   * The answer and its timing do not depend on whether the account exists.
+   */
+  login: publicProcedure.input(genericAuthInput.extend({ turnstileToken: z.string().min(20).max(4096).optional() })).mutation(async ({ input, ctx }) => {
     const db = databaseOrThrow(await getDb());
     const email = normalizeCandidateEmail(input.email);
     const ipHash = requestIpHash(ctx.req.headers);
+    const pairSubject = `${email}:${ipHash ?? "unknown"}`;
+    let networkState;
+    let pairState;
+    let emailState;
     try {
-      await enforcePersistentRateLimit({ action: "candidate_login", subject: `${email}:${ipHash ?? "unknown"}`, maxAttempts: 10, windowMs: 15 * 60 * 1000, blockMs: 15 * 60 * 1000 });
-    } catch {
-      await logSecurityEvent({ actorKind: "anonymous", actorReference: hashSecurityValue(email), category: "candidate_login_rate_limited", outcome: "blocked", severity: "warning", ipHash });
-      throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "Trop de tentatives. Veuillez réessayer dans quelques minutes." });
+      networkState = await recordPersistentRateLimitAttempt({ ...CANDIDATE_LOGIN_POLICY.network, subject: ipHash ?? "unknown" });
+      pairState = networkState.blocked ? null : await recordPersistentRateLimitAttempt({ ...CANDIDATE_LOGIN_POLICY.emailNetwork, subject: pairSubject });
+      emailState = networkState.blocked || pairState?.blocked ? null : await recordPersistentRateLimitAttempt({ ...CANDIDATE_LOGIN_POLICY.email, subject: email });
+    } catch (error) {
+      console.error("candidate_login_throttle_unavailable", error instanceof Error ? error.name : "UnknownError");
+      throw new TRPCError({ code: "SERVICE_UNAVAILABLE", message: "La connexion est temporairement indisponible. Veuillez réessayer dans quelques instants." });
+    }
+    if (networkState.blocked || pairState?.blocked) {
+      await logSecurityEvent({ actorKind: "anonymous", actorReference: hashSecurityValue(email), category: "candidate_login_rate_limited", outcome: "blocked", severity: "warning", ipHash, metadata: { scope: networkState.blocked ? "network" : "email_network" } });
+      throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "Trop de tentatives de connexion depuis cet appareil. Patientez 15 minutes ou réinitialisez votre mot de passe." });
+    }
+    if (emailState?.blocked) {
+      const challengeError = new TRPCError({ code: "PRECONDITION_FAILED", message: "Pour votre sécurité, effectuez la vérification anti-bot avant de vous connecter." });
+      if (emailState.newlyBlocked) {
+        // Many attempts on one email from several networks: alert once per block.
+        await logSecurityEvent({ actorKind: "anonymous", actorReference: hashSecurityValue(email), category: "candidate_login_challenge_enabled", outcome: "alert", severity: "high", ipHash });
+      }
+      if (!input.turnstileToken) throw challengeError;
+      try {
+        await verifyCandidateTurnstile({ token: input.turnstileToken, remoteIp: candidateRequestIp(ctx.req.headers) });
+      } catch {
+        await logSecurityEvent({ actorKind: "anonymous", actorReference: hashSecurityValue(email), category: "candidate_login_turnstile", outcome: "blocked", severity: "warning", ipHash });
+        throw challengeError;
+      }
     }
     const candidate = (await db.select().from(candidateAccounts).where(eq(candidateAccounts.email, email)).limit(1))[0];
     const genericError = new TRPCError({ code: "UNAUTHORIZED", message: "Email ou mot de passe incorrect." });
-    if (!candidate || candidate.status !== "active" || !candidate.emailVerifiedAt) {
-      await logSecurityEvent({ actorKind: "anonymous", actorReference: hashSecurityValue(email), category: "candidate_login", outcome: "failed", severity: "warning", ipHash });
+    const usable = Boolean(candidate && candidate.status === "active" && candidate.emailVerifiedAt);
+    // One scrypt derivation in every case: unknown, pending and disabled accounts take as long as a wrong password.
+    const valid = await verifyCandidatePasswordInConstantTime(input.password, usable ? candidate!.passwordHash : null);
+    if (!usable || !valid) {
+      if (usable) {
+        // Monitoring counter only (no account-wide lock): single atomic increment.
+        const counted = await db.update(candidateAccounts).set({ failedLoginCount: sql`${candidateAccounts.failedLoginCount} + 1` }).where(eq(candidateAccounts.id, candidate!.id)).returning({ failedLoginCount: candidateAccounts.failedLoginCount });
+        const failedLoginCount = Number(counted[0]?.failedLoginCount ?? 0);
+        await logSecurityEvent({ actorKind: "candidate", actorReference: String(candidate!.id), category: "candidate_login", outcome: "failed", severity: failedLoginCount > 0 && failedLoginCount % 10 === 0 ? "high" : "warning", ipHash, metadata: { failedLoginCount } });
+      } else {
+        await logSecurityEvent({ actorKind: "anonymous", actorReference: hashSecurityValue(email), category: "candidate_login", outcome: "failed", severity: "warning", ipHash });
+      }
       throw genericError;
     }
-    if (candidate.lockedUntil && candidate.lockedUntil > new Date()) {
-      await logSecurityEvent({ actorKind: "candidate", actorReference: String(candidate.id), category: "candidate_login_locked", outcome: "blocked", severity: "warning", ipHash });
-      throw genericError;
-    }
-    const valid = await verifyCandidatePassword(input.password, candidate.passwordHash);
-    if (!valid) {
-      const failedLoginCount = candidate.failedLoginCount + 1;
-      await db.update(candidateAccounts).set({
-        failedLoginCount,
-        lockedUntil: failedLoginCount >= 5 ? new Date(Date.now() + 15 * 60 * 1000) : null,
-      }).where(eq(candidateAccounts.id, candidate.id));
-      await logSecurityEvent({ actorKind: "candidate", actorReference: String(candidate.id), category: "candidate_login", outcome: "failed", severity: failedLoginCount >= 5 ? "high" : "warning", ipHash });
-      throw genericError;
-    }
-    await db.update(candidateAccounts).set({ failedLoginCount: 0, lockedUntil: null, lastLoginAt: new Date() }).where(eq(candidateAccounts.id, candidate.id));
-    await createCandidateSession(candidate.id, ctx.req, ctx.res);
-    await logCandidateAudit({ candidateId: candidate.id, action: "login", metadata: { method: "password" } });
-    await logSecurityEvent({ actorKind: "candidate", actorReference: String(candidate.id), category: "candidate_login", outcome: "allowed", ipHash });
+    const signedIn = candidate!;
+    await db.update(candidateAccounts).set({ failedLoginCount: 0, lockedUntil: null, lastLoginAt: new Date() }).where(eq(candidateAccounts.id, signedIn.id));
+    await clearPersistentRateLimit({ action: CANDIDATE_LOGIN_POLICY.emailNetwork.action, subject: pairSubject });
+    await clearPersistentRateLimit({ action: CANDIDATE_LOGIN_POLICY.email.action, subject: email });
+    await createCandidateSession(signedIn.id, ctx.req, ctx.res);
+    await logCandidateAudit({ candidateId: signedIn.id, action: "login", metadata: { method: "password" } });
+    await logSecurityEvent({ actorKind: "candidate", actorReference: String(signedIn.id), category: "candidate_login", outcome: "allowed", ipHash });
     return { success: true };
   }),
 
@@ -523,6 +573,7 @@ export const candidatePortalRouter = router({
   }),
 
   requestPasswordReset: publicProcedure.input(z.object({ email: z.string().email().max(320), turnstileToken: z.string().min(20).max(4096) })).mutation(async ({ input, ctx }) => {
+    const startedAt = Date.now();
     const email = normalizeCandidateEmail(input.email);
     const ipHash = requestIpHash(ctx.req.headers);
     try {
@@ -569,6 +620,7 @@ export const candidatePortalRouter = router({
       }
       await logSecurityEvent({ actorKind: "candidate", actorReference: String(candidate.id), category: "candidate_password_reset_requested", outcome: "allowed", ipHash });
     }
+    await waitForCandidateResponseFloor(startedAt);
     return { message: genericAccessMessage };
   }),
 

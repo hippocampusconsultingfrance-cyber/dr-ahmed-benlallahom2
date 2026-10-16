@@ -12,7 +12,7 @@
  * Never import this module from production code.
  */
 import { Column, SQL, Table, getTableColumns, getTableName, is, sql } from "drizzle-orm";
-import { PgDialect } from "drizzle-orm/pg-core";
+import { PgDialect, getTableConfig } from "drizzle-orm/pg-core";
 
 type Row = Record<string, unknown>;
 type Context = Record<string, Row | null>;
@@ -306,13 +306,25 @@ function evaluateSql(fragment: SQL, resolveColumn: (table: string | null, column
 // Tables and rows
 // ---------------------------------------------------------------------------
 
-type TableMeta = { name: string; columnsByDbName: Map<string, string>; columns: Record<string, Column> };
+type TableMeta = { name: string; columnsByDbName: Map<string, string>; columns: Record<string, Column>; uniqueKeys: string[][] };
 
 function tableMeta(table: AnyTable): TableMeta {
   const columns = getTableColumns(table) as Record<string, Column>;
   const columnsByDbName = new Map<string, string>();
   for (const [key, column] of Object.entries(columns)) columnsByDbName.set(column.name, key);
-  return { name: getTableName(table), columnsByDbName, columns };
+  // Single-column unique/primary keys plus composite unique indexes (uniqueIndex(...).on(a, b)).
+  const uniqueKeys: string[][] = Object.entries(columns).filter(([, column]) => column.isUnique || column.primary).map(([key]) => [key]);
+  for (const index of getTableConfig(table as Parameters<typeof getTableConfig>[0]).indexes) {
+    if (!index.config.unique) continue;
+    // pg-core wraps index columns in IndexedColumn objects that only keep the database name.
+    const keys = index.config.columns.map(column => (is(column, SQL) ? undefined : columnsByDbName.get((column as { name: string }).name)));
+    if (keys.every((key): key is string => typeof key === "string")) uniqueKeys.push(keys);
+  }
+  return { name: getTableName(table), columnsByDbName, columns, uniqueKeys };
+}
+
+function sameKey(left: Row, right: Row, keys: string[]): boolean {
+  return keys.every(key => left[key] !== null && left[key] !== undefined && comparable(left[key]) === comparable(right[key]));
 }
 
 function columnTableName(column: Column): string {
@@ -396,10 +408,9 @@ export class InMemoryDrizzle {
       if (value === null && column.notNull) throw new InMemorySqlError(`null value in column "${column.name}" of relation "${meta.name}" violates not-null constraint`, "23502");
       row[key] = value;
     }
-    for (const [key, column] of Object.entries(meta.columns)) {
-      if (!column.isUnique && !column.primary) continue;
-      if (rows.some(existing => comparable(existing[key]) === comparable(row[key]))) {
-        throw new InMemorySqlError(`duplicate key value violates unique constraint on ${meta.name}.${column.name}`, "23505");
+    for (const keys of meta.uniqueKeys) {
+      if (rows.some(existing => sameKey(existing, row, keys))) {
+        throw new InMemorySqlError(`duplicate key value violates unique constraint on ${meta.name}(${keys.join(", ")})`, "23505");
       }
     }
     rows.push(row);
@@ -556,10 +567,13 @@ class InsertQuery extends Thenable<Row[] | { rowCount: number; rows: Row[] }> {
     if (!this.conflict) return undefined;
     const name = getTableName(this.table);
     const meta = this.db.meta(name);
-    const target = this.conflict.target.length
-      ? this.conflict.target.map(column => meta.columnsByDbName.get(column.name)!)
-      : Object.entries(meta.columns).filter(([, column]) => column.isUnique).map(([key]) => key);
-    return this.db.rows(this.table).find(row => target.every(key => comparable(row[key]) === comparable(this.db.value(values[key], {}))));
+    const candidate: Row = {};
+    for (const key of Object.keys(meta.columns)) candidate[key] = this.db.value(values[key], {});
+    // An explicit target names one constraint; without one, any unique constraint conflicts.
+    const constraints = this.conflict.target.length
+      ? [this.conflict.target.map(column => meta.columnsByDbName.get(column.name)!)]
+      : meta.uniqueKeys.filter(keys => !(keys.length === 1 && meta.columns[keys[0]].columnType === "PgSerial" && candidate[keys[0]] === undefined));
+    return this.db.rows(this.table).find(row => constraints.some(keys => sameKey(row, candidate, keys)));
   }
 }
 

@@ -55,6 +55,9 @@ export const candidateAccessCopy = {
     turnstileRegisterMissing: "Veuillez effectuer la vérification anti-bot avant de créer votre accès.",
     turnstileResetMissing: "Veuillez effectuer la vérification anti-bot avant de demander un lien.",
     turnstileActivationMissing: "Veuillez effectuer la vérification anti-bot avant de renvoyer le lien d’activation.",
+    turnstileLoginMissing: "Veuillez effectuer la vérification anti-bot avant de vous connecter.",
+    loginChallenge: "Pour votre sécurité, plusieurs tentatives ayant échoué sur cette adresse, effectuez la vérification anti-bot puis reconnectez-vous.",
+    tooManyAttempts: "Trop de tentatives de connexion depuis cet appareil. Patientez 15 minutes ou utilisez « Mot de passe oublié ».",
     turnstileError: "La vérification anti-bot n’a pas abouti. Réessayez le contrôle avant de soumettre le formulaire.",
     genericError: "Cette action n’a pas pu être finalisée. Vérifiez vos informations et réessayez.",
     registerSuccess: "Votre demande d’accès a été enregistrée. Ouvrez le lien reçu par email (vérifiez aussi vos courriers indésirables) pour confirmer votre adresse et choisir votre mot de passe.",
@@ -101,6 +104,9 @@ export const candidateAccessCopy = {
     turnstileRegisterMissing: "Please complete the anti-bot verification before creating your access.",
     turnstileResetMissing: "Please complete the anti-bot verification before requesting a link.",
     turnstileActivationMissing: "Please complete the anti-bot verification before resending the activation link.",
+    turnstileLoginMissing: "Please complete the anti-bot verification before signing in.",
+    loginChallenge: "For your security, after several failed attempts on this address, please complete the anti-bot verification and sign in again.",
+    tooManyAttempts: "Too many sign-in attempts from this device. Wait 15 minutes or use “Forgot password”.",
     turnstileError: "Anti-bot verification did not complete. Please try the check again before submitting the form.",
     genericError: "This action could not be completed. Check your information and try again.",
     registerSuccess: "Your access request has been registered. Open the link sent by email (also check your spam folder) to confirm your address and choose your password.",
@@ -147,6 +153,9 @@ export const candidateAccessCopy = {
     turnstileRegisterMissing: "Bitte schließen Sie die Bot-Prüfung ab, bevor Sie Ihren Zugang erstellen.",
     turnstileResetMissing: "Bitte schließen Sie die Bot-Prüfung ab, bevor Sie einen Link anfordern.",
     turnstileActivationMissing: "Bitte schließen Sie die Bot-Prüfung ab, bevor Sie den Aktivierungslink erneut anfordern.",
+    turnstileLoginMissing: "Bitte schließen Sie die Bot-Prüfung ab, bevor Sie sich anmelden.",
+    loginChallenge: "Zu Ihrer Sicherheit: Nach mehreren fehlgeschlagenen Versuchen für diese Adresse schließen Sie bitte die Bot-Prüfung ab und melden Sie sich erneut an.",
+    tooManyAttempts: "Zu viele Anmeldeversuche von diesem Gerät. Warten Sie 15 Minuten oder nutzen Sie „Passwort vergessen“.",
     turnstileError: "Die Bot-Prüfung wurde nicht abgeschlossen. Bitte versuchen Sie die Prüfung erneut, bevor Sie das Formular senden.",
     genericError: "Diese Aktion konnte nicht abgeschlossen werden. Prüfen Sie Ihre Angaben und versuchen Sie es erneut.",
     registerSuccess: "Ihre Zugangsanfrage wurde registriert. Öffnen Sie den per E-Mail erhaltenen Link (prüfen Sie auch den Spam-Ordner), um Ihre Adresse zu bestätigen und Ihr Passwort zu wählen.",
@@ -193,6 +202,9 @@ export const candidateAccessCopy = {
     turnstileRegisterMissing: "创建访问权限前，请完成反机器人验证。",
     turnstileResetMissing: "请求链接前，请完成反机器人验证。",
     turnstileActivationMissing: "重新发送激活链接前，请完成反机器人验证。",
+    turnstileLoginMissing: "登录前，请完成反机器人验证。",
+    loginChallenge: "为了您的安全，此地址已有多次登录失败，请完成反机器人验证后重新登录。",
+    tooManyAttempts: "此设备登录尝试次数过多。请等待 15 分钟或使用“忘记密码”。",
     turnstileError: "反机器人验证未完成。提交表单前请重新验证。",
     genericError: "无法完成此操作。请检查您的信息后重试。",
     registerSuccess: "您的访问请求已登记。请打开邮件中的链接（也请检查垃圾邮件文件夹），确认您的地址并设置密码。",
@@ -256,10 +268,20 @@ export default function CandidateAccessPage() {
   const [consentAttempted, setConsentAttempted] = useState(false);
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
+  // Set when the server asks for the anti-bot check before signing in (many failures on this email).
+  const [loginChallenge, setLoginChallenge] = useState(false);
+  const [turnstileKey, setTurnstileKey] = useState(0);
 
   const login = trpc.candidatePortal.login.useMutation({
     onSuccess: () => navigate("/candidate/portal"),
-    onError: error => setNotice(candidateNotice(error.message, copy)),
+    onError: error => {
+      // A Turnstile token is single use: always render a fresh challenge after an attempt.
+      setTurnstileToken(null);
+      setTurnstileKey(key => key + 1);
+      if (error.data?.code === "PRECONDITION_FAILED") { setLoginChallenge(true); setNotice(copy.loginChallenge); return; }
+      if (error.data?.code === "TOO_MANY_REQUESTS") { setNotice(copy.tooManyAttempts); return; }
+      setNotice(candidateNotice(error.message, copy));
+    },
   });
   const register = trpc.candidatePortal.register.useMutation({
     onSuccess: () => setNotice(copy.registerSuccess),
@@ -309,7 +331,8 @@ export default function CandidateAccessPage() {
     event.preventDefault();
     setNotice("");
     if (mode === "login") {
-      login.mutate({ email, password });
+      if (loginChallenge && !turnstileToken) { setNotice(copy.turnstileLoginMissing); return; }
+      login.mutate({ email, password, turnstileToken: loginChallenge && turnstileToken ? turnstileToken : undefined });
     } else if (mode === "register") {
       if (!terms || !documentConsent) {
         setConsentAttempted(true);
@@ -357,7 +380,7 @@ export default function CandidateAccessPage() {
                 <div className="space-y-2"><Label htmlFor="candidate-email">{copy.email}</Label><Input id="candidate-email" type="email" autoComplete="email" value={email} onChange={event => setEmail(event.target.value)} readOnly={mode === "register" && Boolean(activeInvitationToken)} required /></div>
                 {mode === "login" && <div className="space-y-2"><Label htmlFor="candidate-password">{copy.password}</Label><Input id="candidate-password" type="password" autoComplete="current-password" aria-describedby="candidate-password-hint" value={password} onChange={event => setPassword(event.target.value)} minLength={15} required /><p id="candidate-password-hint" className="text-xs text-slate-500">{copy.passwordHint}</p></div>}
                 {mode === "register" && <div className="candidate-consent-panel space-y-3 rounded-xl border border-slate-700/90 bg-slate-900/75 p-4 text-sm"><label className={`candidate-consent-item ${consentAttempted && !terms ? "candidate-consent-item-invalid" : ""}`}><Checkbox className="candidate-consent-checkbox" checked={terms} aria-invalid={consentAttempted && !terms} onCheckedChange={value => { const next = value === true; setTerms(next); if (next && documentConsent) setConsentAttempted(false); }} /><span>{copy.terms}</span></label><label className={`candidate-consent-item ${consentAttempted && !documentConsent ? "candidate-consent-item-invalid" : ""}`}><Checkbox className="candidate-consent-checkbox" checked={documentConsent} aria-invalid={consentAttempted && !documentConsent} onCheckedChange={value => { const next = value === true; setDocumentConsent(next); if (next && terms) setConsentAttempted(false); }} /><span>{copy.documentConsent}</span></label></div>}
-                {(mode === "register" || mode === "forgot" || mode === "activation") && <TurnstileWidget onToken={setTurnstileToken} />}
+                {(mode === "register" || mode === "forgot" || mode === "activation" || (mode === "login" && loginChallenge)) && <TurnstileWidget key={`${mode}-${turnstileKey}`} onToken={setTurnstileToken} />}
                 {notice && <p role="status" className="rounded-lg border border-cyan-800/50 bg-cyan-950/30 p-3 text-sm text-cyan-100">{notice}</p>}
                 <Button type="submit" className="w-full bg-cyan-500 text-slate-950 hover:bg-cyan-400" disabled={pending}>{pending ? <Loader2 className="animate-spin" aria-hidden="true" /> : mode === "login" ? <LogIn aria-hidden="true" /> : mode === "register" ? <UserPlus aria-hidden="true" /> : mode === "activation" ? <MailCheck aria-hidden="true" /> : <KeyRound aria-hidden="true" />}{mode === "login" ? copy.login : mode === "register" ? copy.register : mode === "activation" ? copy.resendActivation : copy.reset}</Button>
               </form>
