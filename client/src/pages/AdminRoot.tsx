@@ -1,5 +1,10 @@
 import { ClerkProvider } from "@clerk/react";
-import AdminDashboard from "./AdminDashboard";
+import { lazy, Suspense } from "react";
+import PublicContentSkeleton from "@/components/PublicContentSkeleton";
+
+// Chunk séparé : le tableau de bord garde son propre budget (scripts/check-performance-budgets.mjs),
+// @clerk/react est partagé entre cette racine et le tableau de bord.
+const AdminDashboard = lazy(() => import("./AdminDashboard"));
 
 /**
  * Racine de l'espace /admin, chargée à la demande (React.lazy dans App.tsx).
@@ -34,7 +39,17 @@ export default function AdminRoot() {
       signUpFallbackRedirectUrl="/admin"
       afterSignOutUrl="/"
     >
-      <AdminDashboard />
+      <Suspense
+        fallback={
+          <div className="min-h-screen bg-background px-4 py-16">
+            <div className="mx-auto max-w-3xl">
+              <PublicContentSkeleton cards={1} label="Chargement de l’accès administrateur" />
+            </div>
+          </div>
+        }
+      >
+        <AdminDashboard />
+      </Suspense>
     </ClerkProvider>
   );
 }
