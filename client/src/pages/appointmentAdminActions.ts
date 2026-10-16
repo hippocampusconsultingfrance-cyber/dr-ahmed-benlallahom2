@@ -1,5 +1,7 @@
+import { BOOKING_PATIENT_REFUND_DEADLINE_HOURS } from "@shared/bookingPolicy";
+
 /** Which dashboard actions an appointment allows; mirrors server/appointmentAdminActions.ts. */
-export const PATIENT_REFUND_DEADLINE_HOURS = 24;
+export const PATIENT_REFUND_DEADLINE_HOURS = BOOKING_PATIENT_REFUND_DEADLINE_HOURS;
 
 export type AdminAppointmentRow = {
   appointmentDate: string | Date;

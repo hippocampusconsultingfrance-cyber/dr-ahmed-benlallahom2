@@ -10,6 +10,9 @@ const DAY_MS = 24 * HOUR_MS;
 export const BOOKING_MIN_LEAD_TIME_HOURS = 2;
 export const BOOKING_MIN_LEAD_TIME_MS = BOOKING_MIN_LEAD_TIME_HOURS * HOUR_MS;
 
+/** A patient who cancels obtains a full refund up to this many hours before the consultation. */
+export const BOOKING_PATIENT_REFUND_DEADLINE_HOURS = 24;
+
 /** How far ahead a consultation can be booked. */
 export const BOOKING_HORIZON_DAYS = 90;
 export const BOOKING_HORIZON_MS = BOOKING_HORIZON_DAYS * DAY_MS;

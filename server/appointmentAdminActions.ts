@@ -5,9 +5,10 @@ import { appointments } from "../drizzle/schema";
 import { getDb } from "./db";
 import { mutationRowCount } from "./dbMutation";
 import { sendRefundConfirmationEmail, type RefundEmailContext } from "./_core/notifications";
+import { BOOKING_PATIENT_REFUND_DEADLINE_HOURS } from "../shared/bookingPolicy";
 
 /** A patient may obtain a full refund up to this many hours before the consultation. */
-export const PATIENT_REFUND_DEADLINE_HOURS = 24;
+export const PATIENT_REFUND_DEADLINE_HOURS = BOOKING_PATIENT_REFUND_DEADLINE_HOURS;
 
 /**
  * "patient": cancellation requested by the patient, subject to the 24 h rule.

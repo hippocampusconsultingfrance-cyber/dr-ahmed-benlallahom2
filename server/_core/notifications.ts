@@ -1,5 +1,6 @@
 import { Resend } from "resend";
 import { notifyOwner } from "./notification";
+import { PATIENT_CANCELLATION_POLICY, resolveConsultationContact, type ConsultationContact } from "../consultationContact";
 import {
   buildResendApplicationTags,
   RESEND_APPLICATION_ACTIVATION_KIND,
@@ -27,6 +28,8 @@ function escapeHtml(value: unknown): string {
 // Domaine drahmedbenlallahom.com vérifié dans Resend.
 // Une boîte dédiée n'est pas nécessaire pour l'envoi transactionnel ; les
 // réponses des candidats restent dirigées vers la boîte de recrutement active.
+// Les emails patients ont leur propre expéditeur et Reply-To : voir
+// server/consultationContact.ts.
 const FROM_EMAIL = "Hippocampus Consulting <recrutement@drahmedbenlallahom.com>";
 const RECRUITMENT_REPLY_TO = "hippocampusconsultingfrance@gmail.com";
 const HIPPOCAMPUS_LOGO_URL = "https://drahmedbenlallahom.com/assets/abl-logo.svg";
@@ -126,6 +129,157 @@ export async function sendAdminMfaCodeEmail(email: string, code: string) {
   if (error) throw new Error(`admin_mfa_email_failed:${error.message}`);
 }
 
+// ---------------------------------------------------------------------------
+// Patient emails (confirmation, invoice, reminder, refund / cancellation).
+// Sender and Reply-To come from server/consultationContact.ts (Reply-To: the
+// public contact email of the site, CONSULTATION_REPLY_TO to override). Every
+// email has a plain-text part, the contact email and phone, times in "heure de
+// Paris" and, when relevant, the cancellation policy. The free-text request of
+// the booking is never included (health-data minimisation).
+// ---------------------------------------------------------------------------
+
+const PARIS_DATE_TIME_FORMAT = new Intl.DateTimeFormat("fr-FR", {
+  timeZone: "Europe/Paris",
+  weekday: "long",
+  year: "numeric",
+  month: "long",
+  day: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+});
+const EURO_FORMAT = new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR" });
+
+/** "mardi 20 octobre 2026 à 10:00 (heure de Paris)", whatever the server time zone. */
+export function formatPatientDateTime(date: Date): string {
+  return `${PARIS_DATE_TIME_FORMAT.format(date)} (heure de Paris)`;
+}
+
+/** French amount: "100,00 €" (regular spaces, safe in every mail client). */
+export function formatPatientAmount(amount: number | string): string {
+  return EURO_FORMAT.format(Number(amount)).replace(/[  ]/g, " ");
+}
+
+type PatientEmailContent = {
+  subject: string;
+  title: string;
+  customerName: string;
+  paragraphs: string[];
+  details: Array<[label: string, value: string]>;
+  link?: { label: string; url: string };
+  closing?: string[];
+  cancellationPolicy?: boolean;
+};
+
+export type PatientEmail = { subject: string; html: string; text: string };
+
+function telHref(phone: string) {
+  return `tel:${phone.replace(/[^\d+]/g, "")}`;
+}
+
+export function buildPatientEmail(content: PatientEmailContent, contact: ConsultationContact = resolveConsultationContact()): PatientEmail {
+  const contactSentence = `Une question, un report ou une annulation ? Écrivez-nous à ${contact.email} ou appelez le ${contact.phone} en indiquant votre référence. Vous pouvez aussi répondre directement à cet email.`;
+  const paragraph = (value: string) => `<p style="line-height:1.6;">${escapeHtml(value)}</p>`;
+  const html = buildHippocampusEmailShell(`
+      <h2 style="color: #0891b2;">${escapeHtml(content.title)}</h2>
+      <p>Bonjour ${escapeHtml(content.customerName)},</p>
+      ${content.paragraphs.map(paragraph).join("\n      ")}
+      <div style="background: #f8fafc; border-radius: 8px; padding: 16px; margin: 16px 0;">
+        <ul style="list-style: none; padding: 0; margin: 0;">
+          ${content.details.map(([label, value]) => `<li style="padding: 4px 0;"><strong>${escapeHtml(label)} :</strong> ${escapeHtml(value)}</li>`).join("\n          ")}
+          ${content.link ? `<li style="padding: 4px 0;"><strong>${escapeHtml(content.link.label)} :</strong> <a href="${escapeHtml(content.link.url)}">${escapeHtml(content.link.url)}</a></li>` : ""}
+        </ul>
+      </div>
+      ${(content.closing ?? []).map(paragraph).join("\n      ")}
+      ${content.cancellationPolicy ? `<p style="font-size:13px;line-height:1.55;color:#475569;">${escapeHtml(PATIENT_CANCELLATION_POLICY)}</p>` : ""}
+      <p style="font-size:13px;line-height:1.55;color:#475569;">Une question, un report ou une annulation ? Écrivez-nous à <a href="mailto:${escapeHtml(contact.email)}">${escapeHtml(contact.email)}</a> ou appelez le <a href="${escapeHtml(telHref(contact.phone))}">${escapeHtml(contact.phone)}</a> en indiquant votre référence. Vous pouvez aussi répondre directement à cet email.</p>
+    `);
+  const text = [
+    content.title,
+    "",
+    `Bonjour ${content.customerName},`,
+    "",
+    ...content.paragraphs.flatMap(value => [value, ""]),
+    ...content.details.map(([label, value]) => `${label} : ${value}`),
+    ...(content.link ? [`${content.link.label} : ${content.link.url}`] : []),
+    "",
+    ...(content.closing ?? []).flatMap(value => [value, ""]),
+    ...(content.cancellationPolicy ? [PATIENT_CANCELLATION_POLICY, ""] : []),
+    contactSentence,
+    "",
+    "Dr Ahmed Ben Lallahom · Hippocampus Consulting",
+  ].join("\n");
+  return { subject: content.subject, html, text };
+}
+
+async function sendPatientEmail(
+  errors: { rejected: string; failed: string },
+  to: string,
+  email: PatientEmail,
+  options: { idempotencyKey?: string; attachments?: Array<{ filename: string; content: string }> } = {},
+) {
+  const contact = resolveConsultationContact();
+  return sendPostPaymentEmail(errors, {
+    from: contact.from,
+    to: [to],
+    replyTo: contact.replyTo,
+    subject: email.subject,
+    html: email.html,
+    text: email.text,
+    ...(options.attachments ? { attachments: options.attachments } : {}),
+  }, options.idempotencyKey);
+}
+
+export function buildBookingConfirmationEmail(input: { customerName: string; trackingId: string; appointmentDate: Date; finalPrice: number; meetLink?: string }, contact = resolveConsultationContact()): PatientEmail {
+  return buildPatientEmail({
+    subject: `Confirmation de réservation - ${input.trackingId}`,
+    title: "Confirmation de réservation",
+    customerName: input.customerName,
+    paragraphs: ["Votre paiement a bien été reçu et votre consultation avec le Dr Ahmed Ben Lallahom est confirmée. Votre facture vous est envoyée dans un email séparé."],
+    details: [
+      ["Référence", input.trackingId],
+      ["Date et heure", formatPatientDateTime(input.appointmentDate)],
+      ["Durée", "30 minutes"],
+      ["Montant payé", formatPatientAmount(input.finalPrice)],
+      ...(contact.modalityText ? [["Déroulement", contact.modalityText] as [string, string]] : []),
+    ],
+    link: input.meetLink ? { label: "Lien de visioconférence", url: input.meetLink } : undefined,
+    closing: ["Conservez votre référence : elle vous sera demandée pour toute question. Cette consultation programmée ne remplace pas une prise en charge d’urgence : en cas d’urgence, appelez les secours."],
+    cancellationPolicy: true,
+  }, contact);
+}
+
+export function buildBookingReminderEmail(input: { customerName: string; trackingId: string; appointmentDate: Date }, contact = resolveConsultationContact()): PatientEmail {
+  return buildPatientEmail({
+    subject: `Rappel - Votre consultation approche (${input.trackingId})`,
+    title: "Rappel : votre consultation approche",
+    customerName: input.customerName,
+    paragraphs: [`Nous vous rappelons que votre consultation avec le Dr Ahmed Ben Lallahom est prévue le ${formatPatientDateTime(input.appointmentDate)}.`],
+    details: [
+      ["Référence", input.trackingId],
+      ["Date et heure", formatPatientDateTime(input.appointmentDate)],
+      ...(contact.modalityText ? [["Déroulement", contact.modalityText] as [string, string]] : []),
+    ],
+    closing: ["Si vous devez annuler ou reporter votre rendez-vous, prévenez-nous dès que possible aux coordonnées ci-dessous."],
+    cancellationPolicy: true,
+  }, contact);
+}
+
+export function buildInvoiceEmail(input: { customerName: string; trackingId: string; finalPrice: number; invoiceNumber?: string }, contact = resolveConsultationContact()): PatientEmail {
+  return buildPatientEmail({
+    subject: `Facture - Consultation ${input.trackingId}`,
+    title: "Votre facture",
+    customerName: input.customerName,
+    paragraphs: ["Veuillez trouver ci-joint la facture de votre consultation avec le Dr Ahmed Ben Lallahom."],
+    details: [
+      ...(input.invoiceNumber ? [["Facture n°", input.invoiceNumber] as [string, string]] : []),
+      ["Référence", input.trackingId],
+      ["Montant", formatPatientAmount(input.finalPrice)],
+      ["Statut", "Payée"],
+    ],
+    closing: ["Merci de votre confiance."],
+  }, contact);
+}
+
 export async function sendConfirmationEmail(
   customerEmail: string,
   customerName: string,
@@ -136,38 +290,8 @@ export async function sendConfirmationEmail(
   delivery: { idempotencyKey?: string } = {},
 ) {
   try {
-    const formattedDate = appointmentDate.toLocaleString("fr-FR", {
-      timeZone: "Europe/Paris",
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-
-    const emailContent = buildHippocampusEmailShell(`
-      <h2 style="color: #0891b2;">Confirmation de Réservation</h2>
-      <p>Bonjour ${escapeHtml(customerName)},</p>
-      <p>Votre réservation a été confirmée avec succès.</p>
-      <div style="background: #f8fafc; border-radius: 8px; padding: 16px; margin: 16px 0;">
-        <h3 style="color: #334155; margin-top: 0;">Détails de votre consultation :</h3>
-        <ul style="list-style: none; padding: 0;">
-          <li style="padding: 4px 0;"><strong>Numéro de suivi :</strong> ${escapeHtml(trackingId)}</li>
-          <li style="padding: 4px 0;"><strong>Date et heure :</strong> ${formattedDate}</li>
-          <li style="padding: 4px 0;"><strong>Montant :</strong> ${finalPrice}€</li>
-          ${meetLink ? `<li style="padding: 4px 0;"><strong>Lien Google Meet :</strong> <a href="${escapeHtml(meetLink)}">${escapeHtml(meetLink)}</a></li>` : ""}
-        </ul>
-      </div>
-      <p>Merci de votre confiance.</p>
-    `);
-
-    await sendPostPaymentEmail({ rejected: "confirmation_email_rejected", failed: "confirmation_email_failed" }, {
-      from: FROM_EMAIL,
-      to: [customerEmail],
-      subject: `Confirmation de réservation - ${trackingId}`,
-      html: emailContent,
-    }, delivery.idempotencyKey);
-
+    const email = buildBookingConfirmationEmail({ customerName, trackingId, appointmentDate, finalPrice, meetLink });
+    await sendPatientEmail({ rejected: "confirmation_email_rejected", failed: "confirmation_email_failed" }, customerEmail, email, { idempotencyKey: delivery.idempotencyKey });
     console.log("Confirmation email sent successfully");
   } catch (error) {
     throw new Error("confirmation_email_failed", { cause: error });
@@ -233,34 +357,16 @@ export async function sendInvoiceEmail(
   delivery: { idempotencyKey?: string } = {},
 ) {
   try {
-    const emailContent = buildHippocampusEmailShell(`
-      <h2 style="color: #0891b2;">Votre Facture - Consultation Dr. Ben Lallahom</h2>
-      <p>Bonjour ${escapeHtml(customerName)},</p>
-      <p>Veuillez trouver ci-joint la facture correspondant à votre consultation.</p>
-      <div style="background: #f8fafc; border-radius: 8px; padding: 16px; margin: 16px 0;">
-        <h3 style="color: #334155; margin-top: 0;">Récapitulatif :</h3>
-        <ul style="list-style: none; padding: 0;">
-          ${invoiceNumber ? `<li style="padding: 4px 0;"><strong>Facture n° :</strong> ${escapeHtml(invoiceNumber)}</li>` : ""}
-          <li style="padding: 4px 0;"><strong>Référence :</strong> ${escapeHtml(trackingId)}</li>
-          <li style="padding: 4px 0;"><strong>Montant :</strong> ${finalPrice}€</li>
-          <li style="padding: 4px 0;"><strong>Statut :</strong> ✅ Payé</li>
-        </ul>
-      </div>
-      <p>Merci de votre confiance.</p>
-    `);
-
-    await sendPostPaymentEmail({ rejected: "invoice_email_rejected", failed: "invoice_email_failed" }, {
-      from: FROM_EMAIL,
-      to: [customerEmail],
-      subject: `Facture - Consultation ${trackingId}`,
-      html: emailContent,
+    const email = buildInvoiceEmail({ customerName, trackingId, finalPrice, invoiceNumber });
+    await sendPatientEmail({ rejected: "invoice_email_rejected", failed: "invoice_email_failed" }, customerEmail, email, {
+      idempotencyKey: delivery.idempotencyKey,
       attachments: [
         {
-          filename: `Facture-${trackingId}.pdf`,
+          filename: `Facture-${invoiceNumber ?? trackingId}.pdf`,
           content: invoicePdfBuffer.toString("base64"),
         },
       ],
-    }, delivery.idempotencyKey);
+    });
 
     console.log("Invoice email sent successfully");
   } catch (error) {
@@ -283,6 +389,54 @@ export async function sendCustomerConfirmationSMS(
 
 export type RefundEmailContext = "refund" | "practitioner_cancellation" | "unconfirmed_payment";
 
+export function buildRefundEmail(input: {
+  customerName: string;
+  trackingId: string;
+  appointmentDate: Date;
+  refundAmount: string;
+  context?: RefundEmailContext;
+  reason?: string;
+}, contact = resolveConsultationContact()): PatientEmail {
+  const context = input.context ?? "refund";
+  const copy = context === "practitioner_cancellation"
+    ? {
+        subject: `Annulation de votre consultation - ${input.trackingId}`,
+        title: "Annulation de votre consultation",
+        intro: "Nous sommes au regret de vous informer que votre consultation a dû être annulée par le praticien. Le montant payé vous est intégralement remboursé.",
+        dateLabel: "Consultation annulée",
+      }
+    : context === "unconfirmed_payment"
+      ? {
+          subject: `Remboursement de votre paiement - ${input.trackingId}`,
+          title: "Remboursement de votre paiement",
+          intro: "Votre paiement a été reçu alors que le créneau n’était plus réservé à votre nom (réservation temporaire expirée ou annulée). Il vous est intégralement remboursé.",
+          dateLabel: "Créneau demandé",
+        }
+      : {
+          subject: `Remboursement confirmé - ${input.trackingId}`,
+          title: "Confirmation de remboursement",
+          intro: "Le remboursement de votre consultation a été enregistré.",
+          dateLabel: "Consultation initiale",
+        };
+  const reason = input.reason?.trim();
+  return buildPatientEmail({
+    subject: copy.subject,
+    title: copy.title,
+    customerName: input.customerName,
+    paragraphs: [copy.intro],
+    details: [
+      ["Référence", input.trackingId],
+      [copy.dateLabel, formatPatientDateTime(input.appointmentDate)],
+      ...(reason ? [["Motif", reason] as [string, string]] : []),
+      ["Montant remboursé", formatPatientAmount(input.refundAmount)],
+    ],
+    closing: [
+      "Le délai d’apparition du remboursement sur votre compte dépend de votre établissement bancaire.",
+      ...(context === "practitioner_cancellation" ? ["Vous pouvez réserver un nouveau créneau à tout moment sur le site. Nous vous prions de nous excuser pour ce contretemps."] : []),
+    ],
+  }, contact);
+}
+
 /**
  * Refund notice to the patient. "practitioner_cancellation" announces that the
  * practitioner cancelled the consultation (with the reason given to the
@@ -298,75 +452,9 @@ export async function sendRefundConfirmationEmail(
   refundAmount: string,
   details: { context?: RefundEmailContext; reason?: string; idempotencyKey?: string } = {},
 ): Promise<boolean> {
-  const context = details.context ?? "refund";
   try {
-    const formattedDate = appointmentDate.toLocaleString("fr-FR", {
-      timeZone: "Europe/Paris",
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-    const copy = context === "practitioner_cancellation"
-      ? {
-          subject: `Annulation de votre consultation - ${trackingId}`,
-          title: "Annulation de votre consultation",
-          intro: "Nous sommes au regret de vous informer que votre consultation a dû être annulée par le praticien. Le montant payé vous est intégralement remboursé.",
-          dateLabel: "Consultation annulée",
-        }
-      : context === "unconfirmed_payment"
-        ? {
-            subject: `Remboursement de votre paiement - ${trackingId}`,
-            title: "Remboursement de votre paiement",
-            intro: "Votre paiement a été reçu alors que le créneau n’était plus réservé à votre nom (réservation temporaire expirée ou annulée). Il vous est intégralement remboursé.",
-            dateLabel: "Créneau demandé",
-          }
-        : {
-            subject: `Remboursement confirmé - ${trackingId}`,
-            title: "Confirmation de remboursement",
-            intro: "Le remboursement de votre consultation a été enregistré.",
-            dateLabel: "Consultation initiale",
-          };
-    const reason = details.reason?.trim();
-
-    const emailContent = buildHippocampusEmailShell(`
-      <h2 style="color: #0891b2;">${copy.title}</h2>
-      <p>Bonjour ${escapeHtml(customerName)},</p>
-      <p>${copy.intro}</p>
-      <div style="background: #f8fafc; border-radius: 8px; padding: 16px; margin: 16px 0;">
-        <p><strong>Référence :</strong> ${escapeHtml(trackingId)}</p>
-        <p><strong>${copy.dateLabel} :</strong> ${escapeHtml(formattedDate)} (heure de Paris)</p>
-        ${reason ? `<p><strong>Motif :</strong> ${escapeHtml(reason)}</p>` : ""}
-        <p><strong>Montant remboursé :</strong> ${escapeHtml(refundAmount)} €</p>
-      </div>
-      <p>Le délai d’apparition du remboursement dépend de votre établissement bancaire.</p>
-      ${context === "practitioner_cancellation" ? "<p>Vous pouvez réserver un nouveau créneau à tout moment sur le site. Nous vous prions de nous excuser pour ce contretemps.</p>" : ""}
-    `);
-    const text = [
-      copy.title,
-      "",
-      `Bonjour ${customerName},`,
-      "",
-      copy.intro,
-      "",
-      `Référence : ${trackingId}`,
-      `${copy.dateLabel} : ${formattedDate} (heure de Paris)`,
-      ...(reason ? [`Motif : ${reason}`] : []),
-      `Montant remboursé : ${refundAmount} €`,
-      "",
-      "Le délai d’apparition du remboursement dépend de votre établissement bancaire.",
-      ...(context === "practitioner_cancellation" ? ["Vous pouvez réserver un nouveau créneau à tout moment sur le site. Nous vous prions de nous excuser pour ce contretemps."] : []),
-    ].join("\n");
-
-    await sendPostPaymentEmail({ rejected: "refund_email_rejected", failed: "refund_email_failed" }, {
-      from: FROM_EMAIL,
-      to: [customerEmail],
-      subject: copy.subject,
-      html: emailContent,
-      text,
-    }, details.idempotencyKey);
-
+    const email = buildRefundEmail({ customerName, trackingId, appointmentDate, refundAmount, context: details.context, reason: details.reason });
+    await sendPatientEmail({ rejected: "refund_email_rejected", failed: "refund_email_failed" }, customerEmail, email, { idempotencyKey: details.idempotencyKey });
     console.log("Refund email sent successfully");
     return true;
   } catch {
@@ -382,41 +470,11 @@ export async function sendReminderEmail(
   appointmentDate: Date
 ) {
   try {
-    const formattedDate = appointmentDate.toLocaleString("fr-FR", {
-      timeZone: "Europe/Paris",
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
+    const email = buildBookingReminderEmail({ customerName, trackingId, appointmentDate });
+    // One reminder per appointment: the key makes a retried claim harmless.
+    await sendPatientEmail({ rejected: "reminder_email_rejected", failed: "reminder_email_failed" }, customerEmail, email, {
+      idempotencyKey: `appointment-reminder-${trackingId}`,
     });
-
-    const emailContent = buildHippocampusEmailShell(`
-      <h2 style="color: #0891b2;">⏰ Rappel - Votre consultation approche</h2>
-      <p>Bonjour ${escapeHtml(customerName)},</p>
-      <p>Nous vous rappelons que votre consultation avec le Dr. Ahmed Ben Lallahom est prévue le <strong>${formattedDate}</strong> (heure de Paris).</p>
-      <div style="background: #f8fafc; border-radius: 8px; padding: 16px; margin: 16px 0;">
-        <h3 style="color: #334155; margin-top: 0;">Détails :</h3>
-        <ul style="list-style: none; padding: 0;">
-          <li style="padding: 4px 0;"><strong>Référence :</strong> ${escapeHtml(trackingId)}</li>
-          <li style="padding: 4px 0;"><strong>Date et heure :</strong> ${formattedDate}</li>
-        </ul>
-      </div>
-      <p>Si vous devez annuler ou reporter votre rendez-vous, veuillez nous contacter dès que possible.</p>
-      <p>À très bientôt !</p>
-    `);
-
-    const { error } = await getResendClient().emails.send({
-      from: FROM_EMAIL,
-      to: [customerEmail],
-      subject: `Rappel - Votre consultation approche (${trackingId})`,
-      html: emailContent,
-    });
-
-    if (error) {
-      throw new Error(`reminder_email_rejected:${error.message}`);
-    }
-
     console.log("Reminder email sent successfully");
   } catch (error) {
     throw new Error("reminder_email_failed", { cause: error });
