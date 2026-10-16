@@ -7,6 +7,8 @@ import { Card } from "@/components/ui/card";
 import Breadcrumb from "@/components/Breadcrumb";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { SEOHead } from "@/components/SEOHead";
+import Footer from "@/components/Footer";
+import BookingLegalNotice from "@/components/BookingLegalNotice";
 import { clearBookingDraft, clearPendingBooking } from "@/lib/pendingBooking";
 
 export const confirmationContent = {
@@ -192,6 +194,7 @@ export default function BookingConfirmationPage() {
   const seoDescription = state.description;
 
   return (
+    <>
     <main className="min-h-screen bg-background px-4 py-8 sm:py-12">
       <SEOHead title={seoTitle} description={seoDescription} ogUrl="https://drahmedbenlallahom.com/booking/confirmation" noIndex />
       <div className="max-w-4xl mx-auto">
@@ -260,6 +263,7 @@ export default function BookingConfirmationPage() {
           <div className="privacy-trust-card">
             <ShieldCheck className="w-6 h-6 text-primary" aria-hidden="true" />
             <p className="text-sm text-muted-foreground leading-relaxed">{copy.privacy}</p>
+            <BookingLegalNotice showPurpose={false} className="mt-2" />
           </div>
         </section>
 
@@ -273,5 +277,7 @@ export default function BookingConfirmationPage() {
         </section>
       </div>
     </main>
+    <Footer />
+    </>
   );
 }

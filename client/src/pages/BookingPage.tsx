@@ -8,6 +8,8 @@ import { Calendar, Clock, User, Mail, Phone, FileText, CheckCircle, AlertCircle 
 import Breadcrumb from "@/components/Breadcrumb";
 import PublicContentSkeleton from "@/components/PublicContentSkeleton";
 import { SEOHead } from "@/components/SEOHead";
+import Footer from "@/components/Footer";
+import BookingLegalNotice from "@/components/BookingLegalNotice";
 import { getBookingFormCopy } from "@/lib/publicFormCopy";
 import {
   clearBookingDraft,
@@ -734,6 +736,7 @@ export default function BookingPage() {
   }[language];
 
   return (
+    <>
     <div className="min-h-screen bg-background py-8 sm:py-12 px-4">
       <SEOHead
         title={`${content.title} | Dr. Ahmed Ben Lallahom`}
@@ -1070,6 +1073,7 @@ export default function BookingPage() {
             >
               {isLoading ? bookingFormCopy.loading : bookingFormCopy.submit}
             </Button>
+            <BookingLegalNotice className="-mt-2" />
             <div className="booking-notes grid gap-3 sm:grid-cols-2 mt-2" aria-label={content.pricing.title}>
               <div className="booking-note">
                 <span className="text-xs uppercase tracking-[0.14em] text-primary font-bold">{content.availabilityLabel}</span>
@@ -1099,5 +1103,7 @@ export default function BookingPage() {
         </div>
       </div>
     </div>
+    <Footer />
+    </>
   );
 }

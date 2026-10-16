@@ -24,6 +24,13 @@ export const BOOKING_HORIZON_MS = BOOKING_HORIZON_DAYS * DAY_MS;
  */
 export const BOOKING_REQUEST_SUBJECT_MAX_LENGTH = 500;
 
+/**
+ * Link to the terms of sale (CGV) shown next to the payment button and on the
+ * confirmation page. Null hides the link: set it (e.g. "/legal?tab=cgv") only
+ * once a validated CGV page exists.
+ */
+export const BOOKING_TERMS_OF_SALE_HREF: string | null = null;
+
 export type BookingWindowIssue = "too_soon" | "too_far";
 
 /** Why a consultation start cannot be booked at `now` (past dates are "too_soon"), or null. */
