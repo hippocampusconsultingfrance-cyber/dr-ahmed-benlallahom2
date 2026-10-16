@@ -186,7 +186,9 @@ export type InsertAppointment = typeof appointments.$inferInsert;
 export const appointmentFulfillmentJobs = mysqlTable("appointment_fulfillment_jobs", {
   id: serial("id").primaryKey(),
   appointmentId: int("appointment_id").notNull(),
-  jobType: mysqlEnum("job_type", ["confirmation", "invoice"]).notNull(),
+  // varchar column: "owner" (new-booking notification to the owner, sent first)
+  // needs no migration.
+  jobType: mysqlEnum("job_type", ["owner", "confirmation", "invoice"]).notNull(),
   status: mysqlEnum("status", ["queued", "running", "retry", "completed", "failed"]).default("queued").notNull(),
   attempts: int("attempts").default(0).notNull(),
   maxAttempts: int("max_attempts").default(3).notNull(),

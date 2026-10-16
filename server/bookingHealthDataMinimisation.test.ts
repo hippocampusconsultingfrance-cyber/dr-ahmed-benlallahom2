@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { appointmentFulfillmentJobs, appointments } from "../drizzle/schema";
 
 // B4 / LEGAL-09 / BOOK-HEALTHDATA : l’objet libre de la réservation reste en base
@@ -9,7 +9,7 @@ import { appointmentFulfillmentJobs, appointments } from "../drizzle/schema";
 
 const sent = vi.hoisted(() => {
   // Lu au chargement du module de notification.
-  process.env.OWNER_NOTIFICATION_EMAIL = "owner@example.test";
+  vi.stubEnv("OWNER_NOTIFICATION_EMAIL", "owner@example.test");
   return { emails: [] as Array<Record<string, unknown>> };
 });
 vi.mock("resend", () => ({
@@ -79,7 +79,7 @@ function fakeDatabase(input: { jobs?: unknown[][]; appointments?: unknown[][] })
       },
     })),
     update: vi.fn(() => ({ set: () => ({ where: async () => ({ rowCount: 1 }) }) })),
-    insert: vi.fn(() => ({ values: () => ({ onConflictDoUpdate: async () => ({ rowCount: 1 }) }) })),
+    insert: vi.fn(() => ({ values: () => ({ onConflictDoUpdate: async () => ({ rowCount: 1 }), onConflictDoNothing: async () => ({ rowCount: 0 }) }) })),
   };
   database.getDb.mockResolvedValue(db);
   return db;
@@ -99,6 +99,8 @@ function serialized(message: Record<string, unknown>) {
   return JSON.stringify({ ...message, attachments: undefined });
 }
 
+afterAll(() => vi.unstubAllEnvs());
+
 beforeEach(() => {
   sent.emails.length = 0;
   vi.stubEnv("RESEND_API_KEY", "re_test_minimisation");
@@ -106,12 +108,16 @@ beforeEach(() => {
 
 describe("minimisation des données de santé à la réservation", () => {
   it("n’envoie l’objet de la demande ni au patient ni au propriétaire lors de la confirmation", async () => {
+    const ownerJob = { id: 6, appointmentId: 42, jobType: "owner", status: "queued", attempts: 0, maxAttempts: 3, scheduledFor: new Date(0) };
     const job = { id: 7, appointmentId: 42, jobType: "confirmation", status: "queued", attempts: 0, maxAttempts: 3, scheduledFor: new Date(0) };
-    fakeDatabase({ jobs: [[job], [{ ...job, status: "running", attempts: 1 }]], appointments: [[appointmentRow()]] });
+    fakeDatabase({
+      jobs: [[ownerJob, job], [{ ...ownerJob, status: "running", attempts: 1 }], [{ ...job, status: "running", attempts: 1 }]],
+      appointments: [[appointmentRow()], [appointmentRow()]],
+    });
 
     const result = await processDueAppointmentFulfillmentJobs();
 
-    expect(result.results).toEqual([{ completed: true }]);
+    expect(result.results).toEqual([{ completed: true }, { completed: true }]);
     const recipients = sent.emails.map(message => (message.to as string[])[0]);
     expect(recipients).toEqual(expect.arrayContaining(["patient@example.test", "owner@example.test"]));
     for (const message of sent.emails) {

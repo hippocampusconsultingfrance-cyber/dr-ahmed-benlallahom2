@@ -36,6 +36,12 @@ describe("notifyOwner", () => {
     expect(message.html).toContain("&lt;script&gt;");
   });
 
+  it("passes a caller idempotency key to Resend so retries cannot duplicate the email", async () => {
+    const { notifyOwner } = await import("./notification");
+    await notifyOwner({ title: "Nouvelle réservation", content: "APT1" }, { idempotencyKey: "appointment-owner-APT1" });
+    expect(send).toHaveBeenCalledWith(expect.objectContaining({ subject: "Nouvelle réservation" }), { idempotencyKey: "appointment-owner-APT1" });
+  });
+
   it("returns false when Resend rejects the delivery", async () => {
     send.mockResolvedValue({ data: null, error: { message: "rejected" } });
     const { notifyOwner } = await import("./notification");

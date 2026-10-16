@@ -44,6 +44,48 @@ function resendDeliveryFailureCode(error: { name?: string; statusCode?: number |
     : "provider_rejected";
 }
 
+/**
+ * Post-payment emails (patient confirmation, invoice, owner notification) are
+ * retried a few times within the same attempt, with a short backoff, when the
+ * failure is transient (network, timeout, 5xx). Each send carries a stable
+ * Resend idempotency key, so a retry can never deliver the same email twice.
+ * Exported as a mutable object so tests can shorten the delays.
+ */
+export const postPaymentDeliveryRetry = { delaysMs: [500, 1500] as number[] };
+
+const wait = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
+
+class PostPaymentEmailError extends Error {
+  constructor(message: string, readonly failureCode: ResendDeliveryFailureCode, options?: { cause?: unknown }) {
+    super(message, options);
+    this.name = "PostPaymentEmailError";
+  }
+}
+
+type ResendSendPayload = Parameters<Resend["emails"]["send"]>[0];
+
+async function sendPostPaymentEmail(
+  errors: { rejected: string; failed: string },
+  message: ResendSendPayload,
+  idempotencyKey?: string,
+): Promise<string | null> {
+  const delays = postPaymentDeliveryRetry.delaysMs;
+  let lastError: PostPaymentEmailError | null = null;
+  for (let attempt = 0; attempt <= delays.length; attempt += 1) {
+    if (attempt > 0) await wait(delays[attempt - 1]);
+    try {
+      const { data, error } = await getResendClient().emails.send(message, idempotencyKey ? { idempotencyKey } : undefined);
+      if (!error) return data?.id ?? null;
+      const failureCode = resendDeliveryFailureCode(error);
+      lastError = new PostPaymentEmailError(`${errors.rejected}:${error.message}`, failureCode);
+      if (failureCode === "provider_rejected") break;
+    } catch (error) {
+      lastError = new PostPaymentEmailError(errors.failed, "delivery_exception", { cause: error });
+    }
+  }
+  throw lastError ?? new PostPaymentEmailError(errors.failed, "delivery_exception");
+}
+
 export function buildHippocampusEmailShell(content: string) {
   return `
     <div style="margin:0;padding:24px 12px;background:#f1f5f9;font-family:Arial,sans-serif;color:#0f172a;">
@@ -90,7 +132,8 @@ export async function sendConfirmationEmail(
   trackingId: string,
   appointmentDate: Date,
   finalPrice: number,
-  meetLink?: string
+  meetLink?: string,
+  delivery: { idempotencyKey?: string } = {},
 ) {
   try {
     const formattedDate = appointmentDate.toLocaleString("fr-FR", {
@@ -118,16 +161,12 @@ export async function sendConfirmationEmail(
       <p>Merci de votre confiance.</p>
     `);
 
-    const { error } = await getResendClient().emails.send({
+    await sendPostPaymentEmail({ rejected: "confirmation_email_rejected", failed: "confirmation_email_failed" }, {
       from: FROM_EMAIL,
       to: [customerEmail],
       subject: `Confirmation de réservation - ${trackingId}`,
       html: emailContent,
-    });
-
-    if (error) {
-      throw new Error(`confirmation_email_rejected:${error.message}`);
-    }
+    }, delivery.idempotencyKey);
 
     console.log("Confirmation email sent successfully");
   } catch (error) {
@@ -135,74 +174,53 @@ export async function sendConfirmationEmail(
   }
 }
 
+/**
+ * The owner's single "new paid booking" email (the former SMS substitute that
+ * duplicated it is gone). Throws when it could not be delivered after the short
+ * retries, so its own fulfillment job is retried later.
+ */
 export async function sendOwnerNotificationEmail(
   customerName: string,
   customerEmail: string,
   customerPhone: string,
   trackingId: string,
   appointmentDate: Date,
-  finalPrice: number
+  finalPrice: number,
+  delivery: { idempotencyKey?: string } = {},
 ) {
-  try {
-    const formattedDate = appointmentDate.toLocaleString("fr-FR", {
-      timeZone: "Europe/Paris",
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+  const formattedDate = appointmentDate.toLocaleString("fr-FR", {
+    timeZone: "Europe/Paris",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 
-    // Use Manus built-in notification for owner
-    const notificationContent = `
-Nouvelle Réservation - ${trackingId}
+  const notificationContent = [
+    `Nouvelle réservation payée - ${trackingId}`,
+    "",
+    `Client : ${customerName}`,
+    `Email : ${customerEmail}`,
+    `Téléphone : ${customerPhone}`,
+    `Date : ${formattedDate} (heure de Paris)`,
+    `Montant : ${finalPrice} €`,
+    "Objet de la demande : consultable uniquement dans le tableau de bord (jamais recopié par email).",
+  ].join("\n");
 
-Client: ${customerName}
-Email: ${customerEmail}
-Téléphone: ${customerPhone}
-Date: ${formattedDate}
-Montant: ${finalPrice}€
-Objet de la demande : consultable uniquement dans le tableau de bord (jamais recopié par email).
-    `.trim();
-
-    await notifyOwner({
-      title: `🗓️ Nouvelle réservation: ${customerName} - ${finalPrice}€`,
+  const delays = postPaymentDeliveryRetry.delaysMs;
+  for (let attempt = 0; attempt <= delays.length; attempt += 1) {
+    if (attempt > 0) await wait(delays[attempt - 1]);
+    const delivered = await notifyOwner({
+      title: `Nouvelle réservation payée : ${customerName} - ${finalPrice} €`,
       content: notificationContent,
-    });
-
-    console.log("Owner notification sent via Manus notification service");
-  } catch {
-    console.error("Owner notification delivery failed");
+    }, { idempotencyKey: delivery.idempotencyKey }).catch(() => false);
+    if (delivered) {
+      console.log("Owner booking notification sent");
+      return;
+    }
   }
-}
-
-export async function sendOwnerNotificationSMS(
-  customerName: string,
-  customerPhone: string,
-  trackingId: string,
-  appointmentDate: Date,
-  finalPrice: number
-) {
-  try {
-    const formattedDate = appointmentDate.toLocaleString("fr-FR", {
-      timeZone: "Europe/Paris",
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-
-    // Use Manus notification as SMS alternative
-    await notifyOwner({
-      title: `📱 Réservation ${trackingId}`,
-      content: `${customerName} (${customerPhone}) - ${formattedDate} - ${finalPrice}€`,
-    });
-
-    console.log("Owner SMS notification sent via Manus notification service");
-  } catch {
-    console.error("Owner SMS fallback delivery failed");
-  }
+  throw new Error("owner_notification_failed");
 }
 
 export async function sendInvoiceEmail(
@@ -211,7 +229,8 @@ export async function sendInvoiceEmail(
   trackingId: string,
   finalPrice: number,
   invoicePdfBuffer: Buffer,
-  invoiceNumber?: string
+  invoiceNumber?: string,
+  delivery: { idempotencyKey?: string } = {},
 ) {
   try {
     const emailContent = buildHippocampusEmailShell(`
@@ -230,7 +249,7 @@ export async function sendInvoiceEmail(
       <p>Merci de votre confiance.</p>
     `);
 
-    const { error } = await getResendClient().emails.send({
+    await sendPostPaymentEmail({ rejected: "invoice_email_rejected", failed: "invoice_email_failed" }, {
       from: FROM_EMAIL,
       to: [customerEmail],
       subject: `Facture - Consultation ${trackingId}`,
@@ -241,11 +260,7 @@ export async function sendInvoiceEmail(
           content: invoicePdfBuffer.toString("base64"),
         },
       ],
-    });
-
-    if (error) {
-      throw new Error(`invoice_email_rejected:${error.message}`);
-    }
+    }, delivery.idempotencyKey);
 
     console.log("Invoice email sent successfully");
   } catch (error) {

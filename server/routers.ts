@@ -12,10 +12,6 @@ import { canAdminDownloadCv, CV_DOWNLOAD_UNAVAILABLE_MESSAGE } from "./recruitme
 import { eq, and, or, sql, desc, gte, inArray, isNull, lt, ne } from "drizzle-orm";
 import Stripe from "stripe";
 import {
-  sendConfirmationEmail,
-  sendOwnerNotificationEmail,
-  sendOwnerNotificationSMS,
-  sendCustomerConfirmationSMS,
   sendRefundConfirmationEmail,
   sendCandidatePortalAccessEmail,
   candidatePortalAccessEmailFailureCode,

@@ -9,7 +9,6 @@ const notifications = vi.hoisted(() => ({
   sendCustomerConfirmationSMS: vi.fn(async () => true),
   sendInvoiceEmail: vi.fn(async () => undefined),
   sendOwnerNotificationEmail: vi.fn(async () => undefined),
-  sendOwnerNotificationSMS: vi.fn(async () => true),
 }));
 const owner = vi.hoisted(() => ({ notifyOwner: vi.fn(async () => true) }));
 vi.mock("./db", () => ({ getDb: database.getDb }));
@@ -45,7 +44,14 @@ function fakeDatabase(input: { jobs: unknown[][]; appointments?: unknown[][]; up
   const rowCounts = [...(input.updateRowCounts ?? [])];
   const selectWheres: Array<{ table: unknown; where: SQL }> = [];
   const writes: Write[] = [];
+  const inserts: Array<{ table: unknown; values: Record<string, unknown>; conflict: "update" | "nothing" }> = [];
   const db = {
+    insert: vi.fn((table: unknown) => ({
+      values: (values: Record<string, unknown>) => ({
+        onConflictDoUpdate: async () => { inserts.push({ table, values, conflict: "update" }); return { rowCount: 1 }; },
+        onConflictDoNothing: async () => { inserts.push({ table, values, conflict: "nothing" }); return { rowCount: 0 }; },
+      }),
+    })),
     select: vi.fn(() => ({
       from: (table: unknown) => {
         const chain = {
@@ -66,7 +72,7 @@ function fakeDatabase(input: { jobs: unknown[][]; appointments?: unknown[][]; up
     })),
   };
   database.getDb.mockResolvedValue(db);
-  return { db, writes, selectWheres };
+  return { db, writes, selectWheres, inserts };
 }
 
 const futureDate = () => new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
@@ -149,7 +155,8 @@ describe("revendication atomique des envois post-paiement", () => {
 
     expect(result.results).toEqual([{ skipped: true }]);
     expect(notifications.sendConfirmationEmail).not.toHaveBeenCalled();
-    expect(notifications.sendOwnerNotificationSMS).not.toHaveBeenCalled();
+    // Le propriétaire reste prévenu par son propre job (créé s’il manque), jamais en double.
+    expect(notifications.sendOwnerNotificationEmail).not.toHaveBeenCalled();
     expect(writes.at(-1)?.values).toMatchObject({ status: "completed", lastError: "appointment_already_past_confirmation_skipped" });
     expect(owner.notifyOwner).toHaveBeenCalledTimes(1);
     expect(owner.notifyOwner).toHaveBeenCalledWith(expect.objectContaining({ title: expect.stringContaining("APT-42") }));
@@ -180,7 +187,7 @@ describe("revendication atomique des envois post-paiement", () => {
 
     expect(result.results).toEqual([{ completed: false, retry: false }]);
     expect(writes.at(-1)?.values).toMatchObject({ status: "failed" });
-    expect(owner.notifyOwner).toHaveBeenCalledWith(expect.objectContaining({ title: expect.stringContaining("APT-42") }));
+    expect(owner.notifyOwner).toHaveBeenCalledWith(expect.objectContaining({ title: expect.stringContaining("APT-42") }), expect.anything());
   });
 
   it("facture sous un numéro séquentiel attribué une fois, datée du paiement (création du job)", async () => {
@@ -202,7 +209,7 @@ describe("revendication atomique des envois post-paiement", () => {
       paymentDate: new Date("2026-10-12T07:59:00Z"),
       trackingId: "APT-42",
     }));
-    expect(notifications.sendInvoiceEmail).toHaveBeenCalledWith("patient@example.com", "Patient Test", "APT-42", 100, expect.any(Buffer), "FAC-2026-000003");
+    expect(notifications.sendInvoiceEmail).toHaveBeenCalledWith("patient@example.com", "Patient Test", "APT-42", 100, expect.any(Buffer), "FAC-2026-000003", { idempotencyKey: "appointment-invoice-FAC-2026-000003" });
   });
 
   it("remet en file un job interrompu (instance gelée après la réponse à Stripe)", async () => {

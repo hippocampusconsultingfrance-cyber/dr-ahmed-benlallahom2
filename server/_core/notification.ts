@@ -69,7 +69,8 @@ const validatePayload = (input: NotificationPayload): NotificationPayload => {
 
 /** Dispatches a private project-owner notification through Resend. */
 export async function notifyOwner(
-  payload: NotificationPayload
+  payload: NotificationPayload,
+  options: { idempotencyKey?: string } = {},
 ): Promise<boolean> {
   const { title, content } = validatePayload(payload);
   const resend = getResendClient();
@@ -79,14 +80,18 @@ export async function notifyOwner(
   }
 
   try {
-    const { error } = await resend.emails.send({
+    const message = {
       from: FROM_EMAIL,
       to: [OWNER_NOTIFICATION_EMAIL],
       replyTo: OWNER_NOTIFICATION_EMAIL,
       subject: title.slice(0, 200),
       html: `<div style="font-family:Arial,sans-serif;max-width:640px;margin:0 auto;color:#0f172a"><div style="padding:18px 22px;background:#071827;color:#fff;border-bottom:3px solid #0891b2"><strong>Hippocampus Consulting</strong></div><div style="padding:24px;border:1px solid #dbe4ee;border-top:0"><h2 style="margin-top:0;color:#0e7490">${escapeHtml(title)}</h2><div style="white-space:pre-wrap;line-height:1.6">${escapeHtml(content)}</div><p style="margin-top:24px;font-size:12px;color:#64748b">Notification privée générée par drahmedbenlallahom.com</p></div></div>`,
       text: `${title}\n\n${content}\n\nNotification privée générée par drahmedbenlallahom.com`,
-    });
+    };
+    // A stable idempotency key lets a caller retry without a duplicate email.
+    const { error } = options.idempotencyKey
+      ? await resend.emails.send(message, { idempotencyKey: options.idempotencyKey })
+      : await resend.emails.send(message);
     if (error) {
       console.warn(`[Notification] Resend rejected the owner notification: ${error.message}`);
       return false;
