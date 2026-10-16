@@ -90,7 +90,6 @@ export async function sendConfirmationEmail(
   trackingId: string,
   appointmentDate: Date,
   finalPrice: number,
-  requestDetails: string,
   meetLink?: string
 ) {
   try {
@@ -113,7 +112,6 @@ export async function sendConfirmationEmail(
           <li style="padding: 4px 0;"><strong>Numéro de suivi :</strong> ${escapeHtml(trackingId)}</li>
           <li style="padding: 4px 0;"><strong>Date et heure :</strong> ${formattedDate}</li>
           <li style="padding: 4px 0;"><strong>Montant :</strong> ${finalPrice}€</li>
-          <li style="padding: 4px 0;"><strong>Demande :</strong> ${escapeHtml(requestDetails)}</li>
           ${meetLink ? `<li style="padding: 4px 0;"><strong>Lien Google Meet :</strong> <a href="${escapeHtml(meetLink)}">${escapeHtml(meetLink)}</a></li>` : ""}
         </ul>
       </div>
@@ -143,8 +141,7 @@ export async function sendOwnerNotificationEmail(
   customerPhone: string,
   trackingId: string,
   appointmentDate: Date,
-  finalPrice: number,
-  requestDetails: string
+  finalPrice: number
 ) {
   try {
     const formattedDate = appointmentDate.toLocaleString("fr-FR", {
@@ -165,7 +162,7 @@ Email: ${customerEmail}
 Téléphone: ${customerPhone}
 Date: ${formattedDate}
 Montant: ${finalPrice}€
-Demande: ${requestDetails}
+Objet de la demande : consultable uniquement dans le tableau de bord (jamais recopié par email).
     `.trim();
 
     await notifyOwner({

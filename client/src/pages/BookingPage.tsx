@@ -9,6 +9,7 @@ import Breadcrumb from "@/components/Breadcrumb";
 import PublicContentSkeleton from "@/components/PublicContentSkeleton";
 import { SEOHead } from "@/components/SEOHead";
 import { getBookingFormCopy } from "@/lib/publicFormCopy";
+import { BOOKING_REQUEST_SUBJECT_MAX_LENGTH } from "@shared/bookingPolicy";
 
 export const bookingContent = {
   fr: {
@@ -25,8 +26,9 @@ export const bookingContent = {
       timeLabel: "Heure",
       invalidDate: "Saisissez une date valide au format JJ/MM/AAAA et une heure au format HH:MM.",
       dateHint: "Choisissez la date et l’heure de votre consultation. Le créneau est affiché en heure de Paris.",
-      details: "Détails de votre demande",
-      detailsPlaceholder: "Décrivez brièvement votre situation...",
+      details: "Objet de la demande (sans information médicale)",
+      detailsPlaceholder: "Ex. : demande d’avis, questions d’organisation, préparation de la consultation",
+      detailsWarning: "N’indiquez ici aucune information de santé (symptômes, diagnostic, traitement, antécédents, résultats d’examens). Ces éléments seront abordés uniquement pendant la consultation.",
       submit: "Procéder au paiement",
       loading: "Traitement...",
       checkingAvailability: "Vérification du créneau...",
@@ -76,8 +78,9 @@ export const bookingContent = {
       timeLabel: "Time",
       invalidDate: "Enter a valid date in DD/MM/YYYY format and a time in HH:MM format.",
       dateHint: "Choose your consultation date and time. The slot is displayed in Paris time.",
-      details: "Request Details",
-      detailsPlaceholder: "Briefly describe your situation...",
+      details: "Purpose of your request (no medical information)",
+      detailsPlaceholder: "E.g. request for advice, practical questions, preparing the consultation",
+      detailsWarning: "Do not enter any health information here (symptoms, diagnosis, treatment, medical history, test results). These will only be discussed during the consultation.",
       submit: "Proceed to Payment",
       loading: "Processing...",
       checkingAvailability: "Checking availability...",
@@ -127,8 +130,9 @@ export const bookingContent = {
       timeLabel: "Uhrzeit",
       invalidDate: "Geben Sie ein gültiges Datum im Format TT.MM.JJJJ und eine Uhrzeit im Format HH:MM ein.",
       dateHint: "Wählen Sie Datum und Uhrzeit Ihrer Beratung. Der Termin wird in Pariser Zeit angezeigt.",
-      details: "Anforderungsdetails",
-      detailsPlaceholder: "Beschreiben Sie Ihre Situation kurz...",
+      details: "Anlass Ihrer Anfrage (ohne medizinische Angaben)",
+      detailsPlaceholder: "z. B. Bitte um Rat, organisatorische Fragen, Vorbereitung der Beratung",
+      detailsWarning: "Geben Sie hier keine Gesundheitsdaten an (Symptome, Diagnose, Behandlung, Vorgeschichte, Untersuchungsergebnisse). Diese werden ausschließlich während der Beratung besprochen.",
       submit: "Zur Zahlung übergehen",
       loading: "Verarbeitung...",
       checkingAvailability: "Verfügbarkeit wird geprüft...",
@@ -178,8 +182,9 @@ export const bookingContent = {
       timeLabel: "时间",
       invalidDate: "请输入有效日期（日/月/年）和时间（时:分）。",
       dateHint: "请选择咨询日期和时间。时段以巴黎时间显示。",
-      details: "请求详情",
-      detailsPlaceholder: "简要描述您的情况...",
+      details: "咨询事由（请勿填写医疗信息）",
+      detailsPlaceholder: "例如：寻求建议、组织安排问题、咨询准备",
+      detailsWarning: "请勿在此填写任何健康信息（症状、诊断、治疗、病史、检查结果）。这些内容仅在咨询过程中讨论。",
       submit: "继续付款",
       loading: "处理中...",
       checkingAvailability: "正在检查可用性...",
@@ -827,13 +832,19 @@ export default function BookingPage() {
                 <FileText className="w-4 h-4" aria-hidden="true" />
                 {content.form.details}
               </label>
+              <p id="booking-details-warning" className="mb-2 flex gap-2 rounded-lg border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-xs leading-5 text-foreground">
+                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-300" aria-hidden="true" />
+                <span>{content.form.detailsWarning}</span>
+              </p>
               <textarea
                 id="booking-details"
                 required
+                maxLength={BOOKING_REQUEST_SUBJECT_MAX_LENGTH}
                 value={formData.details}
                 onChange={(e) => setFormData({ ...formData, details: e.target.value })}
                 placeholder={content.form.detailsPlaceholder}
-                rows={4}
+                aria-describedby="booking-details-warning"
+                rows={3}
                 enterKeyHint="done"
                 className="form-field-premium w-full px-4 py-2 border"
               />

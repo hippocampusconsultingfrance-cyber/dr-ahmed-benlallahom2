@@ -35,6 +35,7 @@ import { buildCandidatePortalInvitationEmailEvent, candidatePortalAccountMatches
 import { RECRUITMENT_ANALYSIS_PROMPT_VERSION } from "./recruitmentAnalysis";
 import { medicalQuestionsRouter } from "./medicalQuestionsRouter";
 import { issueAdminMfaChallenge, verifyAdminMfaChallenge } from "./adminMfa";
+import { BOOKING_REQUEST_SUBJECT_MAX_LENGTH } from "../shared/bookingPolicy";
 
 let stripeClient: Stripe | undefined;
 
@@ -556,7 +557,9 @@ export const appRouter = router({
           customerEmail: z.string().email().max(320),
           customerPhone: z.string().min(1).max(50),
           appointmentDate: appointmentDateInput,
-          requestDetails: z.string().min(1).max(5000),
+          // Objet de la demande, sans information médicale (minimisation) :
+          // conservé pour le tableau de bord, jamais recopié dans un email.
+          requestDetails: z.string().trim().min(1).max(BOOKING_REQUEST_SUBJECT_MAX_LENGTH),
         })
       )
       .mutation(async ({ input, ctx }) => {
