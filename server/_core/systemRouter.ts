@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { getEnvironmentConfigurationStatus } from "./env";
 import { notifyOwner } from "./notification";
 import { adminProcedure, publicProcedure, router } from "./trpc";
 
@@ -12,6 +13,12 @@ export const systemRouter = router({
     .query(() => ({
       ok: true,
     })),
+
+  /**
+   * Noms des variables critiques manquantes (jamais leurs valeurs), affichés en bandeau
+   * dans le tableau de bord admin (OPS-01). Même source que GET /api/health.
+   */
+  configurationStatus: adminProcedure.query(() => getEnvironmentConfigurationStatus()),
 
   notifyOwner: adminProcedure
     .input(

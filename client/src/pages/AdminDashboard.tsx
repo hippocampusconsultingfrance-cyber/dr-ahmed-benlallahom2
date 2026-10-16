@@ -16,6 +16,7 @@ import SecurityOperationsTab from "@/components/SecurityOperationsTab";
 import RecruitmentDashboardPanel from "@/components/RecruitmentDashboardPanel";
 import MedicalQuestionsAdminTab from "@/components/MedicalQuestionsAdminTab";
 import { AdminEmptyState, AdminErrorState } from "@/components/AdminStatePanel";
+import AdminConfigurationBanner from "@/components/AdminConfigurationBanner";
 import PublicContentSkeleton from "@/components/PublicContentSkeleton";
 import { getActiveAdminTabLabel } from "./adminDashboardMobileTabs";
 import { buildAppointmentsAgenda } from "./appointmentsAgenda";
@@ -161,6 +162,7 @@ export default function AdminDashboard() {
 
       {/* Content */}
       <main className="max-w-7xl mx-auto px-4 py-5 sm:py-8">
+        <AdminConfigurationBanner />
         {activeTab === "overview" && <OverviewTab onNavigate={setActiveTab} />}
         {activeTab === "appointments" && <AppointmentsTab />}
         {activeTab === "contacts" && <ContactsTab />}

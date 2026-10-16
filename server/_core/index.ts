@@ -9,6 +9,7 @@ import net from "net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { clerkMiddleware } from "@clerk/express";
 import { assertCriticalProductionEnvironment } from "./env";
+import { registerHealthRoute } from "./health";
 import { requireVercelCron } from "./cronAuth";
 import { secureReference } from "./secureReference";
 import { registerGoogleDriveOAuthRoutes } from "../googleDriveOAuthRoutes";
@@ -167,7 +168,10 @@ export async function createApp() {
     ].join("; "));
     next();
   });
-  
+
+  // Public uptime probe (SELECT 1 + names of missing critical variables, no secrets).
+  registerHealthRoute(app);
+
   // Stripe Webhook (MUST be before express.json() to receive raw body)
   app.post("/api/stripe/webhook", express.raw({ type: "application/json" }), async (req, res) => {
     const sig = req.headers["stripe-signature"] as string;
