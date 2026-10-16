@@ -1,5 +1,5 @@
 import { createCipheriv, createDecipheriv, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
-import { and, eq, gte, inArray, isNull, lt, lte, or } from "drizzle-orm";
+import { and, eq, gte, inArray, isNull, lt, lte, notInArray, or } from "drizzle-orm";
 import { cvApplications, cvGoogleDriveExportJobs, googleDriveConnections } from "../drizzle/schema";
 import { getDb } from "./db";
 import { logRecruitmentAction } from "./recruitmentAudit";
@@ -596,24 +596,26 @@ async function processGoogleDriveExportJob(jobId: number) {
   }
 }
 
-export async function processDueCvGoogleDriveExports(limit = BATCH_SIZE, applicationIds?: number[]) {
+/**
+ * `skipQuarantinedCvs` leaves aside the jobs whose CV still awaits validation:
+ * the cron runs Drive copies before the analyses (which validate quarantined
+ * CVs) and must not push those jobs back while they wait for it.
+ */
+export async function processDueCvGoogleDriveExports(limit = BATCH_SIZE, applicationIds?: number[], options: { skipQuarantinedCvs?: boolean } = {}) {
   const db = await getDb();
   if (!db) throw new Error("Database connection failed");
   const connection = (await db.select({ id: googleDriveConnections.id }).from(googleDriveConnections).where(eq(googleDriveConnections.connectionKey, CONNECTION_KEY)).limit(1))[0];
   if (!connection) return { processed: 0, waitingForAuthorization: true, results: [] as Array<Record<string, unknown>> };
   const now = new Date();
-  const dueJobs = applicationIds?.length
-    ? and(
-        inArray(cvGoogleDriveExportJobs.status, ["queued", "retry"]),
-        lte(cvGoogleDriveExportJobs.scheduledFor, now),
-        lt(cvGoogleDriveExportJobs.attempts, cvGoogleDriveExportJobs.maxAttempts),
-        inArray(cvGoogleDriveExportJobs.applicationId, applicationIds),
-      )
-    : and(
-        inArray(cvGoogleDriveExportJobs.status, ["queued", "retry"]),
-        lte(cvGoogleDriveExportJobs.scheduledFor, now),
-        lt(cvGoogleDriveExportJobs.attempts, cvGoogleDriveExportJobs.maxAttempts),
-      );
+  const dueJobs = and(
+    inArray(cvGoogleDriveExportJobs.status, ["queued", "retry"]),
+    lte(cvGoogleDriveExportJobs.scheduledFor, now),
+    lt(cvGoogleDriveExportJobs.attempts, cvGoogleDriveExportJobs.maxAttempts),
+    ...(applicationIds?.length ? [inArray(cvGoogleDriveExportJobs.applicationId, applicationIds)] : []),
+    ...(options.skipQuarantinedCvs
+      ? [notInArray(cvGoogleDriveExportJobs.applicationId, db.select({ id: cvApplications.id }).from(cvApplications).where(eq(cvApplications.fileValidationStatus, "quarantined")))]
+      : []),
+  );
   const candidates = await db.select().from(cvGoogleDriveExportJobs).where(dueJobs).orderBy(cvGoogleDriveExportJobs.scheduledFor).limit(Math.min(Math.max(limit, 1), BATCH_SIZE));
   const results: Array<Record<string, unknown>> = [];
   for (const candidate of candidates) {

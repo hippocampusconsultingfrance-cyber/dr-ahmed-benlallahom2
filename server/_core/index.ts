@@ -522,12 +522,15 @@ export async function createApp() {
           res.status(200).json({ success: true, duplicate: true, trackingId: duplicate.trackingId });
           return;
         }
-        recruitmentStage = "queue-capacity-check";
-        const queuedJobs = await db.select({ id: cvProcessingJobs.id }).from(cvProcessingJobs).where(sql`${cvProcessingJobs.status} IN ('queued', 'retry', 'running')`).limit(201);
-        if (queuedJobs.length >= 200) {
-          await logSecurityEvent({ actorKind: "system", category: "public_recruitment_apply_queue_backpressure", outcome: "blocked", severity: "high", ipHash });
-          res.status(503).json({ error: "Le service de candidature reçoit actuellement un volume élevé. Veuillez réessayer ultérieurement." });
-          return;
+        // A long analysis queue never refuses a candidate: the dossier is
+        // stored and queued, and the owner is alerted (at most once a day).
+        recruitmentStage = "queue-backlog-check";
+        try {
+          const { countWaitingCvAnalyses, notifyOwnerOfAnalysisBacklog, RECRUITMENT_ANALYSIS_BACKLOG_ALERT_THRESHOLD } = await import("../recruitmentProcessingWorker");
+          const waitingAnalyses = await countWaitingCvAnalyses(RECRUITMENT_ANALYSIS_BACKLOG_ALERT_THRESHOLD);
+          if (waitingAnalyses >= RECRUITMENT_ANALYSIS_BACKLOG_ALERT_THRESHOLD) await notifyOwnerOfAnalysisBacklog(waitingAnalyses);
+        } catch (backlogError) {
+          console.error("Recruitment backlog check error:", safeErrorName(backlogError));
         }
 
         recruitmentStage = "storage-upload";
@@ -833,29 +836,21 @@ export async function createApp() {
   // remain fast and failures can be retried without losing the candidate dossier.
   app.get("/api/scheduled/recruitment-processing", requireVercelCron, async (_req, res) => {
     try {
-      const { backfillLegacyCvAnalysisJobs, processDueCvAnalysisJobs, recoverStaleCvAnalysisJobs } = await import("../recruitmentProcessing");
-      const { backfillCvGoogleDriveExportJobs, processDueCvGoogleDriveExports, recoverStaleCvGoogleDriveExportJobs } = await import("../googleDriveExport");
-      const { retryDueFailedCvConfirmationEmails } = await import("../recruitmentEmailTrace");
-      const { retryPendingGoogleDriveErasures } = await import("../recruitmentErasure");
-      const analysisRecovery = await recoverStaleCvAnalysisJobs();
-      const driveRecovery = await recoverStaleCvGoogleDriveExportJobs();
-      // GDPR: finish the Drive deletions an erasure could not complete.
-      const driveErasures = await retryPendingGoogleDriveErasures(10);
-      const analysisBackfill = await backfillLegacyCvAnalysisJobs(5);
-      const driveBackfill = await backfillCvGoogleDriveExportJobs(25);
-      const analysis = await processDueCvAnalysisJobs(5);
-      const driveExports = await processDueCvGoogleDriveExports(3);
-      const confirmationEmails = await retryDueFailedCvConfirmationEmails(3);
+      // Drains every queue within a time budget: confirmation-email retries and
+      // Drive copies first, then CV analyses (none started after ~25 s).
+      const { runRecruitmentProcessingWorker } = await import("../recruitmentProcessingWorker");
+      const summary = await runRecruitmentProcessingWorker();
       console.info("[RecruitmentProcessing] Vercel cron summary", {
-        analysisBackfill,
-        driveBackfill,
-        analysisRecovery,
-        driveRecovery,
-        analysisProcessed: analysis.processed,
-        driveExportsProcessed: driveExports.processed,
-        confirmationEmailsProcessed: confirmationEmails.processed,
+        elapsedMs: summary.elapsedMs,
+        analysisRecovery: summary.analysisRecovery,
+        driveRecovery: summary.driveRecovery,
+        driveErasures: summary.driveErasures,
+        confirmationEmailsProcessed: summary.confirmationEmails.processed,
+        driveExportsProcessed: summary.driveExports.processed,
+        analysisProcessed: summary.analysis.processed,
+        analysesWaiting: summary.analysesWaiting,
       });
-      return res.json({ ok: true, scheduler: "vercel-cron", analysisRecovery, driveRecovery, driveErasures, analysisBackfill, driveBackfill, analysis, driveExports, confirmationEmails });
+      return res.json({ ok: true, scheduler: "vercel-cron", ...summary });
     } catch (error: any) {
       console.error("[RecruitmentProcessing] Vercel cron error:", safeErrorName(error));
       return res.status(500).json({ error: error.message, timestamp: new Date().toISOString() });

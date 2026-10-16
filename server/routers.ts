@@ -1843,8 +1843,10 @@ export const appRouter = router({
             await logRecruitmentAction({ applicationId: application.id, adminOpenId: ctx.user.openId, action: "reanalyze", metadata: { queued: true, batch: true } });
           }
           const applicationIds = resumableApplications.map(application => application.id);
+          // One analysis inline at most (an AI call can take ~35 s): the rest is
+          // queued for the cron, so the admin request stays under the 60 s limit.
           const processing = applicationIds.length > 0
-            ? await processDueCvAnalysisJobs(Math.min(applicationIds.length, 2), applicationIds)
+            ? await processDueCvAnalysisJobs(1, applicationIds)
             : { processed: 0, results: [] };
           return { success: true, queued: resumableApplications.length, processed: processing.processed };
         }),
