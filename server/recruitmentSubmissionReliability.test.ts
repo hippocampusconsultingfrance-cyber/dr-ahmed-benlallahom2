@@ -22,7 +22,8 @@ describe("fiabilité du dépôt de candidature", () => {
     expect(rateLimitPosition).toBeGreaterThan(turnstilePosition);
     expect(serverSource).toContain("maxAttempts: 10");
     expect(serverSource).toContain("blockMs: 60 * 60 * 1000");
-    expect(securitySource).toContain("existing.attemptCount > input.maxAttempts");
+    // Relaxed-threshold recovery is covered behaviourally in candidateLoginThrottling.test.ts.
+    expect(securitySource).toContain("gt(table.attemptCount, input.maxAttempts)");
   });
 
   it("ne transforme pas une candidature déjà enregistrée en erreur si une file différée échoue", () => {
