@@ -4,6 +4,7 @@ import { getDb } from "./db";
 import { extractCvDocument, analyzeCvText, RECRUITMENT_ANALYSIS_PROMPT_VERSION, saveCvAnalysis } from "./recruitmentAnalysis";
 import { storageGetSignedUrl, storagePut } from "./storage";
 import { validateCvFile } from "./recruitmentFileValidation";
+import { isProcessingDeadlineError } from "./processingDeadline";
 
 const MAX_ATTEMPTS = 3;
 const PROCESSING_BATCH_SIZE = 5;
@@ -423,6 +424,15 @@ async function processCvAnalysisJob(jobId: number) {
   } catch (error) {
     const message = error instanceof Error ? error.message.slice(0, 4_000) : "unknown_processing_error";
     const now = new Date();
+    if (isProcessingDeadlineError(error)) {
+      // Neither the file's nor the provider's fault: the cron invocation is
+      // about to end. The job goes back to the queue at the same place, for
+      // the next run, without counting this attempt.
+      await db.update(cvProcessingJobs).set({ status: "retry", attempts: Math.max(0, job.attempts - 1), startedAt: null, finishedAt: null, lastError: message })
+        .where(eq(cvProcessingJobs.id, job.id));
+      await db.update(cvApplications).set({ analysisStatus: "queued", updatedAt: now }).where(eq(cvApplications.id, job.applicationId));
+      return { completed: false, applicationId: job.applicationId, retry: true, deadlineReached: true, error: message };
+    }
     const validationFailure = message.startsWith("cv_validation_");
     const finalFailure = validationFailure || job.attempts >= job.maxAttempts;
     await db.update(cvProcessingJobs).set({

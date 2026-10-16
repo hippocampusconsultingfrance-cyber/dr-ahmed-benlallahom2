@@ -3,17 +3,23 @@ import { cvProcessingJobs } from "../drizzle/schema";
 import { getDb } from "./db";
 import { notifyOwner } from "./_core/notification";
 import { enforcePersistentRateLimit } from "./candidateSecurity";
+import { runWithProcessingDeadline } from "./processingDeadline";
 
 /**
  * Time budget of the daily recruitment-processing cron (Vercel function limit:
  * 60 s). Fast work (confirmation-email retries, Drive copies) runs first and
- * stops being started after `budgetMs`; a CV analysis (AI call up to ~35 s)
- * is only started before `analysisStartDeadlineMs`, so the last one still
- * ends inside the function limit. Interrupted jobs are recovered next run.
+ * stops being started after `budgetMs`. A CV analysis is only started before
+ * `analysisStartDeadlineMs`, and runs under `analysisDeadlineMs`: its slow
+ * steps (PDF reading up to 12 s, page rendering 15 s, OCR 20 s, AI analysis
+ * 35 s) each get their own limit shortened to the time left, keeping the
+ * minimum the later steps need (processingDeadline.ts). A job that cannot
+ * finish in time is released for the next run without counting an attempt,
+ * and no further analysis is started; the platform never kills one mid-way.
  */
 export const RECRUITMENT_PROCESSING_BUDGET = {
   budgetMs: 35_000,
   analysisStartDeadlineMs: 25_000,
+  analysisDeadlineMs: 55_000,
   maxEmailBatches: 5,
   maxDriveBatches: 10,
   maxAnalyses: 25,
@@ -101,7 +107,13 @@ export async function runRecruitmentProcessingWorker(
   // Then the analyses, one at a time, none started after the deadline. The
   // analysis validates a quarantined CV before calling the AI provider.
   const analysisBackfill = await backfillLegacyCvAnalysisJobs(5);
-  const analysis = await drainWhile(() => processDueCvAnalysisJobs(1), () => elapsed() < budget.analysisStartDeadlineMs, budget.maxAnalyses);
+  let analysisDeadlineReached = false;
+  const analysis = await drainWhile(
+    () => runWithProcessingDeadline(startedAt + budget.analysisDeadlineMs, () => processDueCvAnalysisJobs(1), clock),
+    () => !analysisDeadlineReached && elapsed() < budget.analysisStartDeadlineMs,
+    budget.maxAnalyses,
+    batch => (analysisDeadlineReached = batch.results.some(result => (result as { deadlineReached?: boolean }).deadlineReached === true)),
+  );
 
   // Copies of the CVs validated by this run, if time remains (else next run).
   const lateDriveExports = waitingForAuthorization
@@ -119,7 +131,7 @@ export async function runRecruitmentProcessingWorker(
     driveBackfill,
     driveExports: { processed: driveExports.processed + lateDriveExports.processed, batches: driveExports.batches + lateDriveExports.batches, afterAnalyses: lateDriveExports.processed, waitingForAuthorization },
     analysisBackfill,
-    analysis,
+    analysis: { ...analysis, deadlineReached: analysisDeadlineReached },
     analysesWaiting,
     backlogAlertSent,
   };

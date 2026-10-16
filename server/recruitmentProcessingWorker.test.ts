@@ -6,6 +6,8 @@ const state = vi.hoisted(() => ({
   calls: [] as string[],
   queues: { emails: 0, drive: 0, analyses: 0, driveAwaitingValidation: 0 },
   analysisDurationMs: 10_000,
+  analysisDeadlineReachedAt: null as null | number,
+  analysisTimeouts: [] as number[],
   driveWaitingForAuthorization: false,
   waiting: 0,
   notifications: [] as Array<{ title: string; content: string }>,
@@ -23,6 +25,16 @@ vi.mock("./recruitmentProcessing", () => ({
   backfillLegacyCvAnalysisJobs: vi.fn(async () => { state.calls.push("backfillAnalysis"); return { inspected: 0, queued: 0, accelerated: 0 }; }),
   processDueCvAnalysisJobs: vi.fn(async (limit: number) => {
     state.calls.push("analysis");
+    // What the AI step of this job would be allowed (deadline context of the cron).
+    const { stepTimeoutMs } = await import("./processingDeadline");
+    try {
+      state.analysisTimeouts.push(stepTimeoutMs("analysis", 35_000, { minimumMs: 15_000 }));
+    } catch {
+      state.analysisTimeouts.push(-1);
+    }
+    if (state.analysisDeadlineReachedAt !== null && state.now >= state.analysisDeadlineReachedAt) {
+      return { processed: 1, results: [{ completed: false, retry: true, deadlineReached: true }] };
+    }
     const processed = take("analyses", limit);
     // The analysis validates a quarantined CV, which makes its Drive copy possible.
     const validated = take("driveAwaitingValidation", processed);
@@ -78,6 +90,8 @@ describe("cron recruitment-processing : vidage par lots dans un budget de temps"
     state.calls = [];
     state.queues = { emails: 0, drive: 0, analyses: 0, driveAwaitingValidation: 0 };
     state.analysisDurationMs = 10_000;
+    state.analysisDeadlineReachedAt = null;
+    state.analysisTimeouts = [];
     state.driveWaitingForAuthorization = false;
     state.waiting = 0;
     state.notifications = [];
@@ -108,6 +122,18 @@ describe("cron recruitment-processing : vidage par lots dans un budget de temps"
     expect(summary.analysis.processed).toBe(3);
     expect(state.queues.analyses).toBe(17);
     expect(summary.elapsedMs).toBeLessThan(60_000);
+  });
+
+  it("donne à chaque analyse un délai borné par la limite de 55 s et n’en démarre plus après un job rendu à la file", async () => {
+    state.queues = { emails: 0, drive: 0, analyses: 20, driveAwaitingValidation: 0 };
+    state.analysisDurationMs = 12_000;
+    state.analysisDeadlineReachedAt = 24_000;
+    const summary = await runRecruitmentProcessingWorker({}, clock);
+    // 0 s: full 35 s; 12 s: 35 s (55 - 12 = 43); 24 s: released → nothing else starts.
+    expect(state.analysisTimeouts).toEqual([35_000, 35_000, 31_000]);
+    expect(summary.analysis).toMatchObject({ processed: 3, deadlineReached: true });
+    expect(state.calls.filter(call => call === "analysis")).toHaveLength(3);
+    expect(state.queues.analyses).toBe(18);
   });
 
   it("une file d’emails et de copies Drive longue ne dépasse pas le budget de 35 s", async () => {

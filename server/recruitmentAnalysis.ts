@@ -5,6 +5,7 @@ import { cvApplications, cvCandidateCertifications, cvCandidateExperiences, cvCa
 import { getDb } from "./db";
 import { assertPdfDecompressionWithinLimits, DOCUMENT_DECOMPRESSION_LIMITS, inspectDocxArchive, truncateExtractedText } from "./documentDecompressionLimits";
 import { PdfReaderUnavailableError, readPdfIsolated } from "./pdfExtractionSandbox";
+import { CV_ANALYSIS_STEP_MINIMUM_MS, ProcessingDeadlineError, stepTimeoutMs } from "./processingDeadline";
 
 export const RECRUITMENT_ANALYSIS_PRIMARY_MODEL = "openai/gpt-6-astra";
 export const RECRUITMENT_ANALYSIS_FALLBACK_MODEL = "google/gemini-3.8-flash";
@@ -268,11 +269,35 @@ async function readPdfBounded<T>(buffer: Buffer, isolated: () => Promise<T>, inP
 }
 
 const VISION_RENDER = { first: 3, desiredWidth: 1400 } as const;
+const OCR_PAGE_TIMEOUT_MS = 20_000;
+const ANALYSIS_TIMEOUT_MS = 35_000;
+
+/**
+ * Isolated-reader limits for one step, its timeout shortened to the cron
+ * deadline when one applies. A timeout caused by that shortening is the
+ * deadline's, not the file's: it releases the job instead of failing it.
+ */
+function pdfStepLimits(step: "pdf_text" | "pdf_render", ownTimeoutMs: number, options: { reserveMs: number; minimumMs: number }) {
+  const timeoutMs = stepTimeoutMs(step, ownTimeoutMs, options);
+  return {
+    limits: { ...DOCUMENT_DECOMPRESSION_LIMITS, pdfTextTimeoutMs: timeoutMs, pdfRenderTimeoutMs: timeoutMs },
+    rethrow(error: unknown): never {
+      if (timeoutMs < ownTimeoutMs && error instanceof Error && error.message === "cv_validation_pdf_processing_timeout") throw new ProcessingDeadlineError(step);
+      throw error;
+    },
+  };
+}
 
 async function extractPdfWithVision(buffer: Buffer): Promise<{ text: string; confidence: number | null; warnings: string[] }> {
   const screenshots = await readPdfBounded(
     buffer,
-    () => readPdfIsolated(buffer, { kind: "render", ...VISION_RENDER }),
+    () => {
+      const step = pdfStepLimits("pdf_render", DOCUMENT_DECOMPRESSION_LIMITS.pdfRenderTimeoutMs, {
+        reserveMs: CV_ANALYSIS_STEP_MINIMUM_MS.ocr + CV_ANALYSIS_STEP_MINIMUM_MS.analysis,
+        minimumMs: CV_ANALYSIS_STEP_MINIMUM_MS.pdfRender,
+      });
+      return readPdfIsolated(buffer, { kind: "render", ...VISION_RENDER }, step.limits).catch(step.rethrow);
+    },
     async parser => {
       const rendered = await parser.getScreenshot({ ...VISION_RENDER, imageDataUrl: true, imageBuffer: false });
       return { total: rendered.total, pages: rendered.pages.map(page => ({ pageNumber: page.pageNumber, dataUrl: page.dataUrl || null })) };
@@ -281,11 +306,13 @@ async function extractPdfWithVision(buffer: Buffer): Promise<{ text: string; con
   const pages = screenshots.pages.filter((page): page is { pageNumber: number; dataUrl: string } => Boolean(page.dataUrl));
   if (pages.length === 0) return { text: "", confidence: null, warnings: ["vision_ocr_no_rendered_pages"] };
 
+  // Pages are transcribed in parallel: one timeout for all of them.
+  const ocrTimeoutMs = stepTimeoutMs("ocr", OCR_PAGE_TIMEOUT_MS, { reserveMs: CV_ANALYSIS_STEP_MINIMUM_MS.analysis, minimumMs: CV_ANALYSIS_STEP_MINIMUM_MS.ocr });
   const transcriptions = await Promise.all(pages.map(async page => {
     const response = await generateText({
       model: RECRUITMENT_OCR_MODEL,
       maxOutputTokens: 3_000,
-      timeout: 20_000,
+      timeout: ocrTimeoutMs,
       maxRetries: 1,
       providerOptions: { gateway: { disallowPromptTraining: true, has: ["vision"] } },
       output: Output.object({ schema: visionOcrPageSchema, name: "cv_ocr_page_transcription" }),
@@ -335,7 +362,13 @@ async function extractCvDocumentUnbounded(buffer: Buffer, mimeType: string): Pro
     const first = DOCUMENT_DECOMPRESSION_LIMITS.pdfMaxExtractedPages;
     const result = await readPdfBounded(
       buffer,
-      () => readPdfIsolated(buffer, { kind: "text", first }),
+      () => {
+        const step = pdfStepLimits("pdf_text", DOCUMENT_DECOMPRESSION_LIMITS.pdfTextTimeoutMs, {
+          reserveMs: CV_ANALYSIS_STEP_MINIMUM_MS.analysis,
+          minimumMs: CV_ANALYSIS_STEP_MINIMUM_MS.pdfText,
+        });
+        return readPdfIsolated(buffer, { kind: "text", first }, step.limits).catch(step.rethrow);
+      },
       async parser => {
         const read = await parser.getText({ first });
         return { total: Number.isInteger(read.total) ? read.total : null, pages: read.pages.map(page => ({ num: page.num, text: page.text })) };
@@ -1264,11 +1297,12 @@ export async function analyzeCvText(input: RecruitmentAnalysisInput): Promise<Re
   const cvContentLength = cleanText(cvText.replace(/\[PAGE\s+\d+\]/gi, "")).length;
   if (cvContentLength < 80) throw new Error("Le texte extrait du CV est insuffisant pour une analyse fiable.");
 
+  const analysisTimeoutMs = stepTimeoutMs("analysis", ANALYSIS_TIMEOUT_MS, { minimumMs: CV_ANALYSIS_STEP_MINIMUM_MS.analysis });
   try {
     const response = await generateText({
       model: RECRUITMENT_ANALYSIS_PRIMARY_MODEL,
       maxOutputTokens: 6_000,
-      timeout: 35_000,
+      timeout: analysisTimeoutMs,
       maxRetries: 1,
       providerOptions: {
         gateway: {
