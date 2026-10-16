@@ -23,6 +23,7 @@ import { getDb } from "../db";
 import { candidateDocumentAuditLogs, candidateDocumentProcessingJobs, candidateDocuments, cvApplications, cvProcessingJobs, recruitmentCampaignRecipients, recruitmentEmailEvents } from "../../drizzle/schema";
 import { CANDIDATE_DOCUMENT_MAX_BYTES, candidateDocumentMimeTypes, safeCandidateDocumentName, validateCandidateDocument } from "../candidateDocumentValidation";
 import { createCandidateInvitationToken } from "../candidateAuth";
+import { CANDIDATE_UPLOADABLE_DOCUMENT_CATEGORIES, candidateDocumentAllowsAiAnalysis } from "../../shared/candidateDocumentCategories";
 import { isSameRecruitmentSubmission } from "../recruitmentSubmissionDeduplication";
 import { sendTrackedCvApplicationConfirmationEmail } from "../recruitmentEmailTrace";
 import { resendApplicationReferenceFromTags, resendRecipientMatchesApplication } from "../resendWebhookCorrelation";
@@ -624,8 +625,13 @@ export async function createApp() {
           res.status(401).json({ error: "Votre session a expiré. Veuillez vous reconnecter." });
           return;
         }
+        if (req.body?.category === "criminal_record" || req.body?.category === "vaccination_record") {
+          // LEGAL-12: criminal-record extracts and health documents are no longer collected.
+          res.status(400).json({ error: "Ce type de document (extrait de casier judiciaire, justificatif de vaccination) n’est pas collecté via l’espace candidat. Ne le transmettez pas.", code: "candidate_document_category_retired" });
+          return;
+        }
         const parsed = z.object({
-          category: z.enum(["identity_document", "medical_license", "diploma", "certificate", "professional_insurance", "vaccination_record", "criminal_record", "employment_evidence", "proof_of_address", "other"]),
+          category: z.enum(CANDIDATE_UPLOADABLE_DOCUMENT_CATEGORIES),
           categoryOtherLabel: z.string().trim().max(160).optional(),
           turnstileToken: z.string().min(20).max(4096),
         }).safeParse(req.body);
@@ -663,6 +669,9 @@ export async function createApp() {
         }
         const retentionUntil = new Date();
         retentionUntil.setFullYear(retentionUntil.getFullYear() + 2);
+        // Only professional credentials are queued for AI analysis; identity and other documents get a human review only.
+        const aiAnalysis = candidateDocumentAllowsAiAnalysis(parsed.data.category);
+        const { candidateHumanReviewOnlyFields } = await import("../candidateDocumentProcessing");
         const result = await db.insert(candidateDocuments).values({
           candidateId: candidate.id,
           applicationId: candidate.linkedApplicationId ?? null,
@@ -684,9 +693,10 @@ export async function createApp() {
           status: "uploaded",
           analysisStatus: "queued",
           retentionUntil,
+          ...(aiAnalysis ? {} : candidateHumanReviewOnlyFields()),
         }).returning({ id: candidateDocuments.id });
         const documentId = Number(result[0].id);
-        await db.insert(candidateDocumentProcessingJobs).values({ documentId, status: "queued" });
+        if (aiAnalysis) await db.insert(candidateDocumentProcessingJobs).values({ documentId, status: "queued" });
         await db.insert(candidateDocumentAuditLogs).values({
           candidateId: candidate.id,
           documentId,

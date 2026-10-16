@@ -4,6 +4,7 @@ import { publicProcedure, protectedProcedure, adminProcedure, router } from "./_
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { canRequestCandidateDocumentReanalysis } from "../shared/candidateDocumentReanalysis";
+import { candidateDocumentAllowsAiAnalysis } from "../shared/candidateDocumentCategories";
 import { getDb } from "./db";
 import { candidateAccounts, candidateDocumentAuditLogs, candidateDocuments, contactMessages, gdprRequests, testimonials, appointments, blogPosts, availabilitySlots, blockedDates, cvApplications, cvCandidateCertifications, cvCandidateLanguages, cvGoogleDriveExportJobs, recruitmentAuditLogs, recruitmentMatchProfiles, clientBriefs, clientBriefCandidates, recruitmentCampaigns, recruitmentCampaignRecipients, recruitmentEmailEvents, recruitmentFollowUpTasks, recruitmentOfferTemplates, securityEvents } from "../drizzle/schema";
 import { notifyOwner } from "./_core/notification";
@@ -2068,6 +2069,9 @@ export const appRouter = router({
           if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Le coffre documentaire est temporairement indisponible." });
           const document = (await db.select().from(candidateDocuments).where(eq(candidateDocuments.id, input.id)).limit(1))[0];
           if (!document) throw new TRPCError({ code: "NOT_FOUND", message: "Document introuvable." });
+          if (!candidateDocumentAllowsAiAnalysis(document.category)) {
+            throw new TRPCError({ code: "BAD_REQUEST", message: "Ce type de document est réservé à la revue humaine : il n’est jamais transmis à l’IA." });
+          }
           if (!canRequestCandidateDocumentReanalysis(document)) {
             throw new TRPCError({ code: document.status === "rejected" ? "BAD_REQUEST" : "CONFLICT", message: document.status === "rejected" ? "Un document refusé ne peut pas être relancé." : "Une analyse de ce document est déjà en cours." });
           }
