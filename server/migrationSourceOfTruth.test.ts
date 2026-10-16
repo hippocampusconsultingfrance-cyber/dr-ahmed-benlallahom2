@@ -77,6 +77,17 @@ describe("source de vérité des migrations Drizzle (M32)", () => {
     expect(extra).toEqual([]);
   });
 
+  it("0001 crée appointment_invoices de façon idempotente, avec le même DDL que l'application (B3)", async () => {
+    const migration = read("drizzle/pg/0001_appointment_invoices.sql");
+    const normalize = (text: string) => text.replace(/--[^\n]*\n/g, "").replace(/\s+/g, " ").replace(/ ?statement-breakpoint ?/g, "").replace(/;/g, "").trim();
+    expect(migration).not.toMatch(/CREATE (UNIQUE )?(TABLE|INDEX) "/);
+    const { APPOINTMENT_INVOICE_DDL } = await import("./invoiceNumbering");
+    const { PgDialect } = await import("drizzle-orm/pg-core");
+    const dialect = new PgDialect();
+    const body = normalize(migration);
+    for (const statement of APPOINTMENT_INVOICE_DDL) expect(body).toContain(normalize(dialect.sqlToQuery(statement).sql));
+  });
+
   it("la baseline crée les 36 tables du schéma", () => {
     const baseline = read("drizzle/pg/0000_baseline.sql");
     const created = [...baseline.matchAll(/CREATE TABLE "([a-z_]+)"/g)].map(match => match[1]);
