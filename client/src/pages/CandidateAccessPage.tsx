@@ -61,7 +61,8 @@ export const candidateAccessCopy = {
     resetSuccess: "Si un compte correspond à cet email, un lien sécurisé de réinitialisation vous sera envoyé.",
     activationSuccess: "Si un compte non activé correspond à cet email, un nouveau lien d’activation vous sera envoyé. Vérifiez aussi vos courriers indésirables.",
     invitationWelcome: "Votre invitation a été vérifiée. Confirmez vos informations : vous choisirez ensuite votre mot de passe depuis le lien d’activation envoyé par email.",
-    invitationInvalid: "Cette invitation est invalide ou expirée. Vous pouvez demander un nouveau lien à notre équipe.",
+    invitationInvalid: "Ce lien d’invitation n’est pas valide. Vous pouvez tout de même créer votre espace ci-dessous avec l’adresse email utilisée pour votre candidature.",
+    invitationExpired: "Votre lien d’invitation a expiré, mais vous pouvez créer votre espace ci-dessous : votre adresse email est préremplie et votre candidature sera rattachée automatiquement.",
   },
   en: {
     metaTitle: "Secure candidate portal | Hippocampus Consulting",
@@ -106,7 +107,8 @@ export const candidateAccessCopy = {
     resetSuccess: "If an account matches this email, a secure reset link will be sent to you.",
     activationSuccess: "If an unverified account matches this email, a new activation link will be sent. Please also check your spam folder.",
     invitationWelcome: "Your invitation has been verified. Confirm your details: you will then choose your password from the activation link sent by email.",
-    invitationInvalid: "This invitation is invalid or expired. You can request a new link from our team.",
+    invitationInvalid: "This invitation link is not valid. You can still create your portal below with the email address used for your application.",
+    invitationExpired: "Your invitation link has expired, but you can create your portal below: your email address is prefilled and your application will be linked automatically.",
   },
   de: {
     metaTitle: "Sicheres Kandidatenportal | Hippocampus Consulting",
@@ -151,7 +153,8 @@ export const candidateAccessCopy = {
     resetSuccess: "Wenn ein Konto zu dieser E-Mail passt, erhalten Sie einen sicheren Link zum Zurücksetzen.",
     activationSuccess: "Wenn ein nicht aktiviertes Konto zu dieser E-Mail passt, wird ein neuer Aktivierungslink gesendet. Prüfen Sie bitte auch Ihren Spam-Ordner.",
     invitationWelcome: "Ihre Einladung wurde geprüft. Bestätigen Sie Ihre Angaben: Ihr Passwort wählen Sie anschließend über den per E-Mail gesendeten Aktivierungslink.",
-    invitationInvalid: "Diese Einladung ist ungültig oder abgelaufen. Sie können unser Team um einen neuen Link bitten.",
+    invitationInvalid: "Dieser Einladungslink ist ungültig. Sie können Ihr Portal trotzdem unten mit der E-Mail-Adresse Ihrer Bewerbung erstellen.",
+    invitationExpired: "Ihr Einladungslink ist abgelaufen, Sie können Ihr Portal aber unten erstellen: Ihre E-Mail-Adresse ist vorausgefüllt und Ihre Bewerbung wird automatisch verknüpft.",
   },
   zh: {
     metaTitle: "安全候选人门户 | Hippocampus Consulting",
@@ -196,7 +199,8 @@ export const candidateAccessCopy = {
     resetSuccess: "如果此电子邮件对应账户，我们将向您发送安全的重置链接。",
     activationSuccess: "如果此电子邮件对应尚未激活的账户，我们将发送新的激活链接。也请检查垃圾邮件文件夹。",
     invitationWelcome: "您的邀请已验证。请确认您的信息：随后您将通过邮件中的激活链接设置密码。",
-    invitationInvalid: "此邀请无效或已过期。您可以向我们的团队申请新的链接。",
+    invitationInvalid: "此邀请链接无效。您仍可在下方使用申请时填写的电子邮件地址创建门户。",
+    invitationExpired: "您的邀请链接已过期，但您仍可在下方创建门户：电子邮件地址已预填，您的申请将自动关联。",
   },
 } as const;
 
@@ -273,6 +277,9 @@ export default function CandidateAccessPage() {
     { token: invitationToken || "invalid" },
     { enabled: Boolean(invitationToken), retry: false },
   );
+  // Only a valid, unexpired invitation is sent with the registration; an expired or
+  // invalid one falls back to the normal sign-up instead of blocking it (CAND-11).
+  const activeInvitationToken = invitationToken && invitation.data && !invitation.data.expired ? invitationToken : undefined;
   useEffect(() => {
     if (invitationToken || invitationEntry.legacyEmail) setMode("register");
     if (invitation.data) {
@@ -280,14 +287,14 @@ export default function CandidateAccessPage() {
       setEmail(invitation.data.email);
       setFirstName(invitation.data.firstName);
       setLastName(invitation.data.lastName);
-      setNotice(copy.invitationWelcome);
+      setNotice(invitation.data.expired ? copy.invitationExpired : copy.invitationWelcome);
     } else if (invitationEntry.legacyEmail) {
       setEmail(invitationEntry.legacyEmail);
       setNotice(copy.invitationWelcome);
     } else if (invitationToken && invitation.isError) {
       setNotice(copy.invitationInvalid);
     }
-  }, [copy.invitationInvalid, copy.invitationWelcome, invitation.data, invitation.isError, invitationEntry.legacyEmail, invitationToken]);
+  }, [copy.invitationExpired, copy.invitationInvalid, copy.invitationWelcome, invitation.data, invitation.isError, invitationEntry.legacyEmail, invitationToken]);
   const pending = login.isPending || register.isPending || reset.isPending || resendActivation.isPending;
 
   function changeMode(nextMode: Mode) {
@@ -312,7 +319,7 @@ export default function CandidateAccessPage() {
       setConsentAttempted(false);
       if (!turnstileToken) { setNotice(copy.turnstileRegisterMissing); return; }
       // No password at this stage: it is chosen from the emailed activation link (SEC-02).
-      register.mutate({ email, firstName, lastName, termsAccepted: terms, documentConsent, turnstileToken, invitationToken: invitationToken || undefined });
+      register.mutate({ email, firstName, lastName, termsAccepted: terms, documentConsent, turnstileToken, invitationToken: activeInvitationToken });
     } else if (mode === "forgot") {
       if (!turnstileToken) { setNotice(copy.turnstileResetMissing); return; }
       reset.mutate({ email, turnstileToken });
@@ -347,7 +354,7 @@ export default function CandidateAccessPage() {
             <CardContent className="px-0">
               <form id="candidate-access-form" className="space-y-5" onSubmit={submit}>
                 {mode === "register" && <div className="grid gap-4 sm:grid-cols-2"><div className="space-y-2"><Label htmlFor="candidate-first-name">{copy.firstName}</Label><Input id="candidate-first-name" value={firstName} onChange={event => setFirstName(event.target.value)} required /></div><div className="space-y-2"><Label htmlFor="candidate-last-name">{copy.lastName}</Label><Input id="candidate-last-name" value={lastName} onChange={event => setLastName(event.target.value)} required /></div></div>}
-                <div className="space-y-2"><Label htmlFor="candidate-email">{copy.email}</Label><Input id="candidate-email" type="email" autoComplete="email" value={email} onChange={event => setEmail(event.target.value)} readOnly={mode === "register" && Boolean(invitationToken && invitation.data)} required /></div>
+                <div className="space-y-2"><Label htmlFor="candidate-email">{copy.email}</Label><Input id="candidate-email" type="email" autoComplete="email" value={email} onChange={event => setEmail(event.target.value)} readOnly={mode === "register" && Boolean(activeInvitationToken)} required /></div>
                 {mode === "login" && <div className="space-y-2"><Label htmlFor="candidate-password">{copy.password}</Label><Input id="candidate-password" type="password" autoComplete="current-password" aria-describedby="candidate-password-hint" value={password} onChange={event => setPassword(event.target.value)} minLength={15} required /><p id="candidate-password-hint" className="text-xs text-slate-500">{copy.passwordHint}</p></div>}
                 {mode === "register" && <div className="candidate-consent-panel space-y-3 rounded-xl border border-slate-700/90 bg-slate-900/75 p-4 text-sm"><label className={`candidate-consent-item ${consentAttempted && !terms ? "candidate-consent-item-invalid" : ""}`}><Checkbox className="candidate-consent-checkbox" checked={terms} aria-invalid={consentAttempted && !terms} onCheckedChange={value => { const next = value === true; setTerms(next); if (next && documentConsent) setConsentAttempted(false); }} /><span>{copy.terms}</span></label><label className={`candidate-consent-item ${consentAttempted && !documentConsent ? "candidate-consent-item-invalid" : ""}`}><Checkbox className="candidate-consent-checkbox" checked={documentConsent} aria-invalid={consentAttempted && !documentConsent} onCheckedChange={value => { const next = value === true; setDocumentConsent(next); if (next && terms) setConsentAttempted(false); }} /><span>{copy.documentConsent}</span></label></div>}
                 {(mode === "register" || mode === "forgot" || mode === "activation") && <TurnstileWidget onToken={setTurnstileToken} />}

@@ -1,5 +1,6 @@
 import { Resend } from "resend";
 import { notifyOwner } from "./notification";
+import { CANDIDATE_INVITATION_MAX_AGE_MS, CANDIDATE_TOKEN_MAX_AGE_MS, formatCandidateLinkValidity } from "../candidateAuth";
 import {
   buildResendApplicationTags,
   RESEND_APPLICATION_ACTIVATION_KIND,
@@ -372,7 +373,7 @@ export async function sendCvApplicationConfirmationEmail(
   idempotencyKey = `cv-application-confirmation-${trackingId}-attempt-1`,
 ): Promise<CvApplicationConfirmationDelivery> {
   const candidatePortalInvitation = candidatePortalInviteUrl
-      ? `<div style="margin:24px 0;padding:18px;border:1px solid #bae6fd;border-radius:10px;background:#f0f9ff;"><h3 style="margin:0 0 8px;color:#0e7490;">Votre espace candidat sécurisé</h3><p style="margin:0 0 14px;">Vous pouvez créer un accès pour déposer ultérieurement vos documents administratifs dans votre coffre privé. L’activation de votre adresse email restera obligatoire.</p><p style="margin:0;"><a href="${escapeHtml(candidatePortalInviteUrl)}" style="display:inline-block;background:#0891b2;color:#ffffff;text-decoration:none;padding:12px 18px;border-radius:7px;font-weight:700;">Créer mon espace candidat</a></p></div>`
+      ? `<div style="margin:24px 0;padding:18px;border:1px solid #bae6fd;border-radius:10px;background:#f0f9ff;"><h3 style="margin:0 0 8px;color:#0e7490;">Votre espace candidat sécurisé</h3><p style="margin:0 0 14px;">Vous pouvez créer un accès pour déposer ultérieurement vos documents administratifs dans votre coffre privé. L’activation de votre adresse email restera obligatoire.</p><p style="margin:0;"><a href="${escapeHtml(candidatePortalInviteUrl)}" style="display:inline-block;background:#0891b2;color:#ffffff;text-decoration:none;padding:12px 18px;border-radius:7px;font-weight:700;">Créer mon espace candidat</a></p><p style="margin:12px 0 0;color:#475569;font-size:13px;">${escapeHtml(candidateInvitationValidityNote())}</p></div>`
       : "";
   const emailContent = buildHippocampusEmailShell(`
       <h2 style="color: #0891b2;">Candidature reçue — Hippocampus Consulting</h2>
@@ -585,6 +586,11 @@ function invitationReferenceFromIdempotencyKey(idempotencyKey?: string) {
   return match?.[1] || null;
 }
 
+/** Validity sentence of the "create my candidate space" invitation link (CAND-11). */
+export function candidateInvitationValidityNote(): string {
+  return `Ce lien d’invitation est valable ${formatCandidateLinkValidity(CANDIDATE_INVITATION_MAX_AGE_MS)}. Passé ce délai, vous pourrez toujours créer votre espace depuis la page « Espace candidat » du site, avec la même adresse email.`;
+}
+
 export function buildCandidatePortalAccessEmail(input: CandidatePortalAccessEmailContentInput) {
   const copy = input.kind === "verify"
     ? {
@@ -592,7 +598,7 @@ export function buildCandidatePortalAccessEmail(input: CandidatePortalAccessEmai
         title: "Confirmez votre adresse email",
         instruction: "Vous recevez cet email parce qu’un espace candidat vient d’être créé avec cette adresse. Pour l’activer, cliquez sur le bouton ci-dessous : vous confirmerez votre adresse email et choisirez votre mot de passe sur la page qui s’ouvre.",
         action: "Confirmer mon adresse email et choisir mon mot de passe",
-        securityNote: "Ce lien personnel et temporaire ne peut servir qu’une fois. Si vous n’avez pas demandé cet espace candidat, ignorez cet email : aucun accès ne sera activé et aucun mot de passe ne sera créé.",
+        securityNote: `Ce lien personnel est valable ${formatCandidateLinkValidity(CANDIDATE_TOKEN_MAX_AGE_MS)} et ne peut servir qu’une fois. Si vous n’avez pas demandé cet espace candidat, ignorez cet email : aucun accès ne sera activé et aucun mot de passe ne sera créé.`,
       }
     : input.kind === "reset"
       ? {
@@ -600,14 +606,14 @@ export function buildCandidatePortalAccessEmail(input: CandidatePortalAccessEmai
           title: "Réinitialisez votre mot de passe",
           instruction: "Une demande de réinitialisation a été reçue. Choisissez un nouveau mot de passe en cliquant sur le bouton ci-dessous.",
           action: "Réinitialiser mon mot de passe",
-          securityNote: "Ce lien est personnel et temporaire. Si vous n’êtes pas à l’origine de cette demande, vous pouvez ignorer cet email.",
+          securityNote: `Ce lien personnel est valable ${formatCandidateLinkValidity(CANDIDATE_TOKEN_MAX_AGE_MS)}. Si vous n’êtes pas à l’origine de cette demande, vous pouvez ignorer cet email.`,
         }
       : {
           subject: "Créez votre espace candidat — Hippocampus Consulting",
           title: "Créez votre espace candidat",
           instruction: "Notre équipe vous invite à créer votre espace candidat sécurisé pour déposer et suivre vos documents administratifs. Après avoir confirmé vos informations, vous recevrez un lien pour activer votre adresse email et choisir votre mot de passe.",
           action: "Créer mon espace candidat",
-          securityNote: "Ce lien sécurisé est personnel et temporaire. Il ne donne aucun accès tant que votre adresse email n’est pas activée et votre mot de passe choisi.",
+          securityNote: `Ce lien sécurisé et personnel ne donne aucun accès tant que votre adresse email n’est pas activée et votre mot de passe choisi. ${candidateInvitationValidityNote()}`,
         };
   return {
     subject: copy.subject,
