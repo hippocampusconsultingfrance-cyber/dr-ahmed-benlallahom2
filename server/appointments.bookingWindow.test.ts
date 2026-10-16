@@ -183,8 +183,10 @@ describe("appointments.create — délai, horizon, téléphone et expiration Str
 
     const result = await appRouter.createCaller(publicContext()).appointments.create(booking(start.toISOString()));
 
-    expect(result).toMatchObject({ success: true });
+    // Session et fin du maintien renvoyées pour « Reprendre le paiement » après un retour arrière.
+    expect(result).toMatchObject({ success: true, checkoutSessionId: "cs_test_window" });
     const [params] = mocks.stripeCreate.mock.calls[0];
+    expect(Math.floor(new Date(result.holdExpiresAt).getTime() / 1000)).toBe(params.expires_at);
     expect(params.expires_at - before).toBeGreaterThanOrEqual(31 * 60);
     expect(params.expires_at).toBeLessThanOrEqual(Math.floor(start.getTime() / 1000));
   });

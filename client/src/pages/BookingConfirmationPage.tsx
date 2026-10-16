@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/card";
 import Breadcrumb from "@/components/Breadcrumb";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { SEOHead } from "@/components/SEOHead";
+import { clearBookingDraft, clearPendingBooking } from "@/lib/pendingBooking";
 
 export const confirmationContent = {
   fr: {
@@ -173,9 +174,17 @@ export default function BookingConfirmationPage() {
 
   useEffect(() => {
     if (canceled && sessionId) {
-      cancelPending.mutate({ sessionId });
+      // Le créneau est libéré ; la saisie reste disponible pour une nouvelle tentative.
+      cancelPending.mutate({ sessionId }, { onSuccess: () => clearPendingBooking({ checkoutSessionId: sessionId }) });
     }
   }, [canceled, sessionId]);
+
+  useEffect(() => {
+    if (paymentConfirmed && trackingId) {
+      clearPendingBooking({ trackingId });
+      clearBookingDraft();
+    }
+  }, [paymentConfirmed, trackingId]);
 
   const state = paymentConfirmed ? copy.success : canceled ? copy.canceled : copy.unknown;
 

@@ -714,7 +714,10 @@ export const appRouter = router({
             });
             if (!session.id || !session.url) throw new Error("stripe_checkout_session_unavailable");
             await db.update(appointments).set({ stripeSessionId: session.id }).where(and(eq(appointments.trackingId, trackingId), eq(appointments.appointmentStatus, "held")));
-            return { success: true, trackingId, finalPrice: parseFloat(finalPrice), checkoutUrl: session.url };
+            // La page de réservation garde la session et l’expiration du maintien
+            // (sessionStorage) pour proposer « Reprendre le paiement » ou
+            // « Annuler et choisir un autre créneau » après un retour arrière.
+            return { success: true, trackingId, finalPrice: parseFloat(finalPrice), checkoutUrl: session.url, checkoutSessionId: session.id, holdExpiresAt: holdExpiresAt.toISOString() };
           } catch (stripeError) {
             await db.update(appointments).set(getExpiredAppointmentHoldUpdate()).where(and(eq(appointments.trackingId, trackingId), eq(appointments.paymentStatus, "pending"), eq(appointments.appointmentStatus, "held")));
             throw stripeError;

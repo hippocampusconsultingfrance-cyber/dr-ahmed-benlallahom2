@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,15 @@ import Breadcrumb from "@/components/Breadcrumb";
 import PublicContentSkeleton from "@/components/PublicContentSkeleton";
 import { SEOHead } from "@/components/SEOHead";
 import { getBookingFormCopy } from "@/lib/publicFormCopy";
+import {
+  clearBookingDraft,
+  clearPendingBooking,
+  loadBookingDraft,
+  loadPendingBooking,
+  saveBookingDraft,
+  savePendingBooking,
+  type PendingBooking,
+} from "@/lib/pendingBooking";
 import {
   BOOKING_HORIZON_DAYS,
   BOOKING_MIN_LEAD_TIME_HOURS,
@@ -72,6 +81,19 @@ export const bookingContent = {
       availabilityLabel: "Disponibilité",
       emergencyTitle: "En cas d’urgence",
       emergencyNote: "En cas d’urgence médicale ou de danger immédiat, appelez immédiatement les secours. Cette consultation programmée ne remplace pas une prise en charge d’urgence.",
+      pending: {
+        title: "Un paiement est en attente",
+        description: "Votre créneau est réservé temporairement pendant le paiement. Reprenez le paiement pour confirmer la consultation, ou annulez pour choisir un autre créneau.",
+        slot: "Créneau",
+        heldUntil: "Réservé jusqu’à",
+        reference: "Référence",
+        resume: "Reprendre le paiement",
+        cancel: "Annuler et choisir un autre créneau",
+        cancelled: "Le créneau a été libéré. Vos informations sont conservées : choisissez une nouvelle date ou heure.",
+        closed: "Cette réservation n’est plus en attente. Si vous avez finalisé le paiement, vous recevrez une confirmation par email ; sinon, choisissez à nouveau votre créneau.",
+        resumeError: "Le paiement ne peut plus être repris (session expirée). Choisissez à nouveau votre créneau.",
+        cancelError: "L’annulation n’a pas pu être confirmée. Réessayez dans un instant.",
+      },
 
   },
   en: {
@@ -128,6 +150,19 @@ export const bookingContent = {
       availabilityLabel: "Availability",
       emergencyTitle: "In an emergency",
       emergencyNote: "For a medical emergency or immediate danger, call emergency services immediately. This scheduled consultation does not replace emergency care.",
+      pending: {
+        title: "A payment is pending",
+        description: "Your time slot is held temporarily during payment. Resume the payment to confirm the consultation, or cancel to choose another time slot.",
+        slot: "Time slot",
+        heldUntil: "Held until",
+        reference: "Reference",
+        resume: "Resume payment",
+        cancel: "Cancel and choose another time slot",
+        cancelled: "The time slot has been released. Your details are kept: choose a new date or time.",
+        closed: "This booking is no longer pending. If you completed the payment, you will receive a confirmation email; otherwise, choose your time slot again.",
+        resumeError: "The payment can no longer be resumed (session expired). Please choose your time slot again.",
+        cancelError: "The cancellation could not be confirmed. Please try again in a moment.",
+      },
 
   },
   de: {
@@ -184,6 +219,19 @@ export const bookingContent = {
       availabilityLabel: "Verfügbarkeit",
       emergencyTitle: "Im Notfall",
       emergencyNote: "Bei einem medizinischen Notfall oder unmittelbarer Gefahr rufen Sie sofort den Rettungsdienst an. Diese geplante Beratung ersetzt keine Notfallversorgung.",
+      pending: {
+        title: "Eine Zahlung ist ausstehend",
+        description: "Ihr Termin ist während der Zahlung vorübergehend reserviert. Setzen Sie die Zahlung fort, um die Beratung zu bestätigen, oder stornieren Sie, um einen anderen Termin zu wählen.",
+        slot: "Termin",
+        heldUntil: "Reserviert bis",
+        reference: "Referenz",
+        resume: "Zahlung fortsetzen",
+        cancel: "Stornieren und anderen Termin wählen",
+        cancelled: "Der Termin wurde freigegeben. Ihre Angaben bleiben erhalten: Wählen Sie ein neues Datum oder eine neue Uhrzeit.",
+        closed: "Diese Buchung ist nicht mehr ausstehend. Wenn Sie die Zahlung abgeschlossen haben, erhalten Sie eine Bestätigung per E-Mail; andernfalls wählen Sie Ihren Termin erneut.",
+        resumeError: "Die Zahlung kann nicht mehr fortgesetzt werden (Sitzung abgelaufen). Bitte wählen Sie Ihren Termin erneut.",
+        cancelError: "Die Stornierung konnte nicht bestätigt werden. Bitte versuchen Sie es gleich noch einmal.",
+      },
 
   },
   zh: {
@@ -240,6 +288,19 @@ export const bookingContent = {
       availabilityLabel: "可用性",
       emergencyTitle: "紧急情况",
       emergencyNote: "如遇医疗紧急情况或面临即时危险，请立即联系急救服务。本次预约咨询不能替代紧急医疗救治。",
+      pending: {
+        title: "有一笔付款待完成",
+        description: "付款期间您的时段已被临时保留。继续付款以确认咨询，或取消后选择其他时段。",
+        slot: "时段",
+        heldUntil: "保留至",
+        reference: "编号",
+        resume: "继续付款",
+        cancel: "取消并选择其他时段",
+        cancelled: "该时段已释放。您的信息已保留：请选择新的日期或时间。",
+        closed: "此预约已不再处于待付款状态。如果您已完成付款，将收到确认邮件；否则请重新选择时段。",
+        resumeError: "无法继续付款（会话已过期）。请重新选择时段。",
+        cancelError: "无法确认取消。请稍后重试。",
+      },
 
   },
 };
@@ -403,6 +464,8 @@ export default function BookingPage() {
   const [phoneError, setPhoneError] = useState<string | null>(null);
   const [paymentStatus, setPaymentStatus] = useState<"success" | "canceled" | null>(null);
   const [trackingId, setTrackingId] = useState<string | null>(null);
+  const [pendingBooking, setPendingBooking] = useState<PendingBooking | null>(null);
+  const [pendingNotice, setPendingNotice] = useState<string | null>(null);
   const paymentSubmissionRef = useRef(false);
   const localizedDate = selectedDate
     ? new Intl.DateTimeFormat(
@@ -485,7 +548,8 @@ export default function BookingPage() {
   const availabilityError = availabilityQueryError || calculatePrice.isError;
 
   const createAppointment = trpc.appointments.create.useMutation();
-
+  const resumeCheckout = trpc.appointments.createCheckoutSession.useMutation();
+  const cancelPendingBooking = trpc.appointments.cancelPending.useMutation();
 
   const synchronizeDateTime = (nextDateText: string, nextTimeText: string) => {
     setDateText(nextDateText);
@@ -509,6 +573,68 @@ export default function BookingPage() {
     setDateError(null);
     setSelectedDate(parsed);
     setFormData((current) => ({ ...current, date: parsed.toISOString() }));
+  };
+
+  // Retour depuis Stripe (bouton Précédent, rechargement, page restaurée du
+  // cache) : saisie conservée et réservation en attente proposée à la reprise
+  // ou à l’annulation, au lieu d’un créneau bloqué par son propre maintien.
+  const restorePendingBooking = useCallback(() => {
+    paymentSubmissionRef.current = false;
+    setPendingBooking(loadPendingBooking());
+  }, []);
+
+  useEffect(() => {
+    restorePendingBooking();
+    const draft = loadBookingDraft();
+    if (draft) {
+      setFormData((current) => ({ ...current, name: draft.name, email: draft.email, phone: draft.phone, details: draft.details }));
+      if (draft.dateText || draft.timeText) synchronizeDateTime(draft.dateText, draft.timeText);
+    }
+    const onPageShow = (event: PageTransitionEvent) => {
+      if (event.persisted) restorePendingBooking();
+    };
+    window.addEventListener("pageshow", onPageShow);
+    return () => window.removeEventListener("pageshow", onPageShow);
+  }, [restorePendingBooking]);
+
+  useEffect(() => {
+    const draft = { name: formData.name, email: formData.email, phone: formData.phone, dateText, timeText, details: formData.details };
+    if (Object.values(draft).some(Boolean)) saveBookingDraft(draft);
+  }, [formData.name, formData.email, formData.phone, formData.details, dateText, timeText]);
+
+  const forgetPendingBooking = (notice: string) => {
+    clearPendingBooking();
+    setPendingBooking(null);
+    setPendingNotice(notice);
+    void bookedSlots.refetch();
+  };
+
+  const handleResumePayment = async () => {
+    if (!pendingBooking || paymentSubmissionRef.current) return;
+    paymentSubmissionRef.current = true;
+    try {
+      const result = await resumeCheckout.mutateAsync({
+        trackingId: pendingBooking.trackingId,
+        finalPrice: pendingBooking.finalPrice,
+        customerEmail: pendingBooking.customerEmail,
+        customerName: pendingBooking.customerName,
+      });
+      if (!result.checkoutUrl) throw new Error("checkout_url_missing");
+      window.location.assign(result.checkoutUrl);
+    } catch {
+      paymentSubmissionRef.current = false;
+      forgetPendingBooking(content.pending.resumeError);
+    }
+  };
+
+  const handleCancelPendingBooking = async () => {
+    if (!pendingBooking) return;
+    try {
+      const result = await cancelPendingBooking.mutateAsync({ sessionId: pendingBooking.checkoutSessionId });
+      forgetPendingBooking(result.cancelled ? content.pending.cancelled : content.pending.closed);
+    } catch {
+      setPendingNotice(content.pending.cancelError);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -548,6 +674,15 @@ export default function BookingPage() {
       });
 
       if (appointmentResult.success && appointmentResult.checkoutUrl) {
+        savePendingBooking({
+          trackingId: appointmentResult.trackingId,
+          checkoutSessionId: appointmentResult.checkoutSessionId,
+          customerName: formData.name,
+          customerEmail: formData.email,
+          finalPrice: appointmentResult.finalPrice,
+          appointmentDate: selectedDate.toISOString(),
+          holdExpiresAt: appointmentResult.holdExpiresAt,
+        });
         window.location.assign(appointmentResult.checkoutUrl);
       } else {
         paymentSubmissionRef.current = false;
@@ -569,6 +704,7 @@ export default function BookingPage() {
 
   const handleReset = () => {
     paymentSubmissionRef.current = false;
+    clearBookingDraft();
     setFormData({ name: "", email: "", phone: "", date: "", details: "" });
     setSelectedDate(null);
     setDateText("");
@@ -644,6 +780,37 @@ export default function BookingPage() {
               })}
             </div>
           </div>
+        )}
+
+        {/* Pending payment after a return from Stripe */}
+        {!paymentStatus && pendingBooking && (
+          <Card className="payment-state payment-state-canceled mb-6 p-5 sm:p-6" role="region" aria-labelledby="pending-booking-title">
+            <div className="flex items-start gap-4">
+              <span className="payment-state-icon" aria-hidden="true">
+                <Clock className="w-6 h-6" />
+              </span>
+              <div className="min-w-0">
+                <h2 id="pending-booking-title" className="font-display text-xl font-bold mb-2">{content.pending.title}</h2>
+                <p className="text-sm text-muted-foreground leading-relaxed">{content.pending.description}</p>
+                <dl className="mt-3 grid gap-1 text-sm">
+                  <div><dt className="inline font-medium">{content.pending.slot} : </dt><dd className="inline">{new Intl.DateTimeFormat(language === "fr" ? "fr-FR" : language === "de" ? "de-DE" : language === "zh" ? "zh-CN" : "en-GB", { dateStyle: "full", timeStyle: "short", timeZone: "Europe/Paris" }).format(new Date(pendingBooking.appointmentDate))}</dd></div>
+                  <div><dt className="inline font-medium">{content.pending.heldUntil} : </dt><dd className="inline">{new Intl.DateTimeFormat(language === "fr" ? "fr-FR" : language === "de" ? "de-DE" : language === "zh" ? "zh-CN" : "en-GB", { timeStyle: "short", timeZone: "Europe/Paris" }).format(new Date(pendingBooking.holdExpiresAt))}</dd></div>
+                  <div><dt className="inline font-medium">{content.pending.reference} : </dt><dd className="inline font-mono text-primary">{pendingBooking.trackingId}</dd></div>
+                </dl>
+                <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+                  <Button type="button" onClick={handleResumePayment} disabled={resumeCheckout.isPending || cancelPendingBooking.isPending} className="cta-primary">
+                    {content.pending.resume}
+                  </Button>
+                  <Button type="button" variant="outline" onClick={handleCancelPendingBooking} disabled={resumeCheckout.isPending || cancelPendingBooking.isPending} className="cta-secondary">
+                    {content.pending.cancel}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </Card>
+        )}
+        {!paymentStatus && pendingNotice && (
+          <p className="mb-6 rounded-xl border border-primary/30 bg-primary/5 p-4 text-sm text-foreground" role="status" aria-live="polite">{pendingNotice}</p>
         )}
 
         {/* Payment Success Message */}
