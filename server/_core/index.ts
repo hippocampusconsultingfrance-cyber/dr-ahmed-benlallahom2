@@ -21,7 +21,7 @@ import { and, desc, eq, isNotNull, isNull, sql } from "drizzle-orm";
 import { validateCvFile } from "../recruitmentFileValidation";
 import { getDb } from "../db";
 import { candidateDocumentAuditLogs, candidateDocumentProcessingJobs, candidateDocuments, cvApplications, cvProcessingJobs, recruitmentCampaignRecipients, recruitmentEmailEvents } from "../../drizzle/schema";
-import { CANDIDATE_DOCUMENT_MAX_BYTES, candidateDocumentMimeTypes, safeCandidateDocumentName, validateCandidateDocument } from "../candidateDocumentValidation";
+import { CANDIDATE_DOCUMENT_MAX_BYTES, CANDIDATE_DOCUMENT_TOO_LARGE_MESSAGE, candidateDocumentMimeTypes, safeCandidateDocumentName, validateCandidateDocument } from "../candidateDocumentValidation";
 import { createCandidateInvitationToken } from "../candidateAuth";
 import { CANDIDATE_UPLOADABLE_DOCUMENT_CATEGORIES, candidateDocumentAllowsAiAnalysis } from "../../shared/candidateDocumentCategories";
 import { isSameRecruitmentSubmission } from "../recruitmentSubmissionDeduplication";
@@ -613,9 +613,9 @@ export async function createApp() {
     candidateDocumentUpload.single("document")(req, res, async uploadError => {
       if (uploadError) {
         const message = uploadError instanceof multer.MulterError && uploadError.code === "LIMIT_FILE_SIZE"
-          ? "Le document ne doit pas dépasser 10 Mo."
+          ? CANDIDATE_DOCUMENT_TOO_LARGE_MESSAGE
           : uploadError.message || "Le document n’a pas pu être reçu.";
-        res.status(400).json({ error: message });
+        res.status(400).json({ error: message, ...(uploadError instanceof multer.MulterError && uploadError.code === "LIMIT_FILE_SIZE" ? { code: "candidate_document_too_large" } : {}) });
         return;
       }
       try {

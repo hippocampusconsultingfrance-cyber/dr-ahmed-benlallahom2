@@ -7,6 +7,8 @@ import {
   candidateDocumentAllowsAiAnalysis,
 } from "../shared/candidateDocumentCategories";
 import { canRequestCandidateDocumentReanalysis } from "../shared/candidateDocumentReanalysis";
+import { CANDIDATE_DOCUMENT_MAX_BYTES, CANDIDATE_DOCUMENT_TOO_LARGE_MESSAGE } from "../shared/candidateDocumentLimits";
+import { candidatePortalCopy } from "../client/src/pages/CandidatePortalPage";
 import { createInMemoryDrizzle, type InMemoryDrizzle } from "./testSupport/inMemoryDrizzle";
 import { TEST_PEPPER } from "./testSupport/candidatePortal";
 import { listen, seedVerifiedCandidate, uploadDocument, validPdfBuffer } from "./testSupport/candidateUploadApp";
@@ -100,6 +102,21 @@ describe("LEGAL-12 — catégories sensibles et analyse IA des documents candida
     expect(result.status).toBe(201);
     expect(db().rows(candidateDocuments)[0]).toMatchObject({ category: "diploma", analysisStatus: "queued" });
     expect(db().rows(candidateDocumentProcessingJobs)).toHaveLength(1);
+  });
+
+  it("refuse au-delà de 4 Mo avec un message clair et accepte un fichier à la limite (OPS-09 / CAND-06)", async () => {
+    expect(CANDIDATE_DOCUMENT_MAX_BYTES).toBe(4 * 1024 * 1024);
+    const tooLarge = await uploadDocument(baseUrl, sessionToken, { category: "diploma", buffer: validPdfBuffer(CANDIDATE_DOCUMENT_MAX_BYTES + 1) });
+    expect(tooLarge.status).toBe(400);
+    expect(tooLarge.body).toMatchObject({ code: "candidate_document_too_large", error: CANDIDATE_DOCUMENT_TOO_LARGE_MESSAGE });
+    expect(String(tooLarge.body.error)).toContain("4 Mo");
+    expect(state.stored).toHaveLength(0);
+    const atLimit = await uploadDocument(baseUrl, sessionToken, { category: "diploma", buffer: validPdfBuffer(CANDIDATE_DOCUMENT_MAX_BYTES) });
+    expect(atLimit.status).toBe(201);
+    for (const language of ["fr", "en", "de", "zh"] as const) {
+      expect(candidatePortalCopy[language].uploadDescription, language).toContain("4 M");
+      expect(candidatePortalCopy[language].fileTooLarge, language).toContain("4 M");
+    }
   });
 
   it("le traitement planifié n’envoie jamais une pièce d’identité (ou une catégorie retirée déjà stockée) à l’IA", async () => {
