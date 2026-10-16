@@ -47,10 +47,13 @@ describe("retours honnêtes dans l’administration du recrutement", () => {
     expect(briefsTab).toContain('status: "declined"');
     expect(briefsTab).toContain('status: "contract_signed"');
     expect(briefsTab).toContain("closeBrief(brief.id)");
+    expect(briefsTab).toContain("{copy.shareReminder}");
     for (const language of ["fr", "en", "de", "zh"]) {
       const line = briefsTab.split("\n").find(entry => entry.startsWith(`  ${language}: { title:`));
       expect(line, language).toContain("removeFromShortlist:");
       expect(line, language).toContain("details:");
+      // LEGAL-22: reminder to inform the candidate before any transmission.
+      expect(line, language).toContain("shareReminder:");
     }
   });
 });

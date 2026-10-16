@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { clientBriefs, cvApplications, recruitmentAuditLogs, recruitmentCampaignRecipients, recruitmentCampaigns, recruitmentFollowUpTasks } from "../drizzle/schema";
+import { clientBriefCandidates, clientBriefs, cvApplications, recruitmentAuditLogs, recruitmentCampaignRecipients, recruitmentCampaigns, recruitmentFollowUpTasks } from "../drizzle/schema";
+import { RECRUITMENT_ANALYSIS_PROMPT_VERSION } from "./recruitmentAnalysis";
 import { createMemoryPg, type MemoryPg } from "./testing/memoryPgProxy";
 import type { TrpcContext } from "./_core/context";
 
@@ -47,7 +48,7 @@ function seedCandidate(index: number, extra: Record<string, unknown> = {}) {
 
 describe("actions d’administration du recrutement", () => {
   beforeEach(() => {
-    memory = createMemoryPg([cvApplications, recruitmentAuditLogs, clientBriefs, recruitmentCampaigns, recruitmentCampaignRecipients, recruitmentFollowUpTasks]);
+    memory = createMemoryPg([cvApplications, recruitmentAuditLogs, clientBriefs, clientBriefCandidates, recruitmentCampaigns, recruitmentCampaignRecipients, recruitmentFollowUpTasks]);
     state.memory = memory;
     state.sentTo = [];
     state.failFor.clear();
@@ -115,6 +116,22 @@ describe("actions d’administration du recrutement", () => {
     expect(driveRetryOutcome({ alreadyCompleted: false, alreadyRunning: false }, { processed: 1, results: [{ completed: false, retry: true, error: "google_drive_token_invalid_grant" }] })).toEqual({ outcome: "retry_scheduled", error: "google_drive_token_invalid_grant" });
     expect(driveRetryOutcome({ alreadyCompleted: false, alreadyRunning: false }, { processed: 0, waitingForAuthorization: true, results: [] }).outcome).toBe("not_connected");
     expect(driveRetryOutcome({ alreadyCompleted: false, alreadyRunning: false }, { processed: 1, results: [{ completed: true }] }).outcome).toBe("completed");
+  });
+
+  it("la shortlist exportée pour un employeur ne contient pas le score IA ; l’export interne du vivier le garde (LEGAL-22)", async () => {
+    const shortlisted = seedCandidate(1, { ai_score: 91, analysis_prompt_version: RECRUITMENT_ANALYSIS_PROMPT_VERSION });
+    seedCandidate(2, { ai_score: 40, analysis_prompt_version: RECRUITMENT_ANALYSIS_PROMPT_VERSION });
+    const [brief] = memory.seed(clientBriefs, [{ brief_id: "BRIEF-EXPORT-1", organization_name: "Clinique", contact_name: "RH", email: "rh@test.local", target_environment: "Hôpital", specialty_needed: "Anesthésie", country: "Suisse" }]);
+    memory.seed(clientBriefCandidates, [{ brief_id: brief!.id, application_id: shortlisted.id, association_status: "shortlisted" }]);
+    const shortlist = await admin().admin.recruitment.exportCsv({ type: "shortlist", briefId: brief!.id as number });
+    const [shortlistHeader, ...shortlistRows] = shortlist.csv.split("\n");
+    expect(shortlist.count).toBe(1);
+    expect(shortlistHeader).not.toContain("Score IA");
+    expect(shortlistRows[0]).toContain("c1@test.local");
+    expect(shortlistRows[0]).not.toContain("91");
+    const pool = await admin().admin.recruitment.exportCsv({ type: "pool", candidateIds: [shortlisted.id as number] });
+    expect(pool.csv.split("\n")[0]).toContain("Score IA");
+    expect(pool.csv).toContain("\"91\"");
   });
 
   it("l’email propriétaire d’un brief contient tout pour qualifier et rappeler (ADM-BRIEF-01)", () => {

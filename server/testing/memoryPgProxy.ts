@@ -86,7 +86,8 @@ type Expr =
   | { type: "and" | "or"; items: Expr[] }
   | { type: "not"; expr: Expr }
   | { type: "now" }
-  | { type: "count" };
+  | { type: "count" }
+  | { type: "case"; whens: Array<[Expr, Expr]>; otherwise: Expr | null };
 
 class Parser {
   private position = 0;
@@ -209,6 +210,17 @@ class Parser {
       this.expectPunct("(");
       this.expectPunct(")");
       expr = { type: "now" };
+    } else if (token.kind === "word" && token.text === "case") {
+      this.next();
+      const whens: Array<[Expr, Expr]> = [];
+      while (this.acceptWord("when")) {
+        const condition = this.expression();
+        this.expectWord("then");
+        whens.push([condition, this.expression()]);
+      }
+      const otherwise = this.acceptWord("else") ? this.expression() : null;
+      this.expectWord("end");
+      expr = { type: "case", whens, otherwise };
     } else if (token.kind === "word" && token.text === "count") {
       this.next();
       this.expectPunct("(");
@@ -241,6 +253,12 @@ function evaluate(expr: Expr, row: Row, params: unknown[], now: string): Value {
     }
     case "now": return now;
     case "count": throw new Error("memoryPgProxy: count(*) is only supported as a select expression");
+    case "case": {
+      for (const [condition, value] of expr.whens) {
+        if (evaluate(condition, row, params, now) === true) return evaluate(value, row, params, now);
+      }
+      return expr.otherwise ? evaluate(expr.otherwise, row, params, now) : null;
+    }
     case "isNull": {
       const value = evaluate(expr.expr, row, params, now);
       return expr.negated ? value !== null : value === null;
@@ -361,13 +379,13 @@ export function createMemoryPg(tables: PgTable[], options: { now?: () => Date } 
     if (first === "create" || first === "alter" || first === "comment" || first === "do") return { rows: [] as Value[][], rowCount: 0 };
 
     if (parser.acceptWord("select")) {
-      const selections: Array<{ count: true } | { column: string }> = [];
+      const selections: Array<{ count: true } | { expr: Expr }> = [];
       do {
         if (parser.isWord("count")) {
           parser.additive();
           selections.push({ count: true });
         } else {
-          selections.push({ column: parser.columnRef() });
+          selections.push({ expr: parser.expression() });
         }
       } while (parser.acceptPunct(","));
       parser.expectWord("from");
@@ -377,17 +395,17 @@ export function createMemoryPg(tables: PgTable[], options: { now?: () => Date } 
       tableMeta(table);
       let rows = data.get(table)!.filter(row => !where || evaluate(where, row, params, now) === true);
       if (parser.acceptWord("order", "by")) {
-        const orders: Array<{ column: string; desc: boolean }> = [];
+        const orders: Array<{ expr: Expr; desc: boolean }> = [];
         do {
-          const column = parser.columnRef();
+          const expr = parser.additive();
           const desc = parser.acceptWord("desc");
           if (!desc) parser.acceptWord("asc");
-          orders.push({ column, desc });
+          orders.push({ expr, desc });
         } while (parser.acceptPunct(","));
         rows = [...rows].sort((a, b) => {
           for (const order of orders) {
-            const left = a[order.column] ?? null;
-            const right = b[order.column] ?? null;
+            const left = evaluate(order.expr, a, params, now);
+            const right = evaluate(order.expr, b, params, now);
             if (left === right) continue;
             if (left === null) return order.desc ? -1 : 1;
             if (right === null) return order.desc ? 1 : -1;
@@ -409,7 +427,7 @@ export function createMemoryPg(tables: PgTable[], options: { now?: () => Date } 
         return { rows: [selections.map(selection => "count" in selection ? rows.length : null)], rowCount: 1 };
       }
       const page = rows.slice(offset, offset + limit);
-      return { rows: page.map(row => selections.map(selection => row[(selection as { column: string }).column] ?? null)), rowCount: page.length };
+      return { rows: page.map(row => selections.map(selection => evaluate((selection as { expr: Expr }).expr, row, params, now))), rowCount: page.length };
     }
 
     if (parser.acceptWord("insert", "into")) {
