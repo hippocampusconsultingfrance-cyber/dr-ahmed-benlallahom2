@@ -1,6 +1,6 @@
 import { Resend } from "resend";
-import { siteConfig } from "../client/src/data/site-config";
 import { buildHippocampusEmailShell } from "./_core/notifications";
+import { DEFAULT_TRANSACTIONAL_FROM, resolveConsultationContact } from "./consultationContact";
 
 /**
  * Emails of the free medical-question service.
@@ -15,22 +15,14 @@ import { buildHippocampusEmailShell } from "./_core/notifications";
  * The indicative answer delay of the acknowledgement can be set with
  * MEDICAL_QUESTION_RESPONSE_DELAY_TEXT (French sentence).
  */
-export const MEDICAL_QUESTION_DEFAULT_FROM = "Hippocampus Consulting <recrutement@drahmedbenlallahom.com>";
-const EMAIL_PATTERN = /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/;
-const SENDER_PATTERN = /^(?:[^<>]{1,120}<[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+>|[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+)$/;
+export const MEDICAL_QUESTION_DEFAULT_FROM = DEFAULT_TRANSACTIONAL_FROM;
 
 type Env = Record<string, string | undefined>;
 
-function envValue(env: Env, key: string, pattern: RegExp) {
-  const value = env[key]?.trim();
-  return value && pattern.test(value) ? value.slice(0, 500) : null;
-}
-
+/** Single source: the consultation contact rules shared with the booking emails. */
 export function resolveMedicalQuestionContact(env: Env = process.env) {
-  return {
-    from: envValue(env, "CONSULTATION_FROM_EMAIL", SENDER_PATTERN) ?? MEDICAL_QUESTION_DEFAULT_FROM,
-    replyTo: envValue(env, "CONSULTATION_REPLY_TO", EMAIL_PATTERN) ?? siteConfig.email,
-  };
+  const { from, replyTo } = resolveConsultationContact(env);
+  return { from, replyTo };
 }
 
 export const MEDICAL_QUESTION_DEFAULT_DELAY = {

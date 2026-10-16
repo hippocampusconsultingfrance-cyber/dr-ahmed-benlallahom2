@@ -17,4 +17,10 @@ describe("page de questions médicales", () => {
     // Explicit consent for health data (art. 9.2.a).
     expect(page).toContain("qui peut contenir des informations sur ma santé");
   });
+
+  it("présente les encadrés urgence et confidentialité comme des notes, pas des repères complémentaires (PUB-A11Y-02)", async () => {
+    const page = await readFile(path.join(process.cwd(), "client/src/pages/MedicalQuestionsPage.tsx"), "utf8");
+    expect(page).not.toContain("<aside");
+    expect(page.match(/<section role="note"/g)).toHaveLength(2);
+  });
 });
