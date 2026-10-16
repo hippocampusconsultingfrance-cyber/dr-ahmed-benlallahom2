@@ -4,7 +4,8 @@
  *  - au démarrage du serveur Express hors Vercel (startServer refuse de démarrer) ;
  *  - au démarrage à froid de la fonction Vercel (api/index.js) : journal d'erreur
  *    bruyant, sans jamais faire planter la fonction ;
- *  - à la demande : GET /api/health (noms seulement) et bandeau du tableau de bord admin.
+ *  - à la demande : bandeau du tableau de bord admin et GET /api/health (statut seul en
+ *    public ; noms avec `Authorization: Bearer <CRON_SECRET>`).
  * Seuls les NOMS sont exposés, jamais les valeurs.
  */
 export const PRODUCTION_REQUIRED_ENVIRONMENT_VARIABLES = [
@@ -13,6 +14,8 @@ export const PRODUCTION_REQUIRED_ENVIRONMENT_VARIABLES = [
   "STRIPE_SECRET_KEY",
   "STRIPE_WEBHOOK_SECRET",
   "CLERK_SECRET_KEY",
+  // Clé publique Clerk : intégrée au navigateur au build, et lue par clerkMiddleware
+  // côté serveur (CLERK_PUBLISHABLE_KEY, à défaut celle-ci : voir clerkPublishableKey).
   "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY",
   "RESEND_API_KEY",
   "TURNSTILE_SECRET_KEY",
@@ -28,6 +31,15 @@ export const PRODUCTION_REQUIRED_ENVIRONMENT_VARIABLES = [
 ] as const;
 
 export type ProductionRequiredEnvironmentVariable = (typeof PRODUCTION_REQUIRED_ENVIRONMENT_VARIABLES)[number];
+
+/**
+ * Clé publique Clerk du serveur. @clerk/express ne lit que CLERK_PUBLISHABLE_KEY ;
+ * sans elle, chaque requête passant par clerkMiddleware répondait 500. La clé
+ * publique du navigateur (NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY, même valeur) suffit.
+ */
+export function clerkPublishableKey(environment: NodeJS.ProcessEnv = process.env): string | undefined {
+  return environment.CLERK_PUBLISHABLE_KEY?.trim() || environment.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY?.trim() || undefined;
+}
 
 /** Anciens noms encore acceptés à la place d'une variable requise. */
 const PRODUCTION_ENVIRONMENT_ALIASES: Partial<Record<ProductionRequiredEnvironmentVariable, readonly string[]>> = {
@@ -76,7 +88,7 @@ export function reportCriticalProductionEnvironment(
   if (!status.ok) {
     log(
       `[Config] CRITICAL: ${status.missing.length} production environment variable(s) missing: ${status.missing.join(", ")}. ` +
-        "Set them in Vercel > Settings > Environment Variables (Production), then redeploy. See GET /api/health."
+        "Set them in Vercel > Settings > Environment Variables (Production), then redeploy. The /admin banner lists them too."
     );
   }
   return status;

@@ -1,14 +1,19 @@
 import type { Express } from "express";
 import { sql } from "drizzle-orm";
 import { getDb } from "../db";
+import { isAuthorizedVercelCronRequest } from "./cronAuth";
 import { getEnvironmentConfigurationStatus, type ProductionRequiredEnvironmentVariable } from "./env";
 
 /**
  * GET /api/health : sonde de disponibilité pour un service de supervision externe
- * (UptimeRobot, Better Stack, Vercel Checks…). Public, sans authentification, et
- * sans aucun secret : il ne renvoie que l'état de la base (SELECT 1) et les NOMS des
- * variables critiques manquantes. Répond 200 si tout va bien, 503 sinon, pour qu'une
- * sonde déclenche une alerte sans analyser le corps.
+ * (UptimeRobot, Better Stack, Vercel Checks…). Publique et sans aucun secret : elle
+ * ne renvoie que l'état de la base (SELECT 1) et l'état « ok / incomplet » de la
+ * configuration. Les NOMS des variables critiques manquantes diraient à n'importe
+ * quel visiteur quelle protection est hors service : ils ne sont donnés qu'avec
+ * `Authorization: Bearer <CRON_SECRET>`, dans le bandeau de /admin et dans les
+ * journaux. Répond 200 si tout va bien, 503 sinon, pour qu'une sonde déclenche une
+ * alerte sans analyser le corps. Montée avant clerkMiddleware : elle répond même
+ * quand la configuration Clerk fait échouer toutes les autres routes /api.
  */
 export const HEALTH_ROUTE = "/api/health";
 
@@ -22,6 +27,15 @@ export type HealthReport = {
     configuration: { status: "ok" | "missing"; missing: ProductionRequiredEnvironmentVariable[] };
   };
 };
+
+/** What an anonymous visitor sees: the statuses, never the names of missing variables. */
+export type PublicHealthReport = Omit<HealthReport, "checks"> & {
+  checks: { database: HealthReport["checks"]["database"]; configuration: { status: HealthReport["checks"]["configuration"]["status"] } };
+};
+
+export function publicHealthReport(report: HealthReport): PublicHealthReport {
+  return { ...report, checks: { database: report.checks.database, configuration: { status: report.checks.configuration.status } } };
+}
 
 type QueryableDatabase = { execute: (query: ReturnType<typeof sql>) => Promise<unknown> };
 
@@ -87,10 +101,11 @@ export async function buildHealthReport(dependencies: HealthDependencies = {}): 
 }
 
 export function registerHealthRoute(app: Express, dependencies: HealthDependencies = {}) {
-  app.get(HEALTH_ROUTE, async (_req, res) => {
+  app.get(HEALTH_ROUTE, async (req, res) => {
     const report = await buildHealthReport(dependencies);
+    const detailed = isAuthorizedVercelCronRequest(req.headers.authorization, (dependencies.environment ?? process.env).CRON_SECRET);
     res.setHeader("Cache-Control", "no-store");
     res.setHeader("X-Robots-Tag", "noindex, nofollow");
-    res.status(report.status === "ok" ? 200 : 503).json(report);
+    res.status(report.status === "ok" ? 200 : 503).json(detailed ? report : publicHealthReport(report));
   });
 }

@@ -9,7 +9,7 @@ import { serveStatic } from "./static";
 import net from "net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { clerkMiddleware } from "@clerk/express";
-import { assertCriticalProductionEnvironment } from "./env";
+import { assertCriticalProductionEnvironment, clerkPublishableKey } from "./env";
 import { registerHealthRoute } from "./health";
 import { requireVercelCron } from "./cronAuth";
 import { secureReference } from "./secureReference";
@@ -140,10 +140,6 @@ export async function createApp() {
   app.set("trust proxy", 1);
   const server = createServer(app);
 
-  app.use(clerkMiddleware({
-    authorizedParties: [PUBLIC_APP_ORIGIN, "http://localhost:3000", "http://127.0.0.1:3000"],
-  }));
-
   // Browser-side defense in depth. Origins are restricted to the application and
   // the third parties genuinely required for checkout and bot protection.
   app.use((_req, res, next) => {
@@ -169,8 +165,15 @@ export async function createApp() {
     next();
   });
 
-  // Public uptime probe (SELECT 1 + names of missing critical variables, no secrets).
+  // Public uptime probe (SELECT 1 + configuration status; names only with the
+  // cron secret). Mounted before clerkMiddleware so that it still answers when
+  // a Clerk misconfiguration makes every other /api route fail.
   registerHealthRoute(app);
+
+  app.use(clerkMiddleware({
+    publishableKey: clerkPublishableKey(),
+    authorizedParties: [PUBLIC_APP_ORIGIN, "http://localhost:3000", "http://127.0.0.1:3000"],
+  }));
 
   // Stripe Webhook (MUST be before express.json() to receive raw body)
   app.post("/api/stripe/webhook", express.raw({ type: "application/json" }), async (req, res) => {

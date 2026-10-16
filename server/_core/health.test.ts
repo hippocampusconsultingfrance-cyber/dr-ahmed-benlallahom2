@@ -3,9 +3,11 @@ import type { AddressInfo } from "node:net";
 import path from "node:path";
 import express from "express";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { clerkMiddleware } from "@clerk/express";
 import {
   PRODUCTION_REQUIRED_ENVIRONMENT_VARIABLES,
   assertCriticalProductionEnvironment,
+  clerkPublishableKey,
   getEnvironmentConfigurationStatus,
   getMissingCriticalProductionEnvironment,
   reportCriticalProductionEnvironment,
@@ -122,33 +124,89 @@ describe("GET /api/health (sonde de disponibilité, M29 / OPS-05)", () => {
     expect(db.execute).toHaveBeenCalledTimes(2);
   });
 
-  it("répond en HTTP 200 / 503, sans cache ni indexation", async () => {
-    const run = async (environment: NodeJS.ProcessEnv) => {
-      resetHealthCacheForTests();
-      const app = express();
-      registerHealthRoute(app, { getDatabase: healthyDb, environment });
-      const server = app.listen(0);
-      try {
-        const { port } = server.address() as AddressInfo;
-        const response = await fetch(`http://127.0.0.1:${port}${HEALTH_ROUTE}`);
-        return { status: response.status, cache: response.headers.get("cache-control"), robots: response.headers.get("x-robots-tag"), body: await response.json() };
-      } finally {
-        server.close();
-      }
-    };
+  const run = async (environment: NodeJS.ProcessEnv, authorization?: string) => {
+    resetHealthCacheForTests();
+    const app = express();
+    registerHealthRoute(app, { getDatabase: healthyDb, environment });
+    const server = app.listen(0);
+    try {
+      const { port } = server.address() as AddressInfo;
+      const response = await fetch(`http://127.0.0.1:${port}${HEALTH_ROUTE}`, { headers: authorization ? { authorization } : {} });
+      const text = await response.text();
+      return { status: response.status, cache: response.headers.get("cache-control"), robots: response.headers.get("x-robots-tag"), text, body: JSON.parse(text) };
+    } finally {
+      server.close();
+    }
+  };
 
+  it("répond en HTTP 200 / 503, sans cache ni indexation", async () => {
     const healthy = await run(completeEnvironment());
     expect(healthy).toMatchObject({ status: 200, cache: "no-store", robots: "noindex, nofollow", body: { status: "ok" } });
 
     const misconfigured = await run({ ...completeEnvironment(), CRON_SECRET: "" });
     expect(misconfigured.status).toBe(503);
-    expect(misconfigured.body.checks.configuration.missing).toEqual(["CRON_SECRET"]);
+    expect(misconfigured.body.checks.configuration).toEqual({ status: "missing" });
   });
 
-  it("est monté dans createApp (donc aussi dans la fonction Vercel)", () => {
+  it("ne dit pas au public QUELLE variable manque ; le secret des tâches planifiées donne le détail", async () => {
+    const environment = { ...completeEnvironment(), TURNSTILE_SECRET_KEY: "", RESEND_WEBHOOK_SECRET: "", CANDIDATE_DOCUMENT_ENCRYPTION_KEY: "" };
+    const anonymous = await run(environment);
+    expect(anonymous.status).toBe(503);
+    expect(anonymous.body).toMatchObject({ status: "error", checks: { database: { status: "ok" }, configuration: { status: "missing" } } });
+    for (const name of PRODUCTION_REQUIRED_ENVIRONMENT_VARIABLES) expect(anonymous.text).not.toContain(name);
+
+    const wrongSecret = await run(environment, "Bearer not-the-cron-secret");
+    expect(wrongSecret.text).not.toContain("TURNSTILE_SECRET_KEY");
+
+    const owner = await run(environment, `Bearer ${environment.CRON_SECRET}`);
+    expect(owner.status).toBe(503);
+    expect(owner.body.checks.configuration).toEqual({ status: "missing", missing: ["TURNSTILE_SECRET_KEY", "CANDIDATE_DOCUMENT_ENCRYPTION_KEY", "RESEND_WEBHOOK_SECRET"] });
+  });
+
+  it("est monté dans createApp avant clerkMiddleware (donc aussi dans la fonction Vercel)", () => {
     const index = readFileSync(path.join(process.cwd(), "server/_core/index.ts"), "utf8");
     expect(index).toContain("registerHealthRoute(app);");
     expect(index.indexOf("registerHealthRoute(app);")).toBeLessThan(index.indexOf('app.post("/api/stripe/webhook"'));
+    expect(index.indexOf("registerHealthRoute(app);")).toBeLessThan(index.indexOf("app.use(clerkMiddleware("));
+    expect(index).toContain("publishableKey: clerkPublishableKey(),");
+  });
+
+  it("répond encore quand la configuration Clerk fait échouer les autres routes, et la clé publique du navigateur suffit au serveur", async () => {
+    vi.stubEnv("CLERK_TELEMETRY_DISABLED", "1");
+    vi.stubEnv("CLERK_SECRET_KEY", "sk_test_health_probe_only");
+    vi.stubEnv("CLERK_PUBLISHABLE_KEY", "");
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const probe = async (environment: NodeJS.ProcessEnv) => {
+      resetHealthCacheForTests();
+      const app = express();
+      registerHealthRoute(app, { getDatabase: healthyDb, environment });
+      app.use(clerkMiddleware({ publishableKey: clerkPublishableKey(environment) }));
+      app.get("/api/other", (_req, res) => { res.json({ ok: true }); });
+      const server = app.listen(0);
+      try {
+        const { port } = server.address() as AddressInfo;
+        const health = await fetch(`http://127.0.0.1:${port}${HEALTH_ROUTE}`);
+        const other = await fetch(`http://127.0.0.1:${port}/api/other`);
+        return { health: health.status, healthType: health.headers.get("content-type"), other: other.status };
+      } finally {
+        server.close();
+      }
+    };
+    try {
+      const withoutKey = await probe({ ...completeEnvironment(), NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: "" });
+      expect(withoutKey.other).toBe(500);
+      expect(withoutKey.health).toBe(503);
+      expect(withoutKey.healthType).toContain("application/json");
+
+      const browserKeyOnly = await probe({ ...completeEnvironment(), NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: "pk_test_aGVhbHRoLXByb2JlLmNsZXJrLmFjY291bnRzLmRldiQ" });
+      expect(browserKeyOnly).toMatchObject({ health: 200, other: 200 });
+    } finally {
+      consoleError.mockRestore();
+      vi.unstubAllEnvs();
+    }
+    expect(clerkPublishableKey({ CLERK_PUBLISHABLE_KEY: " pk_server ", NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: "pk_browser" })).toBe("pk_server");
+    expect(clerkPublishableKey({ NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: "pk_browser" })).toBe("pk_browser");
+    expect(clerkPublishableKey({})).toBeUndefined();
   });
 });
 
