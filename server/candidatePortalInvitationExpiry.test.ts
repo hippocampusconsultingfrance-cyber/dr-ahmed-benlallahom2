@@ -72,6 +72,18 @@ describe("CAND-11 — validité des invitations à l’espace candidat", () => {
     expect(state.emails).toHaveLength(1);
   });
 
+  it("rattache la candidature même si l’email a été saisi avec des majuscules (clavier mobile)", async () => {
+    const application = seedApplication(db(), { email: "Amina.Haddad@Example.Test", firstName: "Amina", lastName: "Haddad" });
+    const expired = createCandidateInvitationToken(Number(application.id), Date.now() - 2 * DAY);
+    await expect(client().api.register({ email: "amina.haddad@example.test", firstName: "Amina", lastName: "Haddad", termsAccepted: true, documentConsent: true, invitationToken: expired, turnstileToken: TURNSTILE })).resolves.toMatchObject({ message: expect.any(String) });
+    expect(accountByEmail(db(), "amina.haddad@example.test")?.linkedApplicationId).toBe(application.id);
+
+    // Plain sign-up without any invitation, address typed in yet another case.
+    const other = seedApplication(db(), { email: "Bruno@Example.Test", firstName: "Bruno", lastName: "Petit" });
+    await client().api.register({ email: "BRUNO@example.test", firstName: "Bruno", lastName: "Petit", termsAccepted: true, documentConsent: true, turnstileToken: TURNSTILE });
+    expect(accountByEmail(db(), "bruno@example.test")?.linkedApplicationId).toBe(other.id);
+  });
+
   it("répond expired: false pour une invitation valide et refuse toujours une invitation falsifiée", async () => {
     const application = seedApplication(db(), { email: "amina@example.test", firstName: "Amina", lastName: "Haddad" });
     const valid = createCandidateInvitationToken(Number(application.id));

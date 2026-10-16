@@ -3,7 +3,7 @@
  *
  * It plugs into drizzle's `pg-proxy` driver and executes the small SQL subset
  * drizzle generates for the queries of this code base (single-table SELECT /
- * INSERT / UPDATE / DELETE with AND/OR/IN/IS NULL predicates, ORDER BY, LIMIT,
+ * INSERT / UPDATE / DELETE with AND/OR/IN/IS NULL predicates, lower(), ORDER BY, LIMIT,
  * RETURNING, ON CONFLICT DO NOTHING / DO UPDATE). Anything else throws, so a
  * test never passes on a silently ignored statement. DDL statements sent with
  * `db.execute` (CREATE ... IF NOT EXISTS, ALTER ... IF NOT EXISTS) are recorded
@@ -86,6 +86,7 @@ type Expr =
   | { type: "and" | "or"; items: Expr[] }
   | { type: "not"; expr: Expr }
   | { type: "now" }
+  | { type: "lower"; expr: Expr }
   | { type: "count" }
   | { type: "case"; whens: Array<[Expr, Expr]>; otherwise: Expr | null };
 
@@ -210,6 +211,11 @@ class Parser {
       this.expectPunct("(");
       this.expectPunct(")");
       expr = { type: "now" };
+    } else if (token.kind === "word" && token.text === "lower" && this.peek(1)?.text === "(") {
+      this.next();
+      this.expectPunct("(");
+      expr = { type: "lower", expr: this.expression() };
+      this.expectPunct(")");
     } else if (token.kind === "word" && token.text === "case") {
       this.next();
       const whens: Array<[Expr, Expr]> = [];
@@ -252,6 +258,10 @@ function evaluate(expr: Expr, row: Row, params: unknown[], now: string): Value {
       return row[expr.name] ?? null;
     }
     case "now": return now;
+    case "lower": {
+      const value = evaluate(expr.expr, row, params, now);
+      return typeof value === "string" ? value.toLowerCase() : value;
+    }
     case "count": throw new Error("memoryPgProxy: count(*) is only supported as a select expression");
     case "case": {
       for (const [condition, value] of expr.whens) {

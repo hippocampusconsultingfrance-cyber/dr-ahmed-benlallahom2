@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { and, asc, eq, gt, inArray, isNotNull, isNull, like, lt, or } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, isNotNull, isNull, like, lt, or, sql } from "drizzle-orm";
 import {
   candidateAccounts,
   candidateDocumentAuditLogs,
@@ -125,9 +125,14 @@ export async function eraseCandidateApplication(
     .where(and(eq(cvGoogleDriveExportJobs.applicationId, application.id), eq(cvGoogleDriveExportJobs.status, "running"), gt(cvGoogleDriveExportJobs.startedAt, activeSince))).limit(1);
   if (runningAnalysis || runningExport) throw new CandidateErasureBusyError();
 
-  const emailVariants = Array.from(new Set([application.email, application.email.trim().toLowerCase()]));
+  // Candidate accounts store the address normalised (trimmed, lower case)
+  // while the application keeps it as typed: the person's portal is the
+  // account linked to this dossier or registered with the same address
+  // (before applying, or after an expired invitation), like the admin list.
+  const normalizedEmail = application.email.trim().toLowerCase();
+  const emailVariants = Array.from(new Set([application.email, normalizedEmail]));
   const accounts = await db.select({ id: candidateAccounts.id }).from(candidateAccounts)
-    .where(eq(candidateAccounts.linkedApplicationId, application.id));
+    .where(or(eq(candidateAccounts.linkedApplicationId, application.id), eq(candidateAccounts.email, normalizedEmail)));
   const accountIds = accounts.map(account => account.id);
   const documents = await db.select({ id: candidateDocuments.id, storageKey: candidateDocuments.storageKey }).from(candidateDocuments)
     .where(accountIds.length
@@ -188,7 +193,7 @@ export async function eraseCandidateApplication(
   const recipientIds = recipients.map(recipient => recipient.id);
   const emailEventConditions = [
     eq(recruitmentEmailEvents.applicationId, application.id),
-    and(isNull(recruitmentEmailEvents.applicationId), inArray(recruitmentEmailEvents.recipientEmail, emailVariants)),
+    and(isNull(recruitmentEmailEvents.applicationId), sql`lower(${recruitmentEmailEvents.recipientEmail}) = ${normalizedEmail}`),
     ...(recipientIds.length ? [inArray(recruitmentEmailEvents.campaignRecipientId, recipientIds)] : []),
   ];
   await deleteRows("recruitment_email_events", rowsDeleted, db.delete(recruitmentEmailEvents).where(or(...emailEventConditions)));
@@ -225,7 +230,7 @@ export async function eraseCandidateApplication(
   await deleteRows("cv_applications", rowsDeleted, db.delete(cvApplications).where(eq(cvApplications.id, application.id)));
 
   const otherApplicationsWithSameEmail = (await db.select({ id: cvApplications.id }).from(cvApplications)
-    .where(inArray(cvApplications.email, emailVariants)).limit(100)).length;
+    .where(sql`lower(${cvApplications.email}) = ${normalizedEmail}`).limit(100)).length;
 
   const performedAt = new Date().toISOString();
   const report: CandidateErasureReport = {

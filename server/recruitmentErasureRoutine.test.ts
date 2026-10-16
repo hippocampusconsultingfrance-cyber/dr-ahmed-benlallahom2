@@ -157,6 +157,28 @@ describe("effacement RGPD complet d’un dossier candidat", () => {
     expect(accountId).toBeGreaterThan(0);
   });
 
+  it("efface aussi l’espace candidat ouvert avec la même adresse mais non rattaché (majuscules, inscription avant candidature)", async () => {
+    const { id, accountId } = seedDossier();
+    // Account created on /candidate/access: lower-case address, no link to the dossier.
+    for (const row of memory.rows(candidateAccounts)) if (row.id === accountId) row.linked_application_id = null;
+    for (const row of memory.rows(candidateDocuments)) Object.assign(row, { application_id: null, category: "identity_document" });
+    const [unrelated] = memory.seed(candidateAccounts, [{ email: "paul@test.local", password_hash: "x", email_verified_at: new Date() }]);
+    memory.seed(cvApplications, [{
+      tracking_id: "CVSAMEPERSON000001", first_name: "Claire", last_name: "Martin", email: "CLAIRE.MARTIN@test.local", specialty: "Anesthésie", target_countries: "[]",
+      cv_file_key: "recruitment/quarantine/CVSAMEPERSON000001-cv.pdf", cv_original_name: "cv.pdf", cv_mime_type: "application/pdf", cv_size_bytes: 1000,
+    }]);
+
+    const report = await eraseCandidateApplication({ applicationId: id, actorOpenId: "user_owner", reason: "admin_gdpr_request" }, dependencies());
+    expect(report.candidateAccountsErased).toBe(1);
+    expect(report.candidateSessionsDeleted).toBe(2);
+    expect(report.candidateDocumentsDeleted).toBe(3);
+    expect(report.otherApplicationsWithSameEmail).toBe(1);
+    expect(memory.rows(candidateAccounts).map(row => row.id)).toEqual([unrelated!.id]);
+    expect(memory.rows(candidateSessions)).toHaveLength(0);
+    expect(memory.rows(candidateDocuments)).toHaveLength(0);
+    expect(Array.from(blobs).some(key => key.startsWith(`candidate-documents/quarantine/${accountId}/`))).toBe(false);
+  });
+
   it("n’efface rien en base si le stockage refuse la suppression (nouvel essai possible)", async () => {
     const { id } = seedDossier();
     const deps = dependencies();

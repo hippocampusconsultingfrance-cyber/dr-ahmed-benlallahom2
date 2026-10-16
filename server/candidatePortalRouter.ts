@@ -261,7 +261,7 @@ export const candidatePortalRouter = router({
       if (invitation && (!invitedApplication || normalizeCandidateEmail(invitedApplication.email) !== email)) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "Cette invitation ne correspond pas à cette adresse email." });
       }
-      const matchingApplication = invitedApplication ?? (await candidateDatabaseOperation(() => db.select({ id: cvApplications.id, trackingId: cvApplications.trackingId }).from(cvApplications).where(eq(cvApplications.email, email)).limit(1)))[0] ?? null;
+      const matchingApplication = invitedApplication ?? (await candidateDatabaseOperation(() => db.select({ id: cvApplications.id, trackingId: cvApplications.trackingId }).from(cvApplications).where(sql`lower(${cvApplications.email}) = ${email}`).limit(1)))[0] ?? null;
       const matchingApplicationId = matchingApplication?.id ?? null;
       const existing = await candidateDatabaseOperation(() => db.select().from(candidateAccounts).where(eq(candidateAccounts.email, email)).limit(1));
 
@@ -371,7 +371,7 @@ export const candidatePortalRouter = router({
       const candidate = (await db.select().from(candidateAccounts).where(and(eq(candidateAccounts.email, email), eq(candidateAccounts.status, "active"))).limit(1))[0];
       if (candidate && !candidate.emailVerifiedAt) {
         const application = (await db.select({ id: cvApplications.id, trackingId: cvApplications.trackingId }).from(cvApplications).where(
-          candidate.linkedApplicationId ? eq(cvApplications.id, candidate.linkedApplicationId) : eq(cvApplications.email, email),
+          candidate.linkedApplicationId ? eq(cvApplications.id, candidate.linkedApplicationId) : sql`lower(${cvApplications.email}) = ${email}`,
         ).limit(1))[0] ?? null;
         const token = createCandidateToken();
         const tokenHash = hashCandidateToken(token, "verification");
