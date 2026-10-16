@@ -4,6 +4,7 @@ import { getDb } from "./db";
 import { mutationRowCount } from "./dbMutation";
 import { enqueueAppointmentFulfillment, processAppointmentFulfillmentNow } from "./appointmentFulfillment";
 import { notifyOwner } from "./_core/notification";
+import { sendUnconfirmablePaymentEmail } from "./_core/notifications";
 
 /** Keeps the Stripe acknowledgement well inside Stripe's delivery timeout. */
 export const IMMEDIATE_FULFILLMENT_TIMEOUT_MS = 15_000;
@@ -70,7 +71,7 @@ export function buildUnconfirmablePaymentAlert(input: {
     title: `Paiement reçu pour un rendez-vous non confirmable (${input.trackingId})`,
     content: [
       `Un paiement Stripe a été reçu pour le rendez-vous ${input.trackingId}, mais il n’a pas pu être confirmé automatiquement : ${UNCONFIRMABLE_REASON_LABELS[input.reason]}.`,
-      "Remboursement ou reprogrammation manuelle requis : contactez le patient puis traitez le paiement depuis le tableau de bord Stripe.",
+      "Remboursement ou reprogrammation manuelle requis : contactez le patient, puis remboursez ce paiement depuis le tableau de bord du site (onglet Rendez-vous : « Rembourser un paiement non confirmé » avec la session Stripe ci-dessous, ou bouton « Rembourser ce paiement » sur le rendez-vous) ou depuis Stripe.",
       `Référence : ${input.trackingId}`,
       `Montant reçu : ${amount}`,
       `Session Stripe : ${input.sessionId}`,
@@ -143,6 +144,15 @@ async function acknowledgeUnconfirmablePayment(input: {
     console.error("Owner alert for unconfirmable payment was not delivered; asking Stripe to retry", { trackingId: input.appointment.trackingId });
     return { httpStatus: 500, body: { received: false }, outcome: "unconfirmable" };
   }
+  // The patient learns that the payment arrived but the slot could not be
+  // confirmed (the success page shows the same); best effort, one email per
+  // Checkout session.
+  await sendUnconfirmablePaymentEmail(input.appointment.customerEmail, {
+    customerName: input.appointment.customerName,
+    trackingId: input.appointment.trackingId,
+    appointmentDate: input.appointment.appointmentDate,
+    amountCents: Number.isFinite(paidAmount) ? paidAmount : null,
+  }, `appointment-unconfirmable-${input.sessionId}`).catch(() => false);
   // Keep a durable trace of the received payment on the row when it cannot
   // clash with an active hold or an already recorded payment. Written only once
   // the owner knows: it makes later deliveries of this payment no-op duplicates.

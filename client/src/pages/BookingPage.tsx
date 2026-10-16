@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
@@ -8,7 +8,25 @@ import { Calendar, Clock, User, Mail, Phone, FileText, CheckCircle, AlertCircle 
 import Breadcrumb from "@/components/Breadcrumb";
 import PublicContentSkeleton from "@/components/PublicContentSkeleton";
 import { SEOHead } from "@/components/SEOHead";
+import Footer from "@/components/Footer";
+import BookingLegalNotice from "@/components/BookingLegalNotice";
 import { getBookingFormCopy } from "@/lib/publicFormCopy";
+import {
+  clearBookingDraft,
+  clearPendingBooking,
+  loadBookingDraft,
+  loadPendingBooking,
+  saveBookingDraft,
+  savePendingBooking,
+  type PendingBooking,
+} from "@/lib/pendingBooking";
+import {
+  BOOKING_HORIZON_DAYS,
+  BOOKING_MIN_LEAD_TIME_HOURS,
+  BOOKING_REQUEST_SUBJECT_MAX_LENGTH,
+  getBookingWindowIssue,
+  isPlausiblePhoneNumber,
+} from "@shared/bookingPolicy";
 
 export const bookingContent = {
   fr: {
@@ -25,8 +43,13 @@ export const bookingContent = {
       timeLabel: "Heure",
       invalidDate: "Saisissez une date valide au format JJ/MM/AAAA et une heure au format HH:MM.",
       dateHint: "Choisissez la date et l’heure de votre consultation. Le créneau est affiché en heure de Paris.",
-      details: "Détails de votre demande",
-      detailsPlaceholder: "Décrivez brièvement votre situation...",
+      windowHint: `Réservation au moins ${BOOKING_MIN_LEAD_TIME_HOURS} h à l’avance et jusqu’à ${BOOKING_HORIZON_DAYS} jours.`,
+      tooSoon: `Ce créneau n’est plus réservable : réservez au moins ${BOOKING_MIN_LEAD_TIME_HOURS} h à l’avance.`,
+      tooFar: `Les réservations sont ouvertes jusqu’à ${BOOKING_HORIZON_DAYS} jours à l’avance.`,
+      invalidPhone: "Saisissez un numéro de téléphone valide (8 à 15 chiffres, indicatif international accepté, ex. +33 6 12 34 56 78).",
+      details: "Objet de la demande (sans information médicale)",
+      detailsPlaceholder: "Ex. : demande d’avis, questions d’organisation, préparation de la consultation",
+      detailsWarning: "N’indiquez ici aucune information de santé (symptômes, diagnostic, traitement, antécédents, résultats d’examens). Ces éléments seront abordés uniquement pendant la consultation.",
       submit: "Procéder au paiement",
       loading: "Traitement...",
       checkingAvailability: "Vérification du créneau...",
@@ -54,12 +77,26 @@ export const bookingContent = {
     restartBooking: "Nouvelle réservation",
     paymentError: "Une erreur est survenue pendant le paiement.",
     bookingError: "Une erreur est survenue pendant la création de la réservation.",
+    invalidInput: "Certaines informations sont invalides : vérifiez votre nom, votre email, votre téléphone et la date choisie.",
           trackingId: "Numéro de suivi:",
       cancellation: "Remboursement intégral au-delà de 24 h avant le rendez-vous. Après ce délai, la réservation n’est pas remboursable.",
       paymentTrust: "Paiement sécurisé par Stripe · Confirmation et facture envoyées par email",
       availabilityLabel: "Disponibilité",
       emergencyTitle: "En cas d’urgence",
       emergencyNote: "En cas d’urgence médicale ou de danger immédiat, appelez immédiatement les secours. Cette consultation programmée ne remplace pas une prise en charge d’urgence.",
+      pending: {
+        title: "Un paiement est en attente",
+        description: "Votre créneau est réservé temporairement pendant le paiement. Reprenez le paiement pour confirmer la consultation, ou annulez pour choisir un autre créneau.",
+        slot: "Créneau",
+        heldUntil: "Réservé jusqu’à",
+        reference: "Référence",
+        resume: "Reprendre le paiement",
+        cancel: "Annuler et choisir un autre créneau",
+        cancelled: "Le créneau a été libéré. Vos informations sont conservées : choisissez une nouvelle date ou heure.",
+        closed: "Cette réservation n’est plus en attente. Si vous avez finalisé le paiement, vous recevrez une confirmation par email ; sinon, choisissez à nouveau votre créneau.",
+        resumeError: "Le paiement ne peut plus être repris (session expirée). Choisissez à nouveau votre créneau.",
+        cancelError: "L’annulation n’a pas pu être confirmée. Réessayez dans un instant.",
+      },
 
   },
   en: {
@@ -76,8 +113,13 @@ export const bookingContent = {
       timeLabel: "Time",
       invalidDate: "Enter a valid date in DD/MM/YYYY format and a time in HH:MM format.",
       dateHint: "Choose your consultation date and time. The slot is displayed in Paris time.",
-      details: "Request Details",
-      detailsPlaceholder: "Briefly describe your situation...",
+      windowHint: `Book at least ${BOOKING_MIN_LEAD_TIME_HOURS} hours ahead and up to ${BOOKING_HORIZON_DAYS} days ahead.`,
+      tooSoon: `This time slot can no longer be booked: please book at least ${BOOKING_MIN_LEAD_TIME_HOURS} hours ahead.`,
+      tooFar: `Bookings are open up to ${BOOKING_HORIZON_DAYS} days ahead.`,
+      invalidPhone: "Enter a valid phone number (8 to 15 digits, international prefix accepted, e.g. +33 6 12 34 56 78).",
+      details: "Purpose of your request (no medical information)",
+      detailsPlaceholder: "E.g. request for advice, practical questions, preparing the consultation",
+      detailsWarning: "Do not enter any health information here (symptoms, diagnosis, treatment, medical history, test results). These will only be discussed during the consultation.",
       submit: "Proceed to Payment",
       loading: "Processing...",
       checkingAvailability: "Checking availability...",
@@ -105,12 +147,26 @@ export const bookingContent = {
     restartBooking: "Start a new booking",
     paymentError: "An error occurred during payment.",
     bookingError: "An error occurred while creating your booking.",
+    invalidInput: "Some information is invalid: please check your name, email, phone number and chosen date.",
           trackingId: "Tracking ID:",
       cancellation: "Full refund is available more than 24 hours before the appointment. After that deadline, the booking is non-refundable.",
       paymentTrust: "Secure payment by Stripe · Confirmation and invoice sent by email",
       availabilityLabel: "Availability",
       emergencyTitle: "In an emergency",
       emergencyNote: "For a medical emergency or immediate danger, call emergency services immediately. This scheduled consultation does not replace emergency care.",
+      pending: {
+        title: "A payment is pending",
+        description: "Your time slot is held temporarily during payment. Resume the payment to confirm the consultation, or cancel to choose another time slot.",
+        slot: "Time slot",
+        heldUntil: "Held until",
+        reference: "Reference",
+        resume: "Resume payment",
+        cancel: "Cancel and choose another time slot",
+        cancelled: "The time slot has been released. Your details are kept: choose a new date or time.",
+        closed: "This booking is no longer pending. If you completed the payment, you will receive a confirmation email; otherwise, choose your time slot again.",
+        resumeError: "The payment can no longer be resumed (session expired). Please choose your time slot again.",
+        cancelError: "The cancellation could not be confirmed. Please try again in a moment.",
+      },
 
   },
   de: {
@@ -127,8 +183,13 @@ export const bookingContent = {
       timeLabel: "Uhrzeit",
       invalidDate: "Geben Sie ein gültiges Datum im Format TT.MM.JJJJ und eine Uhrzeit im Format HH:MM ein.",
       dateHint: "Wählen Sie Datum und Uhrzeit Ihrer Beratung. Der Termin wird in Pariser Zeit angezeigt.",
-      details: "Anforderungsdetails",
-      detailsPlaceholder: "Beschreiben Sie Ihre Situation kurz...",
+      windowHint: `Buchung mindestens ${BOOKING_MIN_LEAD_TIME_HOURS} Stunden im Voraus und bis zu ${BOOKING_HORIZON_DAYS} Tage im Voraus.`,
+      tooSoon: `Dieser Termin kann nicht mehr gebucht werden: Bitte buchen Sie mindestens ${BOOKING_MIN_LEAD_TIME_HOURS} Stunden im Voraus.`,
+      tooFar: `Buchungen sind bis zu ${BOOKING_HORIZON_DAYS} Tage im Voraus möglich.`,
+      invalidPhone: "Geben Sie eine gültige Telefonnummer ein (8 bis 15 Ziffern, internationale Vorwahl möglich, z. B. +49 30 1234567).",
+      details: "Anlass Ihrer Anfrage (ohne medizinische Angaben)",
+      detailsPlaceholder: "z. B. Bitte um Rat, organisatorische Fragen, Vorbereitung der Beratung",
+      detailsWarning: "Geben Sie hier keine Gesundheitsdaten an (Symptome, Diagnose, Behandlung, Vorgeschichte, Untersuchungsergebnisse). Diese werden ausschließlich während der Beratung besprochen.",
       submit: "Zur Zahlung übergehen",
       loading: "Verarbeitung...",
       checkingAvailability: "Verfügbarkeit wird geprüft...",
@@ -156,12 +217,26 @@ export const bookingContent = {
     restartBooking: "Neue Buchung",
     paymentError: "Bei der Zahlung ist ein Fehler aufgetreten.",
     bookingError: "Bei der Erstellung der Buchung ist ein Fehler aufgetreten.",
+    invalidInput: "Einige Angaben sind ungültig: Bitte prüfen Sie Name, E-Mail, Telefonnummer und gewähltes Datum.",
           trackingId: "Verfolgungsnummer:",
       cancellation: "Eine vollständige Rückerstattung ist mehr als 24 Stunden vor dem Termin möglich. Danach ist die Buchung nicht erstattungsfähig.",
       paymentTrust: "Sichere Zahlung über Stripe · Bestätigung und Rechnung per E-Mail",
       availabilityLabel: "Verfügbarkeit",
       emergencyTitle: "Im Notfall",
       emergencyNote: "Bei einem medizinischen Notfall oder unmittelbarer Gefahr rufen Sie sofort den Rettungsdienst an. Diese geplante Beratung ersetzt keine Notfallversorgung.",
+      pending: {
+        title: "Eine Zahlung ist ausstehend",
+        description: "Ihr Termin ist während der Zahlung vorübergehend reserviert. Setzen Sie die Zahlung fort, um die Beratung zu bestätigen, oder stornieren Sie, um einen anderen Termin zu wählen.",
+        slot: "Termin",
+        heldUntil: "Reserviert bis",
+        reference: "Referenz",
+        resume: "Zahlung fortsetzen",
+        cancel: "Stornieren und anderen Termin wählen",
+        cancelled: "Der Termin wurde freigegeben. Ihre Angaben bleiben erhalten: Wählen Sie ein neues Datum oder eine neue Uhrzeit.",
+        closed: "Diese Buchung ist nicht mehr ausstehend. Wenn Sie die Zahlung abgeschlossen haben, erhalten Sie eine Bestätigung per E-Mail; andernfalls wählen Sie Ihren Termin erneut.",
+        resumeError: "Die Zahlung kann nicht mehr fortgesetzt werden (Sitzung abgelaufen). Bitte wählen Sie Ihren Termin erneut.",
+        cancelError: "Die Stornierung konnte nicht bestätigt werden. Bitte versuchen Sie es gleich noch einmal.",
+      },
 
   },
   zh: {
@@ -178,8 +253,13 @@ export const bookingContent = {
       timeLabel: "时间",
       invalidDate: "请输入有效日期（日/月/年）和时间（时:分）。",
       dateHint: "请选择咨询日期和时间。时段以巴黎时间显示。",
-      details: "请求详情",
-      detailsPlaceholder: "简要描述您的情况...",
+      windowHint: `请至少提前 ${BOOKING_MIN_LEAD_TIME_HOURS} 小时预约，最多可提前 ${BOOKING_HORIZON_DAYS} 天。`,
+      tooSoon: `该时段已无法预约：请至少提前 ${BOOKING_MIN_LEAD_TIME_HOURS} 小时预约。`,
+      tooFar: `最多可提前 ${BOOKING_HORIZON_DAYS} 天预约。`,
+      invalidPhone: "请输入有效的电话号码（8 至 15 位数字，可含国际区号，例如 +33 6 12 34 56 78）。",
+      details: "咨询事由（请勿填写医疗信息）",
+      detailsPlaceholder: "例如：寻求建议、组织安排问题、咨询准备",
+      detailsWarning: "请勿在此填写任何健康信息（症状、诊断、治疗、病史、检查结果）。这些内容仅在咨询过程中讨论。",
       submit: "继续付款",
       loading: "处理中...",
       checkingAvailability: "正在检查可用性...",
@@ -207,12 +287,26 @@ export const bookingContent = {
     restartBooking: "新建预约",
     paymentError: "付款过程中发生错误。",
     bookingError: "创建预约时发生错误。",
+    invalidInput: "部分信息无效：请检查您的姓名、电子邮件、电话号码和所选日期。",
           trackingId: "跟踪 ID:",
       cancellation: "预约前24小时以上可全额退款，超过此期限后不可退款。",
       paymentTrust: "Stripe安全支付 · 确认信息和发票将通过电子邮件发送",
       availabilityLabel: "可用性",
       emergencyTitle: "紧急情况",
       emergencyNote: "如遇医疗紧急情况或面临即时危险，请立即联系急救服务。本次预约咨询不能替代紧急医疗救治。",
+      pending: {
+        title: "有一笔付款待完成",
+        description: "付款期间您的时段已被临时保留。继续付款以确认咨询，或取消后选择其他时段。",
+        slot: "时段",
+        heldUntil: "保留至",
+        reference: "编号",
+        resume: "继续付款",
+        cancel: "取消并选择其他时段",
+        cancelled: "该时段已释放。您的信息已保留：请选择新的日期或时间。",
+        closed: "此预约已不再处于待付款状态。如果您已完成付款，将收到确认邮件；否则请重新选择时段。",
+        resumeError: "无法继续付款（会话已过期）。请重新选择时段。",
+        cancelError: "无法确认取消。请稍后重试。",
+      },
 
   },
 };
@@ -334,7 +428,13 @@ export function getBookingAvailabilityState({
 // Refus métier attendus (créneau déjà pris, trop de tentatives, réservations
 // en attente) : le serveur renvoie un message français destiné au patient.
 // Toute autre erreur garde le message générique pour ne rien exposer de technique.
-const BOOKING_USER_FACING_ERROR_CODES = new Set(["CONFLICT", "TOO_MANY_REQUESTS"]);
+const BOOKING_USER_FACING_ERROR_CODES = new Set(["CONFLICT", "TOO_MANY_REQUESTS", "UNPROCESSABLE_CONTENT", "SERVICE_UNAVAILABLE"]);
+
+/** Input rejected by validation (BAD_REQUEST): a localized hint instead of the raw validation report. */
+export function isBookingInputError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  return (error as { data?: { code?: unknown } | null }).data?.code === "BAD_REQUEST";
+}
 
 export function getBookingServerErrorMessage(error: unknown): string | null {
   if (!error || typeof error !== "object") return null;
@@ -373,8 +473,11 @@ export default function BookingPage() {
   const [dateText, setDateText] = useState("");
   const [timeText, setTimeText] = useState("");
   const [dateError, setDateError] = useState<string | null>(null);
+  const [phoneError, setPhoneError] = useState<string | null>(null);
   const [paymentStatus, setPaymentStatus] = useState<"success" | "canceled" | null>(null);
   const [trackingId, setTrackingId] = useState<string | null>(null);
+  const [pendingBooking, setPendingBooking] = useState<PendingBooking | null>(null);
+  const [pendingNotice, setPendingNotice] = useState<string | null>(null);
   const paymentSubmissionRef = useRef(false);
   const localizedDate = selectedDate
     ? new Intl.DateTimeFormat(
@@ -422,10 +525,16 @@ export default function BookingPage() {
   const isOutsideConfiguredAvailability = Boolean(
     selectedDate && availabilitySlots.data && !isWithinBookingAvailability(selectedDate, configuredSlots, 30)
   );
+  // Délai minimal (2 h, passé compris) et horizon (90 jours) : mêmes règles que le serveur.
+  const bookingWindowIssue = selectedDate ? getBookingWindowIssue(selectedDate) : null;
   const availabilityLabel = availabilityQueryError
     ? bookingFormCopy.availabilityError
     : !selectedDate
     ? bookingFormCopy.selectDate
+    : bookingWindowIssue === "too_soon"
+    ? content.form.tooSoon
+    : bookingWindowIssue === "too_far"
+    ? content.form.tooFar
     : availabilityPending
       ? bookingFormCopy.checkingAvailability
       : isBlockedDate
@@ -439,8 +548,8 @@ export default function BookingPage() {
             : bookingFormCopy.available;
   const availabilityState = getBookingAvailabilityState({
     selected: Boolean(selectedDate),
-    pending: availabilityPending,
-    blocked: isBlockedDate || availabilityQueryError || isOutsideConfiguredAvailability,
+    pending: availabilityPending && !bookingWindowIssue,
+    blocked: isBlockedDate || availabilityQueryError || isOutsideConfiguredAvailability || Boolean(bookingWindowIssue),
     booked: isBookedSlot,
   });
 
@@ -451,7 +560,8 @@ export default function BookingPage() {
   const availabilityError = availabilityQueryError || calculatePrice.isError;
 
   const createAppointment = trpc.appointments.create.useMutation();
-
+  const resumeCheckout = trpc.appointments.createCheckoutSession.useMutation();
+  const cancelPendingBooking = trpc.appointments.cancelPending.useMutation();
 
   const synchronizeDateTime = (nextDateText: string, nextTimeText: string) => {
     setDateText(nextDateText);
@@ -477,6 +587,68 @@ export default function BookingPage() {
     setFormData((current) => ({ ...current, date: parsed.toISOString() }));
   };
 
+  // Retour depuis Stripe (bouton Précédent, rechargement, page restaurée du
+  // cache) : saisie conservée et réservation en attente proposée à la reprise
+  // ou à l’annulation, au lieu d’un créneau bloqué par son propre maintien.
+  const restorePendingBooking = useCallback(() => {
+    paymentSubmissionRef.current = false;
+    setPendingBooking(loadPendingBooking());
+  }, []);
+
+  useEffect(() => {
+    restorePendingBooking();
+    const draft = loadBookingDraft();
+    if (draft) {
+      setFormData((current) => ({ ...current, name: draft.name, email: draft.email, phone: draft.phone, details: draft.details }));
+      if (draft.dateText || draft.timeText) synchronizeDateTime(draft.dateText, draft.timeText);
+    }
+    const onPageShow = (event: PageTransitionEvent) => {
+      if (event.persisted) restorePendingBooking();
+    };
+    window.addEventListener("pageshow", onPageShow);
+    return () => window.removeEventListener("pageshow", onPageShow);
+  }, [restorePendingBooking]);
+
+  useEffect(() => {
+    const draft = { name: formData.name, email: formData.email, phone: formData.phone, dateText, timeText, details: formData.details };
+    if (Object.values(draft).some(Boolean)) saveBookingDraft(draft);
+  }, [formData.name, formData.email, formData.phone, formData.details, dateText, timeText]);
+
+  const forgetPendingBooking = (notice: string) => {
+    clearPendingBooking();
+    setPendingBooking(null);
+    setPendingNotice(notice);
+    void bookedSlots.refetch();
+  };
+
+  const handleResumePayment = async () => {
+    if (!pendingBooking || paymentSubmissionRef.current) return;
+    paymentSubmissionRef.current = true;
+    try {
+      const result = await resumeCheckout.mutateAsync({
+        trackingId: pendingBooking.trackingId,
+        finalPrice: pendingBooking.finalPrice,
+        customerEmail: pendingBooking.customerEmail,
+        customerName: pendingBooking.customerName,
+      });
+      if (!result.checkoutUrl) throw new Error("checkout_url_missing");
+      window.location.assign(result.checkoutUrl);
+    } catch {
+      paymentSubmissionRef.current = false;
+      forgetPendingBooking(content.pending.resumeError);
+    }
+  };
+
+  const handleCancelPendingBooking = async () => {
+    if (!pendingBooking) return;
+    try {
+      const result = await cancelPendingBooking.mutateAsync({ sessionId: pendingBooking.checkoutSessionId });
+      forgetPendingBooking(result.cancelled ? content.pending.cancelled : content.pending.closed);
+    } catch {
+      setPendingNotice(content.pending.cancelError);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -487,8 +659,14 @@ export default function BookingPage() {
       return;
     }
 
-    if (isBlockedDate || isBookedSlot || isOutsideConfiguredAvailability || availabilityError) {
+    if (getBookingWindowIssue(selectedDate) || isBlockedDate || isBookedSlot || isOutsideConfiguredAvailability || availabilityError) {
       alert(availabilityLabel);
+      return;
+    }
+
+    if (!isPlausiblePhoneNumber(formData.phone)) {
+      setPhoneError(content.form.invalidPhone);
+      document.getElementById("booking-phone")?.focus();
       return;
     }
 
@@ -508,6 +686,15 @@ export default function BookingPage() {
       });
 
       if (appointmentResult.success && appointmentResult.checkoutUrl) {
+        savePendingBooking({
+          trackingId: appointmentResult.trackingId,
+          checkoutSessionId: appointmentResult.checkoutSessionId,
+          customerName: formData.name,
+          customerEmail: formData.email,
+          finalPrice: appointmentResult.finalPrice,
+          appointmentDate: selectedDate.toISOString(),
+          holdExpiresAt: appointmentResult.holdExpiresAt,
+        });
         window.location.assign(appointmentResult.checkoutUrl);
       } else {
         paymentSubmissionRef.current = false;
@@ -521,6 +708,8 @@ export default function BookingPage() {
         // Le message serveur est rédigé en français : on le précède du libellé
         // localisé pour les autres langues de l’interface.
         alert(language === "fr" ? serverMessage : `${content.bookingError}\n\n${serverMessage}`);
+      } else if (isBookingInputError(error)) {
+        alert(content.invalidInput);
       } else {
         alert(content.bookingError);
       }
@@ -529,11 +718,13 @@ export default function BookingPage() {
 
   const handleReset = () => {
     paymentSubmissionRef.current = false;
+    clearBookingDraft();
     setFormData({ name: "", email: "", phone: "", date: "", details: "" });
     setSelectedDate(null);
     setDateText("");
     setTimeText("");
     setDateError(null);
+    setPhoneError(null);
     setPaymentStatus(null);
     setTrackingId(null);
   };
@@ -557,6 +748,7 @@ export default function BookingPage() {
   }[language];
 
   return (
+    <>
     <div className="min-h-screen bg-background py-8 sm:py-12 px-4">
       <SEOHead
         title={`${content.title} | Dr. Ahmed Ben Lallahom`}
@@ -603,6 +795,37 @@ export default function BookingPage() {
               })}
             </div>
           </div>
+        )}
+
+        {/* Pending payment after a return from Stripe */}
+        {!paymentStatus && pendingBooking && (
+          <Card className="payment-state payment-state-canceled mb-6 p-5 sm:p-6" role="region" aria-labelledby="pending-booking-title">
+            <div className="flex items-start gap-4">
+              <span className="payment-state-icon" aria-hidden="true">
+                <Clock className="w-6 h-6" />
+              </span>
+              <div className="min-w-0">
+                <h2 id="pending-booking-title" className="font-display text-xl font-bold mb-2">{content.pending.title}</h2>
+                <p className="text-sm text-muted-foreground leading-relaxed">{content.pending.description}</p>
+                <dl className="mt-3 grid gap-1 text-sm">
+                  <div><dt className="inline font-medium">{content.pending.slot} : </dt><dd className="inline">{new Intl.DateTimeFormat(language === "fr" ? "fr-FR" : language === "de" ? "de-DE" : language === "zh" ? "zh-CN" : "en-GB", { dateStyle: "full", timeStyle: "short", timeZone: "Europe/Paris" }).format(new Date(pendingBooking.appointmentDate))}</dd></div>
+                  <div><dt className="inline font-medium">{content.pending.heldUntil} : </dt><dd className="inline">{new Intl.DateTimeFormat(language === "fr" ? "fr-FR" : language === "de" ? "de-DE" : language === "zh" ? "zh-CN" : "en-GB", { timeStyle: "short", timeZone: "Europe/Paris" }).format(new Date(pendingBooking.holdExpiresAt))}</dd></div>
+                  <div><dt className="inline font-medium">{content.pending.reference} : </dt><dd className="inline font-mono text-primary">{pendingBooking.trackingId}</dd></div>
+                </dl>
+                <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+                  <Button type="button" onClick={handleResumePayment} disabled={resumeCheckout.isPending || cancelPendingBooking.isPending} className="cta-primary">
+                    {content.pending.resume}
+                  </Button>
+                  <Button type="button" variant="outline" onClick={handleCancelPendingBooking} disabled={resumeCheckout.isPending || cancelPendingBooking.isPending} className="cta-secondary">
+                    {content.pending.cancel}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </Card>
+        )}
+        {!paymentStatus && pendingNotice && (
+          <p className="mb-6 rounded-xl border border-primary/30 bg-primary/5 p-4 text-sm text-foreground" role="status" aria-live="polite">{pendingNotice}</p>
         )}
 
         {/* Payment Success Message */}
@@ -744,12 +967,20 @@ export default function BookingPage() {
                 type="tel"
                 required
                 value={formData.phone}
-                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                onChange={(e) => {
+                  setFormData({ ...formData, phone: e.target.value });
+                  if (phoneError && isPlausiblePhoneNumber(e.target.value)) setPhoneError(null);
+                }}
+                onBlur={() => setPhoneError(formData.phone.trim() && !isPlausiblePhoneNumber(formData.phone) ? content.form.invalidPhone : null)}
                 autoComplete="tel"
                 inputMode="tel"
                 enterKeyHint="next"
+                maxLength={50}
+                aria-invalid={phoneError ? true : undefined}
+                aria-describedby={phoneError ? "booking-phone-error" : undefined}
                 className="form-field-premium w-full px-4 py-2 border"
               />
+              {phoneError && <p id="booking-phone-error" className="mt-2 text-sm text-destructive" role="alert">{phoneError}</p>}
             </div>
 
             {/* Date */}
@@ -788,7 +1019,7 @@ export default function BookingPage() {
                   aria-label={content.form.timeLabel}
                 />
               </div>
-              <p className="mt-2 text-xs leading-5 text-muted-foreground">{content.form.dateHint}</p>
+              <p className="mt-2 text-xs leading-5 text-muted-foreground">{content.form.dateHint} {content.form.windowHint}</p>
               {dateError && <p id="booking-date-error" className="mt-2 text-sm text-destructive" role="alert">{dateError}</p>}
               {localizedDate && <p className="mt-2 text-sm font-medium text-primary" aria-live="polite">{localizedDate}</p>}
               <div id="availability-status" className={`availability-status availability-${availabilityState} mt-3 flex items-center gap-2`} role="status" aria-live="polite" data-state={availabilityState}>
@@ -827,13 +1058,19 @@ export default function BookingPage() {
                 <FileText className="w-4 h-4" aria-hidden="true" />
                 {content.form.details}
               </label>
+              <p id="booking-details-warning" className="mb-2 flex gap-2 rounded-lg border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-xs leading-5 text-foreground">
+                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-300" aria-hidden="true" />
+                <span>{content.form.detailsWarning}</span>
+              </p>
               <textarea
                 id="booking-details"
                 required
+                maxLength={BOOKING_REQUEST_SUBJECT_MAX_LENGTH}
                 value={formData.details}
                 onChange={(e) => setFormData({ ...formData, details: e.target.value })}
                 placeholder={content.form.detailsPlaceholder}
-                rows={4}
+                aria-describedby="booking-details-warning"
+                rows={3}
                 enterKeyHint="done"
                 className="form-field-premium w-full px-4 py-2 border"
               />
@@ -842,12 +1079,13 @@ export default function BookingPage() {
             {/* Submit Button */}
             <Button
               type="submit"
-              disabled={isLoading || availabilityPending || availabilityError || isBlockedDate || isBookedSlot || isOutsideConfiguredAvailability || !selectedDate || !calculatePrice.data}
+              disabled={isLoading || availabilityPending || availabilityError || isBlockedDate || isBookedSlot || isOutsideConfiguredAvailability || Boolean(bookingWindowIssue) || !selectedDate || !calculatePrice.data}
               className="cta-primary w-full"
               size="lg"
             >
               {isLoading ? bookingFormCopy.loading : bookingFormCopy.submit}
             </Button>
+            <BookingLegalNotice className="-mt-2" />
             <div className="booking-notes grid gap-3 sm:grid-cols-2 mt-2" aria-label={content.pricing.title}>
               <div className="booking-note">
                 <span className="text-xs uppercase tracking-[0.14em] text-primary font-bold">{content.availabilityLabel}</span>
@@ -877,5 +1115,7 @@ export default function BookingPage() {
         </div>
       </div>
     </div>
+    <Footer />
+    </>
   );
 }

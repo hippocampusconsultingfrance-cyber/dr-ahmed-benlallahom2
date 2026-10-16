@@ -14,11 +14,6 @@ import { canAdminDownloadCv, CV_DOWNLOAD_UNAVAILABLE_MESSAGE } from "./recruitme
 import { eq, and, or, sql, desc, gte, inArray, isNull, lt, ne } from "drizzle-orm";
 import Stripe from "stripe";
 import {
-  sendConfirmationEmail,
-  sendOwnerNotificationEmail,
-  sendOwnerNotificationSMS,
-  sendCustomerConfirmationSMS,
-  sendRefundConfirmationEmail,
   sendCandidatePortalAccessEmail,
   candidatePortalAccessEmailFailureCode,
   sendRecruitmentCampaignEmail,
@@ -37,6 +32,14 @@ import { buildCandidatePortalInvitationEmailEvent, candidatePortalAccountMatches
 import { RECRUITMENT_ANALYSIS_PROMPT_VERSION } from "./recruitmentAnalysis";
 import { medicalQuestionsRouter } from "./medicalQuestionsRouter";
 import { issueAdminMfaChallenge, verifyAdminMfaChallenge } from "./adminMfa";
+import {
+  BOOKING_INVALID_PHONE_MESSAGE,
+  BOOKING_REQUEST_SUBJECT_MAX_LENGTH,
+  BOOKING_TOO_FAR_MESSAGE,
+  BOOKING_TOO_SOON_MESSAGE,
+  getBookingWindowIssue,
+  isPlausiblePhoneNumber,
+} from "../shared/bookingPolicy";
 
 let stripeClient: Stripe | undefined;
 
@@ -119,9 +122,15 @@ async function enforcePublicFormRateLimit(input: {
 
 /** Nombre maximal de créneaux retenus (en attente de paiement) par adresse email. */
 export const MAX_ACTIVE_APPOINTMENT_HOLDS_PER_EMAIL = 2;
-export const ACTIVE_APPOINTMENT_HOLDS_LIMIT_MESSAGE = "Vous avez déjà deux réservations en attente de paiement. Finalisez ou annulez l’un de ces paiements, ou patientez 30 minutes avant de réserver un nouveau créneau.";
+export const ACTIVE_APPOINTMENT_HOLDS_LIMIT_MESSAGE = "Vous avez déjà deux réservations en attente de paiement. Finalisez ou annulez l’un de ces paiements, ou patientez une trentaine de minutes avant de réserver un nouveau créneau.";
 
 export const CONSULTATION_CHECKOUT_PRODUCT_NAME = "Consultation de conseil santé – 30 minutes";
+
+export const BOOKING_PAYMENT_UNAVAILABLE_MESSAGE = "Le service de paiement est momentanément indisponible. Votre créneau n’a pas été réservé : veuillez réessayer dans quelques minutes ou nous contacter.";
+
+/** Refuse NUL and other control characters (PostgreSQL rejects NUL in text). */
+const NO_CONTROL_CHARACTERS = /^[^\u0000-\u001F\u007F]*$/;
+const NO_CONTROL_CHARACTERS_EXCEPT_NEWLINES = /^[^\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]*$/;
 
 /** Libellé de la ligne Stripe Checkout, visible sur la page de paiement et le reçu. */
 export function consultationCheckoutProductData(trackingId: string) {
@@ -228,14 +237,39 @@ function parisWallClockToUtc(value: string): Date {
   return new Date(utcMs);
 }
 
+const APPOINTMENT_DATE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d{1,3})?)?)?(Z|[+-]\d{2}:?\d{2})?$/i;
+
+/**
+ * Parses an ISO instant (with Z or an offset) or a Europe/Paris wall-clock time.
+ * Impossible calendar values (30 February, 25:00) and Paris wall-clock times
+ * that do not exist (spring-forward gap) are rejected instead of being shifted.
+ */
 export function parseAppointmentDate(value: string): Date {
-  const hasExplicitTimeZone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(value);
-  const parsed = hasExplicitTimeZone
-    ? new Date(value)
-    : parisWallClockToUtc(value.length === 10 ? `${value}T00:00:00` : value.slice(0, 19));
+  const match = APPOINTMENT_DATE_PATTERN.exec(value.trim());
+  if (!match) throw new Error("Invalid appointment date");
+  const [, yearText, monthText, dayText, hourText = "00", minuteText = "00", secondText = "00", zone] = match;
+  const [year, month, day, hour, minute, second] = [yearText, monthText, dayText, hourText, minuteText, secondText].map(Number);
+  const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  if (month < 1 || month > 12 || day < 1 || day > daysInMonth || hour > 23 || minute > 59 || second > 59) {
+    throw new Error("Invalid appointment date");
+  }
+  if (zone && /^[+-]/.test(zone)) {
+    const offset = zone.replace(":", "");
+    if (Number(offset.slice(1, 3)) > 14 || Number(offset.slice(3, 5)) > 59) throw new Error("Invalid appointment date");
+  }
+
+  const parsed = zone
+    ? new Date(value.trim())
+    : parisWallClockToUtc(`${yearText}-${monthText}-${dayText}T${hourText}:${minuteText}:${secondText}`);
 
   if (!Number.isFinite(parsed.getTime())) {
     throw new Error("Invalid appointment date");
+  }
+  if (!zone) {
+    const reread = getParisParts(parsed);
+    if (reread.year !== year || reread.month !== month || reread.day !== day || reread.hour !== hour || reread.minute !== minute) {
+      throw new Error("Invalid appointment date");
+    }
   }
   return parsed;
 }
@@ -556,17 +590,25 @@ export const appRouter = router({
     create: publicProcedure
       .input(
         z.object({
-          customerName: z.string().min(1).max(255),
+          customerName: z.string().min(1).max(255).regex(NO_CONTROL_CHARACTERS, "Caractères non autorisés"),
           customerEmail: z.string().email().max(320),
-          customerPhone: z.string().min(1).max(50),
+          customerPhone: z.string().trim().min(1).max(50).refine(isPlausiblePhoneNumber, BOOKING_INVALID_PHONE_MESSAGE),
           appointmentDate: appointmentDateInput,
-          requestDetails: z.string().min(1).max(5000),
+          // Objet de la demande, sans information médicale (minimisation) :
+          // conservé pour le tableau de bord, jamais recopié dans un email.
+          requestDetails: z.string().trim().min(1).max(BOOKING_REQUEST_SUBJECT_MAX_LENGTH).regex(NO_CONTROL_CHARACTERS_EXCEPT_NEWLINES, "Caractères non autorisés"),
         })
       )
       .mutation(async ({ input, ctx }) => {
         const date = parseAppointmentDate(input.appointmentDate);
-        if (date.getTime() <= Date.now()) {
-          throw new TRPCError({ code: "BAD_REQUEST", message: "La date de consultation doit être future" });
+        // Délai minimal (le passé compris) et horizon maximal : refus métier,
+        // affichés tels quels au patient (UNPROCESSABLE_CONTENT).
+        const bookingWindowIssue = getBookingWindowIssue(date);
+        if (bookingWindowIssue) {
+          throw new TRPCError({
+            code: "UNPROCESSABLE_CONTENT",
+            message: bookingWindowIssue === "too_soon" ? BOOKING_TOO_SOON_MESSAGE : BOOKING_TOO_FAR_MESSAGE,
+          });
         }
 
         // Endpoint public sans Turnstile (parcours de paiement) : chaque appel
@@ -589,7 +631,7 @@ export const appRouter = router({
         }
 
         try {
-          const { getAppointmentHoldExpiry, getExpiredAppointmentHoldUpdate, releaseExpiredAppointmentHolds } = await import("./appointmentHolds");
+          const { getAppointmentHoldExpiry, getExpiredAppointmentHoldUpdate, releaseExpiredAppointmentHolds, stripeExpiresAt } = await import("./appointmentHolds");
           await releaseExpiredAppointmentHolds();
 
           // Plafond de créneaux retenus simultanément par une même adresse
@@ -658,36 +700,50 @@ export const appRouter = router({
 
           const appointmentDateFormatted = date.toISOString().slice(0, 19).replace('T', ' ');
           const slotKey = date.toISOString();
-          const holdExpiresAt = getAppointmentHoldExpiry();
+          // Le maintien (et donc l’expiration Stripe) ne dépasse jamais le début
+          // du créneau ; s’il ne reste pas assez de temps pour une session Stripe
+          // valide, la réservation est refusée avant toute écriture.
+          const holdExpiresAt = getAppointmentHoldExpiry(new Date(), date);
+          if (!holdExpiresAt) {
+            throw new TRPCError({ code: "UNPROCESSABLE_CONTENT", message: BOOKING_TOO_SOON_MESSAGE });
+          }
           await db.execute(
             sql`INSERT INTO appointments (tracking_id, customer_name, customer_email, customer_phone, consultation_type, request_details, appointment_date, slot_key, duration, base_price, final_price, is_night_rate, payment_status, appointment_status, hold_expires_at) VALUES (${trackingId}, ${input.customerName}, ${input.customerEmail}, ${input.customerPhone}, ${'health_advice'}, ${input.requestDetails}, ${appointmentDateFormatted}, ${slotKey}, ${30}, ${basePrice}, ${finalPrice}, ${isNightRate ? 1 : 0}, ${'pending'}, ${'held'}, ${holdExpiresAt})`
           );
 
+          let session: Stripe.Checkout.Session;
           try {
-            const session = await getStripeClient().checkout.sessions.create({
+            session = await getStripeClient().checkout.sessions.create({
               payment_method_types: ["card"],
               line_items: [{ price_data: { currency: "eur", product_data: consultationCheckoutProductData(trackingId), unit_amount: Math.round(Number(finalPrice) * 100) }, quantity: 1 }],
               mode: "payment",
               customer_email: input.customerEmail,
               metadata: { trackingId, customerName: input.customerName },
-              expires_at: Math.floor(holdExpiresAt.getTime() / 1000),
-              success_url: `${getSafeCheckoutOrigin()}/booking/confirmation?status=success&trackingId=${encodeURIComponent(trackingId)}`,
+              expires_at: stripeExpiresAt(holdExpiresAt),
+              success_url: `${getSafeCheckoutOrigin()}/booking/confirmation?status=success&trackingId=${encodeURIComponent(trackingId)}&session_id={CHECKOUT_SESSION_ID}`,
               cancel_url: `${getSafeCheckoutOrigin()}/booking/confirmation?status=canceled&session_id={CHECKOUT_SESSION_ID}`,
             });
             if (!session.id || !session.url) throw new Error("stripe_checkout_session_unavailable");
-            await db.update(appointments).set({ stripeSessionId: session.id }).where(and(eq(appointments.trackingId, trackingId), eq(appointments.appointmentStatus, "held")));
-            return { success: true, trackingId, finalPrice: parseFloat(finalPrice), checkoutUrl: session.url };
           } catch (stripeError) {
+            // Paiement indisponible : le créneau est libéré et le patient reçoit
+            // une consigne claire, jamais le texte technique de Stripe.
             await db.update(appointments).set(getExpiredAppointmentHoldUpdate()).where(and(eq(appointments.trackingId, trackingId), eq(appointments.paymentStatus, "pending"), eq(appointments.appointmentStatus, "held")));
-            throw stripeError;
+            console.error("Stripe checkout session creation failed:", stripeError instanceof Error ? stripeError.name : "UnknownError");
+            throw new TRPCError({ code: "SERVICE_UNAVAILABLE", message: BOOKING_PAYMENT_UNAVAILABLE_MESSAGE, cause: stripeError });
           }
+          await db.update(appointments).set({ stripeSessionId: session.id }).where(and(eq(appointments.trackingId, trackingId), eq(appointments.appointmentStatus, "held")));
+          // La page de réservation garde la session et l’expiration du maintien
+          // (sessionStorage) pour proposer « Reprendre le paiement » ou
+          // « Annuler et choisir un autre créneau » après un retour arrière.
+          return { success: true, trackingId, finalPrice: parseFloat(finalPrice), checkoutUrl: session.url!, checkoutSessionId: session.id, holdExpiresAt: holdExpiresAt.toISOString() };
         } catch (dbError) {
-          console.error("Database insert error:", dbError);
           if (dbError instanceof TRPCError) throw dbError;
+          console.error("Appointment creation failed:", dbError instanceof Error ? dbError.name : "UnknownError");
           if (String(dbError).toLowerCase().includes("appointments_active_slot_unique") || String(dbError).toLowerCase().includes("duplicate")) {
             throw new TRPCError({ code: "CONFLICT", message: "Ce créneau vient d’être réservé par un autre patient. Veuillez en choisir un autre." });
           }
-          throw new Error(`Failed to create appointment: ${dbError instanceof Error ? dbError.message : "Unknown error"}`);
+          // Jamais de requête SQL ni de message de fournisseur dans la réponse.
+          throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "La réservation n’a pas pu être enregistrée. Veuillez réessayer dans quelques instants." });
         }
 
         // Unreachable: the successful branch returns a Stripe Checkout URL.
@@ -745,6 +801,12 @@ export const appRouter = router({
           }
 
           const amountInCents = Math.round(expectedPrice * 100);
+          const { STRIPE_CHECKOUT_MIN_EXPIRY_MS, stripeExpiresAt } = await import("./appointmentHolds");
+          // Stripe refuse une expiration à moins de 30 min : un maintien presque
+          // écoulé ne peut plus ouvrir de session valide.
+          if (appointment.holdExpiresAt.getTime() - Date.now() < STRIPE_CHECKOUT_MIN_EXPIRY_MS) {
+            throw new TRPCError({ code: "CONFLICT", message: "La session de paiement a expiré. Veuillez choisir à nouveau votre créneau." });
+          }
 
           const session = await getStripeClient().checkout.sessions.create({
             payment_method_types: ["card"],
@@ -764,8 +826,8 @@ export const appRouter = router({
               trackingId: input.trackingId,
               customerName: input.customerName,
             },
-            expires_at: Math.floor(appointment.holdExpiresAt.getTime() / 1000),
-            success_url: `${getSafeCheckoutOrigin()}/booking/confirmation?status=success&trackingId=${encodeURIComponent(input.trackingId)}`,
+            expires_at: stripeExpiresAt(appointment.holdExpiresAt),
+            success_url: `${getSafeCheckoutOrigin()}/booking/confirmation?status=success&trackingId=${encodeURIComponent(input.trackingId)}&session_id={CHECKOUT_SESSION_ID}`,
             cancel_url: `${getSafeCheckoutOrigin()}/booking/confirmation?status=canceled&session_id={CHECKOUT_SESSION_ID}`,
           });
 
@@ -781,10 +843,24 @@ export const appRouter = router({
             checkoutUrl: session.url,
           };
         } catch (error) {
-          console.error("Stripe error:", error);
           if (error instanceof TRPCError) throw error;
-          throw new Error("Failed to create checkout session");
+          console.error("Stripe checkout session error:", error instanceof Error ? error.name : "UnknownError");
+          throw new TRPCError({ code: "SERVICE_UNAVAILABLE", message: BOOKING_PAYMENT_UNAVAILABLE_MESSAGE, cause: error });
         }
+      }),
+
+    /**
+     * État réel d’un paiement pour la page de retour Stripe (confirmé, en cours
+     * de validation, à régulariser…), sans jamais se fier au seul ?status=success.
+     */
+    publicStatus: publicProcedure
+      .input(z.object({
+        trackingId: z.string().regex(/^APT[A-Z0-9]{6,17}$/),
+        sessionId: z.string().regex(/^cs_[A-Za-z0-9_]{6,250}$/),
+      }))
+      .query(async ({ input }) => {
+        const { getPublicPaymentState } = await import("./appointmentPublicStatus");
+        return getPublicPaymentState(getStripeClient, input);
       }),
 
     cancelPending: publicProcedure
@@ -898,10 +974,14 @@ export const appRouter = router({
       return await db.select().from(availabilitySlots).where(eq(availabilitySlots.isActive, 1));
     }),
 
+    // Public : seulement les dates à venir, jamais le motif (note interne).
     getBlockedDates: publicProcedure.query(async () => {
       const db = await getDb();
       if (!db) return [];
-      return await db.select().from(blockedDates);
+      return await db
+        .select({ date: blockedDates.date })
+        .from(blockedDates)
+        .where(gte(blockedDates.date, parisDateKey(new Date())));
     }),
 
     getBookedSlots: publicProcedure
@@ -998,109 +1078,39 @@ export const appRouter = router({
       updateStatus: adminProcedure
         .input(
           z.object({
-            trackingId: z.string(),
+            trackingId: z.string().min(1).max(20),
             appointmentStatus: z.enum(["confirmed", "cancelled", "completed", "no_show"]),
           })
         )
         .mutation(async ({ input }) => {
-          const db = await getDb();
-          if (!db) throw new Error("Database connection failed");
-
-          await db
-            .update(appointments)
-            .set({ appointmentStatus: input.appointmentStatus, slotKey: input.appointmentStatus === "cancelled" ? null : undefined })
-            .where(eq(appointments.trackingId, input.trackingId));
-
-          return { success: true };
+          const { updateAppointmentStatusByAdmin } = await import("./appointmentAdminActions");
+          return updateAppointmentStatusByAdmin(input);
         }),
 
+      /**
+       * Remboursement intégral. « patient » : annulation demandée par le patient,
+       * possible jusqu’à 24 h avant. « practitioner » : annulation (ou geste) du
+       * praticien, toujours possible, motif obligatoire communiqué au patient.
+       */
       refund: adminProcedure
         .input(
           z.object({
-            trackingId: z.string().min(1),
-            reason: z.string().min(1).max(500),
+            trackingId: z.string().min(1).max(20),
+            reason: z.string().trim().min(3, "Indiquez le motif du remboursement.").max(500),
+            initiator: z.enum(["patient", "practitioner"]).default("patient"),
           })
         )
         .mutation(async ({ input }) => {
-          const db = await getDb();
-          if (!db) throw new Error("Database connection failed");
+          const { refundAppointmentPayment } = await import("./appointmentAdminActions");
+          return refundAppointmentPayment(getStripeClient(), input);
+        }),
 
-          const [appointment] = await db
-            .select({
-              trackingId: appointments.trackingId,
-              appointmentDate: appointments.appointmentDate,
-              paymentStatus: appointments.paymentStatus,
-              appointmentStatus: appointments.appointmentStatus,
-              stripePaymentIntentId: appointments.stripePaymentIntentId,
-              finalPrice: appointments.finalPrice,
-              customerEmail: appointments.customerEmail,
-              customerName: appointments.customerName,
-            })
-            .from(appointments)
-            .where(eq(appointments.trackingId, input.trackingId))
-            .limit(1);
-
-          if (!appointment) {
-            throw new TRPCError({ code: "NOT_FOUND", message: "Rendez-vous introuvable" });
-          }
-          if (appointment.paymentStatus === "refunded") {
-            throw new TRPCError({ code: "CONFLICT", message: "Ce rendez-vous a déjà été remboursé" });
-          }
-          if (appointment.paymentStatus !== "completed" || !appointment.stripePaymentIntentId) {
-            throw new TRPCError({ code: "CONFLICT", message: "Le rendez-vous n’est pas éligible au remboursement" });
-          }
-
-          const hoursUntilAppointment = (new Date(appointment.appointmentDate).getTime() - Date.now()) / (60 * 60 * 1000);
-          if (hoursUntilAppointment < 24) {
-            throw new TRPCError({ code: "CONFLICT", message: "Le remboursement intégral est disponible jusqu’à 24 heures avant la consultation" });
-          }
-
-          try {
-            const refund = await getStripeClient().refunds.create(
-              {
-                payment_intent: appointment.stripePaymentIntentId,
-                metadata: {
-                  trackingId: appointment.trackingId,
-                  reason: input.reason,
-                },
-              },
-              { idempotencyKey: `refund_${appointment.trackingId}` }
-            );
-
-            const refundAmount = ((refund.amount ?? Math.round(Number(appointment.finalPrice) * 100)) / 100).toFixed(2);
-            const now = new Date();
-            await db
-              .update(appointments)
-              .set({
-                paymentStatus: "refunded",
-                appointmentStatus: "cancelled",
-                slotKey: null,
-                cancellationReason: input.reason,
-                cancelledAt: now,
-                refundAmount,
-                refundedAt: now,
-              })
-              .where(
-                and(
-                  eq(appointments.trackingId, input.trackingId),
-                  eq(appointments.paymentStatus, "completed")
-                )
-              );
-
-            await sendRefundConfirmationEmail(
-              appointment.customerEmail,
-              appointment.customerName,
-              appointment.trackingId,
-              new Date(appointment.appointmentDate),
-              refundAmount
-            );
-
-            return { success: true, refundId: refund.id, refundAmount } as const;
-          } catch (error) {
-            console.error("Stripe refund error:", error);
-            if (error instanceof TRPCError) throw error;
-            throw new TRPCError({ code: "BAD_REQUEST", message: "Le remboursement Stripe a échoué" });
-          }
+      /** Paiement Stripe reçu mais non rattachable au rendez-vous (session indiquée dans l’alerte). */
+      refundUnconfirmedSession: adminProcedure
+        .input(z.object({ sessionId: z.string().trim().regex(/^cs_[A-Za-z0-9_]{6,250}$/, "Identifiant de session Stripe invalide (cs_…)") }))
+        .mutation(async ({ input }) => {
+          const { refundUnconfirmedCheckoutSession } = await import("./appointmentAdminActions");
+          return refundUnconfirmedCheckoutSession(getStripeClient(), input);
         }),
     }),
 
@@ -2323,14 +2333,26 @@ export const appRouter = router({
       addSlot: adminProcedure
         .input(
           z.object({
-            dayOfWeek: z.number().min(0).max(6),
-            startTime: z.string().regex(/^\d{2}:\d{2}$/),
-            endTime: z.string().regex(/^\d{2}:\d{2}$/),
+            dayOfWeek: z.number().int().min(0).max(6),
+            startTime: z.string().regex(/^\d{2}:\d{2}$/).refine(value => Number.isFinite(timeToMinutes(value)), "Heure de début invalide (HH:MM)"),
+            endTime: z.string().regex(/^\d{2}:\d{2}$/).refine(value => Number.isFinite(timeToMinutes(value)), "Heure de fin invalide (HH:MM)"),
           })
         )
         .mutation(async ({ input }) => {
+          // Une plage dont la fin précède le début se termine le lendemain
+          // (consultations de nuit) ; une plage de durée nulle est refusée.
+          if (input.startTime === input.endTime) {
+            throw new TRPCError({ code: "BAD_REQUEST", message: "L’heure de fin doit différer de l’heure de début (une fin plus tôt que le début signifie le lendemain)." });
+          }
           const db = await getDb();
           if (!db) throw new Error("Database connection failed");
+
+          const [duplicate] = await db.select({ id: availabilitySlots.id }).from(availabilitySlots).where(and(
+            eq(availabilitySlots.dayOfWeek, input.dayOfWeek),
+            eq(availabilitySlots.startTime, input.startTime),
+            eq(availabilitySlots.endTime, input.endTime),
+          )).limit(1);
+          if (duplicate) throw new TRPCError({ code: "CONFLICT", message: "Ce créneau existe déjà." });
 
           await db.insert(availabilitySlots).values(input);
           return { success: true };
@@ -2355,16 +2377,46 @@ export const appRouter = router({
       addBlockedDate: adminProcedure
         .input(
           z.object({
-            date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-            reason: z.string().optional(),
+            date: calendarDateInput,
+            // Note interne : jamais renvoyée par l’API publique.
+            reason: z.string().trim().max(200).optional(),
+            // Bloquer une date n’annule pas les rendez-vous payés de ce jour :
+            // l’administrateur doit le confirmer après avertissement.
+            acknowledgePaidAppointments: z.boolean().optional().default(false),
           })
         )
         .mutation(async ({ input }) => {
+          if (input.date < parisDateKey(new Date())) {
+            throw new TRPCError({ code: "BAD_REQUEST", message: "Cette date est déjà passée." });
+          }
           const db = await getDb();
           if (!db) throw new Error("Database connection failed");
 
-          await db.insert(blockedDates).values(input);
-          return { success: true };
+          const [existing] = await db.select({ id: blockedDates.id }).from(blockedDates).where(eq(blockedDates.date, input.date)).limit(1);
+          if (existing) throw new TRPCError({ code: "CONFLICT", message: "Cette date est déjà bloquée." });
+
+          const { start, end } = getParisDateRange(input.date);
+          const paidAppointments = await db
+            .select({ trackingId: appointments.trackingId, appointmentDate: appointments.appointmentDate })
+            .from(appointments)
+            .where(and(
+              gte(appointments.appointmentDate, start),
+              lt(appointments.appointmentDate, end),
+              eq(appointments.paymentStatus, "completed"),
+              eq(appointments.appointmentStatus, "confirmed"),
+            ));
+          if (paidAppointments.length > 0 && !input.acknowledgePaidAppointments) {
+            const list = paidAppointments
+              .map(apt => `${apt.trackingId} à ${new Intl.DateTimeFormat("fr-FR", { timeZone: PARIS_TIME_ZONE, hour: "2-digit", minute: "2-digit" }).format(apt.appointmentDate)}`)
+              .join(", ");
+            throw new TRPCError({
+              code: "PRECONDITION_FAILED",
+              message: `${paidAppointments.length} rendez-vous payé(s) ce jour-là (${list}). Bloquer la date ne les annule pas et ne prévient pas les patients : annulez-les et remboursez-les depuis l’onglet Réservations.`,
+            });
+          }
+
+          await db.insert(blockedDates).values({ date: input.date, reason: input.reason || null });
+          return { success: true, paidAppointments: paidAppointments.map(apt => apt.trackingId) };
         }),
 
       removeBlockedDate: adminProcedure

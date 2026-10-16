@@ -20,6 +20,7 @@ import AdminConfigurationBanner from "@/components/AdminConfigurationBanner";
 import PublicContentSkeleton from "@/components/PublicContentSkeleton";
 import { getActiveAdminTabLabel } from "./adminDashboardMobileTabs";
 import { buildAppointmentsAgenda } from "./appointmentsAgenda";
+import { getAppointmentAdminActions } from "./appointmentAdminActions";
 
 type Tab = "overview" | "appointments" | "contacts" | "gdpr" | "testimonials" | "availability" | "recruitment" | "candidateDocuments" | "security" | "vivier" | "mailing" | "employerBriefs" | "medicalQuestions";
 
@@ -259,16 +260,10 @@ function AppointmentsTab() {
   const { data, isLoading, error } = trpc.admin.appointments.list.useQuery({
     status: statusFilter as any,
   });
+  const [unconfirmedSessionId, setUnconfirmedSessionId] = useState("");
   const updateStatus = trpc.admin.appointments.updateStatus.useMutation({
     onSuccess: () => {
       toast.success("Statut mis à jour");
-      utils.admin.appointments.list.invalidate();
-      utils.admin.stats.invalidate();
-    },
-  });
-  const refundAppointment = trpc.admin.appointments.refund.useMutation({
-    onSuccess: ({ refundAmount }) => {
-      toast.success(`Remboursement confirmé : ${refundAmount} €`);
       utils.admin.appointments.list.invalidate();
       utils.admin.stats.invalidate();
     },
@@ -276,6 +271,37 @@ function AppointmentsTab() {
       toast.error(mutationError.message);
     },
   });
+  const notifyRefundResult = ({ refundAmount, patientNotified }: { refundAmount: string; patientNotified: boolean }) => {
+    toast.success(`Remboursement confirmé : ${refundAmount} €`);
+    if (!patientNotified) toast.warning("L’email au patient n’a pas pu être envoyé : prévenez-le directement.");
+    utils.admin.appointments.list.invalidate();
+    utils.admin.stats.invalidate();
+  };
+  const refundAppointment = trpc.admin.appointments.refund.useMutation({
+    onSuccess: notifyRefundResult,
+    onError: (mutationError) => {
+      toast.error(mutationError.message);
+    },
+  });
+  const refundUnconfirmedSession = trpc.admin.appointments.refundUnconfirmedSession.useMutation({
+    onSuccess: (result) => {
+      notifyRefundResult(result);
+      setUnconfirmedSessionId("");
+    },
+    onError: (mutationError) => {
+      toast.error(mutationError.message);
+    },
+  });
+  /** Motif obligatoire, communiqué au patient pour une annulation par le praticien. */
+  const askRefund = (trackingId: string, initiator: "patient" | "practitioner", question: string) => {
+    const reason = window.prompt(question)?.trim();
+    if (!reason) return;
+    if (reason.length < 3) {
+      toast.error("Indiquez un motif d’au moins 3 caractères.");
+      return;
+    }
+    refundAppointment.mutate({ trackingId, reason, initiator });
+  };
 
   if (error) {
     return <AdminErrorState description={error.message} />;
@@ -372,35 +398,75 @@ function AppointmentsTab() {
                 <span className={`px-2 py-1 rounded text-xs font-medium ${appointmentStatusColors[apt.appointmentStatus] || ""}`}>
                   {apt.appointmentStatus}
                 </span>
-                {apt.appointmentStatus === "confirmed" && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="min-h-10 flex-1 sm:min-h-0 sm:flex-none"
-                    onClick={() => updateStatus.mutate({ trackingId: apt.trackingId, appointmentStatus: "completed" })}
-                  >
-                    <CheckCircle className="w-3 h-3 mr-1" />
-                    Terminer
-                  </Button>
-                )}
-                {apt.paymentStatus === "completed" && apt.appointmentStatus === "confirmed" && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="min-h-10 flex-1 sm:min-h-0 sm:flex-none"
-                    disabled={refundAppointment.isPending}
-                    onClick={() => {
-                      if (!window.confirm(`Confirmer le remboursement de ${apt.finalPrice} € pour ${apt.trackingId} ?`)) return;
-                      refundAppointment.mutate({
-                        trackingId: apt.trackingId,
-                        reason: "Remboursement demandé par l’administration",
-                      });
-                    }}
-                  >
-                    <DollarSign className="w-3 h-3 mr-1" />
-                    Rembourser
-                  </Button>
-                )}
+                {(() => {
+                  const actions = getAppointmentAdminActions(apt);
+                  const buttonClass = "min-h-10 flex-1 sm:min-h-0 sm:flex-none";
+                  return (
+                    <>
+                      {actions.unconfirmedPayment && (
+                        <span className="px-2 py-1 rounded text-xs font-medium bg-amber-500/20 text-amber-400">Paiement à régulariser</span>
+                      )}
+                      {actions.canComplete && (
+                        <Button size="sm" variant="outline" className={buttonClass} disabled={updateStatus.isPending}
+                          onClick={() => {
+                            if (!window.confirm(`Marquer le rendez-vous ${apt.trackingId} comme terminé ?`)) return;
+                            updateStatus.mutate({ trackingId: apt.trackingId, appointmentStatus: "completed" });
+                          }}>
+                          <CheckCircle className="w-3 h-3 mr-1" />
+                          Terminer
+                        </Button>
+                      )}
+                      {actions.canMarkNoShow && (
+                        <Button size="sm" variant="outline" className={buttonClass} disabled={updateStatus.isPending}
+                          onClick={() => {
+                            if (!window.confirm(`Marquer le patient du rendez-vous ${apt.trackingId} comme absent ?`)) return;
+                            updateStatus.mutate({ trackingId: apt.trackingId, appointmentStatus: "no_show" });
+                          }}>
+                          <XCircle className="w-3 h-3 mr-1" />
+                          Absent
+                        </Button>
+                      )}
+                      {actions.canReconfirm && (
+                        <Button size="sm" variant="outline" className={buttonClass} disabled={updateStatus.isPending}
+                          onClick={() => updateStatus.mutate({ trackingId: apt.trackingId, appointmentStatus: "confirmed" })}>
+                          <Clock className="w-3 h-3 mr-1" />
+                          Remettre en confirmé
+                        </Button>
+                      )}
+                      {actions.canPractitionerCancel && (
+                        <Button size="sm" variant="outline" className={buttonClass} disabled={refundAppointment.isPending}
+                          onClick={() => askRefund(apt.trackingId, "practitioner", `Annuler ${apt.trackingId} et rembourser intégralement ${apt.finalPrice} € au patient.\nMotif communiqué au patient (obligatoire) :`)}>
+                          <XCircle className="w-3 h-3 mr-1" />
+                          Annuler (praticien) et rembourser
+                        </Button>
+                      )}
+                      {actions.canPatientRefund && (
+                        <Button size="sm" variant="outline" className={buttonClass} disabled={refundAppointment.isPending}
+                          onClick={() => askRefund(apt.trackingId, "patient", `Annulation demandée par le patient (plus de 24 h avant) : remboursement de ${apt.finalPrice} €.\nMotif (obligatoire) :`)}>
+                          <DollarSign className="w-3 h-3 mr-1" />
+                          Annulation patient (remboursement)
+                        </Button>
+                      )}
+                      {(actions.canPractitionerRefund || actions.unconfirmedPayment) && (
+                        <Button size="sm" variant="outline" className={buttonClass} disabled={refundAppointment.isPending}
+                          onClick={() => askRefund(apt.trackingId, "practitioner", `Rembourser intégralement le paiement de ${apt.trackingId}.\nMotif (obligatoire) :`)}>
+                          <DollarSign className="w-3 h-3 mr-1" />
+                          {actions.unconfirmedPayment ? "Rembourser ce paiement" : "Rembourser"}
+                        </Button>
+                      )}
+                      {actions.canCancelUnpaid && (
+                        <Button size="sm" variant="outline" className={buttonClass} disabled={updateStatus.isPending}
+                          onClick={() => {
+                            if (!window.confirm(`Annuler le rendez-vous non payé ${apt.trackingId} ?`)) return;
+                            updateStatus.mutate({ trackingId: apt.trackingId, appointmentStatus: "cancelled" });
+                          }}>
+                          <XCircle className="w-3 h-3 mr-1" />
+                          Annuler
+                        </Button>
+                      )}
+                    </>
+                  );
+                })()}
               </div>
             </div>
             {apt.requestDetails && (
@@ -412,6 +478,28 @@ function AppointmentsTab() {
           <AdminEmptyState icon={CalendarDays} title="Aucune réservation" description="Les nouvelles réservations apparaîtront ici dès leur confirmation." />
         )}
       </div>
+
+      <section aria-labelledby="unconfirmed-refund-title" className="mt-6 rounded-xl border border-border bg-card p-4">
+        <h2 id="unconfirmed-refund-title" className="font-semibold text-foreground">Rembourser un paiement non confirmé</h2>
+        <p className="mt-1 text-sm text-muted-foreground">Pour un paiement signalé par l’alerte « Paiement reçu pour un rendez-vous non confirmable » (double paiement, session différente) : collez la session Stripe indiquée (cs_…). Le patient est remboursé intégralement et prévenu par email.</p>
+        <form
+          className="mt-3 flex flex-col gap-2 sm:flex-row"
+          onSubmit={(event) => {
+            event.preventDefault();
+            const sessionId = unconfirmedSessionId.trim();
+            if (!sessionId) return;
+            if (!window.confirm(`Rembourser intégralement le paiement de la session ${sessionId} ?`)) return;
+            refundUnconfirmedSession.mutate({ sessionId });
+          }}
+        >
+          <label htmlFor="unconfirmed-session-id" className="sr-only">Session Stripe</label>
+          <Input id="unconfirmed-session-id" value={unconfirmedSessionId} onChange={(event) => setUnconfirmedSessionId(event.target.value)} placeholder="cs_live_…" className="sm:max-w-md" />
+          <Button type="submit" variant="outline" disabled={refundUnconfirmedSession.isPending || !unconfirmedSessionId.trim()}>
+            <DollarSign className="w-3 h-3 mr-1" />
+            Rembourser
+          </Button>
+        </form>
+      </section>
     </div>
   );
 }
@@ -929,13 +1017,21 @@ function AvailabilityTab() {
   });
 
   const blockDate = trpc.admin.availability.addBlockedDate.useMutation({
-    onSuccess: () => {
+    onSuccess: ({ paidAppointments }) => {
       toast.success("Date bloquée");
+      if (paidAppointments.length > 0) toast.warning(`Rendez-vous payés à traiter ce jour-là : ${paidAppointments.join(", ")}.`);
       utils.admin.availability.listBlockedDates.invalidate();
       setShowBlockForm(false);
       setBlockForm({ date: "", reason: "" });
     },
-    onError: (e: any) => toast.error(e.message),
+    onError: (e, variables) => {
+      // Rendez-vous payés ce jour-là : avertir, puis bloquer seulement après confirmation.
+      if (e.data?.code === "PRECONDITION_FAILED" && !variables.acknowledgePaidAppointments) {
+        if (window.confirm(`${e.message}\n\nBloquer quand même cette date ?`)) blockDate.mutate({ ...variables, acknowledgePaidAppointments: true });
+        return;
+      }
+      toast.error(e.message);
+    },
   });
 
   const unblockDate = trpc.admin.availability.removeBlockedDate.useMutation({
@@ -1015,7 +1111,11 @@ function AvailabilityTab() {
                 size="sm"
                 variant="ghost"
                 className="min-h-10 self-start sm:min-h-0"
-                onClick={() => deleteSlot.mutate({ id: slot.id })}
+                aria-label={`Supprimer le créneau ${dayNames[slot.dayOfWeek]} ${slot.startTime} - ${slot.endTime}`}
+                onClick={() => {
+                  if (!window.confirm(`Supprimer le créneau ${dayNames[slot.dayOfWeek]} ${slot.startTime} - ${slot.endTime} ?`)) return;
+                  deleteSlot.mutate({ id: slot.id });
+                }}
               >
                 <Trash className="w-3 h-3 text-red-400" />
               </Button>
@@ -1050,12 +1150,12 @@ function AvailabilityTab() {
                 />
               </div>
               <div>
-                <label className="text-sm text-muted-foreground block mb-1">Raison (optionnel)</label>
+                <label className="text-sm text-muted-foreground block mb-1">Motif interne (optionnel, jamais affiché sur le site)</label>
                 <input
                   className="w-full px-3 py-2 rounded-lg bg-background border border-border text-foreground"
                   value={blockForm.reason}
                   onChange={(e) => setBlockForm({ ...blockForm, reason: e.target.value })}
-                  placeholder="Congés, formation..."
+                  placeholder="Note pour vous uniquement"
                 />
               </div>
               <Button className="min-h-11 w-full md:w-auto md:min-h-0" onClick={() => blockDate.mutate(blockForm)} disabled={blockDate.isPending || !blockForm.date}>
