@@ -10,10 +10,10 @@ const validPdf = Buffer.concat([Buffer.from("%PDF-1.7\n1 0 obj << /Type /Page >>
 const validDoc = Buffer.concat([Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]), Buffer.alloc(300, 66)]);
 const validDocx = buildDocx(["Dr Docx Candidate", "Infirmier anesthésiste IADE — 6 ans d’expérience", "Langues : Français, Anglais"]);
 
-function pdfWithStream(dictionary: string, data: Buffer) {
+function pdfWithStream(dictionary: string, data: Buffer, endOfLine = "\n") {
   return Buffer.concat([
     Buffer.from("%PDF-1.7\n1 0 obj << /Type /Page >> endobj\n"),
-    Buffer.from(`2 0 obj << ${dictionary} /Length ${data.length} >>\nstream\n`, "latin1"),
+    Buffer.from(`2 0 obj << ${dictionary} /Length ${data.length} >>\nstream${endOfLine}`, "latin1"),
     data,
     Buffer.from("\nendstream\nendobj\n%%EOF\n"),
     Buffer.alloc(300, 32),
@@ -116,6 +116,29 @@ describe("bombes de décompression : plafonds avant extraction", () => {
 
     const hugeImage = pdfWithStream("/Type /XObject /Subtype /Image /Width 100000 /Height 100000 /Filter /FlateDecode", deflateSync(Buffer.alloc(10)));
     expect(() => validateCvFile({ buffer: hugeImage, mimeType: "application/pdf", originalName: "cv.pdf", size: hugeImage.length })).toThrow("cv_validation_pdf_image_too_large");
+  });
+
+  it("ne se fie pas au dictionnaire du flux : fin de ligne CR, filtre indirect ou échappé, faux en-tête d’image, compression imbriquée", () => {
+    const over = Buffer.alloc(DOCUMENT_DECOMPRESSION_LIMITS.pdfMaxInflatedBytes + 1024, 32);
+    const bomb = deflateSync(over);
+    const shapes: Array<[string, Buffer]> = [
+      ["CR seul après stream", pdfWithStream("/Filter /FlateDecode", bomb, "\r")],
+      ["espaces puis CRLF après stream", pdfWithStream("/Filter /FlateDecode", bomb, "  \r\n")],
+      ["filtre en référence indirecte", pdfWithStream("/Filter 9 0 R", bomb)],
+      ["nom de filtre échappé", pdfWithStream("/Filter /F#6CateDecode", bomb)],
+      ["contenu déguisé en petite image", pdfWithStream("/Subtype /Image /Width 10 /Height 10 /Filter /FlateDecode", bomb)],
+      ["image aux dimensions indirectes", pdfWithStream("/Subtype /Image /Width 7 0 R /Height 8 0 R /Filter /FlateDecode", bomb)],
+      ["Flate dans Flate", pdfWithStream("/Filter [/FlateDecode /FlateDecode]", deflateSync(bomb))],
+    ];
+    for (const [label, pdf] of shapes) {
+      expect(() => validateCvFile({ buffer: pdf, mimeType: "application/pdf", originalName: "cv.pdf", size: pdf.length }), label).toThrow("cv_validation_pdf_decompressed_size_exceeded");
+    }
+    // Honest images are still accepted: a declared 1000×1000 RGB photo, and a large one.
+    const photo = pdfWithStream("/Type /XObject /Subtype /Image /Width 1000 /Height 1000 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /FlateDecode", deflateSync(Buffer.alloc(3_000_000, 90)));
+    expect(validateCvFile({ buffer: photo, mimeType: "application/pdf", originalName: "cv.pdf", size: photo.length }).pageCount).toBe(1);
+    const scan = pdfWithStream("/Type /XObject /Subtype /Image /Width 2480 /Height 3508 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /FlateDecode", deflateSync(Buffer.alloc(2480 * 3508 * 3, 200)));
+    expect(validateCvFile({ buffer: scan, mimeType: "application/pdf", originalName: "cv.pdf", size: scan.length }).pageCount).toBe(1);
+    expect(recruitmentCvValidationMessage("cv_validation_pdf_processing_timeout")).toContain("trop volumineux");
   });
 
   it("tronque le texte extrait à 200 000 caractères avec un avertissement", async () => {

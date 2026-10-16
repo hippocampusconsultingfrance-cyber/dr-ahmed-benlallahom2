@@ -4,6 +4,7 @@ import { z } from "zod";
 import { cvApplications, cvCandidateCertifications, cvCandidateExperiences, cvCandidateLanguages } from "../drizzle/schema";
 import { getDb } from "./db";
 import { assertPdfDecompressionWithinLimits, DOCUMENT_DECOMPRESSION_LIMITS, inspectDocxArchive, truncateExtractedText } from "./documentDecompressionLimits";
+import { PdfReaderUnavailableError, readPdfIsolated } from "./pdfExtractionSandbox";
 
 export const RECRUITMENT_ANALYSIS_PRIMARY_MODEL = "openai/gpt-6-astra";
 export const RECRUITMENT_ANALYSIS_FALLBACK_MODEL = "google/gemini-3.8-flash";
@@ -243,53 +244,77 @@ async function createPdfParser(buffer: Buffer) {
   // the Node-compatible canvas implementation and must load before pdf-parse.
   const { CanvasFactory } = await import("pdf-parse/worker");
   const { PDFParse } = await import("pdf-parse");
-  return new PDFParse({ data: buffer, CanvasFactory });
+  return new PDFParse({ data: buffer, CanvasFactory, maxImageSize: DOCUMENT_DECOMPRESSION_LIMITS.pdfMaxImagePixels, isEvalSupported: false });
 }
 
-async function extractPdfWithVision(buffer: Buffer): Promise<{ text: string; confidence: number | null; warnings: string[] }> {
+/**
+ * Runs pdf.js in the isolated reader (memory and time bounds). Only when the
+ * reader itself cannot start (pdf.js not loadable in a worker on this host)
+ * does it read in process, after the static check, and says so in the logs.
+ */
+async function readPdfBounded<T>(buffer: Buffer, isolated: () => Promise<T>, inProcess: (parser: Awaited<ReturnType<typeof createPdfParser>>) => Promise<T>): Promise<T> {
+  try {
+    return await isolated();
+  } catch (error) {
+    if (!(error instanceof PdfReaderUnavailableError)) throw error;
+    console.error("[CvExtraction] isolated PDF reader unavailable, reading in process", error.message);
+  }
   const parser = await createPdfParser(buffer);
   try {
-    const screenshots = await parser.getScreenshot({ first: 3, desiredWidth: 1400, imageDataUrl: true, imageBuffer: false });
-    const pages = screenshots.pages.filter(page => page.dataUrl);
-    if (pages.length === 0) return { text: "", confidence: null, warnings: ["vision_ocr_no_rendered_pages"] };
-
-    const transcriptions = await Promise.all(pages.map(async page => {
-      const response = await generateText({
-        model: RECRUITMENT_OCR_MODEL,
-        maxOutputTokens: 3_000,
-        timeout: 20_000,
-        maxRetries: 1,
-        providerOptions: { gateway: { disallowPromptTraining: true, has: ["vision"] } },
-        output: Output.object({ schema: visionOcrPageSchema, name: "cv_ocr_page_transcription" }),
-        messages: [{
-          role: "user",
-          content: [
-            { type: "text", text: "Transcris uniquement le texte professionnel visible sur cette unique page de CV. N’infère rien, ignore les photos et toute caractéristique protégée. Si un passage est illisible, écris [illisible]. Ne fournis aucun numéro de page : il sera associé par le serveur." },
-            { type: "image", image: page.dataUrl!, mediaType: "image/png" },
-          ],
-        }],
-      });
-      return {
-        pageNumber: page.pageNumber,
-        text: response.output.text,
-        confidence: response.output.confidence,
-        warnings: response.output.warnings,
-      };
-    }));
-    return {
-      text: cleanText(transcriptions
-        .sort((left, right) => left.pageNumber - right.pageNumber)
-        .map(page => `[PAGE ${page.pageNumber}]\n${escapeCvPageMarkers(cleanText(page.text))}`)
-        .join("\n\n")),
-      confidence: Math.min(...transcriptions.map(page => page.confidence)),
-      warnings: [
-        ...(screenshots.total > pages.length ? ["vision_ocr_first_3_pages_only"] : []),
-        ...transcriptions.flatMap(page => page.warnings.map(warning => `page_${page.pageNumber}:${warning}`)),
-      ],
-    };
+    return await inProcess(parser);
   } finally {
     await parser.destroy();
   }
+}
+
+const VISION_RENDER = { first: 3, desiredWidth: 1400 } as const;
+
+async function extractPdfWithVision(buffer: Buffer): Promise<{ text: string; confidence: number | null; warnings: string[] }> {
+  const screenshots = await readPdfBounded(
+    buffer,
+    () => readPdfIsolated(buffer, { kind: "render", ...VISION_RENDER }),
+    async parser => {
+      const rendered = await parser.getScreenshot({ ...VISION_RENDER, imageDataUrl: true, imageBuffer: false });
+      return { total: rendered.total, pages: rendered.pages.map(page => ({ pageNumber: page.pageNumber, dataUrl: page.dataUrl || null })) };
+    },
+  );
+  const pages = screenshots.pages.filter((page): page is { pageNumber: number; dataUrl: string } => Boolean(page.dataUrl));
+  if (pages.length === 0) return { text: "", confidence: null, warnings: ["vision_ocr_no_rendered_pages"] };
+
+  const transcriptions = await Promise.all(pages.map(async page => {
+    const response = await generateText({
+      model: RECRUITMENT_OCR_MODEL,
+      maxOutputTokens: 3_000,
+      timeout: 20_000,
+      maxRetries: 1,
+      providerOptions: { gateway: { disallowPromptTraining: true, has: ["vision"] } },
+      output: Output.object({ schema: visionOcrPageSchema, name: "cv_ocr_page_transcription" }),
+      messages: [{
+        role: "user",
+        content: [
+          { type: "text", text: "Transcris uniquement le texte professionnel visible sur cette unique page de CV. N’infère rien, ignore les photos et toute caractéristique protégée. Si un passage est illisible, écris [illisible]. Ne fournis aucun numéro de page : il sera associé par le serveur." },
+          { type: "image", image: page.dataUrl, mediaType: "image/png" },
+        ],
+      }],
+    });
+    return {
+      pageNumber: page.pageNumber,
+      text: response.output.text,
+      confidence: response.output.confidence,
+      warnings: response.output.warnings,
+    };
+  }));
+  return {
+    text: cleanText(transcriptions
+      .sort((left, right) => left.pageNumber - right.pageNumber)
+      .map(page => `[PAGE ${page.pageNumber}]\n${escapeCvPageMarkers(cleanText(page.text))}`)
+      .join("\n\n")),
+    confidence: Math.min(...transcriptions.map(page => page.confidence)),
+    warnings: [
+      ...((screenshots.total ?? 0) > pages.length ? ["vision_ocr_first_3_pages_only"] : []),
+      ...transcriptions.flatMap(page => page.warnings.map(warning => `page_${page.pageNumber}:${warning}`)),
+    ],
+  };
 }
 
 /** Bounded text: what is analysed and stored never exceeds the configured size. */
@@ -304,27 +329,28 @@ export async function extractCvDocument(buffer: Buffer, mimeType: string): Promi
 
 async function extractCvDocumentUnbounded(buffer: Buffer, mimeType: string): Promise<CvExtractionResult> {
   if (mimeType === "application/pdf") {
-    // Also called for vault documents: bound the decompression here too.
+    // Also called for vault documents: bound the decompression here too,
+    // then read in the isolated reader (the real bound, see pdfExtractionSandbox).
     assertPdfDecompressionWithinLimits(buffer);
-    const parser = await createPdfParser(buffer);
-    let extracted = "";
-    let totalPages: number | null = null;
-    let textCoverageWarnings: string[] = [];
-    try {
-      const result = await parser.getText({ first: DOCUMENT_DECOMPRESSION_LIMITS.pdfMaxExtractedPages });
-      const pages = result.pages.map(page => ({ number: page.num, text: cleanText(page.text) }));
-      extracted = cleanText(pages
-        .map(page => `[PAGE ${page.number}]\n${escapeCvPageMarkers(page.text)}`)
-        .join("\n\n"));
-      totalPages = Number.isInteger(result.total) ? result.total : null;
-      textCoverageWarnings = [
-        ...pages.filter(page => page.text.length < 20)
-          .map(page => `pdf_text_page_${page.number}_insufficient_text`),
-        ...(totalPages !== null && pages.length < totalPages ? ["pdf_text_pages_missing"] : []),
-      ];
-    } finally {
-      await parser.destroy();
-    }
+    const first = DOCUMENT_DECOMPRESSION_LIMITS.pdfMaxExtractedPages;
+    const result = await readPdfBounded(
+      buffer,
+      () => readPdfIsolated(buffer, { kind: "text", first }),
+      async parser => {
+        const read = await parser.getText({ first });
+        return { total: Number.isInteger(read.total) ? read.total : null, pages: read.pages.map(page => ({ num: page.num, text: page.text })) };
+      },
+    );
+    const pages = result.pages.map(page => ({ number: page.num, text: cleanText(page.text) }));
+    const extracted = cleanText(pages
+      .map(page => `[PAGE ${page.number}]\n${escapeCvPageMarkers(page.text)}`)
+      .join("\n\n"));
+    const totalPages = result.total;
+    const textCoverageWarnings = [
+      ...pages.filter(page => page.text.length < 20)
+        .map(page => `pdf_text_page_${page.number}_insufficient_text`),
+      ...(totalPages !== null && pages.length < totalPages ? ["pdf_text_pages_missing"] : []),
+    ];
     const extractedContentLength = cleanText(
       extracted.replace(/\[PAGE\s+\d+\]/gi, "")
     ).length;

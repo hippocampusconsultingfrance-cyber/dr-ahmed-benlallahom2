@@ -1,24 +1,41 @@
 import { constants, inflateRawSync, inflateSync } from "node:zlib";
 
 /**
- * Bounds applied before any text extraction, so a small upload cannot expand
- * into gigabytes in the worker (decompression bomb) or store a huge text.
- * Every refusal is a `cv_validation_*` error: the analysis job treats it as a
- * final failure instead of retrying it.
+ * Bounds applied before and during text extraction, so a small upload cannot
+ * expand into gigabytes in the worker (decompression bomb) or store a huge
+ * text. Every refusal is a `cv_validation_*` error: the analysis job treats
+ * it as a final failure instead of retrying it.
+ *
+ * Two layers for PDF: a fast static check at upload (below), which refuses
+ * the common bombs with a clear message, and the isolated reader
+ * (`pdfExtractionSandbox.ts`) where pdf.js really decodes the file, under a
+ * memory and time limit — the static check cannot see every filter chain
+ * pdf.js accepts (LZW, ASCIIHex, names written with #xx escapes…).
  */
 export const DOCUMENT_DECOMPRESSION_LIMITS = {
   /** Sum of the actually inflated sizes of every DOCX (ZIP) entry. */
   docxMaxUncompressedBytes: 20 * 1024 * 1024,
   docxMaxEntries: 1_000,
-  /** Sum of the inflated Flate streams of a PDF, images excepted. */
+  /** Sum of the inflated zlib streams of a PDF (every layer), images excepted. */
   pdfMaxInflatedBytes: 40 * 1024 * 1024,
   /** Largest image a PDF may declare (pixels), since rendering decodes it. */
   pdfMaxImagePixels: 40_000_000,
+  /** An image stream is checked against its declared size when that size is at most this. */
+  pdfImageProbeBytes: 64 * 1024 * 1024,
   /** Pages handed to the text extractor. */
   pdfMaxExtractedPages: 25,
+  /** Isolated PDF reader: process memory growth allowed while pdf.js runs. */
+  pdfReaderMaxMemoryGrowthBytes: 512 * 1024 * 1024,
+  /** Isolated PDF reader: JavaScript heap of the worker. */
+  pdfReaderMaxHeapMb: 256,
+  /** Isolated PDF reader: time allowed for the text of 25 pages / the rendering of 3 pages. */
+  pdfTextTimeoutMs: 12_000,
+  pdfRenderTimeoutMs: 15_000,
   /** Characters of extracted text kept for the analysis and the database. */
   extractedTextMaxChars: 200_000,
 } as const;
+
+export type DocumentDecompressionLimits = { [Key in keyof typeof DOCUMENT_DECOMPRESSION_LIMITS]: number };
 
 function isBufferTooLarge(error: unknown) {
   return error instanceof RangeError || (error instanceof Error && (error as NodeJS.ErrnoException).code === "ERR_BUFFER_TOO_LARGE");
@@ -93,41 +110,76 @@ export function inspectDocxArchive(buffer: Buffer, limits = DOCUMENT_DECOMPRESSI
   return { entryNames, uncompressedBytes, relationships };
 }
 
+const INFLATE_OVERFLOW = Symbol("inflate_overflow");
+
+/** zlib header (RFC 1950), what pdf.js requires at the start of Flate data. */
+function startsWithZlibHeader(data: Buffer) {
+  return data.length >= 2 && (data[0]! & 0x0f) === 8 && data[0]! >> 4 <= 7 && ((data[0]! << 8) | data[1]!) % 31 === 0;
+}
+
+/** Inflates at most `cap` bytes; null when the data is not valid zlib. Trailing bytes are ignored. */
+function inflateWithCap(data: Buffer, cap: number): Buffer | typeof INFLATE_OVERFLOW | null {
+  try {
+    return inflateSync(data, { maxOutputLength: Math.max(1, cap), finishFlush: constants.Z_SYNC_FLUSH });
+  } catch (error) {
+    return isBufferTooLarge(error) ? INFLATE_OVERFLOW : null;
+  }
+}
+
+/** Plain integer value of a dictionary key; null when absent or indirect (`7 0 R`). */
+function directInteger(dictionary: string, key: string) {
+  const match = new RegExp(`/${key}\\s+(\\d+)(\\s+\\d+\\s+R\\b)?`).exec(dictionary);
+  return match && !match[2] ? Number(match[1]) : null;
+}
+
 /**
- * Inflates every Flate stream of a PDF with a shared output cap (content,
- * fonts, object streams: what the text extractor decodes). Image streams are
- * not inflated; their declared dimensions are bounded instead.
+ * Fast static bound on the zlib data of a PDF, before storage. It does not
+ * trust the dictionaries: every `stream` keyword followed by an end of line
+ * (CR, LF or CRLF, as pdf.js accepts) whose data starts with a zlib header is
+ * inflated, whatever its /Filter says (indirect, #xx-escaped, chained), and
+ * the inflated output is inflated again while it is itself zlib data. All of
+ * it counts against one shared cap. A stream declared as an image with plain
+ * /Width and /Height is checked against that declared size instead (a real
+ * image never inflates beyond 8 bytes per pixel); with indirect or missing
+ * dimensions it counts like any other stream. What this cannot see (LZW,
+ * ASCIIHex or ASCII85 first, very large declared images) is bounded where
+ * pdf.js decodes it: in the isolated reader.
  */
-export function assertPdfDecompressionWithinLimits(buffer: Buffer, limits = DOCUMENT_DECOMPRESSION_LIMITS) {
+export function assertPdfDecompressionWithinLimits(buffer: Buffer, limits: Pick<DocumentDecompressionLimits, "pdfMaxInflatedBytes" | "pdfMaxImagePixels" | "pdfImageProbeBytes"> = DOCUMENT_DECOMPRESSION_LIMITS) {
   const source = buffer.toString("latin1");
-  const streamStart = /stream\r?\n/g;
+  const streamKeyword = /stream[^\r\n]*(?:\r\n|\r|\n)/g;
+  const exceeded = () => new Error("cv_validation_pdf_decompressed_size_exceeded");
   let inflatedBytes = 0;
   let match: RegExpExecArray | null;
-  while ((match = streamStart.exec(source))) {
-    if (source.slice(Math.max(0, match.index - 3), match.index) === "end") continue;
+  while ((match = streamKeyword.exec(source))) {
     const dataStart = match.index + match[0].length;
-    const dataEnd = source.indexOf("endstream", dataStart);
-    if (dataEnd < 0) break;
-    streamStart.lastIndex = dataEnd + "endstream".length;
+    // Scan the stream data too: a wrong /Length or an "endstream" inside the
+    // data must not hide a stream from the check.
+    streamKeyword.lastIndex = dataStart;
+    if (source.slice(Math.max(0, match.index - 3), match.index) === "end") continue;
+    const data = buffer.subarray(dataStart);
+    if (!startsWithZlibHeader(data)) continue;
     const objectStart = source.lastIndexOf(" obj", match.index);
     const dictionary = source.slice(Math.max(objectStart, match.index - 4_096, 0), match.index);
     if (/\/Subtype\s*\/Image\b/.test(dictionary)) {
-      const width = Number(/\/Width\s+(\d+)/.exec(dictionary)?.[1] ?? 0);
-      const height = Number(/\/Height\s+(\d+)/.exec(dictionary)?.[1] ?? 0);
-      if (width * height > limits.pdfMaxImagePixels) throw new Error("cv_validation_pdf_image_too_large");
-      continue;
+      const width = directInteger(dictionary, "Width");
+      const height = directInteger(dictionary, "Height");
+      if (width !== null && height !== null) {
+        if (width * height > limits.pdfMaxImagePixels) throw new Error("cv_validation_pdf_image_too_large");
+        const declaredBytes = width * height * 8 + 65_536;
+        if (declaredBytes <= limits.pdfImageProbeBytes && inflateWithCap(data, declaredBytes) === INFLATE_OVERFLOW) throw exceeded();
+        continue;
+      }
     }
-    if (!/\/FlateDecode\b|\/Fl\b/.test(dictionary)) continue;
-    const remaining = limits.pdfMaxInflatedBytes - inflatedBytes;
-    try {
-      const inflated = inflateSync(buffer.subarray(dataStart, dataEnd), { maxOutputLength: Math.max(1, remaining), finishFlush: constants.Z_SYNC_FLUSH });
+    let layer: Buffer = data;
+    while (startsWithZlibHeader(layer)) {
+      const inflated = inflateWithCap(layer, limits.pdfMaxInflatedBytes - inflatedBytes);
+      if (inflated === INFLATE_OVERFLOW) throw exceeded();
+      if (!inflated) break;
       inflatedBytes += inflated.length;
-    } catch (error) {
-      if (isBufferTooLarge(error)) throw new Error("cv_validation_pdf_decompressed_size_exceeded");
-      // A stream with another filter first, or damaged data: the extractor
-      // decodes it the same bounded way or skips it.
+      if (inflatedBytes > limits.pdfMaxInflatedBytes) throw exceeded();
+      layer = inflated;
     }
-    if (inflatedBytes > limits.pdfMaxInflatedBytes) throw new Error("cv_validation_pdf_decompressed_size_exceeded");
   }
   return { inflatedBytes };
 }

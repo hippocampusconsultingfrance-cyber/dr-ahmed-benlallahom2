@@ -166,7 +166,7 @@ export const RECRUITMENT_CV_FORMAT_MESSAGE = "Format de CV non accepté. Utilise
 /** Clear French message for a CV refused by the content checks. */
 export function recruitmentCvValidationMessage(code: string) {
   if (code === "cv_validation_legacy_doc_refused") return RECRUITMENT_CV_FORMAT_MESSAGE;
-  if (code.endsWith("_decompressed_size_exceeded") || code === "cv_validation_pdf_image_too_large") {
+  if (code.endsWith("_decompressed_size_exceeded") || code === "cv_validation_pdf_image_too_large" || code === "cv_validation_pdf_processing_timeout") {
     return "Le CV est trop volumineux une fois ouvert. Enregistrez-le de nouveau en PDF (par exemple « Fichier > Exporter en PDF ») puis réessayez.";
   }
   if (code === "cv_validation_pdf_page_limit_exceeded") return "Le CV ne doit pas dépasser 25 pages.";
