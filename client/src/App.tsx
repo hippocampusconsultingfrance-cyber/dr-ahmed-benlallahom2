@@ -5,6 +5,7 @@ import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { LanguageProvider } from "./contexts/LanguageContext";
 import { useLanguage } from "./contexts/LanguageContext";
+import { isPublicTestimonialsEnabled } from "@shared/publicFeatures";
 import WhatsAppButton from "./components/WhatsAppButton";
 import CookieConsent from "./components/CookieConsent";
 import AnalyticsConsent from "./components/AnalyticsConsent";
@@ -12,7 +13,6 @@ import ConnectionMotionPreference from "./components/ConnectionMotionPreference"
 import { SEOHead } from "./components/SEOHead";
 import SkipToContent from "./components/SkipToContent";
 import PageTransition from "./components/PageTransition";
-import { isPublicTestimonialsEnabled } from "@shared/publicFeatures";
 
 export const routeLoadingCopy = {
   fr: { title: "Chargement de votre espace", caption: "Préparation de l’expérience médicale sécurisée…" },

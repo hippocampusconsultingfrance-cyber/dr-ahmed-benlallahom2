@@ -36,14 +36,14 @@ describe("témoignages masqués du site public (M22 / LEGAL-08)", () => {
   });
 
   it("ne pré-rendent pas /testimonials : la route répond 404 et n'est pas dans le sitemap", async () => {
-    const { getPrerenderRoutes, getRouteSeo } = await import("./routeSeo");
+    const { getPrerenderRoutes, getRouteSeo, renderSitemapXml } = await import("./routeSeo");
     const { buildPrerenderedPages } = await import("../scripts/prerender-route-seo");
 
     expect(getPrerenderRoutes()).not.toContain("/testimonials");
     expect(getRouteSeo("/testimonials")).toMatchObject({ notFound: true, noIndex: true });
     const files = buildPrerenderedPages("<html><head><!--route-seo--></head><body></body></html>").map(page => page.file);
     expect(files).not.toContain("testimonials.html");
-    expect(read("client/public/sitemap.xml")).not.toContain("/testimonials");
+    expect(renderSitemapXml("2026-10-16")).not.toContain("/testimonials");
   });
 
   it("ne sont ni montés sur l'accueil ni routés côté client", () => {

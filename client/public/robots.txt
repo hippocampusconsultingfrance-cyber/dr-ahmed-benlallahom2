@@ -8,6 +8,8 @@ Disallow: /404
 Disallow: /booking/confirmation
 Disallow: /blog
 Disallow: /recruitment/unsubscribe
-Disallow: /api/
+# /api/ reste autorisé : les pages publiques chargent leur contenu (questions-réponses
+# publiées…) par /api/trpc pendant le rendu. Les réponses de l’API portent déjà
+# l’en-tête X-Robots-Tag: noindex (vercel.json), elles ne sont donc pas indexées.
 
 Sitemap: https://drahmedbenlallahom.com/sitemap.xml

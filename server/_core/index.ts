@@ -771,8 +771,9 @@ export async function createApp() {
     }
   });
 
-  // /sitemap.xml is the static client/public/sitemap.xml (served by the Vercel
-  // CDN, or by express.static outside Vercel): a single source of truth.
+  // /sitemap.xml is generated at build time into dist/public by
+  // scripts/prerender-route-seo.ts from the prerendered routes (served by the
+  // Vercel CDN, or by express.static outside Vercel): a single source of truth.
   registerStorageProxy(app);
   registerGoogleDriveOAuthRoutes(app);
   

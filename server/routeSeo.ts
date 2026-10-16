@@ -1,5 +1,17 @@
 import { venturesFr } from "../client/src/data/ventures-fr";
-import { isPublicTestimonialsEnabled } from "../shared/publicFeatures";
+import {
+  DEFAULT_SHARE_IMAGE,
+  ROBOTS_INDEX,
+  ROBOTS_NOINDEX,
+  SITE_NAME,
+  SITE_ORIGIN,
+  STATIC_ROUTE_METADATA,
+  canonicalUrlFor,
+  normalizePathname,
+  type RouteMetadata,
+  type ShareImage,
+} from "../shared/routeMetadata";
+import { buildSiteStructuredData, renderStructuredDataScripts } from "../shared/siteStructuredData";
 
 /** Marqueur de client/index.html remplacé par le <head> propre à chaque route. */
 export const ROUTE_SEO_MARKER = "<!--route-seo-->";
@@ -8,22 +20,9 @@ export const SPA_TEMPLATE_FILE = "_spa-template.html";
 /** Shell SPA générique (noindex, sans canonique) servi par la réécriture Vercel. */
 export const SPA_FALLBACK_FILE = "_spa-fallback.html";
 
-const ORIGIN = "https://drahmedbenlallahom.com";
-const SITE_NAME = "Dr. Ahmed Ben Lallahom";
-const DEFAULT_IMAGE = `${ORIGIN}/assets/abl-logo.svg`;
-
-type RouteSeo = {
-  title: string;
-  description: string;
+type RouteSeo = RouteMetadata & {
   canonicalPath: string;
-  keywords?: string;
-  noIndex?: boolean;
   notFound?: boolean;
-};
-
-type PublicRouteSeo = Omit<RouteSeo, "canonicalPath"> & {
-  /** URL canonique d'un alias (ex. /vvip-offshore → /recruitment/vvip-offshore). */
-  canonicalPath?: string;
 };
 
 // Même extrait que ventureMetaDescription (client/src/pages/VenturePage.tsx) :
@@ -41,7 +40,7 @@ function ventureDescription(description: string[]) {
 // Les pages /venture/:slug sont générées depuis la même source que la page
 // client (ventures-fr.ts) pour qu'aucune entreprise publiée ne reste sans
 // titre, description ni balises Open Graph.
-const VENTURE_ROUTES: Record<string, PublicRouteSeo> = Object.fromEntries(
+const VENTURE_ROUTES: Record<string, RouteMetadata> = Object.fromEntries(
   venturesFr.map(venture => [
     `/venture/${venture.slug}`,
     {
@@ -52,102 +51,9 @@ const VENTURE_ROUTES: Record<string, PublicRouteSeo> = Object.fromEntries(
   ]),
 );
 
-const PUBLIC_ROUTES: Record<string, PublicRouteSeo> = {
-  "/": {
-    title: "Dr. Ahmed Ben Lallahom | Médecine et Conseil",
-    description: "Anesthésiste-réanimateur, entrepreneur en santé et consultant médical basé en France.",
-    keywords: "anesthésiste, réanimateur, consultant médical, santé, France",
-  },
-  "/booking": {
-    title: "Réserver une consultation | Dr. Ben Lallahom",
-    description: "Réservez en ligne une consultation de conseil en santé avec le Dr. Ahmed Ben Lallahom.",
-    keywords: "réservation consultation santé, téléconsultation, conseil médical",
-  },
-  "/questions-anesthesie": {
-    title: "Questions santé | Anesthésie et opération",
-    description: "Posez une question générale sur l’anesthésie ou une opération et recevez une réponse relue par email.",
-    keywords: "questions anesthésie, information opération, information santé, préparation intervention",
-  },
-  "/recruitment": {
-    title: "Recrutement santé international | Hippocampus",
-    description: "Découvrez les opportunités internationales pour professionnels médicaux et paramédicaux.",
-    keywords: "recrutement médical international, recrutement paramédical, Hippocampus Consulting",
-  },
-  "/recruitment/standard": {
-    title: "Candidature santé internationale | Hippocampus",
-    description: "Déposez votre candidature pour des opportunités médicales et paramédicales internationales.",
-    keywords: "candidature médicale, emploi paramédical, mobilité internationale",
-  },
-  "/recruitment/unsubscribe": {
-    title: "Préférences recrutement | Hippocampus Consulting",
-    description: "Gérez vos préférences de communications de recrutement.",
-    noIndex: true,
-  },
-  "/recruitment/vvip-offshore": {
-    title: "Missions santé offshore et Moyen-Orient | Hippocampus",
-    description: "Postulez pour des missions médicales spécialisées offshore, industrielles et au Moyen-Orient.",
-    keywords: "mission médicale offshore, santé Moyen-Orient, plateforme pétrolière",
-  },
-  "/vvip-offshore": {
-    title: "Missions santé offshore et Moyen-Orient | Hippocampus",
-    description: "Postulez pour des missions médicales spécialisées offshore, industrielles et au Moyen-Orient.",
-    keywords: "mission médicale offshore, santé Moyen-Orient, plateforme pétrolière",
-    canonicalPath: "/recruitment/vvip-offshore",
-  },
-  "/employers": {
-    title: "Recruter des soignants | Hippocampus Consulting",
-    description: "Confiez votre besoin de recrutement médical ou paramédical international à Hippocampus Consulting.",
-    keywords: "recrutement soignants, recrutement médical, recrutement paramédical",
-  },
-  "/why-hippocampus": {
-    title: "Pourquoi Hippocampus Consulting | Employeurs",
-    description: "Méthode, confidentialité et accompagnement pour vos recrutements médicaux internationaux.",
-    keywords: "cabinet recrutement médical, méthode recrutement santé, Hippocampus Consulting",
-  },
-  // Pré-rendue (et donc publiée) uniquement si les témoignages sont réactivés (LEGAL-08).
-  ...(isPublicTestimonialsEnabled()
-    ? {
-        "/testimonials": {
-          title: "Témoignages de partenaires | Dr. Ben Lallahom",
-          description: "Découvrez les témoignages de partenaires ayant collaboré avec le Dr. Ahmed Ben Lallahom.",
-        },
-      }
-    : {}),
-  "/gdpr": {
-    title: "Protection des données | Dr. Ben Lallahom",
-    description: "Consultez les informations de protection des données personnelles et RGPD du site.",
-  },
-  "/legal": {
-    title: "Mentions légales | Dr. Ben Lallahom",
-    description: "Consultez les mentions légales et conditions d’utilisation du site Dr. Ahmed Ben Lallahom.",
-  },
-  "/faq": {
-    title: "Questions fréquentes | Dr. Ben Lallahom",
-    description: "Retrouvez les informations pratiques sur la consultation, la réservation et Hippocampus Consulting.",
-  },
-  "/resources": {
-    title: "Ressources médicales institutionnelles | Dr. Ben Lallahom",
-    description: "Une sélection de portails institutionnels de santé pour prolonger votre information, sans remplacer un avis médical.",
-  },
-  "/press": {
-    title: "Presse et publications | Dr. Ben Lallahom",
-    description: "Informations institutionnelles vérifiables sur le parcours et les activités du Dr. Ahmed Ben Lallahom.",
-  },
-  "/search": {
-    title: "Recherche | Dr. Ben Lallahom",
-    description: "Recherchez les informations publiques du site.",
-    noIndex: true,
-  },
-  "/error": {
-    title: "Service temporairement indisponible | Dr. Ben Lallahom",
-    description: "Information de disponibilité du service.",
-    noIndex: true,
-  },
-  "/maintenance": {
-    title: "Maintenance en cours | Dr. Ben Lallahom",
-    description: "Information de maintenance du service.",
-    noIndex: true,
-  },
+// Table statique partagée avec SEOHead (shared/routeMetadata.ts) + pages /venture/*.
+const PUBLIC_ROUTES: Record<string, RouteMetadata> = {
+  ...STATIC_ROUTE_METADATA,
   ...VENTURE_ROUTES,
 };
 
@@ -162,7 +68,7 @@ const escapeHtml = (value: string) =>
     .replace(/'/g, "&#39;");
 
 export function getRouteSeo(url: string): RouteSeo {
-  const pathname = new URL(url, ORIGIN).pathname.replace(/\/+$/, "") || "/";
+  const pathname = normalizePathname(url);
   const known = PUBLIC_ROUTES[pathname];
   if (known) return { ...known, canonicalPath: known.canonicalPath ?? pathname };
 
@@ -193,6 +99,33 @@ export function getPrerenderRoutes(): string[] {
   return Object.keys(PUBLIC_ROUTES);
 }
 
+/**
+ * Routes du sitemap.xml (SEO-03) : routes pré-rendues indexables, sans les alias
+ * dont la canonique pointe vers une autre URL. Généré au build, jamais à la main.
+ */
+export function getSitemapRoutes(): string[] {
+  return getPrerenderRoutes().filter(route => {
+    const seo = getRouteSeo(route);
+    return !seo.noIndex && !seo.notFound && seo.canonicalPath === route;
+  });
+}
+
+export function renderSitemapXml(lastmod: string): string {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(lastmod)) throw new Error(`lastmod invalide : ${lastmod}`);
+  const urls = getSitemapRoutes().map(route => {
+    const priority = route === "/" ? "1.0" : route.split("/").length > 2 ? "0.6" : "0.8";
+    return [
+      "  <url>",
+      `    <loc>${escapeHtml(canonicalUrlFor(route))}</loc>`,
+      `    <lastmod>${lastmod}</lastmod>`,
+      "    <changefreq>monthly</changefreq>",
+      `    <priority>${priority}</priority>`,
+      "  </url>",
+    ].join("\n");
+  });
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.join("\n")}\n</urlset>\n`;
+}
+
 type HeadInput = {
   title: string;
   description: string;
@@ -200,6 +133,8 @@ type HeadInput = {
   noIndex?: boolean;
   /** Absent pour la page de repli SPA : aucune URL canonique ni og:url. */
   canonicalUrl?: string;
+  image?: ShareImage;
+  structuredData?: Record<string, unknown>[];
 };
 
 function renderHead(input: HeadInput): string {
@@ -207,7 +142,10 @@ function renderHead(input: HeadInput): string {
   const description = escapeHtml(input.description);
   const canonical = input.canonicalUrl ? escapeHtml(input.canonicalUrl) : undefined;
   const keywords = input.keywords ? `<meta name="keywords" content="${escapeHtml(input.keywords)}" />` : "";
-  const robots = input.noIndex ? "noindex, follow" : "index, follow";
+  const robots = input.noIndex ? ROBOTS_NOINDEX : ROBOTS_INDEX;
+  const image = input.image ?? DEFAULT_SHARE_IMAGE;
+  const imageUrl = escapeHtml(image.url);
+  const imageAlt = escapeHtml(image.alt);
 
   return [
     `<title>${title}</title>`,
@@ -218,21 +156,32 @@ function renderHead(input: HeadInput): string {
     canonical ? `<meta property="og:url" content="${canonical}" />` : "",
     `<meta property="og:title" content="${title}" />`,
     `<meta property="og:description" content="${description}" />`,
-    `<meta property="og:image" content="${DEFAULT_IMAGE}" />`,
+    `<meta property="og:image" content="${imageUrl}" />`,
+    `<meta property="og:image:type" content="${escapeHtml(image.type)}" />`,
+    `<meta property="og:image:width" content="${image.width}" />`,
+    `<meta property="og:image:height" content="${image.height}" />`,
+    `<meta property="og:image:alt" content="${imageAlt}" />`,
     `<meta property="og:site_name" content="${SITE_NAME}" />`,
     `<meta property="og:locale" content="fr_FR" />`,
     `<meta name="twitter:card" content="summary_large_image" />`,
     canonical ? `<meta name="twitter:url" content="${canonical}" />` : "",
     `<meta name="twitter:title" content="${title}" />`,
     `<meta name="twitter:description" content="${description}" />`,
-    `<meta name="twitter:image" content="${DEFAULT_IMAGE}" />`,
+    `<meta name="twitter:image" content="${imageUrl}" />`,
+    `<meta name="twitter:image:alt" content="${imageAlt}" />`,
     canonical ? `<link rel="canonical" href="${canonical}" />` : "",
+    input.structuredData?.length ? renderStructuredDataScripts(input.structuredData) : "",
   ].filter(Boolean).join("\n    ");
 }
 
 export function renderRouteSeoHead(url: string): string {
   const seo = getRouteSeo(url);
-  return renderHead({ ...seo, canonicalUrl: `${ORIGIN}${seo.canonicalPath}` });
+  return renderHead({
+    ...seo,
+    canonicalUrl: canonicalUrlFor(seo.canonicalPath),
+    // Données structurées du site uniquement sur l'accueil (pas sur les pages non indexables).
+    structuredData: seo.canonicalPath === "/" && !seo.noIndex ? buildSiteStructuredData() : undefined,
+  });
 }
 
 /**
@@ -247,3 +196,4 @@ export function renderFallbackSeoHead(): string {
     noIndex: true,
   });
 }
+
