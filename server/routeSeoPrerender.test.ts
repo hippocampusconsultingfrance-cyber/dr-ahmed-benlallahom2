@@ -128,11 +128,14 @@ describe("page de repli SPA servie par Vercel", () => {
 
   it("est la cible de la réécriture SPA de vercel.json, après l’API, avec cleanUrls", () => {
     const config = JSON.parse(readProjectFile("vercel.json"));
-    const rewrites: { source: string; destination: string }[] = config.rewrites;
+    const rewrites: { source: string; destination: string; missing?: unknown }[] = config.rewrites;
 
     expect(config.cleanUrls).toBe(true);
     expect(rewrites[0]).toEqual({ source: "/api/:path*", destination: "/api/index" });
-    expect(rewrites.at(-1)).toEqual({ source: "/:path*", destination: `/${SPA_FALLBACK_FILE.replace(/\.html$/, "")}` });
+    expect(rewrites.at(-1)).toMatchObject({ source: "/:path*", destination: `/${SPA_FALLBACK_FILE.replace(/\.html$/, "")}` });
+    // A missing script or stylesheet (old chunk after a redeploy) gets a 404,
+    // never the HTML page cached under /static/ as immutable JavaScript.
+    expect(rewrites.at(-1)!.missing).toEqual([{ type: "header", key: "sec-fetch-dest", value: "(script|style)" }]);
     expect(rewrites.some(rewrite => rewrite.destination === "/index.html")).toBe(false);
   });
 

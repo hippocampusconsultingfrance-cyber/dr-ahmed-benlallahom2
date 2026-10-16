@@ -124,6 +124,13 @@
     },
     {
       "source": "/:path*",
+      "missing": [
+        {
+          "type": "header",
+          "key": "sec-fetch-dest",
+          "value": "(script|style)"
+        }
+      ],
       "destination": "/_spa-fallback"
     }
   ]

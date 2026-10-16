@@ -59,4 +59,10 @@ describe("cache immuable des fichiers hachés (CACHE-01)", () => {
     expect(vercel.headers.some(rule => rule.source.startsWith("/assets") && rule.headers.some(header => /immutable/.test(header.value)))).toBe(false);
     expect(read("scripts/check-performance-budgets.mjs")).toContain('path.resolve("dist/public/static")');
   });
+
+  it("répare un fragment introuvable mis en cache (redéploiement, retour arrière) au lieu de rester bloqué un an", () => {
+    const main = read("client/src/main.tsx");
+    expect(main).toContain('import { installChunkLoadRecovery } from "./lib/chunkLoadRecovery";');
+    expect(main.indexOf("installChunkLoadRecovery();")).toBeLessThan(main.indexOf("createRoot("));
+  });
 });
