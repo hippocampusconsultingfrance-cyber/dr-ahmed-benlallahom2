@@ -58,6 +58,22 @@ export async function verifyCandidatePassword(password: string, storedHash: stri
   return timingSafeEqual(actual, expected);
 }
 
+/**
+ * Prefix of the value stored in password_hash while an account has not yet
+ * proven ownership of its email address. It is never a valid scrypt record, so
+ * verifyCandidatePassword always rejects it: the only way to obtain a usable
+ * password is the activation step reached from the emailed link (SEC-02).
+ */
+const CANDIDATE_PASSWORD_NOT_SET_PREFIX = "unset$";
+
+export function createUnsetCandidatePasswordHash(): string {
+  return `${CANDIDATE_PASSWORD_NOT_SET_PREFIX}${randomBytes(18).toString("base64url")}`;
+}
+
+export function isCandidatePasswordSet(storedHash: string | null | undefined): boolean {
+  return typeof storedHash === "string" && storedHash.startsWith("scrypt$");
+}
+
 export function createCandidateToken(): string {
   return randomBytes(32).toString("base64url");
 }

@@ -590,9 +590,9 @@ export function buildCandidatePortalAccessEmail(input: CandidatePortalAccessEmai
     ? {
         subject: "Confirmez votre adresse email — Espace candidat Hippocampus",
         title: "Confirmez votre adresse email",
-        instruction: "Vous recevez cet email parce qu’un espace candidat vient d’être créé avec cette adresse. Pour finaliser son activation, confirmez simplement votre adresse email en cliquant sur le bouton ci-dessous.",
-        action: "Confirmer mon adresse email",
-        securityNote: "Ce lien personnel et temporaire finalise uniquement l’activation de votre adresse. Si vous n’avez pas créé cet espace candidat, ignorez cet email : aucun accès ne sera activé.",
+        instruction: "Vous recevez cet email parce qu’un espace candidat vient d’être créé avec cette adresse. Pour l’activer, cliquez sur le bouton ci-dessous : vous confirmerez votre adresse email et choisirez votre mot de passe sur la page qui s’ouvre.",
+        action: "Confirmer mon adresse email et choisir mon mot de passe",
+        securityNote: "Ce lien personnel et temporaire ne peut servir qu’une fois. Si vous n’avez pas demandé cet espace candidat, ignorez cet email : aucun accès ne sera activé et aucun mot de passe ne sera créé.",
       }
     : input.kind === "reset"
       ? {
@@ -605,9 +605,9 @@ export function buildCandidatePortalAccessEmail(input: CandidatePortalAccessEmai
       : {
           subject: "Créez votre espace candidat — Hippocampus Consulting",
           title: "Créez votre espace candidat",
-          instruction: "Notre équipe vous invite à créer votre espace candidat sécurisé pour déposer et suivre vos documents administratifs. Vous choisirez votre mot de passe et devrez ensuite activer votre adresse email.",
+          instruction: "Notre équipe vous invite à créer votre espace candidat sécurisé pour déposer et suivre vos documents administratifs. Après avoir confirmé vos informations, vous recevrez un lien pour activer votre adresse email et choisir votre mot de passe.",
           action: "Créer mon espace candidat",
-          securityNote: "Ce lien sécurisé est personnel et temporaire. Il ne donne aucun accès sans création de mot de passe ni activation de votre adresse email.",
+          securityNote: "Ce lien sécurisé est personnel et temporaire. Il ne donne aucun accès tant que votre adresse email n’est pas activée et votre mot de passe choisi.",
         };
   return {
     subject: copy.subject,

@@ -1,5 +1,5 @@
 import { parse as parseCookie } from "cookie";
-import { and, desc, eq, gt, isNull } from "drizzle-orm";
+import { and, desc, eq, gt, isNotNull, isNull } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import {
@@ -17,6 +17,7 @@ import {
   CANDIDATE_TOKEN_MAX_AGE_MS,
   candidateSessionCookieOptions,
   createCandidateToken,
+  createUnsetCandidatePasswordHash,
   hashCandidatePassword,
   hashCandidateToken,
   normalizeCandidateEmail,
@@ -87,6 +88,8 @@ export async function getCandidateSession(req: { headers: Record<string, unknown
       gt(candidateSessions.expiresAt, new Date()),
       isNull(candidateSessions.revokedAt),
       eq(candidateAccounts.status, "active"),
+      // A session never authenticates an account whose email ownership is unproven (SEC-02).
+      isNotNull(candidateAccounts.emailVerifiedAt),
     ))
     .limit(1);
   return rows[0]?.candidate ?? null;
@@ -176,9 +179,41 @@ async function recordCandidateActivationDelivery(
   });
 }
 
+async function assertAcceptableNewPassword(password: string) {
+  const passwordError = validateCandidatePassword(password);
+  if (passwordError) throw new TRPCError({ code: "BAD_REQUEST", message: "Choisissez un mot de passe d’au moins 15 caractères." });
+  try {
+    if (await isCompromisedPassword(password)) throw new TRPCError({ code: "BAD_REQUEST", message: "Ce mot de passe a déjà été compromis. Choisissez-en un autre, long et unique." });
+  } catch (error) {
+    if (error instanceof TRPCError) throw error;
+    throw new TRPCError({ code: "SERVICE_UNAVAILABLE", message: "Le contrôle de sécurité du mot de passe est temporairement indisponible." });
+  }
+}
+
+const activationLinkInput = z.object({ email: z.string().email().max(320), token: z.string().min(20).max(200) });
+const invalidActivationLinkMessage = "Ce lien d’activation est invalide ou expiré. Demandez un nouveau lien depuis l’espace candidat.";
+
+/** Looks up the unverified, active account that an emailed activation link designates. */
+async function findPendingActivation(db: NonNullable<Awaited<ReturnType<typeof getDb>>>, input: { email: string; token: string }) {
+  return (await db.select().from(candidateAccounts).where(and(
+    eq(candidateAccounts.email, normalizeCandidateEmail(input.email)),
+    eq(candidateAccounts.verificationTokenHash, hashCandidateToken(input.token, "verification")),
+    gt(candidateAccounts.verificationExpiresAt, new Date()),
+    eq(candidateAccounts.status, "active"),
+    isNull(candidateAccounts.emailVerifiedAt),
+  )).limit(1))[0] ?? null;
+}
+
 export const candidatePortalRouter = router({
+  /**
+   * Registration only records identity and consents. No password is accepted
+   * here: the password is chosen on the page opened by the emailed activation
+   * link, in the same step that proves ownership of the address (SEC-02). A
+   * password sent by an outdated client is dropped by the input schema.
+   */
   register: publicProcedure
-    .input(genericAuthInput.extend({
+    .input(z.object({
+      email: z.string().email().max(320),
       firstName: z.string().trim().min(1).max(120),
       lastName: z.string().trim().min(1).max(120),
       termsAccepted: z.boolean().refine(value => value, "L’acceptation des conditions est requise."),
@@ -200,14 +235,6 @@ export const candidatePortalRouter = router({
         await logSecurityEvent({ actorKind: "anonymous", actorReference: hashSecurityValue(email), category: "candidate_register_turnstile", outcome: "blocked", severity: "warning", ipHash });
         throw new TRPCError({ code: "BAD_REQUEST", message: "La vérification anti-bot doit être renouvelée avant de créer votre accès." });
       }
-      const passwordError = validateCandidatePassword(input.password);
-      if (passwordError) throw new TRPCError({ code: "BAD_REQUEST", message: "Choisissez un mot de passe d’au moins 15 caractères." });
-      try {
-        if (await isCompromisedPassword(input.password)) throw new TRPCError({ code: "BAD_REQUEST", message: "Ce mot de passe a déjà été compromis. Choisissez-en un autre, long et unique." });
-      } catch (error) {
-        if (error instanceof TRPCError) throw error;
-        throw new TRPCError({ code: "SERVICE_UNAVAILABLE", message: "Le contrôle de sécurité du mot de passe est temporairement indisponible." });
-      }
       const db = databaseOrThrow(await getDb());
       const now = new Date();
       const verificationToken = createCandidateToken();
@@ -226,35 +253,55 @@ export const candidatePortalRouter = router({
       const existing = await candidateDatabaseOperation(() => db.select().from(candidateAccounts).where(eq(candidateAccounts.email, email)).limit(1));
 
       let candidateId: number | null = null;
-      let activationFirstName = input.firstName;
       let previousVerificationState: { tokenHash: string | null; expiresAt: Date | null } | null = null;
       if (existing[0]) {
         if (!existing[0].emailVerifiedAt && existing[0].status === "active") {
+          const pending = existing[0];
           previousVerificationState = {
-            tokenHash: existing[0].verificationTokenHash,
-            expiresAt: existing[0].verificationExpiresAt,
+            tokenHash: pending.verificationTokenHash,
+            expiresAt: pending.verificationExpiresAt,
           };
-          activationFirstName = existing[0].firstName ?? input.firstName;
-          await candidateDatabaseOperation(() => db.update(candidateAccounts).set({
+          // Nothing recorded before the proof of mailbox ownership may survive it:
+          // the latest registration replaces identity and consents, any password
+          // (including one stored before this fix) is discarded and every earlier
+          // link, reset token or session of the pending account stops working.
+          const updated = await candidateDatabaseOperation(() => db.update(candidateAccounts).set({
+            firstName: input.firstName,
+            lastName: input.lastName,
+            passwordHash: createUnsetCandidatePasswordHash(),
             verificationTokenHash,
             verificationExpiresAt,
-          }).where(eq(candidateAccounts.id, existing[0].id)));
-          candidateId = existing[0].id;
+            passwordResetTokenHash: null,
+            passwordResetExpiresAt: null,
+            failedLoginCount: 0,
+            lockedUntil: null,
+            linkedApplicationId: matchingApplicationId ?? pending.linkedApplicationId,
+            termsAcceptedAt: now,
+            documentConsentAt: now,
+            updatedAt: now,
+          }).where(and(
+            eq(candidateAccounts.id, pending.id),
+            isNull(candidateAccounts.emailVerifiedAt),
+            eq(candidateAccounts.status, "active"),
+          )).returning({ id: candidateAccounts.id }));
+          if (updated[0]) {
+            await candidateDatabaseOperation(() => db.update(candidateSessions).set({ revokedAt: now }).where(and(eq(candidateSessions.candidateId, pending.id), isNull(candidateSessions.revokedAt))));
+            candidateId = pending.id;
+          }
         }
       } else {
-        const passwordHash = await hashCandidatePassword(input.password);
         const result = await candidateDatabaseOperation(() => db.insert(candidateAccounts).values({
           email,
           firstName: input.firstName,
           lastName: input.lastName,
-          passwordHash,
+          passwordHash: createUnsetCandidatePasswordHash(),
           verificationTokenHash,
           verificationExpiresAt,
           linkedApplicationId: matchingApplicationId,
           termsAcceptedAt: now,
           documentConsentAt: now,
-        }).returning({ id: candidateAccounts.id }));
-        candidateId = Number(result[0].id);
+        }).onConflictDoNothing({ target: candidateAccounts.email }).returning({ id: candidateAccounts.id }));
+        candidateId = result[0] ? Number(result[0].id) : null;
       }
 
       if (candidateId) {
@@ -262,7 +309,7 @@ export const candidatePortalRouter = router({
         try {
           const delivery = await sendCandidatePortalAccessEmail({
             to: email,
-            firstName: activationFirstName,
+            firstName: input.firstName,
             kind: "verify",
             actionUrl: verifyUrl,
             applicationReference: matchingApplication?.trackingId,
@@ -361,20 +408,60 @@ export const candidatePortalRouter = router({
       return application;
     }),
 
+  /** Lets the activation page check the emailed link and prefill the identity before the password step. */
+  activationDetails: publicProcedure
+    .input(activationLinkInput)
+    .query(async ({ input }) => {
+      const db = databaseOrThrow(await getDb());
+      const candidate = await candidateDatabaseOperation(() => findPendingActivation(db, input));
+      if (!candidate) throw new TRPCError({ code: "BAD_REQUEST", message: invalidActivationLinkMessage });
+      return { email: candidate.email, firstName: candidate.firstName ?? "", lastName: candidate.lastName ?? "" };
+    }),
+
+  /**
+   * Proves ownership of the email address and sets the password in one step.
+   * The link is consumed atomically; whatever password, reset token or session
+   * the account had before is discarded (SEC-02 / CAND-16).
+   */
   verifyEmail: publicProcedure
-    .input(z.object({ email: z.string().email().max(320), token: z.string().min(20).max(200) }))
+    .input(activationLinkInput.extend({
+      password: passwordInput,
+      firstName: z.string().trim().min(1).max(120).optional(),
+      lastName: z.string().trim().min(1).max(120).optional(),
+    }))
     .mutation(async ({ input, ctx }) => {
       const db = databaseOrThrow(await getDb());
-      const candidate = (await db.select().from(candidateAccounts).where(and(
-        eq(candidateAccounts.email, normalizeCandidateEmail(input.email)),
+      const ipHash = requestIpHash(ctx.req.headers);
+      const pending = await candidateDatabaseOperation(() => findPendingActivation(db, input));
+      if (!pending) throw new TRPCError({ code: "BAD_REQUEST", message: invalidActivationLinkMessage });
+      // Validate the new password before consuming the link, so a refused password does not burn it.
+      await assertAcceptableNewPassword(input.password);
+      const passwordHash = await hashCandidatePassword(input.password);
+      const now = new Date();
+      const activated = await candidateDatabaseOperation(() => db.update(candidateAccounts).set({
+        emailVerifiedAt: now,
+        verificationTokenHash: null,
+        verificationExpiresAt: null,
+        passwordHash,
+        passwordResetTokenHash: null,
+        passwordResetExpiresAt: null,
+        failedLoginCount: 0,
+        lockedUntil: null,
+        ...(input.firstName ? { firstName: input.firstName } : {}),
+        ...(input.lastName ? { lastName: input.lastName } : {}),
+        updatedAt: now,
+      }).where(and(
+        eq(candidateAccounts.id, pending.id),
         eq(candidateAccounts.verificationTokenHash, hashCandidateToken(input.token, "verification")),
-        gt(candidateAccounts.verificationExpiresAt, new Date()),
+        gt(candidateAccounts.verificationExpiresAt, now),
         eq(candidateAccounts.status, "active"),
-      )).limit(1))[0];
-      if (!candidate) throw new TRPCError({ code: "BAD_REQUEST", message: "Ce lien de vérification est invalide ou expiré." });
-      await db.update(candidateAccounts).set({ emailVerifiedAt: new Date(), verificationTokenHash: null, verificationExpiresAt: null }).where(eq(candidateAccounts.id, candidate.id));
-      await createCandidateSession(candidate.id, ctx.req, ctx.res);
-      await logCandidateAudit({ candidateId: candidate.id, action: "login", metadata: { method: "email_verification" } });
+        isNull(candidateAccounts.emailVerifiedAt),
+      )).returning({ id: candidateAccounts.id }));
+      if (!activated[0]) throw new TRPCError({ code: "BAD_REQUEST", message: invalidActivationLinkMessage });
+      await candidateDatabaseOperation(() => db.update(candidateSessions).set({ revokedAt: now }).where(and(eq(candidateSessions.candidateId, pending.id), isNull(candidateSessions.revokedAt))));
+      await createCandidateSession(pending.id, ctx.req, ctx.res);
+      await logCandidateAudit({ candidateId: pending.id, action: "login", metadata: { method: "email_verification" } });
+      await logSecurityEvent({ actorKind: "candidate", actorReference: String(pending.id), category: "candidate_email_verified", outcome: "allowed", ipHash });
       return { success: true };
     }),
 
@@ -478,14 +565,8 @@ export const candidatePortalRouter = router({
   }),
 
   resetPassword: publicProcedure.input(z.object({ email: z.string().email().max(320), token: z.string().min(20).max(200), password: passwordInput })).mutation(async ({ input, ctx }) => {
-    const passwordError = validateCandidatePassword(input.password);
-    if (passwordError) throw new TRPCError({ code: "BAD_REQUEST", message: "Choisissez un mot de passe d’au moins 15 caractères." });
-    try {
-      if (await isCompromisedPassword(input.password)) throw new TRPCError({ code: "BAD_REQUEST", message: "Ce mot de passe a déjà été compromis. Choisissez-en un autre, long et unique." });
-    } catch (error) {
-      if (error instanceof TRPCError) throw error;
-      throw new TRPCError({ code: "SERVICE_UNAVAILABLE", message: "Le contrôle de sécurité du mot de passe est temporairement indisponible." });
-    }
+    // Length and known-breach checks (isCompromisedPassword(input.password)) run before any change.
+    await assertAcceptableNewPassword(input.password);
     const db = databaseOrThrow(await getDb());
     const candidate = (await db.select().from(candidateAccounts).where(and(
       eq(candidateAccounts.email, normalizeCandidateEmail(input.email)),
