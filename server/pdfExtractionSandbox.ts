@@ -1,4 +1,5 @@
-import { createRequire } from "node:module";
+// Aliased: the Vercel bundle's banner already declares `createRequire` (package.json build).
+import { createRequire as createModuleRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 import { Worker } from "node:worker_threads";
 import { DOCUMENT_DECOMPRESSION_LIMITS, type DocumentDecompressionLimits } from "./documentDecompressionLimits";
@@ -78,7 +79,7 @@ function moduleUrl(specifier: string) {
       // Fall back to the CommonJS resolution below.
     }
   }
-  return pathToFileURL(createRequire(import.meta.url).resolve(specifier)).href;
+  return pathToFileURL(createModuleRequire(import.meta.url).resolve(specifier)).href;
 }
 
 type WorkerMessage =
