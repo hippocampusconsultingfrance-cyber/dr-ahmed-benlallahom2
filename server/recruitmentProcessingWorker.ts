@@ -49,17 +49,19 @@ export async function countWaitingCvAnalyses(cap = 1_000) {
  * application form keeps accepting candidates: analyses are a review aid and
  * can catch up later (manual review stays possible meanwhile).
  */
-export async function notifyOwnerOfAnalysisBacklog(waiting: number) {
+/** `atLeast`: the count was capped (cheap check on each application), so it is a lower bound. */
+export async function notifyOwnerOfAnalysisBacklog(waiting: number, options: { atLeast?: boolean } = {}) {
   if (waiting < RECRUITMENT_ANALYSIS_BACKLOG_ALERT_THRESHOLD) return false;
+  const count = `${options.atLeast ? "au moins " : ""}${waiting}`;
   try {
     await enforcePersistentRateLimit({ action: "recruitment_analysis_backlog_alert", subject: "global", maxAttempts: 1, windowMs: 24 * 60 * 60 * 1000, blockMs: 24 * 60 * 60 * 1000 });
   } catch {
     return false;
   }
   return notifyOwner({
-    title: `Recrutement : ${waiting} analyse(s) de CV en attente`,
+    title: `Recrutement : ${count} analyse(s) de CV en attente`,
     content: [
-      `${waiting} analyse(s) de CV attendent leur traitement (seuil d’alerte : ${RECRUITMENT_ANALYSIS_BACKLOG_ALERT_THRESHOLD}).`,
+      `${options.atLeast ? "Au moins " : ""}${waiting} analyse(s) de CV attendent leur traitement (seuil d’alerte : ${RECRUITMENT_ANALYSIS_BACKLOG_ALERT_THRESHOLD}).`,
       "Les candidatures continuent d’être acceptées ; les CV restent consultables et peuvent être examinés manuellement en attendant l’analyse.",
       "Le traitement automatique avance à chaque passage quotidien. Pour l’accélérer : utilisez « Relancer l’analyse » sur les dossiers prioritaires, ou passez le cron en horaire (offre Vercel Pro).",
     ].join("\n\n"),

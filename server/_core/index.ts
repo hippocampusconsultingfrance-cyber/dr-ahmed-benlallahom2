@@ -530,7 +530,8 @@ export async function createApp() {
         try {
           const { countWaitingCvAnalyses, notifyOwnerOfAnalysisBacklog, RECRUITMENT_ANALYSIS_BACKLOG_ALERT_THRESHOLD } = await import("../recruitmentProcessingWorker");
           const waitingAnalyses = await countWaitingCvAnalyses(RECRUITMENT_ANALYSIS_BACKLOG_ALERT_THRESHOLD);
-          if (waitingAnalyses >= RECRUITMENT_ANALYSIS_BACKLOG_ALERT_THRESHOLD) await notifyOwnerOfAnalysisBacklog(waitingAnalyses);
+          // Counted up to the threshold only: the figure is a lower bound.
+          if (waitingAnalyses >= RECRUITMENT_ANALYSIS_BACKLOG_ALERT_THRESHOLD) await notifyOwnerOfAnalysisBacklog(waitingAnalyses, { atLeast: true });
         } catch (backlogError) {
           console.error("Recruitment backlog check error:", safeErrorName(backlogError));
         }
