@@ -3,6 +3,7 @@ import { generateText, Output } from "ai";
 import { z } from "zod";
 import { cvApplications, cvCandidateCertifications, cvCandidateExperiences, cvCandidateLanguages } from "../drizzle/schema";
 import { getDb } from "./db";
+import { assertPdfDecompressionWithinLimits, DOCUMENT_DECOMPRESSION_LIMITS, inspectDocxArchive, truncateExtractedText } from "./documentDecompressionLimits";
 
 export const RECRUITMENT_ANALYSIS_PRIMARY_MODEL = "openai/gpt-6-astra";
 export const RECRUITMENT_ANALYSIS_FALLBACK_MODEL = "google/gemini-3.8-flash";
@@ -291,14 +292,26 @@ async function extractPdfWithVision(buffer: Buffer): Promise<{ text: string; con
   }
 }
 
+/** Bounded text: what is analysed and stored never exceeds the configured size. */
+function boundedExtraction(result: CvExtractionResult): CvExtractionResult {
+  const bounded = truncateExtractedText(result.text);
+  return bounded.truncated ? { ...result, text: bounded.text, warnings: [...result.warnings, "extracted_text_truncated"] } : result;
+}
+
 export async function extractCvDocument(buffer: Buffer, mimeType: string): Promise<CvExtractionResult> {
+  return boundedExtraction(await extractCvDocumentUnbounded(buffer, mimeType));
+}
+
+async function extractCvDocumentUnbounded(buffer: Buffer, mimeType: string): Promise<CvExtractionResult> {
   if (mimeType === "application/pdf") {
+    // Also called for vault documents: bound the decompression here too.
+    assertPdfDecompressionWithinLimits(buffer);
     const parser = await createPdfParser(buffer);
     let extracted = "";
     let totalPages: number | null = null;
     let textCoverageWarnings: string[] = [];
     try {
-      const result = await parser.getText();
+      const result = await parser.getText({ first: DOCUMENT_DECOMPRESSION_LIMITS.pdfMaxExtractedPages });
       const pages = result.pages.map(page => ({ number: page.num, text: cleanText(page.text) }));
       extracted = cleanText(pages
         .map(page => `[PAGE ${page.number}]\n${escapeCvPageMarkers(page.text)}`)
@@ -331,6 +344,7 @@ export async function extractCvDocument(buffer: Buffer, mimeType: string): Promi
   }
 
   if (mimeType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") {
+    inspectDocxArchive(buffer);
     const mammoth = (await import("mammoth")).default;
     const result = await mammoth.extractRawText({ buffer });
     return { text: escapeCvPageMarkers(cleanText(result.value)), method: "docx", totalPages: null, ocrConfidence: null, ocrModelVersion: null, warnings: result.messages.map(message => `${message.type}:${message.message}`) };

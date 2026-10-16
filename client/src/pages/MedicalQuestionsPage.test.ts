@@ -9,8 +9,12 @@ describe("page de questions médicales", () => {
     expect(page).toContain("urgencyAcknowledged");
     expect(page).toContain("Ce service ne traite pas les urgences");
     expect(page).toContain("TurnstileWidget");
-    expect(page).toContain("if (!form.publication)");
-    expect(page).toContain('invalid={bad("publication")}');
-    expect(page).toContain('aria-required="true"');
+    // Publication is optional and never blocks the question (LEGAL-11).
+    expect(page).not.toContain("if (!form.publication)");
+    expect(page).toContain("publicationConsent: form.publication");
+    expect(page).toContain("required={false}");
+    expect(page).toContain('aria-required={required ? "true" : undefined}');
+    // Explicit consent for health data (art. 9.2.a).
+    expect(page).toContain("qui peut contenir des informations sur ma santé");
   });
 });

@@ -1,4 +1,5 @@
 import "dotenv/config";
+import { RECRUITMENT_CV_ACCEPTED_EXTENSIONS, RECRUITMENT_CV_ACCEPTED_MIME_TYPES, RECRUITMENT_CV_MAX_BYTES } from "../../shared/recruitmentCvLimits";
 import express from "express";
 import multer from "multer";
 import { Webhook } from "svix";
@@ -19,7 +20,7 @@ import { createContext } from "./context";
 import { storageGetSignedUrl, storagePut } from "../storage";
 import { notifyOwner } from "./notification";
 import { and, desc, eq, isNotNull, isNull, sql } from "drizzle-orm";
-import { validateCvFile } from "../recruitmentFileValidation";
+import { RECRUITMENT_CV_FORMAT_MESSAGE, recruitmentCvValidationMessage, validateCvFile } from "../recruitmentFileValidation";
 import { getDb } from "../db";
 import { candidateDocumentAuditLogs, candidateDocumentProcessingJobs, candidateDocuments, cvApplications, cvProcessingJobs, recruitmentCampaignRecipients, recruitmentEmailEvents } from "../../drizzle/schema";
 import { CANDIDATE_DOCUMENT_MAX_BYTES, CANDIDATE_DOCUMENT_TOO_LARGE_MESSAGE, candidateDocumentMimeTypes, safeCandidateDocumentName, validateCandidateDocument } from "../candidateDocumentValidation";
@@ -65,13 +66,11 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
   throw new Error(`No available port found starting from ${startPort}`);
 }
 
-const RECRUITMENT_MAX_FILE_SIZE = 5 * 1024 * 1024;
+// 4 MB (Vercel function bodies are limited to 4.5 MB); PDF or DOCX only.
+const RECRUITMENT_MAX_FILE_SIZE = RECRUITMENT_CV_MAX_BYTES;
 const RECRUITMENT_MAX_TARGET_COUNTRIES = 18;
-const RECRUITMENT_ALLOWED_MIME_TYPES = new Set([
-  "application/pdf",
-  "application/msword",
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-]);
+const RECRUITMENT_ALLOWED_MIME_TYPES = new Set<string>(RECRUITMENT_CV_ACCEPTED_MIME_TYPES);
+
 
 const PUBLIC_APP_ORIGIN = process.env.PUBLIC_APP_ORIGIN || "https://drahmedbenlallahom.com";
 
@@ -79,10 +78,10 @@ const recruitmentUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: RECRUITMENT_MAX_FILE_SIZE, files: 1, fields: 20 },
   fileFilter: (_req, file, callback) => {
-    const extension = file.originalname.toLowerCase().split(".").pop();
-    const allowedExtension = extension === "pdf" || extension === "doc" || extension === "docx";
+    const extension = file.originalname.toLowerCase().split(".").pop() ?? "";
+    const allowedExtension = (RECRUITMENT_CV_ACCEPTED_EXTENSIONS as readonly string[]).includes(extension);
     if (!allowedExtension || !RECRUITMENT_ALLOWED_MIME_TYPES.has(file.mimetype)) {
-      callback(new Error("Format de CV non accepté. Utilisez PDF, DOC ou DOCX."));
+      callback(new Error(RECRUITMENT_CV_FORMAT_MESSAGE));
       return;
     }
     callback(null, true);
@@ -399,10 +398,8 @@ export async function createApp() {
       )`);
 
       try {
-        await notifyOwner({
-          title: `Nouveau brief employeur (${briefId})`,
-          content: `Organisation: ${parsed.data.organizationName}\nContact: ${parsed.data.contactName} (${parsed.data.email})\nEnvironnement: ${parsed.data.targetEnvironment}\nSpécialité: ${parsed.data.specialtyNeeded} (${parsed.data.country})`,
-        });
+        const { buildClientBriefOwnerNotification } = await import("../clientBriefNotification");
+        await notifyOwner(buildClientBriefOwnerNotification({ briefId, ...parsed.data, adminUrl: `${PUBLIC_APP_ORIGIN}/admin` }));
       } catch {
         // notification fail non bloquante
       }
@@ -418,7 +415,7 @@ export async function createApp() {
     recruitmentUpload.single("cv")(req, res, async uploadError => {
       if (uploadError) {
         const message = uploadError instanceof multer.MulterError && uploadError.code === "LIMIT_FILE_SIZE"
-          ? "Le CV ne doit pas dépasser 5 Mo."
+          ? "Le CV ne doit pas dépasser 4 Mo. Compressez-le ou enregistrez-le en PDF, puis réessayez."
           : uploadError.message || "Le fichier CV n’a pas pu être reçu.";
         res.status(400).json({ error: message });
         return;
@@ -493,7 +490,7 @@ export async function createApp() {
           });
         } catch (validationError) {
           const code = validationError instanceof Error ? validationError.message : "cv_validation_failed";
-          res.status(400).json({ error: "Le contenu du CV ne correspond pas à un document PDF, DOC ou DOCX valide.", code });
+          res.status(400).json({ error: recruitmentCvValidationMessage(code), code });
           return;
         }
         recruitmentStage = "database-connect";
@@ -527,12 +524,15 @@ export async function createApp() {
           res.status(200).json({ success: true, duplicate: true, trackingId: duplicate.trackingId });
           return;
         }
-        recruitmentStage = "queue-capacity-check";
-        const queuedJobs = await db.select({ id: cvProcessingJobs.id }).from(cvProcessingJobs).where(sql`${cvProcessingJobs.status} IN ('queued', 'retry', 'running')`).limit(201);
-        if (queuedJobs.length >= 200) {
-          await logSecurityEvent({ actorKind: "system", category: "public_recruitment_apply_queue_backpressure", outcome: "blocked", severity: "high", ipHash });
-          res.status(503).json({ error: "Le service de candidature reçoit actuellement un volume élevé. Veuillez réessayer ultérieurement." });
-          return;
+        // A long analysis queue never refuses a candidate: the dossier is
+        // stored and queued, and the owner is alerted (at most once a day).
+        recruitmentStage = "queue-backlog-check";
+        try {
+          const { countWaitingCvAnalyses, notifyOwnerOfAnalysisBacklog, RECRUITMENT_ANALYSIS_BACKLOG_ALERT_THRESHOLD } = await import("../recruitmentProcessingWorker");
+          const waitingAnalyses = await countWaitingCvAnalyses(RECRUITMENT_ANALYSIS_BACKLOG_ALERT_THRESHOLD);
+          if (waitingAnalyses >= RECRUITMENT_ANALYSIS_BACKLOG_ALERT_THRESHOLD) await notifyOwnerOfAnalysisBacklog(waitingAnalyses);
+        } catch (backlogError) {
+          console.error("Recruitment backlog check error:", safeErrorName(backlogError));
         }
 
         recruitmentStage = "storage-upload";
@@ -837,7 +837,8 @@ export async function createApp() {
     return sendDueAppointmentReminders(trigger.scheduler === "vercel-cron" ? DAILY_REMINDER_WINDOW : HOURLY_REMINDER_WINDOW);
   });
 
-  // Retention review: flags expired recruitment dossiers and notifies the owner.
+  // Retention: erases expired recruitment dossiers and vault documents (a
+  // bounded batch per run, same routine as a GDPR erasure) and reports to the owner.
   registerScheduledJob("/api/scheduled/recruitment-retention", "RecruitmentRetention", async trigger => {
     const { runRecruitmentRetentionCleanup } = await import("../recruitmentRetention");
     return runRecruitmentRetentionCleanup(trigger.scheduler === "vercel-cron" ? "vercel-cron" : `heartbeat:${trigger.taskUid}`);
@@ -847,26 +848,21 @@ export async function createApp() {
   // remain fast and failures can be retried without losing the candidate dossier.
   app.get("/api/scheduled/recruitment-processing", requireVercelCron, async (_req, res) => {
     try {
-      const { backfillLegacyCvAnalysisJobs, processDueCvAnalysisJobs, recoverStaleCvAnalysisJobs } = await import("../recruitmentProcessing");
-      const { backfillCvGoogleDriveExportJobs, processDueCvGoogleDriveExports, recoverStaleCvGoogleDriveExportJobs } = await import("../googleDriveExport");
-      const { retryDueFailedCvConfirmationEmails } = await import("../recruitmentEmailTrace");
-      const analysisRecovery = await recoverStaleCvAnalysisJobs();
-      const driveRecovery = await recoverStaleCvGoogleDriveExportJobs();
-      const analysisBackfill = await backfillLegacyCvAnalysisJobs(5);
-      const driveBackfill = await backfillCvGoogleDriveExportJobs(25);
-      const analysis = await processDueCvAnalysisJobs(5);
-      const driveExports = await processDueCvGoogleDriveExports(3);
-      const confirmationEmails = await retryDueFailedCvConfirmationEmails(3);
+      // Drains every queue within a time budget: confirmation-email retries and
+      // Drive copies first, then CV analyses (none started after ~25 s).
+      const { runRecruitmentProcessingWorker } = await import("../recruitmentProcessingWorker");
+      const summary = await runRecruitmentProcessingWorker();
       console.info("[RecruitmentProcessing] Vercel cron summary", {
-        analysisBackfill,
-        driveBackfill,
-        analysisRecovery,
-        driveRecovery,
-        analysisProcessed: analysis.processed,
-        driveExportsProcessed: driveExports.processed,
-        confirmationEmailsProcessed: confirmationEmails.processed,
+        elapsedMs: summary.elapsedMs,
+        analysisRecovery: summary.analysisRecovery,
+        driveRecovery: summary.driveRecovery,
+        driveErasures: summary.driveErasures,
+        confirmationEmailsProcessed: summary.confirmationEmails.processed,
+        driveExportsProcessed: summary.driveExports.processed,
+        analysisProcessed: summary.analysis.processed,
+        analysesWaiting: summary.analysesWaiting,
       });
-      return res.json({ ok: true, scheduler: "vercel-cron", analysisRecovery, driveRecovery, analysisBackfill, driveBackfill, analysis, driveExports, confirmationEmails });
+      return res.json({ ok: true, scheduler: "vercel-cron", ...summary });
     } catch (error: any) {
       console.error("[RecruitmentProcessing] Vercel cron error:", safeErrorName(error));
       return res.status(500).json({ error: error.message, timestamp: new Date().toISOString() });

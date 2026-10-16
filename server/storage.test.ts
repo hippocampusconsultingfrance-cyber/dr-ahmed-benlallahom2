@@ -1,14 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const blob = vi.hoisted(() => ({
+  del: vi.fn(),
   issueSignedToken: vi.fn(),
+  list: vi.fn(),
   presignUrl: vi.fn(),
   put: vi.fn(),
 }));
 
 vi.mock("@vercel/blob", () => blob);
 
-import { classifyStorageError, storageGetSignedUrl, storagePut } from "./storage";
+import { classifyStorageError, storageDelete, storageGetSignedUrl, storageListKeys, storagePut } from "./storage";
 
 describe("private Vercel Blob storage", () => {
   beforeEach(() => {
@@ -57,6 +59,25 @@ describe("private Vercel Blob storage", () => {
   it("fails closed when the private store credential is missing", async () => {
     vi.stubEnv("BLOB_READ_WRITE_TOKEN", "");
     await expect(storagePut("documents/file.txt", "data", "text/plain")).rejects.toMatchObject({ code: "storage_config_missing" });
+  });
+
+  it("deletes private objects by pathname, deduplicated and in batches of 100", async () => {
+    blob.del.mockResolvedValue(undefined);
+    const keys = Array.from({ length: 150 }, (_, index) => `/recruitment/cv/CV${index}.pdf`);
+    await expect(storageDelete([...keys, keys[0]!])).resolves.toBe(150);
+    expect(blob.del).toHaveBeenCalledTimes(2);
+    expect(blob.del.mock.calls[0]![0]).toHaveLength(100);
+    expect(blob.del.mock.calls[0]![0][0]).toBe("recruitment/cv/CV0.pdf");
+    expect(blob.del).toHaveBeenCalledWith(expect.any(Array), { token: "blob-test-token" });
+  });
+
+  it("lists every page of a dossier prefix and refuses a store-wide listing", async () => {
+    blob.list
+      .mockResolvedValueOnce({ blobs: [{ pathname: "recruitment/cv/CVX-a.pdf" }], hasMore: true, cursor: "next" })
+      .mockResolvedValueOnce({ blobs: [{ pathname: "recruitment/cv/CVX-b.pdf" }], hasMore: false });
+    await expect(storageListKeys("recruitment/cv/CVX-")).resolves.toEqual(["recruitment/cv/CVX-a.pdf", "recruitment/cv/CVX-b.pdf"]);
+    expect(blob.list).toHaveBeenLastCalledWith(expect.objectContaining({ prefix: "recruitment/cv/CVX-", cursor: "next", token: "blob-test-token" }));
+    await expect(storageListKeys("recruitment")).rejects.toThrow("storage_list_prefix_too_broad");
   });
 
   it("classifies Blob failures without exposing their raw message", () => {
