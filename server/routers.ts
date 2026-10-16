@@ -34,7 +34,9 @@ import { googleDriveExportStatus } from "./googleDriveExport";
 import { buildCandidatePortalInvitationEmailEvent, candidatePortalAccountMatchesApplication, resolveCandidatePortalActivationDelivery, resolveCandidatePortalInvitationDelivery, resolveCvConfirmationDelivery, retryCvConfirmationEmail } from "./recruitmentEmailTrace";
 import { RECRUITMENT_ANALYSIS_PROMPT_VERSION } from "./recruitmentAnalysis";
 import { medicalQuestionsRouter } from "./medicalQuestionsRouter";
-import { issueAdminMfaChallenge, verifyAdminMfaChallenge } from "./adminMfa";
+import { AdminMfaRateLimitError, issueAdminMfaChallenge, revokeCurrentAdminMfaSession, verifyAdminMfaChallenge } from "./adminMfa";
+
+const ADMIN_MFA_RATE_LIMITED_MESSAGE = "Trop de tentatives de double authentification. Patientez 15 minutes avant de réessayer.";
 
 let stripeClient: Stripe | undefined;
 
@@ -339,7 +341,13 @@ export const appRouter = router({
     begin: protectedProcedure.mutation(async ({ ctx }) => {
       if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN", message: "Accès administrateur requis." });
       if (!ctx.user.email) throw new TRPCError({ code: "BAD_REQUEST", message: "Aucun email administrateur vérifié n’est disponible pour la double authentification." });
-      await issueAdminMfaChallenge({ openId: ctx.user.openId, email: ctx.user.email, req: ctx.req });
+      try {
+        await issueAdminMfaChallenge({ openId: ctx.user.openId, email: ctx.user.email, req: ctx.req });
+      } catch (error) {
+        if (error instanceof AdminMfaRateLimitError) throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: ADMIN_MFA_RATE_LIMITED_MESSAGE });
+        console.error("[AdminMfa] Unable to issue a security code", error instanceof Error ? error.message : "unknown");
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Le code de sécurité n’a pas pu être envoyé. Réessayez dans quelques instants." });
+      }
       return { success: true };
     }),
     verify: protectedProcedure.input(z.object({ code: z.string().regex(/^\d{6}$/) })).mutation(async ({ input, ctx }) => {
@@ -347,7 +355,8 @@ export const appRouter = router({
       try {
         await verifyAdminMfaChallenge({ openId: ctx.user.openId, code: input.code, req: ctx.req, res: ctx.res });
         return { success: true };
-      } catch {
+      } catch (error) {
+        if (error instanceof AdminMfaRateLimitError) throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: ADMIN_MFA_RATE_LIMITED_MESSAGE });
         throw new TRPCError({ code: "BAD_REQUEST", message: "Le code de sécurité est invalide ou expiré." });
       }
     }),
@@ -369,7 +378,12 @@ export const appRouter = router({
   }),
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user ? { ...opts.ctx.user, mfaVerified: opts.ctx.mfaVerified } : null),
-    logout: publicProcedure.mutation(() => ({ success: true } as const)),
+    // Clerk ends the first factor in the browser; the server-side MFA proof
+    // (8 h) must not survive it on a shared computer.
+    logout: publicProcedure.mutation(async ({ ctx }) => {
+      await revokeCurrentAdminMfaSession({ req: ctx.req, res: ctx.res, openId: ctx.user?.openId ?? null });
+      return { success: true } as const;
+    }),
   }),
 
   contact: router({

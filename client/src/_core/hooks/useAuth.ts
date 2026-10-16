@@ -19,11 +19,20 @@ export function useAuth(options?: UseAuthOptions) {
     refetchOnWindowFocus: false,
   });
 
+  const serverLogout = trpc.auth.logout.useMutation();
+
   const logout = useCallback(async () => {
+    // Revoke the server-side admin MFA session (and its cookie) before Clerk
+    // ends the first factor; a network failure must not block the sign-out.
+    try {
+      await serverLogout.mutateAsync();
+    } catch {
+      // The MFA session still expires on its own; Clerk sign-out proceeds.
+    }
     await clerk.signOut({ redirectUrl: "/" });
     utils.auth.me.setData(undefined, null);
     await utils.auth.me.invalidate();
-  }, [clerk, utils]);
+  }, [clerk, serverLogout, utils]);
 
   const state = useMemo(() => {
     const user = isSignedIn ? meQuery.data ?? null : null;
