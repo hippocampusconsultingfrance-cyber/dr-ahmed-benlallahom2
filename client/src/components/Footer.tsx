@@ -11,12 +11,14 @@ export const footerBrandLogoAltCopy = {
 } as const;
 const footerResourcesCopy = { fr: "Ressources médicales", en: "Medical resources", de: "Medizinische Ressourcen", zh: "医疗资源" } as const;
 const footerPressCopy = { fr: "Presse & publications", en: "Press & publications", de: "Presse & Veröffentlichungen", zh: "媒体与出版" } as const;
+export const footerGdprCopy = { fr: "Exercer mes droits RGPD", en: "Exercise my GDPR rights", de: "Meine DSGVO-Rechte ausüben", zh: "行使我的 GDPR 权利" } as const;
 
 export default function Footer() {
   const { content, language } = useLanguage();
   const logoAlt = footerBrandLogoAltCopy[language as keyof typeof footerBrandLogoAltCopy] ?? footerBrandLogoAltCopy.fr;
   const resourcesLabel = footerResourcesCopy[language as keyof typeof footerResourcesCopy] ?? footerResourcesCopy.fr;
   const pressLabel = footerPressCopy[language as keyof typeof footerPressCopy] ?? footerPressCopy.fr;
+  const gdprLabel = footerGdprCopy[language as keyof typeof footerGdprCopy] ?? footerGdprCopy.fr;
 
   return (
     <footer className="relative border-t border-border/20 bg-card/30">
@@ -80,6 +82,9 @@ export default function Footer() {
               </Link>
               <Link href="/legal?tab=terms" className="block text-sm text-muted-foreground hover:text-primary transition-colors">
                 {content.footer.terms}
+              </Link>
+              <Link href="/gdpr" className="block text-sm text-muted-foreground hover:text-primary transition-colors">
+                {gdprLabel}
               </Link>
               <Link href="/faq" className="block text-sm text-muted-foreground hover:text-primary transition-colors">
                 FAQ

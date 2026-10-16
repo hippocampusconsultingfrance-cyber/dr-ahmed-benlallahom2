@@ -1,6 +1,8 @@
 import Navigation from "@/components/Navigation";
 import Footer from "@/components/Footer";
 import { useLanguage } from "@/contexts/LanguageContext";
+// Adresse de contact publique unique du site (PUB-CONTACT-01), aussi utilisée par la facture et le JSON-LD.
+import { siteConfig } from "@/data/site-config";
 import { ArrowLeft } from "lucide-react";
 import { Link, useSearch } from "wouter";
 import { SEOHead } from "@/components/SEOHead";
@@ -121,7 +123,7 @@ function LegalPageFr() {
                       <p><strong>Immatriculation :</strong> {HIPPOCAMPUS_LEGAL.rcs}</p>
                       <p><strong>Siège social :</strong> {HIPPOCAMPUS_LEGAL.registeredOffice}</p>
                       <p><strong>Directeur de la publication et gérant :</strong> {HIPPOCAMPUS_LEGAL.director}</p>
-                      <p><strong>Email :</strong> {HIPPOCAMPUS_LEGAL.contactEmail}</p>
+                      <p><strong>Email :</strong> <a href={`mailto:${siteConfig.email}`} className="text-primary underline-offset-2 hover:underline">{siteConfig.email}</a></p>
                     </div>
                   </div>
 
@@ -220,7 +222,7 @@ function LegalPageFr() {
                     <li><strong>Droit d'opposition :</strong> Vous opposer au traitement de vos données</li>
                     <li><strong>Droit de ne pas être soumis à une décision automatisée :</strong> Droit à une intervention humaine</li>
                   </ul>
-                  <p className="mt-4">Pour exercer ces droits, veuillez nous contacter via le formulaire de contact avec la mention "Demande RGPD".</p>
+                  <p className="mt-4">Pour exercer ces droits, utilisez le formulaire dédié <Link href="/gdpr" className="text-primary underline underline-offset-2">Exercer mes droits RGPD</Link> ou écrivez-nous à <a href={`mailto:${siteConfig.email}`} className="text-primary underline-offset-2 hover:underline">{siteConfig.email}</a>.</p>
 
                   <h3 className="font-semibold text-foreground mt-4">7. Cookies et technologies de suivi</h3>
                   <p>Ce site utilise les types de cookies suivants :</p>
@@ -232,7 +234,7 @@ function LegalPageFr() {
                   <p className="mt-4">Vous pouvez refuser les cookies non-essentiels en configurant votre navigateur.</p>
 
                   <h3 className="font-semibold text-foreground mt-4">8. Responsable du traitement</h3>
-                  <p><strong>Responsable :</strong> {HIPPOCAMPUS_LEGAL.name}<br /><strong>Siège social :</strong> {HIPPOCAMPUS_LEGAL.registeredOffice}<br /><strong>Gérant :</strong> {HIPPOCAMPUS_LEGAL.director}<br /><strong>Contact :</strong> {HIPPOCAMPUS_LEGAL.contactEmail}</p>
+                  <p><strong>Responsable :</strong> {HIPPOCAMPUS_LEGAL.name}<br /><strong>Siège social :</strong> {HIPPOCAMPUS_LEGAL.registeredOffice}<br /><strong>Gérant :</strong> {HIPPOCAMPUS_LEGAL.director}<br /><strong>Contact :</strong> <a href={`mailto:${siteConfig.email}`} className="text-primary underline-offset-2 hover:underline">{siteConfig.email}</a></p>
 
                   <h3 className="font-semibold text-foreground mt-4">9. Sous-traitants et transferts de données</h3>
                   <p>Nous utilisons les sous-traitants suivants pour traiter vos données :</p>
@@ -418,7 +420,7 @@ function LegalPageEn() {
                       <p><strong>Registration:</strong> {HIPPOCAMPUS_LEGAL.rcs}</p>
                       <p><strong>Registered office:</strong> {HIPPOCAMPUS_LEGAL.registeredOffice}</p>
                       <p><strong>Publication director and manager:</strong> {HIPPOCAMPUS_LEGAL.director}</p>
-                      <p><strong>Email:</strong> {HIPPOCAMPUS_LEGAL.contactEmail}</p>
+                      <p><strong>Email:</strong> <a href={`mailto:${siteConfig.email}`} className="text-primary underline-offset-2 hover:underline">{siteConfig.email}</a></p>
                     </div>
                   </div>
 
@@ -511,7 +513,7 @@ function LegalPageEn() {
                     <li><strong>Right to object:</strong> Object to the processing of your data</li>
                     <li><strong>Right not to be subject to automated decision-making:</strong> Right to human intervention</li>
                   </ul>
-                  <p className="mt-4">To exercise these rights, please contact us through the contact form with the mention "GDPR Request".</p>
+                  <p className="mt-4">To exercise these rights, use the dedicated form <Link href="/gdpr" className="text-primary underline underline-offset-2">Exercise my GDPR rights</Link> or write to <a href={`mailto:${siteConfig.email}`} className="text-primary underline-offset-2 hover:underline">{siteConfig.email}</a>.</p>
 
                   <h3 className="font-semibold text-foreground mt-4">7. Cookies and tracking technologies</h3>
                   <p>This website uses the following types of cookies:</p>
@@ -523,7 +525,7 @@ function LegalPageEn() {
                   <p className="mt-4">You can refuse non-essential cookies by configuring your browser.</p>
 
                   <h3 className="font-semibold text-foreground mt-4">8. Data controller</h3>
-                  <p><strong>Controller:</strong> {HIPPOCAMPUS_LEGAL.name}<br /><strong>Registered office:</strong> {HIPPOCAMPUS_LEGAL.registeredOffice}<br /><strong>Manager:</strong> {HIPPOCAMPUS_LEGAL.director}<br /><strong>Contact:</strong> {HIPPOCAMPUS_LEGAL.contactEmail}</p>
+                  <p><strong>Controller:</strong> {HIPPOCAMPUS_LEGAL.name}<br /><strong>Registered office:</strong> {HIPPOCAMPUS_LEGAL.registeredOffice}<br /><strong>Manager:</strong> {HIPPOCAMPUS_LEGAL.director}<br /><strong>Contact:</strong> <a href={`mailto:${siteConfig.email}`} className="text-primary underline-offset-2 hover:underline">{siteConfig.email}</a></p>
 
                   <h3 className="font-semibold text-foreground mt-4">9. Processors and international transfers</h3>
                   <p>Vercel provides hosting, deployment, server functions, content delivery and Vercel Blob file storage; Neon hosts the PostgreSQL application database; Clerk provides administrator authentication; Cloudflare Turnstile protects forms against abuse; Resend sends transactional emails; Stripe processes consultation payments; and Google Drive may store controlled private CV copies after authorisation by the controller. Depending on the provider infrastructure, processing may take place outside the European Economic Area. The applicable safeguards are those provided by the providers' data processing agreements, including Standard Contractual Clauses where required. Only data necessary for booking, invoicing, recruitment, authentication, hosting, security and communications is shared, and this website does not store card data. AI-supported recruitment analysis is subject to human review and does not make automated hiring decisions.</p>
@@ -688,7 +690,7 @@ function LegalPageDe() {
                       <p><strong>Handelsregister:</strong> {HIPPOCAMPUS_LEGAL.rcs}</p>
                       <p><strong>Sitz:</strong> {HIPPOCAMPUS_LEGAL.registeredOffice}</p>
                       <p><strong>Veröffentlichungsleiter und Geschäftsführer:</strong> {HIPPOCAMPUS_LEGAL.director}</p>
-                      <p><strong>E-Mail:</strong> {HIPPOCAMPUS_LEGAL.contactEmail}</p>
+                      <p><strong>E-Mail:</strong> <a href={`mailto:${siteConfig.email}`} className="text-primary underline-offset-2 hover:underline">{siteConfig.email}</a></p>
                     </div>
                   </div>
 
@@ -781,7 +783,7 @@ function LegalPageDe() {
                     <li><strong>Widerspruchsrecht:</strong> Widersprechen Sie der Verarbeitung Ihrer Daten</li>
                     <li><strong>Recht nicht automatisierter Entscheidungsfindung:</strong> Recht auf menschliche Intervention</li>
                   </ul>
-                  <p className="mt-4">Um diese Rechte auszuüben, kontaktieren Sie uns bitte über das Kontaktformular mit dem Vermerk "DSGVO-Anfrage".</p>
+                  <p className="mt-4">Um diese Rechte auszuüben, nutzen Sie das eigene Formular <Link href="/gdpr" className="text-primary underline underline-offset-2">Meine DSGVO-Rechte ausüben</Link> oder schreiben Sie an <a href={`mailto:${siteConfig.email}`} className="text-primary underline-offset-2 hover:underline">{siteConfig.email}</a>.</p>
 
                   <h3 className="font-semibold text-foreground mt-4">7. Cookies und Tracking-Technologien</h3>
                   <p>Diese Website verwendet die folgenden Arten von Cookies:</p>
@@ -793,7 +795,7 @@ function LegalPageDe() {
                   <p className="mt-4">Sie können nicht-essenzielle Cookies ablehnen, indem Sie Ihren Browser konfigurieren.</p>
 
                   <h3 className="font-semibold text-foreground mt-4">8. Datenverantwortlicher</h3>
-                  <p><strong>Verantwortlicher:</strong> {HIPPOCAMPUS_LEGAL.name}<br /><strong>Sitz:</strong> {HIPPOCAMPUS_LEGAL.registeredOffice}<br /><strong>Geschäftsführer:</strong> {HIPPOCAMPUS_LEGAL.director}<br /><strong>Kontakt:</strong> {HIPPOCAMPUS_LEGAL.contactEmail}</p>
+                  <p><strong>Verantwortlicher:</strong> {HIPPOCAMPUS_LEGAL.name}<br /><strong>Sitz:</strong> {HIPPOCAMPUS_LEGAL.registeredOffice}<br /><strong>Geschäftsführer:</strong> {HIPPOCAMPUS_LEGAL.director}<br /><strong>Kontakt:</strong> <a href={`mailto:${siteConfig.email}`} className="text-primary underline-offset-2 hover:underline">{siteConfig.email}</a></p>
 
                   <h3 className="font-semibold text-foreground mt-4">9. Auftragsverarbeiter und internationale Übermittlungen</h3>
                   <p>Vercel stellt Hosting, Bereitstellung, Serverfunktionen, Inhaltsauslieferung und Vercel-Blob-Dateispeicher bereit; Neon hostet die PostgreSQL-Anwendungsdatenbank; Clerk übernimmt die Administrator-Authentifizierung; Cloudflare Turnstile schützt Formulare vor Missbrauch; Resend versendet Transaktions-E-Mails; Stripe verarbeitet Zahlungen; und Google Drive kann nach Autorisierung des Verantwortlichen kontrollierte private CV-Kopien speichern. Je nach Infrastruktur des jeweiligen Anbieters kann eine Verarbeitung außerhalb des Europäischen Wirtschaftsraums erfolgen. Die geltenden Garantien ergeben sich aus den Auftragsverarbeitungsverträgen der Anbieter, einschließlich Standardvertragsklauseln, sofern erforderlich. Es werden nur für Buchung, Rechnungsstellung, Recruiting, Authentifizierung, Hosting, Sicherheit und Kommunikation erforderliche Daten weitergegeben; diese Website speichert keine Kartendaten. Die KI-gestützte Bewerbungsanalyse wird menschlich überprüft und trifft keine automatisierten Einstellungsentscheidungen.</p>
@@ -958,7 +960,7 @@ function LegalPageZh() {
                       <p><strong>商业登记：</strong>{HIPPOCAMPUS_LEGAL.rcs}</p>
                       <p><strong>注册地址：</strong>{HIPPOCAMPUS_LEGAL.registeredOffice}</p>
                       <p><strong>出版负责人及经理：</strong>{HIPPOCAMPUS_LEGAL.director}</p>
-                      <p><strong>电子邮件：</strong>{HIPPOCAMPUS_LEGAL.contactEmail}</p>
+                      <p><strong>电子邮件：</strong><a href={`mailto:${siteConfig.email}`} className="text-primary underline-offset-2 hover:underline">{siteConfig.email}</a></p>
                     </div>
                   </div>
 
@@ -1051,7 +1053,7 @@ function LegalPageZh() {
                     <li><strong>反对权：</strong> 反对您数据的处理</li>
                     <li><strong>不受自动决策约束的权利：</strong> 获得人工干预的权利</li>
                   </ul>
-                  <p className="mt-4">要行使这些权利，请通过联系表格与我们联系，并注明"GDPR请求"。</p>
+                  <p className="mt-4">如需行使这些权利，请使用专用表格<Link href="/gdpr" className="text-primary underline underline-offset-2">行使我的 GDPR 权利</Link>，或发送邮件至 <a href={`mailto:${siteConfig.email}`} className="text-primary underline-offset-2 hover:underline">{siteConfig.email}</a>。</p>
 
                   <h3 className="font-semibold text-foreground mt-4">7. Cookie和跟踪技术</h3>
                   <p>本网站使用以下类型的Cookie：</p>
@@ -1063,7 +1065,7 @@ function LegalPageZh() {
                   <p className="mt-4">您可以通过配置浏览器来拒绝非必要的Cookie。</p>
 
                   <h3 className="font-semibold text-foreground mt-4">8. 数据控制者</h3>
-                  <p><strong>控制者：</strong>{HIPPOCAMPUS_LEGAL.name}<br /><strong>注册地址：</strong>{HIPPOCAMPUS_LEGAL.registeredOffice}<br /><strong>经理：</strong>{HIPPOCAMPUS_LEGAL.director}<br /><strong>联系：</strong>{HIPPOCAMPUS_LEGAL.contactEmail}</p>
+                  <p><strong>控制者：</strong>{HIPPOCAMPUS_LEGAL.name}<br /><strong>注册地址：</strong>{HIPPOCAMPUS_LEGAL.registeredOffice}<br /><strong>经理：</strong>{HIPPOCAMPUS_LEGAL.director}<br /><strong>联系：</strong><a href={`mailto:${siteConfig.email}`} className="text-primary underline-offset-2 hover:underline">{siteConfig.email}</a></p>
 
                   <h3 className="font-semibold text-foreground mt-4">9. 处理者与国际传输</h3>
                   <p>Vercel 提供托管、部署、服务器功能、内容分发和 Vercel Blob 文件存储；Neon 托管 PostgreSQL 应用数据库；Clerk 提供管理员身份验证；Cloudflare Turnstile 保护表单免受滥用；Resend 发送交易邮件；Stripe 处理付款；Google Drive 可在控制者授权后保存受控的私有 CV 副本。根据各服务商使用的基础设施，数据可能在欧洲经济区以外处理。适用的保障措施以服务商的数据处理协议为准；在需要时包括标准合同条款。仅共享预约、发票、招聘、身份验证、托管、安全和通信所必需的数据；本网站不保存银行卡数据。AI 辅助的候选人分析始终经人工复核，不作出自动招聘决定。</p>

@@ -3,6 +3,9 @@
 // Modifiez ce fichier pour changer les textes des sous-pages entreprises.
 // ============================================================
 
+// Profil LinkedIn du Dr Ben Lallahom : source unique dans site-config.ts (PUB-CONTACT-01).
+import { siteConfig } from "./site-config";
+
 export interface TeamMember {
   name: string;
   role: string;
@@ -54,7 +57,7 @@ export const venturesFr: VentureDetail[] = [
       {
         name: "Dr. Ahmed Ben Lallahom",
         role: "CEO & Fondateur",
-        linkedin: "https://www.linkedin.com/in/ahmed-ben-lallahom/",
+        linkedin: siteConfig.linkedin,
         photo: "/assets/team/ahmed-ben-lallahom.webp",
       },
       {
@@ -123,7 +126,7 @@ export const venturesFr: VentureDetail[] = [
       {
         name: "Dr. Ahmed Ben Lallahom",
         role: "Directeur Médical",
-        linkedin: "https://www.linkedin.com/in/ahmed-ben-lallahom/",
+        linkedin: siteConfig.linkedin,
         photo: "/assets/team/ahmed-ben-lallahom.webp",
       },
     ],
@@ -168,7 +171,7 @@ export const venturesFr: VentureDetail[] = [
       {
         name: "Dr. Ahmed Ben Lallahom",
         role: "Directeur Médical",
-        linkedin: "https://www.linkedin.com/in/ahmed-ben-lallahom/",
+        linkedin: siteConfig.linkedin,
         photo: "/assets/team/ahmed-ben-lallahom.webp",
       },
     ],
@@ -203,7 +206,7 @@ export const venturesFr: VentureDetail[] = [
       {
         name: "Dr. Ahmed Ben Lallahom",
         role: "Consultant",
-        linkedin: "https://www.linkedin.com/in/ahmed-ben-lallahom/",
+        linkedin: siteConfig.linkedin,
         photo: "/assets/team/ahmed-ben-lallahom.webp",
       },
       {
@@ -272,7 +275,7 @@ export const venturesFr: VentureDetail[] = [
       {
         name: "Dr. Ahmed Ben Lallahom",
         role: "Consultant",
-        linkedin: "https://www.linkedin.com/in/ahmed-ben-lallahom/",
+        linkedin: siteConfig.linkedin,
         photo: "/assets/team/ahmed-ben-lallahom.webp",
       },
     ],
