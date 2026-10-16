@@ -143,7 +143,11 @@ export async function generateInvoicePDF(
       const doc = new PDFDocument({
         size: INVOICE_LAYOUT.size,
         margin: INVOICE_LAYOUT.margin,
-        info: { Title: `Facture ${content.invoiceNumber}`, Author: seller.name },
+        // Fixed metadata dates: a retried job regenerates a byte-identical
+        // PDF, so the email resent under the same Resend idempotency key
+        // carries the same attachment (a different payload would be refused
+        // with 409 invalid_idempotent_request).
+        info: { Title: `Facture ${content.invoiceNumber}`, Author: seller.name, CreationDate: data.issueDate, ModDate: data.issueDate },
       });
       const chunks: Buffer[] = [];
 

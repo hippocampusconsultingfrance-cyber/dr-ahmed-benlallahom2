@@ -50,6 +50,20 @@ describe("génération de facture PDF", () => {
     else process.env.TZ = originalTz;
   });
 
+  it("régénère une facture octet pour octet (même pièce jointe sous la même clé d’idempotence Resend)", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      vi.setSystemTime(new Date("2026-10-12T06:20:00.000Z"));
+      const first = await generateInvoicePDF(nightInvoice, resolveInvoiceSeller({}));
+      // Retry by the next daily cron, one day later.
+      vi.setSystemTime(new Date("2026-10-13T06:20:07.000Z"));
+      const retry = await generateInvoicePDF(nightInvoice, resolveInvoiceSeller({}));
+      expect(retry.buffer.equals(first.buffer)).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("produit un PDF A4 stockable sous son numéro de facture", async () => {
     const invoice = await generateInvoicePDF(nightInvoice, resolveInvoiceSeller({}));
 
