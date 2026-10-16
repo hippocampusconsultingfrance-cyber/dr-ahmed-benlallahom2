@@ -10,6 +10,7 @@ import { trpc } from "@/lib/trpc";
 import { TurnstileWidget } from "@/components/TurnstileWidget";
 import { SEOHead } from "@/components/SEOHead";
 import { useLanguage } from "@/contexts/LanguageContext";
+import CandidateLegalFooter, { candidateLegalLinks } from "@/components/CandidateLegalFooter";
 
 type Mode = "login" | "register" | "forgot" | "activation";
 
@@ -38,7 +39,10 @@ export const candidateAccessCopy = {
     password: "Mot de passe",
     passwordHint: "Minimum 15 caractères. Choisissez un mot de passe long et unique.",
     confirmPassword: "Confirmer le mot de passe",
-    terms: "J’accepte les conditions d’utilisation et la politique de confidentialité.",
+    termsParts: ["J’accepte les ", "conditions d’utilisation", " et la ", "politique de confidentialité", "."],
+    legalNotice: "Responsable du traitement : Hippocampus Consulting. Vos droits et les destinataires de vos données sont décrits dans la politique de confidentialité.",
+    legalLinks: { legal: "Mentions légales", privacy: "Confidentialité" },
+    newTab: "(nouvel onglet)",
     documentConsent: "Je consens au traitement confidentiel de mes documents administratifs et à une analyse IA de mes documents professionnels (diplômes, licences, certificats) en aide à la revue humaine. Les pièces d’identité ne sont jamais analysées par l’IA.",
     login: "Se connecter",
     register: "Créer mon accès",
@@ -87,7 +91,10 @@ export const candidateAccessCopy = {
     password: "Password",
     passwordHint: "At least 15 characters. Choose a long, unique password.",
     confirmPassword: "Confirm password",
-    terms: "I accept the terms of use and privacy policy.",
+    termsParts: ["I accept the ", "terms of use", " and the ", "privacy policy", "."],
+    legalNotice: "Controller: Hippocampus Consulting. Your rights and the recipients of your data are described in the privacy policy.",
+    legalLinks: { legal: "Legal notice", privacy: "Privacy" },
+    newTab: "(new tab)",
     documentConsent: "I consent to the confidential processing of my administrative documents and to AI analysis of my professional documents (diplomas, licences, certificates) supporting human review. Identity documents are never analysed by AI.",
     login: "Sign in",
     register: "Create my access",
@@ -136,7 +143,10 @@ export const candidateAccessCopy = {
     password: "Passwort",
     passwordHint: "Mindestens 15 Zeichen. Wählen Sie ein langes, eindeutiges Passwort.",
     confirmPassword: "Passwort bestätigen",
-    terms: "Ich akzeptiere die Nutzungsbedingungen und die Datenschutzrichtlinie.",
+    termsParts: ["Ich akzeptiere die ", "Nutzungsbedingungen", " und die ", "Datenschutzrichtlinie", "."],
+    legalNotice: "Verantwortlicher: Hippocampus Consulting. Ihre Rechte und die Empfänger Ihrer Daten sind in der Datenschutzerklärung beschrieben.",
+    legalLinks: { legal: "Impressum", privacy: "Datenschutz" },
+    newTab: "(neuer Tab)",
     documentConsent: "Ich stimme der vertraulichen Verarbeitung meiner Verwaltungsdokumente und einer KI-Analyse meiner beruflichen Dokumente (Diplome, Zulassungen, Zertifikate) zur Unterstützung der menschlichen Prüfung zu. Ausweisdokumente werden nie von der KI analysiert.",
     login: "Anmelden",
     register: "Zugang erstellen",
@@ -185,7 +195,10 @@ export const candidateAccessCopy = {
     password: "密码",
     passwordHint: "至少 15 个字符。请选择一个长且唯一的密码。",
     confirmPassword: "确认密码",
-    terms: "我接受使用条款和隐私政策。",
+    termsParts: ["我接受", "使用条款", "和", "隐私政策", "。"],
+    legalNotice: "数据控制者：Hippocampus Consulting。您的权利和数据接收方载于隐私政策。",
+    legalLinks: { legal: "法律声明", privacy: "隐私" },
+    newTab: "（新标签页）",
     documentConsent: "我同意对我的行政文件进行保密处理，并同意对我的职业文件（学历证书、执照、证书）进行用于支持人工审核的 AI 分析。身份证明文件绝不会由 AI 分析。",
     login: "登录",
     register: "创建访问权限",
@@ -381,7 +394,7 @@ export default function CandidateAccessPage() {
                 {mode === "register" && <div className="grid gap-4 sm:grid-cols-2"><div className="space-y-2"><Label htmlFor="candidate-first-name">{copy.firstName}</Label><Input id="candidate-first-name" value={firstName} onChange={event => setFirstName(event.target.value)} required /></div><div className="space-y-2"><Label htmlFor="candidate-last-name">{copy.lastName}</Label><Input id="candidate-last-name" value={lastName} onChange={event => setLastName(event.target.value)} required /></div></div>}
                 <div className="space-y-2"><Label htmlFor="candidate-email">{copy.email}</Label><Input id="candidate-email" type="email" autoComplete="email" value={email} onChange={event => setEmail(event.target.value)} readOnly={mode === "register" && Boolean(activeInvitationToken)} required /></div>
                 {mode === "login" && <div className="space-y-2"><Label htmlFor="candidate-password">{copy.password}</Label><Input id="candidate-password" type="password" autoComplete="current-password" aria-describedby="candidate-password-hint" value={password} onChange={event => setPassword(event.target.value)} minLength={15} required /><p id="candidate-password-hint" className="text-xs text-slate-500">{copy.passwordHint}</p></div>}
-                {mode === "register" && <div className="candidate-consent-panel space-y-3 rounded-xl border border-slate-700/90 bg-slate-900/75 p-4 text-sm"><label className={`candidate-consent-item ${consentAttempted && !terms ? "candidate-consent-item-invalid" : ""}`}><Checkbox className="candidate-consent-checkbox" checked={terms} aria-invalid={consentAttempted && !terms} onCheckedChange={value => { const next = value === true; setTerms(next); if (next && documentConsent) setConsentAttempted(false); }} /><span>{copy.terms}</span></label><label className={`candidate-consent-item ${consentAttempted && !documentConsent ? "candidate-consent-item-invalid" : ""}`}><Checkbox className="candidate-consent-checkbox" checked={documentConsent} aria-invalid={consentAttempted && !documentConsent} onCheckedChange={value => { const next = value === true; setDocumentConsent(next); if (next && terms) setConsentAttempted(false); }} /><span>{copy.documentConsent}</span></label></div>}
+                {mode === "register" && <div className="candidate-consent-panel space-y-3 rounded-xl border border-slate-700/90 bg-slate-900/75 p-4 text-sm"><label className={`candidate-consent-item ${consentAttempted && !terms ? "candidate-consent-item-invalid" : ""}`}><Checkbox className="candidate-consent-checkbox" checked={terms} aria-invalid={consentAttempted && !terms} onCheckedChange={value => { const next = value === true; setTerms(next); if (next && documentConsent) setConsentAttempted(false); }} /><span>{copy.termsParts[0]}<a href={candidateLegalLinks.terms} target="_blank" rel="noopener" onClick={event => event.stopPropagation()} className="font-medium text-cyan-300 underline underline-offset-2 hover:text-cyan-200">{copy.termsParts[1]}<span className="sr-only"> {copy.newTab}</span></a>{copy.termsParts[2]}<a href={candidateLegalLinks.privacy} target="_blank" rel="noopener" onClick={event => event.stopPropagation()} className="font-medium text-cyan-300 underline underline-offset-2 hover:text-cyan-200">{copy.termsParts[3]}<span className="sr-only"> {copy.newTab}</span></a>{copy.termsParts[4]}</span></label><label className={`candidate-consent-item ${consentAttempted && !documentConsent ? "candidate-consent-item-invalid" : ""}`}><Checkbox className="candidate-consent-checkbox" checked={documentConsent} aria-invalid={consentAttempted && !documentConsent} onCheckedChange={value => { const next = value === true; setDocumentConsent(next); if (next && terms) setConsentAttempted(false); }} /><span>{copy.documentConsent}</span></label><p className="text-xs leading-5 text-slate-400">{copy.legalNotice} <a href={candidateLegalLinks.legal} target="_blank" rel="noopener" className="text-cyan-300 underline underline-offset-2 hover:text-cyan-200">{copy.legalLinks.legal}<span className="sr-only"> {copy.newTab}</span></a> · <a href={candidateLegalLinks.privacy} target="_blank" rel="noopener" className="text-cyan-300 underline underline-offset-2 hover:text-cyan-200">{copy.legalLinks.privacy}<span className="sr-only"> {copy.newTab}</span></a></p></div>}
                 {(mode === "register" || mode === "forgot" || mode === "activation" || (mode === "login" && loginChallenge)) && <TurnstileWidget key={`${mode}-${turnstileKey}`} onToken={setTurnstileToken} />}
                 {notice && <p role="status" className="rounded-lg border border-cyan-800/50 bg-cyan-950/30 p-3 text-sm text-cyan-100">{notice}</p>}
                 <Button type="submit" className="w-full bg-cyan-500 text-slate-950 hover:bg-cyan-400" disabled={pending}>{pending ? <Loader2 className="animate-spin" aria-hidden="true" /> : mode === "login" ? <LogIn aria-hidden="true" /> : mode === "register" ? <UserPlus aria-hidden="true" /> : mode === "activation" ? <MailCheck aria-hidden="true" /> : <KeyRound aria-hidden="true" />}{mode === "login" ? copy.login : mode === "register" ? copy.register : mode === "activation" ? copy.resendActivation : copy.reset}</Button>
@@ -391,6 +404,7 @@ export default function CandidateAccessPage() {
           </Card>
         </section>
       </div>
+      <CandidateLegalFooter />
     </main>
   );
 }
