@@ -17,8 +17,9 @@ export default function CandidateResetPasswordPage() {
   const [password, setPassword] = useState("");
   const [passwordConfirmation, setPasswordConfirmation] = useState("");
   const [notice, setNotice] = useState("");
+  const utils = trpc.useUtils();
   const reset = trpc.candidatePortal.resetPassword.useMutation({
-    onSuccess: () => navigate("/candidate/portal"),
+    onSuccess: async () => { await utils.candidatePortal.me.invalidate(); navigate("/candidate/portal"); },
     onError: error => setNotice(error.message || copy.genericError),
   });
   const email = params.get("email") ?? "";

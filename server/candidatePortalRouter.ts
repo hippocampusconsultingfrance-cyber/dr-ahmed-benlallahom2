@@ -31,7 +31,6 @@ import {
   candidatePortalAccessEmailFailureCode,
   sendCandidatePortalAccessEmail,
 } from "./_core/notifications";
-import { storageGetSignedUrl } from "./storage";
 import { publicProcedure, router } from "./_core/trpc";
 import { candidateRequestIp, verifyCandidateTurnstile } from "./candidateTurnstile";
 import { clearPersistentRateLimit, enforcePersistentRateLimit, hashSecurityValue, isCompromisedPassword, logSecurityEvent, recordPersistentRateLimitAttempt, requestIpHash } from "./candidateSecurity";
@@ -684,6 +683,13 @@ export const candidatePortalRouter = router({
     return { success: true };
   }),
 
+  /**
+   * The candidate sees their files and the review status only. The internal
+   * review note and the AI summary, confidence and flags are for the team and
+   * are never returned here (CAND-20); they remain available to the owner for
+   * a GDPR access request. Files are downloaded through the decrypting route
+   * GET /api/candidate/documents/:id/download (CAND-17).
+   */
   documents: publicProcedure.query(async ({ ctx }) => {
     const candidate = await requireCandidateSession(ctx.req);
     const db = databaseOrThrow(await getDb());
@@ -694,25 +700,10 @@ export const candidatePortalRouter = router({
       originalName: candidateDocuments.originalName,
       mimeType: candidateDocuments.mimeType,
       sizeBytes: candidateDocuments.sizeBytes,
-      validationStatus: candidateDocuments.validationStatus,
       status: candidateDocuments.status,
-      aiSummary: candidateDocuments.aiSummary,
-      aiConfidence: candidateDocuments.aiConfidence,
-      aiFlags: candidateDocuments.aiFlags,
-      analysisStatus: candidateDocuments.analysisStatus,
-      analyzedAt: candidateDocuments.analyzedAt,
-      reviewNotes: candidateDocuments.reviewNotes,
+      reviewedAt: candidateDocuments.reviewedAt,
       createdAt: candidateDocuments.createdAt,
     }).from(candidateDocuments).where(eq(candidateDocuments.candidateId, candidate.id)).orderBy(desc(candidateDocuments.createdAt));
     return documents;
-  }),
-
-  documentDownload: publicProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ input, ctx }) => {
-    const candidate = await requireCandidateSession(ctx.req);
-    const db = databaseOrThrow(await getDb());
-    const document = (await db.select().from(candidateDocuments).where(and(eq(candidateDocuments.id, input.id), eq(candidateDocuments.candidateId, candidate.id))).limit(1))[0];
-    if (!document) throw new TRPCError({ code: "NOT_FOUND", message: "Document introuvable." });
-    await logCandidateAudit({ candidateId: candidate.id, documentId: document.id, action: "download" });
-    return { url: await storageGetSignedUrl(document.storageKey), filename: document.originalName };
   }),
 });

@@ -272,8 +272,10 @@ export default function CandidateAccessPage() {
   const [loginChallenge, setLoginChallenge] = useState(false);
   const [turnstileKey, setTurnstileKey] = useState(0);
 
+  const utils = trpc.useUtils();
   const login = trpc.candidatePortal.login.useMutation({
-    onSuccess: () => navigate("/candidate/portal"),
+    // Refresh the cached "me" (possibly null from an earlier visit) before opening the portal (CAND-10).
+    onSuccess: async () => { await utils.candidatePortal.me.invalidate(); navigate("/candidate/portal"); },
     onError: error => {
       // A Turnstile token is single use: always render a fresh challenge after an attempt.
       setTurnstileToken(null);
