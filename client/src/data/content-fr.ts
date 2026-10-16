@@ -28,6 +28,7 @@ export const contentFr = {
   about: {
     title: "À Propos",
     text: "Le Dr. Ahmed Ben Lallahom est un anesthésiste-réanimateur avec plus d'une décennie d'expérience clinique de haut niveau en France. Diplômé de la Société Européenne d'Anesthésiologie et de Soins Intensifs (DESAIC), il combine une expertise médicale approfondie en évaluation préopératoire, anesthésie avancée et soins postopératoires avec une vision pour l'innovation en santé à travers ses différentes entreprises.",
+    portraitAlt: "Portrait du Dr Ahmed Ben Lallahom, médecin anesthésiste-réanimateur",
     statsLabels: {
       yearsClinical: "Années de Pratique Clinique",
       ventures: "Entreprises en Santé",

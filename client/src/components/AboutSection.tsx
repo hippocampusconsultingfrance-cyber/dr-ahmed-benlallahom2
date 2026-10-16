@@ -2,6 +2,9 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { siteConfig } from "@/data/site-config";
 import { useEffect, useRef, useState } from "react";
 
+/** Portrait officiel du Dr Ben Lallahom (même fichier que les pages /venture/*). */
+const ABOUT_PORTRAIT_SRC = "/assets/team/ahmed-ben-lallahom.webp";
+
 function AnimatedCounter({ target }: { target: string }) {
   const numericTarget = parseInt(target.replace(/\D/g, "")) || 0;
   const suffix = target.includes("+") ? "+" : "";
@@ -55,14 +58,22 @@ export default function AboutSection() {
         <div className="grid lg:grid-cols-12 gap-12 lg:gap-8 items-start">
           {/* Image — spans 5 cols, offset */}
           <div className="lg:col-span-5 lg:-mt-12 relative">
-            <div className="about-visual relative rounded-2xl overflow-hidden aspect-[3/4] max-w-sm mx-auto lg:mx-0 shadow-2xl shadow-primary/10">
+            {/*
+              Portrait officiel (source 320x320). Le cadre 3:4 est limité à 18rem de large
+              pour que le navigateur n'agrandisse la photo que d'environ 1,2x (pas d'upscaling
+              artificiel d'un fichier dérivé).
+            */}
+            <div className="about-visual relative rounded-2xl overflow-hidden aspect-[3/4] w-full max-w-[18rem] mx-auto lg:mx-0 shadow-2xl shadow-primary/10">
               <img
-                src="/assets/profile-placeholder.svg"
+                src={ABOUT_PORTRAIT_SRC}
+                width={320}
+                height={320}
                 loading="lazy"
-                alt="Dr. Ahmed Ben Lallahom"
-                className="w-full h-full object-cover"
+                decoding="async"
+                alt={content.about.portraitAlt}
+                className="w-full h-full object-cover object-[50%_35%]"
               />
-              <div className="absolute inset-0 bg-gradient-to-t from-background/70 via-transparent to-transparent" />
+              <div className="absolute inset-0 bg-gradient-to-t from-background/50 via-transparent to-transparent" aria-hidden="true" />
               {/* Gold corner accent */}
               <div className="absolute top-4 right-4 w-12 h-12 border-t-2 border-r-2 rounded-tr-lg" style={{ borderColor: "oklch(0.72 0.1 75 / 0.5)" }} />
               <div className="absolute bottom-4 left-4 w-12 h-12 border-b-2 border-l-2 rounded-bl-lg" style={{ borderColor: "oklch(0.72 0.1 75 / 0.5)" }} />

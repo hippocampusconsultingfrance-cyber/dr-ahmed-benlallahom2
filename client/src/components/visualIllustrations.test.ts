@@ -51,7 +51,7 @@ describe("illustrations originales des parcours", () => {
     const root = resolve(import.meta.dirname, "..");
     const ventureSources = ["data/ventures-fr.ts", "data/ventures-en.ts"];
     const assets: Record<string, string[]> = {
-      "profile-placeholder.svg": ["components/AboutSection.tsx"],
+      "team/ahmed-ben-lallahom.webp": ["components/AboutSection.tsx"],
       "abl-logo.svg": ["components/Footer.tsx", "components/Navigation.tsx", "components/SEOHead.tsx"],
       "medical-compass.svg": ["components/ServicesSection.tsx"],
       "booking-care.svg": ["pages/BookingPage.tsx"],
