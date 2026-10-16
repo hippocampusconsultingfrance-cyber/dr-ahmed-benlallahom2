@@ -1,15 +1,34 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { adminMfaChallenges, adminMfaSessions, candidateSecurityRateLimits, securityEvents } from "../drizzle/schema";
+import { adminMfaChallenges, adminMfaSessions } from "../drizzle/schema";
 import { createMemoryPg, type MemoryPg } from "./testing/memoryPgProxy";
 
 const state = vi.hoisted(() => ({
   memory: null as null | { db: unknown },
   sentCodes: [] as string[],
   failNextEmail: false,
+  securityEvents: [] as Array<Record<string, unknown>>,
+  limits: new Map<string, { windowStartedAt: number; count: number; blockedUntil: number }>(),
 }));
 
 vi.mock("./db", () => ({ getDb: async () => state.memory?.db ?? null }));
 vi.mock("./_core/notification", () => ({ notifyOwner: vi.fn(async () => true) }));
+// The limiter and the security journal have their own tests; a faithful JS
+// stand-in keeps these MFA tests independent of their SQL implementation.
+vi.mock("./candidateSecurity", () => ({
+  requestIpHash: (headers: Record<string, unknown>) => typeof headers["x-forwarded-for"] === "string" ? `ip:${headers["x-forwarded-for"]}` : null,
+  logSecurityEvent: vi.fn(async (event: Record<string, unknown>) => { state.securityEvents.push(event); }),
+  enforcePersistentRateLimit: vi.fn(async (policy: { action: string; subject: string; maxAttempts: number; windowMs: number; blockMs: number }) => {
+    const key = `${policy.action}:${policy.subject}`;
+    const now = Date.now();
+    const entry = state.limits.get(key);
+    if (entry?.blockedUntil && entry.blockedUntil > now) throw new Error("candidate_security_rate_limited");
+    const sameWindow = entry && now - entry.windowStartedAt < policy.windowMs;
+    const next = { windowStartedAt: sameWindow ? entry!.windowStartedAt : now, count: sameWindow ? entry!.count + 1 : 1, blockedUntil: 0 };
+    if (next.count > policy.maxAttempts) next.blockedUntil = now + policy.blockMs;
+    state.limits.set(key, next);
+    if (next.blockedUntil) throw new Error("candidate_security_rate_limited");
+  }),
+}));
 vi.mock("./_core/notifications", () => ({
   sendAdminMfaCodeEmail: vi.fn(async (_email: string, code: string) => {
     if (state.failNextEmail) {
@@ -58,10 +77,12 @@ function wrongCode(code: string) {
 
 describe("double authentification administrateur", () => {
   beforeEach(() => {
-    memory = createMemoryPg([adminMfaChallenges, adminMfaSessions, candidateSecurityRateLimits, securityEvents]);
+    memory = createMemoryPg([adminMfaChallenges, adminMfaSessions]);
     state.memory = memory;
     state.sentCodes = [];
     state.failNextEmail = false;
+    state.securityEvents = [];
+    state.limits.clear();
     ipCounter += 1;
   });
 
@@ -112,7 +133,7 @@ describe("double authentification administrateur", () => {
     const sentBefore = state.sentCodes.length;
     await expect(issueAdminMfaChallenge({ openId: OPEN_ID, email: "owner@test.local", req: request(ip) })).rejects.toBeInstanceOf(AdminMfaRateLimitError);
     expect(state.sentCodes.length).toBe(sentBefore);
-    expect(memory.rows(securityEvents).some(row => row.category === "admin_mfa_begin_rate_limited")).toBe(true);
+    expect(state.securityEvents.some(event => event.category === "admin_mfa_begin_rate_limited")).toBe(true);
   });
 
   it("limite les vérifications par compte et IP, même avec de nouveaux codes", async () => {
