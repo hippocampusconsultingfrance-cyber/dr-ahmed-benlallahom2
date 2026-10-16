@@ -563,7 +563,7 @@ export default function BookingPage() {
         description={seoDescription}
         ogUrl="https://drahmedbenlallahom.com/booking"
       />
-      <div className="max-w-3xl mx-auto">
+      <div id="main-content" role="main" tabIndex={-1} className="max-w-3xl mx-auto">
         {/* Breadcrumb */}
         <Breadcrumb items={[{ label: content.title }]} />
 
@@ -575,7 +575,7 @@ export default function BookingPage() {
             <p className="font-display text-base font-semibold tracking-tight text-foreground">Dr. Ahmed Ben Lallahom</p>
             <p className="text-xs leading-5 text-muted-foreground">{bookingBrandCopy}</p>
           </div>
-          <span className="ml-auto hidden h-2 w-2 shrink-0 rounded-full bg-[#c9a96e] sm:block" aria-label="Signature médicale" />
+          <span className="ml-auto hidden h-2 w-2 shrink-0 rounded-full bg-[#c9a96e] sm:block" aria-hidden="true" />
         </div>
 
         {/* Progress Indicator */}

@@ -19,7 +19,9 @@ describe("liens de navigation du pied de page", () => {
 
   it("réutilise le libellé de contact localisé pour le titre partagé", async () => {
     const source = await readFile(new URL("./Footer.tsx", import.meta.url), "utf8");
-    expect(source).toContain("{content.nav.contact}</h4>");
-    expect(source).not.toContain(">Contact</h4>");
+    // Titres de colonnes en h2 (ordre des titres, PUB-A11Y-02).
+    expect(source).toContain("{content.nav.contact}</h2>");
+    expect(source).not.toContain(">Contact</h2>");
+    expect(source).not.toContain("<h4");
   });
 });

@@ -5,6 +5,8 @@ import { trpc } from "@/lib/trpc";
 import PublicContentSkeleton from "@/components/PublicContentSkeleton";
 import { SEOHead } from "@/components/SEOHead";
 import Breadcrumb from "@/components/Breadcrumb";
+import Navigation from "@/components/Navigation";
+import Footer from "@/components/Footer";
 
 export default function TestimonialsPage() {
   const { language } = useLanguage();
@@ -83,13 +85,14 @@ export default function TestimonialsPage() {
   // vérifiés et ne doivent pas être mis en avant sur le site d'un médecin (LEGAL-08).
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-950 pt-24 pb-16">
+    <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-950">
       <SEOHead
         title={currentContent.title}
         description={currentContent.subtitle}
         ogUrl="https://drahmedbenlallahom.com/testimonials"
       />
-      <div className="max-w-4xl mx-auto px-4">
+      <Navigation />
+      <main id="main-content" tabIndex={-1} className="max-w-4xl mx-auto px-4 pt-28 pb-16">
         {/* Breadcrumb */}
         <Breadcrumb items={[{ label: currentContent.title }]} />
 
@@ -178,7 +181,7 @@ export default function TestimonialsPage() {
                       </p>
                     )}
                   </div>
-                  <p className="text-gray-500 text-xs">
+                  <p className="text-slate-400 text-xs">
                     {new Date(testimonial.createdAt).toLocaleDateString(language)}
                   </p>
                 </div>
@@ -186,7 +189,8 @@ export default function TestimonialsPage() {
             ))}
           </div>
         )}
-      </div>
+      </main>
+      <Footer />
     </div>
   );
 }

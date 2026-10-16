@@ -1,7 +1,7 @@
 type MainTarget = Pick<HTMLElement, "id" | "tabIndex" | "focus">;
 
 export function getMainContentTarget(root: { querySelector: (selector: string) => MainTarget | null }) {
-  const main = root.querySelector("main");
+  const main = root.querySelector('main, [role="main"]');
   if (!main) return null;
   if (!main.id) main.id = "main-content";
   main.tabIndex = -1;
