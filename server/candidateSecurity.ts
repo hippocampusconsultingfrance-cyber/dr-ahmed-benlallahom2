@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { and, eq, gt, isNotNull, lte, sql } from "drizzle-orm";
+import { and, eq, gt, gte, inArray, isNotNull, lte, sql } from "drizzle-orm";
 import { candidateSecurityRateLimits, securityEvents } from "../drizzle/schema";
 import { getDb } from "./db";
 import { notifyOwner } from "./_core/notification";
@@ -32,18 +32,75 @@ export async function logSecurityEvent(input: {
 }) {
   const db = await getDb();
   if (!db) return;
+  const category = input.category.slice(0, 100);
   await db.insert(securityEvents).values({
     actorKind: input.actorKind,
     actorReference: input.actorReference ?? null,
-    category: input.category.slice(0, 100),
+    category,
     outcome: input.outcome,
     severity: input.severity ?? "info",
     ipHash: input.ipHash ?? null,
     metadata: input.metadata ? JSON.stringify(input.metadata) : null,
   });
   if ((input.severity === "high" || input.severity === "critical") && input.outcome !== "allowed") {
-    void notifyOwner({ title: "Alerte sécurité — Hippocampus Consulting", content: `${input.category} · ${input.outcome}. Une vérification administrative est recommandée.` }).catch(() => undefined);
+    await notifyOwnerOfSecurityAlert({ ...input, category }).catch((error: unknown) => {
+      console.error("security_alert_notification_failed", error instanceof Error ? error.name : "UnknownError");
+    });
   }
+}
+
+/** At most one owner alert email per event category in this window (CAND-15). */
+export const SECURITY_ALERT_EMAIL_WINDOW_MS = 30 * 60 * 1000;
+
+function describeSecurityActor(input: { actorKind: string; actorReference?: string | null }): string {
+  if (!input.actorReference) return input.actorKind === "system" ? "système" : "non identifié";
+  if (input.actorKind === "candidate") return `compte candidat n° ${input.actorReference}`;
+  if (input.actorKind === "admin") return `administrateur ${input.actorReference.slice(0, 32)}`;
+  // Anonymous references are already pseudonymised hashes: show a short prefix only.
+  return `empreinte ${input.actorReference.slice(0, 12)}…`;
+}
+
+/**
+ * Aggregates high-severity alerts: the first event of a category in a window
+ * sends one email with the number of similar events of the last hour, the
+ * actor and a pseudonymised network; later events of that category are only
+ * recorded until the window has passed. A burst of N failures therefore sends
+ * one email instead of N, and the daily posture review still counts them all.
+ */
+async function notifyOwnerOfSecurityAlert(input: {
+  actorKind: string;
+  actorReference?: string | null;
+  category: string;
+  outcome: string;
+  severity?: string;
+  ipHash?: string | null;
+}) {
+  const slot = await recordPersistentRateLimitAttempt({
+    action: "security_alert_email",
+    subject: input.category,
+    maxAttempts: 1,
+    windowMs: SECURITY_ALERT_EMAIL_WINDOW_MS,
+    blockMs: SECURITY_ALERT_EMAIL_WINDOW_MS,
+  });
+  if (slot.blocked || slot.attemptCount > 1) return;
+  const db = await getDb();
+  if (!db) return;
+  const since = new Date(Date.now() - 2 * SECURITY_ALERT_EMAIL_WINDOW_MS);
+  const recent = await db.select({ id: securityEvents.id }).from(securityEvents).where(and(
+    eq(securityEvents.category, input.category),
+    gte(securityEvents.createdAt, since),
+    inArray(securityEvents.severity, ["high", "critical"]),
+  )).limit(10_000);
+  const windowMinutes = Math.round(SECURITY_ALERT_EMAIL_WINDOW_MS / 60_000);
+  await notifyOwner({
+    title: `Alerte sécurité — ${input.category} — Hippocampus Consulting`,
+    content: [
+      `Catégorie : ${input.category} · ${input.outcome} (gravité ${input.severity ?? "high"}).`,
+      `Événements de ce type sur la dernière heure : ${recent.length}.`,
+      `Dernier acteur : ${describeSecurityActor(input)}${input.ipHash ? ` · réseau ${input.ipHash.slice(0, 12)}…` : ""}.`,
+      `Les événements suivants de cette catégorie sont enregistrés sans nouvel email pendant au moins ${windowMinutes} minutes ; consultez le journal de sécurité de l’administration.`,
+    ].join("\n"),
+  });
 }
 
 export type PersistentRateLimitPolicy = {
