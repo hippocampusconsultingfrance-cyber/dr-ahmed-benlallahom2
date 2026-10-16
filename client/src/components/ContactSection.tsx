@@ -235,7 +235,7 @@ export default function ContactSection() {
                   </p>
                 )}
 
-                <TurnstileWidget onToken={setTurnstileToken} />
+                <TurnstileWidget onToken={setTurnstileToken} deferUntilVisible />
 
                 <button
                   type="submit"

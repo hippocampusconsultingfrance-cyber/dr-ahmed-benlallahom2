@@ -1,10 +1,11 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { secureReference } from "./_core/secureReference";
+import { renderSitemapXml } from "./routeSeo";
 
 const serverSource = readFileSync(new URL("./_core/index.ts", import.meta.url), "utf8");
 const staticSource = readFileSync(new URL("./_core/static.ts", import.meta.url), "utf8");
-const staticSitemap = readFileSync(new URL("../client/public/sitemap.xml", import.meta.url), "utf8");
+const generatedSitemap = renderSitemapXml("2026-10-16");
 
 function clientBriefRoute() {
   const start = serverSource.indexOf('app.post("/api/client-briefs"');
@@ -63,10 +64,10 @@ describe("sitemap unique", () => {
     expect(serverSource).not.toContain("/venture/novarena");
   });
 
-  it("sert le fichier statique client/public/sitemap.xml", () => {
+  it("sert le sitemap.xml généré au build dans dist/public", () => {
     // static.ts is owned elsewhere: only require that dist/public is served as-is.
     expect(staticSource).toMatch(/app\.use\(express\.static\(distPath\b/);
-    expect(staticSitemap).toContain("<urlset");
-    expect(staticSitemap).not.toContain("/venture/novarena");
+    expect(generatedSitemap).toContain("<urlset");
+    expect(generatedSitemap).not.toContain("/venture/novarena");
   });
 });

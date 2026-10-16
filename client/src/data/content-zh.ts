@@ -27,6 +27,7 @@ export const contentZh = {
   about: {
     title: "关于我",
     text: "艾哈迈德·本·拉拉霍姆医生是一位敬业的麻醉学家和重症医学专家，在法国拥有超过十年的高质量临床经验。作为欧洲麻醉学和重症医学学会（DESAIC）的外交官，他将术前评估、高级麻醉和术后护理方面的深厚医学专业知识与通过各种商业企业实现医疗保健创新的愿景相结合。",
+    portraitAlt: "Ahmed Ben Lallahom 医生肖像，麻醉与重症医学医生",
     statsLabels: {
       yearsClinical: "年临床实践",
       ventures: "医疗保健企业",

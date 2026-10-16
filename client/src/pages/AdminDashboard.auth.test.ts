@@ -3,13 +3,17 @@ import { describe, expect, it } from "vitest";
 
 describe("administration authentication", () => {
   it("uses Clerk instead of the retired Manus OAuth portal", async () => {
-    const [dashboard, main, authHook] = await Promise.all([
+    const [dashboard, main, adminRoot, authHook] = await Promise.all([
       readFile(new URL("./AdminDashboard.tsx", import.meta.url), "utf8"),
       readFile(new URL("../main.tsx", import.meta.url), "utf8"),
+      readFile(new URL("./AdminRoot.tsx", import.meta.url), "utf8"),
       readFile(new URL("../_core/hooks/useAuth.ts", import.meta.url), "utf8"),
     ]);
 
-    expect(main).toContain("<ClerkProvider");
+    // ClerkProvider wraps the admin dashboard only (lazily loaded root), not the public site.
+    expect(adminRoot).toContain("<ClerkProvider");
+    expect(adminRoot).toContain("<AdminDashboard />");
+    expect(main).not.toContain("<ClerkProvider");
     expect(dashboard).toContain("<SignInButton");
     expect(authHook).toContain("useClerkAuth");
 

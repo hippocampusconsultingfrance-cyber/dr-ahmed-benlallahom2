@@ -14,6 +14,7 @@ import {
   getPrerenderRoutes,
   getRouteSeo,
   renderFallbackSeoHead,
+  renderSitemapXml,
 } from "./routeSeo";
 
 const readProjectFile = (relativePath: string) =>
@@ -22,7 +23,7 @@ const readProjectFile = (relativePath: string) =>
 const TEMPLATE = `<!doctype html>\n<html lang="fr">\n  <head>\n    ${ROUTE_SEO_MARKER}\n  </head>\n  <body><div id="root"></div></body>\n</html>`;
 
 const sitemapPaths = () =>
-  Array.from(readProjectFile("client/public/sitemap.xml").matchAll(/<loc>([^<]+)<\/loc>/g), match => {
+  Array.from(renderSitemapXml("2026-10-16").matchAll(/<loc>([^<]+)<\/loc>/g), match => {
     const url = new URL(match[1]);
     expect(url.origin).toBe("https://drahmedbenlallahom.com");
     return url.pathname.replace(/\/+$/, "") || "/";
@@ -43,7 +44,7 @@ describe("pré-rendu SEO des routes publiques pour Vercel", () => {
     for (const path of paths) {
       expect(routes, path).toContain(path);
       const { html } = pageFor(path);
-      expect(html, path).toContain('<meta name="robots" content="index, follow" />');
+      expect(html, path).toContain('<meta name="robots" content="index, follow, max-image-preview:large" />');
       expect(html, path).toContain(`<link rel="canonical" href="https://drahmedbenlallahom.com${path}" />`);
       expect(html, path).toContain('<meta property="og:title"');
       expect(html, path).not.toContain(ROUTE_SEO_MARKER);

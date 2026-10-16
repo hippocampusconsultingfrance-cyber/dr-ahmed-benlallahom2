@@ -32,6 +32,10 @@ export default defineConfig({
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
+    // Fichiers hachés (JS, CSS, polices) dans /static, séparés des fichiers non hachés de
+    // client/public/assets : vercel.json peut ainsi les servir avec un cache immuable d'un an
+    // sans figer les photos ni les logos (CACHE-01).
+    assetsDir: "static",
     // Let Rollup keep React, Radix and their shared primitives in a coherent
     // dependency graph. Manual vendor chunks created a framework↔Radix cycle
     // in production, leaving React undefined before the root could render.

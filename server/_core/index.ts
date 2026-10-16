@@ -9,6 +9,7 @@ import net from "net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { clerkMiddleware } from "@clerk/express";
 import { assertCriticalProductionEnvironment } from "./env";
+import { registerHealthRoute } from "./health";
 import { requireVercelCron } from "./cronAuth";
 import { secureReference } from "./secureReference";
 import { registerGoogleDriveOAuthRoutes } from "../googleDriveOAuthRoutes";
@@ -157,8 +158,8 @@ export async function createApp() {
       "frame-ancestors 'self'",
       "form-action 'self'",
       "script-src 'self' 'unsafe-inline' https://js.stripe.com https://challenges.cloudflare.com https://clerk.drahmedbenlallahom.com https://*.clerk.accounts.dev https://*.clerk.com",
-      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-      "font-src 'self' data: https://fonts.gstatic.com",
+      "style-src 'self' 'unsafe-inline'",
+      "font-src 'self' data:",
       "img-src 'self' data: blob: https:",
       "connect-src 'self' ws: wss: https://api.stripe.com https://challenges.cloudflare.com https://clerk.drahmedbenlallahom.com https://*.clerk.accounts.dev https://*.clerk.com",
       "frame-src https://js.stripe.com https://hooks.stripe.com https://challenges.cloudflare.com https://clerk.drahmedbenlallahom.com https://*.clerk.accounts.dev https://*.clerk.com",
@@ -167,7 +168,10 @@ export async function createApp() {
     ].join("; "));
     next();
   });
-  
+
+  // Public uptime probe (SELECT 1 + names of missing critical variables, no secrets).
+  registerHealthRoute(app);
+
   // Stripe Webhook (MUST be before express.json() to receive raw body)
   app.post("/api/stripe/webhook", express.raw({ type: "application/json" }), async (req, res) => {
     const sig = req.headers["stripe-signature"] as string;
@@ -767,8 +771,9 @@ export async function createApp() {
     }
   });
 
-  // /sitemap.xml is the static client/public/sitemap.xml (served by the Vercel
-  // CDN, or by express.static outside Vercel): a single source of truth.
+  // /sitemap.xml is generated at build time into dist/public by
+  // scripts/prerender-route-seo.ts from the prerendered routes (served by the
+  // Vercel CDN, or by express.static outside Vercel): a single source of truth.
   registerStorageProxy(app);
   registerGoogleDriveOAuthRoutes(app);
   

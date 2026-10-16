@@ -79,7 +79,7 @@ export default function WhyHippocampusPage() {
   const stepIcons = [UsersRound, Globe2, ShieldCheck, ArrowRight];
   const guaranteeIcons = [ShieldCheck, UsersRound, Globe2];
 
-  return <div className="min-h-screen bg-[#050b14] text-slate-100">
+  return <div className="theme-dark-island dark min-h-screen bg-[#050b14] text-slate-100">
     <SEOHead
       title={t.metaTitle}
       description={t.metaDescription}

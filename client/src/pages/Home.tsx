@@ -7,6 +7,7 @@ import ServicesSection from "@/components/ServicesSection";
 import EducationSection from "@/components/EducationSection";
 import ContactSection from "@/components/ContactSection";
 import TestimonialsSection from "@/components/TestimonialsSection";
+import { isPublicTestimonialsEnabled } from "@shared/publicFeatures";
 import MedicalQuestionsTeaser from "@/components/MedicalQuestionsTeaser";
 import Footer from "@/components/Footer";
 import { useScrollReveal } from "@/hooks/useScrollReveal";
@@ -59,9 +60,12 @@ export default function Home() {
         <div className="fade-in-up">
           <EducationSection />
         </div>
-        <div className="fade-in-up parallax-subtle">
-          <TestimonialsSection />
-        </div>
+        {/* Témoignages masqués par défaut (LEGAL-08) : interrupteur unique dans shared/publicFeatures.ts. */}
+        {isPublicTestimonialsEnabled() && (
+          <div className="fade-in-up parallax-subtle">
+            <TestimonialsSection />
+          </div>
+        )}
         <div className="fade-in-up">
           <MedicalQuestionsTeaser />
         </div>

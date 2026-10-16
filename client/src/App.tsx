@@ -1,10 +1,11 @@
 import { Toaster } from "@/components/ui/sonner";
 import { lazy, Suspense } from "react";
-import { Route, Switch } from "wouter";
+import { Route, Switch, useLocation } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { LanguageProvider } from "./contexts/LanguageContext";
 import { useLanguage } from "./contexts/LanguageContext";
+import { isPublicTestimonialsEnabled } from "@shared/publicFeatures";
 import WhatsAppButton from "./components/WhatsAppButton";
 import CookieConsent from "./components/CookieConsent";
 import AnalyticsConsent from "./components/AnalyticsConsent";
@@ -12,6 +13,7 @@ import ConnectionMotionPreference from "./components/ConnectionMotionPreference"
 import { SEOHead } from "./components/SEOHead";
 import SkipToContent from "./components/SkipToContent";
 import PageTransition from "./components/PageTransition";
+import { isPrivateAreaPath } from "./lib/privateAreaRoutes";
 
 export const routeLoadingCopy = {
   fr: { title: "Chargement de votre espace", caption: "Préparation de l’expérience médicale sécurisée…" },
@@ -38,7 +40,8 @@ const CandidateResetPasswordPage = lazy(() => import("./pages/CandidateResetPass
 const CandidatePortalPage = lazy(() => import("./pages/CandidatePortalPage"));
 const RecruitmentUnsubscribePage = lazy(() => import("./pages/RecruitmentUnsubscribePage"));
 const NotFound = lazy(() => import("./pages/NotFound"));
-const AdminDashboard = lazy(() => import("./pages/AdminDashboard"));
+// Seule la racine admin charge Clerk (ClerkProvider + @clerk/react) : PERF-01.
+const AdminDashboard = lazy(() => import("./pages/AdminRoot"));
 const ServiceStatusPage = lazy(() => import("./pages/ServiceStatusPage"));
 const FAQPage = lazy(() => import("./pages/FAQPage"));
 const SearchPage = lazy(() => import("./pages/SearchPage"));
@@ -73,7 +76,8 @@ function Router() {
       <Route path="/venture/:slug" component={VenturePage} />
       <Route path="/legal" component={LegalPage} />
       <Route path="/gdpr" component={GDPRPage} />
-      <Route path="/testimonials" component={TestimonialsPage} />
+      {/* Sans l'interrupteur, /testimonials tombe sur la page 404 (LEGAL-08). */}
+      {isPublicTestimonialsEnabled() && <Route path="/testimonials" component={TestimonialsPage} />}
       <Route path="/booking/confirmation" component={BookingConfirmationPage} />
       <Route path="/booking" component={BookingPage} />
       <Route path="/recruitment" component={RecruitmentHubPage} />
@@ -102,6 +106,13 @@ function Router() {
   );
 }
 
+/** WhatsApp and the cookie-preferences pill stay out of the candidate space and the admin (CAND-21). */
+function FloatingWidgets() {
+  const [location] = useLocation();
+  const privateArea = isPrivateAreaPath(location);
+  return <>{!privateArea && <WhatsAppButton />}<CookieConsent showPreferencesShortcut={!privateArea} /></>;
+}
+
 function App() {
   return (
     <ThemeProvider defaultTheme="dark" switchable>
@@ -110,8 +121,7 @@ function App() {
           <SkipToContent />
           <Toaster />
           <PageTransition><Router /></PageTransition>
-          <WhatsAppButton />
-          <CookieConsent />
+          <FloatingWidgets />
           <AnalyticsConsent />
           <ConnectionMotionPreference />
         </ErrorBoundary>

@@ -28,6 +28,7 @@ export const contentEn = {
   about: {
     title: "About",
     text: "Dr. Ahmed Ben Lallahom is a dedicated anesthesiologist-intensivist with over a decade of high-quality clinical experience in France. A Diplomate of the European Society of Anaesthesiology and Intensive Care (DESAIC), he combines deep medical expertise in preoperative assessment, advanced anesthesia, and postoperative care with a vision for healthcare innovation through his various business ventures.",
+    portraitAlt: "Portrait of Dr Ahmed Ben Lallahom, anaesthesiologist and intensive care physician",
     statsLabels: {
       yearsClinical: "Years Clinical Practice",
       ventures: "Healthcare Ventures",

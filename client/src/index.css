@@ -98,6 +98,59 @@ html.high-readability {
   --border: oklch(0.7 0.02 250);
 }
 
+/*
+ * Thème clair : le cyan de marque (--primary) n'atteint que 3,4 à 4,1:1 en petit texte
+ * (PUB-A11Y-03). Le texte « text-primary » utilise une variante plus foncée (≥ 4,9:1 sur les
+ * fonds clairs du site) ; les fonds bg-primary gardent la teinte de marque et leur texte foncé.
+ */
+:root:not(.dark) {
+  --primary-strong: oklch(0.48 0.14 230);
+}
+
+/*
+ * Pages au visuel toujours sombre (/why-hippocampus) : en thème clair, l'en-tête et le pied de
+ * page qu'elles contiennent reprennent les jetons sombres pour rester lisibles (PUB-UI-02).
+ */
+:root:not(.dark) .theme-dark-island {
+  color-scheme: dark;
+  --background: oklch(0.12 0.02 250);
+  --foreground: oklch(0.95 0.005 250);
+  --card: oklch(0.15 0.025 250);
+  --card-foreground: oklch(0.95 0.005 250);
+  --popover: oklch(0.15 0.025 250);
+  --popover-foreground: oklch(0.95 0.005 250);
+  --primary: oklch(0.75 0.15 220);
+  --primary-foreground: oklch(0.04 0.01 250);
+  --secondary: oklch(0.2 0.02 250);
+  --secondary-foreground: oklch(0.85 0.01 250);
+  --muted: oklch(0.18 0.015 250);
+  --muted-foreground: oklch(0.65 0.02 250);
+  --accent: oklch(0.72 0.1 75);
+  --accent-foreground: oklch(0.12 0.02 250);
+  --border: oklch(0.25 0.02 250);
+  --input: oklch(0.2 0.02 250);
+  --ring: oklch(0.75 0.15 220);
+}
+
+/* Thème clair : le globe sombre des héros recrutement ne voile plus le texte (PUB-UI-03). */
+:root:not(.dark) .hero-globe {
+  opacity: 0.12;
+  filter: saturate(0.7);
+  mix-blend-mode: multiply;
+}
+
+@layer utilities {
+  /* Spécificité d'une seule classe : les variantes hover:/focus: gardent la priorité. */
+  :where(:root:not(.dark)) .text-primary:not(:where(.theme-dark-island *)) {
+    color: var(--primary-strong);
+  }
+}
+
+/* .eyebrow-label est une règle hors couche : sa variante claire doit l'être aussi. */
+:root:not(.dark) .eyebrow-label:not(:where(.theme-dark-island *)) {
+  color: var(--primary-strong);
+}
+
 html.high-readability body {
   letter-spacing: 0.006em;
   line-height: 1.62;

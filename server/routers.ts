@@ -1,4 +1,5 @@
 import { createHash, randomInt, randomUUID } from "node:crypto";
+import { isPublicTestimonialsEnabled } from "../shared/publicFeatures";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, adminProcedure, router } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
@@ -479,6 +480,8 @@ export const appRouter = router({
         })
       )
       .query(async ({ input }) => {
+        // Témoignages masqués du site public (LEGAL-08, shared/publicFeatures.ts).
+        if (!isPublicTestimonialsEnabled()) return [];
         const db = await getDb();
         if (!db) return [];
 

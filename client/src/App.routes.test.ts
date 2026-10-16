@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { renderSitemapXml } from "../../server/routeSeo";
 
 const appSource = readFileSync(resolve(process.cwd(), "client/src/App.tsx"), "utf8");
-const sitemap = readFileSync(resolve(process.cwd(), "client/public/sitemap.xml"), "utf8");
+// Le sitemap est généré au build depuis les routes pré-rendues (SEO-03).
+const sitemap = renderSitemapXml("2026-10-16");
 
 describe("routes publiques Employeurs et recrutement", () => {
   it("expose la page de méthode Hippocampus", () => {

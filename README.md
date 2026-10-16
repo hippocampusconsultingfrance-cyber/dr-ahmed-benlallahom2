@@ -57,11 +57,11 @@ docs/audits/       rapports d'audit
 - L'installation utilise `pnpm install --frozen-lockfile` : toute modification de dépendance doit être commitée avec son `pnpm-lock.yaml`.
 - Les pages publiques sont pré-rendues avec leur `<title>`, description, canonical et balises Open Graph ; les routes privées et inconnues passent par `/_spa-fallback` (noindex).
 - Les tâches planifiées sont des **Vercel Cron** quotidiens (`vercel.json > crons`) qui appellent `GET /api/scheduled/*` avec `Authorization: Bearer $CRON_SECRET`. **`CRON_SECRET` doit être défini** dans les variables d'environnement Vercel, sinon aucune tâche ne s'exécute (rappels, confirmations et factures, purge RGPD, analyse des documents…).
-- Variables requises en production : voir `.env.example` (les marquées `[requis prod]` bloquent le démarrage si absentes).
+- Variables requises en production : voir `.env.example` (les marquées `[requis prod]` bloquent le démarrage du serveur Express ; sur Vercel, elles sont signalées dans les journaux, sur `GET /api/health` et dans `/admin`).
 
 ## Base de données
 
-Ne pas utiliser `pnpm db:push` en production. Modifier `drizzle/schema.ts`, générer la migration, relire le SQL puis l'appliquer explicitement : procédure complète dans `drizzle/MIGRATION_SOURCE_OF_TRUTH.md`.
+Base PostgreSQL (Neon). Les migrations de référence sont dans `drizzle/pg/` (`0000_baseline.sql` recrée tout le schéma sur une base vide) ; `drizzle/legacy-mysql/` n'est qu'un historique MySQL à ne jamais exécuter. Ne jamais utiliser `drizzle-kit push` en production. Modifier `drizzle/schema.ts`, générer la migration (`pnpm db:generate`), relire le SQL puis l'appliquer explicitement : procédure complète dans `drizzle/MIGRATION_SOURCE_OF_TRUTH.md`.
 
 ## Sécurité
 
