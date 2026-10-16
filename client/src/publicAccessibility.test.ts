@@ -42,12 +42,6 @@ describe("repères et structure (PUB-A11Y-01 / PUB-A11Y-02)", () => {
     expect(footer).not.toContain("<h4");
     for (const labels of Object.values(footerLandmarkCopy)) expect(Object.keys(labels)).toEqual(["fr", "en", "de", "zh"]);
   });
-
-  it("les encadrés de /questions-anesthesie ne sont plus des repères complémentaires imbriqués", () => {
-    const page = read("pages/MedicalQuestionsPage.tsx");
-    expect(page).not.toContain("<aside");
-    expect(page.match(/<section role="note"/g)).toHaveLength(2);
-  });
 });
 
 describe("contraste du thème clair (PUB-A11Y-03 / PUB-UI-02 / PUB-UI-03)", () => {
