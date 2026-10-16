@@ -1015,13 +1015,21 @@ function AvailabilityTab() {
   });
 
   const blockDate = trpc.admin.availability.addBlockedDate.useMutation({
-    onSuccess: () => {
+    onSuccess: ({ paidAppointments }) => {
       toast.success("Date bloquée");
+      if (paidAppointments.length > 0) toast.warning(`Rendez-vous payés à traiter ce jour-là : ${paidAppointments.join(", ")}.`);
       utils.admin.availability.listBlockedDates.invalidate();
       setShowBlockForm(false);
       setBlockForm({ date: "", reason: "" });
     },
-    onError: (e: any) => toast.error(e.message),
+    onError: (e, variables) => {
+      // Rendez-vous payés ce jour-là : avertir, puis bloquer seulement après confirmation.
+      if (e.data?.code === "PRECONDITION_FAILED" && !variables.acknowledgePaidAppointments) {
+        if (window.confirm(`${e.message}\n\nBloquer quand même cette date ?`)) blockDate.mutate({ ...variables, acknowledgePaidAppointments: true });
+        return;
+      }
+      toast.error(e.message);
+    },
   });
 
   const unblockDate = trpc.admin.availability.removeBlockedDate.useMutation({
@@ -1101,7 +1109,11 @@ function AvailabilityTab() {
                 size="sm"
                 variant="ghost"
                 className="min-h-10 self-start sm:min-h-0"
-                onClick={() => deleteSlot.mutate({ id: slot.id })}
+                aria-label={`Supprimer le créneau ${dayNames[slot.dayOfWeek]} ${slot.startTime} - ${slot.endTime}`}
+                onClick={() => {
+                  if (!window.confirm(`Supprimer le créneau ${dayNames[slot.dayOfWeek]} ${slot.startTime} - ${slot.endTime} ?`)) return;
+                  deleteSlot.mutate({ id: slot.id });
+                }}
               >
                 <Trash className="w-3 h-3 text-red-400" />
               </Button>
@@ -1136,12 +1148,12 @@ function AvailabilityTab() {
                 />
               </div>
               <div>
-                <label className="text-sm text-muted-foreground block mb-1">Raison (optionnel)</label>
+                <label className="text-sm text-muted-foreground block mb-1">Motif interne (optionnel, jamais affiché sur le site)</label>
                 <input
                   className="w-full px-3 py-2 rounded-lg bg-background border border-border text-foreground"
                   value={blockForm.reason}
                   onChange={(e) => setBlockForm({ ...blockForm, reason: e.target.value })}
-                  placeholder="Congés, formation..."
+                  placeholder="Note pour vous uniquement"
                 />
               </div>
               <Button className="min-h-11 w-full md:w-auto md:min-h-0" onClick={() => blockDate.mutate(blockForm)} disabled={blockDate.isPending || !blockForm.date}>
