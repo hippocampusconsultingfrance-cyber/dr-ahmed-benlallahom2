@@ -48,8 +48,46 @@ function validatePdfSafety(buffer: Buffer): number {
   return pageCount;
 }
 
-/** Relationship types that make Word fetch or run something when the file opens. */
-const DANGEROUS_EXTERNAL_RELATIONSHIP = /Type="[^"]*\/(?:attachedTemplate|oleObject|frame|subDocument|package)"[^>]*TargetMode="External"|TargetMode="External"[^>]*Type="[^"]*\/(?:attachedTemplate|oleObject|frame|subDocument|package)"/i;
+/** External relationships that make Word run an object: always refused. */
+const EXTERNAL_OBJECT_RELATIONSHIP = /\/(?:oleObject|package)$/i;
+/**
+ * External relationships that make Word load another document when the file
+ * opens: refused unless the target is a file on the author's own disk. Word
+ * records the template a CV was created from (`file:///C:/Users/…/x.dotx`,
+ * `file:///Users/…` on a Mac); a server target (http(s), UNC `\\host`,
+ * `file://host`) would be fetched by the recruiter's Word.
+ */
+const EXTERNAL_DOCUMENT_RELATIONSHIP = /\/(?:attachedTemplate|frame|subDocument)$/i;
+/** A `<Relationship …>` element; attribute values may contain `>`. */
+const RELATIONSHIP_ELEMENT = /<(?:[\w.-]+:)?Relationship\b(?:[^>"']|"[^"]*"|'[^']*')*>/gi;
+
+function decodeXmlEntities(value: string) {
+  return value.replace(/&(#x[0-9a-f]+|#[0-9]+|amp|lt|gt|quot|apos);/gi, (_, entity: string) => {
+    const named: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: "\"", apos: "'" };
+    if (entity[0] !== "#") return named[entity.toLowerCase()]!;
+    const code = entity[1]?.toLowerCase() === "x" ? parseInt(entity.slice(2), 16) : parseInt(entity.slice(1), 10);
+    return code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : "";
+  });
+}
+
+function xmlAttribute(element: string, name: string) {
+  const match = new RegExp(`\\s${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)')`).exec(element);
+  return match ? decodeXmlEntities(match[1] ?? match[2] ?? "").trim() : null;
+}
+
+function isLocalFileTarget(target: string) {
+  return /^file:\/\/\/[A-Za-z0-9]/i.test(target) || /^[A-Za-z]:[\\/]/.test(target);
+}
+
+export function hasDangerousExternalRelationship(relationshipsXml: string) {
+  for (const [element] of Array.from(relationshipsXml.matchAll(RELATIONSHIP_ELEMENT))) {
+    if (xmlAttribute(element, "TargetMode")?.toLowerCase() !== "external") continue;
+    const type = xmlAttribute(element, "Type") ?? "";
+    if (EXTERNAL_OBJECT_RELATIONSHIP.test(type)) return true;
+    if (EXTERNAL_DOCUMENT_RELATIONSHIP.test(type) && !isLocalFileTarget(xmlAttribute(element, "Target") ?? "")) return true;
+  }
+  return false;
+}
 
 function validateDocxSafety(buffer: Buffer) {
   const archiveText = buffer.toString("latin1", 0, Math.min(buffer.length, 256 * 1024));
@@ -63,7 +101,7 @@ function validateDocxSafety(buffer: Buffer) {
   if (archive.entryNames.some(name => /(?:vbaProject\.bin|vbaData\.xml|^word\/embeddings\/|^word\/activeX\/)/i.test(name))) {
     throw new Error("cv_validation_docx_active_content");
   }
-  if (archive.relationships.some(relationships => DANGEROUS_EXTERNAL_RELATIONSHIP.test(relationships))) {
+  if (archive.relationships.some(hasDangerousExternalRelationship)) {
     throw new Error("cv_validation_docx_active_content");
   }
   return archive;
