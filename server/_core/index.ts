@@ -822,7 +822,8 @@ export async function createApp() {
     return sendDueAppointmentReminders(trigger.scheduler === "vercel-cron" ? DAILY_REMINDER_WINDOW : HOURLY_REMINDER_WINDOW);
   });
 
-  // Retention review: flags expired recruitment dossiers and notifies the owner.
+  // Retention: erases expired recruitment dossiers and vault documents (a
+  // bounded batch per run, same routine as a GDPR erasure) and reports to the owner.
   registerScheduledJob("/api/scheduled/recruitment-retention", "RecruitmentRetention", async trigger => {
     const { runRecruitmentRetentionCleanup } = await import("../recruitmentRetention");
     return runRecruitmentRetentionCleanup(trigger.scheduler === "vercel-cron" ? "vercel-cron" : `heartbeat:${trigger.taskUid}`);

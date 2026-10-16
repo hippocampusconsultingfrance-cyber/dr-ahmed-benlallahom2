@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { and, eq, gt, inArray, isNull, like, or } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, isNotNull, isNull, like, lt, or } from "drizzle-orm";
 import {
   candidateAccounts,
   candidateDocumentAuditLogs,
@@ -291,4 +291,38 @@ export async function retryPendingGoogleDriveErasures(
     }
   }
   return { processed: pending.length, completed, pending: stillPending };
+}
+
+/**
+ * Retention of vault documents on their own `retention_until` (documents of
+ * an erased dossier are already removed with it). Stored objects first; on a
+ * storage failure nothing is removed from the database.
+ */
+export async function eraseExpiredCandidateDocuments(input: { now?: Date; limit?: number; dependencies?: CandidateErasureDependencies } = {}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+  const dependencies = input.dependencies ?? defaultDependencies;
+  const now = input.now ?? new Date();
+  const documents = await db.select({ id: candidateDocuments.id, candidateId: candidateDocuments.candidateId, storageKey: candidateDocuments.storageKey })
+    .from(candidateDocuments)
+    .where(and(isNotNull(candidateDocuments.retentionUntil), lt(candidateDocuments.retentionUntil, now)))
+    .orderBy(asc(candidateDocuments.retentionUntil), asc(candidateDocuments.id))
+    .limit(Math.min(Math.max(input.limit ?? 25, 1), 100));
+  if (!documents.length) return { deleted: 0, failed: 0 };
+  try {
+    await dependencies.storageDelete(documents.map(document => document.storageKey));
+  } catch (error) {
+    console.error("[RecruitmentRetention] vault document deletion failed", error instanceof Error ? error.message : "unknown");
+    return { deleted: 0, failed: documents.length };
+  }
+  const documentIds = documents.map(document => document.id);
+  await db.delete(candidateDocumentProcessingJobs).where(inArray(candidateDocumentProcessingJobs.documentId, documentIds));
+  await db.delete(candidateDocumentAuditLogs).where(inArray(candidateDocumentAuditLogs.documentId, documentIds));
+  const deleted = mutationRowCount(await db.delete(candidateDocuments).where(inArray(candidateDocuments.id, documentIds)));
+  const perCandidate = new Map<number, number>();
+  for (const document of documents) perCandidate.set(document.candidateId, (perCandidate.get(document.candidateId) ?? 0) + 1);
+  for (const [candidateId, count] of Array.from(perCandidate)) {
+    await db.insert(candidateDocumentAuditLogs).values({ candidateId, documentId: null, actorType: "system", actorReference: "retention", action: "erased", metadata: JSON.stringify({ reason: "retention_expired", documentsDeleted: count, performedAt: now.toISOString() }) });
+  }
+  return { deleted, failed: 0 };
 }
