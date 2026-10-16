@@ -8,6 +8,8 @@ vi.mock("./db", () => ({ getDb: database.getDb }));
 import {
   allocateAppointmentInvoice,
   APPOINTMENT_INVOICE_DDL,
+  APPOINTMENT_INVOICE_SCHEMA_OBJECTS,
+  ensureInvoiceSchema,
   formatInvoiceNumber,
   invoiceSeriesFor,
   resetInvoiceSchemaMemo,
@@ -55,6 +57,43 @@ describe("numérotation séquentielle des factures", () => {
     const config = getTableConfig(appointmentInvoices);
     for (const column of config.columns) expect(statements[0]).toContain(`"${column.name}"`);
     for (const index of config.indexes) expect(statements.join("\n")).toContain(`"${index.config.name}"`);
+  });
+
+  it("n’envoie aucune DDL quand la table et ses index existent (rôle sans droit CREATE ni propriété)", async () => {
+    const executed: string[] = [];
+    const db = {
+      execute: vi.fn(async (query: Parameters<PgDialect["sqlToQuery"]>[0]) => {
+        const text = dialect.sqlToQuery(query).sql;
+        executed.push(text);
+        if (text.startsWith("CREATE")) throw Object.assign(new Error("must be owner of table appointment_invoices"), { code: "42501" });
+        return { rows: APPOINTMENT_INVOICE_SCHEMA_OBJECTS.map(name => ({ name })) };
+      }),
+    };
+    await expect(ensureInvoiceSchema(db as never)).resolves.toBeUndefined();
+    expect(executed).toHaveLength(1);
+    expect(executed[0]).toContain("to_regclass");
+  });
+
+  it("considère une création concurrente par une autre instance comme réussie, et propage les autres erreurs", async () => {
+    const run = async (failure: { code: string }, existsAfter: boolean) => {
+      resetInvoiceSchemaMemo();
+      let created = false;
+      const db = {
+        execute: vi.fn(async (query: Parameters<PgDialect["sqlToQuery"]>[0]) => {
+          const text = dialect.sqlToQuery(query).sql;
+          if (text.startsWith("CREATE TABLE")) {
+            created = existsAfter;
+            throw Object.assign(new Error("Failed query"), { cause: failure });
+          }
+          if (text.startsWith("CREATE")) return { rows: [] };
+          return { rows: created ? [{ name: "appointment_invoices" }] : [] };
+        }),
+      };
+      return ensureInvoiceSchema(db as never);
+    };
+    for (const code of ["42P07", "42710", "23505"]) await expect(run({ code }, true)).resolves.toBeUndefined();
+    await expect(run({ code: "42P07" }, false)).rejects.toThrow("Failed query");
+    await expect(run({ code: "42501" }, true)).rejects.toThrow("Failed query");
   });
 
   it("attribue le numéro une seule fois et le relit ensuite", async () => {

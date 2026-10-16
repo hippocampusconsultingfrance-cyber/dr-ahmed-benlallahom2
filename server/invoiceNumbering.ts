@@ -56,12 +56,61 @@ export const APPOINTMENT_INVOICE_DDL = [
   sql`CREATE UNIQUE INDEX IF NOT EXISTS "appointment_invoices_series_sequence_unique" ON "appointment_invoices" USING btree ("invoice_series","invoice_sequence")`,
 ] as const;
 
+/** Relation créée par chaque instruction de APPOINTMENT_INVOICE_DDL, dans le même ordre. */
+export const APPOINTMENT_INVOICE_SCHEMA_OBJECTS = [
+  "appointment_invoices",
+  "appointment_invoices_appointment_unique",
+  "appointment_invoices_number_unique",
+  "appointment_invoices_series_sequence_unique",
+] as const;
+
+/**
+ * Codes PostgreSQL d’une création concurrente du même objet par une autre
+ * instance : relation déjà existante, objet dupliqué, ou doublon dans le
+ * catalogue (pg_class / pg_type) quand deux CREATE ... IF NOT EXISTS se croisent.
+ */
+const CONCURRENT_CREATION_CODES = new Set(["42P07", "42710", "23505"]);
+
+function postgresErrorCode(error: unknown): string | null {
+  for (let current: unknown = error, depth = 0; current && typeof current === "object" && depth < 4; depth += 1) {
+    const code = (current as { code?: unknown }).code;
+    if (typeof code === "string") return code;
+    current = (current as { cause?: unknown }).cause;
+  }
+  return null;
+}
+
+async function existingInvoiceSchemaObjects(db: Database): Promise<Set<string>> {
+  const names = sql.join(APPOINTMENT_INVOICE_SCHEMA_OBJECTS.map(name => sql`${name}`), sql`, `);
+  const result = await db.execute(sql`SELECT name FROM unnest(ARRAY[${names}]::text[]) AS name WHERE to_regclass(name) IS NOT NULL`);
+  const rows = (result as { rows?: Array<{ name?: unknown }> }).rows ?? [];
+  return new Set(rows.map(row => String(row.name)));
+}
+
 let invoiceSchemaReady: Promise<void> | null = null;
 
-/** Mémoïsé par instance ; un échec est réessayé au prochain appel. */
+/**
+ * Mémoïsé par instance ; un échec est réessayé au prochain appel. Lit d’abord ce
+ * qui existe et n’exécute que la DDL manquante : quand tout existe (cas normal,
+ * ou 0001 appliquée par le propriétaire), aucune DDL n’est envoyée, donc aucun
+ * droit CREATE ni propriété de la table n’est nécessaire au rôle applicatif.
+ * Une création concurrente par une autre instance compte comme une réussite
+ * dès que l’objet existe.
+ */
 export function ensureInvoiceSchema(db: Database): Promise<void> {
   invoiceSchemaReady ??= (async () => {
-    for (const statement of APPOINTMENT_INVOICE_DDL) await db.execute(statement);
+    const existing = await existingInvoiceSchemaObjects(db);
+    for (let index = 0; index < APPOINTMENT_INVOICE_DDL.length; index += 1) {
+      const statement = APPOINTMENT_INVOICE_DDL[index]!;
+      const name = APPOINTMENT_INVOICE_SCHEMA_OBJECTS[index]!;
+      if (existing.has(name)) continue;
+      try {
+        await db.execute(statement);
+      } catch (error) {
+        if (!CONCURRENT_CREATION_CODES.has(postgresErrorCode(error) ?? "")) throw error;
+        if (!(await existingInvoiceSchemaObjects(db)).has(name)) throw error;
+      }
+    }
   })().catch(error => {
     invoiceSchemaReady = null;
     throw error;
