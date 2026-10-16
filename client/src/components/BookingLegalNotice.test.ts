@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { bookingLegalNoticeCopy } from "./BookingLegalNotice";
 import { BOOKING_TERMS_OF_SALE_HREF } from "@shared/bookingPolicy";
+import { footerLandmarkCopy } from "./Footer";
 
 // M6 — LEGAL-23 : liens juridiques au point de collecte et de paiement.
 
@@ -32,6 +33,12 @@ describe("informations légales des pages de réservation", () => {
       expect(copy.privacy).toBeTruthy();
       expect(copy.legal).toBeTruthy();
       expect(copy.termsOfSale).toBeTruthy();
+    }
+  });
+
+  it("porte un nom de repère distinct de la navigation légale du pied de page, affichée sur les mêmes pages", () => {
+    for (const language of ["fr", "en", "de", "zh"] as const) {
+      expect(bookingLegalNoticeCopy[language].label).not.toBe(footerLandmarkCopy.legal[language]);
     }
   });
 });
