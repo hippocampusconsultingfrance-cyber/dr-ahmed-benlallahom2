@@ -89,7 +89,8 @@ describe("premium graphic overhaul contracts", () => {
     expect(routers).toContain("session_id={CHECKOUT_SESSION_ID}");
     expect(routers).toContain("cancelPending: publicProcedure");
     expect(routers).toContain("refund: adminProcedure");
-    expect(routers).toContain("idempotencyKey: `refund_${appointment.trackingId}`");
+    // Remboursement idempotent, désormais dans le module des actions admin sur les rendez-vous.
+    expect(readProjectFile("server/appointmentAdminActions.ts")).toContain("idempotencyKey: `refund_${appointment.trackingId}`");
     expect(adminDashboard).toContain("trpc.admin.appointments.refund.useMutation");
     expect(adminDashboard).toContain("Rembourser");
     const notifications = readProjectFile("server/_core/notifications.ts");

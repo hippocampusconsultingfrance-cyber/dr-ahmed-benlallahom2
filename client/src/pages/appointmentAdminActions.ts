@@ -1,0 +1,35 @@
+/** Which dashboard actions an appointment allows; mirrors server/appointmentAdminActions.ts. */
+export const PATIENT_REFUND_DEADLINE_HOURS = 24;
+
+export type AdminAppointmentRow = {
+  appointmentDate: string | Date;
+  paymentStatus: string;
+  appointmentStatus: string;
+  stripePaymentIntentId?: string | null;
+};
+
+export function getAppointmentAdminActions(appointment: AdminAppointmentRow, now = Date.now()) {
+  const start = new Date(appointment.appointmentDate).getTime();
+  const started = start <= now;
+  const paid = appointment.paymentStatus === "completed" && Boolean(appointment.stripePaymentIntentId);
+  const confirmed = appointment.appointmentStatus === "confirmed";
+  const unconfirmedPayment = appointment.paymentStatus === "pending"
+    && appointment.appointmentStatus !== "held"
+    && Boolean(appointment.stripePaymentIntentId);
+  return {
+    /** « Terminer » / « Absent » only once the consultation has started. */
+    canComplete: confirmed && started,
+    canMarkNoShow: confirmed && started,
+    canReconfirm: appointment.paymentStatus === "completed" && ["completed", "no_show"].includes(appointment.appointmentStatus),
+    /** Patient-requested cancellation: 24 h rule. */
+    canPatientRefund: paid && confirmed && (start - now) / 3_600_000 >= PATIENT_REFUND_DEADLINE_HOURS,
+    /** Practitioner cancellation: always a full refund, reason mandatory. */
+    canPractitionerCancel: paid && confirmed,
+    /** Practitioner refund after the fact (gesture), the status is kept. */
+    canPractitionerRefund: paid && !confirmed,
+    /** Payment received after the hold was released: shown "à régulariser". */
+    unconfirmedPayment,
+    /** An unpaid appointment can be cancelled without any refund. */
+    canCancelUnpaid: confirmed && appointment.paymentStatus !== "completed",
+  };
+}

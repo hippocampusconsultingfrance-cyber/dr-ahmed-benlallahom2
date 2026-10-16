@@ -12,7 +12,6 @@ import { canAdminDownloadCv, CV_DOWNLOAD_UNAVAILABLE_MESSAGE } from "./recruitme
 import { eq, and, or, sql, desc, gte, inArray, isNull, lt, ne } from "drizzle-orm";
 import Stripe from "stripe";
 import {
-  sendRefundConfirmationEmail,
   sendCandidatePortalAccessEmail,
   candidatePortalAccessEmailFailureCode,
   sendRecruitmentCampaignEmail,
@@ -1043,109 +1042,39 @@ export const appRouter = router({
       updateStatus: adminProcedure
         .input(
           z.object({
-            trackingId: z.string(),
+            trackingId: z.string().min(1).max(20),
             appointmentStatus: z.enum(["confirmed", "cancelled", "completed", "no_show"]),
           })
         )
         .mutation(async ({ input }) => {
-          const db = await getDb();
-          if (!db) throw new Error("Database connection failed");
-
-          await db
-            .update(appointments)
-            .set({ appointmentStatus: input.appointmentStatus, slotKey: input.appointmentStatus === "cancelled" ? null : undefined })
-            .where(eq(appointments.trackingId, input.trackingId));
-
-          return { success: true };
+          const { updateAppointmentStatusByAdmin } = await import("./appointmentAdminActions");
+          return updateAppointmentStatusByAdmin(input);
         }),
 
+      /**
+       * Remboursement intégral. « patient » : annulation demandée par le patient,
+       * possible jusqu’à 24 h avant. « practitioner » : annulation (ou geste) du
+       * praticien, toujours possible, motif obligatoire communiqué au patient.
+       */
       refund: adminProcedure
         .input(
           z.object({
-            trackingId: z.string().min(1),
-            reason: z.string().min(1).max(500),
+            trackingId: z.string().min(1).max(20),
+            reason: z.string().trim().min(3, "Indiquez le motif du remboursement.").max(500),
+            initiator: z.enum(["patient", "practitioner"]).default("patient"),
           })
         )
         .mutation(async ({ input }) => {
-          const db = await getDb();
-          if (!db) throw new Error("Database connection failed");
+          const { refundAppointmentPayment } = await import("./appointmentAdminActions");
+          return refundAppointmentPayment(getStripeClient(), input);
+        }),
 
-          const [appointment] = await db
-            .select({
-              trackingId: appointments.trackingId,
-              appointmentDate: appointments.appointmentDate,
-              paymentStatus: appointments.paymentStatus,
-              appointmentStatus: appointments.appointmentStatus,
-              stripePaymentIntentId: appointments.stripePaymentIntentId,
-              finalPrice: appointments.finalPrice,
-              customerEmail: appointments.customerEmail,
-              customerName: appointments.customerName,
-            })
-            .from(appointments)
-            .where(eq(appointments.trackingId, input.trackingId))
-            .limit(1);
-
-          if (!appointment) {
-            throw new TRPCError({ code: "NOT_FOUND", message: "Rendez-vous introuvable" });
-          }
-          if (appointment.paymentStatus === "refunded") {
-            throw new TRPCError({ code: "CONFLICT", message: "Ce rendez-vous a déjà été remboursé" });
-          }
-          if (appointment.paymentStatus !== "completed" || !appointment.stripePaymentIntentId) {
-            throw new TRPCError({ code: "CONFLICT", message: "Le rendez-vous n’est pas éligible au remboursement" });
-          }
-
-          const hoursUntilAppointment = (new Date(appointment.appointmentDate).getTime() - Date.now()) / (60 * 60 * 1000);
-          if (hoursUntilAppointment < 24) {
-            throw new TRPCError({ code: "CONFLICT", message: "Le remboursement intégral est disponible jusqu’à 24 heures avant la consultation" });
-          }
-
-          try {
-            const refund = await getStripeClient().refunds.create(
-              {
-                payment_intent: appointment.stripePaymentIntentId,
-                metadata: {
-                  trackingId: appointment.trackingId,
-                  reason: input.reason,
-                },
-              },
-              { idempotencyKey: `refund_${appointment.trackingId}` }
-            );
-
-            const refundAmount = ((refund.amount ?? Math.round(Number(appointment.finalPrice) * 100)) / 100).toFixed(2);
-            const now = new Date();
-            await db
-              .update(appointments)
-              .set({
-                paymentStatus: "refunded",
-                appointmentStatus: "cancelled",
-                slotKey: null,
-                cancellationReason: input.reason,
-                cancelledAt: now,
-                refundAmount,
-                refundedAt: now,
-              })
-              .where(
-                and(
-                  eq(appointments.trackingId, input.trackingId),
-                  eq(appointments.paymentStatus, "completed")
-                )
-              );
-
-            await sendRefundConfirmationEmail(
-              appointment.customerEmail,
-              appointment.customerName,
-              appointment.trackingId,
-              new Date(appointment.appointmentDate),
-              refundAmount
-            );
-
-            return { success: true, refundId: refund.id, refundAmount } as const;
-          } catch (error) {
-            console.error("Stripe refund error:", error);
-            if (error instanceof TRPCError) throw error;
-            throw new TRPCError({ code: "BAD_REQUEST", message: "Le remboursement Stripe a échoué" });
-          }
+      /** Paiement Stripe reçu mais non rattachable au rendez-vous (session indiquée dans l’alerte). */
+      refundUnconfirmedSession: adminProcedure
+        .input(z.object({ sessionId: z.string().trim().regex(/^cs_[A-Za-z0-9_]{6,250}$/, "Identifiant de session Stripe invalide (cs_…)") }))
+        .mutation(async ({ input }) => {
+          const { refundUnconfirmedCheckoutSession } = await import("./appointmentAdminActions");
+          return refundUnconfirmedCheckoutSession(getStripeClient(), input);
         }),
     }),
 

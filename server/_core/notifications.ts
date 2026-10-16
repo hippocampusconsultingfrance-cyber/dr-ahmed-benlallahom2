@@ -281,13 +281,24 @@ export async function sendCustomerConfirmationSMS(
   return false;
 }
 
+export type RefundEmailContext = "refund" | "practitioner_cancellation" | "unconfirmed_payment";
+
+/**
+ * Refund notice to the patient. "practitioner_cancellation" announces that the
+ * practitioner cancelled the consultation (with the reason given to the
+ * patient); "unconfirmed_payment" explains that a payment could not be attached
+ * to a reserved slot. Returns whether the email was accepted, so the admin can
+ * be told to contact the patient otherwise.
+ */
 export async function sendRefundConfirmationEmail(
   customerEmail: string,
   customerName: string,
   trackingId: string,
   appointmentDate: Date,
-  refundAmount: string
-) {
+  refundAmount: string,
+  details: { context?: RefundEmailContext; reason?: string; idempotencyKey?: string } = {},
+): Promise<boolean> {
+  const context = details.context ?? "refund";
   try {
     const formattedDate = appointmentDate.toLocaleString("fr-FR", {
       timeZone: "Europe/Paris",
@@ -297,34 +308,70 @@ export async function sendRefundConfirmationEmail(
       hour: "2-digit",
       minute: "2-digit",
     });
+    const copy = context === "practitioner_cancellation"
+      ? {
+          subject: `Annulation de votre consultation - ${trackingId}`,
+          title: "Annulation de votre consultation",
+          intro: "Nous sommes au regret de vous informer que votre consultation a dû être annulée par le praticien. Le montant payé vous est intégralement remboursé.",
+          dateLabel: "Consultation annulée",
+        }
+      : context === "unconfirmed_payment"
+        ? {
+            subject: `Remboursement de votre paiement - ${trackingId}`,
+            title: "Remboursement de votre paiement",
+            intro: "Votre paiement a été reçu alors que le créneau n’était plus réservé à votre nom (réservation temporaire expirée ou annulée). Il vous est intégralement remboursé.",
+            dateLabel: "Créneau demandé",
+          }
+        : {
+            subject: `Remboursement confirmé - ${trackingId}`,
+            title: "Confirmation de remboursement",
+            intro: "Le remboursement de votre consultation a été enregistré.",
+            dateLabel: "Consultation initiale",
+          };
+    const reason = details.reason?.trim();
 
     const emailContent = buildHippocampusEmailShell(`
-      <h2 style="color: #0891b2;">Confirmation de remboursement</h2>
+      <h2 style="color: #0891b2;">${copy.title}</h2>
       <p>Bonjour ${escapeHtml(customerName)},</p>
-      <p>Le remboursement de votre consultation a été enregistré.</p>
+      <p>${copy.intro}</p>
       <div style="background: #f8fafc; border-radius: 8px; padding: 16px; margin: 16px 0;">
         <p><strong>Référence :</strong> ${escapeHtml(trackingId)}</p>
-        <p><strong>Consultation initiale :</strong> ${escapeHtml(formattedDate)}</p>
-        <p><strong>Montant remboursé :</strong> ${escapeHtml(refundAmount)}€</p>
+        <p><strong>${copy.dateLabel} :</strong> ${escapeHtml(formattedDate)} (heure de Paris)</p>
+        ${reason ? `<p><strong>Motif :</strong> ${escapeHtml(reason)}</p>` : ""}
+        <p><strong>Montant remboursé :</strong> ${escapeHtml(refundAmount)} €</p>
       </div>
       <p>Le délai d’apparition du remboursement dépend de votre établissement bancaire.</p>
+      ${context === "practitioner_cancellation" ? "<p>Vous pouvez réserver un nouveau créneau à tout moment sur le site. Nous vous prions de nous excuser pour ce contretemps.</p>" : ""}
     `);
+    const text = [
+      copy.title,
+      "",
+      `Bonjour ${customerName},`,
+      "",
+      copy.intro,
+      "",
+      `Référence : ${trackingId}`,
+      `${copy.dateLabel} : ${formattedDate} (heure de Paris)`,
+      ...(reason ? [`Motif : ${reason}`] : []),
+      `Montant remboursé : ${refundAmount} €`,
+      "",
+      "Le délai d’apparition du remboursement dépend de votre établissement bancaire.",
+      ...(context === "practitioner_cancellation" ? ["Vous pouvez réserver un nouveau créneau à tout moment sur le site. Nous vous prions de nous excuser pour ce contretemps."] : []),
+    ].join("\n");
 
-    const { error } = await getResendClient().emails.send({
+    await sendPostPaymentEmail({ rejected: "refund_email_rejected", failed: "refund_email_failed" }, {
       from: FROM_EMAIL,
       to: [customerEmail],
-      subject: `Remboursement confirmé - ${trackingId}`,
+      subject: copy.subject,
       html: emailContent,
-    });
-
-    if (error) {
-      console.error("Refund email was rejected by the delivery provider");
-      return;
-    }
+      text,
+    }, details.idempotencyKey);
 
     console.log("Refund email sent successfully");
+    return true;
   } catch {
     console.error("Refund email delivery failed");
+    return false;
   }
 }
 

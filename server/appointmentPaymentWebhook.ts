@@ -70,7 +70,7 @@ export function buildUnconfirmablePaymentAlert(input: {
     title: `Paiement reçu pour un rendez-vous non confirmable (${input.trackingId})`,
     content: [
       `Un paiement Stripe a été reçu pour le rendez-vous ${input.trackingId}, mais il n’a pas pu être confirmé automatiquement : ${UNCONFIRMABLE_REASON_LABELS[input.reason]}.`,
-      "Remboursement ou reprogrammation manuelle requis : contactez le patient puis traitez le paiement depuis le tableau de bord Stripe.",
+      "Remboursement ou reprogrammation manuelle requis : contactez le patient, puis remboursez ce paiement depuis le tableau de bord du site (onglet Rendez-vous : « Rembourser un paiement non confirmé » avec la session Stripe ci-dessous, ou bouton « Rembourser ce paiement » sur le rendez-vous) ou depuis Stripe.",
       `Référence : ${input.trackingId}`,
       `Montant reçu : ${amount}`,
       `Session Stripe : ${input.sessionId}`,
