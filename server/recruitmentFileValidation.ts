@@ -1,16 +1,23 @@
 import { createHash } from "node:crypto";
+import { assertPdfDecompressionWithinLimits, inspectDocxArchive } from "./documentDecompressionLimits";
 
 const PDF_SIGNATURE = Buffer.from("%PDF-");
 const OLE_SIGNATURE = Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]);
 const ZIP_SIGNATURE = Buffer.from([0x50, 0x4b, 0x03, 0x04]);
 const MAX_PDF_PAGES = 25;
-const SECURITY_SCAN_VERSION = "document-safety-v2";
+const SECURITY_SCAN_VERSION = "document-safety-v3";
 
-const allowedMimeTypes = new Set([
+/**
+ * Formats accepted for new applications. The legacy Word format (.doc) is
+ * refused: its macros cannot be inspected reliably (CAND-22). Files already
+ * stored in that format are still processed (`allowLegacyDoc`), with a VBA
+ * check, so existing dossiers stay readable.
+ */
+export const RECRUITMENT_CV_MIME_TYPES = [
   "application/pdf",
-  "application/msword",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-]);
+] as const;
+const LEGACY_DOC_MIME_TYPE = "application/msword";
 
 function matchesSignature(buffer: Buffer, mimeType: string) {
   if (mimeType === "application/pdf") return buffer.subarray(0, PDF_SIGNATURE.length).equals(PDF_SIGNATURE);
@@ -37,27 +44,54 @@ function validatePdfSafety(buffer: Buffer): number {
   const pageCount = (source.match(/\/Type\s*\/Page\b/g) ?? []).length;
   if (pageCount === 0) throw new Error("cv_validation_pdf_page_structure_invalid");
   if (pageCount > MAX_PDF_PAGES) throw new Error("cv_validation_pdf_page_limit_exceeded");
+  assertPdfDecompressionWithinLimits(buffer);
   return pageCount;
 }
 
+/** Relationship types that make Word fetch or run something when the file opens. */
+const DANGEROUS_EXTERNAL_RELATIONSHIP = /Type="[^"]*\/(?:attachedTemplate|oleObject|frame|subDocument|package)"[^>]*TargetMode="External"|TargetMode="External"[^>]*Type="[^"]*\/(?:attachedTemplate|oleObject|frame|subDocument|package)"/i;
+
 function validateDocxSafety(buffer: Buffer) {
   const archiveText = buffer.toString("latin1", 0, Math.min(buffer.length, 256 * 1024));
-  if (!archiveText.includes("[Content_Types].xml")) throw new Error("cv_validation_docx_container_invalid");
   if (/(?:vbaProject\.bin|TargetMode="External"|word\/embeddings\/)/i.test(archiveText)) {
     throw new Error("cv_validation_docx_active_content");
   }
+  // Inflates every entry with a hard cap (decompression bomb) and inspects
+  // the real entry names and relationships, not only the raw bytes.
+  const archive = inspectDocxArchive(buffer);
+  if (!archive.entryNames.includes("[Content_Types].xml")) throw new Error("cv_validation_docx_container_invalid");
+  if (archive.entryNames.some(name => /(?:vbaProject\.bin|vbaData\.xml|^word\/embeddings\/|^word\/activeX\/)/i.test(name))) {
+    throw new Error("cv_validation_docx_active_content");
+  }
+  if (archive.relationships.some(relationships => DANGEROUS_EXTERNAL_RELATIONSHIP.test(relationships))) {
+    throw new Error("cv_validation_docx_active_content");
+  }
+  return archive;
+}
+
+/**
+ * VBA project streams of an OLE (.doc) file. Directory entry names are
+ * UTF-16LE; `_VBA_PROJECT` and `PROJECTwm` exist in every VBA project, while
+ * a CV merely mentioning "VBA" in its text does not contain them.
+ */
+function legacyDocHasMacros(buffer: Buffer) {
+  return /_VBA_PROJECT|PROJECTwm/.test(buffer.toString("utf16le")) || /_VBA_PROJECT|Attribute VB_Name/.test(buffer.toString("latin1"));
 }
 
 /**
  * Defensive validation. This is not an antivirus engine; it verifies declared
  * type, file signature, size and basic container plausibility before storage.
  */
-export function validateCvFile(input: { buffer: Buffer; mimeType: string; originalName: string; size: number }): CvFileValidation {
+export function validateCvFile(input: { buffer: Buffer; mimeType: string; originalName: string; size: number; allowLegacyDoc?: boolean }): CvFileValidation {
   const extension = input.originalName.toLowerCase().split(".").pop();
   const expectedExtension = input.mimeType === "application/pdf" ? "pdf"
-    : input.mimeType === "application/msword" ? "doc"
+    : input.mimeType === LEGACY_DOC_MIME_TYPE ? "doc"
       : "docx";
-  if (!allowedMimeTypes.has(input.mimeType) || extension !== expectedExtension) {
+  if (input.mimeType === LEGACY_DOC_MIME_TYPE && !input.allowLegacyDoc) {
+    throw new Error("cv_validation_legacy_doc_refused");
+  }
+  const allowed = (RECRUITMENT_CV_MIME_TYPES as readonly string[]).includes(input.mimeType) || (input.allowLegacyDoc && input.mimeType === LEGACY_DOC_MIME_TYPE);
+  if (!allowed || extension !== expectedExtension) {
     throw new Error("cv_validation_type_mismatch");
   }
   if (input.size < 256 || input.buffer.length !== input.size) {
@@ -68,7 +102,8 @@ export function validateCvFile(input: { buffer: Buffer; mimeType: string; origin
   }
   const pageCount = input.mimeType === "application/pdf" ? validatePdfSafety(input.buffer) : null;
   if (input.mimeType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") validateDocxSafety(input.buffer);
-  const warnings = input.mimeType === "application/msword"
+  if (input.mimeType === LEGACY_DOC_MIME_TYPE && legacyDocHasMacros(input.buffer)) throw new Error("cv_validation_doc_active_content");
+  const warnings = input.mimeType === LEGACY_DOC_MIME_TYPE
     ? ["legacy_doc_format_limited_security_inspection"]
     : [];
   return {
@@ -86,4 +121,18 @@ export function validateCvFile(input: { buffer: Buffer; mimeType: string; origin
     securityScanVersion: SECURITY_SCAN_VERSION,
     warnings,
   };
+}
+
+export const RECRUITMENT_CV_FORMAT_MESSAGE = "Format de CV non accepté. Utilisez un PDF ou un DOCX (le format Word ancien .doc n’est plus accepté).";
+
+/** Clear French message for a CV refused by the content checks. */
+export function recruitmentCvValidationMessage(code: string) {
+  if (code === "cv_validation_legacy_doc_refused") return RECRUITMENT_CV_FORMAT_MESSAGE;
+  if (code.endsWith("_decompressed_size_exceeded") || code === "cv_validation_pdf_image_too_large") {
+    return "Le CV est trop volumineux une fois ouvert. Enregistrez-le de nouveau en PDF (par exemple « Fichier > Exporter en PDF ») puis réessayez.";
+  }
+  if (code === "cv_validation_pdf_page_limit_exceeded") return "Le CV ne doit pas dépasser 25 pages.";
+  if (code === "cv_validation_pdf_encrypted" || code === "cv_validation_docx_encrypted") return "Le CV est protégé par un mot de passe. Envoyez une version non protégée.";
+  if (code.endsWith("_active_content")) return "Le CV contient des macros, du contenu actif ou des objets intégrés. Enregistrez-le en PDF puis réessayez.";
+  return "Le contenu du CV ne correspond pas à un document PDF ou DOCX valide.";
 }

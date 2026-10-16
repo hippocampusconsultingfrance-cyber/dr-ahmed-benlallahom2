@@ -78,6 +78,8 @@ export async function executeCvExternalPipeline(
     mimeType: input.cvMimeType,
     originalName: input.cvOriginalName,
     size: input.cvSizeBytes,
+    // .doc is refused at upload; dossiers stored before that stay processable.
+    allowLegacyDoc: true,
   });
   if (input.fileChecksum && input.fileChecksum !== validation.checksum) {
     throw new Error("cv_validation_checksum_mismatch");

@@ -9,7 +9,7 @@ import { candidateAccounts, candidateDocumentAuditLogs, candidateDocuments, cont
 import { notifyOwner } from "./_core/notification";
 import { storageGetSignedUrl } from "./storage";
 import { canAdminDownloadCv, CV_DOWNLOAD_UNAVAILABLE_MESSAGE } from "./recruitmentDownloadPolicy";
-import { eq, and, or, sql, desc, gte, inArray, isNull, lt, ne } from "drizzle-orm";
+import { eq, and, or, sql, desc, getTableColumns, gte, inArray, isNull, lt, ne } from "drizzle-orm";
 import Stripe from "stripe";
 import {
   sendConfirmationEmail,
@@ -1608,7 +1608,10 @@ export const appRouter = router({
         detail: adminProcedure.input(z.object({ id: z.number().int().positive() })).query(async ({ input }) => {
           const db = await getDb();
           if (!db) return null;
-          const [candidate] = await db.select().from(cvApplications).where(eq(cvApplications.id, input.id)).limit(1);
+          // The extracted CV text is never sent to the browser (the UI does not
+          // use it, and a legacy row could hold an oversized text).
+          const { extractedText: _extractedText, ...detailColumns } = getTableColumns(cvApplications);
+          const [candidate] = await db.select(detailColumns).from(cvApplications).where(eq(cvApplications.id, input.id)).limit(1);
           if (!candidate) throw new TRPCError({ code: "NOT_FOUND", message: "Candidature introuvable" });
           const [audits, campaignRecipients, followUps] = await Promise.all([
             db.select().from(recruitmentAuditLogs).where(eq(recruitmentAuditLogs.applicationId, input.id)).orderBy(desc(recruitmentAuditLogs.createdAt)).limit(100),
