@@ -835,8 +835,11 @@ export async function createApp() {
       const { backfillLegacyCvAnalysisJobs, processDueCvAnalysisJobs, recoverStaleCvAnalysisJobs } = await import("../recruitmentProcessing");
       const { backfillCvGoogleDriveExportJobs, processDueCvGoogleDriveExports, recoverStaleCvGoogleDriveExportJobs } = await import("../googleDriveExport");
       const { retryDueFailedCvConfirmationEmails } = await import("../recruitmentEmailTrace");
+      const { retryPendingGoogleDriveErasures } = await import("../recruitmentErasure");
       const analysisRecovery = await recoverStaleCvAnalysisJobs();
       const driveRecovery = await recoverStaleCvGoogleDriveExportJobs();
+      // GDPR: finish the Drive deletions an erasure could not complete.
+      const driveErasures = await retryPendingGoogleDriveErasures(10);
       const analysisBackfill = await backfillLegacyCvAnalysisJobs(5);
       const driveBackfill = await backfillCvGoogleDriveExportJobs(25);
       const analysis = await processDueCvAnalysisJobs(5);
@@ -851,7 +854,7 @@ export async function createApp() {
         driveExportsProcessed: driveExports.processed,
         confirmationEmailsProcessed: confirmationEmails.processed,
       });
-      return res.json({ ok: true, scheduler: "vercel-cron", analysisRecovery, driveRecovery, analysisBackfill, driveBackfill, analysis, driveExports, confirmationEmails });
+      return res.json({ ok: true, scheduler: "vercel-cron", analysisRecovery, driveRecovery, driveErasures, analysisBackfill, driveBackfill, analysis, driveExports, confirmationEmails });
     } catch (error: any) {
       console.error("[RecruitmentProcessing] Vercel cron error:", safeErrorName(error));
       return res.status(500).json({ error: error.message, timestamp: new Date().toISOString() });

@@ -105,6 +105,20 @@ function analysisStatusTone(status: string | null | undefined) {
   return "border-primary/25 bg-primary/10 text-primary";
 }
 
+const ERASURE_CONFIRMATION = "Effacer définitivement ce dossier ? Seront supprimés : le CV et ses copies (stockage et Google Drive), les analyses IA, les relances et historiques d’emails, la présence dans les missions, ainsi que l’espace candidat lié, ses sessions et ses documents. Seule une preuve d’effacement anonymisée est conservée. Action irréversible.";
+
+function describeErasureReport(report: { storageObjectsDeleted: number; googleDrive: { status: string; deleted: number }; candidateAccountsErased: number; candidateDocumentsDeleted: number; rowsDeleted: Record<string, number>; otherApplicationsWithSameEmail: number }) {
+  const derivedRows = Object.entries(report.rowsDeleted).filter(([table]) => table !== "cv_applications").reduce((total, [, count]) => total + count, 0);
+  const parts = [
+    `${report.storageObjectsDeleted} fichier(s) stocké(s) supprimé(s)`,
+    report.googleDrive.status === "pending_retry" ? "copie Google Drive en attente de suppression" : `${report.googleDrive.deleted} copie(s) Google Drive supprimée(s)`,
+    `${derivedRows} donnée(s) liée(s) supprimée(s)`,
+    report.candidateAccountsErased ? `espace candidat supprimé (${report.candidateDocumentsDeleted} document(s))` : "aucun espace candidat lié",
+  ];
+  if (report.otherApplicationsWithSameEmail > 0) parts.push(`${report.otherApplicationsWithSameEmail} autre(s) candidature(s) avec le même email à traiter séparément`);
+  return parts.join(" · ");
+}
+
 export default function RecruitmentTab() {
   const [statusFilter, setStatusFilter] = useState<Status | "">("");
   const [countryFilter, setCountryFilter] = useState("");
@@ -238,7 +252,12 @@ export default function RecruitmentTab() {
 
   const eraseApplication = trpc.admin.recruitment.erase.useMutation({
     onSuccess: result => {
-      toast.success(result.physicalDeletionAvailable ? "Dossier candidat et objet privé effacés" : "Dossier effacé et accès au document révoqué ; preuve RGPD ajoutée au journal");
+      const summary = describeErasureReport(result);
+      if (result.googleDrive.status === "pending_retry") {
+        toast.warning("Dossier effacé ; la copie Google Drive sera supprimée automatiquement dès que Drive répondra (reconnexion peut-être nécessaire).", { description: summary, duration: 15_000 });
+      } else {
+        toast.success("Dossier effacé définitivement ; preuve RGPD anonymisée ajoutée au journal.", { description: summary, duration: 15_000 });
+      }
       setExpandedId(null);
       utils.admin.recruitment.list.invalidate();
     },
@@ -487,7 +506,7 @@ export default function RecruitmentTab() {
                           <Button size="sm" variant="outline" onClick={() => openEmailComposer(application.id, `${application.firstName} ${application.lastName}`, "additional_information")} disabled={sendTemplateEmail.isPending || eraseApplication.isPending || reanalyze.isPending}>
                             <Mail className="mr-2 h-4 w-4" /> Demander un complément
                           </Button>
-                          <Button size="sm" variant="outline" className="text-destructive hover:text-destructive" onClick={() => { if (window.confirm("Confirmer l’effacement manuel RGPD du dossier, de ses résultats IA et la révocation immédiate de l’accès au document ? Une preuve d’audit sera conservée.")) eraseApplication.mutate({ id: application.id }); }} disabled={eraseApplication.isPending || reanalyze.isPending}>
+                          <Button size="sm" variant="outline" className="text-destructive hover:text-destructive" onClick={() => { if (window.confirm(ERASURE_CONFIRMATION)) eraseApplication.mutate({ id: application.id }); }} disabled={eraseApplication.isPending || reanalyze.isPending}>
                             {eraseApplication.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
                             Effacer RGPD + preuve
                           </Button>

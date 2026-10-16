@@ -77,6 +77,7 @@ function wrongCode(code: string) {
 
 describe("double authentification administrateur", () => {
   beforeEach(() => {
+    process.env.CANDIDATE_AUTH_PEPPER ||= "test-pepper-for-admin-mfa-tests-0123456789";
     memory = createMemoryPg([adminMfaChallenges, adminMfaSessions]);
     state.memory = memory;
     state.sentCodes = [];

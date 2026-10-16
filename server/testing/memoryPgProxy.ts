@@ -82,6 +82,7 @@ type Expr =
   | { type: "binary"; op: string; left: Expr; right: Expr }
   | { type: "isNull"; expr: Expr; negated: boolean }
   | { type: "in"; expr: Expr; list: Expr[]; negated: boolean }
+  | { type: "like"; expr: Expr; pattern: Expr; negated: boolean; caseInsensitive: boolean }
   | { type: "and" | "or"; items: Expr[] }
   | { type: "not"; expr: Expr }
   | { type: "now" }
@@ -157,6 +158,10 @@ class Parser {
         this.expectPunct(")");
       }
       return { type: "in", expr: left, list, negated };
+    }
+    if (this.isWord("like") || this.isWord("ilike")) {
+      const caseInsensitive = this.next().text === "ilike";
+      return { type: "like", expr: left, pattern: this.additive(), negated, caseInsensitive };
     }
     if (negated) throw new Error(`memoryPgProxy: unsupported NOT predicate in ${this.sqlText}`);
     const token = this.peek();
@@ -245,6 +250,14 @@ function evaluate(expr: Expr, row: Row, params: unknown[], now: string): Value {
       if (value === null) return null;
       const found = expr.list.some(item => compare(value, evaluate(item, row, params, now)) === 0);
       return expr.negated ? !found : found;
+    }
+    case "like": {
+      const value = evaluate(expr.expr, row, params, now);
+      const pattern = evaluate(expr.pattern, row, params, now);
+      if (value === null || pattern === null) return null;
+      const source = String(pattern).replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/%/g, ".*").replace(/_/g, ".");
+      const matched = new RegExp(`^${source}$`, expr.caseInsensitive ? "is" : "s").test(String(value));
+      return expr.negated ? !matched : matched;
     }
     case "and": return expr.items.every(item => evaluate(item, row, params, now) === true);
     case "or": return expr.items.some(item => evaluate(item, row, params, now) === true);
@@ -522,6 +535,8 @@ export function createMemoryPg(tables: PgTable[], options: { now?: () => Date } 
       const name = getTableConfig(table).name;
       const { columns, defaults, serial } = tableMeta(name);
       return rows.map(input => {
+        const unknown = Object.keys(input).filter(column => !columns.includes(column));
+        if (unknown.length) throw new Error(`memoryPgProxy: unknown column(s) ${unknown.join(", ")} for ${name}`);
         const row: Row = Object.fromEntries(columns.map(column => [column, null]));
         for (const column of columns) {
           if (column in input) row[column] = normalize(input[column]);

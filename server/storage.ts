@@ -1,4 +1,4 @@
-import { issueSignedToken, presignUrl, put } from "@vercel/blob";
+import { del, issueSignedToken, list, presignUrl, put } from "@vercel/blob";
 
 const PRIVATE_BLOB_ACCESS = "private" as const;
 const SIGNED_URL_LIFETIME_MS = 5 * 60 * 1000;
@@ -91,4 +91,32 @@ export async function storageGetSignedUrl(relKey: string): Promise<string> {
     validUntil,
   });
   return presignedUrl;
+}
+
+/**
+ * Permanently deletes private objects (GDPR erasure, retention). Vercel Blob
+ * ignores pathnames that no longer exist, so a retried erasure is idempotent.
+ */
+export async function storageDelete(relKeys: string[]): Promise<number> {
+  const keys = Array.from(new Set(relKeys.map(normalizeKey).filter(key => key.length > 0)));
+  const token = getBlobToken();
+  for (let index = 0; index < keys.length; index += 100) {
+    await del(keys.slice(index, index + 100), { token });
+  }
+  return keys.length;
+}
+
+/** Lists object pathnames under a prefix (for copies of one dossier). */
+export async function storageListKeys(prefix: string, maxKeys = 500): Promise<string[]> {
+  const normalized = normalizeKey(prefix);
+  if (!normalized.includes("/")) throw new Error("storage_list_prefix_too_broad");
+  const token = getBlobToken();
+  const keys: string[] = [];
+  let cursor: string | undefined;
+  do {
+    const page = await list({ prefix: normalized, cursor, limit: Math.min(1000, maxKeys - keys.length), token });
+    keys.push(...page.blobs.map(blob => blob.pathname));
+    cursor = page.hasMore ? page.cursor : undefined;
+  } while (cursor && keys.length < maxKeys);
+  return keys;
 }

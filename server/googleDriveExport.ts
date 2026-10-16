@@ -246,6 +246,64 @@ async function findCvInGoogleDrive(input: { accessToken: string; folderId: strin
   return file?.id ? { id: file.id, webViewLink: file.webViewLink ?? null } : null;
 }
 
+async function deleteGoogleDriveFile(accessToken: string, fileId: string): Promise<"deleted" | "missing"> {
+  const response = await fetch(`${GOOGLE_FILES_URL}/${encodeURIComponent(fileId)}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (response.status === 404) return "missing";
+  if (!response.ok) {
+    const result = await response.json().catch(() => ({})) as { error?: { message?: string } };
+    throw new Error(`google_drive_delete_${response.status}${result.error?.message ? `_${result.error.message.slice(0, 120)}` : ""}`);
+  }
+  return "deleted";
+}
+
+export type GoogleDriveCopyDeletion = {
+  status: "deleted" | "none" | "failed" | "not_connected";
+  deleted: number;
+  error: string | null;
+};
+
+/**
+ * Permanently deletes the Google Drive copies of one CV (GDPR erasure,
+ * retention): the file recorded by the export job, then any other file of the
+ * export folder tagged with the dossier tracking id. A missing file counts as
+ * already deleted. Failures are returned, never thrown, so the caller can
+ * record the deletion for a later retry.
+ */
+export async function deleteCvCopiesFromGoogleDrive(input: { trackingId: string; knownFileIds: string[] }): Promise<GoogleDriveCopyDeletion> {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+  const knownFileIds = Array.from(new Set(input.knownFileIds.filter(id => id.trim().length > 0)));
+  const connection = (await db.select().from(googleDriveConnections).where(eq(googleDriveConnections.connectionKey, CONNECTION_KEY)).limit(1))[0];
+  if (!connection) {
+    return knownFileIds.length > 0
+      ? { status: "not_connected", deleted: 0, error: "google_drive_not_connected" }
+      : { status: "none", deleted: 0, error: null };
+  }
+  let deleted = 0;
+  try {
+    const accessToken = await getGoogleDriveAccessToken(connection);
+    for (const fileId of knownFileIds) {
+      if (await deleteGoogleDriveFile(accessToken, fileId) === "deleted") deleted += 1;
+    }
+    // Copies the job does not reference (e.g. an upload that finished after a
+    // lost claim) are found through the tracking id stored on the file.
+    for (let lookup = 0; lookup < 10; lookup += 1) {
+      const orphan = await findCvInGoogleDrive({ accessToken, folderId: connection.folderId, trackingId: input.trackingId });
+      if (!orphan) break;
+      if (await deleteGoogleDriveFile(accessToken, orphan.id) === "missing") break;
+      deleted += 1;
+    }
+    return { status: deleted > 0 ? "deleted" : "none", deleted, error: null };
+  } catch (error) {
+    const message = error instanceof Error ? error.message.slice(0, 500) : "google_drive_delete_unknown";
+    await db.update(googleDriveConnections).set({ lastError: message }).where(eq(googleDriveConnections.id, connection.id)).catch(() => undefined);
+    return { status: "failed", deleted, error: message };
+  }
+}
+
 export async function saveGoogleDriveConnection(input: { authorizedByOpenId: string; refreshToken: string; grantedScopes?: string }) {
   const db = await getDb();
   if (!db) throw new Error("Database connection failed");

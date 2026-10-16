@@ -1879,32 +1879,16 @@ export const appRouter = router({
       erase: adminProcedure
         .input(z.object({ id: z.number() }))
         .mutation(async ({ input, ctx }) => {
-          const db = await getDb();
-          if (!db) throw new Error("Database connection failed");
-          const [application] = await db
-            .select({ id: cvApplications.id, trackingId: cvApplications.trackingId, cvFileKey: cvApplications.cvFileKey })
-            .from(cvApplications)
-            .where(eq(cvApplications.id, input.id))
-            .limit(1);
-          if (!application) throw new TRPCError({ code: "NOT_FOUND", message: "Candidature introuvable" });
-          const storageKeyFingerprint = createHash("sha256").update(application.cvFileKey).digest("hex");
-          // The managed storage contract intentionally exposes no delete-object API.
-          // Revoking the only application reference removes all app access without
-          // scheduling any automatic CV deletion. The audit proof retains no raw key.
-          await logRecruitmentAction({
-            applicationId: input.id,
-            adminOpenId: ctx.user.openId,
-            action: "erase",
-            metadata: {
-              trackingId: application.trackingId,
-              storageKeyFingerprint,
-              storageDisposition: "dereferenced_managed_storage_no_delete_api",
-              erasureMode: "manual_rgpd",
-              performedAt: new Date().toISOString(),
-            },
-          });
-          await db.delete(cvApplications).where(eq(cvApplications.id, input.id));
-          return { success: true, storageDisposition: "dereferenced", physicalDeletionAvailable: false };
+          const { eraseCandidateApplication, CandidateErasureBusyError, CandidateErasureNotFoundError, CandidateErasureStorageError } = await import("./recruitmentErasure");
+          try {
+            const report = await eraseCandidateApplication({ applicationId: input.id, actorOpenId: ctx.user.openId, reason: "admin_gdpr_request" });
+            return { success: true as const, ...report };
+          } catch (error) {
+            if (error instanceof CandidateErasureNotFoundError) throw new TRPCError({ code: "NOT_FOUND", message: "Candidature introuvable" });
+            if (error instanceof CandidateErasureBusyError) throw new TRPCError({ code: "CONFLICT", message: "Une analyse ou une copie Google Drive de ce dossier est en cours. Réessayez l’effacement dans quelques minutes." });
+            if (error instanceof CandidateErasureStorageError) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Les fichiers stockés n’ont pas pu être supprimés : aucune donnée n’a été effacée en base. Réessayez dans quelques instants." });
+            throw error;
+          }
         }),
     }),
 
