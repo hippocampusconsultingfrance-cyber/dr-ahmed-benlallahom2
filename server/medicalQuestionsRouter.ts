@@ -9,7 +9,10 @@ import { enforcePersistentRateLimit, hashSecurityValue, logSecurityEvent, reques
 import { verifyCandidateTurnstile } from "./candidateTurnstile";
 import { isAdminMfaVerified } from "./adminMfa";
 import { improveMedicalAnswerDraft } from "./medicalQuestionAssistant";
-import { sendMedicalQuestionResponseEmail } from "./_core/notifications";
+import { notifyOwner } from "./_core/notification";
+import { buildMedicalQuestionOwnerNotification, sendMedicalQuestionAcknowledgementEmail, sendMedicalQuestionResponseEmail } from "./medicalQuestionEmails";
+
+const PUBLIC_APP_ORIGIN = process.env.PUBLIC_APP_ORIGIN || "https://drahmedbenlallahom.com";
 
 const privateQuestionInput = z.object({
   firstName: z.string().trim().min(1).max(120),
@@ -19,7 +22,8 @@ const privateQuestionInput = z.object({
   question: z.string().trim().min(30).max(3000),
   language: z.enum(["fr", "en", "de", "zh"]).default("fr"),
   privacyConsent: z.literal(true),
-  publicationConsent: z.literal(true),
+  // Separate and optional: answering never depends on accepting publication.
+  publicationConsent: z.boolean().default(false),
   urgencyAcknowledged: z.literal(true),
   turnstileToken: z.string().min(20).max(4096),
   website: z.string().max(200).optional().default(""),
@@ -79,7 +83,7 @@ export const medicalQuestionsRouter = router({
         });
         await verifyCandidateTurnstile({ token: input.turnstileToken, remoteIp: ctx.req.ip });
       } catch {
-        await logSecurityEvent({ actorKind: "anonymous", actorReference: input.email, category: "public_medical_question_protection", outcome: "blocked", severity: "warning", ipHash });
+        await logSecurityEvent({ actorKind: "anonymous", actorReference: hashSecurityValue(input.email), category: "public_medical_question_protection", outcome: "blocked", severity: "warning", ipHash });
         throw new TRPCError({ code: "BAD_REQUEST", message: "La vérification de sécurité doit être renouvelée avant l’envoi." });
       }
     }
@@ -99,8 +103,15 @@ export const medicalQuestionsRouter = router({
     }).returning({ id: medicalQuestions.id });
     const questionId = Number(result[0].id);
     await auditQuestion({ questionId, action: "submitted", metadata: { publicationConsent: input.publicationConsent, language: input.language } });
-    await logSecurityEvent({ actorKind: "anonymous", actorReference: input.email, category: "public_medical_question_submitted", outcome: "allowed", severity: "info", ipHash });
-    return { trackingId };
+    await logSecurityEvent({ actorKind: "anonymous", actorReference: hashSecurityValue(input.email), category: "public_medical_question_submitted", outcome: "allowed", severity: "info", ipHash });
+    // PUB-FORM-01: the owner is told (no health content), the person gets an
+    // acknowledgement with the reference. Neither failure loses the question.
+    const [ownerNotified, acknowledged] = await Promise.all([
+      notifyOwner(buildMedicalQuestionOwnerNotification({ trackingId, language: input.language, publicationConsent: input.publicationConsent, adminUrl: `${PUBLIC_APP_ORIGIN}/admin` })).catch(() => false),
+      sendMedicalQuestionAcknowledgementEmail({ email: input.email, firstName: input.firstName, trackingId, language: input.language }).then(() => true, () => false),
+    ]);
+    await auditQuestion({ questionId, action: acknowledged ? "acknowledgement_sent" : "acknowledgement_failed", metadata: { ownerNotified } }).catch(() => undefined);
+    return { trackingId, acknowledgementSent: acknowledged };
   }),
 
   published: publicProcedure.input(publicQuestionInput).query(async ({ input }) => {
@@ -150,22 +161,50 @@ export const medicalQuestionsRouter = router({
         throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "La proposition de reformulation est temporairement indisponible." });
       }
     }),
-    sendValidatedResponse: adminProcedure.input(draftInput.extend({ publish: z.boolean().default(false) })).mutation(async ({ input, ctx }) => {
+    sendValidatedResponse: adminProcedure.input(draftInput.extend({ publish: z.boolean().default(false), resend: z.boolean().default(false) })).mutation(async ({ input, ctx }) => {
       await requireMfa(ctx);
       const db = await requireDb();
       const [question] = await db.select().from(medicalQuestions).where(eq(medicalQuestions.id, input.id)).limit(1);
       if (!question) throw new TRPCError({ code: "NOT_FOUND", message: "Question introuvable." });
-      if (input.publish && question.publicationConsent !== 1) throw new TRPCError({ code: "BAD_REQUEST", message: "La publication exige l’accord explicite de la personne." });
-      if (input.publish && (!input.publicQuestion || !input.publicResponse)) throw new TRPCError({ code: "BAD_REQUEST", message: "Une question et une réponse anonymisées sont requises pour publier." });
+      if (question.responseSentAt && !input.resend) {
+        throw new TRPCError({ code: "CONFLICT", message: `La réponse a déjà été envoyée le ${question.responseSentAt.toLocaleString("fr-FR", { timeZone: "Europe/Paris" })}. Utilisez « Renvoyer la réponse » pour un nouvel envoi volontaire, ou « Mettre à jour la publication ».` });
+      }
+      if (input.resend && !question.responseSentAt) throw new TRPCError({ code: "BAD_REQUEST", message: "Aucune réponse n’a encore été envoyée pour cette question." });
+      if (!input.resend && input.publish && question.publicationConsent !== 1) throw new TRPCError({ code: "BAD_REQUEST", message: "La publication exige l’accord explicite de la personne." });
+      if (!input.resend && input.publish && (!input.publicQuestion || !input.publicResponse)) throw new TRPCError({ code: "BAD_REQUEST", message: "Une question et une réponse anonymisées sont requises pour publier." });
+      // Same key for a double click (Resend keeps the first email); a
+      // deliberate resend is keyed on the previous sending time.
+      const idempotencyKey = question.responseSentAt
+        ? `medical-question-response/${question.id}/after-${question.responseSentAt.getTime()}`
+        : `medical-question-response/${question.id}/first`;
       try {
-        await sendMedicalQuestionResponseEmail({ email: question.email, firstName: question.firstName, trackingId: question.trackingId, response: input.adminResponse });
+        await sendMedicalQuestionResponseEmail({ email: question.email, firstName: question.firstName, trackingId: question.trackingId, response: input.adminResponse }, { idempotencyKey });
       } catch {
         throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "L’email n’a pas pu être envoyé. La réponse n’a pas été publiée." });
+      }
+      if (input.resend) {
+        const resentAt = new Date();
+        await db.update(medicalQuestions).set({ adminResponse: input.adminResponse, respondedByOpenId: ctx.user.openId, responseSentAt: resentAt }).where(eq(medicalQuestions.id, input.id));
+        await auditQuestion({ questionId: input.id, actorOpenId: ctx.user.openId, action: "response_resent" });
+        return { success: true, published: question.status === "published", resent: true };
       }
       const now = new Date();
       await db.update(medicalQuestions).set({ adminResponse: input.adminResponse, publicQuestion: input.publish ? input.publicQuestion : null, publicResponse: input.publish ? input.publicResponse : null, status: input.publish ? "published" : "answered", respondedByOpenId: ctx.user.openId, responseSentAt: now, publishedAt: input.publish ? now : null }).where(eq(medicalQuestions.id, input.id));
       await auditQuestion({ questionId: input.id, actorOpenId: ctx.user.openId, action: input.publish ? "response_sent_and_published" : "response_sent", metadata: { published: input.publish } });
-      return { success: true, published: input.publish };
+      return { success: true, published: input.publish, resent: false };
+    }),
+    /** Publishes or updates the anonymised version of an answered question, without emailing anyone. */
+    updatePublication: adminProcedure.input(z.object({ id: z.number().int().positive(), publicQuestion: z.string().trim().min(1).max(1000), publicResponse: z.string().trim().min(1).max(5000) })).mutation(async ({ input, ctx }) => {
+      await requireMfa(ctx);
+      const db = await requireDb();
+      const [question] = await db.select().from(medicalQuestions).where(eq(medicalQuestions.id, input.id)).limit(1);
+      if (!question) throw new TRPCError({ code: "NOT_FOUND", message: "Question introuvable." });
+      if (!question.responseSentAt) throw new TRPCError({ code: "BAD_REQUEST", message: "Envoyez d’abord la réponse privée avant de publier." });
+      if (question.publicationConsent !== 1) throw new TRPCError({ code: "BAD_REQUEST", message: "La publication exige l’accord explicite de la personne." });
+      const now = new Date();
+      await db.update(medicalQuestions).set({ publicQuestion: input.publicQuestion, publicResponse: input.publicResponse, status: "published", publishedAt: question.publishedAt ?? now }).where(eq(medicalQuestions.id, input.id));
+      await auditQuestion({ questionId: input.id, actorOpenId: ctx.user.openId, action: question.status === "published" ? "publication_updated" : "published" });
+      return { success: true };
     }),
     unpublish: adminProcedure.input(questionIdInput).mutation(async ({ input, ctx }) => {
       await requireMfa(ctx);

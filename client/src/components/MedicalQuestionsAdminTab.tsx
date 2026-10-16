@@ -37,7 +37,15 @@ export default function MedicalQuestionsAdminTab() {
     onSuccess: result => {
       void utils.medicalQuestions.admin.get.invalidate();
       void utils.medicalQuestions.admin.list.invalidate();
-      toast.success(result.published ? "Réponse envoyée et version anonymisée publiée." : "Réponse envoyée par email.");
+      toast.success(result.resent ? "Réponse renvoyée par email." : result.published ? "Réponse envoyée et version anonymisée publiée." : "Réponse envoyée par email.");
+    },
+    onError: mutationError => toast.error(mutationError.message),
+  });
+  const updatePublication = trpc.medicalQuestions.admin.updatePublication.useMutation({
+    onSuccess: () => {
+      void utils.medicalQuestions.admin.get.invalidate();
+      void utils.medicalQuestions.admin.list.invalidate();
+      toast.success("Publication mise à jour, sans nouvel email au patient.");
     },
     onError: mutationError => toast.error(mutationError.message),
   });
@@ -63,7 +71,9 @@ export default function MedicalQuestionsAdminTab() {
   const responseReady = responseLength >= MIN_PRIVATE_RESPONSE_LENGTH;
   const remainingCharacters = Math.max(0, MIN_PRIVATE_RESPONSE_LENGTH - responseLength);
   const missingPublicContent = publish && (!publicQuestion.trim() || !publicResponse.trim());
-  const sendDisabled = !responseReady || sendValidated.isPending || missingPublicContent;
+  // ADM-MQ-01: once the answer is sent, the main button cannot email again.
+  const alreadySent = Boolean(selected.data?.responseSentAt);
+  const sendDisabled = alreadySent || !responseReady || sendValidated.isPending || missingPublicContent;
   const draftDisabled = !responseReady || saveDraft.isPending;
 
   const validationHint = !responseReady
@@ -89,6 +99,21 @@ export default function MedicalQuestionsAdminTab() {
       publicResponse,
       publish,
     });
+  }
+
+  function handleResend() {
+    if (!selected.data || !responseReady) return;
+    if (!window.confirm("Renvoyer la réponse par email au patient ? Un nouvel email sera envoyé ; la publication n’est pas modifiée.")) return;
+    sendValidated.mutate({ id: selected.data.id, adminResponse, publicQuestion, publicResponse, publish: false, resend: true });
+  }
+
+  function handlePublicationUpdate() {
+    if (!selected.data) return;
+    if (!publicQuestion.trim() || !publicResponse.trim()) {
+      toast.error("La question et la réponse anonymisées sont obligatoires pour publier.");
+      return;
+    }
+    updatePublication.mutate({ id: selected.data.id, publicQuestion, publicResponse });
   }
 
   if (isLoading) return <PublicContentSkeleton cards={3} label="Chargement des questions médicales" />;
@@ -150,6 +175,11 @@ export default function MedicalQuestionsAdminTab() {
             <div className="mt-6 rounded-2xl border border-border bg-background/70 p-5">
               <p className="whitespace-pre-line leading-7 text-foreground">{selected.data.question}</p>
             </div>
+            {selected.data.responseSentAt && (
+              <p className="mt-4 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-200" role="status">
+                Réponse envoyée le {new Date(selected.data.responseSentAt).toLocaleString("fr-FR", { timeZone: "Europe/Paris" })}. Un nouvel envoi n’est possible que par « Renvoyer la réponse par email ».
+              </p>
+            )}
 
             <div className="mt-6 space-y-3">
               <label className="block text-sm font-medium" htmlFor="medical-question-private-response">
@@ -188,7 +218,7 @@ export default function MedicalQuestionsAdminTab() {
               </label>
               <label className="flex items-start gap-3 text-sm">
                 <input type="checkbox" checked={publish} disabled={selected.data.publicationConsent !== 1} onChange={event => setPublish(event.target.checked)} className="form-consent-checkbox mt-1" />
-                <span>Publier la version anonymisée après envoi {selected.data.publicationConsent === 1 ? "(accord de publication reçu)" : "(indisponible : aucun accord de publication)"}</span>
+                <span>{alreadySent ? "Version anonymisée publiée" : "Publier la version anonymisée après envoi"} {selected.data.publicationConsent === 1 ? "(accord de publication reçu)" : "(indisponible : aucun accord de publication)"}</span>
               </label>
               <div className="flex flex-wrap gap-3 pt-1">
                 <button
@@ -207,8 +237,28 @@ export default function MedicalQuestionsAdminTab() {
                   className="cta-primary inline-flex items-center gap-2 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   <Send className="h-4 w-4" />
-                  {sendValidated.isPending ? "Envoi…" : publish ? "Valider, envoyer et publier" : "Valider et envoyer"}
+                  {alreadySent ? "Réponse déjà envoyée" : sendValidated.isPending ? "Envoi…" : publish ? "Valider, envoyer et publier" : "Valider et envoyer"}
                 </button>
+                {alreadySent && selected.data.publicationConsent === 1 && (
+                  <button
+                    type="button"
+                    onClick={handlePublicationUpdate}
+                    disabled={updatePublication.isPending}
+                    className="inline-flex items-center gap-2 rounded-lg border border-primary/40 px-4 py-2 text-sm font-medium text-primary transition-colors hover:bg-primary/10 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    {updatePublication.isPending ? "Mise à jour…" : selected.data.status === "published" ? "Mettre à jour la publication" : "Publier la version anonymisée"}
+                  </button>
+                )}
+                {alreadySent && (
+                  <button
+                    type="button"
+                    onClick={handleResend}
+                    disabled={!responseReady || sendValidated.isPending}
+                    className="inline-flex items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-muted disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    {sendValidated.isPending ? "Envoi…" : "Renvoyer la réponse par email"}
+                  </button>
+                )}
                 {selected.data.status === "published" && (
                   <button
                     type="button"

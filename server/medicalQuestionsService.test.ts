@@ -1,0 +1,110 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { medicalQuestionAuditLogs, medicalQuestions, securityEvents } from "../drizzle/schema";
+import { createMemoryPg, type MemoryPg } from "./testing/memoryPgProxy";
+import type { TrpcContext } from "./_core/context";
+
+const state = vi.hoisted(() => ({
+  memory: null as null | { db: unknown },
+  ownerNotifications: [] as Array<{ title: string; content: string }>,
+  acknowledgements: [] as Array<Record<string, unknown>>,
+  responses: [] as Array<{ input: Record<string, unknown>; options: Record<string, unknown> }>,
+  ackFails: false,
+}));
+
+vi.mock("./db", () => ({ getDb: async () => state.memory?.db ?? null }));
+vi.mock("./adminMfa", async importOriginal => ({ ...await importOriginal<typeof import("./adminMfa")>(), isAdminMfaVerified: vi.fn(async () => true) }));
+vi.mock("./_core/notification", () => ({ notifyOwner: vi.fn(async (payload: { title: string; content: string }) => { state.ownerNotifications.push(payload); return true; }) }));
+vi.mock("./medicalQuestionEmails", async importOriginal => ({
+  ...await importOriginal<typeof import("./medicalQuestionEmails")>(),
+  sendMedicalQuestionAcknowledgementEmail: vi.fn(async (input: Record<string, unknown>) => {
+    if (state.ackFails) throw new Error("resend_down");
+    state.acknowledgements.push(input);
+  }),
+  sendMedicalQuestionResponseEmail: vi.fn(async (input: Record<string, unknown>, options: Record<string, unknown>) => { state.responses.push({ input, options }); }),
+}));
+
+import { appRouter } from "./routers";
+
+let memory: MemoryPg;
+
+function caller(admin = false) {
+  return appRouter.createCaller({
+    user: admin ? ({ openId: "user_owner", role: "admin" } as TrpcContext["user"]) : null,
+    mfaVerified: admin,
+    req: { protocol: "https", headers: { "x-forwarded-for": "203.0.113.5" }, ip: "203.0.113.5" } as unknown as TrpcContext["req"],
+    res: { clearCookie: vi.fn(), cookie: vi.fn() } as unknown as TrpcContext["res"],
+  });
+}
+
+const QUESTION = { firstName: "Jeanne", lastName: "Martin", email: "jeanne@test.local", phone: "+33600000000", question: "Peut-on boire de l’eau avant une anesthésie générale programmée le matin ?", language: "fr" as const, privacyConsent: true as const, urgencyAcknowledged: true as const, turnstileToken: "turnstile-token-ok-000000000000" };
+
+describe("service gratuit de questions santé", () => {
+  beforeEach(() => {
+    process.env.CANDIDATE_AUTH_PEPPER ||= "test-pepper-medical-questions-0123456789";
+    memory = createMemoryPg([medicalQuestions, medicalQuestionAuditLogs, securityEvents]);
+    state.memory = memory;
+    state.ownerNotifications = [];
+    state.acknowledgements = [];
+    state.responses = [];
+    state.ackFails = false;
+  });
+
+  it("accepte une question sans accord de publication, prévient le propriétaire sans contenu de santé et accuse réception (LEGAL-11, PUB-FORM-01)", async () => {
+    const result = await caller().medicalQuestions.submit({ ...QUESTION, publicationConsent: false });
+    expect(result.trackingId).toMatch(/^QMED-/);
+    expect(result.acknowledgementSent).toBe(true);
+    expect(memory.rows(medicalQuestions)[0]).toMatchObject({ publication_consent: 0, privacy_consent: 1 });
+    expect(state.ownerNotifications).toHaveLength(1);
+    const owner = state.ownerNotifications[0]!;
+    expect(owner.title).toContain(result.trackingId);
+    for (const forbidden of ["Jeanne", "Martin", "jeanne@test.local", "+33600000000", "anesthésie générale", "boire"]) {
+      expect(`${owner.title}\n${owner.content}`).not.toContain(forbidden);
+    }
+    expect(state.acknowledgements).toEqual([{ email: "jeanne@test.local", firstName: "Jeanne", trackingId: result.trackingId, language: "fr" }]);
+    // No email in clear in the security journal (LEGAL-13).
+    expect(memory.rows(securityEvents).map(row => row.actor_reference)).not.toContain("jeanne@test.local");
+    expect(memory.rows(medicalQuestionAuditLogs).map(row => row.action)).toEqual(["submitted", "acknowledgement_sent"]);
+  });
+
+  it("un accusé de réception impossible n’empêche pas l’enregistrement de la question", async () => {
+    state.ackFails = true;
+    const result = await caller().medicalQuestions.submit({ ...QUESTION, publicationConsent: true });
+    expect(result.acknowledgementSent).toBe(false);
+    expect(memory.rows(medicalQuestions)).toHaveLength(1);
+    expect(memory.rows(medicalQuestionAuditLogs).map(row => row.action)).toContain("acknowledgement_failed");
+  });
+
+  it("ne publie jamais sans accord, n’envoie pas deux fois, et sépare renvoi et publication (ADM-MQ-01)", async () => {
+    const { trackingId } = await caller().medicalQuestions.submit({ ...QUESTION, publicationConsent: false });
+    const id = memory.rows(medicalQuestions)[0]!.id as number;
+    const admin = caller(true).medicalQuestions.admin;
+    const answer = { id, adminResponse: "Information générale : suivez les consignes de jeûne données par l’équipe d’anesthésie.", publicQuestion: "Q", publicResponse: "R" };
+    await expect(admin.sendValidatedResponse({ ...answer, publish: true })).rejects.toThrow("accord explicite");
+    await expect(admin.sendValidatedResponse({ ...answer, publish: false })).resolves.toMatchObject({ success: true, published: false, resent: false });
+    expect(state.responses).toHaveLength(1);
+    expect(state.responses[0]!.options).toEqual({ idempotencyKey: `medical-question-response/${id}/first` });
+    // Second click: refused, no email.
+    await expect(admin.sendValidatedResponse({ ...answer, publish: false })).rejects.toThrow("déjà été envoyée");
+    expect(state.responses).toHaveLength(1);
+    // Deliberate resend: one more email, keyed on the previous sending.
+    await expect(admin.sendValidatedResponse({ ...answer, publish: false, resend: true })).resolves.toMatchObject({ resent: true });
+    expect(state.responses).toHaveLength(2);
+    expect(String(state.responses[1]!.options.idempotencyKey)).toMatch(new RegExp(`^medical-question-response/${id}/after-\\d+$`));
+    // Publication needs the person's agreement, and never emails.
+    await expect(admin.updatePublication({ id, publicQuestion: "Q", publicResponse: "R" })).rejects.toThrow("accord explicite");
+    expect(trackingId).toMatch(/^QMED-/);
+  });
+
+  it("met à jour la publication d’une question consentie sans renvoyer d’email", async () => {
+    await caller().medicalQuestions.submit({ ...QUESTION, publicationConsent: true });
+    const id = memory.rows(medicalQuestions)[0]!.id as number;
+    const admin = caller(true).medicalQuestions.admin;
+    await expect(admin.updatePublication({ id, publicQuestion: "Q", publicResponse: "R" })).rejects.toThrow("Envoyez d’abord");
+    await admin.sendValidatedResponse({ id, adminResponse: "Information générale relue par le médecin, sans urgence.", publicQuestion: "", publicResponse: "", publish: false });
+    await admin.updatePublication({ id, publicQuestion: "Peut-on boire avant une anesthésie ?", publicResponse: "Suivez les consignes de jeûne." });
+    expect(memory.rows(medicalQuestions)[0]).toMatchObject({ status: "published", public_question: "Peut-on boire avant une anesthésie ?" });
+    expect(state.responses).toHaveLength(1);
+    const published = await caller().medicalQuestions.published({ limit: 5 });
+    expect(published.map(item => item.question)).toEqual(["Peut-on boire avant une anesthésie ?"]);
+  });
+});
