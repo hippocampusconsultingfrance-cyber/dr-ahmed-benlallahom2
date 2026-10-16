@@ -9,7 +9,13 @@ import Breadcrumb from "@/components/Breadcrumb";
 import PublicContentSkeleton from "@/components/PublicContentSkeleton";
 import { SEOHead } from "@/components/SEOHead";
 import { getBookingFormCopy } from "@/lib/publicFormCopy";
-import { BOOKING_REQUEST_SUBJECT_MAX_LENGTH } from "@shared/bookingPolicy";
+import {
+  BOOKING_HORIZON_DAYS,
+  BOOKING_MIN_LEAD_TIME_HOURS,
+  BOOKING_REQUEST_SUBJECT_MAX_LENGTH,
+  getBookingWindowIssue,
+  isPlausiblePhoneNumber,
+} from "@shared/bookingPolicy";
 
 export const bookingContent = {
   fr: {
@@ -26,6 +32,10 @@ export const bookingContent = {
       timeLabel: "Heure",
       invalidDate: "Saisissez une date valide au format JJ/MM/AAAA et une heure au format HH:MM.",
       dateHint: "Choisissez la date et l’heure de votre consultation. Le créneau est affiché en heure de Paris.",
+      windowHint: `Réservation au moins ${BOOKING_MIN_LEAD_TIME_HOURS} h à l’avance et jusqu’à ${BOOKING_HORIZON_DAYS} jours.`,
+      tooSoon: `Ce créneau n’est plus réservable : réservez au moins ${BOOKING_MIN_LEAD_TIME_HOURS} h à l’avance.`,
+      tooFar: `Les réservations sont ouvertes jusqu’à ${BOOKING_HORIZON_DAYS} jours à l’avance.`,
+      invalidPhone: "Saisissez un numéro de téléphone valide (8 à 15 chiffres, indicatif international accepté, ex. +33 6 12 34 56 78).",
       details: "Objet de la demande (sans information médicale)",
       detailsPlaceholder: "Ex. : demande d’avis, questions d’organisation, préparation de la consultation",
       detailsWarning: "N’indiquez ici aucune information de santé (symptômes, diagnostic, traitement, antécédents, résultats d’examens). Ces éléments seront abordés uniquement pendant la consultation.",
@@ -78,6 +88,10 @@ export const bookingContent = {
       timeLabel: "Time",
       invalidDate: "Enter a valid date in DD/MM/YYYY format and a time in HH:MM format.",
       dateHint: "Choose your consultation date and time. The slot is displayed in Paris time.",
+      windowHint: `Book at least ${BOOKING_MIN_LEAD_TIME_HOURS} hours ahead and up to ${BOOKING_HORIZON_DAYS} days ahead.`,
+      tooSoon: `This time slot can no longer be booked: please book at least ${BOOKING_MIN_LEAD_TIME_HOURS} hours ahead.`,
+      tooFar: `Bookings are open up to ${BOOKING_HORIZON_DAYS} days ahead.`,
+      invalidPhone: "Enter a valid phone number (8 to 15 digits, international prefix accepted, e.g. +33 6 12 34 56 78).",
       details: "Purpose of your request (no medical information)",
       detailsPlaceholder: "E.g. request for advice, practical questions, preparing the consultation",
       detailsWarning: "Do not enter any health information here (symptoms, diagnosis, treatment, medical history, test results). These will only be discussed during the consultation.",
@@ -130,6 +144,10 @@ export const bookingContent = {
       timeLabel: "Uhrzeit",
       invalidDate: "Geben Sie ein gültiges Datum im Format TT.MM.JJJJ und eine Uhrzeit im Format HH:MM ein.",
       dateHint: "Wählen Sie Datum und Uhrzeit Ihrer Beratung. Der Termin wird in Pariser Zeit angezeigt.",
+      windowHint: `Buchung mindestens ${BOOKING_MIN_LEAD_TIME_HOURS} Stunden im Voraus und bis zu ${BOOKING_HORIZON_DAYS} Tage im Voraus.`,
+      tooSoon: `Dieser Termin kann nicht mehr gebucht werden: Bitte buchen Sie mindestens ${BOOKING_MIN_LEAD_TIME_HOURS} Stunden im Voraus.`,
+      tooFar: `Buchungen sind bis zu ${BOOKING_HORIZON_DAYS} Tage im Voraus möglich.`,
+      invalidPhone: "Geben Sie eine gültige Telefonnummer ein (8 bis 15 Ziffern, internationale Vorwahl möglich, z. B. +49 30 1234567).",
       details: "Anlass Ihrer Anfrage (ohne medizinische Angaben)",
       detailsPlaceholder: "z. B. Bitte um Rat, organisatorische Fragen, Vorbereitung der Beratung",
       detailsWarning: "Geben Sie hier keine Gesundheitsdaten an (Symptome, Diagnose, Behandlung, Vorgeschichte, Untersuchungsergebnisse). Diese werden ausschließlich während der Beratung besprochen.",
@@ -182,6 +200,10 @@ export const bookingContent = {
       timeLabel: "时间",
       invalidDate: "请输入有效日期（日/月/年）和时间（时:分）。",
       dateHint: "请选择咨询日期和时间。时段以巴黎时间显示。",
+      windowHint: `请至少提前 ${BOOKING_MIN_LEAD_TIME_HOURS} 小时预约，最多可提前 ${BOOKING_HORIZON_DAYS} 天。`,
+      tooSoon: `该时段已无法预约：请至少提前 ${BOOKING_MIN_LEAD_TIME_HOURS} 小时预约。`,
+      tooFar: `最多可提前 ${BOOKING_HORIZON_DAYS} 天预约。`,
+      invalidPhone: "请输入有效的电话号码（8 至 15 位数字，可含国际区号，例如 +33 6 12 34 56 78）。",
       details: "咨询事由（请勿填写医疗信息）",
       detailsPlaceholder: "例如：寻求建议、组织安排问题、咨询准备",
       detailsWarning: "请勿在此填写任何健康信息（症状、诊断、治疗、病史、检查结果）。这些内容仅在咨询过程中讨论。",
@@ -339,7 +361,7 @@ export function getBookingAvailabilityState({
 // Refus métier attendus (créneau déjà pris, trop de tentatives, réservations
 // en attente) : le serveur renvoie un message français destiné au patient.
 // Toute autre erreur garde le message générique pour ne rien exposer de technique.
-const BOOKING_USER_FACING_ERROR_CODES = new Set(["CONFLICT", "TOO_MANY_REQUESTS"]);
+const BOOKING_USER_FACING_ERROR_CODES = new Set(["CONFLICT", "TOO_MANY_REQUESTS", "UNPROCESSABLE_CONTENT"]);
 
 export function getBookingServerErrorMessage(error: unknown): string | null {
   if (!error || typeof error !== "object") return null;
@@ -378,6 +400,7 @@ export default function BookingPage() {
   const [dateText, setDateText] = useState("");
   const [timeText, setTimeText] = useState("");
   const [dateError, setDateError] = useState<string | null>(null);
+  const [phoneError, setPhoneError] = useState<string | null>(null);
   const [paymentStatus, setPaymentStatus] = useState<"success" | "canceled" | null>(null);
   const [trackingId, setTrackingId] = useState<string | null>(null);
   const paymentSubmissionRef = useRef(false);
@@ -427,10 +450,16 @@ export default function BookingPage() {
   const isOutsideConfiguredAvailability = Boolean(
     selectedDate && availabilitySlots.data && !isWithinBookingAvailability(selectedDate, configuredSlots, 30)
   );
+  // Délai minimal (2 h, passé compris) et horizon (90 jours) : mêmes règles que le serveur.
+  const bookingWindowIssue = selectedDate ? getBookingWindowIssue(selectedDate) : null;
   const availabilityLabel = availabilityQueryError
     ? bookingFormCopy.availabilityError
     : !selectedDate
     ? bookingFormCopy.selectDate
+    : bookingWindowIssue === "too_soon"
+    ? content.form.tooSoon
+    : bookingWindowIssue === "too_far"
+    ? content.form.tooFar
     : availabilityPending
       ? bookingFormCopy.checkingAvailability
       : isBlockedDate
@@ -444,8 +473,8 @@ export default function BookingPage() {
             : bookingFormCopy.available;
   const availabilityState = getBookingAvailabilityState({
     selected: Boolean(selectedDate),
-    pending: availabilityPending,
-    blocked: isBlockedDate || availabilityQueryError || isOutsideConfiguredAvailability,
+    pending: availabilityPending && !bookingWindowIssue,
+    blocked: isBlockedDate || availabilityQueryError || isOutsideConfiguredAvailability || Boolean(bookingWindowIssue),
     booked: isBookedSlot,
   });
 
@@ -492,8 +521,14 @@ export default function BookingPage() {
       return;
     }
 
-    if (isBlockedDate || isBookedSlot || isOutsideConfiguredAvailability || availabilityError) {
+    if (getBookingWindowIssue(selectedDate) || isBlockedDate || isBookedSlot || isOutsideConfiguredAvailability || availabilityError) {
       alert(availabilityLabel);
+      return;
+    }
+
+    if (!isPlausiblePhoneNumber(formData.phone)) {
+      setPhoneError(content.form.invalidPhone);
+      document.getElementById("booking-phone")?.focus();
       return;
     }
 
@@ -539,6 +574,7 @@ export default function BookingPage() {
     setDateText("");
     setTimeText("");
     setDateError(null);
+    setPhoneError(null);
     setPaymentStatus(null);
     setTrackingId(null);
   };
@@ -749,12 +785,20 @@ export default function BookingPage() {
                 type="tel"
                 required
                 value={formData.phone}
-                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                onChange={(e) => {
+                  setFormData({ ...formData, phone: e.target.value });
+                  if (phoneError && isPlausiblePhoneNumber(e.target.value)) setPhoneError(null);
+                }}
+                onBlur={() => setPhoneError(formData.phone.trim() && !isPlausiblePhoneNumber(formData.phone) ? content.form.invalidPhone : null)}
                 autoComplete="tel"
                 inputMode="tel"
                 enterKeyHint="next"
+                maxLength={50}
+                aria-invalid={phoneError ? true : undefined}
+                aria-describedby={phoneError ? "booking-phone-error" : undefined}
                 className="form-field-premium w-full px-4 py-2 border"
               />
+              {phoneError && <p id="booking-phone-error" className="mt-2 text-sm text-destructive" role="alert">{phoneError}</p>}
             </div>
 
             {/* Date */}
@@ -793,7 +837,7 @@ export default function BookingPage() {
                   aria-label={content.form.timeLabel}
                 />
               </div>
-              <p className="mt-2 text-xs leading-5 text-muted-foreground">{content.form.dateHint}</p>
+              <p className="mt-2 text-xs leading-5 text-muted-foreground">{content.form.dateHint} {content.form.windowHint}</p>
               {dateError && <p id="booking-date-error" className="mt-2 text-sm text-destructive" role="alert">{dateError}</p>}
               {localizedDate && <p className="mt-2 text-sm font-medium text-primary" aria-live="polite">{localizedDate}</p>}
               <div id="availability-status" className={`availability-status availability-${availabilityState} mt-3 flex items-center gap-2`} role="status" aria-live="polite" data-state={availabilityState}>
@@ -853,7 +897,7 @@ export default function BookingPage() {
             {/* Submit Button */}
             <Button
               type="submit"
-              disabled={isLoading || availabilityPending || availabilityError || isBlockedDate || isBookedSlot || isOutsideConfiguredAvailability || !selectedDate || !calculatePrice.data}
+              disabled={isLoading || availabilityPending || availabilityError || isBlockedDate || isBookedSlot || isOutsideConfiguredAvailability || Boolean(bookingWindowIssue) || !selectedDate || !calculatePrice.data}
               className="cta-primary w-full"
               size="lg"
             >

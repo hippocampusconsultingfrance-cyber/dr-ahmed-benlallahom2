@@ -9,7 +9,10 @@ describe("correctifs P0/P1 de réservation et candidature", () => {
     const router = await readFile(projectFile("server", "routers.ts"), "utf8");
     expect(router).toContain("appointment_status, hold_expires_at");
     expect(router).toContain("'pending'}, ${'held'}");
-    expect(router).toContain("expires_at: Math.floor(holdExpiresAt.getTime() / 1000)");
+    // L’expiration Checkout reste celle du maintien (arrondie à la seconde inférieure).
+    expect(router).toContain("expires_at: stripeExpiresAt(holdExpiresAt)");
+    const holds = await readFile(projectFile("server", "appointmentHolds.ts"), "utf8");
+    expect(holds).toContain("return Math.floor(holdExpiresAt.getTime() / 1000);");
     expect(router).not.toContain("allow_promotion_codes: true");
   });
 

@@ -35,7 +35,14 @@ import { buildCandidatePortalInvitationEmailEvent, candidatePortalAccountMatches
 import { RECRUITMENT_ANALYSIS_PROMPT_VERSION } from "./recruitmentAnalysis";
 import { medicalQuestionsRouter } from "./medicalQuestionsRouter";
 import { issueAdminMfaChallenge, verifyAdminMfaChallenge } from "./adminMfa";
-import { BOOKING_REQUEST_SUBJECT_MAX_LENGTH } from "../shared/bookingPolicy";
+import {
+  BOOKING_INVALID_PHONE_MESSAGE,
+  BOOKING_REQUEST_SUBJECT_MAX_LENGTH,
+  BOOKING_TOO_FAR_MESSAGE,
+  BOOKING_TOO_SOON_MESSAGE,
+  getBookingWindowIssue,
+  isPlausiblePhoneNumber,
+} from "../shared/bookingPolicy";
 
 let stripeClient: Stripe | undefined;
 
@@ -118,7 +125,7 @@ async function enforcePublicFormRateLimit(input: {
 
 /** Nombre maximal de créneaux retenus (en attente de paiement) par adresse email. */
 export const MAX_ACTIVE_APPOINTMENT_HOLDS_PER_EMAIL = 2;
-export const ACTIVE_APPOINTMENT_HOLDS_LIMIT_MESSAGE = "Vous avez déjà deux réservations en attente de paiement. Finalisez ou annulez l’un de ces paiements, ou patientez 30 minutes avant de réserver un nouveau créneau.";
+export const ACTIVE_APPOINTMENT_HOLDS_LIMIT_MESSAGE = "Vous avez déjà deux réservations en attente de paiement. Finalisez ou annulez l’un de ces paiements, ou patientez une trentaine de minutes avant de réserver un nouveau créneau.";
 
 export const CONSULTATION_CHECKOUT_PRODUCT_NAME = "Consultation de conseil santé – 30 minutes";
 
@@ -227,14 +234,39 @@ function parisWallClockToUtc(value: string): Date {
   return new Date(utcMs);
 }
 
+const APPOINTMENT_DATE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d{1,3})?)?)?(Z|[+-]\d{2}:?\d{2})?$/i;
+
+/**
+ * Parses an ISO instant (with Z or an offset) or a Europe/Paris wall-clock time.
+ * Impossible calendar values (30 February, 25:00) and Paris wall-clock times
+ * that do not exist (spring-forward gap) are rejected instead of being shifted.
+ */
 export function parseAppointmentDate(value: string): Date {
-  const hasExplicitTimeZone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(value);
-  const parsed = hasExplicitTimeZone
-    ? new Date(value)
-    : parisWallClockToUtc(value.length === 10 ? `${value}T00:00:00` : value.slice(0, 19));
+  const match = APPOINTMENT_DATE_PATTERN.exec(value.trim());
+  if (!match) throw new Error("Invalid appointment date");
+  const [, yearText, monthText, dayText, hourText = "00", minuteText = "00", secondText = "00", zone] = match;
+  const [year, month, day, hour, minute, second] = [yearText, monthText, dayText, hourText, minuteText, secondText].map(Number);
+  const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  if (month < 1 || month > 12 || day < 1 || day > daysInMonth || hour > 23 || minute > 59 || second > 59) {
+    throw new Error("Invalid appointment date");
+  }
+  if (zone && /^[+-]/.test(zone)) {
+    const offset = zone.replace(":", "");
+    if (Number(offset.slice(1, 3)) > 14 || Number(offset.slice(3, 5)) > 59) throw new Error("Invalid appointment date");
+  }
+
+  const parsed = zone
+    ? new Date(value.trim())
+    : parisWallClockToUtc(`${yearText}-${monthText}-${dayText}T${hourText}:${minuteText}:${secondText}`);
 
   if (!Number.isFinite(parsed.getTime())) {
     throw new Error("Invalid appointment date");
+  }
+  if (!zone) {
+    const reread = getParisParts(parsed);
+    if (reread.year !== year || reread.month !== month || reread.day !== day || reread.hour !== hour || reread.minute !== minute) {
+      throw new Error("Invalid appointment date");
+    }
   }
   return parsed;
 }
@@ -555,7 +587,7 @@ export const appRouter = router({
         z.object({
           customerName: z.string().min(1).max(255),
           customerEmail: z.string().email().max(320),
-          customerPhone: z.string().min(1).max(50),
+          customerPhone: z.string().trim().min(1).max(50).refine(isPlausiblePhoneNumber, BOOKING_INVALID_PHONE_MESSAGE),
           appointmentDate: appointmentDateInput,
           // Objet de la demande, sans information médicale (minimisation) :
           // conservé pour le tableau de bord, jamais recopié dans un email.
@@ -564,8 +596,14 @@ export const appRouter = router({
       )
       .mutation(async ({ input, ctx }) => {
         const date = parseAppointmentDate(input.appointmentDate);
-        if (date.getTime() <= Date.now()) {
-          throw new TRPCError({ code: "BAD_REQUEST", message: "La date de consultation doit être future" });
+        // Délai minimal (le passé compris) et horizon maximal : refus métier,
+        // affichés tels quels au patient (UNPROCESSABLE_CONTENT).
+        const bookingWindowIssue = getBookingWindowIssue(date);
+        if (bookingWindowIssue) {
+          throw new TRPCError({
+            code: "UNPROCESSABLE_CONTENT",
+            message: bookingWindowIssue === "too_soon" ? BOOKING_TOO_SOON_MESSAGE : BOOKING_TOO_FAR_MESSAGE,
+          });
         }
 
         // Endpoint public sans Turnstile (parcours de paiement) : chaque appel
@@ -588,7 +626,7 @@ export const appRouter = router({
         }
 
         try {
-          const { getAppointmentHoldExpiry, getExpiredAppointmentHoldUpdate, releaseExpiredAppointmentHolds } = await import("./appointmentHolds");
+          const { getAppointmentHoldExpiry, getExpiredAppointmentHoldUpdate, releaseExpiredAppointmentHolds, stripeExpiresAt } = await import("./appointmentHolds");
           await releaseExpiredAppointmentHolds();
 
           // Plafond de créneaux retenus simultanément par une même adresse
@@ -657,7 +695,13 @@ export const appRouter = router({
 
           const appointmentDateFormatted = date.toISOString().slice(0, 19).replace('T', ' ');
           const slotKey = date.toISOString();
-          const holdExpiresAt = getAppointmentHoldExpiry();
+          // Le maintien (et donc l’expiration Stripe) ne dépasse jamais le début
+          // du créneau ; s’il ne reste pas assez de temps pour une session Stripe
+          // valide, la réservation est refusée avant toute écriture.
+          const holdExpiresAt = getAppointmentHoldExpiry(new Date(), date);
+          if (!holdExpiresAt) {
+            throw new TRPCError({ code: "UNPROCESSABLE_CONTENT", message: BOOKING_TOO_SOON_MESSAGE });
+          }
           await db.execute(
             sql`INSERT INTO appointments (tracking_id, customer_name, customer_email, customer_phone, consultation_type, request_details, appointment_date, slot_key, duration, base_price, final_price, is_night_rate, payment_status, appointment_status, hold_expires_at) VALUES (${trackingId}, ${input.customerName}, ${input.customerEmail}, ${input.customerPhone}, ${'health_advice'}, ${input.requestDetails}, ${appointmentDateFormatted}, ${slotKey}, ${30}, ${basePrice}, ${finalPrice}, ${isNightRate ? 1 : 0}, ${'pending'}, ${'held'}, ${holdExpiresAt})`
           );
@@ -669,7 +713,7 @@ export const appRouter = router({
               mode: "payment",
               customer_email: input.customerEmail,
               metadata: { trackingId, customerName: input.customerName },
-              expires_at: Math.floor(holdExpiresAt.getTime() / 1000),
+              expires_at: stripeExpiresAt(holdExpiresAt),
               success_url: `${getSafeCheckoutOrigin()}/booking/confirmation?status=success&trackingId=${encodeURIComponent(trackingId)}`,
               cancel_url: `${getSafeCheckoutOrigin()}/booking/confirmation?status=canceled&session_id={CHECKOUT_SESSION_ID}`,
             });
@@ -744,6 +788,12 @@ export const appRouter = router({
           }
 
           const amountInCents = Math.round(expectedPrice * 100);
+          const { STRIPE_CHECKOUT_MIN_EXPIRY_MS, stripeExpiresAt } = await import("./appointmentHolds");
+          // Stripe refuse une expiration à moins de 30 min : un maintien presque
+          // écoulé ne peut plus ouvrir de session valide.
+          if (appointment.holdExpiresAt.getTime() - Date.now() < STRIPE_CHECKOUT_MIN_EXPIRY_MS) {
+            throw new TRPCError({ code: "CONFLICT", message: "La session de paiement a expiré. Veuillez choisir à nouveau votre créneau." });
+          }
 
           const session = await getStripeClient().checkout.sessions.create({
             payment_method_types: ["card"],
@@ -763,7 +813,7 @@ export const appRouter = router({
               trackingId: input.trackingId,
               customerName: input.customerName,
             },
-            expires_at: Math.floor(appointment.holdExpiresAt.getTime() / 1000),
+            expires_at: stripeExpiresAt(appointment.holdExpiresAt),
             success_url: `${getSafeCheckoutOrigin()}/booking/confirmation?status=success&trackingId=${encodeURIComponent(input.trackingId)}`,
             cancel_url: `${getSafeCheckoutOrigin()}/booking/confirmation?status=canceled&session_id={CHECKOUT_SESSION_ID}`,
           });

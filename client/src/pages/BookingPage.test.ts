@@ -100,6 +100,23 @@ describe("booking date placeholders", () => {
     expect(getBookingServerErrorMessage("CONFLICT")).toBeNull();
   });
 
+  it("applique côté client le délai minimal, l’horizon et le contrôle du téléphone, avec un libellé dans chaque langue", async () => {
+    for (const language of ["fr", "en", "de", "zh"] as const) {
+      expect(bookingContent[language].form.tooSoon).toContain("2");
+      expect(bookingContent[language].form.tooFar).toContain("90");
+      expect(bookingContent[language].form.windowHint).toContain("90");
+      expect(bookingContent[language].form.invalidPhone).toBeTruthy();
+    }
+    const source = await import("node:fs/promises").then((fs) =>
+      fs.readFile(new URL("./BookingPage.tsx", import.meta.url), "utf8")
+    );
+    expect(source).toContain("const bookingWindowIssue = selectedDate ? getBookingWindowIssue(selectedDate) : null;");
+    expect(source).toContain("Boolean(bookingWindowIssue) || !selectedDate");
+    expect(source).toContain("if (!isPlausiblePhoneNumber(formData.phone))");
+    expect(getBookingServerErrorMessage({ message: "Ce créneau n’est plus réservable", data: { code: "UNPROCESSABLE_CONTENT" } }))
+      .toBe("Ce créneau n’est plus réservable");
+  });
+
   it("réduit le poids visuel de l’illustration purement décorative", async () => {
     const source = await import("node:fs/promises").then((fs) =>
       fs.readFile(new URL("./BookingPage.tsx", import.meta.url), "utf8")
