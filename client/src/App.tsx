@@ -39,7 +39,8 @@ const CandidateResetPasswordPage = lazy(() => import("./pages/CandidateResetPass
 const CandidatePortalPage = lazy(() => import("./pages/CandidatePortalPage"));
 const RecruitmentUnsubscribePage = lazy(() => import("./pages/RecruitmentUnsubscribePage"));
 const NotFound = lazy(() => import("./pages/NotFound"));
-const AdminDashboard = lazy(() => import("./pages/AdminDashboard"));
+// Seule la racine admin charge Clerk (ClerkProvider + @clerk/react) : PERF-01.
+const AdminDashboard = lazy(() => import("./pages/AdminRoot"));
 const ServiceStatusPage = lazy(() => import("./pages/ServiceStatusPage"));
 const FAQPage = lazy(() => import("./pages/FAQPage"));
 const SearchPage = lazy(() => import("./pages/SearchPage"));

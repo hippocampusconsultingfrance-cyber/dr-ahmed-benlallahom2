@@ -1,5 +1,4 @@
 import { trpc } from "@/lib/trpc";
-import { ClerkProvider } from "@clerk/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { httpBatchLink } from "@trpc/client";
 import { createRoot } from "react-dom/client";
@@ -38,23 +37,12 @@ const trpcClient = trpc.createClient({
   ],
 });
 
-const clerkPublishableKey = import.meta.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
-
-if (!clerkPublishableKey) {
-  throw new Error("NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY n’est pas configurée.");
-}
-
+// Clerk (authentification admin) n'est plus monté ici : voir pages/AdminRoot.tsx,
+// chargé uniquement sur /admin.
 createRoot(document.getElementById("root")!).render(
-  <ClerkProvider
-    publishableKey={clerkPublishableKey}
-    signInFallbackRedirectUrl="/admin"
-    signUpFallbackRedirectUrl="/admin"
-    afterSignOutUrl="/"
-  >
-    <trpc.Provider client={trpcClient} queryClient={queryClient}>
-      <QueryClientProvider client={queryClient}>
-        <App />
-      </QueryClientProvider>
-    </trpc.Provider>
-  </ClerkProvider>
+  <trpc.Provider client={trpcClient} queryClient={queryClient}>
+    <QueryClientProvider client={queryClient}>
+      <App />
+    </QueryClientProvider>
+  </trpc.Provider>
 );
