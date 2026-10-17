@@ -15,13 +15,15 @@
     "test:visual:record": "VISUAL_BASELINE_MODE=record node scripts/visual-regression.mjs",
     "validate:precheckpoint": "pnpm test:visual && pnpm vitest run client/src/components/visualRegressionHarness.test.ts client/src/components/graphicGovernance.test.ts && pnpm check",
     "check:performance": "pnpm build && node scripts/check-performance-budgets.mjs",
-    "db:push": "drizzle-kit generate && drizzle-kit migrate"
+    "db:generate": "drizzle-kit generate"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.693.0",
     "@aws-sdk/s3-request-presigner": "^3.693.0",
     "@clerk/express": "^2.1.63",
     "@clerk/react": "^6.14.7",
+    "@fontsource-variable/dm-sans": "^5.3.0",
+    "@fontsource/playfair-display": "^5.3.0",
     "@hookform/resolvers": "^5.2.2",
     "@neondatabase/serverless": "^1.1.0",
     "@radix-ui/react-accordion": "^1.2.12",

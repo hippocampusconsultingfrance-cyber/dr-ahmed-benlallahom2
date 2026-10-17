@@ -7,6 +7,10 @@ import { Card } from "@/components/ui/card";
 import Breadcrumb from "@/components/Breadcrumb";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { SEOHead } from "@/components/SEOHead";
+import Footer from "@/components/Footer";
+import BookingLegalNotice from "@/components/BookingLegalNotice";
+import { clearBookingDraft, clearPendingBooking } from "@/lib/pendingBooking";
+import { siteConfig } from "@/data/site-config";
 
 export const confirmationContent = {
   fr: {
@@ -31,6 +35,21 @@ export const confirmationContent = {
       nextSteps: "Vérifiez votre email ou revenez au formulaire avant de relancer le paiement.",
       status: "Vérification nécessaire",
     },
+    processing: {
+      eyebrow: "Paiement en cours de validation",
+      title: "Votre paiement est en cours de validation",
+      description: "Stripe a bien pris en compte votre paiement ; nous attendons sa confirmation définitive. Cette page se met à jour automatiquement.",
+      nextSteps: "Vous recevrez un email de confirmation dès la validation. Si rien n’arrive d’ici une heure, contactez-nous avec votre référence.",
+      status: "Référence de suivi",
+    },
+    attention: {
+      eyebrow: "Réservation à régulariser",
+      title: "Paiement reçu, créneau non confirmé",
+      description: "Votre paiement a bien été reçu, mais le créneau n’était plus réservé à votre nom au moment du paiement (réservation temporaire expirée ou créneau indisponible).",
+      nextSteps: "Notre équipe a été prévenue et vous contactera pour vous rembourser intégralement ou vous proposer un autre créneau. Un email vous a également été envoyé.",
+      status: "Référence de suivi",
+    },
+    contactTitle: "Nous contacter",
     stepsTitle: "Prochaines étapes",
     steps: ["Vérifiez votre email de confirmation.", "Conservez votre référence de suivi.", "Préparez votre demande pour la consultation."],
     privacy: "Vos données sont traitées de manière confidentielle et conformément à notre politique de confidentialité.",
@@ -66,6 +85,21 @@ export const confirmationContent = {
       nextSteps: "Check your email or return to the form before restarting payment.",
       status: "Verification required",
     },
+    processing: {
+      eyebrow: "Payment being validated",
+      title: "Your payment is being validated",
+      description: "Stripe has registered your payment; we are waiting for its final confirmation. This page updates automatically.",
+      nextSteps: "You will receive a confirmation email once it is validated. If nothing arrives within an hour, contact us with your reference.",
+      status: "Tracking reference",
+    },
+    attention: {
+      eyebrow: "Booking to be settled",
+      title: "Payment received, time slot not confirmed",
+      description: "Your payment was received, but the time slot was no longer held for you at the time of payment (temporary hold expired or slot unavailable).",
+      nextSteps: "Our team has been notified and will contact you to refund you in full or offer another time slot. An email has also been sent to you.",
+      status: "Tracking reference",
+    },
+    contactTitle: "Contact us",
     stepsTitle: "Next steps",
     steps: ["Check your confirmation email.", "Keep your tracking reference.", "Prepare your request for the consultation."],
     privacy: "Your data is handled confidentially and in accordance with our privacy policy.",
@@ -101,6 +135,21 @@ export const confirmationContent = {
       nextSteps: "Prüfen Sie Ihre E-Mail oder kehren Sie zum Formular zurück, bevor Sie die Zahlung erneut starten.",
       status: "Überprüfung erforderlich",
     },
+    processing: {
+      eyebrow: "Zahlung wird bestätigt",
+      title: "Ihre Zahlung wird bestätigt",
+      description: "Stripe hat Ihre Zahlung erfasst; wir warten auf die endgültige Bestätigung. Diese Seite aktualisiert sich automatisch.",
+      nextSteps: "Sie erhalten eine Bestätigungs-E-Mail, sobald die Zahlung bestätigt ist. Falls innerhalb einer Stunde nichts ankommt, kontaktieren Sie uns mit Ihrer Referenz.",
+      status: "Verfolgungsnummer",
+    },
+    attention: {
+      eyebrow: "Buchung zu klären",
+      title: "Zahlung erhalten, Termin nicht bestätigt",
+      description: "Ihre Zahlung ist eingegangen, aber der Termin war zum Zeitpunkt der Zahlung nicht mehr für Sie reserviert (vorübergehende Reservierung abgelaufen oder Termin nicht verfügbar).",
+      nextSteps: "Unser Team wurde informiert und wird Sie kontaktieren, um Ihnen den vollen Betrag zu erstatten oder einen anderen Termin anzubieten. Sie haben außerdem eine E-Mail erhalten.",
+      status: "Verfolgungsnummer",
+    },
+    contactTitle: "Kontakt",
     stepsTitle: "Nächste Schritte",
     steps: ["Prüfen Sie Ihre Bestätigungs-E-Mail.", "Bewahren Sie Ihre Verfolgungsnummer auf.", "Bereiten Sie Ihre Anfrage für die Beratung vor."],
     privacy: "Ihre Daten werden vertraulich und gemäß unserer Datenschutzrichtlinie verarbeitet.",
@@ -136,6 +185,21 @@ export const confirmationContent = {
       nextSteps: "请查看您的电子邮件，或在重新付款前返回表单。",
       status: "需要核实",
     },
+    processing: {
+      eyebrow: "付款确认中",
+      title: "您的付款正在确认中",
+      description: "Stripe 已收到您的付款，我们正在等待最终确认。此页面会自动更新。",
+      nextSteps: "确认后您将收到确认邮件。如果一小时内未收到，请携带您的编号联系我们。",
+      status: "跟踪编号",
+    },
+    attention: {
+      eyebrow: "预约待处理",
+      title: "已收到付款，时段未确认",
+      description: "我们已收到您的付款，但付款时该时段已不再为您保留（临时保留已过期或时段不可用）。",
+      nextSteps: "我们的团队已收到通知，将与您联系，为您全额退款或提供其他时段。我们也已向您发送了一封邮件。",
+      status: "跟踪编号",
+    },
+    contactTitle: "联系我们",
     stepsTitle: "下一步",
     steps: ["查看确认邮件。", "保存您的跟踪编号。", "准备咨询所需的请求内容。"],
     privacy: "您的数据将按照隐私政策以保密方式处理。",
@@ -152,6 +216,26 @@ export const confirmationContent = {
 } as const;
 
 export type BookingConfirmationState = "success" | "canceled" | "unknown";
+export type VerifiedPaymentState = "confirmed" | "processing" | "attention" | "not_paid" | "unknown";
+
+const STATUS_POLL_INTERVAL_MS = 3000;
+const STATUS_POLL_MAX_UPDATES = 40;
+
+/**
+ * What the page may claim after Stripe's redirect: "?status=success" alone is
+ * never trusted; the server says whether the appointment is confirmed, still
+ * being validated, or to be settled.
+ */
+export function getDisplayedConfirmationState(
+  paymentState: BookingConfirmationState,
+  verified: { hasSession: boolean; state?: VerifiedPaymentState },
+): "confirmed" | "processing" | "attention" | "canceled" | "unknown" {
+  if (paymentState === "canceled") return "canceled";
+  if (paymentState !== "success") return "unknown";
+  if (!verified.hasSession || !verified.state) return "processing";
+  if (verified.state === "not_paid") return "unknown";
+  return verified.state;
+}
 
 export function getBookingConfirmationState(status: string | null): BookingConfirmationState {
   if (status === "success") return "success";
@@ -170,33 +254,57 @@ export default function BookingConfirmationPage() {
   const trackingId = params.get("trackingId");
   const sessionId = params.get("session_id");
   const cancelPending = trpc.appointments.cancelPending.useMutation();
+  const hasVerifiableSession = Boolean(trackingId && /^APT[A-Z0-9]{6,17}$/.test(trackingId) && sessionId && /^cs_[A-Za-z0-9_]{6,250}$/.test(sessionId));
+  const publicStatus = trpc.appointments.publicStatus.useQuery(
+    { trackingId: trackingId ?? "", sessionId: sessionId ?? "" },
+    {
+      enabled: paymentConfirmed && hasVerifiableSession,
+      retry: 1,
+      refetchInterval: (query) => (query.state.data?.state === "processing" && query.state.dataUpdateCount < STATUS_POLL_MAX_UPDATES ? STATUS_POLL_INTERVAL_MS : false),
+    },
+  );
+  const displayed = getDisplayedConfirmationState(paymentState, { hasSession: hasVerifiableSession, state: publicStatus.data?.state });
+  const isConfirmed = displayed === "confirmed";
 
   useEffect(() => {
     if (canceled && sessionId) {
-      cancelPending.mutate({ sessionId });
+      // Le créneau est libéré ; la saisie reste disponible pour une nouvelle tentative.
+      cancelPending.mutate({ sessionId }, { onSuccess: () => clearPendingBooking({ checkoutSessionId: sessionId }) });
     }
   }, [canceled, sessionId]);
 
-  const state = paymentConfirmed ? copy.success : canceled ? copy.canceled : copy.unknown;
+  useEffect(() => {
+    if (paymentConfirmed && trackingId) {
+      clearPendingBooking({ trackingId });
+      clearBookingDraft();
+    }
+  }, [paymentConfirmed, trackingId]);
+
+  const state = displayed === "confirmed" ? copy.success
+    : displayed === "processing" ? copy.processing
+    : displayed === "attention" ? copy.attention
+    : displayed === "canceled" ? copy.canceled
+    : copy.unknown;
 
   const seoTitle = `${state.title} | Dr. Ahmed Ben Lallahom`;
   const seoDescription = state.description;
 
   return (
+    <>
     <main className="min-h-screen bg-background px-4 py-8 sm:py-12">
       <SEOHead title={seoTitle} description={seoDescription} ogUrl="https://drahmedbenlallahom.com/booking/confirmation" noIndex />
       <div className="max-w-4xl mx-auto">
         <Breadcrumb items={[{ label: state.title }]} />
 
-        <section className={`confirmation-panel ${paymentConfirmed ? "is-success" : "is-canceled"} mt-6`} aria-live="polite">
+        <section className={`confirmation-panel ${isConfirmed ? "is-success" : "is-canceled"} mt-6`} aria-live="polite" data-state={displayed}>
           <div className="confirmation-icon" aria-hidden="true">
-            {paymentConfirmed ? <CheckCircle className="w-8 h-8" /> : <AlertCircle className="w-8 h-8" />}
+            {isConfirmed ? <CheckCircle className="w-8 h-8" /> : <AlertCircle className="w-8 h-8" />}
           </div>
           <span className="eyebrow-label mb-4">{state.eyebrow}</span>
           <h1 className="font-display text-4xl sm:text-6xl font-bold tracking-tight max-w-3xl">{state.title}</h1>
           <p className="mt-5 text-lg text-muted-foreground max-w-2xl leading-relaxed">{state.description}</p>
 
-          {trackingId && paymentState !== "unknown" && (
+          {trackingId && displayed !== "unknown" && displayed !== "canceled" && (
             <div className="confirmation-reference mt-7">
               <span className="text-xs uppercase tracking-[0.2em] text-muted-foreground">{state.status}</span>
               <strong className="font-mono text-primary text-lg break-all">{trackingId}</strong>
@@ -221,7 +329,7 @@ export default function BookingConfirmationPage() {
           </div>
         </section>
 
-        {paymentConfirmed && (
+        {isConfirmed && (
         <section className="grid md:grid-cols-3 gap-4 mt-6" aria-label={copy.stepsTitle}>
           {[
             { icon: Mail, label: copy.email },
@@ -237,6 +345,7 @@ export default function BookingConfirmationPage() {
         )}
 
         <section className="confirmation-next-steps mt-8">
+          {(displayed === "confirmed" || displayed === "processing") && (
           <div>
             <span className="eyebrow-label mb-3">{copy.stepsTitle}</span>
             <ol className="space-y-3 text-sm text-muted-foreground">
@@ -248,9 +357,11 @@ export default function BookingConfirmationPage() {
               ))}
             </ol>
           </div>
+          )}
           <div className="privacy-trust-card">
             <ShieldCheck className="w-6 h-6 text-primary" aria-hidden="true" />
             <p className="text-sm text-muted-foreground leading-relaxed">{copy.privacy}</p>
+            <BookingLegalNotice showPurpose={false} className="mt-2" />
           </div>
         </section>
 
@@ -260,9 +371,17 @@ export default function BookingConfirmationPage() {
             <h2 id="refund-policy-title" className="font-display text-2xl font-semibold">{copy.refund.title}</h2>
             <p className="mt-3 text-sm text-muted-foreground leading-relaxed">{copy.refund.text}</p>
             <p className="mt-2 text-sm text-muted-foreground leading-relaxed">{copy.refund.contact}</p>
+            <p className="mt-2 text-sm leading-relaxed">
+              <span className="font-medium text-foreground">{copy.contactTitle} : </span>
+              <a className="text-primary underline underline-offset-2" href={`mailto:${siteConfig.email}`}>{siteConfig.email}</a>
+              {" · "}
+              <a className="text-primary underline underline-offset-2" href={`tel:${siteConfig.phone.replace(/\s/g, "")}`}>{siteConfig.phone}</a>
+            </p>
           </div>
         </section>
       </div>
     </main>
+    <Footer />
+    </>
   );
 }

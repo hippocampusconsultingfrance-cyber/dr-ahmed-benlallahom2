@@ -48,6 +48,7 @@ export const employerCopy = {
     b2Desc: "Vérification rigoureuse des ordres professionnels et certifications de sécurité.",
     b3Title: "Discrétion & Réactivité",
     b3Desc: "Accompagnement sur-mesure pour les environnements les plus exigeants.",
+    whyLink: "Pourquoi choisir Hippocampus Consulting : méthode et confidentialité",
     metaTitle: "Espace Employeurs & Recrutement Médical | Hippocampus Consulting",
     metaDescription: "Soumettez vos briefs de recrutement médical pour hôpitaux, cliniques, plateformes pétrolières, grands groupes industriels et missions VVIP offshore.",
   },
@@ -91,6 +92,7 @@ export const employerCopy = {
     b2Desc: "Rigorous verification of medical board standing and safety certifications.",
     b3Title: "Discretion & Responsiveness",
     b3Desc: "Tailored support for the most demanding environments.",
+    whyLink: "Why choose Hippocampus Consulting: method and confidentiality",
     metaTitle: "Employers & Medical Recruitment | Hippocampus Consulting",
     metaDescription: "Submit your medical recruitment briefs for hospitals, clinics, oil rigs, industrial groups, and VVIP offshore missions.",
   },
@@ -134,6 +136,7 @@ export const employerCopy = {
     b2Desc: "Strikte Überprüfung berufsrechtlicher Zulassungen.",
     b3Title: "Diskretion & Reaktionsfähigkeit",
     b3Desc: "Maßgeschneiderte Unterstützung für anspruchsvollste Umgebungen.",
+    whyLink: "Warum Hippocampus Consulting: Methode und Vertraulichkeit",
     metaTitle: "Arbeitgeber & Medizinisches Recruiting | Hippocampus Consulting",
     metaDescription: "Reichen Sie Ihre medizinischen Recruiting-Briefs für Kliniken und Offshore-Projekte ein.",
   },
@@ -177,6 +180,7 @@ export const employerCopy = {
     b2Desc: "对医疗执业资格与安全证书进行核查。",
     b3Title: "绝对保密与高效响应",
     b3Desc: "为最具挑战性的环境提供定制化支持。",
+    whyLink: "为什么选择 Hippocampus Consulting：方法与保密",
     metaTitle: "雇主专区与医疗招聘 | Hippocampus Consulting",
     metaDescription: "为医院、诊所、石油钻井平台、工业集团及 VVIP 离岸任务提交医疗招聘需求。",
   },
@@ -285,6 +289,9 @@ export default function EmployersPage() {
                 );
               })}
             </div>
+            <Link href="/why-hippocampus" className="inline-flex items-center gap-2 text-sm font-semibold text-primary underline-offset-4 hover:underline">
+              {t.whyLink} <span aria-hidden="true">→</span>
+            </Link>
           </div>
 
           <div className="editorial-card p-6 md:p-8">

@@ -1,4 +1,7 @@
 import { useEffect } from "react";
+import { useLocation } from "wouter";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { resolveClientSeo } from "@shared/routeMetadata";
 
 interface SEOHeadProps {
   title: string;
@@ -11,13 +14,19 @@ interface SEOHeadProps {
   noIndex?: boolean;
 }
 
-const DEFAULT_URL = "https://drahmedbenlallahom.com";
-
+/**
+ * Met à jour le <head> après hydratation. Pour une route publique connue, le titre, la
+ * description, les robots, la canonique et l'image de partage viennent de la table partagée
+ * avec le pré-rendu (shared/routeMetadata.ts) : le HTML servi et le DOM hydraté sont
+ * identiques en français. Les props ne servent qu'aux autres langues et aux routes
+ * dynamiques ou privées. Une page privée (noindex) sans URL explicite ne déclare jamais
+ * l'accueil comme canonique (resolveClientSeo).
+ */
 export function SEOHead({
   title,
   description,
   keywords,
-  ogImage = "https://drahmedbenlallahom.com/assets/abl-logo.svg",
+  ogImage,
   ogUrl,
   // Aucun compte X/Twitter officiel n'est connu : twitter:site et
   // twitter:creator ne sont émis que si une page fournit explicitement un compte.
@@ -25,14 +34,14 @@ export function SEOHead({
   structuredData,
   noIndex = false,
 }: SEOHeadProps) {
+  const [location] = useLocation();
+  const { language } = useLanguage();
+
   useEffect(() => {
-    const pageUrl = ogUrl ?? DEFAULT_URL;
-    // Une page privée (noindex) sans URL explicite ne doit pas déclarer
-    // l'accueil comme URL canonique : signaux contradictoires pour les moteurs.
-    const canonicalUrl = ogUrl ?? (noIndex ? undefined : DEFAULT_URL);
+    const seo = resolveClientSeo(location, language, { title, description, keywords, ogImage, ogUrl, noIndex });
 
     // Update title
-    document.title = title;
+    document.title = seo.title;
 
     // Update or create meta tags
     const updateMeta = (name: string, content: string, isProperty = false) => {
@@ -54,24 +63,29 @@ export function SEOHead({
     };
 
     // Standard meta tags
-    updateMeta("description", description);
-    if (keywords) {
-      updateMeta("keywords", keywords);
+    updateMeta("description", seo.description);
+    if (seo.keywords) {
+      updateMeta("keywords", seo.keywords);
     }
-    updateMeta("robots", noIndex ? "noindex, nofollow, noarchive" : "index, follow, max-image-preview:large");
+    updateMeta("robots", seo.robots);
 
     // Open Graph tags
-    updateMeta("og:title", title, true);
-    updateMeta("og:description", description, true);
-    updateMeta("og:image", ogImage, true);
-    updateMeta("og:url", pageUrl, true);
+    updateMeta("og:title", seo.title, true);
+    updateMeta("og:description", seo.description, true);
+    updateMeta("og:image", seo.image.url, true);
+    updateMeta("og:image:type", seo.image.type, true);
+    updateMeta("og:image:width", String(seo.image.width), true);
+    updateMeta("og:image:height", String(seo.image.height), true);
+    updateMeta("og:image:alt", seo.image.alt, true);
+    updateMeta("og:url", seo.ogUrl, true);
     updateMeta("og:type", "website", true);
 
     // Twitter tags
     updateMeta("twitter:card", "summary_large_image");
-    updateMeta("twitter:title", title);
-    updateMeta("twitter:description", description);
-    updateMeta("twitter:image", ogImage);
+    updateMeta("twitter:title", seo.title);
+    updateMeta("twitter:description", seo.description);
+    updateMeta("twitter:image", seo.image.url);
+    updateMeta("twitter:image:alt", seo.image.alt);
     if (twitterHandle) {
       updateMeta("twitter:site", twitterHandle);
       updateMeta("twitter:creator", twitterHandle);
@@ -83,13 +97,13 @@ export function SEOHead({
 
     // Canonical URL
     let canonical = document.querySelector("link[rel='canonical']") as HTMLLinkElement | null;
-    if (canonicalUrl) {
+    if (seo.canonicalUrl) {
       if (!canonical) {
         canonical = document.createElement("link");
         canonical.rel = "canonical";
         document.head.appendChild(canonical);
       }
-      canonical.href = canonicalUrl;
+      canonical.href = seo.canonicalUrl;
     } else if (canonical) {
       canonical.remove();
     }
@@ -109,7 +123,7 @@ export function SEOHead({
     } else if (script) {
       script.remove();
     }
-  }, [title, description, keywords, ogImage, ogUrl, twitterHandle, structuredData, noIndex]);
+  }, [location, language, title, description, keywords, ogImage, ogUrl, twitterHandle, structuredData, noIndex]);
 
   return null;
 }

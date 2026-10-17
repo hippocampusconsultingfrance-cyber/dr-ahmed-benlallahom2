@@ -4,12 +4,30 @@ import { getDb } from "./db";
 import { analyzeCandidateDocument } from "./candidateDocumentAnalysis";
 import { storageGetSignedUrl } from "./storage";
 import { decryptCandidateDocument } from "./candidateDocumentEncryption";
+import { CANDIDATE_HUMAN_REVIEW_ONLY_FLAG, CANDIDATE_HUMAN_REVIEW_ONLY_SUMMARY, candidateDocumentAllowsAiAnalysis } from "../shared/candidateDocumentCategories";
 
 const MAX_DOCUMENT_ANALYSIS_ATTEMPTS = 3;
+
+/** Fields that mark a document as reviewed by a human only, without any AI processing (LEGAL-12). */
+export function candidateHumanReviewOnlyFields() {
+  return {
+    validationStatus: "accepted" as const,
+    status: "needs_review" as const,
+    analysisStatus: "needs_review" as const,
+    aiSummary: CANDIDATE_HUMAN_REVIEW_ONLY_SUMMARY,
+    aiExtractedData: null,
+    aiConfidence: null,
+    aiFlags: JSON.stringify([CANDIDATE_HUMAN_REVIEW_ONLY_FLAG]),
+    aiModel: null,
+    analysisLastError: null,
+  };
+}
 
 export async function enqueueCandidateDocumentAnalysis(documentId: number) {
   const db = await getDb();
   if (!db) throw new Error("candidate_document_database_unavailable");
+  const category = (await db.select({ category: candidateDocuments.category }).from(candidateDocuments).where(eq(candidateDocuments.id, documentId)).limit(1))[0]?.category;
+  if (!candidateDocumentAllowsAiAnalysis(category)) throw new Error("candidate_document_human_review_only");
   await db.insert(candidateDocumentProcessingJobs).values({ documentId, status: "queued", maxAttempts: MAX_DOCUMENT_ANALYSIS_ATTEMPTS, scheduledFor: new Date() });
   await db.update(candidateDocuments).set({ status: "validating", analysisStatus: "queued" }).where(eq(candidateDocuments.id, documentId));
   await db.insert(candidateDocumentAuditLogs).values({ candidateId: (await db.select({ candidateId: candidateDocuments.candidateId }).from(candidateDocuments).where(eq(candidateDocuments.id, documentId)).limit(1))[0]?.candidateId ?? null, documentId, actorType: "system", action: "analysis_requested" });
@@ -53,6 +71,15 @@ export async function processDueCandidateDocumentAnalysisJobs(limit = 1) {
     const document = (await db.select().from(candidateDocuments).where(eq(candidateDocuments.id, job.documentId)).limit(1))[0];
     if (!document || document.validationStatus === "rejected") {
       await db.update(candidateDocumentProcessingJobs).set({ status: "completed", finishedAt: new Date(), lastError: "document_unavailable_or_rejected" }).where(eq(candidateDocumentProcessingJobs.id, job.id));
+      continue;
+    }
+    if (!candidateDocumentAllowsAiAnalysis(document.category)) {
+      // Identity documents, proofs of address, free-form files and retired sensitive
+      // categories are never read for, nor sent to, an AI service (LEGAL-12).
+      await db.update(candidateDocuments).set(candidateHumanReviewOnlyFields()).where(eq(candidateDocuments.id, document.id));
+      await db.update(candidateDocumentProcessingJobs).set({ status: "completed", finishedAt: new Date(), lastError: "human_review_only" }).where(eq(candidateDocumentProcessingJobs.id, job.id));
+      await db.insert(candidateDocumentAuditLogs).values({ candidateId: document.candidateId, documentId: document.id, actorType: "system", action: "analysis_completed", metadata: JSON.stringify({ outcome: "human_review_only", category: document.category }) });
+      needsReview += 1;
       continue;
     }
     try {

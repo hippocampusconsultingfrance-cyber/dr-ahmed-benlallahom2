@@ -11,7 +11,8 @@ describe("livraison sécurisée des factures", () => {
     ]);
 
     expect(notifications).toContain("attachments:");
-    expect(notifications).toContain("filename: `Facture-${trackingId}.pdf`");
+    // Pièce jointe nommée d’après le numéro de facture (référence de suivi à défaut).
+    expect(notifications).toContain("filename: `Facture-${invoiceNumber ?? trackingId}.pdf`");
     expect(notifications).toContain('content: invoicePdfBuffer.toString("base64")');
     expect(notifications).not.toContain("invoiceUrl");
     expect(confirmation).toContain("Facture PDF incluse");

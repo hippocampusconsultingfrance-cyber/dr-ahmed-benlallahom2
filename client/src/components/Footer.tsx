@@ -11,15 +11,23 @@ export const footerBrandLogoAltCopy = {
 } as const;
 const footerResourcesCopy = { fr: "Ressources médicales", en: "Medical resources", de: "Medizinische Ressourcen", zh: "医疗资源" } as const;
 const footerPressCopy = { fr: "Presse & publications", en: "Press & publications", de: "Presse & Veröffentlichungen", zh: "媒体与出版" } as const;
+export const footerLandmarkCopy = {
+  footer: { fr: "Pied de page", en: "Footer", de: "Fußzeile", zh: "页脚" },
+  sections: { fr: "Rubriques du site", en: "Site sections", de: "Bereiche der Website", zh: "网站栏目" },
+  legal: { fr: "Informations légales", en: "Legal information", de: "Rechtliche Informationen", zh: "法律信息" },
+} as const;
+export const footerGdprCopy = { fr: "Exercer mes droits RGPD", en: "Exercise my GDPR rights", de: "Meine DSGVO-Rechte ausüben", zh: "行使我的 GDPR 权利" } as const;
 
 export default function Footer() {
   const { content, language } = useLanguage();
   const logoAlt = footerBrandLogoAltCopy[language as keyof typeof footerBrandLogoAltCopy] ?? footerBrandLogoAltCopy.fr;
   const resourcesLabel = footerResourcesCopy[language as keyof typeof footerResourcesCopy] ?? footerResourcesCopy.fr;
   const pressLabel = footerPressCopy[language as keyof typeof footerPressCopy] ?? footerPressCopy.fr;
+  const gdprLabel = footerGdprCopy[language as keyof typeof footerGdprCopy] ?? footerGdprCopy.fr;
+  const landmarkLanguage = (language in footerLandmarkCopy.footer ? language : "fr") as keyof typeof footerLandmarkCopy.footer;
 
   return (
-    <footer className="relative border-t border-border/20 bg-card/30">
+    <footer className="relative border-t border-border/20 bg-card/30" aria-label={footerLandmarkCopy.footer[landmarkLanguage]}>
       {/* ECG divider top */}
       <div className="ecg-divider absolute top-0 left-0 right-0" />
 
@@ -49,8 +57,8 @@ export default function Footer() {
 
           {/* Navigation */}
           <div>
-            <h4 className="font-semibold text-foreground mb-4 text-sm uppercase tracking-wide">{content.footer.navigate}</h4>
-            <nav className="space-y-2.5">
+            <h2 className="font-semibold text-foreground mb-4 text-sm uppercase tracking-wide">{content.footer.navigate}</h2>
+            <nav className="space-y-2.5" aria-label={footerLandmarkCopy.sections[landmarkLanguage]}>
               {[
                 { id: "experience", label: content.nav.experience },
                 { id: "services", label: content.nav.services },
@@ -70,8 +78,8 @@ export default function Footer() {
 
           {/* Legal */}
           <div>
-            <h4 className="font-semibold text-foreground mb-4 text-sm uppercase tracking-wide">{content.footer.legal}</h4>
-            <nav className="space-y-2.5">
+            <h2 className="font-semibold text-foreground mb-4 text-sm uppercase tracking-wide">{content.footer.legal}</h2>
+            <nav className="space-y-2.5" aria-label={footerLandmarkCopy.legal[landmarkLanguage]}>
               <Link href="/legal" className="block text-sm text-muted-foreground hover:text-primary transition-colors">
                 {content.footer.legal}
               </Link>
@@ -80,6 +88,9 @@ export default function Footer() {
               </Link>
               <Link href="/legal?tab=terms" className="block text-sm text-muted-foreground hover:text-primary transition-colors">
                 {content.footer.terms}
+              </Link>
+              <Link href="/gdpr" className="block text-sm text-muted-foreground hover:text-primary transition-colors">
+                {gdprLabel}
               </Link>
               <Link href="/faq" className="block text-sm text-muted-foreground hover:text-primary transition-colors">
                 FAQ
@@ -95,7 +106,7 @@ export default function Footer() {
 
           {/* Contact */}
           <div>
-            <h4 className="font-semibold text-foreground mb-4 text-sm uppercase tracking-wide">{content.nav.contact}</h4>
+            <h2 className="font-semibold text-foreground mb-4 text-sm uppercase tracking-wide">{content.nav.contact}</h2>
             <div className="space-y-2.5">
               <a
                 href={`tel:${siteConfig.phone.replace(/\s/g, "")}`}
@@ -127,7 +138,7 @@ export default function Footer() {
             © {new Date().getFullYear()} {siteConfig.name}. {content.footer.rights}
           </p>
           {/* Mini ECG signature */}
-          <svg className="w-24 h-6 opacity-30" viewBox="0 0 96 24" fill="none">
+          <svg className="w-24 h-6 opacity-30" viewBox="0 0 96 24" fill="none" aria-hidden="true">
             <path
               d="M0 12 L20 12 L28 12 L32 4 L36 20 L40 8 L44 14 L48 12 L96 12"
               stroke="oklch(0.75 0.15 220)"

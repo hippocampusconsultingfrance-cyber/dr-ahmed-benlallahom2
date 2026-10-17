@@ -1,10 +1,12 @@
 import { useLanguage } from "@/contexts/LanguageContext";
 import { Star } from "lucide-react";
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import { trpc } from "@/lib/trpc";
 import PublicContentSkeleton from "@/components/PublicContentSkeleton";
 import { SEOHead } from "@/components/SEOHead";
 import Breadcrumb from "@/components/Breadcrumb";
+import Navigation from "@/components/Navigation";
+import Footer from "@/components/Footer";
 
 export default function TestimonialsPage() {
   const { language } = useLanguage();
@@ -26,7 +28,6 @@ export default function TestimonialsPage() {
       filter5Stars: "5 étoiles",
       filter4Stars: "4 étoiles et plus",
       noTestimonials: "Aucun témoignage pour le moment",
-      verified: "✓ Vérifié",
       specialty: "Spécialité",
     },
     en: {
@@ -36,7 +37,6 @@ export default function TestimonialsPage() {
       filter5Stars: "5 stars",
       filter4Stars: "4 stars and up",
       noTestimonials: "No testimonials yet",
-      verified: "✓ Verified",
       specialty: "Specialty",
     },
     de: {
@@ -46,7 +46,6 @@ export default function TestimonialsPage() {
       filter5Stars: "5 Sterne",
       filter4Stars: "4 Sterne und höher",
       noTestimonials: "Noch keine Bewertungen",
-      verified: "✓ Verifiziert",
       specialty: "Fachgebiet",
     },
     zh: {
@@ -56,7 +55,6 @@ export default function TestimonialsPage() {
       filter5Stars: "5星",
       filter4Stars: "4星及以上",
       noTestimonials: "暂无评价",
-      verified: "✓ 已验证",
       specialty: "专科",
     },
   };
@@ -83,53 +81,18 @@ export default function TestimonialsPage() {
     return true;
   });
 
-  // Generate Review schema for SEO
-  const reviewSchema = useMemo(() => {
-    if (testimonials.length === 0) return null;
-
-    const reviews = testimonials.slice(0, 10).map((testimonial) => ({
-      "@type": "Review",
-      "@context": "https://schema.org",
-      author: {
-        "@type": "Person",
-        name: testimonial.authorName,
-      },
-      reviewRating: {
-        "@type": "Rating",
-        ratingValue: testimonial.rating,
-        bestRating: "5",
-        worstRating: "1",
-      },
-      reviewBody: testimonial.content,
-      name: testimonial.title,
-      datePublished: new Date(testimonial.createdAt).toISOString().split("T")[0],
-    }));
-
-    return {
-      "@context": "https://schema.org",
-      "@type": "AggregateOffer",
-      name: currentContent.title,
-      description: currentContent.subtitle,
-      reviews: reviews,
-      aggregateRating: {
-        "@type": "AggregateRating",
-        ratingValue: (
-          testimonials.reduce((sum, t) => sum + t.rating, 0) / testimonials.length
-        ).toFixed(1),
-        reviewCount: testimonials.length,
-      },
-    };
-  }, [testimonials, currentContent]);
+  // Pas de données structurées d'avis ni de note moyenne : notes et avis ne sont pas
+  // vérifiés et ne doivent pas être mis en avant sur le site d'un médecin (LEGAL-08).
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-950 pt-24 pb-16">
+    <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-950">
       <SEOHead
         title={currentContent.title}
         description={currentContent.subtitle}
         ogUrl="https://drahmedbenlallahom.com/testimonials"
-        structuredData={reviewSchema || undefined}
       />
-      <div className="max-w-4xl mx-auto px-4">
+      <Navigation />
+      <main id="main-content" tabIndex={-1} className="max-w-4xl mx-auto px-4 pt-28 pb-16">
         {/* Breadcrumb */}
         <Breadcrumb items={[{ label: currentContent.title }]} />
 
@@ -201,11 +164,6 @@ export default function TestimonialsPage() {
                       {testimonial.title}
                     </h3>
                   </div>
-                  {testimonial.verified === 1 && (
-                    <span className="text-cyan-400 text-sm font-semibold">
-                      {currentContent.verified}
-                    </span>
-                  )}
                 </div>
 
                 {/* Content */}
@@ -223,7 +181,7 @@ export default function TestimonialsPage() {
                       </p>
                     )}
                   </div>
-                  <p className="text-gray-500 text-xs">
+                  <p className="text-slate-400 text-xs">
                     {new Date(testimonial.createdAt).toLocaleDateString(language)}
                   </p>
                 </div>
@@ -231,7 +189,8 @@ export default function TestimonialsPage() {
             ))}
           </div>
         )}
-      </div>
+      </main>
+      <Footer />
     </div>
   );
 }

@@ -69,3 +69,56 @@ export function recruitmentDriveExportErrorLabel(error: string | null | undefine
   if (/upload|quota|rate|429/i.test(error)) return "Google Drive a refusé temporairement la copie";
   return "Échec technique à examiner";
 }
+
+/** Readable French explanation of a technical CV-analysis error (never the raw provider text). */
+export function recruitmentAnalysisErrorLabel(error: string | null | undefined) {
+  if (!error) return null;
+  if (/billing|credit card|402|payment required/i.test(error)) return "Analyse IA indisponible (compte du fournisseur à vérifier) : examinez le CV manuellement.";
+  if (/^cv_validation_/i.test(error)) return "Le fichier CV a été refusé par le contrôle de sécurité : examinez-le manuellement ou demandez un PDF au candidat.";
+  if (/attempts_exhausted/i.test(error)) return "Analyse abandonnée après plusieurs échecs : relancez-la plus tard ou examinez le CV manuellement.";
+  if (/worker_interrupted/i.test(error)) return "Traitement interrompu ; il sera repris automatiquement au prochain passage.";
+  if (/cv_download|storage/i.test(error)) return "Le CV n’a pas pu être lu dans le stockage privé ; une nouvelle tentative est prévue.";
+  if (/gateway|timeout|timed out|failed after|5\d\d|econn|fetch failed|overloaded|rate/i.test(error)) return "Le service d’analyse IA n’a pas répondu ; une nouvelle tentative est programmée.";
+  return "Échec technique de l’analyse : examinez le CV manuellement.";
+}
+
+export type AdminToast = { tone: "success" | "warning" | "info" | "error"; message: string };
+
+/** Toast after « Relancer l’analyse »: success only when an analysis really completed (ADM-REC-02). */
+export function reanalysisToast(result: { outcome?: string; error?: string | null; processed?: number }): AdminToast {
+  switch (result.outcome) {
+    case "completed": return { tone: "success", message: "Analyse relancée et résultat actualisé." };
+    case "needs_review": return { tone: "success", message: "Analyse actualisée : des points demandent une revue humaine." };
+    case "already_running": return { tone: "info", message: "Une analyse de ce CV est déjà en cours." };
+    case "queued": return { tone: "info", message: "Analyse remise en file : elle sera traitée au prochain passage." };
+    case "retry_scheduled": return { tone: "warning", message: `L’analyse a échoué ; une nouvelle tentative est programmée. ${recruitmentAnalysisErrorLabel(result.error) ?? ""}`.trim() };
+    case "failed": return { tone: "error", message: `L’analyse a échoué. ${recruitmentAnalysisErrorLabel(result.error) ?? ""}`.trim() };
+    default: return (result.processed ?? 0) > 0 ? { tone: "success", message: "Analyse relancée." } : { tone: "info", message: "Analyse déjà en cours de traitement." };
+  }
+}
+
+/** Toast after « Relancer la copie » Google Drive (ADM-DRIVE-01). */
+export function driveRetryToast(result: { outcome?: string; error?: string | null }): AdminToast {
+  switch (result.outcome) {
+    case "completed": return { tone: "success", message: "CV copié dans Google Drive." };
+    case "already_completed": return { tone: "success", message: "Le CV est déjà présent dans Google Drive." };
+    case "already_running": return { tone: "info", message: "La copie Google Drive est déjà en cours." };
+    case "queued": return { tone: "info", message: "Copie Google Drive remise en file." };
+    case "waiting_validation": return { tone: "info", message: "Le CV doit d’abord être validé par le contrôle de sécurité ; la copie suivra automatiquement." };
+    case "not_connected": return { tone: "warning", message: "Google Drive n’est pas connecté : connectez-le depuis l’en-tête de l’onglet." };
+    case "retry_scheduled":
+    case "failed": {
+      const reason = recruitmentDriveExportErrorLabel(result.error);
+      return { tone: result.outcome === "failed" ? "error" : "warning", message: `La copie Google Drive a échoué${reason ? ` : ${reason}` : ""}.${/renouveler/.test(reason ?? "") ? " Cliquez sur « Reconnexion Google Drive requise »." : " Une nouvelle tentative est prévue."}` };
+    }
+    default: return { tone: "info", message: "Copie Google Drive relancée." };
+  }
+}
+
+/** Header button of the Candidatures tab: never « connecté » when the token was revoked. */
+export function googleDriveConnectionState(status: { connected?: boolean; lastError?: string | null } | null | undefined) {
+  if (!status?.connected) return { label: "Connecter Google Drive", needsAttention: false };
+  if (status.lastError && /token|unauthorized|401|403|invalid_grant/i.test(status.lastError)) return { label: "Reconnexion Google Drive requise", needsAttention: true };
+  if (status.lastError) return { label: "Google Drive connecté · dernière copie en échec", needsAttention: true };
+  return { label: "Google Drive connecté", needsAttention: false };
+}

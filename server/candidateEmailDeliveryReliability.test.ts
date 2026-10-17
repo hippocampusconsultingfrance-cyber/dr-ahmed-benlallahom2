@@ -31,11 +31,17 @@ describe("fiabilité des e-mails du portail candidat", () => {
     expect(source).toContain('buildCandidatePortalAccessIdempotencyKey("reset", tokenHash)');
   });
 
-  it("ne permet pas à une seconde inscription d’écraser le mot de passe d’un compte en attente", () => {
-    const existingAccountBranch = source.slice(source.indexOf("if (existing[0])"), source.indexOf("} else {", source.indexOf("if (existing[0])")));
-    expect(existingAccountBranch).not.toContain("passwordHash");
-    expect(existingAccountBranch).not.toContain("firstName: input.firstName");
-    expect(existingAccountBranch).not.toContain("lastName: input.lastName");
-    expect(existingAccountBranch).not.toContain("linkedApplicationId: matchingApplicationId");
+  it("ne fixe jamais de mot de passe avant la preuve de possession de l’email (SEC-02)", () => {
+    // Behaviour is covered by candidatePortalPreHijack.test.ts; this guards the shape.
+    const registerSource = source.slice(source.indexOf("  register: publicProcedure"), source.indexOf("  resendVerification: publicProcedure"));
+    expect(registerSource).not.toContain("hashCandidatePassword(");
+    expect(registerSource).not.toContain("input.password");
+    expect(registerSource.match(/passwordHash: createUnsetCandidatePasswordHash\(\)/g)).toHaveLength(2);
+    expect(registerSource).toContain("isNull(candidateAccounts.emailVerifiedAt)");
+    expect(registerSource).toContain("db.update(candidateSessions).set({ revokedAt: now })");
+    const verifySource = source.slice(source.indexOf("  verifyEmail: publicProcedure"), source.indexOf("  login: publicProcedure"));
+    expect(verifySource).toContain("passwordHash,");
+    expect(verifySource).toContain("db.update(candidateSessions).set({ revokedAt: now })");
+    expect(source).toContain("isNotNull(candidateAccounts.emailVerifiedAt)");
   });
 });

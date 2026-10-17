@@ -1,4 +1,7 @@
 import { createHash } from "node:crypto";
+import { CANDIDATE_DOCUMENT_MAX_BYTES } from "../shared/candidateDocumentLimits";
+
+export { CANDIDATE_DOCUMENT_MAX_BYTES, CANDIDATE_DOCUMENT_TOO_LARGE_MESSAGE } from "../shared/candidateDocumentLimits";
 
 const PDF_SIGNATURE = Buffer.from("%PDF-");
 const OLE_SIGNATURE = Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]);
@@ -6,7 +9,6 @@ const ZIP_SIGNATURE = Buffer.from([0x50, 0x4b, 0x03, 0x04]);
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 const JPEG_PREFIX = Buffer.from([0xff, 0xd8, 0xff]);
 
-export const CANDIDATE_DOCUMENT_MAX_BYTES = 10 * 1024 * 1024;
 export const candidateDocumentMimeTypes = new Set([
   "application/pdf",
   "application/msword",

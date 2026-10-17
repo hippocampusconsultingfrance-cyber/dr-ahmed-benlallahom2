@@ -4,6 +4,7 @@
 // ============================================================
 
 import type { VentureDetail } from "./ventures-fr";
+import { siteConfig } from "./site-config";
 
 export const venturesEn: VentureDetail[] = [
   {
@@ -35,7 +36,7 @@ export const venturesEn: VentureDetail[] = [
       {
         name: "Dr. Ahmed Ben Lallahom",
         role: "CEO & Founder",
-        linkedin: "https://www.linkedin.com/in/ahmed-ben-lallahom/",
+        linkedin: siteConfig.linkedin,
         photo: "/assets/team/ahmed-ben-lallahom.webp",
       },
       {
@@ -104,7 +105,7 @@ export const venturesEn: VentureDetail[] = [
       {
         name: "Dr. Ahmed Ben Lallahom",
         role: "Medical Director",
-        linkedin: "https://www.linkedin.com/in/ahmed-ben-lallahom/",
+        linkedin: siteConfig.linkedin,
         photo: "/assets/team/ahmed-ben-lallahom.webp",
       },
     ],
@@ -149,7 +150,7 @@ export const venturesEn: VentureDetail[] = [
       {
         name: "Dr. Ahmed Ben Lallahom",
         role: "Medical Director",
-        linkedin: "https://www.linkedin.com/in/ahmed-ben-lallahom/",
+        linkedin: siteConfig.linkedin,
         photo: "/assets/team/ahmed-ben-lallahom.webp",
       },
     ],
@@ -184,7 +185,7 @@ export const venturesEn: VentureDetail[] = [
       {
         name: "Dr. Ahmed Ben Lallahom",
         role: "Consultant",
-        linkedin: "https://www.linkedin.com/in/ahmed-ben-lallahom/",
+        linkedin: siteConfig.linkedin,
         photo: "/assets/team/ahmed-ben-lallahom.webp",
       },
       {
@@ -253,7 +254,7 @@ export const venturesEn: VentureDetail[] = [
       {
         name: "Dr. Ahmed Ben Lallahom",
         role: "Consultant",
-        linkedin: "https://www.linkedin.com/in/ahmed-ben-lallahom/",
+        linkedin: siteConfig.linkedin,
         photo: "/assets/team/ahmed-ben-lallahom.webp",
       },
     ],

@@ -44,7 +44,6 @@ export default function TestimonialsSection() {
       title: "Témoignages des Partenaires",
       subtitle: "Ce que disent nos partenaires",
       viewAll: "Voir tous les témoignages",
-      verified: "✓ Vérifié",
       error: "Impossible de charger les témoignages.",
       empty: "Aucun témoignage disponible pour le moment.",
       previous: "Témoignage précédent",
@@ -56,7 +55,6 @@ export default function TestimonialsSection() {
       title: "Partner Testimonials",
       subtitle: "What our partners say",
       viewAll: "View all testimonials",
-      verified: "✓ Verified",
       error: "Testimonials could not be loaded.",
       empty: "No testimonials are available at the moment.",
       previous: "Previous testimonial",
@@ -68,7 +66,6 @@ export default function TestimonialsSection() {
       title: "Partnerbewertungen",
       subtitle: "Was unsere Partner sagen",
       viewAll: "Alle Bewertungen anzeigen",
-      verified: "✓ Verifiziert",
       error: "Die Bewertungen konnten nicht geladen werden.",
       empty: "Derzeit sind keine Bewertungen verfügbar.",
       previous: "Vorherige Bewertung",
@@ -80,7 +77,6 @@ export default function TestimonialsSection() {
       title: "合作伙伴评价",
       subtitle: "我们的合作伙伴怎么说",
       viewAll: "查看所有评价",
-      verified: "✓ 已验证",
       error: "暂时无法加载评价。",
       empty: "目前暂无评价。",
       previous: "上一条评价",
@@ -271,11 +267,6 @@ export default function TestimonialsSection() {
                       <p className="text-muted-foreground text-xs">{testimonial.specialty}</p>
                     )}
                   </div>
-                  {testimonial.verified === 1 && (
-                    <span className="text-primary text-xs font-semibold">
-                      {currentContent.verified}
-                    </span>
-                  )}
                 </div>
               </div>
             ))}

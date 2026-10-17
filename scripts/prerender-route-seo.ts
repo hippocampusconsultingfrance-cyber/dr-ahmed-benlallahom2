@@ -24,7 +24,9 @@
  *    cible de la réécriture SPA de vercel.json pour les routes dynamiques ou
  *    privées (candidate/*, admin, booking/confirmation) et les URL inconnues ;
  *  - _spa-template.html : shell intact, contenant encore le marqueur, que
- *    server/_core/static.ts utilise pour rendre le <head> à la volée hors Vercel.
+ *    server/_core/static.ts utilise pour rendre le <head> à la volée hors Vercel ;
+ *  - sitemap.xml : généré depuis les mêmes routes (indexables, sans alias), avec
+ *    la date du build en lastmod (SEO-03). Il n'existe plus de sitemap écrit à la main.
  */
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -36,7 +38,15 @@ import {
   getPrerenderRoutes,
   renderFallbackSeoHead,
   renderRouteSeoHead,
+  renderSitemapXml,
 } from "../server/routeSeo";
+
+export const SITEMAP_FILE = "sitemap.xml";
+
+/** Date du build au format AAAA-MM-JJ (heure de Paris), utilisée comme lastmod du sitemap. */
+export function buildDate(now: Date = new Date()): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Paris", year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
+}
 
 const SAFE_SEGMENT = /^[a-z0-9-]+$/i;
 
@@ -101,6 +111,7 @@ export async function prerenderRouteSeo(
     await mkdir(path.dirname(target), { recursive: true });
     await writeFile(target, page.html, "utf8");
   }
+  await writeFile(path.join(distPath, SITEMAP_FILE), renderSitemapXml(buildDate()), "utf8");
   return pages;
 }
 
@@ -115,7 +126,7 @@ if (isDirectRun) {
   prerenderRouteSeo(distPath)
     .then(pages => {
       console.log(
-        `[prerender-route-seo] ${pages.length} fichiers HTML écrits dans ${distPath}`
+        `[prerender-route-seo] ${pages.length} fichiers HTML et ${SITEMAP_FILE} écrits dans ${distPath}`
       );
     })
     .catch(error => {

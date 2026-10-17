@@ -2,7 +2,7 @@ import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { gzipSync } from "node:zlib";
 
-const assetsDirectory = path.resolve("dist/public/assets");
+const assetsDirectory = path.resolve("dist/public/static");
 const files = await readdir(assetsDirectory);
 const javascript = files.filter((file) => file.endsWith(".js"));
 const resolveLargest = (predicate) => javascript
@@ -25,6 +25,8 @@ const publicMeasures = await Promise.all(publicChunks.map(async (file) => ({ fil
 const budgets = { entry: 160 * 1024, admin: 60 * 1024, public: 30 * 1024 };
 const failures = [];
 if (mainEntry.gzip > budgets.entry) failures.push(`Entrée ${mainEntry.file}: ${kib(mainEntry.gzip)} KiB > ${kib(budgets.entry)} KiB`);
+// Clerk (authentification admin) ne doit jamais revenir dans le chunk d'entrée public (PERF-01).
+if (/ClerkProvider|@clerk\/|clerk\.browser/.test(await readFile(path.join(assetsDirectory, mainEntry.file), "utf8"))) failures.push(`Entrée ${mainEntry.file}: contient Clerk`);
 if (adminGzip > budgets.admin) failures.push(`Admin ${adminFile}: ${kib(adminGzip)} KiB > ${kib(budgets.admin)} KiB`);
 for (const chunk of publicMeasures) if (chunk.gzip > budgets.public) failures.push(`Route ${chunk.file}: ${kib(chunk.gzip)} KiB > ${kib(budgets.public)} KiB`);
 

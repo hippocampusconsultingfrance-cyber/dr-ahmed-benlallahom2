@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { and, eq } from "drizzle-orm";
+import { and, eq, gt, gte, inArray, isNotNull, lte, sql } from "drizzle-orm";
 import { candidateSecurityRateLimits, securityEvents } from "../drizzle/schema";
 import { getDb } from "./db";
 import { notifyOwner } from "./_core/notification";
@@ -32,51 +32,163 @@ export async function logSecurityEvent(input: {
 }) {
   const db = await getDb();
   if (!db) return;
+  const category = input.category.slice(0, 100);
   await db.insert(securityEvents).values({
     actorKind: input.actorKind,
     actorReference: input.actorReference ?? null,
-    category: input.category.slice(0, 100),
+    category,
     outcome: input.outcome,
     severity: input.severity ?? "info",
     ipHash: input.ipHash ?? null,
     metadata: input.metadata ? JSON.stringify(input.metadata) : null,
   });
   if ((input.severity === "high" || input.severity === "critical") && input.outcome !== "allowed") {
-    void notifyOwner({ title: "Alerte sécurité — Hippocampus Consulting", content: `${input.category} · ${input.outcome}. Une vérification administrative est recommandée.` }).catch(() => undefined);
+    await notifyOwnerOfSecurityAlert({ ...input, category }).catch((error: unknown) => {
+      console.error("security_alert_notification_failed", error instanceof Error ? error.name : "UnknownError");
+    });
   }
 }
 
-export async function enforcePersistentRateLimit(input: {
+/** At most one owner alert email per event category in this window (CAND-15). */
+export const SECURITY_ALERT_EMAIL_WINDOW_MS = 30 * 60 * 1000;
+
+function describeSecurityActor(input: { actorKind: string; actorReference?: string | null }): string {
+  if (!input.actorReference) return input.actorKind === "system" ? "système" : "non identifié";
+  if (input.actorKind === "candidate") return `compte candidat n° ${input.actorReference}`;
+  if (input.actorKind === "admin") return `administrateur ${input.actorReference.slice(0, 32)}`;
+  // Anonymous references are already pseudonymised hashes: show a short prefix only.
+  return `empreinte ${input.actorReference.slice(0, 12)}…`;
+}
+
+/**
+ * Aggregates high-severity alerts: the first event of a category in a window
+ * sends one email with the number of similar events of the last hour, the
+ * actor and a pseudonymised network; later events of that category are only
+ * recorded until the window has passed. A burst of N failures therefore sends
+ * one email instead of N, and the daily posture review still counts them all.
+ */
+async function notifyOwnerOfSecurityAlert(input: {
+  actorKind: string;
+  actorReference?: string | null;
+  category: string;
+  outcome: string;
+  severity?: string;
+  ipHash?: string | null;
+}) {
+  const slot = await recordPersistentRateLimitAttempt({
+    action: "security_alert_email",
+    subject: input.category,
+    maxAttempts: 1,
+    windowMs: SECURITY_ALERT_EMAIL_WINDOW_MS,
+    blockMs: SECURITY_ALERT_EMAIL_WINDOW_MS,
+  });
+  if (slot.blocked || slot.attemptCount > 1) return;
+  const db = await getDb();
+  if (!db) return;
+  const since = new Date(Date.now() - 2 * SECURITY_ALERT_EMAIL_WINDOW_MS);
+  const recent = await db.select({ id: securityEvents.id }).from(securityEvents).where(and(
+    eq(securityEvents.category, input.category),
+    gte(securityEvents.createdAt, since),
+    inArray(securityEvents.severity, ["high", "critical"]),
+  )).limit(10_000);
+  const windowMinutes = Math.round(SECURITY_ALERT_EMAIL_WINDOW_MS / 60_000);
+  await notifyOwner({
+    title: `Alerte sécurité — ${input.category} — Hippocampus Consulting`,
+    content: [
+      `Catégorie : ${input.category} · ${input.outcome} (gravité ${input.severity ?? "high"}).`,
+      `Événements de ce type sur la dernière heure : ${recent.length}.`,
+      `Dernier acteur : ${describeSecurityActor(input)}${input.ipHash ? ` · réseau ${input.ipHash.slice(0, 12)}…` : ""}.`,
+      `Les événements suivants de cette catégorie sont enregistrés sans nouvel email pendant au moins ${windowMinutes} minutes ; consultez le journal de sécurité de l’administration.`,
+    ].join("\n"),
+  });
+}
+
+export type PersistentRateLimitPolicy = {
   action: string;
   subject: string;
   maxAttempts: number;
   windowMs: number;
   blockMs: number;
-}): Promise<void> {
+};
+
+/** newlyBlocked is true only for the attempt that created the current block. */
+export type PersistentRateLimitState = { attemptCount: number; blockedUntil: Date | null; blocked: boolean; newlyBlocked: boolean };
+
+function asDate(value: unknown): Date | null {
+  if (value === null || value === undefined) return null;
+  const date = value instanceof Date ? value : new Date(String(value));
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function timestampValue(value: Date) {
+  // Same wall-clock encoding as drizzle's own timestamp columns (ISO string, UTC).
+  return sql`${value.toISOString()}::timestamp`;
+}
+
+/**
+ * Counts one attempt atomically and reports whether the subject is blocked.
+ * A single UPDATE ... RETURNING computes the new counter from the stored row,
+ * so concurrent requests can no longer lose increments (CAND-01). Semantics:
+ * - while blocked (blocked_until in the future and the count above the current
+ *   threshold) nothing changes and the subject stays blocked;
+ * - a block that has expired resets the counter (CAND-12);
+ * - a window older than windowMs restarts at 1;
+ * - going above maxAttempts blocks for blockMs.
+ * A block created under an older, lower threshold is not kept once the policy
+ * is relaxed (attemptCount > maxAttempts is re-checked with the new value).
+ */
+export async function recordPersistentRateLimitAttempt(input: PersistentRateLimitPolicy): Promise<PersistentRateLimitState> {
   const db = await getDb();
   if (!db) throw new Error("candidate_security_database_unavailable");
+  const table = candidateSecurityRateLimits;
   const subjectHash = hashSecurityValue(input.subject);
   const now = new Date();
-  const existing = (await db.select().from(candidateSecurityRateLimits).where(and(eq(candidateSecurityRateLimits.action, input.action), eq(candidateSecurityRateLimits.subjectHash, subjectHash))).limit(1))[0];
-  if (!existing) {
-    await db.insert(candidateSecurityRateLimits).values({ action: input.action, subjectHash, windowStartedAt: now, attemptCount: 1, lastAttemptAt: now });
-    return;
-  }
-  // A policy can be relaxed after a false positive or an infrastructure incident.
-  // In that case, do not preserve a block created under the older, lower threshold.
-  if (existing.blockedUntil && existing.blockedUntil > now && existing.attemptCount > input.maxAttempts) {
-    throw new Error("candidate_security_rate_limited");
-  }
-  const sameWindow = now.getTime() - existing.windowStartedAt.getTime() < input.windowMs;
-  const attempts = sameWindow ? existing.attemptCount + 1 : 1;
-  const blockedUntil = attempts > input.maxAttempts ? new Date(now.getTime() + input.blockMs) : null;
-  await db.update(candidateSecurityRateLimits).set({
-    windowStartedAt: sameWindow ? existing.windowStartedAt : now,
-    attemptCount: attempts,
-    blockedUntil,
+  const blockedNow = and(isNotNull(table.blockedUntil), gt(table.blockedUntil, now), gt(table.attemptCount, input.maxAttempts));
+  const expiredBlock = and(isNotNull(table.blockedUntil), lte(table.blockedUntil, now));
+  const sameWindow = gt(table.windowStartedAt, new Date(now.getTime() - input.windowMs));
+  const nextCount = sql`CASE WHEN ${expiredBlock} THEN 1 WHEN ${sameWindow} THEN ${table.attemptCount} + 1 ELSE 1 END`;
+  const subjectRow = and(eq(table.action, input.action), eq(table.subjectHash, subjectHash));
+  const returning = { attemptCount: table.attemptCount, blockedUntil: table.blockedUntil };
+  const increment = () => db.update(table).set({
+    attemptCount: sql`CASE WHEN ${blockedNow} THEN ${table.attemptCount} ELSE ${nextCount} END`,
+    windowStartedAt: sql`CASE WHEN ${blockedNow} THEN ${table.windowStartedAt} WHEN ${expiredBlock} THEN ${timestampValue(now)} WHEN ${sameWindow} THEN ${table.windowStartedAt} ELSE ${timestampValue(now)} END`,
+    blockedUntil: sql`CASE WHEN ${blockedNow} THEN ${table.blockedUntil} WHEN (${nextCount}) > ${input.maxAttempts} THEN ${timestampValue(new Date(now.getTime() + input.blockMs))} ELSE NULL END`,
     lastAttemptAt: now,
-  }).where(eq(candidateSecurityRateLimits.id, existing.id));
-  if (blockedUntil) throw new Error("candidate_security_rate_limited");
+  }).where(subjectRow).returning(returning);
+
+  let rows = await increment();
+  if (rows.length === 0) {
+    const firstBlock = 1 > input.maxAttempts ? new Date(now.getTime() + input.blockMs) : null;
+    rows = await db.insert(table)
+      .values({ action: input.action, subjectHash, windowStartedAt: now, attemptCount: 1, blockedUntil: firstBlock, lastAttemptAt: now })
+      .onConflictDoNothing()
+      .returning(returning);
+    // Lost the race for the first row: count on the row the other request created.
+    if (rows.length === 0) rows = await increment();
+  }
+  // Several rows can only exist if the unique index is missing; the strictest one wins.
+  const row = rows.reduce((strictest, candidate) => Number(candidate.attemptCount) > Number(strictest.attemptCount) ? candidate : strictest, rows[0]);
+  const attemptCount = Number(row?.attemptCount ?? 1);
+  const blockedUntil = asDate(row?.blockedUntil);
+  const blocked = Boolean(blockedUntil && blockedUntil > now && attemptCount > input.maxAttempts);
+  // A block set by this very statement ends exactly blockMs after this request's clock.
+  const newlyBlocked = blocked && blockedUntil!.getTime() === now.getTime() + input.blockMs;
+  return { attemptCount, blockedUntil, blocked, newlyBlocked };
+}
+
+export async function enforcePersistentRateLimit(input: PersistentRateLimitPolicy): Promise<void> {
+  const state = await recordPersistentRateLimitAttempt(input);
+  if (state.blocked) throw new Error("candidate_security_rate_limited");
+}
+
+/** Forgets the counter of a subject (e.g. after a successful sign-in). */
+export async function clearPersistentRateLimit(input: { action: string; subject: string }): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(candidateSecurityRateLimits).where(and(
+    eq(candidateSecurityRateLimits.action, input.action),
+    eq(candidateSecurityRateLimits.subjectHash, hashSecurityValue(input.subject)),
+  ));
 }
 
 export async function isCompromisedPassword(password: string): Promise<boolean> {

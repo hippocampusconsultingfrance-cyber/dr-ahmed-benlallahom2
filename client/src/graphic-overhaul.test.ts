@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { bookingContent } from "./pages/BookingPage";
+import { renderSitemapXml } from "../../server/routeSeo";
 
 const projectRoot = resolve(import.meta.dirname, "../..");
 
@@ -43,7 +44,8 @@ describe("premium graphic overhaul contracts", () => {
 
   it("hides news from public navigation and indexing while preserving admin blog management", () => {
     const navigation = readProjectFile("client/src/components/Navigation.tsx");
-    const sitemap = readProjectFile("client/public/sitemap.xml");
+    // sitemap.xml est généré au build par scripts/prerender-route-seo.ts (SEO-03).
+    const sitemap = renderSitemapXml("2026-10-16");
     const robots = readProjectFile("client/public/robots.txt");
     const admin = readProjectFile("client/src/pages/AdminDashboard.tsx");
     const app = readProjectFile("client/src/App.tsx");
@@ -89,7 +91,8 @@ describe("premium graphic overhaul contracts", () => {
     expect(routers).toContain("session_id={CHECKOUT_SESSION_ID}");
     expect(routers).toContain("cancelPending: publicProcedure");
     expect(routers).toContain("refund: adminProcedure");
-    expect(routers).toContain("idempotencyKey: `refund_${appointment.trackingId}`");
+    // Remboursement idempotent, désormais dans le module des actions admin sur les rendez-vous.
+    expect(readProjectFile("server/appointmentAdminActions.ts")).toContain("idempotencyKey: `refund_${appointment.trackingId}`");
     expect(adminDashboard).toContain("trpc.admin.appointments.refund.useMutation");
     expect(adminDashboard).toContain("Rembourser");
     const notifications = readProjectFile("server/_core/notifications.ts");

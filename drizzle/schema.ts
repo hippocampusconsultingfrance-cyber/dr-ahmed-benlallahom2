@@ -186,7 +186,9 @@ export type InsertAppointment = typeof appointments.$inferInsert;
 export const appointmentFulfillmentJobs = mysqlTable("appointment_fulfillment_jobs", {
   id: serial("id").primaryKey(),
   appointmentId: int("appointment_id").notNull(),
-  jobType: mysqlEnum("job_type", ["confirmation", "invoice"]).notNull(),
+  // varchar column: "owner" (new-booking notification to the owner, sent first)
+  // needs no migration.
+  jobType: mysqlEnum("job_type", ["owner", "confirmation", "invoice"]).notNull(),
   status: mysqlEnum("status", ["queued", "running", "retry", "completed", "failed"]).default("queued").notNull(),
   attempts: int("attempts").default(0).notNull(),
   maxAttempts: int("max_attempts").default(3).notNull(),
@@ -199,6 +201,28 @@ export const appointmentFulfillmentJobs = mysqlTable("appointment_fulfillment_jo
 }, table => ({
   appointmentJobUnique: uniqueIndex("appointment_fulfillment_unique").on(table.appointmentId, table.jobType),
   dueJobs: index("appointment_fulfillment_due_idx").on(table.status, table.scheduledFor),
+}));
+
+/**
+ * One invoice per paid appointment, numbered once and without gaps inside a
+ * yearly series (FAC-2026-000001). Created at runtime by
+ * server/invoiceNumbering.ts (ensureInvoiceSchema, idempotent DDL): no manual
+ * production migration. Kept out of `appointments` so that existing selects on
+ * that table never reference a column the live database may not have yet.
+ */
+export const appointmentInvoices = mysqlTable("appointment_invoices", {
+  id: serial("id").primaryKey(),
+  appointmentId: int("appointment_id").notNull(),
+  invoiceSeries: varchar("invoice_series", { length: 16 }).notNull(),
+  invoiceSequence: int("invoice_sequence").notNull(),
+  invoiceNumber: varchar("invoice_number", { length: 32 }).notNull(),
+  issuedAt: timestamp("issued_at").notNull(),
+  paidAt: timestamp("paid_at").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, table => ({
+  appointmentUnique: uniqueIndex("appointment_invoices_appointment_unique").on(table.appointmentId),
+  numberUnique: uniqueIndex("appointment_invoices_number_unique").on(table.invoiceNumber),
+  seriesSequenceUnique: uniqueIndex("appointment_invoices_series_sequence_unique").on(table.invoiceSeries, table.invoiceSequence),
 }));
 
 /**

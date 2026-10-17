@@ -1,4 +1,5 @@
 import { FormEvent, useMemo, useRef, useState } from "react";
+import { isAcceptedRecruitmentCvFile, RECRUITMENT_CV_ACCEPT_ATTRIBUTE } from "@shared/recruitmentCvLimits";
 import { CheckCircle2, Clock3, FileUp, Globe2, Loader2, ShieldCheck, UserCheck, Zap, Award, Compass, Lock } from "lucide-react";
 import { Link } from "wouter";
 import { SEOHead } from "@/components/SEOHead";
@@ -33,8 +34,8 @@ const copy = {
     certificationsPlaceholder: "ATLS, ACLS, HUET, etc.",
     diplomaCountry: "Pays d’obtention du diplôme",
     selectCountry: "Sélectionner le pays",
-    cv: "CV détaillé (PDF, DOC ou DOCX — 5 Mo max)",
-    fileHint: "PDF, DOC ou DOCX — 5 Mo max",
+    cv: "CV détaillé (PDF ou DOCX — 4 Mo max)",
+    fileHint: "PDF ou DOCX — 4 Mo max",
     chooseFile: "Choisir un fichier",
     specialties: [
       "Médecin urgentiste (ATLS / ACLS)",
@@ -52,7 +53,7 @@ const copy = {
     successText: "Votre dossier a été transmis à notre cellule de recrutement spécialisé. Votre code de suivi confidentiel :",
     backHome: "Retour à l’accueil",
     required: "Veuillez remplir les champs obligatoires et joindre votre CV.",
-    fileError: "Veuillez joindre un CV valide au format PDF, DOC ou DOCX (max 5 Mo).",
+    fileError: "Veuillez joindre un CV valide au format PDF ou DOCX (max 4 Mo ; le format Word ancien .doc n’est pas accepté).",
     genericError: "Erreur lors de la transmission. Veuillez vérifier vos informations et réessayer.",
     p1Title: "Excellence & Discrétion",
     p1Desc: "Protocoles de confidentialité stricts, habilitations et discrétion absolue exigés pour chaque intervention.",
@@ -100,8 +101,8 @@ const copy = {
     certificationsPlaceholder: "ATLS, ACLS, HUET, etc.",
     diplomaCountry: "Country where diploma was obtained",
     selectCountry: "Select country",
-    cv: "Detailed CV (PDF, DOC or DOCX — 5 MB max)",
-    fileHint: "PDF, DOC or DOCX — 5 MB max",
+    cv: "Detailed CV (PDF or DOCX — 4 MB max)",
+    fileHint: "PDF or DOCX — 4 MB max",
     chooseFile: "Choose a file",
     specialties: [
       "Emergency physician (ATLS / ACLS)",
@@ -119,7 +120,7 @@ const copy = {
     successText: "Your file has been sent to our specialized recruitment unit. Your confidential tracking code:",
     backHome: "Back to Home",
     required: "Please fill in mandatory fields and attach your CV.",
-    fileError: "Please attach a valid PDF, DOC or DOCX CV (max 5 MB).",
+    fileError: "Please attach a valid PDF or DOCX CV (max 4 MB; the legacy Word .doc format is not accepted).",
     genericError: "Transmission error. Please check your information and try again.",
     p1Title: "Excellence & Discretion",
     p1Desc: "Strict confidentiality protocols, clearances, and absolute discretion required for every deployment.",
@@ -167,8 +168,8 @@ const copy = {
     certificationsPlaceholder: "ATLS, ACLS, HUET usw.",
     diplomaCountry: "Land des Diplomabschlusses",
     selectCountry: "Land auswählen",
-    cv: "Detaillierter Lebenslauf (PDF, DOC oder DOCX — max. 5 MB)",
-    fileHint: "PDF, DOC oder DOCX — max. 5 MB",
+    cv: "Detaillierter Lebenslauf (PDF oder DOCX — max. 4 MB)",
+    fileHint: "PDF oder DOCX — max. 4 MB",
     chooseFile: "Datei auswählen",
     specialties: [
       "Notarzt / Notärztin (ATLS / ACLS)",
@@ -186,7 +187,7 @@ const copy = {
     successText: "Ihre Unterlagen wurden an unser spezialisiertes Recruiting-Team übermittelt. Ihr vertraulicher Tracking-Code:",
     backHome: "Zur Startseite",
     required: "Bitte füllen Sie alle Pflichtfelder aus und fügen Sie Ihren Lebenslauf bei.",
-    fileError: "Bitte fügen Sie einen gültigen PDF-, DOC- oder DOCX-Lebenslauf bei (max. 5 MB).",
+    fileError: "Bitte fügen Sie einen gültigen PDF- oder DOCX-Lebenslauf bei (max. 4 MB; das alte Word-Format .doc wird nicht akzeptiert).",
     genericError: "Übertragungsfehler. Bitte überprüfen Sie Ihre Angaben.",
     p1Title: "Exzellenz & Diskretion",
     p1Desc: "Strikte Vertraulichkeitsprotokolle und absolute Verschwiegenheit.",
@@ -234,8 +235,8 @@ const copy = {
     certificationsPlaceholder: "ATLS、ACLS、HUET 等",
     diplomaCountry: "文凭获得国家",
     selectCountry: "选择国家",
-    cv: "详细简历（PDF、DOC 或 DOCX，最大 5 MB）",
-    fileHint: "PDF、DOC 或 DOCX，最大 5 MB",
+    cv: "详细简历（PDF 或 DOCX，最大 4 MB）",
+    fileHint: "PDF 或 DOCX，最大 4 MB",
     chooseFile: "选择文件",
     specialties: [
       "急诊医师（ATLS / ACLS）",
@@ -253,7 +254,7 @@ const copy = {
     successText: "您的资料已提交至专项招聘组。保密追踪编号：",
     backHome: "返回首页",
     required: "请填写必填项并附加您的简历。",
-    fileError: "请附加有效的 PDF、DOC 或 DOCX 格式简历（最大 5 MB）。",
+    fileError: "请附加有效的 PDF 或 DOCX 格式简历（最大 4 MB；不接受旧版 Word .doc 格式）。",
     genericError: "传输错误，请检查信息后重试。",
     p1Title: "卓越与绝对保密",
     p1Desc: "严格的保密协议、安全许可与绝对隐秘。",
@@ -349,14 +350,9 @@ const createInitialForm = (language: Language): FormState => ({
   website: "",
 });
 
-const MAX_VVIP_CV_BYTES = 5 * 1024 * 1024;
-const acceptedVvipCvMimeTypes = new Set(["application/pdf", "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"]);
-const acceptedVvipCvFilename = /\.(pdf|doc|docx)$/i;
-
-/** Android and iOS file pickers may provide a generic MIME type for a valid CV. */
+/** Android and iOS file pickers may provide a generic MIME type for a valid CV (PDF or DOCX, 4 MB at most). */
 export function isAcceptedVvipCvFile(file: Pick<File, "name" | "size" | "type"> | null): boolean {
-  if (!file || file.size > MAX_VVIP_CV_BYTES) return false;
-  return acceptedVvipCvMimeTypes.has(file.type) || acceptedVvipCvFilename.test(file.name);
+  return isAcceptedRecruitmentCvFile(file);
 }
 
 export default function VvipOffshorePage() {
@@ -595,7 +591,7 @@ export default function VvipOffshorePage() {
                         id="vvip-cv"
                         type="file"
                         required
-                        accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                        accept={RECRUITMENT_CV_ACCEPT_ATTRIBUTE}
                         className="peer sr-only"
                         aria-invalid={isInvalid("cv")}
                         aria-describedby="vvip-cv-hint"
