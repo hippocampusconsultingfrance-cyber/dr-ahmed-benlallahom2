@@ -44,9 +44,21 @@ export function getBookingWindowIssue(appointmentStart: Date, now: number = Date
 /**
  * Stable reasons for a refused booking, sent with the tRPC error as
  * `data.reason` so the booking page shows its own translated message instead
- * of the French text written by the server (EN-06).
+ * of the French text written by the server (EN-06): the schedule refusals,
+ * then the anti-abuse limits (attempts per hour, bookings awaiting payment)
+ * and the payment service being unavailable.
  */
-export const BOOKING_REFUSAL_REASONS = ["slot_taken", "too_soon", "too_far", "outside_schedule", "no_availability", "date_blocked"] as const;
+export const BOOKING_REFUSAL_REASONS = [
+  "slot_taken",
+  "too_soon",
+  "too_far",
+  "outside_schedule",
+  "no_availability",
+  "date_blocked",
+  "rate_limited",
+  "too_many_holds",
+  "payment_unavailable",
+] as const;
 export type BookingRefusalReason = (typeof BOOKING_REFUSAL_REASONS)[number];
 
 export function isBookingRefusalReason(value: unknown): value is BookingRefusalReason {

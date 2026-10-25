@@ -11,7 +11,7 @@ import { SEOHead } from "@/components/SEOHead";
 import Footer from "@/components/Footer";
 import BookingLegalNotice from "@/components/BookingLegalNotice";
 import LanguageMenu from "@/components/LanguageMenu";
-import { formatVisitorTime, getBookingLocale } from "@/lib/bookingTime";
+import { formatVisitorTime, getBookingDateTimeFormat, getBookingLocale } from "@/lib/bookingTime";
 import { getBookingFormCopy } from "@/lib/publicFormCopy";
 import {
   clearBookingDraft,
@@ -70,6 +70,8 @@ export const bookingContent = {
       noBookableDay: `Aucun créneau n’est disponible dans les ${BOOKING_HORIZON_DAYS} prochains jours.`,
       noSlotsThisDay: "Tous les horaires de ce jour sont déjà réservés. Choisissez un autre jour.",
       noSlotsLeftThisDay: "Plus aucun horaire n’est disponible ce jour-là. Choisissez un autre jour.",
+      slotsError: "Les horaires de ce jour n’ont pas pu être chargés.",
+      retry: "Réessayer",
       parisTime: "heure de Paris",
       localTime: (time: string) => `soit ${time} chez vous`,
       localTimeShort: (time: string) => `${time} chez vous`,
@@ -100,6 +102,9 @@ export const bookingContent = {
       outside_schedule: "Ce créneau ne fait plus partie des horaires de consultation. Choisissez-en un autre.",
       no_availability: "Aucun horaire de consultation n’est ouvert pour le moment.",
       date_blocked: "Cette date n’est plus disponible. Choisissez un autre jour.",
+      rate_limited: "Trop de tentatives de réservation ont été effectuées. Réessayez dans une heure ou contactez-nous directement.",
+      too_many_holds: "Vous avez déjà deux réservations en attente de paiement. Finalisez ou annulez l’un de ces paiements, ou patientez une trentaine de minutes avant de réserver un nouveau créneau.",
+      payment_unavailable: "Le service de paiement est momentanément indisponible. Votre créneau n’a pas été réservé : réessayez dans quelques minutes ou contactez-nous.",
     },
     pricing: {
       title: "Tarification",
@@ -131,11 +136,14 @@ export const bookingContent = {
         remaining: "Temps restant pour payer",
         remainingValue: (minutes: number) => (minutes < 1 ? "moins d’une minute" : `encore ${minutes} min`),
         reference: "Référence",
+        // Ponctuation des libellés de l’encart : espace avant les deux-points en français seulement.
+        labelSeparator: " : ",
         resume: "Reprendre le paiement",
         cancel: "Annuler et choisir un autre créneau",
         cancelled: "Le créneau a été libéré. Vos informations sont conservées : choisissez une nouvelle date ou heure.",
         closed: "Cette réservation n’est plus en attente. Si vous avez finalisé le paiement, vous recevrez une confirmation par email ; sinon, choisissez à nouveau votre créneau.",
         resumeError: "Le paiement ne peut plus être repris (session expirée). Choisissez à nouveau votre créneau.",
+        resumeUnavailable: "Le service de paiement est momentanément indisponible. Votre créneau reste réservé pendant le temps restant : réessayez de reprendre le paiement dans quelques minutes ou contactez-nous.",
         cancelError: "L’annulation n’a pas pu être confirmée. Réessayez dans un instant.",
       },
 
@@ -155,6 +163,8 @@ export const bookingContent = {
       noBookableDay: `No time slot is available in the next ${BOOKING_HORIZON_DAYS} days.`,
       noSlotsThisDay: "All times on this day are already booked. Please choose another day.",
       noSlotsLeftThisDay: "No times are available on this day any more. Please choose another day.",
+      slotsError: "The times for this day could not be loaded.",
+      retry: "Try again",
       parisTime: "Paris time",
       localTime: (time: string) => `that is ${time} your time`,
       localTimeShort: (time: string) => `${time} your time`,
@@ -184,6 +194,9 @@ export const bookingContent = {
       outside_schedule: "This time slot is no longer part of the consultation hours. Please choose another one.",
       no_availability: "No consultation hours are open at the moment.",
       date_blocked: "This date is no longer available. Please choose another day.",
+      rate_limited: "Too many booking attempts have been made. Please try again in an hour or contact us directly.",
+      too_many_holds: "You already have two bookings awaiting payment. Complete or cancel one of these payments, or wait about thirty minutes before booking a new time slot.",
+      payment_unavailable: "The payment service is temporarily unavailable. Your time slot has not been booked: please try again in a few minutes or contact us.",
     },
     pricing: {
       title: "Pricing",
@@ -215,11 +228,13 @@ export const bookingContent = {
         remaining: "Time left to pay",
         remainingValue: (minutes: number) => (minutes < 1 ? "less than a minute" : `${minutes} min left`),
         reference: "Reference",
+        labelSeparator: ": ",
         resume: "Resume payment",
         cancel: "Cancel and choose another time slot",
         cancelled: "The time slot has been released. Your details are kept: choose a new date or time.",
         closed: "This booking is no longer pending. If you completed the payment, you will receive a confirmation email; otherwise, choose your time slot again.",
         resumeError: "The payment can no longer be resumed (session expired). Please choose your time slot again.",
+        resumeUnavailable: "The payment service is temporarily unavailable. Your time slot remains held for the time left: please try resuming the payment in a few minutes or contact us.",
         cancelError: "The cancellation could not be confirmed. Please try again in a moment.",
       },
 
@@ -239,6 +254,8 @@ export const bookingContent = {
       noBookableDay: `In den nächsten ${BOOKING_HORIZON_DAYS} Tagen ist kein Termin verfügbar.`,
       noSlotsThisDay: "Alle Uhrzeiten an diesem Tag sind bereits gebucht. Bitte wählen Sie einen anderen Tag.",
       noSlotsLeftThisDay: "An diesem Tag ist keine Uhrzeit mehr verfügbar. Bitte wählen Sie einen anderen Tag.",
+      slotsError: "Die Uhrzeiten für diesen Tag konnten nicht geladen werden.",
+      retry: "Erneut versuchen",
       parisTime: "Pariser Zeit",
       localTime: (time: string) => `also ${time} bei Ihnen`,
       localTimeShort: (time: string) => `${time} bei Ihnen`,
@@ -268,6 +285,9 @@ export const bookingContent = {
       outside_schedule: "Dieser Termin liegt nicht mehr innerhalb der Beratungszeiten. Bitte wählen Sie einen anderen.",
       no_availability: "Derzeit sind keine Beratungszeiten freigeschaltet.",
       date_blocked: "Dieses Datum ist nicht mehr verfügbar. Bitte wählen Sie einen anderen Tag.",
+      rate_limited: "Es wurden zu viele Buchungsversuche unternommen. Bitte versuchen Sie es in einer Stunde erneut oder kontaktieren Sie uns direkt.",
+      too_many_holds: "Sie haben bereits zwei Buchungen, die auf Zahlung warten. Schließen Sie eine dieser Zahlungen ab oder stornieren Sie sie, oder warten Sie etwa dreißig Minuten, bevor Sie einen neuen Termin buchen.",
+      payment_unavailable: "Der Zahlungsdienst ist vorübergehend nicht verfügbar. Ihr Termin wurde nicht reserviert: Bitte versuchen Sie es in einigen Minuten erneut oder kontaktieren Sie uns.",
     },
     pricing: {
       title: "Preisgestaltung",
@@ -299,11 +319,13 @@ export const bookingContent = {
         remaining: "Verbleibende Zeit zum Bezahlen",
         remainingValue: (minutes: number) => (minutes < 1 ? "weniger als eine Minute" : `noch ${minutes} Min.`),
         reference: "Referenz",
+        labelSeparator: ": ",
         resume: "Zahlung fortsetzen",
         cancel: "Stornieren und anderen Termin wählen",
         cancelled: "Der Termin wurde freigegeben. Ihre Angaben bleiben erhalten: Wählen Sie ein neues Datum oder eine neue Uhrzeit.",
         closed: "Diese Buchung ist nicht mehr ausstehend. Wenn Sie die Zahlung abgeschlossen haben, erhalten Sie eine Bestätigung per E-Mail; andernfalls wählen Sie Ihren Termin erneut.",
         resumeError: "Die Zahlung kann nicht mehr fortgesetzt werden (Sitzung abgelaufen). Bitte wählen Sie Ihren Termin erneut.",
+        resumeUnavailable: "Der Zahlungsdienst ist vorübergehend nicht verfügbar. Ihr Termin bleibt für die verbleibende Zeit reserviert: Bitte versuchen Sie in einigen Minuten erneut, die Zahlung fortzusetzen, oder kontaktieren Sie uns.",
         cancelError: "Die Stornierung konnte nicht bestätigt werden. Bitte versuchen Sie es gleich noch einmal.",
       },
 
@@ -323,6 +345,8 @@ export const bookingContent = {
       noBookableDay: `未来 ${BOOKING_HORIZON_DAYS} 天内没有可预约的时段。`,
       noSlotsThisDay: "当天所有时间均已被预订，请选择其他日期。",
       noSlotsLeftThisDay: "当天已没有可预约的时间，请选择其他日期。",
+      slotsError: "无法加载当天的时间。",
+      retry: "重试",
       parisTime: "巴黎时间",
       localTime: (time: string) => `即您当地时间 ${time}`,
       localTimeShort: (time: string) => `当地 ${time}`,
@@ -352,6 +376,9 @@ export const bookingContent = {
       outside_schedule: "该时段已不在咨询时间范围内，请选择其他时段。",
       no_availability: "目前没有开放的咨询时段。",
       date_blocked: "该日期已不可预约，请选择其他日期。",
+      rate_limited: "预约尝试次数过多。请一小时后再试，或直接联系我们。",
+      too_many_holds: "您已有两笔待付款的预约。请完成或取消其中一笔付款，或等待约三十分钟后再预约新的时段。",
+      payment_unavailable: "支付服务暂时不可用，您的时段尚未预订：请几分钟后重试或联系我们。",
     },
     pricing: {
       title: "价格",
@@ -383,11 +410,13 @@ export const bookingContent = {
         remaining: "剩余付款时间",
         remainingValue: (minutes: number) => (minutes < 1 ? "不到 1 分钟" : `还剩 ${minutes} 分钟`),
         reference: "编号",
+        labelSeparator: "：",
         resume: "继续付款",
         cancel: "取消并选择其他时段",
         cancelled: "该时段已释放。您的信息已保留：请选择新的日期或时间。",
         closed: "此预约已不再处于待付款状态。如果您已完成付款，将收到确认邮件；否则请重新选择时段。",
         resumeError: "无法继续付款（会话已过期）。请重新选择时段。",
+        resumeUnavailable: "支付服务暂时不可用。在剩余时间内，您的时段仍为您保留：请几分钟后再次尝试继续付款，或联系我们。",
         cancelError: "无法确认取消。请稍后重试。",
       },
 
@@ -401,7 +430,7 @@ export type BookingSlotOption = { start: Date; dayKey: string; time: string };
 
 const PARIS_BOOKING_DAY_INDEX: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
 
-// Un seul formateur : la grille relit l’heure de Paris de chaque créneau des 90 jours.
+// Un seul formateur, lu une fois par heure UTC (getParisOffsetMs) pour les créneaux des 90 jours.
 const PARIS_BOOKING_PARTS = new Intl.DateTimeFormat("en-US", {
   timeZone: "Europe/Paris",
   weekday: "short",
@@ -413,11 +442,34 @@ const PARIS_BOOKING_PARTS = new Intl.DateTimeFormat("en-US", {
   hourCycle: "h23",
 });
 
-function getParisBookingParts(date: Date) {
-  const values = Object.fromEntries(PARIS_BOOKING_PARTS.formatToParts(date).filter(part => part.type !== "literal").map(part => [part.type, part.value]));
+type ParisBookingParts = { year: number; month: number; day: number; hour: number; minute: number; weekday: string };
+
+const BOOKING_HOUR_MS = 60 * 60 * 1000;
+const BOOKING_WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+// Décalage de Paris par heure UTC : il ne change qu'à 01:00 UTC (passage à l'heure d'été ou
+// d'hiver), donc un seul formatage par heure sert à tous les créneaux des 90 jours de la grille.
+const parisOffsetByUtcHour = new Map<number, number>();
+const PARIS_OFFSET_CACHE_LIMIT = 20_000;
+
+function getParisOffsetMs(time: number): number {
+  const utcHour = Math.floor(time / BOOKING_HOUR_MS);
+  const cached = parisOffsetByUtcHour.get(utcHour);
+  if (cached !== undefined) return cached;
+  const hourStart = utcHour * BOOKING_HOUR_MS;
+  const values = Object.fromEntries(PARIS_BOOKING_PARTS.formatToParts(new Date(hourStart)).filter(part => part.type !== "literal").map(part => [part.type, Number(part.value)]));
+  const offset = Date.UTC(values.year, values.month - 1, values.day, values.hour, values.minute) - hourStart;
+  if (parisOffsetByUtcHour.size >= PARIS_OFFSET_CACHE_LIMIT) parisOffsetByUtcHour.clear();
+  parisOffsetByUtcHour.set(utcHour, offset);
+  return offset;
+}
+
+function getParisBookingParts(date: Date): ParisBookingParts {
+  const time = date.getTime();
+  const paris = new Date(time + getParisOffsetMs(time));
   return {
-    year: Number(values.year), month: Number(values.month), day: Number(values.day),
-    hour: Number(values.hour), minute: Number(values.minute), weekday: String(values.weekday),
+    year: paris.getUTCFullYear(), month: paris.getUTCMonth() + 1, day: paris.getUTCDate(),
+    hour: paris.getUTCHours(), minute: paris.getUTCMinutes(), weekday: BOOKING_WEEKDAYS[paris.getUTCDay()],
   };
 }
 
@@ -525,6 +577,20 @@ export function removeBookedSlots(options: BookingSlotOption[], booked: Array<Da
 }
 
 /**
+ * Starts of a sorted list still inside the booking window at `now`, as a
+ * [first, end) range: the same slots as filtering each one with
+ * getBookingWindowIssue (too soon at the front, too far at the back), but the
+ * page clock only changes the range when a slot actually leaves the window.
+ */
+export function bookableSlotRange(options: BookingSlotOption[], now: number): [number, number] {
+  let first = 0;
+  while (first < options.length && getBookingWindowIssue(options[first].start, now)) first += 1;
+  let end = options.length;
+  while (end > first && getBookingWindowIssue(options[end - 1].start, now)) end -= 1;
+  return [first, end];
+}
+
+/**
  * Opening hours shown as soon as the page opens (RES-02), Monday to Sunday,
  * in Paris time: [{ day: "lun.", ranges: ["09:00–12:00", "18:00–22:00"] }].
  */
@@ -543,7 +609,7 @@ export function summarizeBookingAvailability(slots: BookingAvailabilitySlot[], l
 /** "jeudi 29 octobre 2026" for a Paris day key, in the page language. */
 export function formatBookingDay(dayKey: string, locale: string): string {
   const [year, month, day] = dayKey.split("-").map(Number);
-  return new Intl.DateTimeFormat(locale, { dateStyle: "full", timeZone: "UTC" }).format(new Date(Date.UTC(year, month - 1, day)));
+  return getBookingDateTimeFormat(locale, { dateStyle: "full", timeZone: "UTC" }).format(new Date(Date.UTC(year, month - 1, day)));
 }
 
 const BOOKING_SLOT_LIST_REFRESH_MS = 30 * 60 * 1000;
@@ -551,6 +617,21 @@ const BOOKING_SLOT_LIST_REFRESH_MS = 30 * 60 * 1000;
 /** Whole minutes left before the held slot is released (RES-04). */
 export function getHoldRemainingMinutes(holdExpiresAt: string, now: number = Date.now()): number {
   return Math.max(0, Math.floor((new Date(holdExpiresAt).getTime() - now) / 60_000));
+}
+
+/**
+ * What the page clock changes on screen at `time`: the half-hour of the 90-day
+ * list, the slots still inside the booking window, the window issue of the
+ * chosen slot and the minutes left to pay a held slot. A tick that changes none
+ * of them does not render the page again (RES-02, RES-04).
+ */
+export function getBookingClockSignature(
+  time: number,
+  { openSlots, selectedDate, holdExpiresAt }: { openSlots: BookingSlotOption[]; selectedDate: Date | null; holdExpiresAt: string | null },
+): string {
+  const parts: Array<string | number | null> = [Math.floor(time / BOOKING_SLOT_LIST_REFRESH_MS), ...bookableSlotRange(openSlots, time), selectedDate ? getBookingWindowIssue(selectedDate, time) : null];
+  if (holdExpiresAt) parts.push(getHoldRemainingMinutes(holdExpiresAt, time), new Date(holdExpiresAt).getTime() <= time ? "expired" : "held");
+  return parts.join("|");
 }
 
 export function isWithinBookingAvailability(
@@ -604,22 +685,10 @@ export function getBookingAvailabilityState({
   return "available";
 }
 
-// Refus métier attendus (créneau déjà pris, trop de tentatives, réservations
-// en attente) : le serveur renvoie un message français destiné au patient.
-// Toute autre erreur garde le message générique pour ne rien exposer de technique.
-const BOOKING_USER_FACING_ERROR_CODES = new Set(["CONFLICT", "TOO_MANY_REQUESTS", "UNPROCESSABLE_CONTENT", "SERVICE_UNAVAILABLE"]);
-
 /** Input rejected by validation (BAD_REQUEST): a localized hint instead of the raw validation report. */
 export function isBookingInputError(error: unknown): boolean {
   if (!error || typeof error !== "object") return false;
   return (error as { data?: { code?: unknown } | null }).data?.code === "BAD_REQUEST";
-}
-
-export function getBookingServerErrorMessage(error: unknown): string | null {
-  if (!error || typeof error !== "object") return null;
-  const { data, message } = error as { data?: { code?: unknown } | null; message?: unknown };
-  if (typeof data?.code !== "string" || !BOOKING_USER_FACING_ERROR_CODES.has(data.code)) return null;
-  return typeof message === "string" && message.trim() ? message.trim() : null;
 }
 
 /** Stable reason of a refused booking sent by the server (slot taken, too soon…), or null (EN-06). */
@@ -627,6 +696,21 @@ export function getBookingRefusalReason(error: unknown): BookingRefusalReason | 
   if (!error || typeof error !== "object") return null;
   const reason = (error as { data?: { reason?: unknown } | null }).data?.reason;
   return isBookingRefusalReason(reason) ? reason : null;
+}
+
+/**
+ * Alert of a refused booking, always in the page language (EN-06): the
+ * translation of its stable reason, a hint for rejected input, otherwise the
+ * generic message. The French text written by the server is never shown, nor
+ * any technical detail.
+ */
+export function getBookingErrorMessage(
+  error: unknown,
+  copy: { refusals: Record<BookingRefusalReason, string>; invalidInput: string; bookingError: string },
+): string {
+  const refusal = getBookingRefusalReason(error);
+  if (refusal) return copy.refusals[refusal];
+  return isBookingInputError(error) ? copy.invalidInput : copy.bookingError;
 }
 
 export default function BookingPage() {
@@ -664,8 +748,14 @@ export default function BookingPage() {
   const [pendingNotice, setPendingNotice] = useState<string | null>(null);
   // Horloge de la page : délai de 2 h des créneaux proposés et temps restant du paiement en attente.
   const [now, setNow] = useState(() => Date.now());
+  const clockSignatureRef = useRef<(time: number) => string>(() => "");
   const paymentSubmissionRef = useRef(false);
   const draftSlotRef = useRef<string | null>(null);
+  // Grille des horaires : jour dont les réservations sont en cours de nouvel essai, et
+  // jour dont la grille reçoit le focus quand ce nouvel essai se termine (RES-02).
+  const slotsFieldsetRef = useRef<HTMLFieldSetElement>(null);
+  const [slotsRetryDay, setSlotsRetryDay] = useState<string | null>(null);
+  const slotsRetryFocusRef = useRef<string | null>(null);
   const locale = getBookingLocale(language);
   const parisDateTimeFormat = useMemo(() => new Intl.DateTimeFormat(locale, { dateStyle: "full", timeStyle: "short", timeZone: "Europe/Paris" }), [locale]);
   const localizedDate = selectedDate ? `${parisDateTimeFormat.format(selectedDate)} (${content.form.parisTime})` : null;
@@ -673,7 +763,11 @@ export default function BookingPage() {
   const pendingLocalTime = pendingBooking ? formatVisitorTime(new Date(pendingBooking.appointmentDate), locale) : null;
 
   useEffect(() => {
-    const timer = window.setInterval(() => setNow(Date.now()), 30_000);
+    // Tic sans effet à l’écran (voir getBookingClockSignature) : même état, pas de nouveau rendu.
+    const timer = window.setInterval(() => {
+      const time = Date.now();
+      setNow((current) => (clockSignatureRef.current(time) === clockSignatureRef.current(current) ? current : time));
+    }, 30_000);
     return () => window.clearInterval(timer);
   }, []);
 
@@ -716,16 +810,21 @@ export default function BookingPage() {
   // Grille (RES-02) : jours ouverts des 90 prochains jours, moins les dates
   // bloquées et le délai de 2 h, puis horaires libres du jour choisi. La liste
   // (90 jours relus en heure de Paris) n’est recalculée que toutes les 30 min ;
-  // le délai de 2 h, lui, suit l’horloge de la page.
+  // le délai de 2 h, lui, suit l’horloge de la page, qui ne recopie la liste
+  // (et ne recalcule la grille) que lorsqu’un horaire sort de la fenêtre.
   const slotListClock = Math.floor(now / BOOKING_SLOT_LIST_REFRESH_MS) * BOOKING_SLOT_LIST_REFRESH_MS;
   const openSlots = useMemo(
     () => listBookableSlots(availabilitySlots.data ?? [], (blockedDates.data ?? []).map((item) => item.date), slotListClock),
     [availabilitySlots.data, blockedDates.data, slotListClock]
   );
-  const bookableSlots = useMemo(() => openSlots.filter((slot) => !getBookingWindowIssue(slot.start, now)), [openSlots, now]);
+  const [firstBookableSlot, endBookableSlot] = bookableSlotRange(openSlots, now);
+  const bookableSlots = useMemo(() => openSlots.slice(firstBookableSlot, endBookableSlot), [openSlots, firstBookableSlot, endBookableSlot]);
   const scheduleLoaded = Boolean(availabilitySlots.data && blockedDates.data);
   const nothingToBook = scheduleLoaded && bookableSlots.length === 0;
-  const dayOptions = Array.from(new Set([...bookableSlots.map((slot) => slot.dayKey), ...(dayKey ? [dayKey] : [])])).sort();
+  const dayOptions = useMemo(
+    () => Array.from(new Set([...bookableSlots.map((slot) => slot.dayKey), ...(dayKey ? [dayKey] : [])])).sort().map((key) => ({ key, label: formatBookingDay(key, locale) })),
+    [bookableSlots, dayKey, locale]
+  );
   // Horaires du jour choisi avant et après les réservations : une grille vide
   // ne dit « déjà réservés » que si ce sont bien les réservations qui l’ont vidée.
   const dayOpenSlots = useMemo(() => bookableSlots.filter((slot) => slot.dayKey === dayKey), [bookableSlots, dayKey]);
@@ -733,7 +832,7 @@ export default function BookingPage() {
     () => (bookedSlots.data ? removeBookedSlots(dayOpenSlots, bookedSlots.data) : []).map((option) => ({ ...option, localTime: formatVisitorTime(option.start, locale) })),
     [dayOpenSlots, bookedSlots.data, locale]
   );
-  const openingHours = summarizeBookingAvailability(configuredSlots, locale);
+  const openingHours = useMemo(() => summarizeBookingAvailability(availabilitySlots.data ?? [], locale), [availabilitySlots.data, locale]);
   // Délai minimal (2 h, passé compris) et horizon (90 jours) : mêmes règles que le serveur.
   const bookingWindowIssue = selectedDate ? getBookingWindowIssue(selectedDate, now) : null;
   const availabilityLabel = availabilityQueryError
@@ -760,8 +859,9 @@ export default function BookingPage() {
             ? bookingFormCopy.outsideSchedule
             : bookingFormCopy.available;
   const availabilityState = getBookingAvailabilityState({
-    // « Aucun créneau ouvert » est un état indisponible dès l’arrivée, sans attendre une sélection.
-    selected: Boolean(selectedDate) || nothingToBook,
+    // « Aucun créneau ouvert » et l’échec du chargement de l’agenda sont des
+    // états indisponibles dès l’arrivée, sans attendre une sélection.
+    selected: Boolean(selectedDate) || nothingToBook || availabilityQueryError,
     pending: availabilityPending && !bookingWindowIssue,
     blocked: isBlockedDate || availabilityQueryError || isOutsideConfiguredAvailability || Boolean(bookingWindowIssue) || nothingToBook,
     booked: isBookedSlot,
@@ -776,6 +876,33 @@ export default function BookingPage() {
   const createAppointment = trpc.appointments.create.useMutation();
   const resumeCheckout = trpc.appointments.createCheckoutSession.useMutation();
   const cancelPendingBooking = trpc.appointments.cancelPending.useMutation();
+
+  // Bouton « Réessayer » de la grille : relance chaque donnée d’agenda dont le chargement a échoué.
+  // Pendant le nouvel essai, l’encadré d’erreur reste affiché et son bouton garde le focus
+  // (aria-disabled, pas disabled) ; s’il réussit, le focus passe dans la grille qui le remplace
+  // au lieu de retomber au début du document, sinon il reste sur le bouton.
+  const slotsRetrying = Boolean(dateKey) && slotsRetryDay === dateKey;
+  const retryAvailability = () => {
+    if (slotsRetrying) return;
+    const retriedDay = dateKey;
+    setSlotsRetryDay(retriedDay);
+    for (const query of [blockedDates, availabilitySlots]) if (query.isError) void query.refetch();
+    void bookedSlots.refetch().finally(() => {
+      slotsRetryFocusRef.current = retriedDay;
+      setSlotsRetryDay((current) => (current === retriedDay ? null : current));
+    });
+  };
+
+  useEffect(() => {
+    if (slotsRetrying || !dateKey || slotsRetryFocusRef.current !== dateKey) return;
+    slotsRetryFocusRef.current = null;
+    if (bookedSlots.isError) return;
+    const grid = slotsFieldsetRef.current;
+    const target = grid?.querySelector<HTMLElement>("input[name='booking-slot']:checked")
+      ?? grid?.querySelector<HTMLElement>("input[name='booking-slot']")
+      ?? grid?.querySelector<HTMLElement>("[data-slots-empty]");
+    target?.focus();
+  }, [slotsRetrying]);
 
   const chooseDay = (nextDayKey: string) => {
     // Choix du patient : il remplace le créneau du brouillon pas encore repris.
@@ -835,6 +962,10 @@ export default function BookingPage() {
     if (dateKey) void bookedSlots.refetch();
   };
 
+  useEffect(() => {
+    clockSignatureRef.current = (time) => getBookingClockSignature(time, { openSlots, selectedDate, holdExpiresAt: pendingBooking?.holdExpiresAt ?? null });
+  });
+
   // Maintien écoulé pendant que la page reste ouverte : le créneau est libéré côté serveur.
   const pendingHoldExpired = Boolean(pendingBooking && new Date(pendingBooking.holdExpiresAt).getTime() <= now);
   useEffect(() => {
@@ -853,9 +984,12 @@ export default function BookingPage() {
       });
       if (!result.checkoutUrl) throw new Error("checkout_url_missing");
       window.location.assign(result.checkoutUrl);
-    } catch {
+    } catch (error) {
       paymentSubmissionRef.current = false;
-      forgetPendingBooking(content.pending.resumeError);
+      // Stripe indisponible : le serveur garde le créneau, le paiement en attente
+      // reste donc proposé à la reprise au lieu d’être oublié.
+      if (getBookingRefusalReason(error) === "payment_unavailable") setPendingNotice(content.pending.resumeUnavailable);
+      else forgetPendingBooking(content.pending.resumeError);
     }
   };
 
@@ -924,22 +1058,10 @@ export default function BookingPage() {
     } catch (error) {
       paymentSubmissionRef.current = false;
       console.error("Booking error:", error);
-      const refusal = getBookingRefusalReason(error);
-      const serverMessage = getBookingServerErrorMessage(error);
-      if (refusal) {
-        // Créneau pris entre-temps, date fermée… : message dans la langue de la
-        // page (EN-06) et agenda rechargé pour que la grille ne le propose plus.
-        alert(content.refusals[refusal]);
-        void Promise.all([bookedSlots.refetch(), blockedDates.refetch(), availabilitySlots.refetch()]);
-      } else if (serverMessage) {
-        // Le message serveur est rédigé en français : on le précède du libellé
-        // localisé pour les autres langues de l’interface.
-        alert(language === "fr" ? serverMessage : `${content.bookingError}\n\n${serverMessage}`);
-      } else if (isBookingInputError(error)) {
-        alert(content.invalidInput);
-      } else {
-        alert(content.bookingError);
-      }
+      // Message dans la langue de la page (EN-06), jamais le texte français du serveur.
+      alert(getBookingErrorMessage(error, content));
+      // Créneau pris entre-temps, date fermée… : agenda rechargé pour que la grille ne le propose plus.
+      if (getBookingRefusalReason(error)) void Promise.all([bookedSlots.refetch(), blockedDates.refetch(), availabilitySlots.refetch()]);
     }
   };
 
@@ -1035,10 +1157,10 @@ export default function BookingPage() {
                 <h2 id="pending-booking-title" className="font-display text-xl font-bold mb-2">{content.pending.title}</h2>
                 <p className="text-sm text-muted-foreground leading-relaxed">{content.pending.description}</p>
                 <dl className="mt-3 grid gap-1 text-sm">
-                  <div><dt className="inline font-medium">{content.pending.slot} : </dt><dd className="inline">{parisDateTimeFormat.format(new Date(pendingBooking.appointmentDate))} ({content.form.parisTime}){pendingLocalTime && `, ${content.form.localTime(pendingLocalTime)}`}</dd></div>
+                  <div><dt className="inline font-medium">{content.pending.slot}{content.pending.labelSeparator}</dt><dd className="inline">{parisDateTimeFormat.format(new Date(pendingBooking.appointmentDate))} ({content.form.parisTime}){pendingLocalTime && `, ${content.form.localTime(pendingLocalTime)}`}</dd></div>
                   {/* Temps restant plutôt qu’une heure de Paris qui semble déjà passée à l’étranger (RES-04). */}
-                  <div><dt className="inline font-medium">{content.pending.remaining} : </dt><dd className="inline">{content.pending.remainingValue(getHoldRemainingMinutes(pendingBooking.holdExpiresAt, now))}</dd></div>
-                  <div><dt className="inline font-medium">{content.pending.reference} : </dt><dd className="inline font-mono text-primary">{pendingBooking.trackingId}</dd></div>
+                  <div><dt className="inline font-medium">{content.pending.remaining}{content.pending.labelSeparator}</dt><dd className="inline">{content.pending.remainingValue(getHoldRemainingMinutes(pendingBooking.holdExpiresAt, now))}</dd></div>
+                  <div><dt className="inline font-medium">{content.pending.reference}{content.pending.labelSeparator}</dt><dd className="inline font-mono text-primary">{pendingBooking.trackingId}</dd></div>
                 </dl>
                 <div className="mt-4 flex flex-col gap-2 sm:flex-row">
                   <Button type="button" onClick={handleResumePayment} disabled={resumeCheckout.isPending || cancelPendingBooking.isPending} className="cta-primary">
@@ -1242,18 +1364,26 @@ export default function BookingPage() {
                 className="form-field-premium h-11 w-full border px-4 py-2"
               >
                 <option value="">{content.form.dayPlaceholder}</option>
-                {dayOptions.map((key) => (
-                  <option key={key} value={key}>{formatBookingDay(key, locale)}</option>
+                {dayOptions.map(({ key, label }) => (
+                  <option key={key} value={key}>{label}</option>
                 ))}
               </select>
               {dayKey && (
                 // Boutons radio natifs : Tab entre dans la grille, les flèches changent d’horaire.
-                <fieldset className="mt-4" aria-describedby="availability-status">
+                <fieldset ref={slotsFieldsetRef} className="mt-4" aria-describedby="availability-status">
                   <legend className="block text-xs font-medium mb-2">{content.form.slotsLegend}</legend>
-                  {bookedSlots.isLoading ? (
+                  {bookedSlots.isLoading && !slotsRetrying ? (
                     <p className="text-sm text-muted-foreground">{bookingFormCopy.checkingAvailability}</p>
-                  ) : bookedSlots.isError ? null : daySlots.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">{dayOpenSlots.length > 0 ? content.form.noSlotsThisDay : content.form.noSlotsLeftThisDay}</p>
+                  ) : bookedSlots.isError || slotsRetrying ? (
+                    // Réservations du jour non chargées : erreur explicite et nouvel essai, au lieu d’une grille vide.
+                    <div className="flex flex-col items-start gap-3 rounded-xl border border-destructive/35 bg-destructive/5 p-4 text-sm text-destructive" role="alert">
+                      <p>{content.form.slotsError}</p>
+                      <Button type="button" variant="outline" onClick={retryAvailability} aria-disabled={slotsRetrying || undefined} className="min-h-11 aria-disabled:cursor-not-allowed aria-disabled:opacity-50">
+                        {slotsRetrying ? bookingFormCopy.checkingAvailability : content.form.retry}
+                      </Button>
+                    </div>
+                  ) : daySlots.length === 0 ? (
+                    <p data-slots-empty tabIndex={-1} className="text-sm text-muted-foreground focus:outline-none">{dayOpenSlots.length > 0 ? content.form.noSlotsThisDay : content.form.noSlotsLeftThisDay}</p>
                   ) : (
                     <div id="booking-slots" className="grid grid-cols-3 gap-2 sm:grid-cols-4">
                       {daySlots.map((option) => (

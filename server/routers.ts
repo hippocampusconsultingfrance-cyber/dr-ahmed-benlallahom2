@@ -70,6 +70,8 @@ type PublicFormRateLimitPolicy = {
   windowMs: number;
   blockMs: number;
   blockedMessage?: string;
+  /** Motif stable joint au refus, que la page de réservation traduit (EN-06). */
+  reason?: BookingRefusalReason;
 };
 
 const DEFAULT_PUBLIC_FORM_BLOCKED_MESSAGE = "Veuillez patienter avant de soumettre une nouvelle demande.";
@@ -81,8 +83,8 @@ export const PUBLIC_FORM_RATE_LIMITS = {
   // Chaque réservation bloque un créneau de 30 minutes et ouvre une session
   // Stripe. Le compteur par IP borne un script qui change d’email à chaque
   // appel ; le compteur par email borne une même identité qui change d’IP.
-  bookingIp: { action: "public_booking_create_ip", scope: "ip", maxAttempts: 6, windowMs: 60 * 60 * 1000, blockMs: 60 * 60 * 1000, blockedMessage: BOOKING_RATE_LIMIT_MESSAGE },
-  bookingEmail: { action: "public_booking_create_email", scope: "email", maxAttempts: 5, windowMs: 60 * 60 * 1000, blockMs: 60 * 60 * 1000, blockedMessage: BOOKING_RATE_LIMIT_MESSAGE },
+  bookingIp: { action: "public_booking_create_ip", scope: "ip", maxAttempts: 6, windowMs: 60 * 60 * 1000, blockMs: 60 * 60 * 1000, blockedMessage: BOOKING_RATE_LIMIT_MESSAGE, reason: "rate_limited" },
+  bookingEmail: { action: "public_booking_create_email", scope: "email", maxAttempts: 5, windowMs: 60 * 60 * 1000, blockMs: 60 * 60 * 1000, blockedMessage: BOOKING_RATE_LIMIT_MESSAGE, reason: "rate_limited" },
 } as const satisfies Record<string, PublicFormRateLimitPolicy>;
 
 async function enforcePublicFormRateLimit(input: {
@@ -97,7 +99,7 @@ async function enforcePublicFormRateLimit(input: {
   if (process.env.NODE_ENV === "test" || process.env.VITEST === "true") return;
 
   const ipHash = requestIpHash(input.headers) ?? (input.remoteIp ? hashSecurityValue(input.remoteIp) : null);
-  const { scope, blockedMessage, ...policy }: PublicFormRateLimitPolicy = PUBLIC_FORM_RATE_LIMITS[input.kind];
+  const { scope, blockedMessage, reason, ...policy }: PublicFormRateLimitPolicy = PUBLIC_FORM_RATE_LIMITS[input.kind];
   const subject = publicFormRateLimitSubject(scope, ipHash, input.email);
   if (!subject) return;
   try {
@@ -113,7 +115,8 @@ async function enforcePublicFormRateLimit(input: {
       severity: "warning",
       ipHash,
     });
-    throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: blockedMessage ?? DEFAULT_PUBLIC_FORM_BLOCKED_MESSAGE });
+    const message = blockedMessage ?? DEFAULT_PUBLIC_FORM_BLOCKED_MESSAGE;
+    throw reason ? bookingRefusal("TOO_MANY_REQUESTS", reason, message) : new TRPCError({ code: "TOO_MANY_REQUESTS", message });
   }
 }
 
@@ -126,7 +129,7 @@ export const CONSULTATION_CHECKOUT_PRODUCT_NAME = "Consultation de conseil sant�
 export const BOOKING_PAYMENT_UNAVAILABLE_MESSAGE = "Le service de paiement est momentanément indisponible. Votre créneau n’a pas été réservé : veuillez réessayer dans quelques minutes ou nous contacter.";
 
 /** Refus métier d’une réservation : message français et motif stable que la page traduit (EN-06). */
-function bookingRefusal(code: "CONFLICT" | "UNPROCESSABLE_CONTENT", reason: BookingRefusalReason, message: string) {
+function bookingRefusal(code: "CONFLICT" | "UNPROCESSABLE_CONTENT" | "TOO_MANY_REQUESTS" | "SERVICE_UNAVAILABLE", reason: BookingRefusalReason, message: string) {
   return new TRPCError({ code, message, cause: new PublicErrorReason(reason) });
 }
 
@@ -751,7 +754,7 @@ export const appRouter = router({
               )
             );
           if (Number(activeHolds?.count ?? 0) >= MAX_ACTIVE_APPOINTMENT_HOLDS_PER_EMAIL) {
-            throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: ACTIVE_APPOINTMENT_HOLDS_LIMIT_MESSAGE });
+            throw bookingRefusal("TOO_MANY_REQUESTS", "too_many_holds", ACTIVE_APPOINTMENT_HOLDS_LIMIT_MESSAGE);
           }
 
           const dateKey = parisDateKey(date);
@@ -828,7 +831,7 @@ export const appRouter = router({
             // une consigne claire, jamais le texte technique de Stripe.
             await db.update(appointments).set(getExpiredAppointmentHoldUpdate()).where(and(eq(appointments.trackingId, trackingId), eq(appointments.paymentStatus, "pending"), eq(appointments.appointmentStatus, "held")));
             console.error("Stripe checkout session creation failed:", stripeError instanceof Error ? stripeError.name : "UnknownError");
-            throw new TRPCError({ code: "SERVICE_UNAVAILABLE", message: BOOKING_PAYMENT_UNAVAILABLE_MESSAGE, cause: stripeError });
+            throw bookingRefusal("SERVICE_UNAVAILABLE", "payment_unavailable", BOOKING_PAYMENT_UNAVAILABLE_MESSAGE);
           }
           await db.update(appointments).set({ stripeSessionId: session.id }).where(and(eq(appointments.trackingId, trackingId), eq(appointments.appointmentStatus, "held")));
           // La page de réservation garde la session et l’expiration du maintien
@@ -944,7 +947,7 @@ export const appRouter = router({
         } catch (error) {
           if (error instanceof TRPCError) throw error;
           console.error("Stripe checkout session error:", error instanceof Error ? error.name : "UnknownError");
-          throw new TRPCError({ code: "SERVICE_UNAVAILABLE", message: BOOKING_PAYMENT_UNAVAILABLE_MESSAGE, cause: error });
+          throw bookingRefusal("SERVICE_UNAVAILABLE", "payment_unavailable", BOOKING_PAYMENT_UNAVAILABLE_MESSAGE);
         }
       }),
 

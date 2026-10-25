@@ -44,6 +44,11 @@ describe("public form rate limits", () => {
     expect(PUBLIC_FORM_RATE_LIMITS.bookingIp.blockedMessage).toBe(BOOKING_RATE_LIMIT_MESSAGE);
     expect(PUBLIC_FORM_RATE_LIMITS.bookingEmail.blockedMessage).toBe(BOOKING_RATE_LIMIT_MESSAGE);
     expect(BOOKING_RATE_LIMIT_MESSAGE).toMatch(/^Trop de tentatives de réservation/);
+    // Motif traduit par la page de réservation (EN-06), absent des autres formulaires.
+    expect(PUBLIC_FORM_RATE_LIMITS.bookingIp.reason).toBe("rate_limited");
+    expect(PUBLIC_FORM_RATE_LIMITS.bookingEmail.reason).toBe("rate_limited");
+    expect(PUBLIC_FORM_RATE_LIMITS.contact).not.toHaveProperty("reason");
+    expect(PUBLIC_FORM_RATE_LIMITS.gdpr).not.toHaveProperty("reason");
   });
 
   it("keeps the historical IP + email key for contact and GDPR forms", () => {

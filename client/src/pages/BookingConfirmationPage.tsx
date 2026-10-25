@@ -66,6 +66,8 @@ export const confirmationContent = {
       addToCalendar: "Ajouter à mon agenda",
       calendarTitle: "Consultation avec le Dr Ahmed Ben Lallahom",
       reference: "Référence",
+      // Ponctuation des libellés (page et fichier agenda) : espace avant les deux-points en français seulement.
+      labelSeparator: " : ",
     },
     contactTitle: "Nous contacter",
     stepsTitle: "Prochaines étapes",
@@ -130,6 +132,7 @@ export const confirmationContent = {
       addToCalendar: "Add to my calendar",
       calendarTitle: "Consultation with Dr Ahmed Ben Lallahom",
       reference: "Reference",
+      labelSeparator: ": ",
     },
     contactTitle: "Contact us",
     stepsTitle: "Next steps",
@@ -194,6 +197,7 @@ export const confirmationContent = {
       addToCalendar: "Zu meinem Kalender hinzufügen",
       calendarTitle: "Beratung mit Dr. Ahmed Ben Lallahom",
       reference: "Referenz",
+      labelSeparator: ": ",
     },
     contactTitle: "Kontakt",
     stepsTitle: "Nächste Schritte",
@@ -258,6 +262,7 @@ export const confirmationContent = {
       addToCalendar: "添加到我的日历",
       calendarTitle: "与 Ahmed Ben Lallahom 医生的咨询",
       reference: "编号",
+      labelSeparator: "：",
     },
     contactTitle: "联系我们",
     stepsTitle: "下一步",
@@ -297,6 +302,25 @@ export function getDisplayedConfirmationState(
   if (!verified.hasSession || !verified.state) return "processing";
   if (verified.state === "not_paid") return "unknown";
   return verified.state;
+}
+
+/**
+ * Text of the calendar event downloaded from the page (RES-05): reference,
+ * duration, amount and contact, each label punctuated as the page language
+ * writes it ("Référence : …", "Reference: …", "编号：…").
+ */
+export function buildConfirmationCalendarDescription(
+  copy: (typeof confirmationContent)[keyof typeof confirmationContent],
+  details: { trackingId: string; durationMinutes: number; amount: string; email: string; phone: string },
+): string {
+  const { appointment } = copy;
+  const line = (label: string, value: string) => `${label}${appointment.labelSeparator}${value}`;
+  return [
+    line(appointment.reference, details.trackingId),
+    line(appointment.duration, appointment.minutes(details.durationMinutes)),
+    line(appointment.amount, details.amount),
+    line(copy.contactTitle, `${details.email} · ${details.phone}`),
+  ].join("\n");
 }
 
 export function getBookingConfirmationState(status: string | null): BookingConfirmationState {
@@ -348,18 +372,18 @@ export default function BookingConfirmationPage() {
 
   const addToCalendar = () => {
     if (!confirmedAppointment || !confirmedStart || !trackingId) return;
-    const { appointment } = copy;
-    const description = [
-      `${appointment.reference} : ${trackingId}`,
-      `${appointment.duration} : ${appointment.minutes(confirmedAppointment.durationMinutes)}`,
-      `${appointment.amount} : ${formatAmount(confirmedAppointment.amountEur)}`,
-      `${copy.contactTitle} : ${siteConfig.email} · ${siteConfig.phone}`,
-    ].join("\n");
+    const description = buildConfirmationCalendarDescription(copy, {
+      trackingId,
+      durationMinutes: confirmedAppointment.durationMinutes,
+      amount: formatAmount(confirmedAppointment.amountEur),
+      email: siteConfig.email,
+      phone: siteConfig.phone,
+    });
     const ics = buildBookingIcs({
       trackingId,
       start: confirmedStart,
       durationMinutes: confirmedAppointment.durationMinutes,
-      summary: appointment.calendarTitle,
+      summary: copy.appointment.calendarTitle,
       description,
     });
     downloadBookingIcs(ics, `consultation-${trackingId}.ics`);
@@ -501,7 +525,7 @@ export default function BookingConfirmationPage() {
             <p className="mt-3 text-sm text-muted-foreground leading-relaxed">{copy.refund.text}</p>
             <p className="mt-2 text-sm text-muted-foreground leading-relaxed">{copy.refund.contact}</p>
             <p className="mt-2 text-sm leading-relaxed">
-              <span className="font-medium text-foreground">{copy.contactTitle} : </span>
+              <span className="font-medium text-foreground">{copy.contactTitle}{copy.appointment.labelSeparator}</span>
               <a className="text-primary underline underline-offset-2" href={`mailto:${siteConfig.email}`}>{siteConfig.email}</a>
               {" · "}
               <a className="text-primary underline underline-offset-2" href={`tel:${siteConfig.phone.replace(/\s/g, "")}`}>{siteConfig.phone}</a>

@@ -1,7 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
+  bookableSlotRange,
   bookingContent,
   formatBookingDay,
+  getBookingClockSignature,
   getBookingRefusalReason,
   getHoldRemainingMinutes,
   listBookableSlots,
@@ -11,7 +13,7 @@ import {
   summarizeBookingAvailability,
   toParisBookingDateKey,
 } from "./BookingPage";
-import { BOOKING_REFUSAL_REASONS } from "@shared/bookingPolicy";
+import { BOOKING_REFUSAL_REASONS, getBookingWindowIssue } from "@shared/bookingPolicy";
 
 const HOUR = 60 * 60 * 1000;
 const DAY = 24 * HOUR;
@@ -84,6 +86,67 @@ describe("créneaux proposés par la grille de réservation (RES-02)", () => {
   });
 });
 
+describe("grille recalculée sans à-coups quand l'horloge avance (RES-02)", () => {
+  it("garde les horaires du filtre de la fenêtre de réservation, sous forme d'intervalle qui ne bouge qu'au franchissement d'un horaire", () => {
+    const options = listBookableSlots(allWeek("08:00", "23:30"), [], MONDAY_8AM);
+    for (const offset of [-DAY, 0, 29 * 60 * 1000, 30 * 60 * 1000, 5 * HOUR, 26 * HOUR, 3 * DAY]) {
+      const now = MONDAY_8AM + offset;
+      const [first, end] = bookableSlotRange(options, now);
+      expect(options.slice(first, end), `+${offset} ms`).toEqual(options.filter((slot) => !getBookingWindowIssue(slot.start, now)));
+    }
+    // Deux tics de 30 s sans horaire qui passe sous le délai de 2 h : même intervalle, grille inchangée.
+    expect(bookableSlotRange(options, MONDAY_8AM + 30_000)).toEqual(bookableSlotRange(options, MONDAY_8AM + 60_000));
+    expect(bookableSlotRange(options, MONDAY_8AM + 30_000)).not.toEqual(bookableSlotRange(options, MONDAY_8AM + 30 * 60 * 1000 + 30_000));
+    expect(bookableSlotRange([], MONDAY_8AM)).toEqual([0, 0]);
+  });
+
+  it("ne refait le rendu à un tic d'horloge que si un horaire, le délai du créneau choisi ou les minutes restantes changent", () => {
+    // Page ouverte à 08:01 (liste calculée à 08:00) : premier horaire 10:30.
+    const base = MONDAY_8AM + 60_000;
+    const openSlots = listBookableSlots(allWeek("08:00", "23:30"), [], MONDAY_8AM);
+    const idle = { openSlots, selectedDate: null, holdExpiresAt: null };
+    const tick = (offset: number, state: Parameters<typeof getBookingClockSignature>[1] = idle) => getBookingClockSignature(base + offset, state);
+    // Rien ne change à 08:01:30, ni à 08:29.
+    expect(tick(30_000)).toBe(tick(0));
+    expect(tick(28 * 60 * 1000)).toBe(tick(0));
+    // 08:30:30 : 10:30 passe sous le délai de 2 h et la liste des 90 jours est recalculée.
+    expect(tick(29 * 60 * 1000 + 30_000)).not.toBe(tick(30_000));
+
+    // Créneau choisi (11:30) qui passe sous le délai de 2 h à 09:30.
+    const chosen = { ...idle, selectedDate: openSlots[3].start };
+    const chosenDeadline = openSlots[3].start.getTime() - 2 * HOUR - base;
+    expect(tick(30_000, chosen)).toBe(tick(0, chosen));
+    expect(tick(chosenDeadline + 1, chosen)).not.toBe(tick(chosenDeadline - 1, chosen));
+
+    // Paiement en attente : la minute affichée, puis l'échéance.
+    const held = { ...idle, holdExpiresAt: new Date(base + 10 * 60 * 1000 + 15_000).toISOString() };
+    expect(tick(10_000, held)).toBe(tick(0, held));
+    expect(tick(30_000, held)).not.toBe(tick(0, held));
+    expect(tick(10 * 60 * 1000 + 14_000, held)).not.toBe(tick(10 * 60 * 1000 + 16_000, held));
+  });
+
+  it("ne lit l'heure de Paris qu'une fois par heure UTC, puis presque plus une demi-heure plus tard", () => {
+    const formatToParts = vi.spyOn(Intl.DateTimeFormat.prototype, "formatToParts");
+    // Mai 2031 : instants jamais lus par ce fichier, la mémoire part de zéro.
+    const now = Date.UTC(2031, 4, 5, 6, 0);
+    const slots = allWeek("08:00", "23:30");
+    const options = listBookableSlots(slots, [], now);
+    const firstReads = formatToParts.mock.calls.length;
+    formatToParts.mockClear();
+    const later = listBookableSlots(slots, [], now + 30 * 60 * 1000);
+    const laterReads = formatToParts.mock.calls.length;
+    formatToParts.mockRestore();
+
+    expect(options.length).toBeGreaterThan(2500);
+    // Recherche du décalage, vérification et contrôle des plages : quatre lectures par horaire auparavant,
+    // désormais une par heure UTC parcourue.
+    expect(firstReads).toBeLessThan(options.length);
+    expect(laterReads).toBeLessThan(options.length / 20);
+    // Même liste, moins le premier horaire passé sous le délai de 2 h.
+    expect(later.slice(0, 5).map((slot) => slot.start.toISOString())).toEqual(options.slice(1, 6).map((slot) => slot.start.toISOString()));
+  });
+});
+
 describe("plages d'ouverture affichées dès l'arrivée (RES-02)", () => {
   it("regroupe les plages par jour, du lundi au dimanche, en heure de Paris", () => {
     const slots = [
@@ -131,6 +194,9 @@ describe("heure locale du visiteur et temps restant (RES-04)", () => {
 describe("refus de réservation traduits (EN-06)", () => {
   it("lit le motif stable renvoyé par le serveur et rien d'autre", () => {
     expect(getBookingRefusalReason({ message: "Ce créneau chevauche une réservation existante", data: { code: "CONFLICT", reason: "slot_taken" } })).toBe("slot_taken");
+    expect(getBookingRefusalReason({ data: { code: "TOO_MANY_REQUESTS", reason: "rate_limited" } })).toBe("rate_limited");
+    expect(getBookingRefusalReason({ data: { code: "TOO_MANY_REQUESTS", reason: "too_many_holds" } })).toBe("too_many_holds");
+    expect(getBookingRefusalReason({ data: { code: "SERVICE_UNAVAILABLE", reason: "payment_unavailable" } })).toBe("payment_unavailable");
     expect(getBookingRefusalReason({ data: { code: "UNPROCESSABLE_CONTENT", reason: "too_soon" } })).toBe("too_soon");
     expect(getBookingRefusalReason({ data: { code: "CONFLICT", reason: "something_else" } })).toBeNull();
     expect(getBookingRefusalReason({ data: { code: "CONFLICT" } })).toBeNull();

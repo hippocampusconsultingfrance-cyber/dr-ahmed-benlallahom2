@@ -4,7 +4,9 @@ import { chromium, type Browser, type BrowserContextOptions, type Page } from "p
 import superjson from "superjson";
 import { createServer, type ViteDevServer } from "vite";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { cookieCopy } from "@/components/CookieConsent";
 import { COOKIE_CONSENT_STORAGE_KEY, createCookieConsent } from "@/components/cookieConsentState";
+import { getBookingFormCopy } from "@/lib/publicFormCopy";
 import { bookingContent, listBookableSlots, parisBookingSlotStart, toParisBookingDateKey } from "./BookingPage";
 import { confirmationContent } from "./BookingConfirmationPage";
 
@@ -85,23 +87,24 @@ describe.skipIf(!executablePath)("réservation et confirmation dans un navigateu
       void dialog.dismiss();
     });
     await page.route((url) => !url.href.startsWith(baseUrl), (request) => request.abort());
-    await page.route("**/api/trpc/**", (request) => {
+    await page.route("**/api/trpc/**", async (request) => {
       const url = new URL(request.request().url());
       const names = url.pathname.replace(/^.*\/api\/trpc\//, "").split(",");
       const rawInput = request.request().method() === "GET" ? url.searchParams.get("input") : request.request().postData();
       const inputs = rawInput ? JSON.parse(rawInput) : {};
       let status = 200;
-      const body = names.map((name, index) => {
+      // Une procédure peut répondre par une promesse, pour retenir la réponse le temps d'une vérification.
+      const body = await Promise.all(names.map(async (name, index) => {
         const input = inputs[index] ? superjson.deserialize(inputs[index]) : undefined;
         calls.push({ procedure: name, input });
-        const result = procedures[name] ? procedures[name](input) : null;
+        const result = procedures[name] ? await procedures[name](input) : null;
         if (result && typeof result === "object" && "trpcError" in result) {
           const { code, httpStatus, message, reason } = (result as TrpcError).trpcError;
           status = httpStatus;
           return { error: superjson.serialize({ message, code: -32000, data: { code, httpStatus, path: name, ...(reason ? { reason } : {}) } }) };
         }
         return { result: { data: superjson.serialize(result) } };
-      });
+      }));
       return request.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
     });
     await beforeGoto(page);
@@ -257,6 +260,46 @@ describe.skipIf(!executablePath)("réservation et confirmation dans un navigateu
     await page.context().close();
   }, 60_000);
 
+  it("garde le paiement en attente quand Stripe est indisponible à la reprise, avec des libellés ponctués dans la langue de la page (EN-06)", async () => {
+    const pending = {
+      trackingId: "APTPENDING0002",
+      checkoutSessionId: "cs_test_pending",
+      customerName: "Test Patient",
+      customerEmail: "patient@example.test",
+      finalPrice: 150,
+      appointmentDate: listBookableSlots(EVENING_SLOTS, [])[0].start.toISOString(),
+      holdExpiresAt: new Date(Date.now() + 28.5 * 60 * 1000).toISOString(),
+    };
+    // Panne Stripe, puis session expirée : seul le second refus oublie le paiement en attente.
+    const refusals = [
+      refuse("SERVICE_UNAVAILABLE", 503, "Le service de paiement est momentanément indisponible. Votre créneau n’a pas été réservé.", "payment_unavailable"),
+      refuse("CONFLICT", 409, "La session de paiement a expiré"),
+    ];
+    const { page, calls } = await open("/booking", bookingProcedures({ "appointments.createCheckoutSession": () => refusals.shift() }), {
+      language: "en",
+      session: { "booking:pending:v1": JSON.stringify(pending) },
+    });
+    const { pending: copy } = bookingContent.en;
+    const card = page.getByRole("region", { name: copy.title });
+    const text = await card.innerText();
+    expect(text).toContain(`${copy.reference}: ${pending.trackingId}`);
+    expect(text).toMatch(new RegExp(`${copy.remaining}: 2[78] min left`));
+    expect(text).not.toContain(" :");
+
+    const resume = card.getByRole("button", { name: copy.resume });
+    await resume.click();
+    await page.getByText(copy.resumeUnavailable).waitFor();
+    expect(await card.count()).toBe(1);
+    expect(await page.evaluate(() => sessionStorage.getItem("booking:pending:v1"))).not.toBeNull();
+
+    await resume.click();
+    await page.getByText(copy.resumeError).waitFor();
+    expect(await card.count()).toBe(0);
+    expect(await page.evaluate(() => sessionStorage.getItem("booking:pending:v1"))).toBeNull();
+    expect(calls.filter((call) => call.procedure === "appointments.createCheckoutSession")).toHaveLength(2);
+    await page.context().close();
+  }, 60_000);
+
   it("ne dit « déjà réservés » que si les réservations ont pris tous les horaires du jour (RES-02)", async () => {
     const [firstDay, secondDay] = openDays();
     const secondDayStarts = listBookableSlots(EVENING_SLOTS, []).filter((slot) => slot.dayKey === secondDay).map((slot) => slot.start);
@@ -350,6 +393,150 @@ describe.skipIf(!executablePath)("réservation et confirmation dans un navigateu
     await page.clock.fastForward("02:01");
     await expect.poll(() => description.innerText()).toContain(confirmationContent.fr.processing.stalled);
     expect(await description.innerText()).not.toContain(confirmationContent.fr.processing.autoUpdate);
+    await page.context().close();
+  }, 60_000);
+
+  it("traduit aussi les limites anti-abus et le paiement indisponible, et n'affiche jamais le texte français d'un refus sans motif (EN-06)", async () => {
+    const [firstDay] = openDays();
+    const refusals = [
+      refuse("TOO_MANY_REQUESTS", 429, "Trop de tentatives de réservation ont été effectuées. Veuillez réessayer dans une heure ou nous contacter directement.", "rate_limited"),
+      refuse("TOO_MANY_REQUESTS", 429, "Vous avez déjà deux réservations en attente de paiement. Finalisez ou annulez l’un de ces paiements.", "too_many_holds"),
+      refuse("SERVICE_UNAVAILABLE", 503, "Le service de paiement est momentanément indisponible. Votre créneau n’a pas été réservé.", "payment_unavailable"),
+      // Refus sans motif connu : message générique de la page, jamais le texte du serveur.
+      refuse("TOO_MANY_REQUESTS", 429, "Veuillez patienter avant de soumettre une nouvelle demande."),
+    ];
+    const { page, alerts } = await open("/booking", bookingProcedures({ "appointments.create": () => refusals.shift() }), { language: "en" });
+    await page.locator("#booking-name").fill("Test Patient");
+    await page.locator("#booking-email").fill("patient@example.test");
+    await page.locator("#booking-phone").fill("+44 20 7946 0958");
+    await page.locator("#booking-day").selectOption(firstDay);
+    await page.getByRole("group", { name: bookingContent.en.form.slotsLegend }).getByRole("radio").first().locator("xpath=..").click();
+    await page.locator("#booking-details").fill("Practical questions");
+
+    for (let attempt = 1; attempt <= 4; attempt += 1) {
+      await page.locator("#availability-status[data-state='available']").waitFor();
+      await page.getByRole("button", { name: bookingContent.en.form.submit }).click();
+      await expect.poll(() => alerts.length).toBe(attempt);
+    }
+    const { refusals: messages, bookingError } = bookingContent.en;
+    expect(alerts).toEqual([messages.rate_limited, messages.too_many_holds, messages.payment_unavailable, bookingError]);
+    for (const alert of alerts) expect(alert).not.toMatch(/réservation|paiement|Veuillez|créneau/);
+    await page.context().close();
+  }, 60_000);
+
+  it("affiche une erreur et un bouton « Réessayer » quand les réservations du jour ne se chargent pas, sans perdre le focus du clavier (RES-02)", async () => {
+    const [firstDay, secondDay] = openDays();
+    const secondDayStarts = listBookableSlots(EVENING_SLOTS, []).filter((slot) => slot.dayKey === secondDay).map((slot) => slot.start);
+    let bookedSlotsDown = true;
+    let release = () => {};
+    const { page, calls } = await open("/booking", bookingProcedures({
+      // Service rétabli : la réponse est retenue jusqu'à release(), le temps de vérifier le bouton pendant le nouvel essai.
+      "availability.getBookedSlots": ({ date }) => (bookedSlotsDown
+        ? refuse("INTERNAL_SERVER_ERROR", 500, "Internal error")
+        : new Promise((resolve) => { release = () => resolve(date === secondDay ? secondDayStarts : []); })),
+    }), { language: "en" });
+    await page.locator("#booking-day").selectOption(firstDay);
+    const grid = page.getByRole("group", { name: bookingContent.en.form.slotsLegend });
+    // L'erreur s'affiche après les nouvelles tentatives automatiques de la requête (environ 7 s).
+    const retry = grid.getByRole("button", { name: bookingContent.en.form.retry });
+    await retry.waitFor({ timeout: 20_000 });
+    expect(await grid.getByRole("alert").innerText()).toContain(bookingContent.en.form.slotsError);
+    expect(await grid.getByRole("radio").count()).toBe(0);
+    const status = page.locator("#availability-status");
+    expect(await status.getAttribute("data-state")).toBe("unavailable");
+    expect(await status.innerText()).toBe(getBookingFormCopy("en").availabilityError);
+
+    // Nouvel essai au clavier : le bouton garde le focus pendant la requête, un second appui
+    // ne relance rien, puis le focus passe au premier horaire de la grille qui le remplace.
+    const bookedSlotsCalls = () => calls.filter((call) => call.procedure === "availability.getBookedSlots").length;
+    const isFocused = (element: Element) => element === document.activeElement;
+    const attempts = bookedSlotsCalls();
+    bookedSlotsDown = false;
+    await retry.focus();
+    await page.keyboard.press("Enter");
+    await expect.poll(bookedSlotsCalls).toBe(attempts + 1);
+    const pendingRetry = grid.getByRole("alert").getByRole("button");
+    expect(await pendingRetry.getAttribute("aria-disabled")).toBe("true");
+    expect(await pendingRetry.innerText()).toBe(getBookingFormCopy("en").checkingAvailability);
+    expect(await pendingRetry.evaluate(isFocused)).toBe(true);
+    await page.keyboard.press("Enter");
+    release();
+    const firstSlot = grid.getByRole("radio").first();
+    await firstSlot.waitFor({ state: "attached" });
+    await expect.poll(() => firstSlot.evaluate(isFocused)).toBe(true);
+    expect(bookedSlotsCalls()).toBe(attempts + 1);
+    expect(await grid.getByRole("alert").count()).toBe(0);
+    expect(await status.getAttribute("data-state")).toBe("select");
+
+    // Jour déjà entièrement réservé : le focus passe sur le message qui remplace la grille.
+    bookedSlotsDown = true;
+    await page.locator("#booking-day").selectOption(secondDay);
+    await retry.waitFor({ timeout: 20_000 });
+    const failures = bookedSlotsCalls();
+    bookedSlotsDown = false;
+    await retry.focus();
+    await page.keyboard.press("Enter");
+    await expect.poll(bookedSlotsCalls).toBe(failures + 1);
+    release();
+    const fullyBooked = grid.getByText(bookingContent.en.form.noSlotsThisDay);
+    await fullyBooked.waitFor();
+    await expect.poll(() => fullyBooked.evaluate(isFocused)).toBe(true);
+    await page.context().close();
+  }, 60_000);
+
+  it("écrit le fichier agenda et le libellé du contact avec la ponctuation de la langue de la page (RES-05)", async () => {
+    const start = parisBookingSlotStart(toParisBookingDateKey(new Date(Date.now() + 5 * 24 * 60 * 60 * 1000)), "19:00")!;
+    const { page } = await open("/booking/confirmation?status=success&trackingId=APTCONFIRM0002&session_id=cs_test_confirmed", {
+      "appointments.publicStatus": () => ({ state: "confirmed", appointment: { appointmentDate: start.toISOString(), durationMinutes: 30, amountEur: 150 } }),
+    }, { language: "en" });
+    const [download] = await Promise.all([
+      page.waitForEvent("download"),
+      page.getByRole("button", { name: confirmationContent.en.appointment.addToCalendar }).click(),
+    ]);
+    const ics = await import("node:fs/promises").then(async (fs) => fs.readFile(await download.path(), "utf8"));
+    const description = ics.replace(/\r\n /g, "").split("\r\n").find((line) => line.startsWith("DESCRIPTION:"))!;
+    expect(description).toContain("DESCRIPTION:Reference: APTCONFIRM0002\\nDuration: 30 minutes\\nAmount paid: €150.00\\nContact us: ");
+    expect(description).not.toContain(" :");
+    // Même ponctuation sur la page, pour le libellé du contact.
+    const pageText = await page.locator("main").innerText();
+    expect(pageText).toContain(`${confirmationContent.en.contactTitle}: `);
+    expect(pageText).not.toContain(" :");
+    await page.context().close();
+  }, 60_000);
+
+  it("laisse remonter le texte de la confirmation au-dessus de la pastille « Préférences cookies » et du bouton WhatsApp sur téléphone (RES-05)", async () => {
+    const start = parisBookingSlotStart(toParisBookingDateKey(new Date(Date.now() + 5 * 24 * 60 * 60 * 1000)), "19:00")!;
+    // Pixel 7, en anglais, choix cookies déjà fait : la pastille reste en bas à gauche de l'écran, WhatsApp en bas à droite.
+    const { page } = await open("/booking/confirmation?status=success&trackingId=APTCONFIRM0003&session_id=cs_test_confirmed", {
+      "appointments.publicStatus": () => ({ state: "confirmed", appointment: { appointmentDate: start.toISOString(), durationMinutes: 30, amountEur: 150 } }),
+    }, { language: "en", timezoneId: "Asia/Dubai", context: { viewport: { width: 412, height: 839 }, deviceScaleFactor: 2.625, isMobile: true, hasTouch: true } });
+    await page.getByRole("definition").first().waitFor();
+    await page.getByRole("button", { name: cookieCopy.en.settings }).waitFor();
+    await page.locator(".whatsapp-contact-float").waitFor();
+    await page.evaluate(() => Promise.all(document.getAnimations().filter((animation) => (animation as CSSAnimation).animationName === "page-transition-enter").map((animation) => animation.finished)));
+
+    // Chaque texte et chaque commande, amené en bas de l'écran comme le fait le navigateur pour un focus.
+    const covered = await page.evaluate(async () => {
+      const floating = [...document.querySelectorAll<HTMLElement>(".cookie-preferences-shortcut, .whatsapp-contact-float")];
+      const blocks = [...document.querySelectorAll<HTMLElement>("main :is(h1, h2, p, li, dt, dd, a[href], button), footer :is(p, a[href])")]
+        .filter((element) => element.getBoundingClientRect().width > 0 && !floating.some((control) => control.contains(element)));
+      const result: string[] = [];
+      for (const block of blocks) {
+        block.scrollIntoView({ block: "end", behavior: "instant" });
+        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        const box = block.getBoundingClientRect();
+        for (const control of floating) {
+          const area = control.getBoundingClientRect();
+          if (box.left < area.right && area.left < box.right && box.top < area.bottom && area.top < box.bottom) {
+            result.push(`${control.className.split(" ")[0]} : ${block.tagName.toLowerCase()} « ${(block.textContent ?? "").trim().slice(0, 50)} »`);
+          }
+        }
+      }
+      return { floating: floating.length, count: blocks.length, result };
+    });
+    expect(covered.floating).toBe(2);
+    expect(covered.count).toBeGreaterThan(10);
+    expect(covered.result).toEqual([]);
     await page.context().close();
   }, 60_000);
 });
