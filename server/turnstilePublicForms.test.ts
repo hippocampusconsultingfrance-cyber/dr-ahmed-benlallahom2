@@ -17,6 +17,8 @@ describe("garde-fous Turnstile des parcours publics", () => {
     expect(source).toContain("<TurnstileLoadError copy={copy}");
     expect(publicFormCopy.turnstile.fr.loadError).toContain("L’envoi reste bloqué afin de protéger vos données");
     expect(publicFormCopy.turnstile.en.loadError).toContain("Sending stays blocked to protect your data");
+    expect(publicFormCopy.turnstile.de.loadError).toContain("Zum Schutz Ihrer Daten bleibt das Senden gesperrt");
+    expect(publicFormCopy.turnstile.zh.loadError).toContain("为保护您的数据，发送仍被阻止");
   });
 
   it("bloque toutes les soumissions publiques sensibles sans jeton Turnstile", () => {
