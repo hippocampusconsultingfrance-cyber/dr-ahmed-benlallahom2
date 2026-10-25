@@ -385,7 +385,7 @@ async function deliverCampaignRecipient(
   try {
     const email = await sendRecruitmentCampaignEmail({
       candidateEmail: candidate.email,
-      candidateName: `${candidate.firstName} ${candidate.lastName}`,
+      candidateFirstName: candidate.firstName,
       campaignTitle: campaign.title,
       subject: campaign.subject,
       body: campaign.body,
@@ -1995,7 +1995,7 @@ export const appRouter = router({
           if (!application) throw new TRPCError({ code: "NOT_FOUND", message: "Candidature introuvable" });
           const result = await sendRecruitmentTemplateEmail(
             application.email,
-            `${application.firstName} ${application.lastName}`,
+            application.firstName,
             application.trackingId,
             input.template as RecruitmentEmailTemplate,
             { language: input.language as RecruitmentEmailLanguage, customRequest: input.customRequest },

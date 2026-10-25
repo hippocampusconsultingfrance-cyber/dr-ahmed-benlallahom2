@@ -59,15 +59,17 @@ export async function sendMedicalQuestionResponseEmail(
   options: { idempotencyKey?: string } = {},
 ) {
   const contact = resolveMedicalQuestionContact();
+  // The first name comes from the public form: same greeting as the acknowledgement (MAIL-01).
+  const greeting = unverifiedRecipientGreeting(input.firstName);
   const html = buildHippocampusEmailShell(`
     <h2 style="color:#0891b2">Réponse à votre question</h2>
-    <p>Bonjour ${escapeHtml(input.firstName)},</p>
+    <p>${escapeHtml(greeting)}</p>
     <p>Votre question a été examinée. Vous trouverez ci-dessous une réponse d’information générale relue et validée par le Dr. Ahmed Ben Lallahom.</p>
     <div style="margin:20px 0;padding:18px;border-radius:10px;background:#f1f5f9;white-space:pre-line;line-height:1.65;color:#0f172a;">${escapeHtml(input.response)}</div>
     <p style="font-size:13px;line-height:1.55;color:#475569;"><strong>Information importante :</strong> cette réponse générale ne remplace pas une consultation, une évaluation préopératoire ni une prise en charge urgente. En cas d’urgence ou de symptôme inquiétant, contactez les secours ou un professionnel de santé sans attendre.</p>
     <p style="font-size:12px;color:#64748b;">Référence confidentielle : ${escapeHtml(input.trackingId)}</p>
   `);
-  const text = `Bonjour ${input.firstName},\n\nVotre question a été examinée.\n\n${input.response}\n\nInformation importante : cette réponse générale ne remplace pas une consultation, une évaluation préopératoire ni une prise en charge urgente. En cas d’urgence ou de symptôme inquiétant, contactez les secours ou un professionnel de santé sans attendre.\n\nRéférence confidentielle : ${input.trackingId}`;
+  const text = `${greeting}\n\nVotre question a été examinée.\n\n${input.response}\n\nInformation importante : cette réponse générale ne remplace pas une consultation, une évaluation préopératoire ni une prise en charge urgente. En cas d’urgence ou de symptôme inquiétant, contactez les secours ou un professionnel de santé sans attendre.\n\nRéférence confidentielle : ${input.trackingId}`;
   const { error } = await getResendClient().emails.send(
     { from: contact.from, to: [input.email], replyTo: contact.replyTo, subject: `Réponse à votre question — ${input.trackingId}`, html, text },
     options.idempotencyKey ? { idempotencyKey: options.idempotencyKey } : undefined,
