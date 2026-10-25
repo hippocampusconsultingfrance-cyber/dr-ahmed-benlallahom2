@@ -4,6 +4,7 @@ import { chromium, type Browser } from "playwright-core";
 import superjson from "superjson";
 import { createServer, type ViteDevServer } from "vite";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { COOKIE_CONSENT_STORAGE_KEY, createCookieConsent } from "@/components/cookieConsentState";
 import { contentFr } from "@/data/content-fr";
 
 /**
@@ -51,12 +52,14 @@ describe.skipIf(!executablePath)("pages publiques dans un navigateur", () => {
     await server?.close();
   });
 
-  async function open(route: string, { width = 1440, height = 800, theme = "dark" as Theme, touch = false } = {}) {
+  /** Sans consentement enregistré (par défaut), le bandeau cookies est ouvert en bas de l'écran. */
+  async function open(route: string, { width = 1440, height = 800, theme = "dark" as Theme, touch = false, consent = false } = {}) {
     const context = await browser.newContext({ viewport: { width, height }, isMobile: touch, hasTouch: touch });
-    await context.addInitScript((storedTheme) => {
+    await context.addInitScript(({ storedTheme, storedConsent }) => {
       localStorage.setItem("language", "fr");
       localStorage.setItem("theme", storedTheme);
-    }, theme);
+      if (storedConsent) localStorage.setItem(storedConsent.key, storedConsent.value);
+    }, { storedTheme: theme, storedConsent: consent ? { key: COOKIE_CONSENT_STORAGE_KEY, value: JSON.stringify(createCookieConsent(false)) } : null });
     const page = await context.newPage();
     await page.route("**/api/trpc/**", (request) => {
       const procedures = new URL(request.request().url()).pathname.replace(/^.*\/api\/trpc\//, "").split(",");
@@ -274,6 +277,41 @@ describe.skipIf(!executablePath)("pages publiques dans un navigateur", () => {
         });
       });
       expect(clipped, `${route} à ${width} px`).toEqual([]);
+      await page.context().close();
+    }
+  }, 120_000);
+
+  it("laisse voir ce qui reçoit le focus en avançant au clavier dans /employers, bandeau cookies fermé ou ouvert (A11Y-01, WCAG 2.4.11)", async () => {
+    // De 1024 à 1439 px, le formulaire empile ses champs et dépasse de loin la colonne de gauche,
+    // dont le dernier lien reçoit le focus avant lui.
+    for (const [width, height, consent] of [[1366, 657, true], [1280, 600, true], [1366, 768, false], [1280, 720, false], [1024, 768, false]] as const) {
+      const page = await open("/employers", { width, height, consent });
+      expect(await page.locator(".cookie-consent-banner").count(), `${width}x${height}`).toBe(consent ? 0 : 1);
+      const reached: string[] = [];
+      for (let step = 0; step < 40; step++) {
+        await page.keyboard.press("Tab");
+        await page.evaluate(scrollSettled);
+        const state = await page.evaluate(() => {
+          const focused = document.activeElement as HTMLElement | null;
+          const header = document.querySelector("header.site-nav")!;
+          const banner = document.querySelector(".cookie-consent-banner");
+          if (!focused || focused === document.body || header.contains(focused) || banner?.contains(focused)) return null;
+          if (focused.closest("footer")) return { footer: true };
+          const box = focused.getBoundingClientRect();
+          const label = `${focused.tagName.toLowerCase()} « ${(focused.getAttribute("placeholder") || focused.textContent || "").trim().slice(0, 40)} » [${Math.round(box.top)}, ${Math.round(box.bottom)}]`;
+          if (box.bottom <= 0 || box.top >= innerHeight) return { label, hidden: "hors de l'écran" };
+          const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+          if (hit && header.contains(hit)) return { label, hidden: "sous l'en-tête" };
+          if (hit && banner?.contains(hit)) return { label, hidden: "sous le bandeau cookies" };
+          return { label, hidden: null };
+        });
+        if (!state) continue;
+        if ("footer" in state) break;
+        reached.push(state.label);
+        expect(state.hidden && `${state.label} ${state.hidden}`, `${width}x${height}, Tab n° ${step + 1}`).toBeNull();
+      }
+      expect(reached.some((label) => label.startsWith("a « Pourquoi choisir")), `${width}x${height}`).toBe(true);
+      expect(reached.some((label) => label.startsWith("textarea")), `${width}x${height}`).toBe(true);
       await page.context().close();
     }
   }, 120_000);

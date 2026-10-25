@@ -262,7 +262,13 @@ export default function EmployersPage() {
       <Navigation />
       <main className="pt-32 md:pt-40 pb-24">
         <section className="container grid gap-12 lg:grid-cols-[1fr_1.1fr] lg:items-start max-w-6xl">
-          <div className="lg:sticky lg:top-32 space-y-8">
+          {/*
+            Colonne figée seulement à partir de 1440 px (.container s'élargit), où le formulaire remet
+            ses champs deux par deux. Plus étroit, il les empile (A11Y-01) et dépasse de loin cette
+            colonne, qui resterait figée assez longtemps pour que son dernier lien reçoive le focus
+            clavier hors de l'écran ou sous le bandeau cookies (WCAG 2.4.11).
+          */}
+          <div className="min-[1440px]:sticky min-[1440px]:top-32 space-y-8">
             <div>
               <p className="section-kicker">{t.eyebrow}</p>
               <h1 className="mt-4 font-display text-4xl leading-tight text-foreground md:text-5xl">{t.title}</h1>
