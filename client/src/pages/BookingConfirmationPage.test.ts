@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { confirmationContent, getBookingConfirmationState, getDisplayedConfirmationState, STATUS_STALLED_AFTER_MS } from "./BookingConfirmationPage";
+import { buildConfirmationCalendarDescription, confirmationContent, getBookingConfirmationState, getDisplayedConfirmationState, STATUS_STALLED_AFTER_MS } from "./BookingConfirmationPage";
 
 describe("booking confirmation state", () => {
   it("does not treat an absent or unknown Stripe status as a successful payment", () => {
@@ -47,6 +47,24 @@ describe("booking confirmation state", () => {
     }
     expect(confirmationContent.fr.processing.stalled).toContain("vérifiez votre email ou contactez-nous");
     expect(confirmationContent.en.processing.stalled).toContain("check your email or contact us");
+  });
+
+  it("ponctue les libellés du fichier agenda comme la langue de la page (RES-05)", () => {
+    const details = { trackingId: "APTABC123DEF45", durationMinutes: 30, email: "contact@example.test", phone: "+33 1 23 45 67 89" };
+    expect(buildConfirmationCalendarDescription(confirmationContent.fr, { ...details, amount: "150,00 €" }))
+      .toBe("Référence : APTABC123DEF45\nDurée : 30 minutes\nMontant réglé : 150,00 €\nNous contacter : contact@example.test · +33 1 23 45 67 89");
+    expect(buildConfirmationCalendarDescription(confirmationContent.en, { ...details, amount: "€150.00" }))
+      .toBe("Reference: APTABC123DEF45\nDuration: 30 minutes\nAmount paid: €150.00\nContact us: contact@example.test · +33 1 23 45 67 89");
+    expect(buildConfirmationCalendarDescription(confirmationContent.de, { ...details, amount: "150,00 €" }).split("\n")[0]).toBe("Referenz: APTABC123DEF45");
+    expect(buildConfirmationCalendarDescription(confirmationContent.zh, { ...details, amount: "€150.00" }).split("\n")).toEqual([
+      "编号：APTABC123DEF45",
+      "时长：30 分钟",
+      "已付金额：€150.00",
+      "联系我们：contact@example.test · +33 1 23 45 67 89",
+    ]);
+    for (const language of ["en", "de", "zh"] as const) {
+      expect(buildConfirmationCalendarDescription(confirmationContent[language], { ...details, amount: "€150.00" }), language).not.toContain(" :");
+    }
   });
 
   it("provides a neutral and explicit state in every supported language", () => {
