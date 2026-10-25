@@ -2,6 +2,8 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vites
 import { RECRUITMENT_CV_MAX_BYTES } from "../shared/recruitmentCvLimits";
 import { RECRUITMENT_CV_FORMAT_MESSAGE } from "./recruitmentFileValidation";
 import { listen, validPdfBuffer } from "./testSupport/candidateUploadApp";
+import { libreOfficeCvPdf, packPdfIntoObjectStream } from "./testing/pdfFixture";
+import { recruitmentSubmissionErrorMessage } from "../client/src/lib/recruitmentSubmissionErrors";
 
 const state = vi.hoisted(() => {
   process.env.VERCEL = "1";
@@ -94,6 +96,29 @@ describe("POST /api/recruitment/apply — réception du CV (multer) et validatio
       const invalid = await apply({ cvs: [{ buffer: validPdfBuffer() }], fields });
       expect(invalid, JSON.stringify(fields)).toMatchObject({ status: 400, body: { error: "Les informations de candidature sont invalides." } });
     }
+    expect(state.databaseRequests).toBe(0);
+  });
+});
+
+describe("REC-02 — PDF réels et PDF piégés reçus par /api/recruitment/apply", () => {
+  it("conduit un CV LibreOffice et un CV à flux d’objets jusqu’à l’enregistrement", async () => {
+    for (const buffer of [libreOfficeCvPdf(), packPdfIntoObjectStream(libreOfficeCvPdf())]) {
+      const result = await apply({ cvs: [{ buffer }] });
+      expect(result.body.code).toBe("recruitment_service_unavailable");
+    }
+    expect(state.databaseRequests).toBe(2);
+  });
+
+  it("refuse un JavaScript caché dans un flux d’objets et dit au candidat quoi faire, en français et traduit", async () => {
+    const trapped = packPdfIntoObjectStream(libreOfficeCvPdf(), {
+      edit: source => source.replace("/OpenAction[1 0 R /XYZ null null 0]", "/OpenAction <</S/JavaScript/JS(app.alert\\(1\\))>>"),
+    });
+    const result = await apply({ cvs: [{ buffer: trapped }] });
+    expect(result.status).toBe(400);
+    expect(result.body.code).toBe("cv_validation_pdf_active_content");
+    expect(result.body.error).toContain("Réenregistrez votre CV en DOCX ou imprimez-le en PDF depuis votre navigateur");
+    const pageCopy = { genericError: "generic", fileError: "file" };
+    expect(recruitmentSubmissionErrorMessage(result.body, "en", pageCopy)).toContain("print it to PDF from your browser");
     expect(state.databaseRequests).toBe(0);
   });
 });

@@ -133,6 +133,26 @@ function directInteger(dictionary: string, key: string) {
 }
 
 /**
+ * PDF names may spell any character as #xx (`/J#61vaScript` is /JavaScript,
+ * `/#4A#53` is /JS): they are decoded before any keyword is searched.
+ */
+export function decodePdfNames(text: string) {
+  return text.replace(/\/[^\s/<>[\]()%{}\0]*/g, name => name.includes("#")
+    ? name.replace(/#([0-9a-f]{2})/gi, (_, hex: string) => String.fromCharCode(parseInt(hex, 16)))
+    : name);
+}
+
+/** pdf.js reads an object stream from its /N and /First entries, whatever its /Type says. */
+function isObjectStreamDictionary(names: string) {
+  return /\/Type\s*\/ObjStm\b/.test(names) || (/\/First\b/.test(names) && /\/N\b/.test(names));
+}
+
+/** Only Flate, without predictor, is decoded here; an object stream behind any other filter cannot be searched. */
+const FLATE_ONLY_FILTER = /\/Filter\s*(?:\/(?:FlateDecode|Fl)\b|\[\s*(?:\/(?:FlateDecode|Fl)\b\s*)+\])/;
+/** Decoded object stream: it starts with the "object number, offset" pairs. */
+const OBJECT_STREAM_HEADER = /^\s*\d+\s+\d+\s/;
+
+/**
  * Fast static bound on the zlib data of a PDF, before storage. It does not
  * trust the dictionaries: every `stream` keyword followed by an end of line
  * (CR, LF or CRLF, as pdf.js accepts) whose data starts with a zlib header is
@@ -144,12 +164,18 @@ function directInteger(dictionary: string, key: string) {
  * dimensions it counts like any other stream. What this cannot see (LZW,
  * ASCIIHex or ASCII85 first, very large declared images) is bounded where
  * pdf.js decodes it: in the isolated reader.
+ *
+ * The inflated content of each object stream (PDF 1.5+, where pdf-lib,
+ * Acrobat "optimised" or Word put the page and action dictionaries) is
+ * returned for the safety checks (REC-02); `null` marks an object stream
+ * whose content could not be read here.
  */
 export function assertPdfDecompressionWithinLimits(buffer: Buffer, limits: Pick<DocumentDecompressionLimits, "pdfMaxInflatedBytes" | "pdfMaxImagePixels" | "pdfImageProbeBytes"> = DOCUMENT_DECOMPRESSION_LIMITS) {
   const source = buffer.toString("latin1");
   const streamKeyword = /stream[^\r\n]*(?:\r\n|\r|\n)/g;
   const exceeded = () => new Error("cv_validation_pdf_decompressed_size_exceeded");
   let inflatedBytes = 0;
+  const objectStreams: Array<string | null> = [];
   let match: RegExpExecArray | null;
   while ((match = streamKeyword.exec(source))) {
     const dataStart = match.index + match[0].length;
@@ -158,10 +184,16 @@ export function assertPdfDecompressionWithinLimits(buffer: Buffer, limits: Pick<
     streamKeyword.lastIndex = dataStart;
     if (source.slice(Math.max(0, match.index - 3), match.index) === "end") continue;
     const data = buffer.subarray(dataStart);
-    if (!startsWithZlibHeader(data)) continue;
     const objectStart = source.lastIndexOf(" obj", match.index);
     const dictionary = source.slice(Math.max(objectStart, match.index - 4_096, 0), match.index);
-    if (/\/Subtype\s*\/Image\b/.test(dictionary)) {
+    const names = decodePdfNames(dictionary);
+    // Without /Filter an object stream is plain text, already in the raw bytes.
+    const objectStream = isObjectStreamDictionary(names) && /\/Filter\b/.test(names);
+    if (!startsWithZlibHeader(data)) {
+      if (objectStream) objectStreams.push(null);
+      continue;
+    }
+    if (!objectStream && /\/Subtype\s*\/Image\b/.test(dictionary)) {
       const width = directInteger(dictionary, "Width");
       const height = directInteger(dictionary, "Height");
       if (width !== null && height !== null) {
@@ -172,6 +204,7 @@ export function assertPdfDecompressionWithinLimits(buffer: Buffer, limits: Pick<
       }
     }
     let layer: Buffer = data;
+    let decoded = false;
     while (startsWithZlibHeader(layer)) {
       const inflated = inflateWithCap(layer, limits.pdfMaxInflatedBytes - inflatedBytes);
       if (inflated === INFLATE_OVERFLOW) throw exceeded();
@@ -179,9 +212,42 @@ export function assertPdfDecompressionWithinLimits(buffer: Buffer, limits: Pick<
       inflatedBytes += inflated.length;
       if (inflatedBytes > limits.pdfMaxInflatedBytes) throw exceeded();
       layer = inflated;
+      decoded = true;
     }
+    if (!objectStream) continue;
+    const content = decoded && FLATE_ONLY_FILTER.test(names) && !/\/DecodeParms\b/.test(names) ? layer.toString("latin1") : "";
+    objectStreams.push(OBJECT_STREAM_HEADER.test(content.slice(0, 64)) ? content : null);
   }
-  return { inflatedBytes };
+  return { inflatedBytes, objectStreams };
+}
+
+const PDF_ACTIVE_CONTENT = /\/(?:JavaScript|JS|Launch|EmbeddedFiles?|RichMedia|ImportData|SubmitForm)\b/;
+
+export type PdfStructureInspection = {
+  encrypted: boolean;
+  /** JavaScript, launch, embedded file, rich media or form submission/import action. */
+  activeContent: boolean;
+  /** Object streams whose content could not be searched (another filter than Flate, corrupt data). */
+  unreadableObjectStreams: number;
+  pageCount: number;
+};
+
+/**
+ * What the CV and vault PDF checks look at (REC-02): the raw bytes plus the
+ * inflated object streams, inside the bounded loop above, with #xx name
+ * escapes decoded. An /OpenAction alone is not active content (LibreOffice
+ * writes one to open the first page); a JavaScript one is found by /JS.
+ */
+export function inspectPdfStructure(buffer: Buffer, limits: Pick<DocumentDecompressionLimits, "pdfMaxInflatedBytes" | "pdfMaxImagePixels" | "pdfImageProbeBytes"> = DOCUMENT_DECOMPRESSION_LIMITS): PdfStructureInspection {
+  const { objectStreams } = assertPdfDecompressionWithinLimits(buffer, limits);
+  const readable = objectStreams.filter((content): content is string => content !== null);
+  const text = decodePdfNames([buffer.toString("latin1"), ...readable].join("\n"));
+  return {
+    encrypted: /\/Encrypt\b/.test(text),
+    activeContent: PDF_ACTIVE_CONTENT.test(text),
+    unreadableObjectStreams: objectStreams.length - readable.length,
+    pageCount: (text.match(/\/Type\s*\/Page\b/g) ?? []).length,
+  };
 }
 
 /** Keeps the stored and analysed text bounded. */

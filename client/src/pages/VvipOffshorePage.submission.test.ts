@@ -51,7 +51,7 @@ describe("REC-03 / INTL-03 — message affiché après un refus du serveur", () 
     pageLimit: ["cv_validation_pdf_page_limit_exceeded"],
     passwordProtected: ["cv_validation_pdf_encrypted", "cv_validation_docx_encrypted"],
     activeContent: ["cv_validation_pdf_active_content", "cv_validation_docx_active_content", "cv_validation_doc_active_content"],
-    invalidContent: ["cv_validation_signature_invalid", "cv_validation_type_mismatch", "cv_validation_pdf_page_structure_invalid", "cv_validation_docx_container_invalid"],
+    invalidContent: ["cv_validation_signature_invalid", "cv_validation_type_mismatch", "cv_validation_pdf_page_structure_invalid", "cv_validation_pdf_object_stream_unreadable", "cv_validation_docx_container_invalid"],
   };
   const frenchCvMessage = "Le CV est refusé (texte français du serveur).";
 

@@ -37,10 +37,10 @@ const refusals = [
     zh: "简历不得超过 25 页。",
   },
   {
-    refusal: { error: "Le CV contient des macros, du contenu actif ou des objets intégrés.", code: "cv_validation_pdf_active_content" },
-    en: "The CV contains macros, active content or embedded objects. Save it as a PDF and try again.",
-    de: "Der Lebenslauf enthält Makros, aktive Inhalte oder eingebettete Objekte. Speichern Sie ihn als PDF und versuchen Sie es erneut.",
-    zh: "简历包含宏、活动内容或嵌入对象。请另存为 PDF 后重试。",
+    refusal: { error: "Le CV contient des macros, du JavaScript, une commande de lancement ou des fichiers intégrés. Réenregistrez votre CV en DOCX ou imprimez-le en PDF depuis votre navigateur, puis réessayez.", code: "cv_validation_pdf_active_content" },
+    en: "The CV contains macros, JavaScript, a launch command or embedded files. Save your CV again as a DOCX or print it to PDF from your browser, then try again.",
+    de: "Der Lebenslauf enthält Makros, JavaScript, einen Startbefehl oder eingebettete Dateien. Speichern Sie Ihren Lebenslauf erneut als DOCX oder drucken Sie ihn in Ihrem Browser als PDF und versuchen Sie es dann erneut.",
+    zh: "简历包含宏、JavaScript、启动命令或嵌入文件。请将简历重新另存为 DOCX，或在浏览器中打印为 PDF，然后重试。",
   },
 ];
 const serviceFailure = {
