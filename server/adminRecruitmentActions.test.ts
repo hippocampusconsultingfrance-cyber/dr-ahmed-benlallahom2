@@ -171,6 +171,27 @@ describe("actions d’administration du recrutement", () => {
     expect(memory.rows(recruitmentAuditLogs).filter(row => row.action === "export").map(row => row.application_id)).toEqual([shortlisted.id, shortlisted.id]);
   });
 
+  it("une shortlist au-delà de la limite par export est refusée, jamais tronquée (REC-01)", async () => {
+    const [brief] = memory.seed(clientBriefs, [{ brief_id: "BRIEF-REC01-MAX", organization_name: "Clinique", contact_name: "RH", email: "rh@test.local", target_environment: "Hôpital", specialty_needed: "Anesthésie", country: "Suisse" }]);
+    const briefId = brief!.id as number;
+    const candidates = Array.from({ length: 201 }, (_, index) => seedCandidate(index + 1));
+    memory.seed(clientBriefCandidates, candidates.slice(0, 200).map(candidate => ({ brief_id: briefId, application_id: candidate.id, association_status: "shortlisted" })));
+    const exportedRows = (csv: string) => csv.split("\n").length - 1;
+
+    // Exactly at the limit: every shortlisted candidate is in the file.
+    const full = await admin().admin.recruitment.exportCsv({ type: "shortlist", briefId });
+    expect(full.count).toBe(200);
+    expect(exportedRows(full.csv)).toBe(200);
+    await expect(admin().admin.clientBriefs.candidates({ briefId })).resolves.toMatchObject({ shortlistedCount: 200 });
+
+    // One more: the export is refused with the limit rather than cut to 200.
+    memory.seed(clientBriefCandidates, [{ brief_id: briefId, application_id: candidates[200]!.id, association_status: "shortlisted" }]);
+    await expect(admin().admin.clientBriefs.candidates({ briefId })).resolves.toMatchObject({ shortlistedCount: 201 });
+    const auditRowsBefore = memory.rows(recruitmentAuditLogs).length;
+    await expect(admin().admin.recruitment.exportCsv({ type: "shortlist", briefId })).rejects.toThrow("La shortlist compte 201 candidats ; 200 au maximum par export. Retirez des candidats de la shortlist avant de l’exporter.");
+    expect(memory.rows(recruitmentAuditLogs)).toHaveLength(auditRowsBefore);
+  });
+
   it("un export du vivier sans sélection est refusé au lieu d’exporter tout le vivier (REC-01)", async () => {
     const selected = seedCandidate(1);
     seedCandidate(2);
