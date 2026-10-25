@@ -484,6 +484,78 @@ describe.skipIf(!executablePath)("réservation et confirmation dans un navigateu
     await page.context().close();
   }, 60_000);
 
+  it("relance aussi le tarif avec « Réessayer », et dit dans le statut quand le tarif n'a pas pu être calculé (RES-02)", async () => {
+    const [firstDay] = openDays();
+    const copy = getBookingFormCopy("de");
+    let agendaDown = false;
+    let priceDown = false;
+    const agenda = (answer: Procedure): Procedure => (input) => (agendaDown ? refuse("INTERNAL_SERVER_ERROR", 500, "Internal error") : answer(input));
+    const { page, calls } = await open("/booking", bookingProcedures({
+      "availability.getSlots": agenda(() => EVENING_SLOTS),
+      "availability.getBlockedDates": agenda(() => []),
+      "availability.getBookedSlots": agenda(() => []),
+      "appointments.calculatePrice": (input) => (agendaDown || priceDown ? refuse("INTERNAL_SERVER_ERROR", 500, "Internal error") : priceFor(input.appointmentDate)),
+    }), { language: "de" });
+    await page.locator("#booking-day").selectOption(firstDay);
+    const grid = page.getByRole("group", { name: bookingContent.de.form.slotsLegend });
+    const status = page.locator("#availability-status");
+    const submit = page.getByRole("button", { name: copy.submit });
+    await grid.getByRole("radio").first().waitFor();
+    const [first, second] = await grid.getByRole("radio").evaluateAll((radios) => radios.map((radio) => (radio as HTMLInputElement).value));
+    const slot = (value: string) => grid.locator(`input[value="${value}"]`);
+    await slot(first).locator("xpath=..").click();
+    await expect.poll(() => submit.isEnabled()).toBe(true);
+
+    // Retour sur l'onglet : l'agenda et le tarif repartent dans la même requête groupée, qui échoue.
+    agendaDown = true;
+    await page.evaluate(() => {
+      for (const visibility of ["hidden", "visible"]) {
+        Object.defineProperty(document, "visibilityState", { value: visibility, configurable: true });
+        // React Query écoute sur window : l’événement doit remonter du document.
+        document.dispatchEvent(new Event("visibilitychange", { bubbles: true }));
+      }
+    });
+    const retry = grid.getByRole("button", { name: bookingContent.de.form.retry });
+    await retry.waitFor({ timeout: 20_000 });
+    expect(await submit.isDisabled()).toBe(true);
+
+    // « Réessayer » relance le tarif avec l'agenda : l'horaire revient coché et le paiement possible.
+    agendaDown = false;
+    const priceCalls = () => calls.filter((call) => call.procedure === "appointments.calculatePrice").length;
+    const beforeRetry = priceCalls();
+    await retry.click();
+    await expect.poll(() => submit.isEnabled()).toBe(true);
+    expect(priceCalls()).toBe(beforeRetry + 1);
+    expect(await slot(first).isChecked()).toBe(true);
+    expect(await status.getAttribute("data-state")).toBe("available");
+    expect(await status.innerText()).toBe(copy.available);
+
+    // Tarif seul en échec pour un autre horaire : le statut le dit au lieu de « Termin verfügbar »,
+    // et une alerte sous le statut propose son propre « Erneut versuchen », la grille restant affichée.
+    priceDown = true;
+    await slot(second).locator("xpath=..").click();
+    await page.locator("#availability-status[data-state='unavailable']").waitFor({ timeout: 20_000 });
+    expect(await status.innerText()).toBe(bookingContent.de.form.priceError);
+    expect(await submit.isDisabled()).toBe(true);
+    expect(await grid.getByRole("alert").count()).toBe(0);
+    const priceAlert = page.getByRole("alert").filter({ hasText: bookingContent.de.form.priceError });
+    const priceRetry = priceAlert.getByRole("button", { name: bookingContent.de.form.retry });
+
+    // Nouvel essai au clavier : seul le tarif est redemandé, puis le focus passe sur l'horaire coché.
+    priceDown = false;
+    const afterFailure = priceCalls();
+    const bookedSlotsCalls = calls.filter((call) => call.procedure === "availability.getBookedSlots").length;
+    await priceRetry.focus();
+    await page.keyboard.press("Enter");
+    await expect.poll(() => submit.isEnabled()).toBe(true);
+    expect(priceCalls()).toBe(afterFailure + 1);
+    expect(calls.filter((call) => call.procedure === "availability.getBookedSlots").length).toBe(bookedSlotsCalls);
+    expect(await status.innerText()).toBe(copy.available);
+    expect(await priceAlert.count()).toBe(0);
+    await expect.poll(() => slot(second).evaluate((element) => element === document.activeElement)).toBe(true);
+    await page.context().close();
+  }, 90_000);
+
   it("écrit le fichier agenda et le libellé du contact avec la ponctuation de la langue de la page (RES-05)", async () => {
     const start = parisBookingSlotStart(toParisBookingDateKey(new Date(Date.now() + 5 * 24 * 60 * 60 * 1000)), "19:00")!;
     const { page } = await open("/booking/confirmation?status=success&trackingId=APTCONFIRM0002&session_id=cs_test_confirmed", {

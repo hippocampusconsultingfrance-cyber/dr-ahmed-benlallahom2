@@ -72,6 +72,7 @@ export const bookingContent = {
       noSlotsLeftThisDay: "Plus aucun horaire n’est disponible ce jour-là. Choisissez un autre jour.",
       slotsError: "Les horaires de ce jour n’ont pas pu être chargés.",
       retry: "Réessayer",
+      priceError: "Le tarif de cet horaire n’a pas pu être calculé. Réessayez avant de procéder au paiement.",
       parisTime: "heure de Paris",
       localTime: (time: string) => `soit ${time} chez vous`,
       localTimeShort: (time: string) => `${time} chez vous`,
@@ -165,6 +166,7 @@ export const bookingContent = {
       noSlotsLeftThisDay: "No times are available on this day any more. Please choose another day.",
       slotsError: "The times for this day could not be loaded.",
       retry: "Try again",
+      priceError: "The price for this time could not be calculated. Please try again before proceeding to payment.",
       parisTime: "Paris time",
       localTime: (time: string) => `that is ${time} your time`,
       localTimeShort: (time: string) => `${time} your time`,
@@ -256,6 +258,7 @@ export const bookingContent = {
       noSlotsLeftThisDay: "An diesem Tag ist keine Uhrzeit mehr verfügbar. Bitte wählen Sie einen anderen Tag.",
       slotsError: "Die Uhrzeiten für diesen Tag konnten nicht geladen werden.",
       retry: "Erneut versuchen",
+      priceError: "Der Preis für diese Uhrzeit konnte nicht berechnet werden. Bitte versuchen Sie es erneut, bevor Sie zur Zahlung übergehen.",
       parisTime: "Pariser Zeit",
       localTime: (time: string) => `also ${time} bei Ihnen`,
       localTimeShort: (time: string) => `${time} bei Ihnen`,
@@ -347,6 +350,7 @@ export const bookingContent = {
       noSlotsLeftThisDay: "当天已没有可预约的时间，请选择其他日期。",
       slotsError: "无法加载当天的时间。",
       retry: "重试",
+      priceError: "无法计算该时间的费用。请重试后再继续付款。",
       parisTime: "巴黎时间",
       localTime: (time: string) => `即您当地时间 ${time}`,
       localTimeShort: (time: string) => `当地 ${time}`,
@@ -797,6 +801,10 @@ export default function BookingPage() {
     { enabled: Boolean(dateKey) }
   );
   const availabilitySlots = trpc.availability.getSlots.useQuery();
+  const calculatePrice = trpc.appointments.calculatePrice.useQuery(
+    { appointmentDate: selectedDate?.toISOString() || "" },
+    { enabled: !!selectedDate }
+  );
 
   const isBlockedDate = Boolean(dateKey && blockedDates.data?.some((item) => item.date === dateKey));
   const isBookedSlot = Boolean(selectedDate && bookedSlots.data && overlapsBookedSlot(selectedDate, bookedSlots.data));
@@ -835,6 +843,10 @@ export default function BookingPage() {
   const openingHours = useMemo(() => summarizeBookingAvailability(availabilitySlots.data ?? [], locale), [availabilitySlots.data, locale]);
   // Délai minimal (2 h, passé compris) et horizon (90 jours) : mêmes règles que le serveur.
   const bookingWindowIssue = selectedDate ? getBookingWindowIssue(selectedDate, now) : null;
+  // Tarif de l’horaire coché non calculé (souvent dans la même requête groupée que
+  // l’agenda) : « Procéder au paiement » reste désactivé, et le statut le dit au lieu
+  // de « Créneau disponible ».
+  const priceFailed = Boolean(selectedDate) && calculatePrice.isError && !calculatePrice.isFetching;
   const availabilityLabel = availabilityQueryError
     ? bookingFormCopy.availabilityError
     : availabilitySlots.data && !hasConfiguredSlots
@@ -857,27 +869,26 @@ export default function BookingPage() {
           ? bookingFormCopy.noAvailability
           : isOutsideConfiguredAvailability
             ? bookingFormCopy.outsideSchedule
-            : bookingFormCopy.available;
+            : priceFailed
+              ? content.form.priceError
+              : bookingFormCopy.available;
   const availabilityState = getBookingAvailabilityState({
     // « Aucun créneau ouvert » et l’échec du chargement de l’agenda sont des
     // états indisponibles dès l’arrivée, sans attendre une sélection.
     selected: Boolean(selectedDate) || nothingToBook || availabilityQueryError,
     pending: availabilityPending && !bookingWindowIssue,
-    blocked: isBlockedDate || availabilityQueryError || isOutsideConfiguredAvailability || Boolean(bookingWindowIssue) || nothingToBook,
+    blocked: isBlockedDate || availabilityQueryError || isOutsideConfiguredAvailability || Boolean(bookingWindowIssue) || nothingToBook || priceFailed,
     booked: isBookedSlot,
   });
-
-  const calculatePrice = trpc.appointments.calculatePrice.useQuery(
-    { appointmentDate: selectedDate?.toISOString() || "" },
-    { enabled: !!selectedDate }
-  );
   const availabilityError = availabilityQueryError || calculatePrice.isError;
 
   const createAppointment = trpc.appointments.create.useMutation();
   const resumeCheckout = trpc.appointments.createCheckoutSession.useMutation();
   const cancelPendingBooking = trpc.appointments.cancelPending.useMutation();
 
-  // Bouton « Réessayer » de la grille : relance chaque donnée d’agenda dont le chargement a échoué.
+  // Bouton « Réessayer » de la grille : relance chaque donnée d’agenda dont le chargement a échoué,
+  // et le tarif de l’horaire coché s’il a échoué avec elles (même requête groupée) : sinon la
+  // grille reviendrait avec « Procéder au paiement » toujours désactivé.
   // Pendant le nouvel essai, l’encadré d’erreur reste affiché et son bouton garde le focus
   // (aria-disabled, pas disabled) ; s’il réussit, le focus passe dans la grille qui le remplace
   // au lieu de retomber au début du document, sinon il reste sur le bouton.
@@ -886,10 +897,20 @@ export default function BookingPage() {
     if (slotsRetrying) return;
     const retriedDay = dateKey;
     setSlotsRetryDay(retriedDay);
-    for (const query of [blockedDates, availabilitySlots]) if (query.isError) void query.refetch();
+    for (const query of [blockedDates, availabilitySlots, calculatePrice]) if (query.isError) void query.refetch();
     void bookedSlots.refetch().finally(() => {
       slotsRetryFocusRef.current = retriedDay;
       setSlotsRetryDay((current) => (current === retriedDay ? null : current));
+    });
+  };
+
+  // Tarif seul en échec (agenda chargé, grille affichée) : son propre « Réessayer ». Le bouton
+  // disparaît avec l’alerte quand le tarif arrive : le focus passe alors sur l’horaire coché.
+  const priceRetryOnly = calculatePrice.isError && !availabilityQueryError;
+  const retryPrice = () => {
+    if (calculatePrice.isFetching) return;
+    void calculatePrice.refetch().then(({ isError }) => {
+      if (!isError) slotsFieldsetRef.current?.querySelector<HTMLElement>("input[name='booking-slot']:checked")?.focus();
     });
   };
 
@@ -1422,7 +1443,16 @@ export default function BookingPage() {
 
             {/* Price Display */}
             {selectedDate && calculatePrice.isLoading && <PublicContentSkeleton cards={1} label={bookingFormCopy.checkingAvailability} />}
-            {selectedDate && availabilityError && <p className="rounded-xl border border-destructive/35 bg-destructive/5 p-4 text-sm text-destructive" role="alert">{bookingFormCopy.availabilityError}</p>}
+            {selectedDate && availabilityError && (priceRetryOnly ? (
+              <div className="flex flex-col items-start gap-3 rounded-xl border border-destructive/35 bg-destructive/5 p-4 text-sm text-destructive" role="alert">
+                <p>{content.form.priceError}</p>
+                <Button type="button" variant="outline" onClick={retryPrice} aria-disabled={calculatePrice.isFetching || undefined} className="min-h-11 aria-disabled:cursor-not-allowed aria-disabled:opacity-50">
+                  {calculatePrice.isFetching ? bookingFormCopy.checkingAvailability : content.form.retry}
+                </Button>
+              </div>
+            ) : (
+              <p className="rounded-xl border border-destructive/35 bg-destructive/5 p-4 text-sm text-destructive" role="alert">{bookingFormCopy.availabilityError}</p>
+            ))}
             {calculatePrice.data && (
               <Card className="summary-card-premium p-4 sm:p-5">
                 <h3 className="font-semibold mb-3">{content.pricing.title}</h3>
