@@ -89,4 +89,21 @@ describe("REC-03 / INTL-03 — message affiché après un refus du serveur", () 
     expect(vvipSubmissionErrorMessage({ error: "Unexpected end of form" }, language)).toBe(t.genericError);
     expect(vvipSubmissionErrorMessage({ error: "Unexpected field" }, language)).toBe(t.genericError);
   });
+
+  it.each(languages)("après une erreur serveur 5xx, demande de réessayer plutôt que de vérifier les informations (%s)", language => {
+    const t = vvipOffshoreCopy[language];
+    // 500 of the route, then a gateway timeout or error page that is not JSON.
+    const failures = [
+      vvipSubmissionErrorMessage({ error: "La candidature n’a pas pu être enregistrée." }, language, 500),
+      vvipSubmissionErrorMessage({}, language, 504),
+      vvipSubmissionErrorMessage({}, language, 502),
+    ];
+    expect(new Set(failures).size).toBe(1);
+    expect([t.genericError, t.required, t.fileError]).not.toContain(failures[0]);
+    if (language === "fr") expect(failures[0]).toBe("Le service de candidature est momentanément indisponible. Réessayez dans quelques instants.");
+    if (language === "en") expect(failures[0]).toBe("The application service is momentarily unavailable. Please try again in a few moments.");
+    // A 503 with its code keeps the server's reason, a 4xx without code stays generic.
+    expect(vvipSubmissionErrorMessage(serverRefusals[3], language, 503)).toBe(vvipSubmissionErrorMessage(serverRefusals[3], language));
+    expect(vvipSubmissionErrorMessage({}, language, 413)).toBe(t.genericError);
+  });
 });

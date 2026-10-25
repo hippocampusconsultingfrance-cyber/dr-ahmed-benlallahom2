@@ -18,6 +18,7 @@ vi.mock("resend", () => ({
 }));
 
 const { candidatePortalRouter } = await import("./candidatePortalRouter");
+const { verifyCandidateTurnstile } = await import("./candidateTurnstile");
 type Api = ReturnType<typeof candidatePortalRouter.createCaller>;
 const client = (ip: string) => new CandidateClient<Api>(ctx => candidatePortalRouter.createCaller(ctx as Parameters<typeof candidatePortalRouter.createCaller>[0]), ip);
 const clientWithoutIp = () => candidatePortalRouter.createCaller({
@@ -66,6 +67,40 @@ describe("candidatePortal.register et resendVerification — email d’activatio
 
     await client("203.0.113.33").api.register(registration("cible6@test.local"));
     expect(accountByEmail(state.db as InMemoryDrizzle, "cible6@test.local")).toBeDefined();
+  });
+
+  it("ne compte ni un anti-robot à renouveler ni une invitation invalide dans le plafond d’inscription par IP", async () => {
+    const ip = "198.51.100.34";
+    for (let index = 1; index <= 5; index += 1) {
+      vi.mocked(verifyCandidateTurnstile).mockRejectedValueOnce(new Error("candidate_turnstile_invalid"));
+      await expect(client(ip).api.register(registration(`essai${index}@test.local`))).rejects.toMatchObject({ code: "BAD_REQUEST" });
+      await expect(client(ip).api.register({ ...registration(`invitation${index}@test.local`), invitationToken: "x".repeat(40) })).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    }
+    expect(state.sent).toHaveLength(0);
+
+    for (let index = 1; index <= 5; index += 1) {
+      await client(ip).api.register(registration(`candidat${index}@test.local`));
+    }
+    await expect(client(ip).api.register(registration("candidat6@test.local"))).rejects.toMatchObject({ code: "TOO_MANY_REQUESTS" });
+    expect(state.sent).toHaveLength(5);
+  });
+
+  it("ne compte pas un anti-robot à renouveler dans le plafond de renvoi du lien par IP", async () => {
+    for (let index = 1; index <= 6; index += 1) {
+      await client(`198.51.100.${60 + index}`).api.register(registration(`renvoi${index}@test.local`));
+    }
+    state.sent.length = 0;
+    const ip = "198.51.100.70";
+    for (let index = 1; index <= 5; index += 1) {
+      vi.mocked(verifyCandidateTurnstile).mockRejectedValueOnce(new Error("candidate_turnstile_invalid"));
+      await expect(client(ip).api.resendVerification({ email: `renvoi${index}@test.local`, turnstileToken: TURNSTILE })).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    }
+
+    for (let index = 1; index <= 5; index += 1) {
+      await client(ip).api.resendVerification({ email: `renvoi${index}@test.local`, turnstileToken: TURNSTILE });
+    }
+    await expect(client(ip).api.resendVerification({ email: "renvoi6@test.local", turnstileToken: TURNSTILE })).rejects.toMatchObject({ code: "TOO_MANY_REQUESTS" });
+    expect(state.sent).toHaveLength(5);
   });
 
   it("ne regroupe pas les visiteurs sans IP identifiable dans un compteur commun", async () => {

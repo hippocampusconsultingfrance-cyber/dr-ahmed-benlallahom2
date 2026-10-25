@@ -425,6 +425,9 @@ export async function createApp() {
       }
 
       let recruitmentStage = "request-validation";
+      // Set once this application counts towards the per-IP cap, so that a failure on our side gives it
+      // back, and cleared as soon as the request has a lasting effect (stored CV, confirmation sent).
+      let releaseIpAttempt: (() => Promise<void>) | null = null;
       try {
         const file = req.file;
         if (!file) {
@@ -464,25 +467,28 @@ export async function createApp() {
         recruitmentStage = "security-protection";
         const { verifyCandidateTurnstile } = await import("../candidateTurnstile");
         const { enforcePersistentRateLimit, hashSecurityValue, logSecurityEvent } = await import("../candidateSecurity");
-        const { enforcePublicEmailIpRateLimit } = await import("../publicFormRateLimit");
+        const { enforcePublicEmailIpRateLimit, releasePublicEmailIpRateLimit } = await import("../publicFormRateLimit");
         const clientIp = req.ip || "unknown";
         const ipHash = hashSecurityValue(clientIp);
-        if (process.env.NODE_ENV !== "test" && process.env.VITEST !== "true") {
+        const protectionsEnabled = process.env.NODE_ENV !== "test" && process.env.VITEST !== "true";
+        const refuseProtection = async (protectionError: unknown) => {
+          await logSecurityEvent({ actorKind: "anonymous", actorReference: parsed.data.email, category: "public_recruitment_apply_protection", outcome: "blocked", severity: "warning", ipHash })
+            .catch(securityLogError => console.error("Recruitment protection log error:", safeErrorName(securityLogError)));
+          console.warn("Recruitment protection rejected:", safeErrorName(protectionError));
+          const rateLimited = protectionError instanceof Error && protectionError.message === "candidate_security_rate_limited";
+          res.status(400).json({
+            error: rateLimited
+              ? "Trop de tentatives ont été effectuées. Patientez une heure avant de réessayer."
+              : "La vérification de sécurité doit être renouvelée avant l’envoi.",
+            code: rateLimited ? "recruitment_rate_limited" : "recruitment_security_check_required",
+          });
+        };
+        if (protectionsEnabled) {
           try {
             await verifyCandidateTurnstile({ token: parsed.data.turnstileToken, remoteIp: clientIp });
             await enforcePersistentRateLimit({ action: "public_recruitment_apply", subject: `${clientIp}:${parsed.data.email}`, maxAttempts: 10, windowMs: 24 * 60 * 60 * 1000, blockMs: 60 * 60 * 1000 });
-            await enforcePublicEmailIpRateLimit("recruitmentApply", req.ip ? ipHash : null);
           } catch (protectionError) {
-            await logSecurityEvent({ actorKind: "anonymous", actorReference: parsed.data.email, category: "public_recruitment_apply_protection", outcome: "blocked", severity: "warning", ipHash })
-              .catch(securityLogError => console.error("Recruitment protection log error:", safeErrorName(securityLogError)));
-            console.warn("Recruitment protection rejected:", safeErrorName(protectionError));
-            const rateLimited = protectionError instanceof Error && protectionError.message === "candidate_security_rate_limited";
-            res.status(400).json({
-              error: rateLimited
-                ? "Trop de tentatives ont été effectuées. Patientez une heure avant de réessayer."
-                : "La vérification de sécurité doit être renouvelée avant l’envoi.",
-              code: rateLimited ? "recruitment_rate_limited" : "recruitment_security_check_required",
-            });
+            await refuseProtection(protectionError);
             return;
           }
         }
@@ -510,12 +516,28 @@ export async function createApp() {
           return;
         }
 
+        // MAIL-01: only an application that passed every check counts towards the
+        // per-IP cap; a refused CV or anti-bot check leaves the budget untouched.
+        recruitmentStage = "ip-rate-limit";
+        if (protectionsEnabled) {
+          const emailIpHash = req.ip ? ipHash : null;
+          try {
+            await enforcePublicEmailIpRateLimit("recruitmentApply", emailIpHash);
+          } catch (protectionError) {
+            if (!(protectionError instanceof Error && protectionError.message === "candidate_security_rate_limited")) throw protectionError;
+            await refuseProtection(protectionError);
+            return;
+          }
+          releaseIpAttempt = () => releasePublicEmailIpRateLimit("recruitmentApply", emailIpHash);
+        }
+
         recruitmentStage = "duplicate-check";
         const duplicateCandidates = await db.select({
           id: cvApplications.id,
           trackingId: cvApplications.trackingId,
           email: cvApplications.email,
           specialty: cvApplications.specialty,
+          targetCountries: cvApplications.targetCountries,
         }).from(cvApplications).where(eq(cvApplications.fileChecksum, fileValidation.checksum)).limit(20);
         const duplicate = duplicateCandidates.find(candidate => isSameRecruitmentSubmission(candidate, parsed.data));
         if (duplicate) {
@@ -527,6 +549,8 @@ export async function createApp() {
             trackingId: duplicate.trackingId,
             candidatePortalInviteUrl,
           });
+          // The confirmation has gone out: this application keeps its place in the per-IP cap.
+          releaseIpAttempt = null;
           await logSecurityEvent({ actorKind: "anonymous", actorReference: parsed.data.email, category: "public_recruitment_apply_duplicate_file", outcome: "allowed", severity: "info", ipHash });
           res.status(200).json({ success: true, duplicate: true, trackingId: duplicate.trackingId });
           return;
@@ -549,6 +573,9 @@ export async function createApp() {
           file.buffer,
           file.mimetype,
         );
+        // The CV is now stored: a later failure (e.g. a refused INSERT) no longer gives the attempt back,
+        // otherwise each such request would leave a file in quarantine without using up the cap.
+        releaseIpAttempt = null;
         const retentionUntil = new Date();
         retentionUntil.setFullYear(retentionUntil.getFullYear() + 2);
 
@@ -614,6 +641,9 @@ export async function createApp() {
           stage: recruitmentStage,
           ...safeErrorMetadata(error),
         });
+        if (releaseIpAttempt) {
+          await releaseIpAttempt().catch(releaseError => console.error("Recruitment rate limit release error:", safeErrorName(releaseError)));
+        }
         res.status(500).json({ error: "La candidature n’a pas pu être enregistrée." });
       }
     });

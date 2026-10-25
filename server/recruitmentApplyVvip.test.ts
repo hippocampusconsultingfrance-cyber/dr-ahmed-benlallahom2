@@ -11,6 +11,7 @@ import { TEST_PEPPER } from "./testSupport/candidatePortal";
 import { listen, validPdfBuffer } from "./testSupport/candidateUploadApp";
 import { PgDialect } from "drizzle-orm/pg-core";
 import type { SQL } from "drizzle-orm";
+import { createHash } from "node:crypto";
 
 const state = vi.hoisted(() => {
   process.env.VERCEL = "1";
@@ -19,15 +20,17 @@ const state = vi.hoisted(() => {
     executed: [] as unknown[],
     stored: [] as string[],
     dbAvailable: true,
+    // Applications already on file with the same CV checksum (duplicate check).
+    sameCvApplications: [] as Array<{ id: number; trackingId: string; email: string; specialty: string; targetCountries: string }>,
     verifyTurnstile: vi.fn(async () => undefined),
     enforceRateLimit: vi.fn(async () => undefined),
   };
 });
 process.env.CANDIDATE_AUTH_PEPPER ||= TEST_PEPPER;
 
-// No duplicate CV on file, and the INSERT … RETURNING id gives a new application.
+// Duplicate check answered from state.sameCvApplications, and the INSERT … RETURNING id gives a new application.
 const fakeDb = {
-  select: () => ({ from: () => ({ where: () => ({ limit: async () => [] }) }) }),
+  select: () => ({ from: () => ({ where: () => ({ limit: async () => state.sameCvApplications }) }) }),
   execute: async (query: unknown) => { state.executed.push(query); return { rows: [{ id: 41 }] }; },
 };
 vi.mock("./db", () => ({ getDb: async () => (state.dbAvailable ? fakeDb : null) }));
@@ -71,6 +74,7 @@ vi.mock("./googleDriveExport", async importOriginal => ({
 }));
 
 const { createApp } = await import("./_core/index");
+const { notifyOwner } = await import("./_core/notification");
 
 let baseUrl = "";
 let close: () => Promise<void> = async () => undefined;
@@ -86,13 +90,15 @@ beforeEach(() => {
   state.executed.length = 0;
   state.stored.length = 0;
   state.dbAvailable = true;
+  state.sameCvApplications = [];
+  vi.mocked(notifyOwner).mockClear();
 });
 
 const allEnvironments = VVIP_ENVIRONMENTS.map(environment => environment.value);
 
-function vvipBody(specialty: string, cv: Buffer = validPdfBuffer()) {
+function vvipBody(specialty: string, cv: Buffer = validPdfBuffer(), environments: string[] = allEnvironments) {
   return buildVvipApplicationFormData({
-    form: { ...createInitialForm("fr"), firstName: "Amira", lastName: "Haddad", email: "amira@example.test", environments: allEnvironments, yearsExperience: "12", certifications: "ATLS, ACLS, HUET, BOSIET" },
+    form: { ...createInitialForm("fr"), firstName: "Amira", lastName: "Haddad", email: "amira@example.test", environments, yearsExperience: "12", certifications: "ATLS, ACLS, HUET, BOSIET" },
     cv: new File([new Uint8Array(cv)], "cv-amira.pdf", { type: "application/pdf" }),
     specialty,
     diplomaCountry: "Maroc",
@@ -122,6 +128,26 @@ describe("INTL-03 — candidature VVIP avec plusieurs environnements", () => {
   it("accepte une « Autre spécialité » saisie jusqu’à la limite du champ", async () => {
     const result = await apply(vvipBody("R".repeat(VVIP_CUSTOM_SPECIALTY_MAX_LENGTH)));
     expect(result.status, JSON.stringify(result.body)).toBe(201);
+  });
+
+  it("enregistre une nouvelle candidature, et prévient le propriétaire, quand le même CV vise d’autres environnements", async () => {
+    const cv = validPdfBuffer();
+    const specialty = "Médecin urgentiste (ATLS / ACLS)";
+    const [middleEast, , mining] = allEnvironments;
+    state.sameCvApplications = [{ id: 7, trackingId: "CVPREVIOUSVVIP001", email: "amira@example.test", specialty: `[VVIP / Offshore] ${specialty}`, targetCountries: JSON.stringify([middleEast]) }];
+
+    const sameEnvironments = await apply(vvipBody(specialty, cv, [middleEast]));
+    expect(sameEnvironments).toEqual({ status: 200, body: { success: true, duplicate: true, trackingId: "CVPREVIOUSVVIP001" } });
+    expect(notifyOwner).not.toHaveBeenCalled();
+
+    const otherEnvironments = await apply(vvipBody(specialty, cv, [middleEast, mining]));
+    expect(otherEnvironments.status, JSON.stringify(otherEnvironments.body)).toBe(201);
+    expect(otherEnvironments.body.trackingId).not.toBe("CVPREVIOUSVVIP001");
+    const storedValues = state.executed.flatMap(query => new PgDialect().sqlToQuery(query as SQL).params);
+    expect(storedValues).toContain(JSON.stringify([middleEast, mining]));
+    expect(storedValues).toContain(createHash("sha256").update(cv).digest("hex"));
+    expect(notifyOwner).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(notifyOwner).mock.calls[0][0].content).toContain(mining);
   });
 
   it("refuse une spécialité trop longue, journalise le champ sans sa valeur et le formulaire affiche le vrai motif", async () => {

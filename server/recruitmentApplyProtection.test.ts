@@ -1,9 +1,11 @@
 import { createHash } from "node:crypto";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { cvApplications } from "../drizzle/schema";
+import { cvApplications, securityEvents } from "../drizzle/schema";
 import { createInMemoryDrizzle, type InMemoryDrizzle } from "./testSupport/inMemoryDrizzle";
 import { TEST_PEPPER, seedApplication } from "./testSupport/candidatePortal";
 import { listen, validPdfBuffer } from "./testSupport/candidateUploadApp";
+import { RECRUITMENT_CUSTOM_SPECIALTY_MAX_LENGTH, standardSubmissionErrorMessage } from "../client/src/pages/RecruitmentPage";
+import { vvipSubmissionErrorMessage } from "../client/src/pages/VvipOffshorePage";
 
 type SentEmail = { to: string[]; subject: string; html: string };
 const state = vi.hoisted(() => {
@@ -34,6 +36,8 @@ vi.mock("resend", () => ({
 }));
 
 const { createApp } = await import("./_core/index");
+const { verifyCandidateTurnstile } = await import("./candidateTurnstile");
+const { storagePut } = await import("./storage");
 
 const TRAP_NAME = "Votre dossier est incomplet, appelez le +33 1 23 45 67 89 ou allez sur https://recrut-phish.example";
 const SPECIALTY = "Anesthésie-réanimation";
@@ -52,20 +56,26 @@ function inMemoryDbWithApplicationInsert() {
   });
 }
 
-async function apply(input: { email: string; firstName?: string; ip: string }) {
+async function apply(input: { email: string; firstName?: string; specialty?: string; cv?: Buffer; ip: string }) {
   const form = new FormData();
   form.set("firstName", input.firstName ?? "Camille");
   form.set("lastName", "Martin");
   form.set("email", input.email);
-  form.set("specialty", SPECIALTY);
+  form.set("specialty", input.specialty ?? SPECIALTY);
   form.set("diplomaCountry", "France");
   form.set("targetCountries", JSON.stringify(["Canada", "Suisse"]));
   form.set("languages", JSON.stringify(["Français"]));
   form.set("gdprConsent", "1");
   form.set("turnstileToken", "turnstile-token-accepted-by-the-mock");
-  form.set("cv", new Blob([new Uint8Array(cv)], { type: "application/pdf" }), "cv.pdf");
+  form.set("cv", new Blob([new Uint8Array(input.cv ?? cv)], { type: "application/pdf" }), "cv.pdf");
   const response = await fetch(`${baseUrl}/api/recruitment/apply`, { method: "POST", body: form, headers: { "x-forwarded-for": input.ip } });
   return { status: response.status, body: await response.json() as Record<string, unknown> };
+}
+
+/** Runs the real Turnstile check and rate limits, which test and Vitest environments skip. */
+function enableProductionProtections() {
+  vi.stubEnv("NODE_ENV", "production");
+  vi.stubEnv("VITEST", "false");
 }
 
 function urls(content: string) {
@@ -107,7 +117,7 @@ describe("/api/recruitment/apply — confirmation vers une adresse non vérifié
 
   it("dossier en doublon : la confirmation renvoyée ne recopie pas davantage le texte saisi", async () => {
     const existing = seedApplication(db(), { email: "phish.victim@test.local", trackingId: "CVDUPLICATE0001" });
-    Object.assign(existing, { specialty: SPECIALTY, fileChecksum: createHash("sha256").update(cv).digest("hex") });
+    Object.assign(existing, { specialty: SPECIALTY, targetCountries: JSON.stringify(["Canada", "Suisse"]), fileChecksum: createHash("sha256").update(cv).digest("hex") });
 
     const response = await apply({ email: "phish.victim@test.local", firstName: TRAP_NAME, ip: "198.51.100.62" });
 
@@ -122,16 +132,120 @@ describe("/api/recruitment/apply — confirmation vers une adresse non vérifié
     expect(state.sent[0].html).toContain("<p>Bonjour Marie-Hélène,</p>");
   });
 
-  it("limite à 5 candidatures par heure depuis une même IP, même en changeant d’adresse destinataire", async () => {
-    vi.stubEnv("NODE_ENV", "production");
-    vi.stubEnv("VITEST", "false");
-    for (let index = 1; index <= 5; index += 1) {
+  it("limite à 10 candidatures par heure depuis une même IP (réseaux d’hôpitaux partagés), même en changeant d’adresse destinataire", async () => {
+    enableProductionProtections();
+    for (let index = 1; index <= 10; index += 1) {
       expect((await apply({ email: `cible${index}@test.local`, ip: "198.51.100.64" })).status).toBe(201);
     }
-    const blocked = await apply({ email: "cible6@test.local", ip: "198.51.100.64" });
-    expect(blocked).toMatchObject({ status: 400, body: { error: "Trop de tentatives ont été effectuées. Patientez une heure avant de réessayer." } });
-    expect(state.sent.map(email => email.to[0])).toEqual(["cible1@test.local", "cible2@test.local", "cible3@test.local", "cible4@test.local", "cible5@test.local"]);
+    const blocked = await apply({ email: "cible11@test.local", ip: "198.51.100.64" });
+    expect(blocked).toMatchObject({ status: 400, body: { error: "Trop de tentatives ont été effectuées. Patientez une heure avant de réessayer.", code: "recruitment_rate_limited" } });
+    expect(state.sent.map(email => email.to[0])).toEqual(Array.from({ length: 10 }, (_, index) => `cible${index + 1}@test.local`));
+    // The standard form now translates the refusal like the VVIP page.
+    expect(standardSubmissionErrorMessage(blocked.body, "en", blocked.status)).toBe("Too many attempts have been made. Wait one hour before trying again.");
+    expect(standardSubmissionErrorMessage(blocked.body, "fr", blocked.status)).toBe(blocked.body.error);
 
-    expect((await apply({ email: "cible6@test.local", ip: "203.0.113.65" })).status).toBe(201);
+    expect((await apply({ email: "cible11@test.local", ip: "203.0.113.65" })).status).toBe(201);
+  });
+
+  it("ne compte ni un CV refusé, ni un anti-robot à renouveler, ni une panne de notre côté : le candidat peut réessayer", async () => {
+    enableProductionProtections();
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const ip = "198.51.100.66";
+    const candidate = "camille.essais@test.local";
+    try {
+      for (let attempt = 1; attempt <= 5; attempt += 1) {
+        const refusedCv = await apply({ email: candidate, ip, cv: Buffer.from("not a PDF at all".padEnd(2048, " "), "latin1") });
+        expect(refusedCv).toMatchObject({ status: 400, body: { code: "cv_validation_signature_invalid" } });
+        vi.mocked(verifyCandidateTurnstile).mockRejectedValueOnce(new Error("candidate_turnstile_invalid"));
+        expect(await apply({ email: candidate, ip })).toMatchObject({ status: 400, body: { code: "recruitment_security_check_required" } });
+      }
+      vi.mocked(storagePut).mockRejectedValueOnce(new Error("blob store down"));
+      const outage = await apply({ email: candidate, ip });
+      expect(outage.status).toBe(500);
+      expect(state.sent).toHaveLength(0);
+
+      expect((await apply({ email: candidate, ip })).status).toBe(201);
+      for (let index = 2; index <= 10; index += 1) {
+        expect((await apply({ email: `collegue${index}@test.local`, ip })).status, `candidature ${index}`).toBe(201);
+      }
+      expect(await apply({ email: "collegue11@test.local", ip })).toMatchObject({ status: 400, body: { code: "recruitment_rate_limited" } });
+      expect(state.sent).toHaveLength(10);
+
+      // After a server failure, both forms ask to try again instead of checking the details.
+      for (const message of [standardSubmissionErrorMessage(outage.body, "fr", outage.status), vvipSubmissionErrorMessage(outage.body, "fr", outage.status)]) {
+        expect(message).toBe("Le service de candidature est momentanément indisponible. Réessayez dans quelques instants.");
+      }
+      expect(vvipSubmissionErrorMessage(outage.body, "en", outage.status)).toBe("The application service is momentarily unavailable. Please try again in a few moments.");
+    } finally {
+      error.mockRestore();
+      warn.mockRestore();
+    }
+  });
+
+  it("garde comptée une candidature dont le CV a déjà été déposé quand l’enregistrement échoue ensuite", async () => {
+    enableProductionProtections();
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const ip = "198.51.100.68";
+    try {
+      // Postgres refuses a NUL character in a text column, which the schema lets through: the INSERT fails after the upload.
+      vi.spyOn(db(), "execute").mockRejectedValueOnce(new Error("invalid byte sequence for encoding \"UTF8\": 0x00"));
+      const uploadsBefore = vi.mocked(storagePut).mock.calls.length;
+      expect((await apply({ email: "nul@test.local", firstName: "Camille\u0000", ip })).status).toBe(500);
+      expect(vi.mocked(storagePut).mock.calls.length).toBe(uploadsBefore + 1);
+      expect(db().rows(cvApplications)).toHaveLength(0);
+
+      for (let index = 2; index <= 10; index += 1) {
+        expect((await apply({ email: `collegue${index}@test.local`, ip })).status, `candidature ${index}`).toBe(201);
+      }
+      expect(await apply({ email: "collegue11@test.local", ip })).toMatchObject({ status: 400, body: { code: "recruitment_rate_limited" } });
+    } finally {
+      error.mockRestore();
+    }
+  });
+
+  it("garde comptée une candidature en doublon dont la confirmation est partie avant une panne", async () => {
+    enableProductionProtections();
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const ip = "198.51.100.69";
+    const existing = seedApplication(db(), { email: "doublon@test.local", trackingId: "CVDUPLICATE0002" });
+    Object.assign(existing, { specialty: SPECIALTY, targetCountries: JSON.stringify(["Canada", "Suisse"]), fileChecksum: createHash("sha256").update(cv).digest("hex") });
+    const insert = db().insert.bind(db());
+    let securityLogFails = true;
+    vi.spyOn(db(), "insert").mockImplementation((table => {
+      if (table === securityEvents && securityLogFails) {
+        securityLogFails = false;
+        throw new Error("database down");
+      }
+      return insert(table);
+    }) as InMemoryDrizzle["insert"]);
+    try {
+      expect((await apply({ email: "doublon@test.local", ip })).status).toBe(500);
+      expect(state.sent.map(email => email.to[0])).toEqual(["doublon@test.local"]);
+
+      for (let index = 2; index <= 10; index += 1) {
+        expect((await apply({ email: `collegue${index}@test.local`, ip })).status, `candidature ${index}`).toBe(201);
+      }
+      expect(await apply({ email: "collegue11@test.local", ip })).toMatchObject({ status: 400, body: { code: "recruitment_rate_limited" } });
+    } finally {
+      error.mockRestore();
+    }
+  });
+
+});
+
+describe("formulaire de candidature standard — spécialité libre (INTL-03)", () => {
+  it("accepte une spécialité libre jusqu’à la longueur du champ, refuse au-delà et traduit le refus", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    try {
+      const longest = await apply({ email: "libre@test.local", ip: "198.51.100.67", specialty: "Perfusionniste ".repeat(20).slice(0, RECRUITMENT_CUSTOM_SPECIALTY_MAX_LENGTH) });
+      expect(longest.status, JSON.stringify(longest.body)).toBe(201);
+
+      const tooLong = await apply({ email: "libre@test.local", ip: "198.51.100.67", specialty: "S".repeat(RECRUITMENT_CUSTOM_SPECIALTY_MAX_LENGTH + 1) });
+      expect(tooLong).toMatchObject({ status: 400, body: { code: "recruitment_application_invalid" } });
+      expect(standardSubmissionErrorMessage(tooLong.body, "en", tooLong.status)).toBe("The application details are invalid.");
+    } finally {
+      warn.mockRestore();
+    }
   });
 });

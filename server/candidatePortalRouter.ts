@@ -236,7 +236,6 @@ export const candidatePortalRouter = router({
       const ipHash = requestIpHash(ctx.req.headers);
       try {
         await enforcePersistentRateLimit({ action: "candidate_register", subject: `${email}:${ipHash ?? "unknown"}`, maxAttempts: 5, windowMs: 60 * 60 * 1000, blockMs: 60 * 60 * 1000 });
-        await enforcePublicEmailIpRateLimit("candidateRegister", ipHash);
       } catch {
         await logSecurityEvent({ actorKind: "anonymous", actorReference: hashSecurityValue(email), category: "candidate_register_rate_limited", outcome: "blocked", severity: "warning", ipHash });
         throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "Trop de tentatives. Veuillez réessayer plus tard." });
@@ -262,6 +261,14 @@ export const candidatePortalRouter = router({
         : null;
       if (invitation && (!invitedApplication || normalizeCandidateEmail(invitedApplication.email) !== email)) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "Cette invitation ne correspond pas à cette adresse email." });
+      }
+      // MAIL-01: the per-IP cap counts only a registration that passed the
+      // anti-bot and invitation checks, whether or not an email follows (SEC-05).
+      try {
+        await enforcePublicEmailIpRateLimit("candidateRegister", ipHash);
+      } catch {
+        await logSecurityEvent({ actorKind: "anonymous", actorReference: hashSecurityValue(email), category: "candidate_register_rate_limited", outcome: "blocked", severity: "warning", ipHash });
+        throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "Trop de tentatives. Veuillez réessayer plus tard." });
       }
       const matchingApplication = invitedApplication ?? (await candidateDatabaseOperation(() => db.select({ id: cvApplications.id, trackingId: cvApplications.trackingId }).from(cvApplications).where(sql`lower(${cvApplications.email}) = ${email}`).limit(1)))[0] ?? null;
       const matchingApplicationId = matchingApplication?.id ?? null;
@@ -359,7 +366,6 @@ export const candidatePortalRouter = router({
       const ipHash = requestIpHash(ctx.req.headers);
       try {
         await enforcePersistentRateLimit({ action: "candidate_verification_resend", subject: `${email}:${ipHash ?? "unknown"}`, maxAttempts: 4, windowMs: 60 * 60 * 1000, blockMs: 60 * 60 * 1000 });
-        await enforcePublicEmailIpRateLimit("candidateVerificationResend", ipHash);
       } catch {
         await logSecurityEvent({ actorKind: "anonymous", actorReference: hashSecurityValue(email), category: "candidate_verification_resend_rate_limited", outcome: "blocked", severity: "warning", ipHash });
         throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "Trop de demandes. Veuillez réessayer plus tard." });
@@ -369,6 +375,13 @@ export const candidatePortalRouter = router({
       } catch {
         await logSecurityEvent({ actorKind: "anonymous", actorReference: hashSecurityValue(email), category: "candidate_verification_resend_turnstile", outcome: "blocked", severity: "warning", ipHash });
         throw new TRPCError({ code: "BAD_REQUEST", message: "La vérification anti-bot doit être renouvelée avant de demander un lien." });
+      }
+      // MAIL-01: counted once the anti-bot check passed, whatever the account (SEC-05).
+      try {
+        await enforcePublicEmailIpRateLimit("candidateVerificationResend", ipHash);
+      } catch {
+        await logSecurityEvent({ actorKind: "anonymous", actorReference: hashSecurityValue(email), category: "candidate_verification_resend_rate_limited", outcome: "blocked", severity: "warning", ipHash });
+        throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "Trop de demandes. Veuillez réessayer plus tard." });
       }
       const db = databaseOrThrow(await getDb());
       const candidate = (await db.select().from(candidateAccounts).where(and(eq(candidateAccounts.email, email), eq(candidateAccounts.status, "active"))).limit(1))[0];

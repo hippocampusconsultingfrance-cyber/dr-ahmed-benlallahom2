@@ -17,7 +17,7 @@ vi.mock("./_core/notifications", async importOriginal => ({
 }));
 
 const { candidatePortalRouter, CANDIDATE_LOGIN_POLICY } = await import("./candidatePortalRouter");
-const { enforcePersistentRateLimit, recordPersistentRateLimitAttempt, hashSecurityValue } = await import("./candidateSecurity");
+const { enforcePersistentRateLimit, recordPersistentRateLimitAttempt, releasePersistentRateLimitAttempt, hashSecurityValue } = await import("./candidateSecurity");
 type Api = ReturnType<typeof candidatePortalRouter.createCaller>;
 const client = (ip: string) => new CandidateClient<Api>(ctx => candidatePortalRouter.createCaller(ctx as Parameters<typeof candidatePortalRouter.createCaller>[0]), ip);
 
@@ -61,6 +61,29 @@ describe("CAND-01 — compteurs de limitation atomiques", () => {
     db().seed(candidateSecurityRateLimits, { action: "test_expired", subjectHash: hashSecurityValue("subject"), windowStartedAt: new Date(Date.now() - 1000), attemptCount: 9, blockedUntil: new Date(Date.now() - 1), lastAttemptAt: new Date() });
     const state = await recordPersistentRateLimitAttempt({ action: "test_expired", subject: "subject", maxAttempts: 5, windowMs: 15 * 60_000, blockMs: 15 * 60_000 });
     expect(state).toMatchObject({ attemptCount: 1, blocked: false, blockedUntil: null });
+  });
+
+  it("rend une tentative acceptée puis échouée de notre côté (MAIL-01)", async () => {
+    const policy = { action: "test_release", subject: "subject", maxAttempts: 2, windowMs: 60_000, blockMs: 60_000 };
+    await enforcePersistentRateLimit(policy);
+    await enforcePersistentRateLimit(policy);
+    await releasePersistentRateLimitAttempt(policy);
+    await expect(enforcePersistentRateLimit(policy)).resolves.toBeUndefined();
+    await expect(enforcePersistentRateLimit(policy)).rejects.toThrow("candidate_security_rate_limited");
+  });
+
+  it("ne rend rien à un sujet déjà bloqué, même pour une tentative acceptée juste avant le blocage", async () => {
+    const policy = { action: "test_release_blocked", subject: "subject", maxAttempts: 2, windowMs: 60_000, blockMs: 60_000 };
+    await enforcePersistentRateLimit(policy);
+    await enforcePersistentRateLimit(policy);
+    // A parallel request goes over the threshold before the last accepted one fails and gives its attempt back.
+    await expect(enforcePersistentRateLimit(policy)).rejects.toThrow("candidate_security_rate_limited");
+    const [blocked] = limiterRows("test_release_blocked").map(row => ({ ...row }));
+    await releasePersistentRateLimitAttempt(policy);
+
+    expect(limiterRows("test_release_blocked")).toEqual([blocked]);
+    await expect(enforcePersistentRateLimit(policy)).rejects.toThrow("candidate_security_rate_limited");
+    expect(limiterRows("test_release_blocked")[0]).toMatchObject({ attemptCount: blocked.attemptCount, blockedUntil: blocked.blockedUntil });
   });
 });
 

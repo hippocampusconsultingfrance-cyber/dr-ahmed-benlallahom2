@@ -1,0 +1,90 @@
+import { describe, expect, it, vi } from "vitest";
+import { sendStandardApplication, standardSubmissionErrorMessage } from "./RecruitmentPage";
+import { vvipSubmissionErrorMessage } from "./VvipOffshorePage";
+
+const languages = ["fr", "en", "de", "zh"] as const;
+// Refusals of /api/recruitment/apply with their code (server/recruitmentApplyProtection.test.ts gets them from the real route),
+// and the message each language shows for them.
+const refusals = [
+  {
+    refusal: { error: "La vérification de sécurité doit être renouvelée avant l’envoi.", code: "recruitment_security_check_required" },
+    en: "The security check must be renewed before sending.",
+    de: "Die Sicherheitsprüfung muss vor dem Absenden erneuert werden.",
+    zh: "发送前必须重新完成安全验证。",
+  },
+  {
+    refusal: { error: "Trop de tentatives ont été effectuées. Patientez une heure avant de réessayer.", code: "recruitment_rate_limited" },
+    en: "Too many attempts have been made. Wait one hour before trying again.",
+    de: "Es wurden zu viele Versuche unternommen. Warten Sie eine Stunde, bevor Sie es erneut versuchen.",
+    zh: "尝试次数过多。请等待一小时后再试。",
+  },
+  {
+    refusal: { error: "Les informations de candidature sont invalides.", code: "recruitment_application_invalid" },
+    en: "The application details are invalid.",
+    de: "Die Bewerbungsangaben sind ungültig.",
+    zh: "申请信息无效。",
+  },
+  {
+    refusal: { error: "Le service de candidature est temporairement indisponible.", code: "recruitment_service_unavailable" },
+    en: "The application service is temporarily unavailable.",
+    de: "Der Bewerbungsdienst ist vorübergehend nicht verfügbar.",
+    zh: "申请服务暂时不可用。",
+  },
+  {
+    refusal: { error: "Le CV ne doit pas dépasser 25 pages.", code: "cv_validation_pdf_page_limit_exceeded" },
+    en: "The CV must not exceed 25 pages.",
+    de: "Der Lebenslauf darf höchstens 25 Seiten umfassen.",
+    zh: "简历不得超过 25 页。",
+  },
+  {
+    refusal: { error: "Le CV contient des macros, du contenu actif ou des objets intégrés.", code: "cv_validation_pdf_active_content" },
+    en: "The CV contains macros, active content or embedded objects. Save it as a PDF and try again.",
+    de: "Der Lebenslauf enthält Makros, aktive Inhalte oder eingebettete Objekte. Speichern Sie ihn als PDF und versuchen Sie es erneut.",
+    zh: "简历包含宏、活动内容或嵌入对象。请另存为 PDF 后重试。",
+  },
+];
+const serviceFailure = {
+  fr: "Le service de candidature est momentanément indisponible. Réessayez dans quelques instants.",
+  en: "The application service is momentarily unavailable. Please try again in a few moments.",
+  de: "Der Bewerbungsdienst ist momentan nicht verfügbar. Bitte versuchen Sie es in wenigen Augenblicken erneut.",
+  zh: "申请服务暂时无法使用。请稍后再试。",
+};
+
+describe("formulaire de candidature standard — refus du serveur traduits (REC-03)", () => {
+  it.each(languages)("affiche pour chaque code le motif du serveur en français, sa traduction sinon, comme la page VVIP (%s)", language => {
+    for (const { refusal, ...translations } of refusals) {
+      const expected = language === "fr" ? refusal.error : translations[language];
+      expect(standardSubmissionErrorMessage(refusal, language, 400), refusal.code).toBe(expected);
+      expect(vvipSubmissionErrorMessage(refusal, language, 400), refusal.code).toBe(expected);
+    }
+  });
+
+  it("ne montre plus le texte français du serveur sur la page anglaise", () => {
+    // CV refused before the content checks (no code): the page's own CV hint in English.
+    expect(standardSubmissionErrorMessage({ error: "Le CV ne doit pas dépasser 4 Mo. Compressez-le ou enregistrez-le en PDF, puis réessayez." }, "en", 400))
+      .toBe("Please attach a PDF or DOCX CV up to 4 MB (the legacy Word .doc format is not accepted).");
+    expect(standardSubmissionErrorMessage({ error: "Unexpected end of form" }, "en", 400)).toBe("Your application could not be sent. Check the information and try again.");
+  });
+});
+
+describe("formulaire de candidature standard — envoi (REC-03)", () => {
+  const body = new FormData();
+  const answer = (status: number, payload?: unknown) => vi.fn(async () => new Response(payload === undefined ? "<html>Bad Gateway</html>" : JSON.stringify(payload), { status }));
+
+  it("rend le numéro de suivi du serveur", async () => {
+    const send = answer(201, { success: true, trackingId: "CV0123456789ABCDEF" });
+    await expect(sendStandardApplication(body, "en", send)).resolves.toEqual({ trackingId: "CV0123456789ABCDEF" });
+    expect(send).toHaveBeenCalledWith("/api/recruitment/apply", { method: "POST", body });
+  });
+
+  it("traduit un refus du serveur et ne confirme jamais sans numéro de suivi", async () => {
+    await expect(sendStandardApplication(body, "en", answer(400, refusals[1].refusal))).resolves.toEqual({ error: refusals[1].en });
+    await expect(sendStandardApplication(body, "en", answer(201, { success: true }))).resolves.toEqual({ error: "Your application could not be sent. Check the information and try again." });
+  });
+
+  it.each(languages)("demande de réessayer, sans le texte du navigateur, quand la requête n’aboutit pas ou que la passerelle échoue (%s)", async language => {
+    const offline = vi.fn(async () => { throw new TypeError("Failed to fetch"); });
+    await expect(sendStandardApplication(body, language, offline)).resolves.toEqual({ error: serviceFailure[language] });
+    await expect(sendStandardApplication(body, language, answer(502))).resolves.toEqual({ error: serviceFailure[language] });
+  });
+});
