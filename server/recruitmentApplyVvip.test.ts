@@ -9,11 +9,14 @@ import {
 } from "../client/src/pages/VvipOffshorePage";
 import { TEST_PEPPER } from "./testSupport/candidatePortal";
 import { listen, validPdfBuffer } from "./testSupport/candidateUploadApp";
+import { PgDialect } from "drizzle-orm/pg-core";
+import type { SQL } from "drizzle-orm";
 
 const state = vi.hoisted(() => {
   process.env.VERCEL = "1";
   return {
-    confirmations: [] as Array<{ specialty: string; targetCountries: string }>,
+    confirmations: [] as string[],
+    executed: [] as unknown[],
     stored: [] as string[],
     dbAvailable: true,
     verifyTurnstile: vi.fn(async () => undefined),
@@ -25,7 +28,7 @@ process.env.CANDIDATE_AUTH_PEPPER ||= TEST_PEPPER;
 // No duplicate CV on file, and the INSERT … RETURNING id gives a new application.
 const fakeDb = {
   select: () => ({ from: () => ({ where: () => ({ limit: async () => [] }) }) }),
-  execute: async () => ({ rows: [{ id: 41 }] }),
+  execute: async (query: unknown) => { state.executed.push(query); return { rows: [{ id: 41 }] }; },
 };
 vi.mock("./db", () => ({ getDb: async () => (state.dbAvailable ? fakeDb : null) }));
 // Turnstile and the rate limit only run outside Vitest (see the REC-03 test, which simulates it).
@@ -50,8 +53,8 @@ vi.mock("./storage", () => ({
 }));
 vi.mock("./recruitmentEmailTrace", async importOriginal => ({
   ...await importOriginal<typeof import("./recruitmentEmailTrace")>(),
-  sendTrackedCvApplicationConfirmationEmail: vi.fn(async (input: { specialty: string; targetCountries: string }) => {
-    state.confirmations.push({ specialty: input.specialty, targetCountries: input.targetCountries });
+  sendTrackedCvApplicationConfirmationEmail: vi.fn(async (input: { trackingId: string }) => {
+    state.confirmations.push(input.trackingId);
   }),
 }));
 vi.mock("./recruitmentProcessingWorker", async importOriginal => ({
@@ -80,6 +83,7 @@ beforeAll(async () => {
 afterAll(async () => { await close(); });
 beforeEach(() => {
   state.confirmations.length = 0;
+  state.executed.length = 0;
   state.stored.length = 0;
   state.dbAvailable = true;
 });
@@ -108,7 +112,11 @@ describe("INTL-03 — candidature VVIP avec plusieurs environnements", () => {
 
     expect(result.status, JSON.stringify(result.body)).toBe(201);
     expect(result.body.trackingId).toMatch(/^CV[A-Z0-9]{16}$/);
-    expect(state.confirmations).toEqual([{ specialty: `[VVIP / Offshore] ${longestSpecialty}`, targetCountries: allEnvironments.join(", ") }]);
+    // The confirmation email no longer repeats the specialty (MAIL-01): check what is stored instead.
+    expect(state.confirmations).toEqual([result.body.trackingId]);
+    const storedValues = state.executed.flatMap(query => new PgDialect().sqlToQuery(query as SQL).params);
+    expect(storedValues).toContain(`[VVIP / Offshore] ${longestSpecialty}`);
+    expect(storedValues.some(value => typeof value === "string" && allEnvironments.every(environment => value.includes(environment)))).toBe(true);
   });
 
   it("accepte une « Autre spécialité » saisie jusqu’à la limite du champ", async () => {

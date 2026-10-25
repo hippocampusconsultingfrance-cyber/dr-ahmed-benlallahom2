@@ -57,7 +57,7 @@ async function apply(input: { cvs: CvPart[]; fields?: Record<string, string> }) 
 describe("POST /api/recruitment/apply — réception du CV (multer) et validation (zod)", () => {
   it("accepte un CV d'exactement 4 Mo et le conduit jusqu'à l'enregistrement", async () => {
     const result = await apply({ cvs: [{ buffer: validPdfBuffer(RECRUITMENT_CV_MAX_BYTES) }] });
-    expect(result).toEqual({ status: 503, body: { error: "Le service de candidature est temporairement indisponible." } });
+    expect(result).toEqual({ status: 503, body: { error: "Le service de candidature est temporairement indisponible.", code: "recruitment_service_unavailable" } });
     expect(state.databaseRequests).toBe(1);
   });
 
@@ -88,11 +88,11 @@ describe("POST /api/recruitment/apply — réception du CV (multer) et validatio
   it("signale le nombre maximal de pays ciblés et refuse les autres champs invalides", async () => {
     const tooManyCountries = Array.from({ length: 19 }, (_, index) => `Pays ${index + 1}`);
     const countries = await apply({ cvs: [{ buffer: validPdfBuffer() }], fields: { targetCountries: JSON.stringify(tooManyCountries) } });
-    expect(countries).toEqual({ status: 400, body: { error: "Vous pouvez sélectionner jusqu’à 18 pays ciblés." } });
+    expect(countries).toMatchObject({ status: 400, body: { error: "Vous pouvez sélectionner jusqu’à 18 pays ciblés." } });
 
     for (const fields of [{ email: "pas-une-adresse" }, { gdprConsent: "0" }, { targetCountries: "[]" }]) {
       const invalid = await apply({ cvs: [{ buffer: validPdfBuffer() }], fields });
-      expect(invalid, JSON.stringify(fields)).toEqual({ status: 400, body: { error: "Les informations de candidature sont invalides." } });
+      expect(invalid, JSON.stringify(fields)).toMatchObject({ status: 400, body: { error: "Les informations de candidature sont invalides." } });
     }
     expect(state.databaseRequests).toBe(0);
   });

@@ -129,7 +129,7 @@ describe("/api/recruitment/apply — confirmation vers une adresse non vérifié
       expect((await apply({ email: `cible${index}@test.local`, ip: "198.51.100.64" })).status).toBe(201);
     }
     const blocked = await apply({ email: "cible6@test.local", ip: "198.51.100.64" });
-    expect(blocked).toEqual({ status: 400, body: { error: "Trop de tentatives ont été effectuées. Patientez une heure avant de réessayer." } });
+    expect(blocked).toMatchObject({ status: 400, body: { error: "Trop de tentatives ont été effectuées. Patientez une heure avant de réessayer." } });
     expect(state.sent.map(email => email.to[0])).toEqual(["cible1@test.local", "cible2@test.local", "cible3@test.local", "cible4@test.local", "cible5@test.local"]);
 
     expect((await apply({ email: "cible6@test.local", ip: "203.0.113.65" })).status).toBe(201);
