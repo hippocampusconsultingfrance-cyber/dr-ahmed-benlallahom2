@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { clientBriefCandidates, clientBriefs, cvApplications, recruitmentAuditLogs, recruitmentCampaignRecipients, recruitmentCampaigns, recruitmentFollowUpTasks } from "../drizzle/schema";
+import { clientBriefCandidates, clientBriefs, cvApplications, cvCandidateCertifications, cvCandidateLanguages, recruitmentAuditLogs, recruitmentCampaignRecipients, recruitmentCampaigns, recruitmentFollowUpTasks } from "../drizzle/schema";
 import { RECRUITMENT_ANALYSIS_PROMPT_VERSION } from "./recruitmentAnalysis";
 import { createMemoryPg, type MemoryPg } from "./testing/memoryPgProxy";
 import type { TrpcContext } from "./_core/context";
@@ -48,7 +48,7 @@ function seedCandidate(index: number, extra: Record<string, unknown> = {}) {
 
 describe("actions d’administration du recrutement", () => {
   beforeEach(() => {
-    memory = createMemoryPg([cvApplications, recruitmentAuditLogs, clientBriefs, clientBriefCandidates, recruitmentCampaigns, recruitmentCampaignRecipients, recruitmentFollowUpTasks]);
+    memory = createMemoryPg([cvApplications, cvCandidateCertifications, cvCandidateLanguages, recruitmentAuditLogs, clientBriefs, clientBriefCandidates, recruitmentCampaigns, recruitmentCampaignRecipients, recruitmentFollowUpTasks]);
     state.memory = memory;
     state.sentTo = [];
     state.failFor.clear();
@@ -132,6 +132,57 @@ describe("actions d’administration du recrutement", () => {
     const pool = await admin().admin.recruitment.exportCsv({ type: "pool", candidateIds: [shortlisted.id as number] });
     expect(pool.csv.split("\n")[0]).toContain("Score IA");
     expect(pool.csv).toContain("\"91\"");
+  });
+
+  it("une shortlist n’exporte que les présélectionnés de sa mission, et une shortlist vide est refusée (REC-01)", async () => {
+    const shortlisted = seedCandidate(1);
+    const suggested = seedCandidate(2);
+    const otherMission = seedCandidate(3);
+    const rejected = seedCandidate(4, { status: "rejected" });
+    seedCandidate(5);
+    const [brief, other, empty] = memory.seed(clientBriefs, ["BRIEF-REC01-A", "BRIEF-REC01-B", "BRIEF-REC01-C"].map(briefId => ({ brief_id: briefId, organization_name: "Clinique", contact_name: "RH", email: "rh@test.local", target_environment: "Hôpital", specialty_needed: "Anesthésie", country: "Suisse" })));
+    const briefId = brief!.id as number;
+    memory.seed(clientBriefCandidates, [
+      { brief_id: briefId, application_id: shortlisted.id, association_status: "shortlisted" },
+      { brief_id: briefId, application_id: suggested.id, association_status: "suggested" },
+      { brief_id: briefId, application_id: rejected.id, association_status: "shortlisted" },
+      { brief_id: other!.id, application_id: otherMission.id, association_status: "shortlisted" },
+    ]);
+    const exportedEmails = (csv: string) => csv.split("\n").slice(1).map(row => row.split(";")[2]);
+
+    const shortlist = await admin().admin.recruitment.exportCsv({ type: "shortlist", briefId });
+    expect(shortlist).toMatchObject({ count: 1 });
+    expect(exportedEmails(shortlist.csv)).toEqual(["\"c1@test.local\""]);
+    await expect(admin().admin.clientBriefs.candidates({ briefId })).resolves.toMatchObject({ shortlistedCount: 1 });
+
+    // Ids sent by the client for a shortlist are ignored, never added.
+    const forged = await admin().admin.recruitment.exportCsv({ type: "shortlist", briefId, candidateIds: [suggested.id as number, otherMission.id as number, rejected.id as number] });
+    expect(exportedEmails(forged.csv)).toEqual(["\"c1@test.local\""]);
+
+    // A mission nobody is shortlisted for exports nothing, whatever ids come with it.
+    await expect(admin().admin.recruitment.exportCsv({ type: "shortlist", briefId: empty!.id as number })).rejects.toThrow("Aucun candidat présélectionné pour cette mission.");
+    await expect(admin().admin.recruitment.exportCsv({ type: "shortlist", briefId: empty!.id as number, candidateIds: [shortlisted.id as number, suggested.id as number] })).rejects.toThrow("Aucun candidat présélectionné pour cette mission.");
+    await expect(admin().admin.clientBriefs.candidates({ briefId: empty!.id as number })).resolves.toMatchObject({ shortlistedCount: 0 });
+
+    // Removing the last shortlisted candidate empties the shortlist again.
+    await admin().admin.clientBriefs.associateCandidate({ briefId, applicationId: shortlisted.id as number, status: "declined" });
+    await expect(admin().admin.recruitment.exportCsv({ type: "shortlist", briefId })).rejects.toThrow("Aucun candidat présélectionné pour cette mission.");
+    await expect(admin().admin.clientBriefs.candidates({ briefId })).resolves.toMatchObject({ shortlistedCount: 0 });
+    expect(memory.rows(recruitmentAuditLogs).filter(row => row.action === "export").map(row => row.application_id)).toEqual([shortlisted.id, shortlisted.id]);
+  });
+
+  it("un export du vivier sans sélection est refusé au lieu d’exporter tout le vivier (REC-01)", async () => {
+    const selected = seedCandidate(1);
+    seedCandidate(2);
+    const withoutConsent = seedCandidate(3, { marketing_consent: 0 });
+    await expect(admin().admin.recruitment.exportCsv({ type: "pool" })).rejects.toThrow("Sélectionnez au moins un candidat à exporter.");
+    await expect(admin().admin.recruitment.exportCsv({ type: "pool", candidateIds: [] })).rejects.toThrow("Sélectionnez au moins un candidat à exporter.");
+    // A selected id does not bypass the pool's consent filter.
+    const pool = await admin().admin.recruitment.exportCsv({ type: "pool", candidateIds: [selected.id as number, withoutConsent.id as number] });
+    expect(pool.count).toBe(1);
+    expect(pool.csv).toContain("c1@test.local");
+    expect(pool.csv).not.toContain("c2@test.local");
+    expect(pool.csv).not.toContain("c3@test.local");
   });
 
   it("l’email propriétaire d’un brief contient tout pour qualifier et rappeler (ADM-BRIEF-01)", () => {

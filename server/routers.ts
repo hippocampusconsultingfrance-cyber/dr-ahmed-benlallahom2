@@ -172,6 +172,17 @@ function csvCell(value: unknown): string {
   return `"${protectedText.replace(/"/g, '""')}"`;
 }
 
+/**
+ * A mission's shortlist: the candidates shortlisted for it whose application
+ * is still open. Its export carries them and nobody else (REC-01).
+ */
+async function openShortlistedApplicationIds(db: NonNullable<Awaited<ReturnType<typeof getDb>>>, briefId: number): Promise<number[]> {
+  const associations = await db.select({ applicationId: clientBriefCandidates.applicationId }).from(clientBriefCandidates).where(and(eq(clientBriefCandidates.briefId, briefId), eq(clientBriefCandidates.status, "shortlisted")));
+  if (!associations.length) return [];
+  const open = await db.select({ id: cvApplications.id }).from(cvApplications).where(and(sql`${cvApplications.status} NOT IN ('rejected', 'archived')`, inArray(cvApplications.id, associations.map(association => association.applicationId))));
+  return open.map(application => application.id);
+}
+
 const PARIS_DAY_INDEX: Record<string, number> = {
   Sun: 0,
   Mon: 1,
@@ -1810,11 +1821,13 @@ export const appRouter = router({
         let candidateIds = input.candidateIds;
         if (input.type === "shortlist") {
           if (!input.briefId) throw new TRPCError({ code: "BAD_REQUEST", message: "Une mission est requise pour exporter une shortlist." });
-          const associations = await db.select({ applicationId: clientBriefCandidates.applicationId }).from(clientBriefCandidates).where(and(eq(clientBriefCandidates.briefId, input.briefId), eq(clientBriefCandidates.status, "shortlisted")));
-          candidateIds = associations.map(association => association.applicationId);
+          // Ids sent by the client never widen or replace a mission's shortlist.
+          candidateIds = await openShortlistedApplicationIds(db, input.briefId);
+          if (!candidateIds.length) throw new TRPCError({ code: "BAD_REQUEST", message: "Aucun candidat présélectionné pour cette mission." });
         }
-        const conditions = [sql`${cvApplications.status} NOT IN ('rejected', 'archived')`];
-        if (candidateIds.length) conditions.push(inArray(cvApplications.id, candidateIds));
+        // An empty selection is refused, never read as "every candidate" (REC-01).
+        if (!candidateIds.length) throw new TRPCError({ code: "BAD_REQUEST", message: "Sélectionnez au moins un candidat à exporter." });
+        const conditions = [sql`${cvApplications.status} NOT IN ('rejected', 'archived')`, inArray(cvApplications.id, candidateIds)];
         if (input.type === "pool") {
           conditions.push(eq(cvApplications.marketingConsent, 1), isNull(cvApplications.marketingUnsubscribedAt), isNull(cvApplications.marketingSuppressedAt));
         }
@@ -2047,7 +2060,7 @@ export const appRouter = router({
         }))
         .query(async ({ input }) => {
           const db = await getDb();
-          if (!db) return { brief: null, candidates: [], pagination: { page: input.page, limit: input.limit, total: 0, totalPages: 0 } };
+          if (!db) return { brief: null, candidates: [], shortlistedCount: 0, pagination: { page: input.page, limit: input.limit, total: 0, totalPages: 0 } };
           const [brief] = await db.select().from(clientBriefs).where(eq(clientBriefs.id, input.briefId)).limit(1);
           if (!brief) throw new TRPCError({ code: "NOT_FOUND", message: "Brief employeur introuvable" });
           const candidateConditions = [sql`${cvApplications.status} NOT IN ('rejected', 'archived')`];
@@ -2110,7 +2123,9 @@ export const appRouter = router({
             association: associationByApplication.get(application.id) ?? null,
           }));
           const total = Number(countResult?.total || 0);
-          return { brief, candidates, pagination: { page: input.page, limit: input.limit, total, totalPages: Math.ceil(total / input.limit) } };
+          // What the shortlist export would carry, across every page (REC-01).
+          const shortlistedCount = (await openShortlistedApplicationIds(db, brief.id)).length;
+          return { brief, candidates, shortlistedCount, pagination: { page: input.page, limit: input.limit, total, totalPages: Math.ceil(total / input.limit) } };
         }),
       associateCandidate: adminProcedure
         .input(z.object({
