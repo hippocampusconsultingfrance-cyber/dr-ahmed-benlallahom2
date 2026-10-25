@@ -149,6 +149,30 @@ describe("appointments.create — plafond de créneaux retenus par email", () =>
   });
 });
 
+describe("appointments.create — langue de la réservation (EN-01)", () => {
+  async function storedLanguage(input: Record<string, unknown>) {
+    const db = fakeDb(0);
+    mocks.getDb.mockResolvedValue(db);
+    await appRouter.createCaller(publicContext()).appointments.create({ ...bookingInput(), ...input } as ReturnType<typeof bookingInput>);
+    const [insert] = db.execute.mock.calls[0] as unknown as [SQL];
+    const { sql, params } = dialect.sqlToQuery(insert);
+    expect(sql).toMatch(/hold_expires_at, language\) VALUES/);
+    return params.at(-1);
+  }
+
+  it("enregistre la langue affichée par la page de réservation", async () => {
+    await expect(storedLanguage({ language: "en" })).resolves.toBe("en");
+    await expect(storedLanguage({ language: "zh" })).resolves.toBe("zh");
+  });
+
+  it("garde le français quand la page ne l’envoie pas, et refuse une langue inconnue", async () => {
+    await expect(storedLanguage({})).resolves.toBe("fr");
+    mocks.getDb.mockResolvedValue(fakeDb(0));
+    await expect(appRouter.createCaller(publicContext()).appointments.create({ ...bookingInput(), language: "es" } as unknown as ReturnType<typeof bookingInput>))
+      .rejects.toMatchObject({ code: "BAD_REQUEST" });
+  });
+});
+
 describe("appointments.create — limitation de débit persistante", () => {
   beforeEach(() => {
     // Le limiteur est volontairement neutralisé sous Vitest ; on simule ici un

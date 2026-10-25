@@ -37,7 +37,7 @@ function fakeDatabase(upcoming: unknown[], claimRowCounts: number[]) {
   return { writes };
 }
 
-const appointment = (id: number) => ({ id, customerEmail: `p${id}@example.com`, customerName: `Patient ${id}`, trackingId: `APT-${id}`, appointmentDate: new Date("2026-10-08T09:00:00Z") });
+const appointment = (id: number, language = "fr") => ({ id, customerEmail: `p${id}@example.com`, customerName: `Patient ${id}`, trackingId: `APT-${id}`, appointmentDate: new Date("2026-10-08T09:00:00Z"), language });
 
 beforeEach(() => vi.clearAllMocks());
 
@@ -75,10 +75,18 @@ describe("envoi des rappels", () => {
 
     expect(result).toEqual({ reminded: 2, sent: 1, failed: 0 });
     expect(notifications.sendReminderEmail).toHaveBeenCalledTimes(1);
-    expect(notifications.sendReminderEmail).toHaveBeenCalledWith("p1@example.com", "Patient 1", "APT-1", expect.any(Date));
+    expect(notifications.sendReminderEmail).toHaveBeenCalledWith("p1@example.com", "Patient 1", "APT-1", expect.any(Date), { language: "fr" });
     const { sql, params } = dialect.sqlToQuery(writes[0].where);
     expect(sql).toContain('"reminder_sent" =');
     expect(params).toEqual([1, 0]);
+  });
+
+  it("envoie le rappel en anglais pour une réservation faite dans une autre langue que le français (EN-01)", async () => {
+    fakeDatabase([appointment(4, "zh")], [1]);
+
+    await sendDueAppointmentReminders(DAILY_REMINDER_WINDOW);
+
+    expect(notifications.sendReminderEmail).toHaveBeenCalledWith("p4@example.com", "Patient 4", "APT-4", expect.any(Date), { language: "en" });
   });
 
   it("libère la revendication quand l’email échoue, pour un nouvel essai", async () => {

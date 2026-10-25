@@ -79,8 +79,15 @@ describe("annulation par le praticien et remboursements depuis le tableau de bor
     expect(String(updates[0].cancellationReason)).toContain("praticien");
     expect(notifications.sendRefundConfirmationEmail).toHaveBeenCalledWith(
       "patient@example.test", "Patient Test", "APTADMIN0001", expect.any(Date), "100.00",
-      expect.objectContaining({ context: "practitioner_cancellation", reason: "Indisponibilité du médecin" }),
+      expect.objectContaining({ context: "practitioner_cancellation", reason: "Indisponibilité du médecin", language: "fr" }),
     );
+  });
+
+  it("prévient en anglais le patient d’une réservation faite dans une autre langue (EN-01)", async () => {
+    fakeDb(row({ language: "en" }));
+    const { stripe } = fakeStripe();
+    await refundAppointmentPayment(stripe, { trackingId: "APTADMIN0001", reason: "Doctor unavailable", initiator: "practitioner" }, NOW);
+    expect(notifications.sendRefundConfirmationEmail).toHaveBeenLastCalledWith(expect.anything(), expect.anything(), expect.anything(), expect.any(Date), "100.00", expect.objectContaining({ context: "practitioner_cancellation", language: "en" }));
   });
 
   it("garde la règle des 24 h pour une annulation demandée par le patient", async () => {

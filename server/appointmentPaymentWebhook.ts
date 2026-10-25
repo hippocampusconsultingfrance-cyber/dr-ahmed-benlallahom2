@@ -5,6 +5,7 @@ import { mutationRowCount } from "./dbMutation";
 import { enqueueAppointmentFulfillment, processAppointmentFulfillmentNow } from "./appointmentFulfillment";
 import { notifyOwner } from "./_core/notification";
 import { sendUnconfirmablePaymentEmail } from "./_core/notifications";
+import { emailLanguageFor } from "./emailLanguage";
 
 /** Keeps the Stripe acknowledgement well inside Stripe's delivery timeout. */
 export const IMMEDIATE_FULFILLMENT_TIMEOUT_MS = 15_000;
@@ -152,6 +153,7 @@ async function acknowledgeUnconfirmablePayment(input: {
     trackingId: input.appointment.trackingId,
     appointmentDate: input.appointment.appointmentDate,
     amountCents: Number.isFinite(paidAmount) ? paidAmount : null,
+    language: emailLanguageFor(input.appointment.language),
   }, `appointment-unconfirmable-${input.sessionId}`).catch(() => false);
   // Keep a durable trace of the received payment on the row when it cannot
   // clash with an active hold or an already recorded payment. Written only once

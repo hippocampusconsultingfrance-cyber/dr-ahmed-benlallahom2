@@ -25,6 +25,7 @@ import { getDb } from "../db";
 import { candidateDocumentAuditLogs, candidateDocumentProcessingJobs, candidateDocuments, cvApplications, cvProcessingJobs, recruitmentCampaignRecipients, recruitmentEmailEvents } from "../../drizzle/schema";
 import { CANDIDATE_DOCUMENT_MAX_BYTES, CANDIDATE_DOCUMENT_TOO_LARGE_MESSAGE, candidateDocumentMimeTypes, candidateDocumentValidationMessage, safeCandidateDocumentName, validateCandidateDocument } from "../candidateDocumentValidation";
 import { createCandidateInvitationToken } from "../candidateAuth";
+import { SITE_LANGUAGES } from "../emailLanguage";
 import { CANDIDATE_UPLOADABLE_DOCUMENT_CATEGORIES, candidateDocumentAllowsAiAnalysis } from "../../shared/candidateDocumentCategories";
 import { isSameRecruitmentSubmission } from "../recruitmentSubmissionDeduplication";
 import { sendTrackedCvApplicationConfirmationEmail } from "../recruitmentEmailTrace";
@@ -118,6 +119,9 @@ const candidateDocumentUpload = multer({
           marketingConsent: z.enum(["0", "1"]).default("0"),
           website: z.string().max(200).optional().default(""),
           turnstileToken: z.string().min(20).max(4096),
+          // Language shown by the form (EN-02); missing or unknown values mean French
+          // and never refuse an application.
+          language: z.enum(SITE_LANGUAGES).catch("fr"),
         });
 
 function parseListField(value: unknown): string[] {
@@ -551,6 +555,7 @@ export async function createApp() {
             candidateFirstName: parsed.data.firstName,
             trackingId: duplicate.trackingId,
             candidatePortalInviteUrl,
+            language: parsed.data.language,
           });
           // The confirmation has gone out: this application keeps its place in the per-IP cap.
           releaseIpAttempt = null;
@@ -588,7 +593,7 @@ export async function createApp() {
           target_countries, languages, years_experience, availability, mobility, certifications, message,
           cv_file_key, cv_original_name, cv_mime_type, cv_size_bytes,
           file_validation_status, file_checksum, file_validation_notes,
-          gdpr_consent, marketing_consent, status, consent_at, retention_until
+          gdpr_consent, marketing_consent, status, consent_at, retention_until, language
         ) VALUES (
           ${trackingId}, ${parsed.data.firstName}, ${parsed.data.lastName}, ${parsed.data.email},
           ${parsed.data.phone || null}, ${parsed.data.specialty}, ${parsed.data.diplomaCountry}, ${JSON.stringify(parsed.data.targetCountries)},
@@ -596,7 +601,7 @@ export async function createApp() {
           ${parsed.data.availability || null}, ${parsed.data.mobility || null}, ${parsed.data.certifications || null},
           ${parsed.data.message || null}, ${storageResult.key}, ${originalName}, ${file.mimetype}, ${file.size},
           'quarantined', ${fileValidation.checksum}, ${fileValidation.notes}, 1,
-          ${parsed.data.marketingConsent === "1" ? 1 : 0}, 'new', NOW(), ${retentionUntil}
+          ${parsed.data.marketingConsent === "1" ? 1 : 0}, 'new', NOW(), ${retentionUntil}, ${parsed.data.language}
         ) RETURNING id`);
 
         const insertedId = Number((insertResult.rows[0] as { id?: number } | undefined)?.id || 0);
@@ -614,6 +619,7 @@ export async function createApp() {
               candidateFirstName: parsed.data.firstName,
               trackingId,
               candidatePortalInviteUrl,
+              language: parsed.data.language,
             });
           })(),
           notifyOwner({

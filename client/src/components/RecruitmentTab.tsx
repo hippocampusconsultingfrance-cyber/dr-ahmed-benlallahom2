@@ -257,9 +257,11 @@ export default function RecruitmentTab() {
     onError: mutationError => toast.error(mutationError.message),
   });
 
-  const openEmailComposer = (id: number, candidateName: string, template: RecruitmentEmailTemplate) => {
+  // Langue d’envoi présélectionnée d’après la langue du formulaire de candidature :
+  // français pour « fr », anglais sinon, comme les emails automatiques (EN-02).
+  const openEmailComposer = (id: number, candidateName: string, template: RecruitmentEmailTemplate, applicationLanguage?: string | null) => {
     setEmailComposer({ id, candidateName, template });
-    setEmailLanguage("fr");
+    setEmailLanguage(!applicationLanguage || applicationLanguage === "fr" ? "fr" : "en");
     setCustomRequest("");
   };
 
@@ -524,10 +526,10 @@ export default function RecruitmentTab() {
                             {sendPortalInvitation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <UserRoundPlus className="mr-2 h-4 w-4" />}
                             {application.candidatePortalActive ? "Espace candidat actif" : application.candidatePortalInvitation?.eventType ? "Renvoyer l’invitation" : "Inviter à créer l’espace"}
                           </Button>
-                          <Button size="sm" variant="outline" onClick={() => openEmailComposer(application.id, `${application.firstName} ${application.lastName}`, "profile_interest")} disabled={sendTemplateEmail.isPending || eraseApplication.isPending || reanalyze.isPending}>
+                          <Button size="sm" variant="outline" onClick={() => openEmailComposer(application.id, `${application.firstName} ${application.lastName}`, "profile_interest", application.language)} disabled={sendTemplateEmail.isPending || eraseApplication.isPending || reanalyze.isPending}>
                             <Mail className="mr-2 h-4 w-4" /> Proposer un échange
                           </Button>
-                          <Button size="sm" variant="outline" onClick={() => openEmailComposer(application.id, `${application.firstName} ${application.lastName}`, "additional_information")} disabled={sendTemplateEmail.isPending || eraseApplication.isPending || reanalyze.isPending}>
+                          <Button size="sm" variant="outline" onClick={() => openEmailComposer(application.id, `${application.firstName} ${application.lastName}`, "additional_information", application.language)} disabled={sendTemplateEmail.isPending || eraseApplication.isPending || reanalyze.isPending}>
                             <Mail className="mr-2 h-4 w-4" /> Demander un complément
                           </Button>
                           <Button size="sm" variant="outline" className="text-destructive hover:text-destructive" onClick={() => { if (window.confirm(ERASURE_CONFIRMATION)) eraseApplication.mutate({ id: application.id }); }} disabled={eraseApplication.isPending || reanalyze.isPending}>

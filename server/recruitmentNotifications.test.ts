@@ -26,6 +26,7 @@ describe("contrat isolé des notifications recrutement", () => {
     const message = buildRecruitmentTemplateEmail("Amina", "CV-2026", "additional_information");
     expect(message.subject).toContain("Complément d’information");
     expect(message.html).toContain("Ne transmettez jamais de données de patients");
+    expect(message.html).toContain("Communication professionnelle et confidentielle");
   });
 
   it("compose un modèle anglais lorsque l’administrateur le choisit", () => {
@@ -33,6 +34,8 @@ describe("contrat isolé des notifications recrutement", () => {
     expect(message.subject).toContain("Your profile has caught our attention");
     expect(message.html).toContain("<p>Hello Amina,</p>");
     expect(message.html).toContain("Reference:");
+    expect(message.html).toContain("Professional and confidential communication");
+    expect(message.html).not.toContain("Communication professionnelle et confidentielle");
   });
 
   it("insère le texte libre de complément avec échappement HTML", () => {

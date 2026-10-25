@@ -238,6 +238,8 @@ describe("traçabilité de l'email de confirmation de candidature", () => {
             return [{
               id: applicationId, firstName: "Synthetic",
               email: `candidate${applicationId}@example.invalid`, trackingId: `CV-TEST-${applicationId}`,
+              // The first application was made from the English form (EN-02).
+              language: applicationId === 1 ? "en" : "fr",
             }];
           }
           if (/^select/i.test(sql) && sql.includes('from "recruitment_email_events"')) {
@@ -277,7 +279,7 @@ describe("traçabilité de l'email de confirmation de candidature", () => {
     expect(retryMocks.sendEmail).toHaveBeenCalledOnce();
     expect(retryMocks.sendEmail).toHaveBeenCalledWith(
       "candidate1@example.invalid", "Synthetic", "CV-TEST-1",
-      expect.stringContaining("synthetic-invitation-token"), "cv-application-confirmation-CV-TEST-1-attempt-2",
+      expect.stringContaining("synthetic-invitation-token"), "cv-application-confirmation-CV-TEST-1-attempt-2", "en",
     );
 
     // An empty older page wraps the durable scan to the newest failures.

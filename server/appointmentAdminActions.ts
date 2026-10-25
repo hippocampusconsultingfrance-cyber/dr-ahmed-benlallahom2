@@ -5,6 +5,7 @@ import { appointments } from "../drizzle/schema";
 import { getDb } from "./db";
 import { mutationRowCount } from "./dbMutation";
 import { sendRefundConfirmationEmail, type RefundEmailContext } from "./_core/notifications";
+import { emailLanguageFor } from "./emailLanguage";
 import { BOOKING_PATIENT_REFUND_DEADLINE_HOURS } from "../shared/bookingPolicy";
 
 /** A patient may obtain a full refund up to this many hours before the consultation. */
@@ -111,6 +112,7 @@ export async function refundAppointmentPayment(
       context,
       reason: input.initiator === "practitioner" ? input.reason : undefined,
       idempotencyKey: `appointment-refund-${appointment.trackingId}`,
+      language: emailLanguageFor(appointment.language),
     },
   );
   return { success: true as const, refundId: refund.id, refundAmount, cancelled: cancelsAppointment, patientNotified };
@@ -197,6 +199,7 @@ export async function refundUnconfirmedCheckoutSession(stripe: Stripe, input: { 
   const patientNotified = await sendRefundConfirmationEmail(customerEmail, appointment.customerName, trackingId, new Date(appointment.appointmentDate), refundAmount, {
     context: "unconfirmed_payment",
     idempotencyKey: `appointment-refund-session-${session.id}`,
+    language: emailLanguageFor(appointment.language),
   });
   console.log("Unconfirmed Stripe payment refunded", { trackingId });
   return { success: true as const, refundId: refund.id, refundAmount, trackingId, patientNotified };

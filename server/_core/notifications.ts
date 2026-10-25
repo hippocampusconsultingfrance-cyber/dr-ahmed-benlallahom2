@@ -1,7 +1,9 @@
 import { Resend } from "resend";
 import { notifyOwner } from "./notification";
 import { CANDIDATE_INVITATION_MAX_AGE_MS, CANDIDATE_TOKEN_MAX_AGE_MS, formatCandidateLinkValidity } from "../candidateAuth";
-import { PATIENT_CANCELLATION_POLICY, resolveConsultationContact, type ConsultationContact } from "../consultationContact";
+import { PATIENT_CANCELLATION_POLICY, PATIENT_CANCELLATION_POLICY_EN, resolveConsultationContact, type ConsultationContact } from "../consultationContact";
+import { appointmentCalendarFilename, buildAppointmentCalendarEvent } from "../appointmentCalendar";
+import { withEmailLanguage, type EmailLanguage } from "../emailLanguage";
 import {
   buildResendApplicationTags,
   RESEND_APPLICATION_ACTIVATION_KIND,
@@ -117,7 +119,7 @@ async function sendPostPaymentEmail(
   throw lastError ?? new PostPaymentEmailError(errors.failed, "delivery_exception");
 }
 
-export function buildHippocampusEmailShell(content: string) {
+export function buildHippocampusEmailShell(content: string, language: EmailLanguage = "fr") {
   return `
     <div style="margin:0;padding:24px 12px;background:#f1f5f9;font-family:Arial,sans-serif;color:#0f172a;">
       <div style="max-width:600px;margin:0 auto;background:#ffffff;border:1px solid #dbe4ee;border-radius:14px;overflow:hidden;">
@@ -130,7 +132,7 @@ export function buildHippocampusEmailShell(content: string) {
           </table>
         </div>
         <div style="padding:28px;">${content}</div>
-        <div style="padding:18px 28px;border-top:1px solid #e2e8f0;background:#f8fafc;font-size:12px;line-height:1.5;color:#64748b;">Dr. Ahmed Ben Lallahom · Hippocampus Consulting<br />Communication professionnelle et confidentielle</div>
+        <div style="padding:18px 28px;border-top:1px solid #e2e8f0;background:#f8fafc;font-size:12px;line-height:1.5;color:#64748b;">Dr. Ahmed Ben Lallahom · Hippocampus Consulting<br />${language === "en" ? "Professional and confidential communication" : "Communication professionnelle et confidentielle"}</div>
       </div>
     </div>
   `;
@@ -149,10 +151,13 @@ export async function sendAdminMfaCodeEmail(email: string, code: string) {
 // public contact email of the site, CONSULTATION_REPLY_TO to override). Every
 // email has a plain-text part, the contact email and phone, times in "heure de
 // Paris" and, when relevant, the cancellation policy. The free-text request of
-// the booking is never included (health-data minimisation).
+// the booking is never included (health-data minimisation). They are written in
+// the language of the booking: French for "fr", English otherwise (EN-01).
 // ---------------------------------------------------------------------------
 
-const PARIS_DATE_TIME_FORMAT = new Intl.DateTimeFormat("fr-FR", {
+export type { EmailLanguage };
+
+const PARIS_DATE_TIME_OPTIONS: Intl.DateTimeFormatOptions = {
   timeZone: "Europe/Paris",
   weekday: "long",
   year: "numeric",
@@ -160,17 +165,27 @@ const PARIS_DATE_TIME_FORMAT = new Intl.DateTimeFormat("fr-FR", {
   day: "numeric",
   hour: "2-digit",
   minute: "2-digit",
-});
-const EURO_FORMAT = new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR" });
+};
+const PARIS_DATE_TIME_FORMAT = {
+  fr: new Intl.DateTimeFormat("fr-FR", PARIS_DATE_TIME_OPTIONS),
+  en: new Intl.DateTimeFormat("en-GB", PARIS_DATE_TIME_OPTIONS),
+};
+const EURO_FORMAT = {
+  fr: new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR" }),
+  en: new Intl.NumberFormat("en-GB", { style: "currency", currency: "EUR" }),
+};
 
-/** "mardi 20 octobre 2026 à 10:00 (heure de Paris)", whatever the server time zone. */
-export function formatPatientDateTime(date: Date): string {
-  return `${PARIS_DATE_TIME_FORMAT.format(date)} (heure de Paris)`;
+/**
+ * "mardi 20 octobre 2026 à 10:00 (heure de Paris)" or "Tuesday, 20 October
+ * 2026 at 10:00 (Paris time)", whatever the server time zone.
+ */
+export function formatPatientDateTime(date: Date, language: EmailLanguage = "fr"): string {
+  return `${PARIS_DATE_TIME_FORMAT[language].format(date)} (${language === "en" ? "Paris time" : "heure de Paris"})`;
 }
 
-/** French amount: "100,00 €" (regular spaces, safe in every mail client). */
-export function formatPatientAmount(amount: number | string): string {
-  return EURO_FORMAT.format(Number(amount)).replace(/[  ]/g, " ");
+/** "100,00 €" in French, "€100.00" in English (regular spaces, safe in every mail client). */
+export function formatPatientAmount(amount: number | string, language: EmailLanguage = "fr"): string {
+  return EURO_FORMAT[language].format(Number(amount)).replace(/[  ]/g, " ");
 }
 
 type PatientEmailContent = {
@@ -182,42 +197,63 @@ type PatientEmailContent = {
   link?: { label: string; url: string };
   closing?: string[];
   cancellationPolicy?: boolean;
+  language?: EmailLanguage;
 };
 
 export type PatientEmail = { subject: string; html: string; text: string };
+
+const PATIENT_EMAIL_COPY = {
+  fr: {
+    greeting: "Bonjour",
+    labelSeparator: " :",
+    cancellationPolicy: PATIENT_CANCELLATION_POLICY,
+    contactBefore: "Une question, un report ou une annulation ? Écrivez-nous à ",
+    contactMiddle: " ou appelez le ",
+    contactAfter: " en indiquant votre référence. Vous pouvez aussi répondre directement à cet email.",
+  },
+  en: {
+    greeting: "Hello",
+    labelSeparator: ":",
+    cancellationPolicy: PATIENT_CANCELLATION_POLICY_EN,
+    contactBefore: "A question, a change or a cancellation? Write to us at ",
+    contactMiddle: " or call ",
+    contactAfter: ", quoting your reference. You can also reply directly to this email.",
+  },
+} as const;
 
 function telHref(phone: string) {
   return `tel:${phone.replace(/[^\d+]/g, "")}`;
 }
 
 export function buildPatientEmail(content: PatientEmailContent, contact: ConsultationContact = resolveConsultationContact()): PatientEmail {
-  const contactSentence = `Une question, un report ou une annulation ? Écrivez-nous à ${contact.email} ou appelez le ${contact.phone} en indiquant votre référence. Vous pouvez aussi répondre directement à cet email.`;
+  const copy = PATIENT_EMAIL_COPY[content.language ?? "fr"];
+  const contactSentence = `${copy.contactBefore}${contact.email}${copy.contactMiddle}${contact.phone}${copy.contactAfter}`;
   const paragraph = (value: string) => `<p style="line-height:1.6;">${escapeHtml(value)}</p>`;
   const html = buildHippocampusEmailShell(`
       <h2 style="color: #0891b2;">${escapeHtml(content.title)}</h2>
-      <p>Bonjour ${escapeHtml(content.customerName)},</p>
+      <p>${copy.greeting} ${escapeHtml(content.customerName)},</p>
       ${content.paragraphs.map(paragraph).join("\n      ")}
       <div style="background: #f8fafc; border-radius: 8px; padding: 16px; margin: 16px 0;">
         <ul style="list-style: none; padding: 0; margin: 0;">
-          ${content.details.map(([label, value]) => `<li style="padding: 4px 0;"><strong>${escapeHtml(label)} :</strong> ${escapeHtml(value)}</li>`).join("\n          ")}
-          ${content.link ? `<li style="padding: 4px 0;"><strong>${escapeHtml(content.link.label)} :</strong> <a href="${escapeHtml(content.link.url)}">${escapeHtml(content.link.url)}</a></li>` : ""}
+          ${content.details.map(([label, value]) => `<li style="padding: 4px 0;"><strong>${escapeHtml(label)}${copy.labelSeparator}</strong> ${escapeHtml(value)}</li>`).join("\n          ")}
+          ${content.link ? `<li style="padding: 4px 0;"><strong>${escapeHtml(content.link.label)}${copy.labelSeparator}</strong> <a href="${escapeHtml(content.link.url)}">${escapeHtml(content.link.url)}</a></li>` : ""}
         </ul>
       </div>
       ${(content.closing ?? []).map(paragraph).join("\n      ")}
-      ${content.cancellationPolicy ? `<p style="font-size:13px;line-height:1.55;color:#475569;">${escapeHtml(PATIENT_CANCELLATION_POLICY)}</p>` : ""}
-      <p style="font-size:13px;line-height:1.55;color:#475569;">Une question, un report ou une annulation ? Écrivez-nous à <a href="mailto:${escapeHtml(contact.email)}">${escapeHtml(contact.email)}</a> ou appelez le <a href="${escapeHtml(telHref(contact.phone))}">${escapeHtml(contact.phone)}</a> en indiquant votre référence. Vous pouvez aussi répondre directement à cet email.</p>
-    `);
+      ${content.cancellationPolicy ? `<p style="font-size:13px;line-height:1.55;color:#475569;">${escapeHtml(copy.cancellationPolicy)}</p>` : ""}
+      <p style="font-size:13px;line-height:1.55;color:#475569;">${escapeHtml(copy.contactBefore)}<a href="mailto:${escapeHtml(contact.email)}">${escapeHtml(contact.email)}</a>${escapeHtml(copy.contactMiddle)}<a href="${escapeHtml(telHref(contact.phone))}">${escapeHtml(contact.phone)}</a>${escapeHtml(copy.contactAfter)}</p>
+    `, content.language);
   const text = [
     content.title,
     "",
-    `Bonjour ${content.customerName},`,
+    `${copy.greeting} ${content.customerName},`,
     "",
     ...content.paragraphs.flatMap(value => [value, ""]),
-    ...content.details.map(([label, value]) => `${label} : ${value}`),
-    ...(content.link ? [`${content.link.label} : ${content.link.url}`] : []),
+    ...content.details.map(([label, value]) => `${label}${copy.labelSeparator} ${value}`),
+    ...(content.link ? [`${content.link.label}${copy.labelSeparator} ${content.link.url}`] : []),
     "",
     ...(content.closing ?? []).flatMap(value => [value, ""]),
-    ...(content.cancellationPolicy ? [PATIENT_CANCELLATION_POLICY, ""] : []),
+    ...(content.cancellationPolicy ? [copy.cancellationPolicy, ""] : []),
     contactSentence,
     "",
     "Dr Ahmed Ben Lallahom · Hippocampus Consulting",
@@ -225,11 +261,13 @@ export function buildPatientEmail(content: PatientEmailContent, contact: Consult
   return { subject: content.subject, html, text };
 }
 
+type PatientEmailAttachment = { filename: string; content: string; contentType?: string };
+
 async function sendPatientEmail(
   errors: { rejected: string; failed: string },
   to: string,
   email: PatientEmail,
-  options: { idempotencyKey?: string; attachments?: Array<{ filename: string; content: string }> } = {},
+  options: { idempotencyKey?: string; attachments?: PatientEmailAttachment[] } = {},
 ) {
   const contact = resolveConsultationContact();
   return sendPostPaymentEmail(errors, {
@@ -243,26 +281,86 @@ async function sendPatientEmail(
   }, options.idempotencyKey);
 }
 
-export function buildBookingConfirmationEmail(input: { customerName: string; trackingId: string; appointmentDate: Date; finalPrice: number; meetLink?: string }, contact = resolveConsultationContact()): PatientEmail {
-  return buildPatientEmail({
-    subject: `Confirmation de réservation - ${input.trackingId}`,
-    title: "Confirmation de réservation",
-    customerName: input.customerName,
-    paragraphs: ["Votre paiement a bien été reçu et votre consultation avec le Dr Ahmed Ben Lallahom est confirmée. Votre facture vous est envoyée dans un email séparé."],
-    details: [
-      ["Référence", input.trackingId],
-      ["Date et heure", formatPatientDateTime(input.appointmentDate)],
-      ["Durée", "30 minutes"],
-      ["Montant payé", formatPatientAmount(input.finalPrice)],
-      ...(contact.modalityText ? [["Déroulement", contact.modalityText] as [string, string]] : []),
-    ],
-    link: input.meetLink ? { label: "Lien de visioconférence", url: input.meetLink } : undefined,
-    closing: ["Conservez votre référence : elle vous sera demandée pour toute question. Cette consultation programmée ne remplace pas une prise en charge d’urgence : en cas d’urgence, appelez les secours."],
-    cancellationPolicy: true,
-  }, contact);
+const CONSULTATION_DURATION_MINUTES = 30;
+
+export function buildBookingConfirmationEmail(
+  input: { customerName: string; trackingId: string; appointmentDate: Date; finalPrice: number; meetLink?: string; language?: EmailLanguage; confirmedAt?: Date },
+  contact = resolveConsultationContact(),
+): PatientEmail & { attachments: PatientEmailAttachment[] } {
+  const language = input.language ?? "fr";
+  const calendarFilename = appointmentCalendarFilename(input.trackingId);
+  // RES-05: the .ics is in the patient's language, at the exact UTC time; the
+  // payment date as stamp keeps a retried email byte-identical.
+  const calendar = buildAppointmentCalendarEvent({
+    trackingId: input.trackingId,
+    start: input.appointmentDate,
+    durationMinutes: CONSULTATION_DURATION_MINUTES,
+    stampedAt: input.confirmedAt ?? new Date(),
+    language,
+    modalityText: contact.modalityText,
+    contact: { email: contact.email, phone: contact.phone },
+  });
+  const attachments = [{ filename: calendarFilename, content: Buffer.from(calendar, "utf8").toString("base64"), contentType: "text/calendar; charset=utf-8; method=PUBLISH" }];
+  const email = language === "en"
+    ? buildPatientEmail({
+        subject: `Booking confirmation - ${input.trackingId}`,
+        title: "Booking confirmation",
+        customerName: input.customerName,
+        paragraphs: ["Your payment has been received and your consultation with Dr Ahmed Ben Lallahom is confirmed. Your invoice is sent to you in a separate email."],
+        details: [
+          ["Reference", input.trackingId],
+          ["Date and time", formatPatientDateTime(input.appointmentDate, language)],
+          ["Duration", `${CONSULTATION_DURATION_MINUTES} minutes`],
+          ["Amount paid", formatPatientAmount(input.finalPrice, language)],
+          ...(contact.modalityText ? [["Consultation format", contact.modalityText] as [string, string]] : []),
+        ],
+        link: input.meetLink ? { label: "Video call link", url: input.meetLink } : undefined,
+        closing: [
+          `Add to my calendar: open the attached file “${calendarFilename}” (Google Calendar, Outlook, Apple Calendar…).`,
+          "Keep your reference: you will be asked for it with any question. This scheduled consultation does not replace emergency care: in an emergency, call the emergency services.",
+        ],
+        cancellationPolicy: true,
+        language,
+      }, contact)
+    : buildPatientEmail({
+        subject: `Confirmation de réservation - ${input.trackingId}`,
+        title: "Confirmation de réservation",
+        customerName: input.customerName,
+        paragraphs: ["Votre paiement a bien été reçu et votre consultation avec le Dr Ahmed Ben Lallahom est confirmée. Votre facture vous est envoyée dans un email séparé."],
+        details: [
+          ["Référence", input.trackingId],
+          ["Date et heure", formatPatientDateTime(input.appointmentDate)],
+          ["Durée", `${CONSULTATION_DURATION_MINUTES} minutes`],
+          ["Montant payé", formatPatientAmount(input.finalPrice)],
+          ...(contact.modalityText ? [["Déroulement", contact.modalityText] as [string, string]] : []),
+        ],
+        link: input.meetLink ? { label: "Lien de visioconférence", url: input.meetLink } : undefined,
+        closing: [
+          `Ajouter à mon agenda : ouvrez le fichier joint « ${calendarFilename} » (Google Agenda, Outlook, Calendrier Apple…).`,
+          "Conservez votre référence : elle vous sera demandée pour toute question. Cette consultation programmée ne remplace pas une prise en charge d’urgence : en cas d’urgence, appelez les secours.",
+        ],
+        cancellationPolicy: true,
+      }, contact);
+  return { ...email, attachments };
 }
 
-export function buildBookingReminderEmail(input: { customerName: string; trackingId: string; appointmentDate: Date }, contact = resolveConsultationContact()): PatientEmail {
+export function buildBookingReminderEmail(input: { customerName: string; trackingId: string; appointmentDate: Date; language?: EmailLanguage }, contact = resolveConsultationContact()): PatientEmail {
+  if (input.language === "en") {
+    return buildPatientEmail({
+      subject: `Reminder - Your consultation is coming up (${input.trackingId})`,
+      title: "Reminder: your consultation is coming up",
+      customerName: input.customerName,
+      paragraphs: [`This is a reminder that your consultation with Dr Ahmed Ben Lallahom is scheduled for ${formatPatientDateTime(input.appointmentDate, "en")}.`],
+      details: [
+        ["Reference", input.trackingId],
+        ["Date and time", formatPatientDateTime(input.appointmentDate, "en")],
+        ...(contact.modalityText ? [["Consultation format", contact.modalityText] as [string, string]] : []),
+      ],
+      closing: ["If you need to cancel or reschedule your appointment, please let us know as soon as possible using the details below."],
+      cancellationPolicy: true,
+      language: "en",
+    }, contact);
+  }
   return buildPatientEmail({
     subject: `Rappel - Votre consultation approche (${input.trackingId})`,
     title: "Rappel : votre consultation approche",
@@ -278,7 +376,24 @@ export function buildBookingReminderEmail(input: { customerName: string; trackin
   }, contact);
 }
 
-export function buildInvoiceEmail(input: { customerName: string; trackingId: string; finalPrice: number; invoiceNumber?: string }, contact = resolveConsultationContact()): PatientEmail {
+/** The PDF invoice stays in French; the English email says so in one sentence (EN-01). */
+export function buildInvoiceEmail(input: { customerName: string; trackingId: string; finalPrice: number; invoiceNumber?: string; language?: EmailLanguage }, contact = resolveConsultationContact()): PatientEmail {
+  if (input.language === "en") {
+    return buildPatientEmail({
+      subject: `Invoice - Consultation ${input.trackingId}`,
+      title: "Your invoice",
+      customerName: input.customerName,
+      paragraphs: ["Your invoice for your consultation with Dr Ahmed Ben Lallahom, issued in French as required by French law, is attached."],
+      details: [
+        ...(input.invoiceNumber ? [["Invoice no.", input.invoiceNumber] as [string, string]] : []),
+        ["Reference", input.trackingId],
+        ["Amount", formatPatientAmount(input.finalPrice, "en")],
+        ["Status", "Paid"],
+      ],
+      closing: ["Thank you for your trust."],
+      language: "en",
+    }, contact);
+  }
   return buildPatientEmail({
     subject: `Facture - Consultation ${input.trackingId}`,
     title: "Votre facture",
@@ -294,6 +409,11 @@ export function buildInvoiceEmail(input: { customerName: string; trackingId: str
   }, contact);
 }
 
+/**
+ * `confirmedAt` (the payment date) stamps the attached .ics: pass the same
+ * value on every retry so that the email sent under the idempotency key never
+ * changes.
+ */
 export async function sendConfirmationEmail(
   customerEmail: string,
   customerName: string,
@@ -301,11 +421,11 @@ export async function sendConfirmationEmail(
   appointmentDate: Date,
   finalPrice: number,
   meetLink?: string,
-  delivery: { idempotencyKey?: string } = {},
+  delivery: { idempotencyKey?: string; language?: EmailLanguage; confirmedAt?: Date } = {},
 ) {
   try {
-    const email = buildBookingConfirmationEmail({ customerName, trackingId, appointmentDate, finalPrice, meetLink });
-    await sendPatientEmail({ rejected: "confirmation_email_rejected", failed: "confirmation_email_failed" }, customerEmail, email, { idempotencyKey: delivery.idempotencyKey });
+    const { attachments, ...email } = buildBookingConfirmationEmail({ customerName, trackingId, appointmentDate, finalPrice, meetLink, language: delivery.language, confirmedAt: delivery.confirmedAt });
+    await sendPatientEmail({ rejected: "confirmation_email_rejected", failed: "confirmation_email_failed" }, customerEmail, email, { idempotencyKey: delivery.idempotencyKey, attachments });
     console.log("Confirmation email sent successfully");
   } catch (error) {
     throw new Error("confirmation_email_failed", { cause: error });
@@ -324,7 +444,7 @@ export async function sendOwnerNotificationEmail(
   trackingId: string,
   appointmentDate: Date,
   finalPrice: number,
-  delivery: { idempotencyKey?: string } = {},
+  delivery: { idempotencyKey?: string; language?: string } = {},
 ) {
   const formattedDate = appointmentDate.toLocaleString("fr-FR", {
     timeZone: "Europe/Paris",
@@ -343,6 +463,8 @@ export async function sendOwnerNotificationEmail(
     `Téléphone : ${customerPhone}`,
     `Date : ${formattedDate} (heure de Paris)`,
     `Montant : ${finalPrice} €`,
+    // Language of the booking page; the patient's emails are in French only for FR (EN-01).
+    `Langue : ${(delivery.language || "fr").toUpperCase()}`,
     "Objet de la demande : consultable uniquement dans le tableau de bord (jamais recopié par email).",
   ].join("\n");
 
@@ -368,10 +490,10 @@ export async function sendInvoiceEmail(
   finalPrice: number,
   invoicePdfBuffer: Buffer,
   invoiceNumber?: string,
-  delivery: { idempotencyKey?: string } = {},
+  delivery: { idempotencyKey?: string; language?: EmailLanguage } = {},
 ) {
   try {
-    const email = buildInvoiceEmail({ customerName, trackingId, finalPrice, invoiceNumber });
+    const email = buildInvoiceEmail({ customerName, trackingId, finalPrice, invoiceNumber, language: delivery.language });
     await sendPatientEmail({ rejected: "invoice_email_rejected", failed: "invoice_email_failed" }, customerEmail, email, {
       idempotencyKey: delivery.idempotencyKey,
       attachments: [
@@ -410,44 +532,84 @@ export function buildRefundEmail(input: {
   refundAmount: string;
   context?: RefundEmailContext;
   reason?: string;
+  language?: EmailLanguage;
 }, contact = resolveConsultationContact()): PatientEmail {
   const context = input.context ?? "refund";
-  const copy = context === "practitioner_cancellation"
+  const language = input.language ?? "fr";
+  const contextCopy = language === "en"
+    ? (context === "practitioner_cancellation"
+        ? {
+            subject: `Cancellation of your consultation - ${input.trackingId}`,
+            title: "Cancellation of your consultation",
+            intro: "We regret to inform you that your consultation had to be cancelled by the practitioner. The amount paid is refunded to you in full.",
+            dateLabel: "Cancelled consultation",
+          }
+        : context === "unconfirmed_payment"
+          ? {
+              subject: `Refund of your payment - ${input.trackingId}`,
+              title: "Refund of your payment",
+              intro: "Your payment was received when the slot was no longer reserved in your name (temporary booking expired or cancelled). It is refunded to you in full.",
+              dateLabel: "Requested slot",
+            }
+          : {
+              subject: `Refund confirmed - ${input.trackingId}`,
+              title: "Refund confirmation",
+              intro: "The refund of your consultation has been recorded.",
+              dateLabel: "Original consultation",
+            })
+    : (context === "practitioner_cancellation"
+        ? {
+            subject: `Annulation de votre consultation - ${input.trackingId}`,
+            title: "Annulation de votre consultation",
+            intro: "Nous sommes au regret de vous informer que votre consultation a dû être annulée par le praticien. Le montant payé vous est intégralement remboursé.",
+            dateLabel: "Consultation annulée",
+          }
+        : context === "unconfirmed_payment"
+          ? {
+              subject: `Remboursement de votre paiement - ${input.trackingId}`,
+              title: "Remboursement de votre paiement",
+              intro: "Votre paiement a été reçu alors que le créneau n’était plus réservé à votre nom (réservation temporaire expirée ou annulée). Il vous est intégralement remboursé.",
+              dateLabel: "Créneau demandé",
+            }
+          : {
+              subject: `Remboursement confirmé - ${input.trackingId}`,
+              title: "Confirmation de remboursement",
+              intro: "Le remboursement de votre consultation a été enregistré.",
+              dateLabel: "Consultation initiale",
+            });
+  const copy = language === "en"
     ? {
-        subject: `Annulation de votre consultation - ${input.trackingId}`,
-        title: "Annulation de votre consultation",
-        intro: "Nous sommes au regret de vous informer que votre consultation a dû être annulée par le praticien. Le montant payé vous est intégralement remboursé.",
-        dateLabel: "Consultation annulée",
+        reference: "Reference",
+        reason: "Reason",
+        refunded: "Amount refunded",
+        delay: "The time it takes for the refund to appear on your account depends on your bank.",
+        rebook: "You can book a new slot at any time on the website. We apologise for the inconvenience.",
       }
-    : context === "unconfirmed_payment"
-      ? {
-          subject: `Remboursement de votre paiement - ${input.trackingId}`,
-          title: "Remboursement de votre paiement",
-          intro: "Votre paiement a été reçu alors que le créneau n’était plus réservé à votre nom (réservation temporaire expirée ou annulée). Il vous est intégralement remboursé.",
-          dateLabel: "Créneau demandé",
-        }
-      : {
-          subject: `Remboursement confirmé - ${input.trackingId}`,
-          title: "Confirmation de remboursement",
-          intro: "Le remboursement de votre consultation a été enregistré.",
-          dateLabel: "Consultation initiale",
-        };
+    : {
+        reference: "Référence",
+        reason: "Motif",
+        refunded: "Montant remboursé",
+        delay: "Le délai d’apparition du remboursement sur votre compte dépend de votre établissement bancaire.",
+        rebook: "Vous pouvez réserver un nouveau créneau à tout moment sur le site. Nous vous prions de nous excuser pour ce contretemps.",
+      };
+  // The reason is the practitioner's own text, sent as typed whatever the language.
   const reason = input.reason?.trim();
   return buildPatientEmail({
-    subject: copy.subject,
-    title: copy.title,
+    subject: contextCopy.subject,
+    title: contextCopy.title,
     customerName: input.customerName,
-    paragraphs: [copy.intro],
+    paragraphs: [contextCopy.intro],
     details: [
-      ["Référence", input.trackingId],
-      [copy.dateLabel, formatPatientDateTime(input.appointmentDate)],
-      ...(reason ? [["Motif", reason] as [string, string]] : []),
-      ["Montant remboursé", formatPatientAmount(input.refundAmount)],
+      [copy.reference, input.trackingId],
+      [contextCopy.dateLabel, formatPatientDateTime(input.appointmentDate, language)],
+      ...(reason ? [[copy.reason, reason] as [string, string]] : []),
+      [copy.refunded, formatPatientAmount(input.refundAmount, language)],
     ],
     closing: [
-      "Le délai d’apparition du remboursement sur votre compte dépend de votre établissement bancaire.",
-      ...(context === "practitioner_cancellation" ? ["Vous pouvez réserver un nouveau créneau à tout moment sur le site. Nous vous prions de nous excuser pour ce contretemps."] : []),
+      copy.delay,
+      ...(context === "practitioner_cancellation" ? [copy.rebook] : []),
     ],
+    language,
   }, contact);
 }
 
@@ -464,10 +626,10 @@ export async function sendRefundConfirmationEmail(
   trackingId: string,
   appointmentDate: Date,
   refundAmount: string,
-  details: { context?: RefundEmailContext; reason?: string; idempotencyKey?: string } = {},
+  details: { context?: RefundEmailContext; reason?: string; idempotencyKey?: string; language?: EmailLanguage } = {},
 ): Promise<boolean> {
   try {
-    const email = buildRefundEmail({ customerName, trackingId, appointmentDate, refundAmount, context: details.context, reason: details.reason });
+    const email = buildRefundEmail({ customerName, trackingId, appointmentDate, refundAmount, context: details.context, reason: details.reason, language: details.language });
     await sendPatientEmail({ rejected: "refund_email_rejected", failed: "refund_email_failed" }, customerEmail, email, { idempotencyKey: details.idempotencyKey });
     console.log("Refund email sent successfully");
     return true;
@@ -482,7 +644,24 @@ export async function sendRefundConfirmationEmail(
  * slot (hold expired or released, other session): the owner has been alerted
  * and will refund or reschedule. Best effort, idempotent per Checkout session.
  */
-export function buildUnconfirmablePaymentEmail(input: { customerName: string; trackingId: string; appointmentDate: Date; amountCents: number | null }, contact = resolveConsultationContact()): PatientEmail {
+export function buildUnconfirmablePaymentEmail(input: { customerName: string; trackingId: string; appointmentDate: Date; amountCents: number | null; language?: EmailLanguage }, contact = resolveConsultationContact()): PatientEmail {
+  if (input.language === "en") {
+    return buildPatientEmail({
+      subject: `Your payment has been received: we will sort out your booking - ${input.trackingId}`,
+      title: "Your payment has been received, we will sort out your booking",
+      customerName: input.customerName,
+      paragraphs: [
+        "Your payment has been received, but the chosen slot could not be confirmed to you automatically: the temporary booking had expired or the slot was no longer available at the time of payment.",
+        "Our team has been notified and will contact you to refund you in full or offer you another slot. You have nothing more to pay.",
+      ],
+      details: [
+        ["Reference", input.trackingId],
+        ["Requested slot", formatPatientDateTime(input.appointmentDate, "en")],
+        ...(input.amountCents === null ? [] : [["Amount received", formatPatientAmount(input.amountCents / 100, "en")] as [string, string]]),
+      ],
+      language: "en",
+    }, contact);
+  }
   return buildPatientEmail({
     subject: `Votre paiement a été reçu : réservation à régulariser - ${input.trackingId}`,
     title: "Votre paiement a été reçu, réservation à régulariser",
@@ -501,7 +680,7 @@ export function buildUnconfirmablePaymentEmail(input: { customerName: string; tr
 
 export async function sendUnconfirmablePaymentEmail(
   customerEmail: string,
-  input: { customerName: string; trackingId: string; appointmentDate: Date; amountCents: number | null },
+  input: { customerName: string; trackingId: string; appointmentDate: Date; amountCents: number | null; language?: EmailLanguage },
   idempotencyKey: string,
 ): Promise<boolean> {
   try {
@@ -517,10 +696,11 @@ export async function sendReminderEmail(
   customerEmail: string,
   customerName: string,
   trackingId: string,
-  appointmentDate: Date
+  appointmentDate: Date,
+  options: { language?: EmailLanguage } = {},
 ) {
   try {
-    const email = buildBookingReminderEmail({ customerName, trackingId, appointmentDate });
+    const email = buildBookingReminderEmail({ customerName, trackingId, appointmentDate, language: options.language });
     // One reminder per appointment: the key makes a retried claim harmless.
     await sendPatientEmail({ rejected: "reminder_email_rejected", failed: "reminder_email_failed" }, customerEmail, email, {
       idempotencyKey: `appointment-reminder-${trackingId}`,
@@ -537,28 +717,56 @@ export async function sendCvApplicationConfirmationEmail(
   trackingId: string,
   candidatePortalInviteUrl?: string,
   idempotencyKey = `cv-application-confirmation-${trackingId}-attempt-1`,
+  language: EmailLanguage = "fr",
 ): Promise<CvApplicationConfirmationDelivery> {
-  const candidatePortalInvitation = candidatePortalInviteUrl
-      ? `<div style="margin:24px 0;padding:18px;border:1px solid #bae6fd;border-radius:10px;background:#f0f9ff;"><h3 style="margin:0 0 8px;color:#0e7490;">Votre espace candidat sécurisé</h3><p style="margin:0 0 14px;">Vous pouvez créer un accès pour déposer ultérieurement vos documents administratifs dans votre coffre privé. L’activation de votre adresse email restera obligatoire.</p><p style="margin:0;"><a href="${escapeHtml(candidatePortalInviteUrl)}" style="display:inline-block;background:#0891b2;color:#ffffff;text-decoration:none;padding:12px 18px;border-radius:7px;font-weight:700;">Créer mon espace candidat</a></p><p style="margin:12px 0 0;color:#475569;font-size:13px;">${escapeHtml(candidateInvitationValidityNote())}</p></div>`
+  // In the language of the application form (EN-02); the link opens the English page (?lang=en).
+  const copy = language === "en"
+    ? {
+        subject: `Application received - ${trackingId}`,
+        title: "Application received — Hippocampus Consulting",
+        received: "We confirm receipt of your international recruitment application.",
+        trackingNumber: "Tracking number:",
+        review: "Your profile will be reviewed against the available opportunities and the criteria of the country concerned. We will contact you if your profile matches a search.",
+        portalTitle: "Your secure candidate portal",
+        portalText: "You can create your portal access to upload your administrative documents to your private vault later. Activating your email address will still be required.",
+        portalAction: "Create my candidate portal",
+        noPatientData: "Do not send patient data, medical records or clinical documents with your application.",
+        spam: "If you cannot find this email, check your Spam or Junk folder, then add recrutement@drahmedbenlallahom.com to your contacts.",
+      }
+    : {
+        subject: `Candidature reçue - ${trackingId}`,
+        title: "Candidature reçue — Hippocampus Consulting",
+        received: "Nous confirmons la réception de votre candidature de recrutement international.",
+        trackingNumber: "Numéro de suivi :",
+        review: "Votre profil sera examiné selon les opportunités disponibles et les critères du pays concerné. Nous vous contacterons si votre profil correspond à une recherche.",
+        portalTitle: "Votre espace candidat sécurisé",
+        portalText: "Vous pouvez créer un accès pour déposer ultérieurement vos documents administratifs dans votre coffre privé. L’activation de votre adresse email restera obligatoire.",
+        portalAction: "Créer mon espace candidat",
+        noPatientData: "Ne transmettez pas de données de patients, de dossiers médicaux ou de documents cliniques dans votre candidature.",
+        spam: "Si vous ne retrouvez pas cet email, vérifiez votre dossier Spam ou Courriers indésirables, puis ajoutez recrutement@drahmedbenlallahom.com à vos contacts.",
+      };
+  const inviteUrl = candidatePortalInviteUrl ? withEmailLanguage(candidatePortalInviteUrl, language) : undefined;
+  const candidatePortalInvitation = inviteUrl
+      ? `<div style="margin:24px 0;padding:18px;border:1px solid #bae6fd;border-radius:10px;background:#f0f9ff;"><h3 style="margin:0 0 8px;color:#0e7490;">${copy.portalTitle}</h3><p style="margin:0 0 14px;">${copy.portalText}</p><p style="margin:0;"><a href="${escapeHtml(inviteUrl)}" style="display:inline-block;background:#0891b2;color:#ffffff;text-decoration:none;padding:12px 18px;border-radius:7px;font-weight:700;">${copy.portalAction}</a></p><p style="margin:12px 0 0;color:#475569;font-size:13px;">${escapeHtml(candidateInvitationValidityNote(language))}</p></div>`
       : "";
   const emailContent = buildHippocampusEmailShell(`
-      <h2 style="color: #0891b2;">Candidature reçue — Hippocampus Consulting</h2>
-      <p>${escapeHtml(unverifiedRecipientGreeting(candidateFirstName))}</p>
-      <p>Nous confirmons la réception de votre candidature de recrutement international.</p>
+      <h2 style="color: #0891b2;">${copy.title}</h2>
+      <p>${escapeHtml(unverifiedRecipientGreeting(candidateFirstName, language))}</p>
+      <p>${copy.received}</p>
       <div style="background: #f8fafc; border-radius: 8px; padding: 16px; margin: 16px 0;">
-        <p><strong>Numéro de suivi :</strong> ${escapeHtml(trackingId)}</p>
+        <p><strong>${copy.trackingNumber}</strong> ${escapeHtml(trackingId)}</p>
       </div>
-      <p>Votre profil sera examiné selon les opportunités disponibles et les critères du pays concerné. Nous vous contacterons si votre profil correspond à une recherche.</p>
+      <p>${copy.review}</p>
       ${candidatePortalInvitation}
-      <p>Ne transmettez pas de données de patients, de dossiers médicaux ou de documents cliniques dans votre candidature.</p>
-      <p style="color:#64748b;font-size:13px;">Si vous ne retrouvez pas cet email, vérifiez votre dossier Spam ou Courriers indésirables, puis ajoutez recrutement@drahmedbenlallahom.com à vos contacts.</p>
-    `);
+      <p>${copy.noPatientData}</p>
+      <p style="color:#64748b;font-size:13px;">${copy.spam}</p>
+    `, language);
 
   const message = {
     from: FROM_EMAIL,
     to: [candidateEmail],
     replyTo: RECRUITMENT_REPLY_TO,
-    subject: `Candidature reçue - ${trackingId}`,
+    subject: copy.subject,
     html: emailContent,
     tags: buildResendApplicationTags(trackingId),
   };
@@ -639,7 +847,7 @@ export function buildRecruitmentTemplateEmail(
         ${customRequest}
         <p><strong>${copy.reference}:</strong> ${escapeHtml(trackingId)}</p>
         <p>${copy.privacy}</p>
-    `),
+    `, language),
   };
 }
 
@@ -686,7 +894,7 @@ export async function sendRecruitmentCampaignEmail(input: {
         <p>${textToSafeHtml(input.body)}</p>
         <p style="color: #64748b;">${copy.footer}</p>
         <p style="font-size: 12px;"><a href="${escapeHtml(input.unsubscribeUrl)}" style="color: #0e7490;">${copy.unsubscribe}</a></p>
-    `),
+    `, input.language),
   });
   if (error) throw new Error(`Resend campaign email failed: ${error.message}`);
   return { id: data?.id };
@@ -698,6 +906,8 @@ export type CandidatePortalAccessEmailContentInput = {
   kind: "verify" | "reset" | "invite";
   actionUrl: string;
   applicationReference?: string;
+  /** French by default; English for a candidate who uses the site in another language (EN-02). */
+  language?: EmailLanguage;
 };
 
 export type CandidatePortalAccessEmailInput = CandidatePortalAccessEmailContentInput & {
@@ -749,13 +959,47 @@ function invitationReferenceFromIdempotencyKey(idempotencyKey?: string) {
 }
 
 /** Validity sentence of the "create my candidate space" invitation link (CAND-11). */
-export function candidateInvitationValidityNote(): string {
+export function candidateInvitationValidityNote(language: EmailLanguage = "fr"): string {
+  if (language === "en") {
+    return `This invitation link is valid for ${formatCandidateLinkValidity(CANDIDATE_INVITATION_MAX_AGE_MS, "en")}. After that, you can still create your portal from the “Candidate portal” page of the website, with the same email address.`;
+  }
   return `Ce lien d’invitation est valable ${formatCandidateLinkValidity(CANDIDATE_INVITATION_MAX_AGE_MS)}. Passé ce délai, vous pourrez toujours créer votre espace depuis la page « Espace candidat » du site, avec la même adresse email.`;
 }
 
+const CANDIDATE_ACCESS_EMAIL_COPY_EN = {
+  verify: {
+    subject: "Confirm your email address — Hippocampus candidate portal",
+    title: "Confirm your email address",
+    instruction: "You are receiving this email because a candidate portal has just been created with this address. To activate it, click the button below: you will confirm your email address and choose your password on the page that opens.",
+    action: "Confirm my email address and choose my password",
+    securityNote: `This personal link is valid for ${formatCandidateLinkValidity(CANDIDATE_TOKEN_MAX_AGE_MS, "en")} and can only be used once. If you did not request this candidate portal, ignore this email: no access will be activated and no password will be created.`,
+  },
+  reset: {
+    subject: "Reset your password — Hippocampus Consulting",
+    title: "Reset your password",
+    instruction: "A password reset request has been received. Choose a new password by clicking the button below.",
+    action: "Reset my password",
+    securityNote: `This personal link is valid for ${formatCandidateLinkValidity(CANDIDATE_TOKEN_MAX_AGE_MS, "en")}. If you did not make this request, you can ignore this email.`,
+  },
+  invite: {
+    subject: "Create your candidate portal — Hippocampus Consulting",
+    title: "Create your candidate portal",
+    instruction: "Our team invites you to create your secure candidate portal to upload and track your administrative documents. After confirming your details, you will receive a link to activate your email address and choose your password.",
+    action: "Create my candidate portal",
+    securityNote: `This secure, personal link gives no access until your email address is activated and your password chosen. ${candidateInvitationValidityNote("en")}`,
+  },
+  footer: "This email is sent by Hippocampus Consulting from recrutement@drahmedbenlallahom.com. If you cannot find this email, check your Spam or Junk folder, then add this address to your contacts.",
+} as const;
+
 export function buildCandidatePortalAccessEmail(input: CandidatePortalAccessEmailContentInput) {
-  const greeting = unverifiedRecipientGreeting(input.firstName);
-  const copy = input.kind === "verify"
+  const language = input.language ?? "fr";
+  const greeting = unverifiedRecipientGreeting(input.firstName, language);
+  // The page opened by the link is shown in the language of the email (?lang=en).
+  const actionUrl = withEmailLanguage(input.actionUrl, language);
+  const footer = language === "en"
+    ? CANDIDATE_ACCESS_EMAIL_COPY_EN.footer
+    : "Cet email est envoyé par Hippocampus Consulting depuis recrutement@drahmedbenlallahom.com. Si vous ne retrouvez pas cet email, vérifiez votre dossier Spam ou Courriers indésirables, puis ajoutez cette adresse à vos contacts.";
+  const copy = language === "en" ? CANDIDATE_ACCESS_EMAIL_COPY_EN[input.kind] : input.kind === "verify"
     ? {
         subject: "Confirmez votre adresse email — Espace candidat Hippocampus",
         title: "Confirmez votre adresse email",
@@ -784,11 +1028,11 @@ export function buildCandidatePortalAccessEmail(input: CandidatePortalAccessEmai
         <h2 style="color:#0891b2;">${copy.title}</h2>
         <p>${escapeHtml(greeting)}</p>
         <p>${copy.instruction}</p>
-        <p style="margin:24px 0;"><a href="${escapeHtml(input.actionUrl)}" style="display:inline-block;background:#0891b2;color:#ffffff;text-decoration:none;padding:12px 18px;border-radius:7px;font-weight:700;">${copy.action}</a></p>
+        <p style="margin:24px 0;"><a href="${escapeHtml(actionUrl)}" style="display:inline-block;background:#0891b2;color:#ffffff;text-decoration:none;padding:12px 18px;border-radius:7px;font-weight:700;">${copy.action}</a></p>
         <p style="color:#64748b;font-size:13px;">${copy.securityNote}</p>
-        <p style="color:#64748b;font-size:13px;">Cet email est envoyé par Hippocampus Consulting depuis recrutement@drahmedbenlallahom.com. Si vous ne retrouvez pas cet email, vérifiez votre dossier Spam ou Courriers indésirables, puis ajoutez cette adresse à vos contacts.</p>
-    `),
-    text: `${copy.title}\n\n${greeting}\n\n${copy.instruction}\n\n${input.actionUrl}\n\n${copy.securityNote}\n\nCet email est envoyé par Hippocampus Consulting depuis recrutement@drahmedbenlallahom.com. Si vous ne retrouvez pas cet email, vérifiez votre dossier Spam ou Courriers indésirables, puis ajoutez cette adresse à vos contacts.`,
+        <p style="color:#64748b;font-size:13px;">${footer}</p>
+    `, language),
+    text: `${copy.title}\n\n${greeting}\n\n${copy.instruction}\n\n${actionUrl}\n\n${copy.securityNote}\n\n${footer}`,
   };
 }
 

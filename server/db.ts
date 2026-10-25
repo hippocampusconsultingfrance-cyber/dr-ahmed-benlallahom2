@@ -3,8 +3,13 @@ import { neon } from "@neondatabase/serverless";
 import { drizzle } from "drizzle-orm/neon-http";
 import { InsertUser, users } from "../drizzle/schema";
 import { isConfiguredAdminOpenId } from './_core/env';
+import { ensureLanguageColumns } from "./languageColumns";
 
 let _db: ReturnType<typeof drizzle> | null = null;
+
+/** After a failed check of the language columns, the next getDb() calls skip it for this long. */
+export const LANGUAGE_COLUMNS_RETRY_DELAY_MS = 60_000;
+let languageColumnsRetryAt = 0;
 
 // Lazily create the drizzle instance so local tooling can run without a DB.
 export async function getDb() {
@@ -16,7 +21,25 @@ export async function getDb() {
       _db = null;
     }
   }
+  // Every query on appointments, cv_applications or candidate_accounts reads
+  // "language" (EN-01, EN-02): the column is added once per instance before the
+  // first one, until migration 0002 is applied. A failure is logged and checked
+  // again later; tables without that column keep working meanwhile.
+  if (_db && Date.now() >= languageColumnsRetryAt) {
+    try {
+      await ensureLanguageColumns(_db);
+    } catch (error) {
+      languageColumnsRetryAt = Date.now() + LANGUAGE_COLUMNS_RETRY_DELAY_MS;
+      console.error("[Database] Language columns check failed:", error instanceof Error ? error.name : "UnknownError");
+    }
+  }
   return _db;
+}
+
+/** Test seam: drop the cached connection and the retry delay of the language columns check. */
+export function resetDbForTests() {
+  _db = null;
+  languageColumnsRetryAt = 0;
 }
 
 export async function upsertUser(user: InsertUser): Promise<void> {

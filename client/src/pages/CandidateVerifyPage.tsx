@@ -10,7 +10,7 @@ import PublicContentSkeleton from "@/components/PublicContentSkeleton";
 import { useLanguage } from "@/contexts/LanguageContext";
 import CandidateLegalFooter from "@/components/CandidateLegalFooter";
 import LanguageMenu from "@/components/LanguageMenu";
-import { candidateAccountCopy, CandidateAccountLanguage } from "./candidateAccountCopy";
+import { candidateAccountCopy, candidateAccountNotice, CandidateAccountLanguage } from "./candidateAccountCopy";
 
 /**
  * Activation page opened from the emailed link. The password is chosen here,
@@ -40,7 +40,7 @@ export default function CandidateVerifyPage() {
       await utils.candidatePortal.me.invalidate();
       setTimeout(() => navigate("/candidate/portal"), 1200);
     },
-    onError: error => setNotice(error.message || copy.genericError),
+    onError: error => setNotice(candidateAccountNotice(error, copy, language)),
   });
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();

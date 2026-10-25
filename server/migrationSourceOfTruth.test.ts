@@ -88,6 +88,17 @@ describe("source de vérité des migrations Drizzle (M32)", () => {
     for (const statement of APPOINTMENT_INVOICE_DDL) expect(body).toContain(normalize(dialect.sqlToQuery(statement).sql));
   });
 
+  it("0002 ajoute la colonne language de façon idempotente, avec le même DDL que l'application (EN-01, EN-02)", async () => {
+    const migration = read("drizzle/pg/0002_language_columns.sql");
+    const normalize = (text: string) => text.replace(/--[^\n]*\n/g, "").replace(/\s+/g, " ").replace(/ ?statement-breakpoint ?/g, "").replace(/;/g, "").trim();
+    expect(migration).not.toMatch(/ADD COLUMN "/);
+    const { LANGUAGE_COLUMN_DDL } = await import("./languageColumns");
+    const { PgDialect } = await import("drizzle-orm/pg-core");
+    const dialect = new PgDialect();
+    const body = normalize(migration);
+    for (const statement of LANGUAGE_COLUMN_DDL) expect(body).toContain(normalize(dialect.sqlToQuery(statement).sql));
+  });
+
   it("la baseline crée les 36 tables du schéma", () => {
     const baseline = read("drizzle/pg/0000_baseline.sql");
     const created = [...baseline.matchAll(/CREATE TABLE "([a-z_]+)"/g)].map(match => match[1]);
