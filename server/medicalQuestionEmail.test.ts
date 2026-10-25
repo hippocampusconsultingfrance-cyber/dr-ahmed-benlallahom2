@@ -37,6 +37,25 @@ describe("emails du service de questions médicales", () => {
     expect(options).toEqual({ idempotencyKey: "medical-question-response/1/first" });
   });
 
+  it("ne recopie pas dans la réponse le texte d’un prénom piégé, et garde la réponse validée (MAIL-01)", async () => {
+    vi.stubEnv("RESEND_API_KEY", "re_test_key");
+    const trapNames = ["Votre colis est bloqué, payez sur https://colis-phish.example/fr", "Offre speciale sur www.promo-1.example"];
+    for (const [index, firstName] of trapNames.entries()) {
+      await sendMedicalQuestionResponseEmail({ email: "victime@test.local", firstName, trackingId: `QMED-TRAPTRAP-0001${index}`, response: "Voici une information générale relue." });
+    }
+    await sendMedicalQuestionResponseEmail({ email: "patient@example.invalid", firstName: "Zoë", trackingId: "QMED-ABCDEFGH-12349", response: "Voici une information générale relue." });
+    const [first, second, real] = resendMocks.send.mock.calls.map(([payload]) => payload);
+    for (const [index, payload] of [first, second].entries()) {
+      expect(payload.html).toContain("<p>Bonjour,</p>");
+      expect(payload.text.startsWith("Bonjour,\n\n")).toBe(true);
+      expect(payload.text).toContain("Voici une information générale relue.");
+      expect(payload.text).toContain(`Référence confidentielle : QMED-TRAPTRAP-0001${index}`);
+      expect(`${payload.html}${payload.text}`).not.toMatch(/phish|promo-1|colis|Offre|https?:\/\/(?!drahmedbenlallahom\.com\/)/);
+    }
+    expect(real.html).toContain("<p>Bonjour Zoë,</p>");
+    expect(real.text.startsWith("Bonjour Zoë,\n\n")).toBe(true);
+  });
+
   it("Reply-To et expéditeur réglables par CONSULTATION_REPLY_TO / CONSULTATION_FROM_EMAIL (valeurs invalides ignorées)", () => {
     expect(resolveMedicalQuestionContact({})).toEqual({ from: "Hippocampus Consulting <recrutement@drahmedbenlallahom.com>", replyTo: siteConfig.email });
     expect(resolveMedicalQuestionContact({ CONSULTATION_REPLY_TO: "cabinet@example.test", CONSULTATION_FROM_EMAIL: "Dr Ben Lallahom <consultation@example.test>" })).toEqual({ from: "Dr Ben Lallahom <consultation@example.test>", replyTo: "cabinet@example.test" });

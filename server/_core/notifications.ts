@@ -39,7 +39,10 @@ const GREETING_DOMAIN_PATTERN = new RegExp("\\.\\p{L}[\\p{L}\\p{M}]", "u");
  * text of the visitor must not reach the email: the first name is kept only
  * when it looks like one (Unicode letters, spaces, ' ’ . -, at most 40
  * characters, no domain name), otherwise the greeting is neutral. A name never
- * makes a form fail. Plain text: escape it before putting it in HTML.
+ * makes a form fail. The emails the admin sends later to these addresses
+ * (recruitment campaigns and templates, answer to a health question) greet the
+ * same way: the name still comes from the public form. Plain text: escape it
+ * before putting it in HTML.
  */
 export function unverifiedRecipientGreeting(firstName: string | null | undefined, language: "fr" | "en" = "fr"): string {
   const greeting = language === "en" ? "Hello" : "Bonjour";
@@ -594,7 +597,7 @@ function textToSafeHtml(value: string) {
 }
 
 export function buildRecruitmentTemplateEmail(
-  candidateName: string,
+  candidateFirstName: string,
   trackingId: string,
   template: RecruitmentEmailTemplate,
   options: RecruitmentTemplateOptions = {},
@@ -603,7 +606,6 @@ export function buildRecruitmentTemplateEmail(
   const isInterest = template === "profile_interest";
   const copy = language === "en"
     ? {
-        greeting: "Hello",
         heading: "Hippocampus Consulting",
         reference: "Reference",
         privacy: "This message concerns your professional application only. You may request access, rectification or deletion of your data through our GDPR form.",
@@ -614,7 +616,6 @@ export function buildRecruitmentTemplateEmail(
         requested: "Requested documents or information",
       }
     : {
-        greeting: "Bonjour",
         heading: "Hippocampus Consulting",
         reference: "Référence",
         privacy: "Cette communication concerne uniquement votre candidature professionnelle. Vous pouvez demander l’accès, la rectification ou la suppression de vos données via notre formulaire RGPD.",
@@ -633,7 +634,7 @@ export function buildRecruitmentTemplateEmail(
     subject,
     html: buildHippocampusEmailShell(`
         <h2 style="color: #0891b2;">${copy.heading}</h2>
-        <p>${copy.greeting} ${escapeHtml(candidateName)},</p>
+        <p>${escapeHtml(unverifiedRecipientGreeting(candidateFirstName, language))}</p>
         <p>${escapeHtml(body)}</p>
         ${customRequest}
         <p><strong>${copy.reference}:</strong> ${escapeHtml(trackingId)}</p>
@@ -644,12 +645,12 @@ export function buildRecruitmentTemplateEmail(
 
 export async function sendRecruitmentTemplateEmail(
   candidateEmail: string,
-  candidateName: string,
+  candidateFirstName: string,
   trackingId: string,
   template: RecruitmentEmailTemplate,
   options: RecruitmentTemplateOptions = {},
 ): Promise<{ id?: string }> {
-  const message = buildRecruitmentTemplateEmail(candidateName, trackingId, template, options);
+  const message = buildRecruitmentTemplateEmail(candidateFirstName, trackingId, template, options);
 
   const { data, error } = await getResendClient().emails.send({
     from: FROM_EMAIL,
@@ -664,7 +665,7 @@ export async function sendRecruitmentTemplateEmail(
 
 export async function sendRecruitmentCampaignEmail(input: {
   candidateEmail: string;
-  candidateName: string;
+  candidateFirstName: string;
   campaignTitle: string;
   subject: string;
   body: string;
@@ -672,8 +673,8 @@ export async function sendRecruitmentCampaignEmail(input: {
   unsubscribeUrl: string;
 }): Promise<{ id?: string }> {
   const copy = input.language === "en"
-    ? { greeting: "Hello", footer: "This offer concerns your professional profile.", unsubscribe: "Unsubscribe from future recruitment opportunities" }
-    : { greeting: "Bonjour", footer: "Cette offre concerne votre profil professionnel.", unsubscribe: "Ne plus recevoir d’opportunités de recrutement" };
+    ? { footer: "This offer concerns your professional profile.", unsubscribe: "Unsubscribe from future recruitment opportunities" }
+    : { footer: "Cette offre concerne votre profil professionnel.", unsubscribe: "Ne plus recevoir d’opportunités de recrutement" };
   const { data, error } = await getResendClient().emails.send({
     from: FROM_EMAIL,
     to: [input.candidateEmail],
@@ -681,7 +682,7 @@ export async function sendRecruitmentCampaignEmail(input: {
     subject: input.subject,
     html: buildHippocampusEmailShell(`
         <h2 style="color: #0891b2;">${escapeHtml(input.campaignTitle)}</h2>
-        <p>${copy.greeting} ${escapeHtml(input.candidateName)},</p>
+        <p>${escapeHtml(unverifiedRecipientGreeting(input.candidateFirstName, input.language))}</p>
         <p>${textToSafeHtml(input.body)}</p>
         <p style="color: #64748b;">${copy.footer}</p>
         <p style="font-size: 12px;"><a href="${escapeHtml(input.unsubscribeUrl)}" style="color: #0e7490;">${copy.unsubscribe}</a></p>
