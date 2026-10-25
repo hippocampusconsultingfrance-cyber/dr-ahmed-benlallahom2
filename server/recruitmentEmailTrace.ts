@@ -4,6 +4,7 @@ import { getDb } from "./db";
 import { and, desc, eq, exists, isNotNull, like, lt, or } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { createCandidateInvitationToken } from "./candidateAuth";
+import { emailLanguageFor } from "./emailLanguage";
 import {
   sendCvApplicationConfirmationEmail,
   type CvApplicationConfirmationDelivery,
@@ -16,6 +17,8 @@ export type TrackedCvConfirmationInput = {
   trackingId: string;
   candidatePortalInviteUrl?: string;
   deliveryAttempt?: number;
+  /** Language of the application form: French email for "fr", English otherwise (EN-02). */
+  language?: string;
 };
 
 export type CvConfirmationTraceEvent = {
@@ -247,6 +250,7 @@ export async function sendTrackedCvApplicationConfirmationEmail(
     input.trackingId,
     input.candidatePortalInviteUrl,
     `cv-application-confirmation-${input.trackingId}-attempt-${input.deliveryAttempt || 1}`,
+    emailLanguageFor(input.language),
   );
 
   try {
@@ -345,6 +349,7 @@ export async function retryCvConfirmationEmail(
     firstName: cvApplications.firstName,
     email: cvApplications.email,
     trackingId: cvApplications.trackingId,
+    language: cvApplications.language,
   }).from(cvApplications).where(eq(cvApplications.id, applicationId)).limit(1);
   if (!application) return { outcome: "not_found" as const, attempted: false };
 
@@ -376,6 +381,7 @@ export async function retryCvConfirmationEmail(
     // Reuse attempt 1 for an untracked submission so Resend can deduplicate a
     // previous, unrecorded request during its idempotency window.
     deliveryAttempt: current.eventType === "email.failed" ? current.attempts + 1 : 1,
+    language: application.language,
   });
   return { outcome: cvConfirmationRetryOutcome(delivery), attempted: true, delivery };
 }

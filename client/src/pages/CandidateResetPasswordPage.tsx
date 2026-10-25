@@ -9,7 +9,7 @@ import { SEOHead } from "@/components/SEOHead";
 import { useLanguage } from "@/contexts/LanguageContext";
 import CandidateLegalFooter from "@/components/CandidateLegalFooter";
 import LanguageMenu from "@/components/LanguageMenu";
-import { candidateAccountCopy, CandidateAccountLanguage } from "./candidateAccountCopy";
+import { candidateAccountCopy, candidateAccountNotice, CandidateAccountLanguage } from "./candidateAccountCopy";
 
 export default function CandidateResetPasswordPage() {
   const [, navigate] = useLocation();
@@ -22,7 +22,7 @@ export default function CandidateResetPasswordPage() {
   const utils = trpc.useUtils();
   const reset = trpc.candidatePortal.resetPassword.useMutation({
     onSuccess: async () => { await utils.candidatePortal.me.invalidate(); navigate("/candidate/portal"); },
-    onError: error => setNotice(error.message || copy.genericError),
+    onError: error => setNotice(candidateAccountNotice(error, copy, language)),
   });
   const email = params.get("email") ?? "";
   const token = params.get("token") ?? "";

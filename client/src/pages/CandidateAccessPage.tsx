@@ -12,6 +12,7 @@ import { SEOHead } from "@/components/SEOHead";
 import { useLanguage } from "@/contexts/LanguageContext";
 import CandidateLegalFooter, { candidateLegalLinks } from "@/components/CandidateLegalFooter";
 import LanguageMenu from "@/components/LanguageMenu";
+import { isCandidateAccessReason, type CandidateAccessReason } from "@shared/candidateAccessReasons";
 
 type Mode = "login" | "register" | "forgot" | "activation";
 
@@ -72,6 +73,9 @@ export const candidateAccessCopy = {
     invitationWelcome: "Votre invitation a été vérifiée. Confirmez vos informations : vous choisirez ensuite votre mot de passe depuis le lien d’activation envoyé par email.",
     invitationInvalid: "Ce lien d’invitation n’est pas valide. Vous pouvez tout de même créer votre espace ci-dessous avec l’adresse email utilisée pour votre candidature.",
     invitationExpired: "Votre lien d’invitation a expiré, mais vous pouvez créer votre espace ci-dessous : votre adresse email est préremplie et votre candidature sera rattachée automatiquement.",
+    invitationMismatch: "Cette invitation ne correspond pas à cette adresse email. Utilisez l’adresse de votre candidature.",
+    invalidCredentials: "Email ou mot de passe incorrect.",
+    serviceUnavailable: "Le service candidat est temporairement indisponible. Veuillez réessayer dans quelques instants.",
   },
   en: {
     metaTitle: "Secure candidate portal | Hippocampus Consulting",
@@ -125,6 +129,9 @@ export const candidateAccessCopy = {
     invitationWelcome: "Your invitation has been verified. Confirm your details: you will then choose your password from the activation link sent by email.",
     invitationInvalid: "This invitation link is not valid. You can still create your portal below with the email address used for your application.",
     invitationExpired: "Your invitation link has expired, but you can create your portal below: your email address is prefilled and your application will be linked automatically.",
+    invitationMismatch: "This invitation does not match this email address. Use the address of your application.",
+    invalidCredentials: "Incorrect email or password.",
+    serviceUnavailable: "The candidate service is temporarily unavailable. Please try again in a few moments.",
   },
   de: {
     metaTitle: "Sicheres Kandidatenportal | Hippocampus Consulting",
@@ -178,6 +185,9 @@ export const candidateAccessCopy = {
     invitationWelcome: "Ihre Einladung wurde geprüft. Bestätigen Sie Ihre Angaben: Ihr Passwort wählen Sie anschließend über den per E-Mail gesendeten Aktivierungslink.",
     invitationInvalid: "Dieser Einladungslink ist ungültig. Sie können Ihr Portal trotzdem unten mit der E-Mail-Adresse Ihrer Bewerbung erstellen.",
     invitationExpired: "Ihr Einladungslink ist abgelaufen, Sie können Ihr Portal aber unten erstellen: Ihre E-Mail-Adresse ist vorausgefüllt und Ihre Bewerbung wird automatisch verknüpft.",
+    invitationMismatch: "Diese Einladung passt nicht zu dieser E-Mail-Adresse. Verwenden Sie die Adresse Ihrer Bewerbung.",
+    invalidCredentials: "E-Mail oder Passwort ist falsch.",
+    serviceUnavailable: "Der Kandidatendienst ist vorübergehend nicht verfügbar. Bitte versuchen Sie es in wenigen Augenblicken erneut.",
   },
   zh: {
     metaTitle: "安全候选人门户 | Hippocampus Consulting",
@@ -231,13 +241,33 @@ export const candidateAccessCopy = {
     invitationWelcome: "您的邀请已验证。请确认您的信息：随后您将通过邮件中的激活链接设置密码。",
     invitationInvalid: "此邀请链接无效。您仍可在下方使用申请时填写的电子邮件地址创建门户。",
     invitationExpired: "您的邀请链接已过期，但您仍可在下方创建门户：电子邮件地址已预填，您的申请将自动关联。",
+    invitationMismatch: "此邀请与该电子邮件地址不匹配。请使用您申请时填写的地址。",
+    invalidCredentials: "电子邮件或密码不正确。",
+    serviceUnavailable: "候选人服务暂时不可用。请稍后重试。",
   },
 } as const;
 
 type CandidateLanguage = keyof typeof candidateAccessCopy;
 type CandidateCopy = (typeof candidateAccessCopy)[CandidateLanguage];
 
-export function candidateNotice(message: string, copy: CandidateCopy, code?: string) {
+/**
+ * Message shown for a refusal. The stable reason sent by the server comes first
+ * (EN-06); the tRPC code and the input-validation fields cover the rest.
+ */
+export function candidateNotice(message: string, copy: CandidateCopy, code?: string, reason?: string) {
+  if (isCandidateAccessReason(reason)) {
+    const byReason: Partial<Record<CandidateAccessReason, string>> = {
+      candidate_rate_limited: copy.tooManyRequests,
+      candidate_login_rate_limited: copy.tooManyAttempts,
+      candidate_login_challenge_required: copy.loginChallenge,
+      candidate_security_check_required: copy.turnstileError,
+      candidate_invitation_invalid: copy.invitationInvalid,
+      candidate_invitation_email_mismatch: copy.invitationMismatch,
+      candidate_credentials_invalid: copy.invalidCredentials,
+      candidate_service_unavailable: copy.serviceUnavailable,
+    };
+    if (byReason[reason]) return byReason[reason];
+  }
   if (code === "TOO_MANY_REQUESTS") return copy.tooManyRequests;
   if (message.includes("termsAccepted") && message.includes("documentConsent")) return copy.bothConsentMissing;
   if (message.includes("termsAccepted")) return copy.termsMissing;
@@ -304,22 +334,22 @@ export default function CandidateAccessPage() {
       renewTurnstile();
       if (error.data?.code === "PRECONDITION_FAILED") { setLoginChallenge(true); setNotice(copy.loginChallenge); return; }
       if (error.data?.code === "TOO_MANY_REQUESTS") { setNotice(copy.tooManyAttempts); return; }
-      setNotice(candidateNotice(error.message, copy));
+      setNotice(candidateNotice(error.message, copy, undefined, error.data?.reason));
     },
   });
   const register = trpc.candidatePortal.register.useMutation({
     onSuccess: () => setNotice(copy.registerSuccess),
-    onError: error => setNotice(candidateNotice(error.message, copy, error.data?.code)),
+    onError: error => setNotice(candidateNotice(error.message, copy, error.data?.code, error.data?.reason)),
     onSettled: renewTurnstile,
   });
   const reset = trpc.candidatePortal.requestPasswordReset.useMutation({
     onSuccess: () => setNotice(copy.resetSuccess),
-    onError: error => setNotice(candidateNotice(error.message, copy, error.data?.code)),
+    onError: error => setNotice(candidateNotice(error.message, copy, error.data?.code, error.data?.reason)),
     onSettled: renewTurnstile,
   });
   const resendActivation = trpc.candidatePortal.resendVerification.useMutation({
     onSuccess: () => setNotice(copy.activationSuccess),
-    onError: error => setNotice(candidateNotice(error.message, copy, error.data?.code)),
+    onError: error => setNotice(candidateNotice(error.message, copy, error.data?.code, error.data?.reason)),
     onSettled: renewTurnstile,
   });
   const invitation = trpc.candidatePortal.resolveInvitation.useQuery(
@@ -369,13 +399,14 @@ export default function CandidateAccessPage() {
       setConsentAttempted(false);
       if (!turnstileToken) { setNotice(copy.turnstileRegisterMissing); return; }
       // No password at this stage: it is chosen from the emailed activation link (SEC-02).
-      register.mutate({ email, firstName, lastName, termsAccepted: terms, documentConsent, turnstileToken, invitationToken: activeInvitationToken });
+      // The displayed language picks the language of the emails (EN-02).
+      register.mutate({ email, firstName, lastName, termsAccepted: terms, documentConsent, turnstileToken, invitationToken: activeInvitationToken, language });
     } else if (mode === "forgot") {
       if (!turnstileToken) { setNotice(copy.turnstileResetMissing); return; }
-      reset.mutate({ email, turnstileToken });
+      reset.mutate({ email, turnstileToken, language });
     } else {
       if (!turnstileToken) { setNotice(copy.turnstileActivationMissing); return; }
-      resendActivation.mutate({ email, turnstileToken });
+      resendActivation.mutate({ email, turnstileToken, language });
     }
   }
 

@@ -1,3 +1,5 @@
+import { isCandidateAccessReason, type CandidateAccessReason } from "@shared/candidateAccessReasons";
+
 export const candidateAccountCopy = {
   fr: {
     verifyMetaTitle: "Vérification de compte | Hippocampus Consulting",
@@ -25,6 +27,10 @@ export const candidateAccountCopy = {
     passwordMismatch: "Les deux mots de passe doivent être identiques.",
     genericError: "Cette action n’a pas pu être finalisée. Vérifiez le lien et réessayez.",
     save: "Enregistrer et accéder à mon espace",
+    passwordTooShort: "Choisissez un mot de passe d’au moins 15 caractères.",
+    passwordCompromised: "Ce mot de passe a déjà été compromis. Choisissez-en un autre, long et unique.",
+    passwordCheckUnavailable: "Le contrôle de sécurité du mot de passe est temporairement indisponible. Réessayez dans quelques instants.",
+    serviceUnavailable: "Le service candidat est temporairement indisponible. Veuillez réessayer dans quelques instants.",
   },
   en: {
     verifyMetaTitle: "Account verification | Hippocampus Consulting",
@@ -52,6 +58,10 @@ export const candidateAccountCopy = {
     passwordMismatch: "Both passwords must match.",
     genericError: "This action could not be completed. Check the link and try again.",
     save: "Save and access my portal",
+    passwordTooShort: "Choose a password of at least 15 characters.",
+    passwordCompromised: "This password has already appeared in a data breach. Choose another one, long and unique.",
+    passwordCheckUnavailable: "The password security check is temporarily unavailable. Please try again in a few moments.",
+    serviceUnavailable: "The candidate service is temporarily unavailable. Please try again in a few moments.",
   },
   de: {
     verifyMetaTitle: "Kontobestätigung | Hippocampus Consulting",
@@ -79,6 +89,10 @@ export const candidateAccountCopy = {
     passwordMismatch: "Die beiden Passwörter müssen übereinstimmen.",
     genericError: "Diese Aktion konnte nicht abgeschlossen werden. Prüfen Sie den Link und versuchen Sie es erneut.",
     save: "Speichern und Portal öffnen",
+    passwordTooShort: "Wählen Sie ein Passwort mit mindestens 15 Zeichen.",
+    passwordCompromised: "Dieses Passwort ist bereits in einem Datenleck aufgetaucht. Wählen Sie ein anderes, langes und eindeutiges Passwort.",
+    passwordCheckUnavailable: "Die Sicherheitsprüfung des Passworts ist vorübergehend nicht verfügbar. Bitte versuchen Sie es in wenigen Augenblicken erneut.",
+    serviceUnavailable: "Der Kandidatendienst ist vorübergehend nicht verfügbar. Bitte versuchen Sie es in wenigen Augenblicken erneut.",
   },
   zh: {
     verifyMetaTitle: "账户验证 | Hippocampus Consulting",
@@ -106,7 +120,33 @@ export const candidateAccountCopy = {
     passwordMismatch: "两次输入的密码必须一致。",
     genericError: "无法完成此操作。请检查链接后重试。",
     save: "保存并访问我的门户",
+    passwordTooShort: "请选择至少 15 个字符的密码。",
+    passwordCompromised: "该密码已在数据泄露中出现过。请另选一个长且唯一的密码。",
+    passwordCheckUnavailable: "密码安全检查暂时不可用。请稍后重试。",
+    serviceUnavailable: "候选人服务暂时不可用。请稍后重试。",
   },
 } as const;
 
 export type CandidateAccountLanguage = keyof typeof candidateAccountCopy;
+type CandidateAccountCopy = (typeof candidateAccountCopy)[CandidateAccountLanguage];
+
+/**
+ * Refusal of the activation or password reset page, translated from the stable
+ * reason sent by the server (EN-06). Without a known reason, the French page
+ * keeps the server's message and the other languages show the generic one.
+ */
+export function candidateAccountNotice(error: { message: string; data?: { reason?: string } | null }, copy: CandidateAccountCopy, language: string): string {
+  const reason = error.data?.reason;
+  if (isCandidateAccessReason(reason)) {
+    const byReason: Partial<Record<CandidateAccessReason, string>> = {
+      candidate_password_too_short: copy.passwordTooShort,
+      candidate_password_compromised: copy.passwordCompromised,
+      candidate_password_check_unavailable: copy.passwordCheckUnavailable,
+      candidate_activation_link_invalid: copy.invalidDescription,
+      candidate_reset_link_invalid: copy.invalidDescription,
+      candidate_service_unavailable: copy.serviceUnavailable,
+    };
+    if (byReason[reason]) return byReason[reason];
+  }
+  return language === "fr" && error.message ? error.message : copy.genericError;
+}

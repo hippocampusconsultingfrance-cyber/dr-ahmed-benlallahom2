@@ -717,28 +717,56 @@ export async function sendCvApplicationConfirmationEmail(
   trackingId: string,
   candidatePortalInviteUrl?: string,
   idempotencyKey = `cv-application-confirmation-${trackingId}-attempt-1`,
+  language: EmailLanguage = "fr",
 ): Promise<CvApplicationConfirmationDelivery> {
-  const candidatePortalInvitation = candidatePortalInviteUrl
-      ? `<div style="margin:24px 0;padding:18px;border:1px solid #bae6fd;border-radius:10px;background:#f0f9ff;"><h3 style="margin:0 0 8px;color:#0e7490;">Votre espace candidat sécurisé</h3><p style="margin:0 0 14px;">Vous pouvez créer un accès pour déposer ultérieurement vos documents administratifs dans votre coffre privé. L’activation de votre adresse email restera obligatoire.</p><p style="margin:0;"><a href="${escapeHtml(candidatePortalInviteUrl)}" style="display:inline-block;background:#0891b2;color:#ffffff;text-decoration:none;padding:12px 18px;border-radius:7px;font-weight:700;">Créer mon espace candidat</a></p><p style="margin:12px 0 0;color:#475569;font-size:13px;">${escapeHtml(candidateInvitationValidityNote())}</p></div>`
+  // In the language of the application form (EN-02); the link opens the English page (?lang=en).
+  const copy = language === "en"
+    ? {
+        subject: `Application received - ${trackingId}`,
+        title: "Application received — Hippocampus Consulting",
+        received: "We confirm receipt of your international recruitment application.",
+        trackingNumber: "Tracking number:",
+        review: "Your profile will be reviewed against the available opportunities and the criteria of the country concerned. We will contact you if your profile matches a search.",
+        portalTitle: "Your secure candidate portal",
+        portalText: "You can create an access to upload your administrative documents to your private vault later. Activating your email address will still be required.",
+        portalAction: "Create my candidate portal",
+        noPatientData: "Do not send patient data, medical records or clinical documents with your application.",
+        spam: "If you cannot find this email, check your Spam or Junk folder, then add recrutement@drahmedbenlallahom.com to your contacts.",
+      }
+    : {
+        subject: `Candidature reçue - ${trackingId}`,
+        title: "Candidature reçue — Hippocampus Consulting",
+        received: "Nous confirmons la réception de votre candidature de recrutement international.",
+        trackingNumber: "Numéro de suivi :",
+        review: "Votre profil sera examiné selon les opportunités disponibles et les critères du pays concerné. Nous vous contacterons si votre profil correspond à une recherche.",
+        portalTitle: "Votre espace candidat sécurisé",
+        portalText: "Vous pouvez créer un accès pour déposer ultérieurement vos documents administratifs dans votre coffre privé. L’activation de votre adresse email restera obligatoire.",
+        portalAction: "Créer mon espace candidat",
+        noPatientData: "Ne transmettez pas de données de patients, de dossiers médicaux ou de documents cliniques dans votre candidature.",
+        spam: "Si vous ne retrouvez pas cet email, vérifiez votre dossier Spam ou Courriers indésirables, puis ajoutez recrutement@drahmedbenlallahom.com à vos contacts.",
+      };
+  const inviteUrl = candidatePortalInviteUrl ? withEmailLanguage(candidatePortalInviteUrl, language) : undefined;
+  const candidatePortalInvitation = inviteUrl
+      ? `<div style="margin:24px 0;padding:18px;border:1px solid #bae6fd;border-radius:10px;background:#f0f9ff;"><h3 style="margin:0 0 8px;color:#0e7490;">${copy.portalTitle}</h3><p style="margin:0 0 14px;">${copy.portalText}</p><p style="margin:0;"><a href="${escapeHtml(inviteUrl)}" style="display:inline-block;background:#0891b2;color:#ffffff;text-decoration:none;padding:12px 18px;border-radius:7px;font-weight:700;">${copy.portalAction}</a></p><p style="margin:12px 0 0;color:#475569;font-size:13px;">${escapeHtml(candidateInvitationValidityNote(language))}</p></div>`
       : "";
   const emailContent = buildHippocampusEmailShell(`
-      <h2 style="color: #0891b2;">Candidature reçue — Hippocampus Consulting</h2>
-      <p>${escapeHtml(unverifiedRecipientGreeting(candidateFirstName))}</p>
-      <p>Nous confirmons la réception de votre candidature de recrutement international.</p>
+      <h2 style="color: #0891b2;">${copy.title}</h2>
+      <p>${escapeHtml(unverifiedRecipientGreeting(candidateFirstName, language))}</p>
+      <p>${copy.received}</p>
       <div style="background: #f8fafc; border-radius: 8px; padding: 16px; margin: 16px 0;">
-        <p><strong>Numéro de suivi :</strong> ${escapeHtml(trackingId)}</p>
+        <p><strong>${copy.trackingNumber}</strong> ${escapeHtml(trackingId)}</p>
       </div>
-      <p>Votre profil sera examiné selon les opportunités disponibles et les critères du pays concerné. Nous vous contacterons si votre profil correspond à une recherche.</p>
+      <p>${copy.review}</p>
       ${candidatePortalInvitation}
-      <p>Ne transmettez pas de données de patients, de dossiers médicaux ou de documents cliniques dans votre candidature.</p>
-      <p style="color:#64748b;font-size:13px;">Si vous ne retrouvez pas cet email, vérifiez votre dossier Spam ou Courriers indésirables, puis ajoutez recrutement@drahmedbenlallahom.com à vos contacts.</p>
-    `);
+      <p>${copy.noPatientData}</p>
+      <p style="color:#64748b;font-size:13px;">${copy.spam}</p>
+    `, language);
 
   const message = {
     from: FROM_EMAIL,
     to: [candidateEmail],
     replyTo: RECRUITMENT_REPLY_TO,
-    subject: `Candidature reçue - ${trackingId}`,
+    subject: copy.subject,
     html: emailContent,
     tags: buildResendApplicationTags(trackingId),
   };
@@ -878,6 +906,8 @@ export type CandidatePortalAccessEmailContentInput = {
   kind: "verify" | "reset" | "invite";
   actionUrl: string;
   applicationReference?: string;
+  /** French by default; English for a candidate who uses the site in another language (EN-02). */
+  language?: EmailLanguage;
 };
 
 export type CandidatePortalAccessEmailInput = CandidatePortalAccessEmailContentInput & {
@@ -929,13 +959,47 @@ function invitationReferenceFromIdempotencyKey(idempotencyKey?: string) {
 }
 
 /** Validity sentence of the "create my candidate space" invitation link (CAND-11). */
-export function candidateInvitationValidityNote(): string {
+export function candidateInvitationValidityNote(language: EmailLanguage = "fr"): string {
+  if (language === "en") {
+    return `This invitation link is valid for ${formatCandidateLinkValidity(CANDIDATE_INVITATION_MAX_AGE_MS, "en")}. After that, you can still create your portal from the “Candidate portal” page of the website, with the same email address.`;
+  }
   return `Ce lien d’invitation est valable ${formatCandidateLinkValidity(CANDIDATE_INVITATION_MAX_AGE_MS)}. Passé ce délai, vous pourrez toujours créer votre espace depuis la page « Espace candidat » du site, avec la même adresse email.`;
 }
 
+const CANDIDATE_ACCESS_EMAIL_COPY_EN = {
+  verify: {
+    subject: "Confirm your email address — Hippocampus candidate portal",
+    title: "Confirm your email address",
+    instruction: "You are receiving this email because a candidate portal has just been created with this address. To activate it, click the button below: you will confirm your email address and choose your password on the page that opens.",
+    action: "Confirm my email address and choose my password",
+    securityNote: `This personal link is valid for ${formatCandidateLinkValidity(CANDIDATE_TOKEN_MAX_AGE_MS, "en")} and can only be used once. If you did not request this candidate portal, ignore this email: no access will be activated and no password will be created.`,
+  },
+  reset: {
+    subject: "Reset your password — Hippocampus Consulting",
+    title: "Reset your password",
+    instruction: "A password reset request has been received. Choose a new password by clicking the button below.",
+    action: "Reset my password",
+    securityNote: `This personal link is valid for ${formatCandidateLinkValidity(CANDIDATE_TOKEN_MAX_AGE_MS, "en")}. If you did not make this request, you can ignore this email.`,
+  },
+  invite: {
+    subject: "Create your candidate portal — Hippocampus Consulting",
+    title: "Create your candidate portal",
+    instruction: "Our team invites you to create your secure candidate portal to upload and track your administrative documents. After confirming your details, you will receive a link to activate your email address and choose your password.",
+    action: "Create my candidate portal",
+    securityNote: `This secure, personal link gives no access until your email address is activated and your password chosen. ${candidateInvitationValidityNote("en")}`,
+  },
+  footer: "This email is sent by Hippocampus Consulting from recrutement@drahmedbenlallahom.com. If you cannot find this email, check your Spam or Junk folder, then add this address to your contacts.",
+} as const;
+
 export function buildCandidatePortalAccessEmail(input: CandidatePortalAccessEmailContentInput) {
-  const greeting = unverifiedRecipientGreeting(input.firstName);
-  const copy = input.kind === "verify"
+  const language = input.language ?? "fr";
+  const greeting = unverifiedRecipientGreeting(input.firstName, language);
+  // The page opened by the link is shown in the language of the email (?lang=en).
+  const actionUrl = withEmailLanguage(input.actionUrl, language);
+  const footer = language === "en"
+    ? CANDIDATE_ACCESS_EMAIL_COPY_EN.footer
+    : "Cet email est envoyé par Hippocampus Consulting depuis recrutement@drahmedbenlallahom.com. Si vous ne retrouvez pas cet email, vérifiez votre dossier Spam ou Courriers indésirables, puis ajoutez cette adresse à vos contacts.";
+  const copy = language === "en" ? CANDIDATE_ACCESS_EMAIL_COPY_EN[input.kind] : input.kind === "verify"
     ? {
         subject: "Confirmez votre adresse email — Espace candidat Hippocampus",
         title: "Confirmez votre adresse email",
@@ -964,11 +1028,11 @@ export function buildCandidatePortalAccessEmail(input: CandidatePortalAccessEmai
         <h2 style="color:#0891b2;">${copy.title}</h2>
         <p>${escapeHtml(greeting)}</p>
         <p>${copy.instruction}</p>
-        <p style="margin:24px 0;"><a href="${escapeHtml(input.actionUrl)}" style="display:inline-block;background:#0891b2;color:#ffffff;text-decoration:none;padding:12px 18px;border-radius:7px;font-weight:700;">${copy.action}</a></p>
+        <p style="margin:24px 0;"><a href="${escapeHtml(actionUrl)}" style="display:inline-block;background:#0891b2;color:#ffffff;text-decoration:none;padding:12px 18px;border-radius:7px;font-weight:700;">${copy.action}</a></p>
         <p style="color:#64748b;font-size:13px;">${copy.securityNote}</p>
-        <p style="color:#64748b;font-size:13px;">Cet email est envoyé par Hippocampus Consulting depuis recrutement@drahmedbenlallahom.com. Si vous ne retrouvez pas cet email, vérifiez votre dossier Spam ou Courriers indésirables, puis ajoutez cette adresse à vos contacts.</p>
-    `),
-    text: `${copy.title}\n\n${greeting}\n\n${copy.instruction}\n\n${input.actionUrl}\n\n${copy.securityNote}\n\nCet email est envoyé par Hippocampus Consulting depuis recrutement@drahmedbenlallahom.com. Si vous ne retrouvez pas cet email, vérifiez votre dossier Spam ou Courriers indésirables, puis ajoutez cette adresse à vos contacts.`,
+        <p style="color:#64748b;font-size:13px;">${footer}</p>
+    `, language),
+    text: `${copy.title}\n\n${greeting}\n\n${copy.instruction}\n\n${actionUrl}\n\n${copy.securityNote}\n\n${footer}`,
   };
 }
 

@@ -8,18 +8,34 @@ import { isAdminMfaVerified } from "../adminMfa";
 export const GENERIC_INTERNAL_ERROR_MESSAGE = "Une erreur interne est survenue. Veuillez réessayer dans quelques instants.";
 
 /**
+ * Stable, language-neutral reason of a deliberate refusal (EN-06), passed as
+ * the `cause` of a TRPCError and sent to the client as `data.reason`: the page
+ * shows its own translation, the French message stays for any other client.
+ */
+export class PublicErrorReason extends Error {
+  constructor(readonly reason: string) {
+    super(reason);
+    this.name = "PublicErrorReason";
+  }
+}
+
+type ErrorShapeWithReason<TShape extends { data: object }> = TShape & { data: TShape["data"] & { reason?: string } };
+
+/**
  * Unexpected errors (anything that is not a deliberate TRPCError: database,
  * provider, programming errors) reach the client as a generic French message
  * with a short reference; the original is only logged on the server. tRPC
  * wraps such errors as INTERNAL_SERVER_ERROR with the original as `cause`;
- * deliberate TRPCErrors carry no cause and keep their message.
+ * deliberate TRPCErrors carry no cause and keep their message, or a
+ * PublicErrorReason cause whose reason is added to the data.
  */
 export function formatTrpcErrorShape<TShape extends { message: string; data: { code: string; stack?: string } }>(
   shape: TShape,
   error: { code: string; cause?: unknown },
   reference: () => string = () => randomUUID().slice(0, 8),
-): TShape {
-  if (error.code !== "INTERNAL_SERVER_ERROR" || error.cause === undefined) return shape;
+): ErrorShapeWithReason<TShape> {
+  if (error.cause instanceof PublicErrorReason) return { ...shape, data: { ...shape.data, reason: error.cause.reason } };
+  if (error.code !== "INTERNAL_SERVER_ERROR" || error.cause === undefined) return shape as ErrorShapeWithReason<TShape>;
   const ref = reference();
   const cause = error.cause instanceof Error ? error.cause : null;
   // Query parameters (personal data) are left out of the log line.
