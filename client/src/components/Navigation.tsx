@@ -261,12 +261,10 @@ export default function Navigation() {
 
           <a href="/search" className="nav-control inline-flex shrink-0 items-center justify-center rounded-full border border-border/50 p-2 text-muted-foreground transition-all duration-200 hover:border-primary/40 hover:text-foreground" aria-label={accessibilityCopy.search} title={accessibilityCopy.search}><Search className="h-4 w-4" /></a>
 
-          <button
-            onClick={() => scrollTo("contact")}
-            className="nav-cta cta-primary hidden min-[1536px]:flex px-4 py-2.5 text-sm"
-          >
-            {content.nav.getInTouch}
-          </button>
+          {/* Réservation dès 1024 px : « Contact » reste dans les menus (PUB-02). */}
+          <a href="/booking" className="nav-cta cta-primary hidden lg:inline-flex px-4 py-2.5 text-sm">
+            {content.hero.bookConsultation}
+          </a>
 
           {/* Mobile menu toggle */}
           <button
@@ -286,6 +284,9 @@ export default function Navigation() {
       {mobileOpen && (
         <div id="mobile-navigation" className="mobile-navigation min-[1536px]:hidden bg-background/95 backdrop-blur-xl border-b border-border">
           <nav className="container py-6 flex flex-col gap-4" aria-label={accessibilityCopy.mobileNavigation}>
+            <a href="/booking" onClick={() => setMobileOpen(false)} className="cta-primary px-5 py-3.5 text-sm w-full">
+              {content.hero.bookConsultation}
+            </a>
             {[
               { id: "experience", label: content.nav.experience },
               { id: "services", label: content.nav.services },
@@ -307,12 +308,6 @@ export default function Navigation() {
             {toggleTheme && <button onClick={toggleTheme} className="nav-mobile-link flex items-center gap-2 text-left text-lg font-medium text-foreground py-2 border-b border-border/20">{theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}{theme === "dark" ? accessibilityCopy.enableLight : accessibilityCopy.enableDark}</button>}
             {toggleHighReadability && readabilityCopy && <button onClick={toggleHighReadability} className="nav-mobile-link flex items-center gap-2 text-left text-lg font-medium text-foreground py-2 border-b border-border/20" aria-pressed={highReadability}><Accessibility className="h-4 w-4" />{readabilityCopy.label}</button>}
             {theme === "dark" && toggleOledDark && oledCopy && <button onClick={toggleOledDark} className="nav-mobile-link flex items-center gap-2 text-left text-lg font-medium text-foreground py-2 border-b border-border/20" aria-pressed={oledDark}><CircleDot className="h-4 w-4" />{oledCopy.label}</button>}
-            <button
-              onClick={() => scrollTo("contact")}
-              className="nav-cta cta-primary mt-4 px-5 py-3.5 text-sm w-full"
-            >
-              {content.nav.getInTouch}
-            </button>
           </nav>
         </div>
       )}

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { siteConfig } from "@/data/site-config";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { useLocation } from "wouter";
+import { Link } from "wouter";
 import { ArrowUpRight, BadgeCheck, Clock3, Languages } from "lucide-react";
 
 export default function HeroSection() {
@@ -14,7 +14,6 @@ export default function HeroSection() {
     de: ["Zertifizierte klinische Expertise", "30-minütige Beratung", "Internationale Begleitung"],
     zh: ["专业临床经验", "30分钟咨询", "国际化支持"],
   }[language] ?? ["Certified clinical expertise", "30-minute consultation", "International support"];
-  const [, setLocation] = useLocation();
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -91,10 +90,10 @@ export default function HeroSection() {
 
           {/* CTA */}
           <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
-            <button onClick={() => setLocation("/booking")} className="cta-primary">
+            <Link href="/booking" className="cta-primary">
               {content.hero.bookConsultation}
               <ArrowUpRight aria-hidden="true" className="h-4 w-4" />
-            </button>
+            </Link>
             <button
               onClick={() => document.getElementById("contact")?.scrollIntoView({ behavior: "smooth" })}
               className="cta-secondary"

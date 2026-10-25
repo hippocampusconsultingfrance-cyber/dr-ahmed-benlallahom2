@@ -1446,8 +1446,11 @@ html.data-saver .cta-secondary:hover {
   }
 }
 
-/* Audit responsive: the desktop CTA must not override Tailwind's mobile visibility utility. */
-@media (max-width: 767px) {
+/*
+ * Audit responsive: the desktop CTA must not override Tailwind's visibility utility. Below
+ * 1024 px the header has no room for it; booking leads the burger menu instead (PUB-02).
+ */
+@media (max-width: 1023px) {
   .site-nav .nav-cta {
     display: none !important;
   }
