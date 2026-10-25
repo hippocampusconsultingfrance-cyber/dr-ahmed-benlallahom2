@@ -41,6 +41,18 @@ export function getBookingWindowIssue(appointmentStart: Date, now: number = Date
   return null;
 }
 
+/**
+ * Stable reasons for a refused booking, sent with the tRPC error as
+ * `data.reason` so the booking page shows its own translated message instead
+ * of the French text written by the server (EN-06).
+ */
+export const BOOKING_REFUSAL_REASONS = ["slot_taken", "too_soon", "too_far", "outside_schedule", "no_availability", "date_blocked"] as const;
+export type BookingRefusalReason = (typeof BOOKING_REFUSAL_REASONS)[number];
+
+export function isBookingRefusalReason(value: unknown): value is BookingRefusalReason {
+  return typeof value === "string" && (BOOKING_REFUSAL_REASONS as readonly string[]).includes(value);
+}
+
 export const BOOKING_TOO_SOON_MESSAGE = `Ce créneau n’est plus réservable : les consultations se réservent au moins ${BOOKING_MIN_LEAD_TIME_HOURS} heures à l’avance. Veuillez choisir un créneau plus tardif.`;
 export const BOOKING_TOO_FAR_MESSAGE = `Les consultations se réservent au plus ${BOOKING_HORIZON_DAYS} jours à l’avance. Veuillez choisir une date plus proche.`;
 export const BOOKING_INVALID_PHONE_MESSAGE = "Saisissez un numéro de téléphone valide (8 à 15 chiffres, indicatif international accepté, ex. +33 6 12 34 56 78).";

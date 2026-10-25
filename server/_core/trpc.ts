@@ -8,17 +8,30 @@ import { isAdminMfaVerified } from "../adminMfa";
 export const GENERIC_INTERNAL_ERROR_MESSAGE = "Une erreur interne est survenue. Veuillez réessayer dans quelques instants.";
 
 /**
+ * Stable, machine-readable reason of a deliberate refusal. Passed as the
+ * TRPCError's `cause`, it reaches the client as `data.reason`, so the page can
+ * translate the refusal instead of showing the French message (EN-06).
+ */
+export class PublicErrorReason extends Error {
+  constructor(readonly reason: string) {
+    super(reason);
+    this.name = "PublicErrorReason";
+  }
+}
+
+/**
  * Unexpected errors (anything that is not a deliberate TRPCError: database,
  * provider, programming errors) reach the client as a generic French message
  * with a short reference; the original is only logged on the server. tRPC
  * wraps such errors as INTERNAL_SERVER_ERROR with the original as `cause`;
- * deliberate TRPCErrors carry no cause and keep their message.
+ * deliberate TRPCErrors carry no cause (or a PublicErrorReason) and keep their message.
  */
 export function formatTrpcErrorShape<TShape extends { message: string; data: { code: string; stack?: string } }>(
   shape: TShape,
   error: { code: string; cause?: unknown },
   reference: () => string = () => randomUUID().slice(0, 8),
 ): TShape {
+  if (error.cause instanceof PublicErrorReason) return { ...shape, data: { ...shape.data, reason: error.cause.reason } };
   if (error.code !== "INTERNAL_SERVER_ERROR" || error.cause === undefined) return shape;
   const ref = reference();
   const cause = error.cause instanceof Error ? error.cause : null;

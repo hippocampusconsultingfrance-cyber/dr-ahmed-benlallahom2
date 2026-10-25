@@ -2,7 +2,7 @@ import { createHash, randomInt, randomUUID } from "node:crypto";
 import { isPublicTestimonialsEnabled } from "../shared/publicFeatures";
 import { RECRUITMENT_EXPORT_MAX_CANDIDATES } from "../shared/recruitmentExportLimits";
 import { systemRouter } from "./_core/systemRouter";
-import { publicProcedure, protectedProcedure, adminProcedure, router } from "./_core/trpc";
+import { publicProcedure, protectedProcedure, adminProcedure, PublicErrorReason, router } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { canRequestCandidateDocumentReanalysis } from "../shared/candidateDocumentReanalysis";
@@ -42,6 +42,7 @@ import {
   BOOKING_TOO_SOON_MESSAGE,
   getBookingWindowIssue,
   isPlausiblePhoneNumber,
+  type BookingRefusalReason,
 } from "../shared/bookingPolicy";
 
 const ADMIN_MFA_RATE_LIMITED_MESSAGE = "Trop de tentatives de double authentification. Patientez 15 minutes avant de réessayer.";
@@ -122,6 +123,11 @@ export const ACTIVE_APPOINTMENT_HOLDS_LIMIT_MESSAGE = "Vous avez déjà deux ré
 export const CONSULTATION_CHECKOUT_PRODUCT_NAME = "Consultation de conseil santé – 30 minutes";
 
 export const BOOKING_PAYMENT_UNAVAILABLE_MESSAGE = "Le service de paiement est momentanément indisponible. Votre créneau n’a pas été réservé : veuillez réessayer dans quelques minutes ou nous contacter.";
+
+/** Refus métier d’une réservation : message français et motif stable que la page traduit (EN-06). */
+function bookingRefusal(code: "CONFLICT" | "UNPROCESSABLE_CONTENT", reason: BookingRefusalReason, message: string) {
+  return new TRPCError({ code, message, cause: new PublicErrorReason(reason) });
+}
 
 /** Refuse NUL and other control characters (PostgreSQL rejects NUL in text). */
 const NO_CONTROL_CHARACTERS = /^[^\u0000-\u001F\u007F]*$/;
@@ -683,18 +689,17 @@ export const appRouter = router({
           // Objet de la demande, sans information médicale (minimisation) :
           // conservé pour le tableau de bord, jamais recopié dans un email.
           requestDetails: z.string().trim().min(1).max(BOOKING_REQUEST_SUBJECT_MAX_LENGTH).regex(NO_CONTROL_CHARACTERS_EXCEPT_NEWLINES, "Caractères non autorisés"),
+          // Langue affichée par la page de réservation.
+          language: z.enum(["fr", "en", "de", "zh"]).optional().default("fr"),
         })
       )
       .mutation(async ({ input, ctx }) => {
         const date = parseAppointmentDate(input.appointmentDate);
         // Délai minimal (le passé compris) et horizon maximal : refus métier,
-        // affichés tels quels au patient (UNPROCESSABLE_CONTENT).
+        // traduits par la page à partir de leur motif (UNPROCESSABLE_CONTENT).
         const bookingWindowIssue = getBookingWindowIssue(date);
         if (bookingWindowIssue) {
-          throw new TRPCError({
-            code: "UNPROCESSABLE_CONTENT",
-            message: bookingWindowIssue === "too_soon" ? BOOKING_TOO_SOON_MESSAGE : BOOKING_TOO_FAR_MESSAGE,
-          });
+          throw bookingRefusal("UNPROCESSABLE_CONTENT", bookingWindowIssue, bookingWindowIssue === "too_soon" ? BOOKING_TOO_SOON_MESSAGE : BOOKING_TOO_FAR_MESSAGE);
         }
 
         // Endpoint public sans Turnstile (parcours de paiement) : chaque appel
@@ -746,7 +751,7 @@ export const appRouter = router({
             .limit(1);
 
           if (blockedDate.length > 0) {
-            throw new TRPCError({ code: "CONFLICT", message: "Cette date est indisponible" });
+            throw bookingRefusal("CONFLICT", "date_blocked", "Cette date est indisponible");
           }
 
           const activeSlots = await db
@@ -755,12 +760,9 @@ export const appRouter = router({
             .where(eq(availabilitySlots.isActive, 1));
 
           if (!isBookableAppointmentTime(date, activeSlots, 30)) {
-            throw new TRPCError({
-              code: "CONFLICT",
-              message: activeSlots.length === 0
-                ? "Aucun créneau de consultation n’est actuellement ouvert"
-                : "Ce créneau ne correspond pas aux disponibilités configurées",
-            });
+            throw activeSlots.length === 0
+              ? bookingRefusal("CONFLICT", "no_availability", "Aucun créneau de consultation n’est actuellement ouvert")
+              : bookingRefusal("CONFLICT", "outside_schedule", "Ce créneau ne correspond pas aux disponibilités configurées");
           }
 
           const appointmentEnd = new Date(date.getTime() + 30 * 60 * 1000);
@@ -781,7 +783,7 @@ export const appRouter = router({
             .limit(1);
 
           if (existingAppointments.length > 0) {
-            throw new TRPCError({ code: "CONFLICT", message: "Ce créneau chevauche une réservation existante" });
+            throw bookingRefusal("CONFLICT", "slot_taken", "Ce créneau chevauche une réservation existante");
           }
 
           const appointmentDateFormatted = date.toISOString().slice(0, 19).replace('T', ' ');
@@ -791,7 +793,7 @@ export const appRouter = router({
           // valide, la réservation est refusée avant toute écriture.
           const holdExpiresAt = getAppointmentHoldExpiry(new Date(), date);
           if (!holdExpiresAt) {
-            throw new TRPCError({ code: "UNPROCESSABLE_CONTENT", message: BOOKING_TOO_SOON_MESSAGE });
+            throw bookingRefusal("UNPROCESSABLE_CONTENT", "too_soon", BOOKING_TOO_SOON_MESSAGE);
           }
           await db.execute(
             sql`INSERT INTO appointments (tracking_id, customer_name, customer_email, customer_phone, consultation_type, request_details, appointment_date, slot_key, duration, base_price, final_price, is_night_rate, payment_status, appointment_status, hold_expires_at) VALUES (${trackingId}, ${input.customerName}, ${input.customerEmail}, ${input.customerPhone}, ${'health_advice'}, ${input.requestDetails}, ${appointmentDateFormatted}, ${slotKey}, ${30}, ${basePrice}, ${finalPrice}, ${isNightRate ? 1 : 0}, ${'pending'}, ${'held'}, ${holdExpiresAt})`
@@ -826,7 +828,7 @@ export const appRouter = router({
           if (dbError instanceof TRPCError) throw dbError;
           console.error("Appointment creation failed:", dbError instanceof Error ? dbError.name : "UnknownError");
           if (String(dbError).toLowerCase().includes("appointments_active_slot_unique") || String(dbError).toLowerCase().includes("duplicate")) {
-            throw new TRPCError({ code: "CONFLICT", message: "Ce créneau vient d’être réservé par un autre patient. Veuillez en choisir un autre." });
+            throw bookingRefusal("CONFLICT", "slot_taken", "Ce créneau vient d’être réservé par un autre patient. Veuillez en choisir un autre.");
           }
           // Jamais de requête SQL ni de message de fournisseur dans la réponse.
           throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "La réservation n’a pas pu être enregistrée. Veuillez réessayer dans quelques instants." });
