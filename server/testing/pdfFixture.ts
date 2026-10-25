@@ -1,6 +1,6 @@
 /** TEST-ONLY: rewrites PDF fixtures in memory. Never imported by production code. */
 import { readFileSync } from "node:fs";
-import { deflateSync } from "node:zlib";
+import { constants, deflateSync } from "node:zlib";
 
 /** A real CV exported by LibreOffice Writer 24.2 (`soffice --convert-to pdf`): compressed page content and fonts, `/OpenAction [1 0 R /XYZ …]`. */
 export function libreOfficeCvPdf() {
@@ -8,7 +8,7 @@ export function libreOfficeCvPdf() {
 }
 
 /** How the PDF checks must answer a file of `pathologicalPdfs`: accept it (one page), or refuse it with this reason. */
-export type PathologicalPdfOutcome = "accepted" | "object_stream_unreadable" | "stream_count_exceeded";
+export type PathologicalPdfOutcome = "accepted" | "object_stream_unreadable" | "stream_count_exceeded" | "decompressed_size_exceeded";
 
 /**
  * 4 MB PDFs made to keep a naive check busy for minutes (REC-02): each must
@@ -21,12 +21,27 @@ export function pathologicalPdfs(): Array<{ label: string; pdf: Buffer; outcome:
   // zlib header, then empty stored blocks: data that inflates to nothing and runs on over the next keywords.
   const chained = Array.from({ length: 2_000 }, () => `\nstream\nx\x01${"\x00\x00\x00\xff\xff".repeat(400)}`).join("");
   const objectStream = (dictionary: string) => Buffer.concat([Buffer.from(`${head}9 0 obj<<${dictionary}>>stream\n`, "latin1"), deflateSync(Buffer.from("4 0 <</A 1>>")), Buffer.from("\nendstream endobj\n", "latin1")]);
+  // As many streams as fit, each with its own object number.
+  const streams = (dictionary: string, data: Buffer) => {
+    const parts: Buffer[] = [Buffer.from(head, "latin1")];
+    for (let total = head.length, number = 10; total + data.length + dictionary.length + 64 < size; number += 1) {
+      parts.push(Buffer.from(`${number} 0 obj<<${dictionary}>>stream\n`, "latin1"), data, Buffer.from("\nendstream endobj\n", "latin1"));
+      total += data.length + dictionary.length + 64;
+    }
+    return Buffer.concat(parts);
+  };
+  const image = "/Type/XObject/Subtype/Image/Width 2000/Height 4000/BitsPerComponent 8/ColorSpace/DeviceGray/Filter/FlateDecode";
+  // 39 MB of zeros, then an invalid block: zlib data that turns out corrupt once inflated.
+  const corrupt = Buffer.concat([deflateSync(Buffer.alloc(39_000_000), { level: 9, finishFlush: constants.Z_SYNC_FLUSH }), Buffer.from([0xff])]);
   return [
     { label: "« stream » répété sans fin de ligne", pdf: filled("stream "), outcome: "accepted" },
     { label: "« stream » répété sur une seule ligne", pdf: filled("stream ", "\n"), outcome: "object_stream_unreadable" },
     { label: "noms échappés #XX", pdf: filled("/#41"), outcome: "accepted" },
     { label: "données zlib qui couvrent les flux suivants", pdf: Buffer.from(head + chained, "latin1"), outcome: "stream_count_exceeded" },
     { label: "800 000 clés /F dans un flux d’objets", pdf: objectStream(`/Type/ObjStm/N 1/First 4${"/F/Fl".repeat(Math.floor((size - head.length - 256) / 5))}`), outcome: "accepted" },
+    { label: "images de 62 Ko qui se gonflent à leur taille déclarée, 64 Mo", pdf: streams(image, deflateSync(Buffer.alloc(64_000_000), { level: 9 })), outcome: "decompressed_size_exceeded" },
+    { label: "images dont les données se gonflent à 39 Mo puis sont corrompues", pdf: streams(image, corrupt), outcome: "decompressed_size_exceeded" },
+    { label: "flux dont les données se gonflent à 39 Mo puis sont corrompues", pdf: streams("/Filter/FlateDecode", corrupt), outcome: "decompressed_size_exceeded" },
   ];
 }
 

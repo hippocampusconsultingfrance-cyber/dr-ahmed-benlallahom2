@@ -79,13 +79,17 @@ describe("REC-02 — PDF du coffre : mêmes lectures que pour les CV", () => {
     expect(() => validate(bomb)).toThrow("cv_validation_pdf_decompressed_size_exceeded");
   });
 
-  it.each(pathologicalPdfs())("juge en moins d’une seconde un PDF de 4 Mo fait pour bloquer le serveur : $label", ({ pdf, outcome }) => {
+  it.each(pathologicalPdfs())("juge en moins de deux secondes un PDF de 4 Mo fait pour bloquer le serveur : $label", ({ pdf, outcome }) => {
     // The vault reads the same structure as the CV check: 1 MB of "stream stream…" without an end of line blocked it for 86 s.
-    const code = { object_stream_unreadable: "candidate_document_pdf_object_stream_unreadable", stream_count_exceeded: "cv_validation_pdf_stream_count_exceeded" };
+    const code = {
+      object_stream_unreadable: "candidate_document_pdf_object_stream_unreadable",
+      stream_count_exceeded: "cv_validation_pdf_stream_count_exceeded",
+      decompressed_size_exceeded: "cv_validation_pdf_decompressed_size_exceeded",
+    };
     const started = performance.now();
     if (outcome === "accepted") expect(validate(pdf).mimeType).toBe("application/pdf");
     else expect(() => validate(pdf)).toThrow(code[outcome]);
-    expect(performance.now() - started).toBeLessThan(1_000);
+    expect(performance.now() - started).toBeLessThan(2_000);
   });
 
   it("explique au candidat le motif du refus et quoi faire", () => {

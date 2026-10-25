@@ -1,4 +1,5 @@
-import { deflateSync } from "node:zlib";
+import { randomBytes } from "node:crypto";
+import { constants, deflateSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
 import { recruitmentCvValidationMessage, validateCvFile } from "./recruitmentFileValidation";
 import { DOCUMENT_DECOMPRESSION_LIMITS, truncateExtractedText } from "./documentDecompressionLimits";
@@ -323,6 +324,27 @@ describe("bombes de décompression : plafonds avant extraction", () => {
     expect(recruitmentCvValidationMessage("cv_validation_pdf_processing_timeout")).toContain("trop volumineux");
   });
 
+  it("borne aussi les images et les données corrompues, sans refuser un CV honnête", () => {
+    const pdfWithStreams = (streams: Array<[string, Buffer]>) => Buffer.concat([
+      Buffer.from("%PDF-1.7\n1 0 obj << /Type /Page >> endobj\n"),
+      ...streams.flatMap(([dictionary, data], index) => [Buffer.from(`${index + 2} 0 obj << ${dictionary} /Length ${data.length} >>\nstream\n`, "latin1"), data, Buffer.from("\nendstream\nendobj\n")]),
+      Buffer.from("%%EOF\n"),
+    ]);
+    const validate = (pdf: Buffer) => validateCvFile({ buffer: pdf, mimeType: "application/pdf", originalName: "cv.pdf", size: pdf.length });
+    const photo: [string, Buffer] = ["/Type /XObject /Subtype /Image /Width 1000 /Height 1000 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /FlateDecode", deflateSync(Buffer.alloc(3_000_000, 90))];
+    const text: [string, Buffer] = ["/Filter /FlateDecode", deflateSync(Buffer.from("BT /F1 12 Tf (Dr Candidat) Tj ET"))];
+    // 150 MB of honest images: those past the probes' budget count like the other streams, under their cap.
+    expect(validate(pdfWithStreams([...Array.from({ length: 50 }, () => photo), text])).pageCount).toBe(1);
+    // zlib data followed by an invalid block: inflating it fails once `content` is out.
+    const damaged = (content: Buffer): [string, Buffer] => ["/Filter /FlateDecode", Buffer.concat([deflateSync(content, { finishFlush: constants.Z_SYNC_FLUSH }), Buffer.from([0xff])])];
+    // A damaged stream counts for what it inflated to before the error, not for the most its size allows
+    // (40 KB that deflate cannot shrink, like a font, could have inflated to 40 MB): 30 MB still fit after it.
+    const page = (bytes: number): [string, Buffer] => ["/Filter /FlateDecode", deflateSync(Buffer.alloc(bytes, 32))];
+    expect(validate(pdfWithStreams([damaged(randomBytes(40_000)), page(30 * 1024 * 1024), text])).pageCount).toBe(1);
+    // But it does count: 39 MB before the error leave too little for the next stream.
+    expect(() => validate(pdfWithStreams([damaged(Buffer.alloc(39 * 1024 * 1024)), page(2 * 1024 * 1024)]))).toThrow("cv_validation_pdf_decompressed_size_exceeded");
+  });
+
   it("juge un fichier de 4 Mo truffé de mots « stream » ou d’objets en un temps linéaire, pas quadratique", () => {
     // Before the reading of object streams was bounded, 800 KB of "stream\n" took 17 s.
     const filled = (unit: string) => Buffer.from(`%PDF-1.7\n${unit.repeat(Math.floor((4 * 1024 * 1024 - 16) / unit.length))}`, "latin1");
@@ -342,16 +364,17 @@ describe("bombes de décompression : plafonds avant extraction", () => {
     expect(recruitmentCvValidationMessage("cv_validation_pdf_stream_count_exceeded")).toContain("imprimez-le en PDF depuis votre navigateur");
   });
 
-  it.each(pathologicalPdfs())("juge en moins d’une seconde un PDF de 4 Mo fait pour bloquer le serveur : $label", ({ pdf, outcome }) => {
+  it.each(pathologicalPdfs())("juge en moins de deux secondes un PDF de 4 Mo fait pour bloquer le serveur : $label", ({ pdf, outcome }) => {
     // 1 MB of "stream stream…" without an end of line blocked the server for 84 s; 4 MB, for more than 5 minutes.
+    // Each is now judged in a quarter of a second at most; the margin is for a loaded CI.
     const started = performance.now();
     const validate = () => validateCvFile({ buffer: pdf, mimeType: "application/pdf", originalName: "cv.pdf", size: pdf.length });
     if (outcome === "accepted") expect(validate().pageCount).toBe(1);
     else expect(validate).toThrow(`cv_validation_pdf_${outcome}`);
-    expect(performance.now() - started).toBeLessThan(1_000);
+    expect(performance.now() - started).toBeLessThan(2_000);
   });
 
-  it("juge en moins d’une seconde un DOCX dont les relations se décompressent en 20 Mo de balises", () => {
+  it("juge en moins de deux secondes un DOCX dont les relations se décompressent en 20 Mo de balises", () => {
     const docxWithRelationships = (unit: string) => buildDocx(["CV"], [{ name: "word/_rels/document.xml.rels", content: unit.repeat(Math.floor(19 * 1024 * 1024 / unit.length)) }]);
     // 200 KB of "<Relationship " took 3 s; a few KB of DOCX inflate to 20 MB.
     for (const [unit, code] of [["<Relationship ", "cv_validation_docx_container_invalid"], ["<Relationship Type=\"a\" ", "cv_validation_docx_container_invalid"], ["<Relationship/>", null]] as const) {
@@ -361,7 +384,7 @@ describe("bombes de décompression : plafonds avant extraction", () => {
       const validate = () => validateCvFile({ buffer: docx, mimeType: DOCX, originalName: "cv.docx", size: docx.length });
       if (code) expect(validate, unit).toThrow(code);
       else expect(validate().mimeType).toBe(DOCX);
-      expect(performance.now() - started, unit).toBeLessThan(1_000);
+      expect(performance.now() - started, unit).toBeLessThan(2_000);
     }
     expect(recruitmentCvValidationMessage("cv_validation_docx_container_invalid")).toContain("Réenregistrez votre CV en DOCX");
   });

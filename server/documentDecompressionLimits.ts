@@ -23,10 +23,14 @@ export const DOCUMENT_DECOMPRESSION_LIMITS = {
   pdfMaxImagePixels: 40_000_000,
   /** An image stream is checked against its declared size when that size is at most this. */
   pdfImageProbeBytes: 64 * 1024 * 1024,
+  /** Sum of the inflated images checked that way: beyond it, an image counts like any other stream. */
+  pdfMaxProbedImageBytes: 128 * 1024 * 1024,
   /** `stream` keywords examined in one PDF: a CV has a few hundred at most. */
   pdfMaxStreams: 5_000,
   /** Streams whose zlib data runs on past the next `stream` keyword (never in a real PDF): each is inflated to the end of the file. */
   pdfMaxOverlappingStreams: 32,
+  /** Corrupt zlib streams whose output is measured by inflating them again: any further one counts for the most it could inflate to. */
+  pdfMaxMeasuredCorruptStreams: 32,
   /** Pages handed to the text extractor. */
   pdfMaxExtractedPages: 25,
   /** Isolated PDF reader: process memory growth allowed while pdf.js runs. */
@@ -132,6 +136,34 @@ function inflateWithCap(data: Buffer, cap: number): { output: Buffer; read: numb
   }
 }
 
+/** How many more times one PDF may repeat a costly inflation. */
+type Allowance = { count: number; max: number };
+
+/**
+ * What zlib data that inflateWithCap found corrupt inflated to before the
+ * error, at most `cap`. It counts against the caps like valid data: 4 MB of
+ * streams inflating to 40 MB each, then corrupt, took 2.4 s. Deflate
+ * expands its input 1,032 times at most, which bounds small data; larger
+ * data is measured within a factor of four by inflating it again with
+ * growing caps, for `pdfMaxMeasuredCorruptStreams` streams (an error costs
+ * more than the inflation of a small stream), then given that bound too.
+ */
+function inflatedBeforeError(data: Buffer, cap: number, measures: Allowance) {
+  const most = Math.min(cap, data.length * 1_032);
+  if (most <= 4_096 || ++measures.count > measures.max) return most;
+  for (let probe = 4_096; probe < most; probe *= 4) {
+    if (inflateWithCap(data, probe) !== INFLATE_OVERFLOW) return probe;
+  }
+  return most;
+}
+
+/** Inflation of a stream's data: its output, `corruptBytes` when the data turned out corrupt (see inflatedBeforeError), or an overflow of the cap. */
+type StreamInflation = { output: Buffer; read: number } | { corruptBytes: number } | typeof INFLATE_OVERFLOW;
+
+function inflateOrMeasure(data: Buffer, cap: number, measures: Allowance): StreamInflation {
+  return inflateWithCap(data, cap) ?? { corruptBytes: inflatedBeforeError(data, cap, measures) };
+}
+
 /**
  * Inflates the zlib data of a stream, at most `cap` bytes. The data of a
  * real stream ends before the next `stream` keyword (its own `endstream` at
@@ -141,11 +173,11 @@ function inflateWithCap(data: Buffer, cap: number): { output: Buffer; read: numb
  * (`data`), at most `pdfMaxOverlappingStreams` times: 2,000 such streams
  * chained through empty zlib blocks took 5 s on 4 MB.
  */
-function inflateStreamData(window: Buffer, data: Buffer, cap: number, overlaps: { count: number; max: number }) {
-  const read = inflateWithCap(window, cap);
-  if (read === INFLATE_OVERFLOW || read === null || read.read < window.length || window.length === data.length) return read;
+function inflateStreamData(window: Buffer, data: Buffer, cap: number, overlaps: Allowance, measures: Allowance): StreamInflation {
+  const read = inflateOrMeasure(window, cap, measures);
+  if (read === INFLATE_OVERFLOW || "corruptBytes" in read || read.read < window.length || window.length === data.length) return read;
   if (++overlaps.count > overlaps.max) throw new Error("cv_validation_pdf_stream_count_exceeded");
-  return inflateWithCap(data, cap);
+  return inflateOrMeasure(data, cap, measures);
 }
 
 /** Plain integer value of a dictionary key; null when absent or indirect (`7 0 R`). */
@@ -391,10 +423,12 @@ function lineEndFinder(source: string) {
  * (CR, LF or CRLF, as pdf.js accepts) whose data starts with a zlib header is
  * inflated, whatever its /Filter says (indirect, #xx-escaped, chained), and
  * the inflated output is inflated again while it is itself zlib data. All of
- * it counts against one shared cap. A stream declared as an image with plain
+ * it counts against one shared cap, data that turns out corrupt included. A
+ * stream declared as an image with plain
  * /Width and /Height is checked against that declared size instead (a real
- * image never inflates beyond 8 bytes per pixel); with indirect or missing
- * dimensions it counts like any other stream. What this cannot see (LZW,
+ * image never inflates beyond 8 bytes per pixel), up to a total of
+ * `pdfMaxProbedImageBytes`; past that total, or with indirect or missing
+ * dimensions, it counts like any other stream. What this cannot see (LZW,
  * ASCIIHex or ASCII85 first, very large declared images) is bounded where
  * pdf.js decodes it: in the isolated reader.
  *
@@ -408,15 +442,17 @@ function lineEndFinder(source: string) {
  * with indexOf, never a regular expression: /stream[^\r\n]*\n/ took minutes
  * on 4 MB of "stream stream…" without an end of line.
  */
-export function assertPdfDecompressionWithinLimits(buffer: Buffer, limits: Pick<DocumentDecompressionLimits, "pdfMaxInflatedBytes" | "pdfMaxImagePixels" | "pdfImageProbeBytes" | "pdfMaxStreams" | "pdfMaxOverlappingStreams"> = DOCUMENT_DECOMPRESSION_LIMITS) {
+export function assertPdfDecompressionWithinLimits(buffer: Buffer, limits: Pick<DocumentDecompressionLimits, "pdfMaxInflatedBytes" | "pdfMaxImagePixels" | "pdfImageProbeBytes" | "pdfMaxProbedImageBytes" | "pdfMaxStreams" | "pdfMaxOverlappingStreams" | "pdfMaxMeasuredCorruptStreams"> = DOCUMENT_DECOMPRESSION_LIMITS) {
   const source = buffer.toString("latin1");
   const nextLineEnd = lineEndFinder(source);
   const exceeded = () => new Error("cv_validation_pdf_decompressed_size_exceeded");
   const work = pdfScanWork(source);
   const dictionaries = readPdfStreamDictionaries(source, work);
   let inflatedBytes = 0;
+  let probedImageBytes = 0;
   let streams = 0;
   const overlaps = { count: 0, max: limits.pdfMaxOverlappingStreams };
+  const measures = { count: 0, max: limits.pdfMaxMeasuredCorruptStreams };
   const objectStreams: Array<string | null> = [];
   for (let at = source.indexOf("stream"); at !== -1;) {
     const lineEnd = nextLineEnd(at + 6);
@@ -451,8 +487,14 @@ export function assertPdfDecompressionWithinLimits(buffer: Buffer, limits: Pick<
       if (width !== null && height !== null) {
         if (width * height > limits.pdfMaxImagePixels) throw new Error("cv_validation_pdf_image_too_large");
         const declaredBytes = width * height * 8 + 65_536;
-        if (declaredBytes <= limits.pdfImageProbeBytes && inflateStreamData(window, data, declaredBytes, overlaps) === INFLATE_OVERFLOW) throw exceeded();
-        continue;
+        if (declaredBytes > limits.pdfImageProbeBytes) continue;
+        // The probes share one budget: 67 images of 62 KB, each inflating to its declared 64 MB, took 5 s.
+        if (declaredBytes <= limits.pdfMaxProbedImageBytes - probedImageBytes) {
+          const probe = inflateStreamData(window, data, declaredBytes, overlaps, measures);
+          if (probe === INFLATE_OVERFLOW) throw exceeded();
+          probedImageBytes += "corruptBytes" in probe ? probe.corruptBytes : probe.output.length;
+          continue;
+        }
       }
     }
     let layer: Buffer = data;
@@ -460,9 +502,12 @@ export function assertPdfDecompressionWithinLimits(buffer: Buffer, limits: Pick<
     while (startsWithZlibHeader(layer)) {
       const cap = limits.pdfMaxInflatedBytes - inflatedBytes;
       // The first layer is read from the file, the next ones from memory.
-      const inflated = decoded ? inflateWithCap(layer, cap) : inflateStreamData(window, data, cap, overlaps);
+      const inflated = decoded ? inflateOrMeasure(layer, cap, measures) : inflateStreamData(window, data, cap, overlaps, measures);
       if (inflated === INFLATE_OVERFLOW) throw exceeded();
-      if (!inflated) break;
+      if ("corruptBytes" in inflated) {
+        inflatedBytes += inflated.corruptBytes;
+        break;
+      }
       inflatedBytes += inflated.output.length;
       if (inflatedBytes > limits.pdfMaxInflatedBytes) throw exceeded();
       layer = inflated.output;
@@ -490,7 +535,7 @@ export type PdfStructureInspection = {
  * escapes decoded. An /OpenAction alone is not active content (LibreOffice
  * writes one to open the first page); a JavaScript one is found by /JS.
  */
-export function inspectPdfStructure(buffer: Buffer, limits: Pick<DocumentDecompressionLimits, "pdfMaxInflatedBytes" | "pdfMaxImagePixels" | "pdfImageProbeBytes" | "pdfMaxStreams" | "pdfMaxOverlappingStreams"> = DOCUMENT_DECOMPRESSION_LIMITS): PdfStructureInspection {
+export function inspectPdfStructure(buffer: Buffer, limits: Pick<DocumentDecompressionLimits, "pdfMaxInflatedBytes" | "pdfMaxImagePixels" | "pdfImageProbeBytes" | "pdfMaxProbedImageBytes" | "pdfMaxStreams" | "pdfMaxOverlappingStreams" | "pdfMaxMeasuredCorruptStreams"> = DOCUMENT_DECOMPRESSION_LIMITS): PdfStructureInspection {
   const { objectStreams } = assertPdfDecompressionWithinLimits(buffer, limits);
   const readable = objectStreams.filter((content): content is string => content !== null);
   const text = decodePdfNames([buffer.toString("latin1"), ...readable].join("\n"));
