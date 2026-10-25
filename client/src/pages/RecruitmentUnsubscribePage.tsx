@@ -4,6 +4,7 @@ import { CheckCircle2, MailX, ShieldAlert } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { SEOHead } from "@/components/SEOHead";
 import { useLanguage } from "@/contexts/LanguageContext";
+import LanguageMenu from "@/components/LanguageMenu";
 
 type SupportedLanguage = "fr" | "en" | "de" | "zh";
 
@@ -73,7 +74,8 @@ export default function RecruitmentUnsubscribePage() {
   return (
     <>
       <SEOHead title="Désinscription recrutement | Hippocampus Consulting" description="Gérez vos préférences de communications de recrutement." noIndex />
-      <main className="grid min-h-screen place-items-center bg-[#030a12] p-6 text-center text-white">
+      <main className="flex min-h-screen flex-col items-center justify-center bg-[#030a12] p-6 text-center text-white">
+        <div className="mb-4 flex w-full max-w-lg justify-end"><LanguageMenu tone="candidate" /></div>
         <section className="w-full max-w-lg rounded-3xl border border-cyan-950 bg-slate-950/80 p-8 shadow-2xl sm:p-10" aria-live="polite">
           {unsubscribe.isSuccess ? (
             <>

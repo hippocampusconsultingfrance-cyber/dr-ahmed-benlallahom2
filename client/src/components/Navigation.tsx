@@ -1,16 +1,16 @@
 import { useState, useEffect, useRef } from "react";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useTheme } from "@/contexts/ThemeContext";
-import { Accessibility, CircleDot, Menu, X, ChevronDown, Sun, Moon, Search } from "lucide-react";
-import { getMenuFocusIndex, isNavigationDismissKey } from "./navigationKeyboard";
+import { Accessibility, CircleDot, Menu, X, Sun, Moon, Search } from "lucide-react";
+import { isNavigationDismissKey } from "./navigationKeyboard";
 import { navigationAccessibilityCopy } from "./navigationAccessibilityCopy";
+import LanguageMenu from "./LanguageMenu";
 
 export default function Navigation() {
   const { content, language } = useLanguage();
   const { theme, toggleTheme, highReadability, toggleHighReadability, oledDark, toggleOledDark } = useTheme();
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [dropdownOpen, setDropdownOpen] = useState(false);
   const readabilityCopy = {
     fr: { enable: "Activer la lisibilité renforcée", disable: "Désactiver la lisibilité renforcée", label: "Lisibilité renforcée" },
     en: { enable: "Enable high readability", disable: "Disable high readability", label: "High readability" },
@@ -24,18 +24,8 @@ export default function Navigation() {
     zh: { enable: "启用 OLED 黑色", disable: "关闭 OLED 黑色", label: "OLED 黑色" },
   }[language as "fr" | "en" | "de" | "zh"];
   const accessibilityCopy = navigationAccessibilityCopy[language as keyof typeof navigationAccessibilityCopy] ?? navigationAccessibilityCopy.fr;
-  const dropdownRef = useRef<HTMLDivElement>(null);
-  const languageButtonRef = useRef<HTMLButtonElement>(null);
   const mobileMenuButtonRef = useRef<HTMLButtonElement>(null);
 
-  const languages = [
-    { code: "fr", name: "Français", flag: "🇫🇷" },
-    { code: "en", name: "English", flag: "🇬🇧" },
-    { code: "de", name: "Deutsch", flag: "🇩🇪" },
-    { code: "zh", name: "中文", flag: "🇨🇳" },
-  ];
-
-  const currentLang = languages.find((l) => l.code === language);
   const recruitmentLabel = { fr: "Recrutement", en: "Recruitment", de: "Recruiting", zh: "招聘" }[language];
   const employersLabel = { fr: "Employeurs", en: "Employers", de: "Arbeitgeber", zh: "雇主专区" }[language];
   const medicalQuestionsLabel = { fr: "Questions santé", en: "Health questions", de: "Gesundheitsfragen", zh: "健康问答" }[language];
@@ -47,44 +37,10 @@ export default function Navigation() {
     ? "nav-mobile-link text-left text-lg font-medium text-primary py-2 border-b border-border/20"
     : "nav-mobile-link text-left text-lg font-medium text-foreground py-2 border-b border-border/20";
 
-  const handleLanguageChange = (code: string) => {
-    if (code !== language) {
-      // Changer la langue en mettant à jour le localStorage
-      localStorage.setItem("language", code);
-      // Recharger la page pour appliquer la nouvelle langue
-      window.location.reload();
-    }
-    setDropdownOpen(false);
-  };
-
-  // Fermer le dropdown quand on clique ailleurs
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setDropdownOpen(false);
-      }
-    };
-
-    if (dropdownOpen) {
-      document.addEventListener("mousedown", handleClickOutside);
-      return () => document.removeEventListener("mousedown", handleClickOutside);
-    }
-  }, [dropdownOpen]);
-
-  useEffect(() => {
-    if (!dropdownOpen) return;
-    const firstMenuItem = dropdownRef.current?.querySelector<HTMLButtonElement>('[role="menuitem"]');
-    firstMenuItem?.focus();
-  }, [dropdownOpen]);
-
+  // Le menu de langue (LanguageMenu) gère lui-même Échap ; ici, le menu mobile.
   useEffect(() => {
     const handleEscape = (event: KeyboardEvent) => {
       if (!isNavigationDismissKey(event.key)) return;
-      if (dropdownOpen) {
-        event.preventDefault();
-        setDropdownOpen(false);
-        languageButtonRef.current?.focus();
-      }
       if (mobileOpen) {
         event.preventDefault();
         setMobileOpen(false);
@@ -93,22 +49,13 @@ export default function Navigation() {
     };
     document.addEventListener("keydown", handleEscape);
     return () => document.removeEventListener("keydown", handleEscape);
-  }, [dropdownOpen, mobileOpen]);
+  }, [mobileOpen]);
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 50);
     window.addEventListener("scroll", handleScroll);
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
-
-  const handleLanguageMenuKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
-    const menuItems = Array.from(dropdownRef.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]') ?? []);
-    const currentIndex = menuItems.findIndex((item) => item === document.activeElement);
-    const nextIndex = getMenuFocusIndex(currentIndex < 0 ? 0 : currentIndex, menuItems.length, event.key);
-    if (nextIndex === null) return;
-    event.preventDefault();
-    menuItems[nextIndex]?.focus();
-  };
 
   const scrollTo = (id: string) => {
     setMobileOpen(false);
@@ -183,45 +130,7 @@ export default function Navigation() {
         {/* Actions */}
         <div className="flex min-w-0 items-center gap-1.5 justify-self-end sm:gap-2">
           {/* Language Dropdown */}
-          <div ref={dropdownRef} className="relative">
-            <button
-              onClick={() => setDropdownOpen(!dropdownOpen)}
-              ref={languageButtonRef}
-              className="nav-control flex shrink-0 items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-full border border-border/50 text-sm font-medium text-muted-foreground hover:text-foreground hover:border-primary/40 transition-all duration-200 hover:bg-background/50"
-              title={accessibilityCopy.changeLanguage}
-              aria-label={accessibilityCopy.changeLanguage}
-              aria-expanded={dropdownOpen}
-              aria-haspopup="menu"
-              aria-controls="language-menu"
-            >
-              <span className="text-base">{currentLang?.flag}</span>
-              <span>{currentLang?.code.toUpperCase()}</span>
-              <ChevronDown
-                className="w-3.5 h-3.5 transition-transform"
-                style={{ transform: dropdownOpen ? "rotate(180deg)" : "rotate(0deg)" }}
-              />
-            </button>
-
-            {dropdownOpen && (
-              <div id="language-menu" onKeyDown={handleLanguageMenuKeyDown} className="nav-language-menu absolute right-0 mt-2 w-48 bg-background border border-border/50 rounded-lg shadow-lg z-50 overflow-hidden" role="menu" aria-label={accessibilityCopy.chooseLanguage}>
-                {languages.map((lang) => (
-                  <button
-                    key={lang.code}
-                    onClick={() => handleLanguageChange(lang.code)}
-                    role="menuitem"
-                    className={`w-full px-4 py-3 text-left text-sm font-medium transition-colors ${
-                      language === lang.code
-                        ? "bg-primary text-primary-foreground"
-                        : "text-foreground hover:bg-background/50"
-                    }`}
-                  >
-                    <span className="text-base mr-2">{lang.flag}</span>
-                    {lang.name}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+          <LanguageMenu />
 
           {/* Theme Toggle */}
           {toggleTheme && (

@@ -9,6 +9,7 @@ import { SEOHead } from "@/components/SEOHead";
 import PublicContentSkeleton from "@/components/PublicContentSkeleton";
 import { useLanguage } from "@/contexts/LanguageContext";
 import CandidateLegalFooter from "@/components/CandidateLegalFooter";
+import LanguageMenu from "@/components/LanguageMenu";
 import { candidateAccountCopy, CandidateAccountLanguage } from "./candidateAccountCopy";
 
 /**
@@ -51,7 +52,7 @@ export default function CandidateVerifyPage() {
   const loading = hasLink && details.isLoading;
   const showForm = Boolean(details.data) && !verification.isSuccess;
 
-  return <><SEOHead title={copy.verifyMetaTitle} description={copy.verifyMetaDescription} noIndex /><main id="main-content" tabIndex={-1} className="flex min-h-screen flex-col items-center justify-center bg-[#030a12] p-6 text-white">
+  return <><SEOHead title={copy.verifyMetaTitle} description={copy.verifyMetaDescription} noIndex /><main id="main-content" tabIndex={-1} className="flex min-h-screen flex-col items-center justify-center bg-[#030a12] p-6 text-white"><div className="mb-4 flex w-full max-w-md justify-end"><LanguageMenu tone="candidate" /></div>
     <div className="w-full max-w-md rounded-3xl border border-cyan-950 bg-slate-950/80 p-8 sm:p-10">
       {loading && <div className="text-center"><PublicContentSkeleton cards={1} label={copy.verifyingTitle} /><h1 className="mt-5 text-2xl font-semibold">{copy.verifyingTitle}</h1><p className="mt-3 text-slate-400">{copy.verifyingDescription}</p></div>}
       {showForm && <form onSubmit={submit} aria-busy={verification.isPending}>
