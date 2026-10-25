@@ -2,7 +2,7 @@ import { deflateSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
 import { candidateDocumentValidationMessage, safeCandidateDocumentName, validateCandidateDocument } from "./candidateDocumentValidation";
 import { DOCUMENT_DECOMPRESSION_LIMITS } from "./documentDecompressionLimits";
-import { libreOfficeCvPdf, packPdfIntoObjectStream, pathologicalPdfs, pngPredict } from "./testing/pdfFixture";
+import { classicPdf, libreOfficeChineseCvPdf, libreOfficeCvPdf, packPdfIntoObjectStream, pathologicalPdfs, pngPredict, saveIncrementally, withObjectInStreamData } from "./testing/pdfFixture";
 
 describe("validation des documents candidats", () => {
   it("nettoie les noms de fichiers et rejette les chemins", () => {
@@ -65,6 +65,23 @@ describe("REC-02 — PDF du coffre : mêmes lectures que pour les CV", () => {
     }
     const tiff = packPdfIntoObjectStream(libreOfficeCvPdf(), { objectStream: { dictionary: "/Type/ObjStm/Filter/FlateDecode/DecodeParms<</Predictor 2/Columns 5>>" } });
     expect(() => validate(tiff)).toThrow("candidate_document_pdf_object_stream_unreadable");
+  });
+
+  it("ne lit pas les données binaires des flux, compte une page réenregistrée une fois et refuse un formulaire XFA", () => {
+    // The compressed Chinese font of this LibreOffice PDF holds the bytes "/JS".
+    expect(validate(libreOfficeChineseCvPdf()).mimeType).toBe("application/pdf");
+    // An action the xref places inside the data of a stream is still found.
+    const hidden = withObjectInStreamData(libreOfficeCvPdf(), { number: 99, body: "<</S/JavaScript/JS(app.alert\\(1\\))>>" }, [{ number: 20, body: "<</Type/Catalog/Pages 10 0 R/OpenAction 99 0 R>>" }]);
+    expect(() => validate(hidden)).toThrow("candidate_document_pdf_active_content");
+    // A document of 25 pages, every page rotated afterwards: still 25 pages, not 50.
+    const page = (rotate: number) => `<</Type/Page/Parent 2 0 R/MediaBox[0 0 595 842]/Rotate ${rotate}>>`;
+    const kids = (count: number) => `<</Type/Pages/Count ${count}/Kids[${Array.from({ length: count }, (_, index) => `${index + 3} 0 R`).join(" ")}]>>`;
+    const scanned = classicPdf(["<</Type/Catalog/Pages 2 0 R>>", kids(25), ...Array.from({ length: 25 }, () => page(0))]);
+    const rotated = saveIncrementally(scanned, Array.from({ length: 25 }, (_, index) => ({ number: index + 3, body: page(90) })));
+    expect(validate(rotated).mimeType).toBe("application/pdf");
+    expect(() => validate(saveIncrementally(rotated, [{ number: 2, body: kids(26) }, { number: 28, body: page(0) }]))).toThrow("candidate_document_pdf_page_limit");
+    const xfa = packPdfIntoObjectStream(libreOfficeCvPdf(), { edit: source => source.replace("/PageMode/UseOutlines", "/AcroForm<</Fields[]/XFA 99 0 R>>") });
+    expect(() => validate(xfa)).toThrow("candidate_document_pdf_active_content");
   });
 
   it("distingue un PDF sans page d’un PDF trop long, et borne la décompression", () => {

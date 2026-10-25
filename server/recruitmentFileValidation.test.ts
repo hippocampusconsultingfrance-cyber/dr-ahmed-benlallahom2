@@ -5,7 +5,7 @@ import { recruitmentCvValidationMessage, validateCvFile } from "./recruitmentFil
 import { DOCUMENT_DECOMPRESSION_LIMITS, truncateExtractedText } from "./documentDecompressionLimits";
 import { extractCvDocument } from "./recruitmentAnalysis";
 import { buildDocx } from "./testing/zipFixture";
-import { libreOfficeCvPdf, packPdfIntoObjectStream, pathologicalPdfs, pngPredict } from "./testing/pdfFixture";
+import { classicPdf, libreOfficeChineseCvPdf, libreOfficeCvPdf, packPdfIntoObjectStream, pathologicalPdfs, pngPredict, saveIncrementally, withObjectInStreamData, withTrailerInStreamData } from "./testing/pdfFixture";
 
 const DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 const validPdf = Buffer.concat([Buffer.from("%PDF-1.7\n1 0 obj << /Type /Page >> endobj\n"), Buffer.alloc(300, 65)]);
@@ -271,6 +271,105 @@ describe("REC-02 — PDF réels acceptés, actions dangereuses cherchées aussi 
     // Declaring the object stream as a small image does not skip its content.
     const disguised = pdfWithStream("/Type /ObjStm /N 1 /First 4 /Subtype /Image /Width 1 /Height 1 /Filter /FlateDecode", deflateSync(Buffer.from("1 0 << /S /JavaScript /JS (app.alert(1)) >>")));
     expect(() => validate(disguised)).toThrow("cv_validation_pdf_active_content");
+  });
+
+  describe("ne lit que la structure du PDF et ses flux d’objets, jamais les données binaires des autres flux", () => {
+    const JAVASCRIPT_ACTION = "<</S/JavaScript/JS(app.alert\\(1\\))>>";
+    /** The catalog (object 20) of the LibreOffice CV, with `entries` in place of its page mode. */
+    const catalog = (entries: string) => ({ number: 20, body: `<</Type/Catalog/Pages 10 0 R\n${entries}\n/StructTreeRoot 18 0 R\n/Lang(en-US)\n/MarkInfo<</Marked true>>\n>>` });
+
+    it("accepte un CV LibreOffice dont la police chinoise compressée contient les octets « /JS »", async () => {
+      const pdf = libreOfficeChineseCvPdf();
+      // "/JS" followed by 0x94, inside the Flate data of the embedded WenQuanYi font: no PDF name.
+      expect(pdf.toString("latin1")).toMatch(/\/JS\x94/);
+
+      expect(validate(pdf).pageCount).toBe(1);
+      expect((await extractCvDocument(pdf, "application/pdf")).text).toContain("麻醉科医师");
+    });
+
+    it("accepte les mots-clés actifs écrits dans les données d’une image ou d’un flux compressé, et les refuse dans un dictionnaire", () => {
+      const markers = Buffer.from("/JavaScript /JS(x) /Launch /EmbeddedFile /SubmitForm /XFA /Encrypt /Type /Page /Type /Page", "latin1");
+      // Stored (level 0) deflate data and JPEG data both hold the bytes as they are.
+      const stored = deflateSync(markers, { level: 0 });
+      expect(stored.includes(markers)).toBe(true);
+      const jpeg = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), markers, Buffer.from([0xff, 0xd9])]);
+      const withStream = (dictionary: string, data: Buffer) => saveIncrementally(libreOfficeCvPdf(), [{ number: 22, body: `<<${dictionary}/Length ${data.length}>>\nstream\n${data.toString("latin1")}\nendstream` }]);
+      expect(validate(withStream("/Type/XObject/Subtype/Image/Width 8/Height 8/BitsPerComponent 8/ColorSpace/DeviceGray/Filter/FlateDecode", stored)).pageCount).toBe(1);
+      expect(validate(withStream("/Type/XObject/Subtype/Image/Width 8/Height 8/BitsPerComponent 8/ColorSpace/DeviceGray/Filter/DCTDecode", jpeg)).pageCount).toBe(1);
+      expect(validate(withStream("/Filter/FlateDecode", stored)).pageCount).toBe(1);
+
+      expect(() => validate(saveIncrementally(libreOfficeCvPdf(), [{ number: 22, body: `<</Type/Annot/Subtype/Link/A ${JAVASCRIPT_ACTION}>>` }]))).toThrow("cv_validation_pdf_active_content");
+    });
+
+    it("lit pourtant un objet ou un trailer que pdf.js lit dans les données d’un autre flux", async () => {
+      // pdf.js reads an object where the xref points, even inside the data of a stream: here, the page.
+      const page = withObjectInStreamData(libreOfficeCvPdf(), { number: 1, body: "<</Type/Page/Parent 10 0 R/Resources 17 0 R/MediaBox[0 0 595 842]/Contents 2 0 R>>" });
+      expect((await extractCvDocument(page, "application/pdf")).text).toContain("Dr Camille Martin");
+      expect(validate(page).pageCount).toBe(1);
+
+      const traps = [
+        // The opening action, an object the xref places inside the data of a stream.
+        withObjectInStreamData(libreOfficeCvPdf(), { number: 99, body: JAVASCRIPT_ACTION }, [catalog("/OpenAction 99 0 R")]),
+        withObjectInStreamData(packPdfIntoObjectStream(libreOfficeCvPdf()), { number: 99, body: JAVASCRIPT_ACTION }, [catalog("/OpenAction 99 0 R")]),
+        // The last xref section and its trailer, with a direct catalog, inside the data of a stream.
+        withTrailerInStreamData(libreOfficeCvPdf(), `<</Type/Catalog/Pages 10 0 R/OpenAction ${JAVASCRIPT_ACTION}>>`),
+        // A comment fakes a stream inside the catalog: pdf.js skips it and reads the action after it.
+        saveIncrementally(libreOfficeCvPdf(), [{ number: 20, body: `<</Type/Catalog/Pages 10 0 R\n% 98 0 obj <<>> stream\n/OpenAction ${JAVASCRIPT_ACTION}\n>>` }]),
+      ];
+      for (const [index, trap] of traps.entries()) {
+        // pdf.js reads each of them: the PDF opens on its page, and a PDF reader would run the action.
+        expect((await extractCvDocument(trap, "application/pdf")).text, String(index)).toContain("Dr Camille Martin");
+        expect(() => validate(trap), String(index)).toThrow("cv_validation_pdf_active_content");
+      }
+    });
+  });
+
+  describe("compte les pages distinctes, chacune dans sa dernière version", () => {
+    const pageOfCv = (rotate: number) => ({ number: 1, body: `<</Type/Page/Parent 10 0 R/Resources 17 0 R/MediaBox[0 0 595.303937007874 841.889763779528]/Rotate ${rotate}/Contents 2 0 R>>` });
+    /** A PDF of `count` blank pages, objects 3 onwards. */
+    const blankPages = (count: number) => classicPdf([
+      "<</Type/Catalog/Pages 2 0 R>>",
+      `<</Type/Pages/Count ${count}/Kids[${Array.from({ length: count }, (_, index) => `${index + 3} 0 R`).join(" ")}]>>`,
+      ...Array.from({ length: count }, () => "<</Type/Page/Parent 2 0 R/MediaBox[0 0 595 842]>>"),
+    ]);
+    const rotated = (pdf: Buffer, numbers: number[]) => saveIncrementally(pdf, numbers.map(number => ({ number, body: "<</Type/Page/Parent 2 0 R/MediaBox[0 0 595 842]/Rotate 90>>" })));
+
+    it("ne compte pas deux fois une page réenregistrée par une mise à jour incrémentale", async () => {
+      const turned = saveIncrementally(libreOfficeCvPdf(), [pageOfCv(90)]);
+      expect(validate(turned).pageCount).toBe(1);
+      expect((await extractCvDocument(turned, "application/pdf")).totalPages).toBe(1);
+      expect(validate(saveIncrementally(packPdfIntoObjectStream(libreOfficeCvPdf()), [pageOfCv(90)])).pageCount).toBe(1);
+      expect(validate(saveIncrementally(turned, [pageOfCv(180)])).pageCount).toBe(1);
+    });
+
+    it("accepte 14 pages toutes tournées après coup, refuse 26 pages distinctes", () => {
+      const fourteen = rotated(blankPages(14), Array.from({ length: 14 }, (_, index) => index + 3));
+      expect(validate(fourteen).pageCount).toBe(14);
+      // 13 pages, then 13 new ones added by an update: 26 distinct pages.
+      const thirteen = blankPages(13);
+      const added = saveIncrementally(thirteen, [
+        { number: 2, body: `<</Type/Pages/Count 26/Kids[${Array.from({ length: 26 }, (_, index) => `${index + 3} 0 R`).join(" ")}]>>` },
+        ...Array.from({ length: 13 }, (_, index) => ({ number: index + 16, body: "<</Type/Page/Parent 2 0 R/MediaBox[0 0 595 842]>>" })),
+      ]);
+      expect(() => validate(added)).toThrow("cv_validation_pdf_page_limit_exceeded");
+      expect(() => validate(blankPages(26))).toThrow("cv_validation_pdf_page_limit_exceeded");
+      expect(validate(blankPages(25)).pageCount).toBe(25);
+    });
+  });
+
+  it("refuse un formulaire XFA, qui porte ses propres scripts, même dans un flux d’objets ou derrière un nom échappé", () => {
+    const xfa = (entry: string) => (source: string) => source.replace("/PageMode/UseOutlines", `/AcroForm<</Fields[]${entry}>>/NeedsRendering true`);
+    const template = "<xdp:xdp><template><subform><event><script>app.alert(1)</script></event></subform></template></xdp:xdp>";
+    const withScript = saveIncrementally(libreOfficeCvPdf(), [
+      { number: 20, body: "<</Type/Catalog/Pages 10 0 R/AcroForm<</Fields[]/XFA 22 0 R>>/NeedsRendering true>>" },
+      { number: 22, body: `<</Length ${template.length}>>\nstream\n${template}\nendstream` },
+    ]);
+    expect(() => validate(withScript)).toThrow("cv_validation_pdf_active_content");
+    expect(() => validate(packPdfIntoObjectStream(libreOfficeCvPdf(), { edit: xfa("/XFA 99 0 R") }))).toThrow("cv_validation_pdf_active_content");
+    expect(() => validate(Buffer.from(xfa("/X#46A 99 0 R")(libreOfficeCvPdf().toString("latin1")), "latin1"))).toThrow("cv_validation_pdf_active_content");
+    // A plain form (AcroForm without XFA) stays accepted.
+    expect(validate(packPdfIntoObjectStream(libreOfficeCvPdf(), { edit: xfa("") })).pageCount).toBe(1);
+    expect(recruitmentCvValidationMessage("cv_validation_pdf_active_content")).toContain("Réenregistrez votre CV en DOCX");
   });
 
   it("dit au candidat quoi faire d’un CV refusé : le réenregistrer en DOCX ou l’imprimer en PDF depuis le navigateur", () => {

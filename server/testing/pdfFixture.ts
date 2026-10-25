@@ -7,6 +7,85 @@ export function libreOfficeCvPdf() {
   return readFileSync(new URL("./fixtures/cv-libreoffice.pdf", import.meta.url));
 }
 
+/** A Chinese CV exported by LibreOffice 24.2 the same way: the compressed data of its embedded Chinese font holds the bytes "/JS" (REC-02). */
+export function libreOfficeChineseCvPdf() {
+  return readFileSync(new URL("./fixtures/cv-libreoffice-zh.pdf", import.meta.url));
+}
+
+/**
+ * A classic PDF (xref table) whose objects are numbered from 1 in the order
+ * given; the first one is the catalog.
+ */
+export function classicPdf(objects: string[]) {
+  let output = "%PDF-1.7\n%\xe2\xe3\xcf\xd3\n";
+  const offsets = objects.map((body, index) => {
+    const offset = output.length;
+    output += `${index + 1} 0 obj\n${body}\nendobj\n`;
+    return offset;
+  });
+  const xref = output.length;
+  output += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n${offsets.map(offset => `${String(offset).padStart(10, "0")} 00000 n \n`).join("")}`;
+  output += `trailer\n<</Size ${objects.length + 1}/Root 1 0 R>>\nstartxref\n${xref}\n%%EOF\n`;
+  return Buffer.from(output, "latin1");
+}
+
+/** The last trailer of a PDF: where its xref section starts, its catalog and its /Size. */
+function lastTrailer(source: string) {
+  const previous = /startxref\s+(\d+)\s+%%EOF\s*$/.exec(source)?.[1];
+  const root = /\/Root\s+(\d+\s+\d+\s+R)/.exec(source.slice(source.lastIndexOf("/Root")))?.[1];
+  if (!previous || !root) throw new Error("fixture without startxref or /Root");
+  return { previous, root, size: Number(/\/Size\s+(\d+)/.exec(source.slice(source.lastIndexOf("/Size")))?.[1] ?? 0) };
+}
+
+const xrefEntry = (number: number, offset: number) => `${number} 1\n${String(offset).padStart(10, "0")} 00000 n \n`;
+
+/**
+ * Appends an incremental update (ISO 32000-1, 7.5.6), as Acrobat, pypdf or
+ * an online editor write one to rotate pages or fill in a form: the objects
+ * given are written again after the end of the file, with their own xref
+ * section and a trailer that points to the previous one.
+ */
+export function saveIncrementally(pdf: Buffer, objects: Array<{ number: number; body: string }>) {
+  const source = pdf.toString("latin1");
+  const { previous, root, size } = lastTrailer(source);
+  let output = source.endsWith("\n") ? source : `${source}\n`;
+  const entries = objects.map(object => {
+    const entry = xrefEntry(object.number, output.length);
+    output += `${object.number} 0 obj\n${object.body}\nendobj\n`;
+    return entry;
+  });
+  const xref = output.length;
+  output += `xref\n${entries.join("")}trailer\n<</Size ${Math.max(size, ...objects.map(object => object.number + 1))}/Root ${root}/Prev ${previous}>>\nstartxref\n${xref}\n%%EOF\n`;
+  return Buffer.from(output, "latin1");
+}
+
+/**
+ * Appends a stream object, number 90, whose data holds `hidden` after its
+ * zlib data, before `endstream`: pdf.js reads an object or an xref section
+ * written there when an xref offset points to it, whatever surrounds it.
+ */
+function appendStreamHiding(source: string, hidden: string) {
+  const data = deflateSync(Buffer.from("q Q")).toString("latin1");
+  const head = `90 0 obj\n<</Length ${data.length}/Filter/FlateDecode>>\nstream\n${data}\n`;
+  return { output: `${source}${head}${hidden}\nendstream\nendobj\n`, streamOffset: source.length, hiddenOffset: source.length + head.length };
+}
+
+/** `object` written inside the data of another stream, where the xref points to it; `others` are saved before, in their own update. */
+export function withObjectInStreamData(pdf: Buffer, object: { number: number; body: string }, others: Array<{ number: number; body: string }> = []) {
+  const source = (others.length > 0 ? saveIncrementally(pdf, others) : pdf).toString("latin1");
+  const { previous, root, size } = lastTrailer(source);
+  const { output, streamOffset, hiddenOffset } = appendStreamHiding(source, `${object.number} 0 obj\n${object.body}\nendobj`);
+  return Buffer.from(`${output}xref\n${xrefEntry(90, streamOffset)}${xrefEntry(object.number, hiddenOffset)}trailer\n<</Size ${Math.max(size, 91, object.number + 1)}/Root ${root}/Prev ${previous}>>\nstartxref\n${output.length}\n%%EOF\n`, "latin1");
+}
+
+/** An xref section and its trailer, whose catalog is the direct dictionary `root`, written inside the data of a stream, where startxref points. */
+export function withTrailerInStreamData(pdf: Buffer, root: string) {
+  const source = pdf.toString("latin1");
+  const { previous, size } = lastTrailer(source);
+  const { output, hiddenOffset } = appendStreamHiding(source, `xref\n${xrefEntry(90, source.length)}trailer\n<</Size ${Math.max(size, 91)}/Prev ${previous}/Root ${root}>>`);
+  return Buffer.from(`${output}startxref\n${hiddenOffset}\n%%EOF\n`, "latin1");
+}
+
 /** How the PDF checks must answer a file of `pathologicalPdfs`: accept it (one page), or refuse it with this reason. */
 export type PathologicalPdfOutcome = "accepted" | "object_stream_unreadable" | "stream_count_exceeded" | "decompressed_size_exceeded";
 
