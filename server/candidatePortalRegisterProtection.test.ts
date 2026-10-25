@@ -39,7 +39,7 @@ beforeEach(() => {
   vi.stubEnv("RESEND_API_KEY", "re_test_candidate_register_protection");
 });
 
-describe("candidatePortal.register — email d’activation vers une adresse non vérifiée (MAIL-01)", () => {
+describe("candidatePortal.register et resendVerification — email d’activation vers une adresse non vérifiée (MAIL-01)", () => {
   it("crée l’espace avec le prénom saisi mais n’en recopie pas le texte dans l’email d’activation", async () => {
     const trapName = "Offre speciale sur https://promo-1.example";
     await client("198.51.100.31").api.register(registration("cible@test.local", trapName));
@@ -73,5 +73,22 @@ describe("candidatePortal.register — email d’activation vers une adresse non
       await clientWithoutIp().register(registration(`candidat${index}@test.local`));
     }
     expect(state.sent).toHaveLength(7);
+  });
+
+  it("limite aussi à 5 renvois du lien d’activation par heure depuis une même IP, sur des comptes en attente différents", async () => {
+    // Six accounts awaiting activation, registered from as many addresses.
+    for (let index = 1; index <= 6; index += 1) {
+      await client(`198.51.100.${40 + index}`).api.register(registration(`attente${index}@test.local`));
+    }
+    state.sent.length = 0;
+
+    for (let index = 1; index <= 5; index += 1) {
+      await client("198.51.100.50").api.resendVerification({ email: `attente${index}@test.local`, turnstileToken: TURNSTILE });
+    }
+    await expect(client("198.51.100.50").api.resendVerification({ email: "attente6@test.local", turnstileToken: TURNSTILE })).rejects.toMatchObject({ code: "TOO_MANY_REQUESTS" });
+    expect(state.sent.map(email => email.to[0])).toEqual(["attente1@test.local", "attente2@test.local", "attente3@test.local", "attente4@test.local", "attente5@test.local"]);
+
+    await client("203.0.113.51").api.resendVerification({ email: "attente6@test.local", turnstileToken: TURNSTILE });
+    expect(state.sent.at(-1)?.to).toEqual(["attente6@test.local"]);
   });
 });

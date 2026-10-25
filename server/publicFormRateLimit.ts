@@ -18,11 +18,14 @@ const HOUR_MS = 60 * 60 * 1000;
 // MAIL-01 : ces formulaires envoient un email à une adresse que personne n’a
 // encore vérifiée. Leurs compteurs IP + email laissent un script changer
 // d’adresse destinataire à chaque appel ; ce compteur par IP seule, ajouté
-// aux existants, borne le nombre d’emails qu’une même IP fait partir.
+// aux existants, borne le nombre d’emails qu’une même IP fait partir. Le
+// renvoi du lien d’activation a le sien : sans lui, chaque compte en attente
+// inscrit au fil des heures redonnerait 4 envois par heure à la même IP.
 export const PUBLIC_EMAIL_IP_RATE_LIMITS = {
   medicalQuestion: { action: "public_medical_question_submit_ip", maxAttempts: 5, windowMs: HOUR_MS, blockMs: HOUR_MS },
   recruitmentApply: { action: "public_recruitment_apply_ip", maxAttempts: 5, windowMs: HOUR_MS, blockMs: HOUR_MS },
   candidateRegister: { action: "candidate_register_ip", maxAttempts: 5, windowMs: HOUR_MS, blockMs: HOUR_MS },
+  candidateVerificationResend: { action: "candidate_verification_resend_ip", maxAttempts: 5, windowMs: HOUR_MS, blockMs: HOUR_MS },
 } as const;
 
 /**

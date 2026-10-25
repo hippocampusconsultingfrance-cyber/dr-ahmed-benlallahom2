@@ -359,6 +359,7 @@ export const candidatePortalRouter = router({
       const ipHash = requestIpHash(ctx.req.headers);
       try {
         await enforcePersistentRateLimit({ action: "candidate_verification_resend", subject: `${email}:${ipHash ?? "unknown"}`, maxAttempts: 4, windowMs: 60 * 60 * 1000, blockMs: 60 * 60 * 1000 });
+        await enforcePublicEmailIpRateLimit("candidateVerificationResend", ipHash);
       } catch {
         await logSecurityEvent({ actorKind: "anonymous", actorReference: hashSecurityValue(email), category: "candidate_verification_resend_rate_limited", outcome: "blocked", severity: "warning", ipHash });
         throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "Trop de demandes. Veuillez réessayer plus tard." });
