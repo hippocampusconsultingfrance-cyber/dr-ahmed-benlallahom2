@@ -845,8 +845,13 @@ export default function BookingPage() {
   const bookingWindowIssue = selectedDate ? getBookingWindowIssue(selectedDate, now) : null;
   // Tarif de l’horaire coché non calculé (souvent dans la même requête groupée que
   // l’agenda) : « Procéder au paiement » reste désactivé, et le statut le dit au lieu
-  // de « Créneau disponible ».
-  const priceFailed = Boolean(selectedDate) && calculatePrice.isError && !calculatePrice.isFetching;
+  // de « Créneau disponible ». Le dernier résultat reçu pour cet horaire reste un échec
+  // pendant un nouvel essai (« Réessayer », retour sur l’onglet), même quand React Query
+  // efface l’erreur faute de tarif déjà reçu : l’alerte et son bouton restent en place,
+  // et le statut dit « Vérification… » comme le bouton, jusqu’à la réponse.
+  const priceLastFailed = Boolean(selectedDate) && calculatePrice.errorUpdatedAt > calculatePrice.dataUpdatedAt;
+  const priceFailed = priceLastFailed && !calculatePrice.isFetching;
+  const priceRetrying = priceLastFailed && calculatePrice.isFetching && !availabilityQueryError;
   const availabilityLabel = availabilityQueryError
     ? bookingFormCopy.availabilityError
     : availabilitySlots.data && !hasConfiguredSlots
@@ -859,7 +864,7 @@ export default function BookingPage() {
     ? content.form.tooSoon
     : bookingWindowIssue === "too_far"
     ? content.form.tooFar
-    : availabilityPending
+    : availabilityPending || priceRetrying
       ? bookingFormCopy.checkingAvailability
       : isBlockedDate
       ? bookingFormCopy.blocked
@@ -876,11 +881,11 @@ export default function BookingPage() {
     // « Aucun créneau ouvert » et l’échec du chargement de l’agenda sont des
     // états indisponibles dès l’arrivée, sans attendre une sélection.
     selected: Boolean(selectedDate) || nothingToBook || availabilityQueryError,
-    pending: availabilityPending && !bookingWindowIssue,
+    pending: (availabilityPending || priceRetrying) && !bookingWindowIssue,
     blocked: isBlockedDate || availabilityQueryError || isOutsideConfiguredAvailability || Boolean(bookingWindowIssue) || nothingToBook || priceFailed,
     booked: isBookedSlot,
   });
-  const availabilityError = availabilityQueryError || calculatePrice.isError;
+  const availabilityError = availabilityQueryError || priceLastFailed;
 
   const createAppointment = trpc.appointments.create.useMutation();
   const resumeCheckout = trpc.appointments.createCheckoutSession.useMutation();
@@ -904,13 +909,24 @@ export default function BookingPage() {
     });
   };
 
+  // Focus dans la grille : horaire coché, sinon premier horaire, sinon le message « aucun horaire ».
+  const focusSlotGrid = () => {
+    const grid = slotsFieldsetRef.current;
+    const target = grid?.querySelector<HTMLElement>("input[name='booking-slot']:checked")
+      ?? grid?.querySelector<HTMLElement>("input[name='booking-slot']")
+      ?? grid?.querySelector<HTMLElement>("[data-slots-empty]");
+    target?.focus();
+  };
+
   // Tarif seul en échec (agenda chargé, grille affichée) : son propre « Réessayer ». Le bouton
-  // disparaît avec l’alerte quand le tarif arrive : le focus passe alors sur l’horaire coché.
-  const priceRetryOnly = calculatePrice.isError && !availabilityQueryError;
-  const retryPrice = () => {
+  // disparaît avec l’alerte quand le tarif arrive : le focus passe alors dans la grille, sauf si
+  // le visiteur est allé ailleurs pendant l’attente (jusqu’à plusieurs secondes avec les nouveaux essais).
+  const priceRetryOnly = priceLastFailed && !availabilityQueryError;
+  const retryPrice = (event: React.MouseEvent<HTMLButtonElement>) => {
     if (calculatePrice.isFetching) return;
+    const button = event.currentTarget;
     void calculatePrice.refetch().then(({ isError }) => {
-      if (!isError) slotsFieldsetRef.current?.querySelector<HTMLElement>("input[name='booking-slot']:checked")?.focus();
+      if (!isError && (document.activeElement === button || document.activeElement === document.body)) focusSlotGrid();
     });
   };
 
@@ -918,11 +934,7 @@ export default function BookingPage() {
     if (slotsRetrying || !dateKey || slotsRetryFocusRef.current !== dateKey) return;
     slotsRetryFocusRef.current = null;
     if (bookedSlots.isError) return;
-    const grid = slotsFieldsetRef.current;
-    const target = grid?.querySelector<HTMLElement>("input[name='booking-slot']:checked")
-      ?? grid?.querySelector<HTMLElement>("input[name='booking-slot']")
-      ?? grid?.querySelector<HTMLElement>("[data-slots-empty]");
-    target?.focus();
+    focusSlotGrid();
   }, [slotsRetrying]);
 
   const chooseDay = (nextDayKey: string) => {
@@ -1442,7 +1454,7 @@ export default function BookingPage() {
             </fieldset>
 
             {/* Price Display */}
-            {selectedDate && calculatePrice.isLoading && <PublicContentSkeleton cards={1} label={bookingFormCopy.checkingAvailability} />}
+            {selectedDate && calculatePrice.isLoading && !priceLastFailed && <PublicContentSkeleton cards={1} label={bookingFormCopy.checkingAvailability} />}
             {selectedDate && availabilityError && (priceRetryOnly ? (
               <div className="flex flex-col items-start gap-3 rounded-xl border border-destructive/35 bg-destructive/5 p-4 text-sm text-destructive" role="alert">
                 <p>{content.form.priceError}</p>

@@ -138,7 +138,7 @@ describe("booking day and time choice", () => {
 
     expect(source).toContain("availabilityError");
     expect(source).toContain("blockedDates.isError || bookedSlots.isError || availabilitySlots.isError");
-    expect(source).toContain("availabilityQueryError || calculatePrice.isError");
+    expect(source).toContain("availabilityQueryError || priceLastFailed");
     expect(source).toContain("disabled={isLoading || availabilityPending || availabilityError");
     expect(source).toContain("PublicContentSkeleton cards={1}");
     expect(source).toContain('role="alert"');
