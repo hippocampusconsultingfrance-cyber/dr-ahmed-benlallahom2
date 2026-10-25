@@ -49,7 +49,7 @@ function dbReturning(appointment: Record<string, unknown> | null) {
 }
 
 const status = (sessionId = "cs_test_own") => caller().appointments.publicStatus({ trackingId: "APTSTATUS0001", sessionId });
-const row = (overrides: Record<string, unknown> = {}) => ({ trackingId: "APTSTATUS0001", paymentStatus: "completed", appointmentStatus: "confirmed", stripeSessionId: "cs_test_own", ...overrides });
+const row = (overrides: Record<string, unknown> = {}) => ({ trackingId: "APTSTATUS0001", paymentStatus: "completed", appointmentStatus: "confirmed", stripeSessionId: "cs_test_own", appointmentDate: new Date("2026-10-29T18:00:00.000Z"), duration: 30, finalPrice: "150.00", ...overrides });
 
 let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
 beforeEach(() => {
@@ -63,15 +63,19 @@ afterEach(() => {
 });
 
 describe("appointments.publicStatus — état réel affiché après Stripe", () => {
-  it("confirme seulement un rendez-vous payé et confirmé avec cette session", async () => {
+  it("confirme seulement un rendez-vous payé et confirmé avec cette session, avec sa date, sa durée et son montant (RES-05)", async () => {
     dbReturning(row());
-    await expect(status()).resolves.toEqual({ state: "confirmed" });
+    await expect(status()).resolves.toEqual({
+      state: "confirmed",
+      appointment: { appointmentDate: "2026-10-29T18:00:00.000Z", durationMinutes: 30, amountEur: 150 },
+    });
     expect(mocks.stripeRetrieve).not.toHaveBeenCalled();
   });
 
   it("affiche « en cours de validation » tant que le webhook n’a pas confirmé un paiement reçu", async () => {
     dbReturning(row({ paymentStatus: "pending", appointmentStatus: "held" }));
     mocks.stripeRetrieve.mockResolvedValue({ id: "cs_test_own", payment_status: "paid", status: "complete", metadata: { trackingId: "APTSTATUS0001" } });
+    // Pas encore confirmé : ni date, ni durée, ni montant.
     await expect(status()).resolves.toEqual({ state: "processing" });
   });
 
