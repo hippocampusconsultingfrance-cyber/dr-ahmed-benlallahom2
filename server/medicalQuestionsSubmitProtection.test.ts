@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { medicalQuestions } from "../drizzle/schema";
+import { medicalQuestionAuditLogs, medicalQuestions } from "../drizzle/schema";
 import { createInMemoryDrizzle, type InMemoryDrizzle } from "./testSupport/inMemoryDrizzle";
 import { TEST_PEPPER } from "./testSupport/candidatePortal";
 import { medicalQuestionSubmitError } from "../client/src/pages/MedicalQuestionsPage";
@@ -117,6 +117,28 @@ describe("medicalQuestions.submit — emails vers une adresse non vérifiée (MA
     }
     await expect(caller(ip).submit(question("patient6@test.local"))).rejects.toMatchObject({ code: "TOO_MANY_REQUESTS" });
     expect(state.sent).toHaveLength(5);
+  });
+
+  it("garde comptée une question déjà enregistrée quand la suite échoue", async () => {
+    enableProductionProtections();
+    const ip = "198.51.100.50";
+    const db = state.db as InMemoryDrizzle;
+    const insert = db.insert.bind(db);
+    let auditFails = true;
+    vi.spyOn(db, "insert").mockImplementation((table => {
+      if (table === medicalQuestionAuditLogs && auditFails) {
+        auditFails = false;
+        throw new Error("database down");
+      }
+      return insert(table);
+    }) as typeof db.insert);
+    await expect(caller(ip).submit(question("enregistree@test.local"))).rejects.toThrow("database down");
+    expect(db.rows(medicalQuestions)).toHaveLength(1);
+
+    for (let index = 2; index <= 5; index += 1) {
+      await expect(caller(ip).submit(question(`patient${index}@test.local`))).resolves.toMatchObject({ acknowledgementSent: true });
+    }
+    await expect(caller(ip).submit(question("patient6@test.local"))).rejects.toMatchObject({ code: "TOO_MANY_REQUESTS" });
   });
 
   it("ne regroupe pas les visiteurs sans IP identifiable dans un compteur commun", async () => {

@@ -425,7 +425,8 @@ export async function createApp() {
       }
 
       let recruitmentStage = "request-validation";
-      // Set once this application counts towards the per-IP cap, so that a failure on our side gives it back.
+      // Set once this application counts towards the per-IP cap, so that a failure on our side gives it
+      // back, and cleared as soon as the request has a lasting effect (stored CV, confirmation sent).
       let releaseIpAttempt: (() => Promise<void>) | null = null;
       try {
         const file = req.file;
@@ -548,6 +549,8 @@ export async function createApp() {
             trackingId: duplicate.trackingId,
             candidatePortalInviteUrl,
           });
+          // The confirmation has gone out: this application keeps its place in the per-IP cap.
+          releaseIpAttempt = null;
           await logSecurityEvent({ actorKind: "anonymous", actorReference: parsed.data.email, category: "public_recruitment_apply_duplicate_file", outcome: "allowed", severity: "info", ipHash });
           res.status(200).json({ success: true, duplicate: true, trackingId: duplicate.trackingId });
           return;
@@ -570,6 +573,9 @@ export async function createApp() {
           file.buffer,
           file.mimetype,
         );
+        // The CV is now stored: a later failure (e.g. a refused INSERT) no longer gives the attempt back,
+        // otherwise each such request would leave a file in quarantine without using up the cap.
+        releaseIpAttempt = null;
         const retentionUntil = new Date();
         retentionUntil.setFullYear(retentionUntil.getFullYear() + 2);
 

@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { cvApplications } from "../drizzle/schema";
+import { cvApplications, securityEvents } from "../drizzle/schema";
 import { createInMemoryDrizzle, type InMemoryDrizzle } from "./testSupport/inMemoryDrizzle";
 import { TEST_PEPPER, seedApplication } from "./testSupport/candidatePortal";
 import { listen, validPdfBuffer } from "./testSupport/candidateUploadApp";
@@ -180,6 +180,55 @@ describe("/api/recruitment/apply — confirmation vers une adresse non vérifié
     } finally {
       error.mockRestore();
       warn.mockRestore();
+    }
+  });
+
+  it("garde comptée une candidature dont le CV a déjà été déposé quand l’enregistrement échoue ensuite", async () => {
+    enableProductionProtections();
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const ip = "198.51.100.68";
+    try {
+      // Postgres refuses a NUL character in a text column, which the schema lets through: the INSERT fails after the upload.
+      vi.spyOn(db(), "execute").mockRejectedValueOnce(new Error("invalid byte sequence for encoding \"UTF8\": 0x00"));
+      const uploadsBefore = vi.mocked(storagePut).mock.calls.length;
+      expect((await apply({ email: "nul@test.local", firstName: "Camille\u0000", ip })).status).toBe(500);
+      expect(vi.mocked(storagePut).mock.calls.length).toBe(uploadsBefore + 1);
+      expect(db().rows(cvApplications)).toHaveLength(0);
+
+      for (let index = 2; index <= 10; index += 1) {
+        expect((await apply({ email: `collegue${index}@test.local`, ip })).status, `candidature ${index}`).toBe(201);
+      }
+      expect(await apply({ email: "collegue11@test.local", ip })).toMatchObject({ status: 400, body: { code: "recruitment_rate_limited" } });
+    } finally {
+      error.mockRestore();
+    }
+  });
+
+  it("garde comptée une candidature en doublon dont la confirmation est partie avant une panne", async () => {
+    enableProductionProtections();
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const ip = "198.51.100.69";
+    const existing = seedApplication(db(), { email: "doublon@test.local", trackingId: "CVDUPLICATE0002" });
+    Object.assign(existing, { specialty: SPECIALTY, targetCountries: JSON.stringify(["Canada", "Suisse"]), fileChecksum: createHash("sha256").update(cv).digest("hex") });
+    const insert = db().insert.bind(db());
+    let securityLogFails = true;
+    vi.spyOn(db(), "insert").mockImplementation((table => {
+      if (table === securityEvents && securityLogFails) {
+        securityLogFails = false;
+        throw new Error("database down");
+      }
+      return insert(table);
+    }) as InMemoryDrizzle["insert"]);
+    try {
+      expect((await apply({ email: "doublon@test.local", ip })).status).toBe(500);
+      expect(state.sent.map(email => email.to[0])).toEqual(["doublon@test.local"]);
+
+      for (let index = 2; index <= 10; index += 1) {
+        expect((await apply({ email: `collegue${index}@test.local`, ip })).status, `candidature ${index}`).toBe(201);
+      }
+      expect(await apply({ email: "collegue11@test.local", ip })).toMatchObject({ status: 400, body: { code: "recruitment_rate_limited" } });
+    } finally {
+      error.mockRestore();
     }
   });
 

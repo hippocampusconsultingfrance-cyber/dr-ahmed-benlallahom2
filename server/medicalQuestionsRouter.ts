@@ -117,11 +117,12 @@ export const medicalQuestionsRouter = router({
         urgencyAcknowledged: 1,
       }).returning({ id: medicalQuestions.id });
       questionId = Number(result[0].id);
-      await auditQuestion({ questionId, action: "submitted", metadata: { publicationConsent: input.publicationConsent, language: input.language } });
     } catch (error) {
+      // Nothing was recorded: the attempt is given back. Once the row exists it stays counted.
       await releasePublicEmailIpRateLimit("medicalQuestion", emailIpHash).catch(() => undefined);
       throw error;
     }
+    await auditQuestion({ questionId, action: "submitted", metadata: { publicationConsent: input.publicationConsent, language: input.language } });
     await logSecurityEvent({ actorKind: "anonymous", actorReference: hashSecurityValue(input.email), category: "public_medical_question_submitted", outcome: "allowed", severity: "info", ipHash });
     // PUB-FORM-01: the owner is told (no health content), the person gets an
     // acknowledgement with the reference. Neither failure loses the question.
