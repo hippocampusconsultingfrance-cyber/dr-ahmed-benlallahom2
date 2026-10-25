@@ -15,7 +15,7 @@ vi.mock("./db", () => ({ getDb: database.getDb }));
 vi.mock("./_core/notifications", () => notifications);
 vi.mock("./_core/notification", () => owner);
 const invoicing = vi.hoisted(() => ({
-  generateInvoicePDF: vi.fn(async () => ({ buffer: Buffer.from("pdf") })),
+  generateInvoicePDF: vi.fn(async (_data: Record<string, unknown>) => ({ buffer: Buffer.from("pdf") })),
   allocateAppointmentInvoice: vi.fn(async () => ({
     invoiceNumber: "FAC-2026-000003",
     issuedAt: new Date("2026-10-12T08:00:00Z"),
@@ -229,13 +229,24 @@ describe("revendication atomique des envois post-paiement", () => {
     });
 
     const invoiceJob = { ...queuedJob, id: 8, jobType: "invoice", createdAt };
+    const appointmentDate = futureDate();
     fakeDatabase({
       jobs: [[invoiceJob], [{ ...invoiceJob, status: "running", attempts: 1 }]],
-      appointments: [[paidAppointment({ language: "de" })]],
+      appointments: [[paidAppointment({ language: "de", appointmentDate })]],
       updateRowCounts: [1],
     });
     await processDueAppointmentFulfillmentJobs();
     expect(notifications.sendInvoiceEmail).toHaveBeenCalledWith(expect.anything(), expect.anything(), "APT-42", 100, expect.any(Buffer), "FAC-2026-000003", expect.objectContaining({ language: "en" }));
+    // The PDF is generated from exactly the same data as for a French booking: no language.
+    const germanInvoiceData = invoicing.generateInvoicePDF.mock.calls.at(-1)![0];
+    expect(germanInvoiceData).not.toHaveProperty("language");
+    fakeDatabase({
+      jobs: [[invoiceJob], [{ ...invoiceJob, status: "running", attempts: 1 }]],
+      appointments: [[paidAppointment({ appointmentDate })]],
+      updateRowCounts: [1],
+    });
+    await processDueAppointmentFulfillmentJobs();
+    expect(invoicing.generateInvoicePDF.mock.calls.at(-1)![0]).toEqual(germanInvoiceData);
 
     const ownerJob = { ...queuedJob, id: 9, jobType: "owner", createdAt };
     fakeDatabase({

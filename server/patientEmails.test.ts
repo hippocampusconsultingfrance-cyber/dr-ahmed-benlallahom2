@@ -168,6 +168,16 @@ describe("emails patients dans la langue de la réservation (EN-01) et fichier a
     expect(ics).toContain("DTSTART:20261015T223000Z\r\n");
   });
 
+  it("présente la modalité configurée sous « Consultation format » en anglais, dans l’email et le .ics", async () => {
+    vi.stubEnv("CONSULTATION_MODALITY_TEXT", "Video call, link sent the day before.");
+    await sendConfirmationEmail("patient@example.test", "John Smith", "APTMAIL0004", NIGHT_APPOINTMENT, 100, undefined, { language: "en", confirmedAt: new Date("2026-10-10T08:00:00Z") });
+    const message = last();
+    expect(String(message.text)).toContain("Consultation format: Video call, link sent the day before.");
+    expect(calendarOf(message).ics.replace(/\r\n /g, "")).toContain("Consultation format: Video call\\, link sent the day before.");
+    await sendReminderEmail("patient@example.test", "John Smith", "APTMAIL0004", NIGHT_APPOINTMENT, { language: "en" });
+    expect(String(last().text)).toContain("Consultation format: Video call, link sent the day before.");
+  });
+
   it("un nouvel essai avec la même date de paiement renvoie exactement le même email (clé d’idempotence)", async () => {
     const options = { idempotencyKey: "appointment-confirmation-APTMAIL0003", language: "en" as const, confirmedAt: new Date("2026-10-10T08:00:00Z") };
     await sendConfirmationEmail("patient@example.test", "John Smith", "APTMAIL0003", NIGHT_APPOINTMENT, 100, undefined, options);
@@ -195,7 +205,7 @@ describe("emails patients dans la langue de la réservation (EN-01) et fichier a
     expect(String(last().text)).toContain("Amount refunded: €150.00");
 
     await sendUnconfirmablePaymentEmail("patient@example.test", { customerName: "John Smith", trackingId: "APTMAIL0002", appointmentDate: NIGHT_APPOINTMENT, amountCents: 10000, language: "en" }, "appointment-unconfirmable-cs_test");
-    expect(last().subject).toBe("Your payment has been received: booking to be settled - APTMAIL0002");
+    expect(last().subject).toBe("Your payment has been received: we will sort out your booking - APTMAIL0002");
     expect(String(last().text)).toContain("Amount received: €100.00");
   });
 

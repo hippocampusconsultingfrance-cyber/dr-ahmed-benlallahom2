@@ -22,7 +22,7 @@ const CALENDAR_COPY = {
   en: {
     summary: "Consultation with Dr Ahmed Ben Lallahom",
     reference: "Reference",
-    modality: "How it takes place",
+    modality: "Consultation format",
     contact: "A question, a change or a cancellation",
   },
 } as const;

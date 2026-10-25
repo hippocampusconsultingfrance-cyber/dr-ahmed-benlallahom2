@@ -312,7 +312,7 @@ export function buildBookingConfirmationEmail(
           ["Date and time", formatPatientDateTime(input.appointmentDate, language)],
           ["Duration", `${CONSULTATION_DURATION_MINUTES} minutes`],
           ["Amount paid", formatPatientAmount(input.finalPrice, language)],
-          ...(contact.modalityText ? [["How it takes place", contact.modalityText] as [string, string]] : []),
+          ...(contact.modalityText ? [["Consultation format", contact.modalityText] as [string, string]] : []),
         ],
         link: input.meetLink ? { label: "Video call link", url: input.meetLink } : undefined,
         closing: [
@@ -354,7 +354,7 @@ export function buildBookingReminderEmail(input: { customerName: string; trackin
       details: [
         ["Reference", input.trackingId],
         ["Date and time", formatPatientDateTime(input.appointmentDate, "en")],
-        ...(contact.modalityText ? [["How it takes place", contact.modalityText] as [string, string]] : []),
+        ...(contact.modalityText ? [["Consultation format", contact.modalityText] as [string, string]] : []),
       ],
       closing: ["If you need to cancel or reschedule your appointment, please let us know as soon as possible using the details below."],
       cancellationPolicy: true,
@@ -647,8 +647,8 @@ export async function sendRefundConfirmationEmail(
 export function buildUnconfirmablePaymentEmail(input: { customerName: string; trackingId: string; appointmentDate: Date; amountCents: number | null; language?: EmailLanguage }, contact = resolveConsultationContact()): PatientEmail {
   if (input.language === "en") {
     return buildPatientEmail({
-      subject: `Your payment has been received: booking to be settled - ${input.trackingId}`,
-      title: "Your payment has been received, booking to be settled",
+      subject: `Your payment has been received: we will sort out your booking - ${input.trackingId}`,
+      title: "Your payment has been received, we will sort out your booking",
       customerName: input.customerName,
       paragraphs: [
         "Your payment has been received, but the chosen slot could not be confirmed to you automatically: the temporary booking had expired or the slot was no longer available at the time of payment.",
@@ -728,7 +728,7 @@ export async function sendCvApplicationConfirmationEmail(
         trackingNumber: "Tracking number:",
         review: "Your profile will be reviewed against the available opportunities and the criteria of the country concerned. We will contact you if your profile matches a search.",
         portalTitle: "Your secure candidate portal",
-        portalText: "You can create an access to upload your administrative documents to your private vault later. Activating your email address will still be required.",
+        portalText: "You can create your portal access to upload your administrative documents to your private vault later. Activating your email address will still be required.",
         portalAction: "Create my candidate portal",
         noPatientData: "Do not send patient data, medical records or clinical documents with your application.",
         spam: "If you cannot find this email, check your Spam or Junk folder, then add recrutement@drahmedbenlallahom.com to your contacts.",
