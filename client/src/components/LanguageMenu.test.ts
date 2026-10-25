@@ -15,6 +15,7 @@ import CandidateResetPasswordPage from "@/pages/CandidateResetPasswordPage";
 import CandidatePortalPage from "@/pages/CandidatePortalPage";
 import NotFound from "@/pages/NotFound";
 import ServiceStatusPage from "@/pages/ServiceStatusPage";
+import RecruitmentUnsubscribePage from "@/pages/RecruitmentUnsubscribePage";
 
 /** Browser globals read while rendering: the address, the stored language and an English browser. */
 function stubBrowser({ path = "/", search = "", storedLanguage = null as string | null } = {}) {
@@ -83,6 +84,7 @@ describe("menu de langue réutilisable (EN-03)", () => {
     ["/candidate/verify", CandidateVerifyPage, "?email=a%40example.com&token=abc"],
     ["/candidate/reset-password", CandidateResetPasswordPage, "?email=a%40example.com&token=abc"],
     ["/candidate/portal", CandidatePortalPage],
+    ["/recruitment/unsubscribe", RecruitmentUnsubscribePage, "?token=abcdefghijklmnopqrstuvwxyz012345"],
     ["/page-inconnue", NotFound],
     ["/maintenance", () => createElement(ServiceStatusPage, { kind: "maintenance" })],
     ["/error", () => createElement(ServiceStatusPage, { kind: "error" })],

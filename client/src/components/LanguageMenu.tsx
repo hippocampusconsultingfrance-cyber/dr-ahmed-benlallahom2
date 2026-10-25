@@ -38,8 +38,8 @@ const toneClasses = {
 
 /**
  * Language dropdown of the site header, also placed on the pages that do not
- * show <Navigation> (booking, payment confirmation, candidate space, 404,
- * maintenance) so that a visitor arriving from a shared link can switch (EN-03).
+ * show <Navigation> (booking, payment confirmation, candidate space, recruitment
+ * unsubscribe, 404, maintenance) so that a visitor arriving from a shared link can switch (EN-03).
  */
 export default function LanguageMenu({ className, tone = "site" }: { className?: string; tone?: keyof typeof toneClasses }) {
   const colors = toneClasses[tone];
