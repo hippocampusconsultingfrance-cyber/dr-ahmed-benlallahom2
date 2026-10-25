@@ -30,12 +30,26 @@ const root = path.resolve(import.meta.dirname, "../..");
 
 type Theme = "light" | "dark";
 
+/**
+ * Turnstile simulé : le client est servi avec une clé de site de test et le script de Cloudflare est
+ * remplacé par un faux qui affiche le défi sans le résoudre, comme avant qu'un visiteur le passe, ou
+ * qui donne aussitôt le jeton passé à open().
+ */
+const TURNSTILE_TEST_SITE_KEY = "1x00000000000000000000AA";
+const fakeTurnstileScript = (token: string | null) => `window.turnstile = {
+  render: (element, options) => { if (${JSON.stringify(token)}) setTimeout(() => options.callback(${JSON.stringify(token)})); return "fake-widget"; },
+  remove: () => {},
+  reset: () => {},
+};`;
+
 describe.skipIf(!executablePath)("pages publiques dans un navigateur", () => {
   let server: ViteDevServer;
   let browser: Browser;
   let baseUrl: string;
+  const previousTurnstileSiteKey = process.env.VITE_TURNSTILE_SITE_KEY;
 
   beforeAll(async () => {
+    process.env.VITE_TURNSTILE_SITE_KEY = TURNSTILE_TEST_SITE_KEY;
     server = await createServer({
       configFile: path.join(root, "vite.config.ts"),
       cacheDir: path.join(root, "node_modules/.vite/public-pages-browser-test"),
@@ -50,10 +64,12 @@ describe.skipIf(!executablePath)("pages publiques dans un navigateur", () => {
   afterAll(async () => {
     await browser?.close();
     await server?.close();
+    if (previousTurnstileSiteKey === undefined) delete process.env.VITE_TURNSTILE_SITE_KEY;
+    else process.env.VITE_TURNSTILE_SITE_KEY = previousTurnstileSiteKey;
   });
 
   /** Sans consentement enregistré (par défaut), le bandeau cookies est ouvert en bas de l'écran. */
-  async function open(route: string, { width = 1440, height = 800, theme = "dark" as Theme, touch = false, consent = false, language = "fr" } = {}) {
+  async function open(route: string, { width = 1440, height = 800, theme = "dark" as Theme, touch = false, consent = false, language = "fr", turnstileToken = null as string | null } = {}) {
     const context = await browser.newContext({ viewport: { width, height }, isMobile: touch, hasTouch: touch });
     await context.addInitScript(({ storedLanguage, storedTheme, storedConsent }) => {
       localStorage.setItem("language", storedLanguage);
@@ -65,7 +81,7 @@ describe.skipIf(!executablePath)("pages publiques dans un navigateur", () => {
       const procedures = new URL(request.request().url()).pathname.replace(/^.*\/api\/trpc\//, "").split(",");
       return request.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(procedures.map(() => ({ result: { data: superjson.serialize(null) } }))) });
     });
-    await page.route("https://challenges.cloudflare.com/**", (request) => request.abort());
+    await page.route("https://challenges.cloudflare.com/**", (request) => request.fulfill({ status: 200, contentType: "text/javascript", body: fakeTurnstileScript(turnstileToken) }));
     await page.goto(`${baseUrl}${route}`, { waitUntil: "networkidle" });
     // On a loaded machine (CI), "networkidle" can fire before the lazily loaded page has replaced the
     // loading screen: wait for the page itself, whose landmark every tested route renders.
@@ -428,6 +444,65 @@ describe.skipIf(!executablePath)("pages publiques dans un navigateur", () => {
     }
   }, 120_000);
 
+  it("nomme les champs d'une candidature ou d'une question envoyée vide, y amène un focus visible et garde la liste au choix du CV (A11Y-03)", async () => {
+    for (const { route, language, width, message, first, other } of [
+      { route: "/recruitment/standard", language: "fr", width: 1366, first: "recruitment-firstName", other: "recruitment-lastName",
+        message: "À compléter ou corriger : Prénom, Nom, Email, Spécialité / profession, Pays d’obtention du diplôme, Pays ciblés, CV, Consentement au traitement des données." },
+      { route: "/recruitment/standard", language: "en", width: 390, first: "recruitment-firstName", other: "recruitment-lastName",
+        message: "Please complete or correct: First name, Last name, Professional email, Specialty / profession, Country where the diploma was obtained, Target countries, CV, Consent to data processing." },
+      { route: "/recruitment/vvip-offshore", language: "en", width: 1366, first: "vvip-firstName", other: "vvip-lastName",
+        message: "Please complete or correct: First name, Last name, Professional email, Preferred Environment, Country where diploma was obtained, CV, Consent to data processing." },
+      { route: "/questions-anesthesie", language: "fr", width: 390, first: "medical-question-firstName", other: "medical-question-lastName",
+        message: "À compléter ou corriger : Prénom, Nom, Email, Téléphone, Votre question, Consentement au traitement de votre question, Avertissement sur les urgences." },
+    ]) {
+      const label = `${route} (${language}, ${width} px)`;
+      // The anti-bot check is passed, as it is for most visitors before they send.
+      const page = await open(route, { language, width, height: width < 768 ? 844 : 900, consent: true, turnstileToken: "test-token" });
+      const submit = page.locator("main form button[type=submit]");
+      await expect.poll(() => submit.isEnabled(), { timeout: 5_000 }).toBe(true);
+      await submit.click();
+      await expect.poll(() => page.locator("main form [role=alert]").allTextContents(), { timeout: 5_000 }).toEqual([message]);
+      await page.evaluate(scrollSettled);
+      const state = await page.evaluate((otherId) => {
+        const focused = document.activeElement as HTMLElement;
+        const other = document.getElementById(otherId)!;
+        const box = focused.getBoundingClientRect();
+        const headerBottom = document.querySelector("header.site-nav")!.getBoundingClientRect().bottom;
+        const ring = (element: Element) => { const style = getComputedStyle(element); return `${style.outlineStyle} ${style.outlineWidth} ${style.borderColor} ${style.boxShadow}`; };
+        return {
+          focused: focused.id,
+          invalid: [focused.getAttribute("aria-invalid"), other.getAttribute("aria-invalid")],
+          visible: box.top >= headerBottom && box.bottom <= innerHeight ? true : `[${Math.round(box.top)}, ${Math.round(box.bottom)}] sous ${Math.round(headerBottom)} / ${innerHeight}`,
+          focusOutline: getComputedStyle(focused).outlineStyle,
+          sameLookAsOtherInvalidField: ring(focused) === ring(other),
+          focusVisible: focused.matches(":focus-visible"),
+        };
+      }, other);
+      expect(state.focused, label).toBe(first);
+      expect(state.invalid, label).toEqual(["true", "true"]);
+      expect(state.visible, `${label} : premier champ visible sous l'en-tête`).toBe(true);
+      expect(state.focusVisible, label).toBe(true);
+      // The field that has focus stands out from the other fields in error (WCAG 2.4.7).
+      expect(state.focusOutline, label).toBe("solid");
+      expect(state.sameLookAsOtherInvalidField, label).toBe(false);
+      await page.context().close();
+    }
+
+    // A CV chosen after a refused send keeps the other fields in the alert, whether it is refused or accepted.
+    const page = await open("/recruitment/standard", { language: "en", consent: true, turnstileToken: "test-token" });
+    await expect.poll(() => page.locator("main form button[type=submit]").isEnabled(), { timeout: 5_000 }).toBe(true);
+    await page.fill("#recruitment-firstName", "Amina");
+    await page.locator("main form button[type=submit]").click();
+    const alerts = () => page.locator("main form [role=alert]").allTextContents();
+    await expect.poll(alerts, { timeout: 5_000 }).toEqual(["Please complete or correct: Last name, Professional email, Specialty / profession, Country where the diploma was obtained, Target countries, CV, Consent to data processing."]);
+    await page.setInputFiles("#recruitment-cv", { name: "cv.doc", mimeType: "application/msword", buffer: Buffer.from("cv") });
+    expect(await alerts()).toEqual(["Please complete or correct: Last name, Professional email, Specialty / profession, Country where the diploma was obtained, Target countries, Consent to data processing. Please attach a PDF or DOCX CV up to 4 MB (the legacy Word .doc format is not accepted)."]);
+    await page.setInputFiles("#recruitment-cv", { name: "cv.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.7") });
+    expect(await alerts()).toEqual(["Please complete or correct: Last name, Professional email, Specialty / profession, Country where the diploma was obtained, Target countries, Consent to data processing."]);
+    expect(await page.getAttribute("#recruitment-lastName", "aria-invalid")).toBe("true");
+    await page.context().close();
+  }, 120_000);
+
   it("signale dès son choix un CV trop lourd ou au mauvais format et traduit les spécialités (REC-04, A11Y-03)", async () => {
     const tooLarge = { name: "cv.pdf", mimeType: "application/pdf", buffer: Buffer.alloc(4 * 1024 * 1024 + 1) };
     const legacyWord = { name: "cv.doc", mimeType: "application/msword", buffer: Buffer.from("cv") };
@@ -449,6 +524,13 @@ describe.skipIf(!executablePath)("pages publiques dans un navigateur", () => {
     expect(options).toContain("Médecine d’urgence → Emergency medicine");
     await standard.selectOption("#recruitment-specialty", "Médecine d’urgence");
     expect(await standard.getByText("Selected: Emergency medicine").isVisible()).toBe(true);
+    // "Other" opens a single field, named by a visible label, whose example is in the page language.
+    await standard.getByLabel("Search a specialty…").fill("");
+    await standard.selectOption("#recruitment-specialty", "Autre spécialité ou profession");
+    const customSpecialty = standard.getByLabel("Specify your specialty or profession *", { exact: true });
+    expect(await customSpecialty.count()).toBe(1);
+    expect(await standard.getByText("Specify your specialty or profession *", { exact: true }).isVisible()).toBe(true);
+    expect(await customSpecialty.getAttribute("placeholder")).toBe("e.g. Perfusionist, hearing aid specialist…");
     await standard.context().close();
 
     const vvip = await open("/recruitment/vvip-offshore", { language: "en", consent: true });
