@@ -9,6 +9,7 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { SEOHead } from "@/components/SEOHead";
 import Footer from "@/components/Footer";
 import BookingLegalNotice from "@/components/BookingLegalNotice";
+import LanguageMenu from "@/components/LanguageMenu";
 import { clearBookingDraft, clearPendingBooking } from "@/lib/pendingBooking";
 import { siteConfig } from "@/data/site-config";
 
@@ -294,6 +295,7 @@ export default function BookingConfirmationPage() {
     <main className="min-h-screen bg-background px-4 py-8 sm:py-12">
       <SEOHead title={seoTitle} description={seoDescription} ogUrl="https://drahmedbenlallahom.com/booking/confirmation" noIndex />
       <div className="max-w-4xl mx-auto">
+        <div className="mb-4 flex justify-end"><LanguageMenu /></div>
         <Breadcrumb items={[{ label: state.title }]} />
 
         <section className={`confirmation-panel ${isConfirmed ? "is-success" : "is-canceled"} mt-6`} aria-live="polite" data-state={displayed}>

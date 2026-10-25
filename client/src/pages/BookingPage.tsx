@@ -10,6 +10,7 @@ import PublicContentSkeleton from "@/components/PublicContentSkeleton";
 import { SEOHead } from "@/components/SEOHead";
 import Footer from "@/components/Footer";
 import BookingLegalNotice from "@/components/BookingLegalNotice";
+import LanguageMenu from "@/components/LanguageMenu";
 import { getBookingFormCopy } from "@/lib/publicFormCopy";
 import {
   clearBookingDraft,
@@ -830,6 +831,7 @@ export default function BookingPage() {
             <p className="text-xs leading-5 text-muted-foreground">{bookingBrandCopy}</p>
           </div>
           <span className="ml-auto hidden h-2 w-2 shrink-0 rounded-full bg-[#c9a96e] sm:block" aria-hidden="true" />
+          <LanguageMenu className="ml-auto shrink-0 sm:ml-0" />
         </div>
 
         {/* Progress Indicator */}
