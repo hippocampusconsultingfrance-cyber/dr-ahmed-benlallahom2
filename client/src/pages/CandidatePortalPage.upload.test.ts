@@ -1,6 +1,6 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CANDIDATE_AI_ANALYSIS_CATEGORIES, CANDIDATE_UPLOADABLE_DOCUMENT_CATEGORIES } from "@shared/candidateDocumentCategories";
 
 const view = vi.hoisted(() => ({ language: "fr" as "fr" | "en" | "de" | "zh" }));
@@ -28,7 +28,7 @@ vi.mock("@/lib/trpc", () => {
   };
 });
 
-const { default: CandidatePortalPage, candidateDocumentAiNotice, candidatePortalCopy, candidateUploadProblem } = await import("./CandidatePortalPage");
+const { default: CandidatePortalPage, candidateDocumentAiNotice, candidatePortalCopy, candidateUploadFieldDescription, candidateUploadProblem, candidateUploadProblemField, focusCandidateUploadProblem } = await import("./CandidatePortalPage");
 const languages = ["fr", "en", "de", "zh"] as const;
 
 function renderPortal(language: (typeof languages)[number]) {
@@ -44,6 +44,7 @@ function categoryTrigger(html: string) {
 }
 
 beforeEach(() => { view.language = "fr"; });
+afterEach(() => { vi.unstubAllGlobals(); });
 
 describe("REC-05 — catégorie du document dans le coffre", () => {
   it.each(languages)("n’en présélectionne aucune et l’exige (%s)", language => {
@@ -90,6 +91,63 @@ describe("REC-05 — catégorie du document dans le coffre", () => {
     expect(candidateUploadProblem({ ...ready, category: "other" }, copy)).toBe(copy.otherRequired);
     expect(candidateUploadProblem({ ...ready, category: "diploma", file: null }, copy)).toBe(copy.selectDocument);
     expect(candidateUploadProblem({ ...ready, category: "diploma", turnstileToken: null }, copy)).toBe(copy.turnstile);
+  });
+
+  it.each(languages)("garde la région des messages dans la page dès le premier rendu, vide et reliée à aucun champ (%s)", language => {
+    const html = renderPortal(language);
+    const trigger = categoryTrigger(html).tag;
+
+    // Inserted together with its text, a live region is not reliably announced: it must already be there.
+    expect(html).toContain('<p id="candidate-document-upload-message" role="status" class="sr-only"></p>');
+    expect(trigger).toContain('aria-describedby="candidate-document-ai-note"');
+    expect(trigger).toContain('aria-invalid="false"');
+    expect(html).toMatch(/<input[^>]*id="candidate-document-file"[^>]*aria-describedby="candidate-document-limit"/);
+  });
+
+  it.each(languages)("relie « choisissez le type » au déclencheur de catégorie, et à lui seul (%s)", language => {
+    const copy = candidatePortalCopy[language];
+    const html = renderPortal(language);
+    const message = candidateUploadProblem({ file: { size: 2048 }, category: "", otherLabel: "", turnstileToken: "turnstile-token" }, copy) ?? "";
+    const field = candidateUploadProblemField(message, copy);
+
+    expect(field).toBe("candidate-document-category");
+    expect(categoryTrigger(html).tag).toContain(`id="${field}"`);
+    expect(candidateUploadFieldDescription("candidate-document-category", message, copy, "candidate-document-ai-note")).toBe("candidate-document-upload-message candidate-document-ai-note");
+    expect(candidateUploadFieldDescription("candidate-document-file", message, copy, "candidate-document-limit")).toBe("candidate-document-limit");
+    expect(candidateUploadFieldDescription("candidate-document-other", message, copy)).toBeUndefined();
+    // Once a type is chosen the message goes, and so does the link.
+    expect(candidateUploadFieldDescription("candidate-document-category", "", copy, "candidate-document-ai-note")).toBe("candidate-document-ai-note");
+  });
+
+  it("relie chaque autre message au champ qu’il concerne, et aucun message général à un champ", () => {
+    const copy = candidatePortalCopy.en;
+
+    expect(candidateUploadProblemField(copy.otherRequired, copy)).toBe("candidate-document-other");
+    expect(candidateUploadFieldDescription("candidate-document-other", copy.otherRequired, copy)).toBe("candidate-document-upload-message");
+    expect(candidateUploadProblemField(copy.selectDocument, copy)).toBe("candidate-document-file");
+    expect(candidateUploadProblemField(copy.fileTooLarge, copy)).toBe("candidate-document-file");
+    for (const message of ["", copy.turnstile, copy.uploading, copy.uploadSuccess, copy.uploadError]) {
+      expect(candidateUploadProblemField(message, copy), message).toBeNull();
+      expect(candidateUploadFieldDescription("candidate-document-category", message, copy, "candidate-document-ai-note"), message).toBe("candidate-document-ai-note");
+    }
+  });
+
+  it("ramène le focus sur le champ fautif après le rendu qui lui relie le message", () => {
+    const copy = candidatePortalCopy.fr;
+    const frames: Array<() => void> = [];
+    const fields = new Map<string, { focus: ReturnType<typeof vi.fn> }>();
+    vi.stubGlobal("window", { requestAnimationFrame: (callback: () => void) => frames.push(callback) });
+    vi.stubGlobal("document", { getElementById: (id: string) => fields.get(id) ?? fields.set(id, { focus: vi.fn() }).get(id) });
+
+    focusCandidateUploadProblem(copy.categoryRequired, copy);
+    expect(fields.size).toBe(0);
+    frames.splice(0).forEach(frame => frame());
+    expect([...fields.keys()]).toEqual(["candidate-document-category"]);
+    expect(fields.get("candidate-document-category")?.focus).toHaveBeenCalledTimes(1);
+
+    // The anti-bot check is not a field the visitor can type into: focus stays where it is.
+    focusCandidateUploadProblem(copy.turnstile, copy);
+    expect(frames).toHaveLength(0);
   });
 });
 
