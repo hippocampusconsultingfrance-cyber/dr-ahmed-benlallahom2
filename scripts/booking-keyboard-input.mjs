@@ -9,7 +9,8 @@
  *   CHROMIUM=/chemin/vers/chromium pnpm test:booking-keyboard
  *
  * Vérifie aussi qu'un lien ?lang=en affiche la page en anglais, avec le menu
- * de langue, puis retire le paramètre de l'adresse (EN-03).
+ * de langue, puis retire le paramètre de l'adresse, même quand le chemin
+ * commence par « // » (EN-03).
  */
 import { createServer } from "vite";
 import { chromium, devices } from "playwright-core";
@@ -18,7 +19,7 @@ import superjson from "superjson";
 const responses = {
   "availability.getBlockedDates": [],
   "availability.getBookedSlots": [],
-  "availability.getSlots": [0, 1, 2, 3, 4, 5, 6].map((dayOfWeek) => ({ id: dayOfWeek + 1, dayOfWeek, startTime: "08:00", endTime: "21:00", isActive: 1 })),
+  "availability.getSlots": [0, 1, 2, 3, 4, 5, 6].map((dayOfWeek) => ({ id: dayOfWeek + 1, dayOfWeek, startTime: "00:00", endTime: "21:00", isActive: 1 })),
   "appointments.calculatePrice": { basePrice: 100, finalPrice: 150, isNightRate: true },
 };
 
@@ -30,6 +31,8 @@ const scenarios = [
   { device: "Pixel 7", date, time: "1900", shownDate, shownTime: "19:00" },
   { device: "iPhone 14", date, time: "930", shownDate, shownTime: "9:30" },
   { device: "iPhone 14", date, time: "10h00", shownDate, shownTime: "10:00" },
+  // Trois chiffres valent H:MM : « 130 » est 1 h 30 (nuit à Paris), pas « 13:0 ».
+  { device: "Pixel 7", date, time: "130", shownDate, shownTime: "130", shownSlot: "à 01:30" },
 ];
 
 const server = await createServer({ configFile: "vite.config.ts", server: { host: "127.0.0.1" }, logLevel: "error" });
@@ -41,6 +44,9 @@ const failures = [];
 async function openPage(device, path) {
   const context = await browser.newContext({ ...devices[device], locale: "fr-FR", timezoneId: "Europe/Paris" });
   const page = await context.newPage();
+  page.on("pageerror", (error) => failures.push(`${path} : ${error.message}`));
+  // Aucun service externe (polices, Turnstile…) : seul le serveur Vite local répond.
+  await page.route((url) => !url.href.startsWith(baseUrl), (route) => route.abort());
   await page.route("**/api/trpc/**", (route) => {
     const procedures = new URL(route.request().url()).pathname.replace(/^.*\/api\/trpc\//, "").split(",");
     const body = procedures.map((name) => ({ result: { data: superjson.serialize(responses[name] ?? null) } }));
@@ -61,9 +67,10 @@ try {
     const shown = { date: await page.inputValue("#booking-date"), time: await page.inputValue("#booking-time") };
     const state = await page.getAttribute("#availability-status", "data-state");
     const dateError = await page.locator("#booking-date-error").count();
+    const slot = (await page.locator("p.text-primary[aria-live]").allInnerTexts()).join(" ");
     const label = `${scenario.device} « ${scenario.date} » + « ${scenario.time} »`;
-    if (shown.date !== scenario.shownDate || shown.time !== scenario.shownTime || state !== "available" || dateError) {
-      failures.push(`${label} : affiché ${shown.date} ${shown.time}, état ${state}, erreur ${dateError ? "oui" : "non"}`);
+    if (shown.date !== scenario.shownDate || shown.time !== scenario.shownTime || state !== "available" || dateError || (scenario.shownSlot && !slot.endsWith(scenario.shownSlot))) {
+      failures.push(`${label} : affiché ${shown.date} ${shown.time} (${slot}), état ${state}, erreur ${dateError ? "oui" : "non"}`);
     } else {
       console.log(`OK ${label} → ${shown.date} ${shown.time}, créneau disponible`);
     }
@@ -81,6 +88,17 @@ try {
     console.log("OK /booking?lang=en → page en anglais, menu de langue, ?lang retiré de l'adresse");
   }
   await context.close();
+
+  // Un chemin « //hôte/x » ne doit pas faire lever history.replaceState (page blanche).
+  const slashed = await openPage("Pixel 7", "//evil.example/x?lang=en");
+  await slashed.page.waitForTimeout(300);
+  const rendered = await slashed.page.locator("#root *").count();
+  if (!rendered || slashed.page.url() !== `${baseUrl}//evil.example/x`) {
+    failures.push(`//evil.example/x?lang=en : ${rendered} éléments rendus, adresse ${slashed.page.url()}`);
+  } else {
+    console.log("OK //evil.example/x?lang=en → page rendue, même origine, ?lang retiré");
+  }
+  await slashed.context.close();
 } finally {
   await browser.close();
   await server.close();
