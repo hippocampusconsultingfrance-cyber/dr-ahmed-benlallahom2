@@ -1,8 +1,8 @@
 /**
- * Tape la date et l'heure de /booking touche par touche, comme sur le pavé
- * numérique d'un mobile (chiffres seuls, sans « / » ni « : »), dans un vrai
- * navigateur en émulation mobile (RES-01). Le remplissage par script (fill)
- * ne révèle pas ce défaut : seule une frappe au clavier le fait.
+ * Choisit le jour puis l'horaire de /booking dans un vrai navigateur en
+ * émulation mobile : au toucher sur la grille de créneaux, et au clavier
+ * (Tab puis flèches), comme le ferait un patient sur iPhone ou Android
+ * (RES-01, puis RES-02 : la grille remplace la saisie de la date et de l'heure).
  *
  * Autonome : démarre Vite sur le client et répond aux requêtes tRPC de
  * disponibilité par des créneaux fictifs ; aucun serveur ni base n'est requis.
@@ -23,16 +23,15 @@ const responses = {
   "appointments.calculatePrice": { basePrice: 100, finalPrice: 150, isNightRate: true },
 };
 
-// Un jour dans dix jours, dans la fenêtre de réservation (2 h à 90 jours).
-const shownDate = new Intl.DateTimeFormat("fr-FR", { timeZone: "Europe/Paris", day: "2-digit", month: "2-digit", year: "numeric" })
-  .format(new Date(Date.now() + 10 * 24 * 3600 * 1000));
-const date = shownDate.replace(/\D/g, "");
+// Un jour dans dix jours, dans la fenêtre de réservation (2 h à 90 jours), en clé de Paris.
+const day = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Paris" }).format(new Date(Date.now() + 10 * 24 * 3600 * 1000));
 const scenarios = [
-  { device: "Pixel 7", date, time: "1900", shownDate, shownTime: "19:00" },
-  { device: "iPhone 14", date, time: "930", shownDate, shownTime: "9:30" },
-  { device: "iPhone 14", date, time: "10h00", shownDate, shownTime: "10:00" },
-  // Trois chiffres valent H:MM : « 130 » est 1 h 30 (nuit à Paris), pas « 13:0 ».
-  { device: "Pixel 7", date, time: "130", shownDate, shownTime: "130", shownSlot: "à 01:30" },
+  { device: "Pixel 7", day, time: "19:00" },
+  { device: "iPhone 14", day, time: "09:30" },
+  // Nuit à Paris : 01:30, au tarif de nuit.
+  { device: "Pixel 7", day, time: "01:30" },
+  // Au clavier : Tab entre dans la grille sur 00:00, deux flèches mènent à 01:00.
+  { device: "iPhone 14", day, time: "01:00", keyboard: ["Tab", "Space", "ArrowRight", "ArrowRight"] },
 ];
 
 const server = await createServer({ configFile: "vite.config.ts", server: { host: "127.0.0.1" }, logLevel: "error" });
@@ -59,20 +58,24 @@ async function openPage(device, path) {
 try {
   for (const scenario of scenarios) {
     const { context, page } = await openPage(scenario.device, "/booking");
-    await page.locator("#booking-date").tap();
-    await page.keyboard.type(scenario.date, { delay: 30 });
-    await page.locator("#booking-time").tap();
-    await page.keyboard.type(scenario.time, { delay: 30 });
-    await page.waitForTimeout(300);
-    const shown = { date: await page.inputValue("#booking-date"), time: await page.inputValue("#booking-time") };
-    const state = await page.getAttribute("#availability-status", "data-state");
-    const dateError = await page.locator("#booking-date-error").count();
-    const slot = (await page.locator("p.text-primary[aria-live]").allInnerTexts()).join(" ");
-    const label = `${scenario.device} « ${scenario.date} » + « ${scenario.time} »`;
-    if (shown.date !== scenario.shownDate || shown.time !== scenario.shownTime || state !== "available" || dateError || (scenario.shownSlot && !slot.endsWith(scenario.shownSlot))) {
-      failures.push(`${label} : affiché ${shown.date} ${shown.time} (${slot}), état ${state}, erreur ${dateError ? "oui" : "non"}`);
+    await page.locator("#booking-day").tap();
+    await page.locator("#booking-day").selectOption(scenario.day);
+    await page.locator(`input[name="booking-slot"]`).first().waitFor({ state: "attached" });
+    if (scenario.keyboard) {
+      await page.locator("#booking-day").focus();
+      for (const key of scenario.keyboard) await page.keyboard.press(key);
     } else {
-      console.log(`OK ${label} → ${shown.date} ${shown.time}, créneau disponible`);
+      await page.locator("label", { hasText: new RegExp(`^${scenario.time}`) }).tap();
+    }
+    await page.waitForTimeout(300);
+    const checked = await page.locator(`input[name="booking-slot"]:checked`).evaluate((input) => input.closest("label").textContent).catch(() => null);
+    const state = await page.getAttribute("#availability-status", "data-state");
+    const slot = (await page.locator("p.text-primary[aria-live]").allInnerTexts()).join(" ");
+    const label = `${scenario.device} ${scenario.day} ${scenario.time}${scenario.keyboard ? " (clavier)" : ""}`;
+    if (checked !== scenario.time || state !== "available" || !slot.includes(`${scenario.time} (heure de Paris)`)) {
+      failures.push(`${label} : coché ${checked}, récapitulatif « ${slot} », état ${state}`);
+    } else {
+      console.log(`OK ${label} → ${slot}, créneau disponible`);
     }
     await context.close();
   }

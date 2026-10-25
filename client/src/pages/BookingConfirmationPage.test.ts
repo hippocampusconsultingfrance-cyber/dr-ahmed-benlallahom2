@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { confirmationContent, getBookingConfirmationState, getDisplayedConfirmationState } from "./BookingConfirmationPage";
+import { confirmationContent, getBookingConfirmationState, getDisplayedConfirmationState, STATUS_STALLED_AFTER_MS } from "./BookingConfirmationPage";
 
 describe("booking confirmation state", () => {
   it("does not treat an absent or unknown Stripe status as a successful payment", () => {
@@ -33,6 +33,20 @@ describe("booking confirmation state", () => {
     expect(source).toContain("{isConfirmed && (");
     expect(source).toContain("mailto:${siteConfig.email}");
     expect(source).toContain("trpc.appointments.publicStatus.useQuery(");
+  });
+
+  it("sépare l’annonce de mise à jour automatique de sa variante « vérifiez votre email » après 2 min (RES-05)", () => {
+    expect(STATUS_STALLED_AFTER_MS).toBe(2 * 60 * 1000);
+    for (const language of ["fr", "en", "de", "zh"] as const) {
+      const { processing, appointment } = confirmationContent[language];
+      expect(processing.description).not.toContain(processing.autoUpdate);
+      expect(processing.stalled).not.toBe(processing.autoUpdate);
+      expect(appointment.addToCalendar).toBeTruthy();
+      expect(appointment.minutes(30)).toContain("30");
+      expect(appointment.localTime("22:00")).toContain("22:00");
+    }
+    expect(confirmationContent.fr.processing.stalled).toContain("vérifiez votre email ou contactez-nous");
+    expect(confirmationContent.en.processing.stalled).toContain("check your email or contact us");
   });
 
   it("provides a neutral and explicit state in every supported language", () => {
