@@ -443,6 +443,9 @@ export async function createApp() {
         });
 
         if (!parsed.success) {
+          // Names of the refused fields and the kind of issue only, never the submitted values.
+          const rejectedFields = Array.from(new Set(parsed.error.issues.map(issue => `${issue.path.map(String).join(".")}:${issue.code}`)));
+          console.warn("Recruitment application rejected:", rejectedFields.join(", "));
           const targetCountriesTooMany = parsed.error.issues.some(issue => issue.path[0] === "targetCountries" && issue.code === "too_big");
           res.status(400).json({
             error: targetCountriesTooMany
