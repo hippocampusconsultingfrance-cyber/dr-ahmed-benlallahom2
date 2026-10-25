@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { buildBookingIcs } from "./bookingCalendar";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { buildBookingIcs, downloadBookingIcs } from "./bookingCalendar";
 
 const event = {
   trackingId: "APTABC123DEF45",
@@ -31,5 +31,32 @@ describe("fichier agenda de la page de confirmation (RES-05)", () => {
     const ics = buildBookingIcs({ ...event, summary: "与 Ahmed Ben Lallahom 医生的咨询".repeat(4) });
     for (const line of ics.split("\r\n")) expect(new TextEncoder().encode(line).length, line).toBeLessThanOrEqual(75);
     expect(unfold(ics)).toContain(`SUMMARY:${"与 Ahmed Ben Lallahom 医生的咨询".repeat(4)}`);
+  });
+});
+
+describe("téléchargement du fichier agenda (RES-05)", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it("laisse 40 s au navigateur pour lire le fichier avant de libérer son adresse", () => {
+    vi.useFakeTimers();
+    const link = { href: "", download: "", click: vi.fn(), remove: vi.fn() };
+    vi.stubGlobal("window", globalThis);
+    vi.stubGlobal("document", { createElement: vi.fn(() => link), body: { appendChild: vi.fn() } });
+    vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:consultation");
+    const revokeObjectURL = vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
+
+    downloadBookingIcs(buildBookingIcs(event), "consultation-APTABC123DEF45.ics");
+    expect(link).toMatchObject({ href: "blob:consultation", download: "consultation-APTABC123DEF45.ics" });
+    expect(link.click).toHaveBeenCalledOnce();
+
+    // Safari et iOS peuvent démarrer le téléchargement bien après le clic.
+    vi.advanceTimersByTime(39_000);
+    expect(revokeObjectURL).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1_000);
+    expect(revokeObjectURL).toHaveBeenCalledWith("blob:consultation");
   });
 });

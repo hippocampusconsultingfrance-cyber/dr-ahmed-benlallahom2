@@ -70,5 +70,6 @@ export function downloadBookingIcs(content: string, fileName: string) {
   document.body.appendChild(link);
   link.click();
   link.remove();
-  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  // Safari et iOS lisent parfois le blob bien après le clic : URL gardée 40 s, comme FileSaver.js.
+  window.setTimeout(() => URL.revokeObjectURL(url), 40_000);
 }
