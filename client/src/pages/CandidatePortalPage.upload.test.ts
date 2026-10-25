@@ -28,7 +28,7 @@ vi.mock("@/lib/trpc", () => {
   };
 });
 
-const { default: CandidatePortalPage, candidateDocumentAiNotice, candidatePortalCopy, candidateUploadFieldDescription, candidateUploadProblem, candidateUploadProblemField, focusCandidateUploadProblem } = await import("./CandidatePortalPage");
+const { default: CandidatePortalPage, candidateDocumentAiNotice, candidatePortalCopy, candidateUploadFieldDescription, candidateUploadMessageAfterCategoryChange, candidateUploadProblem, candidateUploadProblemField, focusCandidateUploadProblem } = await import("./CandidatePortalPage");
 const languages = ["fr", "en", "de", "zh"] as const;
 
 function renderPortal(language: (typeof languages)[number]) {
@@ -129,6 +129,18 @@ describe("REC-05 — catégorie du document dans le coffre", () => {
     for (const message of ["", copy.turnstile, copy.uploading, copy.uploadSuccess, copy.uploadError]) {
       expect(candidateUploadProblemField(message, copy), message).toBeNull();
       expect(candidateUploadFieldDescription("candidate-document-category", message, copy, "candidate-document-ai-note"), message).toBe("candidate-document-ai-note");
+    }
+  });
+
+  it.each(languages)("efface au changement de type les messages qui ne s’appliquent plus, et seulement eux (%s)", language => {
+    const copy = candidatePortalCopy[language];
+
+    expect(candidateUploadMessageAfterCategoryChange(copy.categoryRequired, "diploma", copy)).toBe("");
+    // Leaving "other" removes its details field: the message asking for them must go with it.
+    expect(candidateUploadMessageAfterCategoryChange(copy.otherRequired, "diploma", copy)).toBe("");
+    expect(candidateUploadMessageAfterCategoryChange(copy.otherRequired, "other", copy)).toBe(copy.otherRequired);
+    for (const message of [copy.selectDocument, copy.fileTooLarge, copy.turnstile, copy.uploadSuccess, copy.uploadError]) {
+      expect(candidateUploadMessageAfterCategoryChange(message, "identity_document", copy), message).toBe(message);
     }
   });
 
