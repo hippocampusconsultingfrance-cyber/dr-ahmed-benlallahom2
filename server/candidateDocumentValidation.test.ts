@@ -71,8 +71,12 @@ describe("REC-02 — PDF du coffre : mêmes lectures que pour les CV", () => {
     // The compressed Chinese font of this LibreOffice PDF holds the bytes "/JS".
     expect(validate(libreOfficeChineseCvPdf()).mimeType).toBe("application/pdf");
     // An action the xref places inside the data of a stream is still found.
-    const hidden = withObjectInStreamData(libreOfficeCvPdf(), { number: 99, body: "<</S/JavaScript/JS(app.alert\\(1\\))>>" }, [{ number: 20, body: "<</Type/Catalog/Pages 10 0 R/OpenAction 99 0 R>>" }]);
-    expect(() => validate(hidden)).toThrow("candidate_document_pdf_active_content");
+    const hidden = (header?: string) => withObjectInStreamData(libreOfficeCvPdf(), { number: 99, header, body: "<</S/JavaScript/JS(app.alert\\(1\\))>>" }, [{ number: 20, body: "<</Type/Catalog/Pages 10 0 R/OpenAction 99 0 R>>" }]);
+    expect(() => validate(hidden())).toThrow("candidate_document_pdf_active_content");
+    // pdf.js reads "0." as the generation number 0, then the "obj" keyword.
+    expect(() => validate(hidden("99 0.obj"))).toThrow("candidate_document_pdf_active_content");
+    const commented = saveIncrementally(libreOfficeCvPdf(), [{ number: 20, header: "20 0.obj", body: "<</Type/Catalog/Pages 10 0 R\n% 98 0 obj <<>> stream\n/OpenAction<</S/JavaScript/JS(app.alert\\(1\\))>>/Lang(upstream)\n>>" }]);
+    expect(() => validate(commented)).toThrow("candidate_document_pdf_active_content");
     // A document of 25 pages, every page rotated afterwards: still 25 pages, not 50.
     const page = (rotate: number) => `<</Type/Page/Parent 2 0 R/MediaBox[0 0 595 842]/Rotate ${rotate}>>`;
     const kids = (count: number) => `<</Type/Pages/Count ${count}/Kids[${Array.from({ length: count }, (_, index) => `${index + 3} 0 R`).join(" ")}]>>`;

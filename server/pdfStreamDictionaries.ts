@@ -169,10 +169,14 @@ export function readPdfStreamDictionaries(source: string, work: PdfScanWork): Pd
   let match: RegExpExecArray | null;
   try {
     while ((match = objKeyword.exec(source))) {
-      // "12 0 obj" or "12 0obj"; not "endobj", not "object".
-      const before = match.index > 0 ? source.charCodeAt(match.index - 1) : 0x20;
+      // Not "object", not "obj12".
       const after = match.index + 3 < source.length ? source.charCodeAt(match.index + 3) : 0x20;
-      if ((isRegular(before) && (before < 0x30 || before > 0x39)) || isRegular(after)) continue;
+      if (isRegular(after)) continue;
+      // "12 0 obj", "12 0obj", and "12 0.obj", "12 0-obj" or "12 0E+obj", where pdf.js's number ends
+      // (Lexer.getNumber). Any other "obj" ("endobj") leads to no stream, but its value is kept in
+      // `values`: one too many only widens what the checks search.
+      const before = match.index > 0 ? source.charCodeAt(match.index - 1) : 0x20;
+      const header = !isRegular(before) || (before >= 0x30 && before <= 0x39) || before === 0x2e || before === 0x2d || before === 0x2b;
       let value: Value;
       try {
         value = readValue(source, nextToken(source, match.index + 3, work), work, 0);
@@ -181,7 +185,7 @@ export function readPdfStreamDictionaries(source: string, work: PdfScanWork): Pd
         throw error;
       }
       values.push({ start: match.index, end: value.end });
-      if (value.stream === undefined) continue;
+      if (!header || value.stream === undefined) continue;
       const start = nextToken(source, match.index + 3, work).start;
       const known = byKeyword.get(value.stream);
       if (!known || start < known.start) byKeyword.set(value.stream, { start, end: value.end });

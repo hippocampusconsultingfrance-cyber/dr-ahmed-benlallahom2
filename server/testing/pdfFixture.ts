@@ -39,19 +39,24 @@ function lastTrailer(source: string) {
 
 const xrefEntry = (number: number, offset: number) => `${number} 1\n${String(offset).padStart(10, "0")} 00000 n \n`;
 
+/** An object written by the helpers below; `header` replaces its "N 0 obj" (pdf.js also reads "N 0.obj"). */
+type FixtureObject = { number: number; body: string; header?: string };
+
+const objectText = (object: FixtureObject) => `${object.header ?? `${object.number} 0 obj`}\n${object.body}\nendobj`;
+
 /**
  * Appends an incremental update (ISO 32000-1, 7.5.6), as Acrobat, pypdf or
  * an online editor write one to rotate pages or fill in a form: the objects
  * given are written again after the end of the file, with their own xref
  * section and a trailer that points to the previous one.
  */
-export function saveIncrementally(pdf: Buffer, objects: Array<{ number: number; body: string }>) {
+export function saveIncrementally(pdf: Buffer, objects: FixtureObject[]) {
   const source = pdf.toString("latin1");
   const { previous, root, size } = lastTrailer(source);
   let output = source.endsWith("\n") ? source : `${source}\n`;
   const entries = objects.map(object => {
     const entry = xrefEntry(object.number, output.length);
-    output += `${object.number} 0 obj\n${object.body}\nendobj\n`;
+    output += `${objectText(object)}\n`;
     return entry;
   });
   const xref = output.length;
@@ -71,10 +76,10 @@ function appendStreamHiding(source: string, hidden: string) {
 }
 
 /** `object` written inside the data of another stream, where the xref points to it; `others` are saved before, in their own update. */
-export function withObjectInStreamData(pdf: Buffer, object: { number: number; body: string }, others: Array<{ number: number; body: string }> = []) {
+export function withObjectInStreamData(pdf: Buffer, object: FixtureObject, others: FixtureObject[] = []) {
   const source = (others.length > 0 ? saveIncrementally(pdf, others) : pdf).toString("latin1");
   const { previous, root, size } = lastTrailer(source);
-  const { output, streamOffset, hiddenOffset } = appendStreamHiding(source, `${object.number} 0 obj\n${object.body}\nendobj`);
+  const { output, streamOffset, hiddenOffset } = appendStreamHiding(source, objectText(object));
   return Buffer.from(`${output}xref\n${xrefEntry(90, streamOffset)}${xrefEntry(object.number, hiddenOffset)}trailer\n<</Size ${Math.max(size, 91, object.number + 1)}/Root ${root}/Prev ${previous}>>\nstartxref\n${output.length}\n%%EOF\n`, "latin1");
 }
 

@@ -315,6 +315,11 @@ describe("REC-02 — PDF réels acceptés, actions dangereuses cherchées aussi 
         withTrailerInStreamData(libreOfficeCvPdf(), `<</Type/Catalog/Pages 10 0 R/OpenAction ${JAVASCRIPT_ACTION}>>`),
         // A comment fakes a stream inside the catalog: pdf.js skips it and reads the action after it.
         saveIncrementally(libreOfficeCvPdf(), [{ number: 20, body: `<</Type/Catalog/Pages 10 0 R\n% 98 0 obj <<>> stream\n/OpenAction ${JAVASCRIPT_ACTION}\n>>` }]),
+        // pdf.js reads "0.", "0-" or "0E+" as the generation number 0, then the "obj" keyword.
+        ...["99 0.obj", "99 0-obj", "99 0E+obj"].map(header => withObjectInStreamData(libreOfficeCvPdf(), { number: 99, header, body: JAVASCRIPT_ACTION }, [catalog("/OpenAction 99 0 R")])),
+        withObjectInStreamData(packPdfIntoObjectStream(libreOfficeCvPdf()), { number: 99, header: "99 0.obj", body: JAVASCRIPT_ACTION }, [catalog("/OpenAction 99 0 R")]),
+        // The same catalog with a fake stream in a comment, which "upstream" closes, and no real stream.
+        saveIncrementally(libreOfficeCvPdf(), [{ number: 20, header: "20 0.obj", body: `<</Type/Catalog/Pages 10 0 R\n% 98 0 obj <<>> stream\n/OpenAction ${JAVASCRIPT_ACTION}/Lang(upstream)\n>>` }]),
       ];
       for (const [index, trap] of traps.entries()) {
         // pdf.js reads each of them: the PDF opens on its page, and a PDF reader would run the action.
