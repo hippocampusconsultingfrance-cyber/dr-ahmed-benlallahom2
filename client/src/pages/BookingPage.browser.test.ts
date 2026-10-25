@@ -352,4 +352,32 @@ describe.skipIf(!executablePath)("réservation et confirmation dans un navigateu
     expect(await description.innerText()).not.toContain(confirmationContent.fr.processing.autoUpdate);
     await page.context().close();
   }, 60_000);
+
+  it("traduit aussi les limites anti-abus et le paiement indisponible, et n'affiche jamais le texte français d'un refus sans motif (EN-06)", async () => {
+    const [firstDay] = openDays();
+    const refusals = [
+      refuse("TOO_MANY_REQUESTS", 429, "Trop de tentatives de réservation ont été effectuées. Veuillez réessayer dans une heure ou nous contacter directement.", "rate_limited"),
+      refuse("TOO_MANY_REQUESTS", 429, "Vous avez déjà deux réservations en attente de paiement. Finalisez ou annulez l’un de ces paiements.", "too_many_holds"),
+      refuse("SERVICE_UNAVAILABLE", 503, "Le service de paiement est momentanément indisponible. Votre créneau n’a pas été réservé.", "payment_unavailable"),
+      // Refus sans motif connu : message générique de la page, jamais le texte du serveur.
+      refuse("TOO_MANY_REQUESTS", 429, "Veuillez patienter avant de soumettre une nouvelle demande."),
+    ];
+    const { page, alerts } = await open("/booking", bookingProcedures({ "appointments.create": () => refusals.shift() }), { language: "en" });
+    await page.locator("#booking-name").fill("Test Patient");
+    await page.locator("#booking-email").fill("patient@example.test");
+    await page.locator("#booking-phone").fill("+44 20 7946 0958");
+    await page.locator("#booking-day").selectOption(firstDay);
+    await page.getByRole("group", { name: bookingContent.en.form.slotsLegend }).getByRole("radio").first().locator("xpath=..").click();
+    await page.locator("#booking-details").fill("Practical questions");
+
+    for (let attempt = 1; attempt <= 4; attempt += 1) {
+      await page.locator("#availability-status[data-state='available']").waitFor();
+      await page.getByRole("button", { name: bookingContent.en.form.submit }).click();
+      await expect.poll(() => alerts.length).toBe(attempt);
+    }
+    const { refusals: messages, bookingError } = bookingContent.en;
+    expect(alerts).toEqual([messages.rate_limited, messages.too_many_holds, messages.payment_unavailable, bookingError]);
+    for (const alert of alerts) expect(alert).not.toMatch(/réservation|paiement|Veuillez|créneau/);
+    await page.context().close();
+  }, 60_000);
 });

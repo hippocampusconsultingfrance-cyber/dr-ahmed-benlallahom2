@@ -100,6 +100,9 @@ export const bookingContent = {
       outside_schedule: "Ce créneau ne fait plus partie des horaires de consultation. Choisissez-en un autre.",
       no_availability: "Aucun horaire de consultation n’est ouvert pour le moment.",
       date_blocked: "Cette date n’est plus disponible. Choisissez un autre jour.",
+      rate_limited: "Trop de tentatives de réservation ont été effectuées. Réessayez dans une heure ou contactez-nous directement.",
+      too_many_holds: "Vous avez déjà deux réservations en attente de paiement. Finalisez ou annulez l’un de ces paiements, ou patientez une trentaine de minutes avant de réserver un nouveau créneau.",
+      payment_unavailable: "Le service de paiement est momentanément indisponible. Votre créneau n’a pas été réservé : réessayez dans quelques minutes ou contactez-nous.",
     },
     pricing: {
       title: "Tarification",
@@ -184,6 +187,9 @@ export const bookingContent = {
       outside_schedule: "This time slot is no longer part of the consultation hours. Please choose another one.",
       no_availability: "No consultation hours are open at the moment.",
       date_blocked: "This date is no longer available. Please choose another day.",
+      rate_limited: "Too many booking attempts have been made. Please try again in an hour or contact us directly.",
+      too_many_holds: "You already have two bookings awaiting payment. Complete or cancel one of these payments, or wait about thirty minutes before booking a new time slot.",
+      payment_unavailable: "The payment service is temporarily unavailable. Your time slot has not been booked: please try again in a few minutes or contact us.",
     },
     pricing: {
       title: "Pricing",
@@ -268,6 +274,9 @@ export const bookingContent = {
       outside_schedule: "Dieser Termin liegt nicht mehr innerhalb der Beratungszeiten. Bitte wählen Sie einen anderen.",
       no_availability: "Derzeit sind keine Beratungszeiten freigeschaltet.",
       date_blocked: "Dieses Datum ist nicht mehr verfügbar. Bitte wählen Sie einen anderen Tag.",
+      rate_limited: "Es wurden zu viele Buchungsversuche unternommen. Bitte versuchen Sie es in einer Stunde erneut oder kontaktieren Sie uns direkt.",
+      too_many_holds: "Sie haben bereits zwei Buchungen, die auf Zahlung warten. Schließen Sie eine dieser Zahlungen ab oder stornieren Sie sie, oder warten Sie etwa dreißig Minuten, bevor Sie einen neuen Termin buchen.",
+      payment_unavailable: "Der Zahlungsdienst ist vorübergehend nicht verfügbar. Ihr Termin wurde nicht reserviert: Bitte versuchen Sie es in einigen Minuten erneut oder kontaktieren Sie uns.",
     },
     pricing: {
       title: "Preisgestaltung",
@@ -352,6 +361,9 @@ export const bookingContent = {
       outside_schedule: "该时段已不在咨询时间范围内，请选择其他时段。",
       no_availability: "目前没有开放的咨询时段。",
       date_blocked: "该日期已不可预约，请选择其他日期。",
+      rate_limited: "预约尝试次数过多。请一小时后再试，或直接联系我们。",
+      too_many_holds: "您已有两笔待付款的预约。请完成或取消其中一笔付款，或等待约三十分钟后再预约新的时段。",
+      payment_unavailable: "支付服务暂时不可用，您的时段尚未预订：请几分钟后重试或联系我们。",
     },
     pricing: {
       title: "价格",
@@ -604,22 +616,10 @@ export function getBookingAvailabilityState({
   return "available";
 }
 
-// Refus métier attendus (créneau déjà pris, trop de tentatives, réservations
-// en attente) : le serveur renvoie un message français destiné au patient.
-// Toute autre erreur garde le message générique pour ne rien exposer de technique.
-const BOOKING_USER_FACING_ERROR_CODES = new Set(["CONFLICT", "TOO_MANY_REQUESTS", "UNPROCESSABLE_CONTENT", "SERVICE_UNAVAILABLE"]);
-
 /** Input rejected by validation (BAD_REQUEST): a localized hint instead of the raw validation report. */
 export function isBookingInputError(error: unknown): boolean {
   if (!error || typeof error !== "object") return false;
   return (error as { data?: { code?: unknown } | null }).data?.code === "BAD_REQUEST";
-}
-
-export function getBookingServerErrorMessage(error: unknown): string | null {
-  if (!error || typeof error !== "object") return null;
-  const { data, message } = error as { data?: { code?: unknown } | null; message?: unknown };
-  if (typeof data?.code !== "string" || !BOOKING_USER_FACING_ERROR_CODES.has(data.code)) return null;
-  return typeof message === "string" && message.trim() ? message.trim() : null;
 }
 
 /** Stable reason of a refused booking sent by the server (slot taken, too soon…), or null (EN-06). */
@@ -627,6 +627,21 @@ export function getBookingRefusalReason(error: unknown): BookingRefusalReason | 
   if (!error || typeof error !== "object") return null;
   const reason = (error as { data?: { reason?: unknown } | null }).data?.reason;
   return isBookingRefusalReason(reason) ? reason : null;
+}
+
+/**
+ * Alert of a refused booking, always in the page language (EN-06): the
+ * translation of its stable reason, a hint for rejected input, otherwise the
+ * generic message. The French text written by the server is never shown, nor
+ * any technical detail.
+ */
+export function getBookingErrorMessage(
+  error: unknown,
+  copy: { refusals: Record<BookingRefusalReason, string>; invalidInput: string; bookingError: string },
+): string {
+  const refusal = getBookingRefusalReason(error);
+  if (refusal) return copy.refusals[refusal];
+  return isBookingInputError(error) ? copy.invalidInput : copy.bookingError;
 }
 
 export default function BookingPage() {
@@ -924,22 +939,10 @@ export default function BookingPage() {
     } catch (error) {
       paymentSubmissionRef.current = false;
       console.error("Booking error:", error);
-      const refusal = getBookingRefusalReason(error);
-      const serverMessage = getBookingServerErrorMessage(error);
-      if (refusal) {
-        // Créneau pris entre-temps, date fermée… : message dans la langue de la
-        // page (EN-06) et agenda rechargé pour que la grille ne le propose plus.
-        alert(content.refusals[refusal]);
-        void Promise.all([bookedSlots.refetch(), blockedDates.refetch(), availabilitySlots.refetch()]);
-      } else if (serverMessage) {
-        // Le message serveur est rédigé en français : on le précède du libellé
-        // localisé pour les autres langues de l’interface.
-        alert(language === "fr" ? serverMessage : `${content.bookingError}\n\n${serverMessage}`);
-      } else if (isBookingInputError(error)) {
-        alert(content.invalidInput);
-      } else {
-        alert(content.bookingError);
-      }
+      // Message dans la langue de la page (EN-06), jamais le texte français du serveur.
+      alert(getBookingErrorMessage(error, content));
+      // Créneau pris entre-temps, date fermée… : agenda rechargé pour que la grille ne le propose plus.
+      if (getBookingRefusalReason(error)) void Promise.all([bookedSlots.refetch(), blockedDates.refetch(), availabilitySlots.refetch()]);
     }
   };
 

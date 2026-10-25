@@ -11,26 +11,33 @@ const mocks = vi.hoisted(() => ({
   getDb: vi.fn(),
   releaseExpiredAppointmentHolds: vi.fn(),
   stripeCreate: vi.fn(),
+  stripeRetrieve: vi.fn(),
+  enforcePersistentRateLimit: vi.fn(),
 }));
 
 vi.mock("./db", () => ({ getDb: mocks.getDb }));
+vi.mock("./candidateSecurity", async importOriginal => ({
+  ...await importOriginal<typeof import("./candidateSecurity")>(),
+  enforcePersistentRateLimit: mocks.enforcePersistentRateLimit,
+  logSecurityEvent: vi.fn(async () => undefined),
+}));
 vi.mock("./appointmentHolds", async importOriginal => ({
   ...await importOriginal<typeof import("./appointmentHolds")>(),
   releaseExpiredAppointmentHolds: mocks.releaseExpiredAppointmentHolds,
 }));
 vi.mock("stripe", () => ({
   default: vi.fn().mockImplementation(() => ({
-    checkout: { sessions: { create: mocks.stripeCreate, retrieve: vi.fn() } },
+    checkout: { sessions: { create: mocks.stripeCreate, retrieve: mocks.stripeRetrieve } },
   })),
 }));
 
-import { appRouter } from "./routers";
+import { ACTIVE_APPOINTMENT_HOLDS_LIMIT_MESSAGE, appRouter, BOOKING_PAYMENT_UNAVAILABLE_MESSAGE, BOOKING_RATE_LIMIT_MESSAGE } from "./routers";
 
 const ALL_DAY_SLOTS = Array.from({ length: 7 }, (_, dayOfWeek) => ({ dayOfWeek, startTime: "00:00", endTime: "00:00" }));
 
 /** Lectures successives d'appointments.create : maintiens actifs, date bloquée, plages ouvertes, chevauchement. */
-function fakeDb({ blocked = [] as unknown[], slots = ALL_DAY_SLOTS as unknown[], overlapping = [] as unknown[], insertError = null as Error | null } = {}) {
-  const selectResults: unknown[][] = [[{ count: 0 }], blocked, slots, overlapping];
+function fakeDb({ activeHolds = 0, blocked = [] as unknown[], slots = ALL_DAY_SLOTS as unknown[], overlapping = [] as unknown[], insertError = null as Error | null } = {}) {
+  const selectResults: unknown[][] = [[{ count: activeHolds }], blocked, slots, overlapping];
   return {
     select: vi.fn(() => {
       const result = selectResults.shift() ?? [];
@@ -68,11 +75,11 @@ function booking(appointmentDate: string, overrides: Record<string, unknown> = {
 }
 
 /** Vraie requête tRPC (batch HTTP, superjson, errorFormatter), comme celle de la page de réservation. */
-async function postCreate(input: Record<string, unknown>) {
+async function postCreate(input: Record<string, unknown>, procedure = "appointments.create") {
   const response = await fetchRequestHandler({
     endpoint: "/api/trpc",
     router: appRouter,
-    req: new Request("http://localhost/api/trpc/appointments.create?batch=1", {
+    req: new Request(`http://localhost/api/trpc/${procedure}?batch=1`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ 0: superjson.serialize(input) }),
@@ -97,6 +104,7 @@ beforeEach(() => {
   vi.stubEnv("STRIPE_SECRET_KEY", "sk_test_synthetic_refusal_reasons");
   mocks.releaseExpiredAppointmentHolds.mockResolvedValue({ released: 0 });
   mocks.stripeCreate.mockResolvedValue({ id: "cs_test_reasons", url: "https://checkout.stripe.test/reasons" });
+  mocks.enforcePersistentRateLimit.mockResolvedValue(undefined);
 });
 
 afterEach(() => {
@@ -141,7 +149,50 @@ describe("appointments.create — motifs de refus stables (EN-06)", () => {
     expect(failure?.data.code).toBe("INTERNAL_SERVER_ERROR");
     expect(failure?.data.reason).toBeUndefined();
     expect((await postCreate(booking(inThreeDays(), { customerPhone: "abc" })))?.data.reason).toBeUndefined();
-    expect(BOOKING_REFUSAL_REASONS).toEqual(["slot_taken", "too_soon", "too_far", "outside_schedule", "no_availability", "date_blocked"]);
+    expect(BOOKING_REFUSAL_REASONS).toEqual([
+      "slot_taken", "too_soon", "too_far", "outside_schedule", "no_availability", "date_blocked",
+      "rate_limited", "too_many_holds", "payment_unavailable",
+    ]);
+  });
+
+  it("joint aussi un motif aux limites anti-abus et au paiement indisponible, sans retirer le message français", async () => {
+    // Le limiteur, neutralisé sous Vitest, est rétabli comme en production pour ce refus.
+    vi.stubEnv("VITEST", "false");
+    vi.stubEnv("NODE_ENV", "production");
+    mocks.getDb.mockResolvedValue(fakeDb());
+    mocks.enforcePersistentRateLimit.mockRejectedValueOnce(new Error("candidate_security_rate_limited"));
+    expect(await postCreate(booking(inThreeDays())))
+      .toMatchObject({ message: BOOKING_RATE_LIMIT_MESSAGE, data: { code: "TOO_MANY_REQUESTS", reason: "rate_limited" } });
+    vi.unstubAllEnvs();
+    vi.stubEnv("STRIPE_SECRET_KEY", "sk_test_synthetic_refusal_reasons");
+
+    mocks.getDb.mockResolvedValue(fakeDb({ activeHolds: 2 }));
+    expect(await postCreate(booking(inThreeDays())))
+      .toMatchObject({ message: ACTIVE_APPOINTMENT_HOLDS_LIMIT_MESSAGE, data: { code: "TOO_MANY_REQUESTS", reason: "too_many_holds" } });
+
+    mocks.getDb.mockResolvedValue(fakeDb());
+    mocks.stripeCreate.mockRejectedValueOnce(Object.assign(new Error("connection to Stripe failed"), { name: "StripeConnectionError" }));
+    const paymentDown = await postCreate(booking(inThreeDays()));
+    expect(paymentDown).toMatchObject({ message: BOOKING_PAYMENT_UNAVAILABLE_MESSAGE, data: { code: "SERVICE_UNAVAILABLE", reason: "payment_unavailable" } });
+    expect(JSON.stringify(paymentDown)).not.toContain("Stripe");
+  });
+
+  it("donne le même motif quand la reprise d'un paiement ne peut pas ouvrir Stripe", async () => {
+    const held = {
+      trackingId: "APTREASONS0001",
+      customerEmail: "patient@example.com",
+      customerName: "Patient Synthétique",
+      finalPrice: "150.00",
+      paymentStatus: "pending",
+      appointmentStatus: "held",
+      stripeSessionId: "cs_test_resume",
+      holdExpiresAt: new Date(Date.now() + 40 * 60 * 1000),
+    };
+    mocks.getDb.mockResolvedValue({ select: vi.fn(() => ({ from: () => ({ where: () => ({ limit: async () => [held] }) }) })) });
+    mocks.stripeRetrieve.mockRejectedValueOnce(Object.assign(new Error("connection to Stripe failed"), { name: "StripeConnectionError" }));
+    const input = { trackingId: held.trackingId, finalPrice: 150, customerEmail: held.customerEmail, customerName: held.customerName };
+    expect(await postCreate(input, "appointments.createCheckoutSession"))
+      .toMatchObject({ message: BOOKING_PAYMENT_UNAVAILABLE_MESSAGE, data: { code: "SERVICE_UNAVAILABLE", reason: "payment_unavailable" } });
   });
 
   it("accepte la langue affichée par la page, français par défaut, et refuse une langue inconnue", async () => {

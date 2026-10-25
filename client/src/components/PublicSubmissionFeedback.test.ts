@@ -19,7 +19,7 @@ describe("feedbacks publics après soumission", () => {
     expect(gdpr).toContain("{copy.received}");
     expect(gdpr).toContain("toast.error(copy.error)");
     expect(booking).toContain("alert(content.paymentError);");
-    expect(booking).toContain("alert(content.bookingError);");
+    expect(booking).toContain("alert(getBookingErrorMessage(error, content));");
     expect(bookingConfirmation).toContain('export type BookingConfirmationState = "success" | "canceled" | "unknown"');
     expect(bookingConfirmation).toContain('if (status === "success") return "success"');
     expect(bookingConfirmation).toContain('if (status === "canceled") return "canceled"');

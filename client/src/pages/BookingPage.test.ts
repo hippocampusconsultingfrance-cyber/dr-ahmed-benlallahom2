@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bookingContent, getBookingAvailabilityState, getBookingServerErrorMessage, isBookingInputError, isWithinBookingAvailability, parisBookingSlotStart, toParisBookingDateKey } from "./BookingPage";
+import { bookingContent, getBookingAvailabilityState, getBookingErrorMessage, isBookingInputError, isWithinBookingAvailability, parisBookingSlotStart, toParisBookingDateKey } from "./BookingPage";
 
 describe("booking day and time choice", () => {
   it("labels the day choice and the time grid in every supported language", () => {
@@ -69,26 +69,32 @@ describe("booking day and time choice", () => {
     );
 
     expect(source).toContain("alert(content.paymentError);");
-    expect(source).toContain("alert(content.bookingError);");
+    expect(source).toContain("alert(getBookingErrorMessage(error, content));");
     expect(source).not.toContain("alert(`${content.paymentError} ${error.message}`)");
     expect(source).not.toContain("alert(`${content.bookingError} ${error instanceof Error ? error.message : \"Unknown error\"}`)");
     expect(source).not.toContain("alert(error.message)");
-    expect(source).toContain("const serverMessage = getBookingServerErrorMessage(error);");
   });
 
-  it("affiche le message français du serveur pour les refus métier attendus uniquement", () => {
-    const holdsMessage = "Vous avez déjà deux réservations en attente de paiement.";
-    expect(getBookingServerErrorMessage({ message: holdsMessage, data: { code: "TOO_MANY_REQUESTS", httpStatus: 429 } })).toBe(holdsMessage);
-    expect(getBookingServerErrorMessage({ message: " Ce créneau chevauche une réservation existante ", data: { code: "CONFLICT" } }))
-      .toBe("Ce créneau chevauche une réservation existante");
+  it("traduit chaque refus à partir de son motif et n’affiche jamais le texte du serveur (EN-06)", () => {
+    for (const language of ["fr", "en", "de", "zh"] as const) {
+      const copy = bookingContent[language];
+      expect(getBookingErrorMessage({ message: "Trop de tentatives de réservation ont été effectuées.", data: { code: "TOO_MANY_REQUESTS", reason: "rate_limited" } }, copy)).toBe(copy.refusals.rate_limited);
+      expect(getBookingErrorMessage({ message: "Vous avez déjà deux réservations en attente de paiement.", data: { code: "TOO_MANY_REQUESTS", reason: "too_many_holds" } }, copy)).toBe(copy.refusals.too_many_holds);
+      expect(getBookingErrorMessage({ message: "Le service de paiement est momentanément indisponible.", data: { code: "SERVICE_UNAVAILABLE", reason: "payment_unavailable" } }, copy)).toBe(copy.refusals.payment_unavailable);
+      expect(getBookingErrorMessage({ message: "Ce créneau n’est plus réservable", data: { code: "UNPROCESSABLE_CONTENT", reason: "too_soon" } }, copy)).toBe(copy.refusals.too_soon);
 
-    // Erreurs techniques ou de validation : rien n’est exposé, le libellé générique localisé s’applique.
-    expect(getBookingServerErrorMessage({ message: "Failed to create appointment: connection reset", data: { code: "INTERNAL_SERVER_ERROR" } })).toBeNull();
-    expect(getBookingServerErrorMessage({ message: "[{\"code\":\"invalid_string\"}]", data: { code: "BAD_REQUEST" } })).toBeNull();
-    expect(getBookingServerErrorMessage(new Error("Network request failed"))).toBeNull();
-    expect(getBookingServerErrorMessage({ message: "", data: { code: "CONFLICT" } })).toBeNull();
-    expect(getBookingServerErrorMessage(null)).toBeNull();
-    expect(getBookingServerErrorMessage("CONFLICT")).toBeNull();
+      // Refus sans motif connu (motif absent ou inconnu) : message générique traduit, sans le texte français.
+      expect(getBookingErrorMessage({ message: "Vous avez déjà deux réservations en attente de paiement.", data: { code: "TOO_MANY_REQUESTS" } }, copy)).toBe(copy.bookingError);
+      expect(getBookingErrorMessage({ message: "Ce créneau chevauche une réservation existante", data: { code: "CONFLICT", reason: "something_else" } }, copy)).toBe(copy.bookingError);
+      // Erreurs techniques : rien n’est exposé ; une saisie refusée reçoit une consigne localisée.
+      expect(getBookingErrorMessage({ message: "Failed to create appointment: connection reset", data: { code: "INTERNAL_SERVER_ERROR" } }, copy)).toBe(copy.bookingError);
+      expect(getBookingErrorMessage({ message: "[{\"code\":\"invalid_string\"}]", data: { code: "BAD_REQUEST" } }, copy)).toBe(copy.invalidInput);
+      expect(getBookingErrorMessage(new Error("Network request failed"), copy)).toBe(copy.bookingError);
+      expect(getBookingErrorMessage(null, copy)).toBe(copy.bookingError);
+      expect(getBookingErrorMessage("CONFLICT", copy)).toBe(copy.bookingError);
+    }
+    expect(bookingContent.en.refusals.too_many_holds).not.toMatch(/réservation|attente/);
+    expect(bookingContent.de.refusals.payment_unavailable).toContain("Zahlungsdienst");
   });
 
   it("applique côté client le délai minimal, l’horizon et le contrôle du téléphone, avec un libellé dans chaque langue", async () => {
@@ -104,13 +110,13 @@ describe("booking day and time choice", () => {
     expect(source).toContain("const bookingWindowIssue = selectedDate ? getBookingWindowIssue(selectedDate, now) : null;");
     expect(source).toContain("Boolean(bookingWindowIssue) || !selectedDate");
     expect(source).toContain("if (!isPlausiblePhoneNumber(formData.phone))");
-    expect(getBookingServerErrorMessage({ message: "Ce créneau n’est plus réservable", data: { code: "UNPROCESSABLE_CONTENT" } }))
-      .toBe("Ce créneau n’est plus réservable");
+    expect(getBookingErrorMessage({ message: "Ce créneau n’est plus réservable", data: { code: "UNPROCESSABLE_CONTENT", reason: "too_soon" } }, bookingContent.de))
+      .toBe(bookingContent.de.form.tooSoon);
   });
 
-  it("affiche la consigne « paiement indisponible » et un message localisé pour une saisie refusée", () => {
-    expect(getBookingServerErrorMessage({ message: "Le service de paiement est momentanément indisponible.", data: { code: "SERVICE_UNAVAILABLE" } }))
-      .toBe("Le service de paiement est momentanément indisponible.");
+  it("donne la consigne « paiement indisponible » dans la langue de la page et un message localisé pour une saisie refusée", () => {
+    expect(getBookingErrorMessage({ message: "Le service de paiement est momentanément indisponible.", data: { code: "SERVICE_UNAVAILABLE", reason: "payment_unavailable" } }, bookingContent.zh))
+      .toBe(bookingContent.zh.refusals.payment_unavailable);
     expect(isBookingInputError({ message: "[{\"code\":\"custom\"}]", data: { code: "BAD_REQUEST" } })).toBe(true);
     expect(isBookingInputError({ data: { code: "CONFLICT" } })).toBe(false);
     for (const language of ["fr", "en", "de", "zh"] as const) expect(bookingContent[language].invalidInput).toBeTruthy();

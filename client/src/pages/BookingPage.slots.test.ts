@@ -131,6 +131,9 @@ describe("heure locale du visiteur et temps restant (RES-04)", () => {
 describe("refus de réservation traduits (EN-06)", () => {
   it("lit le motif stable renvoyé par le serveur et rien d'autre", () => {
     expect(getBookingRefusalReason({ message: "Ce créneau chevauche une réservation existante", data: { code: "CONFLICT", reason: "slot_taken" } })).toBe("slot_taken");
+    expect(getBookingRefusalReason({ data: { code: "TOO_MANY_REQUESTS", reason: "rate_limited" } })).toBe("rate_limited");
+    expect(getBookingRefusalReason({ data: { code: "TOO_MANY_REQUESTS", reason: "too_many_holds" } })).toBe("too_many_holds");
+    expect(getBookingRefusalReason({ data: { code: "SERVICE_UNAVAILABLE", reason: "payment_unavailable" } })).toBe("payment_unavailable");
     expect(getBookingRefusalReason({ data: { code: "UNPROCESSABLE_CONTENT", reason: "too_soon" } })).toBe("too_soon");
     expect(getBookingRefusalReason({ data: { code: "CONFLICT", reason: "something_else" } })).toBeNull();
     expect(getBookingRefusalReason({ data: { code: "CONFLICT" } })).toBeNull();
