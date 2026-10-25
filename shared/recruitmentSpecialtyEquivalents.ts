@@ -9,11 +9,18 @@
  * start ("anaesthe" matches "anaesthetist", never "urolog" inside
  * "neurologist"); an Arabic or Chinese term matches anywhere, since an Arabic
  * word takes prefixes (و, ال) and Chinese has no spaces.
+ *
+ * French and German terms serve the specialties typed as free text («
+ * Autre ») and the VVIP / Offshore profiles (client/src/pages/VvipOffshorePage.tsx),
+ * stored in the language of the form: « Médecin urgentiste », « Notarzt »,
+ * « Réanimateur », « Infirmier(ère) anesthésiste (IADE) »… The platform
+ * physician, private physician and offshore paramedic profiles have no
+ * equivalent among the form specialties.
  */
 export const RECRUITMENT_SPECIALTY_EQUIVALENTS: Readonly<Record<string, readonly string[]>> = {
   "Médecine générale": ["general practi", "family medicine", "family physician", "family doctor", "allgemeinmedizin", "hausarzt", "طب الأسرة", "طبيب أسرة", "طب عام", "طبيب عام", "全科", "家庭医学", "家庭醫學", "家庭医生", "家庭醫生"],
-  "Médecine d’urgence": ["emergency", "notfall", "notaufnahme", "طوارئ", "急诊", "急診", "急救医学", "急救醫學"],
-  "Médecine intensive et réanimation": ["intensive care", "critical care", "intensivist", "intensivmedizin", "العناية المركزة", "العناية الحرجة", "重症医学", "重症醫學", "重症监护", "重症監護"],
+  "Médecine d’urgence": ["emergency", "urgentist", "médecine d’urgence", "notfall", "notarzt", "notaufnahme", "طوارئ", "急诊", "急診", "急救医学", "急救醫學"],
+  "Médecine intensive et réanimation": ["intensive care", "critical care", "intensivist", "soins intensifs", "réanimat", "intensivmedizin", "العناية المركزة", "العناية الحرجة", "重症医学", "重症醫學", "重症监护", "重症監護"],
   "Gériatrie": ["geriatr", "elderly care", "care of the elderly", "altersmedizin", "طب الشيخوخة", "طب المسنين", "老年医学", "老年醫學", "老年科"],
   "Médecine du travail": ["occupational medicine", "occupational health", "occupational physician", "arbeitsmedizin", "betriebsarzt", "طب العمل", "الطب المهني", "الصحة المهنية", "职业医学", "職業醫學", "职业病", "職業病", "职业健康", "職業健康"],
   "Médecine du sport": ["sports medicine", "sport medicine", "sports and exercise medicine", "sportmedizin", "الطب الرياضي", "طب الرياضة", "运动医学", "運動醫學"],
@@ -47,16 +54,16 @@ export const RECRUITMENT_SPECIALTY_EQUIVALENTS: Readonly<Record<string, readonly
   "Ophtalmologie": ["ophthalmolog", "eye surg", "augenheilkunde", "augenarzt", "طب العيون", "جراحة العيون", "العيون", "眼科"],
   "Oto-rhino-laryngologie (ORL) et chirurgie cervico-faciale": ["otolaryngolog", "otorhinolaryngolog", "ear nose and throat", "ear nose throat", "head and neck surg", "hals nasen ohren", "hno", "الأنف والأذن والحنجرة", "أنف وأذن وحنجرة", "耳鼻喉", "耳鼻咽喉"],
   "Stomatologie": ["stomatolog", "oral surg", "oral medicine", "mundchirurg", "oralchirurg", "طب الفم", "جراحة الفم", "口腔科", "口腔医学", "口腔醫學"],
-  "Anesthésie-réanimation": ["anesthesi", "anesthet", "anaesthe", "anästhes", "intensive care", "تخدير", "麻醉"],
+  "Anesthésie-réanimation": ["anesthesi", "anesthet", "anaesthe", "anästhes", "intensive care", "soins intensifs", "réanimat", "تخدير", "麻醉"],
   "Radiologie et imagerie médicale": ["radiolog", "diagnostic imaging", "medical imaging", "الأشعة", "التصوير الطبي", "放射科", "影像科", "医学影像", "醫學影像"],
   "Médecine nucléaire": ["nuclear medicine", "nuklearmedizin", "الطب النووي", "核医学", "核醫學"],
   "Biologie médicale / Pathologie": ["clinical patholog", "pathologist", "laboratory medicine", "clinical biochem", "medical microbiolog", "laboratoriumsmedizin", "الطب المخبري", "علم الأمراض", "检验医学", "檢驗醫學", "检验科", "檢驗科", "病理"],
   "Anatomie et cytologie pathologiques": ["anatomic patholog", "anatomical patholog", "histopatholog", "cytopatholog", "cytolog", "pathologist", "علم الأمراض التشريحي", "الأنسجة المرضية", "علم الأنسجة", "病理科", "病理学", "病理學", "细胞病理", "細胞病理"],
   "Pharmacologie médicale": ["pharmacolog", "pharmakolog", "علم الأدوية", "علم العقاقير", "药理", "藥理"],
   "Toxicologie": ["toxicolog", "toxikolog", "علم السموم", "السموم", "毒理", "中毒"],
-  "Soins infirmiers généraux": ["nurse", "nursing", "krankenpfleg", "pflegefach", "تمريض", "ممرض", "护士", "護士", "护理", "護理"],
-  "Infirmier(ère) en soins généraux et spécialisés (IDE)": ["nurse", "nursing", "krankenpfleg", "pflegefach", "تمريض", "ممرض", "护士", "護士", "护理", "護理"],
-  "Infirmier(ère) anesthésiste (IADE)": ["nurse anesthet", "nurse anaesthet", "anaesthetic nurse", "anesthesia nurse", "anaesthesia nurse", "crna", "anästhesiepfleg", "anästhesiefachpfleg", "fachkrankenpfleger für anästhesie", "fachkrankenpflegerin für anästhesie", "ممرض تخدير", "ممرضة تخدير", "تمريض التخدير", "麻醉护士", "麻醉護士"],
+  "Soins infirmiers généraux": ["nurse", "nursing", "infirmier", "krankenpfleg", "pflegefach", "تمريض", "ممرض", "护士", "護士", "护理", "護理"],
+  "Infirmier(ère) en soins généraux et spécialisés (IDE)": ["nurse", "nursing", "infirmier", "krankenpfleg", "pflegefach", "تمريض", "ممرض", "护士", "護士", "护理", "護理"],
+  "Infirmier(ère) anesthésiste (IADE)": ["nurse anesthet", "nurse anaesthet", "anaesthetic nurse", "anesthesia nurse", "anaesthesia nurse", "crna", "iade", "infirmier anesthésiste", "infirmière anesthésiste", "infirmier ère anesthésiste", "anästhesiepfleg", "fachpflege anästhesie", "anästhesiefachpfleg", "fachkrankenpfleger für anästhesie", "fachkrankenpflegerin für anästhesie", "ممرض تخدير", "ممرضة تخدير", "تمريض التخدير", "麻醉护士", "麻醉護士", "麻醉专科护士", "麻醉專科護士"],
   "Infirmier(ère) de bloc opératoire (IBODE)": ["theatre nurse", "theater nurse", "operating room nurse", "operating theatre nurse", "scrub nurse", "perioperative nurs", "operationstechnische", "op pflege", "op fachpflege", "fachkrankenpfleger für den operationsdienst", "ممرض العمليات", "ممرضة العمليات", "تمريض العمليات", "手术室护士", "手術室護士", "手术室护理", "手術室護理"],
   "Infirmier(ère) puériculteur(trice)": ["pediatric nurs", "paediatric nurs", "children s nurs", "neonatal nurs", "kinderkrankenpfleg", "ممرض أطفال", "ممرضة أطفال", "تمريض الأطفال", "儿科护士", "兒科護士", "儿科护理", "兒科護理"],
   "Infirmier(ère) en pratique avancée (IPA)": ["advanced practice nurs", "advanced nurse practitioner", "nurse practitioner", "clinical nurse specialist", "pflegeexpert", "ممارس تمريض متقدم", "ممرض ممارس متقدم", "高级实践护士", "高級實踐護士", "专科护士", "專科護士"],

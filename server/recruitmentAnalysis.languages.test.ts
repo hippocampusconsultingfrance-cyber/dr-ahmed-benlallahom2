@@ -135,6 +135,38 @@ describe("INTL-02 — même CV, même score, quelle que soit la langue du CV", (
     const result = analyse("chinois", cvs["Anesthésie-réanimation"]!["chinois"], "Anästhesist (Facharzt)");
     expect(result.scoreBreakdown.specialtyMatch).toBe(30);
     expect(result.relevanceScore).toBe(47);
+    expect(analyse("anglais britannique", cvs["Médecine d’urgence"]!["anglais britannique"], "Médecin urgentiste").scoreBreakdown.specialtyMatch).toBe(30);
+  });
+
+  // Profiles of client/src/pages/VvipOffshorePage.tsx, stored in the language of the form with this prefix.
+  const vvip = (label: string) => `[VVIP / Offshore] ${label}`;
+
+  const emergencyPhysician = cvs["Médecine d’urgence"]!["anglais britannique"];
+  const intensivist = { title: "Consultant in Intensive Care Medicine", specialty: "Intensive Care Medicine", skill: "mechanical ventilation" };
+  it.each([
+    ["Médecin urgentiste (ATLS / ACLS)", emergencyPhysician],
+    ["Emergency physician (ATLS / ACLS)", emergencyPhysician],
+    ["Notarzt / Notärztin (ATLS / ACLS)", emergencyPhysician],
+    ["急诊医师（ATLS / ACLS）", emergencyPhysician],
+    ["Médecin de soins intensifs / Réanimateur", intensivist],
+    ["Intensive care physician", intensivist],
+    ["Intensivmediziner / Reanimation", intensivist],
+    ["重症医学医师", intensivist],
+  ])("rapproche le profil VVIP « %s » d’un CV en anglais britannique", (label, cv) => {
+    const result = analyse("anglais britannique", cv, vvip(label));
+    expect(result.scoreBreakdown.specialtyMatch).toBe(30);
+    expect(result.relevanceScore).toBe(47);
+  });
+
+  it("rapproche les infirmiers anesthésistes et infirmiers VVIP de leur CV, mais pas un urgentiste d’un anesthésiste", () => {
+    const nurseAnaesthetist = { title: "Nurse Anaesthetist", specialty: "Anaesthetic nursing", skill: "airway management" };
+    for (const label of ["Infirmier(ère) anesthésiste (IADE) VVIP", "VVIP nurse anaesthetist", "VVIP-Fachpflege Anästhesie", "VVIP 麻醉专科护士"]) {
+      expect(analyse("anglais britannique", nurseAnaesthetist, vvip(label)).scoreBreakdown.specialtyMatch, label).toBe(30);
+    }
+    const nurse = { title: "Registered Nurse", specialty: "Adult nursing", skill: "triage" };
+    expect(analyse("anglais britannique", nurse, vvip("Infirmier(ère) paramédical(e) Offshore / Rig Medic")).scoreBreakdown.specialtyMatch).toBe(30);
+    expect(analyse("anglais britannique", cvs["Anesthésie-réanimation"]!["anglais britannique"], vvip("Médecin urgentiste (ATLS / ACLS)")).scoreBreakdown.specialtyMatch).toBe(0);
+    expect(analyse("anglais britannique", cvs["Médecine d’urgence"]!["anglais britannique"], vvip("Notarzt / Notärztin (ATLS / ACLS)")).scoreBreakdown.specialtyMatch).toBe(30);
   });
 });
 
