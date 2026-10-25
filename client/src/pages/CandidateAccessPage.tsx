@@ -371,7 +371,8 @@ export default function CandidateAccessPage() {
   const description = mode === "login" ? copy.loginDescription : mode === "register" ? copy.registerDescription : mode === "forgot" ? copy.forgotDescription : copy.activationDescription;
 
   return (
-    <main id="main-content" tabIndex={-1} className="min-h-screen bg-[#030a12] px-4 py-10 text-slate-100 sm:py-16">
+    // Fond toujours sombre : les champs et libellés reprennent les jetons sombres en thème clair (A11Y-02).
+    <main id="main-content" tabIndex={-1} className="theme-dark-island dark min-h-screen bg-[#030a12] px-4 py-10 text-slate-100 sm:py-16">
       <SEOHead title={copy.metaTitle} description={copy.metaDescription} noIndex />
       <div className="mx-auto grid max-w-5xl overflow-hidden rounded-3xl border border-cyan-950/80 bg-slate-950/60 shadow-2xl shadow-cyan-950/20 lg:grid-cols-[0.9fr_1.1fr]">
         <section className="relative overflow-hidden border-b border-cyan-950/70 bg-[radial-gradient(circle_at_25%_15%,rgba(8,145,178,0.26),transparent_42%),linear-gradient(150deg,#06243a,#06121e)] p-7 sm:p-10 lg:border-b-0 lg:border-r">
