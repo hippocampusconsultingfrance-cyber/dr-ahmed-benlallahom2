@@ -8,7 +8,7 @@
   "functions": {
     "api/index.js": {
       "maxDuration": 60,
-      "includeFiles": "drizzle/**"
+      "includeFiles": "{drizzle/**,server/fonts/**}"
     }
   },
   "crons": [
