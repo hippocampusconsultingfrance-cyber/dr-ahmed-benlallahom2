@@ -181,6 +181,23 @@ export async function enforcePersistentRateLimit(input: PersistentRateLimitPolic
   if (state.blocked) throw new Error("candidate_security_rate_limited");
 }
 
+/**
+ * Gives back one attempt counted by recordPersistentRateLimitAttempt, for a
+ * request that then failed on our side (storage or database error): only the
+ * requests we accepted use up the budget. A subject already above the
+ * threshold keeps its block.
+ */
+export async function releasePersistentRateLimitAttempt(input: PersistentRateLimitPolicy): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  const table = candidateSecurityRateLimits;
+  await db.update(table).set({ attemptCount: sql`GREATEST(${table.attemptCount} - 1, 0)` }).where(and(
+    eq(table.action, input.action),
+    eq(table.subjectHash, hashSecurityValue(input.subject)),
+    lte(table.attemptCount, input.maxAttempts),
+  ));
+}
+
 /** Forgets the counter of a subject (e.g. after a successful sign-in). */
 export async function clearPersistentRateLimit(input: { action: string; subject: string }): Promise<void> {
   const db = await getDb();

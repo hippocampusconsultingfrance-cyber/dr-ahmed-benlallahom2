@@ -24,3 +24,12 @@ describe("page de questions médicales", () => {
     expect(page.match(/<section role="note"/g)).toHaveLength(2);
   });
 });
+
+describe("page de questions médicales — refus de l’envoi", () => {
+  it("distingue le plafond d’envois par connexion d’un anti-robot à renouveler (MAIL-01)", async () => {
+    const { medicalQuestionSubmitError } = await import("./MedicalQuestionsPage");
+    expect(medicalQuestionSubmitError("TOO_MANY_REQUESTS")).toBe("tooManyRequests");
+    expect(medicalQuestionSubmitError("BAD_REQUEST")).toBe("turnstile");
+    expect(medicalQuestionSubmitError(undefined)).toBe("turnstile");
+  });
+});

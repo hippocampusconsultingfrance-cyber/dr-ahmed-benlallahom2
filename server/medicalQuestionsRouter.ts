@@ -7,7 +7,7 @@ import { adminProcedure, publicProcedure, router } from "./_core/trpc";
 import { getDb } from "./db";
 import { enforcePersistentRateLimit, hashSecurityValue, logSecurityEvent, requestIpHash } from "./candidateSecurity";
 import { verifyCandidateTurnstile } from "./candidateTurnstile";
-import { enforcePublicEmailIpRateLimit } from "./publicFormRateLimit";
+import { enforcePublicEmailIpRateLimit, releasePublicEmailIpRateLimit } from "./publicFormRateLimit";
 import { isAdminMfaVerified } from "./adminMfa";
 import { improveMedicalAnswerDraft } from "./medicalQuestionAssistant";
 import { notifyOwner } from "./_core/notification";
@@ -73,7 +73,8 @@ export const medicalQuestionsRouter = router({
     if (input.website.trim()) throw new TRPCError({ code: "BAD_REQUEST", message: "La demande n’a pas pu être traitée." });
     const ipHash = requestIpHash(ctx.req.headers);
     const ipSubject = ipHash ?? hashSecurityValue(ctx.req.ip || "unknown");
-    if (process.env.NODE_ENV !== "test" && process.env.VITEST !== "true") {
+    const protectionsEnabled = process.env.NODE_ENV !== "test" && process.env.VITEST !== "true";
+    if (protectionsEnabled) {
       try {
         await enforcePersistentRateLimit({
           action: "public_medical_question_submit",
@@ -82,7 +83,6 @@ export const medicalQuestionsRouter = router({
           windowMs: 24 * 60 * 60 * 1000,
           blockMs: 24 * 60 * 60 * 1000,
         });
-        await enforcePublicEmailIpRateLimit("medicalQuestion", ipHash ?? (ctx.req.ip ? hashSecurityValue(ctx.req.ip) : null));
         await verifyCandidateTurnstile({ token: input.turnstileToken, remoteIp: ctx.req.ip });
       } catch {
         await logSecurityEvent({ actorKind: "anonymous", actorReference: hashSecurityValue(input.email), category: "public_medical_question_protection", outcome: "blocked", severity: "warning", ipHash });
@@ -90,21 +90,38 @@ export const medicalQuestionsRouter = router({
       }
     }
     const db = await requireDb();
+    // MAIL-01: only a question that passed the anti-bot check counts towards the
+    // per-IP cap, and is given back if it cannot be recorded. Its refusal has its
+    // own code, so the page does not point at the security check.
+    const emailIpHash = protectionsEnabled ? ipHash ?? (ctx.req.ip ? hashSecurityValue(ctx.req.ip) : null) : null;
+    try {
+      await enforcePublicEmailIpRateLimit("medicalQuestion", emailIpHash);
+    } catch (error) {
+      if (!(error instanceof Error && error.message === "candidate_security_rate_limited")) throw error;
+      await logSecurityEvent({ actorKind: "anonymous", actorReference: hashSecurityValue(input.email), category: "public_medical_question_protection", outcome: "blocked", severity: "warning", ipHash });
+      throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "Trop d’envois depuis cette connexion. Réessayez dans une heure." });
+    }
     const trackingId = medicalQuestionTrackingId();
-    const result = await db.insert(medicalQuestions).values({
-      trackingId,
-      firstName: input.firstName,
-      lastName: input.lastName,
-      email: input.email,
-      phone: input.phone,
-      question: input.question,
-      language: input.language,
-      privacyConsent: 1,
-      publicationConsent: input.publicationConsent ? 1 : 0,
-      urgencyAcknowledged: 1,
-    }).returning({ id: medicalQuestions.id });
-    const questionId = Number(result[0].id);
-    await auditQuestion({ questionId, action: "submitted", metadata: { publicationConsent: input.publicationConsent, language: input.language } });
+    let questionId: number;
+    try {
+      const result = await db.insert(medicalQuestions).values({
+        trackingId,
+        firstName: input.firstName,
+        lastName: input.lastName,
+        email: input.email,
+        phone: input.phone,
+        question: input.question,
+        language: input.language,
+        privacyConsent: 1,
+        publicationConsent: input.publicationConsent ? 1 : 0,
+        urgencyAcknowledged: 1,
+      }).returning({ id: medicalQuestions.id });
+      questionId = Number(result[0].id);
+      await auditQuestion({ questionId, action: "submitted", metadata: { publicationConsent: input.publicationConsent, language: input.language } });
+    } catch (error) {
+      await releasePublicEmailIpRateLimit("medicalQuestion", emailIpHash).catch(() => undefined);
+      throw error;
+    }
     await logSecurityEvent({ actorKind: "anonymous", actorReference: hashSecurityValue(input.email), category: "public_medical_question_submitted", outcome: "allowed", severity: "info", ipHash });
     // PUB-FORM-01: the owner is told (no health content), the person gets an
     // acknowledgement with the reference. Neither failure loses the question.

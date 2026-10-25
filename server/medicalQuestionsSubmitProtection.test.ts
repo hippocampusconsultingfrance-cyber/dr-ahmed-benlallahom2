@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { medicalQuestions } from "../drizzle/schema";
 import { createInMemoryDrizzle, type InMemoryDrizzle } from "./testSupport/inMemoryDrizzle";
 import { TEST_PEPPER } from "./testSupport/candidatePortal";
+import { medicalQuestionSubmitError } from "../client/src/pages/MedicalQuestionsPage";
 
 process.env.CANDIDATE_AUTH_PEPPER ||= TEST_PEPPER;
 
@@ -18,6 +19,7 @@ vi.mock("resend", () => ({
 }));
 
 const { medicalQuestionsRouter } = await import("./medicalQuestionsRouter");
+const { verifyCandidateTurnstile } = await import("./candidateTurnstile");
 
 function caller(ip: string | null) {
   const headers: Record<string, string> = ip ? { "x-forwarded-for": ip } : {};
@@ -49,7 +51,15 @@ beforeEach(() => {
   state.sent.length = 0;
   vi.stubEnv("RESEND_API_KEY", "re_test_medical_submit");
 });
-afterEach(() => vi.unstubAllEnvs());
+afterEach(() => {
+  vi.unstubAllEnvs();
+  vi.restoreAllMocks();
+});
+
+async function failure(promise: Promise<unknown>) {
+  try { await promise; } catch (error) { return error as { code: string; message: string }; }
+  throw new Error("the call was expected to fail");
+}
 
 describe("medicalQuestions.submit — emails vers une adresse non vérifiée (MAIL-01)", () => {
   it("enregistre la question avec le prénom saisi mais n’en recopie pas le texte dans l’accusé", async () => {
@@ -71,11 +81,42 @@ describe("medicalQuestions.submit — emails vers une adresse non vérifiée (MA
     for (let index = 1; index <= 5; index += 1) {
       await expect(caller("198.51.100.47").submit(question(`cible${index}@test.local`, `Offre speciale sur https://promo-${index}.example`))).resolves.toMatchObject({ acknowledgementSent: true });
     }
-    await expect(caller("198.51.100.47").submit(question("cible6@test.local"))).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    const refusal = await failure(caller("198.51.100.47").submit(question("cible6@test.local")));
+    expect(refusal).toMatchObject({ code: "TOO_MANY_REQUESTS", message: "Trop d’envois depuis cette connexion. Réessayez dans une heure." });
+    // The page shows its own message for this code and does not point at the anti-bot box.
+    expect(medicalQuestionSubmitError(refusal.code)).toBe("tooManyRequests");
     expect(state.sent.map(email => email.to[0])).toEqual(["cible1@test.local", "cible2@test.local", "cible3@test.local", "cible4@test.local", "cible5@test.local"]);
     expect((state.db as InMemoryDrizzle).rows(medicalQuestions)).toHaveLength(5);
 
     await expect(caller("203.0.113.48").submit(question("cible6@test.local"))).resolves.toMatchObject({ acknowledgementSent: true });
+  });
+
+  it("ne compte ni un anti-robot à renouveler ni une question non enregistrée", async () => {
+    enableProductionProtections();
+    const ip = "198.51.100.49";
+    for (let index = 1; index <= 5; index += 1) {
+      vi.mocked(verifyCandidateTurnstile).mockRejectedValueOnce(new Error("candidate_turnstile_invalid"));
+      const refusal = await failure(caller(ip).submit(question(`essai${index}@test.local`)));
+      expect(refusal).toMatchObject({ code: "BAD_REQUEST", message: "La vérification de sécurité doit être renouvelée avant l’envoi." });
+      expect(medicalQuestionSubmitError(refusal.code)).toBe("turnstile");
+    }
+    const db = state.db as InMemoryDrizzle;
+    const insert = db.insert.bind(db);
+    let questionInsertFails = true;
+    vi.spyOn(db, "insert").mockImplementation((table => {
+      if (table === medicalQuestions && questionInsertFails) {
+        questionInsertFails = false;
+        throw new Error("database down");
+      }
+      return insert(table);
+    }) as typeof db.insert);
+    await expect(caller(ip).submit(question("panne@test.local"))).rejects.toThrow("database down");
+
+    for (let index = 1; index <= 5; index += 1) {
+      await expect(caller(ip).submit(question(`patient${index}@test.local`))).resolves.toMatchObject({ acknowledgementSent: true });
+    }
+    await expect(caller(ip).submit(question("patient6@test.local"))).rejects.toMatchObject({ code: "TOO_MANY_REQUESTS" });
+    expect(state.sent).toHaveLength(5);
   });
 
   it("ne regroupe pas les visiteurs sans IP identifiable dans un compteur commun", async () => {
