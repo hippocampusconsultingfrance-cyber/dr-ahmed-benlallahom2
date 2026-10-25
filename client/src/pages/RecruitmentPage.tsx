@@ -120,7 +120,7 @@ type FormState = {
   firstName: string; lastName: string; email: string; phone: string; specialty: string; specialtyCustom: string; diplomaCountry: string; targetCountries: string[]; otherTargetCountry: string; languages: string[]; otherLanguage: string; yearsExperience: string; message: string; gdprConsent: boolean; marketingConsent: boolean; website: string;
 };
 
-const initialForm: FormState = { firstName: "", lastName: "", email: "", phone: "", specialty: "", specialtyCustom: "", diplomaCountry: "", targetCountries: [], otherTargetCountry: "", languages: [], otherLanguage: "", yearsExperience: "", message: "", gdprConsent: false, marketingConsent: false, website: "" };
+export const initialForm: FormState = { firstName: "", lastName: "", email: "", phone: "", specialty: "", specialtyCustom: "", diplomaCountry: "", targetCountries: [], otherTargetCountry: "", languages: [], otherLanguage: "", yearsExperience: "", message: "", gdprConsent: false, marketingConsent: false, website: "" };
 
 /** Fields the standard form checks before sending, in the order they appear on it. */
 type StandardField = "firstName" | "lastName" | "email" | "specialty" | "specialtyCustom" | "diplomaCountry" | "targetCountries" | "otherTargetCountry" | "cv" | "gdprConsent" | "turnstile";
@@ -142,6 +142,32 @@ export function standardFieldsToCorrect(invalidFields: Iterable<StandardField>, 
     if (field === "cv" && file) return { detail: t.fileError, focusId: standardFieldIds.cv };
     return { label: names[field], focusId: standardFieldIds[field] };
   });
+}
+
+/** Multipart body of a standard application; `language` is the one the form is shown in. */
+export function buildStandardApplicationFormData({ form, cv, specialty, diplomaCountry, turnstileToken, language }: { form: FormState; cv: File; specialty: string; diplomaCountry: string; turnstileToken: string; language: Language }): FormData {
+  const body = new FormData();
+  body.append("cv", cv);
+  body.append("firstName", form.firstName);
+  body.append("lastName", form.lastName);
+  body.append("email", form.email);
+  body.append("phone", form.phone);
+  body.append("specialty", specialty);
+  body.append("diplomaCountry", diplomaCountry);
+  const submittedTargetCountries = form.targetCountries.map(country => country === OTHER_TARGET_COUNTRY ? `Autre pays : ${form.otherTargetCountry.trim()}` : country);
+  body.append("targetCountries", JSON.stringify(submittedTargetCountries));
+  const submittedLanguages = form.languages.flatMap(languageValue => languageValue === "Other"
+    ? form.otherLanguage.split(",").map(item => item.trim()).filter(Boolean)
+    : [languageValue]);
+  body.append("languages", JSON.stringify(submittedLanguages));
+  body.append("yearsExperience", form.yearsExperience);
+  body.append("message", form.message);
+  body.append("gdprConsent", form.gdprConsent ? "1" : "0");
+  body.append("marketingConsent", form.marketingConsent ? "1" : "0");
+  body.append("website", form.website);
+  body.append("turnstileToken", turnstileToken);
+  body.append("language", language);
+  return body;
 }
 
 /**
@@ -290,26 +316,7 @@ export default function RecruitmentPage() {
     if (!file) return;
     if (!turnstileToken) return;
 
-    const body = new FormData();
-    body.append("cv", file);
-    body.append("firstName", form.firstName);
-    body.append("lastName", form.lastName);
-    body.append("email", form.email);
-    body.append("phone", form.phone);
-    body.append("specialty", finalSpecialty);
-    body.append("diplomaCountry", submittedDiplomaCountry);
-    const submittedTargetCountries = form.targetCountries.map(country => country === OTHER_TARGET_COUNTRY ? `Autre pays : ${form.otherTargetCountry.trim()}` : country);
-    body.append("targetCountries", JSON.stringify(submittedTargetCountries));
-    const submittedLanguages = form.languages.flatMap(languageValue => languageValue === "Other"
-      ? form.otherLanguage.split(",").map(item => item.trim()).filter(Boolean)
-      : [languageValue]);
-    body.append("languages", JSON.stringify(submittedLanguages));
-    body.append("yearsExperience", form.yearsExperience);
-    body.append("message", form.message);
-    body.append("gdprConsent", form.gdprConsent ? "1" : "0");
-    body.append("marketingConsent", form.marketingConsent ? "1" : "0");
-    body.append("website", form.website);
-    body.append("turnstileToken", turnstileToken);
+    const body = buildStandardApplicationFormData({ form, cv: file, specialty: finalSpecialty, diplomaCountry: submittedDiplomaCountry, turnstileToken, language: lang });
 
     setStatus("sending");
     const result = await sendStandardApplication(body, lang);

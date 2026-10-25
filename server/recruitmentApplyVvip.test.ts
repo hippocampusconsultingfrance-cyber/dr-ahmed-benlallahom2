@@ -103,6 +103,7 @@ function vvipBody(specialty: string, cv: Buffer = validPdfBuffer(), environments
     specialty,
     diplomaCountry: "Maroc",
     turnstileToken: "turnstile-token-not-checked-under-vitest",
+    language: "fr",
   });
 }
 

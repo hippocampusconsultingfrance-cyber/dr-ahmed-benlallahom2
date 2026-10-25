@@ -13,6 +13,7 @@ function bodyFor(specialty: string, environments: string[] = allEnvironments) {
     specialty,
     diplomaCountry: "Maroc",
     turnstileToken: "turnstile-token-of-this-attempt",
+    language: "fr",
   });
 }
 

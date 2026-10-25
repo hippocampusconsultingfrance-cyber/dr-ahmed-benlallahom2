@@ -415,8 +415,9 @@ export function vvipFieldsToCorrect(invalidFields: Iterable<VvipField>, file: Pi
  * Multipart body of a VVIP application. The specialty keeps only the VVIP prefix,
  * which marks the pathway and keeps the application apart from a standard one;
  * the environments are sent in targetCountries and in the message (INTL-03).
+ * `language` is the one the form is shown in.
  */
-export function buildVvipApplicationFormData({ form, cv, specialty, diplomaCountry, turnstileToken }: { form: FormState; cv: File; specialty: string; diplomaCountry: string; turnstileToken: string }): FormData {
+export function buildVvipApplicationFormData({ form, cv, specialty, diplomaCountry, turnstileToken, language }: { form: FormState; cv: File; specialty: string; diplomaCountry: string; turnstileToken: string; language: Language }): FormData {
   const body = new FormData();
   body.append("cv", cv);
   body.append("firstName", form.firstName);
@@ -435,6 +436,7 @@ export function buildVvipApplicationFormData({ form, cv, specialty, diplomaCount
   body.append("marketingConsent", "0");
   body.append("website", form.website);
   body.append("turnstileToken", turnstileToken);
+  body.append("language", language);
   return body;
 }
 
@@ -518,7 +520,7 @@ export default function VvipOffshorePage() {
 
     setStatus("sending");
     try {
-      const body = buildVvipApplicationFormData({ form, cv: file, specialty: finalSpecialty, diplomaCountry: submittedDiplomaCountry, turnstileToken });
+      const body = buildVvipApplicationFormData({ form, cv: file, specialty: finalSpecialty, diplomaCountry: submittedDiplomaCountry, turnstileToken, language: lang });
       const res = await fetch("/api/recruitment/apply", {
         method: "POST",
         body,

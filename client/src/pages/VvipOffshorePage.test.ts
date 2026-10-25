@@ -37,6 +37,7 @@ describe("candidature VVIP — erreurs publiques", () => {
       specialty: "Médecin urgentiste (ATLS / ACLS)",
       diplomaCountry: "Maroc",
       turnstileToken: "turnstile-token",
+      language: "fr",
     });
     expect(JSON.parse(String(body.get("targetCountries")))).toEqual(environments);
     expect(body.get("diplomaCountry")).toBe("Maroc");
