@@ -409,6 +409,20 @@ Les corrections de code peuvent être faites **par lots testés**, comme pour la
 - **Première étape de IA-01** : nouveau libellé « Citation trouvée… » et rappel d'ouvrir le CV.
 - Puis vérification de RES-01 sur un vrai iPhone (section 7).
 
+**Avancement au 25 octobre — lot 1 corrigé**, puis vérifié deux fois de bout en bout sur la réplique (navigateur ordinateur et mobile, FR et EN) :
+
+| ID | État | Reste à faire |
+|---|---|---|
+| RES-01 | ✅ corrigé : date et heure saisissables en chiffres seuls, « 10h00 », « 10.00 » | Un essai sur un vrai iPhone et un vrai Android |
+| REC-01 | ✅ corrigé : l'export ne contient que les présélectionnés de la mission ; une liste vide est refusée | — |
+| PUB-01, PUB-02 | ✅ corrigés : menu toujours visible, vrais liens « Réserver une consultation » sur toutes les pages | — |
+| A11Y-01, A11Y-02 | ✅ corrigés : champs visibles (bordure contrastée), connexion candidat lisible en thème clair | Sur petit téléphone, quelques longues valeurs de listes déroulantes restent coupées de quelques pixels |
+| REC-03, INTL-03, REC-05 | ✅ corrigés : nouvel essai VVIP possible, plusieurs environnements acceptés, type de document à choisir dans le coffre | — |
+| EN-03 | ✅ corrigé : choix de la langue sur la réservation, l'espace candidat, la 404 ; lien `?lang=en` | Utiliser `?lang=en` dans vos liens anglais |
+| MAIL-01 | ✅ corrigé : plus de texte libre recopié dans les emails, limite par connexion qui ne compte que les envois acceptés | Vérifier le quota Resend et activer ses alertes |
+| IA-01 | ⏳ étape 1 faite : l'analyse n'est plus présentée comme « vérifiée » | Écarter le texte invisible des CV (lot 4) |
+| SECU-01 | ✅ dépendances à jour : plus aucune vulnérabilité connue | Décider si le contrôle des dépendances reste bloquant dans la CI |
+
 ### Lot 2 — Vendre la consultation et accueillir l'international (≈ 2 semaines)
 - **Réservation** : RES-02 (plages visibles, puis grille de créneaux), RES-04 (heure locale), RES-05 (ajout à l'agenda, date sur la confirmation).
 - **Anglais** : EN-01, EN-02, EN-06 (erreurs du serveur traduites), REC-04.
