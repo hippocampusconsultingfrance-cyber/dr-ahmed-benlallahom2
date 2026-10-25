@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { contradictionEvidenceLabel, CV_REVIEW_REMINDER, fieldEvidenceStatusLabel } from "./recruitmentEvidenceLabels";
+import { contradictionEvidenceLabel, CV_READING_LABELS, CV_REVIEW_REMINDER, cvReadingTextForDisplay, fieldEvidenceStatusLabel, fieldEvidenceStatusTone } from "./recruitmentEvidenceLabels";
 
 describe("libellés des preuves IA d’un CV (IA-01)", () => {
   it("une citation retrouvée dans le texte lu n’est jamais présentée comme vérifiée", () => {
@@ -17,5 +17,41 @@ describe("libellés des preuves IA d’un CV (IA-01)", () => {
 
   it("rappelle d’ouvrir le CV avant toute shortlist", () => {
     expect(CV_REVIEW_REMINDER).toMatch(/^Ouvrir le CV avant toute shortlist/);
+  });
+
+  it("n’affiche jamais en vert une citation trouvée dans le texte lu", () => {
+    expect(fieldEvidenceStatusTone({ sourceLocation: "page 1", evidenceVerified: true })).toBe("text-foreground");
+    expect(fieldEvidenceStatusTone({ sourceLocation: "page 1", evidenceVerified: false })).toBe("text-amber-700 dark:text-amber-300");
+    expect(fieldEvidenceStatusTone({ sourceLocation: "formulaire de candidature", evidenceVerified: true })).toBe("text-amber-700 dark:text-amber-300");
+    for (const evidenceVerified of [true, false, undefined]) expect(fieldEvidenceStatusTone({ evidenceVerified })).not.toMatch(/emerald|green/);
+  });
+
+  it("ne titre aucune partie de la lecture du CV comme vérifiée", () => {
+    for (const label of Object.values(CV_READING_LABELS)) expect(label).not.toMatch(/vérifi/i);
+    expect(CV_READING_LABELS.profile).toBe("Profil trouvé dans le texte lu par l’outil");
+    expect(CV_READING_LABELS.strengths).toMatch(/\(à comparer au CV\)$/);
+  });
+
+  it("affiche avec le libellé actuel les analyses déjà enregistrées qui disaient « vérifié »", () => {
+    expect(cvReadingTextForDisplay("Lecture automatisée : 10 citation(s) vérifiée(s) sur 10. 3 expérience(s), 2 certification(s) et 1 langue(s) disposent d’une preuve exploitable. Revue humaine obligatoire."))
+      .toBe("Lecture automatisée : 10 citation(s) sur 10 trouvée(s) dans le texte lu par l’outil, à comparer au CV. 3 expérience(s), 2 certification(s) et 1 langue(s) s’appuient sur une citation de ce texte. Revue humaine obligatoire.");
+    expect(cvReadingTextForDisplay("Titre professionnel vérifié : Médecin anesthésiste-réanimateur.")).toBe("Titre professionnel trouvé dans le texte lu par l’outil : Médecin anesthésiste-réanimateur.");
+    expect(cvReadingTextForDisplay("Spécialité(s) vérifiée(s) : Anesthésie.")).toBe("Spécialité(s) trouvée(s) dans le texte lu par l’outil : Anesthésie.");
+    expect(cvReadingTextForDisplay("Compétence(s) vérifiée(s) : Réanimation, ALR.")).toBe("Compétence(s) trouvée(s) dans le texte lu par l’outil : Réanimation, ALR.");
+    expect(cvReadingTextForDisplay("Langue(s) vérifiée(s) : Français, Anglais.")).toBe("Langue(s) trouvée(s) dans le texte lu par l’outil : Français, Anglais.");
+    expect(cvReadingTextForDisplay("Certification(s) vérifiée(s) : ACLS.")).toBe("Certification(s) trouvée(s) dans le texte lu par l’outil : ACLS.");
+    expect(cvReadingTextForDisplay("Score déterministe calculé uniquement à partir de faits professionnels vérifiés et rapprochés de la spécialité déclarée."))
+      .toBe("Score déterministe calculé uniquement à partir de faits professionnels trouvés dans le texte lu par l’outil et rapprochés de la spécialité déclarée, à comparer au CV.");
+    expect(cvReadingTextForDisplay("Score non présenté : les preuves vérifiées sont insuffisantes, contradictoires ou non rapprochées de la spécialité déclarée (50 % de couverture)."))
+      .toBe("Score non présenté : les citations trouvées dans le texte lu par l’outil sont insuffisantes, contradictoires ou non rapprochées de la spécialité déclarée (50 % de couverture).");
+  });
+
+  it("laisse intacts les textes actuels et ceux d’une autre origine", () => {
+    for (const text of [
+      "Lecture automatisée : 4 citation(s) sur 5 trouvée(s) dans le texte lu par l’outil, à comparer au CV. 1 expérience(s), 0 certification(s) et 1 langue(s) s’appuient sur une citation de ce texte. Revue humaine obligatoire.",
+      "3 expérience(s) professionnelle(s) sourcée(s).",
+      "Le texte du CV a été extrait avec succès. L’analyse IA complète est temporairement indisponible ; ce dossier doit être examiné manuellement.",
+      "Compétence vérifiée : Réanimation, d’après le candidat.",
+    ]) expect(cvReadingTextForDisplay(text)).toBe(text);
   });
 });

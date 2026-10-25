@@ -6,7 +6,7 @@ import PublicContentSkeleton from "@/components/PublicContentSkeleton";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import Candidate360Dialog from "./Candidate360Dialog";
-import { contradictionEvidenceLabel, CV_REVIEW_REMINDER, fieldEvidenceStatusLabel } from "./recruitmentEvidenceLabels";
+import { contradictionEvidenceLabel, CV_READING_LABELS, CV_REVIEW_REMINDER, cvReadingTextForDisplay, fieldEvidenceStatusLabel, fieldEvidenceStatusTone } from "./recruitmentEvidenceLabels";
 import {
   recruitmentDriveExportLabel,
   recruitmentDriveExportErrorLabel,
@@ -526,17 +526,17 @@ export default function RecruitmentTab() {
 
                       {application.aiSummary ? (
                         <div className="mt-4 space-y-4">
-                          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Synthèse des preuves vérifiées</p>
-                          <p className="leading-6 text-foreground/90">{application.aiSummary}</p>
+                          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{CV_READING_LABELS.summary}</p>
+                          <p className="leading-6 text-foreground/90">{cvReadingTextForDisplay(application.aiSummary)}</p>
                           <div className="grid gap-3 md:grid-cols-2">
                             <div>
-                              <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Profil vérifié dans le CV</p>
+                              <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{CV_READING_LABELS.profile}</p>
                               <p className="text-foreground">{extracted.professionalTitle || "Titre non identifié"}</p>
                               <p className="text-muted-foreground">{extracted.specialties?.join(", ") || "Spécialités non identifiées"}</p>
                             </div>
                             <div>
-                              <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Compétences vérifiées</p>
-                              <p className="text-foreground">{extracted.verifiedSkills?.join(", ") || "Aucune compétence vérifiée dans le CV"}</p>
+                              <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{CV_READING_LABELS.skills}</p>
+                              <p className="text-foreground">{extracted.verifiedSkills?.join(", ") || CV_READING_LABELS.noSkills}</p>
                             </div>
                           </div>
                           {(typeof extracted.confidence === "number" || typeof extracted.evidenceCoverage === "number") && (
@@ -553,7 +553,7 @@ export default function RecruitmentTab() {
                                 <p>Expérience <strong className="text-foreground">{extracted.scoreBreakdown.experienceEvidence ?? 0}/25</strong></p>
                                 <p>Compétences <strong className="text-foreground">{extracted.scoreBreakdown.skillsEvidence ?? 0}/20</strong></p>
                                 <p>Langues <strong className="text-foreground">{extracted.scoreBreakdown.languageReadiness ?? 0}/15</strong></p>
-                                <p>Certifications vérifiées <strong className="text-foreground">{extracted.scoreBreakdown.credentialReadiness ?? 0}/10</strong></p>
+                                <p>{CV_READING_LABELS.credentials} <strong className="text-foreground">{extracted.scoreBreakdown.credentialReadiness ?? 0}/10</strong></p>
                               </div>
                             </div>
                           )}
@@ -566,7 +566,7 @@ export default function RecruitmentTab() {
                                     <p className="font-medium text-foreground">{item.value || "Information extraite"}</p>
                                     <p className="mt-1 text-muted-foreground">« {item.evidence || "Preuve non fournie"} »</p>
                                     <p className="mt-1 text-muted-foreground">Source : {item.sourceLocation || "non localisée"} · confiance {typeof item.confidence === "number" ? `${item.confidence}%` : "—"}</p>
-                                    <p className={`mt-1 font-medium ${item.evidenceVerified ? "text-emerald-700 dark:text-emerald-300" : "text-amber-700 dark:text-amber-300"}`}>
+                                    <p className={`mt-1 font-medium ${fieldEvidenceStatusTone(item)}`}>
                                       {fieldEvidenceStatusLabel(item)}
                                     </p>
                                   </div>
@@ -589,15 +589,15 @@ export default function RecruitmentTab() {
                           )}
                           <div className="grid gap-3 md:grid-cols-2">
                             <div>
-                              <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Éléments professionnels vérifiés</p>
-                              <ul className="list-disc space-y-1 pl-5 text-muted-foreground">{strengths.length ? strengths.map(item => <li key={item}>{item}</li>) : <li>Non renseigné</li>}</ul>
+                              <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{CV_READING_LABELS.strengths}</p>
+                              <ul className="list-disc space-y-1 pl-5 text-muted-foreground">{strengths.length ? strengths.map(item => <li key={item}>{cvReadingTextForDisplay(item)}</li>) : <li>Non renseigné</li>}</ul>
                             </div>
                             <div>
                               <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Points à vérifier</p>
                               <ul className="list-disc space-y-1 pl-5 text-muted-foreground">{weaknesses.length ? weaknesses.map(item => <li key={item}>{item}</li>) : <li>Non renseigné</li>}</ul>
                             </div>
                           </div>
-                          {application.aiMatchReasoning && <p className="border-t border-primary/10 pt-3 text-xs leading-5 text-muted-foreground"><strong className="text-foreground">{verifiedScore === null ? "Conclusion de l’analyse :" : "Justification du score :"}</strong> {application.aiMatchReasoning}</p>}
+                          {application.aiMatchReasoning && <p className="border-t border-primary/10 pt-3 text-xs leading-5 text-muted-foreground"><strong className="text-foreground">{verifiedScore === null ? "Conclusion de l’analyse :" : "Justification du score :"}</strong> {cvReadingTextForDisplay(application.aiMatchReasoning)}</p>}
                           {extractionWarnings.length > 0 && <p className="border-t border-primary/10 pt-3 text-xs leading-5 text-amber-700 dark:text-amber-300"><strong>Qualité d’extraction :</strong> {extractionWarnings.join(" · ")}</p>}
                           {application.aiAnalyzedAt && <p className="text-[11px] text-muted-foreground">Analysé le {new Date(application.aiAnalyzedAt).toLocaleString("fr-FR", { timeZone: "Europe/Paris" })}</p>}
                         </div>

@@ -1126,24 +1126,27 @@ export function normalizeRecruitmentAnalysis(
     item => isVerifiedFact(item) && !certificationIsCurrent(item)
   );
   const verifiedEvidenceCount = allEvidence.filter(isVerifiedFact).length;
+  // A "verified" fact only means its quote was found in the text read from the
+  // CV, which can hold passages invisible on screen: the wording shown to the
+  // admin says so and never calls it verified (IA-01).
   const deterministicStrengths = uniqueStrings([
     ...(verifiedProfessionalTitle
-      ? [`Titre professionnel vérifié : ${verifiedProfessionalTitle}.`]
+      ? [`Titre professionnel trouvé dans le texte lu par l’outil : ${verifiedProfessionalTitle}.`]
       : []),
     ...(verifiedSpecialties.length > 0
-      ? [`Spécialité(s) vérifiée(s) : ${verifiedSpecialties.join(", ")}.`]
+      ? [`Spécialité(s) trouvée(s) dans le texte lu par l’outil : ${verifiedSpecialties.join(", ")}.`]
       : []),
     ...(verifiedExperiences.length > 0
       ? [`${verifiedExperiences.length} expérience(s) professionnelle(s) sourcée(s).`]
       : []),
     ...(verifiedSkills.length > 0
-      ? [`Compétence(s) vérifiée(s) : ${verifiedSkills.join(", ")}.`]
+      ? [`Compétence(s) trouvée(s) dans le texte lu par l’outil : ${verifiedSkills.join(", ")}.`]
       : []),
     ...(verifiedLanguages.length > 0
-      ? [`Langue(s) vérifiée(s) : ${verifiedLanguages.join(", ")}.`]
+      ? [`Langue(s) trouvée(s) dans le texte lu par l’outil : ${verifiedLanguages.join(", ")}.`]
       : []),
     ...(verifiedCertifications.length > 0
-      ? [`Certification(s) vérifiée(s) : ${verifiedCertifications.map(item => item.name).join(", ")}.`]
+      ? [`Certification(s) trouvée(s) dans le texte lu par l’outil : ${verifiedCertifications.map(item => item.name).join(", ")}.`]
       : []),
   ]);
   const deterministicGaps = uniqueStrings([
@@ -1159,9 +1162,9 @@ export function normalizeRecruitmentAnalysis(
   ]);
   return {
     ...analysis,
-    summary: `Lecture automatisée : ${verifiedEvidenceCount} citation(s) vérifiée(s) sur ${allEvidence.length}. ` +
+    summary: `Lecture automatisée : ${verifiedEvidenceCount} citation(s) sur ${allEvidence.length} trouvée(s) dans le texte lu par l’outil, à comparer au CV. ` +
       `${verifiedExperiences.length} expérience(s), ${verifiedCertifications.length} certification(s) et ` +
-      `${verifiedLanguages.length} langue(s) disposent d’une preuve exploitable. Revue humaine obligatoire.`,
+      `${verifiedLanguages.length} langue(s) s’appuient sur une citation de ce texte. Revue humaine obligatoire.`,
     relevanceScore: scoreIsTrustworthy
       ? Math.max(0, Math.min(100, score))
       : null,
@@ -1201,8 +1204,8 @@ export function normalizeRecruitmentAnalysis(
     fieldEvidence,
     contradictions: uniqueContradictions,
     reasoning: scoreIsTrustworthy
-      ? "Score déterministe calculé uniquement à partir de faits professionnels vérifiés et rapprochés de la spécialité déclarée."
-      : `Score non présenté : les preuves vérifiées sont insuffisantes, contradictoires ou non rapprochées de la spécialité déclarée (${evidenceCoverage} % de couverture).`,
+      ? "Score déterministe calculé uniquement à partir de faits professionnels trouvés dans le texte lu par l’outil et rapprochés de la spécialité déclarée, à comparer au CV."
+      : `Score non présenté : les citations trouvées dans le texte lu par l’outil sont insuffisantes, contradictoires ou non rapprochées de la spécialité déclarée (${evidenceCoverage} % de couverture).`,
   };
 }
 
