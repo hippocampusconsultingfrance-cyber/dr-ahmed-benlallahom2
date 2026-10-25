@@ -2,7 +2,7 @@ import { deflateSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
 import { candidateDocumentValidationMessage, safeCandidateDocumentName, validateCandidateDocument } from "./candidateDocumentValidation";
 import { DOCUMENT_DECOMPRESSION_LIMITS } from "./documentDecompressionLimits";
-import { libreOfficeCvPdf, packPdfIntoObjectStream, pathologicalPdfs } from "./testing/pdfFixture";
+import { libreOfficeCvPdf, packPdfIntoObjectStream, pathologicalPdfs, pngPredict } from "./testing/pdfFixture";
 
 describe("validation des documents candidats", () => {
   it("nettoie les noms de fichiers et rejette les chemins", () => {
@@ -51,6 +51,20 @@ describe("REC-02 — PDF du coffre : mêmes lectures que pour les CV", () => {
     }
     const hexAlias = hidden("/Type/ObjStm/F/AHx", content => Buffer.from(`${content.toString("hex")}>`, "latin1"));
     expect(() => validate(hexAlias)).toThrow("candidate_document_pdf_object_stream_unreadable");
+  });
+
+  it("accepte un flux d’objets sans filtre ou à prédicteur PNG, et y trouve le JavaScript", () => {
+    const plain = (edit?: (source: string) => string) => packPdfIntoObjectStream(libreOfficeCvPdf(), { edit, objectStream: { dictionary: "/Type/ObjStm", encode: content => content } });
+    const predicted = (edit?: (source: string) => string) => packPdfIntoObjectStream(libreOfficeCvPdf(), {
+      edit,
+      objectStream: { dictionary: "/Type/ObjStm/Filter/FlateDecode/DecodeParms<</Predictor 12/Columns 5>>", encode: content => deflateSync(pngPredict(content, 5, [0, 1, 2, 3, 4])) },
+    });
+    for (const pdf of [plain, predicted]) {
+      expect(validate(pdf()).mimeType).toBe("application/pdf");
+      expect(() => validate(pdf(javaScriptOpening))).toThrow("candidate_document_pdf_active_content");
+    }
+    const tiff = packPdfIntoObjectStream(libreOfficeCvPdf(), { objectStream: { dictionary: "/Type/ObjStm/Filter/FlateDecode/DecodeParms<</Predictor 2/Columns 5>>" } });
+    expect(() => validate(tiff)).toThrow("candidate_document_pdf_object_stream_unreadable");
   });
 
   it("distingue un PDF sans page d’un PDF trop long, et borne la décompression", () => {

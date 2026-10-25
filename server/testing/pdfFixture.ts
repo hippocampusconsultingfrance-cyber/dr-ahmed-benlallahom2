@@ -30,6 +30,36 @@ export function pathologicalPdfs(): Array<{ label: string; pdf: Buffer; outcome:
   ];
 }
 
+/**
+ * PNG prediction (/DecodeParms << /Predictor 12 /Columns n >>) of `data` in
+ * rows of `columns` bytes, `pixelBytes` per pixel, the row types taken in
+ * turn from `types` (0 none, 1 sub, 2 up, 3 average, 4 Paeth); the last row
+ * is completed with zeros, which pdf.js reads as white-space.
+ */
+export function pngPredict(data: Buffer, columns: number, types: number[], pixelBytes = 1) {
+  const rows: Buffer[] = [];
+  let previous = Buffer.alloc(columns);
+  for (let row = 0; row * columns < data.length; row += 1) {
+    const current = Buffer.alloc(columns);
+    data.copy(current, 0, row * columns, (row + 1) * columns);
+    const type = types[row % types.length]!;
+    const encoded = Buffer.alloc(columns + 1, type);
+    for (let index = 0; index < columns; index += 1) {
+      const left = index >= pixelBytes ? current[index - pixelBytes]! : 0;
+      const up = previous[index]!;
+      const upLeft = index >= pixelBytes ? previous[index - pixelBytes]! : 0;
+      const estimate = left + up - upLeft;
+      const paeth = Math.abs(estimate - left) <= Math.abs(estimate - up) && Math.abs(estimate - left) <= Math.abs(estimate - upLeft) ? left
+        : Math.abs(estimate - up) <= Math.abs(estimate - upLeft) ? up : upLeft;
+      const predicted = [0, left, up, (left + up) >> 1, paeth][type]!;
+      encoded[index + 1] = (current[index]! - predicted) & 0xff;
+    }
+    rows.push(encoded);
+    previous = current;
+  }
+  return Buffer.concat(rows);
+}
+
 type PdfObject = { number: number; body: string; isStream: boolean };
 
 function readObjects(source: string) {

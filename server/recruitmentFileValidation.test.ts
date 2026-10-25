@@ -4,7 +4,7 @@ import { recruitmentCvValidationMessage, validateCvFile } from "./recruitmentFil
 import { DOCUMENT_DECOMPRESSION_LIMITS, truncateExtractedText } from "./documentDecompressionLimits";
 import { extractCvDocument } from "./recruitmentAnalysis";
 import { buildDocx } from "./testing/zipFixture";
-import { libreOfficeCvPdf, packPdfIntoObjectStream, pathologicalPdfs } from "./testing/pdfFixture";
+import { libreOfficeCvPdf, packPdfIntoObjectStream, pathologicalPdfs, pngPredict } from "./testing/pdfFixture";
 
 const DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 const validPdf = Buffer.concat([Buffer.from("%PDF-1.7\n1 0 obj << /Type /Page >> endobj\n"), Buffer.alloc(300, 65)]);
@@ -195,18 +195,72 @@ describe("REC-02 — PDF réels acceptés, actions dangereuses cherchées aussi 
       expect(() => validate(pdf)).toThrow("cv_validation_pdf_object_stream_unreadable");
     });
 
-    it("refuse un commentaire entre le dictionnaire et « stream », un flux d’objets non compressé ou contenant un flux", () => {
+    it("refuse un commentaire entre le dictionnaire et « stream » ou un flux d’objets contenant un flux", () => {
       const hex = hiddenJavaScript("/Type/ObjStm/F/AHx", asHex).toString("latin1");
       for (const separator of [" %c>>\n", "\n% x >> y\n"]) {
         const commented = Buffer.from(hex.replace(/(\/Length \d+>>)\nstream/, (_match, end: string) => `${end}${separator}stream`), "latin1");
         expect(() => validate(commented), separator).toThrow("cv_validation_pdf_object_stream_unreadable");
       }
-      const plain = packPdfIntoObjectStream(libreOfficeCvPdf(), { objectStream: { dictionary: "/Type/ObjStm", encode: content => content } });
-      expect(() => validate(plain)).toThrow("cv_validation_pdf_object_stream_unreadable");
       const nested = packPdfIntoObjectStream(libreOfficeCvPdf(), {
         objectStream: { encode: content => deflateSync(Buffer.concat([content, Buffer.from("<</Type/ObjStm/N 1/First 4/F/AHx/Length 9>>\nstream\n3120302036>\nendstream\n", "latin1")])) },
       });
       expect(() => validate(nested)).toThrow("cv_validation_pdf_object_stream_unreadable");
+    });
+  });
+
+  describe("lit un flux d’objets non compressé ou à prédicteur PNG, permis par ISO 32000", () => {
+    const javaScriptOpening = openingWith("<</S/JavaScript/JS(app.alert\\(1\\))>>");
+    const predicted = (types: number[], dictionary = "/Type/ObjStm/Filter/FlateDecode/DecodeParms<</Predictor 12/Columns 7>>") => (edit?: (source: string) => string) =>
+      packPdfIntoObjectStream(libreOfficeCvPdf(), { edit, objectStream: { dictionary, encode: content => deflateSync(pngPredict(content, 7, types)) } });
+
+    it("accepte un flux d’objets écrit sans filtre (qpdf --qdf, pikepdf) et y trouve le JavaScript", async () => {
+      const plain = (edit?: (source: string) => string) => packPdfIntoObjectStream(libreOfficeCvPdf(), { edit, objectStream: { dictionary: "/Type/ObjStm", encode: content => content } });
+      expect(validate(plain()).pageCount).toBe(1);
+      expect((await extractCvDocument(plain(), "application/pdf")).text).toContain("Dr Camille Martin");
+      expect(() => validate(plain(javaScriptOpening))).toThrow("cv_validation_pdf_active_content");
+    });
+
+    it.each([
+      ["none", [0]],
+      ["sub", [1]],
+      ["up", [2]],
+      ["average", [3]],
+      ["Paeth", [4]],
+      ["tous types en alternance", [0, 1, 2, 3, 4]],
+    ])("défait le prédicteur PNG (%s) comme pdf.js : pages comptées, JavaScript trouvé", async (_label, types) => {
+      const pdf = predicted(types);
+      // pdf.js reads the predicted object stream: the PDF is valid, and its pages are found in it.
+      const extraction = await extractCvDocument(pdf(), "application/pdf");
+      expect(extraction.text).toContain("Dr Camille Martin");
+      expect(extraction.totalPages).toBe(1);
+      expect(pdf().toString("latin1")).not.toMatch(/\/Type\s*\/Page\b/);
+      expect(validate(pdf()).pageCount).toBe(1);
+      expect(() => validate(pdf(javaScriptOpening))).toThrow("cv_validation_pdf_active_content");
+    });
+
+    it("lit /DP, /BPC, /Colors et /Predictor 1 comme pdf.js", async () => {
+      const asIs = packPdfIntoObjectStream(libreOfficeCvPdf(), { edit: javaScriptOpening, objectStream: { dictionary: "/Type/ObjStm/Filter/FlateDecode/DP<</Predictor 1>>" } });
+      expect(() => validate(asIs)).toThrow("cv_validation_pdf_active_content");
+      // Two bytes per pixel, three pixels per row: "sub" and Paeth look two bytes back.
+      const wide = (edit?: (source: string) => string) => packPdfIntoObjectStream(libreOfficeCvPdf(), {
+        edit,
+        objectStream: { dictionary: "/Type/ObjStm/F/Fl/DP<</Predictor 15/Colors 2/BPC 8/Columns 3>>", encode: content => deflateSync(pngPredict(content, 6, [1, 4], 2)) },
+      });
+      expect((await extractCvDocument(wide(), "application/pdf")).text).toContain("Dr Camille Martin");
+      expect(validate(wide()).pageCount).toBe(1);
+      expect(() => validate(wide(javaScriptOpening))).toThrow("cv_validation_pdf_active_content");
+    });
+
+    it.each([
+      ["le prédicteur TIFF (2)", "/Type/ObjStm/Filter/FlateDecode/DecodeParms<</Predictor 2/Columns 7>>"],
+      ["des paramètres en référence indirecte", "/Type/ObjStm/Filter/FlateDecode/DecodeParms 9 0 R"],
+      ["des paramètres en tableau avec un seul filtre", "/Type/ObjStm/Filter/FlateDecode/DecodeParms[<</Predictor 12/Columns 7>>]"],
+      ["/DP et /DecodeParms à la fois", "/Type/ObjStm/Filter/FlateDecode/DP<</Predictor 12/Columns 7>>/DecodeParms<</Predictor 12/Columns 7>>"],
+      ["un nom échappé #XX", "/Type/ObjStm/Filter/FlateDecode/Decode#50arms<</Predictor 12/Columns 7>>"],
+      ["une chaîne dans le dictionnaire", "/Type/ObjStm/Filter/FlateDecode/DecodeParms<</Predictor 12/Columns 7>>/X(a)"],
+    ])("refuse comme illisible, avec le conseil de réenregistrer, un flux d’objets à prédicteur dont %s", (_label, dictionary) => {
+      expect(() => validate(predicted([2], dictionary)(javaScriptOpening))).toThrow("cv_validation_pdf_object_stream_unreadable");
+      expect(() => validate(predicted([2], dictionary)())).toThrow("cv_validation_pdf_object_stream_unreadable");
     });
   });
 

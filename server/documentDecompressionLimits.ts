@@ -202,12 +202,12 @@ function isObjectStreamDictionary(names: string) {
 const PDF_NAME_END = "(?=[\\0\\t\\n\\f\\r /<>\\[\\]()%{}]|$)";
 const PDF_SPACE = "[\\0\\t\\n\\f\\r ]*";
 /** pdf.js reads /F as /Filter and /DP as /DecodeParms. */
-const FILTER_KEY = new RegExp(`/(?:Filter|F)${PDF_NAME_END}`, "g");
+const FILTER_KEY = new RegExp(`/(?:Filter|F)${PDF_NAME_END}`);
 const DECODE_PARMS_KEY = new RegExp(`/(?:DecodeParms|DP)${PDF_NAME_END}`);
 const FLATE_NAME = `/(?:FlateDecode|Fl)${PDF_NAME_END}`;
 const FLATE_ONLY_VALUE = new RegExp(`^${PDF_SPACE}(?:${FLATE_NAME}|\\[${PDF_SPACE}(?:${FLATE_NAME}${PDF_SPACE})+\\])`);
 
-/** Only Flate, without predictor, is decoded here; any other filter (or none) leaves an object stream unreadable. */
+/** Flate, alone or chained, without /DecodeParms. */
 function isFlateOnly(names: string) {
   if (DECODE_PARMS_KEY.test(names)) return false;
   // One key at a time, not matchAll: a dictionary of 4 MB of "/F/Fl" holds 800,000 keys.
@@ -220,12 +220,151 @@ function isFlateOnly(names: string) {
   return keys > 0;
 }
 
+type PlainValue =
+  | { kind: "name"; name: string }
+  | { kind: "integer" }
+  | { kind: "reference" }
+  | { kind: "names" }
+  | { kind: "integers"; entries: Map<string, number> };
+
+/** A token of a plain dictionary, followed by white-space or a delimiter. */
+const PLAIN_TOKEN = /[\0\t\n\f\r ]*(\/[A-Za-z0-9]+|\d+|<<|>>|\[|\]|R)(?=[\0\t\n\f\r /<>[\]]|$)/;
+const INTEGER = /^\d+$/;
+
+/**
+ * Top-level entries of a dictionary written plainly, the way producers write
+ * an object stream's: names of letters and digits, integers, references,
+ * arrays of names and dictionaries of integers. Null for anything else
+ * (strings, #xx escapes, comments, a key given twice, a value where a key is
+ * expected…), which pdf.js might read another way than this check.
+ */
+function plainDictionaryEntries(text: string): Map<string, PlainValue> | null {
+  const tokens: string[] = [];
+  const token = new RegExp(PLAIN_TOKEN.source, "y");
+  while (token.lastIndex < text.length) {
+    const match = token.exec(text);
+    if (!match) return null;
+    tokens.push(match[1]!);
+  }
+  let index = 0;
+  const entriesUntilEnd = <T>(value: () => T | null) => {
+    const entries = new Map<string, T>();
+    for (let key = tokens[index++]; key !== ">>"; key = tokens[index++]) {
+      if (!key?.startsWith("/") || entries.has(key)) return null;
+      const read = value();
+      if (read === null) return null;
+      entries.set(key, read);
+    }
+    return entries;
+  };
+  const value = (): PlainValue | null => {
+    const first = tokens[index++];
+    if (first === undefined) return null;
+    if (first.startsWith("/")) return { kind: "name", name: first };
+    if (INTEGER.test(first)) {
+      if (!INTEGER.test(tokens[index] ?? "") || tokens[index + 1] !== "R") return { kind: "integer" };
+      index += 2;
+      return { kind: "reference" };
+    }
+    if (first === "[") {
+      for (let item = tokens[index++]; item !== "]"; item = tokens[index++]) if (!item?.startsWith("/")) return null;
+      return { kind: "names" };
+    }
+    if (first !== "<<") return null;
+    const entries = entriesUntilEnd(() => {
+      const integer = tokens[index++];
+      return integer !== undefined && INTEGER.test(integer) ? Number(integer) : null;
+    });
+    return entries && { kind: "integers", entries };
+  };
+  if (tokens[index++] !== "<<") return null;
+  const entries = entriesUntilEnd(value);
+  return entries && index === tokens.length ? entries : null;
+}
+
+/** Parameters of the PNG predictor pdf.js applies after Flate (PredictorStream). */
+type PngPredictor = { pixelBytes: number; rowBytes: number };
+
+/**
+ * Predictor of a Flate object stream that carries /DecodeParms, read from a
+ * plain dictionary with one /Filter /FlateDecode and one /DecodeParms
+ * dictionary, with pdf.js's defaults: null for none (/Predictor 1),
+ * undefined when it cannot be decoded here (TIFF predictor, arrays,
+ * indirect values…).
+ */
+function flatePredictor(dictionary: string): PngPredictor | null | undefined {
+  const entries = plainDictionaryEntries(dictionary);
+  if (!entries) return undefined;
+  // pdf.js reads /F before /Filter and /DP before /DecodeParms: a dictionary with both is not decoded here.
+  const filterKeys = ["/F", "/Filter"].filter(key => entries.has(key));
+  const parmsKeys = ["/DP", "/DecodeParms"].filter(key => entries.has(key));
+  if (filterKeys.length !== 1 || parmsKeys.length !== 1) return undefined;
+  const filter = entries.get(filterKeys[0]!)!;
+  const parms = entries.get(parmsKeys[0]!)!;
+  if (filter.kind !== "name" || (filter.name !== "/FlateDecode" && filter.name !== "/Fl") || parms.kind !== "integers") return undefined;
+  const parameter = (key: string, fallback: number) => parms.entries.get(key) || fallback;
+  const predictor = parameter("/Predictor", 1);
+  if (predictor <= 1) return null;
+  if (predictor < 10 || predictor > 15) return undefined;
+  const colors = parameter("/Colors", 1);
+  const bits = (parms.entries.has("/BPC") ? parms.entries.get("/BPC") : parms.entries.get("/BitsPerComponent")) || 8;
+  const columns = parameter("/Columns", 1);
+  // Beyond 32-bit integers, pdf.js's row size wraps around.
+  if (colors * bits > 1 << 20 || columns * colors * bits > 1 << 30) return undefined;
+  return { pixelBytes: (colors * bits + 7) >> 3, rowBytes: (columns * colors * bits + 7) >> 3 };
+}
+
+/**
+ * PNG prediction undone row by row as pdf.js does it (readBlockPng): each
+ * row starts with its type (0 none, 1 sub, 2 up, 3 average, 4 Paeth). pdf.js
+ * completes a short last row with zeros, white-space that is left out here,
+ * so that a huge /Columns allocates nothing. Null for another row type,
+ * which pdf.js cannot read either.
+ */
+function undoPngPredictor(data: Buffer, { pixelBytes, rowBytes }: PngPredictor): Buffer | null {
+  const output = Buffer.alloc(data.length);
+  let end = 0;
+  for (let at = 0, length = 0; at + 1 < data.length; at += rowBytes + 1, length += rowBytes) {
+    const type = data[at]!;
+    if (type > 4) return null;
+    const rawLength = Math.min(rowBytes, data.length - at - 1);
+    for (let index = 0; index < rawLength; index += 1) {
+      const left = index >= pixelBytes ? output[length + index - pixelBytes]! : 0;
+      const up = length > 0 ? output[length - rowBytes + index]! : 0;
+      const upLeft = length > 0 && index >= pixelBytes ? output[length - rowBytes + index - pixelBytes]! : 0;
+      let predicted = 0;
+      if (type === 1) predicted = left;
+      else if (type === 2) predicted = up;
+      else if (type === 3) predicted = (left + up) >> 1;
+      else if (type === 4) {
+        const estimate = left + up - upLeft;
+        const toLeft = Math.abs(estimate - left);
+        const toUp = Math.abs(estimate - up);
+        const toUpLeft = Math.abs(estimate - upLeft);
+        predicted = toLeft <= toUp && toLeft <= toUpLeft ? left : toUp <= toUpLeft ? up : upLeft;
+      }
+      output[length + index] = (predicted + data[at + 1 + index]!) & 0xff;
+    }
+    end = length + rawLength;
+  }
+  return output.subarray(0, end);
+}
+
 /** Decoded object stream: it starts with the "object number, offset" pairs. */
 const OBJECT_STREAM_HEADER = /^\s*\d+\s+\d+\s/;
 
-/** Content of an object stream searched by the checks; null when it cannot be read here. */
-function readableObjectStream(names: string, decoded: Buffer | null, work: PdfScanWork) {
-  if (!decoded || !isFlateOnly(names)) return null;
+/**
+ * Content of an object stream searched by the checks; null when it cannot be
+ * read here. Without any filter (ISO 32000 allows it), pdf.js reads the bytes
+ * as they are, and they are searched with the rest of the file: nothing more
+ * to add. Flate is decoded, with its PNG predictor if /DecodeParms has one.
+ */
+function readableObjectStream(dictionary: string, names: string, inflated: Buffer | null, work: PdfScanWork) {
+  if (!FILTER_KEY.test(names)) return "";
+  const predictor = DECODE_PARMS_KEY.test(names) ? flatePredictor(dictionary) : isFlateOnly(names) ? null : undefined;
+  if (!inflated || predictor === undefined) return null;
+  const decoded = predictor ? undoPngPredictor(inflated, predictor) : inflated;
+  if (!decoded) return null;
   const content = decoded.toString("latin1");
   if (!OBJECT_STREAM_HEADER.test(content.slice(0, 64)) || containsStream(content, work)) return null;
   return content;
@@ -261,7 +400,8 @@ function lineEndFinder(source: string) {
  *
  * The inflated content of each object stream (PDF 1.5+, where pdf-lib,
  * Acrobat "optimised" or Word put the page and action dictionaries) is
- * returned for the safety checks (REC-02); `null` marks an object stream
+ * returned for the safety checks (REC-02), an empty string for one written
+ * without filter (its bytes are the file's); `null` marks an object stream
  * whose content could not be read here, or a stream whose dictionary reads
  * two ways (see pdfStreamDictionaries.ts). The work stays linear in the size
  * of the file, and the number of streams is capped. The keywords are found
@@ -300,8 +440,9 @@ export function assertPdfDecompressionWithinLimits(buffer: Buffer, limits: Pick<
     const names = typeof dictionary === "string" ? decodePdfNames(dictionary) : "";
     // A dictionary that reads two ways may be an object stream's.
     const objectStream = unclear || isObjectStreamDictionary(names);
+    const readObjectStream = (inflated: Buffer | null) => typeof dictionary === "string" ? readableObjectStream(dictionary, names, inflated, work) : null;
     if (!startsWithZlibHeader(data)) {
-      if (objectStream) objectStreams.push(null);
+      if (objectStream) objectStreams.push(readObjectStream(null));
       continue;
     }
     if (!objectStream && /\/Subtype\s*\/Image\b/.test(names)) {
@@ -327,7 +468,7 @@ export function assertPdfDecompressionWithinLimits(buffer: Buffer, limits: Pick<
       layer = inflated.output;
       decoded = true;
     }
-    if (objectStream) objectStreams.push(unclear ? null : readableObjectStream(names, decoded ? layer : null, work));
+    if (objectStream) objectStreams.push(readObjectStream(decoded ? layer : null));
   }
   return { inflatedBytes, objectStreams };
 }
@@ -338,7 +479,7 @@ export type PdfStructureInspection = {
   encrypted: boolean;
   /** JavaScript, launch, embedded file, rich media or form submission/import action. */
   activeContent: boolean;
-  /** Object streams whose content could not be searched (no filter or another than Flate, corrupt data, a stream inside), and streams whose dictionary reads two ways. */
+  /** Object streams whose content could not be searched (a filter other than Flate, a predictor other than PNG, corrupt data, a stream inside), and streams whose dictionary reads two ways. */
   unreadableObjectStreams: number;
   pageCount: number;
 };
