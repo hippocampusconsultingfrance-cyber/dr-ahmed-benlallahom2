@@ -260,6 +260,46 @@ describe.skipIf(!executablePath)("réservation et confirmation dans un navigateu
     await page.context().close();
   }, 60_000);
 
+  it("garde le paiement en attente quand Stripe est indisponible à la reprise, avec des libellés ponctués dans la langue de la page (EN-06)", async () => {
+    const pending = {
+      trackingId: "APTPENDING0002",
+      checkoutSessionId: "cs_test_pending",
+      customerName: "Test Patient",
+      customerEmail: "patient@example.test",
+      finalPrice: 150,
+      appointmentDate: listBookableSlots(EVENING_SLOTS, [])[0].start.toISOString(),
+      holdExpiresAt: new Date(Date.now() + 28.5 * 60 * 1000).toISOString(),
+    };
+    // Panne Stripe, puis session expirée : seul le second refus oublie le paiement en attente.
+    const refusals = [
+      refuse("SERVICE_UNAVAILABLE", 503, "Le service de paiement est momentanément indisponible. Votre créneau n’a pas été réservé.", "payment_unavailable"),
+      refuse("CONFLICT", 409, "La session de paiement a expiré"),
+    ];
+    const { page, calls } = await open("/booking", bookingProcedures({ "appointments.createCheckoutSession": () => refusals.shift() }), {
+      language: "en",
+      session: { "booking:pending:v1": JSON.stringify(pending) },
+    });
+    const { pending: copy } = bookingContent.en;
+    const card = page.getByRole("region", { name: copy.title });
+    const text = await card.innerText();
+    expect(text).toContain(`${copy.reference}: ${pending.trackingId}`);
+    expect(text).toMatch(new RegExp(`${copy.remaining}: 2[78] min left`));
+    expect(text).not.toContain(" :");
+
+    const resume = card.getByRole("button", { name: copy.resume });
+    await resume.click();
+    await page.getByText(copy.resumeUnavailable).waitFor();
+    expect(await card.count()).toBe(1);
+    expect(await page.evaluate(() => sessionStorage.getItem("booking:pending:v1"))).not.toBeNull();
+
+    await resume.click();
+    await page.getByText(copy.resumeError).waitFor();
+    expect(await card.count()).toBe(0);
+    expect(await page.evaluate(() => sessionStorage.getItem("booking:pending:v1"))).toBeNull();
+    expect(calls.filter((call) => call.procedure === "appointments.createCheckoutSession")).toHaveLength(2);
+    await page.context().close();
+  }, 60_000);
+
   it("ne dit « déjà réservés » que si les réservations ont pris tous les horaires du jour (RES-02)", async () => {
     const [firstDay, secondDay] = openDays();
     const secondDayStarts = listBookableSlots(EVENING_SLOTS, []).filter((slot) => slot.dayKey === secondDay).map((slot) => slot.start);

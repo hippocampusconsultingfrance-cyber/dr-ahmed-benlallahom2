@@ -143,6 +143,7 @@ export const bookingContent = {
         cancelled: "Le créneau a été libéré. Vos informations sont conservées : choisissez une nouvelle date ou heure.",
         closed: "Cette réservation n’est plus en attente. Si vous avez finalisé le paiement, vous recevrez une confirmation par email ; sinon, choisissez à nouveau votre créneau.",
         resumeError: "Le paiement ne peut plus être repris (session expirée). Choisissez à nouveau votre créneau.",
+        resumeUnavailable: "Le service de paiement est momentanément indisponible. Votre créneau reste réservé pendant le temps restant : réessayez de reprendre le paiement dans quelques minutes ou contactez-nous.",
         cancelError: "L’annulation n’a pas pu être confirmée. Réessayez dans un instant.",
       },
 
@@ -233,6 +234,7 @@ export const bookingContent = {
         cancelled: "The time slot has been released. Your details are kept: choose a new date or time.",
         closed: "This booking is no longer pending. If you completed the payment, you will receive a confirmation email; otherwise, choose your time slot again.",
         resumeError: "The payment can no longer be resumed (session expired). Please choose your time slot again.",
+        resumeUnavailable: "The payment service is temporarily unavailable. Your time slot remains held for the time left: please try resuming the payment in a few minutes or contact us.",
         cancelError: "The cancellation could not be confirmed. Please try again in a moment.",
       },
 
@@ -323,6 +325,7 @@ export const bookingContent = {
         cancelled: "Der Termin wurde freigegeben. Ihre Angaben bleiben erhalten: Wählen Sie ein neues Datum oder eine neue Uhrzeit.",
         closed: "Diese Buchung ist nicht mehr ausstehend. Wenn Sie die Zahlung abgeschlossen haben, erhalten Sie eine Bestätigung per E-Mail; andernfalls wählen Sie Ihren Termin erneut.",
         resumeError: "Die Zahlung kann nicht mehr fortgesetzt werden (Sitzung abgelaufen). Bitte wählen Sie Ihren Termin erneut.",
+        resumeUnavailable: "Der Zahlungsdienst ist vorübergehend nicht verfügbar. Ihr Termin bleibt für die verbleibende Zeit reserviert: Bitte versuchen Sie in einigen Minuten erneut, die Zahlung fortzusetzen, oder kontaktieren Sie uns.",
         cancelError: "Die Stornierung konnte nicht bestätigt werden. Bitte versuchen Sie es gleich noch einmal.",
       },
 
@@ -413,6 +416,7 @@ export const bookingContent = {
         cancelled: "该时段已释放。您的信息已保留：请选择新的日期或时间。",
         closed: "此预约已不再处于待付款状态。如果您已完成付款，将收到确认邮件；否则请重新选择时段。",
         resumeError: "无法继续付款（会话已过期）。请重新选择时段。",
+        resumeUnavailable: "支付服务暂时不可用。在剩余时间内，您的时段仍为您保留：请几分钟后再次尝试继续付款，或联系我们。",
         cancelError: "无法确认取消。请稍后重试。",
       },
 
@@ -980,9 +984,12 @@ export default function BookingPage() {
       });
       if (!result.checkoutUrl) throw new Error("checkout_url_missing");
       window.location.assign(result.checkoutUrl);
-    } catch {
+    } catch (error) {
       paymentSubmissionRef.current = false;
-      forgetPendingBooking(content.pending.resumeError);
+      // Stripe indisponible : le serveur garde le créneau, le paiement en attente
+      // reste donc proposé à la reprise au lieu d’être oublié.
+      if (getBookingRefusalReason(error) === "payment_unavailable") setPendingNotice(content.pending.resumeUnavailable);
+      else forgetPendingBooking(content.pending.resumeError);
     }
   };
 
