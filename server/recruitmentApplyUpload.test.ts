@@ -76,7 +76,7 @@ describe("POST /api/recruitment/apply — réception du CV (multer) et validatio
   it("refuse une candidature qui joint deux CV", async () => {
     const result = await apply({ cvs: [{ buffer: validPdfBuffer() }, { buffer: validPdfBuffer(), name: "cv-2.pdf" }] });
     expect(result.status).toBe(400);
-    expect(String(result.body.error)).not.toBe("");
+    expect(result.body).toEqual({ error: expect.stringMatching(/\S/) });
     expect(state.databaseRequests).toBe(0);
   });
 
