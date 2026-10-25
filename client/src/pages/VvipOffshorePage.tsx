@@ -9,6 +9,8 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { getWorldwideCountries } from "./RecruitmentPage";
 import { resolveCountryForSubmission } from "@/lib/countrySubmission";
 import { recruitmentServiceFailureMessage, recruitmentSubmissionErrorMessage } from "@/lib/recruitmentSubmissionErrors";
+import { reportFieldsToCorrect, type FieldToCorrect } from "@/lib/formFieldsToCorrect";
+import { getTurnstileWidgetCopy } from "@/lib/publicFormCopy";
 import { TurnstileWidget } from "@/components/TurnstileWidget";
 
 export const vvipOffshoreCopy = {
@@ -54,7 +56,8 @@ export const vvipOffshoreCopy = {
     successTitle: "Candidature VVIP enregistrée",
     successText: "Votre dossier a été transmis à notre cellule de recrutement spécialisé. Votre code de suivi confidentiel :",
     backHome: "Retour à l’accueil",
-    required: "Veuillez remplir les champs obligatoires et joindre votre CV.",
+    cvField: "CV",
+    consentField: "Consentement au traitement des données",
     fileError: "Veuillez joindre un CV valide au format PDF ou DOCX (max 4 Mo ; le format Word ancien .doc n’est pas accepté).",
     genericError: "Erreur lors de la transmission. Veuillez vérifier vos informations et réessayer.",
     p1Title: "Excellence & Discrétion",
@@ -125,7 +128,8 @@ export const vvipOffshoreCopy = {
     successTitle: "VVIP Application Registered",
     successText: "Your file has been sent to our specialized recruitment unit. Your confidential tracking code:",
     backHome: "Back to Home",
-    required: "Please fill in mandatory fields and attach your CV.",
+    cvField: "CV",
+    consentField: "Consent to data processing",
     fileError: "Please attach a valid PDF or DOCX CV (max 4 MB; the legacy Word .doc format is not accepted).",
     genericError: "Transmission error. Please check your information and try again.",
     p1Title: "Excellence & Discretion",
@@ -196,7 +200,8 @@ export const vvipOffshoreCopy = {
     successTitle: "VVIP-Bewerbung registriert",
     successText: "Ihre Unterlagen wurden an unser spezialisiertes Recruiting-Team übermittelt. Ihr vertraulicher Tracking-Code:",
     backHome: "Zur Startseite",
-    required: "Bitte füllen Sie alle Pflichtfelder aus und fügen Sie Ihren Lebenslauf bei.",
+    cvField: "Lebenslauf",
+    consentField: "Einwilligung in die Datenverarbeitung",
     fileError: "Bitte fügen Sie einen gültigen PDF- oder DOCX-Lebenslauf bei (max. 4 MB; das alte Word-Format .doc wird nicht akzeptiert).",
     genericError: "Übertragungsfehler. Bitte überprüfen Sie Ihre Angaben.",
     p1Title: "Exzellenz & Diskretion",
@@ -267,7 +272,8 @@ export const vvipOffshoreCopy = {
     successTitle: "VVIP 申请已登记",
     successText: "您的资料已提交至专项招聘组。保密追踪编号：",
     backHome: "返回首页",
-    required: "请填写必填项并附加您的简历。",
+    cvField: "简历",
+    consentField: "数据处理同意",
     fileError: "请附加有效的 PDF 或 DOCX 格式简历（最大 4 MB；不接受旧版 Word .doc 格式）。",
     genericError: "传输错误，请检查信息后重试。",
     p1Title: "卓越与绝对保密",
@@ -383,6 +389,28 @@ export function isAcceptedVvipCvFile(file: Pick<File, "name" | "size" | "type"> 
   return isAcceptedRecruitmentCvFile(file);
 }
 
+/** Fields the VVIP form checks before sending, in the order they appear on it. */
+type VvipField = "firstName" | "lastName" | "email" | "specialty" | "specialtyCustom" | "environments" | "diplomaCountry" | "cv" | "gdprConsent" | "turnstile";
+/** Control focused for each of them; the anti-bot check takes no focus. */
+const vvipFieldIds: Record<Exclude<VvipField, "turnstile">, string> = {
+  firstName: "vvip-firstName", lastName: "vvip-lastName", email: "vvip-email", specialty: "vvip-specialty", specialtyCustom: "vvip-specialty-custom", environments: "vvip-environment-0", diplomaCountry: "vvip-diploma-country", cv: "vvip-cv", gdprConsent: "vvip-gdpr-consent",
+};
+
+/**
+ * What the alert says about the fields the VVIP form refused (A11Y-03): each one is named,
+ * except an attached CV of the wrong format or size, which gets the format hint instead of
+ * being listed as missing.
+ */
+export function vvipFieldsToCorrect(invalidFields: Iterable<VvipField>, file: Pick<File, "name" | "size" | "type"> | null, language: Language): FieldToCorrect[] {
+  const t = vvipOffshoreCopy[language];
+  const names: Record<VvipField, string> = { firstName: t.firstName, lastName: t.lastName, email: t.email, specialty: t.specialty, specialtyCustom: customSpecialtyCopy[language], environments: t.environment, diplomaCountry: t.diplomaCountry, cv: t.cvField, gdprConsent: t.consentField, turnstile: getTurnstileWidgetCopy(language).label };
+  return Array.from(invalidFields, field => {
+    if (field === "turnstile") return { label: names.turnstile };
+    if (field === "cv" && file) return { detail: t.fileError, focusId: vvipFieldIds.cv };
+    return { label: names[field], focusId: vvipFieldIds[field] };
+  });
+}
+
 /**
  * Multipart body of a VVIP application. The specialty keeps only the VVIP prefix,
  * which marks the pathway and keeps the application apart from a standard one;
@@ -444,13 +472,29 @@ export default function VvipOffshorePage() {
   const isInvalid = (field: string) => validationAttempted && invalidFields.has(field);
   const toggleEnvironment = (environment: string) => update("environments", form.environments.includes(environment) ? form.environments.filter(item => item !== environment) : [...form.environments, environment]);
 
+  /** A CV of the wrong format or size is reported as soon as it is chosen, not only when sending (A11Y-03). */
+  const chooseCv = (selected: File | null) => {
+    setFile(selected);
+    const refused = selected !== null && !isAcceptedVvipCvFile(selected);
+    setInvalidFields(previous => { const next = new Set(previous); if (refused) next.add("cv"); else next.delete("cv"); return next; });
+    if (refused) {
+      setValidationAttempted(true);
+      setStatus("error");
+      setErrorMessage(t.fileError);
+    } else if (errorMessage === t.fileError) {
+      setStatus("idle");
+      setErrorMessage("");
+    }
+  };
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setErrorMessage("");
     setValidationAttempted(true);
     const submittedDiplomaCountry = resolveCountryForSubmission(form.diplomaCountry, new FormData(event.currentTarget).get("diplomaCountry"), diplomaCountries.map(country => country.label));
 
-    const nextInvalidFields = new Set<string>();
+    // Filled in the order of the form, which the alert follows.
+    const nextInvalidFields = new Set<VvipField>();
     if (!form.firstName.trim()) nextInvalidFields.add("firstName");
     if (!form.lastName.trim()) nextInvalidFields.add("lastName");
     if (!form.email.trim() || !/^\S+@\S+\.\S+$/.test(form.email)) nextInvalidFields.add("email");
@@ -465,7 +509,7 @@ export default function VvipOffshorePage() {
     if (nextInvalidFields.size) {
       setInvalidFields(nextInvalidFields);
       setStatus("error");
-      setErrorMessage(nextInvalidFields.has("cv") ? t.fileError : t.required);
+      setErrorMessage(reportFieldsToCorrect(vvipFieldsToCorrect(nextInvalidFields, file, lang), lang));
       return;
     }
     setInvalidFields(new Set());
@@ -567,18 +611,18 @@ export default function VvipOffshorePage() {
                     <div className="grid gap-4 @xl:grid-cols-2">
                       <label className="block w-full space-y-1.5 text-sm text-foreground">
                         <span className="block font-medium">{t.firstName} *</span>
-                        <input required value={form.firstName} aria-invalid={isInvalid("firstName")} onChange={(e) => update("firstName", e.target.value)} className={`form-control block w-full ${isInvalid("firstName") ? "form-field-invalid" : ""}`} autoComplete="given-name" />
+                        <input id="vvip-firstName" required value={form.firstName} aria-invalid={isInvalid("firstName")} onChange={(e) => update("firstName", e.target.value)} className={`form-control block w-full ${isInvalid("firstName") ? "form-field-invalid" : ""}`} autoComplete="given-name" />
                       </label>
                       <label className="block w-full space-y-1.5 text-sm text-foreground">
                         <span className="block font-medium">{t.lastName} *</span>
-                        <input required value={form.lastName} aria-invalid={isInvalid("lastName")} onChange={(e) => update("lastName", e.target.value)} className={`form-control block w-full ${isInvalid("lastName") ? "form-field-invalid" : ""}`} autoComplete="family-name" />
+                        <input id="vvip-lastName" required value={form.lastName} aria-invalid={isInvalid("lastName")} onChange={(e) => update("lastName", e.target.value)} className={`form-control block w-full ${isInvalid("lastName") ? "form-field-invalid" : ""}`} autoComplete="family-name" />
                       </label>
                     </div>
 
                     <div className="grid gap-4 @xl:grid-cols-2">
                       <label className="block w-full space-y-1.5 text-sm text-foreground">
                         <span className="block font-medium">{t.email} *</span>
-                        <input type="email" required value={form.email} aria-invalid={isInvalid("email")} onChange={(e) => update("email", e.target.value)} className={`form-control block w-full ${isInvalid("email") ? "form-field-invalid" : ""}`} autoComplete="email" />
+                        <input id="vvip-email" type="email" required value={form.email} aria-invalid={isInvalid("email")} onChange={(e) => update("email", e.target.value)} className={`form-control block w-full ${isInvalid("email") ? "form-field-invalid" : ""}`} autoComplete="email" />
                       </label>
                       <label className="block w-full space-y-1.5 text-sm text-foreground">
                         <span className="block font-medium">{t.phone}</span>
@@ -589,7 +633,7 @@ export default function VvipOffshorePage() {
                     <div className="grid gap-4 @xl:grid-cols-2">
                       <label className="block w-full space-y-1.5 text-sm text-foreground">
                         <span className="block font-medium">{t.specialty} *</span>
-                        <select value={form.specialty} aria-invalid={isInvalid("specialty")} onChange={(e) => update("specialty", e.target.value)} className={`form-control block w-full ${isInvalid("specialty") ? "form-field-invalid" : ""}`}>
+                        <select id="vvip-specialty" value={form.specialty} aria-invalid={isInvalid("specialty")} onChange={(e) => update("specialty", e.target.value)} className={`form-control block w-full ${isInvalid("specialty") ? "form-field-invalid" : ""}`}>
                           {t.specialties.map((opt) => (
                             <option key={opt} value={opt}>{opt}</option>
                           ))}
@@ -610,14 +654,14 @@ export default function VvipOffshorePage() {
                       <fieldset className={`block w-full space-y-2 text-sm text-foreground ${isInvalid("environments") ? "form-consent-group-invalid" : ""}`}>
                         <legend className="block font-medium">{t.environment} *</legend>
                         <div className="grid gap-2">
-                          {environmentOptions.map(option => <label key={option.value} className="form-consent-item flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-foreground"><input type="checkbox" checked={form.environments.includes(option.value)} aria-invalid={isInvalid("environments")} onChange={() => toggleEnvironment(option.value)} className="form-consent-checkbox" />{option.label}</label>)}
+                          {environmentOptions.map((option, index) => <label key={option.value} className="form-consent-item flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-foreground"><input id={`vvip-environment-${index}`} type="checkbox" checked={form.environments.includes(option.value)} aria-invalid={isInvalid("environments")} onChange={() => toggleEnvironment(option.value)} className="form-consent-checkbox" />{option.label}</label>)}
                         </div>
                       </fieldset>
                     </div>
 
                     <label className="block w-full space-y-1.5 text-sm text-foreground">
                       <span className="block font-medium">{t.diplomaCountry} *</span>
-                      <select name="diplomaCountry" required value={form.diplomaCountry} aria-invalid={isInvalid("diplomaCountry")} onInput={(e) => update("diplomaCountry", e.currentTarget.value)} onChange={(e) => update("diplomaCountry", e.target.value)} className={`form-control block w-full ${isInvalid("diplomaCountry") ? "form-field-invalid" : ""}`} autoComplete="country-name">
+                      <select id="vvip-diploma-country" name="diplomaCountry" required value={form.diplomaCountry} aria-invalid={isInvalid("diplomaCountry")} onInput={(e) => update("diplomaCountry", e.currentTarget.value)} onChange={(e) => update("diplomaCountry", e.target.value)} className={`form-control block w-full ${isInvalid("diplomaCountry") ? "form-field-invalid" : ""}`} autoComplete="country-name">
                         <option value="">{t.selectCountry}</option>
                         {diplomaCountries.map(country => <option key={country.code} value={country.label}>{country.label}</option>)}
                       </select>
@@ -644,7 +688,7 @@ export default function VvipOffshorePage() {
                         className="peer sr-only"
                         aria-invalid={isInvalid("cv")}
                         aria-describedby="vvip-cv-hint"
-                        onChange={(e) => { setFile(e.target.files?.[0] || null); setInvalidFields(previous => { const next = new Set(previous); next.delete("cv"); return next; }); }}
+                        onChange={(e) => chooseCv(e.target.files?.[0] || null)}
                       />
                       <label
                         htmlFor="vvip-cv"
@@ -661,6 +705,7 @@ export default function VvipOffshorePage() {
 
                     <label className={`form-consent-item flex items-start gap-3 cursor-pointer text-xs text-muted-foreground ${isInvalid("gdprConsent") ? "form-consent-item-invalid" : ""}`}>
                       <input
+                        id="vvip-gdpr-consent"
                         type="checkbox"
                         required
                         checked={form.gdprConsent}

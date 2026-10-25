@@ -53,13 +53,13 @@ describe.skipIf(!executablePath)("pages publiques dans un navigateur", () => {
   });
 
   /** Sans consentement enregistré (par défaut), le bandeau cookies est ouvert en bas de l'écran. */
-  async function open(route: string, { width = 1440, height = 800, theme = "dark" as Theme, touch = false, consent = false } = {}) {
+  async function open(route: string, { width = 1440, height = 800, theme = "dark" as Theme, touch = false, consent = false, language = "fr" } = {}) {
     const context = await browser.newContext({ viewport: { width, height }, isMobile: touch, hasTouch: touch });
-    await context.addInitScript(({ storedTheme, storedConsent }) => {
-      localStorage.setItem("language", "fr");
+    await context.addInitScript(({ storedLanguage, storedTheme, storedConsent }) => {
+      localStorage.setItem("language", storedLanguage);
       localStorage.setItem("theme", storedTheme);
       if (storedConsent) localStorage.setItem(storedConsent.key, storedConsent.value);
-    }, { storedTheme: theme, storedConsent: consent ? { key: COOKIE_CONSENT_STORAGE_KEY, value: JSON.stringify(createCookieConsent(false)) } : null });
+    }, { storedLanguage: language, storedTheme: theme, storedConsent: consent ? { key: COOKIE_CONSENT_STORAGE_KEY, value: JSON.stringify(createCookieConsent(false)) } : null });
     const page = await context.newPage();
     await page.route("**/api/trpc/**", (request) => {
       const procedures = new URL(request.request().url()).pathname.replace(/^.*\/api\/trpc\//, "").split(",");
@@ -393,6 +393,69 @@ describe.skipIf(!executablePath)("pages publiques dans un navigateur", () => {
       expect(covered.result, route).toEqual([]);
       await page.context().close();
     }
+  }, 120_000);
+
+  it("nomme les champs d'un brief envoyé vide, y amène le focus et les marque en erreur (A11Y-03)", async () => {
+    const ids = ["employer-organizationName", "employer-contactName", "employer-email", "employer-specialtyNeeded", "employer-country"];
+    for (const [language, width, message] of [
+      ["fr", 1366, "À compléter ou corriger : Établissement ou entreprise, Nom du responsable, Email, Spécialité médicale ou paramédicale recherchée, Pays / Zone géographique."],
+      ["en", 390, "Please complete or correct: Organization or Company, Contact Name, Professional Email, Specialty / Profession Needed, Country / Region."],
+    ] as const) {
+      const page = await open("/employers", { language, width, height: width < 768 ? 844 : 900, consent: true });
+      await page.fill("#employer-email", "rh@clinique");
+      await page.locator("main form button[type=submit]").click();
+      await expect.poll(() => page.locator("main form [role=alert]").textContent(), { timeout: 5_000 }).toBe(message);
+      // Focus scrolls smoothly (scroll-behavior: smooth) up to the first field.
+      await page.evaluate(scrollSettled);
+      const state = await page.evaluate((fieldIds) => {
+        const focused = document.activeElement as HTMLElement;
+        const box = focused.getBoundingClientRect();
+        const headerBottom = document.querySelector("header.site-nav")!.getBoundingClientRect().bottom;
+        return {
+          focused: focused.id,
+          visible: box.top >= headerBottom && box.bottom <= innerHeight ? true : `[${Math.round(box.top)}, ${Math.round(box.bottom)}] sous ${Math.round(headerBottom)} / ${innerHeight}`,
+          fields: fieldIds.map((id) => { const field = document.getElementById(id)!; return `${id} ${field.getAttribute("aria-invalid")} ${field.classList.contains("form-field-invalid")}`; }),
+        };
+      }, ids);
+      expect(state.focused, language).toBe("employer-organizationName");
+      expect(state.visible, `${language} : premier champ visible sous l'en-tête`).toBe(true);
+      expect(state.fields, language).toEqual(ids.map((id) => `${id} true true`));
+      // Corrected fields leave the error state as soon as they are typed in.
+      await page.keyboard.type("Clinique du Golfe");
+      expect(await page.getAttribute("#employer-organizationName", "aria-invalid")).toBe("false");
+      expect(await page.getAttribute("#employer-contactName", "aria-invalid")).toBe("true");
+      await page.context().close();
+    }
+  }, 120_000);
+
+  it("signale dès son choix un CV trop lourd ou au mauvais format et traduit les spécialités (REC-04, A11Y-03)", async () => {
+    const tooLarge = { name: "cv.pdf", mimeType: "application/pdf", buffer: Buffer.alloc(4 * 1024 * 1024 + 1) };
+    const legacyWord = { name: "cv.doc", mimeType: "application/msword", buffer: Buffer.from("cv") };
+    const accepted = { name: "cv.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.7") };
+    const alerts = (page: Awaited<ReturnType<typeof open>>) => page.locator("main form [role=alert]").allTextContents();
+
+    const standard = await open("/recruitment/standard", { language: "en", consent: true });
+    await standard.setInputFiles("#recruitment-cv", tooLarge);
+    expect(await alerts(standard)).toContain("Please attach a PDF or DOCX CV up to 4 MB (the legacy Word .doc format is not accepted).");
+    expect(await standard.getAttribute("#recruitment-cv", "aria-invalid")).toBe("true");
+    // The size of the chosen file comes with the limit, which stays visible.
+    expect(await standard.textContent("#recruitment-cv-hint")).toBe("4.00 MB · CV (PDF or DOCX — 4 MB maximum)");
+    await standard.setInputFiles("#recruitment-cv", accepted);
+    expect(await alerts(standard)).not.toContain("Please attach a PDF or DOCX CV up to 4 MB (the legacy Word .doc format is not accepted).");
+    expect(await standard.getAttribute("#recruitment-cv", "aria-invalid")).toBe("false");
+
+    await standard.getByLabel("Search a specialty…").fill("emergency");
+    const options = await standard.$$eval("#recruitment-specialty option", (elements) => elements.map((option) => `${(option as HTMLOptionElement).value} → ${option.textContent}`));
+    expect(options).toContain("Médecine d’urgence → Emergency medicine");
+    await standard.selectOption("#recruitment-specialty", "Médecine d’urgence");
+    expect(await standard.getByText("Selected: Emergency medicine").isVisible()).toBe(true);
+    await standard.context().close();
+
+    const vvip = await open("/recruitment/vvip-offshore", { language: "en", consent: true });
+    await vvip.setInputFiles("#vvip-cv", legacyWord);
+    expect(await alerts(vvip)).toContain("Please attach a valid PDF or DOCX CV (max 4 MB; the legacy Word .doc format is not accepted).");
+    expect(await vvip.getAttribute("#vvip-cv", "aria-invalid")).toBe("true");
+    await vvip.context().close();
   }, 120_000);
 
   it("rend libellés et saisie de la connexion candidat lisibles en thème clair (A11Y-02)", async () => {
