@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { reportFieldsToCorrect } from "./formFieldsToCorrect";
+import { fieldsToCorrectMessage, reportFieldsToCorrect } from "./formFieldsToCorrect";
 
 /** Records the frames asked for and the fields focused, without a DOM. */
 function stubFocus() {
@@ -44,6 +44,13 @@ describe("A11Y-03 — champs à corriger après un envoi refusé", () => {
 
     // Only the anti-bot check is missing: focus stays where it is.
     reportFieldsToCorrect([{ label: "Vérification anti-bot" }], "fr");
+    expect(frames).toHaveLength(0);
+  });
+
+  it("rédige le même message sans déplacer le focus, pour une alerte mise à jour hors envoi", () => {
+    const { frames } = stubFocus();
+
+    expect(fieldsToCorrectMessage([{ label: "Prénom", focusId: "first" }, { detail: "Le CV est refusé.", focusId: "cv" }], "fr")).toBe("À compléter ou corriger : Prénom. Le CV est refusé.");
     expect(frames).toHaveLength(0);
   });
 });

@@ -9,7 +9,7 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { getWorldwideCountries } from "./RecruitmentPage";
 import { resolveCountryForSubmission } from "@/lib/countrySubmission";
 import { recruitmentServiceFailureMessage, recruitmentSubmissionErrorMessage } from "@/lib/recruitmentSubmissionErrors";
-import { reportFieldsToCorrect, type FieldToCorrect } from "@/lib/formFieldsToCorrect";
+import { fieldsToCorrectMessage, reportFieldsToCorrect, type FieldToCorrect } from "@/lib/formFieldsToCorrect";
 import { getTurnstileWidgetCopy } from "@/lib/publicFormCopy";
 import { TurnstileWidget } from "@/components/TurnstileWidget";
 
@@ -390,11 +390,32 @@ export function isAcceptedVvipCvFile(file: Pick<File, "name" | "size" | "type"> 
 }
 
 /** Fields the VVIP form checks before sending, in the order they appear on it. */
-type VvipField = "firstName" | "lastName" | "email" | "specialty" | "specialtyCustom" | "environments" | "diplomaCountry" | "cv" | "gdprConsent" | "turnstile";
+const vvipFields = ["firstName", "lastName", "email", "specialty", "specialtyCustom", "environments", "diplomaCountry", "cv", "gdprConsent", "turnstile"] as const;
+type VvipField = (typeof vvipFields)[number];
 /** Control focused for each of them; the anti-bot check takes no focus. */
 const vvipFieldIds: Record<Exclude<VvipField, "turnstile">, string> = {
   firstName: "vvip-firstName", lastName: "vvip-lastName", email: "vvip-email", specialty: "vvip-specialty", specialtyCustom: "vvip-specialty-custom", environments: "vvip-environment-0", diplomaCountry: "vvip-diploma-country", cv: "vvip-cv", gdprConsent: "vvip-gdpr-consent",
 };
+
+/**
+ * Fields the VVIP form refuses to send, in the order of the form, which the alert follows (A11Y-03).
+ * `diplomaCountry` is the country resolved for sending, empty when none was chosen.
+ */
+export function vvipInvalidFields(form: FormState, file: Pick<File, "name" | "size" | "type"> | null, turnstileToken: string | null, diplomaCountry: string, language: Language): Set<VvipField> {
+  const specialties = vvipOffshoreCopy[language].specialties;
+  const isCustomSpecialty = form.specialty === specialties[specialties.length - 1];
+  const invalid = new Set<VvipField>();
+  if (!form.firstName.trim()) invalid.add("firstName");
+  if (!form.lastName.trim()) invalid.add("lastName");
+  if (!form.email.trim() || !/^\S+@\S+\.\S+$/.test(form.email)) invalid.add("email");
+  if (!(isCustomSpecialty ? form.specialtyCustom.trim() : form.specialty)) invalid.add(isCustomSpecialty ? "specialtyCustom" : "specialty");
+  if (!form.environments.length) invalid.add("environments");
+  if (!diplomaCountry) invalid.add("diplomaCountry");
+  if (!file || !isAcceptedVvipCvFile(file)) invalid.add("cv");
+  if (!form.gdprConsent) invalid.add("gdprConsent");
+  if (!turnstileToken) invalid.add("turnstile");
+  return invalid;
+}
 
 /**
  * What the alert says about the fields the VVIP form refused (A11Y-03): each one is named,
@@ -474,16 +495,25 @@ export default function VvipOffshorePage() {
   const isInvalid = (field: string) => validationAttempted && invalidFields.has(field);
   const toggleEnvironment = (environment: string) => update("environments", form.environments.includes(environment) ? form.environments.filter(item => item !== environment) : [...form.environments, environment]);
 
-  /** A CV of the wrong format or size is reported as soon as it is chosen, not only when sending (A11Y-03). */
+  /**
+   * A CV of the wrong format or size is reported as soon as it is chosen, not only when sending (A11Y-03).
+   * The alert of a refused send, or of a refused CV, then names what is still to correct, without taking
+   * focus from the file field; a server's refusal stays until a refused CV replaces it.
+   */
   const chooseCv = (selected: File | null) => {
     setFile(selected);
     const refused = selected !== null && !isAcceptedVvipCvFile(selected);
-    setInvalidFields(previous => { const next = new Set(previous); if (refused) next.add("cv"); else next.delete("cv"); return next; });
-    if (refused) {
-      setValidationAttempted(true);
+    const remaining = new Set(invalidFields);
+    if (refused) remaining.add("cv"); else remaining.delete("cv");
+    if (turnstileToken) remaining.delete("turnstile");
+    setInvalidFields(remaining);
+    if (!refused && !invalidFields.size) return;
+    setValidationAttempted(true);
+    const toCorrect = vvipFields.filter(field => remaining.has(field));
+    if (toCorrect.length) {
       setStatus("error");
-      setErrorMessage(t.fileError);
-    } else if (errorMessage === t.fileError) {
+      setErrorMessage(fieldsToCorrectMessage(vvipFieldsToCorrect(toCorrect, selected, lang), lang));
+    } else {
       setStatus("idle");
       setErrorMessage("");
     }
@@ -495,19 +525,9 @@ export default function VvipOffshorePage() {
     setValidationAttempted(true);
     const submittedDiplomaCountry = resolveCountryForSubmission(form.diplomaCountry, new FormData(event.currentTarget).get("diplomaCountry"), diplomaCountries.map(country => country.label));
 
-    // Filled in the order of the form, which the alert follows.
-    const nextInvalidFields = new Set<VvipField>();
-    if (!form.firstName.trim()) nextInvalidFields.add("firstName");
-    if (!form.lastName.trim()) nextInvalidFields.add("lastName");
-    if (!form.email.trim() || !/^\S+@\S+\.\S+$/.test(form.email)) nextInvalidFields.add("email");
     const isCustomSpecialty = form.specialty === t.specialties[t.specialties.length - 1];
     const finalSpecialty = isCustomSpecialty ? form.specialtyCustom.trim() : form.specialty;
-    if (!finalSpecialty) nextInvalidFields.add(isCustomSpecialty ? "specialtyCustom" : "specialty");
-    if (!form.environments.length) nextInvalidFields.add("environments");
-    if (!submittedDiplomaCountry) nextInvalidFields.add("diplomaCountry");
-    if (!file || !isAcceptedVvipCvFile(file)) nextInvalidFields.add("cv");
-    if (!form.gdprConsent) nextInvalidFields.add("gdprConsent");
-    if (!turnstileToken) nextInvalidFields.add("turnstile");
+    const nextInvalidFields = vvipInvalidFields(form, file, turnstileToken, submittedDiplomaCountry, lang);
     if (nextInvalidFields.size) {
       setInvalidFields(nextInvalidFields);
       setStatus("error");
@@ -690,6 +710,7 @@ export default function VvipOffshorePage() {
                         className="peer sr-only"
                         aria-invalid={isInvalid("cv")}
                         aria-describedby="vvip-cv-hint"
+                        disabled={status === "sending"}
                         onChange={(e) => chooseCv(e.target.files?.[0] || null)}
                       />
                       <label

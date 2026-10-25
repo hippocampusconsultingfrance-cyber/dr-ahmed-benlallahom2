@@ -11,15 +11,22 @@ export type FieldToCorrect = {
 };
 
 /**
- * Called when a form refuses to send. Returns the text of the form's alert, which names in plain
- * words each field to correct in the order given (the order of the form), and puts focus on the
- * first of them once that alert has rendered.
+ * Text of a form's alert, which names in plain words each field to correct in the order given
+ * (the order of the form). Leaves focus where it is.
  */
-export function reportFieldsToCorrect(fields: readonly FieldToCorrect[], language: string): string {
+export function fieldsToCorrectMessage(fields: readonly FieldToCorrect[], language: string): string {
   const copy = getFieldsToCorrectCopy(language);
-  const focusId = fields.find(field => field.focusId)?.focusId;
-  if (focusId) window.requestAnimationFrame(() => document.getElementById(focusId)?.focus());
   const labels = fields.flatMap(field => field.label ? [field.label] : []);
   const details = fields.flatMap(field => field.detail ? [field.detail] : []);
   return [...(labels.length ? [copy.list.replace("{fields}", labels.join(copy.separator))] : []), ...details].join(copy.sentenceSeparator);
+}
+
+/**
+ * Called when a form refuses to send. Returns the text of the form's alert (fieldsToCorrectMessage)
+ * and puts focus on the first field to correct once that alert has rendered.
+ */
+export function reportFieldsToCorrect(fields: readonly FieldToCorrect[], language: string): string {
+  const focusId = fields.find(field => field.focusId)?.focusId;
+  if (focusId) window.requestAnimationFrame(() => document.getElementById(focusId)?.focus());
+  return fieldsToCorrectMessage(fields, language);
 }

@@ -9,13 +9,14 @@ vi.mock("@/components/Navigation", () => ({ default: () => null }));
 vi.mock("@/components/Footer", () => ({ default: () => null }));
 vi.mock("@/components/SEOHead", () => ({ SEOHead: () => null }));
 
-const { default: VvipOffshorePage, vvipFieldsToCorrect, vvipOffshoreCopy } = await import("./VvipOffshorePage");
+const { default: VvipOffshorePage, createInitialForm, VVIP_ENVIRONMENTS, vvipFieldsToCorrect, vvipInvalidFields, vvipOffshoreCopy } = await import("./VvipOffshorePage");
 const { reportFieldsToCorrect } = await import("@/lib/formFieldsToCorrect");
 
 const languages = ["fr", "en", "de", "zh"] as const;
-// What an empty VVIP form refuses (its specialty is preselected), in the order the page checks it.
-const emptyFormFields = ["firstName", "lastName", "email", "environments", "diplomaCountry", "cv", "gdprConsent", "turnstile"] as const;
+// What the page refuses when sent empty, before the anti-bot check has given a token.
+const emptyFormFields = vvipInvalidFields(createInitialForm("fr"), null, null, "", "fr");
 const oversizedCv = { name: "cv.pdf", size: 4 * 1024 * 1024 + 1, type: "application/pdf" };
+const acceptedCv = { name: "cv.docx", size: 300_000, type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" };
 
 function stubFocus() {
   const frames: Array<() => void> = [];
@@ -28,6 +29,18 @@ function stubFocus() {
 afterEach(() => { vi.unstubAllGlobals(); });
 
 describe("A11Y-03 — formulaire VVIP refusé avant l’envoi", () => {
+  it.each(languages)("refuse les champs dans l’ordre du formulaire, sa spécialité étant présélectionnée (%s)", language => {
+    const empty = createInitialForm(language);
+    const specialties = vvipOffshoreCopy[language].specialties;
+    const complete = { ...empty, firstName: "Amina", lastName: "Haddad", email: "amina@example.org", environments: [VVIP_ENVIRONMENTS[1].value], gdprConsent: true };
+
+    expect([...vvipInvalidFields(empty, null, null, "", language)]).toEqual(["firstName", "lastName", "email", "environments", "diplomaCountry", "cv", "gdprConsent", "turnstile"]);
+    expect([...vvipInvalidFields(complete, acceptedCv, "token", "Maroc", language)]).toEqual([]);
+    // The last specialty of the page's language asks for the typed one.
+    expect([...vvipInvalidFields({ ...complete, specialty: specialties[specialties.length - 1] }, oversizedCv, "token", "Maroc", language)]).toEqual(["specialtyCustom", "cv"]);
+    expect([...vvipInvalidFields({ ...complete, specialty: "" }, acceptedCv, "token", "Maroc", language)]).toEqual(["specialty"]);
+  });
+
   it("nomme chaque champ à reprendre au lieu de ne parler que du CV, et place le focus sur le premier", () => {
     const { flush, focused } = stubFocus();
 

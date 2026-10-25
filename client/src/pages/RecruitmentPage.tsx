@@ -8,7 +8,7 @@ import Footer from "@/components/Footer";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { resolveCountryForSubmission } from "@/lib/countrySubmission";
 import { recruitmentServiceFailureMessage, recruitmentSubmissionErrorMessage } from "@/lib/recruitmentSubmissionErrors";
-import { reportFieldsToCorrect, type FieldToCorrect } from "@/lib/formFieldsToCorrect";
+import { fieldsToCorrectMessage, reportFieldsToCorrect, type FieldToCorrect } from "@/lib/formFieldsToCorrect";
 import { getTurnstileWidgetCopy } from "@/lib/publicFormCopy";
 import { TurnstileWidget } from "@/components/TurnstileWidget";
 import { filterRecruitmentSpecialties, recruitmentSpecialtyLabel } from "./recruitmentSpecialties";
@@ -123,11 +123,32 @@ type FormState = {
 export const initialForm: FormState = { firstName: "", lastName: "", email: "", phone: "", specialty: "", specialtyCustom: "", diplomaCountry: "", targetCountries: [], otherTargetCountry: "", languages: [], otherLanguage: "", yearsExperience: "", message: "", gdprConsent: false, marketingConsent: false, website: "" };
 
 /** Fields the standard form checks before sending, in the order they appear on it. */
-type StandardField = "firstName" | "lastName" | "email" | "specialty" | "specialtyCustom" | "diplomaCountry" | "targetCountries" | "otherTargetCountry" | "cv" | "gdprConsent" | "turnstile";
+const standardFields = ["firstName", "lastName", "email", "specialty", "specialtyCustom", "diplomaCountry", "targetCountries", "otherTargetCountry", "cv", "gdprConsent", "turnstile"] as const;
+type StandardField = (typeof standardFields)[number];
 /** Control focused for each of them; the anti-bot check takes no focus. */
 const standardFieldIds: Record<Exclude<StandardField, "turnstile">, string> = {
   firstName: "recruitment-firstName", lastName: "recruitment-lastName", email: "recruitment-email", specialty: "recruitment-specialty", specialtyCustom: "recruitment-specialty-custom", diplomaCountry: "recruitment-diploma-country-search", targetCountries: "recruitment-target-country-0", otherTargetCountry: "recruitment-other-target-country", cv: "recruitment-cv", gdprConsent: "recruitment-gdpr-consent",
 };
+
+/**
+ * Fields the standard form refuses to send, in the order of the form, which the alert follows (A11Y-03).
+ * `diplomaCountry` is the country resolved for sending, empty when none was chosen.
+ */
+export function standardInvalidFields(form: FormState, file: Pick<File, "name" | "size" | "type"> | null, turnstileToken: string | null, diplomaCountry: string): Set<StandardField> {
+  const isCustomSpecialty = form.specialty === "Autre spécialité ou profession";
+  const invalid = new Set<StandardField>();
+  if (!form.firstName.trim()) invalid.add("firstName");
+  if (!form.lastName.trim()) invalid.add("lastName");
+  if (!form.email.trim() || !/^\S+@\S+\.\S+$/.test(form.email)) invalid.add("email");
+  if (!(isCustomSpecialty ? form.specialtyCustom.trim() : form.specialty)) invalid.add(isCustomSpecialty ? "specialtyCustom" : "specialty");
+  if (!diplomaCountry) invalid.add("diplomaCountry");
+  if (!form.targetCountries.length) invalid.add("targetCountries");
+  if (form.targetCountries.includes(OTHER_TARGET_COUNTRY) && !form.otherTargetCountry.trim()) invalid.add("otherTargetCountry");
+  if (!file || !isAcceptedCvFile(file)) invalid.add("cv");
+  if (!form.gdprConsent) invalid.add("gdprConsent");
+  if (!turnstileToken) invalid.add("turnstile");
+  return invalid;
+}
 
 /**
  * What the alert says about the fields the standard form refused (A11Y-03): each one is named,
@@ -276,17 +297,23 @@ export default function RecruitmentPage() {
     update("languages", form.languages.includes(languageValue) ? form.languages.filter(item => item !== languageValue) : [...form.languages, languageValue]);
   };
 
-  /** A CV of the wrong format or size is reported as soon as it is chosen, not only when sending (A11Y-03). */
+  /**
+   * A CV of the wrong format or size is reported as soon as it is chosen, not only when sending (A11Y-03).
+   * The alert of a refused send, or of a refused CV, then names what is still to correct, without taking
+   * focus from the file field; a server's refusal stays until a refused CV replaces it.
+   */
   const chooseCv = (selected: File | null) => {
     setFile(selected);
     const refused = selected !== null && !isAcceptedCvFile(selected);
-    setInvalidFields(previous => { const next = new Set(previous); if (refused) next.add("cv"); else next.delete("cv"); return next; });
-    if (refused) {
-      setValidationAttempted(true);
-      setStatus("error"); setErrorMessage(t.fileError);
-    } else if (errorMessage === t.fileError) {
-      setStatus("idle"); setErrorMessage("");
-    }
+    const remaining = new Set(invalidFields);
+    if (refused) remaining.add("cv"); else remaining.delete("cv");
+    if (turnstileToken) remaining.delete("turnstile");
+    setInvalidFields(remaining);
+    if (!refused && !invalidFields.size) return;
+    setValidationAttempted(true);
+    const toCorrect = standardFields.filter(field => remaining.has(field));
+    if (toCorrect.length) { setStatus("error"); setErrorMessage(fieldsToCorrectMessage(standardFieldsToCorrect(toCorrect, selected, lang), lang)); }
+    else { setStatus("idle"); setErrorMessage(""); }
   };
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -296,18 +323,7 @@ export default function RecruitmentPage() {
     const submittedDiplomaCountry = resolveCountryForSubmission(form.diplomaCountry, new FormData(event.currentTarget).get("diplomaCountry"), worldwideCountries.map(country => country.label));
     const isCustomSpecialty = form.specialty === "Autre spécialité ou profession";
     const finalSpecialty = isCustomSpecialty ? form.specialtyCustom.trim() : form.specialty;
-    // Filled in the order of the form, which the alert follows.
-    const nextInvalidFields = new Set<StandardField>();
-    if (!form.firstName.trim()) nextInvalidFields.add("firstName");
-    if (!form.lastName.trim()) nextInvalidFields.add("lastName");
-    if (!form.email.trim() || !/^\S+@\S+\.\S+$/.test(form.email)) nextInvalidFields.add("email");
-    if (!finalSpecialty) nextInvalidFields.add(isCustomSpecialty ? "specialtyCustom" : "specialty");
-    if (!submittedDiplomaCountry) nextInvalidFields.add("diplomaCountry");
-    if (!form.targetCountries.length) nextInvalidFields.add("targetCountries");
-    if (form.targetCountries.includes(OTHER_TARGET_COUNTRY) && !form.otherTargetCountry.trim()) nextInvalidFields.add("otherTargetCountry");
-    if (!file || !isAcceptedCvFile(file)) nextInvalidFields.add("cv");
-    if (!form.gdprConsent) nextInvalidFields.add("gdprConsent");
-    if (!turnstileToken) nextInvalidFields.add("turnstile");
+    const nextInvalidFields = standardInvalidFields(form, file, turnstileToken, submittedDiplomaCountry);
     if (nextInvalidFields.size) {
       setInvalidFields(nextInvalidFields);
       setStatus("error"); setErrorMessage(reportFieldsToCorrect(standardFieldsToCorrect(nextInvalidFields, file, lang), lang)); return;
@@ -495,7 +511,7 @@ export default function RecruitmentPage() {
                     <textarea id="recruitment-message" value={form.message} onChange={event => update("message", event.target.value)} className="recruitment-field min-h-28 resize-y" maxLength={5000} />
                   </label>
                   
-                  <div className={`rounded-xl border border-dashed border-primary/40 bg-primary/5 p-4 focus-within:ring-2 focus-within:ring-primary ${isInvalid("cv") ? "form-file-invalid" : ""}`}><label htmlFor="recruitment-cv" className="flex cursor-pointer items-center gap-3 text-sm font-medium text-foreground"><FileUp className="h-5 w-5 text-primary" /><span>{file ? file.name : t.chooseFile}</span><input ref={fileInputRef} id="recruitment-cv" type="file" accept={RECRUITMENT_CV_ACCEPT_ATTRIBUTE} aria-invalid={isInvalid("cv")} aria-describedby="recruitment-cv-hint" onChange={event => chooseCv(event.target.files?.[0] || null)} className="sr-only" required /></label><p id="recruitment-cv-hint" className="mt-2 text-xs text-muted-foreground">{file ? `${(file.size / (1024 * 1024)).toFixed(2)} MB · ${t.cv}` : t.cv}</p></div>
+                  <div className={`rounded-xl border border-dashed border-primary/40 bg-primary/5 p-4 focus-within:ring-2 focus-within:ring-primary ${isInvalid("cv") ? "form-file-invalid" : ""}`}><label htmlFor="recruitment-cv" className="flex cursor-pointer items-center gap-3 text-sm font-medium text-foreground"><FileUp className="h-5 w-5 text-primary" /><span>{file ? file.name : t.chooseFile}</span><input ref={fileInputRef} id="recruitment-cv" type="file" accept={RECRUITMENT_CV_ACCEPT_ATTRIBUTE} aria-invalid={isInvalid("cv")} aria-describedby="recruitment-cv-hint" disabled={status === "sending"} onChange={event => chooseCv(event.target.files?.[0] || null)} className="sr-only" required /></label><p id="recruitment-cv-hint" className="mt-2 text-xs text-muted-foreground">{file ? `${(file.size / (1024 * 1024)).toFixed(2)} MB · ${t.cv}` : t.cv}</p></div>
                   <label className={`form-consent-item flex items-start gap-3 text-sm text-muted-foreground ${isInvalid("gdprConsent") ? "form-consent-item-invalid" : ""}`}><input id="recruitment-gdpr-consent" type="checkbox" checked={form.gdprConsent} aria-invalid={isInvalid("gdprConsent")} onChange={event => update("gdprConsent", event.target.checked)} className="form-consent-checkbox mt-1" required /><span>{t.gdpr}</span></label>
                   <label className="form-consent-item flex items-start gap-3 text-sm text-muted-foreground"><input type="checkbox" checked={form.marketingConsent} onChange={event => update("marketingConsent", event.target.checked)} className="form-consent-checkbox mt-1" /><span>{t.marketing}</span></label>
                   <div className={isInvalid("turnstile") ? "rounded-xl border border-destructive/50 p-2" : ""}><TurnstileWidget key={turnstileAttempt} onToken={setTurnstileToken} /></div>

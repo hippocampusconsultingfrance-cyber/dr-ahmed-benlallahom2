@@ -9,17 +9,19 @@ vi.mock("@/components/Navigation", () => ({ default: () => null }));
 vi.mock("@/components/Footer", () => ({ default: () => null }));
 vi.mock("@/components/SEOHead", () => ({ SEOHead: () => null }));
 
-const { default: RecruitmentPage, standardFieldsToCorrect } = await import("./RecruitmentPage");
+const { default: RecruitmentPage, initialForm, standardFieldsToCorrect, standardInvalidFields } = await import("./RecruitmentPage");
 const { reportFieldsToCorrect } = await import("@/lib/formFieldsToCorrect");
 
 const languages = ["fr", "en", "de", "zh"] as const;
-// What an empty form refuses, in the order the page checks it.
-const emptyFormFields = ["firstName", "lastName", "email", "specialty", "diplomaCountry", "targetCountries", "cv", "gdprConsent", "turnstile"] as const;
+// What the page refuses when sent empty, before the anti-bot check has given a token.
+const emptyFormFields = standardInvalidFields(initialForm, null, null, "");
 const fileError = {
   fr: "Veuillez joindre un CV au format PDF ou DOCX de 4 Mo maximum (le format Word ancien .doc n’est pas accepté).",
   en: "Please attach a PDF or DOCX CV up to 4 MB (the legacy Word .doc format is not accepted).",
 };
 const refusedCv = { name: "cv.doc", size: 300_000, type: "application/msword" };
+const acceptedCv = { name: "cv.pdf", size: 300_000, type: "application/pdf" };
+const completeForm = { ...initialForm, firstName: "Amina", lastName: "Haddad", email: "amina@example.org", specialty: "Médecine d’urgence", targetCountries: ["France"], gdprConsent: true };
 
 function render(language: (typeof languages)[number]) {
   view.language = language;
@@ -37,6 +39,19 @@ function stubFocus() {
 afterEach(() => { vi.unstubAllGlobals(); });
 
 describe("A11Y-03 — formulaire standard refusé avant l’envoi", () => {
+  it("refuse les champs dans l’ordre du formulaire, et laisse partir un formulaire complet", () => {
+    expect([...emptyFormFields]).toEqual(["firstName", "lastName", "email", "specialty", "diplomaCountry", "targetCountries", "cv", "gdprConsent", "turnstile"]);
+    expect([...standardInvalidFields(completeForm, acceptedCv, "token", "Maroc")]).toEqual([]);
+
+    expect([...standardInvalidFields({ ...completeForm, email: "amina@example" }, acceptedCv, "token", "Maroc")]).toEqual(["email"]);
+    // "Other" asks for the typed specialty and the typed country instead.
+    expect([...standardInvalidFields({ ...completeForm, specialty: "Autre spécialité ou profession", specialtyCustom: " ", targetCountries: ["Autre pays / Mobilité mondiale"] }, acceptedCv, "token", "Maroc")])
+      .toEqual(["specialtyCustom", "otherTargetCountry"]);
+    expect([...standardInvalidFields({ ...completeForm, specialty: "Autre spécialité ou profession", specialtyCustom: "Perfusionniste" }, acceptedCv, "token", "Maroc")]).toEqual([]);
+    // An attached CV of the wrong format is refused like a missing one; the alert tells them apart.
+    expect([...standardInvalidFields(completeForm, refusedCv, "token", "")]).toEqual(["diplomaCountry", "cv"]);
+  });
+
   it("nomme chaque champ d’un envoi à vide au lieu de « Champ obligatoire » et place le focus sur le premier", () => {
     const { flush, focused } = stubFocus();
 
