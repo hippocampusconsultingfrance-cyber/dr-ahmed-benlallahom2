@@ -117,7 +117,7 @@ export const RECRUITMENT_PARAMEDICAL_SPECIALTIES: ReadonlySet<string> = new Set(
 ]);
 
 /** Words of a pharmacist's title, among the nursing and allied health ones below. */
-export const RECRUITMENT_PHARMACIST_TITLE_TERMS: readonly string[] = ["pharmacist", "pharmacien", "apotheker", "صيدلي", "صيدلاني", "صيدلانية", "药剂师", "藥劑師", "药师", "藥師"];
+export const RECRUITMENT_PHARMACIST_TITLE_TERMS: readonly string[] = ["pharmacist", "pharmacien", "apotheker", "صيدلي", "صيدلاني", "药剂师", "藥劑師", "药师", "藥師"];
 
 /**
  * Physician specialties that pharmacists practise too: in France, a
@@ -132,12 +132,10 @@ export const RECRUITMENT_PHARMACIST_SPECIALTIES: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * Words of a nursing or allied health title. A Latin-script word is a word
- * start and a Chinese one matches anywhere, like the equivalents above; an
- * Arabic one is a whole word, after the usual prefixes (و, ف, ب, ك, ل, ال,
- * لل), so feminine forms are listed too and « للممرضين » ("of the nurses")
- * is no « ممرض ». Only names of professions: not the fields they share with
- * physicians (斜视 "strabismus", "clinical pharmac…"), so that a
+ * Words of a nursing or allied health title, matched like the equivalents
+ * above: « ممرض » is also in « الممرضات » (the nurses), « تمريض » in
+ * « التمريضية » (the adjective). Only names of professions: not the fields
+ * they share with physicians (斜视 "strabismus", "clinical pharmac…"), so that a
  * « Consultant Clinical Pharmacologist » stays a physician. "Rig medic" also
  * names the offshore paramedic profile of the VVIP form in every language.
  */
@@ -152,22 +150,24 @@ export const RECRUITMENT_PARAMEDICAL_TITLE_TERMS: readonly string[] = [
   "krankenpfleg", "pflegefach", "pflegekraft", "fachpflege", "pflegehelfer", "pflegeexpert", "pflegedienstleitung", "op pflege",
   "anästhesiepfleg", "intensivpfleg", "hebamme", "entbindungspfleg", "notfallsanitäter", "rettungssanitäter", "rettungsassistent",
   "logopäd", "mtra", "mtla", "diätassistent", "psychologe", "sozialarbeit",
-  "ممرض", "ممرضة", "تمريض", "مسعف", "مسعفة", "فني تخدير", "فنية تخدير", "فني أشعة", "فنية أشعة", "فني مختبر", "فنية مختبر",
+  "ممرض", "تمريض", "مسعف", "فني تخدير", "فنية تخدير", "فني أشعة", "فنية أشعة", "فني مختبر", "فنية مختبر",
   "فني إسعاف", "تقني أشعة", "تقنية أشعة", "تقني مختبر", "تقنية مختبر",
   "أخصائي تغذية", "أخصائية تغذية", "أخصائي نفسي", "أخصائية نفسية", "أخصائي اجتماعي", "أخصائية اجتماعية",
   "护士", "護士", "护理", "護理", "助产", "助產", "技师", "技師", "技术员", "技術員", "护工", "護工", "急救员", "急救員", "急救医护", "急救醫護",
-  "治疗师", "治療師", "营养师", "營養師", "心理师", "心理師", "社工",
+  "治疗师", "治療師", "营养师", "營養師", "心理师", "心理師", "社工", "医师助理", "醫師助理", "医生助理", "醫生助理",
 ];
 
 /**
  * Words of a physician's title: a title holding one keeps its specialty
  * points beside a nursing or allied health word (INTL-02), « Facharzt für
  * Psychiatrie, Diplom-Psychologe », « استشاري تخدير ومدرب للممرضين »
- * (consultant anaesthetist, trainer of nurses). Whole words, Latin ones too:
- * « médecine » (the field) is no « médecin », and "Doctor of …" a degree
- * (Doctor of Nursing Practice); a word inside a nursing or allied health
- * title (« Physician Assistant ») does not count. Not "consultant" alone: a
- * « Nurse Consultant » is a nurse.
+ * (consultant anaesthetist, trainer of nurses). Latin and Arabic ones are
+ * whole words: « médecine » (the field) is no « médecin », nor « جراحة »
+ * (surgery) a « جراح ». A word inside a nursing or allied health title
+ * (« Physician Assistant », 医师助理) does not count, nor one that names
+ * someone else (server/recruitmentAnalysis.ts: "Doctor of Nursing
+ * Practice", 无国界医生, « assistant du médecin »…). Not "consultant" alone:
+ * a « Nurse Consultant » is a nurse.
  */
 export const RECRUITMENT_PHYSICIAN_TITLE_TERMS: readonly string[] = [
   "doctor", "physician", "surgeon", "médecin", "chirurgien", "chirurgienne", "praticien hospitalier", "praticienne hospitalière",

@@ -222,14 +222,23 @@ describe("INTL-02 — citations en arabe et en chinois", () => {
   });
 
   it("lit « 资格不全 » (qualification incomplète) comme une négation, mais pas l’insuffisance d’un organe", () => {
-    for (const denied of ["麻醉科医师资格不全", "麻醉科医师证书不全", "麻醉科医师，资料不全"]) {
+    for (const denied of ["麻醉科医师资格不全", "麻醉科医师证书不全", "麻醉科医师，资料不全", "麻醉科医师，执业证书不全", "麻醉科医师，资质不全", "麻醉科医师，手續不全", "麻醉科医师，资格证不全"]) {
       expect(titleEvidence("麻醉科医师", denied), denied).toBe(false);
     }
+    // The qualification may end the quoted value: 资格 then 不全 is still 资格不全.
+    expect(titleEvidence("麻醉科主治医师资格", "麻醉科主治医师资格不全")).toBe(false);
     for (const quote of ["麻醉科医师，擅长心功能不全患者麻醉", "麻醉科医师（二尖瓣关闭不全手术麻醉）", "麻醉科医师，肾功能不全患者围术期管理", "麻醉科医师，发育不全患儿麻醉"]) {
       expect(titleEvidence("麻醉科医师", quote), quote).toBe(true);
     }
     expect(titleEvidence("麻醉科醫師", "麻醉科醫師（主動脈瓣閉鎖不全手術）")).toBe(true);
     expect(titleEvidence("麻醉科醫師", "麻醉科醫師資格不全")).toBe(false);
+    // Other conditions in 不全: cervical insufficiency, incomplete fracture or abortion, neural tube defect, osteogenesis imperfecta…
+    const conditions: Array<[string, string]> = [
+      ["妇产科主治医师", "妇产科主治医师，宫颈机能不全诊治"], ["婦產科醫師", "婦產科醫師，子宮頸機能不全"], ["骨科主治医师", "骨科主治医师，不全骨折微创治疗"],
+      ["妇产科主治医师", "妇产科主治医师，不全流产处理"], ["神经外科主治医师", "神经外科主治医师，神经管闭合不全"], ["儿科主治医师", "儿科主治医师，成骨不全症诊治"],
+      ["神经内科主治医师", "神经内科主治医师，不全瘫康复"], ["普外科主治医师", "普外科主治医师，不全性肠梗阻"],
+    ];
+    for (const [title, quote] of conditions) expect(titleEvidence(title, quote), quote).toBe(true);
   });
 
   it("lit « غير حكومية » (ONG), « دون انقطاع » ou « لا سيما » sans négation, et « لست » comme une négation", () => {
@@ -334,7 +343,7 @@ describe("INTL-02 — un titre infirmier, technicien ou secouriste n’est pas u
   });
 
   it("garde ses points à un médecin dont le titre cite aussi une profession paramédicale", () => {
-    // Consultant anaesthetist and trainer of nurses: « للممرضين » ("of the nurses") is no « ممرض » (a nurse).
+    // Consultant anaesthetist and trainer of nurses: « استشاري » (consultant) is a physician's word.
     expect(analyse("arabe", { title: "استشاري تخدير ومدرب للممرضين", specialty: "التخدير", skill: "التخدير الموضعي" }, "Anesthésie-réanimation").scoreBreakdown.specialtyMatch).toBe(30);
     expect(analyse("arabe", { title: "طبيب تخدير ومشرف على قسم التمريض", specialty: "التخدير", skill: "التخدير الموضعي" }, "Anesthésie-réanimation").scoreBreakdown.specialtyMatch).toBe(30);
     expect(analyse("allemand", { title: "Facharzt für Psychiatrie, Diplom-Psychologe", specialty: "Psychiatrie und Psychotherapie", skill: "Psychotherapie" }, "Psychiatrie").scoreBreakdown.specialtyMatch).toBe(30);
@@ -347,10 +356,31 @@ describe("INTL-02 — un titre infirmier, technicien ou secouriste n’est pas u
     expect(english("Doctor of Nursing Practice, Nurse Anesthetist", "Anesthesia", "Anesthésie-réanimation")).toBe(0);
     expect(analyse("français", { title: "Infirmière en médecine d’urgence", specialty: "Médecine d’urgence", skill: "triage" }, "Médecine d’urgence").scoreBreakdown.specialtyMatch).toBe(0);
     expect(analyse("allemand", { title: "Diplom-Psychologe", specialty: "Psychiatrie", skill: "Psychotherapie" }, "Psychiatrie").scoreBreakdown.specialtyMatch).toBe(0);
-    // Arabic words are whole words, with their prefixes: the feminine « ممرضة » and « الممرض » are nurses.
-    expect(analyse("arabe", { title: "ممرضة العناية المركزة", specialty: "العناية المركزة", skill: "التنفس الاصطناعي" }, "Médecine intensive et réanimation").scoreBreakdown.specialtyMatch).toBe(0);
-    expect(analyse("arabe", { title: "الممرض المسؤول عن العناية المركزة", specialty: "العناية المركزة", skill: "التنفس الاصطناعي" }, "Médecine intensive et réanimation").scoreBreakdown.specialtyMatch).toBe(0);
-    expect(analyse("arabe", { title: "فنية تخدير", specialty: "التخدير", skill: "التخدير الموضعي" }, "Anesthésie-réanimation").scoreBreakdown.specialtyMatch).toBe(0);
-    expect(analyse("arabe", { title: "صيدلانية سريرية في العناية المركزة", specialty: "العناية المركزة", skill: "الأدوية" }, "Médecine intensive et réanimation").scoreBreakdown.specialtyMatch).toBe(0);
+    // Feminine and plural forms, the article, the adjective « تمريضية »: head nurse, director of nursing services…
+    const arabic = (title: string, specialty: string, declared: string) => analyse("arabe", { title, specialty, skill: "التنفس الاصطناعي" }, declared).scoreBreakdown.specialtyMatch;
+    for (const title of ["ممرضة العناية المركزة", "الممرض المسؤول عن العناية المركزة", "رئيسة الممرضات في العناية المركزة", "مديرة الخدمات التمريضية في العناية المركزة", "صيدلانية سريرية في العناية المركزة"]) {
+      expect(arabic(title, "العناية المركزة", "Médecine intensive et réanimation"), title).toBe(0);
+    }
+    expect(arabic("مشرفة الممرضات بقسم الطوارئ", "طب الطوارئ", "Médecine d’urgence")).toBe(0);
+    expect(arabic("فنية تخدير", "التخدير", "Anesthésie-réanimation")).toBe(0);
+    // A surgical nurse: « جراحة » (surgery) is no « جراح » (surgeon).
+    expect(arabic("ممرضة جراحة القلب", "جراحة القلب", "Chirurgie cardiovasculaire et thoracique")).toBe(0);
+  });
+
+  it("ne prend pas pour un médecin le nom d’un médecin qui désigne quelqu’un d’autre", () => {
+    const chinese = (title: string, specialty: string, declared: string) => analyse("chinois", { title, specialty, skill: "创伤急救" }, declared).scoreBreakdown.specialtyMatch;
+    // Doctors Without Borders, a physician assistant (医师助理), "assisting the anaesthetist".
+    expect(chinese("急诊科护士（无国界医生项目）", "急诊医学", "Médecine d’urgence")).toBe(0);
+    expect(chinese("急診科護士（無國界醫生）", "急诊医学", "Médecine d’urgence")).toBe(0);
+    expect(chinese("重症监护护士，医师助理", "重症医学", "Médecine intensive et réanimation")).toBe(0);
+    expect(chinese("麻醉护士，协助麻醉医师", "麻醉学", "Anesthésie-réanimation")).toBe(0);
+    expect(chinese("麻醉護士，協助麻醉醫師", "麻醉学", "Anesthésie-réanimation")).toBe(0);
+    expect(analyse("allemand", { title: "Notfallsanitäter im Notarzt-Einsatz", specialty: "Notfallmedizin", skill: "Reanimation" }, "Médecine d’urgence").scoreBreakdown.specialtyMatch).toBe(0);
+    expect(analyse("français", { title: "Infirmier, assistant du médecin anesthésiste", specialty: "Anesthésie", skill: "anesthésie locorégionale" }, "Anesthésie-réanimation").scoreBreakdown.specialtyMatch).toBe(0);
+    expect(english("Intensive Care Nurse, physician liaison", "Intensive care", "Médecine intensive et réanimation")).toBe(0);
+    // The physicians themselves keep their points.
+    expect(chinese("急诊科医生（无国界医生项目）", "急诊医学", "Médecine d’urgence")).toBe(30);
+    expect(chinese("重症医学科主治医师，带教医师助理", "重症医学", "Médecine intensive et réanimation")).toBe(30);
+    expect(analyse("allemand", { title: "Notarzt, früher Notfallsanitäter", specialty: "Notfallmedizin", skill: "Reanimation" }, "Médecine d’urgence").scoreBreakdown.specialtyMatch).toBe(30);
   });
 });
