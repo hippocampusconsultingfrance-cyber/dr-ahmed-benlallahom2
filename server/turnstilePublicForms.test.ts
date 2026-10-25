@@ -28,8 +28,16 @@ describe("garde-fous Turnstile des parcours publics", () => {
   });
 
   it("renouvelle automatiquement le contrôle recrutement après un échec serveur", () => {
-    const page = project("client/src/pages/RecruitmentPage.tsx");
-    expect(page).toContain("setTurnstileAttempt(value => value + 1)");
-    expect(page).toContain("<TurnstileWidget key={turnstileAttempt} onToken={setTurnstileToken} />");
+    for (const path of ["client/src/pages/RecruitmentPage.tsx", "client/src/pages/VvipOffshorePage.tsx"]) {
+      const page = project(path);
+      expect(page, path).toContain("setTurnstileAttempt(value => value + 1)");
+      expect(page, path).toContain("<TurnstileWidget key={turnstileAttempt} onToken={setTurnstileToken} />");
+    }
+  });
+
+  it("renouvelle le contrôle de l’espace candidat après chaque inscription ou demande de lien (REC-03)", () => {
+    const page = project("client/src/pages/CandidateAccessPage.tsx");
+    expect(page.match(/onSettled: renewTurnstile,/g)).toHaveLength(3);
+    expect(page).toContain("<TurnstileWidget key={`${mode}-${turnstileKey}`} onToken={setTurnstileToken} />");
   });
 });

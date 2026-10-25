@@ -1,5 +1,5 @@
 import { FormEvent, useMemo, useRef, useState } from "react";
-import { isAcceptedRecruitmentCvFile, RECRUITMENT_CV_ACCEPT_ATTRIBUTE } from "@shared/recruitmentCvLimits";
+import { isAcceptedRecruitmentCvFile, RECRUITMENT_CV_ACCEPT_ATTRIBUTE, recruitmentCvRefusalReason } from "@shared/recruitmentCvLimits";
 import { CheckCircle2, Clock3, FileUp, Globe2, Loader2, ShieldCheck, UserCheck, Zap, Award, Compass, Lock } from "lucide-react";
 import { Link } from "wouter";
 import { SEOHead } from "@/components/SEOHead";
@@ -10,7 +10,7 @@ import { getWorldwideCountries } from "./RecruitmentPage";
 import { resolveCountryForSubmission } from "@/lib/countrySubmission";
 import { TurnstileWidget } from "@/components/TurnstileWidget";
 
-const copy = {
+export const vvipOffshoreCopy = {
   fr: {
     eyebrow: "Hippocampus Consulting · Missions d’Élite VVIP & Offshore",
     title: "Médecine d’urgence et soins hautement spécialisés en environnements critiques.",
@@ -319,7 +319,67 @@ const publicTrustCopy = {
   },
 } as const;
 
-type Language = keyof typeof copy;
+/** Translations of the French messages returned by /api/recruitment/apply, by cause. */
+const serverErrorCopy = {
+  en: {
+    securityCheck: "The security check must be renewed before sending.",
+    rateLimited: "Too many attempts have been made. Wait one hour before trying again.",
+    invalidInformation: "The application details are invalid.",
+    unavailable: "The application service is temporarily unavailable.",
+    legacyFormat: "CV format not accepted. Use a PDF or a DOCX (the legacy Word .doc format is no longer accepted).",
+    tooLargeWhenOpened: "The CV is too large once opened. Save it again as a PDF (for example “File > Export to PDF”) and try again.",
+    pageLimit: "The CV must not exceed 25 pages.",
+    passwordProtected: "The CV is password-protected. Send a version without a password.",
+    activeContent: "The CV contains macros, active content or embedded objects. Save it as a PDF and try again.",
+    invalidContent: "The CV content does not match a valid PDF or DOCX document.",
+  },
+  de: {
+    securityCheck: "Die Sicherheitsprüfung muss vor dem Absenden erneuert werden.",
+    rateLimited: "Es wurden zu viele Versuche unternommen. Warten Sie eine Stunde, bevor Sie es erneut versuchen.",
+    invalidInformation: "Die Bewerbungsangaben sind ungültig.",
+    unavailable: "Der Bewerbungsdienst ist vorübergehend nicht verfügbar.",
+    legacyFormat: "CV-Format nicht akzeptiert. Verwenden Sie ein PDF oder DOCX (das alte Word-Format .doc wird nicht mehr akzeptiert).",
+    tooLargeWhenOpened: "Der Lebenslauf ist nach dem Öffnen zu groß. Speichern Sie ihn erneut als PDF (zum Beispiel „Datei > Als PDF exportieren“) und versuchen Sie es erneut.",
+    pageLimit: "Der Lebenslauf darf höchstens 25 Seiten umfassen.",
+    passwordProtected: "Der Lebenslauf ist passwortgeschützt. Senden Sie eine Version ohne Passwort.",
+    activeContent: "Der Lebenslauf enthält Makros, aktive Inhalte oder eingebettete Objekte. Speichern Sie ihn als PDF und versuchen Sie es erneut.",
+    invalidContent: "Der Inhalt des Lebenslaufs entspricht keinem gültigen PDF- oder DOCX-Dokument.",
+  },
+  zh: {
+    securityCheck: "发送前必须重新完成安全验证。",
+    rateLimited: "尝试次数过多。请等待一小时后再试。",
+    invalidInformation: "申请信息无效。",
+    unavailable: "申请服务暂时不可用。",
+    legacyFormat: "不接受该简历格式。请使用 PDF 或 DOCX（不再接受旧版 Word .doc 格式）。",
+    tooLargeWhenOpened: "简历打开后体积过大。请重新另存为 PDF（例如“文件 > 导出为 PDF”）后重试。",
+    pageLimit: "简历不得超过 25 页。",
+    passwordProtected: "简历受密码保护。请发送未设密码的版本。",
+    activeContent: "简历包含宏、活动内容或嵌入对象。请另存为 PDF 后重试。",
+    invalidContent: "简历内容与有效的 PDF 或 DOCX 文档不符。",
+  },
+} as const;
+type ServerErrorCause = keyof typeof serverErrorCopy.en;
+
+/** Codes returned by /api/recruitment/apply next to its message (the CV checks use cv_validation_*). */
+const serverErrorCauses = new Map<string, ServerErrorCause>([
+  ["recruitment_security_check_required", "securityCheck"],
+  ["recruitment_rate_limited", "rateLimited"],
+  ["recruitment_application_invalid", "invalidInformation"],
+  ["recruitment_service_unavailable", "unavailable"],
+]);
+
+/** Values sent to the API whatever the display language (targetCountries and message). */
+export const VVIP_ENVIRONMENTS = [
+  { value: "Moyen-Orient (Gouvernement / VVIP)", labelKey: "env1" },
+  { value: "Plateformes pétrolières & gazières (Onshore / Offshore)", labelKey: "env2" },
+  { value: "Sociétés minières & industrielles isolées", labelKey: "env3" },
+  { value: "Événements internationaux de prestige", labelKey: "env4" },
+] as const;
+
+/** With the "[VVIP / Offshore] " prefix, a free-text specialty stays within the 160 characters accepted by the API (INTL-03). */
+export const VVIP_CUSTOM_SPECIALTY_MAX_LENGTH = 140;
+
+type Language = keyof typeof vvipOffshoreCopy;
 type FormState = {
   firstName: string;
   lastName: string;
@@ -335,12 +395,12 @@ type FormState = {
   website: string;
 };
 
-const createInitialForm = (language: Language): FormState => ({
+export const createInitialForm = (language: Language): FormState => ({
   firstName: "",
   lastName: "",
   email: "",
   phone: "",
-  specialty: copy[language].specialties[0],
+  specialty: vvipOffshoreCopy[language].specialties[0],
   specialtyCustom: "",
   environments: [],
   diplomaCountry: "",
@@ -355,10 +415,55 @@ export function isAcceptedVvipCvFile(file: Pick<File, "name" | "size" | "type"> 
   return isAcceptedRecruitmentCvFile(file);
 }
 
+/**
+ * Multipart body of a VVIP application. The specialty keeps only the VVIP prefix,
+ * which marks the pathway and keeps the application apart from a standard one;
+ * the environments are sent in targetCountries and in the message (INTL-03).
+ */
+export function buildVvipApplicationFormData({ form, cv, specialty, diplomaCountry, turnstileToken }: { form: FormState; cv: File; specialty: string; diplomaCountry: string; turnstileToken: string }): FormData {
+  const body = new FormData();
+  body.append("cv", cv);
+  body.append("firstName", form.firstName);
+  body.append("lastName", form.lastName);
+  body.append("email", form.email);
+  body.append("phone", form.phone);
+  const environmentSummary = form.environments.join(", ");
+  body.append("specialty", `[VVIP / Offshore] ${specialty}`);
+  body.append("diplomaCountry", diplomaCountry);
+  body.append("targetCountries", JSON.stringify(form.environments));
+  body.append("languages", JSON.stringify(["Français", "Anglais"]));
+  body.append("yearsExperience", form.yearsExperience ? String(Number(form.yearsExperience)) : "5");
+  body.append("certifications", form.certifications);
+  body.append("message", `Mission VVIP / Offshore. Environnements: ${environmentSummary}. Certifications: ${form.certifications}`);
+  body.append("gdprConsent", "1");
+  body.append("marketingConsent", "0");
+  body.append("website", form.website);
+  body.append("turnstileToken", turnstileToken);
+  return body;
+}
+
+/**
+ * Message shown when the API refuses an application. A refusal the page knows
+ * (by its code, or a CV refusal without one) shows the server's own message in
+ * French and its translation in the other languages; anything else, such as a
+ * technical upload error, stays generic.
+ */
+export function vvipSubmissionErrorMessage(payload: { error?: unknown; code?: unknown } | null | undefined, language: Language): string {
+  const t = vvipOffshoreCopy[language];
+  const serverMessage = typeof payload?.error === "string" ? payload.error.trim() : "";
+  if (!serverMessage) return t.genericError;
+  const code = typeof payload?.code === "string" ? payload.code : "";
+  const cause = code.startsWith("cv_validation_") ? recruitmentCvRefusalReason(code) : serverErrorCauses.get(code);
+  if (cause) return language === "fr" ? serverMessage : serverErrorCopy[language][cause];
+  // CV size, format or missing file: refused before the content checks, without a code.
+  if (serverMessage.includes("CV")) return language === "fr" ? serverMessage : t.fileError;
+  return t.genericError;
+}
+
 export default function VvipOffshorePage() {
   const { language } = useLanguage();
-  const lang = (language in copy ? language : "fr") as Language;
-  const t = copy[lang];
+  const lang = (language in vvipOffshoreCopy ? language : "fr") as Language;
+  const t = vvipOffshoreCopy[lang];
   const customSpecialtyLabel = customSpecialtyCopy[lang];
   const trust = publicTrustCopy[lang];
   const [form, setForm] = useState<FormState>(() => createInitialForm(lang));
@@ -369,14 +474,10 @@ export default function VvipOffshorePage() {
   const [invalidFields, setInvalidFields] = useState<Set<string>>(() => new Set());
   const [trackingId, setTrackingId] = useState("");
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  const [turnstileAttempt, setTurnstileAttempt] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const diplomaCountries = useMemo(() => getWorldwideCountries(lang), [lang]);
-  const environmentOptions = [
-    { value: "Moyen-Orient (Gouvernement / VVIP)", label: t.env1 },
-    { value: "Plateformes pétrolières & gazières (Onshore / Offshore)", label: t.env2 },
-    { value: "Sociétés minières & industrielles isolées", label: t.env3 },
-    { value: "Événements internationaux de prestige", label: t.env4 },
-  ];
+  const environmentOptions = VVIP_ENVIRONMENTS.map(environment => ({ value: environment.value, label: t[environment.labelKey] }));
 
   const update = <K extends keyof FormState>(key: K, value: FormState[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -415,42 +516,30 @@ export default function VvipOffshorePage() {
 
     setStatus("sending");
     try {
-      const body = new FormData();
-      body.append("cv", file);
-      body.append("firstName", form.firstName);
-      body.append("lastName", form.lastName);
-      body.append("email", form.email);
-      body.append("phone", form.phone);
-      const environmentSummary = form.environments.join(", ");
-      body.append("specialty", `[VVIP / Offshore] ${finalSpecialty} (${environmentSummary})`);
-      body.append("diplomaCountry", submittedDiplomaCountry);
-      body.append("targetCountries", JSON.stringify(form.environments));
-      body.append("languages", JSON.stringify(["Français", "Anglais"]));
-      body.append("yearsExperience", form.yearsExperience ? String(Number(form.yearsExperience)) : "5");
-      body.append("certifications", form.certifications);
-      body.append("message", `Mission VVIP / Offshore. Environnements: ${environmentSummary}. Certifications: ${form.certifications}`);
-      body.append("gdprConsent", "1");
-      body.append("marketingConsent", "0");
-      body.append("website", form.website);
-      body.append("turnstileToken", turnstileToken);
-
+      const body = buildVvipApplicationFormData({ form, cv: file, specialty: finalSpecialty, diplomaCountry: submittedDiplomaCountry, turnstileToken });
       const res = await fetch("/api/recruitment/apply", {
         method: "POST",
         body,
       });
       const payload = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(payload.error || t.genericError);
+      if (!res.ok) {
+        setStatus("error");
+        setErrorMessage(vvipSubmissionErrorMessage(payload, lang));
+        return;
+      }
 
       if (typeof payload.trackingId !== "string" || !payload.trackingId) throw new Error(t.genericError);
       setTrackingId(payload.trackingId);
-      setTurnstileToken(null);
       setValidationAttempted(false);
       setStatus("success");
     } catch (err) {
       setStatus("error");
       console.error("VVIP application submission error:", err);
-      const serverMessage = err instanceof Error ? err.message : "";
-      setErrorMessage(serverMessage.includes("CV") ? t.fileError : serverMessage.includes("informations") ? t.required : t.genericError);
+      setErrorMessage(t.genericError);
+    } finally {
+      // A Turnstile token is single use: always render a fresh challenge after an attempt.
+      setTurnstileToken(null);
+      setTurnstileAttempt(value => value + 1);
     }
   }
 
@@ -550,6 +639,7 @@ export default function VvipOffshorePage() {
                           <input
                             id="vvip-specialty-custom"
                             required
+                            maxLength={VVIP_CUSTOM_SPECIALTY_MAX_LENGTH}
                             value={form.specialtyCustom}
                             aria-invalid={isInvalid("specialtyCustom")}
                             onChange={(e) => update("specialtyCustom", e.target.value)}
@@ -627,7 +717,7 @@ export default function VvipOffshorePage() {
                       <input tabIndex={-1} autoComplete="off" value={form.website} onChange={(e) => update("website", e.target.value)} />
                     </label>
 
-                    <div className={isInvalid("turnstile") ? "rounded-xl border border-destructive/50 p-2" : ""}><TurnstileWidget onToken={setTurnstileToken} /></div>
+                    <div className={isInvalid("turnstile") ? "rounded-xl border border-destructive/50 p-2" : ""}><TurnstileWidget key={turnstileAttempt} onToken={setTurnstileToken} /></div>
                     {status === "error" && (
                       <p className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive" role="alert">{errorMessage}</p>
                     )}
