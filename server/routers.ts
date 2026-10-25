@@ -26,6 +26,7 @@ import { logRecruitmentAction, matchesRecruitmentProfile, parseRecruitmentJsonAr
 import { computeBriefCandidateMatch } from "./clientBriefMatching";
 import { candidatePortalRouter } from "./candidatePortalRouter";
 import { enforcePersistentRateLimit, hashSecurityValue, logSecurityEvent, requestIpHash } from "./candidateSecurity";
+import { publicFormRateLimitSubject, type PublicFormRateLimitScope } from "./publicFormRateLimit";
 import { createCandidateInvitationToken } from "./candidateAuth";
 import { verifyCandidateTurnstile } from "./candidateTurnstile";
 import { googleDriveExportStatus } from "./googleDriveExport";
@@ -61,7 +62,7 @@ const CV_APPLICATION_STATUSES = ["new", "reviewing", "shortlisted", "placed", "r
 type PublicFormRateLimitPolicy = {
   action: string;
   /** Clé de comptage : couple IP + email (formulaires), IP seule ou email seul (réservation). */
-  scope: "ip_email" | "ip" | "email";
+  scope: PublicFormRateLimitScope;
   maxAttempts: number;
   windowMs: number;
   blockMs: number;
@@ -80,16 +81,6 @@ export const PUBLIC_FORM_RATE_LIMITS = {
   bookingIp: { action: "public_booking_create_ip", scope: "ip", maxAttempts: 6, windowMs: 60 * 60 * 1000, blockMs: 60 * 60 * 1000, blockedMessage: BOOKING_RATE_LIMIT_MESSAGE },
   bookingEmail: { action: "public_booking_create_email", scope: "email", maxAttempts: 5, windowMs: 60 * 60 * 1000, blockMs: 60 * 60 * 1000, blockedMessage: BOOKING_RATE_LIMIT_MESSAGE },
 } as const satisfies Record<string, PublicFormRateLimitPolicy>;
-
-export function publicFormRateLimitSubject(scope: PublicFormRateLimitPolicy["scope"], ipHash: string | null, email: string): string | null {
-  if (scope === "ip_email") return `${ipHash ?? "unknown"}:${email}`;
-  if (scope === "email") return `email:${email}`;
-  // Sans IP identifiable, ne jamais regrouper tous les patients dans un seul
-  // compteur « unknown » : quelques appels suffiraient à bloquer l’agenda pour
-  // tout le monde. Le compteur par email et le plafond de créneaux retenus
-  // restent appliqués dans ce cas.
-  return ipHash ? `ip:${ipHash}` : null;
-}
 
 async function enforcePublicFormRateLimit(input: {
   kind: keyof typeof PUBLIC_FORM_RATE_LIMITS;

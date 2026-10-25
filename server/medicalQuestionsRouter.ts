@@ -7,6 +7,7 @@ import { adminProcedure, publicProcedure, router } from "./_core/trpc";
 import { getDb } from "./db";
 import { enforcePersistentRateLimit, hashSecurityValue, logSecurityEvent, requestIpHash } from "./candidateSecurity";
 import { verifyCandidateTurnstile } from "./candidateTurnstile";
+import { enforcePublicEmailIpRateLimit } from "./publicFormRateLimit";
 import { isAdminMfaVerified } from "./adminMfa";
 import { improveMedicalAnswerDraft } from "./medicalQuestionAssistant";
 import { notifyOwner } from "./_core/notification";
@@ -81,6 +82,7 @@ export const medicalQuestionsRouter = router({
           windowMs: 24 * 60 * 60 * 1000,
           blockMs: 24 * 60 * 60 * 1000,
         });
+        await enforcePublicEmailIpRateLimit("medicalQuestion", ipHash ?? (ctx.req.ip ? hashSecurityValue(ctx.req.ip) : null));
         await verifyCandidateTurnstile({ token: input.turnstileToken, remoteIp: ctx.req.ip });
       } catch {
         await logSecurityEvent({ actorKind: "anonymous", actorReference: hashSecurityValue(input.email), category: "public_medical_question_protection", outcome: "blocked", severity: "warning", ipHash });
