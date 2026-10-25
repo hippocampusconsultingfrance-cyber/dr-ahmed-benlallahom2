@@ -117,7 +117,7 @@ describe("/api/recruitment/apply — confirmation vers une adresse non vérifié
 
   it("dossier en doublon : la confirmation renvoyée ne recopie pas davantage le texte saisi", async () => {
     const existing = seedApplication(db(), { email: "phish.victim@test.local", trackingId: "CVDUPLICATE0001" });
-    Object.assign(existing, { specialty: SPECIALTY, fileChecksum: createHash("sha256").update(cv).digest("hex") });
+    Object.assign(existing, { specialty: SPECIALTY, targetCountries: JSON.stringify(["Canada", "Suisse"]), fileChecksum: createHash("sha256").update(cv).digest("hex") });
 
     const response = await apply({ email: "phish.victim@test.local", firstName: TRAP_NAME, ip: "198.51.100.62" });
 

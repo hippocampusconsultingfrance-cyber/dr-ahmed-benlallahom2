@@ -536,6 +536,7 @@ export async function createApp() {
           trackingId: cvApplications.trackingId,
           email: cvApplications.email,
           specialty: cvApplications.specialty,
+          targetCountries: cvApplications.targetCountries,
         }).from(cvApplications).where(eq(cvApplications.fileChecksum, fileValidation.checksum)).limit(20);
         const duplicate = duplicateCandidates.find(candidate => isSameRecruitmentSubmission(candidate, parsed.data));
         if (duplicate) {
