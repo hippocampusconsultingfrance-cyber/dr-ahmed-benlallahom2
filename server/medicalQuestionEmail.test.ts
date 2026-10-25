@@ -61,6 +61,25 @@ describe("emails du service de questions médicales", () => {
     expect(resendMocks.send.mock.calls[2][0].subject).toBe("Your question has been received — QMED-ABCDEFGH-12347");
   });
 
+  it("ne recopie pas dans l’accusé le texte d’un prénom piégé, en français comme en anglais (MAIL-01)", async () => {
+    vi.stubEnv("RESEND_API_KEY", "re_test_key");
+    const trapName = "Votre colis est bloqué, payez sur https://colis-phish.example/fr";
+    await sendMedicalQuestionAcknowledgementEmail({ email: "victime@test.local", firstName: trapName, trackingId: "QMED-TRAPTRAP-00001", language: "fr" });
+    await sendMedicalQuestionAcknowledgementEmail({ email: "victime@test.local", firstName: "Offre speciale sur www.promo-1.example", trackingId: "QMED-TRAPTRAP-00002", language: "en" });
+    const [french, english] = resendMocks.send.mock.calls.map(([payload]) => payload);
+    expect(french.text.startsWith("Bonjour,\n\n")).toBe(true);
+    expect(french.html).toContain("<p>Bonjour,</p>");
+    expect(french.text).toContain("Référence : QMED-TRAPTRAP-00001");
+    expect(english.text.startsWith("Hello,\n\n")).toBe(true);
+    expect(english.text).toContain("Reference: QMED-TRAPTRAP-00002");
+    for (const payload of [french, english]) {
+      expect(`${payload.html}${payload.text}`).not.toMatch(/phish|promo-1|colis|Offre/);
+    }
+
+    await sendMedicalQuestionAcknowledgementEmail({ email: "patient@example.invalid", firstName: "Marie-Hélène", trackingId: "QMED-ABCDEFGH-12348", language: "fr" });
+    expect(resendMocks.send.mock.calls[2][0].text.startsWith("Bonjour Marie-Hélène,\n\n")).toBe(true);
+  });
+
   it("alerte le propriétaire sans nom, email ni contenu de santé", () => {
     const notification = buildMedicalQuestionOwnerNotification({ trackingId: "QMED-ABCDEFGH-12345", language: "fr", publicationConsent: false, adminUrl: "https://example.test/admin" });
     expect(notification.title).toBe("Nouvelle question santé à traiter (QMED-ABCDEFGH-12345)");

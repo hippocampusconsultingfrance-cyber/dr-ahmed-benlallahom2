@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { BOOKING_RATE_LIMIT_MESSAGE, PUBLIC_FORM_RATE_LIMITS, publicFormRateLimitSubject } from "./routers";
+import { publicFormRateLimitSubject } from "./publicFormRateLimit";
+import { BOOKING_RATE_LIMIT_MESSAGE, PUBLIC_FORM_RATE_LIMITS } from "./routers";
 
 describe("public form rate limits", () => {
   it("keeps the rate limiter outside the deterministic integration fixtures", async () => {

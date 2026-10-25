@@ -460,12 +460,14 @@ export async function createApp() {
         recruitmentStage = "security-protection";
         const { verifyCandidateTurnstile } = await import("../candidateTurnstile");
         const { enforcePersistentRateLimit, hashSecurityValue, logSecurityEvent } = await import("../candidateSecurity");
+        const { enforcePublicEmailIpRateLimit } = await import("../publicFormRateLimit");
         const clientIp = req.ip || "unknown";
         const ipHash = hashSecurityValue(clientIp);
         if (process.env.NODE_ENV !== "test" && process.env.VITEST !== "true") {
           try {
             await verifyCandidateTurnstile({ token: parsed.data.turnstileToken, remoteIp: clientIp });
             await enforcePersistentRateLimit({ action: "public_recruitment_apply", subject: `${clientIp}:${parsed.data.email}`, maxAttempts: 10, windowMs: 24 * 60 * 60 * 1000, blockMs: 60 * 60 * 1000 });
+            await enforcePublicEmailIpRateLimit("recruitmentApply", req.ip ? ipHash : null);
           } catch (protectionError) {
             await logSecurityEvent({ actorKind: "anonymous", actorReference: parsed.data.email, category: "public_recruitment_apply_protection", outcome: "blocked", severity: "warning", ipHash })
               .catch(securityLogError => console.error("Recruitment protection log error:", safeErrorName(securityLogError)));
@@ -512,15 +514,12 @@ export async function createApp() {
         }).from(cvApplications).where(eq(cvApplications.fileChecksum, fileValidation.checksum)).limit(20);
         const duplicate = duplicateCandidates.find(candidate => isSameRecruitmentSubmission(candidate, parsed.data));
         if (duplicate) {
-          const candidateName = `${parsed.data.firstName} ${parsed.data.lastName}`;
           const candidatePortalInviteUrl = `${PUBLIC_APP_ORIGIN}/candidate/access?invite=${encodeURIComponent(createCandidateInvitationToken(Number(duplicate.id)))}`;
           await sendTrackedCvApplicationConfirmationEmail({
             applicationId: Number(duplicate.id),
             candidateEmail: parsed.data.email,
-            candidateName,
+            candidateFirstName: parsed.data.firstName,
             trackingId: duplicate.trackingId,
-            specialty: parsed.data.specialty,
-            targetCountries: parsed.data.targetCountries.join(", "),
             candidatePortalInviteUrl,
           });
           await logSecurityEvent({ actorKind: "anonymous", actorReference: parsed.data.email, category: "public_recruitment_apply_duplicate_file", outcome: "allowed", severity: "info", ipHash });
@@ -577,10 +576,8 @@ export async function createApp() {
             await sendTrackedCvApplicationConfirmationEmail({
               applicationId: insertedId,
               candidateEmail: parsed.data.email,
-              candidateName,
+              candidateFirstName: parsed.data.firstName,
               trackingId,
-              specialty: parsed.data.specialty,
-              targetCountries: parsed.data.targetCountries.join(", "),
               candidatePortalInviteUrl,
             });
           })(),
