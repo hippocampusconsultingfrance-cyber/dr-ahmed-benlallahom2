@@ -10,16 +10,18 @@ import { contentFr } from "@/data/content-fr";
  * Pages publiques dans un vrai navigateur : le client est servi par Vite et tRPC répond par des
  * données vides, sans serveur ni base. Ne tourne que si un Chromium est disponible :
  *   CHROMIUM=/chemin/vers/chrome pnpm vitest run client/src/publicPages.browser.test.ts
- * (ou le Chromium installé par Playwright).
+ * sinon le Chromium installé par Playwright, puis celui du système (/usr/bin/chromium, comme
+ * scripts/visual-regression.mjs, ou /usr/bin/google-chrome, présent sur les machines de la CI).
  */
 function findChromium() {
   if (process.env.CHROMIUM) return process.env.CHROMIUM;
+  let bundled: string | undefined;
   try {
-    const bundled = chromium.executablePath();
-    return existsSync(bundled) ? bundled : undefined;
+    bundled = chromium.executablePath();
   } catch {
-    return undefined;
+    // Pas de Chromium Playwright connu pour cette plateforme : restent ceux du système.
   }
+  return [bundled, "/usr/bin/chromium", "/usr/bin/google-chrome"].find((candidate) => candidate && existsSync(candidate));
 }
 
 const executablePath = findChromium();
