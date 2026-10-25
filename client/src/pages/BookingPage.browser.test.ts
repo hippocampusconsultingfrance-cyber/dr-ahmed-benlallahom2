@@ -504,33 +504,37 @@ describe.skipIf(!executablePath)("réservation et confirmation dans un navigateu
     await page.context().close();
   }, 60_000);
 
-  it("laisse remonter le texte de la confirmation au-dessus de la pastille « Préférences cookies » sur téléphone (RES-05)", async () => {
+  it("laisse remonter le texte de la confirmation au-dessus de la pastille « Préférences cookies » et du bouton WhatsApp sur téléphone (RES-05)", async () => {
     const start = parisBookingSlotStart(toParisBookingDateKey(new Date(Date.now() + 5 * 24 * 60 * 60 * 1000)), "19:00")!;
-    // Pixel 7, en anglais, choix cookies déjà fait : la pastille reste en bas à gauche de l'écran.
+    // Pixel 7, en anglais, choix cookies déjà fait : la pastille reste en bas à gauche de l'écran, WhatsApp en bas à droite.
     const { page } = await open("/booking/confirmation?status=success&trackingId=APTCONFIRM0003&session_id=cs_test_confirmed", {
       "appointments.publicStatus": () => ({ state: "confirmed", appointment: { appointmentDate: start.toISOString(), durationMinutes: 30, amountEur: 150 } }),
     }, { language: "en", timezoneId: "Asia/Dubai", context: { viewport: { width: 412, height: 839 }, deviceScaleFactor: 2.625, isMobile: true, hasTouch: true } });
     await page.getByRole("definition").first().waitFor();
     await page.getByRole("button", { name: cookieCopy.en.settings }).waitFor();
+    await page.locator(".whatsapp-contact-float").waitFor();
     await page.evaluate(() => Promise.all(document.getAnimations().filter((animation) => (animation as CSSAnimation).animationName === "page-transition-enter").map((animation) => animation.finished)));
 
     // Chaque texte et chaque commande, amené en bas de l'écran comme le fait le navigateur pour un focus.
     const covered = await page.evaluate(async () => {
-      const shortcut = document.querySelector(".cookie-preferences-shortcut")!;
+      const floating = [...document.querySelectorAll<HTMLElement>(".cookie-preferences-shortcut, .whatsapp-contact-float")];
       const blocks = [...document.querySelectorAll<HTMLElement>("main :is(h1, h2, p, li, dt, dd, a[href], button), footer :is(p, a[href])")]
-        .filter((element) => element.getBoundingClientRect().width > 0 && !shortcut.contains(element));
+        .filter((element) => element.getBoundingClientRect().width > 0 && !floating.some((control) => control.contains(element)));
       const result: string[] = [];
       for (const block of blocks) {
         block.scrollIntoView({ block: "end", behavior: "instant" });
         await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
         const box = block.getBoundingClientRect();
-        const pill = shortcut.getBoundingClientRect();
-        if (box.left < pill.right && pill.left < box.right && box.top < pill.bottom && pill.top < box.bottom) {
-          result.push(`${block.tagName.toLowerCase()} « ${(block.textContent ?? "").trim().slice(0, 50)} »`);
+        for (const control of floating) {
+          const area = control.getBoundingClientRect();
+          if (box.left < area.right && area.left < box.right && box.top < area.bottom && area.top < box.bottom) {
+            result.push(`${control.className.split(" ")[0]} : ${block.tagName.toLowerCase()} « ${(block.textContent ?? "").trim().slice(0, 50)} »`);
+          }
         }
       }
-      return { count: blocks.length, result };
+      return { floating: floating.length, count: blocks.length, result };
     });
+    expect(covered.floating).toBe(2);
     expect(covered.count).toBeGreaterThan(10);
     expect(covered.result).toEqual([]);
     await page.context().close();
