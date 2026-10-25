@@ -1526,6 +1526,19 @@ html[data-cookie-banner-open="true"] .whatsapp-contact-float {
   display: none;
 }
 
+/*
+ * Tant que le bandeau est ouvert, la page garde en bas un espace de sa hauteur (mesurée par
+ * CookieConsent) : sur téléphone, un bouton ou le menu de langue d'une page courte
+ * (/recruitment/unsubscribe, espace candidat) se fait remonter au-dessus au lieu de rester dessous.
+ */
+html[data-cookie-banner-open="true"] {
+  scroll-padding-bottom: var(--cookie-banner-height, 0px);
+}
+
+html[data-cookie-banner-open="true"] body {
+  padding-bottom: var(--cookie-banner-height, 0px);
+}
+
 @media (max-width: 767px) {
   .cookie-consent-banner {
     max-height: min(46vh, 22rem);

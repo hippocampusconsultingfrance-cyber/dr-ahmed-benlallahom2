@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { COOKIE_BANNER_OPEN_ATTRIBUTE, COOKIE_POLICY_HREF, cookieCopy, syncCookieBannerOpenAttribute } from "./CookieConsent";
+import { COOKIE_BANNER_HEIGHT_PROPERTY, COOKIE_BANNER_OPEN_ATTRIBUTE, COOKIE_POLICY_HREF, cookieCopy, syncCookieBannerOpenAttribute, trackCookieBannerHeight } from "./CookieConsent";
 
 const readSource = (file: string) => import("node:fs/promises").then(fs => fs.readFile(new URL(file, import.meta.url), "utf8"));
 
@@ -20,6 +20,41 @@ describe("coordination des contrôles fixes", () => {
 
     expect(root.removeAttribute).toHaveBeenCalledWith(COOKIE_BANNER_OPEN_ATTRIBUTE);
     expect(root.setAttribute).not.toHaveBeenCalled();
+  });
+
+  it("reporte sur le document la hauteur du bandeau ouvert, la suit et la retire à la fermeture (EN-03)", () => {
+    const root = { style: { setProperty: vi.fn(), removeProperty: vi.fn() } };
+    const banner = { offsetHeight: 257 } as HTMLElement;
+    let onResize = () => {};
+    const disconnect = vi.fn();
+    const observe = vi.fn();
+    const Observer = vi.fn(function (this: unknown, callback: () => void) {
+      onResize = callback;
+      return { observe, disconnect };
+    }) as unknown as typeof ResizeObserver;
+
+    const stop = trackCookieBannerHeight(root, banner, Observer);
+    expect(root.style.setProperty).toHaveBeenLastCalledWith(COOKIE_BANNER_HEIGHT_PROPERTY, "257px");
+    expect(observe).toHaveBeenCalledWith(banner);
+
+    // Texte qui se replie autrement (rotation, langue) : la nouvelle hauteur remplace l'ancienne.
+    (banner as { offsetHeight: number }).offsetHeight = 329;
+    onResize();
+    expect(root.style.setProperty).toHaveBeenLastCalledWith(COOKIE_BANNER_HEIGHT_PROPERTY, "329px");
+
+    stop();
+    expect(disconnect).toHaveBeenCalled();
+    expect(root.style.removeProperty).toHaveBeenCalledWith(COOKIE_BANNER_HEIGHT_PROPERTY);
+  });
+
+  it("mesure le bandeau une fois quand ResizeObserver n'existe pas", () => {
+    const root = { style: { setProperty: vi.fn(), removeProperty: vi.fn() } };
+
+    const stop = trackCookieBannerHeight(root, { offsetHeight: 180 } as HTMLElement, undefined);
+    expect(root.style.setProperty).toHaveBeenCalledWith(COOKIE_BANNER_HEIGHT_PROPERTY, "180px");
+
+    stop();
+    expect(root.style.removeProperty).toHaveBeenCalledWith(COOKIE_BANNER_HEIGHT_PROPERTY);
   });
 
   it("utilise une vraie fenêtre modale : focus piégé, Échap et restitution du focus (PUB-A11Y-04)", async () => {

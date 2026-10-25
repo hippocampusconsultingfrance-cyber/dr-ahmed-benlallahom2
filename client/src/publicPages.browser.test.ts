@@ -51,8 +51,8 @@ describe.skipIf(!executablePath)("pages publiques dans un navigateur", () => {
     await server?.close();
   });
 
-  async function open(route: string, { width = 1440, height = 800, theme = "dark" as Theme } = {}) {
-    const context = await browser.newContext({ viewport: { width, height } });
+  async function open(route: string, { width = 1440, height = 800, theme = "dark" as Theme, touch = false } = {}) {
+    const context = await browser.newContext({ viewport: { width, height }, isMobile: touch, hasTouch: touch });
     await context.addInitScript((storedTheme) => {
       localStorage.setItem("language", "fr");
       localStorage.setItem("theme", storedTheme);
@@ -273,6 +273,47 @@ describe.skipIf(!executablePath)("pages publiques dans un navigateur", () => {
         });
       });
       expect(clipped, `${route} à ${width} px`).toEqual([]);
+      await page.context().close();
+    }
+  }, 120_000);
+
+  it("laisse toucher au-dessus du bandeau cookies le bouton de désinscription, le menu de langue et l'espace candidat (EN-03)", async () => {
+    const token = "a".repeat(40);
+    // iPhone 14, iPhone SE, Galaxy S8 ; le bandeau cookies est ouvert (aucun choix enregistré).
+    for (const [width, height] of [[390, 664], [320, 568], [360, 740]] as const) {
+      const page = await open(`/recruitment/unsubscribe?token=${token}`, { width, height, touch: true });
+      const unsubscribeCalls: string[] = [];
+      page.on("request", (request) => {
+        if (request.url().includes("recruitmentPreferences.unsubscribe")) unsubscribeCalls.push(request.url());
+      });
+      expect(await page.locator(".cookie-consent-banner").isVisible()).toBe(true);
+      await page.getByRole("button", { name: "Ne plus recevoir ces opportunités" }).tap({ timeout: 5_000 });
+      await expect.poll(() => unsubscribeCalls.length, { timeout: 5_000 }).toBe(1);
+      await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
+      await page.getByRole("button", { name: "Changer de langue" }).tap();
+      // Essai sans effet (trial) : Playwright vérifie que le doigt atteindrait bien chaque langue.
+      for (const name of ["Français", "English", "Deutsch", "中文"]) await page.getByRole("menuitem", { name }).tap({ trial: true, timeout: 5_000 });
+      await page.context().close();
+    }
+
+    // Pages voisines sur le plus petit écran : chaque commande se fait remonter au-dessus du bandeau.
+    for (const route of ["/candidate/access", "/candidate/reset-password", "/booking/confirmation?status=canceled", "/maintenance"]) {
+      const page = await open(route, { width: 320, height: 568, touch: true });
+      const covered = await page.evaluate(async () => {
+        const banner = document.querySelector(".cookie-consent-banner")!;
+        const controls = [...document.querySelectorAll<HTMLElement>(".page-transition :is(button, a[href], input, select, textarea):not(:disabled):not(.sr-only)")].filter((element) => element.getBoundingClientRect().width > 0);
+        const result: string[] = [];
+        for (const control of controls) {
+          control.scrollIntoView({ block: "end", behavior: "instant" });
+          await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+          const box = control.getBoundingClientRect();
+          const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+          if (hit && banner.contains(hit)) result.push(`${control.tagName.toLowerCase()} « ${(control.getAttribute("aria-label") || control.textContent || "").trim().slice(0, 40)} »`);
+        }
+        return { controls: controls.length, result };
+      });
+      expect(covered.controls, route).toBeGreaterThan(0);
+      expect(covered.result, route).toEqual([]);
       await page.context().close();
     }
   }, 120_000);
