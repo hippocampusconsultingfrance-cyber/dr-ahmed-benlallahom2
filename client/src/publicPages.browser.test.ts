@@ -67,6 +67,9 @@ describe.skipIf(!executablePath)("pages publiques dans un navigateur", () => {
     });
     await page.route("https://challenges.cloudflare.com/**", (request) => request.abort());
     await page.goto(`${baseUrl}${route}`, { waitUntil: "networkidle" });
+    // On a loaded machine (CI), "networkidle" can fire before the lazily loaded page has replaced the
+    // loading screen: wait for the page itself, whose landmark every tested route renders.
+    await page.waitForFunction(() => !document.querySelector(".app-loading-shell") && document.querySelector('main, [role="main"]') !== null, undefined, { timeout: 30_000 });
     // Fin de l'animation d'entrée de page, posée sur le conteneur ou sur les voisins de l'en-tête :
     // l'état testé est celui que le visiteur garde ensuite.
     await page.evaluate(() => Promise.all(document.getAnimations().filter((animation) => (animation as CSSAnimation).animationName === "page-transition-enter").map((animation) => animation.finished)));
@@ -123,7 +126,7 @@ describe.skipIf(!executablePath)("pages publiques dans un navigateur", () => {
       for (const route of ["/", "/faq", "/employers", "/venture/pratique-clinique"]) {
         const page = await open(route, { width });
         await page.evaluate(() => window.scrollTo({ top: 1500, behavior: "instant" }));
-        const position = await page.evaluate(() => ({ scrollY: window.scrollY, top: document.querySelector("header.site-nav")!.getBoundingClientRect().top }));
+        const position = await page.evaluate(() => ({ scrollY: window.scrollY, top: document.querySelector("header.site-nav")?.getBoundingClientRect().top ?? null }));
         expect(position.scrollY, `${route} à ${width} px`).toBeGreaterThan(500);
         expect(position.top, `${route} à ${width} px`).toBe(0);
         await page.context().close();
