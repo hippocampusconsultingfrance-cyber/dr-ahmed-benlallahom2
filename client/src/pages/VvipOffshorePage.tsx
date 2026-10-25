@@ -8,7 +8,7 @@ import Footer from "@/components/Footer";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { getWorldwideCountries } from "./RecruitmentPage";
 import { resolveCountryForSubmission } from "@/lib/countrySubmission";
-import { recruitmentSubmissionErrorMessage } from "@/lib/recruitmentSubmissionErrors";
+import { recruitmentServiceFailureMessage, recruitmentSubmissionErrorMessage } from "@/lib/recruitmentSubmissionErrors";
 import { TurnstileWidget } from "@/components/TurnstileWidget";
 
 export const vvipOffshoreCopy = {
@@ -493,7 +493,8 @@ export default function VvipOffshorePage() {
     } catch (err) {
       setStatus("error");
       console.error("VVIP application submission error:", err);
-      setErrorMessage(t.genericError);
+      // The request never got a usable answer (offline, connection closed): nothing for the candidate to correct.
+      setErrorMessage(recruitmentServiceFailureMessage(lang));
     } finally {
       // A Turnstile token is single use: always render a fresh challenge after an attempt.
       setTurnstileToken(null);

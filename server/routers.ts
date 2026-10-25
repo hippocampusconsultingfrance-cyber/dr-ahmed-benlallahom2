@@ -1826,6 +1826,8 @@ export const appRouter = router({
           conditions.push(eq(cvApplications.marketingConsent, 1), isNull(cvApplications.marketingUnsubscribedAt), isNull(cvApplications.marketingSuppressedAt));
         }
         const rows = await db.select({ id: cvApplications.id, firstName: cvApplications.firstName, lastName: cvApplications.lastName, email: cvApplications.email, phone: cvApplications.phone, specialty: cvApplications.specialty, targetCountries: cvApplications.targetCountries, languages: cvApplications.languages, yearsExperience: cvApplications.yearsExperience, availability: cvApplications.availability, mobility: cvApplications.mobility, certifications: cvApplications.certifications, aiScore: verifiedRecruitmentScore, status: cvApplications.status }).from(cvApplications).where(and(...conditions)).orderBy(desc(verifiedRecruitmentScore), desc(cvApplications.createdAt)).limit(RECRUITMENT_EXPORT_MAX_CANDIDATES);
+        // Selected candidates may have been refused or unsubscribed meanwhile: no header-only file, no "logged" export of nobody.
+        if (!rows.length) throw new TRPCError({ code: "BAD_REQUEST", message: "Aucun des candidats sélectionnés ne peut plus être exporté (refusé, archivé ou désinscrit)." });
         // A shortlist is meant for a client employer: it never carries the AI
         // score, an internal reading aid that must not become a third party's
         // selection criterion (LEGAL-22). The internal pool export keeps it.

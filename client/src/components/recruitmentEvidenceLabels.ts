@@ -39,6 +39,8 @@ const LEGACY_CV_READING_WORDING: ReadonlyArray<readonly [RegExp, string]> = [
   [/^(Spécialité|Compétence|Langue|Certification)\(s\) vérifiée\(s\) : /, "$1(s) trouvée(s) dans le texte lu par l’outil : "],
   [/^Score déterministe calculé uniquement à partir de faits professionnels vérifiés et rapprochés de la spécialité déclarée\.$/, "Score déterministe calculé uniquement à partir de faits professionnels trouvés dans le texte lu par l’outil et rapprochés de la spécialité déclarée, à comparer au CV."],
   [/^Score non présenté : les preuves vérifiées sont insuffisantes, /, "Score non présenté : les citations trouvées dans le texte lu par l’outil sont insuffisantes, "],
+  // Analyses saved by the earlier recruitment-v5-verified-evidence prompt.
+  [/^Score non présenté : la couverture de preuves vérifiées est insuffisante/, "Score non présenté : la couverture des citations trouvées dans le texte lu par l’outil est insuffisante"],
 ];
 
 export function cvReadingTextForDisplay(text: string) {

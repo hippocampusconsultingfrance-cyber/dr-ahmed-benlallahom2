@@ -44,6 +44,9 @@ describe("libellés des preuves IA d’un CV (IA-01)", () => {
       .toBe("Score déterministe calculé uniquement à partir de faits professionnels trouvés dans le texte lu par l’outil et rapprochés de la spécialité déclarée, à comparer au CV.");
     expect(cvReadingTextForDisplay("Score non présenté : les preuves vérifiées sont insuffisantes, contradictoires ou non rapprochées de la spécialité déclarée (50 % de couverture)."))
       .toBe("Score non présenté : les citations trouvées dans le texte lu par l’outil sont insuffisantes, contradictoires ou non rapprochées de la spécialité déclarée (50 % de couverture).");
+    // Conclusion saved by the earlier recruitment-v5-verified-evidence prompt.
+    expect(cvReadingTextForDisplay("Score non présenté : la couverture de preuves vérifiées est insuffisante (45 %)."))
+      .toBe("Score non présenté : la couverture des citations trouvées dans le texte lu par l’outil est insuffisante (45 %).");
   });
 
   it("laisse intacts les textes actuels et ceux d’une autre origine", () => {

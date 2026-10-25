@@ -134,6 +134,12 @@ describe("actions d’administration du recrutement", () => {
     expect(pool.csv).toContain("\"91\"");
   });
 
+  it("refuse un export du vivier dont plus aucun candidat sélectionné n’est exportable, au lieu d’un fichier vide (REC-01)", async () => {
+    const refused = seedCandidate(1, { status: "rejected" });
+    await expect(admin().admin.recruitment.exportCsv({ type: "pool", candidateIds: [refused.id as number] }))
+      .rejects.toThrow("Aucun des candidats sélectionnés ne peut plus être exporté (refusé, archivé ou désinscrit).");
+  });
+
   it("une shortlist n’exporte que les présélectionnés de sa mission, et une shortlist vide est refusée (REC-01)", async () => {
     const shortlisted = seedCandidate(1);
     const suggested = seedCandidate(2);
