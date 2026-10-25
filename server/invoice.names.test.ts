@@ -157,11 +157,11 @@ describe("noms internationaux sur la facture PDF", () => {
     expect(await printedName(name)).toBe(printed);
   });
 
-  it("n’imprime pas de ligne de nom pour un nom fait d’emoji", async () => {
-    expect(await printedNameLines("😀😀")).toEqual([]);
+  it.each(["😀😀", "👩‍⚕️ 🇫🇷"])("imprime un tiret à la place d’un nom fait d’emoji (« %s »)", async name => {
+    expect(await printedNameLines(name)).toEqual(["-"]);
   });
 
-  it.each(["محمد العتيبي", "王小明", "王小明（Wang Xiaoming）", "Dr Ahmed بن علي (أبو فهد) Martin"])(
+  it.each(["محمد العتيبي", "王小明", "王小明（Wang Xiaoming）", "Dr Ahmed بن علي (أبو فهد) Martin", "😀😀"])(
     "laisse l’email, le téléphone et le tableau à la même hauteur qu’après un nom latin (« %s »)",
     async name => {
       const latin = await textHeights(await invoicePdf("Jean Dupont"));
@@ -316,6 +316,7 @@ describe("ordre d’affichage de la ligne du nom", () => {
     expect(printableInvoiceName("Ⓙean ⒥ohn 🄼artin 🇫🇷", latinOnly)).toBe("Jean (j)ohn Martin");
     expect(printableInvoiceName("Łukasz 김", latinOnly)).toBe("?ukasz ?");
     expect(printableInvoiceName("  Jean  Dupont ", latinOnly)).toBe("  Jean  Dupont ");
+    expect(printableInvoiceName(" 😀 🇫🇷 ", latinOnly)).toBe("-");
   });
 
   it("met le point médian entre deux idéogrammes et la ponctuation pleine chasse dans la police chinoise", () => {

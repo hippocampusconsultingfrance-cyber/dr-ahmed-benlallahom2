@@ -154,8 +154,9 @@ function invoiceNameCharacterFont(chars: string[], position: number): InvoiceNam
  * vide : aucune n’a les emoji, ni l’hébreu, le coréen ou le thaï. Un caractère
  * sans dessin devient sa forme simple si les polices l’ont (lettres
  * « stylisées » ou entourées : 𝓙𝓮𝓪𝓷, Ⓙⓔⓐⓝ → Jean) ; sinon un emoji ou un
- * pictogramme est retiré, et tout autre caractère devient « ? ». `hasGlyph`
- * dit si la police qui écrirait le caractère en a le dessin.
+ * pictogramme est retiré, et tout autre caractère devient « ? ». Un nom fait
+ * seulement d’emoji devient « - ». `hasGlyph` dit si la police qui écrirait le
+ * caractère en a le dessin.
  */
 export function printableInvoiceName(name: string, hasGlyph: (font: InvoiceNameRun["font"], char: string) => boolean): string {
   const drawable = (chars: string[], start: number, end: number) =>
@@ -177,8 +178,11 @@ export function printableInvoiceName(name: string, hasGlyph: (font: InvoiceNameR
     else if (PICTOGRAPH.test(segment)) removed = true;
     else printable += "?";
   }
-  // Un emoji retiré entre deux mots y laissait deux espaces.
-  return removed ? printable.replace(/\s{2,}/g, " ").trim() : printable;
+  if (!removed) return printable;
+  // Un emoji retiré entre deux mots y laissait deux espaces. Sans rien
+  // d’imprimable, un tiret garde la ligne du nom : l’email et le tableau
+  // restent à leur hauteur.
+  return printable.replace(/\s{2,}/g, " ").trim() || "-";
 }
 
 /**
