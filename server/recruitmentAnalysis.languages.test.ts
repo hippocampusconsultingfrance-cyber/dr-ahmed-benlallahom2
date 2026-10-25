@@ -221,6 +221,17 @@ describe("INTL-02 — citations en arabe et en chinois", () => {
     }
   });
 
+  it("lit « 资格不全 » (qualification incomplète) comme une négation, mais pas l’insuffisance d’un organe", () => {
+    for (const denied of ["麻醉科医师资格不全", "麻醉科医师证书不全", "麻醉科医师，资料不全"]) {
+      expect(titleEvidence("麻醉科医师", denied), denied).toBe(false);
+    }
+    for (const quote of ["麻醉科医师，擅长心功能不全患者麻醉", "麻醉科医师（二尖瓣关闭不全手术麻醉）", "麻醉科医师，肾功能不全患者围术期管理", "麻醉科医师，发育不全患儿麻醉"]) {
+      expect(titleEvidence("麻醉科医师", quote), quote).toBe(true);
+    }
+    expect(titleEvidence("麻醉科醫師", "麻醉科醫師（主動脈瓣閉鎖不全手術）")).toBe(true);
+    expect(titleEvidence("麻醉科醫師", "麻醉科醫師資格不全")).toBe(false);
+  });
+
   it("lit « غير حكومية » (ONG), « دون انقطاع » ou « لا سيما » sans négation, et « لست » comme une négation", () => {
     for (const quote of ["استشاري تخدير في منظمة غير حكومية", "استشاري تخدير في المنظمات غير الحكومية", "استشاري تخدير في مستشفى غير ربحي", "استشاري تخدير بدوام كامل دون انقطاع", "استشاري تخدير، لا سيما تخدير القلب"]) {
       expect(titleEvidence("استشاري تخدير", quote), quote).toBe(true);
@@ -320,5 +331,26 @@ describe("INTL-02 — un titre infirmier, technicien ou secouriste n’est pas u
     expect(analyse("arabe", { title: "ممرض العناية المركزة", specialty: "العناية المركزة", skill: "التنفس الاصطناعي" }, "Médecine intensive et réanimation").scoreBreakdown.specialtyMatch).toBe(0);
     expect(analyse("chinois", { title: "重症监护护士", specialty: "重症医学", skill: "呼吸机管理" }, "Médecine intensive et réanimation").scoreBreakdown.specialtyMatch).toBe(0);
     expect(analyse("chinois", { title: "重症医学科主治医师", specialty: "重症医学", skill: "呼吸机管理" }, "Médecine intensive et réanimation").scoreBreakdown.specialtyMatch).toBe(30);
+  });
+
+  it("garde ses points à un médecin dont le titre cite aussi une profession paramédicale", () => {
+    // Consultant anaesthetist and trainer of nurses: « للممرضين » ("of the nurses") is no « ممرض » (a nurse).
+    expect(analyse("arabe", { title: "استشاري تخدير ومدرب للممرضين", specialty: "التخدير", skill: "التخدير الموضعي" }, "Anesthésie-réanimation").scoreBreakdown.specialtyMatch).toBe(30);
+    expect(analyse("arabe", { title: "طبيب تخدير ومشرف على قسم التمريض", specialty: "التخدير", skill: "التخدير الموضعي" }, "Anesthésie-réanimation").scoreBreakdown.specialtyMatch).toBe(30);
+    expect(analyse("allemand", { title: "Facharzt für Psychiatrie, Diplom-Psychologe", specialty: "Psychiatrie und Psychotherapie", skill: "Psychotherapie" }, "Psychiatrie").scoreBreakdown.specialtyMatch).toBe(30);
+    expect(english("Consultant Anaesthetist and Physician, former Staff Nurse", "Anaesthesia", "Anesthésie-réanimation")).toBe(30);
+    expect(analyse("chinois", { title: "麻醉科医师兼护理部顾问", specialty: "麻醉学", skill: "区域麻醉" }, "Anesthésie-réanimation").scoreBreakdown.specialtyMatch).toBe(30);
+  });
+
+  it("ne prend pour un médecin ni « Physician Assistant », ni « Doctor of Nursing Practice », ni une infirmière de médecine d’urgence", () => {
+    expect(english("Emergency Medicine Physician Assistant", "Emergency medicine", "Médecine d’urgence")).toBe(0);
+    expect(english("Doctor of Nursing Practice, Nurse Anesthetist", "Anesthesia", "Anesthésie-réanimation")).toBe(0);
+    expect(analyse("français", { title: "Infirmière en médecine d’urgence", specialty: "Médecine d’urgence", skill: "triage" }, "Médecine d’urgence").scoreBreakdown.specialtyMatch).toBe(0);
+    expect(analyse("allemand", { title: "Diplom-Psychologe", specialty: "Psychiatrie", skill: "Psychotherapie" }, "Psychiatrie").scoreBreakdown.specialtyMatch).toBe(0);
+    // Arabic words are whole words, with their prefixes: the feminine « ممرضة » and « الممرض » are nurses.
+    expect(analyse("arabe", { title: "ممرضة العناية المركزة", specialty: "العناية المركزة", skill: "التنفس الاصطناعي" }, "Médecine intensive et réanimation").scoreBreakdown.specialtyMatch).toBe(0);
+    expect(analyse("arabe", { title: "الممرض المسؤول عن العناية المركزة", specialty: "العناية المركزة", skill: "التنفس الاصطناعي" }, "Médecine intensive et réanimation").scoreBreakdown.specialtyMatch).toBe(0);
+    expect(analyse("arabe", { title: "فنية تخدير", specialty: "التخدير", skill: "التخدير الموضعي" }, "Anesthésie-réanimation").scoreBreakdown.specialtyMatch).toBe(0);
+    expect(analyse("arabe", { title: "صيدلانية سريرية في العناية المركزة", specialty: "العناية المركزة", skill: "الأدوية" }, "Médecine intensive et réanimation").scoreBreakdown.specialtyMatch).toBe(0);
   });
 });
