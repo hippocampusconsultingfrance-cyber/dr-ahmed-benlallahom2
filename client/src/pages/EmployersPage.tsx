@@ -15,7 +15,9 @@ export const employerCopy = {
     formTitle: "Soumettre un brief de mission",
     formIntro: "Précisez vos besoins opérationnels. Notre cellule spécialisée vous contactera sous 24h avec une shortlist qualifiée.",
     orgName: "Établissement ou entreprise",
+    orgNamePlaceholder: "Hôpital, Groupe, Société",
     contactName: "Nom du responsable",
+    contactNamePlaceholder: "Dr. / M. / Mme",
     email: "Email",
     phone: "Téléphone",
     targetEnvironment: "Environnement de la mission",
@@ -28,6 +30,7 @@ export const employerCopy = {
     country: "Pays / Zone géographique",
     countryPlaceholder: "Ex. Arabie saoudite, Canada, France",
     requiredCertifications: "Certifications obligatoires (ex. ATLS, ACLS, HUET)",
+    certificationsPlaceholder: "ATLS, ACLS, HUET, OGP, etc.",
     timeline: "Calendrier souhaité (ex. Immédiat, Q3 2026)",
     timelinePlaceholder: "Ex. Immédiat, T3 2026",
     notes: "Détails de la mission ou contraintes particulières",
@@ -59,7 +62,9 @@ export const employerCopy = {
     formTitle: "Submit a Mission Brief",
     formIntro: "Specify your operational requirements. Our specialized unit will contact you within 24 hours with a qualified shortlist.",
     orgName: "Organization or Company",
+    orgNamePlaceholder: "Hospital, group, company",
     contactName: "Contact Name",
+    contactNamePlaceholder: "Dr / Mr / Ms",
     email: "Professional Email",
     phone: "Phone",
     targetEnvironment: "Mission Environment",
@@ -72,6 +77,7 @@ export const employerCopy = {
     country: "Country / Region",
     countryPlaceholder: "e.g. Saudi Arabia, Canada, France",
     requiredCertifications: "Mandatory Certifications (e.g. ATLS, ACLS, HUET)",
+    certificationsPlaceholder: "ATLS, ACLS, HUET, OGP, etc.",
     timeline: "Expected Timeline (e.g. Immediate, Q3 2026)",
     timelinePlaceholder: "e.g. Immediate, Q3 2026",
     notes: "Mission details or specific constraints",
@@ -103,7 +109,9 @@ export const employerCopy = {
     formTitle: "Einsatz-Brief einreichen",
     formIntro: "Geben Sie Ihre operativen Anforderungen an. Unser spezialisiertes Team kontaktiert Sie innerhalb von 24 Stunden.",
     orgName: "Einrichtung oder Unternehmen",
+    orgNamePlaceholder: "Krankenhaus, Gruppe, Unternehmen",
     contactName: "Name des Ansprechpartners",
+    contactNamePlaceholder: "Dr. / Herr / Frau",
     email: "Berufliche E-Mail",
     phone: "Telefon",
     targetEnvironment: "Einsatzumgebung",
@@ -116,6 +124,7 @@ export const employerCopy = {
     country: "Land / Region",
     countryPlaceholder: "z. B. Saudi-Arabien, Kanada, Frankreich",
     requiredCertifications: "Erforderliche Zertifikate (z.B. ATLS, ACLS, HUET)",
+    certificationsPlaceholder: "ATLS, ACLS, HUET, OGP usw.",
     timeline: "Zeitplan (z.B. Sofort, Q3 2026)",
     timelinePlaceholder: "z. B. Sofort, Q3 2026",
     notes: "Einsatzdetails oder besondere Anforderungen",
@@ -147,7 +156,9 @@ export const employerCopy = {
     formTitle: "提交任务需求 (Brief)",
     formIntro: "请告知您的运营需求。我们的专业团队将在 24 小时内为您提供合格的候选人 shortlist。",
     orgName: "机构或公司名称",
+    orgNamePlaceholder: "医院、集团、公司",
     contactName: "负责人姓名",
+    contactNamePlaceholder: "医生 / 先生 / 女士",
     email: "职业邮箱",
     phone: "电话",
     targetEnvironment: "任务环境",
@@ -160,6 +171,7 @@ export const employerCopy = {
     country: "国家 / 地区",
     countryPlaceholder: "例如：沙特阿拉伯、加拿大、法国",
     requiredCertifications: "强制认证（如 ATLS, ACLS, HUET）",
+    certificationsPlaceholder: "ATLS、ACLS、HUET、OGP 等",
     timeline: "期望时间表（如：即刻、2026年第三季度）",
     timelinePlaceholder: "例如：即刻、2026年第三季度",
     notes: "任务详情或特殊约束",
@@ -331,11 +343,11 @@ export default function EmployersPage() {
                   <div className="grid gap-4 @xl:grid-cols-2">
                     <label className="block w-full space-y-2 text-sm text-foreground">
                       <span className="block mb-1 font-medium">{t.orgName} *</span>
-                      <input required value={form.organizationName} onChange={(e) => update("organizationName", e.target.value)} className="form-control block w-full" placeholder="Hôpital, Groupe, Société" />
+                      <input required value={form.organizationName} onChange={(e) => update("organizationName", e.target.value)} className="form-control block w-full" placeholder={t.orgNamePlaceholder} />
                     </label>
                     <label className="block w-full space-y-2 text-sm text-foreground">
                       <span className="block mb-1 font-medium">{t.contactName} *</span>
-                      <input required value={form.contactName} onChange={(e) => update("contactName", e.target.value)} className="form-control block w-full" placeholder="Dr. / M. / Mme" />
+                      <input required value={form.contactName} onChange={(e) => update("contactName", e.target.value)} className="form-control block w-full" placeholder={t.contactNamePlaceholder} />
                     </label>
                   </div>
 
@@ -379,7 +391,7 @@ export default function EmployersPage() {
 
                   <label className="block w-full space-y-2 text-sm text-foreground">
                     <span className="block mb-1 font-medium">{t.requiredCertifications}</span>
-                    <input value={form.requiredCertifications} onChange={(e) => update("requiredCertifications", e.target.value)} className="form-control block w-full" placeholder="ATLS, ACLS, HUET, OGP, etc." />
+                    <input value={form.requiredCertifications} onChange={(e) => update("requiredCertifications", e.target.value)} className="form-control block w-full" placeholder={t.certificationsPlaceholder} />
                   </label>
 
                   <label className="block w-full space-y-2 text-sm text-foreground">

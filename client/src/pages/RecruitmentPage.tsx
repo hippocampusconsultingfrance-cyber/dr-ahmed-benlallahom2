@@ -9,6 +9,7 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { resolveCountryForSubmission } from "@/lib/countrySubmission";
 import { recruitmentServiceFailureMessage, recruitmentSubmissionErrorMessage } from "@/lib/recruitmentSubmissionErrors";
 import { TurnstileWidget } from "@/components/TurnstileWidget";
+import { filterRecruitmentSpecialties, recruitmentSpecialtyLabel } from "./recruitmentSpecialties";
 
 const countryOptions = [
   { value: "France", labels: { fr: "France", en: "France", de: "Frankreich", zh: "法国" } },
@@ -46,101 +47,7 @@ const professionalLanguageOptions = [
 ] as const;
 
 const otherLanguageLabel = { fr: "Autre langue (à préciser)", en: "Other language (please specify)", de: "Andere Sprache (bitte angeben)", zh: "其他语言（请注明）" } as const;
-
-const specialtyCategories = [
-  {
-    category: { fr: "Médecine générale & Urgences", en: "General Practice & Emergency", de: "Allgemeinmedizin & Notfallmedizin", zh: "全科与急诊医学" },
-    items: [
-      "Médecine générale",
-      "Médecine d’urgence",
-      "Médecine intensive et réanimation",
-      "Gériatrie",
-      "Médecine du travail",
-      "Médecine du sport",
-      "Santé publique et médecine sociale",
-    ],
-  },
-  {
-    category: { fr: "Spécialités médicales", en: "Medical Specialties", de: "Medizinische Fachgebiete", zh: "内科专科" },
-    items: [
-      "Cardiologie",
-      "Cardiologie interventionnelle",
-      "Pneumologie",
-      "Gastro-entérologie et hépatologie",
-      "Néphrologie",
-      "Neurologie",
-      "Oncologie médicale",
-      "Hématologie",
-      "Endocrinologie, diabétologie et nutrition",
-      "Rhumatologie",
-      "Dermatologie et vénéréologie",
-      "Pédiatrie",
-      "Psychiatrie",
-      "Psychiatrie de l’enfant et de l’adolescent",
-      "Infectiologie et maladies tropicales",
-      "Médecine physique et de réadaptation (MPR)",
-    ],
-  },
-  {
-    category: { fr: "Chirurgie & Spécialités chirurgicales", en: "Surgery & Surgical Specialties", de: "Chirurgie & Chirurgische Fachgebiete", zh: "外科与手术专科" },
-    items: [
-      "Chirurgie générale",
-      "Chirurgie viscérale et digestive",
-      "Chirurgie orthopédique et traumatologie",
-      "Neurochirurgie",
-      "Chirurgie cardiovasculaire et thoracique",
-      "Chirurgie plastique, reconstructrice et esthétique",
-      "Chirurgie pédiatrique",
-      "Chirurgie maxillo-faciale",
-      "Urologie",
-      "Gynécologie et obstétrique",
-      "Ophtalmologie",
-      "Oto-rhino-laryngologie (ORL) et chirurgie cervico-faciale",
-      "Stomatologie",
-    ],
-  },
-  {
-    category: { fr: "Anesthésie, Imagerie & Laboratoire", en: "Anesthesia, Imaging & Laboratory", de: "Anästhesie, Bildgebung & Labor", zh: "麻醉、影像与检验医学" },
-    items: [
-      "Anesthésie-réanimation",
-      "Radiologie et imagerie médicale",
-      "Médecine nucléaire",
-      "Biologie médicale / Pathologie",
-      "Anatomie et cytologie pathologiques",
-      "Pharmacologie médicale",
-      "Toxicologie",
-    ],
-  },
-  {
-    category: { fr: "Soins infirmiers & Paramédical", en: "Nursing & Allied Health", de: "Pflege & Paramedizinische Berufe", zh: "护理与专职医疗" },
-    items: [
-      "Soins infirmiers généraux",
-      "Infirmier(ère) en soins généraux et spécialisés (IDE)",
-      "Infirmier(ère) anesthésiste (IADE)",
-      "Infirmier(ère) de bloc opératoire (IBODE)",
-      "Infirmier(ère) puériculteur(trice)",
-      "Infirmier(ère) en pratique avancée (IPA)",
-      "Cadre de santé / Direction des soins",
-      "Sage-femme",
-      "Masseur-kinésithérapeute / Physiothérapeute",
-      "Ergothérapeute",
-      "Orthophoniste",
-      "Orthoptiste",
-      "Psychomotricien(ne)",
-      "Manipulateur(trice) d’électroradiologie médicale (ERM)",
-      "Technicien(ne) de laboratoire médical",
-      "Préparateur(trice) en pharmacie",
-      "Pharmacien(ne)",
-      "Diététicien(ne) / Nutritionniste",
-      "Psychologue clinicien(ne)",
-      "Assistant(e) social(e) de santé",
-    ],
-  },
-  {
-    category: { fr: "Autre", en: "Other", de: "Sonstige", zh: "其他" },
-    items: ["Autre spécialité ou profession"],
-  },
-] as const;
+const otherLanguagePlaceholder = { fr: "Ex. Italien, russe…", en: "e.g. Italian, Russian…", de: "z. B. Italienisch, Russisch…", zh: "例如：意大利语、俄语…" } as const;
 
 const copy = {
   fr: {
@@ -150,19 +57,19 @@ const copy = {
     nav: "Recrutement",
     formTitle: "Déposer votre candidature",
     formIntro: "Envoyez-nous votre profil. Une candidature complète nous permet de vous orienter vers les opportunités pertinentes.",
-    firstName: "Prénom", lastName: "Nom", email: "Email", phone: "Téléphone", specialty: "Spécialité / profession", specialtySearch: "Rechercher une spécialité…", standardPathTitle: "Mobilité médicale internationale", standardPathText: "Hôpitaux, cliniques et établissements de santé en Europe, au Canada et au Moyen-Orient.", vvipPathTitle: "Missions VVIP & Offshore", vvipPathText: "Plateformes pétrolières, sites isolés, entreprises offshore et environnements critiques.", vvipPathCta: "Découvrir le parcours VVIP", specialtyCustom: "Précisez votre spécialité ou profession", countries: "Pays ciblés", otherTargetCountry: "Autre pays à préciser", languages: "Langues professionnelles", experience: "Années d’expérience", message: "Message ou projet professionnel", cv: "CV (PDF ou DOCX — 4 Mo maximum)", chooseFile: "Choisir un fichier", noFile: "Aucun fichier sélectionné", gdpr: "J’accepte que mes données soient traitées pour l’examen de ma candidature, y compris par une analyse automatisée d’aide à la présélection, conformément à la politique de confidentialité. Une revue humaine est toujours requise et aucune décision n’est prise uniquement par l’IA.", marketing: "J’accepte de recevoir occasionnellement des informations sur des opportunités professionnelles.", submit: "Envoyer ma candidature", sending: "Envoi en cours…", successTitle: "Candidature reçue", successText: "Votre profil a bien été enregistré. Conservez votre numéro de suivi :", backHome: "Retour au site", required: "Champ obligatoire", consentError: "Votre consentement RGPD est requis.", fileError: "Veuillez joindre un CV au format PDF ou DOCX de 4 Mo maximum (le format Word ancien .doc n’est pas accepté).", turnstile: "Veuillez valider la vérification de sécurité avant l’envoi.", genericError: "La candidature n’a pas pu être envoyée. Vérifiez les informations et réessayez.", privacyNote: "Ne transmettez aucune donnée de patient, dossier médical ou information clinique dans ce formulaire.", confidentiality: "Données traitées de manière confidentielle", international: "Opportunités internationales sélectionnées", humanReview: "Examen humain de chaque profil", select: "Sélectionner dans la liste", otherSpecialty: "Autre spécialité ou profession", noMatch: "Aucune spécialité ne correspond à votre recherche.",
+    firstName: "Prénom", lastName: "Nom", email: "Email", phone: "Téléphone", specialty: "Spécialité / profession", specialtySearch: "Rechercher une spécialité…", standardPathTitle: "Mobilité médicale internationale", standardPathText: "Hôpitaux, cliniques et établissements de santé en Europe, au Canada et au Moyen-Orient.", vvipPathTitle: "Missions VVIP & Offshore", vvipPathText: "Plateformes pétrolières, sites isolés, entreprises offshore et environnements critiques.", vvipPathCta: "Découvrir le parcours VVIP", specialtyCustom: "Précisez votre spécialité ou profession", countries: "Pays ciblés", otherTargetCountry: "Autre pays à préciser", languages: "Langues professionnelles", experience: "Années d’expérience", message: "Message ou projet professionnel", cv: "CV (PDF ou DOCX — 4 Mo maximum)", chooseFile: "Choisir un fichier", noFile: "Aucun fichier sélectionné", gdpr: "J’accepte que mes données soient traitées pour l’examen de ma candidature, y compris par une analyse automatisée d’aide à la présélection, conformément à la politique de confidentialité. Une revue humaine est toujours requise et aucune décision n’est prise uniquement par l’IA.", marketing: "J’accepte de recevoir occasionnellement des informations sur des opportunités professionnelles.", submit: "Envoyer ma candidature", sending: "Envoi en cours…", successTitle: "Candidature reçue", successText: "Votre profil a bien été enregistré. Conservez votre numéro de suivi :", backHome: "Retour au site", required: "Champ obligatoire", consentError: "Votre consentement RGPD est requis.", fileError: "Veuillez joindre un CV au format PDF ou DOCX de 4 Mo maximum (le format Word ancien .doc n’est pas accepté).", turnstile: "Veuillez valider la vérification de sécurité avant l’envoi.", genericError: "La candidature n’a pas pu être envoyée. Vérifiez les informations et réessayez.", privacyNote: "Ne transmettez aucune donnée de patient, dossier médical ou information clinique dans ce formulaire.", confidentiality: "Données traitées de manière confidentielle", international: "Opportunités internationales sélectionnées", humanReview: "Examen humain de chaque profil", select: "Sélectionner dans la liste", otherSpecialty: "Autre spécialité ou profession", noMatch: "Aucune spécialité ne correspond à votre recherche.", selected: "Sélectionné : {specialty}", clearSpecialtySearch: "Effacer la recherche de spécialité",
     metaTitle: "Recrutement international de professionnels de santé | Hippocampus Consulting", metaDescription: "Déposez votre CV pour être considéré pour des opportunités de recrutement médical en Europe, au Canada et au Moyen-Orient.",
   },
   en: {
-    eyebrow: "Hippocampus Consulting · Medical mobility", title: "Your expertise can cross borders.", intro: "We are building an international network of healthcare professionals for selected opportunities in Europe, Canada and the Middle East.", nav: "Recruitment", standardPathTitle: "International medical mobility", standardPathText: "Hospitals, clinics and healthcare institutions across Europe, Canada and the Middle East.", vvipPathTitle: "VVIP & Offshore missions", vvipPathText: "Oil rigs, remote sites, offshore companies and critical environments.", vvipPathCta: "Explore the VVIP pathway", formTitle: "Submit your application", formIntro: "Share your profile with us. A complete application helps us identify relevant opportunities.", firstName: "First name", lastName: "Last name", email: "Professional email", phone: "Phone", specialty: "Specialty / profession", specialtySearch: "Search a specialty…", specialtyCustom: "Specify your specialty or profession", countries: "Target countries", otherTargetCountry: "Specify the other country", languages: "Professional languages", experience: "Years of experience", message: "Message or professional project", cv: "CV (PDF or DOCX — 4 MB maximum)", chooseFile: "Choose a file", noFile: "No file selected", gdpr: "I consent to my data being processed to review my application, including automated analysis to assist pre-screening, in accordance with the privacy policy. Human review is always required and no decision is made solely by AI.", marketing: "I agree to occasionally receive information about professional opportunities.", submit: "Submit my application", sending: "Sending…", successTitle: "Application received", successText: "Your profile has been registered. Keep your tracking number:", backHome: "Back to site", required: "Required field", consentError: "GDPR consent is required.", fileError: "Please attach a PDF or DOCX CV up to 4 MB (the legacy Word .doc format is not accepted).", genericError: "Your application could not be sent. Check the information and try again.", privacyNote: "Do not submit patient data, medical records or clinical information through this form.", confidentiality: "Confidential data handling", international: "Selected international opportunities", humanReview: "Human review of every profile", select: "Select from list", otherSpecialty: "Other specialty or profession", noMatch: "No specialty matches your search.",
+    eyebrow: "Hippocampus Consulting · Medical mobility", title: "Your expertise can cross borders.", intro: "We are building an international network of healthcare professionals for selected opportunities in Europe, Canada and the Middle East.", nav: "Recruitment", standardPathTitle: "International medical mobility", standardPathText: "Hospitals, clinics and healthcare institutions across Europe, Canada and the Middle East.", vvipPathTitle: "VVIP & Offshore missions", vvipPathText: "Oil rigs, remote sites, offshore companies and critical environments.", vvipPathCta: "Explore the VVIP pathway", formTitle: "Submit your application", formIntro: "Share your profile with us. A complete application helps us identify relevant opportunities.", firstName: "First name", lastName: "Last name", email: "Professional email", phone: "Phone", specialty: "Specialty / profession", specialtySearch: "Search a specialty…", specialtyCustom: "Specify your specialty or profession", countries: "Target countries", otherTargetCountry: "Specify the other country", languages: "Professional languages", experience: "Years of experience", message: "Message or professional project", cv: "CV (PDF or DOCX — 4 MB maximum)", chooseFile: "Choose a file", noFile: "No file selected", gdpr: "I consent to my data being processed to review my application, including automated analysis to assist pre-screening, in accordance with the privacy policy. Human review is always required and no decision is made solely by AI.", marketing: "I agree to occasionally receive information about professional opportunities.", submit: "Submit my application", sending: "Sending…", successTitle: "Application received", successText: "Your profile has been registered. Keep your tracking number:", backHome: "Back to site", required: "Required field", consentError: "GDPR consent is required.", fileError: "Please attach a PDF or DOCX CV up to 4 MB (the legacy Word .doc format is not accepted).", genericError: "Your application could not be sent. Check the information and try again.", privacyNote: "Do not submit patient data, medical records or clinical information through this form.", confidentiality: "Confidential data handling", international: "Selected international opportunities", humanReview: "Human review of every profile", select: "Select from list", otherSpecialty: "Other specialty or profession", noMatch: "No specialty matches your search.", selected: "Selected: {specialty}", clearSpecialtySearch: "Clear the specialty search",
     metaTitle: "International healthcare recruitment | Hippocampus Consulting", metaDescription: "Submit your CV to be considered for healthcare recruitment opportunities in Europe, Canada and the Middle East.",
   },
   de: {
-    eyebrow: "Hippocampus Consulting · Medizinische Mobilität", title: "Ihre Expertise kennt keine Grenzen.", intro: "Wir bauen ein internationales Netzwerk von Gesundheitsfachkräften für ausgewählte Möglichkeiten in Europa, Kanada und dem Nahen Osten auf.", nav: "Recruiting", standardPathTitle: "Internationale medizinische Mobilität", standardPathText: "Krankenhäuser, Kliniken und Gesundheitseinrichtungen in Europa, Kanada und dem Nahen Osten.", vvipPathTitle: "VVIP- & Offshore-Missionen", vvipPathText: "Bohrinseln, abgelegene Standorte, Offshore-Unternehmen und kritische Umgebungen.", vvipPathCta: "VVIP-Pfad entdecken", formTitle: "Bewerbung einreichen", formIntro: "Teilen Sie Ihr Profil mit uns. Eine vollständige Bewerbung erleichtert die Zuordnung zu passenden Möglichkeiten.", firstName: "Vorname", lastName: "Nachname", email: "Berufliche E-Mail", phone: "Telefon", specialty: "Fachgebiet / Beruf", specialtySearch: "Fachgebiet suchen…", specialtyCustom: "Geben Sie Ihr Fachgebiet an", countries: "Zielländer", languages: "Berufssprachen", experience: "Berufserfahrung in Jahren", message: "Nachricht oder berufliches Projekt", cv: "Lebenslauf (PDF oder DOCX — maximal 4 MB)", chooseFile: "Datei auswählen", noFile: "Keine Datei ausgewählt", gdpr: "Ich stimme der Verarbeitung meiner Daten zur Prüfung meiner Bewerbung einschließlich einer automatisierten Analyse zur Unterstützung der Vorauswahl gemäß der Datenschutzerklärung zu. Eine menschliche Prüfung ist immer erforderlich; keine Entscheidung wird ausschließlich durch KI getroffen.", marketing: "Ich möchte gelegentlich Informationen zu beruflichen Möglichkeiten erhalten.", submit: "Bewerbung senden", sending: "Wird gesendet…", successTitle: "Bewerbung erhalten", successText: "Ihr Profil wurde gespeichert. Bewahren Sie Ihre Referenznummer auf:", backHome: "Zur Website", required: "Pflichtfeld", consentError: "Die RGPD-Zustimmung ist erforderlich.", fileError: "Bitte fügen Sie einen PDF- oder DOCX-Lebenslauf bis 4 MB bei (das alte Word-Format .doc wird nicht akzeptiert).", genericError: "Die Bewerbung konnte nicht gesendet werden. Bitte prüfen Sie die Angaben und versuchen Sie es erneut.", privacyNote: "Übermitteln Sie keine Patientendaten, medizinischen Akten oder klinischen Informationen über dieses Formular.", confidentiality: "Vertrauliche Datenverarbeitung", international: "Ausgewählte internationale Möglichkeiten", humanReview: "Menschliche Prüfung jedes Profils", select: "Aus der Liste wählen", otherSpecialty: "Anderes Fachgebiet", noMatch: "Keine passende Fachgebiet gefunden.",
+    eyebrow: "Hippocampus Consulting · Medizinische Mobilität", title: "Ihre Expertise kennt keine Grenzen.", intro: "Wir bauen ein internationales Netzwerk von Gesundheitsfachkräften für ausgewählte Möglichkeiten in Europa, Kanada und dem Nahen Osten auf.", nav: "Recruiting", standardPathTitle: "Internationale medizinische Mobilität", standardPathText: "Krankenhäuser, Kliniken und Gesundheitseinrichtungen in Europa, Kanada und dem Nahen Osten.", vvipPathTitle: "VVIP- & Offshore-Missionen", vvipPathText: "Bohrinseln, abgelegene Standorte, Offshore-Unternehmen und kritische Umgebungen.", vvipPathCta: "VVIP-Pfad entdecken", formTitle: "Bewerbung einreichen", formIntro: "Teilen Sie Ihr Profil mit uns. Eine vollständige Bewerbung erleichtert die Zuordnung zu passenden Möglichkeiten.", firstName: "Vorname", lastName: "Nachname", email: "Berufliche E-Mail", phone: "Telefon", specialty: "Fachgebiet / Beruf", specialtySearch: "Fachgebiet suchen…", specialtyCustom: "Geben Sie Ihr Fachgebiet an", countries: "Zielländer", languages: "Berufssprachen", experience: "Berufserfahrung in Jahren", message: "Nachricht oder berufliches Projekt", cv: "Lebenslauf (PDF oder DOCX — maximal 4 MB)", chooseFile: "Datei auswählen", noFile: "Keine Datei ausgewählt", gdpr: "Ich stimme der Verarbeitung meiner Daten zur Prüfung meiner Bewerbung einschließlich einer automatisierten Analyse zur Unterstützung der Vorauswahl gemäß der Datenschutzerklärung zu. Eine menschliche Prüfung ist immer erforderlich; keine Entscheidung wird ausschließlich durch KI getroffen.", marketing: "Ich möchte gelegentlich Informationen zu beruflichen Möglichkeiten erhalten.", submit: "Bewerbung senden", sending: "Wird gesendet…", successTitle: "Bewerbung erhalten", successText: "Ihr Profil wurde gespeichert. Bewahren Sie Ihre Referenznummer auf:", backHome: "Zur Website", required: "Pflichtfeld", consentError: "Die RGPD-Zustimmung ist erforderlich.", fileError: "Bitte fügen Sie einen PDF- oder DOCX-Lebenslauf bis 4 MB bei (das alte Word-Format .doc wird nicht akzeptiert).", genericError: "Die Bewerbung konnte nicht gesendet werden. Bitte prüfen Sie die Angaben und versuchen Sie es erneut.", privacyNote: "Übermitteln Sie keine Patientendaten, medizinischen Akten oder klinischen Informationen über dieses Formular.", confidentiality: "Vertrauliche Datenverarbeitung", international: "Ausgewählte internationale Möglichkeiten", humanReview: "Menschliche Prüfung jedes Profils", select: "Aus der Liste wählen", otherSpecialty: "Anderes Fachgebiet", noMatch: "Keine passende Fachgebiet gefunden.", selected: "Ausgewählt: {specialty}", clearSpecialtySearch: "Fachgebietssuche löschen",
     metaTitle: "Internationales Recruiting von Gesundheitsfachkräften | Hippocampus Consulting", metaDescription: "Reichen Sie Ihren Lebenslauf für internationale Recruiting-Möglichkeiten in Europa, Kanada und dem Nahen Osten ein.",
   },
   zh: {
-    eyebrow: "Hippocampus Consulting · 国际医疗人才流动", title: "让您的专业能力走向国际。", intro: "我们正在建立医疗专业人员国际网络，匹配欧洲、加拿大和中东地区经过筛选的职业机会。", nav: "招聘", standardPathTitle: "国际医疗人才流动", standardPathText: "欧洲、加拿大和中东地区的医院、诊所及医疗机构。", vvipPathTitle: "VVIP 与离岸任务", vvipPathText: "石油平台、偏远驻地、离岸企业和高风险环境。", vvipPathCta: "了解 VVIP 任务", formTitle: "提交申请", formIntro: "请分享您的职业资料。完整的申请有助于我们识别合适的机会。", firstName: "名", lastName: "姓", email: "职业邮箱", phone: "电话", specialty: "专业 / 职业", specialtySearch: "搜索专业…", specialtyCustom: "请输入您的专业或职业", countries: "目标国家", languages: "职业语言", experience: "工作年限", message: "留言或职业项目", cv: "简历（PDF 或 DOCX，最大 4 MB）", chooseFile: "选择文件", noFile: "未选择文件", gdpr: "我同意根据隐私政策处理我的个人数据以审核申请，包括使用自动化分析辅助初步筛选。始终需要人工审核，不会仅依据人工智能作出决定。", marketing: "我同意偶尔接收职业机会相关信息。", submit: "提交申请", sending: "正在发送…", successTitle: "已收到申请", successText: "您的资料已登记。请保存您的跟踪编号：", backHome: "返回网站", required: "必填项", consentError: "需要您的隐私同意。", fileError: "请附加不超过 4 MB 的 PDF 或 DOCX 简历（不接受旧版 Word .doc 格式）。", genericError: "申请无法发送。请检查信息后重试。", privacyNote: "请勿在此表单中提交患者数据、病历或临床信息。", confidentiality: "机密数据处理", international: "精选国际机会", humanReview: "人工审核每份资料", select: "从列表中选择", otherSpecialty: "其他专业或职业", noMatch: "未找到符合条件的专业。",
+    eyebrow: "Hippocampus Consulting · 国际医疗人才流动", title: "让您的专业能力走向国际。", intro: "我们正在建立医疗专业人员国际网络，匹配欧洲、加拿大和中东地区经过筛选的职业机会。", nav: "招聘", standardPathTitle: "国际医疗人才流动", standardPathText: "欧洲、加拿大和中东地区的医院、诊所及医疗机构。", vvipPathTitle: "VVIP 与离岸任务", vvipPathText: "石油平台、偏远驻地、离岸企业和高风险环境。", vvipPathCta: "了解 VVIP 任务", formTitle: "提交申请", formIntro: "请分享您的职业资料。完整的申请有助于我们识别合适的机会。", firstName: "名", lastName: "姓", email: "职业邮箱", phone: "电话", specialty: "专业 / 职业", specialtySearch: "搜索专业…", specialtyCustom: "请输入您的专业或职业", countries: "目标国家", languages: "职业语言", experience: "工作年限", message: "留言或职业项目", cv: "简历（PDF 或 DOCX，最大 4 MB）", chooseFile: "选择文件", noFile: "未选择文件", gdpr: "我同意根据隐私政策处理我的个人数据以审核申请，包括使用自动化分析辅助初步筛选。始终需要人工审核，不会仅依据人工智能作出决定。", marketing: "我同意偶尔接收职业机会相关信息。", submit: "提交申请", sending: "正在发送…", successTitle: "已收到申请", successText: "您的资料已登记。请保存您的跟踪编号：", backHome: "返回网站", required: "必填项", consentError: "需要您的隐私同意。", fileError: "请附加不超过 4 MB 的 PDF 或 DOCX 简历（不接受旧版 Word .doc 格式）。", genericError: "申请无法发送。请检查信息后重试。", privacyNote: "请勿在此表单中提交患者数据、病历或临床信息。", confidentiality: "机密数据处理", international: "精选国际机会", humanReview: "人工审核每份资料", select: "从列表中选择", otherSpecialty: "其他专业或职业", noMatch: "未找到符合条件的专业。", selected: "已选择：{specialty}", clearSpecialtySearch: "清除专业搜索",
     metaTitle: "International healthcare recruitment | Hippocampus Consulting", metaDescription: "Submit your CV to be considered for healthcare recruitment opportunities in Europe, Canada and the Middle East.",
   },
 } as const;
@@ -199,10 +106,10 @@ const publicTrustCopy = {
 } as const;
 
 const diplomaCountryCopy = {
-  fr: { label: "Pays d’obtention du diplôme", search: "Rechercher un pays dans le monde…" },
-  en: { label: "Country where the diploma was obtained", search: "Search any country…" },
-  de: { label: "Land des Diplomerwerbs", search: "Land weltweit suchen…" },
-  zh: { label: "获得文凭的国家", search: "搜索世界各地的国家…" },
+  fr: { label: "Pays d’obtention du diplôme", search: "Rechercher un pays dans le monde…", clear: "Effacer la recherche de pays" },
+  en: { label: "Country where the diploma was obtained", search: "Search any country…", clear: "Clear the country search" },
+  de: { label: "Land des Diplomerwerbs", search: "Land weltweit suchen…", clear: "Ländersuche löschen" },
+  zh: { label: "获得文凭的国家", search: "搜索世界各地的国家…", clear: "清除国家搜索" },
 } as const;
 const otherTargetCountryLabel = { fr: "Autre pays à préciser", en: "Specify the other country", de: "Anderes Land bitte angeben", zh: "请注明其他国家" } as const;
 
@@ -292,14 +199,7 @@ export default function RecruitmentPage() {
   const worldwideCountries = useMemo(() => getWorldwideCountries(lang), [lang]);
   const filteredDiplomaCountries = useMemo(() => filterWorldwideCountries(worldwideCountries, diplomaCountryQuery, lang).slice(0, 30), [worldwideCountries, diplomaCountryQuery, lang]);
 
-  const filteredSpecialtyCategories = useMemo(() => {
-    const q = specialtyQuery.trim().toLowerCase();
-    if (!q) return specialtyCategories;
-    return specialtyCategories.map(group => {
-      const filteredItems = group.items.filter(item => item.toLowerCase().includes(q) || group.category.fr.toLowerCase().includes(q));
-      return { ...group, items: filteredItems };
-    }).filter(group => group.items.length > 0);
-  }, [specialtyQuery]);
+  const filteredSpecialtyCategories = useMemo(() => filterRecruitmentSpecialties(specialtyQuery, lang), [specialtyQuery, lang]);
 
   const update = <K extends keyof FormState>(key: K, value: FormState[K]) => {
     setForm(previous => ({ ...previous, [key]: value }));
@@ -451,7 +351,7 @@ export default function RecruitmentPage() {
                             type="button"
                             onClick={() => setSpecialtyQuery("")}
                             className="site-search-clear"
-                            aria-label="Effacer la recherche de spécialité"
+                            aria-label={t.clearSpecialtySearch}
                           >
                             <X className="h-4 w-4" />
                           </button>
@@ -464,13 +364,13 @@ export default function RecruitmentPage() {
                         ) : (
                           filteredSpecialtyCategories.map(group => (
                             <optgroup key={group.category.fr} label={group.category[lang] || group.category.fr}>
-                              {group.items.map(item => <option key={item} value={item}>{item}</option>)}
+                              {group.items.map(item => <option key={item.value} value={item.value}>{item.labels[lang]}</option>)}
                             </optgroup>
                           ))
                         )}
                       </select>
                       {form.specialty && form.specialty !== "Autre spécialité ou profession" && (
-                        <p className="mt-1.5 text-xs text-primary font-medium">Sélectionné : {form.specialty}</p>
+                        <p className="mt-1.5 text-xs text-primary font-medium">{t.selected.replace("{specialty}", recruitmentSpecialtyLabel(form.specialty, lang))}</p>
                       )}
                       {form.specialty === "Autre spécialité ou profession" && (
                         <label className="mt-3 block">
@@ -517,7 +417,7 @@ export default function RecruitmentPage() {
                         aria-controls="recruitment-diploma-country-options"
                         aria-autocomplete="list"
                       />
-                      {diplomaCountryQuery && <button type="button" onClick={() => { setDiplomaCountryQuery(""); setDiplomaCountryOpen(true); }} className="site-search-clear" aria-label="Effacer la recherche"><X className="h-4 w-4" /></button>}
+                      {diplomaCountryQuery && <button type="button" onClick={() => { setDiplomaCountryQuery(""); setDiplomaCountryOpen(true); }} className="site-search-clear" aria-label={diplomaCopy.clear}><X className="h-4 w-4" /></button>}
                     </div>
                     {form.diplomaCountry && <p className="text-xs font-medium text-primary">{diplomaCopy.label} : {form.diplomaCountry}</p>}
                     {diplomaCountryOpen && (
@@ -531,13 +431,6 @@ export default function RecruitmentPage() {
                     )}
                   </div>
 
-                  {form.specialty === "Autre spécialité ou profession" && (
-                    <label className="recruitment-field-group animate-in fade-in duration-200">
-                      <span>{t.specialtyCustom} *</span>
-                      <input id="recruitment-specialty-custom" required value={form.specialtyCustom} maxLength={RECRUITMENT_CUSTOM_SPECIALTY_MAX_LENGTH} aria-invalid={isInvalid("specialty")} onChange={event => update("specialtyCustom", event.target.value)} placeholder="Ex. Perfusionniste, Audioprothésiste, etc." className={`recruitment-field ${isInvalid("specialty") ? "form-field-invalid" : ""}`} />
-                    </label>
-                  )}
-
                   <fieldset className={isInvalid("targetCountries") ? "form-consent-group-invalid" : ""}><legend className="mb-3 text-sm font-medium text-foreground">{t.countries} *</legend><div className="grid gap-2 sm:grid-cols-2">{countryOptions.map(country => <label key={country.value} className="form-consent-item flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-foreground"><input type="checkbox" checked={form.targetCountries.includes(country.value)} onChange={() => toggleCountry(country.value)} className="form-consent-checkbox" />{country.labels[lang]}</label>)}</div>{form.targetCountries.includes(OTHER_TARGET_COUNTRY) && <label className="recruitment-field-group mt-4 animate-in fade-in duration-200"><span>{otherTargetCountryLabel[lang]} *</span><input id="recruitment-other-target-country" required value={form.otherTargetCountry} aria-invalid={isInvalid("otherTargetCountry")} onChange={event => update("otherTargetCountry", event.target.value)} className={`recruitment-field ${isInvalid("otherTargetCountry") ? "form-field-invalid" : ""}`} /></label>}<p className="sr-only">{selectedCountryLabels}</p></fieldset>
                   
                   <fieldset>
@@ -548,7 +441,7 @@ export default function RecruitmentPage() {
                         {option.labels[lang]}
                       </label>)}
                     </div>
-                    {form.languages.includes("Other") && <label className="recruitment-field-group mt-4 animate-in fade-in duration-200"><span>{otherLanguageLabel[lang]}</span><input id="recruitment-other-language" value={form.otherLanguage} onChange={event => update("otherLanguage", event.target.value)} placeholder="Ex. Italien, russe…" className="recruitment-field" /></label>}
+                    {form.languages.includes("Other") && <label className="recruitment-field-group mt-4 animate-in fade-in duration-200"><span>{otherLanguageLabel[lang]}</span><input id="recruitment-other-language" value={form.otherLanguage} onChange={event => update("otherLanguage", event.target.value)} placeholder={otherLanguagePlaceholder[lang]} className="recruitment-field" /></label>}
                   </fieldset>
                   
                   <label className="recruitment-field-group">
