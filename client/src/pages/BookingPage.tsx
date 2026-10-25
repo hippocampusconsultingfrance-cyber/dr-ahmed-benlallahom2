@@ -70,6 +70,8 @@ export const bookingContent = {
       noBookableDay: `Aucun créneau n’est disponible dans les ${BOOKING_HORIZON_DAYS} prochains jours.`,
       noSlotsThisDay: "Tous les horaires de ce jour sont déjà réservés. Choisissez un autre jour.",
       noSlotsLeftThisDay: "Plus aucun horaire n’est disponible ce jour-là. Choisissez un autre jour.",
+      slotsError: "Les horaires de ce jour n’ont pas pu être chargés.",
+      retry: "Réessayer",
       parisTime: "heure de Paris",
       localTime: (time: string) => `soit ${time} chez vous`,
       localTimeShort: (time: string) => `${time} chez vous`,
@@ -158,6 +160,8 @@ export const bookingContent = {
       noBookableDay: `No time slot is available in the next ${BOOKING_HORIZON_DAYS} days.`,
       noSlotsThisDay: "All times on this day are already booked. Please choose another day.",
       noSlotsLeftThisDay: "No times are available on this day any more. Please choose another day.",
+      slotsError: "The times for this day could not be loaded.",
+      retry: "Try again",
       parisTime: "Paris time",
       localTime: (time: string) => `that is ${time} your time`,
       localTimeShort: (time: string) => `${time} your time`,
@@ -245,6 +249,8 @@ export const bookingContent = {
       noBookableDay: `In den nächsten ${BOOKING_HORIZON_DAYS} Tagen ist kein Termin verfügbar.`,
       noSlotsThisDay: "Alle Uhrzeiten an diesem Tag sind bereits gebucht. Bitte wählen Sie einen anderen Tag.",
       noSlotsLeftThisDay: "An diesem Tag ist keine Uhrzeit mehr verfügbar. Bitte wählen Sie einen anderen Tag.",
+      slotsError: "Die Uhrzeiten für diesen Tag konnten nicht geladen werden.",
+      retry: "Erneut versuchen",
       parisTime: "Pariser Zeit",
       localTime: (time: string) => `also ${time} bei Ihnen`,
       localTimeShort: (time: string) => `${time} bei Ihnen`,
@@ -332,6 +338,8 @@ export const bookingContent = {
       noBookableDay: `未来 ${BOOKING_HORIZON_DAYS} 天内没有可预约的时段。`,
       noSlotsThisDay: "当天所有时间均已被预订，请选择其他日期。",
       noSlotsLeftThisDay: "当天已没有可预约的时间，请选择其他日期。",
+      slotsError: "无法加载当天的时间。",
+      retry: "重试",
       parisTime: "巴黎时间",
       localTime: (time: string) => `即您当地时间 ${time}`,
       localTimeShort: (time: string) => `当地 ${time}`,
@@ -775,8 +783,9 @@ export default function BookingPage() {
             ? bookingFormCopy.outsideSchedule
             : bookingFormCopy.available;
   const availabilityState = getBookingAvailabilityState({
-    // « Aucun créneau ouvert » est un état indisponible dès l’arrivée, sans attendre une sélection.
-    selected: Boolean(selectedDate) || nothingToBook,
+    // « Aucun créneau ouvert » et l’échec du chargement de l’agenda sont des
+    // états indisponibles dès l’arrivée, sans attendre une sélection.
+    selected: Boolean(selectedDate) || nothingToBook || availabilityQueryError,
     pending: availabilityPending && !bookingWindowIssue,
     blocked: isBlockedDate || availabilityQueryError || isOutsideConfiguredAvailability || Boolean(bookingWindowIssue) || nothingToBook,
     booked: isBookedSlot,
@@ -791,6 +800,11 @@ export default function BookingPage() {
   const createAppointment = trpc.appointments.create.useMutation();
   const resumeCheckout = trpc.appointments.createCheckoutSession.useMutation();
   const cancelPendingBooking = trpc.appointments.cancelPending.useMutation();
+
+  // Bouton « Réessayer » de la grille : relance chaque donnée d’agenda dont le chargement a échoué.
+  const retryAvailability = () => {
+    for (const query of [bookedSlots, blockedDates, availabilitySlots]) if (query.isError) void query.refetch();
+  };
 
   const chooseDay = (nextDayKey: string) => {
     // Choix du patient : il remplace le créneau du brouillon pas encore repris.
@@ -1255,7 +1269,15 @@ export default function BookingPage() {
                   <legend className="block text-xs font-medium mb-2">{content.form.slotsLegend}</legend>
                   {bookedSlots.isLoading ? (
                     <p className="text-sm text-muted-foreground">{bookingFormCopy.checkingAvailability}</p>
-                  ) : bookedSlots.isError ? null : daySlots.length === 0 ? (
+                  ) : bookedSlots.isError ? (
+                    // Réservations du jour non chargées : erreur explicite et nouvel essai, au lieu d’une grille vide.
+                    <div className="flex flex-col items-start gap-3 rounded-xl border border-destructive/35 bg-destructive/5 p-4 text-sm text-destructive" role="alert">
+                      <p>{content.form.slotsError}</p>
+                      <Button type="button" variant="outline" onClick={retryAvailability} disabled={bookedSlots.isFetching} className="min-h-11">
+                        {bookedSlots.isFetching ? bookingFormCopy.checkingAvailability : content.form.retry}
+                      </Button>
+                    </div>
+                  ) : daySlots.length === 0 ? (
                     <p className="text-sm text-muted-foreground">{dayOpenSlots.length > 0 ? content.form.noSlotsThisDay : content.form.noSlotsLeftThisDay}</p>
                   ) : (
                     <div id="booking-slots" className="grid grid-cols-3 gap-2 sm:grid-cols-4">

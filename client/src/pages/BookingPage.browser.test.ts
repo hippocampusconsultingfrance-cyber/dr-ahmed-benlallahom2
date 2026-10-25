@@ -5,6 +5,7 @@ import superjson from "superjson";
 import { createServer, type ViteDevServer } from "vite";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { COOKIE_CONSENT_STORAGE_KEY, createCookieConsent } from "@/components/cookieConsentState";
+import { getBookingFormCopy } from "@/lib/publicFormCopy";
 import { bookingContent, listBookableSlots, parisBookingSlotStart, toParisBookingDateKey } from "./BookingPage";
 import { confirmationContent } from "./BookingConfirmationPage";
 
@@ -378,6 +379,33 @@ describe.skipIf(!executablePath)("réservation et confirmation dans un navigateu
     const { refusals: messages, bookingError } = bookingContent.en;
     expect(alerts).toEqual([messages.rate_limited, messages.too_many_holds, messages.payment_unavailable, bookingError]);
     for (const alert of alerts) expect(alert).not.toMatch(/réservation|paiement|Veuillez|créneau/);
+    await page.context().close();
+  }, 60_000);
+
+  it("affiche une erreur et un bouton « Réessayer » quand les réservations du jour ne se chargent pas (RES-02)", async () => {
+    const [firstDay] = openDays();
+    let bookedSlotsDown = true;
+    const { page, calls } = await open("/booking", bookingProcedures({
+      "availability.getBookedSlots": () => (bookedSlotsDown ? refuse("INTERNAL_SERVER_ERROR", 500, "Internal error") : []),
+    }), { language: "en" });
+    await page.locator("#booking-day").selectOption(firstDay);
+    const grid = page.getByRole("group", { name: bookingContent.en.form.slotsLegend });
+    // L'erreur s'affiche après les nouvelles tentatives automatiques de la requête (environ 7 s).
+    const retry = grid.getByRole("button", { name: bookingContent.en.form.retry });
+    await retry.waitFor({ timeout: 20_000 });
+    expect(await grid.getByRole("alert").innerText()).toContain(bookingContent.en.form.slotsError);
+    expect(await grid.getByRole("radio").count()).toBe(0);
+    const status = page.locator("#availability-status");
+    expect(await status.getAttribute("data-state")).toBe("unavailable");
+    expect(await status.innerText()).toBe(getBookingFormCopy("en").availabilityError);
+
+    const attempts = calls.filter((call) => call.procedure === "availability.getBookedSlots").length;
+    bookedSlotsDown = false;
+    await retry.click();
+    await grid.getByRole("radio").first().waitFor();
+    expect(calls.filter((call) => call.procedure === "availability.getBookedSlots").length).toBeGreaterThan(attempts);
+    expect(await grid.getByRole("alert").count()).toBe(0);
+    expect(await status.getAttribute("data-state")).toBe("select");
     await page.context().close();
   }, 60_000);
 });
