@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from "react";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { getTurnstileWidgetCopy } from "@/lib/publicFormCopy";
 
 declare global {
   interface Window {
@@ -28,6 +30,20 @@ const SCRIPT_ID = "cloudflare-turnstile-script";
 /** Distance au viewport à partir de laquelle un widget différé charge Cloudflare. */
 export const TURNSTILE_DEFER_ROOT_MARGIN = "400px 0px";
 
+type TurnstileWidgetCopy = ReturnType<typeof getTurnstileWidgetCopy>;
+
+/** Shown when the challenge cannot load or no longer holds a token: sending stays blocked until a new one arrives. */
+export function TurnstileLoadError({ copy, onRetry }: { copy: TurnstileWidgetCopy; onRetry: () => void }) {
+  return (
+    <div className="flex flex-col items-start gap-2 rounded-md border border-amber-500/50 bg-amber-950/30 p-3 text-xs text-amber-100 sm:flex-row sm:items-center sm:justify-between" role="alert">
+      <span>{copy.loadError}</span>
+      <button type="button" onClick={onRetry} className="shrink-0 rounded border border-amber-300/70 px-2.5 py-1 font-medium text-amber-50 transition hover:bg-amber-100/10">
+        {copy.retry}
+      </button>
+    </div>
+  );
+}
+
 /**
  * Renders one explicit Cloudflare challenge and exposes only its short-lived token.
  * The callback is held in a ref so a parent re-render cannot tear down a challenge
@@ -43,6 +59,8 @@ export function TurnstileWidget({ onToken, deferUntilVisible = false }: { onToke
   const onTokenRef = useRef(onToken);
   const tokenRef = useRef(false);
   const siteKey = import.meta.env.VITE_TURNSTILE_SITE_KEY as string | undefined;
+  const { language } = useLanguage();
+  const copy = getTurnstileWidgetCopy(language);
   const [errorCode, setErrorCode] = useState<string | null>(null);
   const [retryNonce, setRetryNonce] = useState(0);
   const [armed, setArmed] = useState(!deferUntilVisible);
@@ -144,19 +162,12 @@ export function TurnstileWidget({ onToken, deferUntilVisible = false }: { onToke
     };
   }, [armed, siteKey, retryNonce]);
 
-  if (!siteKey) return <p className="text-xs text-amber-200" role="alert">La vérification anti-bot est indisponible. Veuillez réessayer ultérieurement.</p>;
+  if (!siteKey) return <p className="text-xs text-amber-200" role="alert">{copy.unavailable}</p>;
 
   return (
     <div className="space-y-2" aria-live="polite">
-      <div ref={containerRef} className="min-h-[65px] w-full overflow-hidden" aria-label="Vérification anti-bot" />
-      {errorCode && (
-        <div className="flex flex-col items-start gap-2 rounded-md border border-amber-500/50 bg-amber-950/30 p-3 text-xs text-amber-100 sm:flex-row sm:items-center sm:justify-between" role="alert">
-          <span>La vérification de sécurité n’a pas pu être chargée. L’envoi reste bloqué afin de protéger vos données ; réessayez dans quelques instants.</span>
-          <button type="button" onClick={() => setRetryNonce(value => value + 1)} className="shrink-0 rounded border border-amber-300/70 px-2.5 py-1 font-medium text-amber-50 transition hover:bg-amber-100/10">
-            Réessayer
-          </button>
-        </div>
-      )}
+      <div ref={containerRef} className="min-h-[65px] w-full overflow-hidden" aria-label={copy.label} />
+      {errorCode && <TurnstileLoadError copy={copy} onRetry={() => setRetryNonce(value => value + 1)} />}
     </div>
   );
 }

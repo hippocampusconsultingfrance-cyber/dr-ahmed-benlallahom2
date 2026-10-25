@@ -23,8 +23,15 @@ export const publicFormCopy = {
     de: { invalidDate: "Geben Sie ein gültiges Datum im Format TT.MM.JJJJ und eine Uhrzeit im Format HH:MM ein.", submit: "Zur Zahlung übergehen", loading: "Verarbeitung...", checkingAvailability: "Verfügbarkeit wird geprüft...", availabilityError: "Die Verfügbarkeit kann derzeit nicht bestätigt werden. Bitte versuchen Sie es erneut, bevor Sie zur Zahlung übergehen.", available: "Termin verfügbar", blocked: "Datum nicht verfügbar", alreadyBooked: "Dieser Termin ist bereits reserviert", noAvailability: "Derzeit sind keine Beratungszeiten freigeschaltet.", outsideSchedule: "Diese Uhrzeit liegt außerhalb der freigegebenen Beratungszeiten.", selectDate: "Wählen Sie Datum und Uhrzeit" },
     zh: { invalidDate: "请输入有效日期（日/月/年）和时间（时:分）。", submit: "继续付款", loading: "处理中...", checkingAvailability: "正在检查可用性...", availabilityError: "目前无法确认可用性。请重试后再继续付款。", available: "时间段可用", blocked: "日期不可用", alreadyBooked: "该时间段已被预订", noAvailability: "目前没有开放的咨询时段。", outsideSchedule: "该时间不在已开放的咨询时段内。", selectDate: "请选择日期和时间" },
   },
+  turnstile: {
+    fr: { label: "Vérification anti-bot", unavailable: "La vérification anti-bot est indisponible. Veuillez réessayer ultérieurement.", loadError: "La vérification de sécurité n’a pas pu être chargée. L’envoi reste bloqué afin de protéger vos données ; réessayez dans quelques instants.", retry: "Réessayer" },
+    en: { label: "Anti-bot verification", unavailable: "The anti-bot verification is unavailable. Please try again later.", loadError: "The security check could not be loaded. Sending stays blocked to protect your data; try again in a few moments.", retry: "Try again" },
+    de: { label: "Bot-Prüfung", unavailable: "Die Bot-Prüfung ist nicht verfügbar. Bitte versuchen Sie es später erneut.", loadError: "Die Sicherheitsprüfung konnte nicht geladen werden. Zum Schutz Ihrer Daten bleibt das Senden gesperrt; versuchen Sie es in wenigen Augenblicken erneut.", retry: "Erneut versuchen" },
+    zh: { label: "反机器人验证", unavailable: "反机器人验证暂不可用，请稍后重试。", loadError: "无法加载安全验证。为保护您的数据，发送仍被阻止；请稍后重试。", retry: "重试" },
+  },
 } as const;
 
 export const getContactFormCopy = (language: string) => publicFormCopy.contact[fallbackLanguage(language)];
 export const getGdprRequestCopy = (language: string) => publicFormCopy.gdpr[fallbackLanguage(language)];
 export const getBookingFormCopy = (language: string) => publicFormCopy.booking[fallbackLanguage(language)];
+export const getTurnstileWidgetCopy = (language: string) => publicFormCopy.turnstile[fallbackLanguage(language)];
