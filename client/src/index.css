@@ -258,9 +258,13 @@ html[lang="zh"] .font-display,
   .candidate-consent-item-invalid { border-color: #fb7185; background: linear-gradient(135deg, rgb(127 29 29 / 52%), rgb(69 10 10 / 66%)); box-shadow: 0 0 0 3px rgb(251 113 133 / 14%); }
   .candidate-consent-item-invalid .candidate-consent-checkbox { border-color: #fb7185; background: #3f111b; }
 
+  /*
+   * « backwards » et non « both » : une transformation conservée après l'animation ferait de ce
+   * conteneur le repère de l'en-tête fixe, qui défilerait alors avec la page (PUB-01).
+   */
   @media (prefers-reduced-motion: no-preference) {
     .page-transition {
-      animation: page-transition-enter 180ms cubic-bezier(0.23, 1, 0.32, 1) both;
+      animation: page-transition-enter 180ms cubic-bezier(0.23, 1, 0.32, 1) backwards;
     }
   }
 
