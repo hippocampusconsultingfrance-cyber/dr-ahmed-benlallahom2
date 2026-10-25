@@ -246,3 +246,50 @@ describe("INTL-02 — citations en arabe et en chinois", () => {
     expect(yearsEvidence("10年", "麻醉科医师，10年工作经验", 1).yearsExperience).toBeNull();
   });
 });
+
+describe("INTL-02 — un titre infirmier, technicien ou secouriste n’est pas une spécialité médicale", () => {
+  const english = (title: string, specialty: string, declared: string) => analyse("anglais britannique", { title, specialty, skill: "patient assessment" }, declared).scoreBreakdown.specialtyMatch;
+
+  it.each([
+    ["Intensive Care Nurse", "Intensive Care", "Anesthésie-réanimation"],
+    ["Intensive Care Nurse", "Critical care nursing", "Médecine intensive et réanimation"],
+    ["Emergency Medical Technician", "Emergency care", "Médecine d’urgence"],
+    ["Paramedic", "Emergency medicine", "Médecine d’urgence"],
+    ["Paediatric Nurse", "Paediatrics", "Pédiatrie"],
+    ["Diabetes Specialist Nurse", "Diabetes", "Endocrinologie, diabétologie et nutrition"],
+    ["Radiology Technician", "Radiology", "Radiologie et imagerie médicale"],
+  ])("« %s » (%s) ne marque aucun point pour « %s »", (title, specialty, declared) => {
+    expect(english(title, specialty, declared)).toBe(0);
+  });
+
+  it("garde les points d’un médecin, et ceux d’un infirmier quand la profession déclarée est infirmière", () => {
+    expect(english("Consultant in Intensive Care Medicine", "Intensive Care Medicine", "Anesthésie-réanimation")).toBe(30);
+    expect(english("Consultant Nephrologist", "Renal Medicine", "Néphrologie")).toBe(30);
+    expect(english("Consultant in Diabetes and Endocrinology", "Diabetes", "Endocrinologie, diabétologie et nutrition")).toBe(30);
+    // Fields shared with allied health professions do not make a physician one.
+    expect(english("Consultant Clinical Pharmacologist", "Clinical Pharmacology", "Pharmacologie médicale")).toBe(30);
+    expect(analyse("chinois", { title: "眼科主治医师", specialty: "斜视与小儿眼科", skill: "斜视手术" }, "Ophtalmologie").scoreBreakdown.specialtyMatch).toBe(30);
+    expect(analyse("arabe", { title: "استشاري تخدير", specialty: "التخدير وتقنيات تسكين الألم", skill: "التخدير الموضعي" }, "Anesthésie-réanimation").scoreBreakdown.specialtyMatch).toBe(30);
+    expect(english("Paediatric Nurse", "Paediatric nursing", "Infirmier(ère) puériculteur(trice)")).toBe(30);
+    expect(english("Intensive Care Nurse", "Critical care nursing", "Infirmier(ère) en soins généraux et spécialisés (IDE)")).toBe(30);
+    expect(english("Intensive Care Nurse", "Critical care nursing", "[VVIP / Offshore] Infirmier(ère) paramédical(e) Offshore / Rig Medic")).toBe(30);
+  });
+
+  it("ne rapproche plus un chirurgien de la transplantation rénale de la néphrologie", () => {
+    expect(english("Kidney Transplant Surgeon", "Kidney transplantation", "Néphrologie")).toBe(0);
+    expect(analyse("chinois", { title: "肾脏移植外科医师", specialty: "肾脏移植", skill: "肾移植手术" }, "Néphrologie").scoreBreakdown.specialtyMatch).toBe(0);
+    expect(analyse("chinois", { title: "肾脏内科主治医师", specialty: "肾脏病学", skill: "血液透析" }, "Néphrologie").scoreBreakdown.specialtyMatch).toBe(30);
+  });
+
+  it("applique la même règle aux CV en français, en allemand, en arabe et en chinois, sans toucher aux médecins", () => {
+    const french = (title: string, specialty: string, declared: string) => analyse("français", { title, specialty, skill: "ventilation" }, declared).scoreBreakdown.specialtyMatch;
+    expect(french("Infirmier de réanimation", "Réanimation", "Médecine intensive et réanimation")).toBe(0);
+    expect(french("Infirmière anesthésiste", "Anesthésie", "Anesthésie-réanimation")).toBe(0);
+    expect(french("Infirmier de réanimation", "Soins infirmiers en réanimation", "Infirmier(ère) en soins généraux et spécialisés (IDE)")).toBe(30);
+    expect(french("Médecin réanimateur", "Médecine intensive et réanimation", "Médecine intensive et réanimation")).toBe(30);
+    expect(analyse("allemand", { title: "Notfallsanitäter", specialty: "Notfallmedizin", skill: "Reanimation" }, "Médecine d’urgence").scoreBreakdown.specialtyMatch).toBe(0);
+    expect(analyse("arabe", { title: "ممرض العناية المركزة", specialty: "العناية المركزة", skill: "التنفس الاصطناعي" }, "Médecine intensive et réanimation").scoreBreakdown.specialtyMatch).toBe(0);
+    expect(analyse("chinois", { title: "重症监护护士", specialty: "重症医学", skill: "呼吸机管理" }, "Médecine intensive et réanimation").scoreBreakdown.specialtyMatch).toBe(0);
+    expect(analyse("chinois", { title: "重症医学科主治医师", specialty: "重症医学", skill: "呼吸机管理" }, "Médecine intensive et réanimation").scoreBreakdown.specialtyMatch).toBe(30);
+  });
+});

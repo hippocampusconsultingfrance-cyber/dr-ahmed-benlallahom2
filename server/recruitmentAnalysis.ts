@@ -6,7 +6,7 @@ import { getDb } from "./db";
 import { assertPdfDecompressionWithinLimits, DOCUMENT_DECOMPRESSION_LIMITS, inspectDocxArchive, truncateExtractedText } from "./documentDecompressionLimits";
 import { PdfReaderUnavailableError, readPdfIsolated } from "./pdfExtractionSandbox";
 import { CV_ANALYSIS_STEP_MINIMUM_MS, ProcessingDeadlineError, stepTimeoutMs } from "./processingDeadline";
-import { RECRUITMENT_SPECIALTY_EQUIVALENTS } from "../shared/recruitmentSpecialtyEquivalents";
+import { RECRUITMENT_PARAMEDICAL_SPECIALTIES, RECRUITMENT_PARAMEDICAL_TITLE_TERMS, RECRUITMENT_SPECIALTY_EQUIVALENTS } from "../shared/recruitmentSpecialtyEquivalents";
 
 export const RECRUITMENT_ANALYSIS_PRIMARY_MODEL = "openai/gpt-6-astra";
 export const RECRUITMENT_ANALYSIS_FALLBACK_MODEL = "google/gemini-3.8-flash";
@@ -714,14 +714,26 @@ const specialtyEquivalents = Object.entries(RECRUITMENT_SPECIALTY_EQUIVALENTS).m
   terms: terms.map(normalizeSpecialtyText),
 }));
 
+/** A Latin-script term is a word start; an Arabic or Chinese one matches anywhere (see recruitmentSpecialtyEquivalents.ts). */
+const textUsesTerm = (text: string, term: string) => /[a-z]/.test(term) ? ` ${text}`.includes(` ${term}`) : text.includes(term);
+
 /** Specialties of the application form that a title or specialty names: the form value itself, or those whose equivalents it uses. */
 function namedRecruitmentSpecialties(value: string) {
   const text = normalizeSpecialtyText(value);
   const formValue = specialtyEquivalents.find(entry => entry.specialty === text);
   if (formValue) return [formValue.specialty];
   return specialtyEquivalents
-    .filter(entry => entry.terms.some(term => /[a-z]/.test(term) ? ` ${text}`.includes(` ${term}`) : text.includes(term)))
+    .filter(entry => entry.terms.some(term => textUsesTerm(text, term)))
     .map(entry => entry.specialty);
+}
+
+const paramedicalSpecialties = new Set(Array.from(RECRUITMENT_PARAMEDICAL_SPECIALTIES, normalizeSpecialtyText));
+const paramedicalTitleTerms = RECRUITMENT_PARAMEDICAL_TITLE_TERMS.map(normalizeSpecialtyText);
+
+/** A nursing or allied health profession, declared or cited: « Intensive Care Nurse », « Emergency Medical Technician », « 麻醉护士 »… */
+function namesParamedicalProfession(value: string) {
+  const text = normalizeSpecialtyText(value);
+  return paramedicalSpecialties.has(text) || paramedicalTitleTerms.some(term => textUsesTerm(text, term));
 }
 
 /** INTL-02: "Consultant Anaesthetist", "Facharzt für Anästhesiologie", "طبيب تخدير" or "麻醉科医师" match « Anesthésie-réanimation ». */
@@ -922,10 +934,16 @@ function verifiedScoreBreakdown(input: {
       .filter(item => isVerifiedFact(item) && certificationIsCurrent(item))
       .map(item => normalizeEvidenceText(item.name))
   );
+  // INTL-02: a nurse, technician or paramedic is no physician of the specialty their unit is named after
+  // (« Intensive Care Nurse »): unless a nursing or allied health profession was declared, such a title
+  // earns no specialty points, nor do the specialties of that CV.
+  const paramedicalDeclared = namesParamedicalProfession(input.targetSpecialty);
+  const paramedicalTitle = !paramedicalDeclared && verifiedFields.some(item => item.field === "professionalTitle" && namesParamedicalProfession(item.value));
   const specialtyEvidenceProvenance = new Set(
     verifiedFields
       .filter(item =>
         (item.field === "specialty" || item.field === "professionalTitle") &&
+        !paramedicalTitle && (paramedicalDeclared || !namesParamedicalProfession(item.value)) &&
         specialtyMatchesDeclared(item.value, input.targetSpecialty)
       )
       .map(item => `${normalizeEvidenceText(item.evidence)}|${normalizeEvidenceText(item.sourceLocation)}`)

@@ -29,7 +29,8 @@ export const RECRUITMENT_SPECIALTY_EQUIVALENTS: Readonly<Record<string, readonly
   "Cardiologie interventionnelle": ["interventional cardiolog", "cardiolog", "kardiolog", "herzkatheter", "قسطرة", "طب القلب", "أمراض القلب", "心脏介入", "心臟介入", "心内科", "心內科", "心血管内科", "心血管內科"],
   "Pneumologie": ["pulmonolog", "pneumolog", "respiratory medicine", "respiratory physician", "chest physician", "lungenheilkunde", "الأمراض الصدرية", "أمراض الصدر", "طب الرئة", "呼吸内科", "呼吸內科", "呼吸科", "肺科"],
   "Gastro-entérologie et hépatologie": ["gastroenterolog", "gastro enterolog", "hepatolog", "الجهاز الهضمي", "أمراض الكبد", "طب الكبد", "消化内科", "消化內科", "消化科", "肝病"],
-  "Néphrologie": ["nephrolog", "renal medicine", "renal physician", "kidney", "أمراض الكلى", "طب الكلى", "肾内科", "腎內科", "肾脏", "腎臟"],
+  // Not "kidney" or 肾脏 alone: a "Kidney Transplant Surgeon" (肾脏移植外科医师) is no nephrologist.
+  "Néphrologie": ["nephrolog", "renal medicine", "renal physician", "kidney disease", "kidney specialist", "kidney physician", "kidney medicine", "أمراض الكلى", "طب الكلى", "肾内科", "腎內科", "肾脏内科", "腎臟內科", "肾脏病", "腎臟病"],
   "Neurologie": ["neurolog", "طب الأعصاب", "أمراض الأعصاب", "الأمراض العصبية", "神经内科", "神經內科", "神经科", "神經科"],
   "Oncologie médicale": ["oncolog", "onkolog", "طب الأورام", "الأورام", "肿瘤", "腫瘤"],
   "Hématologie": ["hematolog", "haematolog", "hämatolog", "أمراض الدم", "طب الدم", "血液科", "血液内科", "血液內科"],
@@ -82,3 +83,57 @@ export const RECRUITMENT_SPECIALTY_EQUIVALENTS: Readonly<Record<string, readonly
   "Psychologue clinicien(ne)": ["psycholog", "أخصائي نفسي", "أخصائية نفسية", "علم النفس السريري", "عالم نفس", "心理师", "心理師", "心理咨询师", "心理諮詢師", "临床心理", "臨床心理"],
   "Assistant(e) social(e) de santé": ["social work", "sozialarbeit", "sozialpädagog", "sozialdienst", "أخصائي اجتماعي", "أخصائية اجتماعية", "الخدمة الاجتماعية", "社工", "社会工作", "社會工作"],
 };
+
+/**
+ * The « Soins infirmiers & Paramédical » specialties of the form
+ * (client/src/pages/recruitmentSpecialties.ts). A title holding one of the
+ * terms below is a nursing or allied health title: it earns specialty points
+ * only when the declared specialty is one of these professions too
+ * (INTL-02). An « Intensive Care Nurse », an « Emergency Medical
+ * Technician » or an « Infirmier de réanimation » is no intensivist or
+ * emergency physician.
+ */
+export const RECRUITMENT_PARAMEDICAL_SPECIALTIES: ReadonlySet<string> = new Set([
+  "Soins infirmiers généraux",
+  "Infirmier(ère) en soins généraux et spécialisés (IDE)",
+  "Infirmier(ère) anesthésiste (IADE)",
+  "Infirmier(ère) de bloc opératoire (IBODE)",
+  "Infirmier(ère) puériculteur(trice)",
+  "Infirmier(ère) en pratique avancée (IPA)",
+  "Cadre de santé / Direction des soins",
+  "Sage-femme",
+  "Masseur-kinésithérapeute / Physiothérapeute",
+  "Ergothérapeute",
+  "Orthophoniste",
+  "Orthoptiste",
+  "Psychomotricien(ne)",
+  "Manipulateur(trice) d’électroradiologie médicale (ERM)",
+  "Technicien(ne) de laboratoire médical",
+  "Préparateur(trice) en pharmacie",
+  "Pharmacien(ne)",
+  "Diététicien(ne) / Nutritionniste",
+  "Psychologue clinicien(ne)",
+  "Assistant(e) social(e) de santé",
+]);
+
+/**
+ * Words of a nursing or allied health title, matched like the equivalents
+ * above. Only names of professions: not the fields they share with
+ * physicians (斜视 "strabismus", "clinical pharmac…"), so that a
+ * « Consultant Clinical Pharmacologist » stays a physician.
+ */
+export const RECRUITMENT_PARAMEDICAL_TITLE_TERMS: readonly string[] = [
+  "nurse", "nursing", "midwi", "paramedic", "technician", "technologist", "therapist", "physiotherap", "radiographer", "sonographer",
+  "pharmacist", "dietitian", "dietician", "nutritionist", "orthoptist", "psychologist", "social worker", "healthcare assistant",
+  "care assistant", "medical assistant", "physician assistant", "physician associate",
+  "infirmier", "aide soignant", "auxiliaire", "technicien", "manipulateur", "préparateur", "kinésithérap", "sage femme", "orthophon",
+  "ergothérap", "psychomotric", "diététicien", "pharmacien", "puéricult", "psychologue", "assistant social",
+  "assistante sociale", "cadre de santé", "ambulancier", "brancardier", "secouriste",
+  "krankenpfleg", "pflegefach", "pflegekraft", "fachpflege", "pflegehelfer", "pflegeexpert", "pflegedienstleitung", "op pflege",
+  "anästhesiepfleg", "intensivpfleg", "hebamme", "entbindungspfleg", "notfallsanitäter", "rettungssanitäter", "rettungsassistent",
+  "logopäd", "mtra", "mtla", "apotheker", "diätassistent", "psychologe", "sozialarbeit",
+  "ممرض", "تمريض", "مسعف", "فني تخدير", "فني أشعة", "فني مختبر", "فني إسعاف", "تقني أشعة", "تقني مختبر", "صيدلي", "صيدلاني",
+  "أخصائي تغذية", "أخصائية تغذية", "أخصائي نفسي", "أخصائية نفسية", "أخصائي اجتماعي",
+  "护士", "護士", "护理", "護理", "助产", "助產", "技师", "技師", "技术员", "技術員", "护工", "護工", "急救员", "急救員", "治疗师", "治療師",
+  "药剂师", "藥劑師", "药师", "藥師", "营养师", "營養師", "心理师", "心理師", "社工",
+];
