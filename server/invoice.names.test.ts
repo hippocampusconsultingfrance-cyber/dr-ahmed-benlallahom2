@@ -149,6 +149,9 @@ describe("noms internationaux sur la facture PDF", () => {
     ["김민준", "???"],
     ["สมชาย ใจดี", "????? ???"],
     ["𝓙𝓮𝓪𝓷 Dupont", "Jean Dupont"],
+    // Lettres entourées : des symboles, mais à forme simple qui s’imprime.
+    ["Ⓐⓛⓘ Ⓓⓤⓟⓞⓝⓣ", "Ali Dupont"],
+    ["🄹ohn Ⓜartin", "John Martin"],
     ["Jean © Dupont", "Jean © Dupont"],
   ])("n’imprime aucun carré vide pour « %s »", async (name, printed) => {
     expect(await printedName(name)).toBe(printed);
@@ -310,6 +313,7 @@ describe("ordre d’affichage de la ligne du nom", () => {
   it("retire les emoji et remplace un caractère sans dessin par sa forme simple, ou « ? »", () => {
     const latinOnly = (_font: InvoiceNameRun["font"], char: string) => /[\x20-\x7e]/.test(char);
     expect(printableInvoiceName("Zoë ★ Martin 1️⃣", latinOnly)).toBe("Zoe Martin 1");
+    expect(printableInvoiceName("Ⓙean ⒥ohn 🄼artin 🇫🇷", latinOnly)).toBe("Jean (j)ohn Martin");
     expect(printableInvoiceName("Łukasz 김", latinOnly)).toBe("?ukasz ?");
     expect(printableInvoiceName("  Jean  Dupont ", latinOnly)).toBe("  Jean  Dupont ");
   });

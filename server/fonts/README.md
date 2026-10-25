@@ -28,9 +28,12 @@ Noto Sans 2.015 dessine ǹ ḿ ṃ ṅ ṣ ẹ ị ọ ụ en lettre de base plu
 perdait la marque (« Thi » pour « Thị »). La facture retire `ccmp` d’une ligne
 de nom qui en contient (`DECOMPOSED_BY_NOTO_SANS` dans `server/invoice.ts`). À
 revoir avec une autre version de Noto Sans : le test des lettres latines
-précomposées de `server/invoice.names.test.ts` le signalera.
+précomposées de `server/invoice.names.test.ts` le signalera. Limite connue : ị
+suivi d’un ton au-dessus (igbo ị̀, ị́) garde alors le point du i sous le ton ;
+son texte copié reste exact.
 
 Écritures qu’aucune de ces polices n’a (hébreu, coréen, thaï, devanagari,
 géorgien…) et emoji : PDFKit les dessinerait en carrés vides. La ligne du nom
-retire les emoji et pictogrammes, et remplace un autre caractère sans dessin par
-sa forme simple quand elle s’imprime (𝓙𝓮𝓪𝓷 → Jean), sinon par « ? ».
+remplace un caractère sans dessin par sa forme simple quand elle s’imprime
+(𝓙𝓮𝓪𝓷 et Ⓙⓔⓐⓝ → Jean, ⒥ → (j)) ; sinon elle retire un emoji ou un
+pictogramme, et met « ? » à la place de tout autre caractère.

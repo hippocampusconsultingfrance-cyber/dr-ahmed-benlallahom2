@@ -130,9 +130,6 @@ const MIDDLE_DOT = "\u00b7";
 // copié ou extrait perdait le point (« Thi » pour « Thị »). Sans ccmp, la
 // police prend sa lettre précomposée, au même dessin.
 const DECOMPOSED_BY_NOTO_SANS = /[\u01f9\u1e3f\u1e43\u1e45\u1e63\u1eb9\u1ecb\u1ecd\u1ee5]/;
-// fontkit retire une fonctionnalité donnée à false ; les types de PDFKit ne
-// connaissent que la liste de celles à ajouter.
-const WITHOUT_DECOMPOSITION = { ccmp: false } as unknown as PDFKit.Mixins.OpenTypeFeatures[];
 const GRAPHEMES = new Intl.Segmenter(undefined, { granularity: "grapheme" });
 const PICTOGRAPH = new RegExp("[\\p{Extended_Pictographic}\\p{S}]", "u");
 // Masqués par fontkit, même sans dessin dans la police (ZWJ, sélecteurs de variante…).
@@ -154,10 +151,11 @@ function invoiceNameCharacterFont(chars: string[], position: number): InvoiceNam
 
 /**
  * Le nom tel que les polices de la facture savent l’imprimer, sans carré
- * vide : aucune n’a les emoji, ni l’hébreu, le coréen ou le thaï. Un emoji ou
- * un pictogramme est retiré. Un autre caractère sans dessin devient sa forme
- * simple si les polices l’ont (lettres « stylisées » 𝓙𝓮𝓪𝓷 → Jean), sinon
- * « ? ». `hasGlyph` dit si la police qui écrirait le caractère en a le dessin.
+ * vide : aucune n’a les emoji, ni l’hébreu, le coréen ou le thaï. Un caractère
+ * sans dessin devient sa forme simple si les polices l’ont (lettres
+ * « stylisées » ou entourées : 𝓙𝓮𝓪𝓷, Ⓙⓔⓐⓝ → Jean) ; sinon un emoji ou un
+ * pictogramme est retiré, et tout autre caractère devient « ? ». `hasGlyph`
+ * dit si la police qui écrirait le caractère en a le dessin.
  */
 export function printableInvoiceName(name: string, hasGlyph: (font: InvoiceNameRun["font"], char: string) => boolean): string {
   const drawable = (chars: string[], start: number, end: number) =>
@@ -171,20 +169,27 @@ export function printableInvoiceName(name: string, hasGlyph: (font: InvoiceNameR
     position += Array.from(segment).length;
     if (drawable(chars, start, position)) {
       printable += segment;
-    } else if (PICTOGRAPH.test(segment)) {
-      removed = true;
-    } else {
-      const simple = Array.from(segment.normalize("NFKD")).filter(char => !COMBINING_MARK.test(char));
-      printable += simple.length > 0 && drawable(simple, 0, simple.length) ? simple.join("") : "?";
+      continue;
     }
+    // La forme simple d’abord : les lettres entourées (Ⓙ, 🄹) sont des symboles.
+    const simple = Array.from(segment.normalize("NFKD")).filter(char => !COMBINING_MARK.test(char));
+    if (simple.length > 0 && drawable(simple, 0, simple.length)) printable += simple.join("");
+    else if (PICTOGRAPH.test(segment)) removed = true;
+    else printable += "?";
   }
   // Un emoji retiré entre deux mots y laissait deux espaces.
   return removed ? printable.replace(/\s{2,}/g, " ").trim() : printable;
 }
 
-/** Retirer la décomposition (ccmp) des lettres que Noto Sans décompose. */
+/**
+ * Retirer la décomposition (ccmp) des lettres que Noto Sans décompose. fontkit
+ * retire une fonctionnalité donnée à false ; les types de PDFKit ne connaissent
+ * que la liste de celles à ajouter. Un objet neuf à chaque appel : fontkit y
+ * inscrit les fonctionnalités qu’il applique.
+ */
 function invoiceNameFeatures(run: InvoiceNameRun): PDFKit.Mixins.OpenTypeFeatures[] | undefined {
-  return run.font === "regular" && DECOMPOSED_BY_NOTO_SANS.test(run.text) ? WITHOUT_DECOMPOSITION : undefined;
+  if (run.font !== "regular" || !DECOMPOSED_BY_NOTO_SANS.test(run.text)) return undefined;
+  return { ccmp: false } as unknown as PDFKit.Mixins.OpenTypeFeatures[];
 }
 
 type InvoiceNameChar = { char: string; font: InvoiceNameRun["font"]; level: number };
