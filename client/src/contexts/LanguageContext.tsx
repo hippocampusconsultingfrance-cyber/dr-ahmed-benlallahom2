@@ -35,8 +35,7 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
 
   // Une fois la langue du lien mémorisée (effet ci-dessus), ?lang= est retiré de l’adresse.
   useEffect(() => {
-    const { pathname, search, hash } = window.location;
-    const address = removeLanguageParameter(pathname, search, hash);
+    const address = removeLanguageParameter(window.location.href);
     if (address) window.history.replaceState(window.history.state, "", address);
   }, []);
 

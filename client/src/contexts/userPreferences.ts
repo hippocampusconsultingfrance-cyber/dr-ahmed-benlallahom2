@@ -16,13 +16,16 @@ export function readLanguageParameter(search: string): UserLanguage | null {
   return USER_LANGUAGES.includes(value as UserLanguage) ? (value as UserLanguage) : null;
 }
 
-/** Address to show once ?lang= has been applied and remembered (other parameters and the hash are kept); null when there is none. */
-export function removeLanguageParameter(pathname: string, search: string, hash: string): string | null {
-  const params = new URLSearchParams(search);
-  if (!params.has("lang")) return null;
-  params.delete("lang");
-  const query = params.toString();
-  return `${pathname}${query ? `?${query}` : ""}${hash}`;
+/**
+ * Address to show once ?lang= has been applied and remembered (other parameters and the hash are kept);
+ * null when there is none. Rebuilt from the full href so that it keeps the page's origin: a path such as
+ * "//x" would otherwise read as another host and make history.replaceState throw.
+ */
+export function removeLanguageParameter(href: string): string | null {
+  const url = new URL(href);
+  if (!url.searchParams.has("lang")) return null;
+  url.searchParams.delete("lang");
+  return url.href;
 }
 
 export function getNextLanguage(language: UserLanguage): UserLanguage {
