@@ -451,6 +451,7 @@ export async function createApp() {
             error: targetCountriesTooMany
               ? `Vous pouvez sélectionner jusqu’à ${RECRUITMENT_MAX_TARGET_COUNTRIES} pays ciblés.`
               : "Les informations de candidature sont invalides.",
+            code: targetCountriesTooMany ? "recruitment_target_countries_too_many" : "recruitment_application_invalid",
           });
           return;
         }
@@ -478,6 +479,7 @@ export async function createApp() {
               error: rateLimited
                 ? "Trop de tentatives ont été effectuées. Patientez une heure avant de réessayer."
                 : "La vérification de sécurité doit être renouvelée avant l’envoi.",
+              code: rateLimited ? "recruitment_rate_limited" : "recruitment_security_check_required",
             });
             return;
           }
@@ -502,7 +504,7 @@ export async function createApp() {
         recruitmentStage = "database-connect";
         const db = await (await import("../db")).getDb();
         if (!db) {
-          res.status(503).json({ error: "Le service de candidature est temporairement indisponible." });
+          res.status(503).json({ error: "Le service de candidature est temporairement indisponible.", code: "recruitment_service_unavailable" });
           return;
         }
 

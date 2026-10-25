@@ -40,7 +40,7 @@ beforeEach(() => {
 });
 
 describe("REC-03 — espace candidat : jeton anti-robot à usage unique et vrai motif affiché", () => {
-  it("un nouvel essai avec le jeton déjà consommé est refusé et le motif est traduit, pas générique", async () => {
+  it("le refus du vrai routeur pour un jeton déjà consommé devient turnstileError, pas le message générique", async () => {
     const api = client().api;
     const token = freshToken();
     const registration = { email: "lina.cand@example.test", firstName: "Lina", lastName: "Cand", termsAccepted: true, documentConsent: true };

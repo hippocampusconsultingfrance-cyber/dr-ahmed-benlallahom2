@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { recruitmentCvRefusalReason, type RecruitmentCvRefusalReason } from "../shared/recruitmentCvLimits";
 import { assertPdfDecompressionWithinLimits, inspectDocxArchive } from "./documentDecompressionLimits";
 
 const PDF_SIGNATURE = Buffer.from("%PDF-");
@@ -163,14 +164,16 @@ export function validateCvFile(input: { buffer: Buffer; mimeType: string; origin
 
 export const RECRUITMENT_CV_FORMAT_MESSAGE = "Format de CV non accepté. Utilisez un PDF ou un DOCX (le format Word ancien .doc n’est plus accepté).";
 
-/** Clear French message for a CV refused by the content checks. */
+const RECRUITMENT_CV_REFUSAL_MESSAGES: Record<RecruitmentCvRefusalReason, string> = {
+  legacyFormat: RECRUITMENT_CV_FORMAT_MESSAGE,
+  tooLargeWhenOpened: "Le CV est trop volumineux une fois ouvert. Enregistrez-le de nouveau en PDF (par exemple « Fichier > Exporter en PDF ») puis réessayez.",
+  pageLimit: "Le CV ne doit pas dépasser 25 pages.",
+  passwordProtected: "Le CV est protégé par un mot de passe. Envoyez une version non protégée.",
+  activeContent: "Le CV contient des macros, du contenu actif ou des objets intégrés. Enregistrez-le en PDF puis réessayez.",
+  invalidContent: "Le contenu du CV ne correspond pas à un document PDF ou DOCX valide.",
+};
+
+/** Clear French message for a CV refused by the content checks (the forms translate it from the same code). */
 export function recruitmentCvValidationMessage(code: string) {
-  if (code === "cv_validation_legacy_doc_refused") return RECRUITMENT_CV_FORMAT_MESSAGE;
-  if (code.endsWith("_decompressed_size_exceeded") || code === "cv_validation_pdf_image_too_large" || code === "cv_validation_pdf_processing_timeout") {
-    return "Le CV est trop volumineux une fois ouvert. Enregistrez-le de nouveau en PDF (par exemple « Fichier > Exporter en PDF ») puis réessayez.";
-  }
-  if (code === "cv_validation_pdf_page_limit_exceeded") return "Le CV ne doit pas dépasser 25 pages.";
-  if (code === "cv_validation_pdf_encrypted" || code === "cv_validation_docx_encrypted") return "Le CV est protégé par un mot de passe. Envoyez une version non protégée.";
-  if (code.endsWith("_active_content")) return "Le CV contient des macros, du contenu actif ou des objets intégrés. Enregistrez-le en PDF puis réessayez.";
-  return "Le contenu du CV ne correspond pas à un document PDF ou DOCX valide.";
+  return RECRUITMENT_CV_REFUSAL_MESSAGES[recruitmentCvRefusalReason(code)];
 }

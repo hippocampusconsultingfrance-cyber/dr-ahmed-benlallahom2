@@ -7,6 +7,7 @@ describe("spécialité personnalisée — candidature VVIP", () => {
     const page = await readFile(path.join(process.cwd(), "client/src/pages/VvipOffshorePage.tsx"), "utf8");
     expect(page).toContain("specialtyCustom: string;");
     expect(page).toContain('id="vvip-specialty-custom"');
+    expect(page).toContain("maxLength={VVIP_CUSTOM_SPECIALTY_MAX_LENGTH}");
     expect(page).toContain("const finalSpecialty = isCustomSpecialty ? form.specialtyCustom.trim() : form.specialty;");
   });
 });

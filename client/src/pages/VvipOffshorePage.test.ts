@@ -6,12 +6,13 @@ describe("candidature VVIP — erreurs publiques", () => {
     const { vvipOffshoreCopy, vvipSubmissionErrorMessage } = await import("./VvipOffshorePage");
     const cvRefused = { error: "Le contenu du CV ne correspond pas à un document PDF ou DOCX valide.", code: "cv_validation_signature_invalid" };
     expect(vvipSubmissionErrorMessage(cvRefused, "fr")).toBe(cvRefused.error);
-    expect(vvipSubmissionErrorMessage(cvRefused, "en")).toBe(vvipOffshoreCopy.en.fileError);
+    expect(vvipSubmissionErrorMessage(cvRefused, "en")).toBe("The CV content does not match a valid PDF or DOCX document.");
     expect(vvipSubmissionErrorMessage({ error: "Échec base de données: relation cv_applications" }, "de")).toBe(vvipOffshoreCopy.de.genericError);
     expect(vvipSubmissionErrorMessage({}, "fr")).toBe(vvipOffshoreCopy.fr.genericError);
 
     const source = await readFile(new URL("./VvipOffshorePage.tsx", import.meta.url), "utf8");
     expect(source).toContain("resolveCountryForSubmission(form.diplomaCountry");
+    expect(source).toContain("diplomaCountry: submittedDiplomaCountry");
     expect(source).toContain('typeof payload.trackingId !== "string"');
     expect(source).not.toContain('payload.trackingId || "VVIP-OK"');
   });
