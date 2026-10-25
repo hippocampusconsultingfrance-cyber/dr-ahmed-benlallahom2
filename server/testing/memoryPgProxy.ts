@@ -405,20 +405,22 @@ export function createMemoryPg(tables: PgTable[], options: { now?: () => Date } 
       tableMeta(table);
       let rows = data.get(table)!.filter(row => !where || evaluate(where, row, params, now) === true);
       if (parser.acceptWord("order", "by")) {
-        const orders: Array<{ expr: Expr; desc: boolean }> = [];
+        const orders: Array<{ expr: Expr; desc: boolean; nullsFirst: boolean }> = [];
         do {
           const expr = parser.additive();
           const desc = parser.acceptWord("desc");
           if (!desc) parser.acceptWord("asc");
-          orders.push({ expr, desc });
+          // PostgreSQL default: NULL sorts as the largest value (first in DESC, last in ASC).
+          const nullsFirst = parser.acceptWord("nulls", "first") || (!parser.acceptWord("nulls", "last") && desc);
+          orders.push({ expr, desc, nullsFirst });
         } while (parser.acceptPunct(","));
         rows = [...rows].sort((a, b) => {
           for (const order of orders) {
             const left = evaluate(order.expr, a, params, now);
             const right = evaluate(order.expr, b, params, now);
             if (left === right) continue;
-            if (left === null) return order.desc ? -1 : 1;
-            if (right === null) return order.desc ? 1 : -1;
+            if (left === null) return order.nullsFirst ? -1 : 1;
+            if (right === null) return order.nullsFirst ? 1 : -1;
             const result = compare(left, right);
             if (result !== 0) return order.desc ? -result : result;
           }

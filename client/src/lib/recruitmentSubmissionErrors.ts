@@ -13,8 +13,8 @@ const serverErrorCopy = {
     tooLargeWhenOpened: "The CV is too large once opened. Save it again as a PDF (for example “File > Export to PDF”) and try again.",
     pageLimit: "The CV must not exceed 25 pages.",
     passwordProtected: "The CV is password-protected. Send a version without a password.",
-    activeContent: "The CV contains macros, active content or embedded objects. Save it as a PDF and try again.",
-    invalidContent: "The CV content does not match a valid PDF or DOCX document.",
+    activeContent: "The CV contains macros, JavaScript, a launch command or embedded files. Save your CV again as a DOCX or print it to PDF from your browser, then try again.",
+    invalidContent: "The CV content does not match a valid PDF or DOCX document. Save your CV again as a DOCX or print it to PDF from your browser, then try again.",
   },
   de: {
     securityCheck: "Die Sicherheitsprüfung muss vor dem Absenden erneuert werden.",
@@ -25,8 +25,8 @@ const serverErrorCopy = {
     tooLargeWhenOpened: "Der Lebenslauf ist nach dem Öffnen zu groß. Speichern Sie ihn erneut als PDF (zum Beispiel „Datei > Als PDF exportieren“) und versuchen Sie es erneut.",
     pageLimit: "Der Lebenslauf darf höchstens 25 Seiten umfassen.",
     passwordProtected: "Der Lebenslauf ist passwortgeschützt. Senden Sie eine Version ohne Passwort.",
-    activeContent: "Der Lebenslauf enthält Makros, aktive Inhalte oder eingebettete Objekte. Speichern Sie ihn als PDF und versuchen Sie es erneut.",
-    invalidContent: "Der Inhalt des Lebenslaufs entspricht keinem gültigen PDF- oder DOCX-Dokument.",
+    activeContent: "Der Lebenslauf enthält Makros, JavaScript, einen Startbefehl oder eingebettete Dateien. Speichern Sie Ihren Lebenslauf erneut als DOCX oder drucken Sie ihn in Ihrem Browser als PDF und versuchen Sie es dann erneut.",
+    invalidContent: "Der Inhalt des Lebenslaufs entspricht keinem gültigen PDF- oder DOCX-Dokument. Speichern Sie Ihren Lebenslauf erneut als DOCX oder drucken Sie ihn in Ihrem Browser als PDF und versuchen Sie es dann erneut.",
   },
   zh: {
     securityCheck: "发送前必须重新完成安全验证。",
@@ -37,8 +37,8 @@ const serverErrorCopy = {
     tooLargeWhenOpened: "简历打开后体积过大。请重新另存为 PDF（例如“文件 > 导出为 PDF”）后重试。",
     pageLimit: "简历不得超过 25 页。",
     passwordProtected: "简历受密码保护。请发送未设密码的版本。",
-    activeContent: "简历包含宏、活动内容或嵌入对象。请另存为 PDF 后重试。",
-    invalidContent: "简历内容与有效的 PDF 或 DOCX 文档不符。",
+    activeContent: "简历包含宏、JavaScript、启动命令或嵌入文件。请将简历重新另存为 DOCX，或在浏览器中打印为 PDF，然后重试。",
+    invalidContent: "简历内容与有效的 PDF 或 DOCX 文档不符。请将简历重新另存为 DOCX，或在浏览器中打印为 PDF，然后重试。",
   },
 } as const;
 type ServerErrorCause = keyof typeof serverErrorCopy.en;

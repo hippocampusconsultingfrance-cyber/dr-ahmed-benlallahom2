@@ -23,7 +23,7 @@ import { and, desc, eq, isNotNull, isNull, sql } from "drizzle-orm";
 import { RECRUITMENT_CV_FORMAT_MESSAGE, recruitmentCvValidationMessage, validateCvFile } from "../recruitmentFileValidation";
 import { getDb } from "../db";
 import { candidateDocumentAuditLogs, candidateDocumentProcessingJobs, candidateDocuments, cvApplications, cvProcessingJobs, recruitmentCampaignRecipients, recruitmentEmailEvents } from "../../drizzle/schema";
-import { CANDIDATE_DOCUMENT_MAX_BYTES, CANDIDATE_DOCUMENT_TOO_LARGE_MESSAGE, candidateDocumentMimeTypes, safeCandidateDocumentName, validateCandidateDocument } from "../candidateDocumentValidation";
+import { CANDIDATE_DOCUMENT_MAX_BYTES, CANDIDATE_DOCUMENT_TOO_LARGE_MESSAGE, candidateDocumentMimeTypes, candidateDocumentValidationMessage, safeCandidateDocumentName, validateCandidateDocument } from "../candidateDocumentValidation";
 import { createCandidateInvitationToken } from "../candidateAuth";
 import { CANDIDATE_UPLOADABLE_DOCUMENT_CATEGORIES, candidateDocumentAllowsAiAnalysis } from "../../shared/candidateDocumentCategories";
 import { isSameRecruitmentSubmission } from "../recruitmentSubmissionDeduplication";
@@ -696,7 +696,8 @@ export async function createApp() {
         try {
           validation = validateCandidateDocument({ buffer: file.buffer, mimeType: file.mimetype, originalName, size: file.size });
         } catch (error) {
-          res.status(400).json({ error: "Le document est refusé par le contrôle de sécurité.", code: error instanceof Error ? error.message : "candidate_document_validation_failed" });
+          const code = error instanceof Error ? error.message : "candidate_document_validation_failed";
+          res.status(400).json({ error: candidateDocumentValidationMessage(code), code });
           return;
         }
         const { encryptCandidateDocument } = await import("../candidateDocumentEncryption");

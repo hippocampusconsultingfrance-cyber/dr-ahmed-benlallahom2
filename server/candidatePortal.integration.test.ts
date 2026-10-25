@@ -43,7 +43,7 @@ describe("parcours candidat — protections intégrées non destructives", () =>
     });
     const encrypted = encryptCandidateDocument(source);
 
-    expect(validation.securityScanVersion).toBe("candidate-document-safety-v1");
+    expect(validation.securityScanVersion).toBe("candidate-document-safety-v2");
     expect(encrypted.encrypted.equals(source)).toBe(false);
     expect(decryptCandidateDocument(encrypted.encrypted, encrypted.iv, encrypted.authTag)).toEqual(source);
   });

@@ -12,6 +12,8 @@ import { candidatePortalCopy } from "../client/src/pages/CandidatePortalPage";
 import { createInMemoryDrizzle, type InMemoryDrizzle } from "./testSupport/inMemoryDrizzle";
 import { TEST_PEPPER } from "./testSupport/candidatePortal";
 import { listen, seedVerifiedCandidate, uploadDocument, validPdfBuffer } from "./testSupport/candidateUploadApp";
+import { libreOfficeCvPdf, packPdfIntoObjectStream } from "./testing/pdfFixture";
+import { candidateDocumentRefusalMessage } from "../client/src/lib/candidateDocumentUploadErrors";
 
 const state = vi.hoisted(() => {
   process.env.VERCEL = "1";
@@ -175,5 +177,30 @@ describe("LEGAL-12 — catégories sensibles et analyse IA des documents candida
     }
     expect(db().rows(candidateDocumentProcessingJobs).every(job => job.status === "completed" && job.lastError === "human_review_only")).toBe(true);
     expect(db().rows(candidateDocumentAuditLogs).filter(log => String(log.metadata).includes("human_review_only"))).toHaveLength(4);
+  });
+});
+
+describe("REC-02 — PDF réels et PDF piégés déposés dans le coffre", () => {
+  it("accepte un PDF LibreOffice et un PDF à flux d’objets", async () => {
+    for (const buffer of [libreOfficeCvPdf(), packPdfIntoObjectStream(libreOfficeCvPdf())]) {
+      const result = await uploadDocument(baseUrl, sessionToken, { category: "diploma", buffer, name: "diplome.pdf" });
+      expect(result.status, JSON.stringify(result.body)).toBe(201);
+    }
+    expect(db().rows(candidateDocuments)).toHaveLength(2);
+  });
+
+  it("refuse un JavaScript caché dans un flux d’objets avec le motif et la marche à suivre, sans rien stocker", async () => {
+    const trapped = packPdfIntoObjectStream(libreOfficeCvPdf(), {
+      edit: source => source.replace("/OpenAction[1 0 R /XYZ null null 0]", "/OpenAction <</S/JavaScript/JS(app.alert\\(1\\))>>"),
+    });
+    const result = await uploadDocument(baseUrl, sessionToken, { category: "diploma", buffer: trapped, name: "diplome.pdf" });
+    expect(result.status).toBe(400);
+    expect(result.body.code).toBe("candidate_document_pdf_active_content");
+    expect(result.body.error).not.toBe("Le document est refusé par le contrôle de sécurité.");
+    expect(result.body.error).toContain("imprimez-le en PDF depuis votre navigateur");
+    expect(candidateDocumentRefusalMessage(result.body, "fr")).toBe(result.body.error);
+    expect(candidateDocumentRefusalMessage(result.body, "en")).toContain("print it to PDF from your browser");
+    expect(state.stored).toHaveLength(0);
+    expect(db().rows(candidateDocuments)).toHaveLength(0);
   });
 });

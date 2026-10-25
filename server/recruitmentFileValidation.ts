@@ -1,12 +1,12 @@
 import { createHash } from "node:crypto";
 import { recruitmentCvRefusalReason, type RecruitmentCvRefusalReason } from "../shared/recruitmentCvLimits";
-import { assertPdfDecompressionWithinLimits, inspectDocxArchive } from "./documentDecompressionLimits";
+import { inspectDocxArchive, inspectPdfStructure } from "./documentDecompressionLimits";
 
 const PDF_SIGNATURE = Buffer.from("%PDF-");
 const OLE_SIGNATURE = Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]);
 const ZIP_SIGNATURE = Buffer.from([0x50, 0x4b, 0x03, 0x04]);
 const MAX_PDF_PAGES = 25;
-const SECURITY_SCAN_VERSION = "document-safety-v3";
+const SECURITY_SCAN_VERSION = "document-safety-v4";
 
 /**
  * Formats accepted for new applications. The legacy Word format (.doc) is
@@ -36,17 +36,19 @@ export type CvFileValidation = {
   warnings: string[];
 };
 
+/**
+ * Reads the object streams too (bounded inflation, see inspectPdfStructure):
+ * pdf-lib, Acrobat "optimised" or Word put the pages and actions there, and
+ * a JavaScript action may hide there or behind #xx-escaped names (REC-02).
+ */
 function validatePdfSafety(buffer: Buffer): number {
-  const source = buffer.toString("latin1");
-  if (/\/Encrypt\b/.test(source)) throw new Error("cv_validation_pdf_encrypted");
-  if (/(?:\/JavaScript\b|\/JS\b|\/Launch\b|\/OpenAction\b|\/EmbeddedFile\b)/.test(source)) {
-    throw new Error("cv_validation_pdf_active_content");
-  }
-  const pageCount = (source.match(/\/Type\s*\/Page\b/g) ?? []).length;
-  if (pageCount === 0) throw new Error("cv_validation_pdf_page_structure_invalid");
-  if (pageCount > MAX_PDF_PAGES) throw new Error("cv_validation_pdf_page_limit_exceeded");
-  assertPdfDecompressionWithinLimits(buffer);
-  return pageCount;
+  const pdf = inspectPdfStructure(buffer);
+  if (pdf.encrypted) throw new Error("cv_validation_pdf_encrypted");
+  if (pdf.activeContent) throw new Error("cv_validation_pdf_active_content");
+  if (pdf.unreadableObjectStreams > 0) throw new Error("cv_validation_pdf_object_stream_unreadable");
+  if (pdf.pageCount === 0) throw new Error("cv_validation_pdf_page_structure_invalid");
+  if (pdf.pageCount > MAX_PDF_PAGES) throw new Error("cv_validation_pdf_page_limit_exceeded");
+  return pdf.pageCount;
 }
 
 /** External relationships that make Word run an object: always refused. */
@@ -164,13 +166,16 @@ export function validateCvFile(input: { buffer: Buffer; mimeType: string; origin
 
 export const RECRUITMENT_CV_FORMAT_MESSAGE = "Format de CV non accepté. Utilisez un PDF ou un DOCX (le format Word ancien .doc n’est plus accepté).";
 
+/** What a candidate can always do with a CV the checks refuse (REC-02). */
+const RECRUITMENT_CV_RESAVE_ADVICE = "Réenregistrez votre CV en DOCX ou imprimez-le en PDF depuis votre navigateur, puis réessayez.";
+
 const RECRUITMENT_CV_REFUSAL_MESSAGES: Record<RecruitmentCvRefusalReason, string> = {
   legacyFormat: RECRUITMENT_CV_FORMAT_MESSAGE,
   tooLargeWhenOpened: "Le CV est trop volumineux une fois ouvert. Enregistrez-le de nouveau en PDF (par exemple « Fichier > Exporter en PDF ») puis réessayez.",
   pageLimit: "Le CV ne doit pas dépasser 25 pages.",
   passwordProtected: "Le CV est protégé par un mot de passe. Envoyez une version non protégée.",
-  activeContent: "Le CV contient des macros, du contenu actif ou des objets intégrés. Enregistrez-le en PDF puis réessayez.",
-  invalidContent: "Le contenu du CV ne correspond pas à un document PDF ou DOCX valide.",
+  activeContent: `Le CV contient des macros, du JavaScript, une commande de lancement ou des fichiers intégrés. ${RECRUITMENT_CV_RESAVE_ADVICE}`,
+  invalidContent: `Le contenu du CV ne correspond pas à un document PDF ou DOCX valide. ${RECRUITMENT_CV_RESAVE_ADVICE}`,
 };
 
 /** Clear French message for a CV refused by the content checks (the forms translate it from the same code). */

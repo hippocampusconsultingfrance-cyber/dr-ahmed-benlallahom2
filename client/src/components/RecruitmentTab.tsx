@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { BrainCircuit, ClipboardList, Download, FileSearch, Loader2, Mail, RefreshCw, Sparkles, Trash2, UserRound, UserRoundPlus } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
@@ -6,6 +6,7 @@ import PublicContentSkeleton from "@/components/PublicContentSkeleton";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import Candidate360Dialog from "./Candidate360Dialog";
+import { SCORE_UNAVAILABLE_EXPLANATION, SCORE_UNAVAILABLE_HEADING, scoredApplicationsFirst } from "./recruitmentScoreGroups";
 import { contradictionEvidenceLabel, CV_READING_LABELS, CV_REVIEW_REMINDER, cvReadingTextForDisplay, fieldEvidenceStatusLabel, fieldEvidenceStatusTone } from "./recruitmentEvidenceLabels";
 import {
   recruitmentDriveExportLabel,
@@ -164,6 +165,11 @@ export default function RecruitmentTab() {
     minimumScore: minimumScore ? Number(minimumScore) : undefined,
     profileId: selectedProfileId ? Number(selectedProfileId) : undefined,
   });
+  // With a score threshold, the dossiers without a verified score are listed apart, not dropped (INTL-02).
+  const scoreThreshold = Math.max(Number(minimumScore) || 0, profilesQuery.data?.find(profile => String(profile.id) === selectedProfileId)?.minimumScore ?? 0);
+  const listedApplications = scoreThreshold > 0
+    ? scoredApplicationsFirst(data?.items ?? [], item => item.analysisPromptVersion === VERIFIED_ANALYSIS_VERSION ? item.aiScore : null)
+    : { items: data?.items ?? [], firstUnscored: -1 };
 
   const updateStatus = trpc.admin.recruitment.updateStatus.useMutation({
     onSuccess: () => {
@@ -367,7 +373,7 @@ export default function RecruitmentTab() {
         <PublicContentSkeleton label="Chargement des candidatures" />
       ) : data?.items.length ? (
         <div className="space-y-3">
-          {data.items.map(application => {
+          {listedApplications.items.map((application, index) => {
             const countries = parseJsonList(application.targetCountries);
             const languages = parseJsonList(application.languages);
             const strengths = parseJsonList(application.aiStrengths);
@@ -378,7 +384,14 @@ export default function RecruitmentTab() {
             const verifiedScore = hasVerifiedAnalysis ? application.aiScore : null;
             const expanded = expandedId === application.id;
             return (
-              <article key={application.id} className="rounded-xl border border-border bg-card p-4 shadow-sm">
+              <Fragment key={application.id}>
+              {index === listedApplications.firstUnscored ? (
+                <div className="border-t border-border pt-4">
+                  <h3 className="font-semibold text-foreground">{SCORE_UNAVAILABLE_HEADING}</h3>
+                  <p className="text-xs text-muted-foreground">{SCORE_UNAVAILABLE_EXPLANATION}</p>
+                </div>
+              ) : null}
+              <article className="rounded-xl border border-border bg-card p-4 shadow-sm">
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                   <button type="button" onClick={() => setExpandedId(expanded ? null : application.id)} className="min-w-0 text-left">
                     <div className="flex items-start gap-3">
@@ -393,7 +406,7 @@ export default function RecruitmentTab() {
                   </button>
                   <div className="flex flex-wrap items-center gap-2">
                     <span className={`rounded-full border px-2.5 py-1 text-xs font-medium ${scoreTone(verifiedScore)}`}>
-                      {verifiedScore === null ? (application.aiSummary ? "Score à recalculer" : "IA en attente") : `Score IA ${verifiedScore}/100`}
+                      {verifiedScore === null ? (application.aiSummary ? (hasVerifiedAnalysis ? SCORE_UNAVAILABLE_HEADING : "Score à recalculer") : "IA en attente") : `Score IA ${verifiedScore}/100`}
                     </span>
                     <span className={`rounded-full border px-2.5 py-1 text-xs font-medium ${analysisStatusTone(application.analysisStatus)}`}>
                       {analysisStatusLabel(application.analysisStatus)}
@@ -613,6 +626,7 @@ export default function RecruitmentTab() {
                   </div>
                 )}
               </article>
+              </Fragment>
             );
           })}
         </div>

@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
-import { CANDIDATE_DOCUMENT_MAX_BYTES } from "../shared/candidateDocumentLimits";
+import { CANDIDATE_DOCUMENT_MAX_BYTES, candidateDocumentRefusalReason, type CandidateDocumentRefusalReason } from "../shared/candidateDocumentLimits";
+import { inspectPdfStructure } from "./documentDecompressionLimits";
 
 export { CANDIDATE_DOCUMENT_MAX_BYTES, CANDIDATE_DOCUMENT_TOO_LARGE_MESSAGE } from "../shared/candidateDocumentLimits";
 
@@ -44,12 +45,14 @@ export function safeCandidateDocumentName(value: string): string {
   return safe || "document";
 }
 
+/** Same reading as the CV check: object streams and #xx-escaped names included, bounded inflation (REC-02). */
 function validatePdf(buffer: Buffer) {
-  const source = buffer.toString("latin1");
-  if (/\/Encrypt\b/.test(source)) throw new Error("candidate_document_pdf_encrypted");
-  if (/(?:\/JavaScript\b|\/JS\b|\/Launch\b|\/OpenAction\b|\/EmbeddedFile\b)/.test(source)) throw new Error("candidate_document_pdf_active_content");
-  const pageCount = (source.match(/\/Type\s*\/Page\b/g) ?? []).length;
-  if (pageCount === 0 || pageCount > 25) throw new Error("candidate_document_pdf_page_limit");
+  const pdf = inspectPdfStructure(buffer);
+  if (pdf.encrypted) throw new Error("candidate_document_pdf_encrypted");
+  if (pdf.activeContent) throw new Error("candidate_document_pdf_active_content");
+  if (pdf.unreadableObjectStreams > 0) throw new Error("candidate_document_pdf_object_stream_unreadable");
+  if (pdf.pageCount === 0) throw new Error("candidate_document_pdf_page_structure_invalid");
+  if (pdf.pageCount > 25) throw new Error("candidate_document_pdf_page_limit");
 }
 
 function validateDocx(buffer: Buffer) {
@@ -83,9 +86,25 @@ export function validateCandidateDocument(input: { buffer: Buffer; mimeType: str
   const warnings = input.mimeType === "application/msword" ? ["legacy_doc_format_limited_security_inspection"] : [];
   return {
     checksum: createHash("sha256").update(input.buffer).digest("hex"),
-    notes: ["signature_verified", `mime=${input.mimeType}`, `bytes=${input.size}`, "security_scan=candidate-document-safety-v1", ...warnings].join("; "),
+    notes: ["signature_verified", `mime=${input.mimeType}`, `bytes=${input.size}`, "security_scan=candidate-document-safety-v2", ...warnings].join("; "),
     mimeType: input.mimeType,
-    securityScanVersion: "candidate-document-safety-v1",
+    securityScanVersion: "candidate-document-safety-v2",
     warnings,
   };
+}
+
+/** What a candidate can always do with a document the checks refuse (REC-02). */
+const CANDIDATE_DOCUMENT_RESAVE_ADVICE = "Réenregistrez-le en DOCX, imprimez-le en PDF depuis votre navigateur ou envoyez-en une photo (JPEG ou PNG), puis réessayez.";
+
+const CANDIDATE_DOCUMENT_REFUSAL_MESSAGES: Record<CandidateDocumentRefusalReason, string> = {
+  tooLargeWhenOpened: `Le document est trop volumineux une fois ouvert. ${CANDIDATE_DOCUMENT_RESAVE_ADVICE}`,
+  pageLimit: "Le document ne doit pas dépasser 25 pages.",
+  passwordProtected: "Le document est protégé par un mot de passe. Envoyez une version non protégée.",
+  activeContent: `Le document contient des macros, du JavaScript, une commande de lancement ou des fichiers intégrés. ${CANDIDATE_DOCUMENT_RESAVE_ADVICE}`,
+  invalidContent: `Le contenu du document ne correspond pas à un fichier PDF, DOC, DOCX, JPEG ou PNG valide. ${CANDIDATE_DOCUMENT_RESAVE_ADVICE}`,
+};
+
+/** Clear French message for a document refused by validateCandidateDocument (the portal translates it from the same code). */
+export function candidateDocumentValidationMessage(code: string) {
+  return CANDIDATE_DOCUMENT_REFUSAL_MESSAGES[candidateDocumentRefusalReason(code) ?? "invalidContent"];
 }

