@@ -36,6 +36,15 @@ describe("recruitment matching profiles", () => {
     })).toBe(false);
   });
 
+  it("keeps a dossier without a verified score for reading, whatever the minimum score (INTL-02)", () => {
+    const profile = { targetCountry: null, specialty: "anesthésie", minimumScore: 80, requiredLanguages: JSON.stringify(["Anglais"]), requiredSkills: null };
+    const candidate = { score: null, specialty: "Anesthésie-réanimation", targetCountries: ["Émirats arabes unis"], languages: ["Anglais"], extractedSkills: [], profile };
+    expect(matchesRecruitmentProfile(candidate)).toBe(true);
+    expect(matchesRecruitmentProfile({ ...candidate, score: 79 })).toBe(false);
+    // The other criteria still apply.
+    expect(matchesRecruitmentProfile({ ...candidate, languages: ["Arabe"] })).toBe(false);
+  });
+
   it("handles malformed JSON safely", () => {
     expect(parseRecruitmentJsonArray("not-json")).toEqual([]);
     expect(parseRecruitmentJsonArray(JSON.stringify(["France", 1, null]))).toEqual(["France"]);

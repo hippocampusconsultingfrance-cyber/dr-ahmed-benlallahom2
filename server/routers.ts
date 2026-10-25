@@ -157,6 +157,13 @@ export const recruitmentPoolFiltersInput = z.object({
 }).optional();
 
 const verifiedRecruitmentScore = sql<number | null>`CASE WHEN ${cvApplications.analysisPromptVersion} = ${RECRUITMENT_ANALYSIS_PROMPT_VERSION} THEN ${cvApplications.aiScore} ELSE NULL END`;
+/**
+ * Score threshold of the admin lists (INTL-02): a dossier without a verified score (CV in
+ * another language, analysis pending, refused or from an older version) is kept, and the
+ * list shows it apart, « Score indisponible – à lire », instead of dropping it. A threshold
+ * of 0 filters nothing.
+ */
+const scoreAtLeastOrUnavailable = (minimumScore: number) => sql`(${verifiedRecruitmentScore} >= ${minimumScore} OR ${verifiedRecruitmentScore} IS NULL)`;
 
 function csvCell(value: unknown): string {
   const text = value === null || value === undefined ? "" : String(value);
@@ -1266,12 +1273,11 @@ export const appRouter = router({
               .limit(1);
             if (!selectedProfile) throw new TRPCError({ code: "NOT_FOUND", message: "Profil de matching introuvable" });
             profile = selectedProfile;
-            conditions.push(sql`${cvApplications.aiScore} >= ${selectedProfile.minimumScore}`);
             if (selectedProfile.specialty) conditions.push(sql`LOWER(${cvApplications.specialty}) LIKE LOWER(${`%${selectedProfile.specialty}%`})`);
             if (selectedProfile.targetCountry) conditions.push(sql`${cvApplications.targetCountries} LIKE ${`%${selectedProfile.targetCountry}%`}`);
           }
-          if (input.minimumScore !== undefined) conditions.push(sql`${cvApplications.aiScore} >= ${input.minimumScore}`);
-          if (input.profileId || input.minimumScore !== undefined) conditions.push(eq(cvApplications.analysisPromptVersion, RECRUITMENT_ANALYSIS_PROMPT_VERSION));
+          const minimumScore = Math.max(input.minimumScore ?? 0, profile?.minimumScore ?? 0);
+          if (minimumScore > 0) conditions.push(scoreAtLeastOrUnavailable(minimumScore));
           const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
           const rawItems = await db
@@ -1420,10 +1426,7 @@ export const appRouter = router({
             if (input?.availability) conditions.push(sql`LOWER(COALESCE(${cvApplications.availability}, '')) LIKE LOWER(${`%${input.availability}%`})`);
             if (input?.mobility) conditions.push(sql`(LOWER(COALESCE(${cvApplications.mobility}, '')) LIKE LOWER(${`%${input.mobility}%`}) OR LOWER(COALESCE(${cvApplications.targetCountries}, '')) LIKE LOWER(${`%${input.mobility}%`}))`);
             if (input?.certification) conditions.push(sql`(LOWER(COALESCE(${cvApplications.certifications}, '')) LIKE LOWER(${`%${input.certification}%`}) OR (${cvApplications.analysisPromptVersion} = ${RECRUITMENT_ANALYSIS_PROMPT_VERSION} AND LOWER(COALESCE(${cvApplications.normalizedCertifications}, '')) LIKE LOWER(${`%${input.certification}%`})))`);
-            if (input?.minimumScore !== undefined) {
-              conditions.push(sql`${cvApplications.aiScore} >= ${input.minimumScore}`);
-              conditions.push(eq(cvApplications.analysisPromptVersion, RECRUITMENT_ANALYSIS_PROMPT_VERSION));
-            }
+            if (input?.minimumScore) conditions.push(scoreAtLeastOrUnavailable(input.minimumScore));
             return db.select({
               id: cvApplications.id,
               firstName: cvApplications.firstName,

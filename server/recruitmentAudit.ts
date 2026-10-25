@@ -55,7 +55,8 @@ export function matchesRecruitmentProfile(input: {
   };
 }): boolean {
   const profile = input.profile;
-  if ((input.score ?? -1) < profile.minimumScore) return false;
+  // INTL-02: without a verified score the dossier stays in the profile, listed apart to be read.
+  if (input.score !== null && input.score < profile.minimumScore) return false;
   if (profile.specialty && !input.specialty.toLowerCase().includes(profile.specialty.toLowerCase())) return false;
   if (profile.targetCountry && !input.targetCountries.some(country => country.toLowerCase().includes(profile.targetCountry!.toLowerCase()))) return false;
 
