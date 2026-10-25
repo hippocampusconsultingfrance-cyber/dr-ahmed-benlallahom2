@@ -847,7 +847,7 @@ export function buildRecruitmentTemplateEmail(
         ${customRequest}
         <p><strong>${copy.reference}:</strong> ${escapeHtml(trackingId)}</p>
         <p>${copy.privacy}</p>
-    `),
+    `, language),
   };
 }
 
@@ -894,7 +894,7 @@ export async function sendRecruitmentCampaignEmail(input: {
         <p>${textToSafeHtml(input.body)}</p>
         <p style="color: #64748b;">${copy.footer}</p>
         <p style="font-size: 12px;"><a href="${escapeHtml(input.unsubscribeUrl)}" style="color: #0e7490;">${copy.unsubscribe}</a></p>
-    `),
+    `, input.language),
   });
   if (error) throw new Error(`Resend campaign email failed: ${error.message}`);
   return { id: data?.id };

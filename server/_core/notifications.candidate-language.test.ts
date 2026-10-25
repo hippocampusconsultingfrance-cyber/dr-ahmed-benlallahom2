@@ -8,7 +8,7 @@ const { sendEmail } = vi.hoisted(() => ({ sendEmail: vi.fn() }));
 vi.mock("resend", () => ({ Resend: vi.fn(() => ({ emails: { send: sendEmail } })) }));
 vi.mock("./notification", () => ({ notifyOwner: vi.fn() }));
 
-import { buildCandidatePortalAccessEmail, sendCandidatePortalAccessEmail, sendCvApplicationConfirmationEmail } from "./notifications";
+import { buildCandidatePortalAccessEmail, sendCandidatePortalAccessEmail, sendCvApplicationConfirmationEmail, sendRecruitmentCampaignEmail } from "./notifications";
 
 const FRENCH_WORDS = /Bonjour|Candidature reçue|Créer mon espace|Confirmez|Réinitialisez|valable|Courriers indésirables/;
 
@@ -88,5 +88,21 @@ describe("emails d’accès à l’espace candidat en anglais", () => {
     await sendCandidatePortalAccessEmail({ to: "a@example.com", firstName: "Aisha", kind: "reset", actionUrl: url.reset, language: "en", idempotencyKey: "candidate-portal-password-reset-key" });
     expect(sendEmail.mock.calls[0][0].subject).toBe("Reset your password — Hippocampus Consulting");
     expect(sendEmail.mock.calls[0][1]).toEqual({ idempotencyKey: "candidate-portal-password-reset-key" });
+  });
+});
+
+describe("campagne de recrutement envoyée en anglais", () => {
+  it("garde le pied de page dans la langue choisie par l’administrateur", async () => {
+    const campaign = { candidateEmail: "candidate@example.com", candidateFirstName: "Aisha", campaignTitle: "ICU opportunity", subject: "New opportunity", body: "A position is open.", unsubscribeUrl: "https://drahmedbenlallahom.com/recruitment/unsubscribe?token=abc" };
+    await sendRecruitmentCampaignEmail({ ...campaign, language: "en" });
+    const english = sendEmail.mock.calls[0][0].html;
+    expect(english).toContain("Hello Aisha,");
+    expect(english).toContain("Unsubscribe from future recruitment opportunities");
+    expect(english).toContain("Professional and confidential communication");
+    expect(english).not.toMatch(FRENCH_WORDS);
+    expect(english).not.toContain("Communication professionnelle et confidentielle");
+
+    await sendRecruitmentCampaignEmail({ ...campaign, language: "fr" });
+    expect(sendEmail.mock.calls[1][0].html).toContain("Communication professionnelle et confidentielle");
   });
 });
