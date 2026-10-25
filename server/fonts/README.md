@@ -22,3 +22,15 @@ reste du mot : « سلامة » est extrait « سالمة » par pdftotext comme
 (visionneuse de Firefox). Beaucoup de noms sont concernés (علاء، بلال، صلاح،
 الأمين…) : seul l’affichage d’un nom arabe est garanti exact, pas son texte
 copié.
+
+Noto Sans 2.015 dessine ǹ ḿ ṃ ṅ ṣ ẹ ị ọ ụ en lettre de base plus marque
+(fonctionnalité OpenType `ccmp`, pour y empiler un ton) : le texte copié en
+perdait la marque (« Thi » pour « Thị »). La facture retire `ccmp` d’une ligne
+de nom qui en contient (`DECOMPOSED_BY_NOTO_SANS` dans `server/invoice.ts`). À
+revoir avec une autre version de Noto Sans : le test des lettres latines
+précomposées de `server/invoice.names.test.ts` le signalera.
+
+Écritures qu’aucune de ces polices n’a (hébreu, coréen, thaï, devanagari,
+géorgien…) et emoji : PDFKit les dessinerait en carrés vides. La ligne du nom
+retire les emoji et pictogrammes, et remplace un autre caractère sans dessin par
+sa forme simple quand elle s’imprime (𝓙𝓮𝓪𝓷 → Jean), sinon par « ? ».
