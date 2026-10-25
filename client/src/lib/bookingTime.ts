@@ -8,9 +8,26 @@ export function getBookingLocale(language: string): string {
   return BOOKING_LOCALES[language] ?? "en-GB";
 }
 
+const bookingDateTimeFormats = new Map<string, Intl.DateTimeFormat>();
+
+/**
+ * One Intl.DateTimeFormat per locale and options, created once: a formatter is
+ * slow to build, and the booking grid formats every time slot of the day again
+ * whenever the page clock ticks.
+ */
+export function getBookingDateTimeFormat(locale: string, options: Intl.DateTimeFormatOptions): Intl.DateTimeFormat {
+  const key = `${locale}|${JSON.stringify(options)}`;
+  let format = bookingDateTimeFormats.get(key);
+  if (!format) {
+    format = new Intl.DateTimeFormat(locale, options);
+    bookingDateTimeFormats.set(key, format);
+  }
+  return format;
+}
+
 /** "2026-10-29" for an instant in a time zone (the browser's when omitted). */
 function calendarDayIn(date: Date, timeZone?: string): string {
-  const parts = Object.fromEntries(new Intl.DateTimeFormat("en-US", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(date).map(part => [part.type, part.value]));
+  const parts = Object.fromEntries(getBookingDateTimeFormat("en-US", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(date).map(part => [part.type, part.value]));
   return `${parts.year}-${parts.month}-${parts.day}`;
 }
 
@@ -20,7 +37,7 @@ function calendarDayIn(date: Date, timeZone?: string): string {
  * null in France, Belgium… `timeZone` defaults to the browser's.
  */
 export function formatVisitorTime(date: Date, locale: string, timeZone?: string): string | null {
-  const format = (options: Intl.DateTimeFormatOptions, zone?: string) => new Intl.DateTimeFormat(locale, { ...options, hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: zone }).format(date);
+  const format = (options: Intl.DateTimeFormatOptions, zone?: string) => getBookingDateTimeFormat(locale, { ...options, hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: zone }).format(date);
   if (calendarDayIn(date, timeZone) !== calendarDayIn(date, "Europe/Paris")) return format({ weekday: "short" }, timeZone);
   const localTime = format({}, timeZone);
   return localTime === format({}, "Europe/Paris") ? null : localTime;

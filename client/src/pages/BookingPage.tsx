@@ -11,7 +11,7 @@ import { SEOHead } from "@/components/SEOHead";
 import Footer from "@/components/Footer";
 import BookingLegalNotice from "@/components/BookingLegalNotice";
 import LanguageMenu from "@/components/LanguageMenu";
-import { formatVisitorTime, getBookingLocale } from "@/lib/bookingTime";
+import { formatVisitorTime, getBookingDateTimeFormat, getBookingLocale } from "@/lib/bookingTime";
 import { getBookingFormCopy } from "@/lib/publicFormCopy";
 import {
   clearBookingDraft,
@@ -421,7 +421,7 @@ export type BookingSlotOption = { start: Date; dayKey: string; time: string };
 
 const PARIS_BOOKING_DAY_INDEX: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
 
-// Un seul formateur : la grille relit l’heure de Paris de chaque créneau des 90 jours.
+// Un seul formateur, lu une fois par heure UTC (getParisOffsetMs) pour les créneaux des 90 jours.
 const PARIS_BOOKING_PARTS = new Intl.DateTimeFormat("en-US", {
   timeZone: "Europe/Paris",
   weekday: "short",
@@ -433,11 +433,34 @@ const PARIS_BOOKING_PARTS = new Intl.DateTimeFormat("en-US", {
   hourCycle: "h23",
 });
 
-function getParisBookingParts(date: Date) {
-  const values = Object.fromEntries(PARIS_BOOKING_PARTS.formatToParts(date).filter(part => part.type !== "literal").map(part => [part.type, part.value]));
+type ParisBookingParts = { year: number; month: number; day: number; hour: number; minute: number; weekday: string };
+
+const BOOKING_HOUR_MS = 60 * 60 * 1000;
+const BOOKING_WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+// Décalage de Paris par heure UTC : il ne change qu'à 01:00 UTC (passage à l'heure d'été ou
+// d'hiver), donc un seul formatage par heure sert à tous les créneaux des 90 jours de la grille.
+const parisOffsetByUtcHour = new Map<number, number>();
+const PARIS_OFFSET_CACHE_LIMIT = 20_000;
+
+function getParisOffsetMs(time: number): number {
+  const utcHour = Math.floor(time / BOOKING_HOUR_MS);
+  const cached = parisOffsetByUtcHour.get(utcHour);
+  if (cached !== undefined) return cached;
+  const hourStart = utcHour * BOOKING_HOUR_MS;
+  const values = Object.fromEntries(PARIS_BOOKING_PARTS.formatToParts(new Date(hourStart)).filter(part => part.type !== "literal").map(part => [part.type, Number(part.value)]));
+  const offset = Date.UTC(values.year, values.month - 1, values.day, values.hour, values.minute) - hourStart;
+  if (parisOffsetByUtcHour.size >= PARIS_OFFSET_CACHE_LIMIT) parisOffsetByUtcHour.clear();
+  parisOffsetByUtcHour.set(utcHour, offset);
+  return offset;
+}
+
+function getParisBookingParts(date: Date): ParisBookingParts {
+  const time = date.getTime();
+  const paris = new Date(time + getParisOffsetMs(time));
   return {
-    year: Number(values.year), month: Number(values.month), day: Number(values.day),
-    hour: Number(values.hour), minute: Number(values.minute), weekday: String(values.weekday),
+    year: paris.getUTCFullYear(), month: paris.getUTCMonth() + 1, day: paris.getUTCDate(),
+    hour: paris.getUTCHours(), minute: paris.getUTCMinutes(), weekday: BOOKING_WEEKDAYS[paris.getUTCDay()],
   };
 }
 
@@ -545,6 +568,20 @@ export function removeBookedSlots(options: BookingSlotOption[], booked: Array<Da
 }
 
 /**
+ * Starts of a sorted list still inside the booking window at `now`, as a
+ * [first, end) range: the same slots as filtering each one with
+ * getBookingWindowIssue (too soon at the front, too far at the back), but the
+ * page clock only changes the range when a slot actually leaves the window.
+ */
+export function bookableSlotRange(options: BookingSlotOption[], now: number): [number, number] {
+  let first = 0;
+  while (first < options.length && getBookingWindowIssue(options[first].start, now)) first += 1;
+  let end = options.length;
+  while (end > first && getBookingWindowIssue(options[end - 1].start, now)) end -= 1;
+  return [first, end];
+}
+
+/**
  * Opening hours shown as soon as the page opens (RES-02), Monday to Sunday,
  * in Paris time: [{ day: "lun.", ranges: ["09:00–12:00", "18:00–22:00"] }].
  */
@@ -563,7 +600,7 @@ export function summarizeBookingAvailability(slots: BookingAvailabilitySlot[], l
 /** "jeudi 29 octobre 2026" for a Paris day key, in the page language. */
 export function formatBookingDay(dayKey: string, locale: string): string {
   const [year, month, day] = dayKey.split("-").map(Number);
-  return new Intl.DateTimeFormat(locale, { dateStyle: "full", timeZone: "UTC" }).format(new Date(Date.UTC(year, month - 1, day)));
+  return getBookingDateTimeFormat(locale, { dateStyle: "full", timeZone: "UTC" }).format(new Date(Date.UTC(year, month - 1, day)));
 }
 
 const BOOKING_SLOT_LIST_REFRESH_MS = 30 * 60 * 1000;
@@ -571,6 +608,21 @@ const BOOKING_SLOT_LIST_REFRESH_MS = 30 * 60 * 1000;
 /** Whole minutes left before the held slot is released (RES-04). */
 export function getHoldRemainingMinutes(holdExpiresAt: string, now: number = Date.now()): number {
   return Math.max(0, Math.floor((new Date(holdExpiresAt).getTime() - now) / 60_000));
+}
+
+/**
+ * What the page clock changes on screen at `time`: the half-hour of the 90-day
+ * list, the slots still inside the booking window, the window issue of the
+ * chosen slot and the minutes left to pay a held slot. A tick that changes none
+ * of them does not render the page again (RES-02, RES-04).
+ */
+export function getBookingClockSignature(
+  time: number,
+  { openSlots, selectedDate, holdExpiresAt }: { openSlots: BookingSlotOption[]; selectedDate: Date | null; holdExpiresAt: string | null },
+): string {
+  const parts: Array<string | number | null> = [Math.floor(time / BOOKING_SLOT_LIST_REFRESH_MS), ...bookableSlotRange(openSlots, time), selectedDate ? getBookingWindowIssue(selectedDate, time) : null];
+  if (holdExpiresAt) parts.push(getHoldRemainingMinutes(holdExpiresAt, time), new Date(holdExpiresAt).getTime() <= time ? "expired" : "held");
+  return parts.join("|");
 }
 
 export function isWithinBookingAvailability(
@@ -687,6 +739,7 @@ export default function BookingPage() {
   const [pendingNotice, setPendingNotice] = useState<string | null>(null);
   // Horloge de la page : délai de 2 h des créneaux proposés et temps restant du paiement en attente.
   const [now, setNow] = useState(() => Date.now());
+  const clockSignatureRef = useRef<(time: number) => string>(() => "");
   const paymentSubmissionRef = useRef(false);
   const draftSlotRef = useRef<string | null>(null);
   const locale = getBookingLocale(language);
@@ -696,7 +749,11 @@ export default function BookingPage() {
   const pendingLocalTime = pendingBooking ? formatVisitorTime(new Date(pendingBooking.appointmentDate), locale) : null;
 
   useEffect(() => {
-    const timer = window.setInterval(() => setNow(Date.now()), 30_000);
+    // Tic sans effet à l’écran (voir getBookingClockSignature) : même état, pas de nouveau rendu.
+    const timer = window.setInterval(() => {
+      const time = Date.now();
+      setNow((current) => (clockSignatureRef.current(time) === clockSignatureRef.current(current) ? current : time));
+    }, 30_000);
     return () => window.clearInterval(timer);
   }, []);
 
@@ -739,16 +796,21 @@ export default function BookingPage() {
   // Grille (RES-02) : jours ouverts des 90 prochains jours, moins les dates
   // bloquées et le délai de 2 h, puis horaires libres du jour choisi. La liste
   // (90 jours relus en heure de Paris) n’est recalculée que toutes les 30 min ;
-  // le délai de 2 h, lui, suit l’horloge de la page.
+  // le délai de 2 h, lui, suit l’horloge de la page, qui ne recopie la liste
+  // (et ne recalcule la grille) que lorsqu’un horaire sort de la fenêtre.
   const slotListClock = Math.floor(now / BOOKING_SLOT_LIST_REFRESH_MS) * BOOKING_SLOT_LIST_REFRESH_MS;
   const openSlots = useMemo(
     () => listBookableSlots(availabilitySlots.data ?? [], (blockedDates.data ?? []).map((item) => item.date), slotListClock),
     [availabilitySlots.data, blockedDates.data, slotListClock]
   );
-  const bookableSlots = useMemo(() => openSlots.filter((slot) => !getBookingWindowIssue(slot.start, now)), [openSlots, now]);
+  const [firstBookableSlot, endBookableSlot] = bookableSlotRange(openSlots, now);
+  const bookableSlots = useMemo(() => openSlots.slice(firstBookableSlot, endBookableSlot), [openSlots, firstBookableSlot, endBookableSlot]);
   const scheduleLoaded = Boolean(availabilitySlots.data && blockedDates.data);
   const nothingToBook = scheduleLoaded && bookableSlots.length === 0;
-  const dayOptions = Array.from(new Set([...bookableSlots.map((slot) => slot.dayKey), ...(dayKey ? [dayKey] : [])])).sort();
+  const dayOptions = useMemo(
+    () => Array.from(new Set([...bookableSlots.map((slot) => slot.dayKey), ...(dayKey ? [dayKey] : [])])).sort().map((key) => ({ key, label: formatBookingDay(key, locale) })),
+    [bookableSlots, dayKey, locale]
+  );
   // Horaires du jour choisi avant et après les réservations : une grille vide
   // ne dit « déjà réservés » que si ce sont bien les réservations qui l’ont vidée.
   const dayOpenSlots = useMemo(() => bookableSlots.filter((slot) => slot.dayKey === dayKey), [bookableSlots, dayKey]);
@@ -756,7 +818,7 @@ export default function BookingPage() {
     () => (bookedSlots.data ? removeBookedSlots(dayOpenSlots, bookedSlots.data) : []).map((option) => ({ ...option, localTime: formatVisitorTime(option.start, locale) })),
     [dayOpenSlots, bookedSlots.data, locale]
   );
-  const openingHours = summarizeBookingAvailability(configuredSlots, locale);
+  const openingHours = useMemo(() => summarizeBookingAvailability(availabilitySlots.data ?? [], locale), [availabilitySlots.data, locale]);
   // Délai minimal (2 h, passé compris) et horizon (90 jours) : mêmes règles que le serveur.
   const bookingWindowIssue = selectedDate ? getBookingWindowIssue(selectedDate, now) : null;
   const availabilityLabel = availabilityQueryError
@@ -863,6 +925,10 @@ export default function BookingPage() {
     // pas de requête (un jour vide est refusé par le serveur).
     if (dateKey) void bookedSlots.refetch();
   };
+
+  useEffect(() => {
+    clockSignatureRef.current = (time) => getBookingClockSignature(time, { openSlots, selectedDate, holdExpiresAt: pendingBooking?.holdExpiresAt ?? null });
+  });
 
   // Maintien écoulé pendant que la page reste ouverte : le créneau est libéré côté serveur.
   const pendingHoldExpired = Boolean(pendingBooking && new Date(pendingBooking.holdExpiresAt).getTime() <= now);
@@ -1259,8 +1325,8 @@ export default function BookingPage() {
                 className="form-field-premium h-11 w-full border px-4 py-2"
               >
                 <option value="">{content.form.dayPlaceholder}</option>
-                {dayOptions.map((key) => (
-                  <option key={key} value={key}>{formatBookingDay(key, locale)}</option>
+                {dayOptions.map(({ key, label }) => (
+                  <option key={key} value={key}>{label}</option>
                 ))}
               </select>
               {dayKey && (
