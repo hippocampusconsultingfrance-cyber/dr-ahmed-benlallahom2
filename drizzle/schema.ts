@@ -172,6 +172,9 @@ export const appointments = mysqlTable("appointments", {
   emailSent: int("email_sent").default(0).notNull(), // 1 = confirmation email sent
   smsSent: int("sms_sent").default(0).notNull(), // 1 = SMS notification sent
   reminderSent: int("reminder_sent").default(0).notNull(), // 1 = 24h reminder sent
+  // Language of the booking page (fr, en, de, zh): patient emails in French for
+  // "fr", in English otherwise (EN-01). Also added at runtime: server/languageColumns.ts.
+  language: varchar("language", { length: 10 }).default("fr").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 }, table => ({
@@ -341,6 +344,9 @@ export const cvApplications = mysqlTable("cv_applications", {
   ocrModelVersion: varchar("ocr_model_version", { length: 100 }),
   extractionWarnings: text("extraction_warnings"),
   analysisRequestedAt: timestamp("analysis_requested_at"),
+  // Language of the application form (fr, en, de, zh), not the spoken languages
+  // above: candidate emails in French for "fr", in English otherwise (EN-02).
+  language: varchar("language", { length: 10 }).default("fr").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
@@ -665,6 +671,8 @@ export const candidateAccounts = mysqlTable("candidate_accounts", {
   termsAcceptedAt: timestamp("terms_accepted_at"),
   documentConsentAt: timestamp("document_consent_at"),
   status: mysqlEnum("status", ["active", "disabled", "erased"]).default("active").notNull(),
+  // Copied at creation from the invitation's application, else the language of the access page (EN-02).
+  language: varchar("language", { length: 10 }).default("fr").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, table => ({

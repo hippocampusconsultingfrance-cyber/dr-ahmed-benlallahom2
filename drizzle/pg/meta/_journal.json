@@ -15,6 +15,13 @@
       "when": 1792177809116,
       "tag": "0001_appointment_invoices",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792937705446,
+      "tag": "0002_language_columns",
+      "breakpoints": true
     }
   ]
 }
