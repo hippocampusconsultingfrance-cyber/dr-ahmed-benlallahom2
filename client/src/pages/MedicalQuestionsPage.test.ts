@@ -32,4 +32,27 @@ describe("page de questions médicales — refus de l’envoi", () => {
     expect(medicalQuestionSubmitError("BAD_REQUEST")).toBe("turnstile");
     expect(medicalQuestionSubmitError(undefined)).toBe("turnstile");
   });
+
+  it("n’entoure plus la case anti-robot d’un refus précédent quand le plafond est atteint ensuite", async () => {
+    const { medicalQuestionAlert, medicalQuestionFeedback, medicalQuestionInvalidFields } = await import("./MedicalQuestionsPage");
+    const form = { firstName: "Jeanne", lastName: "Martin", email: "jeanne@test.local", phone: "+33 6 12 34 56 78", question: "Puis-je garder mes lunettes jusqu’au bloc opératoire ?", privacy: true, publication: false, urgency: true };
+
+    let feedback = medicalQuestionFeedback({ invalid: new Set(), rateLimited: false }, { type: "submit", invalid: medicalQuestionInvalidFields(form, "first-token") });
+    feedback = medicalQuestionFeedback(feedback, { type: "refused", code: "BAD_REQUEST" });
+    expect(feedback.invalid).toEqual(new Set(["turnstile"]));
+    expect(medicalQuestionAlert(feedback)).toBe("error");
+
+    // The renewed challenge is solved and the question sent again: this time the server reports the cap.
+    feedback = medicalQuestionFeedback(feedback, { type: "submit", invalid: medicalQuestionInvalidFields(form, "second-token") });
+    feedback = medicalQuestionFeedback(feedback, { type: "refused", code: "TOO_MANY_REQUESTS" });
+    expect(feedback.invalid.size).toBe(0);
+    expect(medicalQuestionAlert(feedback)).toBe("tooManyRequests");
+
+    // A later submit with a field to fix shows the fields again, not the cap.
+    feedback = medicalQuestionFeedback(feedback, { type: "submit", invalid: medicalQuestionInvalidFields({ ...form, phone: "" }, null) });
+    expect(feedback).toEqual({ invalid: new Set(["phone", "turnstile"]), rateLimited: false });
+    expect(medicalQuestionAlert(feedback)).toBe("error");
+    feedback = medicalQuestionFeedback(feedback, { type: "edit", field: "phone" });
+    expect(feedback.invalid).toEqual(new Set(["turnstile"]));
+  });
 });
