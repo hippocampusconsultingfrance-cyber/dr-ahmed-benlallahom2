@@ -87,23 +87,24 @@ describe.skipIf(!executablePath)("réservation et confirmation dans un navigateu
       void dialog.dismiss();
     });
     await page.route((url) => !url.href.startsWith(baseUrl), (request) => request.abort());
-    await page.route("**/api/trpc/**", (request) => {
+    await page.route("**/api/trpc/**", async (request) => {
       const url = new URL(request.request().url());
       const names = url.pathname.replace(/^.*\/api\/trpc\//, "").split(",");
       const rawInput = request.request().method() === "GET" ? url.searchParams.get("input") : request.request().postData();
       const inputs = rawInput ? JSON.parse(rawInput) : {};
       let status = 200;
-      const body = names.map((name, index) => {
+      // Une procédure peut répondre par une promesse, pour retenir la réponse le temps d'une vérification.
+      const body = await Promise.all(names.map(async (name, index) => {
         const input = inputs[index] ? superjson.deserialize(inputs[index]) : undefined;
         calls.push({ procedure: name, input });
-        const result = procedures[name] ? procedures[name](input) : null;
+        const result = procedures[name] ? await procedures[name](input) : null;
         if (result && typeof result === "object" && "trpcError" in result) {
           const { code, httpStatus, message, reason } = (result as TrpcError).trpcError;
           status = httpStatus;
           return { error: superjson.serialize({ message, code: -32000, data: { code, httpStatus, path: name, ...(reason ? { reason } : {}) } }) };
         }
         return { result: { data: superjson.serialize(result) } };
-      });
+      }));
       return request.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
     });
     await beforeGoto(page);
@@ -383,11 +384,16 @@ describe.skipIf(!executablePath)("réservation et confirmation dans un navigateu
     await page.context().close();
   }, 60_000);
 
-  it("affiche une erreur et un bouton « Réessayer » quand les réservations du jour ne se chargent pas (RES-02)", async () => {
-    const [firstDay] = openDays();
+  it("affiche une erreur et un bouton « Réessayer » quand les réservations du jour ne se chargent pas, sans perdre le focus du clavier (RES-02)", async () => {
+    const [firstDay, secondDay] = openDays();
+    const secondDayStarts = listBookableSlots(EVENING_SLOTS, []).filter((slot) => slot.dayKey === secondDay).map((slot) => slot.start);
     let bookedSlotsDown = true;
+    let release = () => {};
     const { page, calls } = await open("/booking", bookingProcedures({
-      "availability.getBookedSlots": () => (bookedSlotsDown ? refuse("INTERNAL_SERVER_ERROR", 500, "Internal error") : []),
+      // Service rétabli : la réponse est retenue jusqu'à release(), le temps de vérifier le bouton pendant le nouvel essai.
+      "availability.getBookedSlots": ({ date }) => (bookedSlotsDown
+        ? refuse("INTERNAL_SERVER_ERROR", 500, "Internal error")
+        : new Promise((resolve) => { release = () => resolve(date === secondDay ? secondDayStarts : []); })),
     }), { language: "en" });
     await page.locator("#booking-day").selectOption(firstDay);
     const grid = page.getByRole("group", { name: bookingContent.en.form.slotsLegend });
@@ -400,13 +406,41 @@ describe.skipIf(!executablePath)("réservation et confirmation dans un navigateu
     expect(await status.getAttribute("data-state")).toBe("unavailable");
     expect(await status.innerText()).toBe(getBookingFormCopy("en").availabilityError);
 
-    const attempts = calls.filter((call) => call.procedure === "availability.getBookedSlots").length;
+    // Nouvel essai au clavier : le bouton garde le focus pendant la requête, un second appui
+    // ne relance rien, puis le focus passe au premier horaire de la grille qui le remplace.
+    const bookedSlotsCalls = () => calls.filter((call) => call.procedure === "availability.getBookedSlots").length;
+    const isFocused = (element: Element) => element === document.activeElement;
+    const attempts = bookedSlotsCalls();
     bookedSlotsDown = false;
-    await retry.click();
-    await grid.getByRole("radio").first().waitFor();
-    expect(calls.filter((call) => call.procedure === "availability.getBookedSlots").length).toBeGreaterThan(attempts);
+    await retry.focus();
+    await page.keyboard.press("Enter");
+    await expect.poll(bookedSlotsCalls).toBe(attempts + 1);
+    const pendingRetry = grid.getByRole("alert").getByRole("button");
+    expect(await pendingRetry.getAttribute("aria-disabled")).toBe("true");
+    expect(await pendingRetry.innerText()).toBe(getBookingFormCopy("en").checkingAvailability);
+    expect(await pendingRetry.evaluate(isFocused)).toBe(true);
+    await page.keyboard.press("Enter");
+    release();
+    const firstSlot = grid.getByRole("radio").first();
+    await firstSlot.waitFor({ state: "attached" });
+    await expect.poll(() => firstSlot.evaluate(isFocused)).toBe(true);
+    expect(bookedSlotsCalls()).toBe(attempts + 1);
     expect(await grid.getByRole("alert").count()).toBe(0);
     expect(await status.getAttribute("data-state")).toBe("select");
+
+    // Jour déjà entièrement réservé : le focus passe sur le message qui remplace la grille.
+    bookedSlotsDown = true;
+    await page.locator("#booking-day").selectOption(secondDay);
+    await retry.waitFor({ timeout: 20_000 });
+    const failures = bookedSlotsCalls();
+    bookedSlotsDown = false;
+    await retry.focus();
+    await page.keyboard.press("Enter");
+    await expect.poll(bookedSlotsCalls).toBe(failures + 1);
+    release();
+    const fullyBooked = grid.getByText(bookingContent.en.form.noSlotsThisDay);
+    await fullyBooked.waitFor();
+    await expect.poll(() => fullyBooked.evaluate(isFocused)).toBe(true);
     await page.context().close();
   }, 60_000);
 

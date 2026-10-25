@@ -742,6 +742,11 @@ export default function BookingPage() {
   const clockSignatureRef = useRef<(time: number) => string>(() => "");
   const paymentSubmissionRef = useRef(false);
   const draftSlotRef = useRef<string | null>(null);
+  // Grille des horaires : jour dont les réservations sont en cours de nouvel essai, et
+  // jour dont la grille reçoit le focus quand ce nouvel essai se termine (RES-02).
+  const slotsFieldsetRef = useRef<HTMLFieldSetElement>(null);
+  const [slotsRetryDay, setSlotsRetryDay] = useState<string | null>(null);
+  const slotsRetryFocusRef = useRef<string | null>(null);
   const locale = getBookingLocale(language);
   const parisDateTimeFormat = useMemo(() => new Intl.DateTimeFormat(locale, { dateStyle: "full", timeStyle: "short", timeZone: "Europe/Paris" }), [locale]);
   const localizedDate = selectedDate ? `${parisDateTimeFormat.format(selectedDate)} (${content.form.parisTime})` : null;
@@ -864,9 +869,31 @@ export default function BookingPage() {
   const cancelPendingBooking = trpc.appointments.cancelPending.useMutation();
 
   // Bouton « Réessayer » de la grille : relance chaque donnée d’agenda dont le chargement a échoué.
+  // Pendant le nouvel essai, l’encadré d’erreur reste affiché et son bouton garde le focus
+  // (aria-disabled, pas disabled) ; s’il réussit, le focus passe dans la grille qui le remplace
+  // au lieu de retomber au début du document, sinon il reste sur le bouton.
+  const slotsRetrying = Boolean(dateKey) && slotsRetryDay === dateKey;
   const retryAvailability = () => {
-    for (const query of [bookedSlots, blockedDates, availabilitySlots]) if (query.isError) void query.refetch();
+    if (slotsRetrying) return;
+    const retriedDay = dateKey;
+    setSlotsRetryDay(retriedDay);
+    for (const query of [blockedDates, availabilitySlots]) if (query.isError) void query.refetch();
+    void bookedSlots.refetch().finally(() => {
+      slotsRetryFocusRef.current = retriedDay;
+      setSlotsRetryDay((current) => (current === retriedDay ? null : current));
+    });
   };
+
+  useEffect(() => {
+    if (slotsRetrying || !dateKey || slotsRetryFocusRef.current !== dateKey) return;
+    slotsRetryFocusRef.current = null;
+    if (bookedSlots.isError) return;
+    const grid = slotsFieldsetRef.current;
+    const target = grid?.querySelector<HTMLElement>("input[name='booking-slot']:checked")
+      ?? grid?.querySelector<HTMLElement>("input[name='booking-slot']")
+      ?? grid?.querySelector<HTMLElement>("[data-slots-empty]");
+    target?.focus();
+  }, [slotsRetrying]);
 
   const chooseDay = (nextDayKey: string) => {
     // Choix du patient : il remplace le créneau du brouillon pas encore repris.
@@ -1331,20 +1358,20 @@ export default function BookingPage() {
               </select>
               {dayKey && (
                 // Boutons radio natifs : Tab entre dans la grille, les flèches changent d’horaire.
-                <fieldset className="mt-4" aria-describedby="availability-status">
+                <fieldset ref={slotsFieldsetRef} className="mt-4" aria-describedby="availability-status">
                   <legend className="block text-xs font-medium mb-2">{content.form.slotsLegend}</legend>
-                  {bookedSlots.isLoading ? (
+                  {bookedSlots.isLoading && !slotsRetrying ? (
                     <p className="text-sm text-muted-foreground">{bookingFormCopy.checkingAvailability}</p>
-                  ) : bookedSlots.isError ? (
+                  ) : bookedSlots.isError || slotsRetrying ? (
                     // Réservations du jour non chargées : erreur explicite et nouvel essai, au lieu d’une grille vide.
                     <div className="flex flex-col items-start gap-3 rounded-xl border border-destructive/35 bg-destructive/5 p-4 text-sm text-destructive" role="alert">
                       <p>{content.form.slotsError}</p>
-                      <Button type="button" variant="outline" onClick={retryAvailability} disabled={bookedSlots.isFetching} className="min-h-11">
-                        {bookedSlots.isFetching ? bookingFormCopy.checkingAvailability : content.form.retry}
+                      <Button type="button" variant="outline" onClick={retryAvailability} aria-disabled={slotsRetrying || undefined} className="min-h-11 aria-disabled:cursor-not-allowed aria-disabled:opacity-50">
+                        {slotsRetrying ? bookingFormCopy.checkingAvailability : content.form.retry}
                       </Button>
                     </div>
                   ) : daySlots.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">{dayOpenSlots.length > 0 ? content.form.noSlotsThisDay : content.form.noSlotsLeftThisDay}</p>
+                    <p data-slots-empty tabIndex={-1} className="text-sm text-muted-foreground focus:outline-none">{dayOpenSlots.length > 0 ? content.form.noSlotsThisDay : content.form.noSlotsLeftThisDay}</p>
                   ) : (
                     <div id="booking-slots" className="grid grid-cols-3 gap-2 sm:grid-cols-4">
                       {daySlots.map((option) => (
