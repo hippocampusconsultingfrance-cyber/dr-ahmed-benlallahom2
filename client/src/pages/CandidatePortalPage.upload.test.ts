@@ -56,6 +56,16 @@ describe("REC-05 — catégorie du document dans le coffre", () => {
     for (const category of CANDIDATE_UPLOADABLE_DOCUMENT_CATEGORIES) expect(trigger.content, category).not.toContain(copy.categories[category]);
   });
 
+  it.each(languages)("laisse le message categoryRequired au formulaire, pas à la validation du navigateur (%s)", language => {
+    // Radix adds a hidden native <select> to the form. Emptied after an upload, a `required` one would
+    // make the browser block the next submit with its own bubble, before upload() shows categoryRequired.
+    const nativeSelects = renderPortal(language).match(/<select[^>]*>/g) ?? [];
+
+    expect(nativeSelects).toHaveLength(1);
+    expect(nativeSelects[0]).toContain('aria-hidden="true"');
+    expect(nativeSelects[0]).not.toMatch(/\srequired(=|\s|>)/);
+  });
+
   it.each(languages)("indique sous la liste quelles catégories sont lues par l’IA (%s)", language => {
     const copy = candidatePortalCopy[language];
     const html = renderPortal(language);
