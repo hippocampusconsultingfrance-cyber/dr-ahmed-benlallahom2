@@ -444,7 +444,7 @@ describe.skipIf(!executablePath)("réservation et confirmation dans un navigateu
     await page.context().close();
   }, 60_000);
 
-  it("écrit le fichier agenda avec la ponctuation de la langue de la page (RES-05)", async () => {
+  it("écrit le fichier agenda et le libellé du contact avec la ponctuation de la langue de la page (RES-05)", async () => {
     const start = parisBookingSlotStart(toParisBookingDateKey(new Date(Date.now() + 5 * 24 * 60 * 60 * 1000)), "19:00")!;
     const { page } = await open("/booking/confirmation?status=success&trackingId=APTCONFIRM0002&session_id=cs_test_confirmed", {
       "appointments.publicStatus": () => ({ state: "confirmed", appointment: { appointmentDate: start.toISOString(), durationMinutes: 30, amountEur: 150 } }),
@@ -457,6 +457,10 @@ describe.skipIf(!executablePath)("réservation et confirmation dans un navigateu
     const description = ics.replace(/\r\n /g, "").split("\r\n").find((line) => line.startsWith("DESCRIPTION:"))!;
     expect(description).toContain("DESCRIPTION:Reference: APTCONFIRM0002\\nDuration: 30 minutes\\nAmount paid: €150.00\\nContact us: ");
     expect(description).not.toContain(" :");
+    // Même ponctuation sur la page, pour le libellé du contact.
+    const pageText = await page.locator("main").innerText();
+    expect(pageText).toContain(`${confirmationContent.en.contactTitle}: `);
+    expect(pageText).not.toContain(" :");
     await page.context().close();
   }, 60_000);
 

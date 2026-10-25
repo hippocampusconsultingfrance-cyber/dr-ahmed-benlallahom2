@@ -136,6 +136,8 @@ export const bookingContent = {
         remaining: "Temps restant pour payer",
         remainingValue: (minutes: number) => (minutes < 1 ? "moins d’une minute" : `encore ${minutes} min`),
         reference: "Référence",
+        // Ponctuation des libellés de l’encart : espace avant les deux-points en français seulement.
+        labelSeparator: " : ",
         resume: "Reprendre le paiement",
         cancel: "Annuler et choisir un autre créneau",
         cancelled: "Le créneau a été libéré. Vos informations sont conservées : choisissez une nouvelle date ou heure.",
@@ -225,6 +227,7 @@ export const bookingContent = {
         remaining: "Time left to pay",
         remainingValue: (minutes: number) => (minutes < 1 ? "less than a minute" : `${minutes} min left`),
         reference: "Reference",
+        labelSeparator: ": ",
         resume: "Resume payment",
         cancel: "Cancel and choose another time slot",
         cancelled: "The time slot has been released. Your details are kept: choose a new date or time.",
@@ -314,6 +317,7 @@ export const bookingContent = {
         remaining: "Verbleibende Zeit zum Bezahlen",
         remainingValue: (minutes: number) => (minutes < 1 ? "weniger als eine Minute" : `noch ${minutes} Min.`),
         reference: "Referenz",
+        labelSeparator: ": ",
         resume: "Zahlung fortsetzen",
         cancel: "Stornieren und anderen Termin wählen",
         cancelled: "Der Termin wurde freigegeben. Ihre Angaben bleiben erhalten: Wählen Sie ein neues Datum oder eine neue Uhrzeit.",
@@ -403,6 +407,7 @@ export const bookingContent = {
         remaining: "剩余付款时间",
         remainingValue: (minutes: number) => (minutes < 1 ? "不到 1 分钟" : `还剩 ${minutes} 分钟`),
         reference: "编号",
+        labelSeparator: "：",
         resume: "继续付款",
         cancel: "取消并选择其他时段",
         cancelled: "该时段已释放。您的信息已保留：请选择新的日期或时间。",
@@ -1145,10 +1150,10 @@ export default function BookingPage() {
                 <h2 id="pending-booking-title" className="font-display text-xl font-bold mb-2">{content.pending.title}</h2>
                 <p className="text-sm text-muted-foreground leading-relaxed">{content.pending.description}</p>
                 <dl className="mt-3 grid gap-1 text-sm">
-                  <div><dt className="inline font-medium">{content.pending.slot} : </dt><dd className="inline">{parisDateTimeFormat.format(new Date(pendingBooking.appointmentDate))} ({content.form.parisTime}){pendingLocalTime && `, ${content.form.localTime(pendingLocalTime)}`}</dd></div>
+                  <div><dt className="inline font-medium">{content.pending.slot}{content.pending.labelSeparator}</dt><dd className="inline">{parisDateTimeFormat.format(new Date(pendingBooking.appointmentDate))} ({content.form.parisTime}){pendingLocalTime && `, ${content.form.localTime(pendingLocalTime)}`}</dd></div>
                   {/* Temps restant plutôt qu’une heure de Paris qui semble déjà passée à l’étranger (RES-04). */}
-                  <div><dt className="inline font-medium">{content.pending.remaining} : </dt><dd className="inline">{content.pending.remainingValue(getHoldRemainingMinutes(pendingBooking.holdExpiresAt, now))}</dd></div>
-                  <div><dt className="inline font-medium">{content.pending.reference} : </dt><dd className="inline font-mono text-primary">{pendingBooking.trackingId}</dd></div>
+                  <div><dt className="inline font-medium">{content.pending.remaining}{content.pending.labelSeparator}</dt><dd className="inline">{content.pending.remainingValue(getHoldRemainingMinutes(pendingBooking.holdExpiresAt, now))}</dd></div>
+                  <div><dt className="inline font-medium">{content.pending.reference}{content.pending.labelSeparator}</dt><dd className="inline font-mono text-primary">{pendingBooking.trackingId}</dd></div>
                 </dl>
                 <div className="mt-4 flex flex-col gap-2 sm:flex-row">
                   <Button type="button" onClick={handleResumePayment} disabled={resumeCheckout.isPending || cancelPendingBooking.isPending} className="cta-primary">

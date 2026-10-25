@@ -66,7 +66,7 @@ export const confirmationContent = {
       addToCalendar: "Ajouter à mon agenda",
       calendarTitle: "Consultation avec le Dr Ahmed Ben Lallahom",
       reference: "Référence",
-      // Ponctuation des libellés du fichier agenda : espace avant les deux-points en français seulement.
+      // Ponctuation des libellés (page et fichier agenda) : espace avant les deux-points en français seulement.
       labelSeparator: " : ",
     },
     contactTitle: "Nous contacter",
@@ -525,7 +525,7 @@ export default function BookingConfirmationPage() {
             <p className="mt-3 text-sm text-muted-foreground leading-relaxed">{copy.refund.text}</p>
             <p className="mt-2 text-sm text-muted-foreground leading-relaxed">{copy.refund.contact}</p>
             <p className="mt-2 text-sm leading-relaxed">
-              <span className="font-medium text-foreground">{copy.contactTitle} : </span>
+              <span className="font-medium text-foreground">{copy.contactTitle}{copy.appointment.labelSeparator}</span>
               <a className="text-primary underline underline-offset-2" href={`mailto:${siteConfig.email}`}>{siteConfig.email}</a>
               {" · "}
               <a className="text-primary underline underline-offset-2" href={`tel:${siteConfig.phone.replace(/\s/g, "")}`}>{siteConfig.phone}</a>
