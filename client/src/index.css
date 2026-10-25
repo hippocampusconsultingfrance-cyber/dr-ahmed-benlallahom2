@@ -282,11 +282,14 @@ html[lang="zh"] .font-display,
   .candidate-consent-item-invalid .candidate-consent-checkbox { border-color: #fb7185; background: #3f111b; }
 
   /*
-   * « backwards » et non « both » : une transformation conservée après l'animation ferait de ce
-   * conteneur le repère de l'en-tête fixe, qui défilerait alors avec la page (PUB-01).
+   * Un ancêtre transformé devient le repère de l'en-tête fixe, qui défile alors avec la page (PUB-01).
+   * D'où « backwards » et non « both » (rien ne reste après l'animation), et, sur les pages qui ont
+   * l'en-tête, une animation posée sur ses voisins plutôt que sur le conteneur : pendant les 180 ms,
+   * par exemple quand un retour arrière restaure le défilement, l'en-tête reste en haut de l'écran.
    */
   @media (prefers-reduced-motion: no-preference) {
-    .page-transition {
+    .page-transition:not(:has(> * > .site-nav)),
+    .page-transition > :has(> .site-nav) > :not(.site-nav) {
       animation: page-transition-enter 180ms cubic-bezier(0.23, 1, 0.32, 1) backwards;
     }
   }
@@ -296,7 +299,8 @@ html[lang="zh"] .font-display,
     to { opacity: 1; transform: translateY(0); }
   }
 
-  html.data-saver .page-transition {
+  html.data-saver .page-transition,
+  html.data-saver .page-transition > :has(> .site-nav) > :not(.site-nav) {
     animation: none;
   }
 
@@ -456,6 +460,18 @@ html[lang="zh"] .font-display,
   }
   .parallax-subtle:not(.visible) {
     transform: scale(0.97);
+  }
+
+  /*
+   * Section pas encore révélée qui reçoit le focus clavier : affichée aussitôt, à sa place. Sinon elle
+   * reste transparente 0,7 s et son décalage, retiré après le défilement, glisse l'élément focalisé
+   * sous l'en-tête fixe (WCAG 2.4.11).
+   */
+  .fade-in-up:focus-within,
+  .parallax-subtle:focus-within {
+    opacity: 1;
+    transform: none;
+    transition: none;
   }
 
   /* Smooth hover lift for interactive cards */
@@ -804,6 +820,22 @@ html[lang="zh"] .font-display,
 
 html {
   scroll-behavior: smooth;
+}
+
+/*
+ * En-tête fixe (Navigation : h-18, puis md:h-20) : ce que le navigateur fait défiler pour un focus
+ * clavier (Maj+Tab), une ancre ou scrollIntoView s'arrête sous lui au lieu de finir caché dessous
+ * (WCAG 2.4.11). 1,25rem de plus que l'en-tête : pour un champ, Chromium aligne sur ce bord le
+ * curseur de saisie, pas le cadre. Le scroll-mt d'une ancre (LegalPage) s'y ajoute.
+ */
+html:has(header.site-nav) {
+  scroll-padding-top: 5.75rem;
+}
+
+@media (min-width: 768px) {
+  html:has(header.site-nav) {
+    scroll-padding-top: 6.25rem;
+  }
 }
 
 body {

@@ -218,7 +218,7 @@ function LegalPageFr() {
                   </ul>
                   <p className="mt-4">Pour exercer ces droits, utilisez le formulaire dédié <Link href="/gdpr" className="text-primary underline underline-offset-2">Exercer mes droits RGPD</Link> ou écrivez-nous à <a href={`mailto:${siteConfig.email}`} className="text-primary underline-offset-2 hover:underline">{siteConfig.email}</a>.</p>
 
-                  <h3 id="cookies" className="font-semibold text-foreground mt-4 scroll-mt-28">7. Cookies et technologies de suivi</h3>
+                  <h3 id="cookies" className="font-semibold text-foreground mt-4 scroll-mt-4">7. Cookies et technologies de suivi</h3>
                   <p>Ce site utilise :</p>
                   <ul className="list-disc list-inside space-y-2 ml-2">
                     <li><strong>Traceurs essentiels (sans consentement) :</strong> mémorisation de votre choix en matière de cookies, protection anti-robot des formulaires (Cloudflare Turnstile), session de l’espace candidat et, uniquement sur l’espace d’administration, l’authentification Clerk.</li>
@@ -509,7 +509,7 @@ function LegalPageEn() {
                   </ul>
                   <p className="mt-4">To exercise these rights, use the dedicated form <Link href="/gdpr" className="text-primary underline underline-offset-2">Exercise my GDPR rights</Link> or write to <a href={`mailto:${siteConfig.email}`} className="text-primary underline-offset-2 hover:underline">{siteConfig.email}</a>.</p>
 
-                  <h3 id="cookies" className="font-semibold text-foreground mt-4 scroll-mt-28">7. Cookies and tracking technologies</h3>
+                  <h3 id="cookies" className="font-semibold text-foreground mt-4 scroll-mt-4">7. Cookies and tracking technologies</h3>
                   <p>This website uses:</p>
                   <ul className="list-disc list-inside space-y-2 ml-2">
                     <li><strong>Essential trackers (no consent needed):</strong> remembering your cookie choice, bot protection of forms (Cloudflare Turnstile), the candidate area session and, on the administration area only, Clerk authentication.</li>
@@ -779,7 +779,7 @@ function LegalPageDe() {
                   </ul>
                   <p className="mt-4">Um diese Rechte auszuüben, nutzen Sie das eigene Formular <Link href="/gdpr" className="text-primary underline underline-offset-2">Meine DSGVO-Rechte ausüben</Link> oder schreiben Sie an <a href={`mailto:${siteConfig.email}`} className="text-primary underline-offset-2 hover:underline">{siteConfig.email}</a>.</p>
 
-                  <h3 id="cookies" className="font-semibold text-foreground mt-4 scroll-mt-28">7. Cookies und Tracking-Technologien</h3>
+                  <h3 id="cookies" className="font-semibold text-foreground mt-4 scroll-mt-4">7. Cookies und Tracking-Technologien</h3>
                   <p>Diese Website verwendet:</p>
                   <ul className="list-disc list-inside space-y-2 ml-2">
                     <li><strong>Essenzielle Tracker (ohne Einwilligung):</strong> Speicherung Ihrer Cookie-Auswahl, Bot-Schutz der Formulare (Cloudflare Turnstile), Sitzung des Kandidatenbereichs und, nur im Administrationsbereich, die Clerk-Authentifizierung.</li>
@@ -1049,7 +1049,7 @@ function LegalPageZh() {
                   </ul>
                   <p className="mt-4">如需行使这些权利，请使用专用表格<Link href="/gdpr" className="text-primary underline underline-offset-2">行使我的 GDPR 权利</Link>，或发送邮件至 <a href={`mailto:${siteConfig.email}`} className="text-primary underline-offset-2 hover:underline">{siteConfig.email}</a>。</p>
 
-                  <h3 id="cookies" className="font-semibold text-foreground mt-4 scroll-mt-28">7. Cookie和跟踪技术</h3>
+                  <h3 id="cookies" className="font-semibold text-foreground mt-4 scroll-mt-4">7. Cookie和跟踪技术</h3>
                   <p>本网站使用：</p>
                   <ul className="list-disc list-inside space-y-2 ml-2">
                     <li><strong>必要跟踪器（无需同意）：</strong> 记住您的 Cookie 选择、表单防机器人保护（Cloudflare Turnstile）、候选人空间会话，以及仅在管理后台使用的 Clerk 身份验证。</li>

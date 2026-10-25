@@ -100,6 +100,20 @@ describe.skipIf(!executablePath)("pages publiques dans un navigateur", () => {
     return { rgba, backgroundBehind, ratio };
   };
 
+  /** Fin du défilement doux (scroll-behavior: smooth) : la position ne bouge plus pendant 4 images. */
+  const scrollSettled = () => new Promise<void>((resolve) => {
+    let last = -1;
+    let stable = 0;
+    let frames = 0;
+    const tick = () => {
+      stable = window.scrollY === last ? stable + 1 : 0;
+      last = window.scrollY;
+      if (stable >= 4 || ++frames > 120) resolve();
+      else requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  });
+
   it("garde l'en-tête en haut de l'écran après un défilement de 1 500 px (PUB-01)", async () => {
     for (const width of [1440, 390]) {
       for (const route of ["/", "/faq", "/employers", "/venture/pratique-clinique"]) {
@@ -110,6 +124,77 @@ describe.skipIf(!executablePath)("pages publiques dans un navigateur", () => {
         expect(position.top, `${route} à ${width} px`).toBe(0);
         await page.context().close();
       }
+    }
+  }, 120_000);
+
+  it("laisse l'en-tête fixe pendant l'animation d'entrée d'une page, qui reste celle du contenu (PUB-01)", async () => {
+    for (const width of [1440, 390]) {
+      const page = await open("/faq", { width });
+      await page.evaluate(() => history.pushState(null, "", "/employers"));
+      await page.waitForFunction(() => location.pathname === "/employers" && document.querySelector(".page-transition main form") !== null);
+      // Retour arrière vers /faq : la page revient avec son animation d'entrée, figée ici à son début.
+      const during = await page.evaluate(() => new Promise<{ animations: number; scrollY: number; headerTop: number; transformedAncestors: string[]; mainOpacity: string }>((resolve) => {
+        const observer = new MutationObserver(() => {
+          if (location.pathname !== "/faq" || !document.querySelector(".page-transition main")) return;
+          observer.disconnect();
+          const animations = document.getAnimations().filter((animation) => (animation as CSSAnimation).animationName === "page-transition-enter");
+          for (const animation of animations) {
+            animation.pause();
+            animation.currentTime = 0;
+          }
+          window.scrollTo({ top: 1500, behavior: "instant" });
+          const header = document.querySelector("header.site-nav")!;
+          const transformedAncestors: string[] = [];
+          for (let node = header.parentElement; node; node = node.parentElement) {
+            if (getComputedStyle(node).transform !== "none") transformedAncestors.push(node.tagName + "." + node.className);
+          }
+          resolve({ animations: animations.length, scrollY: window.scrollY, headerTop: header.getBoundingClientRect().top, transformedAncestors, mainOpacity: getComputedStyle(document.querySelector(".page-transition main")!).opacity });
+        });
+        observer.observe(document.body, { childList: true, subtree: true });
+        history.back();
+      }));
+      expect(during.animations, `${width} px`).toBeGreaterThan(0);
+      expect(during.scrollY, `${width} px`).toBeGreaterThan(500);
+      expect(during.transformedAncestors, `${width} px`).toEqual([]);
+      expect(during.headerTop, `${width} px`).toBe(0);
+      // Le contenu, lui, entre toujours en fondu.
+      expect(during.mainOpacity, `${width} px`).toBe("0");
+      await page.context().close();
+    }
+
+    // Sans en-tête (réservation, espace candidat…), la page entière garde l'animation.
+    const booking = await open("/booking");
+    expect(await booking.evaluate(() => getComputedStyle(document.querySelector(".page-transition")!).animationName)).toBe("page-transition-enter");
+    await booking.context().close();
+  }, 120_000);
+
+  it("garde sous l'en-tête fixe l'élément qui reçoit le focus en remontant au clavier (PUB-01, WCAG 2.4.11)", async () => {
+    for (const [route, width] of [["/employers", 1366], ["/faq", 1366], ["/employers", 390], ["/", 390]] as const) {
+      const page = await open(route, { width, height: width < 768 ? 844 : 900 });
+      // Du premier lien du pied de page, Maj+Tab remonte dans le formulaire ou la FAQ.
+      await page.evaluate(() => {
+        window.scrollTo({ top: document.documentElement.scrollHeight, behavior: "instant" });
+        document.querySelector<HTMLElement>("footer a[href], footer button")!.focus();
+      });
+      for (let step = 0; step < 14; step++) {
+        await page.keyboard.press("Shift+Tab");
+        await page.evaluate(scrollSettled);
+        const hidden = await page.evaluate(() => {
+          const focused = document.activeElement as HTMLElement | null;
+          const header = document.querySelector("header.site-nav")!;
+          if (!focused || focused === document.body || header.contains(focused)) return null;
+          const box = focused.getBoundingClientRect();
+          const label = `${focused.tagName.toLowerCase()} « ${(focused.getAttribute("placeholder") || focused.textContent || "").trim().slice(0, 40)} » [${Math.round(box.top)}, ${Math.round(box.bottom)}]`;
+          if (box.bottom <= 0 || box.top >= innerHeight) return `${label} hors de l'écran`;
+          const covered = [[box.left + box.width / 2, box.top + box.height / 2], [box.left + 4, box.top + 2]].some(([x, y]) => {
+            const hit = document.elementFromPoint(x, y);
+            return hit !== null && header.contains(hit) && !focused.contains(hit);
+          });
+          return covered ? `${label} sous l'en-tête` : null;
+        });
+        expect(hidden, `${route} à ${width} px, Maj+Tab n° ${step + 1}`).toBeNull();
+      }
+      await page.context().close();
     }
   }, 120_000);
 
