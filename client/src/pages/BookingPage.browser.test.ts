@@ -4,6 +4,7 @@ import { chromium, type Browser, type BrowserContextOptions, type Page } from "p
 import superjson from "superjson";
 import { createServer, type ViteDevServer } from "vite";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { cookieCopy } from "@/components/CookieConsent";
 import { COOKIE_CONSENT_STORAGE_KEY, createCookieConsent } from "@/components/cookieConsentState";
 import { getBookingFormCopy } from "@/lib/publicFormCopy";
 import { bookingContent, listBookableSlots, parisBookingSlotStart, toParisBookingDateKey } from "./BookingPage";
@@ -422,6 +423,38 @@ describe.skipIf(!executablePath)("réservation et confirmation dans un navigateu
     const description = ics.replace(/\r\n /g, "").split("\r\n").find((line) => line.startsWith("DESCRIPTION:"))!;
     expect(description).toContain("DESCRIPTION:Reference: APTCONFIRM0002\\nDuration: 30 minutes\\nAmount paid: €150.00\\nContact us: ");
     expect(description).not.toContain(" :");
+    await page.context().close();
+  }, 60_000);
+
+  it("laisse remonter le texte de la confirmation au-dessus de la pastille « Préférences cookies » sur téléphone (RES-05)", async () => {
+    const start = parisBookingSlotStart(toParisBookingDateKey(new Date(Date.now() + 5 * 24 * 60 * 60 * 1000)), "19:00")!;
+    // Pixel 7, en anglais, choix cookies déjà fait : la pastille reste en bas à gauche de l'écran.
+    const { page } = await open("/booking/confirmation?status=success&trackingId=APTCONFIRM0003&session_id=cs_test_confirmed", {
+      "appointments.publicStatus": () => ({ state: "confirmed", appointment: { appointmentDate: start.toISOString(), durationMinutes: 30, amountEur: 150 } }),
+    }, { language: "en", timezoneId: "Asia/Dubai", context: { viewport: { width: 412, height: 839 }, deviceScaleFactor: 2.625, isMobile: true, hasTouch: true } });
+    await page.getByRole("definition").first().waitFor();
+    await page.getByRole("button", { name: cookieCopy.en.settings }).waitFor();
+    await page.evaluate(() => Promise.all(document.getAnimations().filter((animation) => (animation as CSSAnimation).animationName === "page-transition-enter").map((animation) => animation.finished)));
+
+    // Chaque texte et chaque commande, amené en bas de l'écran comme le fait le navigateur pour un focus.
+    const covered = await page.evaluate(async () => {
+      const shortcut = document.querySelector(".cookie-preferences-shortcut")!;
+      const blocks = [...document.querySelectorAll<HTMLElement>("main :is(h1, h2, p, li, dt, dd, a[href], button), footer :is(p, a[href])")]
+        .filter((element) => element.getBoundingClientRect().width > 0 && !shortcut.contains(element));
+      const result: string[] = [];
+      for (const block of blocks) {
+        block.scrollIntoView({ block: "end", behavior: "instant" });
+        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        const box = block.getBoundingClientRect();
+        const pill = shortcut.getBoundingClientRect();
+        if (box.left < pill.right && pill.left < box.right && box.top < pill.bottom && pill.top < box.bottom) {
+          result.push(`${block.tagName.toLowerCase()} « ${(block.textContent ?? "").trim().slice(0, 50)} »`);
+        }
+      }
+      return { count: blocks.length, result };
+    });
+    expect(covered.count).toBeGreaterThan(10);
+    expect(covered.result).toEqual([]);
     await page.context().close();
   }, 60_000);
 });

@@ -1537,6 +1537,19 @@ html[data-cookie-banner-open="true"] .whatsapp-contact-float {
 }
 
 /*
+ * Pastille « Préférences cookies » (bas gauche, 1rem du bord, 2rem de haut + bordure) : comme pour le
+ * bandeau ci-dessous, la page garde en bas la place qu'elle occupe, pour que la fin d'une page et ce qui
+ * reçoit le focus se fassent remonter au-dessus d'elle (texte de /booking/confirmation sur téléphone).
+ */
+html:has(.cookie-preferences-shortcut) {
+  scroll-padding-bottom: 3.5rem;
+}
+
+html:has(.cookie-preferences-shortcut) body {
+  padding-bottom: 3.5rem;
+}
+
+/*
  * Tant que le bandeau est ouvert, la page garde en bas un espace de sa hauteur (mesurée par
  * CookieConsent) : sur téléphone, un bouton ou le menu de langue d'une page courte
  * (/recruitment/unsubscribe, espace candidat) se fait remonter au-dessus au lieu de rester dessous.
