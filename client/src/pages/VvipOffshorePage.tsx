@@ -16,6 +16,7 @@ export const vvipOffshoreCopy = {
     title: "Médecine d’urgence et soins hautement spécialisés en environnements critiques.",
     intro: "Nous recrutons des médecins, urgentistes et personnels paramédicaux d’élite pour des missions exclusives au Moyen-Orient (délégations VVIP et environnements institutionnels), sur les plateformes pétrolières et auprès des grandes sociétés industrielles offshore.",
     nav: "VVIP & Offshore",
+    secureChannel: "Canal Sécurisé VVIP",
     formTitle: "Candidature Missions VVIP & Offshore",
     formIntro: "Ces missions requièrent une excellence clinique irréprochable, une résistance au stress éprouvée et des certifications internationales à jour (ATLS, ACLS, HUET/BOSIET selon les sites).",
     firstName: "Prénom",
@@ -70,6 +71,8 @@ export const vvipOffshoreCopy = {
     card2Desc: "Prise en charge des traumatismes majeurs, stabilisation en milieu confiné, gestion des intoxications et des urgences chirurgicales sur plates-formes offshores et sites isolés.",
     card3Title: "Chantiers & Sites Miniers Isolat",
     card3Desc: "Mise en place de cliniques de site autonome, gestion de la médecine du travail d'urgence, traçabilité des stocks pharmaceutiques et télé-médecine avancée.",
+    clearanceRequired: "Habilitation requise",
+    reqKicker: "Standards de Sélection",
     reqTitle: "Exigences et qualifications requises",
     reqSub: "Le recrutement VVIP et Offshore repose sur un filtrage drastique garantissant une sécurité opérationnelle absolue.",
     req1: "Minimum 5 années d’exercice en médecine d’urgence, réanimation ou trauma-center.",
@@ -84,6 +87,7 @@ export const vvipOffshoreCopy = {
     title: "High-acuity emergency medicine in demanding environments.",
     intro: "We recruit elite physicians, emergency doctors, and healthcare professionals for exclusive assignments in the Middle East (VVIP delegations and institutional environments), oil rigs, and major offshore industrial corporations.",
     nav: "VVIP & Offshore",
+    secureChannel: "VVIP Secure Channel",
     formTitle: "VVIP & Offshore Application",
     formIntro: "These missions require flawless clinical excellence, proven stress resilience, and up-to-date international certifications (ATLS, ACLS, HUET/BOSIET).",
     firstName: "First name",
@@ -138,6 +142,8 @@ export const vvipOffshoreCopy = {
     card2Desc: "Management of major trauma, confinement stabilization, toxicological incidents, and surgical emergencies on offshore rigs and remote installations.",
     card3Title: "Remote Industrial & Mining Sites",
     card3Desc: "Deployment of autonomous site clinics, emergency occupational health management, pharmaceutical stock tracking, and advanced telemedicine.",
+    clearanceRequired: "Clearance required",
+    reqKicker: "Selection Standards",
     reqTitle: "Mandatory Requirements & Qualifications",
     reqSub: "VVIP and Offshore recruitment relies on rigorous screening ensuring absolute operational safety.",
     req1: "Minimum 5 years of practice in emergency medicine, intensive care, or trauma centers.",
@@ -152,6 +158,7 @@ export const vvipOffshoreCopy = {
     title: "Notfallmedizin und spezialisierte Versorgung in kritischen Umgebungen.",
     intro: "Wir rekrutieren Elite-Ärzte, Notärzte und medizinisches Fachpersonal für exklusive Einsätze im Nahen Osten (höchste Schutzstufen, VVIP), auf Bohrinseln und Offshore-Industriestandorten.",
     nav: "VVIP & Offshore",
+    secureChannel: "Sicherer VVIP-Kanal",
     formTitle: "VVIP & Offshore Bewerbung",
     formIntro: "Diese Einsätze erfordern absolute klinische Exzellenz, Stressresistenz und aktuelle internationale Zertifizierungen (ATLS, ACLS, HUET/BOSIET).",
     firstName: "Vorname",
@@ -206,6 +213,8 @@ export const vvipOffshoreCopy = {
     card2Desc: "Versorgung schwerer Traumata, Stabilisierung in engen Räumen, Giftunfälle und chirurgische Notfälle auf Bohrinseln.",
     card3Title: "Entlegene Industrie- & Bergbaustandorte",
     card3Desc: "Einrichtung autonomer Standortkliniken, arbeitsmedizinische Notfallversorgung und fortschrittliche Telemedizin.",
+    clearanceRequired: "Sicherheitsfreigabe erforderlich",
+    reqKicker: "Auswahlstandards",
     reqTitle: "Anforderungen & Qualifikationen",
     reqSub: "Das VVIP- und Offshore-Recruiting basiert auf strengsten Prüfungen zur Gewährleistung absoluter operativer Sicherheit.",
     req1: "Mindestens 5 Jahre Praxis in Notfallmedizin, Intensivmedizin oder Trauma-Zentren.",
@@ -220,6 +229,7 @@ export const vvipOffshoreCopy = {
     title: "苛刻环境下的急救医学与高端医疗保障。",
     intro: "我们为中东地区（政府及 VVIP 代表团）、石油钻井平台及大型离岸海洋工程企业招募顶尖医师、急诊-重症 specialist 及专业医护人员。",
     nav: "VVIP & 离岸",
+    secureChannel: "VVIP 安全通道",
     formTitle: "VVIP 与离岸任务专属申请",
     formIntro: "此类任务要求卓越的临床能力、出色的抗压素质以及最新的国际权威认证（ATLS、ACLS、HUET/BOSIET）。",
     firstName: "名",
@@ -274,6 +284,8 @@ export const vvipOffshoreCopy = {
     card2Desc: "应对海上平台及偏远设施的严重创伤、密闭空间稳定、中毒事件及外科急症。",
     card3Title: "偏远矿山与工业驻地",
     card3Desc: "建立自主营地诊所、应急职业健康管理、药品库存追溯及高级远程医疗。",
+    clearanceRequired: "需具备安全许可",
+    reqKicker: "遴选标准",
     reqTitle: "岗位要求与专业资质",
     reqSub: "VVIP 及离岸招聘采用极为严格的筛选标准，以确保绝对的作业安全。",
     req1: "至少 5 年急诊医学、重症医学或创伤中心临床经验。",
@@ -594,7 +606,7 @@ export default function VvipOffshorePage() {
                 <>
                   <div className="flex items-center gap-2.5 text-primary">
                     <Lock className="h-5 w-5" />
-                    <span className="text-xs font-semibold uppercase tracking-wider">Canal Sécurisé VVIP</span>
+                    <span className="text-xs font-semibold uppercase tracking-wider">{t.secureChannel}</span>
                   </div>
                   <h2 className="mt-2 font-display text-2xl md:text-3xl text-foreground">{t.formTitle}</h2>
                   <p className="mt-2 text-sm leading-6 text-muted-foreground">{t.formIntro}</p>
@@ -757,7 +769,7 @@ export default function VvipOffshorePage() {
                   <p className="mt-4 text-sm leading-6 text-muted-foreground">{card.desc}</p>
                 </div>
                 <div className="mt-6 pt-4 border-t border-border/40 flex items-center gap-2 text-xs text-primary font-medium">
-                  <ShieldCheck className="h-4 w-4" /> Habilitation requise
+                  <ShieldCheck className="h-4 w-4" /> {t.clearanceRequired}
                 </div>
               </div>
             ))}
@@ -768,7 +780,7 @@ export default function VvipOffshorePage() {
         <section className="container max-w-6xl mt-24">
           <div className="editorial-card p-8 md:p-12 relative overflow-hidden bg-gradient-to-br from-card via-card to-background">
             <div className="max-w-2xl">
-              <span className="section-kicker">Standards de Sélection</span>
+              <span className="section-kicker">{t.reqKicker}</span>
               <h2 className="mt-3 font-display text-3xl text-foreground">{t.reqTitle}</h2>
               <p className="mt-3 text-muted-foreground">{t.reqSub}</p>
 
