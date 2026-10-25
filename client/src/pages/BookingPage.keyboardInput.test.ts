@@ -38,6 +38,26 @@ describe("saisie de la date et de l'heure au pavé numérique (RES-01)", () => {
     expect(typeTime("19:005").at(-1)).toBe("19:00");
   });
 
+  it("lit trois chiffres comme H:MM pendant la frappe, et quatre comme HH:MM", () => {
+    expect(typeTime("130")).toEqual(["1", "13", "130"]);
+    expect(typeTime("1300")).toEqual(["1", "13", "130", "13:00"]);
+    expect(typeTime("215").at(-1)).toBe("215");
+    expect(typeTime("100").at(-1)).toBe("100");
+    expect(typeTime("1000")).toEqual(["1", "10", "100", "10:00"]);
+    expect(typeTime("2359").at(-1)).toBe("23:59");
+    // « 190 » ne peut pas valoir 1:90 : le deux-points est inséré tout de suite.
+    expect(typeTime("190")).toEqual(["1", "19", "19:0"]);
+    // « 2400 » n'est pas réécrit en 2:40 : il reste visible et refusé.
+    expect(typeTime("2400").at(-1)).toBe("24:00");
+    expect(parseBookingDateTime("05/11/2026", "24:00")).toBeNull();
+
+    const date = typeDate("05112026").at(-1)!;
+    expect(parseBookingDateTime(date, typeTime("130").at(-1)!)?.toISOString()).toBe("2026-11-05T00:30:00.000Z");
+    expect(parseBookingDateTime(date, typeTime("215").at(-1)!)?.toISOString()).toBe("2026-11-05T01:15:00.000Z");
+    expect(parseBookingDateTime(date, typeTime("1300").at(-1)!)?.toISOString()).toBe("2026-11-05T12:00:00.000Z");
+    expect(typeInto(formatBookingTimeInput, Array(4).fill("Backspace"), "13:00")).toEqual(["13:0", "13:", "13", "1"]);
+  });
+
   it("garde les séparateurs tapés au clavier complet et n'empêche jamais d'effacer", () => {
     expect(typeDate("5/11/2026").at(-1)).toBe("5/11/2026");
     expect(typeDate("05.11.2026").at(-1)).toBe("05/11/2026");

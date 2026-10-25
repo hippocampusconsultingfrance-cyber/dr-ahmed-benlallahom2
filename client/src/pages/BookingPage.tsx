@@ -352,7 +352,13 @@ export function formatBookingDateInput(value: string, separator: "/" | "." = "/"
   return segments.join(separator);
 }
 
-/** Masque de saisie de l’heure : « 930 » s’affiche « 9:30 », « 1900 » « 19:00 », « 10h00 » « 10:00 ». */
+/**
+ * Masque de saisie de l’heure : « : » est inséré dès que la lecture est sans
+ * ambiguïté (« 930 » s’affiche « 9:30 », « 1900 » « 19:00 », « 10h00 » « 10:00 »).
+ * Trois chiffres qui se lisent H:MM (« 130 », « 215 ») restent tels quels et
+ * valent 1:30 et 2:15, comme pour le parseur ; le quatrième chiffre donne
+ * HH:MM (« 1300 » s’affiche « 13:00 »).
+ */
 export function formatBookingTimeInput(value: string): string {
   const segments = [""];
   for (const character of value) {
@@ -360,12 +366,15 @@ export function formatBookingTimeInput(value: string): string {
     if (/\d/.test(character)) {
       if (segments.length === 2) {
         if (segments[1].length < 2) segments[1] += character;
-      } else if (hour.length === 2 || (hour.length === 1 && Number(hour + character) > 23)) {
+      } else if (hour.length === 3) {
+        segments.splice(0, 1, hour.slice(0, 2), `${hour[2]}${character}`);
+      } else if ((hour.length === 1 && Number(hour) > 2) || (hour.length === 2 && Number(hour[1] + character) > 59)) {
+        // L’heure n’a qu’un chiffre (« 9 ») ou les deux suivants ne peuvent pas être des minutes (« 19 » puis « 0 » : « 19:0 »).
         segments.push(character);
       } else {
         segments[0] += character;
       }
-    } else if (/[:hH.,\s]/.test(character) && segments.length === 1 && hour) {
+    } else if (/[:hH.,\s]/.test(character) && segments.length === 1 && hour && hour.length < 3) {
       segments.push("");
     }
   }
