@@ -311,10 +311,70 @@ export const bookingContent = {
   },
 };
 
+// Le pavé numérique de l’iPhone (inputMode="numeric") n’a ni « / » ni « : » :
+// « 05112026 » se lit JJMMAAAA, « 930 » et « 1900 » H:MM et HH:MM, et « h »,
+// « . », « , » ou l’espace valent « : » (« 10h00 », « 10.00 ») (RES-01).
+function normalizeBookingDateText(value: string): string {
+  const trimmed = value.trim();
+  const separated = trimmed.replace(/[.\-\s]+/g, "/");
+  if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(separated) || !/^[\d\s./-]+$/.test(trimmed)) return separated;
+  const digits = trimmed.replace(/\D/g, "");
+  return digits.length === 8 ? `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}` : separated;
+}
+
+function normalizeBookingTimeText(value: string): string {
+  const trimmed = value.trim();
+  const bareDigits = /^(\d{1,2})(\d{2})$/.exec(trimmed);
+  if (bareDigits) return `${bareDigits[1]}:${bareDigits[2]}`;
+  return trimmed.replace(/\s*[hH.,:\s]\s*/, ":");
+}
+
+/**
+ * Masque de saisie de la date : « / » (« . » en allemand) est inséré dès que le
+ * jour ou le mois a ses deux chiffres et que la frappe continue. Un séparateur
+ * tapé au clavier complet est conservé (« 5/11/2026 »), et l’effacement n’est
+ * jamais bloqué par un séparateur ajouté automatiquement.
+ */
+export function formatBookingDateInput(value: string, separator: "/" | "." = "/"): string {
+  const segments = [""];
+  for (const character of value) {
+    const index = segments.length - 1;
+    const maxLength = index < 2 ? 2 : 4;
+    if (/\d/.test(character)) {
+      if (segments[index].length < maxLength) segments[index] += character;
+      else if (index < 2) segments.push(character);
+      else break;
+    } else if (/[/.\-\s,]/.test(character) && index < 2 && segments[index]) {
+      segments.push("");
+    }
+  }
+  return segments.join(separator);
+}
+
+/** Masque de saisie de l’heure : « 930 » s’affiche « 9:30 », « 1900 » « 19:00 », « 10h00 » « 10:00 ». */
+export function formatBookingTimeInput(value: string): string {
+  const segments = [""];
+  for (const character of value) {
+    const [hour] = segments;
+    if (/\d/.test(character)) {
+      if (segments.length === 2) {
+        if (segments[1].length < 2) segments[1] += character;
+      } else if (hour.length === 2 || (hour.length === 1 && Number(hour + character) > 23)) {
+        segments.push(character);
+      } else {
+        segments[0] += character;
+      }
+    } else if (/[:hH.,\s]/.test(character) && segments.length === 1 && hour) {
+      segments.push("");
+    }
+  }
+  return segments.join(":");
+}
+
 export function parseBookingDateTime(dateValue: string, timeValue: string): Date | null {
-  const normalizedDate = dateValue.trim().replace(/[.\-]/g, "/");
+  const normalizedDate = normalizeBookingDateText(dateValue);
   const dateMatch = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(normalizedDate);
-  const timeMatch = /^(\d{1,2}):(\d{2})$/.exec(timeValue.trim());
+  const timeMatch = /^(\d{1,2}):(\d{2})$/.exec(normalizeBookingTimeText(timeValue));
 
   if (!dateMatch || !timeMatch) return null;
 
@@ -470,6 +530,8 @@ export default function BookingPage() {
   });
 
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  // Séparateur inséré pendant la frappe, celui du format affiché (TT.MM.JJJJ en allemand).
+  const dateSeparator = language === "de" ? "." : "/";
   const [dateText, setDateText] = useState("");
   const [timeText, setTimeText] = useState("");
   const [dateError, setDateError] = useState<string | null>(null);
@@ -995,7 +1057,7 @@ export default function BookingPage() {
                   type="text"
                   required
                   value={dateText}
-                  onChange={(e) => synchronizeDateTime(e.target.value, timeText)}
+                  onChange={(e) => synchronizeDateTime(formatBookingDateInput(e.target.value, dateSeparator), timeText)}
                   inputMode="numeric"
                   autoComplete="off"
                   enterKeyHint="next"
@@ -1009,7 +1071,7 @@ export default function BookingPage() {
                   type="text"
                   required
                   value={timeText}
-                  onChange={(e) => synchronizeDateTime(dateText, e.target.value)}
+                  onChange={(e) => synchronizeDateTime(dateText, formatBookingTimeInput(e.target.value))}
                   inputMode="numeric"
                   autoComplete="off"
                   enterKeyHint="next"
