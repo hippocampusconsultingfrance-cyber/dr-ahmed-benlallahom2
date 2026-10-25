@@ -237,8 +237,10 @@ html[lang="zh"] .font-display,
 
   /*
    * Champs « form-control » (/employers, VVIP, onglet admin Questions santé) : même rendu que
-   * .recruitment-field. Dans cette couche, les utilitaires posés sur un champ (h-11, px-3…)
-   * gardent la priorité et le style d'erreur ci-dessous l'emporte par !important (A11Y-01).
+   * .recruitment-field, à garder aligné. Dans cette couche, un utilitaire posé sur un champ ne
+   * l'emporte que sur la propriété qu'il définit : h-11 laisse jouer min-height. Les champs de
+   * /questions-anesthesie gardent leur rendu grâce à min-h-11 py-0 rounded-none. Le style
+   * d'erreur ci-dessous l'emporte par !important (A11Y-01).
    */
   .form-control {
     display: block;
@@ -887,6 +889,7 @@ body {
   font-weight: 600;
 }
 
+/* Rendu repris par .form-control (@layer components) : modifier les deux ensemble. */
 .recruitment-field {
   display: block;
   width: 100%;
