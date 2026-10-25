@@ -20,6 +20,11 @@ const TRAP_NAMES = [
   "Offre speciale sur https://promo-1.example",
   "Payez sur www.colis-phish.example",
   "Payez sur colis-phish.example",
+  // Domains whose second character after the dot is a combining mark: Indian
+  // top-level domains (.भारत, .ভারত) and a decomposed accent.
+  "Payez sur colis-phish.भारत",
+  "Payez sur colis-phish.ভারত",
+  "Payez sur colis-phish.c\u0301om",
   "<a href=\"https://lien-phish.example\">Jeanne</a>",
   "Jeanne\nAppelez le 01 23 45 67 89",
 ];
@@ -40,6 +45,8 @@ describe("unverifiedRecipientGreeting (MAIL-01)", () => {
     expect(unverifiedRecipientGreeting("N'Golo")).toBe("Bonjour N'Golo,");
     expect(unverifiedRecipientGreeting("D’Arcy")).toBe("Bonjour D’Arcy,");
     expect(unverifiedRecipientGreeting("J. P.")).toBe("Bonjour J. P.,");
+    expect(unverifiedRecipientGreeting("J.-P.")).toBe("Bonjour J.-P.,");
+    expect(unverifiedRecipientGreeting("Nguye\u0302\u0303n")).toBe("Bonjour Nguye\u0302\u0303n,");
     expect(unverifiedRecipientGreeting("René")).toBe("Bonjour René,");
     expect(unverifiedRecipientGreeting("محمد")).toBe("Bonjour محمد,");
     expect(unverifiedRecipientGreeting("李明", "en")).toBe("Hello 李明,");

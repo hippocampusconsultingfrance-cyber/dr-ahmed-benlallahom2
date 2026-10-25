@@ -29,8 +29,9 @@ function escapeHtml(value: unknown): string {
 const GREETING_NAME_MAX_LENGTH = 40;
 // Built with RegExp: tsc refuses the literal "u" flag with this project's default target.
 const GREETING_NAME_PATTERN = new RegExp("^\\p{L}[\\p{L}\\p{M} '’.-]*$", "u");
-// A dot glued to two letters is a domain name ("colis-phish.example"), not an initial.
-const GREETING_DOMAIN_PATTERN = new RegExp("\\.\\p{L}{2}", "u");
+// A dot glued to a letter and another letter or mark is a domain name
+// ("colis-phish.example", "colis-phish.भारत"), not an initial.
+const GREETING_DOMAIN_PATTERN = new RegExp("\\.\\p{L}[\\p{L}\\p{M}]", "u");
 
 /**
  * Greeting of an email sent to an address nobody has verified yet (MAIL-01).
