@@ -87,11 +87,11 @@ export const RECRUITMENT_SPECIALTY_EQUIVALENTS: Readonly<Record<string, readonly
 /**
  * The « Soins infirmiers & Paramédical » specialties of the form
  * (client/src/pages/recruitmentSpecialties.ts). A title holding one of the
- * terms below is a nursing or allied health title: it earns specialty points
- * only when the declared specialty is one of these professions too
- * (INTL-02). An « Intensive Care Nurse », an « Emergency Medical
- * Technician » or an « Infirmier de réanimation » is no intensivist or
- * emergency physician.
+ * terms below, and no physician's word, is a nursing or allied health
+ * title: it earns specialty points only when the declared specialty is one
+ * of these professions too (INTL-02). An « Intensive Care Nurse », an
+ * « Emergency Medical Technician » or an « Infirmier de réanimation » is no
+ * intensivist or emergency physician.
  */
 export const RECRUITMENT_PARAMEDICAL_SPECIALTIES: ReadonlySet<string> = new Set([
   "Soins infirmiers généraux",
@@ -133,8 +133,9 @@ export const RECRUITMENT_PHARMACIST_SPECIALTIES: ReadonlySet<string> = new Set([
 
 /**
  * Words of a nursing or allied health title, matched like the equivalents
- * above. Only names of professions: not the fields they share with
- * physicians (斜视 "strabismus", "clinical pharmac…"), so that a
+ * above: « ممرض » is also in « الممرضات » (the nurses), « تمريض » in
+ * « التمريضية » (the adjective). Only names of professions: not the fields
+ * they share with physicians (斜视 "strabismus", "clinical pharmac…"), so that a
  * « Consultant Clinical Pharmacologist » stays a physician. "Rig medic" also
  * names the offshore paramedic profile of the VVIP form in every language.
  */
@@ -149,8 +150,28 @@ export const RECRUITMENT_PARAMEDICAL_TITLE_TERMS: readonly string[] = [
   "krankenpfleg", "pflegefach", "pflegekraft", "fachpflege", "pflegehelfer", "pflegeexpert", "pflegedienstleitung", "op pflege",
   "anästhesiepfleg", "intensivpfleg", "hebamme", "entbindungspfleg", "notfallsanitäter", "rettungssanitäter", "rettungsassistent",
   "logopäd", "mtra", "mtla", "diätassistent", "psychologe", "sozialarbeit",
-  "ممرض", "تمريض", "مسعف", "فني تخدير", "فني أشعة", "فني مختبر", "فني إسعاف", "تقني أشعة", "تقني مختبر",
-  "أخصائي تغذية", "أخصائية تغذية", "أخصائي نفسي", "أخصائية نفسية", "أخصائي اجتماعي",
+  "ممرض", "تمريض", "مسعف", "فني تخدير", "فنية تخدير", "فني أشعة", "فنية أشعة", "فني مختبر", "فنية مختبر",
+  "فني إسعاف", "تقني أشعة", "تقنية أشعة", "تقني مختبر", "تقنية مختبر",
+  "أخصائي تغذية", "أخصائية تغذية", "أخصائي نفسي", "أخصائية نفسية", "أخصائي اجتماعي", "أخصائية اجتماعية",
   "护士", "護士", "护理", "護理", "助产", "助產", "技师", "技師", "技术员", "技術員", "护工", "護工", "急救员", "急救員", "急救医护", "急救醫護",
-  "治疗师", "治療師", "营养师", "營養師", "心理师", "心理師", "社工",
+  "治疗师", "治療師", "营养师", "營養師", "心理师", "心理師", "社工", "医师助理", "醫師助理", "医生助理", "醫生助理",
+];
+
+/**
+ * Words of a physician's title: a title holding one keeps its specialty
+ * points beside a nursing or allied health word (INTL-02), « Facharzt für
+ * Psychiatrie, Diplom-Psychologe », « استشاري تخدير ومدرب للممرضين »
+ * (consultant anaesthetist, trainer of nurses). Latin and Arabic ones are
+ * whole words: « médecine » (the field) is no « médecin », nor « جراحة »
+ * (surgery) a « جراح ». A word inside a nursing or allied health title
+ * (« Physician Assistant », 医师助理) does not count, nor one that names
+ * someone else (server/recruitmentAnalysis.ts: "Doctor of Nursing
+ * Practice", 无国界医生, « assistant du médecin »…). Not "consultant" alone:
+ * a « Nurse Consultant » is a nurse.
+ */
+export const RECRUITMENT_PHYSICIAN_TITLE_TERMS: readonly string[] = [
+  "doctor", "physician", "surgeon", "médecin", "chirurgien", "chirurgienne", "praticien hospitalier", "praticienne hospitalière",
+  "arzt", "ärztin", "facharzt", "fachärztin", "oberarzt", "oberärztin", "chefarzt", "chefärztin", "assistenzarzt", "assistenzärztin", "notarzt", "notärztin",
+  "طبيب", "طبيبة", "استشاري", "استشارية", "جراح",
+  "医师", "醫師", "医生", "醫生", "大夫",
 ];

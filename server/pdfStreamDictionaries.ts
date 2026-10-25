@@ -149,20 +149,34 @@ function readDictionary(source: string, from: number, work: PdfScanWork, depth: 
 export type PdfStreamDictionaries = {
   /** Start (`<<`) and end (after `>>`) of the dictionary of each `stream` keyword, by the keyword's index. */
   byKeyword: Map<number, { start: number; end: number }>;
+  /**
+   * Where pdf.js may read objects in the raw file, sorted by start: from
+   * every `obj` keyword to the end of its value, and from every `trailer`
+   * keyword to the end of its dictionary (or of the file: pdf.js reads a
+   * trailer in recovery mode). Stream data that one of them reaches is
+   * searched by the checks like the rest of the file.
+   */
+  values: Array<{ start: number; end: number }>;
   unclear: boolean;
 };
 
-/** Parses the object after every `obj` keyword of the raw file, as pdf.js does from an xref offset. */
+/** Parses the object after every `obj` keyword of the raw file, as pdf.js does from an xref offset, and the dictionary after every `trailer`. */
 export function readPdfStreamDictionaries(source: string, work: PdfScanWork): PdfStreamDictionaries {
   const byKeyword = new Map<number, { start: number; end: number }>();
+  const values: Array<{ start: number; end: number }> = [];
   const objKeyword = /obj/g;
+  const trailerKeyword = /trailer/g;
   let match: RegExpExecArray | null;
   try {
     while ((match = objKeyword.exec(source))) {
-      // "12 0 obj" or "12 0obj"; not "endobj", not "object".
-      const before = match.index > 0 ? source.charCodeAt(match.index - 1) : 0x20;
+      // Not "object", not "obj12".
       const after = match.index + 3 < source.length ? source.charCodeAt(match.index + 3) : 0x20;
-      if ((isRegular(before) && (before < 0x30 || before > 0x39)) || isRegular(after)) continue;
+      if (isRegular(after)) continue;
+      // "12 0 obj", "12 0obj", and "12 0.obj", "12 0-obj" or "12 0E+obj", where pdf.js's number ends
+      // (Lexer.getNumber). Any other "obj" ("endobj") leads to no stream, but its value is kept in
+      // `values`: one too many only widens what the checks search.
+      const before = match.index > 0 ? source.charCodeAt(match.index - 1) : 0x20;
+      const header = !isRegular(before) || (before >= 0x30 && before <= 0x39) || before === 0x2e || before === 0x2d || before === 0x2b;
       let value: Value;
       try {
         value = readValue(source, nextToken(source, match.index + 3, work), work, 0);
@@ -170,16 +184,29 @@ export function readPdfStreamDictionaries(source: string, work: PdfScanWork): Pd
         if (error === UNREADABLE_OBJECT) continue;
         throw error;
       }
-      if (value.stream === undefined) continue;
+      values.push({ start: match.index, end: value.end });
+      if (!header || value.stream === undefined) continue;
       const start = nextToken(source, match.index + 3, work).start;
       const known = byKeyword.get(value.stream);
       if (!known || start < known.start) byKeyword.set(value.stream, { start, end: value.end });
     }
+    // pdf.js reads a trailer from these bytes whatever precedes them (XRef.indexObjects finds "trailer" anywhere after "xref").
+    while ((match = trailerKeyword.exec(source))) {
+      if (match.index + 7 < source.length && isRegular(source.charCodeAt(match.index + 7))) continue;
+      let end = source.length;
+      try {
+        end = readValue(source, nextToken(source, match.index + 7, work), work, 0).end;
+      } catch (error) {
+        if (error !== UNREADABLE_OBJECT) throw error;
+      }
+      values.push({ start: match.index, end });
+    }
   } catch (error) {
-    if (error === UNCLEAR_PDF_STRUCTURE) return { byKeyword, unclear: true };
+    if (error === UNCLEAR_PDF_STRUCTURE) return { byKeyword, values, unclear: true };
     throw error;
   }
-  return { byKeyword, unclear: false };
+  values.sort((left, right) => left.start - right.start);
+  return { byKeyword, values, unclear: false };
 }
 
 function whitespaceStart(source: string, index: number, work: PdfScanWork) {

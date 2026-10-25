@@ -11,6 +11,7 @@ import {
   RECRUITMENT_PARAMEDICAL_TITLE_TERMS,
   RECRUITMENT_PHARMACIST_SPECIALTIES,
   RECRUITMENT_PHARMACIST_TITLE_TERMS,
+  RECRUITMENT_PHYSICIAN_TITLE_TERMS,
   RECRUITMENT_SPECIALTY_EQUIVALENTS,
 } from "../shared/recruitmentSpecialtyEquivalents";
 
@@ -518,22 +519,27 @@ const UNSPACED_NEGATION_AFTER = /无|無|没有|沒有|未|不|非|过期|過期
  * 无痛 "painless" (无痛分娩, 无痛胃肠镜), 无菌 "aseptic", 无创 "non-invasive", 无偿 "unpaid", 无论
  * "whatever", 无锡 (a city), 无国界医生 "Doctors Without Borders", 不同 "different", 不断 "constantly",
  * 不仅 / 不只 / 不但 "not only", 不少 "many", 不良反应 "adverse reaction", 不孕 / 不育 "infertility",
- * 不全 "insufficiency", 不适 "discomfort", 心律不齐 "arrhythmia", 不稳定 "unstable", 不限于 "not limited
- * to", 不懈 "untiring", 未来 "future", 非常 "very", 非洲 "Africa", 非典 "SARS", 非营利 / 非政府
- * "non-profit / non-governmental".
+ * 不全 "insufficiency, incomplete" (心功能不全, 二尖瓣关闭不全, 宫颈机能不全, 不全骨折, 不全流产…) but
+ * after a document or qualification (资格不全 "incomplete qualification", 证书不全, 资料不全…), 不适
+ * "discomfort", 心律不齐 "arrhythmia", 不稳定 "unstable", 不限于 "not limited to", 不懈 "untiring", 未来
+ * "future", 非常 "very", 非洲 "Africa", 非典 "SARS", 非营利 / 非政府 "non-profit / non-governmental".
  */
-const UNSPACED_NON_NEGATIONS = /无痛|無痛|无菌|無菌|无创|無創|无偿|無償|无论|無論|无锡|無錫|无国界|無國界|不同|不断|不斷|不仅|不僅|不只|不但|不少|不良|不孕|不育|不全|不适|不適|不齐|不齊|不稳定|不穩定|不限|不懈|未来|未來|非常|非洲|非典|非营利|非營利|非政府/g;
+const UNSPACED_NON_NEGATIONS = /无痛|無痛|无菌|無菌|无创|無創|无偿|無償|无论|無論|无锡|無錫|无国界|無國界|不同|不断|不斷|不仅|不僅|不只|不但|不少|不良|不孕|不育|(?<!资格|資格|资质|資質|证|證|证书|證書|证件|證件|执照|執照|资料|資料|材料|文件|信息|資訊|手续|手續)不全|不适|不適|不齐|不齊|不稳定|不穩定|不限|不懈|未来|未來|非常|非洲|非典|非营利|非營利|非政府/g;
 
-/** The window with those words masked, at the same length. */
+/** The text with those words masked, at the same length. */
 const maskUnspacedNonNegations = (text: string) => text.replace(UNSPACED_NON_NEGATIONS, word => "·".repeat(word.length));
 
 /** A claim written with ideographs, found by inclusion and checked for a nearby negation. */
 function unspacedEvidenceAffirmsClaim(normalizedEvidence: string, claim: string) {
+  // Masked over the whole quote: a claim that ends in 资格, then 不全, is still 资格不全.
+  const masked = maskUnspacedNonNegations(normalizedEvidence);
   for (let index = normalizedEvidence.indexOf(claim); index !== -1; index = normalizedEvidence.indexOf(claim, index + 1)) {
-    const before = normalizedEvidence.slice(Math.max(0, index - 12), index);
-    const after = normalizedEvidence.slice(index + claim.length, index + claim.length + 12);
-    if (!UNSPACED_NEGATION_BEFORE.test(maskUnspacedNonNegations(before).trimEnd().slice(-4)) &&
-      !UNSPACED_NEGATION_AFTER.test(maskUnspacedNonNegations(after).trimStart().slice(0, 6)) &&
+    const start = Math.max(0, index - 12);
+    const end = index + claim.length;
+    const before = normalizedEvidence.slice(start, index);
+    const after = normalizedEvidence.slice(end, end + 12);
+    if (!UNSPACED_NEGATION_BEFORE.test(masked.slice(start, index).trimEnd().slice(-4)) &&
+      !UNSPACED_NEGATION_AFTER.test(masked.slice(end, end + 12).trimStart().slice(0, 6)) &&
       ![before.split(" "), after.split(" ")].some(tokens => tokens.some((_, position) => negatesAt(tokens, position)))) return true;
   }
   return false;
@@ -733,17 +739,57 @@ function namedRecruitmentSpecialties(value: string) {
     .map(entry => entry.specialty);
 }
 
+/** A word of a title, and whether a title (normalized) holds it. */
+type TitleTerm = { term: string; isIn: (text: string) => boolean };
+
+/**
+ * Words of a title (INTL-02): like the specialty equivalents, a Latin one as a word start and an Arabic
+ * or Chinese one anywhere (« الممرضات » "the nurses" holds « ممرض »); with `wholeWords`, a Latin or
+ * Arabic one as a whole word, after the usual Arabic prefixes (و, ف, ب, ك, ل, ال, لل): « médecine » is
+ * no « médecin », nor « جراحة » (surgery) a « جراح » (surgeon).
+ */
+function titleTerms(terms: readonly string[], wholeWords = false): TitleTerm[] {
+  return terms.map(normalizeSpecialtyText).map(term => {
+    if (!wholeWords || !/[a-z\u0600-\u06ff]/.test(term)) return { term, isIn: (text: string) => textUsesTerm(text, term) };
+    if (/[a-z]/.test(term)) return { term, isIn: (text: string) => ` ${text} `.includes(` ${term} `) };
+    const word = new RegExp(`(?:^| )[وف]?(?:[بك]?ال|لل|[بكل])?${term}(?= |$)`);
+    return { term, isIn: (text: string) => word.test(text) };
+  });
+}
+
 const paramedicalSpecialties = new Set(Array.from(RECRUITMENT_PARAMEDICAL_SPECIALTIES, normalizeSpecialtyText));
-const paramedicalTitleTerms = RECRUITMENT_PARAMEDICAL_TITLE_TERMS.map(normalizeSpecialtyText);
+const paramedicalTitleTerms = titleTerms(RECRUITMENT_PARAMEDICAL_TITLE_TERMS);
 const pharmacistSpecialties = new Set(Array.from(RECRUITMENT_PHARMACIST_SPECIALTIES, normalizeSpecialtyText));
 const pharmacistTitleTerms = new Set(RECRUITMENT_PHARMACIST_TITLE_TERMS.map(normalizeSpecialtyText));
 /** For medical biology, toxicology and pharmacology, which pharmacists practise too: « Pharmacien biologiste ». */
-const nonPharmacistTitleTerms = paramedicalTitleTerms.filter(term => !pharmacistTitleTerms.has(term));
+const nonPharmacistTitleTerms = paramedicalTitleTerms.filter(({ term }) => !pharmacistTitleTerms.has(term));
+const physicianTitleTerms = titleTerms(RECRUITMENT_PHYSICIAN_TITLE_TERMS, true);
 
-/** A nursing or allied health profession, declared or cited: « Intensive Care Nurse », « Emergency Medical Technician », « 麻醉护士 »… */
-function namesParamedicalProfession(value: string, titleTerms = paramedicalTitleTerms) {
+/**
+ * Where a physician's word names someone other than the holder of the title (normalized): "Doctor of …"
+ * (a degree: Doctor of Nursing Practice), "physician liaison", « assistant(e) du médecin »,
+ * « Notarzt-Einsatz » / « Notarzt-Dienst » (on call with the emergency physician), 无国界医生 (Doctors
+ * Without Borders), 协助麻醉医师 "assisting the anaesthetist".
+ */
+const OTHER_PHYSICIAN_PHRASES = /(?<![^ ])(?:doctor of|physician liaison|assistante? du medecin|notarzt einsatz|notarzt dienst)(?![^ ])|无国界医生|無國界醫生|(?:协助|協助)[^ ]*?(?:医师|醫師|医生|醫生)/g;
+
+/** A physician's title: « Facharzt », « استشاري », « 医师 »… */
+function namesPhysician(text: string) {
+  const ownTitle = text.replace(OTHER_PHYSICIAN_PHRASES, " ");
+  return physicianTitleTerms.some(({ isIn }) => isIn(ownTitle));
+}
+
+/**
+ * A nursing or allied health profession, declared or cited: « Intensive Care Nurse », « Emergency Medical
+ * Technician », « 麻醉护士 »… Not when the title also names a physician (« Facharzt für Psychiatrie,
+ * Diplom-Psychologe »), outside the nursing or allied health words themselves (« Physician Assistant »,
+ * 医师助理).
+ */
+function namesParamedicalProfession(value: string, terms = paramedicalTitleTerms) {
   const text = normalizeSpecialtyText(value);
-  return paramedicalSpecialties.has(text) || titleTerms.some(term => textUsesTerm(text, term));
+  if (paramedicalSpecialties.has(text)) return true;
+  const used = terms.filter(({ isIn }) => isIn(text));
+  return used.length > 0 && !namesPhysician(used.reduce((rest, { term }) => rest.split(term).join(" "), text));
 }
 
 /** INTL-02: "Consultant Anaesthetist", "Facharzt für Anästhesiologie", "طبيب تخدير" or "麻醉科医师" match « Anesthésie-réanimation ». */
@@ -948,14 +994,14 @@ function verifiedScoreBreakdown(input: {
   // (« Intensive Care Nurse »): unless a nursing or allied health profession was declared, such a title
   // earns no specialty points, nor do the specialties of that CV. A pharmacist keeps them for the
   // specialties pharmacists practise.
-  const titleTerms = pharmacistSpecialties.has(normalizeSpecialtyText(input.targetSpecialty)) ? nonPharmacistTitleTerms : paramedicalTitleTerms;
+  const paramedicalTerms = pharmacistSpecialties.has(normalizeSpecialtyText(input.targetSpecialty)) ? nonPharmacistTitleTerms : paramedicalTitleTerms;
   const paramedicalDeclared = namesParamedicalProfession(input.targetSpecialty);
-  const paramedicalTitle = !paramedicalDeclared && verifiedFields.some(item => item.field === "professionalTitle" && namesParamedicalProfession(item.value, titleTerms));
+  const paramedicalTitle = !paramedicalDeclared && verifiedFields.some(item => item.field === "professionalTitle" && namesParamedicalProfession(item.value, paramedicalTerms));
   const specialtyEvidenceProvenance = new Set(
     verifiedFields
       .filter(item =>
         (item.field === "specialty" || item.field === "professionalTitle") &&
-        !paramedicalTitle && (paramedicalDeclared || !namesParamedicalProfession(item.value, titleTerms)) &&
+        !paramedicalTitle && (paramedicalDeclared || !namesParamedicalProfession(item.value, paramedicalTerms)) &&
         specialtyMatchesDeclared(item.value, input.targetSpecialty)
       )
       .map(item => `${normalizeEvidenceText(item.evidence)}|${normalizeEvidenceText(item.sourceLocation)}`)
