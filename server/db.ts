@@ -13,7 +13,15 @@ let _db: ReturnType<typeof drizzle> | null = null;
  * of a long query on the table is usually released within seconds.
  */
 export const LANGUAGE_COLUMNS_RETRY_DELAY_MS = 5_000;
+/**
+ * The delay doubles after each consecutive failure, up to this. Under a lock
+ * held for minutes, each attempt makes the readers of the table wait up to 2 s
+ * behind its queued ALTER: once a minute at most per instance.
+ */
+export const LANGUAGE_COLUMNS_MAX_RETRY_DELAY_MS = 60_000;
 let languageColumnsRetryAt = 0;
+// Failed checks since the last success.
+let languageColumnsFailedChecks = 0;
 // Kinds of failure (error name and SQLSTATE) logged since the last success.
 const languageColumnsLoggedFailures = new Set<string>();
 
@@ -23,17 +31,22 @@ const languageColumnsLoggedFailures = new Set<string>();
 // sharing one check (memoised by ensureLanguageColumns). Other queries never
 // wait. After a failure (lock not obtained within 2 s, role not allowed to
 // alter the table) the queries go on without waiting, and the first one after
-// the delay checks again, with the same 2 s bound. Each kind of failure is
-// logged once until a check succeeds, so retries failing again every few
-// seconds stay silent, and the success is logged once.
+// the delay (5 s, then 10, 20, 40 and at most 60 s) checks again, with the same
+// 2 s bound. Each kind of failure is logged once until a check succeeds, so
+// retries failing again stay silent, and the success is logged once.
 function languageColumnsReady(ddl: Parameters<typeof ensureLanguageColumns>[0]): Promise<void> {
   if (Date.now() < languageColumnsRetryAt) return Promise.resolve();
   return ensureLanguageColumns(ddl).then(() => {
+    languageColumnsFailedChecks = 0;
     if (languageColumnsLoggedFailures.size === 0) return;
     languageColumnsLoggedFailures.clear();
     console.log("[Database] Language columns check succeeded after a failure");
   }, error => {
-    languageColumnsRetryAt = Date.now() + LANGUAGE_COLUMNS_RETRY_DELAY_MS;
+    // Queries waiting together share one check: only the first of them counts its failure.
+    if (Date.now() >= languageColumnsRetryAt) {
+      languageColumnsRetryAt = Date.now() + Math.min(LANGUAGE_COLUMNS_RETRY_DELAY_MS * 2 ** languageColumnsFailedChecks, LANGUAGE_COLUMNS_MAX_RETRY_DELAY_MS);
+      languageColumnsFailedChecks += 1;
+    }
     const name = error instanceof Error ? error.name : "UnknownError";
     const code = postgresErrorCode(error) ?? "";
     if (languageColumnsLoggedFailures.has(`${name} ${code}`)) return;
@@ -62,6 +75,7 @@ export async function getDb() {
 export function resetDbForTests() {
   _db = null;
   languageColumnsRetryAt = 0;
+  languageColumnsFailedChecks = 0;
   languageColumnsLoggedFailures.clear();
 }
 
