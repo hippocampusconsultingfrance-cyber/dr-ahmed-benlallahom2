@@ -14,7 +14,7 @@ vi.mock("@/lib/trpc", () => ({
   trpc: {
     admin: {
       recruitment: {
-        // As the server sends them: sorted by score, unscored profiles first (PostgreSQL puts NULL first in DESC).
+        // Out of order on purpose (the server sends the scored profiles first, NULLS LAST): the tab groups them itself.
         pool: { list: { useQuery: () => ({ data: [candidate(3, "Haddad", null), candidate(1, "Martin", 88), candidate(4, "Wang", null), candidate(2, "Weber", 74)], isLoading: false, error: null, refetch: vi.fn() }) } },
         exportCsv: { useMutation: () => ({ mutate: vi.fn(), isPending: false }) },
       },

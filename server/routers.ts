@@ -164,6 +164,8 @@ const verifiedRecruitmentScore = sql<number | null>`CASE WHEN ${cvApplications.a
  * of 0 filters nothing.
  */
 const scoreAtLeastOrUnavailable = (minimumScore: number) => sql`(${verifiedRecruitmentScore} >= ${minimumScore} OR ${verifiedRecruitmentScore} IS NULL)`;
+/** Best verified score first: a plain DESC would put the dossiers without one first in PostgreSQL, and a limit would then keep only them. */
+const verifiedScoreFirst = sql`${verifiedRecruitmentScore} DESC NULLS LAST`;
 
 function csvCell(value: unknown): string {
   const text = value === null || value === undefined ? "" : String(value);
@@ -1336,7 +1338,8 @@ export const appRouter = router({
             })
             .from(cvApplications)
             .where(whereClause)
-            .orderBy(desc(cvApplications.createdAt))
+            // With a threshold, the dossiers without a score come after every scored one, not page by page.
+            .orderBy(...(minimumScore > 0 ? [sql`(${verifiedRecruitmentScore} IS NULL)`] : []), desc(cvApplications.createdAt))
             .limit(profile ? 1000 : input.limit)
             .offset(profile ? 0 : input.offset);
 
@@ -1442,7 +1445,7 @@ export const appRouter = router({
               status: cvApplications.status,
               marketingConsent: cvApplications.marketingConsent,
               createdAt: cvApplications.createdAt,
-            }).from(cvApplications).where(and(...conditions)).orderBy(desc(verifiedRecruitmentScore), desc(cvApplications.createdAt)).limit(input?.limit || 200);
+            }).from(cvApplications).where(and(...conditions)).orderBy(verifiedScoreFirst, desc(cvApplications.createdAt)).limit(input?.limit || 200);
           }),
       }),
 
@@ -1478,7 +1481,7 @@ export const appRouter = router({
               email: cvApplications.email,
               specialty: cvApplications.specialty,
               aiScore: verifiedRecruitmentScore,
-            }).from(cvApplications).where(and(...conditions)).orderBy(desc(verifiedRecruitmentScore), desc(cvApplications.createdAt)).limit(200);
+            }).from(cvApplications).where(and(...conditions)).orderBy(verifiedScoreFirst, desc(cvApplications.createdAt)).limit(200);
           }),
 
         list: adminProcedure.query(async () => {
@@ -1828,7 +1831,7 @@ export const appRouter = router({
         if (input.type === "pool") {
           conditions.push(eq(cvApplications.marketingConsent, 1), isNull(cvApplications.marketingUnsubscribedAt), isNull(cvApplications.marketingSuppressedAt));
         }
-        const rows = await db.select({ id: cvApplications.id, firstName: cvApplications.firstName, lastName: cvApplications.lastName, email: cvApplications.email, phone: cvApplications.phone, specialty: cvApplications.specialty, targetCountries: cvApplications.targetCountries, languages: cvApplications.languages, yearsExperience: cvApplications.yearsExperience, availability: cvApplications.availability, mobility: cvApplications.mobility, certifications: cvApplications.certifications, aiScore: verifiedRecruitmentScore, status: cvApplications.status }).from(cvApplications).where(and(...conditions)).orderBy(desc(verifiedRecruitmentScore), desc(cvApplications.createdAt)).limit(RECRUITMENT_EXPORT_MAX_CANDIDATES);
+        const rows = await db.select({ id: cvApplications.id, firstName: cvApplications.firstName, lastName: cvApplications.lastName, email: cvApplications.email, phone: cvApplications.phone, specialty: cvApplications.specialty, targetCountries: cvApplications.targetCountries, languages: cvApplications.languages, yearsExperience: cvApplications.yearsExperience, availability: cvApplications.availability, mobility: cvApplications.mobility, certifications: cvApplications.certifications, aiScore: verifiedRecruitmentScore, status: cvApplications.status }).from(cvApplications).where(and(...conditions)).orderBy(verifiedScoreFirst, desc(cvApplications.createdAt)).limit(RECRUITMENT_EXPORT_MAX_CANDIDATES);
         // Selected candidates may have been refused or unsubscribed meanwhile: no header-only file, no "logged" export of nobody.
         if (!rows.length) throw new TRPCError({ code: "BAD_REQUEST", message: "Aucun des candidats sélectionnés ne peut plus être exporté (refusé, archivé ou désinscrit)." });
         // A shortlist is meant for a client employer: it never carries the AI
@@ -2082,7 +2085,7 @@ export const appRouter = router({
             status: cvApplications.status,
           }).from(cvApplications)
             .where(and(...candidateConditions))
-            .orderBy(desc(verifiedRecruitmentScore), desc(cvApplications.createdAt), desc(cvApplications.id))
+            .orderBy(verifiedScoreFirst, desc(cvApplications.createdAt), desc(cvApplications.id))
             .limit(input.limit)
             .offset(input.page * input.limit);
           const applicationIds = applications.map(application => application.id);

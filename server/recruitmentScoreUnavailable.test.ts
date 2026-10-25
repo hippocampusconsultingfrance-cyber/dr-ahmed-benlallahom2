@@ -68,3 +68,29 @@ describe("INTL-02 — un seuil de score n’écarte plus les dossiers sans score
     expect(names(await admin().admin.recruitment.pool.list({ minimumScore: 0 }))).toEqual(["Below", "Outdated", "Pending", "Scored", "Unscored"]);
   });
 });
+
+describe("INTL-02 — les dossiers notés passent avant les dossiers sans score, même quand la liste est coupée", () => {
+  beforeEach(() => {
+    memory = createMemoryPg([cvApplications, recruitmentMatchProfiles, candidateAccounts, cvGoogleDriveExportJobs, recruitmentEmailEvents]);
+    state.memory = memory;
+    // The scored dossiers are the oldest: sorted by date alone, the unscored ones would fill the first rows.
+    seedCandidate("High", { ai_score: 92, analysis_prompt_version: RECRUITMENT_ANALYSIS_PROMPT_VERSION, createdAt: "2026-01-01 08:00:00" });
+    seedCandidate("Good", { ai_score: 81, analysis_prompt_version: RECRUITMENT_ANALYSIS_PROMPT_VERSION, createdAt: "2026-01-02 08:00:00" });
+    for (const [index, lastName] of ["Waiting", "Foreign", "Legacy"].entries()) {
+      seedCandidate(lastName, { ai_score: lastName === "Legacy" ? 95 : null, analysis_prompt_version: lastName === "Legacy" ? "recruitment-v6" : RECRUITMENT_ANALYSIS_PROMPT_VERSION, createdAt: `2026-03-0${index + 1} 08:00:00` });
+    }
+  });
+
+  it("le vivier trié par score garde les profils notés en tête quand il y a plus de profils sans score que la limite", async () => {
+    expect((await admin().admin.recruitment.pool.list({ minimumScore: 80, limit: 2 })).map(item => item.lastName)).toEqual(["High", "Good"]);
+    expect((await admin().admin.recruitment.pool.list({ minimumScore: 80 })).map(item => item.lastName)).toEqual(["High", "Good", "Legacy", "Foreign", "Waiting"]);
+  });
+
+  it("la liste des candidatures avec un score minimum montre tous les dossiers notés avant ceux sans score, d’une page à l’autre", async () => {
+    const firstPage = await admin().admin.recruitment.list({ minimumScore: 80, limit: 2, offset: 0 });
+    expect(firstPage.items.map(item => item.lastName)).toEqual(["Good", "High"]);
+    expect((await admin().admin.recruitment.list({ minimumScore: 80, limit: 2, offset: 2 })).items.map(item => item.lastName)).toEqual(["Legacy", "Foreign"]);
+    // Without a threshold the list stays in date order.
+    expect((await admin().admin.recruitment.list({ limit: 2 })).items.map(item => item.lastName)).toEqual(["Legacy", "Foreign"]);
+  });
+});
