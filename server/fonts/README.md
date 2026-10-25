@@ -36,4 +36,6 @@ son texte copié reste exact.
 géorgien…) et emoji : PDFKit les dessinerait en carrés vides. La ligne du nom
 remplace un caractère sans dessin par sa forme simple quand elle s’imprime
 (𝓙𝓮𝓪𝓷 et Ⓙⓔⓐⓝ → Jean, ⒥ → (j)) ; sinon elle retire un emoji ou un
-pictogramme, et met « ? » à la place de tout autre caractère.
+pictogramme, et met « ? » à la place de tout autre caractère. Un nom fait
+seulement d’emoji s’imprime « - » : la ligne du nom reste, et l’email, le
+téléphone et le tableau ne remontent pas.
