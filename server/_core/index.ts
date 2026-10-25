@@ -512,15 +512,12 @@ export async function createApp() {
         }).from(cvApplications).where(eq(cvApplications.fileChecksum, fileValidation.checksum)).limit(20);
         const duplicate = duplicateCandidates.find(candidate => isSameRecruitmentSubmission(candidate, parsed.data));
         if (duplicate) {
-          const candidateName = `${parsed.data.firstName} ${parsed.data.lastName}`;
           const candidatePortalInviteUrl = `${PUBLIC_APP_ORIGIN}/candidate/access?invite=${encodeURIComponent(createCandidateInvitationToken(Number(duplicate.id)))}`;
           await sendTrackedCvApplicationConfirmationEmail({
             applicationId: Number(duplicate.id),
             candidateEmail: parsed.data.email,
-            candidateName,
+            candidateFirstName: parsed.data.firstName,
             trackingId: duplicate.trackingId,
-            specialty: parsed.data.specialty,
-            targetCountries: parsed.data.targetCountries.join(", "),
             candidatePortalInviteUrl,
           });
           await logSecurityEvent({ actorKind: "anonymous", actorReference: parsed.data.email, category: "public_recruitment_apply_duplicate_file", outcome: "allowed", severity: "info", ipHash });
@@ -577,10 +574,8 @@ export async function createApp() {
             await sendTrackedCvApplicationConfirmationEmail({
               applicationId: insertedId,
               candidateEmail: parsed.data.email,
-              candidateName,
+              candidateFirstName: parsed.data.firstName,
               trackingId,
-              specialty: parsed.data.specialty,
-              targetCountries: parsed.data.targetCountries.join(", "),
               candidatePortalInviteUrl,
             });
           })(),

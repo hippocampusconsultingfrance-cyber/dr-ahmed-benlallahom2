@@ -236,9 +236,8 @@ describe("traçabilité de l'email de confirmation de candidature", () => {
             const applicationId = indexedParam(sql, params, /"cv_applications"\."id"\s*=\s*\$(\d+)/);
             if (typeof applicationId !== "number") throw new Error(`Unexpected application query: ${sql}`);
             return [{
-              id: applicationId, firstName: "Synthetic", lastName: "Candidate",
+              id: applicationId, firstName: "Synthetic",
               email: `candidate${applicationId}@example.invalid`, trackingId: `CV-TEST-${applicationId}`,
-              specialty: "Test", targetCountries: "[]",
             }];
           }
           if (/^select/i.test(sql) && sql.includes('from "recruitment_email_events"')) {
@@ -277,7 +276,7 @@ describe("traçabilité de l'email de confirmation de candidature", () => {
     expect(cursorWrites).toContain(2);
     expect(retryMocks.sendEmail).toHaveBeenCalledOnce();
     expect(retryMocks.sendEmail).toHaveBeenCalledWith(
-      "candidate1@example.invalid", "Synthetic Candidate", "CV-TEST-1", "Test", "Non précisé",
+      "candidate1@example.invalid", "Synthetic", "CV-TEST-1",
       expect.stringContaining("synthetic-invitation-token"), "cv-application-confirmation-CV-TEST-1-attempt-2",
     );
 

@@ -1,5 +1,5 @@
 import { Resend } from "resend";
-import { buildHippocampusEmailShell } from "./_core/notifications";
+import { buildHippocampusEmailShell, unverifiedRecipientGreeting } from "./_core/notifications";
 import { DEFAULT_TRANSACTIONAL_FROM, resolveConsultationContact } from "./consultationContact";
 
 /**
@@ -75,15 +75,16 @@ export async function sendMedicalQuestionResponseEmail(
   if (error) throw new Error(`medical_question_response_email_failed:${error.message}`);
 }
 
-/** Acknowledgement to the person: reference, indicative delay, no copy of the question. */
+/** Acknowledgement to the person: reference, indicative delay, no copy of the question nor of any other typed text (MAIL-01). */
 export async function sendMedicalQuestionAcknowledgementEmail(input: { email: string; firstName: string; trackingId: string; language: string }) {
   const contact = resolveMedicalQuestionContact();
   const french = input.language === "fr";
   const delay = medicalQuestionDelayText(input.language);
+  const greeting = unverifiedRecipientGreeting(input.firstName, french ? "fr" : "en");
   const subject = french ? `Votre question a bien été reçue — ${input.trackingId}` : `Your question has been received — ${input.trackingId}`;
   const html = buildHippocampusEmailShell(french ? `
     <h2 style="color:#0891b2">Votre question a bien été reçue</h2>
-    <p>Bonjour ${escapeHtml(input.firstName)},</p>
+    <p>${escapeHtml(greeting)}</p>
     <p>Nous avons bien reçu votre question. Elle sera relue par le Dr. Ahmed Ben Lallahom avant toute réponse, qui vous sera envoyée par email.</p>
     <p>${escapeHtml(delay)}</p>
     <p style="margin:20px 0;padding:14px;border-radius:10px;background:#f1f5f9;font-family:monospace;font-size:16px;font-weight:700;color:#0f172a;">Référence : ${escapeHtml(input.trackingId)}</p>
@@ -91,7 +92,7 @@ export async function sendMedicalQuestionAcknowledgementEmail(input: { email: st
     <p style="font-size:12px;color:#64748b;">Pour retirer votre consentement ou supprimer votre demande, répondez à cet email en indiquant votre référence.</p>
   ` : `
     <h2 style="color:#0891b2">Your question has been received</h2>
-    <p>Hello ${escapeHtml(input.firstName)},</p>
+    <p>${escapeHtml(greeting)}</p>
     <p>We have received your question. It will be reviewed by Dr. Ahmed Ben Lallahom before any answer, which will be sent to you by email.</p>
     <p>${escapeHtml(delay)}</p>
     <p style="margin:20px 0;padding:14px;border-radius:10px;background:#f1f5f9;font-family:monospace;font-size:16px;font-weight:700;color:#0f172a;">Reference: ${escapeHtml(input.trackingId)}</p>
@@ -99,8 +100,8 @@ export async function sendMedicalQuestionAcknowledgementEmail(input: { email: st
     <p style="font-size:12px;color:#64748b;">To withdraw your consent or delete your request, reply to this email with your reference.</p>
   `);
   const text = french
-    ? `Bonjour ${input.firstName},\n\nNous avons bien reçu votre question. Elle sera relue par le Dr. Ahmed Ben Lallahom avant toute réponse, qui vous sera envoyée par email.\n\n${delay}\n\nRéférence : ${input.trackingId}\n\nCe service ne traite pas les urgences. En cas de danger immédiat ou de symptôme inquiétant, contactez les secours (15 ou 112) ou un professionnel de santé sans attendre cette réponse.\n\nPour retirer votre consentement ou supprimer votre demande, répondez à cet email en indiquant votre référence.`
-    : `Hello ${input.firstName},\n\nWe have received your question. It will be reviewed by Dr. Ahmed Ben Lallahom before any answer, which will be sent to you by email.\n\n${delay}\n\nReference: ${input.trackingId}\n\nThis service does not handle emergencies. In case of immediate danger or a worrying symptom, contact the emergency services (112) or a health professional without waiting for this answer.\n\nTo withdraw your consent or delete your request, reply to this email with your reference.`;
+    ? `${greeting}\n\nNous avons bien reçu votre question. Elle sera relue par le Dr. Ahmed Ben Lallahom avant toute réponse, qui vous sera envoyée par email.\n\n${delay}\n\nRéférence : ${input.trackingId}\n\nCe service ne traite pas les urgences. En cas de danger immédiat ou de symptôme inquiétant, contactez les secours (15 ou 112) ou un professionnel de santé sans attendre cette réponse.\n\nPour retirer votre consentement ou supprimer votre demande, répondez à cet email en indiquant votre référence.`
+    : `${greeting}\n\nWe have received your question. It will be reviewed by Dr. Ahmed Ben Lallahom before any answer, which will be sent to you by email.\n\n${delay}\n\nReference: ${input.trackingId}\n\nThis service does not handle emergencies. In case of immediate danger or a worrying symptom, contact the emergency services (112) or a health professional without waiting for this answer.\n\nTo withdraw your consent or delete your request, reply to this email with your reference.`;
   const { error } = await getResendClient().emails.send(
     { from: contact.from, to: [input.email], replyTo: contact.replyTo, subject, html, text },
     { idempotencyKey: `medical-question-acknowledgement/${input.trackingId}` },

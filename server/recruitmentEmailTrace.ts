@@ -12,10 +12,8 @@ import {
 export type TrackedCvConfirmationInput = {
   applicationId: number;
   candidateEmail: string;
-  candidateName: string;
+  candidateFirstName: string;
   trackingId: string;
-  specialty: string;
-  targetCountries: string;
   candidatePortalInviteUrl?: string;
   deliveryAttempt?: number;
 };
@@ -245,10 +243,8 @@ export async function sendTrackedCvApplicationConfirmationEmail(
 ): Promise<CvApplicationConfirmationDelivery> {
   const delivery = await sendCvApplicationConfirmationEmail(
     input.candidateEmail,
-    input.candidateName,
+    input.candidateFirstName,
     input.trackingId,
-    input.specialty,
-    input.targetCountries,
     input.candidatePortalInviteUrl,
     `cv-application-confirmation-${input.trackingId}-attempt-${input.deliveryAttempt || 1}`,
   );
@@ -347,11 +343,8 @@ export async function retryCvConfirmationEmail(
   const [application] = await db.select({
     id: cvApplications.id,
     firstName: cvApplications.firstName,
-    lastName: cvApplications.lastName,
     email: cvApplications.email,
     trackingId: cvApplications.trackingId,
-    specialty: cvApplications.specialty,
-    targetCountries: cvApplications.targetCountries,
   }).from(cvApplications).where(eq(cvApplications.id, applicationId)).limit(1);
   if (!application) return { outcome: "not_found" as const, attempted: false };
 
@@ -373,21 +366,12 @@ export async function retryCvConfirmationEmail(
     return { outcome: "not_due" as const, attempted: false, current };
   }
 
-  let targetCountries = "Non précisé";
-  try {
-    const parsed = JSON.parse(application.targetCountries);
-    if (Array.isArray(parsed)) targetCountries = parsed.filter(value => typeof value === "string").join(", ") || targetCountries;
-  } catch {
-    // Keep a neutral fallback; malformed legacy metadata must not block delivery.
-  }
   const publicOrigin = process.env.PUBLIC_APP_ORIGIN?.trim() || "https://drahmedbenlallahom.com";
   const delivery = await sendTrackedCvApplicationConfirmationEmail({
     applicationId: application.id,
     candidateEmail: application.email,
-    candidateName: `${application.firstName} ${application.lastName}`,
+    candidateFirstName: application.firstName,
     trackingId: application.trackingId,
-    specialty: application.specialty,
-    targetCountries,
     candidatePortalInviteUrl: `${publicOrigin}/candidate/access?invite=${encodeURIComponent(createCandidateInvitationToken(application.id))}`,
     // Reuse attempt 1 for an untracked submission so Resend can deduplicate a
     // previous, unrecorded request during its idempotency window.

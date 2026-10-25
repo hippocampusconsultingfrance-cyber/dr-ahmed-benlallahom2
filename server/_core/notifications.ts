@@ -26,6 +26,29 @@ function escapeHtml(value: unknown): string {
     .replaceAll("'", "&#039;");
 }
 
+const GREETING_NAME_MAX_LENGTH = 40;
+// Built with RegExp: tsc refuses the literal "u" flag with this project's default target.
+const GREETING_NAME_PATTERN = new RegExp("^\\p{L}[\\p{L}\\p{M} '’.-]*$", "u");
+// A dot glued to two letters is a domain name ("colis-phish.example"), not an initial.
+const GREETING_DOMAIN_PATTERN = new RegExp("\\.\\p{L}{2}", "u");
+
+/**
+ * Greeting of an email sent to an address nobody has verified yet (MAIL-01).
+ * Anyone can type someone else's address in these public forms, so the free
+ * text of the visitor must not reach the email: the first name is kept only
+ * when it looks like one (Unicode letters, spaces, ' ’ . -, at most 40
+ * characters, no domain name), otherwise the greeting is neutral. A name never
+ * makes a form fail. Plain text: escape it before putting it in HTML.
+ */
+export function unverifiedRecipientGreeting(firstName: string | null | undefined, language: "fr" | "en" = "fr"): string {
+  const greeting = language === "en" ? "Hello" : "Bonjour";
+  const name = firstName?.trim() ?? "";
+  const keepName = Array.from(name).length <= GREETING_NAME_MAX_LENGTH
+    && GREETING_NAME_PATTERN.test(name)
+    && !GREETING_DOMAIN_PATTERN.test(name);
+  return keepName ? `${greeting} ${name},` : `${greeting},`;
+}
+
 // Domaine drahmedbenlallahom.com vérifié dans Resend.
 // Une boîte dédiée n'est pas nécessaire pour l'envoi transactionnel ; les
 // réponses des candidats restent dirigées vers la boîte de recrutement active.
@@ -506,10 +529,8 @@ export async function sendReminderEmail(
 
 export async function sendCvApplicationConfirmationEmail(
   candidateEmail: string,
-  candidateName: string,
+  candidateFirstName: string,
   trackingId: string,
-  specialty: string,
-  targetCountries: string,
   candidatePortalInviteUrl?: string,
   idempotencyKey = `cv-application-confirmation-${trackingId}-attempt-1`,
 ): Promise<CvApplicationConfirmationDelivery> {
@@ -518,12 +539,10 @@ export async function sendCvApplicationConfirmationEmail(
       : "";
   const emailContent = buildHippocampusEmailShell(`
       <h2 style="color: #0891b2;">Candidature reçue — Hippocampus Consulting</h2>
-      <p>Bonjour ${escapeHtml(candidateName)},</p>
+      <p>${escapeHtml(unverifiedRecipientGreeting(candidateFirstName))}</p>
       <p>Nous confirmons la réception de votre candidature de recrutement international.</p>
       <div style="background: #f8fafc; border-radius: 8px; padding: 16px; margin: 16px 0;">
         <p><strong>Numéro de suivi :</strong> ${escapeHtml(trackingId)}</p>
-        <p><strong>Spécialité :</strong> ${escapeHtml(specialty)}</p>
-        <p><strong>Pays ciblés :</strong> ${escapeHtml(targetCountries)}</p>
       </div>
       <p>Votre profil sera examiné selon les opportunités disponibles et les critères du pays concerné. Nous vous contacterons si votre profil correspond à une recherche.</p>
       ${candidatePortalInvitation}
@@ -733,6 +752,7 @@ export function candidateInvitationValidityNote(): string {
 }
 
 export function buildCandidatePortalAccessEmail(input: CandidatePortalAccessEmailContentInput) {
+  const greeting = unverifiedRecipientGreeting(input.firstName);
   const copy = input.kind === "verify"
     ? {
         subject: "Confirmez votre adresse email — Espace candidat Hippocampus",
@@ -760,13 +780,13 @@ export function buildCandidatePortalAccessEmail(input: CandidatePortalAccessEmai
     subject: copy.subject,
     html: buildHippocampusEmailShell(`
         <h2 style="color:#0891b2;">${copy.title}</h2>
-        <p>Bonjour ${escapeHtml(input.firstName || "")},</p>
+        <p>${escapeHtml(greeting)}</p>
         <p>${copy.instruction}</p>
         <p style="margin:24px 0;"><a href="${escapeHtml(input.actionUrl)}" style="display:inline-block;background:#0891b2;color:#ffffff;text-decoration:none;padding:12px 18px;border-radius:7px;font-weight:700;">${copy.action}</a></p>
         <p style="color:#64748b;font-size:13px;">${copy.securityNote}</p>
         <p style="color:#64748b;font-size:13px;">Cet email est envoyé par Hippocampus Consulting depuis recrutement@drahmedbenlallahom.com. Si vous ne retrouvez pas cet email, vérifiez votre dossier Spam ou Courriers indésirables, puis ajoutez cette adresse à vos contacts.</p>
     `),
-    text: `${copy.title}\n\nBonjour ${input.firstName || ""},\n\n${copy.instruction}\n\n${input.actionUrl}\n\n${copy.securityNote}\n\nCet email est envoyé par Hippocampus Consulting depuis recrutement@drahmedbenlallahom.com. Si vous ne retrouvez pas cet email, vérifiez votre dossier Spam ou Courriers indésirables, puis ajoutez cette adresse à vos contacts.`,
+    text: `${copy.title}\n\n${greeting}\n\n${copy.instruction}\n\n${input.actionUrl}\n\n${copy.securityNote}\n\nCet email est envoyé par Hippocampus Consulting depuis recrutement@drahmedbenlallahom.com. Si vous ne retrouvez pas cet email, vérifiez votre dossier Spam ou Courriers indésirables, puis ajoutez cette adresse à vos contacts.`,
   };
 }
 
