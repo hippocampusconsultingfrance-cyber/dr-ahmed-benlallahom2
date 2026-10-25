@@ -201,4 +201,48 @@ describe("INTL-02 — citations en arabe et en chinois", () => {
     // The quote must still be in the text that was read.
     expect(titleEvidence("麻醉科主治医师", "北京协和医院麻醉科主治医师", "上海瑞金医院儿科主治医师")).toBe(false);
   });
+
+  it("ne prend pas pour une négation les mots chinois du vocabulaire médical qui commencent par 无, 不, 非 ou 未", () => {
+    for (const quote of [
+      "麻醉科医师（无痛分娩中心）",
+      "麻醉科医师，擅长无痛胃肠镜与无痛分娩",
+      "无痛分娩麻醉科医师",
+      "麻醉科医师，不同级别医院工作经验",
+      "麻醉科医师，熟练掌握无创通气与无菌操作",
+      "无锡市人民医院麻醉科医师",
+      "麻醉科医师，负责包括但不限于心脏手术麻醉",
+      "麻醉科医师，处理麻醉不良反应",
+      "曾在非洲援助医疗队担任麻醉科医师",
+      "非营利医院麻醉科医师",
+    ]) expect(titleEvidence("麻醉科医师", quote), quote).toBe(true);
+    for (const denied of ["非麻醉科医师", "不是麻醉科医师", "无麻醉科医师资格", "麻醉科医师资格：无", "麻醉科医师（尚未通过）", "麻醉科医师：未注册"]) {
+      expect(titleEvidence("麻醉科医师", denied), denied).toBe(false);
+    }
+  });
+
+  it("lit « غير حكومية » (ONG), « دون انقطاع » ou « لا سيما » sans négation, et « لست » comme une négation", () => {
+    for (const quote of ["استشاري تخدير في منظمة غير حكومية", "استشاري تخدير في المنظمات غير الحكومية", "استشاري تخدير في مستشفى غير ربحي", "استشاري تخدير بدوام كامل دون انقطاع", "استشاري تخدير، لا سيما تخدير القلب"]) {
+      expect(titleEvidence("استشاري تخدير", quote), quote).toBe(true);
+    }
+    for (const denied of ["لست استشاري تخدير", "غير حاصل على لقب استشاري تخدير", "استشاري تخدير غير معتمد", "استشاري تخدير دون ترخيص"]) {
+      expect(titleEvidence("استشاري تخدير", denied), denied).toBe(false);
+    }
+  });
+
+  it("vérifie les années d’expérience écrites contre un idéogramme : « 10年 », « 超过10年 »", () => {
+    const yearsEvidence = (value: string, evidence: string, years = 10) => normalizeRecruitmentAnalysis({
+      ...{ summary: "", professionalTitle: "", specialties: [], skills: [], languages: [], normalizedLanguages: [], certifications: [], countriesOfInterest: [], normalizedExperiences: [], strengths: [], gaps: [], dataQualityWarnings: [], requiredFollowUps: [], contradictions: [], confidence: 90, reasoning: "" },
+      yearsExperience: years,
+      fieldEvidence: [{ field: "yearsExperience", value, evidence, sourceLocation: "page 1", confidence: 95 }],
+      scoreBreakdown: { specialtyMatch: 0, experienceEvidence: 0, skillsEvidence: 0, languageReadiness: 0, credentialReadiness: 0 },
+    }, `[PAGE 1]\n${evidence}`);
+    for (const [value, evidence] of [["10年", "麻醉科医师，10年工作经验"], ["超过10年", "临床麻醉工作超过10年"], ["10 年", "工作经验：10 年"], ["10 years", "Consultant Anaesthetist — 10 years of experience"]]) {
+      const result = yearsEvidence(value!, evidence!);
+      expect(result.yearsExperience, value).toBe(10);
+      expect(result.scoreBreakdown.experienceEvidence, value).toBe(15);
+    }
+    // 2010年 is a year, not ten years of experience.
+    expect(yearsEvidence("2010年", "2010年起担任麻醉科医师").yearsExperience).toBeNull();
+    expect(yearsEvidence("10年", "麻醉科医师，10年工作经验", 1).yearsExperience).toBeNull();
+  });
 });

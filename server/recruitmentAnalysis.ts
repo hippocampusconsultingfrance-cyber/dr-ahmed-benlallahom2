@@ -483,24 +483,52 @@ const NEGATION_TOKENS = new Set([
   "nessuna", "nunca", "absent", "missing", "manquant", "manquante", "unavailable",
   "expired", "expire", "expiree", "revoked", "revoque", "revoquee", "suspended",
   "suspendu", "suspendue", "lapsed", "perime", "perimee", "invalid", "invalide",
-  "لا", "ليس", "ليست", "لم", "لن", "بدون", "دون", "غير",
+  "لا", "ليس", "ليست", "لست", "لم", "لن", "بدون", "دون", "غير",
 ]);
+/**
+ * Arabic negations that negate nothing before these words (INTL-02): غير حكومية "non-governmental"
+ * (an NGO), غير ربحية "non-profit", دون / بدون انقطاع "without interruption", لا سيما "especially",
+ * لا يقل عن "no less than".
+ */
+const NON_NEGATING_NEXT_WORDS = new Map([
+  ["غير", new Set(["حكومية", "حكومي", "الحكومية", "الحكومي", "ربحية", "ربحي", "الربحية", "الربحي"])],
+  ["دون", new Set(["انقطاع", "توقف"])],
+  ["بدون", new Set(["انقطاع", "توقف"])],
+  ["لا", new Set(["سيما", "يقل", "تقل"])],
+]);
+
+/** Whether the word at `index` negates what is around it. */
+function negatesAt(tokens: string[], index: number) {
+  const token = tokens[index]!;
+  return NEGATION_TOKENS.has(token) && !NON_NEGATING_NEXT_WORDS.get(token)?.has(tokens[index + 1] ?? "");
+}
+
 /** Chinese negation in the few characters before a claim (无 / 没有 "without", 未 "not yet", 非 "non-", 不 "not"). */
 const UNSPACED_NEGATION_BEFORE = /无|無|没有|沒有|未|非|不/;
+/** …or just after it, as the Latin check looks at the words that follow: "资格：无", "：未取得", "（尚未通过）", or an expiry. */
+const UNSPACED_NEGATION_AFTER = /无|無|没有|沒有|未|不|非|过期|過期|失效|吊销|吊銷|暂停|暫停/;
 /**
- * …or just after it, as the Latin check looks at the words that follow: "资格：无", "：未取得",
- * "（尚未通过）", or an expiry. 未来 "future", 不仅 "not only" and 非常 "very" negate nothing.
+ * Words that start with a negation character but negate nothing, common in medical CVs (INTL-02):
+ * 无痛 "painless" (无痛分娩, 无痛胃肠镜), 无菌 "aseptic", 无创 "non-invasive", 无偿 "unpaid", 无论
+ * "whatever", 无锡 (a city), 无国界医生 "Doctors Without Borders", 不同 "different", 不断 "constantly",
+ * 不仅 / 不只 / 不但 "not only", 不少 "many", 不良反应 "adverse reaction", 不孕 / 不育 "infertility",
+ * 不全 "insufficiency", 不适 "discomfort", 心律不齐 "arrhythmia", 不稳定 "unstable", 不限于 "not limited
+ * to", 不懈 "untiring", 未来 "future", 非常 "very", 非洲 "Africa", 非典 "SARS", 非营利 / 非政府
+ * "non-profit / non-governmental".
  */
-const UNSPACED_NEGATION_AFTER = /无|無|没有|沒有|未(?!来|來)|不(?!仅|僅|只|但)|非(?!常)|过期|過期|失效|吊销|吊銷|暂停|暫停/;
+const UNSPACED_NON_NEGATIONS = /无痛|無痛|无菌|無菌|无创|無創|无偿|無償|无论|無論|无锡|無錫|无国界|無國界|不同|不断|不斷|不仅|不僅|不只|不但|不少|不良|不孕|不育|不全|不适|不適|不齐|不齊|不稳定|不穩定|不限|不懈|未来|未來|非常|非洲|非典|非营利|非營利|非政府/g;
+
+/** The window with those words masked, at the same length. */
+const maskUnspacedNonNegations = (text: string) => text.replace(UNSPACED_NON_NEGATIONS, word => "·".repeat(word.length));
 
 /** A claim written with ideographs, found by inclusion and checked for a nearby negation. */
 function unspacedEvidenceAffirmsClaim(normalizedEvidence: string, claim: string) {
   for (let index = normalizedEvidence.indexOf(claim); index !== -1; index = normalizedEvidence.indexOf(claim, index + 1)) {
     const before = normalizedEvidence.slice(Math.max(0, index - 12), index);
     const after = normalizedEvidence.slice(index + claim.length, index + claim.length + 12);
-    const nearbyTokens = [...before.split(" "), ...after.split(" ")];
-    if (!UNSPACED_NEGATION_BEFORE.test(before.trimEnd().slice(-4)) && !UNSPACED_NEGATION_AFTER.test(after.trimStart().slice(0, 6)) &&
-      !nearbyTokens.some(token => NEGATION_TOKENS.has(token))) return true;
+    if (!UNSPACED_NEGATION_BEFORE.test(maskUnspacedNonNegations(before).trimEnd().slice(-4)) &&
+      !UNSPACED_NEGATION_AFTER.test(maskUnspacedNonNegations(after).trimStart().slice(0, 6)) &&
+      ![before.split(" "), after.split(" ")].some(tokens => tokens.some((_, position) => negatesAt(tokens, position)))) return true;
   }
   return false;
 }
@@ -515,11 +543,12 @@ function evidenceAffirmsClaims(evidence: string, claimedValues: string[]) {
     for (let index = 0; index <= evidenceTokens.length - claimTokens.length; index += 1) {
       const matches = claimTokens.every((token, offset) => evidenceTokens[index + offset] === token);
       if (!matches) continue;
-      const nearbyTokens = [
-        ...evidenceTokens.slice(Math.max(0, index - 12), index),
-        ...evidenceTokens.slice(index + claimTokens.length, index + claimTokens.length + 6),
-      ];
-      if (!nearbyTokens.some(token => NEGATION_TOKENS.has(token))) return true;
+      const end = index + claimTokens.length;
+      let negated = false;
+      for (let position = Math.max(0, index - 12); position < Math.min(evidenceTokens.length, end + 6); position += 1) {
+        if ((position < index || position >= end) && negatesAt(evidenceTokens, position)) negated = true;
+      }
+      if (!negated) return true;
     }
     return false;
   });
@@ -668,6 +697,11 @@ function verifiedLanguageProficiency(
     : "unknown";
 }
 
+/** The number written as a word, or against an ideograph as Chinese writes it: "10年", "超过10年" (INTL-02). */
+function containsYears(value: string, years: number) {
+  return new RegExp(`(?:^|\\s|${UNSPACED_SCRIPT.source})${years}(?:\\s|$|${UNSPACED_SCRIPT.source})`).test(normalizeEvidenceText(value));
+}
+
 function sameNormalizedValue(left: string, right: string) {
   return normalizeEvidenceText(left) === normalizeEvidenceText(right);
 }
@@ -725,9 +759,7 @@ function contradictionMatchesDeclaredContext(
     case "language":
       return declared.languages.some(value => sameNormalizedValue(item.declaredValue, value));
     case "yearsExperience":
-      return declared.yearsExperience !== undefined && new RegExp(
-        `(?:^|\\s)${declared.yearsExperience}(?:\\s|$)`
-      ).test(normalizeEvidenceText(item.declaredValue));
+      return declared.yearsExperience !== undefined && containsYears(item.declaredValue, declared.yearsExperience);
     case "professionalTitle":
     case "skill":
     case "certification":
@@ -754,9 +786,7 @@ function fieldEvidenceMatchesAnalysis(
     case "targetCountry":
       return analysis.countriesOfInterest.some(value => sameNormalizedValue(item.value, value));
     case "yearsExperience":
-      return analysis.yearsExperience !== null && new RegExp(
-        `(?:^|\\s)${analysis.yearsExperience}(?:\\s|$)`
-      ).test(normalizeEvidenceText(item.value));
+      return analysis.yearsExperience !== null && containsYears(item.value, analysis.yearsExperience);
     case "certification":
       return analysis.certifications.some(value => sameNormalizedValue(item.value, value.name));
     case "employment":
