@@ -6,6 +6,7 @@ import { getDb } from "./db";
 import { assertPdfDecompressionWithinLimits, DOCUMENT_DECOMPRESSION_LIMITS, inspectDocxArchive, truncateExtractedText } from "./documentDecompressionLimits";
 import { PdfReaderUnavailableError, readPdfIsolated } from "./pdfExtractionSandbox";
 import { CV_ANALYSIS_STEP_MINIMUM_MS, ProcessingDeadlineError, stepTimeoutMs } from "./processingDeadline";
+import { RECRUITMENT_SPECIALTY_EQUIVALENTS } from "../shared/recruitmentSpecialtyEquivalents";
 
 export const RECRUITMENT_ANALYSIS_PRIMARY_MODEL = "openai/gpt-6-astra";
 export const RECRUITMENT_ANALYSIS_FALLBACK_MODEL = "google/gemini-3.8-flash";
@@ -429,13 +430,17 @@ const VERIFIED_EVIDENCE_MIN_CONFIDENCE = 70;
 
 type EvidenceBearing = { evidence: string; sourceLocation: string; confidence: number; evidenceVerified: boolean };
 
+// Arabic (، ؛ ؟) and Chinese (、 。 《 》 「 」…) punctuation separates words too (INTL-02).
 const normalizeEvidenceText = (value: string) =>
   value
     .normalize("NFKD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLocaleLowerCase()
-    .replace(/[\s.,;:!?()[\]{}'"«»“”‘’/\\|_+=*•·—–-]+/g, " ")
+    .replace(/[\s.,;:!?()[\]{}'"«»“”‘’/\\|_+=*•·—–\-،؛؟、。《》「」『』【】]+/g, " ")
     .trim();
+
+/** Chinese and Japanese write words without spaces: a value with ideographs is looked up as is (INTL-02). */
+const UNSPACED_SCRIPT = /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]/;
 
 function sourcePageText(sourceText: string, pageNumber: number): string | null {
   const markerPattern = /\[PAGE\s+(\d+)\]/gi;
@@ -468,7 +473,7 @@ function evidenceContainsClaims(evidence: string, claimedValues: string[]) {
   const normalizedClaims = claimedValues.map(normalizeEvidenceText);
   return normalizedClaims.length > 0 && normalizedClaims.every(value =>
     (value.length >= 2 || /^\d+$/.test(value)) &&
-    normalizedEvidence.includes(` ${value} `)
+    normalizedEvidence.includes(UNSPACED_SCRIPT.test(value) ? value : ` ${value} `)
   );
 }
 
@@ -478,12 +483,30 @@ const NEGATION_TOKENS = new Set([
   "nessuna", "nunca", "absent", "missing", "manquant", "manquante", "unavailable",
   "expired", "expire", "expiree", "revoked", "revoque", "revoquee", "suspended",
   "suspendu", "suspendue", "lapsed", "perime", "perimee", "invalid", "invalide",
+  "لا", "ليس", "ليست", "لم", "لن", "بدون", "دون", "غير",
 ]);
+/** Chinese negation in the few characters before a claim (无 / 没有 "without", 未 "not yet", 非 "non-", 不 "not"), or expiry just after it. */
+const UNSPACED_NEGATION_BEFORE = /无|無|没有|沒有|未|非|不/;
+const UNSPACED_NEGATION_AFTER = /过期|過期|失效|吊销|吊銷|暂停|暫停/;
+
+/** A claim written with ideographs, found by inclusion and checked for a nearby negation. */
+function unspacedEvidenceAffirmsClaim(normalizedEvidence: string, claim: string) {
+  for (let index = normalizedEvidence.indexOf(claim); index !== -1; index = normalizedEvidence.indexOf(claim, index + 1)) {
+    const before = normalizedEvidence.slice(Math.max(0, index - 12), index);
+    const after = normalizedEvidence.slice(index + claim.length, index + claim.length + 12);
+    const nearbyTokens = [...before.split(" "), ...after.split(" ")];
+    if (!UNSPACED_NEGATION_BEFORE.test(before.trimEnd().slice(-4)) && !UNSPACED_NEGATION_AFTER.test(after.trimStart().slice(0, 6)) &&
+      !nearbyTokens.some(token => NEGATION_TOKENS.has(token))) return true;
+  }
+  return false;
+}
 
 function evidenceAffirmsClaims(evidence: string, claimedValues: string[]) {
   const evidenceTokens = normalizeEvidenceText(evidence).split(" ").filter(Boolean);
   return claimedValues.every(claim => {
-    const claimTokens = normalizeEvidenceText(claim).split(" ").filter(Boolean);
+    const normalizedClaim = normalizeEvidenceText(claim);
+    if (UNSPACED_SCRIPT.test(normalizedClaim)) return unspacedEvidenceAffirmsClaim(evidenceTokens.join(" "), normalizedClaim);
+    const claimTokens = normalizedClaim.split(" ").filter(Boolean);
     if (claimTokens.length === 0) return false;
     for (let index = 0; index <= evidenceTokens.length - claimTokens.length; index += 1) {
       const matches = claimTokens.every((token, offset) => evidenceTokens[index + offset] === token);
@@ -645,6 +668,31 @@ function sameNormalizedValue(left: string, right: string) {
   return normalizeEvidenceText(left) === normalizeEvidenceText(right);
 }
 
+/** Arabic vowel signs, hamza marks and tatweel are ignored when naming a specialty (أ, إ and ا compare equal). */
+const normalizeSpecialtyText = (value: string) => normalizeEvidenceText(value).replace(/[\u0640\u064b-\u065f\u0670]/g, "");
+
+const specialtyEquivalents = Object.entries(RECRUITMENT_SPECIALTY_EQUIVALENTS).map(([specialty, terms]) => ({
+  specialty: normalizeSpecialtyText(specialty),
+  terms: terms.map(normalizeSpecialtyText),
+}));
+
+/** Specialties of the application form that a title or specialty names: the form value itself, or those whose equivalents it uses. */
+function namedRecruitmentSpecialties(value: string) {
+  const text = normalizeSpecialtyText(value);
+  const formValue = specialtyEquivalents.find(entry => entry.specialty === text);
+  if (formValue) return [formValue.specialty];
+  return specialtyEquivalents
+    .filter(entry => entry.terms.some(term => /[a-z]/.test(term) ? ` ${text}`.includes(` ${term}`) : text.includes(term)))
+    .map(entry => entry.specialty);
+}
+
+/** INTL-02: "Consultant Anaesthetist", "Facharzt für Anästhesiologie", "طبيب تخدير" or "麻醉科医师" match « Anesthésie-réanimation ». */
+function specialtyMatchesDeclared(value: string, declaredSpecialty: string) {
+  if (normalizedPhrasesOverlap(value, declaredSpecialty)) return true;
+  const named = new Set(namedRecruitmentSpecialties(value));
+  return namedRecruitmentSpecialties(declaredSpecialty).some(specialty => named.has(specialty));
+}
+
 function normalizedPhrasesOverlap(left: string, right: string) {
   const normalizedLeft = normalizeEvidenceText(left);
   const normalizedRight = normalizeEvidenceText(right);
@@ -728,7 +776,8 @@ export function verifyCvEvidence(
   sourceText: string
 ) {
   const normalizedEvidence = normalizeEvidenceText(evidence);
-  if (normalizedEvidence.length < 6) return false;
+  // An ideograph is a word: four of them ("麻醉医师") cite as much as six Latin letters.
+  if (normalizedEvidence.length < (UNSPACED_SCRIPT.test(normalizedEvidence) ? 4 : 6)) return false;
   const pageMatch = sourceLocation.match(/\bpage\s*(\d+)\b/i);
   const sourceHasPageMarkers = /\[PAGE\s+\d+\]/i.test(sourceText);
   if (sourceHasPageMarkers && !pageMatch) return false;
@@ -843,7 +892,7 @@ function verifiedScoreBreakdown(input: {
     verifiedFields
       .filter(item =>
         (item.field === "specialty" || item.field === "professionalTitle") &&
-        normalizedPhrasesOverlap(item.value, input.targetSpecialty)
+        specialtyMatchesDeclared(item.value, input.targetSpecialty)
       )
       .map(item => `${normalizeEvidenceText(item.evidence)}|${normalizeEvidenceText(item.sourceLocation)}`)
   );
