@@ -202,6 +202,32 @@ describe.skipIf(!executablePath)("pages publiques dans un navigateur", () => {
     }
   }, 120_000);
 
+  it("amène en haut de l'écran la section choisie dans le menu ou par « Me contacter », comme une adresse /#section (PUB-01)", async () => {
+    // Chaque section a sa propre marge haute : elle ne doit pas s'arrêter en plus sous le scroll-padding de l'en-tête.
+    for (const width of [1600, 390]) {
+      for (const [id, trigger] of [["services", "menu"], ["contact", "menu"], ["contact", "hero"]] as const) {
+        const page = await open("/", { width, height: width < 768 ? 844 : 900, consent: true });
+        if (trigger === "hero") {
+          await page.locator("#hero").getByRole("button", { name: contentFr.nav.getInTouch }).click();
+        } else {
+          if (width < 1536) await page.getByRole("button", { name: "Ouvrir le menu" }).click();
+          const name = id === "services" ? contentFr.nav.services : contentFr.nav.contact;
+          await page.locator(width < 1536 ? "#mobile-navigation" : "header nav").getByRole("button", { name, exact: true }).click();
+        }
+        await page.waitForFunction(() => window.scrollY > 0);
+        await page.evaluate(scrollSettled);
+        const landed = await page.evaluate((sectionId) => ({
+          section: document.getElementById(sectionId)!.getBoundingClientRect().top,
+          heading: document.querySelector(`#${sectionId} h2`)!.getBoundingClientRect().top,
+          header: document.querySelector("header.site-nav")!.getBoundingClientRect().bottom,
+        }), id);
+        expect(landed.section, `${id} par ${trigger} à ${width} px`).toBeLessThanOrEqual(1);
+        expect(landed.heading, `${id} par ${trigger} à ${width} px`).toBeGreaterThanOrEqual(landed.header);
+        await page.context().close();
+      }
+    }
+  }, 120_000);
+
   it("met la réservation en tête du menu mobile et dans l'en-tête dès 1024 px (PUB-02)", async () => {
     const mobile = await open("/faq", { width: 390, height: 844 });
     await mobile.getByRole("button", { name: "Ouvrir le menu" }).click();

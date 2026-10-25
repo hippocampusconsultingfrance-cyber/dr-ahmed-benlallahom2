@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { Accessibility, CircleDot, Menu, X, Sun, Moon, Search } from "lucide-react";
+import { scrollToSectionTop } from "@/lib/scrollToSection";
 import { isNavigationDismissKey } from "./navigationKeyboard";
 import { navigationAccessibilityCopy } from "./navigationAccessibilityCopy";
 import LanguageMenu from "./LanguageMenu";
@@ -63,7 +64,7 @@ export default function Navigation() {
     if (currentPath === "/" || currentPath === "") {
       const el = document.getElementById(id);
       if (el) {
-        el.scrollIntoView({ behavior: "smooth" });
+        scrollToSectionTop(el);
         return;
       }
     }
