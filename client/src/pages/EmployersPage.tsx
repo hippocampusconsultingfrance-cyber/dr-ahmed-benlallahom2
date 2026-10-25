@@ -321,8 +321,8 @@ export default function EmployersPage() {
                 <h2 className="font-display text-3xl text-foreground">{t.formTitle}</h2>
                 <p className="mt-3 text-sm leading-6 text-muted-foreground">{t.formIntro}</p>
 
-                <form onSubmit={handleSubmit} className="mt-8 space-y-6" noValidate>
-                  <div className="grid gap-4 sm:grid-cols-2">
+                <form onSubmit={handleSubmit} className="@container mt-8 space-y-6" noValidate>
+                  <div className="grid gap-4 @xl:grid-cols-2">
                     <label className="block w-full space-y-2 text-sm text-foreground">
                       <span className="block mb-1 font-medium">{t.orgName} *</span>
                       <input required value={form.organizationName} onChange={(e) => update("organizationName", e.target.value)} className="form-control block w-full" placeholder="Hôpital, Groupe, Société" />
@@ -333,7 +333,7 @@ export default function EmployersPage() {
                     </label>
                   </div>
 
-                  <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="grid gap-4 @xl:grid-cols-2">
                     <label className="block w-full space-y-2 text-sm text-foreground">
                       <span className="block mb-1 font-medium">{t.email} *</span>
                       <input type="email" required value={form.email} onChange={(e) => update("email", e.target.value)} className="form-control block w-full" autoComplete="email" />
@@ -344,7 +344,7 @@ export default function EmployersPage() {
                     </label>
                   </div>
 
-                  <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="grid gap-4 @xl:grid-cols-2">
                     <label className="block w-full space-y-2 text-sm text-foreground">
                       <span className="block mb-1 font-medium">{t.targetEnvironment} *</span>
                       <select value={form.targetEnvironment} onChange={(e) => update("targetEnvironment", e.target.value)} className="form-control block w-full">
@@ -360,7 +360,7 @@ export default function EmployersPage() {
                     </label>
                   </div>
 
-                  <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="grid gap-4 @xl:grid-cols-2">
                     <label className="block w-full space-y-2 text-sm text-foreground">
                       <span className="block mb-1 font-medium">{t.country} *</span>
                       <input name="country" required value={form.country} onInput={(e) => update("country", e.currentTarget.value)} onChange={(e) => update("country", e.target.value)} autoComplete="country-name" className="form-control block w-full" placeholder={t.countryPlaceholder} />

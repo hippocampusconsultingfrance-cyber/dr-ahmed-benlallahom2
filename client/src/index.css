@@ -236,17 +236,19 @@ html[lang="zh"] .font-display,
   .form-consent-item-invalid .form-consent-checkbox, .form-consent-group-invalid .form-consent-checkbox, .form-consent-checkbox[aria-invalid="true"] { border-color: #fb7185; background: #3f111b; box-shadow: 0 0 0 3px rgb(251 113 133 / 18%); }
 
   /*
-   * Champs « form-control » (/employers, VVIP, onglet admin Questions santé) : même rendu que
-   * .recruitment-field, à garder aligné. Dans cette couche, un utilitaire posé sur un champ ne
-   * l'emporte que sur la propriété qu'il définit : h-11 laisse jouer min-height. Les champs de
-   * /questions-anesthesie gardent leur rendu grâce à min-h-11 py-0 rounded-none. Le style
-   * d'erreur ci-dessous l'emporte par !important (A11Y-01).
+   * Champs « form-control » (/employers, VVIP, onglet admin Questions santé) : rendu de
+   * .recruitment-field, à garder aligné, sauf la bordure, qui atteint ici au moins 3:1 contre le
+   * fond voisin en thème clair comme sombre (WCAG 1.4.11). Dans cette couche, un utilitaire posé
+   * sur un champ ne l'emporte que sur la propriété qu'il définit : h-11 laisse jouer min-height.
+   * Les champs de /questions-anesthesie gardent leur rendu grâce à min-h-11 py-0 rounded-none et
+   * border-border. Le style d'erreur ci-dessous l'emporte par !important (A11Y-01).
    */
   .form-control {
+    --form-control-border: color-mix(in oklch, var(--muted-foreground) 65%, var(--border));
     display: block;
     width: 100%;
     min-height: 3.2rem;
-    border: 1px solid color-mix(in oklch, var(--border) 86%, transparent);
+    border: 1px solid var(--form-control-border);
     border-radius: 0.75rem;
     padding: 0.72rem 0.9rem;
     background: color-mix(in oklch, var(--background) 48%, var(--card));
@@ -254,7 +256,9 @@ html[lang="zh"] .font-display,
     box-shadow: inset 0 1px 0 color-mix(in oklch, white 4%, transparent);
     transition: border-color 180ms ease, box-shadow 180ms ease, background 180ms ease;
   }
-  .form-control:hover { border-color: color-mix(in oklch, var(--primary) 46%, var(--border)); }
+  /* La flèche d'un select a sa propre place : une marge droite de 0,9rem ne ferait que couper la valeur choisie. */
+  select.form-control { padding-right: 0.5rem; }
+  .form-control:hover { border-color: color-mix(in oklch, var(--primary) 46%, var(--form-control-border)); }
   .form-control:focus { border-color: var(--primary); background: color-mix(in oklch, var(--card) 84%, var(--background)); box-shadow: 0 0 0 4px color-mix(in oklch, var(--primary) 13%, transparent); }
   .form-control::placeholder { color: var(--muted-foreground); opacity: 0.82; }
   .form-field-invalid, .recruitment-field.form-field-invalid, .form-control.form-field-invalid, .form-field-premium.form-field-invalid, [aria-invalid="true"].form-control, [aria-invalid="true"].recruitment-field { border-color: #fb7185 !important; background-color: rgb(69 10 10 / 52%) !important; box-shadow: 0 0 0 3px rgb(251 113 133 / 18%) !important; }
@@ -921,7 +925,7 @@ body {
   font-weight: 600;
 }
 
-/* Rendu repris par .form-control (@layer components) : modifier les deux ensemble. */
+/* Rendu repris par .form-control (@layer components), bordure à part : modifier les deux ensemble. */
 .recruitment-field {
   display: block;
   width: 100%;

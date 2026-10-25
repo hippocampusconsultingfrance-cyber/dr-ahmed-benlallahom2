@@ -247,11 +247,33 @@ describe.skipIf(!executablePath)("pages publiques dans un navigateur", () => {
         expect(fields.length, `${route} ${theme}`).toBeGreaterThan(5);
         for (const field of fields) {
           expect(field.width, `${route} ${theme} ${width} px`).toBeGreaterThanOrEqual(1);
-          expect(field.borderContrast, `${route} ${theme} ${width} px`).toBeGreaterThan(1.15);
+          // Contraste non textuel du contour d'un champ (WCAG 1.4.11).
+          expect(field.borderContrast, `${route} ${theme} ${width} px`).toBeGreaterThanOrEqual(3);
           expect(field.height, `${route} ${theme} ${width} px`).toBeGreaterThanOrEqual(44);
         }
         await page.context().close();
       }
+    }
+  }, 120_000);
+
+  it("affiche en entier la valeur choisie et le texte indicatif des champs form-control (A11Y-01)", async () => {
+    for (const [route, width] of [["/employers", 1366], ["/employers", 1440], ["/employers", 390], ["/recruitment/vvip-offshore", 1366], ["/recruitment/vvip-offshore", 1440], ["/recruitment/vvip-offshore", 390]] as const) {
+      const page = await open(route, { width });
+      const clipped = await page.$$eval("main form .form-control:is(input, select)", (elements) => {
+        const context = document.createElement("canvas").getContext("2d")!;
+        return elements.filter((element) => element.getBoundingClientRect().width > 0).flatMap((element) => {
+          const field = element as HTMLInputElement | HTMLSelectElement;
+          const style = getComputedStyle(field);
+          context.font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+          const text = field instanceof HTMLSelectElement ? field.selectedOptions[0]?.text ?? "" : field.placeholder;
+          // La flèche d'un select occupe environ 20 px en plus de la marge intérieure.
+          const room = field.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight) - (field instanceof HTMLSelectElement ? 20 : 0);
+          const needed = context.measureText(text).width;
+          return needed > room ? [`« ${text} » : ${Math.ceil(needed)} px pour ${Math.floor(room)}`] : [];
+        });
+      });
+      expect(clipped, `${route} à ${width} px`).toEqual([]);
+      await page.context().close();
     }
   }, 120_000);
 
