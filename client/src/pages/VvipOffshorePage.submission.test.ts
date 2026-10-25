@@ -13,6 +13,7 @@ function bodyFor(specialty: string, environments: string[] = allEnvironments) {
     specialty,
     diplomaCountry: "Maroc",
     turnstileToken: "turnstile-token-of-this-attempt",
+    language: "fr",
   });
 }
 
@@ -58,7 +59,7 @@ describe("REC-03 / INTL-03 — message affiché après un refus du serveur", () 
   it("affiche en français le message réel du serveur, sans le remplacer par « remplir les champs obligatoires »", () => {
     for (const refusal of serverRefusals) expect(vvipSubmissionErrorMessage(refusal, "fr")).toBe(refusal.error);
     for (const code of Object.values(cvRefusals).flat()) expect(vvipSubmissionErrorMessage({ error: frenchCvMessage, code }, "fr"), code).toBe(frenchCvMessage);
-    expect(vvipSubmissionErrorMessage(serverRefusals[2], "fr")).not.toBe(vvipOffshoreCopy.fr.required);
+    expect(vvipSubmissionErrorMessage(serverRefusals[2], "fr")).not.toBe(vvipOffshoreCopy.fr.genericError);
   });
 
   it.each(["en", "de", "zh"] as const)("traduit chaque refus connu du serveur d’après son code (%s)", language => {
@@ -72,7 +73,7 @@ describe("REC-03 / INTL-03 — message affiché après un refus du serveur", () 
 
     expect(new Set(shown).size, "un message distinct par cause").toBe(shown.length);
     for (const message of shown) {
-      expect([t.required, t.genericError, t.fileError]).not.toContain(message);
+      expect([t.genericError, t.fileError]).not.toContain(message);
       expect(serverRefusals.map(refusal => refusal.error), "traduit, pas le texte français").not.toContain(message);
       expect(message).not.toBe(frenchCvMessage);
     }
@@ -99,7 +100,7 @@ describe("REC-03 / INTL-03 — message affiché après un refus du serveur", () 
       vvipSubmissionErrorMessage({}, language, 502),
     ];
     expect(new Set(failures).size).toBe(1);
-    expect([t.genericError, t.required, t.fileError]).not.toContain(failures[0]);
+    expect([t.genericError, t.fileError]).not.toContain(failures[0]);
     if (language === "fr") expect(failures[0]).toBe("Le service de candidature est momentanément indisponible. Réessayez dans quelques instants.");
     if (language === "en") expect(failures[0]).toBe("The application service is momentarily unavailable. Please try again in a few moments.");
     // A 503 with its code keeps the server's reason, a 4xx without code stays generic.

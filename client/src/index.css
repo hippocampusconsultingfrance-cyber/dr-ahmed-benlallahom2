@@ -950,6 +950,16 @@ body {
   box-shadow: 0 0 0 4px color-mix(in oklch, var(--primary) 13%, transparent);
 }
 
+/*
+ * Un champ en erreur garde sa bordure et son ombre rouges (!important) : sans contour, celui qui a
+ * le focus, souvent placé là par l'alerte d'un envoi refusé, ressemblerait aux autres (A11Y-03, WCAG 2.4.7).
+ */
+.recruitment-field.form-field-invalid:focus-visible,
+[aria-invalid="true"].recruitment-field:focus-visible {
+  outline: 3px solid color-mix(in oklch, var(--primary) 72%, white);
+  outline-offset: 3px;
+}
+
 .recruitment-field::placeholder {
   color: var(--muted-foreground);
   opacity: 0.82;

@@ -32,6 +32,7 @@ describe("répertoire mondial du pays de diplôme", () => {
     const source = await readFile(new URL("./RecruitmentPage.tsx", import.meta.url), "utf8");
     expect(source).toContain('resolveCountryForSubmission(form.diplomaCountry');
     expect(source).toContain('name="diplomaCountry"');
-    expect(source).toContain('body.append("diplomaCountry", submittedDiplomaCountry);');
+    expect(source).toContain('diplomaCountry: submittedDiplomaCountry');
+    expect(source).toContain('body.append("diplomaCountry", diplomaCountry);');
   });
 });

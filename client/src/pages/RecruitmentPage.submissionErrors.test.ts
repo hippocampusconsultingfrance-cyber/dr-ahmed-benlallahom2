@@ -25,6 +25,31 @@ const refusals = [
     zh: "申请信息无效。",
   },
   {
+    refusal: { error: "Vous pouvez sélectionner jusqu’à 18 pays ciblés.", code: "recruitment_target_countries_too_many" },
+    en: "Too many target countries are selected. Remove some and try again.",
+    de: "Es sind zu viele Zielländer ausgewählt. Entfernen Sie einige und versuchen Sie es erneut.",
+    zh: "所选目标国家过多。请删除部分后重试。",
+  },
+  // Refused on reception (server/recruitmentApplyUpload.test.ts), before the content checks.
+  {
+    refusal: { error: "Le CV ne doit pas dépasser 4 Mo. Compressez-le ou enregistrez-le en PDF, puis réessayez.", code: "recruitment_cv_too_large" },
+    en: "The CV must not exceed 4 MB. Compress it or save it as a PDF, then try again.",
+    de: "Der Lebenslauf darf höchstens 4 MB groß sein. Komprimieren Sie ihn oder speichern Sie ihn als PDF und versuchen Sie es erneut.",
+    zh: "简历不得超过 4 MB。请压缩或另存为 PDF 后重试。",
+  },
+  {
+    refusal: { error: "Format de CV non accepté. Utilisez un PDF ou un DOCX (le format Word ancien .doc n’est plus accepté).", code: "recruitment_cv_format_refused" },
+    en: "CV format not accepted. Use a PDF or a DOCX (the legacy Word .doc format is no longer accepted).",
+    de: "CV-Format nicht akzeptiert. Verwenden Sie ein PDF oder DOCX (das alte Word-Format .doc wird nicht mehr akzeptiert).",
+    zh: "不接受该简历格式。请使用 PDF 或 DOCX（不再接受旧版 Word .doc 格式）。",
+  },
+  {
+    refusal: { error: "Le CV est requis.", code: "recruitment_cv_required" },
+    en: "The CV is required.",
+    de: "Der Lebenslauf ist erforderlich.",
+    zh: "必须提供简历。",
+  },
+  {
     refusal: { error: "Le service de candidature est temporairement indisponible.", code: "recruitment_service_unavailable" },
     en: "The application service is temporarily unavailable.",
     de: "Der Bewerbungsdienst ist vorübergehend nicht verfügbar.",

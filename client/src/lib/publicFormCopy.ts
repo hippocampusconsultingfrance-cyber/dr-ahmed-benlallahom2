@@ -29,9 +29,17 @@ export const publicFormCopy = {
     de: { label: "Bot-Prüfung", unavailable: "Die Bot-Prüfung ist nicht verfügbar. Bitte versuchen Sie es später erneut.", loadError: "Die Sicherheitsprüfung konnte nicht geladen werden. Zum Schutz Ihrer Daten bleibt das Senden gesperrt; versuchen Sie es in wenigen Augenblicken erneut.", retry: "Erneut versuchen" },
     zh: { label: "反机器人验证", unavailable: "反机器人验证暂不可用，请稍后重试。", loadError: "无法加载安全验证。为保护您的数据，发送仍被阻止；请稍后重试。", retry: "重试" },
   },
+  // Message d'un formulaire refusé avant l'envoi : {fields} reçoit les noms des champs à reprendre (A11Y-03).
+  fieldsToCorrect: {
+    fr: { list: "À compléter ou corriger : {fields}.", separator: ", ", sentenceSeparator: " " },
+    en: { list: "Please complete or correct: {fields}.", separator: ", ", sentenceSeparator: " " },
+    de: { list: "Bitte ergänzen oder korrigieren: {fields}.", separator: ", ", sentenceSeparator: " " },
+    zh: { list: "请填写或更正：{fields}。", separator: "、", sentenceSeparator: "" },
+  },
 } as const;
 
 export const getContactFormCopy = (language: string) => publicFormCopy.contact[fallbackLanguage(language)];
 export const getGdprRequestCopy = (language: string) => publicFormCopy.gdpr[fallbackLanguage(language)];
 export const getBookingFormCopy = (language: string) => publicFormCopy.booking[fallbackLanguage(language)];
 export const getTurnstileWidgetCopy = (language: string) => publicFormCopy.turnstile[fallbackLanguage(language)];
+export const getFieldsToCorrectCopy = (language: string) => publicFormCopy.fieldsToCorrect[fallbackLanguage(language)];
