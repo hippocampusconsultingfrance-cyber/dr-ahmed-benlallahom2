@@ -280,9 +280,9 @@ export default function Navigation() {
         </div>
       </div>
 
-      {/* Mobile Menu */}
+      {/* Mobile Menu : l'en-tête est fixe, le menu défile donc lui-même sous la barre (h-18, md:h-20). */}
       {mobileOpen && (
-        <div id="mobile-navigation" className="mobile-navigation min-[1536px]:hidden bg-background/95 backdrop-blur-xl border-b border-border">
+        <div id="mobile-navigation" className="mobile-navigation min-[1536px]:hidden max-h-[calc(100dvh-4.5rem)] md:max-h-[calc(100dvh-5rem)] overflow-y-auto overscroll-contain bg-background/95 backdrop-blur-xl border-b border-border">
           <nav className="container py-6 flex flex-col gap-4" aria-label={accessibilityCopy.mobileNavigation}>
             <a href="/booking" onClick={() => setMobileOpen(false)} className="cta-primary px-5 py-3.5 text-sm w-full">
               {content.hero.bookConsultation}

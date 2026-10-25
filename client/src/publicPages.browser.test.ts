@@ -128,6 +128,21 @@ describe.skipIf(!executablePath)("pages publiques dans un navigateur", () => {
     }
   }, 120_000);
 
+  it("laisse atteindre au clavier la dernière entrée du menu mobile sur un écran peu haut", async () => {
+    // L'en-tête étant vraiment fixe (PUB-01), le menu doit défiler lui-même : sous 640 px, thème,
+    // lisibilité renforcée et noir OLED n'existent que dans ce menu.
+    for (const [width, height] of [[390, 664], [360, 640], [844, 390]] as const) {
+      const page = await open("/faq", { width, height });
+      await page.getByRole("button", { name: "Ouvrir le menu" }).click();
+      const lastEntry = page.locator("#mobile-navigation nav > *").last();
+      await lastEntry.focus();
+      const box = await lastEntry.evaluate((element) => element.getBoundingClientRect().toJSON());
+      expect(box.height, `${width}x${height}`).toBeGreaterThan(0);
+      expect(box.bottom, `${width}x${height}`).toBeLessThanOrEqual(height);
+      await page.context().close();
+    }
+  }, 120_000);
+
   it("dessine les champs form-control avec bordure, fond et hauteur, en thème clair et sombre (A11Y-01)", async () => {
     for (const theme of ["light", "dark"] as const) {
       for (const [route, width] of [["/employers", 1366], ["/employers", 320], ["/recruitment/vvip-offshore", 1366]] as const) {
