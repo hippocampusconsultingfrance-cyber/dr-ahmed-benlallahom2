@@ -103,6 +103,17 @@ function currentFontBaseline(doc: PDFKit.PDFDocument, fontSize: number): number 
   return typeof ascender === "number" ? -(ascender / 1000) * fontSize : undefined;
 }
 
+/**
+ * La police a-t-elle le dessin de ce caractère ? Sinon PDFKit imprime un carré
+ * vide. Lu dans la police fontkit sous `_font.font`, que PDFKit ne type pas ;
+ * Helvetica, police de repli, n’a pas cette table : on la croit capable.
+ */
+function fontHasGlyph(doc: PDFKit.PDFDocument, fontName: string, char: string): boolean {
+  doc.font(fontName);
+  const font = (doc as unknown as { _font?: { font?: { hasGlyphForCodePoint?: (codePoint: number) => boolean } } })._font?.font;
+  return typeof font?.hasGlyphForCodePoint === "function" ? font.hasGlyphForCodePoint(char.codePointAt(0) ?? 0) : true;
+}
+
 const bidi = bidiFactory();
 const ARABIC_FONT_CHARACTER = new RegExp("\\p{Script_Extensions=Arabic}", "u");
 // Idéogrammes, kana et bopomofo par Script : Script_Extensions=Han couvre aussi
@@ -113,6 +124,17 @@ const ARABIC_FONT_CHARACTER = new RegExp("\\p{Script_Extensions=Arabic}", "u");
 const HAN_FONT_CHARACTER = new RegExp("[\\p{Script=Han}\\p{Script=Hiragana}\\p{Script=Katakana}\\p{Script=Bopomofo}\\u3000-\\u30ff\\uff00-\\uffef]", "u");
 const ARABIC_LETTER = new RegExp("\\p{Script=Arabic}", "u");
 const MIDDLE_DOT = "\u00b7";
+// Noto Sans décompose ǹ ḿ ṃ ṅ ṣ ẹ ị ọ ụ (ccmp) en lettre de base et
+// point souscrit ou accent, pour y empiler un ton (yoruba, igbo). PDFKit
+// relie alors le glyphe de base à la lettre nue et la marque à rien : le texte
+// copié ou extrait perdait le point (« Thi » pour « Thị »). Sans ccmp, la
+// police prend sa lettre précomposée, au même dessin.
+const DECOMPOSED_BY_NOTO_SANS = /[\u01f9\u1e3f\u1e43\u1e45\u1e63\u1eb9\u1ecb\u1ecd\u1ee5]/;
+const GRAPHEMES = new Intl.Segmenter(undefined, { granularity: "grapheme" });
+const PICTOGRAPH = new RegExp("[\\p{Extended_Pictographic}\\p{S}]", "u");
+// Masqués par fontkit, même sans dessin dans la police (ZWJ, sélecteurs de variante…).
+const INVISIBLE = new RegExp("\\p{Default_Ignorable_Code_Point}", "u");
+const COMBINING_MARK = new RegExp("\\p{M}", "u");
 
 export type InvoiceNameRun = { text: string; font: "regular" | "arabic" | "han" };
 
@@ -128,6 +150,63 @@ function invoiceNameCharacterFont(chars: string[], position: number): InvoiceNam
 }
 
 /**
+ * Le nom tel que les polices de la facture savent l’imprimer, sans carré
+ * vide : aucune n’a les emoji, ni l’hébreu, le coréen ou le thaï. Un caractère
+ * sans dessin devient sa forme simple si les polices l’ont (lettres
+ * « stylisées » ou entourées : 𝓙𝓮𝓪𝓷, Ⓙⓔⓐⓝ → Jean) ; sinon un emoji ou un
+ * pictogramme est retiré, et tout autre caractère devient « ? ». `hasGlyph`
+ * dit si la police qui écrirait le caractère en a le dessin.
+ */
+export function printableInvoiceName(name: string, hasGlyph: (font: InvoiceNameRun["font"], char: string) => boolean): string {
+  const drawable = (chars: string[], start: number, end: number) =>
+    chars.slice(start, end).every((char, index) => INVISIBLE.test(char) || hasGlyph(invoiceNameCharacterFont(chars, start + index), char));
+  const chars = Array.from(name);
+  let position = 0;
+  let removed = false;
+  let printable = "";
+  for (const { segment } of Array.from(GRAPHEMES.segment(name))) {
+    const start = position;
+    position += Array.from(segment).length;
+    if (drawable(chars, start, position)) {
+      printable += segment;
+      continue;
+    }
+    // La forme simple d’abord : les lettres entourées (Ⓙ, 🄹) sont des symboles.
+    const simple = Array.from(segment.normalize("NFKD")).filter(char => !COMBINING_MARK.test(char));
+    if (simple.length > 0 && drawable(simple, 0, simple.length)) printable += simple.join("");
+    else if (PICTOGRAPH.test(segment)) removed = true;
+    else printable += "?";
+  }
+  // Un emoji retiré entre deux mots y laissait deux espaces.
+  return removed ? printable.replace(/\s{2,}/g, " ").trim() : printable;
+}
+
+/**
+ * Retirer la décomposition (ccmp) des lettres que Noto Sans décompose. fontkit
+ * retire une fonctionnalité donnée à false ; les types de PDFKit ne connaissent
+ * que la liste de celles à ajouter. Un objet neuf à chaque appel : fontkit y
+ * inscrit les fonctionnalités qu’il applique.
+ */
+function invoiceNameFeatures(run: InvoiceNameRun): PDFKit.Mixins.OpenTypeFeatures[] | undefined {
+  if (run.font !== "regular" || !DECOMPOSED_BY_NOTO_SANS.test(run.text)) return undefined;
+  return { ccmp: false } as unknown as PDFKit.Mixins.OpenTypeFeatures[];
+}
+
+type InvoiceNameChar = { char: string; font: InvoiceNameRun["font"]; level: number };
+
+/** Caractères du nom, avec leur police et leur niveau bidi calculé sur tout le nom (UAX #9). */
+function invoiceNameChars(name: string): InvoiceNameChar[] {
+  const { levels } = bidi.getEmbeddingLevels(name);
+  const chars = Array.from(name);
+  let index = 0;
+  return chars.map((char, position) => {
+    const level = levels[index];
+    index += char.length;
+    return { char, font: invoiceNameCharacterFont(chars, position), level };
+  });
+}
+
+/**
  * Découpe la ligne du nom en segments à écrire de gauche à droite, chacun dans
  * la police qui en a les glyphes. L’algorithme bidirectionnel Unicode
  * (bidi-js) donne l’ordre d’affichage des segments. Les espaces restent dans
@@ -138,18 +217,64 @@ function invoiceNameCharacterFont(chars: string[], position: number): InvoiceNam
  * segments de droite à gauche (espaces, ponctuation) sont retournés ici.
  */
 export function invoiceNameRuns(name: string): InvoiceNameRun[] {
-  const { levels } = bidi.getEmbeddingLevels(name);
+  return invoiceLineRuns(invoiceNameChars(name));
+}
+
+/**
+ * Lignes du nom, chacune en segments à écrire de gauche à droite. Comme le veut
+ * UAX #9, la coupure se fait dans l’ordre logique, puis chaque ligne est remise
+ * dans l’ordre d’affichage : couper la ligne déjà retournée, comme le faisait
+ * PDFKit, mettait la fin d’un long nom arabe sur la première ligne. Une ligne
+ * s’arrête au dernier mot qui tient (`fits`), ou dans un mot plus long qu’elle ;
+ * les espaces de la coupure ne s’impriment pas.
+ */
+export function invoiceNameLines(name: string, fits: (runs: InvoiceNameRun[]) => boolean): InvoiceNameRun[][] {
+  const chars = invoiceNameChars(name);
+  const space = (position: number) => chars[position]?.char === " ";
+  const line = (start: number, end: number) => invoiceLineRuns(chars.slice(start, end));
+  const lines: InvoiceNameRun[][] = [];
+  let start = 0;
+  while (space(start)) start += 1;
+  while (start < chars.length) {
+    let end = start;
+    for (let position = start + 1; position <= chars.length; position += 1) {
+      if (space(position - 1) || (position < chars.length && !space(position))) continue; // pas une fin de mot
+      if (!fits(line(start, position))) break;
+      end = position;
+    }
+    if (end === start) {
+      // Le plus long début du mot qui tient, d’au moins un caractère, sans
+      // détacher une lettre de ses marques (harakat, accents combinants).
+      let low = start + 1;
+      let high = start + 1;
+      while (high < chars.length && !space(high)) high += 1;
+      while (low < high) {
+        const middle = Math.ceil((low + high) / 2);
+        if (fits(line(start, middle))) low = middle;
+        else high = middle - 1;
+      }
+      end = low;
+      while (end > start + 1 && end < chars.length && COMBINING_MARK.test(chars[end].char)) end -= 1;
+    }
+    lines.push(line(start, end));
+    start = end;
+    while (space(start)) start += 1;
+  }
+  return lines;
+}
+
+/** Vrai si une partie du nom s’écrit de droite à gauche. */
+function hasRightToLeft(name: string): boolean {
+  return invoiceNameChars(name).some(({ level }) => level % 2 === 1);
+}
+
+function invoiceLineRuns(chars: InvoiceNameChar[]): InvoiceNameRun[] {
   const runs: Array<InvoiceNameRun & { level: number }> = [];
-  const chars = Array.from(name);
-  let index = 0;
-  chars.forEach((char, position) => {
-    const level = levels[index];
-    index += char.length;
-    const font = invoiceNameCharacterFont(chars, position);
+  for (const { char, font, level } of chars) {
     const previous = runs[runs.length - 1];
     if (previous && previous.level === level && previous.font === font) previous.text += char;
     else runs.push({ text: char, font, level });
-  });
+  }
 
   // Règle L2 d’UAX #9, appliquée aux segments : du niveau le plus haut au plus
   // bas niveau impair, inverser chaque suite de segments de niveau au moins égal.
@@ -364,13 +489,30 @@ export async function generateInvoicePDF(
       // PDFKit sets each segment from its own font's ascender, much taller in
       // the Arabic font: all segments take the main font's baseline instead.
       const baseline = currentFontBaseline(doc, 10);
-      const nameRuns = invoiceNameRuns(buyerName);
-      nameRuns.forEach((run, index) => {
-        doc.font(font(run.font));
-        const options = { continued: index < nameRuns.length - 1, baseline };
-        if (index === 0) doc.text(run.text, 50, clientY + 20, options);
-        else doc.text(run.text, options);
-      });
+      const lineHeight = doc.currentLineHeight(true);
+      const name = printableInvoiceName(buyerName, (key, char) => fontHasGlyph(doc, font(key), char));
+      const nameRuns = invoiceNameRuns(name);
+      if (nameRuns.length === 1 && nameRuns[0].font === "regular" && !hasRightToLeft(name)) {
+        // Latin, Greek, Cyrillic: PDFKit wraps a long name itself, as before.
+        doc.font(regular).text(name, 50, clientY + 20, { baseline, features: invoiceNameFeatures(nameRuns[0]) });
+      } else {
+        // Lines cut in reading order, each one main-font line apart: the taller
+        // Arabic and Chinese fonts no longer push the email and table down.
+        const nameWidth = doc.page.width - 50 - doc.page.margins.right;
+        const widthOf = (runs: InvoiceNameRun[]) =>
+          runs.reduce((width, run) => width + doc.font(font(run.font)).widthOfString(run.text, { features: invoiceNameFeatures(run) }), 0);
+        let lineY = clientY + 20;
+        for (const line of invoiceNameLines(name, runs => widthOf(runs) <= nameWidth)) {
+          line.forEach((run, index) => {
+            doc.font(font(run.font));
+            const options = { lineBreak: false, baseline, features: invoiceNameFeatures(run) };
+            if (index === 0) doc.text(run.text, 50, lineY, options);
+            else doc.text(run.text, options);
+          });
+          lineY += lineHeight;
+        }
+        doc.y = lineY;
+      }
       doc.font(regular);
       for (const line of buyerDetails) doc.text(line, 50);
 
