@@ -1,27 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { bookingContent, getBookingAvailabilityState, getBookingServerErrorMessage, isBookingInputError, isWithinBookingAvailability, parseBookingDateTime, toParisBookingDateKey } from "./BookingPage";
+import { bookingContent, getBookingAvailabilityState, getBookingServerErrorMessage, isBookingInputError, isWithinBookingAvailability, parisBookingSlotStart, toParisBookingDateKey } from "./BookingPage";
 
-describe("booking date placeholders", () => {
-  it("uses an explicit localized placeholder for every supported language", () => {
-    expect(bookingContent.fr.form.datePlaceholder).toBe("JJ/MM/AAAA · HH:MM");
-    expect(bookingContent.en.form.datePlaceholder).toBe("DD/MM/YYYY · HH:MM");
-    expect(bookingContent.de.form.datePlaceholder).toBe("TT.MM.JJJJ · HH:MM");
-    expect(bookingContent.zh.form.datePlaceholder).toBe("年/月/日 · 时:分");
+describe("booking day and time choice", () => {
+  it("labels the day choice and the time grid in every supported language", () => {
+    expect(bookingContent.fr.form.slotsLegend).toBe("Horaire (heure de Paris)");
+    expect(bookingContent.en.form.slotsLegend).toBe("Time (Paris time)");
     for (const language of ["fr", "en", "de", "zh"] as const) {
+      expect(bookingContent[language].form.day).toBeTruthy();
+      expect(bookingContent[language].form.dayPlaceholder).toBeTruthy();
+      expect(bookingContent[language].form.openingHours).toBeTruthy();
+      expect(bookingContent[language].form.noBookableDay).toContain("90");
       expect(bookingContent[language].form.noAvailability).toBeTruthy();
       expect(bookingContent[language].form.outsideSchedule).toBeTruthy();
     }
-  });
-
-  it("keeps date and time controls visible and keyboard accessible", async () => {
-    const source = await import("node:fs/promises").then((fs) =>
-      fs.readFile(new URL("./BookingPage.tsx", import.meta.url), "utf8")
-    );
-
-    expect(source).toContain('id="booking-date"');
-    expect(source).toContain('id="booking-time"');
-    expect(source).toContain('type="text"');
-    expect(source).not.toContain('opacity-0');
   });
 
   it("aide la saisie tactile avec le remplissage automatique et les touches d’action", async () => {
@@ -36,21 +27,21 @@ describe("booking date placeholders", () => {
     expect(source).toContain('enterKeyHint="done"');
   });
 
-  it("interprète toujours la saisie en heure de Paris", () => {
-    const parsed = parseBookingDateTime("21/08/2026", "10:00");
+  it("interprète toujours le créneau choisi en heure de Paris", () => {
+    const parsed = parisBookingSlotStart("2026-08-21", "10:00");
     expect(parsed?.toISOString()).toBe("2026-08-21T08:00:00.000Z");
-    expect(parseBookingDateTime("03/09/2026", "10:30")?.toISOString()).toBe("2026-09-03T08:30:00.000Z");
-    expect(parseBookingDateTime("15/01/2026", "10:00")?.toISOString()).toBe("2026-01-15T09:00:00.000Z");
+    expect(parisBookingSlotStart("2026-09-03", "10:30")?.toISOString()).toBe("2026-09-03T08:30:00.000Z");
+    expect(parisBookingSlotStart("2026-01-15", "10:00")?.toISOString()).toBe("2026-01-15T09:00:00.000Z");
     expect(toParisBookingDateKey(parsed!)).toBe("2026-08-21");
-    expect(parseBookingDateTime("31/02/2026", "10:00")).toBeNull();
-    expect(parseBookingDateTime("21/08/2026", "25:00")).toBeNull();
+    expect(parisBookingSlotStart("2026-02-31", "10:00")).toBeNull();
+    expect(parisBookingSlotStart("2026-08-21", "25:00")).toBeNull();
   });
 
   it("refuse une liste vide et les heures hors des créneaux de 30 minutes", () => {
     const mondaySlot = [{ dayOfWeek: 1, startTime: "09:00", endTime: "11:00" }];
-    expect(isWithinBookingAvailability(parseBookingDateTime("17/08/2026", "09:30")!, mondaySlot)).toBe(true);
-    expect(isWithinBookingAvailability(parseBookingDateTime("17/08/2026", "09:15")!, mondaySlot)).toBe(false);
-    expect(isWithinBookingAvailability(parseBookingDateTime("17/08/2026", "09:30")!, [])).toBe(false);
+    expect(isWithinBookingAvailability(parisBookingSlotStart("2026-08-17", "09:30")!, mondaySlot)).toBe(true);
+    expect(isWithinBookingAvailability(parisBookingSlotStart("2026-08-17", "09:15")!, mondaySlot)).toBe(false);
+    expect(isWithinBookingAvailability(parisBookingSlotStart("2026-08-17", "09:30")!, [])).toBe(false);
   });
 
   it("distingue explicitement les états de disponibilité du créneau", () => {
@@ -110,7 +101,7 @@ describe("booking date placeholders", () => {
     const source = await import("node:fs/promises").then((fs) =>
       fs.readFile(new URL("./BookingPage.tsx", import.meta.url), "utf8")
     );
-    expect(source).toContain("const bookingWindowIssue = selectedDate ? getBookingWindowIssue(selectedDate) : null;");
+    expect(source).toContain("const bookingWindowIssue = selectedDate ? getBookingWindowIssue(selectedDate, now) : null;");
     expect(source).toContain("Boolean(bookingWindowIssue) || !selectedDate");
     expect(source).toContain("if (!isPlausiblePhoneNumber(formData.phone))");
     expect(getBookingServerErrorMessage({ message: "Ce créneau n’est plus réservable", data: { code: "UNPROCESSABLE_CONTENT" } }))

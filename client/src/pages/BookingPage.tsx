@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,7 @@ import { SEOHead } from "@/components/SEOHead";
 import Footer from "@/components/Footer";
 import BookingLegalNotice from "@/components/BookingLegalNotice";
 import LanguageMenu from "@/components/LanguageMenu";
+import { formatVisitorTime, getBookingLocale } from "@/lib/bookingTime";
 import { getBookingFormCopy } from "@/lib/publicFormCopy";
 import {
   clearBookingDraft,
@@ -25,8 +26,11 @@ import {
   BOOKING_HORIZON_DAYS,
   BOOKING_MIN_LEAD_TIME_HOURS,
   BOOKING_REQUEST_SUBJECT_MAX_LENGTH,
+  BOOKING_HORIZON_MS,
   getBookingWindowIssue,
+  isBookingRefusalReason,
   isPlausiblePhoneNumber,
+  type BookingRefusalReason,
 } from "@shared/bookingPolicy";
 
 export const bookingContent = {
@@ -38,12 +42,16 @@ export const bookingContent = {
       email: "Email",
       phone: "Numéro de téléphone",
       date: "Date et heure",
-      datePlaceholder: "JJ/MM/AAAA · HH:MM",
-      dateOnlyPlaceholder: "JJ/MM/AAAA",
-      timePlaceholder: "HH:MM",
-      timeLabel: "Heure",
-      invalidDate: "Saisissez une date valide au format JJ/MM/AAAA et une heure au format HH:MM.",
-      dateHint: "Choisissez la date et l’heure de votre consultation. Le créneau est affiché en heure de Paris.",
+      day: "Jour",
+      dayPlaceholder: "Choisissez un jour",
+      slotsLegend: "Horaire (heure de Paris)",
+      openingHours: "Disponibilités (heure de Paris)",
+      noBookableDay: `Aucun créneau n’est disponible dans les ${BOOKING_HORIZON_DAYS} prochains jours.`,
+      noSlotsThisDay: "Tous les horaires de ce jour sont déjà réservés. Choisissez un autre jour.",
+      parisTime: "heure de Paris",
+      localTime: (time: string) => `soit ${time} chez vous`,
+      localTimeShort: (time: string) => `${time} chez vous`,
+      dateHint: "Choisissez un jour, puis un horaire libre. Les horaires sont en heure de Paris ; l’heure de chez vous s’affiche dessous lorsqu’elle diffère.",
       windowHint: `Réservation au moins ${BOOKING_MIN_LEAD_TIME_HOURS} h à l’avance et jusqu’à ${BOOKING_HORIZON_DAYS} jours.`,
       tooSoon: `Ce créneau n’est plus réservable : réservez au moins ${BOOKING_MIN_LEAD_TIME_HOURS} h à l’avance.`,
       tooFar: `Les réservations sont ouvertes jusqu’à ${BOOKING_HORIZON_DAYS} jours à l’avance.`,
@@ -61,6 +69,15 @@ export const bookingContent = {
       selectDate: "Sélectionnez une date et une heure",
       noAvailability: "Aucun créneau de consultation n’est configuré pour le moment.",
       outsideSchedule: "Ce créneau est en dehors des horaires de consultation disponibles.",
+    },
+    // Refus du serveur, traduits à partir de leur motif stable (EN-06).
+    refusals: {
+      slot_taken: "Ce créneau vient d’être réservé par un autre patient. Choisissez-en un autre.",
+      too_soon: `Ce créneau n’est plus réservable : réservez au moins ${BOOKING_MIN_LEAD_TIME_HOURS} h à l’avance.`,
+      too_far: `Les réservations sont ouvertes jusqu’à ${BOOKING_HORIZON_DAYS} jours à l’avance.`,
+      outside_schedule: "Ce créneau ne fait plus partie des horaires de consultation. Choisissez-en un autre.",
+      no_availability: "Aucun horaire de consultation n’est ouvert pour le moment.",
+      date_blocked: "Cette date n’est plus disponible. Choisissez un autre jour.",
     },
     pricing: {
       title: "Tarification",
@@ -89,7 +106,8 @@ export const bookingContent = {
         title: "Un paiement est en attente",
         description: "Votre créneau est réservé temporairement pendant le paiement. Reprenez le paiement pour confirmer la consultation, ou annulez pour choisir un autre créneau.",
         slot: "Créneau",
-        heldUntil: "Réservé jusqu’à",
+        remaining: "Temps restant pour payer",
+        remainingValue: (minutes: number) => (minutes < 1 ? "moins d’une minute" : `encore ${minutes} min`),
         reference: "Référence",
         resume: "Reprendre le paiement",
         cancel: "Annuler et choisir un autre créneau",
@@ -108,12 +126,16 @@ export const bookingContent = {
       email: "Email",
       phone: "Phone Number",
       date: "Date and Time",
-      datePlaceholder: "DD/MM/YYYY · HH:MM",
-      dateOnlyPlaceholder: "DD/MM/YYYY",
-      timePlaceholder: "HH:MM",
-      timeLabel: "Time",
-      invalidDate: "Enter a valid date in DD/MM/YYYY format and a time in HH:MM format.",
-      dateHint: "Choose your consultation date and time. The slot is displayed in Paris time.",
+      day: "Day",
+      dayPlaceholder: "Choose a day",
+      slotsLegend: "Time (Paris time)",
+      openingHours: "Availability (Paris time)",
+      noBookableDay: `No time slot is available in the next ${BOOKING_HORIZON_DAYS} days.`,
+      noSlotsThisDay: "All times on this day are already booked. Please choose another day.",
+      parisTime: "Paris time",
+      localTime: (time: string) => `that is ${time} your time`,
+      localTimeShort: (time: string) => `${time} your time`,
+      dateHint: "Choose a day, then a free time. Times are in Paris time; your own time is shown below when it differs.",
       windowHint: `Book at least ${BOOKING_MIN_LEAD_TIME_HOURS} hours ahead and up to ${BOOKING_HORIZON_DAYS} days ahead.`,
       tooSoon: `This time slot can no longer be booked: please book at least ${BOOKING_MIN_LEAD_TIME_HOURS} hours ahead.`,
       tooFar: `Bookings are open up to ${BOOKING_HORIZON_DAYS} days ahead.`,
@@ -131,6 +153,14 @@ export const bookingContent = {
       selectDate: "Select a date and time",
       noAvailability: "No consultation time slots are currently configured.",
       outsideSchedule: "This time slot is outside the available consultation hours.",
+    },
+    refusals: {
+      slot_taken: "This time slot has just been booked by another patient. Please choose another one.",
+      too_soon: `This time slot can no longer be booked: please book at least ${BOOKING_MIN_LEAD_TIME_HOURS} hours ahead.`,
+      too_far: `Bookings are open up to ${BOOKING_HORIZON_DAYS} days ahead.`,
+      outside_schedule: "This time slot is no longer part of the consultation hours. Please choose another one.",
+      no_availability: "No consultation hours are open at the moment.",
+      date_blocked: "This date is no longer available. Please choose another day.",
     },
     pricing: {
       title: "Pricing",
@@ -159,7 +189,8 @@ export const bookingContent = {
         title: "A payment is pending",
         description: "Your time slot is held temporarily during payment. Resume the payment to confirm the consultation, or cancel to choose another time slot.",
         slot: "Time slot",
-        heldUntil: "Held until",
+        remaining: "Time left to pay",
+        remainingValue: (minutes: number) => (minutes < 1 ? "less than a minute" : `${minutes} min left`),
         reference: "Reference",
         resume: "Resume payment",
         cancel: "Cancel and choose another time slot",
@@ -178,12 +209,16 @@ export const bookingContent = {
       email: "E-Mail",
       phone: "Telefonnummer",
       date: "Datum und Uhrzeit",
-      datePlaceholder: "TT.MM.JJJJ · HH:MM",
-      dateOnlyPlaceholder: "TT.MM.JJJJ",
-      timePlaceholder: "HH:MM",
-      timeLabel: "Uhrzeit",
-      invalidDate: "Geben Sie ein gültiges Datum im Format TT.MM.JJJJ und eine Uhrzeit im Format HH:MM ein.",
-      dateHint: "Wählen Sie Datum und Uhrzeit Ihrer Beratung. Der Termin wird in Pariser Zeit angezeigt.",
+      day: "Tag",
+      dayPlaceholder: "Tag wählen",
+      slotsLegend: "Uhrzeit (Pariser Zeit)",
+      openingHours: "Verfügbarkeit (Pariser Zeit)",
+      noBookableDay: `In den nächsten ${BOOKING_HORIZON_DAYS} Tagen ist kein Termin verfügbar.`,
+      noSlotsThisDay: "Alle Uhrzeiten an diesem Tag sind bereits gebucht. Bitte wählen Sie einen anderen Tag.",
+      parisTime: "Pariser Zeit",
+      localTime: (time: string) => `also ${time} bei Ihnen`,
+      localTimeShort: (time: string) => `${time} bei Ihnen`,
+      dateHint: "Wählen Sie einen Tag und dann eine freie Uhrzeit. Die Uhrzeiten sind in Pariser Zeit; Ihre Ortszeit wird darunter angezeigt, wenn sie abweicht.",
       windowHint: `Buchung mindestens ${BOOKING_MIN_LEAD_TIME_HOURS} Stunden im Voraus und bis zu ${BOOKING_HORIZON_DAYS} Tage im Voraus.`,
       tooSoon: `Dieser Termin kann nicht mehr gebucht werden: Bitte buchen Sie mindestens ${BOOKING_MIN_LEAD_TIME_HOURS} Stunden im Voraus.`,
       tooFar: `Buchungen sind bis zu ${BOOKING_HORIZON_DAYS} Tage im Voraus möglich.`,
@@ -201,6 +236,14 @@ export const bookingContent = {
       selectDate: "Wählen Sie Datum und Uhrzeit",
       noAvailability: "Derzeit sind keine Beratungszeiten konfiguriert.",
       outsideSchedule: "Dieser Termin liegt außerhalb der verfügbaren Beratungszeiten.",
+    },
+    refusals: {
+      slot_taken: "Dieser Termin wurde soeben von einer anderen Person gebucht. Bitte wählen Sie einen anderen.",
+      too_soon: `Dieser Termin kann nicht mehr gebucht werden: Bitte buchen Sie mindestens ${BOOKING_MIN_LEAD_TIME_HOURS} Stunden im Voraus.`,
+      too_far: `Buchungen sind bis zu ${BOOKING_HORIZON_DAYS} Tage im Voraus möglich.`,
+      outside_schedule: "Dieser Termin liegt nicht mehr innerhalb der Beratungszeiten. Bitte wählen Sie einen anderen.",
+      no_availability: "Derzeit sind keine Beratungszeiten freigeschaltet.",
+      date_blocked: "Dieses Datum ist nicht mehr verfügbar. Bitte wählen Sie einen anderen Tag.",
     },
     pricing: {
       title: "Preisgestaltung",
@@ -229,7 +272,8 @@ export const bookingContent = {
         title: "Eine Zahlung ist ausstehend",
         description: "Ihr Termin ist während der Zahlung vorübergehend reserviert. Setzen Sie die Zahlung fort, um die Beratung zu bestätigen, oder stornieren Sie, um einen anderen Termin zu wählen.",
         slot: "Termin",
-        heldUntil: "Reserviert bis",
+        remaining: "Verbleibende Zeit zum Bezahlen",
+        remainingValue: (minutes: number) => (minutes < 1 ? "weniger als eine Minute" : `noch ${minutes} Min.`),
         reference: "Referenz",
         resume: "Zahlung fortsetzen",
         cancel: "Stornieren und anderen Termin wählen",
@@ -248,12 +292,16 @@ export const bookingContent = {
       email: "电子邮件",
       phone: "电话号码",
       date: "日期和时间",
-      datePlaceholder: "年/月/日 · 时:分",
-      dateOnlyPlaceholder: "日/月/年",
-      timePlaceholder: "时:分",
-      timeLabel: "时间",
-      invalidDate: "请输入有效日期（日/月/年）和时间（时:分）。",
-      dateHint: "请选择咨询日期和时间。时段以巴黎时间显示。",
+      day: "日期",
+      dayPlaceholder: "请选择日期",
+      slotsLegend: "时间（巴黎时间）",
+      openingHours: "可预约时间（巴黎时间）",
+      noBookableDay: `未来 ${BOOKING_HORIZON_DAYS} 天内没有可预约的时段。`,
+      noSlotsThisDay: "当天所有时间均已被预订，请选择其他日期。",
+      parisTime: "巴黎时间",
+      localTime: (time: string) => `即您当地时间 ${time}`,
+      localTimeShort: (time: string) => `当地 ${time}`,
+      dateHint: "请先选择日期，再选择空闲时间。时间均为巴黎时间；如与您当地时间不同，将在下方显示当地时间。",
       windowHint: `请至少提前 ${BOOKING_MIN_LEAD_TIME_HOURS} 小时预约，最多可提前 ${BOOKING_HORIZON_DAYS} 天。`,
       tooSoon: `该时段已无法预约：请至少提前 ${BOOKING_MIN_LEAD_TIME_HOURS} 小时预约。`,
       tooFar: `最多可提前 ${BOOKING_HORIZON_DAYS} 天预约。`,
@@ -271,6 +319,14 @@ export const bookingContent = {
       selectDate: "请选择日期和时间",
       noAvailability: "目前尚未配置可预约的咨询时段。",
       outsideSchedule: "该时间不在可预约的咨询时间范围内。",
+    },
+    refusals: {
+      slot_taken: "该时段刚刚被其他患者预订，请选择其他时段。",
+      too_soon: `该时段已无法预约：请至少提前 ${BOOKING_MIN_LEAD_TIME_HOURS} 小时预约。`,
+      too_far: `最多可提前 ${BOOKING_HORIZON_DAYS} 天预约。`,
+      outside_schedule: "该时段已不在咨询时间范围内，请选择其他时段。",
+      no_availability: "目前没有开放的咨询时段。",
+      date_blocked: "该日期已不可预约，请选择其他日期。",
     },
     pricing: {
       title: "价格",
@@ -299,7 +355,8 @@ export const bookingContent = {
         title: "有一笔付款待完成",
         description: "付款期间您的时段已被临时保留。继续付款以确认咨询，或取消后选择其他时段。",
         slot: "时段",
-        heldUntil: "保留至",
+        remaining: "剩余付款时间",
+        remainingValue: (minutes: number) => (minutes < 1 ? "不到 1 分钟" : `还剩 ${minutes} 分钟`),
         reference: "编号",
         resume: "继续付款",
         cancel: "取消并选择其他时段",
@@ -312,119 +369,27 @@ export const bookingContent = {
   },
 };
 
-// Le pavé numérique de l’iPhone (inputMode="numeric") n’a ni « / » ni « : » :
-// « 05112026 » se lit JJMMAAAA, « 930 » et « 1900 » H:MM et HH:MM, et « h »,
-// « . », « , » ou l’espace valent « : » (« 10h00 », « 10.00 ») (RES-01).
-function normalizeBookingDateText(value: string): string {
-  const trimmed = value.trim();
-  const separated = trimmed.replace(/[.\-\s]+/g, "/");
-  if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(separated) || !/^[\d\s./-]+$/.test(trimmed)) return separated;
-  const digits = trimmed.replace(/\D/g, "");
-  return digits.length === 8 ? `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}` : separated;
-}
+export type BookingAvailabilitySlot = { dayOfWeek: number; startTime: string; endTime: string };
 
-function normalizeBookingTimeText(value: string): string {
-  const trimmed = value.trim();
-  const bareDigits = /^(\d{1,2})(\d{2})$/.exec(trimmed);
-  if (bareDigits) return `${bareDigits[1]}:${bareDigits[2]}`;
-  return trimmed.replace(/\s*[hH.,:\s]\s*/, ":");
-}
-
-/**
- * Masque de saisie de la date : « / » (« . » en allemand) est inséré dès que le
- * jour ou le mois a ses deux chiffres et que la frappe continue. Un séparateur
- * tapé au clavier complet est conservé (« 5/11/2026 »), et l’effacement n’est
- * jamais bloqué par un séparateur ajouté automatiquement.
- */
-export function formatBookingDateInput(value: string, separator: "/" | "." = "/"): string {
-  const segments = [""];
-  for (const character of value) {
-    const index = segments.length - 1;
-    const maxLength = index < 2 ? 2 : 4;
-    if (/\d/.test(character)) {
-      if (segments[index].length < maxLength) segments[index] += character;
-      else if (index < 2) segments.push(character);
-      else break;
-    } else if (/[/.\-\s,]/.test(character) && index < 2 && segments[index]) {
-      segments.push("");
-    }
-  }
-  return segments.join(separator);
-}
-
-/**
- * Masque de saisie de l’heure : « : » est inséré dès que la lecture est sans
- * ambiguïté (« 930 » s’affiche « 9:30 », « 1900 » « 19:00 », « 10h00 » « 10:00 »).
- * Trois chiffres qui se lisent H:MM (« 130 », « 215 ») restent tels quels et
- * valent 1:30 et 2:15, comme pour le parseur ; le quatrième chiffre donne
- * HH:MM (« 1300 » s’affiche « 13:00 »).
- */
-export function formatBookingTimeInput(value: string): string {
-  const segments = [""];
-  for (const character of value) {
-    const [hour] = segments;
-    if (/\d/.test(character)) {
-      if (segments.length === 2) {
-        if (segments[1].length < 2) segments[1] += character;
-      } else if (hour.length === 3) {
-        segments.splice(0, 1, hour.slice(0, 2), `${hour[2]}${character}`);
-      } else if ((hour.length === 1 && Number(hour) > 2) || (hour.length === 2 && Number(hour[1] + character) > 59)) {
-        // L’heure n’a qu’un chiffre (« 9 ») ou les deux suivants ne peuvent pas être des minutes (« 19 » puis « 0 » : « 19:0 »).
-        segments.push(character);
-      } else {
-        segments[0] += character;
-      }
-    } else if (/[:hH.,\s]/.test(character) && segments.length === 1 && hour && hour.length < 3) {
-      segments.push("");
-    }
-  }
-  return segments.join(":");
-}
-
-export function parseBookingDateTime(dateValue: string, timeValue: string): Date | null {
-  const normalizedDate = normalizeBookingDateText(dateValue);
-  const dateMatch = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(normalizedDate);
-  const timeMatch = /^(\d{1,2}):(\d{2})$/.exec(normalizeBookingTimeText(timeValue));
-
-  if (!dateMatch || !timeMatch) return null;
-
-  const [, dayText, monthText, yearText] = dateMatch;
-  const [, hourText, minuteText] = timeMatch;
-  const day = Number(dayText);
-  const month = Number(monthText);
-  const year = Number(yearText);
-  const hour = Number(hourText);
-  const minute = Number(minuteText);
-  const wallClockMs = Date.UTC(year, month - 1, day, hour, minute, 0);
-  let utcMs = wallClockMs;
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    const parts = getParisBookingParts(new Date(utcMs));
-    const representedWallClockMs = Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, 0);
-    const offsetErrorMs = representedWallClockMs - wallClockMs;
-    if (offsetErrorMs === 0) break;
-    utcMs -= offsetErrorMs;
-  }
-
-  const parsed = new Date(utcMs);
-  const verified = getParisBookingParts(parsed);
-  return verified.year === year && verified.month === month && verified.day === day && verified.hour === hour && verified.minute === minute
-    ? parsed
-    : null;
-}
+/** A 30-minute start offered in the grid: exact instant, Paris calendar day and Paris time. */
+export type BookingSlotOption = { start: Date; dayKey: string; time: string };
 
 const PARIS_BOOKING_DAY_INDEX: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
 
+// Un seul formateur : la grille relit l’heure de Paris de chaque créneau des 90 jours.
+const PARIS_BOOKING_PARTS = new Intl.DateTimeFormat("en-US", {
+  timeZone: "Europe/Paris",
+  weekday: "short",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  hourCycle: "h23",
+});
+
 function getParisBookingParts(date: Date) {
-  const values = Object.fromEntries(new Intl.DateTimeFormat("en-US", {
-    timeZone: "Europe/Paris",
-    weekday: "short",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
-  }).formatToParts(date).filter(part => part.type !== "literal").map(part => [part.type, part.value]));
+  const values = Object.fromEntries(PARIS_BOOKING_PARTS.formatToParts(date).filter(part => part.type !== "literal").map(part => [part.type, part.value]));
   return {
     year: Number(values.year), month: Number(values.month), day: Number(values.day),
     hour: Number(values.hour), minute: Number(values.minute), weekday: String(values.weekday),
@@ -444,9 +409,128 @@ function bookingTimeToMinutes(value: string): number {
   return hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59 ? hour * 60 + minute : Number.NaN;
 }
 
+function minutesToBookingTime(minutes: number): string {
+  return `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
+}
+
+/** Paris calendar day `days` days after `dayKey` ("2026-11-05"). */
+function addBookingDays(dayKey: string, days: number): string {
+  const [year, month, day] = dayKey.split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day + days)).toISOString().slice(0, 10);
+}
+
+/**
+ * Instant of a Paris wall-clock time ("2026-11-05", "19:00"), whatever the
+ * visitor's time zone; null for a time that does not exist in Paris (the hour
+ * skipped when clocks go forward) or an impossible date.
+ */
+export function parisBookingSlotStart(dayKey: string, time: string): Date | null {
+  const dayMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dayKey);
+  const timeMatch = /^(\d{2}):(\d{2})$/.exec(time);
+  if (!dayMatch || !timeMatch) return null;
+  const [year, month, day] = dayMatch.slice(1).map(Number);
+  const [hour, minute] = timeMatch.slice(1).map(Number);
+  const wallClockMs = Date.UTC(year, month - 1, day, hour, minute, 0);
+  let utcMs = wallClockMs;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const parts = getParisBookingParts(new Date(utcMs));
+    const representedWallClockMs = Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, 0);
+    const offsetErrorMs = representedWallClockMs - wallClockMs;
+    if (offsetErrorMs === 0) break;
+    utcMs -= offsetErrorMs;
+  }
+
+  const parsed = new Date(utcMs);
+  const verified = getParisBookingParts(parsed);
+  return verified.year === year && verified.month === month && verified.day === day && verified.hour === hour && verified.minute === minute
+    ? parsed
+    : null;
+}
+
+/**
+ * Every 30-minute start the server accepts (RES-02): drawn from the opening
+ * hours in Paris time (a range past midnight also opens the early hours of the
+ * next day), within the booking window (2 h ahead, 90 days at most), minus the
+ * blocked dates. Booked slots are removed per day with removeBookedSlots.
+ */
+export function listBookableSlots(
+  slots: BookingAvailabilitySlot[],
+  blockedDateKeys: Iterable<string>,
+  now: number = Date.now(),
+): BookingSlotOption[] {
+  const blocked = new Set(blockedDateKeys);
+  const lastDayKey = toParisBookingDateKey(new Date(now + BOOKING_HORIZON_MS));
+  const options = new Map<number, BookingSlotOption>();
+  // Dès la veille : une plage de nuit (22:00–02:00) ouvre aussi le début de la journée.
+  for (let dayKey = addBookingDays(toParisBookingDateKey(new Date(now)), -1); dayKey <= lastDayKey; dayKey = addBookingDays(dayKey, 1)) {
+    const [year, month, day] = dayKey.split("-").map(Number);
+    const dayOfWeek = new Date(Date.UTC(year, month - 1, day)).getUTCDay();
+    for (const slot of slots) {
+      if (slot.dayOfWeek !== dayOfWeek) continue;
+      const slotStart = bookingTimeToMinutes(slot.startTime);
+      const rawSlotEnd = bookingTimeToMinutes(slot.endTime);
+      if (!Number.isFinite(slotStart) || !Number.isFinite(rawSlotEnd)) continue;
+      const slotEnd = rawSlotEnd <= slotStart ? rawSlotEnd + 24 * 60 : rawSlotEnd;
+      for (let minutes = slotStart; minutes + 30 <= slotEnd; minutes += 30) {
+        const optionDayKey = minutes >= 24 * 60 ? addBookingDays(dayKey, 1) : dayKey;
+        const time = minutesToBookingTime(minutes % (24 * 60));
+        const start = parisBookingSlotStart(optionDayKey, time);
+        if (!start || options.has(start.getTime()) || blocked.has(optionDayKey) || getBookingWindowIssue(start, now)) continue;
+        // Même contrôle que le serveur (isBookableAppointmentTime) avant de proposer l’horaire.
+        if (!isWithinBookingAvailability(start, slots, 30)) continue;
+        options.set(start.getTime(), { start, dayKey: optionDayKey, time });
+      }
+    }
+  }
+  return Array.from(options.values()).sort((a, b) => a.start.getTime() - b.start.getTime());
+}
+
+/** Whether a consultation starting at `start` overlaps a held or confirmed appointment of the day (availability.getBookedSlots). */
+export function overlapsBookedSlot(start: Date, booked: Array<Date | string>, durationMinutes = 30): boolean {
+  const durationMs = durationMinutes * 60 * 1000;
+  return booked.some(value => {
+    const bookedStart = new Date(value).getTime();
+    return start.getTime() < bookedStart + durationMs && bookedStart < start.getTime() + durationMs;
+  });
+}
+
+/** The day's starts that are still free. */
+export function removeBookedSlots(options: BookingSlotOption[], booked: Array<Date | string>): BookingSlotOption[] {
+  return options.filter(({ start }) => !overlapsBookedSlot(start, booked));
+}
+
+/**
+ * Opening hours shown as soon as the page opens (RES-02), Monday to Sunday,
+ * in Paris time: [{ day: "lun.", ranges: ["09:00–12:00", "18:00–22:00"] }].
+ */
+export function summarizeBookingAvailability(slots: BookingAvailabilitySlot[], locale: string) {
+  const weekday = new Intl.DateTimeFormat(locale, { weekday: "short", timeZone: "UTC" });
+  return [1, 2, 3, 4, 5, 6, 0].flatMap(dayOfWeek => {
+    const ranges = Array.from(new Set(slots
+      .filter(slot => slot.dayOfWeek === dayOfWeek)
+      .sort((a, b) => a.startTime.localeCompare(b.startTime))
+      .map(slot => `${slot.startTime}–${slot.endTime === "00:00" ? "24:00" : slot.endTime}`)));
+    // Le 4 janvier 1970 est un dimanche.
+    return ranges.length ? [{ day: weekday.format(new Date(Date.UTC(1970, 0, 4 + dayOfWeek))), ranges }] : [];
+  });
+}
+
+/** "jeudi 29 octobre 2026" for a Paris day key, in the page language. */
+export function formatBookingDay(dayKey: string, locale: string): string {
+  const [year, month, day] = dayKey.split("-").map(Number);
+  return new Intl.DateTimeFormat(locale, { dateStyle: "full", timeZone: "UTC" }).format(new Date(Date.UTC(year, month - 1, day)));
+}
+
+const BOOKING_SLOT_LIST_REFRESH_MS = 30 * 60 * 1000;
+
+/** Whole minutes left before the held slot is released (RES-04). */
+export function getHoldRemainingMinutes(holdExpiresAt: string, now: number = Date.now()): number {
+  return Math.max(0, Math.floor((new Date(holdExpiresAt).getTime() - now) / 60_000));
+}
+
 export function isWithinBookingAvailability(
   date: Date,
-  slots: Array<{ dayOfWeek: number; startTime: string; endTime: string }>,
+  slots: BookingAvailabilitySlot[],
   durationMinutes = 30
 ): boolean {
   if (slots.length === 0) return false;
@@ -513,6 +597,13 @@ export function getBookingServerErrorMessage(error: unknown): string | null {
   return typeof message === "string" && message.trim() ? message.trim() : null;
 }
 
+/** Stable reason of a refused booking sent by the server (slot taken, too soon…), or null (EN-06). */
+export function getBookingRefusalReason(error: unknown): BookingRefusalReason | null {
+  if (!error || typeof error !== "object") return null;
+  const reason = (error as { data?: { reason?: unknown } | null }).data?.reason;
+  return isBookingRefusalReason(reason) ? reason : null;
+}
+
 export default function BookingPage() {
   const { language } = useLanguage();
   const [location, setLocation] = useLocation();
@@ -535,28 +626,31 @@ export default function BookingPage() {
     name: "",
     email: "",
     phone: "",
-    date: "",
     details: "",
   });
 
+  // Jour choisi (clé de Paris « 2026-11-05 ») puis créneau choisi dans la grille.
+  const [dayKey, setDayKey] = useState("");
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
-  // Séparateur inséré pendant la frappe, celui du format affiché (TT.MM.JJJJ en allemand).
-  const dateSeparator = language === "de" ? "." : "/";
-  const [dateText, setDateText] = useState("");
-  const [timeText, setTimeText] = useState("");
-  const [dateError, setDateError] = useState<string | null>(null);
   const [phoneError, setPhoneError] = useState<string | null>(null);
   const [paymentStatus, setPaymentStatus] = useState<"success" | "canceled" | null>(null);
   const [trackingId, setTrackingId] = useState<string | null>(null);
   const [pendingBooking, setPendingBooking] = useState<PendingBooking | null>(null);
   const [pendingNotice, setPendingNotice] = useState<string | null>(null);
+  // Horloge de la page : délai de 2 h des créneaux proposés et temps restant du paiement en attente.
+  const [now, setNow] = useState(() => Date.now());
   const paymentSubmissionRef = useRef(false);
-  const localizedDate = selectedDate
-    ? new Intl.DateTimeFormat(
-        language === "fr" ? "fr-FR" : language === "de" ? "de-DE" : language === "zh" ? "zh-CN" : "en-GB",
-        { dateStyle: "full", timeStyle: "short", timeZone: "Europe/Paris" }
-      ).format(selectedDate)
-    : null;
+  const draftSlotRef = useRef<string | null>(null);
+  const locale = getBookingLocale(language);
+  const parisDateTimeFormat = new Intl.DateTimeFormat(locale, { dateStyle: "full", timeStyle: "short", timeZone: "Europe/Paris" });
+  const localizedDate = selectedDate ? `${parisDateTimeFormat.format(selectedDate)} (${content.form.parisTime})` : null;
+  const selectedLocalTime = selectedDate ? formatVisitorTime(selectedDate, locale) : null;
+  const pendingLocalTime = pendingBooking ? formatVisitorTime(new Date(pendingBooking.appointmentDate), locale) : null;
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   // Handle Stripe redirect
   useEffect(() => {
@@ -577,7 +671,7 @@ export default function BookingPage() {
     }
   }, []);
 
-  const dateKey = selectedDate ? toParisBookingDateKey(selectedDate) : "";
+  const dateKey = selectedDate ? toParisBookingDateKey(selectedDate) : dayKey;
   const blockedDates = trpc.availability.getBlockedDates.useQuery();
   const bookedSlots = trpc.availability.getBookedSlots.useQuery(
     { date: dateKey },
@@ -586,10 +680,7 @@ export default function BookingPage() {
   const availabilitySlots = trpc.availability.getSlots.useQuery();
 
   const isBlockedDate = Boolean(dateKey && blockedDates.data?.some((item) => item.date === dateKey));
-  const isBookedSlot = Boolean(
-    selectedDate &&
-      bookedSlots.data?.some((slot) => new Date(slot).toISOString().slice(0, 16) === selectedDate.toISOString().slice(0, 16))
-  );
+  const isBookedSlot = Boolean(selectedDate && bookedSlots.data && overlapsBookedSlot(selectedDate, bookedSlots.data));
   const availabilityPending = blockedDates.isLoading || bookedSlots.isLoading || availabilitySlots.isLoading;
   const availabilityQueryError = blockedDates.isError || bookedSlots.isError || availabilitySlots.isError;
   const configuredSlots = availabilitySlots.data ?? [];
@@ -597,10 +688,29 @@ export default function BookingPage() {
   const isOutsideConfiguredAvailability = Boolean(
     selectedDate && availabilitySlots.data && !isWithinBookingAvailability(selectedDate, configuredSlots, 30)
   );
+  // Grille (RES-02) : jours ouverts des 90 prochains jours, moins les dates
+  // bloquées et le délai de 2 h, puis horaires libres du jour choisi. La liste
+  // (90 jours relus en heure de Paris) n’est recalculée que toutes les 30 min ;
+  // le délai de 2 h, lui, suit l’horloge de la page.
+  const slotListClock = Math.floor(now / BOOKING_SLOT_LIST_REFRESH_MS) * BOOKING_SLOT_LIST_REFRESH_MS;
+  const openSlots = useMemo(
+    () => listBookableSlots(availabilitySlots.data ?? [], (blockedDates.data ?? []).map((item) => item.date), slotListClock),
+    [availabilitySlots.data, blockedDates.data, slotListClock]
+  );
+  const bookableSlots = useMemo(() => openSlots.filter((slot) => !getBookingWindowIssue(slot.start, now)), [openSlots, now]);
+  const scheduleLoaded = Boolean(availabilitySlots.data && blockedDates.data);
+  const nothingToBook = scheduleLoaded && bookableSlots.length === 0;
+  const dayOptions = Array.from(new Set([...bookableSlots.map((slot) => slot.dayKey), ...(dayKey ? [dayKey] : [])])).sort();
+  const daySlots = bookedSlots.data ? removeBookedSlots(bookableSlots.filter((slot) => slot.dayKey === dayKey), bookedSlots.data) : [];
+  const openingHours = summarizeBookingAvailability(configuredSlots, locale);
   // Délai minimal (2 h, passé compris) et horizon (90 jours) : mêmes règles que le serveur.
-  const bookingWindowIssue = selectedDate ? getBookingWindowIssue(selectedDate) : null;
+  const bookingWindowIssue = selectedDate ? getBookingWindowIssue(selectedDate, now) : null;
   const availabilityLabel = availabilityQueryError
     ? bookingFormCopy.availabilityError
+    : availabilitySlots.data && !hasConfiguredSlots
+    ? bookingFormCopy.noAvailability
+    : nothingToBook && !selectedDate
+    ? content.form.noBookableDay
     : !selectedDate
     ? bookingFormCopy.selectDate
     : bookingWindowIssue === "too_soon"
@@ -619,9 +729,10 @@ export default function BookingPage() {
             ? bookingFormCopy.outsideSchedule
             : bookingFormCopy.available;
   const availabilityState = getBookingAvailabilityState({
-    selected: Boolean(selectedDate),
+    // « Aucun créneau ouvert » est un état indisponible dès l’arrivée, sans attendre une sélection.
+    selected: Boolean(selectedDate) || nothingToBook,
     pending: availabilityPending && !bookingWindowIssue,
-    blocked: isBlockedDate || availabilityQueryError || isOutsideConfiguredAvailability || Boolean(bookingWindowIssue),
+    blocked: isBlockedDate || availabilityQueryError || isOutsideConfiguredAvailability || Boolean(bookingWindowIssue) || nothingToBook,
     booked: isBookedSlot,
   });
 
@@ -635,28 +746,9 @@ export default function BookingPage() {
   const resumeCheckout = trpc.appointments.createCheckoutSession.useMutation();
   const cancelPendingBooking = trpc.appointments.cancelPending.useMutation();
 
-  const synchronizeDateTime = (nextDateText: string, nextTimeText: string) => {
-    setDateText(nextDateText);
-    setTimeText(nextTimeText);
-
-    if (!nextDateText.trim() || !nextTimeText.trim()) {
-      setSelectedDate(null);
-      setDateError(null);
-      setFormData((current) => ({ ...current, date: "" }));
-      return;
-    }
-
-    const parsed = parseBookingDateTime(nextDateText, nextTimeText);
-    if (!parsed) {
-      setSelectedDate(null);
-      setDateError(bookingFormCopy.invalidDate);
-      setFormData((current) => ({ ...current, date: "" }));
-      return;
-    }
-
-    setDateError(null);
-    setSelectedDate(parsed);
-    setFormData((current) => ({ ...current, date: parsed.toISOString() }));
+  const chooseDay = (nextDayKey: string) => {
+    setDayKey(nextDayKey);
+    if (selectedDate && toParisBookingDateKey(selectedDate) !== nextDayKey) setSelectedDate(null);
   };
 
   // Retour depuis Stripe (bouton Précédent, rechargement, page restaurée du
@@ -672,7 +764,7 @@ export default function BookingPage() {
     const draft = loadBookingDraft();
     if (draft) {
       setFormData((current) => ({ ...current, name: draft.name, email: draft.email, phone: draft.phone, details: draft.details }));
-      if (draft.dateText || draft.timeText) synchronizeDateTime(draft.dateText, draft.timeText);
+      draftSlotRef.current = draft.appointmentDate || null;
     }
     const onPageShow = (event: PageTransitionEvent) => {
       if (event.persisted) restorePendingBooking();
@@ -681,10 +773,23 @@ export default function BookingPage() {
     return () => window.removeEventListener("pageshow", onPageShow);
   }, [restorePendingBooking]);
 
+  // Créneau du brouillon : repris une fois l’agenda chargé, s’il est encore proposé.
   useEffect(() => {
-    const draft = { name: formData.name, email: formData.email, phone: formData.phone, dateText, timeText, details: formData.details };
+    const draftSlot = draftSlotRef.current;
+    if (!draftSlot || !scheduleLoaded) return;
+    draftSlotRef.current = null;
+    const option = bookableSlots.find((slot) => slot.start.toISOString() === draftSlot);
+    if (option) {
+      setDayKey(option.dayKey);
+      setSelectedDate(option.start);
+    }
+  }, [scheduleLoaded, bookableSlots]);
+
+  const appointmentDate = selectedDate?.toISOString() ?? "";
+  useEffect(() => {
+    const draft = { name: formData.name, email: formData.email, phone: formData.phone, appointmentDate, details: formData.details };
     if (Object.values(draft).some(Boolean)) saveBookingDraft(draft);
-  }, [formData.name, formData.email, formData.phone, formData.details, dateText, timeText]);
+  }, [formData.name, formData.email, formData.phone, formData.details, appointmentDate]);
 
   const forgetPendingBooking = (notice: string) => {
     clearPendingBooking();
@@ -692,6 +797,12 @@ export default function BookingPage() {
     setPendingNotice(notice);
     void bookedSlots.refetch();
   };
+
+  // Maintien écoulé pendant que la page reste ouverte : le créneau est libéré côté serveur.
+  const pendingHoldExpired = Boolean(pendingBooking && new Date(pendingBooking.holdExpiresAt).getTime() <= now);
+  useEffect(() => {
+    if (pendingHoldExpired) forgetPendingBooking(content.pending.closed);
+  }, [pendingHoldExpired]);
 
   const handleResumePayment = async () => {
     if (!pendingBooking || paymentSubmissionRef.current) return;
@@ -755,6 +866,7 @@ export default function BookingPage() {
         customerPhone: formData.phone,
         appointmentDate: selectedDate.toISOString(),
         requestDetails: formData.details,
+        language,
       });
 
       if (appointmentResult.success && appointmentResult.checkoutUrl) {
@@ -775,8 +887,14 @@ export default function BookingPage() {
     } catch (error) {
       paymentSubmissionRef.current = false;
       console.error("Booking error:", error);
+      const refusal = getBookingRefusalReason(error);
       const serverMessage = getBookingServerErrorMessage(error);
-      if (serverMessage) {
+      if (refusal) {
+        // Créneau pris entre-temps, date fermée… : message dans la langue de la
+        // page (EN-06) et agenda rechargé pour que la grille ne le propose plus.
+        alert(content.refusals[refusal]);
+        void Promise.all([bookedSlots.refetch(), blockedDates.refetch(), availabilitySlots.refetch()]);
+      } else if (serverMessage) {
         // Le message serveur est rédigé en français : on le précède du libellé
         // localisé pour les autres langues de l’interface.
         alert(language === "fr" ? serverMessage : `${content.bookingError}\n\n${serverMessage}`);
@@ -791,11 +909,9 @@ export default function BookingPage() {
   const handleReset = () => {
     paymentSubmissionRef.current = false;
     clearBookingDraft();
-    setFormData({ name: "", email: "", phone: "", date: "", details: "" });
+    setFormData({ name: "", email: "", phone: "", details: "" });
+    setDayKey("");
     setSelectedDate(null);
-    setDateText("");
-    setTimeText("");
-    setDateError(null);
     setPhoneError(null);
     setPaymentStatus(null);
     setTrackingId(null);
@@ -881,8 +997,9 @@ export default function BookingPage() {
                 <h2 id="pending-booking-title" className="font-display text-xl font-bold mb-2">{content.pending.title}</h2>
                 <p className="text-sm text-muted-foreground leading-relaxed">{content.pending.description}</p>
                 <dl className="mt-3 grid gap-1 text-sm">
-                  <div><dt className="inline font-medium">{content.pending.slot} : </dt><dd className="inline">{new Intl.DateTimeFormat(language === "fr" ? "fr-FR" : language === "de" ? "de-DE" : language === "zh" ? "zh-CN" : "en-GB", { dateStyle: "full", timeStyle: "short", timeZone: "Europe/Paris" }).format(new Date(pendingBooking.appointmentDate))}</dd></div>
-                  <div><dt className="inline font-medium">{content.pending.heldUntil} : </dt><dd className="inline">{new Intl.DateTimeFormat(language === "fr" ? "fr-FR" : language === "de" ? "de-DE" : language === "zh" ? "zh-CN" : "en-GB", { timeStyle: "short", timeZone: "Europe/Paris" }).format(new Date(pendingBooking.holdExpiresAt))}</dd></div>
+                  <div><dt className="inline font-medium">{content.pending.slot} : </dt><dd className="inline">{parisDateTimeFormat.format(new Date(pendingBooking.appointmentDate))} ({content.form.parisTime}){pendingLocalTime && `, ${content.form.localTime(pendingLocalTime)}`}</dd></div>
+                  {/* Temps restant plutôt qu’une heure de Paris qui semble déjà passée à l’étranger (RES-04). */}
+                  <div><dt className="inline font-medium">{content.pending.remaining} : </dt><dd className="inline">{content.pending.remainingValue(getHoldRemainingMinutes(pendingBooking.holdExpiresAt, now))}</dd></div>
                   <div><dt className="inline font-medium">{content.pending.reference} : </dt><dd className="inline font-mono text-primary">{pendingBooking.trackingId}</dd></div>
                 </dl>
                 <div className="mt-4 flex flex-col gap-2 sm:flex-row">
@@ -1056,51 +1173,87 @@ export default function BookingPage() {
               {phoneError && <p id="booking-phone-error" className="mt-2 text-sm text-destructive" role="alert">{phoneError}</p>}
             </div>
 
-            {/* Date */}
-            <div>
-              <label htmlFor="booking-date" className="block text-sm font-medium mb-2 flex items-center gap-2">
+            {/* Date : jour puis horaire libre, choisis dans l’agenda (RES-02) */}
+            <fieldset>
+              <legend className="block text-sm font-medium mb-2 flex items-center gap-2">
                 <Calendar className="w-4 h-4" aria-hidden="true" />
                 {content.form.date}
-              </label>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <input
-                  id="booking-date"
-                  type="text"
-                  required
-                  value={dateText}
-                  onChange={(e) => synchronizeDateTime(formatBookingDateInput(e.target.value, dateSeparator), timeText)}
-                  inputMode="numeric"
-                  autoComplete="off"
-                  enterKeyHint="next"
-                  placeholder={content.form.dateOnlyPlaceholder}
-                  className="form-field-premium h-11 w-full border px-4 py-2"
-                  aria-describedby="availability-status booking-date-error"
-                  aria-label={content.form.date}
-                />
-                <input
-                  id="booking-time"
-                  type="text"
-                  required
-                  value={timeText}
-                  onChange={(e) => synchronizeDateTime(dateText, formatBookingTimeInput(e.target.value))}
-                  inputMode="numeric"
-                  autoComplete="off"
-                  enterKeyHint="next"
-                  placeholder={content.form.timePlaceholder}
-                  className="form-field-premium h-11 w-full border px-4 py-2"
-                  aria-describedby="availability-status booking-date-error"
-                  aria-label={content.form.timeLabel}
-                />
+              </legend>
+              <div id="booking-opening-hours" className="mb-4 rounded-xl border border-border/60 bg-background/40 px-4 py-3 text-xs leading-5 text-muted-foreground">
+                <p className="font-semibold text-foreground">{content.form.openingHours}</p>
+                {availabilitySlots.isLoading ? (
+                  <p>{bookingFormCopy.checkingAvailability}</p>
+                ) : openingHours.length > 0 ? (
+                  <ul className="mt-1 grid gap-0.5">
+                    {openingHours.map(({ day, ranges }) => (
+                      <li key={day}><span className="font-medium text-foreground">{day}</span> {ranges.join(", ")}</li>
+                    ))}
+                  </ul>
+                ) : availabilitySlots.data ? (
+                  <p>{bookingFormCopy.noAvailability}</p>
+                ) : null}
               </div>
+              <label htmlFor="booking-day" className="block text-xs font-medium mb-2">{content.form.day}</label>
+              <select
+                id="booking-day"
+                required
+                value={dayKey}
+                onChange={(e) => chooseDay(e.target.value)}
+                disabled={dayOptions.length === 0}
+                aria-describedby="booking-opening-hours availability-status"
+                className="form-field-premium h-11 w-full border px-4 py-2"
+              >
+                <option value="">{content.form.dayPlaceholder}</option>
+                {dayOptions.map((key) => (
+                  <option key={key} value={key}>{formatBookingDay(key, locale)}</option>
+                ))}
+              </select>
+              {dayKey && (
+                // Boutons radio natifs : Tab entre dans la grille, les flèches changent d’horaire.
+                <fieldset className="mt-4" aria-describedby="availability-status">
+                  <legend className="block text-xs font-medium mb-2">{content.form.slotsLegend}</legend>
+                  {bookedSlots.isLoading ? (
+                    <p className="text-sm text-muted-foreground">{bookingFormCopy.checkingAvailability}</p>
+                  ) : bookedSlots.isError ? null : daySlots.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">{content.form.noSlotsThisDay}</p>
+                  ) : (
+                    <div id="booking-slots" className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+                      {daySlots.map((option) => {
+                        const localTime = formatVisitorTime(option.start, locale);
+                        return (
+                          <label key={option.start.toISOString()} className="block cursor-pointer">
+                            <input
+                              type="radio"
+                              name="booking-slot"
+                              value={option.start.toISOString()}
+                              checked={selectedDate?.getTime() === option.start.getTime()}
+                              onChange={() => setSelectedDate(option.start)}
+                              className="peer sr-only"
+                            />
+                            <span className="flex min-h-11 flex-col items-center justify-center rounded-xl border border-border/70 bg-background/40 px-2 py-2 text-sm font-semibold text-foreground transition-colors hover:border-primary/60 peer-checked:border-primary peer-checked:bg-primary peer-checked:text-primary-foreground peer-focus-visible:ring-2 peer-focus-visible:ring-primary peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-background">
+                              <span>{option.time}</span>
+                              {localTime && <span className="text-[11px] font-normal leading-4 opacity-80">{content.form.localTimeShort(localTime)}</span>}
+                            </span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  )}
+                </fieldset>
+              )}
               <p className="mt-2 text-xs leading-5 text-muted-foreground">{content.form.dateHint} {content.form.windowHint}</p>
-              {dateError && <p id="booking-date-error" className="mt-2 text-sm text-destructive" role="alert">{dateError}</p>}
-              {localizedDate && <p className="mt-2 text-sm font-medium text-primary" aria-live="polite">{localizedDate}</p>}
+              {localizedDate && (
+                <p className="mt-2 text-sm font-medium text-primary" aria-live="polite">
+                  {localizedDate}
+                  {selectedLocalTime && <span className="block text-xs font-normal text-muted-foreground">{content.form.localTime(selectedLocalTime)}</span>}
+                </p>
+              )}
               <div id="availability-status" className={`availability-status availability-${availabilityState} mt-3 flex items-center gap-2`} role="status" aria-live="polite" data-state={availabilityState}>
                 {availabilityState === "select" && <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-primary/20 bg-primary/10 text-primary" aria-hidden="true"><Calendar className="h-4 w-4" /></span>}
                 <span className="availability-dot" aria-hidden="true" />
                 <span>{availabilityLabel}</span>
               </div>
-            </div>
+            </fieldset>
 
             {/* Price Display */}
             {selectedDate && calculatePrice.isLoading && <PublicContentSkeleton cards={1} label={bookingFormCopy.checkingAvailability} />}
