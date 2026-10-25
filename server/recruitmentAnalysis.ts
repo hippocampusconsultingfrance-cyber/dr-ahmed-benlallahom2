@@ -485,9 +485,13 @@ const NEGATION_TOKENS = new Set([
   "suspendu", "suspendue", "lapsed", "perime", "perimee", "invalid", "invalide",
   "لا", "ليس", "ليست", "لم", "لن", "بدون", "دون", "غير",
 ]);
-/** Chinese negation in the few characters before a claim (无 / 没有 "without", 未 "not yet", 非 "non-", 不 "not"), or expiry just after it. */
+/** Chinese negation in the few characters before a claim (无 / 没有 "without", 未 "not yet", 非 "non-", 不 "not"). */
 const UNSPACED_NEGATION_BEFORE = /无|無|没有|沒有|未|非|不/;
-const UNSPACED_NEGATION_AFTER = /过期|過期|失效|吊销|吊銷|暂停|暫停/;
+/**
+ * …or just after it, as the Latin check looks at the words that follow: "资格：无", "：未取得",
+ * "（尚未通过）", or an expiry. 未来 "future", 不仅 "not only" and 非常 "very" negate nothing.
+ */
+const UNSPACED_NEGATION_AFTER = /无|無|没有|沒有|未(?!来|來)|不(?!仅|僅|只|但)|非(?!常)|过期|過期|失效|吊销|吊銷|暂停|暫停/;
 
 /** A claim written with ideographs, found by inclusion and checked for a nearby negation. */
 function unspacedEvidenceAffirmsClaim(normalizedEvidence: string, claim: string) {

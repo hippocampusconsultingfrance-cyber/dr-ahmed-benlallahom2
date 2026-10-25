@@ -159,6 +159,12 @@ describe("INTL-02 — citations en arabe et en chinois", () => {
     expect(titleEvidence("麻醉科主治医师", "无麻醉科主治医师资格")).toBe(false);
     expect(titleEvidence("麻醉科主治医师", "尚未取得麻醉科主治医师资格")).toBe(false);
     expect(titleEvidence("麻醉科主治医师", "麻醉科主治医师资格已过期")).toBe(false);
+    // A negation after the value, as "Board certified anaesthetist: none" in English.
+    for (const denied of ["麻醉科主治医师资格：无", "麻醉科主治医师资格：未取得", "麻醉科主治医师资格：没有", "麻醉科主治医师（尚未通过）"]) {
+      expect(titleEvidence("麻醉科主治医师", denied), denied).toBe(false);
+    }
+    expect(titleEvidence("麻醉科主治医师", "麻醉科主治医师，非常熟悉心脏手术麻醉")).toBe(true);
+    expect(titleEvidence("麻醉科主治医师", "麻醉科主治医师，不仅负责手术麻醉")).toBe(true);
     expect(titleEvidence("طبيب تخدير", "ليس طبيب تخدير، بل ممرض")).toBe(false);
     // The quote must still be in the text that was read.
     expect(titleEvidence("麻醉科主治医师", "北京协和医院麻醉科主治医师", "上海瑞金医院儿科主治医师")).toBe(false);
