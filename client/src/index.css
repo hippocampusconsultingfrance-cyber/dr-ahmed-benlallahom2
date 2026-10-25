@@ -234,6 +234,29 @@ html[lang="zh"] .font-display,
   .form-consent-checkbox:focus-visible { outline: 3px solid rgb(56 189 248 / 45%); outline-offset: 3px; }
   .form-consent-item-invalid, .form-consent-group-invalid .form-consent-item { border-color: rgb(248 113 113 / 90%); background: linear-gradient(135deg, rgb(127 29 29 / 38%), rgb(69 10 10 / 52%)); }
   .form-consent-item-invalid .form-consent-checkbox, .form-consent-group-invalid .form-consent-checkbox, .form-consent-checkbox[aria-invalid="true"] { border-color: #fb7185; background: #3f111b; box-shadow: 0 0 0 3px rgb(251 113 133 / 18%); }
+
+  /*
+   * Champs « form-control » (/employers, VVIP, onglet admin Questions santé) : même rendu que
+   * .recruitment-field, à garder aligné. Dans cette couche, un utilitaire posé sur un champ ne
+   * l'emporte que sur la propriété qu'il définit : h-11 laisse jouer min-height. Les champs de
+   * /questions-anesthesie gardent leur rendu grâce à min-h-11 py-0 rounded-none. Le style
+   * d'erreur ci-dessous l'emporte par !important (A11Y-01).
+   */
+  .form-control {
+    display: block;
+    width: 100%;
+    min-height: 3.2rem;
+    border: 1px solid color-mix(in oklch, var(--border) 86%, transparent);
+    border-radius: 0.75rem;
+    padding: 0.72rem 0.9rem;
+    background: color-mix(in oklch, var(--background) 48%, var(--card));
+    color: var(--foreground);
+    box-shadow: inset 0 1px 0 color-mix(in oklch, white 4%, transparent);
+    transition: border-color 180ms ease, box-shadow 180ms ease, background 180ms ease;
+  }
+  .form-control:hover { border-color: color-mix(in oklch, var(--primary) 46%, var(--border)); }
+  .form-control:focus { border-color: var(--primary); background: color-mix(in oklch, var(--card) 84%, var(--background)); box-shadow: 0 0 0 4px color-mix(in oklch, var(--primary) 13%, transparent); }
+  .form-control::placeholder { color: var(--muted-foreground); opacity: 0.82; }
   .form-field-invalid, .recruitment-field.form-field-invalid, .form-control.form-field-invalid, .form-field-premium.form-field-invalid, [aria-invalid="true"].form-control, [aria-invalid="true"].recruitment-field { border-color: #fb7185 !important; background-color: rgb(69 10 10 / 52%) !important; box-shadow: 0 0 0 3px rgb(251 113 133 / 18%) !important; }
   .form-field-invalid:focus, [aria-invalid="true"].form-control:focus, [aria-invalid="true"].recruitment-field:focus { border-color: #fb7185 !important; outline: none; }
   .form-file-invalid { border-color: #fb7185 !important; background: linear-gradient(135deg, rgb(127 29 29 / 38%), rgb(69 10 10 / 52%)) !important; box-shadow: 0 0 0 3px rgb(251 113 133 / 14%); }
@@ -258,9 +281,13 @@ html[lang="zh"] .font-display,
   .candidate-consent-item-invalid { border-color: #fb7185; background: linear-gradient(135deg, rgb(127 29 29 / 52%), rgb(69 10 10 / 66%)); box-shadow: 0 0 0 3px rgb(251 113 133 / 14%); }
   .candidate-consent-item-invalid .candidate-consent-checkbox { border-color: #fb7185; background: #3f111b; }
 
+  /*
+   * « backwards » et non « both » : une transformation conservée après l'animation ferait de ce
+   * conteneur le repère de l'en-tête fixe, qui défilerait alors avec la page (PUB-01).
+   */
   @media (prefers-reduced-motion: no-preference) {
     .page-transition {
-      animation: page-transition-enter 180ms cubic-bezier(0.23, 1, 0.32, 1) both;
+      animation: page-transition-enter 180ms cubic-bezier(0.23, 1, 0.32, 1) backwards;
     }
   }
 
@@ -862,6 +889,7 @@ body {
   font-weight: 600;
 }
 
+/* Rendu repris par .form-control (@layer components) : modifier les deux ensemble. */
 .recruitment-field {
   display: block;
   width: 100%;
@@ -1442,8 +1470,11 @@ html.data-saver .cta-secondary:hover {
   }
 }
 
-/* Audit responsive: the desktop CTA must not override Tailwind's mobile visibility utility. */
-@media (max-width: 767px) {
+/*
+ * Audit responsive: the desktop CTA must not override Tailwind's visibility utility. Below
+ * 1024 px the header has no room for it; booking leads the burger menu instead (PUB-02).
+ */
+@media (max-width: 1023px) {
   .site-nav .nav-cta {
     display: none !important;
   }

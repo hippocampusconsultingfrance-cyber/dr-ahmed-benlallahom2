@@ -5,6 +5,8 @@ const templateRoot = path.resolve(import.meta.dirname);
 
 export default defineConfig({
   root: templateRoot,
+  // Même runtime JSX que l'application (@vitejs/plugin-react) pour les tests qui rendent des composants.
+  esbuild: { jsx: "automatic" },
   resolve: {
     alias: {
       "@": path.resolve(templateRoot, "client", "src"),
