@@ -7,6 +7,7 @@ import { COOKIE_CONSENT_STORAGE_KEY, createCookieConsent, readValidCookieConsent
 import { COOKIE_CONSENT_CHANGE_EVENT } from "./analyticsConsentLogic";
 
 export const COOKIE_BANNER_OPEN_ATTRIBUTE = "data-cookie-banner-open";
+export const COOKIE_BANNER_HEIGHT_PROPERTY = "--cookie-banner-height";
 
 type CookieBannerRoot = Pick<HTMLElement, "setAttribute" | "removeAttribute">;
 
@@ -16,6 +17,23 @@ export function syncCookieBannerOpenAttribute(root: CookieBannerRoot, isOpen: bo
     return;
   }
   root.removeAttribute(COOKIE_BANNER_OPEN_ATTRIBUTE);
+}
+
+type CookieBannerHeightRoot = { style: Pick<CSSStyleDeclaration, "setProperty" | "removeProperty"> };
+
+/**
+ * Tient à jour sur la racine la hauteur réelle du bandeau ouvert, que la page laisse libre en bas
+ * (index.css) ; renvoie la fonction qui arrête le suivi et retire la valeur.
+ */
+export function trackCookieBannerHeight(root: CookieBannerHeightRoot, banner: HTMLElement, Observer: typeof ResizeObserver | undefined = globalThis.ResizeObserver) {
+  const syncHeight = () => root.style.setProperty(COOKIE_BANNER_HEIGHT_PROPERTY, `${banner.offsetHeight}px`);
+  syncHeight();
+  const observer = Observer ? new Observer(syncHeight) : null;
+  observer?.observe(banner);
+  return () => {
+    observer?.disconnect();
+    root.style.removeProperty(COOKIE_BANNER_HEIGHT_PROPERTY);
+  };
 }
 
 /** Ancre de la section cookies de la politique de confidentialité (LegalPage, 4 langues). */
@@ -38,6 +56,7 @@ export default function CookieConsent({ showPreferencesShortcut = true }: { show
   const [cookieConsent, setCookieConsent] = useState<CookieConsentValue | null>(null);
   const [draftPerformance, setDraftPerformance] = useState(false);
   const preferencesTriggerRef = useRef<HTMLElement | null>(null);
+  const bannerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     // Choix absent, illisible, non daté ou expiré (6 mois si refus, 13 mois si accord) : on redemande.
@@ -55,6 +74,11 @@ export default function CookieConsent({ showPreferencesShortcut = true }: { show
     const root = document.documentElement;
     syncCookieBannerOpenAttribute(root, showBanner);
     return () => root.removeAttribute(COOKIE_BANNER_OPEN_ATTRIBUTE);
+  }, [showBanner]);
+
+  useEffect(() => {
+    if (!showBanner || !bannerRef.current) return;
+    return trackCookieBannerHeight(document.documentElement, bannerRef.current);
   }, [showBanner]);
 
   const saveConsent = (performance: boolean) => {
@@ -86,7 +110,7 @@ export default function CookieConsent({ showPreferencesShortcut = true }: { show
 
   return (
     <>
-      {showBanner && <div className="cookie-consent-banner fixed bottom-0 left-0 right-0 z-50 border-t border-primary/30 bg-background/98 shadow-2xl backdrop-blur-sm animate-in slide-in-from-bottom duration-300" role="dialog" aria-label={copy.title} aria-live="polite">
+      {showBanner && <div ref={bannerRef} className="cookie-consent-banner fixed bottom-0 left-0 right-0 z-50 border-t border-primary/30 bg-background/98 shadow-2xl backdrop-blur-sm animate-in slide-in-from-bottom duration-300" role="dialog" aria-label={copy.title} aria-live="polite">
         <div className="container max-w-4xl px-4 py-6"><div className="flex items-start justify-between gap-4"><div className="flex-1"><h2 className="mb-2 text-base font-semibold text-foreground">{copy.title}</h2><p className="mb-4 text-sm text-muted-foreground">{copy.description}<a href={COOKIE_POLICY_HREF} className="ml-1 font-medium text-primary underline underline-offset-2 hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">{copy.learnMore}</a></p><div className="flex flex-wrap gap-2"><Button size="sm" variant="outline" onClick={handleAcceptEssential}>{copy.essential}</Button><Button size="sm" variant="outline" onClick={handleCustomize}>{copy.customize}</Button><Button size="sm" onClick={handleAcceptAll}>{copy.acceptAll}</Button></div></div><button onClick={() => setShowBanner(false)} className="rounded-md p-1 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" aria-label={copy.close}><X size={20} /></button></div></div>
       </div>}
 

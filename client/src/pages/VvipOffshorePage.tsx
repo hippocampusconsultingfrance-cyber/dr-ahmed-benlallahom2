@@ -562,8 +562,8 @@ export default function VvipOffshorePage() {
                     </ul>
                   </section>
 
-                    <form onSubmit={handleSubmit} className="mt-6 space-y-5" noValidate>
-                    <div className="grid gap-4 sm:grid-cols-2">
+                    <form onSubmit={handleSubmit} className="@container mt-6 space-y-5" noValidate>
+                    <div className="grid gap-4 @xl:grid-cols-2">
                       <label className="block w-full space-y-1.5 text-sm text-foreground">
                         <span className="block font-medium">{t.firstName} *</span>
                         <input required value={form.firstName} aria-invalid={isInvalid("firstName")} onChange={(e) => update("firstName", e.target.value)} className={`form-control block w-full ${isInvalid("firstName") ? "form-field-invalid" : ""}`} autoComplete="given-name" />
@@ -574,7 +574,7 @@ export default function VvipOffshorePage() {
                       </label>
                     </div>
 
-                    <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="grid gap-4 @xl:grid-cols-2">
                       <label className="block w-full space-y-1.5 text-sm text-foreground">
                         <span className="block font-medium">{t.email} *</span>
                         <input type="email" required value={form.email} aria-invalid={isInvalid("email")} onChange={(e) => update("email", e.target.value)} className={`form-control block w-full ${isInvalid("email") ? "form-field-invalid" : ""}`} autoComplete="email" />
@@ -585,7 +585,7 @@ export default function VvipOffshorePage() {
                       </label>
                     </div>
 
-                    <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="grid gap-4 @xl:grid-cols-2">
                       <label className="block w-full space-y-1.5 text-sm text-foreground">
                         <span className="block font-medium">{t.specialty} *</span>
                         <select value={form.specialty} aria-invalid={isInvalid("specialty")} onChange={(e) => update("specialty", e.target.value)} className={`form-control block w-full ${isInvalid("specialty") ? "form-field-invalid" : ""}`}>
@@ -622,7 +622,7 @@ export default function VvipOffshorePage() {
                       </select>
                     </label>
 
-                    <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="grid gap-4 @xl:grid-cols-2">
                       <label className="block w-full space-y-1.5 text-sm text-foreground">
                         <span className="block font-medium">{t.experience}</span>
                         <input type="number" min="0" max="50" value={form.yearsExperience} onChange={(e) => update("yearsExperience", e.target.value)} className="form-control block w-full" placeholder={t.experiencePlaceholder} />

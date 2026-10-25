@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { siteConfig } from "@/data/site-config";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { scrollToSectionTop } from "@/lib/scrollToSection";
 import { Link } from "wouter";
 import { ArrowUpRight, BadgeCheck, Clock3, Languages } from "lucide-react";
 
@@ -95,7 +96,7 @@ export default function HeroSection() {
               <ArrowUpRight aria-hidden="true" className="h-4 w-4" />
             </Link>
             <button
-              onClick={() => document.getElementById("contact")?.scrollIntoView({ behavior: "smooth" })}
+              onClick={() => scrollToSectionTop(document.getElementById("contact"))}
               className="cta-secondary"
             >
               {content.nav.getInTouch}
