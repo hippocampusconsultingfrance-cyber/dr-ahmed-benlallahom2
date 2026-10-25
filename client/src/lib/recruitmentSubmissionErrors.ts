@@ -59,6 +59,11 @@ const serverFailureCopy: Record<Language, string> = {
   zh: "申请服务暂时无法使用。请稍后再试。",
 };
 
+/** Shown after a server failure, or when the request never reached the server (offline, connection closed). */
+export function recruitmentServiceFailureMessage(language: Language): string {
+  return serverFailureCopy[language];
+}
+
 /**
  * Message shown when /api/recruitment/apply refuses an application, on the
  * standard and VVIP forms. A refusal the page knows (by its code, or a CV
@@ -76,7 +81,7 @@ export function recruitmentSubmissionErrorMessage(
   const code = typeof payload?.code === "string" ? payload.code : "";
   const cause = !serverMessage ? undefined : code.startsWith("cv_validation_") ? recruitmentCvRefusalReason(code) : serverErrorCauses.get(code);
   if (cause) return language === "fr" ? serverMessage : serverErrorCopy[language][cause];
-  if (status !== undefined && status >= 500) return serverFailureCopy[language];
+  if (status !== undefined && status >= 500) return recruitmentServiceFailureMessage(language);
   // CV size, format or missing file: refused before the content checks, without a code.
   if (serverMessage.includes("CV")) return language === "fr" ? serverMessage : pageCopy.fileError;
   return pageCopy.genericError;
