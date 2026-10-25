@@ -12,12 +12,15 @@ describe("candidate access translations", () => {
       expect(copy.turnstileActivationMissing.length, language).toBeGreaterThan(0);
       expect(copy.activationSuccess.length, language).toBeGreaterThan(0);
       expect(copy.genericError.length, language).toBeGreaterThan(0);
+      expect(copy.tooManyRequests.length, language).toBeGreaterThan(0);
     }
   });
 
   it("maps known server validation codes to localised notices and masks unknown errors", () => {
     expect(candidateNotice("termsAccepted documentConsent", candidateAccessCopy.en)).toBe(candidateAccessCopy.en.bothConsentMissing);
     expect(candidateNotice("candidate_turnstile", candidateAccessCopy.de)).toBe(candidateAccessCopy.de.turnstileError);
+    expect(candidateNotice("La vérification anti-bot doit être renouvelée avant de créer votre accès.", candidateAccessCopy.en, "BAD_REQUEST")).toBe(candidateAccessCopy.en.turnstileError);
+    expect(candidateNotice("Trop de tentatives. Veuillez réessayer plus tard.", candidateAccessCopy.de, "TOO_MANY_REQUESTS")).toBe(candidateAccessCopy.de.tooManyRequests);
     expect(candidateNotice("database detail", candidateAccessCopy.zh)).toBe(candidateAccessCopy.zh.genericError);
   });
 });

@@ -62,6 +62,7 @@ export const candidateAccessCopy = {
     turnstileLoginMissing: "Veuillez effectuer la vérification anti-bot avant de vous connecter.",
     loginChallenge: "Pour votre sécurité, plusieurs tentatives ayant échoué sur cette adresse, effectuez la vérification anti-bot puis reconnectez-vous.",
     tooManyAttempts: "Trop de tentatives de connexion depuis cet appareil. Patientez 15 minutes ou utilisez « Mot de passe oublié ».",
+    tooManyRequests: "Trop de tentatives. Veuillez réessayer plus tard.",
     turnstileError: "La vérification anti-bot n’a pas abouti. Réessayez le contrôle avant de soumettre le formulaire.",
     genericError: "Cette action n’a pas pu être finalisée. Vérifiez vos informations et réessayez.",
     registerSuccess: "Votre demande d’accès a été enregistrée. Ouvrez le lien reçu par email (vérifiez aussi vos courriers indésirables) pour confirmer votre adresse et choisir votre mot de passe.",
@@ -114,6 +115,7 @@ export const candidateAccessCopy = {
     turnstileLoginMissing: "Please complete the anti-bot verification before signing in.",
     loginChallenge: "For your security, after several failed attempts on this address, please complete the anti-bot verification and sign in again.",
     tooManyAttempts: "Too many sign-in attempts from this device. Wait 15 minutes or use “Forgot password”.",
+    tooManyRequests: "Too many attempts. Please try again later.",
     turnstileError: "Anti-bot verification did not complete. Please try the check again before submitting the form.",
     genericError: "This action could not be completed. Check your information and try again.",
     registerSuccess: "Your access request has been registered. Open the link sent by email (also check your spam folder) to confirm your address and choose your password.",
@@ -166,6 +168,7 @@ export const candidateAccessCopy = {
     turnstileLoginMissing: "Bitte schließen Sie die Bot-Prüfung ab, bevor Sie sich anmelden.",
     loginChallenge: "Zu Ihrer Sicherheit: Nach mehreren fehlgeschlagenen Versuchen für diese Adresse schließen Sie bitte die Bot-Prüfung ab und melden Sie sich erneut an.",
     tooManyAttempts: "Zu viele Anmeldeversuche von diesem Gerät. Warten Sie 15 Minuten oder nutzen Sie „Passwort vergessen“.",
+    tooManyRequests: "Zu viele Versuche. Bitte versuchen Sie es später erneut.",
     turnstileError: "Die Bot-Prüfung wurde nicht abgeschlossen. Bitte versuchen Sie die Prüfung erneut, bevor Sie das Formular senden.",
     genericError: "Diese Aktion konnte nicht abgeschlossen werden. Prüfen Sie Ihre Angaben und versuchen Sie es erneut.",
     registerSuccess: "Ihre Zugangsanfrage wurde registriert. Öffnen Sie den per E-Mail erhaltenen Link (prüfen Sie auch den Spam-Ordner), um Ihre Adresse zu bestätigen und Ihr Passwort zu wählen.",
@@ -218,6 +221,7 @@ export const candidateAccessCopy = {
     turnstileLoginMissing: "登录前，请完成反机器人验证。",
     loginChallenge: "为了您的安全，此地址已有多次登录失败，请完成反机器人验证后重新登录。",
     tooManyAttempts: "此设备登录尝试次数过多。请等待 15 分钟或使用“忘记密码”。",
+    tooManyRequests: "尝试次数过多，请稍后重试。",
     turnstileError: "反机器人验证未完成。提交表单前请重新验证。",
     genericError: "无法完成此操作。请检查您的信息后重试。",
     registerSuccess: "您的访问请求已登记。请打开邮件中的链接（也请检查垃圾邮件文件夹），确认您的地址并设置密码。",
@@ -232,11 +236,12 @@ export const candidateAccessCopy = {
 type CandidateLanguage = keyof typeof candidateAccessCopy;
 type CandidateCopy = (typeof candidateAccessCopy)[CandidateLanguage];
 
-export function candidateNotice(message: string, copy: CandidateCopy) {
+export function candidateNotice(message: string, copy: CandidateCopy, code?: string) {
+  if (code === "TOO_MANY_REQUESTS") return copy.tooManyRequests;
   if (message.includes("termsAccepted") && message.includes("documentConsent")) return copy.bothConsentMissing;
   if (message.includes("termsAccepted")) return copy.termsMissing;
   if (message.includes("documentConsent")) return copy.documentConsentMissing;
-  if (message.includes("candidate_turnstile")) return copy.turnstileError;
+  if (message.includes("candidate_turnstile") || message.includes("vérification anti-bot")) return copy.turnstileError;
   if (message.toLowerCase().includes("invitation")) return copy.invitationInvalid;
   return copy.genericError;
 }
@@ -286,13 +291,16 @@ export default function CandidateAccessPage() {
   const [turnstileKey, setTurnstileKey] = useState(0);
 
   const utils = trpc.useUtils();
+  // A Turnstile token is single use: always render a fresh challenge after an attempt.
+  const renewTurnstile = () => {
+    setTurnstileToken(null);
+    setTurnstileKey(key => key + 1);
+  };
   const login = trpc.candidatePortal.login.useMutation({
     // Refresh the cached "me" (possibly null from an earlier visit) before opening the portal (CAND-10).
     onSuccess: async () => { await utils.candidatePortal.me.invalidate(); navigate("/candidate/portal"); },
     onError: error => {
-      // A Turnstile token is single use: always render a fresh challenge after an attempt.
-      setTurnstileToken(null);
-      setTurnstileKey(key => key + 1);
+      renewTurnstile();
       if (error.data?.code === "PRECONDITION_FAILED") { setLoginChallenge(true); setNotice(copy.loginChallenge); return; }
       if (error.data?.code === "TOO_MANY_REQUESTS") { setNotice(copy.tooManyAttempts); return; }
       setNotice(candidateNotice(error.message, copy));
@@ -300,15 +308,18 @@ export default function CandidateAccessPage() {
   });
   const register = trpc.candidatePortal.register.useMutation({
     onSuccess: () => setNotice(copy.registerSuccess),
-    onError: error => setNotice(candidateNotice(error.message, copy)),
+    onError: error => setNotice(candidateNotice(error.message, copy, error.data?.code)),
+    onSettled: renewTurnstile,
   });
   const reset = trpc.candidatePortal.requestPasswordReset.useMutation({
     onSuccess: () => setNotice(copy.resetSuccess),
-    onError: error => setNotice(candidateNotice(error.message, copy)),
+    onError: error => setNotice(candidateNotice(error.message, copy, error.data?.code)),
+    onSettled: renewTurnstile,
   });
   const resendActivation = trpc.candidatePortal.resendVerification.useMutation({
     onSuccess: () => setNotice(copy.activationSuccess),
-    onError: error => setNotice(candidateNotice(error.message, copy)),
+    onError: error => setNotice(candidateNotice(error.message, copy, error.data?.code)),
+    onSettled: renewTurnstile,
   });
   const invitation = trpc.candidatePortal.resolveInvitation.useQuery(
     { token: invitationToken || "invalid" },
