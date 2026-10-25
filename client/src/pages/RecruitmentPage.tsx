@@ -7,6 +7,7 @@ import Navigation from "@/components/Navigation";
 import Footer from "@/components/Footer";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { resolveCountryForSubmission } from "@/lib/countrySubmission";
+import { recruitmentSubmissionErrorMessage } from "@/lib/recruitmentSubmissionErrors";
 import { TurnstileWidget } from "@/components/TurnstileWidget";
 
 const countryOptions = [
@@ -30,6 +31,8 @@ const countryOptions = [
   { value: "Autre pays / Mobilité mondiale", labels: { fr: "Autre pays / Mobilité mondiale", en: "Other country / Global mobility", de: "Anderes Land / Globale Mobilität", zh: "其他国家/全球流动" } },
 ] as const;
 const OTHER_TARGET_COUNTRY = "Autre pays / Mobilité mondiale";
+/** The specialty is sent as typed: /api/recruitment/apply accepts up to 160 characters (cv_applications.specialty). */
+export const RECRUITMENT_CUSTOM_SPECIALTY_MAX_LENGTH = 160;
 
 const professionalLanguageOptions = [
   { value: "Arabic", labels: { fr: "Arabe", en: "Arabic", de: "Arabisch", zh: "阿拉伯语" } },
@@ -218,6 +221,11 @@ export function isAcceptedCvFile(file: Pick<File, "name" | "size" | "type"> | nu
   return isAcceptedRecruitmentCvFile(file);
 }
 
+/** Message shown when the API refuses an application: the VVIP page's mapping, translated by code. */
+export function standardSubmissionErrorMessage(payload: { error?: unknown; code?: unknown } | null | undefined, language: Language, status?: number): string {
+  return recruitmentSubmissionErrorMessage(payload, language, copy[language], status);
+}
+
 const WORLDWIDE_COUNTRY_CODES = "AF,AX,AL,DZ,AS,AD,AO,AI,AQ,AG,AR,AM,AW,AU,AT,AZ,BS,BH,BD,BB,BY,BE,BZ,BJ,BM,BT,BO,BQ,BA,BW,BV,BR,IO,BN,BG,BF,BI,CV,KH,CM,CA,KY,CF,TD,CL,CN,CX,CC,CO,KM,CG,CD,CK,CR,CI,HR,CU,CW,CY,CZ,DK,DJ,DM,DO,EC,EG,SV,GQ,ER,EE,SZ,ET,FK,FO,FJ,FI,FR,GF,PF,TF,GA,GM,GE,DE,GH,GI,GR,GL,GD,GP,GU,GT,GG,GN,GW,GY,HT,HM,VA,HN,HK,HU,IS,IN,ID,IR,IQ,IE,IM,IL,IT,JM,JP,JE,JO,KZ,KE,KI,KP,KR,KW,KG,LA,LV,LB,LS,LR,LY,LI,LT,LU,MO,MG,MW,MY,MV,ML,MT,MH,MQ,MR,MU,YT,MX,FM,MD,MC,MN,ME,MS,MA,MZ,MM,NA,NR,NP,NL,NC,NZ,NI,NE,NG,NU,NF,MK,MP,NO,OM,PK,PW,PS,PA,PG,PY,PE,PH,PN,PL,PT,PR,QA,RE,RO,RU,RW,BL,SH,KN,LC,MF,PM,VC,WS,SM,ST,SA,SN,RS,SC,SL,SG,SX,SK,SI,SB,SO,ZA,GS,SS,ES,LK,SD,SR,SJ,SE,CH,SY,TW,TJ,TZ,TH,TL,TG,TK,TO,TT,TN,TR,TM,TC,TV,UG,UA,AE,GB,US,UM,UY,UZ,VU,VE,VN,VG,VI,WF,EH,YE,ZM,ZW".split(",");
 
 export function getWorldwideCountries(locale: string) {
@@ -350,7 +358,7 @@ export default function RecruitmentPage() {
     try {
       const response = await fetch("/api/recruitment/apply", { method: "POST", body });
       const payload = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(payload.error || t.genericError);
+      if (!response.ok) throw new Error(standardSubmissionErrorMessage(payload, lang, response.status));
       if (typeof payload.trackingId !== "string" || !payload.trackingId) throw new Error(t.genericError);
       setTrackingId(payload.trackingId);
       setTurnstileToken(null);
@@ -456,6 +464,7 @@ export default function RecruitmentPage() {
                             id="recruitment-specialty-custom"
                             required
                             value={form.specialtyCustom}
+                            maxLength={RECRUITMENT_CUSTOM_SPECIALTY_MAX_LENGTH}
                             aria-invalid={isInvalid("specialtyCustom")}
                             onChange={event => update("specialtyCustom", event.target.value)}
                             className={`recruitment-field ${isInvalid("specialtyCustom") ? "form-field-invalid" : ""}`}
@@ -510,7 +519,7 @@ export default function RecruitmentPage() {
                   {form.specialty === "Autre spécialité ou profession" && (
                     <label className="recruitment-field-group animate-in fade-in duration-200">
                       <span>{t.specialtyCustom} *</span>
-                      <input id="recruitment-specialty-custom" required value={form.specialtyCustom} aria-invalid={isInvalid("specialty")} onChange={event => update("specialtyCustom", event.target.value)} placeholder="Ex. Perfusionniste, Audioprothésiste, etc." className={`recruitment-field ${isInvalid("specialty") ? "form-field-invalid" : ""}`} />
+                      <input id="recruitment-specialty-custom" required value={form.specialtyCustom} maxLength={RECRUITMENT_CUSTOM_SPECIALTY_MAX_LENGTH} aria-invalid={isInvalid("specialty")} onChange={event => update("specialtyCustom", event.target.value)} placeholder="Ex. Perfusionniste, Audioprothésiste, etc." className={`recruitment-field ${isInvalid("specialty") ? "form-field-invalid" : ""}`} />
                     </label>
                   )}
 
