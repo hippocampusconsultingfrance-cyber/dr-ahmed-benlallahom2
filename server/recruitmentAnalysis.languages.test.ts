@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { normalizeRecruitmentAnalysis } from "./recruitmentAnalysis";
+import { vvipOffshoreCopy } from "../client/src/pages/VvipOffshorePage";
 
 type AnalysisInput = Parameters<typeof normalizeRecruitmentAnalysis>[0];
 
@@ -275,10 +276,38 @@ describe("INTL-02 — un titre infirmier, technicien ou secouriste n’est pas u
     expect(english("Intensive Care Nurse", "Critical care nursing", "[VVIP / Offshore] Infirmier(ère) paramédical(e) Offshore / Rig Medic")).toBe(30);
   });
 
+  it("reconnaît les profils VVIP paramédicaux du formulaire dans les 4 langues comme une profession paramédicale déclarée", () => {
+    const profiles = vvipOffshoreCopy.fr.specialties;
+    const rigMedic = profiles.indexOf("Infirmier(ère) paramédical(e) Offshore / Rig Medic");
+    const nurseAnaesthetist = profiles.indexOf("Infirmier(ère) anesthésiste (IADE) VVIP");
+    for (const language of ["fr", "en", "de", "zh"] as const) {
+      // The form stores the profile chosen, in the language of the page, after this prefix.
+      const declared = (index: number) => `[VVIP / Offshore] ${vvipOffshoreCopy[language].specialties[index]}`;
+      expect(english("Offshore Rig Medic and Paramedic", "Rig Medic", declared(rigMedic)), declared(rigMedic)).toBe(30);
+      expect(english("Nurse Anaesthetist", "Nurse anaesthesia", declared(nurseAnaesthetist)), declared(nurseAnaesthetist)).toBe(30);
+    }
+  });
+
+  it("garde ses points à un pharmacien biologiste ou toxicologue, pas à un pharmacien qui vise une autre spécialité médicale", () => {
+    const french = (title: string, specialty: string, declared: string) => analyse("français", { title, specialty, skill: "validation biologique" }, declared).scoreBreakdown.specialtyMatch;
+    // In France, pharmacists practise medical biology, toxicology and pharmacology.
+    expect(french("Pharmacien biologiste", "Biologie médicale", "Biologie médicale / Pathologie")).toBe(30);
+    expect(french("Pharmacien toxicologue", "Toxicologie", "Toxicologie")).toBe(30);
+    expect(english("Clinical Pharmacist, Toxicology", "Toxicology", "Toxicologie")).toBe(30);
+    expect(french("Pharmacien hospitalier en réanimation", "Réanimation", "Médecine intensive et réanimation")).toBe(0);
+    expect(french("Pharmacien hospitalier", "Pharmacie clinique", "Pharmacien(ne)")).toBe(30);
+    // A laboratory technician is still no medical biologist.
+    expect(french("Technicien de laboratoire en biologie médicale", "Biologie médicale", "Biologie médicale / Pathologie")).toBe(0);
+  });
+
   it("ne rapproche plus un chirurgien de la transplantation rénale de la néphrologie", () => {
     expect(english("Kidney Transplant Surgeon", "Kidney transplantation", "Néphrologie")).toBe(0);
     expect(analyse("chinois", { title: "肾脏移植外科医师", specialty: "肾脏移植", skill: "肾移植手术" }, "Néphrologie").scoreBreakdown.specialtyMatch).toBe(0);
     expect(analyse("chinois", { title: "肾脏内科主治医师", specialty: "肾脏病学", skill: "血液透析" }, "Néphrologie").scoreBreakdown.specialtyMatch).toBe(30);
+    // 腎臟科 is the usual name of the department in Taiwan.
+    expect(analyse("chinois", { title: "腎臟科主治醫師", specialty: "腎臟科", skill: "血液透析" }, "Néphrologie").scoreBreakdown.specialtyMatch).toBe(30);
+    expect(analyse("chinois", { title: "肾脏科主治医师", specialty: "肾病科", skill: "血液透析" }, "Néphrologie").scoreBreakdown.specialtyMatch).toBe(30);
+    expect(english("Consultant Kidney Doctor", "Nephrology", "Néphrologie")).toBe(30);
   });
 
   it("applique la même règle aux CV en français, en allemand, en arabe et en chinois, sans toucher aux médecins", () => {

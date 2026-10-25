@@ -30,7 +30,7 @@ export const RECRUITMENT_SPECIALTY_EQUIVALENTS: Readonly<Record<string, readonly
   "Pneumologie": ["pulmonolog", "pneumolog", "respiratory medicine", "respiratory physician", "chest physician", "lungenheilkunde", "الأمراض الصدرية", "أمراض الصدر", "طب الرئة", "呼吸内科", "呼吸內科", "呼吸科", "肺科"],
   "Gastro-entérologie et hépatologie": ["gastroenterolog", "gastro enterolog", "hepatolog", "الجهاز الهضمي", "أمراض الكبد", "طب الكبد", "消化内科", "消化內科", "消化科", "肝病"],
   // Not "kidney" or 肾脏 alone: a "Kidney Transplant Surgeon" (肾脏移植外科医师) is no nephrologist.
-  "Néphrologie": ["nephrolog", "renal medicine", "renal physician", "kidney disease", "kidney specialist", "kidney physician", "kidney medicine", "أمراض الكلى", "طب الكلى", "肾内科", "腎內科", "肾脏内科", "腎臟內科", "肾脏病", "腎臟病"],
+  "Néphrologie": ["nephrolog", "renal medicine", "renal physician", "kidney disease", "kidney specialist", "kidney physician", "kidney doctor", "kidney medicine", "أمراض الكلى", "طب الكلى", "肾内科", "腎內科", "肾脏内科", "腎臟內科", "肾脏科", "腎臟科", "肾病科", "腎病科", "肾脏病", "腎臟病"],
   "Neurologie": ["neurolog", "طب الأعصاب", "أمراض الأعصاب", "الأمراض العصبية", "神经内科", "神經內科", "神经科", "神經科"],
   "Oncologie médicale": ["oncolog", "onkolog", "طب الأورام", "الأورام", "肿瘤", "腫瘤"],
   "Hématologie": ["hematolog", "haematolog", "hämatolog", "أمراض الدم", "طب الدم", "血液科", "血液内科", "血液內科"],
@@ -116,24 +116,41 @@ export const RECRUITMENT_PARAMEDICAL_SPECIALTIES: ReadonlySet<string> = new Set(
   "Assistant(e) social(e) de santé",
 ]);
 
+/** Words of a pharmacist's title, among the nursing and allied health ones below. */
+export const RECRUITMENT_PHARMACIST_TITLE_TERMS: readonly string[] = ["pharmacist", "pharmacien", "apotheker", "صيدلي", "صيدلاني", "药剂师", "藥劑師", "药师", "藥師"];
+
+/**
+ * Physician specialties that pharmacists practise too: in France, a
+ * « Pharmacien biologiste » practises medical biology, and pharmacists
+ * specialise in toxicology and pharmacology. For these, a pharmacist's title
+ * keeps its specialty points.
+ */
+export const RECRUITMENT_PHARMACIST_SPECIALTIES: ReadonlySet<string> = new Set([
+  "Biologie médicale / Pathologie",
+  "Toxicologie",
+  "Pharmacologie médicale",
+]);
+
 /**
  * Words of a nursing or allied health title, matched like the equivalents
  * above. Only names of professions: not the fields they share with
  * physicians (斜视 "strabismus", "clinical pharmac…"), so that a
- * « Consultant Clinical Pharmacologist » stays a physician.
+ * « Consultant Clinical Pharmacologist » stays a physician. "Rig medic" also
+ * names the offshore paramedic profile of the VVIP form in every language.
  */
 export const RECRUITMENT_PARAMEDICAL_TITLE_TERMS: readonly string[] = [
-  "nurse", "nursing", "midwi", "paramedic", "technician", "technologist", "therapist", "physiotherap", "radiographer", "sonographer",
-  "pharmacist", "dietitian", "dietician", "nutritionist", "orthoptist", "psychologist", "social worker", "healthcare assistant",
+  ...RECRUITMENT_PHARMACIST_TITLE_TERMS,
+  "nurse", "nursing", "midwi", "paramedic", "rig medic", "technician", "technologist", "therapist", "physiotherap", "radiographer", "sonographer",
+  "dietitian", "dietician", "nutritionist", "orthoptist", "psychologist", "social worker", "healthcare assistant",
   "care assistant", "medical assistant", "physician assistant", "physician associate",
   "infirmier", "aide soignant", "auxiliaire", "technicien", "manipulateur", "préparateur", "kinésithérap", "sage femme", "orthophon",
-  "ergothérap", "psychomotric", "diététicien", "pharmacien", "puéricult", "psychologue", "assistant social",
+  "ergothérap", "psychomotric", "diététicien", "puéricult", "psychologue", "assistant social",
   "assistante sociale", "cadre de santé", "ambulancier", "brancardier", "secouriste",
   "krankenpfleg", "pflegefach", "pflegekraft", "fachpflege", "pflegehelfer", "pflegeexpert", "pflegedienstleitung", "op pflege",
   "anästhesiepfleg", "intensivpfleg", "hebamme", "entbindungspfleg", "notfallsanitäter", "rettungssanitäter", "rettungsassistent",
-  "logopäd", "mtra", "mtla", "apotheker", "diätassistent", "psychologe", "sozialarbeit",
-  "ممرض", "تمريض", "مسعف", "فني تخدير", "فني أشعة", "فني مختبر", "فني إسعاف", "تقني أشعة", "تقني مختبر", "صيدلي", "صيدلاني",
+  "logopäd", "mtra", "mtla", "diätassistent", "psychologe", "sozialarbeit",
+  "ممرض", "تمريض", "مسعف", "فني تخدير", "فني أشعة", "فني مختبر", "فني إسعاف", "تقني أشعة", "تقني مختبر",
   "أخصائي تغذية", "أخصائية تغذية", "أخصائي نفسي", "أخصائية نفسية", "أخصائي اجتماعي",
-  "护士", "護士", "护理", "護理", "助产", "助產", "技师", "技師", "技术员", "技術員", "护工", "護工", "急救员", "急救員", "治疗师", "治療師",
-  "药剂师", "藥劑師", "药师", "藥師", "营养师", "營養師", "心理师", "心理師", "社工",
+  "护士", "護士", "护理", "護理", "助产", "助產", "技师", "技師", "技术员", "技術員", "护工", "護工", "急救员", "急救員", "急救医护", "急救醫護",
+  "治疗师", "治療師", "营养师", "營養師", "心理师", "心理師", "社工",
 ];

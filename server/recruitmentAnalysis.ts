@@ -6,7 +6,13 @@ import { getDb } from "./db";
 import { assertPdfDecompressionWithinLimits, DOCUMENT_DECOMPRESSION_LIMITS, inspectDocxArchive, truncateExtractedText } from "./documentDecompressionLimits";
 import { PdfReaderUnavailableError, readPdfIsolated } from "./pdfExtractionSandbox";
 import { CV_ANALYSIS_STEP_MINIMUM_MS, ProcessingDeadlineError, stepTimeoutMs } from "./processingDeadline";
-import { RECRUITMENT_PARAMEDICAL_SPECIALTIES, RECRUITMENT_PARAMEDICAL_TITLE_TERMS, RECRUITMENT_SPECIALTY_EQUIVALENTS } from "../shared/recruitmentSpecialtyEquivalents";
+import {
+  RECRUITMENT_PARAMEDICAL_SPECIALTIES,
+  RECRUITMENT_PARAMEDICAL_TITLE_TERMS,
+  RECRUITMENT_PHARMACIST_SPECIALTIES,
+  RECRUITMENT_PHARMACIST_TITLE_TERMS,
+  RECRUITMENT_SPECIALTY_EQUIVALENTS,
+} from "../shared/recruitmentSpecialtyEquivalents";
 
 export const RECRUITMENT_ANALYSIS_PRIMARY_MODEL = "openai/gpt-6-astra";
 export const RECRUITMENT_ANALYSIS_FALLBACK_MODEL = "google/gemini-3.8-flash";
@@ -729,11 +735,15 @@ function namedRecruitmentSpecialties(value: string) {
 
 const paramedicalSpecialties = new Set(Array.from(RECRUITMENT_PARAMEDICAL_SPECIALTIES, normalizeSpecialtyText));
 const paramedicalTitleTerms = RECRUITMENT_PARAMEDICAL_TITLE_TERMS.map(normalizeSpecialtyText);
+const pharmacistSpecialties = new Set(Array.from(RECRUITMENT_PHARMACIST_SPECIALTIES, normalizeSpecialtyText));
+const pharmacistTitleTerms = new Set(RECRUITMENT_PHARMACIST_TITLE_TERMS.map(normalizeSpecialtyText));
+/** For medical biology, toxicology and pharmacology, which pharmacists practise too: « Pharmacien biologiste ». */
+const nonPharmacistTitleTerms = paramedicalTitleTerms.filter(term => !pharmacistTitleTerms.has(term));
 
 /** A nursing or allied health profession, declared or cited: « Intensive Care Nurse », « Emergency Medical Technician », « 麻醉护士 »… */
-function namesParamedicalProfession(value: string) {
+function namesParamedicalProfession(value: string, titleTerms = paramedicalTitleTerms) {
   const text = normalizeSpecialtyText(value);
-  return paramedicalSpecialties.has(text) || paramedicalTitleTerms.some(term => textUsesTerm(text, term));
+  return paramedicalSpecialties.has(text) || titleTerms.some(term => textUsesTerm(text, term));
 }
 
 /** INTL-02: "Consultant Anaesthetist", "Facharzt für Anästhesiologie", "طبيب تخدير" or "麻醉科医师" match « Anesthésie-réanimation ». */
@@ -936,14 +946,16 @@ function verifiedScoreBreakdown(input: {
   );
   // INTL-02: a nurse, technician or paramedic is no physician of the specialty their unit is named after
   // (« Intensive Care Nurse »): unless a nursing or allied health profession was declared, such a title
-  // earns no specialty points, nor do the specialties of that CV.
+  // earns no specialty points, nor do the specialties of that CV. A pharmacist keeps them for the
+  // specialties pharmacists practise.
+  const titleTerms = pharmacistSpecialties.has(normalizeSpecialtyText(input.targetSpecialty)) ? nonPharmacistTitleTerms : paramedicalTitleTerms;
   const paramedicalDeclared = namesParamedicalProfession(input.targetSpecialty);
-  const paramedicalTitle = !paramedicalDeclared && verifiedFields.some(item => item.field === "professionalTitle" && namesParamedicalProfession(item.value));
+  const paramedicalTitle = !paramedicalDeclared && verifiedFields.some(item => item.field === "professionalTitle" && namesParamedicalProfession(item.value, titleTerms));
   const specialtyEvidenceProvenance = new Set(
     verifiedFields
       .filter(item =>
         (item.field === "specialty" || item.field === "professionalTitle") &&
-        !paramedicalTitle && (paramedicalDeclared || !namesParamedicalProfession(item.value)) &&
+        !paramedicalTitle && (paramedicalDeclared || !namesParamedicalProfession(item.value, titleTerms)) &&
         specialtyMatchesDeclared(item.value, input.targetSpecialty)
       )
       .map(item => `${normalizeEvidenceText(item.evidence)}|${normalizeEvidenceText(item.sourceLocation)}`)
