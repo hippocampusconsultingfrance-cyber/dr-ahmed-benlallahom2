@@ -6,6 +6,7 @@ import PublicContentSkeleton from "@/components/PublicContentSkeleton";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import Candidate360Dialog from "./Candidate360Dialog";
+import { contradictionEvidenceLabel, CV_REVIEW_REMINDER, fieldEvidenceStatusLabel } from "./recruitmentEvidenceLabels";
 import {
   recruitmentDriveExportLabel,
   recruitmentDriveExportErrorLabel,
@@ -498,6 +499,7 @@ export default function RecruitmentTab() {
                           <div>
                             <h4 className="font-semibold text-foreground">Lecture intelligente du CV</h4>
                             <p className="text-xs text-muted-foreground">Aide à la revue humaine · aucune décision automatique</p>
+                            <p className="mt-1 text-xs font-medium text-amber-700 dark:text-amber-300">{CV_REVIEW_REMINDER}</p>
                           </div>
                         </div>
                         <div className="flex flex-wrap gap-2">
@@ -565,9 +567,7 @@ export default function RecruitmentTab() {
                                     <p className="mt-1 text-muted-foreground">« {item.evidence || "Preuve non fournie"} »</p>
                                     <p className="mt-1 text-muted-foreground">Source : {item.sourceLocation || "non localisée"} · confiance {typeof item.confidence === "number" ? `${item.confidence}%` : "—"}</p>
                                     <p className={`mt-1 font-medium ${item.evidenceVerified ? "text-emerald-700 dark:text-emerald-300" : "text-amber-700 dark:text-amber-300"}`}>
-                                      {item.sourceLocation === "formulaire de candidature"
-                                        ? "Donnée déclarée, non vérifiée dans le CV"
-                                        : item.evidenceVerified ? "Citation vérifiée dans le texte" : "Citation à vérifier manuellement"}
+                                      {fieldEvidenceStatusLabel(item)}
                                     </p>
                                   </div>
                                 ))}
@@ -581,7 +581,7 @@ export default function RecruitmentTab() {
                                 {extracted.contradictions.map((item, index) => (
                                   <li key={`${item.field}-${index}`}>
                                     <strong>{item.field || "Champ"} :</strong> formulaire « {item.declaredValue || "—"} » / CV « {item.documentValue || "—"} » — {item.sourceLocation || "source non localisée"}
-                                    <span className="ml-1 font-medium">({item.evidenceVerified ? "citation vérifiée" : "citation à vérifier"})</span>
+                                    <span className="ml-1 font-medium">({contradictionEvidenceLabel(item.evidenceVerified)})</span>
                                   </li>
                                 ))}
                               </ul>

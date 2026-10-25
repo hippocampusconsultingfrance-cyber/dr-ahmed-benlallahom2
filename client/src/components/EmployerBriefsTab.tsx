@@ -49,6 +49,8 @@ export default function EmployerBriefsTab() {
     onError: exportError => toast.error(exportError.message),
   });
   const activeBrief = matches.data?.brief ?? null;
+  // Never offer an empty shortlist export: the server refuses it (REC-01).
+  const shortlistedCount = matches.data?.shortlistedCount ?? 0;
   const selectedBrief = briefs?.find(brief => brief.id === selectedBriefId) ?? null;
   const locale = language === "zh" ? "zh-CN" : language === "de" ? "de-DE" : language === "en" ? "en-GB" : "fr-FR";
   const formatDate = (value: Date | string | null | undefined) => value ? new Date(value).toLocaleString(locale, { timeZone: "Europe/Paris", dateStyle: "medium", timeStyle: "short" }) : null;
@@ -114,7 +116,7 @@ export default function EmployerBriefsTab() {
             </dl>
           </section>}
         {matches.data && activeBrief && <>
-          <div className="mb-5 flex flex-col gap-3 border-b border-border pb-4 sm:flex-row sm:items-start sm:justify-between"><div><p className="text-sm text-primary">{activeBrief.briefId}</p><h2 className="text-xl font-semibold text-foreground">{activeBrief.specialtyNeeded} — {activeBrief.country}</h2><p className="mt-1 text-sm text-muted-foreground">{copy.humanReview}</p><p className="mt-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-200">{copy.shareReminder}</p></div><Button size="sm" variant="outline" disabled={exportShortlist.isPending} onClick={() => exportShortlist.mutate({ type: "shortlist", briefId: activeBrief.id })}>{exportShortlist.isPending ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Download className="mr-1.5 h-3.5 w-3.5" />}{copy.export}</Button></div>
+          <div className="mb-5 flex flex-col gap-3 border-b border-border pb-4 sm:flex-row sm:items-start sm:justify-between"><div><p className="text-sm text-primary">{activeBrief.briefId}</p><h2 className="text-xl font-semibold text-foreground">{activeBrief.specialtyNeeded} — {activeBrief.country}</h2><p className="mt-1 text-sm text-muted-foreground">{copy.humanReview}</p><p className="mt-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-200">{copy.shareReminder}</p></div><Button size="sm" variant="outline" disabled={exportShortlist.isPending || shortlistedCount === 0} onClick={() => exportShortlist.mutate({ type: "shortlist", briefId: activeBrief.id })}>{exportShortlist.isPending ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Download className="mr-1.5 h-3.5 w-3.5" />}{copy.export} ({shortlistedCount})</Button></div>
           <div className="space-y-3">
             {matches.data.candidates.map(candidate => (
               <article key={candidate.id} className="rounded-lg border border-border bg-background p-4">
