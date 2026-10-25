@@ -25,6 +25,8 @@ export const DOCUMENT_DECOMPRESSION_LIMITS = {
   pdfImageProbeBytes: 64 * 1024 * 1024,
   /** `stream` keywords examined in one PDF: a CV has a few hundred at most. */
   pdfMaxStreams: 5_000,
+  /** Streams whose zlib data runs on past the next `stream` keyword (never in a real PDF): each is inflated to the end of the file. */
+  pdfMaxOverlappingStreams: 32,
   /** Pages handed to the text extractor. */
   pdfMaxExtractedPages: 25,
   /** Isolated PDF reader: process memory growth allowed while pdf.js runs. */
@@ -120,13 +122,30 @@ function startsWithZlibHeader(data: Buffer) {
   return data.length >= 2 && (data[0]! & 0x0f) === 8 && data[0]! >> 4 <= 7 && ((data[0]! << 8) | data[1]!) % 31 === 0;
 }
 
-/** Inflates at most `cap` bytes; null when the data is not valid zlib. Trailing bytes are ignored. */
-function inflateWithCap(data: Buffer, cap: number): Buffer | typeof INFLATE_OVERFLOW | null {
+/** Inflates at most `cap` bytes; null when the data is not valid zlib. Trailing bytes are ignored; `read` counts the input bytes used. */
+function inflateWithCap(data: Buffer, cap: number): { output: Buffer; read: number } | typeof INFLATE_OVERFLOW | null {
   try {
-    return inflateSync(data, { maxOutputLength: Math.max(1, cap), finishFlush: constants.Z_SYNC_FLUSH });
+    const result = inflateSync(data, { maxOutputLength: Math.max(1, cap), finishFlush: constants.Z_SYNC_FLUSH, info: true }) as unknown as { buffer: Buffer; engine: { bytesWritten: number } };
+    return { output: result.buffer, read: result.engine.bytesWritten };
   } catch (error) {
     return isBufferTooLarge(error) ? INFLATE_OVERFLOW : null;
   }
+}
+
+/**
+ * Inflates the zlib data of a stream, at most `cap` bytes. The data of a
+ * real stream ends before the next `stream` keyword (its own `endstream` at
+ * the latest), so it is first inflated up to there (`window`): each stream is
+ * then read once. Only zlib data still running at that point, which may
+ * cover the next streams, is inflated again from the whole rest of the file
+ * (`data`), at most `pdfMaxOverlappingStreams` times: 2,000 such streams
+ * chained through empty zlib blocks took 5 s on 4 MB.
+ */
+function inflateStreamData(window: Buffer, data: Buffer, cap: number, overlaps: { count: number; max: number }) {
+  const read = inflateWithCap(window, cap);
+  if (read === INFLATE_OVERFLOW || read === null || read.read < window.length || window.length === data.length) return read;
+  if (++overlaps.count > overlaps.max) throw new Error("cv_validation_pdf_stream_count_exceeded");
+  return inflateWithCap(data, cap);
 }
 
 /** Plain integer value of a dictionary key; null when absent or indirect (`7 0 R`). */
@@ -135,14 +154,44 @@ function directInteger(dictionary: string, key: string) {
   return match && !match[2] ? Number(match[1]) : null;
 }
 
+/** What ends a name (`/A/B`, `/A B`): white-space as \s reads it in a latin1 string, the PDF delimiters and NUL. */
+const ENDS_PDF_NAME = new Uint8Array(256);
+for (const char of "\t\n\v\f\r \xa0<>[]()%{}\0") ENDS_PDF_NAME[char.charCodeAt(0)] = 1;
+
+/** Value of a hexadecimal digit, -1 for any other character. */
+function hexValue(code: number) {
+  if (code >= 0x30 && code <= 0x39) return code - 0x30;
+  const lower = code | 0x20;
+  return lower >= 0x61 && lower <= 0x66 ? lower - 0x57 : -1;
+}
+
 /**
  * PDF names may spell any character as #xx (`/J#61vaScript` is /JavaScript,
- * `/#4A#53` is /JS): they are decoded before any keyword is searched.
+ * `/#4A#53` is /JS): they are decoded before any keyword is searched. One
+ * pass over the text, without a regular expression per name: 4 MB of `/#41`
+ * took 0.7 s.
  */
 export function decodePdfNames(text: string) {
-  return text.replace(/\/[^\s/<>[\]()%{}\0]*/g, name => name.includes("#")
-    ? name.replace(/#([0-9a-f]{2})/gi, (_, hex: string) => String.fromCharCode(parseInt(hex, 16)))
-    : name);
+  if (!text.includes("#")) return text;
+  const parts: string[] = [];
+  let copied = 0;
+  let inName = false;
+  for (let index = 0; index < text.length; index += 1) {
+    const code = text.charCodeAt(index);
+    if (code === 0x2f) inName = true;
+    else if (code < 256 && ENDS_PDF_NAME[code]) inName = false;
+    else if (code === 0x23 && inName) {
+      const high = hexValue(text.charCodeAt(index + 1));
+      const low = high === -1 ? -1 : hexValue(text.charCodeAt(index + 2));
+      if (low === -1) continue;
+      if (index > copied) parts.push(text.slice(copied, index));
+      parts.push(String.fromCharCode(high * 16 + low));
+      index += 2;
+      copied = index + 1;
+    }
+  }
+  parts.push(text.slice(copied));
+  return parts.join("");
 }
 
 /** pdf.js reads an object stream from its /N and /First entries, whatever its /Type says. */
@@ -160,8 +209,15 @@ const FLATE_ONLY_VALUE = new RegExp(`^${PDF_SPACE}(?:${FLATE_NAME}|\\[${PDF_SPAC
 
 /** Only Flate, without predictor, is decoded here; any other filter (or none) leaves an object stream unreadable. */
 function isFlateOnly(names: string) {
-  const keys = Array.from(names.matchAll(FILTER_KEY));
-  return keys.length > 0 && !DECODE_PARMS_KEY.test(names) && keys.every(key => FLATE_ONLY_VALUE.test(names.slice(key.index + key[0].length)));
+  if (DECODE_PARMS_KEY.test(names)) return false;
+  // One key at a time, not matchAll: a dictionary of 4 MB of "/F/Fl" holds 800,000 keys.
+  const filterKey = new RegExp(FILTER_KEY.source, "g");
+  let keys = 0;
+  for (let key = filterKey.exec(names); key; key = filterKey.exec(names)) {
+    if (!FLATE_ONLY_VALUE.test(names.slice(filterKey.lastIndex))) return false;
+    keys += 1;
+  }
+  return keys > 0;
 }
 
 /** Decoded object stream: it starts with the "object number, offset" pairs. */
@@ -173,6 +229,21 @@ function readableObjectStream(names: string, decoded: Buffer | null, work: PdfSc
   const content = decoded.toString("latin1");
   if (!OBJECT_STREAM_HEADER.test(content.slice(0, 64)) || containsStream(content, work)) return null;
   return content;
+}
+
+/**
+ * First CR or LF at or after `from`, -1 when there is none. `from` only
+ * grows: each character is read at most once per kind of end of line, so a
+ * file without any end of line, or with LF only, stays linear.
+ */
+function lineEndFinder(source: string) {
+  let cr = -2;
+  let lf = -2;
+  return (from: number) => {
+    if (cr !== -1 && cr < from) cr = source.indexOf("\r", from);
+    if (lf !== -1 && lf < from) lf = source.indexOf("\n", from);
+    return cr === -1 ? lf : lf === -1 ? cr : Math.min(cr, lf);
+  };
 }
 
 /**
@@ -193,31 +264,37 @@ function readableObjectStream(names: string, decoded: Buffer | null, work: PdfSc
  * returned for the safety checks (REC-02); `null` marks an object stream
  * whose content could not be read here, or a stream whose dictionary reads
  * two ways (see pdfStreamDictionaries.ts). The work stays linear in the size
- * of the file, and the number of streams is capped.
+ * of the file, and the number of streams is capped. The keywords are found
+ * with indexOf, never a regular expression: /stream[^\r\n]*\n/ took minutes
+ * on 4 MB of "stream stream…" without an end of line.
  */
-export function assertPdfDecompressionWithinLimits(buffer: Buffer, limits: Pick<DocumentDecompressionLimits, "pdfMaxInflatedBytes" | "pdfMaxImagePixels" | "pdfImageProbeBytes" | "pdfMaxStreams"> = DOCUMENT_DECOMPRESSION_LIMITS) {
+export function assertPdfDecompressionWithinLimits(buffer: Buffer, limits: Pick<DocumentDecompressionLimits, "pdfMaxInflatedBytes" | "pdfMaxImagePixels" | "pdfImageProbeBytes" | "pdfMaxStreams" | "pdfMaxOverlappingStreams"> = DOCUMENT_DECOMPRESSION_LIMITS) {
   const source = buffer.toString("latin1");
-  const streamKeyword = /stream[^\r\n]*(?:\r\n|\r|\n)/g;
+  const nextLineEnd = lineEndFinder(source);
   const exceeded = () => new Error("cv_validation_pdf_decompressed_size_exceeded");
   const work = pdfScanWork(source);
   const dictionaries = readPdfStreamDictionaries(source, work);
   let inflatedBytes = 0;
   let streams = 0;
+  const overlaps = { count: 0, max: limits.pdfMaxOverlappingStreams };
   const objectStreams: Array<string | null> = [];
-  let match: RegExpExecArray | null;
-  while ((match = streamKeyword.exec(source))) {
-    const dataStart = match.index + match[0].length;
-    // Scan the stream data too: a wrong /Length or an "endstream" inside the
-    // data must not hide a stream from the check.
-    streamKeyword.lastIndex = dataStart;
+  for (let at = source.indexOf("stream"); at !== -1;) {
+    const lineEnd = nextLineEnd(at + 6);
+    // No end of line left: no keyword further on starts stream data either.
+    if (lineEnd === -1) break;
+    const dataStart = lineEnd + (source.startsWith("\r\n", lineEnd) ? 2 : 1);
     // Every keyword of the line shares this data ("endstream endobj 5 0 obj <<…>>stream").
+    // The search then goes on in the stream data: a wrong /Length or an
+    // "endstream" inside the data must not hide a stream from the check.
     const keywords: number[] = [];
-    for (let at = match.index; at !== -1 && at < dataStart; at = source.indexOf("stream", at + 6)) {
+    for (; at !== -1 && at < dataStart; at = source.indexOf("stream", at + 6)) {
       if (source.slice(Math.max(0, at - 3), at) !== "end") keywords.push(at);
     }
     if (keywords.length === 0) continue;
     if (++streams > limits.pdfMaxStreams) throw new Error("cv_validation_pdf_stream_count_exceeded");
     const data = buffer.subarray(dataStart);
+    // Up to the next "stream" keyword, `at` (see inflateStreamData).
+    const window = at === -1 ? data : buffer.subarray(dataStart, at + 6);
     const dictionary = streamDictionaryText(source, keywords, dictionaries, work);
     const unclear = dictionary === UNCLEAR_PDF_STRUCTURE;
     const names = typeof dictionary === "string" ? decodePdfNames(dictionary) : "";
@@ -233,19 +310,21 @@ export function assertPdfDecompressionWithinLimits(buffer: Buffer, limits: Pick<
       if (width !== null && height !== null) {
         if (width * height > limits.pdfMaxImagePixels) throw new Error("cv_validation_pdf_image_too_large");
         const declaredBytes = width * height * 8 + 65_536;
-        if (declaredBytes <= limits.pdfImageProbeBytes && inflateWithCap(data, declaredBytes) === INFLATE_OVERFLOW) throw exceeded();
+        if (declaredBytes <= limits.pdfImageProbeBytes && inflateStreamData(window, data, declaredBytes, overlaps) === INFLATE_OVERFLOW) throw exceeded();
         continue;
       }
     }
     let layer: Buffer = data;
     let decoded = false;
     while (startsWithZlibHeader(layer)) {
-      const inflated = inflateWithCap(layer, limits.pdfMaxInflatedBytes - inflatedBytes);
+      const cap = limits.pdfMaxInflatedBytes - inflatedBytes;
+      // The first layer is read from the file, the next ones from memory.
+      const inflated = decoded ? inflateWithCap(layer, cap) : inflateStreamData(window, data, cap, overlaps);
       if (inflated === INFLATE_OVERFLOW) throw exceeded();
       if (!inflated) break;
-      inflatedBytes += inflated.length;
+      inflatedBytes += inflated.output.length;
       if (inflatedBytes > limits.pdfMaxInflatedBytes) throw exceeded();
-      layer = inflated;
+      layer = inflated.output;
       decoded = true;
     }
     if (objectStream) objectStreams.push(unclear ? null : readableObjectStream(names, decoded ? layer : null, work));
@@ -270,7 +349,7 @@ export type PdfStructureInspection = {
  * escapes decoded. An /OpenAction alone is not active content (LibreOffice
  * writes one to open the first page); a JavaScript one is found by /JS.
  */
-export function inspectPdfStructure(buffer: Buffer, limits: Pick<DocumentDecompressionLimits, "pdfMaxInflatedBytes" | "pdfMaxImagePixels" | "pdfImageProbeBytes" | "pdfMaxStreams"> = DOCUMENT_DECOMPRESSION_LIMITS): PdfStructureInspection {
+export function inspectPdfStructure(buffer: Buffer, limits: Pick<DocumentDecompressionLimits, "pdfMaxInflatedBytes" | "pdfMaxImagePixels" | "pdfImageProbeBytes" | "pdfMaxStreams" | "pdfMaxOverlappingStreams"> = DOCUMENT_DECOMPRESSION_LIMITS): PdfStructureInspection {
   const { objectStreams } = assertPdfDecompressionWithinLimits(buffer, limits);
   const readable = objectStreams.filter((content): content is string => content !== null);
   const text = decodePdfNames([buffer.toString("latin1"), ...readable].join("\n"));

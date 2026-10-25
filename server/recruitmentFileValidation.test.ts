@@ -4,7 +4,7 @@ import { recruitmentCvValidationMessage, validateCvFile } from "./recruitmentFil
 import { DOCUMENT_DECOMPRESSION_LIMITS, truncateExtractedText } from "./documentDecompressionLimits";
 import { extractCvDocument } from "./recruitmentAnalysis";
 import { buildDocx } from "./testing/zipFixture";
-import { libreOfficeCvPdf, packPdfIntoObjectStream } from "./testing/pdfFixture";
+import { libreOfficeCvPdf, packPdfIntoObjectStream, pathologicalPdfs } from "./testing/pdfFixture";
 
 const DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 const validPdf = Buffer.concat([Buffer.from("%PDF-1.7\n1 0 obj << /Type /Page >> endobj\n"), Buffer.alloc(300, 65)]);
@@ -286,6 +286,30 @@ describe("bombes de décompression : plafonds avant extraction", () => {
       expect(performance.now() - started, JSON.stringify(unit)).toBeLessThan(4_000);
     }
     expect(recruitmentCvValidationMessage("cv_validation_pdf_stream_count_exceeded")).toContain("imprimez-le en PDF depuis votre navigateur");
+  });
+
+  it.each(pathologicalPdfs())("juge en moins d’une seconde un PDF de 4 Mo fait pour bloquer le serveur : $label", ({ pdf, outcome }) => {
+    // 1 MB of "stream stream…" without an end of line blocked the server for 84 s; 4 MB, for more than 5 minutes.
+    const started = performance.now();
+    const validate = () => validateCvFile({ buffer: pdf, mimeType: "application/pdf", originalName: "cv.pdf", size: pdf.length });
+    if (outcome === "accepted") expect(validate().pageCount).toBe(1);
+    else expect(validate).toThrow(`cv_validation_pdf_${outcome}`);
+    expect(performance.now() - started).toBeLessThan(1_000);
+  });
+
+  it("juge en moins d’une seconde un DOCX dont les relations se décompressent en 20 Mo de balises", () => {
+    const docxWithRelationships = (unit: string) => buildDocx(["CV"], [{ name: "word/_rels/document.xml.rels", content: unit.repeat(Math.floor(19 * 1024 * 1024 / unit.length)) }]);
+    // 200 KB of "<Relationship " took 3 s; a few KB of DOCX inflate to 20 MB.
+    for (const [unit, code] of [["<Relationship ", "cv_validation_docx_container_invalid"], ["<Relationship Type=\"a\" ", "cv_validation_docx_container_invalid"], ["<Relationship/>", null]] as const) {
+      const docx = docxWithRelationships(unit);
+      expect(docx.length).toBeLessThan(100 * 1024);
+      const started = performance.now();
+      const validate = () => validateCvFile({ buffer: docx, mimeType: DOCX, originalName: "cv.docx", size: docx.length });
+      if (code) expect(validate, unit).toThrow(code);
+      else expect(validate().mimeType).toBe(DOCX);
+      expect(performance.now() - started, unit).toBeLessThan(1_000);
+    }
+    expect(recruitmentCvValidationMessage("cv_validation_docx_container_invalid")).toContain("Réenregistrez votre CV en DOCX");
   });
 
   it("tronque le texte extrait à 200 000 caractères avec un avertissement", async () => {

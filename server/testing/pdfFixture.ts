@@ -7,6 +7,29 @@ export function libreOfficeCvPdf() {
   return readFileSync(new URL("./fixtures/cv-libreoffice.pdf", import.meta.url));
 }
 
+/** How the PDF checks must answer a file of `pathologicalPdfs`: accept it (one page), or refuse it with this reason. */
+export type PathologicalPdfOutcome = "accepted" | "object_stream_unreadable" | "stream_count_exceeded";
+
+/**
+ * 4 MB PDFs made to keep a naive check busy for minutes (REC-02): each must
+ * be judged in well under a second. The first three objects are a real page.
+ */
+export function pathologicalPdfs(): Array<{ label: string; pdf: Buffer; outcome: PathologicalPdfOutcome }> {
+  const size = 4 * 1024 * 1024;
+  const head = "%PDF-1.7\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj 2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj 3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 595 842]>>endobj ";
+  const filled = (unit: string, tail = "") => Buffer.from(head + unit.repeat(Math.floor((size - head.length - tail.length) / unit.length)) + tail, "latin1");
+  // zlib header, then empty stored blocks: data that inflates to nothing and runs on over the next keywords.
+  const chained = Array.from({ length: 2_000 }, () => `\nstream\nx\x01${"\x00\x00\x00\xff\xff".repeat(400)}`).join("");
+  const objectStream = (dictionary: string) => Buffer.concat([Buffer.from(`${head}9 0 obj<<${dictionary}>>stream\n`, "latin1"), deflateSync(Buffer.from("4 0 <</A 1>>")), Buffer.from("\nendstream endobj\n", "latin1")]);
+  return [
+    { label: "« stream » répété sans fin de ligne", pdf: filled("stream "), outcome: "accepted" },
+    { label: "« stream » répété sur une seule ligne", pdf: filled("stream ", "\n"), outcome: "object_stream_unreadable" },
+    { label: "noms échappés #XX", pdf: filled("/#41"), outcome: "accepted" },
+    { label: "données zlib qui couvrent les flux suivants", pdf: Buffer.from(head + chained, "latin1"), outcome: "stream_count_exceeded" },
+    { label: "800 000 clés /F dans un flux d’objets", pdf: objectStream(`/Type/ObjStm/N 1/First 4${"/F/Fl".repeat(Math.floor((size - head.length - 256) / 5))}`), outcome: "accepted" },
+  ];
+}
+
 type PdfObject = { number: number; body: string; isStream: boolean };
 
 function readObjects(source: string) {

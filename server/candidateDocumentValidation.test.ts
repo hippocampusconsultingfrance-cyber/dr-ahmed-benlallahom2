@@ -2,7 +2,7 @@ import { deflateSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
 import { candidateDocumentValidationMessage, safeCandidateDocumentName, validateCandidateDocument } from "./candidateDocumentValidation";
 import { DOCUMENT_DECOMPRESSION_LIMITS } from "./documentDecompressionLimits";
-import { libreOfficeCvPdf, packPdfIntoObjectStream } from "./testing/pdfFixture";
+import { libreOfficeCvPdf, packPdfIntoObjectStream, pathologicalPdfs } from "./testing/pdfFixture";
 
 describe("validation des documents candidats", () => {
   it("nettoie les noms de fichiers et rejette les chemins", () => {
@@ -63,6 +63,15 @@ describe("REC-02 — PDF du coffre : mêmes lectures que pour les CV", () => {
       Buffer.from("\nendstream\nendobj\n%%EOF\n", "latin1"),
     ]);
     expect(() => validate(bomb)).toThrow("cv_validation_pdf_decompressed_size_exceeded");
+  });
+
+  it.each(pathologicalPdfs())("juge en moins d’une seconde un PDF de 4 Mo fait pour bloquer le serveur : $label", ({ pdf, outcome }) => {
+    // The vault reads the same structure as the CV check: 1 MB of "stream stream…" without an end of line blocked it for 86 s.
+    const code = { object_stream_unreadable: "candidate_document_pdf_object_stream_unreadable", stream_count_exceeded: "cv_validation_pdf_stream_count_exceeded" };
+    const started = performance.now();
+    if (outcome === "accepted") expect(validate(pdf).mimeType).toBe("application/pdf");
+    else expect(() => validate(pdf)).toThrow(code[outcome]);
+    expect(performance.now() - started).toBeLessThan(1_000);
   });
 
   it("explique au candidat le motif du refus et quoi faire", () => {
