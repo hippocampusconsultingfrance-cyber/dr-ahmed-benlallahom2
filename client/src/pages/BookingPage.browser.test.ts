@@ -229,6 +229,89 @@ describe.skipIf(!executablePath)("réservation et confirmation dans un navigateu
     await page.context().close();
   }, 60_000);
 
+  it("ferme le paiement en attente à l'échéance sans demander les réservations d'un jour vide (RES-04)", async () => {
+    const pending = {
+      trackingId: "APTEXPIRING01",
+      checkoutSessionId: "cs_test_expiring",
+      customerName: "Test Patient",
+      customerEmail: "patient@example.test",
+      finalPrice: 150,
+      appointmentDate: listBookableSlots(EVENING_SLOTS, [])[0].start.toISOString(),
+      holdExpiresAt: new Date(Date.now() + 2 * 60 * 1000).toISOString(),
+    };
+    const { page, calls } = await open("/booking", bookingProcedures({
+      // Comme le serveur (calendarDateInput) : un jour vide est refusé.
+      "availability.getBookedSlots": ({ date }) => (date ? [] : refuse("BAD_REQUEST", 400, "Invalid date")),
+    }), { session: { "booking:pending:v1": JSON.stringify(pending) }, beforeGoto: (page) => page.clock.install() });
+    const card = page.getByRole("region", { name: bookingContent.fr.pending.title });
+    await card.waitFor();
+
+    await page.clock.fastForward("03:00");
+    await page.getByText(bookingContent.fr.pending.closed).waitFor();
+    expect(await card.count()).toBe(0);
+    // Aucun jour choisi : rien à recharger, et pas d'erreur de disponibilité affichée.
+    expect(calls.filter((call) => call.procedure === "availability.getBookedSlots")).toEqual([]);
+    const status = page.locator("#availability-status");
+    expect(await status.getAttribute("data-state")).toBe("select");
+    expect(await status.innerText()).not.toBe(bookingContent.fr.form.availabilityError);
+    await page.context().close();
+  }, 60_000);
+
+  it("ne dit « déjà réservés » que si les réservations ont pris tous les horaires du jour (RES-02)", async () => {
+    const [firstDay, secondDay] = openDays();
+    const secondDayStarts = listBookableSlots(EVENING_SLOTS, []).filter((slot) => slot.dayKey === secondDay).map((slot) => slot.start);
+    let blocked: Array<{ date: string }> = [];
+    const { page, alerts } = await open("/booking", bookingProcedures({
+      "availability.getBlockedDates": () => blocked,
+      "availability.getBookedSlots": ({ date }) => (date === secondDay ? secondDayStarts : []),
+      // Le jour vient d'être fermé dans l'administration pendant que la page était ouverte.
+      "appointments.create": () => {
+        blocked = [{ date: firstDay }];
+        return refuse("CONFLICT", 409, "Cette date est indisponible", "date_blocked");
+      },
+    }));
+    const grid = page.getByRole("group", { name: bookingContent.fr.form.slotsLegend });
+
+    await page.locator("#booking-day").selectOption(secondDay);
+    await grid.getByText(bookingContent.fr.form.noSlotsThisDay).waitFor();
+
+    await page.locator("#booking-name").fill("Test Patient");
+    await page.locator("#booking-email").fill("patient@example.test");
+    await page.locator("#booking-phone").fill("+33 6 12 34 56 78");
+    await page.locator("#booking-day").selectOption(firstDay);
+    await grid.getByRole("radio").first().locator("xpath=..").click();
+    await page.locator("#booking-details").fill("Questions pratiques");
+    await page.locator("#availability-status[data-state='available']").waitFor();
+    await page.getByRole("button", { name: bookingContent.fr.form.submit }).click();
+    await expect.poll(() => alerts).toEqual([bookingContent.fr.refusals.date_blocked]);
+
+    // Jour fermé : la grille ne prétend pas que tout est réservé, comme la ligne d'état.
+    await grid.getByText(bookingContent.fr.form.noSlotsLeftThisDay).waitFor();
+    expect(await grid.innerText()).not.toContain(bookingContent.fr.form.noSlotsThisDay);
+    expect(await page.locator("#availability-status").innerText()).toBe(bookingContent.fr.form.blocked);
+    await page.context().close();
+  }, 60_000);
+
+  it("garde le créneau du brouillon tant que l'agenda n'est pas chargé, puis le reprend (RES-02)", async () => {
+    const slot = listBookableSlots(EVENING_SLOTS, []).find((option) => option.dayKey === openDays()[1])!;
+    const draft = { name: "Test Patient", email: "patient@example.test", phone: "+33 6 12 34 56 78", appointmentDate: slot.start.toISOString(), details: "" };
+    const storedDraft = (page: Page) => page.evaluate(() => JSON.parse(sessionStorage.getItem("booking:draft:v1") ?? "null"));
+
+    const offline = await open("/booking", bookingProcedures({
+      "availability.getSlots": () => refuse("INTERNAL_SERVER_ERROR", 500, "Internal error"),
+    }), { session: { "booking:draft:v1": JSON.stringify(draft) } });
+    await expect.poll(() => offline.page.locator("#booking-name").inputValue()).toBe("Test Patient");
+    expect(await storedDraft(offline.page)).toEqual(draft);
+    await offline.page.locator("#booking-details").fill("Questions pratiques");
+    await expect.poll(() => storedDraft(offline.page)).toEqual({ ...draft, details: "Questions pratiques" });
+    await offline.page.context().close();
+
+    const online = await open("/booking", bookingProcedures(), { session: { "booking:draft:v1": JSON.stringify(draft) } });
+    await online.page.locator(`input[name="booking-slot"][value="${draft.appointmentDate}"]:checked`).waitFor({ state: "attached" });
+    expect(await online.page.locator("#booking-day").inputValue()).toBe(slot.dayKey);
+    await online.page.context().close();
+  }, 60_000);
+
   it("rappelle la date, la durée et le montant d'un rendez-vous confirmé et propose le fichier agenda (RES-05)", async () => {
     const start = parisBookingSlotStart(toParisBookingDateKey(new Date(Date.now() + 5 * 24 * 60 * 60 * 1000)), "19:00")!;
     const { page, calls } = await open("/booking/confirmation?status=success&trackingId=APTCONFIRM0001&session_id=cs_test_confirmed", {

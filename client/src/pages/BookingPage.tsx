@@ -33,6 +33,27 @@ import {
   type BookingRefusalReason,
 } from "@shared/bookingPolicy";
 
+// Délai minimal et horizon : même texte pour la vérification de la page et pour
+// le refus du serveur (EN-06).
+const bookingWindowMessages = {
+  fr: {
+    tooSoon: `Ce créneau n’est plus réservable : réservez au moins ${BOOKING_MIN_LEAD_TIME_HOURS} h à l’avance.`,
+    tooFar: `Les réservations sont ouvertes jusqu’à ${BOOKING_HORIZON_DAYS} jours à l’avance.`,
+  },
+  en: {
+    tooSoon: `This time slot can no longer be booked: please book at least ${BOOKING_MIN_LEAD_TIME_HOURS} hours ahead.`,
+    tooFar: `Bookings are open up to ${BOOKING_HORIZON_DAYS} days ahead.`,
+  },
+  de: {
+    tooSoon: `Dieser Termin kann nicht mehr gebucht werden: Bitte buchen Sie mindestens ${BOOKING_MIN_LEAD_TIME_HOURS} Stunden im Voraus.`,
+    tooFar: `Buchungen sind bis zu ${BOOKING_HORIZON_DAYS} Tage im Voraus möglich.`,
+  },
+  zh: {
+    tooSoon: `该时段已无法预约：请至少提前 ${BOOKING_MIN_LEAD_TIME_HOURS} 小时预约。`,
+    tooFar: `最多可提前 ${BOOKING_HORIZON_DAYS} 天预约。`,
+  },
+};
+
 export const bookingContent = {
   fr: {
     title: "Réserver une Consultation",
@@ -48,13 +69,14 @@ export const bookingContent = {
       openingHours: "Disponibilités (heure de Paris)",
       noBookableDay: `Aucun créneau n’est disponible dans les ${BOOKING_HORIZON_DAYS} prochains jours.`,
       noSlotsThisDay: "Tous les horaires de ce jour sont déjà réservés. Choisissez un autre jour.",
+      noSlotsLeftThisDay: "Plus aucun horaire n’est disponible ce jour-là. Choisissez un autre jour.",
       parisTime: "heure de Paris",
       localTime: (time: string) => `soit ${time} chez vous`,
       localTimeShort: (time: string) => `${time} chez vous`,
       dateHint: "Choisissez un jour, puis un horaire libre. Les horaires sont en heure de Paris ; l’heure de chez vous s’affiche dessous lorsqu’elle diffère.",
       windowHint: `Réservation au moins ${BOOKING_MIN_LEAD_TIME_HOURS} h à l’avance et jusqu’à ${BOOKING_HORIZON_DAYS} jours.`,
-      tooSoon: `Ce créneau n’est plus réservable : réservez au moins ${BOOKING_MIN_LEAD_TIME_HOURS} h à l’avance.`,
-      tooFar: `Les réservations sont ouvertes jusqu’à ${BOOKING_HORIZON_DAYS} jours à l’avance.`,
+      tooSoon: bookingWindowMessages.fr.tooSoon,
+      tooFar: bookingWindowMessages.fr.tooFar,
       invalidPhone: "Saisissez un numéro de téléphone valide (8 à 15 chiffres, indicatif international accepté, ex. +33 6 12 34 56 78).",
       details: "Objet de la demande (sans information médicale)",
       detailsPlaceholder: "Ex. : demande d’avis, questions d’organisation, préparation de la consultation",
@@ -73,8 +95,8 @@ export const bookingContent = {
     // Refus du serveur, traduits à partir de leur motif stable (EN-06).
     refusals: {
       slot_taken: "Ce créneau vient d’être réservé par un autre patient. Choisissez-en un autre.",
-      too_soon: `Ce créneau n’est plus réservable : réservez au moins ${BOOKING_MIN_LEAD_TIME_HOURS} h à l’avance.`,
-      too_far: `Les réservations sont ouvertes jusqu’à ${BOOKING_HORIZON_DAYS} jours à l’avance.`,
+      too_soon: bookingWindowMessages.fr.tooSoon,
+      too_far: bookingWindowMessages.fr.tooFar,
       outside_schedule: "Ce créneau ne fait plus partie des horaires de consultation. Choisissez-en un autre.",
       no_availability: "Aucun horaire de consultation n’est ouvert pour le moment.",
       date_blocked: "Cette date n’est plus disponible. Choisissez un autre jour.",
@@ -132,13 +154,14 @@ export const bookingContent = {
       openingHours: "Availability (Paris time)",
       noBookableDay: `No time slot is available in the next ${BOOKING_HORIZON_DAYS} days.`,
       noSlotsThisDay: "All times on this day are already booked. Please choose another day.",
+      noSlotsLeftThisDay: "No times are available on this day any more. Please choose another day.",
       parisTime: "Paris time",
       localTime: (time: string) => `that is ${time} your time`,
       localTimeShort: (time: string) => `${time} your time`,
       dateHint: "Choose a day, then a free time. Times are in Paris time; your own time is shown below when it differs.",
       windowHint: `Book at least ${BOOKING_MIN_LEAD_TIME_HOURS} hours ahead and up to ${BOOKING_HORIZON_DAYS} days ahead.`,
-      tooSoon: `This time slot can no longer be booked: please book at least ${BOOKING_MIN_LEAD_TIME_HOURS} hours ahead.`,
-      tooFar: `Bookings are open up to ${BOOKING_HORIZON_DAYS} days ahead.`,
+      tooSoon: bookingWindowMessages.en.tooSoon,
+      tooFar: bookingWindowMessages.en.tooFar,
       invalidPhone: "Enter a valid phone number (8 to 15 digits, international prefix accepted, e.g. +33 6 12 34 56 78).",
       details: "Purpose of your request (no medical information)",
       detailsPlaceholder: "E.g. request for advice, practical questions, preparing the consultation",
@@ -156,8 +179,8 @@ export const bookingContent = {
     },
     refusals: {
       slot_taken: "This time slot has just been booked by another patient. Please choose another one.",
-      too_soon: `This time slot can no longer be booked: please book at least ${BOOKING_MIN_LEAD_TIME_HOURS} hours ahead.`,
-      too_far: `Bookings are open up to ${BOOKING_HORIZON_DAYS} days ahead.`,
+      too_soon: bookingWindowMessages.en.tooSoon,
+      too_far: bookingWindowMessages.en.tooFar,
       outside_schedule: "This time slot is no longer part of the consultation hours. Please choose another one.",
       no_availability: "No consultation hours are open at the moment.",
       date_blocked: "This date is no longer available. Please choose another day.",
@@ -215,13 +238,14 @@ export const bookingContent = {
       openingHours: "Verfügbarkeit (Pariser Zeit)",
       noBookableDay: `In den nächsten ${BOOKING_HORIZON_DAYS} Tagen ist kein Termin verfügbar.`,
       noSlotsThisDay: "Alle Uhrzeiten an diesem Tag sind bereits gebucht. Bitte wählen Sie einen anderen Tag.",
+      noSlotsLeftThisDay: "An diesem Tag ist keine Uhrzeit mehr verfügbar. Bitte wählen Sie einen anderen Tag.",
       parisTime: "Pariser Zeit",
       localTime: (time: string) => `also ${time} bei Ihnen`,
       localTimeShort: (time: string) => `${time} bei Ihnen`,
       dateHint: "Wählen Sie einen Tag und dann eine freie Uhrzeit. Die Uhrzeiten sind in Pariser Zeit; Ihre Ortszeit wird darunter angezeigt, wenn sie abweicht.",
       windowHint: `Buchung mindestens ${BOOKING_MIN_LEAD_TIME_HOURS} Stunden im Voraus und bis zu ${BOOKING_HORIZON_DAYS} Tage im Voraus.`,
-      tooSoon: `Dieser Termin kann nicht mehr gebucht werden: Bitte buchen Sie mindestens ${BOOKING_MIN_LEAD_TIME_HOURS} Stunden im Voraus.`,
-      tooFar: `Buchungen sind bis zu ${BOOKING_HORIZON_DAYS} Tage im Voraus möglich.`,
+      tooSoon: bookingWindowMessages.de.tooSoon,
+      tooFar: bookingWindowMessages.de.tooFar,
       invalidPhone: "Geben Sie eine gültige Telefonnummer ein (8 bis 15 Ziffern, internationale Vorwahl möglich, z. B. +49 30 1234567).",
       details: "Anlass Ihrer Anfrage (ohne medizinische Angaben)",
       detailsPlaceholder: "z. B. Bitte um Rat, organisatorische Fragen, Vorbereitung der Beratung",
@@ -239,8 +263,8 @@ export const bookingContent = {
     },
     refusals: {
       slot_taken: "Dieser Termin wurde soeben von einer anderen Person gebucht. Bitte wählen Sie einen anderen.",
-      too_soon: `Dieser Termin kann nicht mehr gebucht werden: Bitte buchen Sie mindestens ${BOOKING_MIN_LEAD_TIME_HOURS} Stunden im Voraus.`,
-      too_far: `Buchungen sind bis zu ${BOOKING_HORIZON_DAYS} Tage im Voraus möglich.`,
+      too_soon: bookingWindowMessages.de.tooSoon,
+      too_far: bookingWindowMessages.de.tooFar,
       outside_schedule: "Dieser Termin liegt nicht mehr innerhalb der Beratungszeiten. Bitte wählen Sie einen anderen.",
       no_availability: "Derzeit sind keine Beratungszeiten freigeschaltet.",
       date_blocked: "Dieses Datum ist nicht mehr verfügbar. Bitte wählen Sie einen anderen Tag.",
@@ -298,13 +322,14 @@ export const bookingContent = {
       openingHours: "可预约时间（巴黎时间）",
       noBookableDay: `未来 ${BOOKING_HORIZON_DAYS} 天内没有可预约的时段。`,
       noSlotsThisDay: "当天所有时间均已被预订，请选择其他日期。",
+      noSlotsLeftThisDay: "当天已没有可预约的时间，请选择其他日期。",
       parisTime: "巴黎时间",
       localTime: (time: string) => `即您当地时间 ${time}`,
       localTimeShort: (time: string) => `当地 ${time}`,
       dateHint: "请先选择日期，再选择空闲时间。时间均为巴黎时间；如与您当地时间不同，将在下方显示当地时间。",
       windowHint: `请至少提前 ${BOOKING_MIN_LEAD_TIME_HOURS} 小时预约，最多可提前 ${BOOKING_HORIZON_DAYS} 天。`,
-      tooSoon: `该时段已无法预约：请至少提前 ${BOOKING_MIN_LEAD_TIME_HOURS} 小时预约。`,
-      tooFar: `最多可提前 ${BOOKING_HORIZON_DAYS} 天预约。`,
+      tooSoon: bookingWindowMessages.zh.tooSoon,
+      tooFar: bookingWindowMessages.zh.tooFar,
       invalidPhone: "请输入有效的电话号码（8 至 15 位数字，可含国际区号，例如 +33 6 12 34 56 78）。",
       details: "咨询事由（请勿填写医疗信息）",
       detailsPlaceholder: "例如：寻求建议、组织安排问题、咨询准备",
@@ -322,8 +347,8 @@ export const bookingContent = {
     },
     refusals: {
       slot_taken: "该时段刚刚被其他患者预订，请选择其他时段。",
-      too_soon: `该时段已无法预约：请至少提前 ${BOOKING_MIN_LEAD_TIME_HOURS} 小时预约。`,
-      too_far: `最多可提前 ${BOOKING_HORIZON_DAYS} 天预约。`,
+      too_soon: bookingWindowMessages.zh.tooSoon,
+      too_far: bookingWindowMessages.zh.tooFar,
       outside_schedule: "该时段已不在咨询时间范围内，请选择其他时段。",
       no_availability: "目前没有开放的咨询时段。",
       date_blocked: "该日期已不可预约，请选择其他日期。",
@@ -642,7 +667,7 @@ export default function BookingPage() {
   const paymentSubmissionRef = useRef(false);
   const draftSlotRef = useRef<string | null>(null);
   const locale = getBookingLocale(language);
-  const parisDateTimeFormat = new Intl.DateTimeFormat(locale, { dateStyle: "full", timeStyle: "short", timeZone: "Europe/Paris" });
+  const parisDateTimeFormat = useMemo(() => new Intl.DateTimeFormat(locale, { dateStyle: "full", timeStyle: "short", timeZone: "Europe/Paris" }), [locale]);
   const localizedDate = selectedDate ? `${parisDateTimeFormat.format(selectedDate)} (${content.form.parisTime})` : null;
   const selectedLocalTime = selectedDate ? formatVisitorTime(selectedDate, locale) : null;
   const pendingLocalTime = pendingBooking ? formatVisitorTime(new Date(pendingBooking.appointmentDate), locale) : null;
@@ -701,7 +726,13 @@ export default function BookingPage() {
   const scheduleLoaded = Boolean(availabilitySlots.data && blockedDates.data);
   const nothingToBook = scheduleLoaded && bookableSlots.length === 0;
   const dayOptions = Array.from(new Set([...bookableSlots.map((slot) => slot.dayKey), ...(dayKey ? [dayKey] : [])])).sort();
-  const daySlots = bookedSlots.data ? removeBookedSlots(bookableSlots.filter((slot) => slot.dayKey === dayKey), bookedSlots.data) : [];
+  // Horaires du jour choisi avant et après les réservations : une grille vide
+  // ne dit « déjà réservés » que si ce sont bien les réservations qui l’ont vidée.
+  const dayOpenSlots = useMemo(() => bookableSlots.filter((slot) => slot.dayKey === dayKey), [bookableSlots, dayKey]);
+  const daySlots = useMemo(
+    () => (bookedSlots.data ? removeBookedSlots(dayOpenSlots, bookedSlots.data) : []).map((option) => ({ ...option, localTime: formatVisitorTime(option.start, locale) })),
+    [dayOpenSlots, bookedSlots.data, locale]
+  );
   const openingHours = summarizeBookingAvailability(configuredSlots, locale);
   // Délai minimal (2 h, passé compris) et horizon (90 jours) : mêmes règles que le serveur.
   const bookingWindowIssue = selectedDate ? getBookingWindowIssue(selectedDate, now) : null;
@@ -747,6 +778,8 @@ export default function BookingPage() {
   const cancelPendingBooking = trpc.appointments.cancelPending.useMutation();
 
   const chooseDay = (nextDayKey: string) => {
+    // Choix du patient : il remplace le créneau du brouillon pas encore repris.
+    draftSlotRef.current = null;
     setDayKey(nextDayKey);
     if (selectedDate && toParisBookingDateKey(selectedDate) !== nextDayKey) setSelectedDate(null);
   };
@@ -788,14 +821,18 @@ export default function BookingPage() {
   const appointmentDate = selectedDate?.toISOString() ?? "";
   useEffect(() => {
     const draft = { name: formData.name, email: formData.email, phone: formData.phone, appointmentDate, details: formData.details };
-    if (Object.values(draft).some(Boolean)) saveBookingDraft(draft);
+    if (!Object.values(draft).some(Boolean)) return;
+    // Agenda pas encore chargé : le créneau du brouillon, en attente de reprise, est gardé.
+    saveBookingDraft({ ...draft, appointmentDate: appointmentDate || draftSlotRef.current || "" });
   }, [formData.name, formData.email, formData.phone, formData.details, appointmentDate]);
 
   const forgetPendingBooking = (notice: string) => {
     clearPendingBooking();
     setPendingBooking(null);
     setPendingNotice(notice);
-    void bookedSlots.refetch();
+    // Jour affiché rechargé pour reproposer le créneau libéré ; sans jour choisi,
+    // pas de requête (un jour vide est refusé par le serveur).
+    if (dateKey) void bookedSlots.refetch();
   };
 
   // Maintien écoulé pendant que la page reste ouverte : le créneau est libéré côté serveur.
@@ -909,6 +946,7 @@ export default function BookingPage() {
   const handleReset = () => {
     paymentSubmissionRef.current = false;
     clearBookingDraft();
+    draftSlotRef.current = null;
     setFormData({ name: "", email: "", phone: "", details: "" });
     setDayKey("");
     setSelectedDate(null);
@@ -1215,28 +1253,25 @@ export default function BookingPage() {
                   {bookedSlots.isLoading ? (
                     <p className="text-sm text-muted-foreground">{bookingFormCopy.checkingAvailability}</p>
                   ) : bookedSlots.isError ? null : daySlots.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">{content.form.noSlotsThisDay}</p>
+                    <p className="text-sm text-muted-foreground">{dayOpenSlots.length > 0 ? content.form.noSlotsThisDay : content.form.noSlotsLeftThisDay}</p>
                   ) : (
                     <div id="booking-slots" className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-                      {daySlots.map((option) => {
-                        const localTime = formatVisitorTime(option.start, locale);
-                        return (
-                          <label key={option.start.toISOString()} className="block cursor-pointer">
-                            <input
-                              type="radio"
-                              name="booking-slot"
-                              value={option.start.toISOString()}
-                              checked={selectedDate?.getTime() === option.start.getTime()}
-                              onChange={() => setSelectedDate(option.start)}
-                              className="peer sr-only"
-                            />
-                            <span className="flex min-h-11 flex-col items-center justify-center rounded-xl border border-border/70 bg-background/40 px-2 py-2 text-sm font-semibold text-foreground transition-colors hover:border-primary/60 peer-checked:border-primary peer-checked:bg-primary peer-checked:text-primary-foreground peer-focus-visible:ring-2 peer-focus-visible:ring-primary peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-background">
-                              <span>{option.time}</span>
-                              {localTime && <span className="text-[11px] font-normal leading-4 opacity-80">{content.form.localTimeShort(localTime)}</span>}
-                            </span>
-                          </label>
-                        );
-                      })}
+                      {daySlots.map((option) => (
+                        <label key={option.start.toISOString()} className="block cursor-pointer">
+                          <input
+                            type="radio"
+                            name="booking-slot"
+                            value={option.start.toISOString()}
+                            checked={selectedDate?.getTime() === option.start.getTime()}
+                            onChange={() => setSelectedDate(option.start)}
+                            className="peer sr-only"
+                          />
+                          <span className="flex min-h-11 flex-col items-center justify-center rounded-xl border border-border/70 bg-background/40 px-2 py-2 text-sm font-semibold text-foreground transition-colors hover:border-primary/60 peer-checked:border-primary peer-checked:bg-primary peer-checked:text-primary-foreground peer-focus-visible:ring-2 peer-focus-visible:ring-primary peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-background">
+                            <span>{option.time}</span>
+                            {option.localTime && <span className="text-[11px] font-normal leading-4 opacity-80">{content.form.localTimeShort(option.localTime)}</span>}
+                          </span>
+                        </label>
+                      ))}
                     </div>
                   )}
                 </fieldset>
