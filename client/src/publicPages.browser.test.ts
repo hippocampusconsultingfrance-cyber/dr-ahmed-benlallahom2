@@ -245,18 +245,27 @@ describe.skipIf(!executablePath)("pages publiques dans un navigateur", () => {
     }
   }, 120_000);
 
-  it("laisse atteindre au clavier la dernière entrée du menu mobile sur un écran peu haut", async () => {
+  it("laisse atteindre au clavier la dernière entrée du menu mobile sur un écran peu haut, bandeau cookies fermé ou ouvert", async () => {
     // L'en-tête étant vraiment fixe (PUB-01), le menu doit défiler lui-même : sous 640 px, thème,
-    // lisibilité renforcée et noir OLED n'existent que dans ce menu.
-    for (const [width, height] of [[390, 664], [360, 640], [844, 390]] as const) {
-      const page = await open("/faq", { width, height });
-      await page.getByRole("button", { name: "Ouvrir le menu" }).click();
-      const lastEntry = page.locator("#mobile-navigation nav > *").last();
-      await lastEntry.focus();
-      const box = await lastEntry.evaluate((element) => element.getBoundingClientRect().toJSON());
-      expect(box.height, `${width}x${height}`).toBeGreaterThan(0);
-      expect(box.bottom, `${width}x${height}`).toBeLessThanOrEqual(height);
-      await page.context().close();
+    // lisibilité renforcée et noir OLED n'existent que dans ce menu. Bandeau ouvert, il s'arrête
+    // au-dessus (EN-03).
+    for (const consent of [true, false]) {
+      for (const [width, height] of [[390, 664], [360, 640], [844, 390]] as const) {
+        const page = await open("/faq", { width, height, consent });
+        await page.getByRole("button", { name: "Ouvrir le menu" }).click();
+        const lastEntry = page.locator("#mobile-navigation nav > *").last();
+        await lastEntry.focus();
+        const reached = await lastEntry.evaluate((element) => {
+          const box = element.getBoundingClientRect();
+          const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+          return { height: box.height, bottom: box.bottom, visible: hit !== null && element.contains(hit) };
+        });
+        const label = `${width}x${height}, bandeau ${consent ? "fermé" : "ouvert"}`;
+        expect(reached.height, label).toBeGreaterThan(0);
+        expect(reached.bottom, label).toBeLessThanOrEqual(height);
+        expect(reached.visible, label).toBe(true);
+        await page.context().close();
+      }
     }
   }, 120_000);
 

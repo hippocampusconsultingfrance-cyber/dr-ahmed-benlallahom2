@@ -1539,6 +1539,17 @@ html[data-cookie-banner-open="true"] body {
   padding-bottom: var(--cookie-banner-height, 0px);
 }
 
+/* Le menu mobile, qui défile lui-même sous la barre (Navigation), s'arrête aussi au-dessus du bandeau. */
+html[data-cookie-banner-open="true"] .mobile-navigation {
+  max-height: max(6rem, calc(100dvh - 4.5rem - var(--cookie-banner-height, 0px)));
+}
+
+@media (min-width: 768px) {
+  html[data-cookie-banner-open="true"] .mobile-navigation {
+    max-height: max(6rem, calc(100dvh - 5rem - var(--cookie-banner-height, 0px)));
+  }
+}
+
 @media (max-width: 767px) {
   .cookie-consent-banner {
     max-height: min(46vh, 22rem);
