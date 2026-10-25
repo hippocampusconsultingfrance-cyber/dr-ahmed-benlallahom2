@@ -71,21 +71,26 @@ let languageColumnsReady: Promise<void> | null = null;
  * existe et n’exécute que la DDL manquante, donc aucune DDL n’est envoyée quand
  * les colonnes sont là (cas normal, ou 0002 appliquée par le propriétaire). Un
  * ajout concurrent par une autre instance compte comme une réussite dès que la
- * colonne existe.
+ * colonne existe. Chaque table manquante est tentée même si une autre échoue
+ * (verrou pris sur cette seule table) : les colonnes ajoutées le restent, et la
+ * première erreur n’est relancée qu’à la fin.
  */
 export function ensureLanguageColumns(db: Executor): Promise<void> {
   languageColumnsReady ??= (async () => {
     const missing = await tablesMissingLanguageColumn(db);
+    const failures: unknown[] = [];
     for (let index = 0; index < LANGUAGE_COLUMN_TABLES.length; index += 1) {
       const table = LANGUAGE_COLUMN_TABLES[index]!;
       if (!missing.has(table)) continue;
       try {
         await db.execute(withLockTimeout(LANGUAGE_COLUMN_DDL[index]!));
       } catch (error) {
-        if (!CONCURRENT_CREATION_CODES.has(postgresErrorCode(error) ?? "")) throw error;
-        if ((await tablesMissingLanguageColumn(db)).has(table)) throw error;
+        const addedConcurrently = CONCURRENT_CREATION_CODES.has(postgresErrorCode(error) ?? "")
+          && !(await tablesMissingLanguageColumn(db)).has(table);
+        if (!addedConcurrently) failures.push(error);
       }
     }
+    if (failures.length > 0) throw failures[0];
   })().catch(error => {
     languageColumnsReady = null;
     throw error;
@@ -98,14 +103,20 @@ export function resetLanguageColumnsMemo() {
   languageColumnsReady = null;
 }
 
-/** Toute requête qui nomme l’une de ces tables peut lire ou écrire « language » (Drizzle sélectionne toutes les colonnes). */
+/**
+ * Une requête ne lit ou n’écrit « language » que si elle nomme l’une de ces
+ * tables et la colonne : Drizzle liste toutes les colonnes d’un select ou d’un
+ * insert complet, et les INSERT bruts du code nomment language. Les créneaux
+ * réservés (appointment_date seule) ou une suppression n’en dépendent pas.
+ */
 const LANGUAGE_TABLE_PATTERN = new RegExp(`\\b(?:${LANGUAGE_COLUMN_TABLES.join("|")})\\b`);
+const LANGUAGE_COLUMN_PATTERN = /\blanguage\b/;
 
 /**
- * Client Neon pour Drizzle : une requête qui nomme appointments,
- * cv_applications ou candidate_accounts attend d’abord `beforeLanguageQuery`
- * (vérification des colonnes) ; toute autre requête part aussitôt. Drizzle
- * envoie une requête par `client.query` et un `db.batch` par
+ * Client Neon pour Drizzle : une requête qui nomme « language » et
+ * appointments, cv_applications ou candidate_accounts attend d’abord
+ * `beforeLanguageQuery` (vérification des colonnes) ; toute autre requête part
+ * aussitôt. Drizzle envoie une requête par `client.query` et un `db.batch` par
  * `client.transaction`, avec les requêtes déjà construites, pas encore
  * envoyées : un NeonQueryPromise ne part qu’à son premier `then`.
  */
@@ -114,7 +125,7 @@ export function waitForLanguageColumns(client: NeonClient, beforeLanguageQuery: 
   const deferred = new WeakMap<object, object>();
   const query = ((text: string, params?: unknown[], options?: Parameters<NeonClient["query"]>[2]) => {
     const pending = client.query(text, params, options);
-    if (!LANGUAGE_TABLE_PATTERN.test(text)) return pending;
+    if (!LANGUAGE_TABLE_PATTERN.test(text) || !LANGUAGE_COLUMN_PATTERN.test(text)) return pending;
     const run = () => beforeLanguageQuery().then(() => pending);
     const waiting = {
       then: (onFulfilled?: (value: unknown) => unknown, onRejected?: (reason: unknown) => unknown) => run().then(onFulfilled, onRejected),

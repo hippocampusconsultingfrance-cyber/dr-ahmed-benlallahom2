@@ -10,22 +10,30 @@ let _db: ReturnType<typeof drizzle> | null = null;
 /** After a failed check of the language columns, queries skip it for this long. */
 export const LANGUAGE_COLUMNS_RETRY_DELAY_MS = 60_000;
 let languageColumnsRetryAt = 0;
-let languageColumnsFailureLogged = false;
+let languageColumnsLoggedFailure: string | null = null;
 
-// Every query on appointments, cv_applications or candidate_accounts reads
-// "language" (EN-01, EN-02): until migration 0002 is applied, the first one of
-// the instance adds the missing columns, and the queries on those tables wait
-// for it, sharing one check (memoised by ensureLanguageColumns). Other queries
-// never wait. After a failure (lock not obtained within 2 s, role not allowed
-// to alter the table) the queries go on without waiting, the failure is logged
-// once per instance and the check runs again after the delay.
+// Queries that read or write "language" on appointments, cv_applications or
+// candidate_accounts (EN-01, EN-02): until migration 0002 is applied, the first
+// one of the instance adds the missing columns, and those queries wait for it,
+// sharing one check (memoised by ensureLanguageColumns). Other queries never
+// wait. After a failure (lock not obtained within 2 s, role not allowed to
+// alter the table) the queries go on without waiting and the check runs again
+// after the delay. A failure is logged when its kind (SQLSTATE) changes, so a
+// retry failing the same way every minute stays silent, and a later success
+// is logged once.
 function languageColumnsReady(ddl: Parameters<typeof ensureLanguageColumns>[0]): Promise<void> {
   if (Date.now() < languageColumnsRetryAt) return Promise.resolve();
-  return ensureLanguageColumns(ddl).catch(error => {
+  return ensureLanguageColumns(ddl).then(() => {
+    if (languageColumnsLoggedFailure === null) return;
+    languageColumnsLoggedFailure = null;
+    console.log("[Database] Language columns check succeeded after a failure");
+  }, error => {
     languageColumnsRetryAt = Date.now() + LANGUAGE_COLUMNS_RETRY_DELAY_MS;
-    if (languageColumnsFailureLogged) return;
-    languageColumnsFailureLogged = true;
-    console.error("[Database] Language columns check failed:", error instanceof Error ? error.name : "UnknownError", postgresErrorCode(error) ?? "");
+    const name = error instanceof Error ? error.name : "UnknownError";
+    const code = postgresErrorCode(error) ?? "";
+    if (languageColumnsLoggedFailure === `${name} ${code}`) return;
+    languageColumnsLoggedFailure = `${name} ${code}`;
+    console.error("[Database] Language columns check failed:", name, code);
   });
 }
 
@@ -49,7 +57,7 @@ export async function getDb() {
 export function resetDbForTests() {
   _db = null;
   languageColumnsRetryAt = 0;
-  languageColumnsFailureLogged = false;
+  languageColumnsLoggedFailure = null;
 }
 
 export async function upsertUser(user: InsertUser): Promise<void> {

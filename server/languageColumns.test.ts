@@ -14,12 +14,13 @@ import { ensureLanguageColumns, LANGUAGE_COLUMN_DDL, LANGUAGE_COLUMN_TABLES, res
 
 // EN-01 / EN-02 — colonne « language » ajoutée à l’exécution tant que la
 // migration 0002 n’est pas appliquée, une seule fois par instance, sans faire
-// attendre les requêtes qui ne touchent pas ces tables.
+// attendre les requêtes qui ne lisent ni n’écrivent cette colonne.
 
 const dialect = new PgDialect();
 const textOf = (query: Parameters<PgDialect["sqlToQuery"]>[0]) => dialect.sqlToQuery(query).sql;
 const alteredTable = (text: string) => /ALTER TABLE "([a-z_]+)"/.exec(text)?.[1];
 const isCheck = (text: string) => text.includes("to_regclass");
+const namesLanguage = (text: string) => /\blanguage\b/.test(text);
 
 /** Database double: `missing` lists the tables still without the column; ALTER adds it. */
 function fakeDatabase(options: { missing: string[]; alterFailures?: Record<string, unknown> }) {
@@ -58,8 +59,9 @@ function deferred(): Deferred {
 /**
  * Neon HTTP double behind the real Drizzle driver. Like a NeonQueryPromise, a
  * query is sent (recorded in `sent`) only when awaited; `transaction` receives
- * the queries built by `db.batch`. A query on a table without the column fails
- * as PostgreSQL would (42703); `alter` can hold or fail the ALTER of a table.
+ * the queries built by `db.batch`. A query naming the column of a table
+ * without it fails as PostgreSQL would (42703); `alter` can hold or fail the
+ * ALTER of a table.
  */
 function neonDatabase(options: { missing?: string[]; alter?: (table: string) => Promise<void> } = {}) {
   const missing = new Set(options.missing ?? []);
@@ -73,7 +75,7 @@ function neonDatabase(options: { missing?: string[]; alter?: (table: string) => 
       return { rows: [] };
     }
     const table = LANGUAGE_COLUMN_TABLES.find(name => new RegExp(`\\b${name}\\b`).test(text));
-    if (table && missing.has(table)) throw Object.assign(new Error(`column "language" of relation "${table}" does not exist`), { code: "42703" });
+    if (table && missing.has(table) && namesLanguage(text)) throw Object.assign(new Error(`column "language" of relation "${table}" does not exist`), { code: "42703" });
     return { rows: [] };
   };
   const send = (text: string) => {
@@ -91,6 +93,7 @@ function neonDatabase(options: { missing?: string[]; alter?: (table: string) => 
 }
 
 const lockTimeout = Object.assign(new Error("canceling statement due to lock timeout"), { code: "55P03" });
+const notOwner = Object.assign(new Error("must be owner of table appointments"), { code: "42501" });
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -144,7 +147,7 @@ describe("colonnes de langue créées à l’exécution", () => {
     const concurrent = { error: Object.assign(new Error("Failed query"), { cause: { code: "42701" } }), addsColumn: true };
     await expect(ensureLanguageColumns(fakeDatabase({ missing: ["candidate_accounts"], alterFailures: { candidate_accounts: concurrent } }).db)).resolves.toBeUndefined();
 
-    for (const error of [Object.assign(new Error("must be owner of table appointments"), { code: "42501" }), lockTimeout]) {
+    for (const error of [notOwner, lockTimeout]) {
       resetLanguageColumnsMemo();
       const failing = fakeDatabase({ missing: ["appointments"], alterFailures: { appointments: { error } } });
       await expect(ensureLanguageColumns(failing.db)).rejects.toBe(error);
@@ -152,6 +155,14 @@ describe("colonnes de langue créées à l’exécution", () => {
       await expect(ensureLanguageColumns(failing.db)).rejects.toBe(error);
       expect(failing.executed.filter(isCheck)).toHaveLength(2);
     }
+  });
+
+  it("ajoute les colonnes des autres tables quand le verrou d’une seule est pris, puis relance la première erreur", async () => {
+    const alterFailures = { appointments: { error: lockTimeout }, candidate_accounts: { error: notOwner } };
+    const { db, executed, missing } = fakeDatabase({ missing: [...LANGUAGE_COLUMN_TABLES], alterFailures });
+    await expect(ensureLanguageColumns(db)).rejects.toBe(lockTimeout);
+    expect(executed.map(alteredTable).filter(Boolean)).toEqual(["appointments", "candidate_accounts", "cv_applications"]);
+    expect([...missing]).toEqual(["appointments", "candidate_accounts"]);
   });
 });
 
@@ -161,6 +172,9 @@ describe("getDb() : seules les requêtes sur ces tables attendent les colonnes",
     const db = (await getDb())!;
     await db.select().from(availabilitySlots);
     await db.execute(sql`select 1`);
+    // Booked slots (availability.getBookedSlots) read appointment_date only.
+    await db.select({ appointmentDate: appointments.appointmentDate }).from(appointments);
+    await db.delete(cvApplications).where(eq(cvApplications.id, 1));
     expect(sent.filter(isCheck)).toHaveLength(0);
 
     await db.select().from(appointments);
@@ -168,7 +182,7 @@ describe("getDb() : seules les requêtes sur ces tables attendent les colonnes",
     await db.update(cvApplications).set({ language: "en" }).where(eq(cvApplications.id, 1));
     expect(sent.filter(isCheck)).toHaveLength(1);
     expect(sent.filter(text => alteredTable(text))).toEqual([]);
-    expect(sent.filter(text => text.includes('"appointments"'))).toHaveLength(1);
+    expect(sent.filter(text => text.includes('"appointments"'))).toHaveLength(2);
   });
 
   it("colonnes absentes : un seul ALTER par table pour des requêtes simultanées, envoyées après lui", async () => {
@@ -196,6 +210,7 @@ describe("getDb() : seules les requêtes sur ces tables attendent les colonnes",
   it("verrou indisponible : pas de blocage global, les requêtes sur ces tables repartent après l’échec, journalisé une fois", async () => {
     vi.useFakeTimers({ now: new Date("2026-10-25T10:00:00Z"), toFake: ["Date"] });
     const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
     const lockWait = deferred();
     let lock: "held" | "timeout" | "free" = "held";
     const alter = () => (lock === "held" ? lockWait.promise : lock === "timeout" ? Promise.reject(lockTimeout) : Promise.resolve());
@@ -238,6 +253,62 @@ describe("getDb() : seules les requêtes sur ces tables attendent les colonnes",
     expect(sent.filter(isCheck)).toHaveLength(3);
     expect(sent.filter(text => alteredTable(text))).toHaveLength(3);
     expect(error).toHaveBeenCalledTimes(1);
+    expect(log).toHaveBeenCalledExactlyOnceWith("[Database] Language columns check succeeded after a failure");
+  });
+
+  it("verrou pris sur appointments seulement : la candidature et le compte candidat fonctionnent, la grille des créneaux aussi", async () => {
+    vi.useFakeTimers({ now: new Date("2026-10-25T10:00:00Z"), toFake: ["Date"] });
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    vi.spyOn(console, "log").mockImplementation(() => undefined);
+    let appointmentsLock: "held" | "free" = "held";
+    const alter = (table: string) => (table === "appointments" && appointmentsLock === "held" ? Promise.reject(lockTimeout) : Promise.resolve());
+    const { sent, missing } = neonDatabase({ missing: [...LANGUAGE_COLUMN_TABLES], alter });
+    const db = (await getDb())!;
+
+    // A long query holds appointments while a candidate applies: the ALTER of
+    // appointments gives up (55P03), the other two tables still get the column.
+    await expect(db.execute(sql`INSERT INTO cv_applications (tracking_id, language) VALUES (${"CV1"}, ${"en"})`)).resolves.toEqual({ rows: [] });
+    await expect(db.select().from(candidateAccounts).where(eq(candidateAccounts.id, 1))).resolves.toEqual([]);
+    expect(sent.map(alteredTable).filter(Boolean)).toEqual(["appointments", "candidate_accounts", "cv_applications"]);
+    expect([...missing]).toEqual(["appointments"]);
+
+    // Until the next attempt, bookings fail at once; the slot grid does not need the column.
+    await expect(db.select().from(appointments)).rejects.toThrow();
+    await expect(db.select({ appointmentDate: appointments.appointmentDate }).from(appointments)).resolves.toEqual([]);
+
+    // The next attempt alters appointments only.
+    appointmentsLock = "free";
+    vi.setSystemTime(Date.now() + LANGUAGE_COLUMNS_RETRY_DELAY_MS);
+    await expect(db.select().from(appointments)).resolves.toEqual([]);
+    expect(sent.map(alteredTable).filter(Boolean)).toEqual(["appointments", "candidate_accounts", "cv_applications", "appointments"]);
+    expect(missing.size).toBe(0);
+  });
+
+  it("journalise chaque nouveau type d’échec, pas sa répétition, puis le retour à la normale", async () => {
+    vi.useFakeTimers({ now: new Date("2026-10-25T10:00:00Z"), toFake: ["Date"] });
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const network = new TypeError("fetch failed");
+    const failures: unknown[] = [network, notOwner, notOwner];
+    neonDatabase({ missing: ["appointments"], alter: () => (failures.length > 0 ? Promise.reject(failures.shift()) : Promise.resolve()) });
+    const db = (await getDb())!;
+
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      await expect(db.select().from(appointments)).rejects.toThrow();
+      vi.setSystemTime(Date.now() + LANGUAGE_COLUMNS_RETRY_DELAY_MS);
+    }
+    // The owner sees the 42501 (role not owner) even though a network error came
+    // first (Drizzle wraps both in an Error; only the SQLSTATE tells them apart).
+    expect(error.mock.calls).toEqual([
+      ["[Database] Language columns check failed:", "Error", ""],
+      ["[Database] Language columns check failed:", "Error", "42501"],
+    ]);
+    expect(log).not.toHaveBeenCalled();
+
+    await expect(db.select().from(appointments)).resolves.toEqual([]);
+    await expect(db.select().from(appointments)).resolves.toEqual([]);
+    expect(log).toHaveBeenCalledExactlyOnceWith("[Database] Language columns check succeeded after a failure");
+    expect(error).toHaveBeenCalledTimes(2);
   });
 
   it("ne fait rien sans base configurée", async () => {
