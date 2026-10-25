@@ -61,6 +61,7 @@ export const vvipOffshoreCopy = {
     p2Desc: "Golfe Persique, Moyen-Orient, plateformes en mer du Nord, Afrique de l’Ouest et chantiers isolés.",
     p3Title: "Standards Internationaux",
     p3Desc: "Accompagnement sur les normes médicales rigoureuses (OGP, Oil & Gas UK, AHA).",
+    section2Kicker: "Expertise & Domaines",
     section2Title: "Domaines d’intervention et expertises critiques",
     section2Sub: "Une couverture médicale sur mesure pour les situations où l’infrastructure hospitalière classique n’est pas immédiatement accessible.",
     card1Title: "Délégations VVIP & missions institutionnelles",
@@ -128,6 +129,7 @@ export const vvipOffshoreCopy = {
     p2Desc: "Persian Gulf, Middle East, North Sea platforms, West Africa, and remote industrial sites.",
     p3Title: "International Standards",
     p3Desc: "Compliance with rigorous medical standards (OGP, Oil & Gas UK, AHA).",
+    section2Kicker: "Expertise & Fields",
     section2Title: "Mission Scopes & Critical Expertise",
     section2Sub: "Tailored medical coverage for situations where standard hospital infrastructure is not immediately accessible.",
     card1Title: "VVIP Delegations & Institutional Missions",
@@ -195,6 +197,7 @@ export const vvipOffshoreCopy = {
     p2Desc: "Persischer Golf, Naher Osten, Nordsee-Plattformen und Westafrika.",
     p3Title: "Internationale Standards",
     p3Desc: "Einhaltung strenger Medizinstandards (OGP, Oil & Gas UK, AHA).",
+    section2Kicker: "Expertise & Fachgebiete",
     section2Title: "Einsatzbereiche & Kritische Expertise",
     section2Sub: "Maßgeschneiderte medizinische Versorgung für Situationen, in denen keine reguläre Krankenhausinfrastruktur verfügbar ist.",
     card1Title: "VVIP-Delegationen & institutionelle Einsätze",
@@ -262,6 +265,7 @@ export const vvipOffshoreCopy = {
     p2Desc: "波斯湾、中东、北海钻井平台及西非远洋项目。",
     p3Title: "严苛国际标准",
     p3Desc: "全面契合 OGP、Oil & Gas UK 及 AHA 医疗准则。",
+    section2Kicker: "专长与领域",
     section2Title: "任务领域与关键专长",
     section2Sub: "在常规医院基础设施无法立即触及的环境中，提供量身定制的医疗保障。",
     card1Title: "VVIP 官方代表团与机构任务",
@@ -735,7 +739,7 @@ export default function VvipOffshorePage() {
         {/* Detailed Expertise Section */}
         <section className="container max-w-6xl mt-24">
           <div className="text-center max-w-2xl mx-auto">
-            <p className="section-kicker">Expertise & Domaines</p>
+            <p className="section-kicker">{t.section2Kicker}</p>
             <h2 className="mt-3 font-display text-3xl md:text-4xl text-foreground">{t.section2Title}</h2>
             <p className="mt-4 text-muted-foreground">{t.section2Sub}</p>
           </div>
