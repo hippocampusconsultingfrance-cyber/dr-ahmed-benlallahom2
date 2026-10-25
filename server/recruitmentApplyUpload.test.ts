@@ -63,13 +63,13 @@ describe("POST /api/recruitment/apply — réception du CV (multer) et validatio
 
   it("refuse un CV de plus de 4 Mo avec le message dédié, sans rien enregistrer", async () => {
     const result = await apply({ cvs: [{ buffer: validPdfBuffer(RECRUITMENT_CV_MAX_BYTES + 1) }] });
-    expect(result).toEqual({ status: 400, body: { error: "Le CV ne doit pas dépasser 4 Mo. Compressez-le ou enregistrez-le en PDF, puis réessayez." } });
+    expect(result).toEqual({ status: 400, body: { error: "Le CV ne doit pas dépasser 4 Mo. Compressez-le ou enregistrez-le en PDF, puis réessayez.", code: "recruitment_cv_too_large" } });
     expect(state.databaseRequests).toBe(0);
   });
 
   it("refuse un fichier qui n'est ni un PDF ni un DOCX", async () => {
     const result = await apply({ cvs: [{ buffer: Buffer.from("Curriculum vitae"), name: "cv.txt", type: "text/plain" }] });
-    expect(result).toEqual({ status: 400, body: { error: RECRUITMENT_CV_FORMAT_MESSAGE } });
+    expect(result).toEqual({ status: 400, body: { error: RECRUITMENT_CV_FORMAT_MESSAGE, code: "recruitment_cv_format_refused" } });
     expect(state.databaseRequests).toBe(0);
   });
 
@@ -82,13 +82,13 @@ describe("POST /api/recruitment/apply — réception du CV (multer) et validatio
 
   it("exige le CV", async () => {
     const result = await apply({ cvs: [] });
-    expect(result).toEqual({ status: 400, body: { error: "Le CV est requis." } });
+    expect(result).toEqual({ status: 400, body: { error: "Le CV est requis.", code: "recruitment_cv_required" } });
   });
 
   it("signale le nombre maximal de pays ciblés et refuse les autres champs invalides", async () => {
     const tooManyCountries = Array.from({ length: 19 }, (_, index) => `Pays ${index + 1}`);
     const countries = await apply({ cvs: [{ buffer: validPdfBuffer() }], fields: { targetCountries: JSON.stringify(tooManyCountries) } });
-    expect(countries).toMatchObject({ status: 400, body: { error: "Vous pouvez sélectionner jusqu’à 18 pays ciblés." } });
+    expect(countries).toEqual({ status: 400, body: { error: "Vous pouvez sélectionner jusqu’à 18 pays ciblés.", code: "recruitment_target_countries_too_many" } });
 
     for (const fields of [{ email: "pas-une-adresse" }, { gdprConsent: "0" }, { targetCountries: "[]" }]) {
       const invalid = await apply({ cvs: [{ buffer: validPdfBuffer() }], fields });

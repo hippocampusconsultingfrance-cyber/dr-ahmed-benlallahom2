@@ -417,10 +417,13 @@ export async function createApp() {
   app.post("/api/recruitment/apply", (req, res, next) => {
     recruitmentUpload.single("cv")(req, res, async uploadError => {
       if (uploadError) {
-        const message = uploadError instanceof multer.MulterError && uploadError.code === "LIMIT_FILE_SIZE"
+        const tooLarge = uploadError instanceof multer.MulterError && uploadError.code === "LIMIT_FILE_SIZE";
+        const message = tooLarge
           ? "Le CV ne doit pas dépasser 4 Mo. Compressez-le ou enregistrez-le en PDF, puis réessayez."
           : uploadError.message || "Le fichier CV n’a pas pu être reçu.";
-        res.status(400).json({ error: message });
+        // The forms translate these two refusals by their code; any other upload error stays generic there.
+        const code = tooLarge ? "recruitment_cv_too_large" : uploadError.message === RECRUITMENT_CV_FORMAT_MESSAGE ? "recruitment_cv_format_refused" : undefined;
+        res.status(400).json({ error: message, ...(code ? { code } : {}) });
         return;
       }
 
@@ -431,7 +434,7 @@ export async function createApp() {
       try {
         const file = req.file;
         if (!file) {
-          res.status(400).json({ error: "Le CV est requis." });
+          res.status(400).json({ error: "Le CV est requis.", code: "recruitment_cv_required" });
           return;
         }
 
