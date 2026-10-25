@@ -209,7 +209,43 @@ describe("revendication atomique des envois post-paiement", () => {
       paymentDate: new Date("2026-10-12T07:59:00Z"),
       trackingId: "APT-42",
     }));
-    expect(notifications.sendInvoiceEmail).toHaveBeenCalledWith("patient@example.com", "Patient Test", "APT-42", 100, expect.any(Buffer), "FAC-2026-000003", { idempotencyKey: "appointment-invoice-FAC-2026-000003" });
+    expect(notifications.sendInvoiceEmail).toHaveBeenCalledWith("patient@example.com", "Patient Test", "APT-42", 100, expect.any(Buffer), "FAC-2026-000003", { idempotencyKey: "appointment-invoice-FAC-2026-000003", language: "fr" });
+  });
+
+  it("écrit les emails d’une réservation faite en allemand en anglais, la facture PDF restant en français (EN-01)", async () => {
+    const createdAt = new Date("2026-10-12T07:59:00Z");
+    const confirmationJob = { ...queuedJob, createdAt };
+    fakeDatabase({
+      jobs: [[confirmationJob], [{ ...confirmationJob, status: "running", attempts: 1 }]],
+      appointments: [[paidAppointment({ language: "de" })]],
+      updateRowCounts: [1],
+    });
+    await processDueAppointmentFulfillmentJobs();
+    // The .ics stamp is the job's creation time: a retried email stays identical (RES-05).
+    expect(notifications.sendConfirmationEmail).toHaveBeenCalledWith("patient@example.com", "Patient Test", "APT-42", expect.any(Date), 100, undefined, {
+      idempotencyKey: "appointment-confirmation-APT-42",
+      language: "en",
+      confirmedAt: createdAt,
+    });
+
+    const invoiceJob = { ...queuedJob, id: 8, jobType: "invoice", createdAt };
+    fakeDatabase({
+      jobs: [[invoiceJob], [{ ...invoiceJob, status: "running", attempts: 1 }]],
+      appointments: [[paidAppointment({ language: "de" })]],
+      updateRowCounts: [1],
+    });
+    await processDueAppointmentFulfillmentJobs();
+    expect(notifications.sendInvoiceEmail).toHaveBeenCalledWith(expect.anything(), expect.anything(), "APT-42", 100, expect.any(Buffer), "FAC-2026-000003", expect.objectContaining({ language: "en" }));
+
+    const ownerJob = { ...queuedJob, id: 9, jobType: "owner", createdAt };
+    fakeDatabase({
+      jobs: [[ownerJob], [{ ...ownerJob, status: "running", attempts: 1 }]],
+      appointments: [[paidAppointment({ language: "de" })]],
+      updateRowCounts: [1],
+    });
+    await processDueAppointmentFulfillmentJobs();
+    // The owner sees the language of the booking page itself.
+    expect(notifications.sendOwnerNotificationEmail).toHaveBeenCalledWith("Patient Test", "patient@example.com", "+33600000000", "APT-42", expect.any(Date), 100, { idempotencyKey: "appointment-owner-APT-42", language: "de" });
   });
 
   it("remet en file un job interrompu (instance gelée après la réponse à Stripe)", async () => {

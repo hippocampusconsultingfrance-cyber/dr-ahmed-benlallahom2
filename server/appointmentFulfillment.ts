@@ -9,6 +9,7 @@ import {
   sendOwnerNotificationEmail,
 } from "./_core/notifications";
 import { notifyOwner } from "./_core/notification";
+import { emailLanguageFor } from "./emailLanguage";
 import { generateInvoicePDF } from "./invoice";
 import { allocateAppointmentInvoice } from "./invoiceNumbering";
 
@@ -79,7 +80,7 @@ async function ensureOwnerNotification(db: Database, appointment: Appointment, f
       scheduledFor: new Date(),
     }).onConflictDoNothing({ target: [appointmentFulfillmentJobs.appointmentId, appointmentFulfillmentJobs.jobType] });
   } catch {
-    await sendOwnerNotificationEmail(appointment.customerName, appointment.customerEmail, appointment.customerPhone, appointment.trackingId, appointment.appointmentDate, finalPrice, { idempotencyKey: ownerNotificationKey(appointment) })
+    await sendOwnerNotificationEmail(appointment.customerName, appointment.customerEmail, appointment.customerPhone, appointment.trackingId, appointment.appointmentDate, finalPrice, { idempotencyKey: ownerNotificationKey(appointment), language: appointment.language })
       .catch(() => console.error("[AppointmentFulfillment] Inline owner notification failed"));
   }
 }
@@ -144,12 +145,16 @@ async function runJob(id: number) {
     }
     return { skipped: true };
   }
+  // Patient emails in French for a booking made in French, in English otherwise (EN-01).
+  const language = emailLanguageFor(appointment.language);
   try {
     if (jobType === "owner") {
-      await sendOwnerNotificationEmail(appointment.customerName, appointment.customerEmail, appointment.customerPhone, appointment.trackingId, appointment.appointmentDate, finalPrice, { idempotencyKey: ownerNotificationKey(appointment) });
+      await sendOwnerNotificationEmail(appointment.customerName, appointment.customerEmail, appointment.customerPhone, appointment.trackingId, appointment.appointmentDate, finalPrice, { idempotencyKey: ownerNotificationKey(appointment), language: appointment.language });
     } else if (jobType === "confirmation") {
       await ensureOwnerNotification(db, appointment, finalPrice);
-      await sendConfirmationEmail(appointment.customerEmail, appointment.customerName, appointment.trackingId, appointment.appointmentDate, finalPrice, undefined, { idempotencyKey: `appointment-confirmation-${appointment.trackingId}` });
+      // The job is created at the payment confirmation: its creation time stamps
+      // the attached .ics, identical on every retry (RES-05).
+      await sendConfirmationEmail(appointment.customerEmail, appointment.customerName, appointment.trackingId, appointment.appointmentDate, finalPrice, undefined, { idempotencyKey: `appointment-confirmation-${appointment.trackingId}`, language, confirmedAt: job.createdAt ?? appointment.appointmentDate });
       const smsSent = await sendCustomerConfirmationSMS(appointment.customerPhone, appointment.trackingId, appointment.appointmentDate);
       await db.update(appointments).set({ emailSent: 1, smsSent: smsSent ? 1 : 0 }).where(eq(appointments.id, appointment.id));
     } else {
@@ -173,7 +178,8 @@ async function runJob(id: number) {
         finalPrice,
         isNightRate: appointment.isNightRate === 1,
       });
-      await sendInvoiceEmail(appointment.customerEmail, appointment.customerName, appointment.trackingId, finalPrice, invoice.buffer, invoiceRecord.invoiceNumber, { idempotencyKey: `appointment-invoice-${invoiceRecord.invoiceNumber}` });
+      // The PDF stays in French whatever the language of the email (EN-01).
+      await sendInvoiceEmail(appointment.customerEmail, appointment.customerName, appointment.trackingId, finalPrice, invoice.buffer, invoiceRecord.invoiceNumber, { idempotencyKey: `appointment-invoice-${invoiceRecord.invoiceNumber}`, language });
     }
     await db.update(appointmentFulfillmentJobs).set({ status: "completed", finishedAt: new Date(), lastError: null }).where(eq(appointmentFulfillmentJobs.id, id));
     return { completed: true };

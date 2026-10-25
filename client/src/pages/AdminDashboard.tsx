@@ -400,6 +400,8 @@ function AppointmentsTab() {
                   <span>{apt.customerPhone}</span>
                   <span>{new Date(apt.appointmentDate).toLocaleString("fr-FR", { timeZone: "Europe/Paris" })}</span>
                   <span className="font-semibold text-foreground">{apt.finalPrice}€</span>
+                  {/* Langue de la page de réservation : emails patients en anglais sauf pour FR (EN-01). */}
+                  <span title="Langue de la réservation et des emails au patient">Langue : {(apt.language || "fr").toUpperCase()}</span>
                 </div>
               </div>
               <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:flex-nowrap">

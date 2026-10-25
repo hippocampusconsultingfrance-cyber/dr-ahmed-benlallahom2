@@ -2,6 +2,7 @@ import { and, eq, gte, isNull, lt, lte, or, sql } from "drizzle-orm";
 import { appointments, candidateSecurityRateLimits, securityEvents } from "../drizzle/schema";
 import { getDb } from "./db";
 import { mutationRowCount } from "./dbMutation";
+import { emailLanguageFor } from "./emailLanguage";
 import { notifyOwner } from "./_core/notification";
 
 const HOUR_MS = 60 * 60 * 1000;
@@ -54,7 +55,7 @@ export async function sendDueAppointmentReminders(window: ReminderWindow, now = 
       .where(and(eq(appointments.id, apt.id), eq(appointments.reminderSent, 0)));
     if (mutationRowCount(claim) !== 1) continue;
     try {
-      await sendReminderEmail(apt.customerEmail, apt.customerName, apt.trackingId, apt.appointmentDate);
+      await sendReminderEmail(apt.customerEmail, apt.customerName, apt.trackingId, apt.appointmentDate, { language: emailLanguageFor(apt.language) });
       sent += 1;
       console.log("[Reminder] Sent successfully");
     } catch (e) {
