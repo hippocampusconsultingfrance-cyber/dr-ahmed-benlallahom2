@@ -65,6 +65,7 @@ describe("noms internationaux sur la facture PDF", () => {
     "Zoë Ørsted-Łukasz N'Diaye",
     "Ioana Știrbu",
     "Иван Петров",
+    "Marcel·la Col·lell",
   ])("imprime « %s » lisiblement", async name => {
     expect(await printedName(name)).toBe(name);
   });
@@ -75,7 +76,14 @@ describe("noms internationaux sur la facture PDF", () => {
     expect(await printedName(decomposed)).toBe("Zoë Hélène Garçon");
   });
 
-  it.each(["王小明", "田中 ひろし"])("imprime le nom chinois ou japonais « %s » avec Noto Sans SC", async name => {
+  it.each([
+    "王小明",
+    "田中 ひろし",
+    // Ponctuation pleine chasse des claviers chinois, que Noto Sans n’a pas.
+    "王小明（Wang Xiaoming）",
+    "迈克尔·乔丹",
+    "マイケル・ジョーダン",
+  ])("imprime le nom chinois ou japonais « %s » avec Noto Sans SC", async name => {
     const pdf = await invoicePdf(name);
     expect(embeddedFonts(pdf)).toContain("NotoSansSC-Regular");
     expect(await printedName(name)).toBe(name);
@@ -83,6 +91,9 @@ describe("noms internationaux sur la facture PDF", () => {
 
   // pdf.js liste les mots de gauche à droite : un nom arabe s’affiche de droite
   // à gauche, son premier mot (محمد) se retrouve donc à droite, en dernier.
+  // Limite connue (server/fonts/README.md) : un nom avec la ligature lam-alef
+  // (سلامة, علاء, الأمين) s’imprime correctement mais se copie avec les deux
+  // lettres de la ligature inversées ; ces exemples n’en ont pas.
   it.each([
     ["محمد العتيبي", "العتيبي محمد"],
     ["Mohammed محمد العتيبي", "Mohammed العتيبي محمد"],
@@ -105,8 +116,20 @@ describe("noms internationaux sur la facture PDF", () => {
     }
   });
 
-  it("garde Noto Sans pour tout le document et ne charge les polices arabe et chinoise qu’au besoin", async () => {
-    expect(embeddedFonts(await invoicePdf("Łukasz Kowalski"))).toEqual(["NotoSans-Bold", "NotoSans-Regular"]);
+  it("imprime la ligature lam-alef d’un nom arabe avec Noto Sans Arabic", async () => {
+    const pdf = await invoicePdf("سلامة عبد الله");
+    expect(embeddedFonts(pdf)).toContain("NotoSansArabic-Regular");
+    expect(invoiceNameRuns("سلامة عبد الله")).toEqual([
+      { text: "الله", font: "arabic" },
+      { text: " ", font: "regular" },
+      { text: "عبد", font: "arabic" },
+      { text: " ", font: "regular" },
+      { text: "سلامة", font: "arabic" },
+    ]);
+  });
+
+  it.each(["Łukasz Kowalski", "Marcel·la Col·lell"])("garde Noto Sans pour tout le document et ne charge les polices arabe et chinoise qu’au besoin (« %s »)", async name => {
+    expect(embeddedFonts(await invoicePdf(name))).toEqual(["NotoSans-Bold", "NotoSans-Regular"]);
   });
 });
 
@@ -141,5 +164,23 @@ describe("ordre d’affichage de la ligne du nom", () => {
 
   it("écrit un nom japonais en un seul segment, espace idéographique comprise", () => {
     expect(invoiceNameRuns("田中　太郎")).toEqual([{ text: "田中　太郎", font: "han" }]);
+    expect(invoiceNameRuns("マイケル・ジョーダン")).toEqual([{ text: "マイケル・ジョーダン", font: "han" }]);
+  });
+
+  it("laisse le point médian catalan dans la police principale", () => {
+    expect(invoiceNameRuns("Marcel·la Col·lell")).toEqual([{ text: "Marcel·la Col·lell", font: "regular" }]);
+    expect(invoiceNameRuns("Wang·王")).toEqual([
+      { text: "Wang·", font: "regular" },
+      { text: "王", font: "han" },
+    ]);
+  });
+
+  it("met le point médian entre deux idéogrammes et la ponctuation pleine chasse dans la police chinoise", () => {
+    expect(invoiceNameRuns("迈克尔·乔丹")).toEqual([{ text: "迈克尔·乔丹", font: "han" }]);
+    expect(invoiceNameRuns("王小明（Wang Xiaoming）")).toEqual([
+      { text: "王小明（", font: "han" },
+      { text: "Wang Xiaoming", font: "regular" },
+      { text: "）", font: "han" },
+    ]);
   });
 });

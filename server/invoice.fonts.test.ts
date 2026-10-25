@@ -10,7 +10,8 @@ vi.mock("node:fs", async importOriginal => {
   return { ...actual, default: { ...actual, readFileSync }, readFileSync };
 });
 
-import { globSync, statSync } from "node:fs";
+import { copyFileSync, globSync, mkdirSync, mkdtempSync, rmSync, statSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { resolveInvoiceSeller } from "./invoiceSeller";
 import type { InvoiceData } from "./invoice";
 
@@ -55,11 +56,17 @@ function fontFilesRead(): string[] {
   return readFileSync.mock.calls.map(([file]) => path.basename(String(file))).filter(file => /\.(ttf|otf)$/.test(file));
 }
 
-function failReading(fileNames: string[], failure: () => unknown) {
+function failReading(fails: (file: string) => boolean, failure: () => unknown) {
   readFileSync.mockImplementation((file: unknown, ...rest: unknown[]) => {
-    if (fileNames.includes(path.basename(String(file)))) return failure();
+    if (fails(String(file))) return failure();
     return (originalReadFileSync as (...args: unknown[]) => unknown)(file, ...rest);
   });
+}
+
+const named = (fileNames: string[]) => (file: string) => fileNames.includes(path.basename(file));
+
+function missingFile(): never {
+  throw Object.assign(new Error("ENOENT: no such file or directory"), { code: "ENOENT" });
 }
 
 describe("polices de la facture PDF", () => {
@@ -77,6 +84,10 @@ describe("polices de la facture PDF", () => {
     await generate("Łukasz Kowalski");
     expect(fontFilesRead().sort()).toEqual(["NotoSans-Bold.ttf", "NotoSans-Regular.ttf"]);
 
+    // Le point médian catalan est aussi un signe chinois (Script_Extensions=Han).
+    await generate("Marcel·la Col·lell");
+    expect(fontFilesRead().sort()).toEqual(["NotoSans-Bold.ttf", "NotoSans-Regular.ttf"]);
+
     await generate("王小明");
     expect(fontFilesRead()).toContain("NotoSansSC-Regular.otf");
     expect(fontFilesRead()).not.toContain("NotoSansArabic-Regular.ttf");
@@ -87,9 +98,7 @@ describe("polices de la facture PDF", () => {
 
   it("revient à Helvetica sans faire échouer la facture si Noto Sans manque", async () => {
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
-    failReading(["NotoSans-Regular.ttf", "NotoSans-Bold.ttf"], () => {
-      throw Object.assign(new Error("ENOENT: no such file or directory"), { code: "ENOENT" });
-    });
+    failReading(named(["NotoSans-Regular.ttf", "NotoSans-Bold.ttf"]), missingFile);
 
     const pdf = await generate("Zoë Ørsted");
     const text = await pdfText(pdf);
@@ -103,7 +112,7 @@ describe("polices de la facture PDF", () => {
 
   it("garde la facture si la police chinoise est illisible", async () => {
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
-    failReading(["NotoSansSC-Regular.otf"], () => Buffer.from("not a font"));
+    failReading(named(["NotoSansSC-Regular.otf"]), () => Buffer.from("not a font"));
 
     const pdf = await generate("王小明");
     const text = await pdfText(pdf);
@@ -112,6 +121,33 @@ describe("polices de la facture PDF", () => {
     expect(text).toContain("FAC-2026-000009");
     expect(text).toContain("patient@example.test");
     expect(error).toHaveBeenCalledWith("Invoice font unreadable:", "NotoSansSC-Regular.otf", expect.any(String));
+  });
+
+  it("trouve les polices sous le répertoire courant, comme api/index.js sur Vercel", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    // La fonction Vercel : le bundle n’a pas server/fonts à côté de lui, seul le
+    // répertoire courant (racine de la fonction, includeFiles) l’a.
+    const functionRoot = mkdtempSync(path.join(tmpdir(), "invoice-function-"));
+    try {
+      mkdirSync(path.join(functionRoot, "server", "fonts"), { recursive: true });
+      for (const file of ["NotoSans-Regular.ttf", "NotoSans-Bold.ttf"]) {
+        copyFileSync(path.join(root, "server", "fonts", file), path.join(functionRoot, "server", "fonts", file));
+      }
+      const sourceFonts = path.join(root, "server", "fonts") + path.sep;
+      failReading(file => file.startsWith(sourceFonts), missingFile);
+      const { generateInvoicePDF } = await import("./invoice");
+      vi.spyOn(process, "cwd").mockReturnValue(functionRoot);
+
+      const pdf = (await generateInvoicePDF(invoiceFor("Zoë Ørsted"), resolveInvoiceSeller({}))).buffer;
+
+      expect(readFileSync.mock.calls.map(([file]) => String(file))).toContain(path.join(functionRoot, "server", "fonts", "NotoSans-Regular.ttf"));
+      expect(pdf.toString("latin1")).toMatch(/\/BaseFont \/[A-Z]{6}\+NotoSans-Regular/);
+      expect(pdf.toString("latin1")).toMatch(/\/BaseFont \/[A-Z]{6}\+NotoSans-Bold/);
+      expect(pdf.toString("latin1")).not.toContain("Helvetica");
+      expect(error).not.toHaveBeenCalled();
+    } finally {
+      rmSync(functionRoot, { recursive: true, force: true });
+    }
   });
 
   it("embarque toutes les polices dans la fonction Vercel, pour un poids raisonnable", async () => {

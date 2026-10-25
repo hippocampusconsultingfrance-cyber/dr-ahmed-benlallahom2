@@ -14,3 +14,11 @@ Noto Sans Arabic reste en 2.009 : chaque forme de lettre y est un glyphe
 complet. Dans les versions suivantes, les points sont des marques posées sur
 des squelettes partagés (ب, ت, ي…), et un lecteur PDF qui extrait le texte
 (copier-coller, recherche, pdftotext) rendrait une lettre pour une autre.
+
+Limite connue, en 2.009 aussi : la ligature lam-alef (لا, لأ, لإ, لآ) s’imprime
+correctement mais se copie avec ses deux lettres inversées. Son glyphe unique
+porte les deux lettres dans l’ordre logique, et le lecteur les retourne avec le
+reste du mot : « سلامة » est extrait « سالمة » par pdftotext comme par pdf.js
+(visionneuse de Firefox). Beaucoup de noms sont concernés (علاء، بلال، صلاح،
+الأمين…) : seul l’affichage d’un nom arabe est garanti exact, pas son texte
+copié.

@@ -105,11 +105,27 @@ function currentFontBaseline(doc: PDFKit.PDFDocument, fontSize: number): number 
 
 const bidi = bidiFactory();
 const ARABIC_FONT_CHARACTER = new RegExp("\\p{Script_Extensions=Arabic}", "u");
-// Idéogrammes, kana, bopomofo et l’espace idéographique (entre nom et prénom japonais).
-const HAN_FONT_CHARACTER = new RegExp("[\\p{Script_Extensions=Han}\\p{Script_Extensions=Hiragana}\\p{Script_Extensions=Katakana}\\p{Script_Extensions=Bopomofo}\\u3000]", "u");
+// Idéogrammes, kana et bopomofo par Script : Script_Extensions=Han couvre aussi
+// des signes latins que Noto Sans dessine (point médian de Col·lell, caron).
+// Plus les blocs que Noto Sans n’a pas du tout : ponctuation CJK (espace
+// idéographique, 「」), signes des blocs kana (ー, ・) et formes pleine chasse
+// des claviers chinois (（ ）， ．).
+const HAN_FONT_CHARACTER = new RegExp("[\\p{Script=Han}\\p{Script=Hiragana}\\p{Script=Katakana}\\p{Script=Bopomofo}\\u3000-\\u30ff\\uff00-\\uffef]", "u");
 const ARABIC_LETTER = new RegExp("\\p{Script=Arabic}", "u");
+const MIDDLE_DOT = "\u00b7";
 
 export type InvoiceNameRun = { text: string; font: "regular" | "arabic" | "han" };
+
+function invoiceNameCharacterFont(chars: string[], position: number): InvoiceNameRun["font"] {
+  const char = chars[position];
+  if (ARABIC_FONT_CHARACTER.test(char)) return "arabic";
+  if (HAN_FONT_CHARACTER.test(char)) return "han";
+  // Point de séparation d’un nom étranger transcrit en chinois (迈克尔·乔丹) :
+  // pleine chasse, avec les idéogrammes, s’il est entre deux d’entre eux.
+  const between = (other: string | undefined) => other !== undefined && HAN_FONT_CHARACTER.test(other);
+  if (char === MIDDLE_DOT && between(chars[position - 1]) && between(chars[position + 1])) return "han";
+  return "regular";
+}
 
 /**
  * Découpe la ligne du nom en segments à écrire de gauche à droite, chacun dans
@@ -124,15 +140,16 @@ export type InvoiceNameRun = { text: string; font: "regular" | "arabic" | "han" 
 export function invoiceNameRuns(name: string): InvoiceNameRun[] {
   const { levels } = bidi.getEmbeddingLevels(name);
   const runs: Array<InvoiceNameRun & { level: number }> = [];
+  const chars = Array.from(name);
   let index = 0;
-  for (const char of name) {
+  chars.forEach((char, position) => {
     const level = levels[index];
     index += char.length;
-    const font: InvoiceNameRun["font"] = ARABIC_FONT_CHARACTER.test(char) ? "arabic" : HAN_FONT_CHARACTER.test(char) ? "han" : "regular";
+    const font = invoiceNameCharacterFont(chars, position);
     const previous = runs[runs.length - 1];
     if (previous && previous.level === level && previous.font === font) previous.text += char;
     else runs.push({ text: char, font, level });
-  }
+  });
 
   // Règle L2 d’UAX #9, appliquée aux segments : du niveau le plus haut au plus
   // bas niveau impair, inverser chaque suite de segments de niveau au moins égal.
