@@ -2,7 +2,7 @@ import { deflateSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
 import { candidateDocumentValidationMessage, safeCandidateDocumentName, validateCandidateDocument } from "./candidateDocumentValidation";
 import { DOCUMENT_DECOMPRESSION_LIMITS } from "./documentDecompressionLimits";
-import { libreOfficeCvPdf, packPdfIntoObjectStream } from "./testing/pdfFixture";
+import { libreOfficeCvPdf, packPdfIntoObjectStream, pathologicalPdfs, pngPredict } from "./testing/pdfFixture";
 
 describe("validation des documents candidats", () => {
   it("nettoie les noms de fichiers et rejette les chemins", () => {
@@ -53,6 +53,20 @@ describe("REC-02 — PDF du coffre : mêmes lectures que pour les CV", () => {
     expect(() => validate(hexAlias)).toThrow("candidate_document_pdf_object_stream_unreadable");
   });
 
+  it("accepte un flux d’objets sans filtre ou à prédicteur PNG, et y trouve le JavaScript", () => {
+    const plain = (edit?: (source: string) => string) => packPdfIntoObjectStream(libreOfficeCvPdf(), { edit, objectStream: { dictionary: "/Type/ObjStm", encode: content => content } });
+    const predicted = (edit?: (source: string) => string) => packPdfIntoObjectStream(libreOfficeCvPdf(), {
+      edit,
+      objectStream: { dictionary: "/Type/ObjStm/Filter/FlateDecode/DecodeParms<</Predictor 12/Columns 5>>", encode: content => deflateSync(pngPredict(content, 5, [0, 1, 2, 3, 4])) },
+    });
+    for (const pdf of [plain, predicted]) {
+      expect(validate(pdf()).mimeType).toBe("application/pdf");
+      expect(() => validate(pdf(javaScriptOpening))).toThrow("candidate_document_pdf_active_content");
+    }
+    const tiff = packPdfIntoObjectStream(libreOfficeCvPdf(), { objectStream: { dictionary: "/Type/ObjStm/Filter/FlateDecode/DecodeParms<</Predictor 2/Columns 5>>" } });
+    expect(() => validate(tiff)).toThrow("candidate_document_pdf_object_stream_unreadable");
+  });
+
   it("distingue un PDF sans page d’un PDF trop long, et borne la décompression", () => {
     const pdf = (body: string) => Buffer.from(`%PDF-1.7\n${body}\n%%EOF\n`.padEnd(2048, " "), "latin1");
     expect(() => validate(pdf("1 0 obj << /Type /Catalog >> endobj"))).toThrow("candidate_document_pdf_page_structure_invalid");
@@ -63,6 +77,19 @@ describe("REC-02 — PDF du coffre : mêmes lectures que pour les CV", () => {
       Buffer.from("\nendstream\nendobj\n%%EOF\n", "latin1"),
     ]);
     expect(() => validate(bomb)).toThrow("cv_validation_pdf_decompressed_size_exceeded");
+  });
+
+  it.each(pathologicalPdfs())("juge en moins de deux secondes un PDF de 4 Mo fait pour bloquer le serveur : $label", ({ pdf, outcome }) => {
+    // The vault reads the same structure as the CV check: 1 MB of "stream stream…" without an end of line blocked it for 86 s.
+    const code = {
+      object_stream_unreadable: "candidate_document_pdf_object_stream_unreadable",
+      stream_count_exceeded: "cv_validation_pdf_stream_count_exceeded",
+      decompressed_size_exceeded: "cv_validation_pdf_decompressed_size_exceeded",
+    };
+    const started = performance.now();
+    if (outcome === "accepted") expect(validate(pdf).mimeType).toBe("application/pdf");
+    else expect(() => validate(pdf)).toThrow(code[outcome]);
+    expect(performance.now() - started).toBeLessThan(2_000);
   });
 
   it("explique au candidat le motif du refus et quoi faire", () => {

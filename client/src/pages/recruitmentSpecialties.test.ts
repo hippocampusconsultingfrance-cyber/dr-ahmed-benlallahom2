@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { RECRUITMENT_PARAMEDICAL_SPECIALTIES, RECRUITMENT_SPECIALTY_EQUIVALENTS } from "@shared/recruitmentSpecialtyEquivalents";
 import { filterRecruitmentSpecialties, recruitmentSpecialtyCategories, recruitmentSpecialtyLabel } from "./recruitmentSpecialties";
 
 const languages = ["fr", "en", "de", "zh"] as const;
@@ -45,6 +46,13 @@ describe("REC-04 — spécialités du formulaire standard", () => {
     expect(found("Unfallchirurgie", "de")).toEqual(["Chirurgie orthopédique et traumatologie"]);
     expect(found("Unfallchirurgie", "en")).toEqual([]);
     expect(found("儿科", "zh")).toEqual(expect.arrayContaining(["Pédiatrie", "Infirmier(ère) puériculteur(trice)"]));
+  });
+
+  it("donne au rapprochement des CV les professions de la catégorie Soins infirmiers & Paramédical, et chaque spécialité a ses équivalents", () => {
+    const nursing = recruitmentSpecialtyCategories.find(group => group.category.en === "Nursing & Allied Health")!;
+    expect(new Set(nursing.items.map(item => item.value))).toEqual(RECRUITMENT_PARAMEDICAL_SPECIALTIES);
+    const withEquivalents = items.map(item => item.value).filter(value => value !== "Autre spécialité ou profession");
+    expect(Object.keys(RECRUITMENT_SPECIALTY_EQUIVALENTS).sort()).toEqual(withEquivalents.sort());
   });
 
   it("garde toutes les spécialités d’une catégorie dont le nom correspond", () => {

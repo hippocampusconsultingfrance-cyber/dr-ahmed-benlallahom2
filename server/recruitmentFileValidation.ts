@@ -61,8 +61,32 @@ const EXTERNAL_OBJECT_RELATIONSHIP = /\/(?:oleObject|package)$/i;
  * `file://host`) would be fetched by the recruiter's Word.
  */
 const EXTERNAL_DOCUMENT_RELATIONSHIP = /\/(?:attachedTemplate|frame|subDocument)$/i;
-/** A `<Relationship …>` element; attribute values may contain `>`. */
-const RELATIONSHIP_ELEMENT = /<(?:[\w.-]+:)?Relationship\b(?:[^>"']|"[^"]*"|'[^']*')*>/gi;
+/** Start of a `<Relationship …>` element. */
+const RELATIONSHIP_START = /<(?:[\w.-]+:)?Relationship\b/gi;
+
+/**
+ * The `<Relationship …>` elements of a relationship part, read once from
+ * left to right (attribute values may contain `>`); null when one never
+ * ends, which Word cannot read either. A regular expression for the whole
+ * element was tried again from every later start: 200 KB of
+ * "<Relationship " (a 1.5 KB DOCX) took 3 s, and the inflated parts may reach 20 MB.
+ */
+function relationshipElements(xml: string): string[] | null {
+  const elements: string[] = [];
+  const start = new RegExp(RELATIONSHIP_START.source, RELATIONSHIP_START.flags);
+  for (let match = start.exec(xml); match; match = start.exec(xml)) {
+    let end = match.index + match[0].length;
+    for (; end < xml.length && xml[end] !== ">"; end += 1) {
+      const char = xml[end];
+      if (char === "\"" || char === "'") end = xml.indexOf(char, end + 1);
+      if (end === -1) return null;
+    }
+    if (end >= xml.length) return null;
+    elements.push(xml.slice(match.index, end + 1));
+    start.lastIndex = end + 1;
+  }
+  return elements;
+}
 
 function decodeXmlEntities(value: string) {
   return value.replace(/&(#x[0-9a-f]+|#[0-9]+|amp|lt|gt|quot|apos);/gi, (_, entity: string) => {
@@ -82,14 +106,11 @@ function isLocalFileTarget(target: string) {
   return /^file:\/\/\/[A-Za-z0-9]/i.test(target) || /^[A-Za-z]:[\\/]/.test(target);
 }
 
-export function hasDangerousExternalRelationship(relationshipsXml: string) {
-  for (const [element] of Array.from(relationshipsXml.matchAll(RELATIONSHIP_ELEMENT))) {
-    if (xmlAttribute(element, "TargetMode")?.toLowerCase() !== "external") continue;
-    const type = xmlAttribute(element, "Type") ?? "";
-    if (EXTERNAL_OBJECT_RELATIONSHIP.test(type)) return true;
-    if (EXTERNAL_DOCUMENT_RELATIONSHIP.test(type) && !isLocalFileTarget(xmlAttribute(element, "Target") ?? "")) return true;
-  }
-  return false;
+function isDangerousExternalRelationship(element: string) {
+  if (!element.includes("TargetMode") || xmlAttribute(element, "TargetMode")?.toLowerCase() !== "external") return false;
+  const type = xmlAttribute(element, "Type") ?? "";
+  if (EXTERNAL_OBJECT_RELATIONSHIP.test(type)) return true;
+  return EXTERNAL_DOCUMENT_RELATIONSHIP.test(type) && !isLocalFileTarget(xmlAttribute(element, "Target") ?? "");
 }
 
 function validateDocxSafety(buffer: Buffer) {
@@ -104,8 +125,10 @@ function validateDocxSafety(buffer: Buffer) {
   if (archive.entryNames.some(name => /(?:vbaProject\.bin|vbaData\.xml|^word\/embeddings\/|^word\/activeX\/)/i.test(name))) {
     throw new Error("cv_validation_docx_active_content");
   }
-  if (archive.relationships.some(hasDangerousExternalRelationship)) {
-    throw new Error("cv_validation_docx_active_content");
+  for (const relationships of archive.relationships) {
+    const elements = relationshipElements(relationships);
+    if (!elements) throw new Error("cv_validation_docx_container_invalid");
+    if (elements.some(isDangerousExternalRelationship)) throw new Error("cv_validation_docx_active_content");
   }
   return archive;
 }

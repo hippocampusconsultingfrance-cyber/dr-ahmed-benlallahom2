@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { normalizeRecruitmentAnalysis } from "./recruitmentAnalysis";
+import { vvipOffshoreCopy } from "../client/src/pages/VvipOffshorePage";
 
 type AnalysisInput = Parameters<typeof normalizeRecruitmentAnalysis>[0];
 
@@ -200,5 +201,124 @@ describe("INTL-02 — citations en arabe et en chinois", () => {
     expect(titleEvidence("طبيب تخدير", "ليس طبيب تخدير، بل ممرض")).toBe(false);
     // The quote must still be in the text that was read.
     expect(titleEvidence("麻醉科主治医师", "北京协和医院麻醉科主治医师", "上海瑞金医院儿科主治医师")).toBe(false);
+  });
+
+  it("ne prend pas pour une négation les mots chinois du vocabulaire médical qui commencent par 无, 不, 非 ou 未", () => {
+    for (const quote of [
+      "麻醉科医师（无痛分娩中心）",
+      "麻醉科医师，擅长无痛胃肠镜与无痛分娩",
+      "无痛分娩麻醉科医师",
+      "麻醉科医师，不同级别医院工作经验",
+      "麻醉科医师，熟练掌握无创通气与无菌操作",
+      "无锡市人民医院麻醉科医师",
+      "麻醉科医师，负责包括但不限于心脏手术麻醉",
+      "麻醉科医师，处理麻醉不良反应",
+      "曾在非洲援助医疗队担任麻醉科医师",
+      "非营利医院麻醉科医师",
+    ]) expect(titleEvidence("麻醉科医师", quote), quote).toBe(true);
+    for (const denied of ["非麻醉科医师", "不是麻醉科医师", "无麻醉科医师资格", "麻醉科医师资格：无", "麻醉科医师（尚未通过）", "麻醉科医师：未注册"]) {
+      expect(titleEvidence("麻醉科医师", denied), denied).toBe(false);
+    }
+  });
+
+  it("lit « غير حكومية » (ONG), « دون انقطاع » ou « لا سيما » sans négation, et « لست » comme une négation", () => {
+    for (const quote of ["استشاري تخدير في منظمة غير حكومية", "استشاري تخدير في المنظمات غير الحكومية", "استشاري تخدير في مستشفى غير ربحي", "استشاري تخدير بدوام كامل دون انقطاع", "استشاري تخدير، لا سيما تخدير القلب"]) {
+      expect(titleEvidence("استشاري تخدير", quote), quote).toBe(true);
+    }
+    for (const denied of ["لست استشاري تخدير", "غير حاصل على لقب استشاري تخدير", "استشاري تخدير غير معتمد", "استشاري تخدير دون ترخيص"]) {
+      expect(titleEvidence("استشاري تخدير", denied), denied).toBe(false);
+    }
+  });
+
+  it("vérifie les années d’expérience écrites contre un idéogramme : « 10年 », « 超过10年 »", () => {
+    const yearsEvidence = (value: string, evidence: string, years = 10) => normalizeRecruitmentAnalysis({
+      ...{ summary: "", professionalTitle: "", specialties: [], skills: [], languages: [], normalizedLanguages: [], certifications: [], countriesOfInterest: [], normalizedExperiences: [], strengths: [], gaps: [], dataQualityWarnings: [], requiredFollowUps: [], contradictions: [], confidence: 90, reasoning: "" },
+      yearsExperience: years,
+      fieldEvidence: [{ field: "yearsExperience", value, evidence, sourceLocation: "page 1", confidence: 95 }],
+      scoreBreakdown: { specialtyMatch: 0, experienceEvidence: 0, skillsEvidence: 0, languageReadiness: 0, credentialReadiness: 0 },
+    }, `[PAGE 1]\n${evidence}`);
+    for (const [value, evidence] of [["10年", "麻醉科医师，10年工作经验"], ["超过10年", "临床麻醉工作超过10年"], ["10 年", "工作经验：10 年"], ["10 years", "Consultant Anaesthetist — 10 years of experience"]]) {
+      const result = yearsEvidence(value!, evidence!);
+      expect(result.yearsExperience, value).toBe(10);
+      expect(result.scoreBreakdown.experienceEvidence, value).toBe(15);
+    }
+    // 2010年 is a year, not ten years of experience.
+    expect(yearsEvidence("2010年", "2010年起担任麻醉科医师").yearsExperience).toBeNull();
+    expect(yearsEvidence("10年", "麻醉科医师，10年工作经验", 1).yearsExperience).toBeNull();
+  });
+});
+
+describe("INTL-02 — un titre infirmier, technicien ou secouriste n’est pas une spécialité médicale", () => {
+  const english = (title: string, specialty: string, declared: string) => analyse("anglais britannique", { title, specialty, skill: "patient assessment" }, declared).scoreBreakdown.specialtyMatch;
+
+  it.each([
+    ["Intensive Care Nurse", "Intensive Care", "Anesthésie-réanimation"],
+    ["Intensive Care Nurse", "Critical care nursing", "Médecine intensive et réanimation"],
+    ["Emergency Medical Technician", "Emergency care", "Médecine d’urgence"],
+    ["Paramedic", "Emergency medicine", "Médecine d’urgence"],
+    ["Paediatric Nurse", "Paediatrics", "Pédiatrie"],
+    ["Diabetes Specialist Nurse", "Diabetes", "Endocrinologie, diabétologie et nutrition"],
+    ["Radiology Technician", "Radiology", "Radiologie et imagerie médicale"],
+  ])("« %s » (%s) ne marque aucun point pour « %s »", (title, specialty, declared) => {
+    expect(english(title, specialty, declared)).toBe(0);
+  });
+
+  it("garde les points d’un médecin, et ceux d’un infirmier quand la profession déclarée est infirmière", () => {
+    expect(english("Consultant in Intensive Care Medicine", "Intensive Care Medicine", "Anesthésie-réanimation")).toBe(30);
+    expect(english("Consultant Nephrologist", "Renal Medicine", "Néphrologie")).toBe(30);
+    expect(english("Consultant in Diabetes and Endocrinology", "Diabetes", "Endocrinologie, diabétologie et nutrition")).toBe(30);
+    // Fields shared with allied health professions do not make a physician one.
+    expect(english("Consultant Clinical Pharmacologist", "Clinical Pharmacology", "Pharmacologie médicale")).toBe(30);
+    expect(analyse("chinois", { title: "眼科主治医师", specialty: "斜视与小儿眼科", skill: "斜视手术" }, "Ophtalmologie").scoreBreakdown.specialtyMatch).toBe(30);
+    expect(analyse("arabe", { title: "استشاري تخدير", specialty: "التخدير وتقنيات تسكين الألم", skill: "التخدير الموضعي" }, "Anesthésie-réanimation").scoreBreakdown.specialtyMatch).toBe(30);
+    expect(english("Paediatric Nurse", "Paediatric nursing", "Infirmier(ère) puériculteur(trice)")).toBe(30);
+    expect(english("Intensive Care Nurse", "Critical care nursing", "Infirmier(ère) en soins généraux et spécialisés (IDE)")).toBe(30);
+    expect(english("Intensive Care Nurse", "Critical care nursing", "[VVIP / Offshore] Infirmier(ère) paramédical(e) Offshore / Rig Medic")).toBe(30);
+  });
+
+  it("reconnaît les profils VVIP paramédicaux du formulaire dans les 4 langues comme une profession paramédicale déclarée", () => {
+    const profiles = vvipOffshoreCopy.fr.specialties;
+    const rigMedic = profiles.indexOf("Infirmier(ère) paramédical(e) Offshore / Rig Medic");
+    const nurseAnaesthetist = profiles.indexOf("Infirmier(ère) anesthésiste (IADE) VVIP");
+    for (const language of ["fr", "en", "de", "zh"] as const) {
+      // The form stores the profile chosen, in the language of the page, after this prefix.
+      const declared = (index: number) => `[VVIP / Offshore] ${vvipOffshoreCopy[language].specialties[index]}`;
+      expect(english("Offshore Rig Medic and Paramedic", "Rig Medic", declared(rigMedic)), declared(rigMedic)).toBe(30);
+      expect(english("Nurse Anaesthetist", "Nurse anaesthesia", declared(nurseAnaesthetist)), declared(nurseAnaesthetist)).toBe(30);
+    }
+  });
+
+  it("garde ses points à un pharmacien biologiste ou toxicologue, pas à un pharmacien qui vise une autre spécialité médicale", () => {
+    const french = (title: string, specialty: string, declared: string) => analyse("français", { title, specialty, skill: "validation biologique" }, declared).scoreBreakdown.specialtyMatch;
+    // In France, pharmacists practise medical biology, toxicology and pharmacology.
+    expect(french("Pharmacien biologiste", "Biologie médicale", "Biologie médicale / Pathologie")).toBe(30);
+    expect(french("Pharmacien toxicologue", "Toxicologie", "Toxicologie")).toBe(30);
+    expect(english("Clinical Pharmacist, Toxicology", "Toxicology", "Toxicologie")).toBe(30);
+    expect(french("Pharmacien hospitalier en réanimation", "Réanimation", "Médecine intensive et réanimation")).toBe(0);
+    expect(french("Pharmacien hospitalier", "Pharmacie clinique", "Pharmacien(ne)")).toBe(30);
+    // A laboratory technician is still no medical biologist.
+    expect(french("Technicien de laboratoire en biologie médicale", "Biologie médicale", "Biologie médicale / Pathologie")).toBe(0);
+  });
+
+  it("ne rapproche plus un chirurgien de la transplantation rénale de la néphrologie", () => {
+    expect(english("Kidney Transplant Surgeon", "Kidney transplantation", "Néphrologie")).toBe(0);
+    expect(analyse("chinois", { title: "肾脏移植外科医师", specialty: "肾脏移植", skill: "肾移植手术" }, "Néphrologie").scoreBreakdown.specialtyMatch).toBe(0);
+    expect(analyse("chinois", { title: "肾脏内科主治医师", specialty: "肾脏病学", skill: "血液透析" }, "Néphrologie").scoreBreakdown.specialtyMatch).toBe(30);
+    // 腎臟科 is the usual name of the department in Taiwan.
+    expect(analyse("chinois", { title: "腎臟科主治醫師", specialty: "腎臟科", skill: "血液透析" }, "Néphrologie").scoreBreakdown.specialtyMatch).toBe(30);
+    expect(analyse("chinois", { title: "肾脏科主治医师", specialty: "肾病科", skill: "血液透析" }, "Néphrologie").scoreBreakdown.specialtyMatch).toBe(30);
+    expect(english("Consultant Kidney Doctor", "Nephrology", "Néphrologie")).toBe(30);
+  });
+
+  it("applique la même règle aux CV en français, en allemand, en arabe et en chinois, sans toucher aux médecins", () => {
+    const french = (title: string, specialty: string, declared: string) => analyse("français", { title, specialty, skill: "ventilation" }, declared).scoreBreakdown.specialtyMatch;
+    expect(french("Infirmier de réanimation", "Réanimation", "Médecine intensive et réanimation")).toBe(0);
+    expect(french("Infirmière anesthésiste", "Anesthésie", "Anesthésie-réanimation")).toBe(0);
+    expect(french("Infirmier de réanimation", "Soins infirmiers en réanimation", "Infirmier(ère) en soins généraux et spécialisés (IDE)")).toBe(30);
+    expect(french("Médecin réanimateur", "Médecine intensive et réanimation", "Médecine intensive et réanimation")).toBe(30);
+    expect(analyse("allemand", { title: "Notfallsanitäter", specialty: "Notfallmedizin", skill: "Reanimation" }, "Médecine d’urgence").scoreBreakdown.specialtyMatch).toBe(0);
+    expect(analyse("arabe", { title: "ممرض العناية المركزة", specialty: "العناية المركزة", skill: "التنفس الاصطناعي" }, "Médecine intensive et réanimation").scoreBreakdown.specialtyMatch).toBe(0);
+    expect(analyse("chinois", { title: "重症监护护士", specialty: "重症医学", skill: "呼吸机管理" }, "Médecine intensive et réanimation").scoreBreakdown.specialtyMatch).toBe(0);
+    expect(analyse("chinois", { title: "重症医学科主治医师", specialty: "重症医学", skill: "呼吸机管理" }, "Médecine intensive et réanimation").scoreBreakdown.specialtyMatch).toBe(30);
   });
 });

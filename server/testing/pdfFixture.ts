@@ -1,10 +1,78 @@
 /** TEST-ONLY: rewrites PDF fixtures in memory. Never imported by production code. */
 import { readFileSync } from "node:fs";
-import { deflateSync } from "node:zlib";
+import { constants, deflateSync } from "node:zlib";
 
 /** A real CV exported by LibreOffice Writer 24.2 (`soffice --convert-to pdf`): compressed page content and fonts, `/OpenAction [1 0 R /XYZ …]`. */
 export function libreOfficeCvPdf() {
   return readFileSync(new URL("./fixtures/cv-libreoffice.pdf", import.meta.url));
+}
+
+/** How the PDF checks must answer a file of `pathologicalPdfs`: accept it (one page), or refuse it with this reason. */
+export type PathologicalPdfOutcome = "accepted" | "object_stream_unreadable" | "stream_count_exceeded" | "decompressed_size_exceeded";
+
+/**
+ * 4 MB PDFs made to keep a naive check busy for minutes (REC-02): each must
+ * be judged in well under a second. The first three objects are a real page.
+ */
+export function pathologicalPdfs(): Array<{ label: string; pdf: Buffer; outcome: PathologicalPdfOutcome }> {
+  const size = 4 * 1024 * 1024;
+  const head = "%PDF-1.7\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj 2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj 3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 595 842]>>endobj ";
+  const filled = (unit: string, tail = "") => Buffer.from(head + unit.repeat(Math.floor((size - head.length - tail.length) / unit.length)) + tail, "latin1");
+  // zlib header, then empty stored blocks: data that inflates to nothing and runs on over the next keywords.
+  const chained = Array.from({ length: 2_000 }, () => `\nstream\nx\x01${"\x00\x00\x00\xff\xff".repeat(400)}`).join("");
+  const objectStream = (dictionary: string) => Buffer.concat([Buffer.from(`${head}9 0 obj<<${dictionary}>>stream\n`, "latin1"), deflateSync(Buffer.from("4 0 <</A 1>>")), Buffer.from("\nendstream endobj\n", "latin1")]);
+  // As many streams as fit, each with its own object number.
+  const streams = (dictionary: string, data: Buffer) => {
+    const parts: Buffer[] = [Buffer.from(head, "latin1")];
+    for (let total = head.length, number = 10; total + data.length + dictionary.length + 64 < size; number += 1) {
+      parts.push(Buffer.from(`${number} 0 obj<<${dictionary}>>stream\n`, "latin1"), data, Buffer.from("\nendstream endobj\n", "latin1"));
+      total += data.length + dictionary.length + 64;
+    }
+    return Buffer.concat(parts);
+  };
+  const image = "/Type/XObject/Subtype/Image/Width 2000/Height 4000/BitsPerComponent 8/ColorSpace/DeviceGray/Filter/FlateDecode";
+  // 39 MB of zeros, then an invalid block: zlib data that turns out corrupt once inflated.
+  const corrupt = Buffer.concat([deflateSync(Buffer.alloc(39_000_000), { level: 9, finishFlush: constants.Z_SYNC_FLUSH }), Buffer.from([0xff])]);
+  return [
+    { label: "« stream » répété sans fin de ligne", pdf: filled("stream "), outcome: "accepted" },
+    { label: "« stream » répété sur une seule ligne", pdf: filled("stream ", "\n"), outcome: "object_stream_unreadable" },
+    { label: "noms échappés #XX", pdf: filled("/#41"), outcome: "accepted" },
+    { label: "données zlib qui couvrent les flux suivants", pdf: Buffer.from(head + chained, "latin1"), outcome: "stream_count_exceeded" },
+    { label: "800 000 clés /F dans un flux d’objets", pdf: objectStream(`/Type/ObjStm/N 1/First 4${"/F/Fl".repeat(Math.floor((size - head.length - 256) / 5))}`), outcome: "accepted" },
+    { label: "images de 62 Ko qui se gonflent à leur taille déclarée, 64 Mo", pdf: streams(image, deflateSync(Buffer.alloc(64_000_000), { level: 9 })), outcome: "decompressed_size_exceeded" },
+    { label: "images dont les données se gonflent à 39 Mo puis sont corrompues", pdf: streams(image, corrupt), outcome: "decompressed_size_exceeded" },
+    { label: "flux dont les données se gonflent à 39 Mo puis sont corrompues", pdf: streams("/Filter/FlateDecode", corrupt), outcome: "decompressed_size_exceeded" },
+  ];
+}
+
+/**
+ * PNG prediction (/DecodeParms << /Predictor 12 /Columns n >>) of `data` in
+ * rows of `columns` bytes, `pixelBytes` per pixel, the row types taken in
+ * turn from `types` (0 none, 1 sub, 2 up, 3 average, 4 Paeth); the last row
+ * is completed with zeros, which pdf.js reads as white-space.
+ */
+export function pngPredict(data: Buffer, columns: number, types: number[], pixelBytes = 1) {
+  const rows: Buffer[] = [];
+  let previous = Buffer.alloc(columns);
+  for (let row = 0; row * columns < data.length; row += 1) {
+    const current = Buffer.alloc(columns);
+    data.copy(current, 0, row * columns, (row + 1) * columns);
+    const type = types[row % types.length]!;
+    const encoded = Buffer.alloc(columns + 1, type);
+    for (let index = 0; index < columns; index += 1) {
+      const left = index >= pixelBytes ? current[index - pixelBytes]! : 0;
+      const up = previous[index]!;
+      const upLeft = index >= pixelBytes ? previous[index - pixelBytes]! : 0;
+      const estimate = left + up - upLeft;
+      const paeth = Math.abs(estimate - left) <= Math.abs(estimate - up) && Math.abs(estimate - left) <= Math.abs(estimate - upLeft) ? left
+        : Math.abs(estimate - up) <= Math.abs(estimate - upLeft) ? up : upLeft;
+      const predicted = [0, left, up, (left + up) >> 1, paeth][type]!;
+      encoded[index + 1] = (current[index]! - predicted) & 0xff;
+    }
+    rows.push(encoded);
+    previous = current;
+  }
+  return Buffer.concat(rows);
 }
 
 type PdfObject = { number: number; body: string; isStream: boolean };
