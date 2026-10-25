@@ -43,6 +43,16 @@ describe("REC-02 — PDF du coffre : mêmes lectures que pour les CV", () => {
     expect(() => validate(hex)).toThrow("candidate_document_pdf_object_stream_unreadable");
   });
 
+  it("lit le dictionnaire du flux d’objets comme pdf.js : ni un faux « obj », ni une longue chaîne, ni /F ne le cachent", () => {
+    // A page written in clear in the dictionary, so that the page count alone cannot refuse the file.
+    const hidden = (dictionary: string, encode?: (content: Buffer) => Buffer) => packPdfIntoObjectStream(libreOfficeCvPdf(), { edit: javaScriptOpening, objectStream: { dictionary: `${dictionary}/Y(/Type /Page)`, encode } });
+    for (const dictionary of ["/Type/ObjStm/Filter/FlateDecode/X( obj)", `/Type/ObjStm/Filter/FlateDecode/X(${"x".repeat(5_000)})`, "/Type/ObjStm/F/FlateDecode", "/Type/ObjStm/Filter/FlateDecode 9 0 obj <<"]) {
+      expect(() => validate(hidden(dictionary)), dictionary.slice(0, 40)).toThrow("candidate_document_pdf_active_content");
+    }
+    const hexAlias = hidden("/Type/ObjStm/F/AHx", content => Buffer.from(`${content.toString("hex")}>`, "latin1"));
+    expect(() => validate(hexAlias)).toThrow("candidate_document_pdf_object_stream_unreadable");
+  });
+
   it("distingue un PDF sans page d’un PDF trop long, et borne la décompression", () => {
     const pdf = (body: string) => Buffer.from(`%PDF-1.7\n${body}\n%%EOF\n`.padEnd(2048, " "), "latin1");
     expect(() => validate(pdf("1 0 obj << /Type /Catalog >> endobj"))).toThrow("candidate_document_pdf_page_structure_invalid");

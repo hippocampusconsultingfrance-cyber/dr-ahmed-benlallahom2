@@ -161,6 +161,55 @@ describe("REC-02 — PDF réels acceptés, actions dangereuses cherchées aussi 
     expect(recruitmentCvValidationMessage("cv_validation_pdf_object_stream_unreadable")).toContain("imprimez-le en PDF depuis votre navigateur");
   });
 
+  describe("lit le dictionnaire du flux d’objets comme pdf.js, pas dans une fenêtre devinée", () => {
+    // A page written in clear in the dictionary, so that the page count alone cannot refuse the file.
+    const hiddenJavaScript = (dictionary: string, encode?: (content: Buffer) => Buffer) => packPdfIntoObjectStream(libreOfficeCvPdf(), {
+      edit: openingWith("<</S/JavaScript/JS(app.alert\\(1\\))>>"),
+      objectStream: { dictionary: `${dictionary}/Y(/Type /Page)`, encode },
+    });
+    const asHex = (content: Buffer) => Buffer.from(`${content.toString("hex")}>`, "latin1");
+
+    it.each([
+      ["un faux « obj » dans une chaîne", "/Type/ObjStm/Filter/FlateDecode/X( obj)"],
+      ["une chaîne de 5 000 caractères", `/Type/ObjStm/Filter/FlateDecode/X(${"x".repeat(5_000)})`],
+      ["/F au lieu de /Filter", "/Type/ObjStm/F/FlateDecode"],
+      ["un faux en-tête d’objet là où pdf.js attend une clé", "/Type/ObjStm/Filter/FlateDecode 9 0 obj <<"],
+    ])("trouve le JavaScript malgré %s", async (_label, dictionary) => {
+      const pdf = hiddenJavaScript(dictionary);
+      // pdf.js reads the object stream (pages and opening action), so a PDF reader would run the script.
+      const extraction = await extractCvDocument(pdf, "application/pdf");
+      expect(extraction.totalPages).toBe(1);
+      expect(extraction.text).toContain("Dr Camille Martin");
+      expect(() => validate(pdf)).toThrow("cv_validation_pdf_active_content");
+    });
+
+    it.each([
+      ["/F/AHx (ASCIIHex) au lieu de /Filter", "/Type/ObjStm/F/AHx", asHex],
+      ["/DP (prédicteur) au lieu de /DecodeParms", "/Type/ObjStm/Filter/FlateDecode/DP<</Predictor 1>>", undefined],
+      ["un faux « endobj » là où pdf.js attend une clé", "/Type/ObjStm/F/AHx endobj 9 0 obj <<", asHex],
+      ["un « >> » pris par pdf.js comme valeur", "/Type/ObjStm/X >> /F/AHx", asHex],
+      ["une image en ligne (BI) là où pdf.js attend une valeur", "/Type/ObjStm/F/AHx/X BI /W 1 ID x EI <<", asHex],
+    ])("refuse comme illisible un flux d’objets caché par %s", async (_label, dictionary, encode) => {
+      const pdf = hiddenJavaScript(dictionary, encode);
+      expect((await extractCvDocument(pdf, "application/pdf")).totalPages).toBe(1);
+      expect(() => validate(pdf)).toThrow("cv_validation_pdf_object_stream_unreadable");
+    });
+
+    it("refuse un commentaire entre le dictionnaire et « stream », un flux d’objets non compressé ou contenant un flux", () => {
+      const hex = hiddenJavaScript("/Type/ObjStm/F/AHx", asHex).toString("latin1");
+      for (const separator of [" %c>>\n", "\n% x >> y\n"]) {
+        const commented = Buffer.from(hex.replace(/(\/Length \d+>>)\nstream/, (_match, end: string) => `${end}${separator}stream`), "latin1");
+        expect(() => validate(commented), separator).toThrow("cv_validation_pdf_object_stream_unreadable");
+      }
+      const plain = packPdfIntoObjectStream(libreOfficeCvPdf(), { objectStream: { dictionary: "/Type/ObjStm", encode: content => content } });
+      expect(() => validate(plain)).toThrow("cv_validation_pdf_object_stream_unreadable");
+      const nested = packPdfIntoObjectStream(libreOfficeCvPdf(), {
+        objectStream: { encode: content => deflateSync(Buffer.concat([content, Buffer.from("<</Type/ObjStm/N 1/First 4/F/AHx/Length 9>>\nstream\n3120302036>\nendstream\n", "latin1")])) },
+      });
+      expect(() => validate(nested)).toThrow("cv_validation_pdf_object_stream_unreadable");
+    });
+  });
+
   it("garde le plafond de décompression pour les flux d’objets", () => {
     const bomb = pdfWithStream("/Type /ObjStm /N 1 /First 4 /Filter /FlateDecode", deflateSync(Buffer.alloc(DOCUMENT_DECOMPRESSION_LIMITS.pdfMaxInflatedBytes + 1024, 32)));
     expect(() => validate(bomb)).toThrow("cv_validation_pdf_decompressed_size_exceeded");
@@ -218,6 +267,25 @@ describe("bombes de décompression : plafonds avant extraction", () => {
     const scan = pdfWithStream("/Type /XObject /Subtype /Image /Width 2480 /Height 3508 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /FlateDecode", deflateSync(Buffer.alloc(2480 * 3508 * 3, 200)));
     expect(validateCvFile({ buffer: scan, mimeType: "application/pdf", originalName: "cv.pdf", size: scan.length }).pageCount).toBe(1);
     expect(recruitmentCvValidationMessage("cv_validation_pdf_processing_timeout")).toContain("trop volumineux");
+  });
+
+  it("juge un fichier de 4 Mo truffé de mots « stream » ou d’objets en un temps linéaire, pas quadratique", () => {
+    // Before the reading of object streams was bounded, 800 KB of "stream\n" took 17 s.
+    const filled = (unit: string) => Buffer.from(`%PDF-1.7\n${unit.repeat(Math.floor((4 * 1024 * 1024 - 16) / unit.length))}`, "latin1");
+    const shapes: Array<[string, string]> = [
+      ["stream\n", "cv_validation_pdf_stream_count_exceeded"],
+      ["stream\nx\x9c", "cv_validation_pdf_stream_count_exceeded"],
+      ["1 0 obj <</N 1/First 4/Filter/FlateDecode>>stream\nx\x9c", "cv_validation_pdf_stream_count_exceeded"],
+      ["1 0 obj <<", "cv_validation_pdf_page_structure_invalid"],
+      ["obj (", "cv_validation_pdf_page_structure_invalid"],
+    ];
+    for (const [unit, code] of shapes) {
+      const pdf = filled(unit);
+      const started = performance.now();
+      expect(() => validateCvFile({ buffer: pdf, mimeType: "application/pdf", originalName: "cv.pdf", size: pdf.length }), JSON.stringify(unit)).toThrow(code);
+      expect(performance.now() - started, JSON.stringify(unit)).toBeLessThan(4_000);
+    }
+    expect(recruitmentCvValidationMessage("cv_validation_pdf_stream_count_exceeded")).toContain("imprimez-le en PDF depuis votre navigateur");
   });
 
   it("tronque le texte extrait à 200 000 caractères avec un avertissement", async () => {
