@@ -12,6 +12,8 @@ export default defineConfig({
       "@assets": path.resolve(templateRoot, "attached_assets"),
     },
   },
+  // Same automatic JSX runtime as @vitejs/plugin-react, so that tests can render pages.
+  esbuild: { jsx: "automatic" },
   test: {
     environment: "node",
     include: ["server/**/*.test.ts", "server/**/*.spec.ts", "client/**/*.test.ts", "client/**/*.spec.ts"],
