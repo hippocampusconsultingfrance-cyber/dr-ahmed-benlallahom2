@@ -50,6 +50,7 @@ const professionalLanguageOptions = [
 
 const otherLanguageLabel = { fr: "Autre langue (à préciser)", en: "Other language (please specify)", de: "Andere Sprache (bitte angeben)", zh: "其他语言（请注明）" } as const;
 const otherLanguagePlaceholder = { fr: "Ex. Italien, russe…", en: "e.g. Italian, Russian…", de: "z. B. Italienisch, Russisch…", zh: "例如：意大利语、俄语…" } as const;
+const customSpecialtyPlaceholder = { fr: "Ex. Perfusionniste, audioprothésiste…", en: "e.g. Perfusionist, hearing aid specialist…", de: "z. B. Kardiotechniker, Hörakustiker…", zh: "例如：体外循环灌注师、助听器验配师…" } as const;
 
 const copy = {
   fr: {
@@ -435,8 +436,8 @@ export default function RecruitmentPage() {
                         <p className="mt-1.5 text-xs text-primary font-medium">{t.selected.replace("{specialty}", recruitmentSpecialtyLabel(form.specialty, lang))}</p>
                       )}
                       {form.specialty === "Autre spécialité ou profession" && (
-                        <label className="mt-3 block">
-                          <span className="sr-only">{t.specialtyCustom}</span>
+                        <label className="recruitment-field-group mt-3">
+                          <span>{t.specialtyCustom} *</span>
                           <input
                             id="recruitment-specialty-custom"
                             required
@@ -445,7 +446,7 @@ export default function RecruitmentPage() {
                             aria-invalid={isInvalid("specialtyCustom")}
                             onChange={event => update("specialtyCustom", event.target.value)}
                             className={`recruitment-field ${isInvalid("specialtyCustom") ? "form-field-invalid" : ""}`}
-                            placeholder={`${t.specialtyCustom} *`}
+                            placeholder={customSpecialtyPlaceholder[lang]}
                           />
                         </label>
                       )}
