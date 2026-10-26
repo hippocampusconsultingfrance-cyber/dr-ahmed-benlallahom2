@@ -1183,7 +1183,7 @@ export const appRouter = router({
             .from(appointments)
             .where(whereClause);
 
-          return { items, total: countResult[0]?.count || 0 };
+          return { items, total: Number(countResult[0]?.count ?? 0) };
         }),
 
       updateStatus: adminProcedure
@@ -1427,7 +1427,7 @@ export const appRouter = router({
               emailDelivery: resolveCvConfirmationDelivery(emailEventsByApplicationId.get(item.id) || []),
             }));
           const countResult = profile ? [{ count: matchedItems.length }] : await db.select({ count: sql<number>`COUNT(*)` }).from(cvApplications).where(whereClause);
-          return { items, total: countResult[0]?.count || 0 };
+          return { items, total: Number(countResult[0]?.count ?? 0) };
         }),
 
       pool: router({
@@ -2264,24 +2264,30 @@ export const appRouter = router({
           z.object({
             limit: z.number().min(1).max(100).optional().default(50),
             offset: z.number().min(0).optional().default(0),
+            /** Only the messages not marked as read yet (ADM-01). */
+            unreadOnly: z.boolean().optional().default(false),
           })
         )
         .query(async ({ input }) => {
           const db = await getDb();
           if (!db) return { items: [], total: 0 };
 
+          const whereClause = input.unreadOnly ? eq(contactMessages.read, 0) : undefined;
+
           const items = await db
             .select()
             .from(contactMessages)
+            .where(whereClause)
             .orderBy(desc(contactMessages.createdAt))
             .limit(input.limit)
             .offset(input.offset);
 
           const countResult = await db
             .select({ count: sql<number>`COUNT(*)` })
-            .from(contactMessages);
+            .from(contactMessages)
+            .where(whereClause);
 
-          return { items, total: countResult[0]?.count || 0 };
+          return { items, total: Number(countResult[0]?.count ?? 0) };
         }),
 
       markRead: adminProcedure
@@ -2323,7 +2329,7 @@ export const appRouter = router({
             .select({ count: sql<number>`COUNT(*)` })
             .from(gdprRequests);
 
-          return { items, total: countResult[0]?.count || 0 };
+          return { items, total: Number(countResult[0]?.count ?? 0) };
         }),
 
       updateStatus: adminProcedure

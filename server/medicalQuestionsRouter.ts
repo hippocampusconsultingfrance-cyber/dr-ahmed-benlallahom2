@@ -1,6 +1,6 @@
 import { randomInt } from "node:crypto";
 import { TRPCError } from "@trpc/server";
-import { and, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { medicalQuestionAuditLogs, medicalQuestions } from "../drizzle/schema";
 import { adminProcedure, publicProcedure, router } from "./_core/trpc";
@@ -31,6 +31,7 @@ const privateQuestionInput = z.object({
 });
 
 const publicQuestionInput = z.object({ limit: z.number().int().min(1).max(50).default(12) }).optional();
+const medicalQuestionStatus = z.enum(["submitted", "drafting", "answered", "published", "rejected"]);
 const questionIdInput = z.object({ id: z.number().int().positive() });
 
 const TRACKING_ID_ALPHABET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
@@ -149,12 +150,28 @@ export const medicalQuestionsRouter = router({
   }),
 
   admin: router({
-    list: adminProcedure.input(z.object({ status: z.enum(["submitted", "drafting", "answered", "published", "rejected"]).optional(), limit: z.number().int().min(1).max(100).default(50) }).optional()).query(async ({ input, ctx }) => {
+    /**
+     * ADM-01: one page of the questions in the given statuses, with their total.
+     * The tab opens on the questions to answer, oldest first, so that none
+     * waits out of sight behind the newer ones.
+     */
+    list: adminProcedure.input(z.object({
+      statuses: z.array(medicalQuestionStatus).min(1).max(medicalQuestionStatus.options.length).optional(),
+      order: z.enum(["oldest", "newest"]).default("newest"),
+      limit: z.number().int().min(1).max(100).default(50),
+      offset: z.number().int().min(0).default(0),
+    }).optional()).query(async ({ input, ctx }) => {
       await requireMfa(ctx);
       const db = await requireDb();
-      return db.select().from(medicalQuestions)
-        .where(input?.status ? eq(medicalQuestions.status, input.status) : undefined)
-        .orderBy(desc(medicalQuestions.createdAt)).limit(input?.limit ?? 50);
+      const whereClause = input?.statuses ? inArray(medicalQuestions.status, input.statuses) : undefined;
+      const createdAt = input?.order === "oldest" ? asc(medicalQuestions.createdAt) : desc(medicalQuestions.createdAt);
+      const items = await db.select().from(medicalQuestions)
+        .where(whereClause)
+        .orderBy(createdAt, input?.order === "oldest" ? asc(medicalQuestions.id) : desc(medicalQuestions.id))
+        .limit(input?.limit ?? 50)
+        .offset(input?.offset ?? 0);
+      const [count] = await db.select({ count: sql<number>`COUNT(*)` }).from(medicalQuestions).where(whereClause);
+      return { items, total: Number(count?.count ?? 0) };
     }),
     get: adminProcedure.input(questionIdInput).query(async ({ input, ctx }) => {
       await requireMfa(ctx);
@@ -240,6 +257,21 @@ export const medicalQuestionsRouter = router({
         publishedAt: null,
       }).where(eq(medicalQuestions.id, input.id));
       await auditQuestion({ questionId: input.id, actorOpenId: ctx.user.openId, action: "unpublished", metadata: { retainedPrivateRecord: true } });
+      return { success: true };
+    }),
+    /**
+     * « Classer sans suite » (ADM-01): a question that will not be answered
+     * leaves the queue; the private record and its journal are kept, and
+     * saving a draft puts it back in the queue.
+     */
+    reject: adminProcedure.input(questionIdInput).mutation(async ({ input, ctx }) => {
+      await requireMfa(ctx);
+      const db = await requireDb();
+      const [question] = await db.select().from(medicalQuestions).where(eq(medicalQuestions.id, input.id)).limit(1);
+      if (!question) throw new TRPCError({ code: "NOT_FOUND", message: "Question introuvable." });
+      if (question.responseSentAt) throw new TRPCError({ code: "BAD_REQUEST", message: "Cette question a déjà reçu une réponse : elle ne peut plus être classée sans suite." });
+      await db.update(medicalQuestions).set({ status: "rejected" }).where(eq(medicalQuestions.id, input.id));
+      await auditQuestion({ questionId: input.id, actorOpenId: ctx.user.openId, action: "rejected", metadata: { previousStatus: question.status } });
       return { success: true };
     }),
   }),
