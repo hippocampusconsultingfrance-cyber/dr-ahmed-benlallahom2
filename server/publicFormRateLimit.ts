@@ -1,4 +1,4 @@
-import { enforcePersistentRateLimit, recordPersistentRateLimitAttempt, releasePersistentRateLimitAttempt, sendOwnerAlertOncePerWindow } from "./candidateSecurity";
+import { dailyOwnerAlertIdempotencyKey, enforcePersistentRateLimit, recordPersistentRateLimitAttempt, releasePersistentRateLimitAttempt, sendOwnerAlertOncePerWindow } from "./candidateSecurity";
 import { notifyOwner } from "./_core/notification";
 
 /** Clé de comptage : couple IP + email (formulaires), IP seule ou email seul (réservation). */
@@ -118,13 +118,14 @@ export async function countPublicFormDailyVolume(kind: PublicFormDailyVolumeKind
   }
   if (!state.blocked) return true;
   // An alert that could not leave is sent by a later request above the threshold.
-  await sendOwnerAlertOncePerWindow({ action: `${action}_alert`, subject: "global", windowMs: DAY_MS, blockMs: DAY_MS }, () => notifyOwner({
+  const alertAction = `${action}_alert`;
+  await sendOwnerAlertOncePerWindow({ action: alertAction, subject: "global", windowMs: DAY_MS, blockMs: DAY_MS }, () => notifyOwner({
     title: `Volume inhabituel : plus de ${threshold} ${PUBLIC_FORM_VOLUME_LABELS[kind]} en 24 heures`,
     content: [
       `Le seuil quotidien de ${threshold} ${PUBLIC_FORM_VOLUME_LABELS[kind]} est dépassé (moins de 24 heures, tous visiteurs confondus).`,
       `Le formulaire reste ouvert : pendant les 24 prochaines heures, les demandes suivantes sont enregistrées ${PUBLIC_FORM_SKIPPED_EFFECTS[kind]}. Aucun autre email ne vous sera envoyé pour ce volume.`,
       "Consultez-les dans l’administration. S’il s’agit d’envois automatisés, activez l’Attack Challenge Mode du pare-feu Vercel.",
     ].join("\n\n"),
-  })).catch(() => false);
+  }, { idempotencyKey: dailyOwnerAlertIdempotencyKey(alertAction) })).catch(() => false);
   return false;
 }

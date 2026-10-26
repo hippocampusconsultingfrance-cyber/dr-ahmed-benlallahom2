@@ -1,7 +1,7 @@
 import { createCipheriv, createDecipheriv, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { and, eq, gte, inArray, isNull, like, lt, lte, ne, notInArray, notLike, or, sql } from "drizzle-orm";
 import { cvApplications, cvGoogleDriveExportJobs, googleDriveConnections } from "../drizzle/schema";
-import { sendOwnerAlertOncePerWindow } from "./candidateSecurity";
+import { hashSecurityValue, sendOwnerAlertOncePerWindow } from "./candidateSecurity";
 import { getDb } from "./db";
 import { logRecruitmentAction } from "./recruitmentAudit";
 import { storageGetSignedUrl } from "./storage";
@@ -275,12 +275,19 @@ const RECONNECTION_ALERT_WINDOW_MS = 365 * 24 * 60 * 60 * 1000;
  * One alert per refused authorization (REC-09), kept as sent only once
  * delivered: while the connection stays « à renouveler », each pass of the
  * copies tries again an alert that could not leave (Resend down or out of
- * quota at the refusal), then never again for that authorization.
+ * quota at the refusal), then never again for that authorization. Its Resend
+ * idempotency key is stable for the authorization, so an attempt Resend took
+ * without a clear answer (5xx, timeout) is not sent twice by a retry while
+ * Resend keeps the key (24 hours; notifyOwner also asks again at once). An
+ * authorization is never alerted twice, so a kept key never hides a due alert.
  */
 async function notifyOwnerOfGoogleDriveReconnection(connection: { id: number; refreshTokenCiphertext: string }) {
+  const subject = `${connection.id}:${connection.refreshTokenCiphertext}`;
+  // A hash: the token's ciphertext never leaves for Resend.
+  const idempotencyKey = `google-drive-reconnection-${hashSecurityValue(subject).slice(0, 32)}`;
   await sendOwnerAlertOncePerWindow({
     action: "google_drive_reconnection_alert",
-    subject: `${connection.id}:${connection.refreshTokenCiphertext}`,
+    subject,
     windowMs: RECONNECTION_ALERT_WINDOW_MS,
     blockMs: RECONNECTION_ALERT_WINDOW_MS,
   }, () => notifyOwner({
@@ -291,7 +298,7 @@ async function notifyOwnerOfGoogleDriveReconnection(connection: { id: number; re
       "Pour reprendre : onglet Candidatures, bouton « Reconnexion Google Drive requise ». Les copies arrêtées par ce refus repartiront automatiquement après la reconnexion.",
       "Cette alerte n’est envoyée qu’une fois jusqu’à la reconnexion.",
     ].join("\n\n"),
-  })).catch((error: unknown) => console.error("google_drive_reconnection_alert_failed", error instanceof Error ? error.name : "UnknownError"));
+  }, { idempotencyKey })).catch((error: unknown) => console.error("google_drive_reconnection_alert_failed", error instanceof Error ? error.name : "UnknownError"));
 }
 
 /**
