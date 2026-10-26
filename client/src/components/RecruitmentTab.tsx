@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import PublicContentSkeleton from "@/components/PublicContentSkeleton";
 import AdminLoadMore from "@/components/AdminLoadMore";
-import { adminListCount, adminPageOffsets, ADMIN_PAGE_SIZE, mergeAdminPages, useAdminPageCount } from "@/components/adminPagination";
+import { adminListCount, adminPageOffsets, ADMIN_PAGE_SIZE, mergeAdminPages, updateAdminPageItem, useAdminPageCount } from "@/components/adminPagination";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import Candidate360Dialog from "./Candidate360Dialog";
@@ -181,9 +181,19 @@ export default function RecruitmentTab() {
     : { items: applications, firstUnscored: -1 };
 
   const updateStatus = trpc.admin.recruitment.updateStatus.useMutation({
-    onSuccess: () => {
+    onSuccess: (_result, input) => {
       toast.success("Candidature mise à jour");
-      utils.admin.recruitment.list.invalidate();
+      // ADM-01: with a status filter, the dossier may leave the list and shift the following pages,
+      // which are all reloaded. Without one, nothing moves (the order and the other filters do not
+      // depend on the status): the dossier is updated in the pages already loaded.
+      if (filters.status) {
+        void utils.admin.recruitment.list.invalidate();
+        return;
+      }
+      const changes = { status: input.status, ...(input.adminNotes !== undefined ? { adminNotes: input.adminNotes || null } : {}) };
+      for (const offset of adminPageOffsets(pageCount)) {
+        utils.admin.recruitment.list.setData({ ...filters, limit: ADMIN_PAGE_SIZE, offset }, page => updateAdminPageItem(page, input.id, changes));
+      }
     },
     onError: mutationError => toast.error(mutationError.message),
   });
