@@ -682,6 +682,19 @@ describe("texte invisible écarté à l’extraction (IA-01)", () => {
     expect(extraction).toMatchObject({ invisibleText: undefined, warnings: [] });
   });
 
+  it("DOCX : écarte comme non vérifiable, sans l’accuser, le texte que sa place peut couper sans que ce soit manifeste, et lit un grand nom lisible en haut de page", async () => {
+    // Lines of 10 pt every 6 pt: each runs into the one above, as LibreOffice draws them; not so far that they are manifestly unseen.
+    const cramped = await extractCvDocument(docx(NURSE_CV.map(line => paragraph(line)).join("") + CLAIMS.map(claim => laidOut(claim, '<w:spacing w:before="0" w:after="0" w:line="120" w:lineRule="exact"/>')).join("")), DOCX);
+    for (const line of NURSE_CV) expect(cramped.text).toContain(line);
+    for (const claim of CLAIMS) expect(cramped.text).not.toContain(claim);
+    expect(cramped.invisibleText).toMatchObject({ characters: 0, excerpt: "", unverifiable: { characters: CLAIMS.join(" ").length, reasons: ["layout"] } });
+    expect(cramped.warnings).toEqual([`unverifiable_text_set_aside:${CLAIMS.join(" ").length}`, "docx_text_may_be_cut"]);
+    // A 28 pt name in an exact spacing of 13 pt at the top of the page, legible in LibreOffice, and a 20 pt title in a row of 14 pt.
+    const name = await extractCvDocument(docx(`<w:p><w:pPr><w:spacing w:after="120" w:line="260" w:lineRule="exact"/></w:pPr><w:r><w:rPr><w:sz w:val="56"/></w:rPr><w:t>Jean EXEMPLE</w:t></w:r></w:p>` + exactRow(280, paragraph("Infirmier de réanimation", '<w:sz w:val="40"/>')) + NURSE_CV.map(line => paragraph(line)).join("")), DOCX);
+    for (const line of ["Jean EXEMPLE", "Infirmier de réanimation", ...NURSE_CV]) expect(name.text).toContain(line);
+    expect(name).toMatchObject({ invisibleText: undefined, warnings: [] });
+  });
+
   it("DOCX : prend la couleur de fond d’une zone de texte VML dans v:fill, qui l’emporte sur fillcolor, et pas celle d’un dégradé", async () => {
     const vml = (fillcolor: string, fill: string, content: string) =>
       `<w:p><w:r><w:pict><v:shape ${fillcolor} style="position:absolute;width:200pt;height:120pt"><v:textbox><w:txbxContent>${content}</w:txbxContent></v:textbox>${fill}</v:shape></w:pict></w:r></w:p>`;
@@ -1106,6 +1119,20 @@ describe("dossier d’un CV qui cache du texte, de bout en bout (IA-01)", () => 
       expect(String(dossier(id).extracted_text)).not.toContain(hidden);
     }
     expect(JSON.parse(String(dossier(id).extraction_warnings))).toEqual([`unverifiable_text_set_aside:${CLAIMS.join(" ").length}`, "docx_white_text_near_drawing"]);
+    expect(String(dossier(id).ai_weaknesses)).not.toContain("texte invisible");
+  });
+
+  it("DOCX dont les consignes se chevauchent en interligne exact de 6 pt : rien n’atteint l’IA, sans accusation, et la fiche dit que leur place peut les couper", async () => {
+    state.reading = obedientReading("section Expérience");
+    const claims = CLAIMS.map(claim => laidOut(claim, '<w:spacing w:before="0" w:after="0" w:line="120" w:lineRule="exact"/>')).join("");
+    const id = seedDossier(docx(NURSE_CV.map(line => paragraph(line)).join("") + claims), DOCX);
+    await processDueCvAnalysisJobs(5);
+    expect(state.prompts[0]).toContain("Infirmier diplômé d'État (IDE)");
+    for (const hidden of ["DESAR", "Licence DHA", "Anglais (courant)", "score maximal"]) {
+      expect(state.prompts[0]).not.toContain(hidden);
+      expect(String(dossier(id).extracted_text)).not.toContain(hidden);
+    }
+    expect(JSON.parse(String(dossier(id).extraction_warnings))).toEqual([`unverifiable_text_set_aside:${CLAIMS.join(" ").length}`, "docx_text_may_be_cut"]);
     expect(String(dossier(id).ai_weaknesses)).not.toContain("texte invisible");
   });
 

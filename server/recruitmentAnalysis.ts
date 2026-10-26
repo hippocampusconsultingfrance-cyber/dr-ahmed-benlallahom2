@@ -6,7 +6,7 @@ import { getDb } from "./db";
 import { sameRecruitmentFact } from "./clientBriefMatching";
 import { certificationDateIsCurrent, certificationExpiryInFrench } from "../shared/recruitmentFactOrigins";
 import { assertPdfDecompressionWithinLimits, DOCUMENT_DECOMPRESSION_LIMITS, truncateExtractedText } from "./documentDecompressionLimits";
-import { withoutInvisibleDocxText } from "./docxVisibleText";
+import { withoutInvisibleDocxText, type DocxUnverifiableReason } from "./docxVisibleText";
 import { pdfStandardFontDataUrl, PdfReaderUnavailableError, readPdfIsolated, type PdfTextReading } from "./pdfExtractionSandbox";
 import type { PdfUnverifiableReason } from "./pdfVisibleText";
 import { CV_ANALYSIS_STEP_MINIMUM_MS, ProcessingDeadlineError, stepTimeoutMs } from "./processingDeadline";
@@ -265,8 +265,8 @@ export type CvExtractionResult = {
   invisibleText?: InvisibleTextSummary;
 };
 
-/** Why text was set aside without being counted as hidden: see pdfVisibleText, and docxVisibleText for `drawing`. */
-export type UnverifiableTextReason = PdfUnverifiableReason | "drawing";
+/** Why text was set aside without being counted as hidden: see pdfVisibleText, and docxVisibleText for `drawing`, `layout` and `layout_unfinished`. */
+export type UnverifiableTextReason = PdfUnverifiableReason | DocxUnverifiableReason;
 
 export type InvisibleTextSummary = {
   characters: number;
@@ -337,6 +337,8 @@ const UNVERIFIABLE_REASONS: Record<UnverifiableTextReason, { warning: string; la
   unfinished: { warning: "pdf_visibility_check_unfinished", label: "contrôle de visibilité non terminé (document long ou lourd)" },
   unmatched: { warning: "pdf_text_unmatched", label: "texte que l’outil n’a pas pu rattacher à son dessin" },
   drawing: { warning: "docx_white_text_near_drawing", label: "texte blanc ou peu contrasté sur un fond incertain : zone de texte, image ou forme proche, style de tableau" },
+  layout: { warning: "docx_text_may_be_cut", label: "texte que sa ligne de tableau, sa zone de texte, son cadre ou son interligne de taille fixe, ou le bord de la page, peuvent couper" },
+  layout_unfinished: { warning: "docx_layout_check_unfinished", label: "contrôle de mise en page non terminé (document long ou lourd)" },
 };
 
 /**
@@ -655,7 +657,7 @@ async function extractCvDocumentUnbounded(buffer: Buffer, mimeType: string): Pro
     const mammoth = (await import("mammoth")).default;
     const result = await mammoth.extractRawText({ buffer: visible.buffer });
     const text = escapeCvPageMarkers(cleanText(result.value));
-    const invisibleText = invisibleTextSummary(visible.invisibleText, visible.unverifiableText.map(passage => ({ reason: "drawing" as const, text: passage })), text.length);
+    const invisibleText = invisibleTextSummary(visible.invisibleText, visible.unverifiableText, text.length);
     return { text, method: "docx", totalPages: null, ocrConfidence: null, ocrModelVersion: null, warnings: [...result.messages.map(message => `${message.type}:${message.message}`), ...invisibleTextWarnings(invisibleText)], invisibleText };
   }
 

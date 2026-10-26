@@ -53,6 +53,16 @@ export const DOCUMENT_DECOMPRESSION_LIMITS = {
    * paths costs about 65,000.
    */
   pdfVisibilityWorkUnits: 600_000,
+  /**
+   * DOCX visibility check: work of laying out the text whose place may hide
+   * it (in a row, text box or frame of fixed size, an exact line spacing, past
+   * the page's edge), in characters and paragraphs laid out, counted rather
+   * than timed so that a file always gives the same text. Past it, such text
+   * is set aside as unverifiable. A CV lays out under 2,000; 1,000,000 take
+   * about 0.25 s on the development machine, where a document part of 20 MB
+   * is read in at most 2 s.
+   */
+  docxLayoutWorkUnits: 1_000_000,
   /** Characters of extracted text kept for the analysis and the database. */
   extractedTextMaxChars: 200_000,
 } as const;
