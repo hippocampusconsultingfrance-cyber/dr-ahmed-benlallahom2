@@ -120,10 +120,14 @@ describe("EXPL-02 — état des envois sur chaque rendez-vous", () => {
     const past = seedAppointment("APTSTATE0002", { appointment_date: new Date(Date.now() - 3_600_000) });
     seedJob(past.id, "confirmation", { status: "completed", attempts: 1, last_error: "appointment_already_past_confirmation_skipped" });
     seedAppointment("APTSTATE0003", { payment_status: "pending", appointment_status: "held", stripe_payment_intent_id: null });
+    // Still "running" 20 minutes after its worker started: interrupted, not being sent.
+    const frozen = seedAppointment("APTSTATE0004");
+    seedJob(frozen.id, "confirmation", { status: "running", attempts: 1, started_at: new Date(Date.now() - 20 * 60_000) });
+    seedJob(frozen.id, "invoice", { status: "running", attempts: 1, started_at: new Date(Date.now() - 60_000) });
 
     const list = await admin().appointments.list({});
 
-    expect(list.total).toBe(3);
+    expect(list.total).toBe(4);
     const byId = new Map(list.items.map(item => [item.trackingId, item]));
     expect(byId.get("APTSTATE0001")?.deliveries.map(({ jobType, state, attempts, maxAttempts }) => ({ jobType, state, attempts, maxAttempts }))).toEqual([
       { jobType: "owner", state: "sent", attempts: 1, maxAttempts: 3 },
@@ -134,6 +138,7 @@ describe("EXPL-02 — état des envois sur chaque rendez-vous", () => {
     expect(byId.get("APTSTATE0001")?.invoiceNumber).toBe("FAC-2026-000007");
     expect(byId.get("APTSTATE0002")?.deliveries.map(delivery => delivery.state)).toEqual(["not_sent"]);
     expect(byId.get("APTSTATE0003")).toMatchObject({ deliveries: [], invoiceNumber: null });
+    expect(byId.get("APTSTATE0004")?.deliveries.map(delivery => delivery.state)).toEqual(["interrupted", "sending"]);
   });
 });
 
@@ -182,6 +187,21 @@ describe("EXPL-02 — « Renvoyer »", () => {
     await expect(admin().appointments.retryFulfillment({ trackingId: "APTRETRY0004" })).rejects.toMatchObject({ code: "PRECONDITION_FAILED" });
     await expect(admin().appointments.retryFulfillment({ trackingId: "APTUNKNOWN01" })).rejects.toMatchObject({ code: "NOT_FOUND" });
   });
+
+  it("relance un envoi resté « en cours » après l’arrêt de son exécution, sans attendre le prochain passage planifié", async () => {
+    const paid = seedAppointment("APTRETRY0005");
+    seedJob(paid.id, "owner", { status: "completed", attempts: 1 });
+    seedJob(paid.id, "confirmation", { status: "running", attempts: 1, started_at: new Date(Date.now() - 16 * 60_000) });
+    seedJob(paid.id, "invoice", { status: "failed", attempts: 3 });
+    seedInvoice(paid.id, 5);
+
+    const result = await admin().appointments.retryFulfillment({ trackingId: "APTRETRY0005" });
+
+    expect(result.requeued).toBe(2);
+    expect(result.deliveries.map(delivery => delivery.state)).toEqual(["sent", "sent", "sent"]);
+    expect(state.sent.map(email => email.kind)).toEqual(["confirmation", "invoice"]);
+    expect(job(paid.id, "confirmation")).toMatchObject({ status: "completed", attempts: 1, max_attempts: APPOINTMENT_FULFILLMENT_MAX_ATTEMPTS });
+  });
 });
 
 describe("EXPL-02 — « Télécharger la facture »", () => {
@@ -218,8 +238,6 @@ describe("EXPL-02 — encart « À traiter »", () => {
     seedJob(failed.id, "owner", { status: "completed", attempts: 1 });
     const refunded = seedAppointment("APTTODO00002", { payment_status: "refunded", appointment_status: "cancelled" });
     seedJob(refunded.id, "confirmation", { status: "failed", attempts: 3 });
-    const retrying = seedAppointment("APTTODO00003");
-    seedJob(retrying.id, "confirmation", { status: "retry", attempts: 1 });
     seedAppointment("APTTODO00004", { customer_name: "Bruno Weber", payment_status: "pending", appointment_status: "cancelled" });
     seedAppointment("APTTODO00005", { payment_status: "pending", appointment_status: "held" });
 
@@ -229,24 +247,65 @@ describe("EXPL-02 — encart « À traiter »", () => {
       total: 1,
       items: [{ trackingId: "APTTODO00001", customerName: "Alice Martin", appointmentDate: expect.any(Date), jobTypes: ["confirmation", "invoice"] }],
     });
+    expect(attention.retryingDeliveries).toEqual({ total: 0, items: [] });
     expect(attention.unconfirmedPayments).toEqual({
       total: 1,
       items: [{ trackingId: "APTTODO00004", customerName: "Bruno Weber", appointmentDate: expect.any(Date) }],
     });
   });
 
+  it("signale dès le premier échec un envoi en attente de son prochain essai, ou interrompu", async () => {
+    const retrying = seedAppointment("APTTODO00007", { customer_name: "Chloé Durand" });
+    seedJob(retrying.id, "confirmation", { status: "retry", attempts: 1, scheduled_for: new Date("2026-10-27T06:20:00Z") });
+    seedJob(retrying.id, "invoice", { status: "retry", attempts: 2, scheduled_for: new Date("2026-10-26T18:00:00Z") });
+    seedJob(retrying.id, "owner", { status: "completed", attempts: 1 });
+    const frozen = seedAppointment("APTTODO00008", { customer_name: "David Roux" });
+    seedJob(frozen.id, "confirmation", { status: "running", attempts: 1, started_at: new Date(Date.now() - 20 * 60_000) });
+    // Being sent right now, refunded meanwhile, or still to be attempted: nothing to handle.
+    const sending = seedAppointment("APTTODO00009");
+    seedJob(sending.id, "confirmation", { status: "running", attempts: 1, started_at: new Date() });
+    const refunded = seedAppointment("APTTODO00010", { payment_status: "refunded", appointment_status: "cancelled" });
+    seedJob(refunded.id, "confirmation", { status: "retry", attempts: 1 });
+    const queued = seedAppointment("APTTODO00011");
+    seedJob(queued.id, "confirmation");
+
+    const attention = await admin().attention();
+
+    expect(attention.failedDeliveries).toEqual({ total: 0, items: [] });
+    expect(attention.retryingDeliveries).toEqual({
+      total: 2,
+      items: [
+        { trackingId: "APTTODO00007", customerName: "Chloé Durand", appointmentDate: expect.any(Date), jobTypes: ["confirmation", "invoice"], nextAttemptAt: new Date("2026-10-26T18:00:00Z") },
+        { trackingId: "APTTODO00008", customerName: "David Roux", appointmentDate: expect.any(Date), jobTypes: ["confirmation"], nextAttemptAt: null },
+      ],
+    });
+  });
+
+  it("compte tous les échecs des rendez-vous payés, même derrière de nombreux échecs de rendez-vous remboursés", async () => {
+    for (let index = 0; index < 205; index += 1) {
+      const refunded = seedAppointment(`APTREF${String(index).padStart(6, "0")}`, { payment_status: "refunded", appointment_status: "cancelled" });
+      seedJob(refunded.id, "invoice", { status: "failed", attempts: 3, updated_at: new Date("2026-01-01T00:00:00Z") });
+    }
+    const paid = seedAppointment("APTTODO00012");
+    seedJob(paid.id, "invoice", { status: "failed", attempts: 7 });
+
+    const attention = await admin().attention();
+
+    expect(attention.failedDeliveries).toEqual({ total: 1, items: [expect.objectContaining({ trackingId: "APTTODO00012" })] });
+  });
+
   it("est vide quand tout est parti", async () => {
     const paid = seedAppointment("APTTODO00006");
     seedJob(paid.id, "confirmation", { status: "completed", attempts: 1 });
-    await expect(admin().attention()).resolves.toEqual({ failedDeliveries: { total: 0, items: [] }, unconfirmedPayments: { total: 0, items: [] } });
+    await expect(admin().attention()).resolves.toEqual({ failedDeliveries: { total: 0, items: [] }, retryingDeliveries: { total: 0, items: [] }, unconfirmedPayments: { total: 0, items: [] } });
   });
 });
 
 describe("EXPL-02 — tentatives automatiques", () => {
-  it("met en file chaque envoi avec 6 tentatives, espacées de 10 min, 1 h, 4 h, 12 h puis 20 h", async () => {
+  it("met en file chaque envoi avec 7 tentatives, espacées de 10 min, 1 h, 4 h, 12 h, 20 h puis 20 h", async () => {
     const paid = seedAppointment("APTSPACING01");
     await enqueueAppointmentFulfillment(paid.id as number);
-    expect(memory.rows(appointmentFulfillmentJobs).map(row => [row.job_type, row.max_attempts])).toEqual([["owner", 6], ["confirmation", 6], ["invoice", 6]]);
+    expect(memory.rows(appointmentFulfillmentJobs).map(row => [row.job_type, row.max_attempts])).toEqual([["owner", 7], ["confirmation", 7], ["invoice", 7]]);
     for (const row of memory.rows(appointmentFulfillmentJobs)) if (row.job_type !== "confirmation") row.status = "completed";
 
     state.down.add("confirmation");
@@ -254,7 +313,7 @@ describe("EXPL-02 — tentatives automatiques", () => {
     const start = new Date("2026-10-26T10:00:00Z");
     vi.setSystemTime(start);
     const delays: number[] = [];
-    for (let attempt = 1; attempt <= 6; attempt += 1) {
+    for (let attempt = 1; attempt <= 7; attempt += 1) {
       await processAppointmentFulfillmentNow(paid.id as number);
       const confirmation = job(paid.id, "confirmation");
       if (confirmation.status !== "retry") break;
@@ -263,8 +322,11 @@ describe("EXPL-02 — tentatives automatiques", () => {
       vi.setSystemTime(next);
     }
 
-    expect(delays).toEqual([10, 60, 240, 720, 1200]);
-    expect(job(paid.id, "confirmation")).toMatchObject({ status: "failed", attempts: 6 });
-    expect(pgTimestamp(new Date())).toBe(pgTimestamp(new Date(start.getTime() + (10 + 60 + 240 + 720 + 1200) * 60_000)));
+    expect(delays).toEqual([10, 60, 240, 720, 1200, 1200]);
+    expect(job(paid.id, "confirmation")).toMatchObject({ status: "failed", attempts: 7 });
+    // More than two days of outage covered, even by a worker that runs often.
+    const span = (10 + 60 + 240 + 720 + 1200 + 1200) * 60_000;
+    expect(span).toBeGreaterThan(48 * 3_600_000);
+    expect(pgTimestamp(new Date())).toBe(pgTimestamp(new Date(start.getTime() + span)));
   });
 });

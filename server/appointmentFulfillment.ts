@@ -18,16 +18,17 @@ const MAX_BATCH = 5;
 export const APPOINTMENT_FULFILLMENT_STALE_AFTER_MS = 15 * 60_000;
 
 /**
- * Attempts per job (EXPL-02). With the daily scheduled run, the five retries
- * after the first attempt span about five days: a provider outage of a day or
+ * Attempts per job (EXPL-02). With the daily scheduled run, the six retries
+ * after the first attempt span about six days: a provider outage of a day or
  * two no longer loses the confirmation or the invoice.
  */
-export const APPOINTMENT_FULFILLMENT_MAX_ATTEMPTS = 6;
+export const APPOINTMENT_FULFILLMENT_MAX_ATTEMPTS = 7;
 /**
- * Wait after the 1st, 2nd… failed attempt: about 37 h in all on a worker that
- * runs often. Each stays under a day, so the daily run always finds the job due.
+ * Wait after the 1st, 2nd… failed attempt: about 57 h in all on a worker that
+ * runs often, so a two-day outage is covered there too. Each stays under a
+ * day, so the daily run always finds the job due.
  */
-export const APPOINTMENT_FULFILLMENT_RETRY_DELAYS_MS = [10 * 60_000, 60 * 60_000, 4 * 3_600_000, 12 * 3_600_000, 20 * 3_600_000] as const;
+export const APPOINTMENT_FULFILLMENT_RETRY_DELAYS_MS = [10 * 60_000, 60 * 60_000, 4 * 3_600_000, 12 * 3_600_000, 20 * 3_600_000, 20 * 3_600_000] as const;
 
 /**
  * Independent jobs, processed in this order: the owner learns about the paid
@@ -302,10 +303,11 @@ export async function recoverStaleAppointmentFulfillmentJobs(staleAfterMs = APPO
 /**
  * What the dashboard shows for a job (EXPL-02): sent; failed for good;
  * failed and waiting for its next automatic attempt; not attempted yet; being
- * sent right now; or deliberately not sent (consultation already past,
- * appointment no longer paid).
+ * sent right now; interrupted (still "running" long after its worker stopped);
+ * or deliberately not sent (consultation already past, appointment no longer
+ * paid).
  */
-export type AppointmentDeliveryState = "sent" | "failed" | "retrying" | "pending" | "sending" | "not_sent";
+export type AppointmentDeliveryState = "sent" | "failed" | "retrying" | "pending" | "sending" | "interrupted" | "not_sent";
 
 const DELIVERY_STATES: Record<string, AppointmentDeliveryState> = { failed: "failed", retry: "retrying", queued: "pending", running: "sending" };
 
@@ -318,8 +320,14 @@ export type AppointmentDelivery = {
   nextAttemptAt: Date | null;
 };
 
-function deliveryOf(job: FulfillmentJob): AppointmentDelivery {
-  const state = job.status === "completed" ? job.lastError ? "not_sent" : "sent" : DELIVERY_STATES[job.status] ?? "pending";
+/** Same rule as recoverStaleAppointmentFulfillmentJobs: no worker runs that long. */
+function isInterruptedJob(job: Pick<FulfillmentJob, "status" | "startedAt">, now: Date) {
+  return job.status === "running" && job.startedAt !== null && job.startedAt.getTime() <= now.getTime() - APPOINTMENT_FULFILLMENT_STALE_AFTER_MS;
+}
+
+function deliveryOf(job: FulfillmentJob, now: Date): AppointmentDelivery {
+  const state = job.status === "completed" ? job.lastError ? "not_sent" : "sent"
+    : isInterruptedJob(job, now) ? "interrupted" : DELIVERY_STATES[job.status] ?? "pending";
   return {
     jobType: job.jobType as FulfillmentJobType,
     state,
@@ -337,8 +345,9 @@ export async function getAppointmentDeliveries(appointmentIds: number[]): Promis
   if (!db) throw new Error("Database connection failed");
   const jobs = await db.select().from(appointmentFulfillmentJobs).where(inArray(appointmentFulfillmentJobs.appointmentId, appointmentIds));
   const order = (jobType: string) => APPOINTMENT_FULFILLMENT_JOB_TYPES.indexOf(jobType as FulfillmentJobType);
+  const now = new Date();
   for (const job of [...jobs].sort((a, b) => order(a.jobType) - order(b.jobType))) {
-    deliveries.set(job.appointmentId, [...(deliveries.get(job.appointmentId) ?? []), deliveryOf(job)]);
+    deliveries.set(job.appointmentId, [...(deliveries.get(job.appointmentId) ?? []), deliveryOf(job, now)]);
   }
   return deliveries;
 }
@@ -350,10 +359,10 @@ export type AppointmentFulfillmentRetry =
 
 /**
  * « Renvoyer » from the dashboard (EXPL-02): the jobs of a paid appointment
- * that did not go out (failed, or waiting for their next attempt) go back to
- * the queue with a full attempt budget and run now, through the same claim and
- * idempotency keys as the scheduled worker. A job already sent, or running, is
- * left alone.
+ * that did not go out (failed, waiting for their next attempt, or interrupted)
+ * go back to the queue with a full attempt budget and run now, through the
+ * same claim and idempotency keys as the scheduled worker. A job already sent,
+ * or being sent right now, is left alone.
  */
 export async function retryAppointmentFulfillment(trackingId: string): Promise<AppointmentFulfillmentRetry> {
   const db = await getDb();
@@ -374,7 +383,10 @@ export async function retryAppointmentFulfillment(trackingId: string): Promise<A
     updatedAt: now,
   }).where(and(
     eq(appointmentFulfillmentJobs.appointmentId, appointment.id),
-    inArray(appointmentFulfillmentJobs.status, ["queued", "retry", "failed"]),
+    or(
+      inArray(appointmentFulfillmentJobs.status, ["queued", "retry", "failed"]),
+      and(eq(appointmentFulfillmentJobs.status, "running"), lte(appointmentFulfillmentJobs.startedAt, new Date(now.getTime() - APPOINTMENT_FULFILLMENT_STALE_AFTER_MS))),
+    ),
   ));
   const requeued = mutationRowCount(result);
   if (requeued > 0) await processAppointmentFulfillmentNow(appointment.id);
@@ -382,32 +394,61 @@ export async function retryAppointmentFulfillment(trackingId: string): Promise<A
 }
 
 /**
- * Paid appointments with a job whose attempts ran out, oldest failure first:
+ * Paid appointments whose post-payment emails did not go out, oldest first:
  * the « À traiter » panel reads them from the database, not from an alert
- * email sent through the very channel that failed (EXPL-02).
+ * email sent through the very channel that failed (EXPL-02). « failed »: the
+ * attempts ran out. « retrying »: an attempt failed (or was interrupted) and
+ * the next automatic one may only come with the next scheduled run, days
+ * before the attempts run out.
  */
-export async function listFailedAppointmentDeliveries(limit = 20) {
+export async function listAppointmentDeliveriesToHandle(limit = 20, now = new Date()) {
   const db = await getDb();
   if (!db) throw new Error("Database connection failed");
-  const failedJobs = await db.select({ appointmentId: appointmentFulfillmentJobs.appointmentId, jobType: appointmentFulfillmentJobs.jobType })
-    .from(appointmentFulfillmentJobs)
-    .where(eq(appointmentFulfillmentJobs.status, "failed"))
-    .orderBy(appointmentFulfillmentJobs.updatedAt, appointmentFulfillmentJobs.id)
-    .limit(200);
-  const jobTypesByAppointment = new Map<number, FulfillmentJobType[]>();
-  for (const job of failedJobs) {
-    jobTypesByAppointment.set(job.appointmentId, [...(jobTypesByAppointment.get(job.appointmentId) ?? []), job.jobType as FulfillmentJobType]);
+  // No cap here: the failed jobs of refunded appointments stay failed, and a
+  // cap applied before the paid filter would push the new failures out.
+  const jobs = await db.select({
+    appointmentId: appointmentFulfillmentJobs.appointmentId,
+    jobType: appointmentFulfillmentJobs.jobType,
+    status: appointmentFulfillmentJobs.status,
+    scheduledFor: appointmentFulfillmentJobs.scheduledFor,
+  }).from(appointmentFulfillmentJobs)
+    .where(or(
+      inArray(appointmentFulfillmentJobs.status, ["failed", "retry"]),
+      and(eq(appointmentFulfillmentJobs.status, "running"), lte(appointmentFulfillmentJobs.startedAt, new Date(now.getTime() - APPOINTMENT_FULFILLMENT_STALE_AFTER_MS))),
+    ))
+    .orderBy(appointmentFulfillmentJobs.updatedAt, appointmentFulfillmentJobs.id);
+  const failed = new Map<number, FulfillmentJobType[]>();
+  // Earliest next automatic attempt; null when only interrupted jobs wait for the next scheduled run.
+  const retrying = new Map<number, { jobTypes: FulfillmentJobType[]; nextAttemptAt: Date | null }>();
+  for (const job of jobs) {
+    const jobType = job.jobType as FulfillmentJobType;
+    if (job.status === "failed") {
+      failed.set(job.appointmentId, [...(failed.get(job.appointmentId) ?? []), jobType]);
+      continue;
+    }
+    const previous = retrying.get(job.appointmentId);
+    const nextAttemptAt = job.status === "retry" ? job.scheduledFor : null;
+    retrying.set(job.appointmentId, {
+      jobTypes: [...(previous?.jobTypes ?? []), jobType],
+      nextAttemptAt: previous?.nextAttemptAt && (!nextAttemptAt || previous.nextAttemptAt < nextAttemptAt) ? previous.nextAttemptAt : nextAttemptAt,
+    });
   }
-  if (jobTypesByAppointment.size === 0) return { total: 0, items: [] };
-  const paid = await db.select({ id: appointments.id, trackingId: appointments.trackingId, customerName: appointments.customerName, appointmentDate: appointments.appointmentDate })
+  const appointmentIds = Array.from(new Set([...Array.from(failed.keys()), ...Array.from(retrying.keys())]));
+  const paid = appointmentIds.length === 0 ? [] : await db.select({ id: appointments.id, trackingId: appointments.trackingId, customerName: appointments.customerName, appointmentDate: appointments.appointmentDate })
     .from(appointments)
-    .where(and(inArray(appointments.id, Array.from(jobTypesByAppointment.keys())), eq(appointments.paymentStatus, "completed")));
-  const byId = new Map(paid.map(appointment => [appointment.id, appointment]));
-  const items = Array.from(jobTypesByAppointment.entries()).flatMap(([appointmentId, jobTypes]) => {
-    const appointment = byId.get(appointmentId);
-    return appointment ? [{ trackingId: appointment.trackingId, customerName: appointment.customerName, appointmentDate: appointment.appointmentDate, jobTypes }] : [];
-  });
-  return { total: items.length, items: items.slice(0, limit) };
+    .where(and(inArray(appointments.id, appointmentIds), eq(appointments.paymentStatus, "completed")));
+  const byId = new Map(paid.map(({ id, ...appointment }) => [id, appointment]));
+  const page = <T>(items: T[]) => ({ total: items.length, items: items.slice(0, limit) });
+  return {
+    failed: page(Array.from(failed.entries()).flatMap(([appointmentId, jobTypes]) => {
+      const appointment = byId.get(appointmentId);
+      return appointment ? [{ ...appointment, jobTypes }] : [];
+    })),
+    retrying: page(Array.from(retrying.entries()).flatMap(([appointmentId, delivery]) => {
+      const appointment = byId.get(appointmentId);
+      return appointment ? [{ ...appointment, ...delivery }] : [];
+    })),
+  };
 }
 
 /**

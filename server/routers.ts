@@ -2413,14 +2413,15 @@ export const appRouter = router({
 
     /**
      * « À traiter » en tête du tableau de bord, lu depuis la base (EXPL-02) :
-     * envois après paiement dont les tentatives sont épuisées, et paiements
-     * reçus sans rendez-vous confirmé (à rembourser ou reprogrammer).
+     * envois après paiement en échec (tentatives épuisées, ou nouvel essai
+     * automatique en attente), et paiements reçus sans rendez-vous confirmé
+     * (patient à contacter, puis à rembourser).
      */
     attention: adminProcedure.query(async () => {
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Base de données indisponible." });
-      const { listFailedAppointmentDeliveries } = await import("./appointmentFulfillment");
-      const failedDeliveries = await listFailedAppointmentDeliveries();
+      const { listAppointmentDeliveriesToHandle } = await import("./appointmentFulfillment");
+      const deliveries = await listAppointmentDeliveriesToHandle();
       // Same rule as isUnconfirmedPaidAppointment (server/appointmentAdminActions.ts).
       const unconfirmed = and(eq(appointments.paymentStatus, "pending"), ne(appointments.appointmentStatus, "held"), isNotNull(appointments.stripePaymentIntentId));
       const unconfirmedItems = await db
@@ -2431,7 +2432,8 @@ export const appRouter = router({
         .limit(20);
       const [unconfirmedCount] = await db.select({ count: sql<number>`COUNT(*)` }).from(appointments).where(unconfirmed);
       return {
-        failedDeliveries,
+        failedDeliveries: deliveries.failed,
+        retryingDeliveries: deliveries.retrying,
         unconfirmedPayments: { total: Number(unconfirmedCount?.count ?? 0), items: unconfirmedItems },
       };
     }),

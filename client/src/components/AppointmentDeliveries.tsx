@@ -5,7 +5,7 @@ import { trpc } from "@/lib/trpc";
 import { downloadInvoicePdf } from "./invoicePdfDownload";
 
 export type AppointmentDeliveryJob = "confirmation" | "invoice" | "owner";
-export type AppointmentDeliveryState = "sent" | "failed" | "retrying" | "pending" | "sending" | "not_sent";
+export type AppointmentDeliveryState = "sent" | "failed" | "retrying" | "pending" | "sending" | "interrupted" | "not_sent";
 export type AppointmentDeliveryView = { jobType: AppointmentDeliveryJob; state: AppointmentDeliveryState; attempts: number; maxAttempts: number };
 
 /** In the order the practitioner reads them (EXPL-02). */
@@ -23,6 +23,7 @@ const DELIVERY_STATE_LABELS: Record<AppointmentDeliveryState, string> = {
   retrying: "en échec, nouvel essai prévu",
   pending: "en attente",
   sending: "en cours d’envoi",
+  interrupted: "envoi interrompu",
   not_sent: "non envoyée",
 };
 
@@ -32,6 +33,7 @@ const DELIVERY_STATE_TONES: Record<AppointmentDeliveryState, string> = {
   retrying: "bg-amber-500/20 text-amber-400",
   pending: "bg-slate-500/20 text-slate-300",
   sending: "bg-blue-500/20 text-blue-400",
+  interrupted: "bg-amber-500/20 text-amber-400",
   not_sent: "bg-muted text-muted-foreground",
 };
 
@@ -41,9 +43,13 @@ export function deliveryLabel(delivery: AppointmentDeliveryView): string {
   return `${DELIVERY_JOB_LABELS[delivery.jobType]} : ${DELIVERY_STATE_LABELS[delivery.state]}${attempts}`;
 }
 
-/** « Renvoyer » has something to send now: a job failed, or still waiting for an attempt (not one being sent). */
-export function canRetryDeliveries(deliveries: AppointmentDeliveryView[]): boolean {
-  return deliveries.some(delivery => delivery.state === "failed" || delivery.state === "retrying" || delivery.state === "pending");
+/**
+ * « Renvoyer » has something to send now: a job of a paid appointment failed,
+ * was interrupted, or still waits for an attempt (not one being sent). The
+ * server refuses it once the appointment is no longer paid (refunded…).
+ */
+export function canRetryDeliveries(deliveries: AppointmentDeliveryView[], paid: boolean): boolean {
+  return paid && deliveries.some(delivery => ["failed", "retrying", "pending", "interrupted"].includes(delivery.state));
 }
 
 /**
@@ -52,7 +58,7 @@ export function canRetryDeliveries(deliveries: AppointmentDeliveryView[]): boole
  * ones that did not go out right away, « Télécharger la facture » regenerates
  * the invoice already issued, identical to the one emailed.
  */
-export default function AppointmentDeliveries({ trackingId, deliveries, invoiceNumber }: { trackingId: string; deliveries: AppointmentDeliveryView[]; invoiceNumber: string | null }) {
+export default function AppointmentDeliveries({ trackingId, paid, deliveries, invoiceNumber }: { trackingId: string; paid: boolean; deliveries: AppointmentDeliveryView[]; invoiceNumber: string | null }) {
   const utils = trpc.useUtils();
   const retry = trpc.admin.appointments.retryFulfillment.useMutation({
     onSuccess: result => {
@@ -82,7 +88,7 @@ export default function AppointmentDeliveries({ trackingId, deliveries, invoiceN
         {invoiceNumber && <li className="rounded px-2 py-1 font-mono text-xs text-muted-foreground">{invoiceNumber}</li>}
       </ul>
       <div className="flex w-full flex-wrap gap-2 sm:w-auto">
-        {canRetryDeliveries(deliveries) && (
+        {canRetryDeliveries(deliveries, paid) && (
           <Button size="sm" variant="outline" className={buttonClass} disabled={retry.isPending}
             onClick={() => {
               if (!window.confirm(`Renvoyer maintenant les envois non aboutis du rendez-vous ${trackingId} ? Les envois déjà effectués ne sont pas répétés.`)) return;

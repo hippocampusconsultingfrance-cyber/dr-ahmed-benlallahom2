@@ -492,7 +492,7 @@ function AppointmentsTab() {
             {apt.requestDetails && (
               <p className="text-sm text-muted-foreground mt-2 line-clamp-2">{apt.requestDetails}</p>
             )}
-            <AppointmentDeliveries trackingId={apt.trackingId} deliveries={apt.deliveries} invoiceNumber={apt.invoiceNumber} />
+            <AppointmentDeliveries trackingId={apt.trackingId} paid={apt.paymentStatus === "completed"} deliveries={apt.deliveries} invoiceNumber={apt.invoiceNumber} />
           </div>
         ))}
         {items.length === 0 && (

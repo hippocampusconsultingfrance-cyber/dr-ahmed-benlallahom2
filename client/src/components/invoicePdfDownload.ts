@@ -11,5 +11,6 @@ export function downloadInvoicePdf(input: { filename: string; contentBase64: str
   document.body.appendChild(anchor);
   anchor.click();
   anchor.remove();
-  window.setTimeout(() => URL.revokeObjectURL(url), 0);
+  // Safari et iOS lisent parfois le blob bien après le clic : URL gardée 40 s, comme pour le fichier agenda.
+  window.setTimeout(() => URL.revokeObjectURL(url), 40_000);
 }

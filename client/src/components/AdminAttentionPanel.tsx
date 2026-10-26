@@ -4,6 +4,14 @@ import { trpc } from "@/lib/trpc";
 import PublicContentSkeleton from "@/components/PublicContentSkeleton";
 import { DELIVERY_JOB_LABELS, type AppointmentDeliveryJob } from "./AppointmentDeliveries";
 
+const parisTime = (date: string | Date) => new Date(date).toLocaleString("fr-FR", { timeZone: "Europe/Paris" });
+const jobLabels = (jobTypes: string[]) => jobTypes.map(jobType => DELIVERY_JOB_LABELS[jobType as AppointmentDeliveryJob] ?? jobType).join(", ");
+
+/** « Facture · nouvel essai automatique au plus tôt le … », or interrupted, waiting for the next scheduled run. */
+export function retryingDetail(item: { jobTypes: string[]; nextAttemptAt: string | Date | null }): string {
+  return `${jobLabels(item.jobTypes)} · ${item.nextAttemptAt ? `nouvel essai automatique au plus tôt le ${parisTime(item.nextAttemptAt)}` : "envoi interrompu, nouvel essai à la prochaine exécution planifiée"}`;
+}
+
 type AttentionItem = { trackingId: string; customerName: string; appointmentDate: string | Date; detail?: string };
 
 function AttentionList({ id, title, description, items, total }: { id: string; title: string; description: string; items: AttentionItem[]; total: number }) {
@@ -14,7 +22,7 @@ function AttentionList({ id, title, description, items, total }: { id: string; t
       <ul aria-labelledby={id} className="mt-3 space-y-2">
         {items.map(item => (
           <li key={item.trackingId} className="text-sm">
-            <span className="font-mono text-primary">{item.trackingId}</span> · <span className="text-foreground">{item.customerName}</span> · <span className="text-muted-foreground">{new Date(item.appointmentDate).toLocaleString("fr-FR", { timeZone: "Europe/Paris" })}</span>
+            <span className="font-mono text-primary">{item.trackingId}</span> · <span className="text-foreground">{item.customerName}</span> · <span className="text-muted-foreground">{parisTime(item.appointmentDate)}</span>
             {item.detail && <span className="block text-xs text-red-400">{item.detail}</span>}
           </li>
         ))}
@@ -26,9 +34,10 @@ function AttentionList({ id, title, description, items, total }: { id: string; t
 
 /**
  * « À traiter » at the top of the dashboard (EXPL-02), read from the database:
- * post-payment emails whose attempts ran out, and payments received without a
- * confirmed appointment. It no longer depends on an alert email, sent through
- * the very channel that may have failed.
+ * post-payment emails whose attempts ran out, or that failed and wait for
+ * their next automatic attempt (possibly the next day), and payments received
+ * without a confirmed appointment. It no longer depends on an alert email,
+ * sent through the very channel that may have failed.
  */
 export default function AdminAttentionPanel({ onOpenAppointments }: { onOpenAppointments: () => void }) {
   const { data, isLoading, error } = trpc.admin.attention.useQuery();
@@ -44,8 +53,9 @@ export default function AdminAttentionPanel({ onOpenAppointments }: { onOpenAppo
   }
 
   const failed = data?.failedDeliveries ?? { total: 0, items: [] };
+  const retrying = data?.retryingDeliveries ?? { total: 0, items: [] };
   const unconfirmed = data?.unconfirmedPayments ?? { total: 0, items: [] };
-  if (failed.total === 0 && unconfirmed.total === 0) {
+  if (failed.total === 0 && retrying.total === 0 && unconfirmed.total === 0) {
     return (
       <section aria-labelledby="admin-attention-title" className="flex items-start gap-3 rounded-2xl border border-border bg-card p-5">
         <CheckCircle className="mt-0.5 h-5 w-5 shrink-0 text-green-400" aria-hidden="true" />
@@ -73,14 +83,23 @@ export default function AdminAttentionPanel({ onOpenAppointments }: { onOpenAppo
             title="Envois après paiement en échec"
             description="Le patient n’a pas reçu sa confirmation ou sa facture, ou vous n’avez pas reçu la notification. Sur le rendez-vous : « Renvoyer », ou « Télécharger la facture » pour l’envoyer vous-même."
             total={failed.total}
-            items={failed.items.map(item => ({ ...item, detail: item.jobTypes.map(jobType => DELIVERY_JOB_LABELS[jobType as AppointmentDeliveryJob] ?? jobType).join(", ") }))}
+            items={failed.items.map(item => ({ ...item, detail: jobLabels(item.jobTypes) }))}
+          />
+        )}
+        {retrying.total > 0 && (
+          <AttentionList
+            id="admin-attention-retrying"
+            title="Envois en échec, nouvel essai prévu"
+            description="Une tentative a échoué ou a été interrompue ; l’essai automatique suivant n’a lieu qu’à une exécution planifiée, parfois le lendemain. D’ici là, le patient n’a pas sa confirmation ou sa facture, ou vous n’avez pas la notification : « Renvoyer » sur le rendez-vous relance l’envoi tout de suite."
+            total={retrying.total}
+            items={retrying.items.map(item => ({ ...item, detail: retryingDetail(item) }))}
           />
         )}
         {unconfirmed.total > 0 && (
           <AttentionList
             id="admin-attention-payments"
             title="Paiements à régulariser"
-            description="Paiement reçu sans rendez-vous confirmé : contactez le patient, puis remboursez ou reprogrammez depuis l’onglet Réservations."
+            description="Paiement reçu sans rendez-vous confirmé : contactez le patient, puis remboursez-le depuis l’onglet Réservations (« Rembourser ce paiement »), ou convenez avec lui d’un nouveau rendez-vous."
             total={unconfirmed.total}
             items={unconfirmed.items}
           />
