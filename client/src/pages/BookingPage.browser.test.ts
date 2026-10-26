@@ -125,6 +125,9 @@ describe.skipIf(!executablePath)("réservation et confirmation dans un navigateu
 
   it("affiche dès l'arrivée les plages d'ouverture, ou « aucun créneau ouvert » (RES-02)", async () => {
     const { page } = await open("/booking", bookingProcedures());
+    // On a loaded machine the opening hours can still be loading once the page is shown.
+    const checking = getBookingFormCopy("fr").checkingAvailability;
+    await page.waitForFunction((text) => !document.querySelector("#booking-opening-hours")?.textContent?.includes(text), checking, { timeout: 30_000 });
     const hours = await page.locator("#booking-opening-hours").innerText();
     expect(hours).toContain(bookingContent.fr.form.openingHours);
     expect(hours).toContain("lun. 18:00–21:00");
@@ -133,6 +136,7 @@ describe.skipIf(!executablePath)("réservation et confirmation dans un navigateu
 
     const closed = await open("/booking", bookingProcedures({ "availability.getSlots": () => [] }));
     const status = closed.page.locator("#availability-status");
+    await closed.page.waitForFunction(() => document.querySelector("#availability-status")?.getAttribute("data-state") === "unavailable", undefined, { timeout: 30_000 });
     expect(await status.getAttribute("data-state")).toBe("unavailable");
     expect(await status.innerText()).toBe("Aucun horaire de consultation n’est actuellement ouvert.");
     expect(await closed.page.locator("#booking-day").isDisabled()).toBe(true);
