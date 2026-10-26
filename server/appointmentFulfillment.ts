@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { and, eq, gte, inArray, lt, lte, or } from "drizzle-orm";
 import { appointmentFulfillmentJobs, appointments } from "../drizzle/schema";
 import { getDb } from "./db";
@@ -259,6 +260,17 @@ function ownerNotificationKey(appointment: Pick<Appointment, "trackingId">) {
   return `appointment-owner-${appointment.trackingId}`;
 }
 
+/**
+ * Idempotency key of an email to the patient: one per booking (or invoice) and
+ * address. Every attempt to the same address reuses it, so the email never
+ * leaves twice; once the address is corrected from the dashboard after a
+ * refusal (EXPL-02), « Renvoyer » writes to the new one under a new key, which
+ * Resend would otherwise refuse as reused with another content (409).
+ */
+export function patientEmailIdempotencyKey(key: string, customerEmail: string) {
+  return `${key}-${createHash("sha256").update(customerEmail.trim().toLowerCase()).digest("hex").slice(0, 16)}`;
+}
+
 function retryAt(attempt: number) {
   const delays = APPOINTMENT_FULFILLMENT_RETRY_DELAYS_MS;
   return new Date(Date.now() + delays[Math.min(Math.max(1, attempt), delays.length) - 1]);
@@ -375,14 +387,14 @@ async function runJob(id: number) {
       await waitForSendSlot();
       // The job is created at the payment confirmation: its creation time stamps
       // the attached .ics, identical on every retry (RES-05).
-      await sendConfirmationEmail(appointment.customerEmail, appointment.customerName, appointment.trackingId, appointment.appointmentDate, finalPrice, undefined, { idempotencyKey: `appointment-confirmation-${appointment.trackingId}`, language, confirmedAt: job.createdAt ?? appointment.appointmentDate });
+      await sendConfirmationEmail(appointment.customerEmail, appointment.customerName, appointment.trackingId, appointment.appointmentDate, finalPrice, undefined, { idempotencyKey: patientEmailIdempotencyKey(`appointment-confirmation-${appointment.trackingId}`, appointment.customerEmail), language, confirmedAt: job.createdAt ?? appointment.appointmentDate });
       const smsSent = await sendCustomerConfirmationSMS(appointment.customerPhone, appointment.trackingId, appointment.appointmentDate);
       await db.update(appointments).set({ emailSent: 1, smsSent: smsSent ? 1 : 0 }).where(eq(appointments.id, appointment.id));
     } else if (jobType === "refund") {
       await waitForSendSlot();
       // One key whatever the refund's origin: the patient is told once. Its
       // failure carries its cause, so a refused address is told apart (RES-06).
-      await sendRefundConfirmationEmail(appointment.customerEmail, appointment.customerName, appointment.trackingId, appointment.appointmentDate, appointment.refundAmount ?? appointment.finalPrice, { ...refundNotice!.email, idempotencyKey: `appointment-refund-${appointment.trackingId}`, language });
+      await sendRefundConfirmationEmail(appointment.customerEmail, appointment.customerName, appointment.trackingId, appointment.appointmentDate, appointment.refundAmount ?? appointment.finalPrice, { ...refundNotice!.email, idempotencyKey: patientEmailIdempotencyKey(`appointment-refund-${appointment.trackingId}`, appointment.customerEmail), language });
     } else if (jobType === "refund_owner") {
       // Queued after the patient email: says whether it went out.
       const [patientJob] = await db.select({ status: appointmentFulfillmentJobs.status, lastError: appointmentFulfillmentJobs.lastError }).from(appointmentFulfillmentJobs)
@@ -414,7 +426,7 @@ async function runJob(id: number) {
       // Its pause counts from here, once the PDF is built.
       await waitForSendSlot();
       // The PDF stays in French whatever the language of the email (EN-01).
-      await sendInvoiceEmail(appointment.customerEmail, appointment.customerName, appointment.trackingId, finalPrice, invoice.buffer, invoiceRecord.invoiceNumber, { idempotencyKey: `appointment-invoice-${invoiceRecord.invoiceNumber}`, language });
+      await sendInvoiceEmail(appointment.customerEmail, appointment.customerName, appointment.trackingId, finalPrice, invoice.buffer, invoiceRecord.invoiceNumber, { idempotencyKey: patientEmailIdempotencyKey(`appointment-invoice-${invoiceRecord.invoiceNumber}`, appointment.customerEmail), language });
     }
     await db.update(appointmentFulfillmentJobs).set({ status: "completed", finishedAt: new Date(), lastError: null }).where(eq(appointmentFulfillmentJobs.id, id));
     return { completed: true };
@@ -434,7 +446,8 @@ async function runJob(id: number) {
     // A refusal of this very email (address, content) does not pass with
     // time (EXPL-02): the job ends now, as refused, instead of failing again
     // at each automatic attempt; « Renvoyer » sends it again once the address
-    // is corrected. A refused sending configuration (API key, sender domain)
+    // is corrected on the appointment (updateAppointmentCustomerEmailByAdmin).
+    // A refused sending configuration (API key, sender domain)
     // stops every email until it is corrected: it keeps its automatic attempts.
     const refused = postPaymentEmailRefused(error);
     const terminal = refused || job.attempts >= job.maxAttempts;
@@ -450,7 +463,7 @@ async function runJob(id: number) {
       await notifyOwner({
         title: `Échec d’envoi après ${isRefundNoticeJob(jobType) ? "remboursement" : "paiement"} (${appointment.trackingId})`,
         content: refused
-          ? `L’envoi ${JOB_LABELS[jobType]} du rendez-vous ${appointment.trackingId} a été refusé par le service d’envoi (adresse email du patient refusée ou invalide, ou contenu de l’email refusé). ${recorded}. Ce refus n’est pas passager : vérifiez l’adresse du patient et contactez-le directement. Le site ne le renverra pas de lui-même : une fois l’adresse corrigée, « Renvoyer » sur le rendez-vous (onglet Réservations) le renvoie. ${patientContact(appointment)}`
+          ? `L’envoi ${JOB_LABELS[jobType]} du rendez-vous ${appointment.trackingId} a été refusé par le service d’envoi (adresse email du patient refusée ou invalide, ou contenu de l’email refusé). ${recorded}. Ce refus n’est pas passager : vérifiez l’adresse du patient et contactez-le directement. Le site ne le renverra pas de lui-même : corrigez l’adresse sur le rendez-vous (onglet Réservations, « Corriger l’email du patient »), puis « Renvoyer » l’envoie à la nouvelle adresse. ${patientContact(appointment)}`
           : terminal
             ? `L’envoi ${JOB_LABELS[jobType]} du rendez-vous ${appointment.trackingId} a échoué ${job.attempts} fois. ${recorded} ; un envoi manuel au patient est nécessaire. ${patientContact(appointment)}`
             : `L’envoi ${JOB_LABELS[jobType]} du rendez-vous ${appointment.trackingId} vient d’échouer (tentative ${job.attempts} sur ${job.maxAttempts}). ${recorded}. Un nouvel essai automatique aura lieu lors de la prochaine exécution planifiée ; en attendant, vous pouvez contacter le patient. ${patientContact(appointment)}`,

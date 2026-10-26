@@ -257,3 +257,26 @@ export async function refundUnconfirmedCheckoutSession(stripe: Stripe, input: { 
   console.log("Unconfirmed Stripe payment refunded", { trackingId });
   return { success: true as const, refundId: refund.id, refundAmount, trackingId, patientNotified };
 }
+
+/**
+ * Corrects the patient's email of a booking from the dashboard (EXPL-02),
+ * typically after the email service refused it: each post-payment or refund
+ * email reads the address from the booking at every attempt, so « Renvoyer »
+ * then writes to the new one. The address is already validated by the caller.
+ * Never on a booking reduced to its accounting record (erasure or retention,
+ * RGPD-12): its emptied address stays empty, even under a concurrent erasure.
+ */
+export async function updateAppointmentCustomerEmailByAdmin(input: { trackingId: string; customerEmail: string }, now = new Date()) {
+  const db = await database();
+  const appointment = await loadAppointment(input.trackingId);
+  if (!appointment.customerEmail.trim()) {
+    throw new TRPCError({ code: "CONFLICT", message: "Les données de ce patient ont été effacées (RGPD) : son adresse email ne peut plus être renseignée." });
+  }
+  if (appointment.customerEmail === input.customerEmail) return { success: true as const, unchanged: true };
+  const result = await db.update(appointments).set({ customerEmail: input.customerEmail, updatedAt: now })
+    .where(and(eq(appointments.id, appointment.id), eq(appointments.customerEmail, appointment.customerEmail)));
+  if (mutationRowCount(result) !== 1) {
+    throw new TRPCError({ code: "CONFLICT", message: "Le rendez-vous a été modifié entre-temps. Actualisez la liste." });
+  }
+  return { success: true as const, unchanged: false };
+}

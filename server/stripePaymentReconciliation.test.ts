@@ -113,7 +113,7 @@ const { refundAppointmentPayment } = await import("./appointmentAdminActions");
 const { paymentStatusPageFulfillment } = await import("./appointmentPublicStatus");
 const { KEPT_HOLD_RECHECK_MS } = await import("./appointmentHolds");
 const { generateInvoicePDF } = await import("./invoice");
-const { APPOINTMENT_FULFILLMENT_STALE_AFTER_MS, appointmentFulfillmentPacing, closeUnsentAppointmentFulfillment, getAppointmentDeliveries, processDueAppointmentFulfillmentJobs, recoverStaleAppointmentFulfillmentJobs } = await import("./appointmentFulfillment");
+const { APPOINTMENT_FULFILLMENT_STALE_AFTER_MS, appointmentFulfillmentPacing, closeUnsentAppointmentFulfillment, getAppointmentDeliveries, patientEmailIdempotencyKey, processDueAppointmentFulfillmentJobs, recoverStaleAppointmentFulfillmentJobs } = await import("./appointmentFulfillment");
 const PAGE_FULFILLMENT_TIMEOUT_MS = paymentStatusPageFulfillment.timeoutMs;
 const signer = new Stripe(process.env.STRIPE_SECRET_KEY!);
 
@@ -131,6 +131,8 @@ const HOUR = 60 * 60 * 1000;
 const TRACKING_ID = "APTRECON00001";
 const SESSION_ID = "cs_test_reconciliation_1";
 const PAYMENT_INTENT = "pi_test_reconciliation_1";
+/** One key per booking and address: the patient is told once (RES-06, EXPL-02). */
+const REFUND_EMAIL_KEY = patientEmailIdempotencyKey(`appointment-refund-${TRACKING_ID}`, "patient@example.test");
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -621,7 +623,7 @@ describe("RES-06 — remboursements et contestations faits dans Stripe", () => {
     expect(appointmentRow()).toMatchObject({ paymentStatus: "refunded", appointmentStatus: "cancelled", slotKey: null, refundAmount: "100.00" });
     expect(appointmentRow().refundedAt).toBeInstanceOf(Date);
     expect(emails.sendRefundConfirmationEmail).toHaveBeenCalledTimes(1);
-    expect(emails.sendRefundConfirmationEmail).toHaveBeenCalledWith("patient@example.test", "Patient Test", TRACKING_ID, expect.any(Date), "100.00", { context: "refund", idempotencyKey: `appointment-refund-${TRACKING_ID}`, language: "fr" });
+    expect(emails.sendRefundConfirmationEmail).toHaveBeenCalledWith("patient@example.test", "Patient Test", TRACKING_ID, expect.any(Date), "100.00", { context: "refund", idempotencyKey: REFUND_EMAIL_KEY, language: "fr" });
     expect(owner.notifyOwner).toHaveBeenCalledTimes(1);
     const [alert] = owner.notifyOwner.mock.calls[0];
     expect(alert.title).toBe(`Remboursement constaté chez Stripe (${TRACKING_ID})`);
@@ -755,7 +757,7 @@ describe("RES-06 — remboursements et contestations faits dans Stripe", () => {
     owner.notifyOwner.mockResolvedValue(true);
     expect(await retryAppointmentFulfillment(TRACKING_ID)).toMatchObject({ outcome: "retried", requeued: 2 });
     expect(jobStates()).toEqual([["refund", "completed"], ["refund_owner", "completed"]]);
-    expect(emails.sendRefundConfirmationEmail).toHaveBeenLastCalledWith("patient@example.test", "Patient Test", TRACKING_ID, expect.any(Date), "100.00", { context: "refund", idempotencyKey: `appointment-refund-${TRACKING_ID}`, language: "fr" });
+    expect(emails.sendRefundConfirmationEmail).toHaveBeenLastCalledWith("patient@example.test", "Patient Test", TRACKING_ID, expect.any(Date), "100.00", { context: "refund", idempotencyKey: REFUND_EMAIL_KEY, language: "fr" });
     expect(owner.notifyOwner).toHaveBeenCalledTimes(1);
     const [alert, options] = owner.notifyOwner.mock.calls[0];
     expect(alert.title).toBe(`Remboursement constaté chez Stripe (${TRACKING_ID})`);
@@ -810,7 +812,7 @@ describe("RES-06 — remboursements et contestations faits dans Stripe", () => {
     expect((await runFulfillment()).status).toBe(200);
     expect(jobStates()).toEqual([["refund", "completed"]]);
     expect(emails.sendRefundConfirmationEmail).toHaveBeenCalledTimes(2);
-    const email = ["patient@example.test", "Patient Test", TRACKING_ID, expect.any(Date), "100.00", { context: "practitioner_cancellation", reason: "Indisponibilité du médecin", idempotencyKey: `appointment-refund-${TRACKING_ID}`, language: "fr" }];
+    const email = ["patient@example.test", "Patient Test", TRACKING_ID, expect.any(Date), "100.00", { context: "practitioner_cancellation", reason: "Indisponibilité du médecin", idempotencyKey: REFUND_EMAIL_KEY, language: "fr" }];
     expect(emails.sendRefundConfirmationEmail).toHaveBeenNthCalledWith(1, ...email);
     expect(emails.sendRefundConfirmationEmail).toHaveBeenNthCalledWith(2, ...email);
     expect((await listAppointmentDeliveriesToHandle()).retrying.total).toBe(0);

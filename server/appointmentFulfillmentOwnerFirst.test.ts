@@ -55,7 +55,7 @@ vi.mock("./invoiceNumbering", () => ({
   })),
 }));
 
-import { appointmentFulfillmentPacing, enqueueAppointmentFulfillment, immediateFulfillmentBudget, processDueAppointmentFulfillmentJobs } from "./appointmentFulfillment";
+import { appointmentFulfillmentPacing, enqueueAppointmentFulfillment, immediateFulfillmentBudget, patientEmailIdempotencyKey, processDueAppointmentFulfillmentJobs } from "./appointmentFulfillment";
 import { postPaymentDeliveryRetry, sendConfirmationEmail, sendOwnerNotificationEmail } from "./_core/notifications";
 import * as notificationsModule from "./_core/notifications";
 import { processFulfillmentBestEffort } from "./appointmentPaymentWebhook";
@@ -205,7 +205,7 @@ describe("envois après paiement — propriétaire d’abord, essais courts, ale
     // Email patient : 3 essais (1 + 2 essais courts) avec la même clé d’idempotence.
     const patientConfirmations = resend.calls.filter(call => String(call.message.subject).startsWith("Confirmation de réservation"));
     expect(patientConfirmations).toHaveLength(3);
-    expect(new Set(patientConfirmations.map(call => call.options?.idempotencyKey))).toEqual(new Set(["appointment-confirmation-APTOWNER0001"]));
+    expect(new Set(patientConfirmations.map(call => call.options?.idempotencyKey))).toEqual(new Set([patientEmailIdempotencyKey("appointment-confirmation-APTOWNER0001", "patient@example.test")]));
     // Alerte au propriétaire dès le premier échec, avec les coordonnées du patient.
     const alert = ownerEmails.find(call => String(call.message.subject).startsWith("Échec d’envoi après paiement"));
     expect(alert).toBeDefined();

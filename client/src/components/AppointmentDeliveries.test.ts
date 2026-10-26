@@ -8,8 +8,10 @@ const state = vi.hoisted(() => ({
   attention: { data: undefined as unknown, isLoading: false, error: null as null | { message: string } },
   retryOptions: null as null | MutationOptions,
   invoiceOptions: null as null | MutationOptions,
+  emailOptions: null as null | MutationOptions,
   retryMutate: vi.fn(),
   invoiceMutate: vi.fn(),
+  emailMutate: vi.fn(),
   invalidated: [] as string[],
   toasts: [] as Array<[string, string]>,
   downloads: [] as unknown[],
@@ -32,12 +34,13 @@ vi.mock("@/lib/trpc", () => ({
       appointments: {
         retryFulfillment: { useMutation: (options: MutationOptions) => { state.retryOptions = options; return { mutate: state.retryMutate, isPending: false }; } },
         invoicePdf: { useMutation: (options: MutationOptions) => { state.invoiceOptions = options; return { mutate: state.invoiceMutate, isPending: false }; } },
+        updateCustomerEmail: { useMutation: (options: MutationOptions) => { state.emailOptions = options; return { mutate: state.emailMutate, isPending: false }; } },
       },
     },
   },
 }));
 
-const { default: AppointmentDeliveries, canRetryDeliveries, deliveryLabel, refundEmailWarning } = await import("./AppointmentDeliveries");
+const { default: AppointmentDeliveries, canCorrectPatientEmail, canRetryDeliveries, deliveryLabel, refundEmailWarning } = await import("./AppointmentDeliveries");
 const { default: AdminAttentionPanel, retryingDetail, waitingDetail } = await import("./AdminAttentionPanel");
 
 type Delivery = Parameters<typeof deliveryLabel>[0];
@@ -59,6 +62,7 @@ function button(tree: ReactNode, label: string) {
 beforeEach(() => {
   state.retryMutate.mockClear();
   state.invoiceMutate.mockClear();
+  state.emailMutate.mockClear();
   state.invalidated = [];
   state.toasts = [];
   state.downloads = [];
@@ -174,9 +178,43 @@ describe("EXPL-02 — envois après paiement sur la fiche du rendez-vous", () =>
     expect(message).toContain("aucun nouvel essai automatique n’aura lieu");
   });
 
+  it("propose de corriger l’adresse du patient après un refus, puis « Renvoyer » l’utilise (EXPL-02)", async () => {
+    const refused = [delivery("owner", "sent"), delivery("confirmation", "refused", 1, 7), delivery("invoice", "refused", 1, 7)];
+    // Only once an email to the patient that « Renvoyer » sends again was refused, and never for a booking whose data was erased.
+    expect(canCorrectPatientEmail(refused, "completed", "patient@exemple.fr")).toBe(true);
+    expect(canCorrectPatientEmail([delivery("refund", "refused", 1, 7)], "refunded", "patient@exemple.fr")).toBe(true);
+    expect(canCorrectPatientEmail([delivery("confirmation", "failed", 7, 7), delivery("owner", "refused")], "completed", "patient@exemple.fr")).toBe(false);
+    expect(canCorrectPatientEmail(refused, "refunded", "patient@exemple.fr")).toBe(false);
+    expect(canCorrectPatientEmail(refused, "completed", "")).toBe(false);
+    expect(renderToStaticMarkup(createElement(AppointmentDeliveries, { trackingId: "APTUI0000011", paymentStatus: "completed", invoiceNumber: null, deliveries: [delivery("confirmation", "sent")], customerEmail: "patient@exemple.fr" })))
+      .not.toContain("Corriger l’email du patient");
+    expect(renderToStaticMarkup(createElement(AppointmentDeliveries, { trackingId: "APTUI0000011", paymentStatus: "completed", invoiceNumber: null, deliveries: refused, customerEmail: "patient@exemple.fr" })))
+      .toContain("Corriger l’email du patient");
+
+    const prompt = vi.fn(() => "  patient.corrige@exemple.fr ");
+    vi.stubGlobal("window", { confirm: vi.fn(() => true), prompt });
+    const tree = AppointmentDeliveries({ trackingId: "APTUI0000011", paymentStatus: "completed", invoiceNumber: null, deliveries: refused, customerEmail: "patient@exemple.fr" });
+    button(tree, "Corriger l’email du patient")();
+    expect(prompt).toHaveBeenCalledWith(expect.stringContaining("APTUI0000011"), "patient@exemple.fr");
+    expect(state.emailMutate).toHaveBeenCalledWith({ trackingId: "APTUI0000011", customerEmail: "patient.corrige@exemple.fr" });
+
+    await state.emailOptions!.onSuccess!({ success: true, unchanged: false } as never);
+    expect(state.toasts.at(-1)).toEqual(["success", "Adresse du patient corrigée. « Renvoyer » envoie maintenant les envois refusés à cette adresse."]);
+    expect(state.invalidated).toEqual(["appointments.list"]);
+    await state.emailOptions!.onError!(new Error("Adresse email invalide : saisissez une adresse complète, par exemple prenom.nom@exemple.fr."));
+    expect(state.toasts.at(-1)).toEqual(["error", "Adresse email invalide : saisissez une adresse complète, par exemple prenom.nom@exemple.fr."]);
+
+    // Cancelled, or the same address: nothing is sent to the server.
+    state.emailMutate.mockClear();
+    prompt.mockReturnValueOnce(null as never).mockReturnValueOnce("patient@exemple.fr");
+    button(tree, "Corriger l’email du patient")();
+    button(tree, "Corriger l’email du patient")();
+    expect(state.emailMutate).not.toHaveBeenCalled();
+  });
+
   it("explique au médecin pourquoi l’email de remboursement n’est pas parti", () => {
     expect(refundEmailWarning("refused")).toContain("a été refusé par le service d’envoi");
-    expect(refundEmailWarning("refused")).toContain("« Renvoyer » sur le rendez-vous");
+    expect(refundEmailWarning("refused")).toContain("Sur le rendez-vous, « Corriger l’email du patient », puis « Renvoyer » l’envoie à la nouvelle adresse.");
     for (const pending of ["retrying", "pending", "sending", "interrupted"] as const) {
       expect(refundEmailWarning(pending)).toContain("n’est pas encore parti : un nouvel essai automatique est prévu");
     }
@@ -266,7 +304,7 @@ describe("EXPL-02 — encart « À traiter » du tableau de bord", () => {
     expect(html).not.toContain("Rien à traiter");
     expect(html).toContain("Envois refusés par le service d’envoi (1)");
     expect(html).toContain("Ce refus n’est pas passager : aucun nouvel essai automatique n’a lieu.");
-    expect(html).toContain("« Renvoyer » sur le rendez-vous");
+    expect(html).toContain("sur le rendez-vous, « Corriger l’email du patient », puis « Renvoyer » l’envoie à la nouvelle adresse.");
     expect(html).toContain("APTTODOUI005");
     expect(html).toContain("Confirmation, Facture");
     expect(html).not.toContain("nouvel essai automatique au plus tôt");

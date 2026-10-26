@@ -1,6 +1,6 @@
 import type Stripe from "stripe";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { appointmentFulfillmentJobs, appointments } from "../drizzle/schema";
+import { appointmentFulfillmentJobs, appointments, securityEvents } from "../drizzle/schema";
 import { createMemoryPg, type MemoryPg } from "./testing/memoryPgProxy";
 import type { TrpcContext } from "./_core/context";
 
@@ -44,7 +44,7 @@ vi.mock("./_core/notification", async importOriginal => ({ ...await importOrigin
 
 import { appRouter } from "./routers";
 import { postPaymentDeliveryRetry } from "./_core/notifications";
-import { appointmentFulfillmentPacing, enqueueStripeRefundNotices, processAppointmentFulfillmentNow, processDueAppointmentFulfillmentJobs } from "./appointmentFulfillment";
+import { appointmentFulfillmentPacing, enqueueStripeRefundNotices, patientEmailIdempotencyKey, processAppointmentFulfillmentNow, processDueAppointmentFulfillmentJobs } from "./appointmentFulfillment";
 import { refundAppointmentPayment } from "./appointmentAdminActions";
 import { STRIPE_REFUND_CANCELLATION_REASON } from "./appointmentPaymentWebhook";
 
@@ -98,7 +98,7 @@ const deliveriesOf = async (trackingId: string) => (await admin().appointments.l
 const stripe = { refunds: { create: vi.fn(async () => ({ id: "re_test_1", amount: 10000 })), list: vi.fn(async () => ({ data: [] })) } } as unknown as Stripe;
 
 beforeEach(() => {
-  memory = createMemoryPg([appointments, appointmentFulfillmentJobs]);
+  memory = createMemoryPg([appointments, appointmentFulfillmentJobs, securityEvents]);
   state.memory = memory;
   resend.calls.length = 0;
   resend.rejected.clear();
@@ -143,7 +143,7 @@ describe("EXPL-02 — un refus du service d’envoi termine l’envoi tout de su
     expect(alert.title).toBe("Échec d’envoi après paiement (APTREFUSE001)");
     expect(alert.content).toContain("a été refusé par le service d’envoi");
     expect(alert.content).toContain("Ce refus n’est pas passager");
-    expect(alert.content).toContain("« Renvoyer » sur le rendez-vous");
+    expect(alert.content).toContain("corrigez l’adresse sur le rendez-vous (onglet Réservations, « Corriger l’email du patient »), puis « Renvoyer » l’envoie à la nouvelle adresse");
     expect(alert.content).not.toContain("nouvel essai automatique");
     expect(alert.content).not.toMatch(/tentative \d sur/);
     expect(alert.key).toBe("appointment-confirmation-failure-APTREFUSE001-refused");
@@ -254,7 +254,7 @@ describe("EXPL-02 — remboursement depuis le tableau de bord par la file des re
     const [email] = emailsTo("aptrefund010@example.test");
     expect(emailsTo("aptrefund010@example.test")).toHaveLength(1);
     expect(email.message.subject).toBe(subject);
-    expect(email.options).toEqual({ idempotencyKey: "appointment-refund-APTREFUND010" });
+    expect(email.options).toEqual({ idempotencyKey: patientEmailIdempotencyKey("appointment-refund-APTREFUND010", "aptrefund010@example.test") });
     if (reasonLine) expect(String(email.message.text)).toContain(reasonLine);
     else expect(String(email.message.text)).not.toMatch(/Motif|Reason/);
     expect(job(id, "refund")).toMatchObject({ status: "completed", attempts: 1, last_error: null });
@@ -283,7 +283,7 @@ describe("EXPL-02 — remboursement depuis le tableau de bord par la file des re
     const sent = emailsTo("aptrefund011@example.test");
     // 3 tries in the first attempt (short retries), then the one that went out: same key, same email.
     expect(sent).toHaveLength(4);
-    expect(new Set(sent.map(call => call.options?.idempotencyKey))).toEqual(new Set(["appointment-refund-APTREFUND011"]));
+    expect(new Set(sent.map(call => call.options?.idempotencyKey))).toEqual(new Set([patientEmailIdempotencyKey("appointment-refund-APTREFUND011", "aptrefund011@example.test")]));
     expect(new Set(sent.map(call => call.message.text)).size).toBe(1);
     expect(job(id, "refund")).toMatchObject({ status: "completed", last_error: null });
     await expect(admin().attention()).resolves.toMatchObject({ retryingDeliveries: { total: 0 }, refusedDeliveries: { total: 0 } });
@@ -306,5 +306,76 @@ describe("EXPL-02 — remboursement depuis le tableau de bord par la file des re
     await expect(refundAppointmentPayment(stripe, { trackingId: "APTREFUND013", initiator: "practitioner", reason: "Indisponibilité du médecin" }))
       .resolves.toMatchObject({ success: true, patientNotified: false, patientEmail: "retrying" });
     expect(job(id, "refund")).toMatchObject({ status: "retry", attempts: 1, max_attempts: 7 });
+  });
+});
+
+describe("EXPL-02 — adresse du patient corrigée depuis la fiche du rendez-vous après un refus", () => {
+  const corrections = () => memory.rows(securityEvents).filter(event => event.category === "admin_appointment_email_corrected");
+
+  it("« Renvoyer » écrit ensuite à la nouvelle adresse, sous une nouvelle clé, une seule fois ; la correction est tracée sans les adresses", async () => {
+    const { id } = seedAppointment("APTFIXMAIL01");
+    seedJob(id, "owner", { status: "completed", attempts: 1 });
+    seedJob(id, "confirmation");
+    resend.rejected.add("aptfixmail01@example.test");
+    await processAppointmentFulfillmentNow(id);
+    expect(job(id, "confirmation")).toMatchObject({ status: "failed", attempts: 1 });
+
+    // Typed with surrounding spaces, as pasted from an email.
+    await expect(admin().appointments.updateCustomerEmail({ trackingId: "APTFIXMAIL01", customerEmail: "  patient.corrige@example.test " }))
+      .resolves.toEqual({ success: true, unchanged: false });
+
+    expect(memory.rows(appointments)[0]).toMatchObject({ customer_email: "patient.corrige@example.test" });
+    // Nothing is sent by the correction itself: the refusal stays on screen until « Renvoyer ».
+    expect((await deliveriesOf("APTFIXMAIL01")).map(delivery => delivery.state)).toEqual(["sent", "refused"]);
+    expect(resend.calls).toHaveLength(1);
+    expect(corrections()).toEqual([expect.objectContaining({ security_event_actor_kind: "admin", actor_reference: "user_owner", security_event_outcome: "allowed" })]);
+    const trace = JSON.stringify(corrections()[0]);
+    expect(trace).toContain("APTFIXMAIL01");
+    expect(trace).not.toContain("example.test");
+
+    const retry = await admin().appointments.retryFulfillment({ trackingId: "APTFIXMAIL01" });
+
+    expect(retry.deliveries.map(delivery => delivery.state)).toEqual(["sent", "sent"]);
+    const [refused] = emailsTo("aptfixmail01@example.test");
+    const sent = emailsTo("patient.corrige@example.test");
+    expect(sent).toHaveLength(1);
+    expect(sent[0].message.subject).toBe(refused.message.subject);
+    // A new key for the new address: the one of the refused send would be refused as reused with another content.
+    expect(sent[0].options?.idempotencyKey).toBe(patientEmailIdempotencyKey("appointment-confirmation-APTFIXMAIL01", "patient.corrige@example.test"));
+    expect(sent[0].options?.idempotencyKey).not.toBe(refused.options?.idempotencyKey);
+    await expect(admin().attention()).resolves.toMatchObject({ refusedDeliveries: { total: 0 } });
+  });
+
+  it("vaut aussi pour l’email d’un remboursement refusé", async () => {
+    const { id } = seedAppointment("APTFIXMAIL02");
+    resend.rejected.add("aptfixmail02@example.test");
+    await expect(refundAppointmentPayment(stripe, { trackingId: "APTFIXMAIL02", initiator: "practitioner", reason: "Indisponibilité du médecin" }))
+      .resolves.toMatchObject({ patientEmail: "refused" });
+
+    await admin().appointments.updateCustomerEmail({ trackingId: "APTFIXMAIL02", customerEmail: "bonne.adresse@example.test" });
+    const retry = await admin().appointments.retryFulfillment({ trackingId: "APTFIXMAIL02" });
+
+    expect(retry.requeuedJobTypes).toEqual(["refund"]);
+    expect(emailsTo("bonne.adresse@example.test").map(call => call.message.subject)).toEqual(["Annulation de votre consultation - APTFIXMAIL02"]);
+    expect(job(id, "refund")).toMatchObject({ status: "completed", last_error: null });
+  });
+
+  it("refuse une adresse que la réservation refuserait, un rendez-vous anonymisé (RGPD) ou inconnu, et ne trace qu’un vrai changement", async () => {
+    seedAppointment("APTFIXMAIL03");
+    seedAppointment("APTFIXMAIL04", { customer_email: "", customer_name: "Patient effacé" });
+
+    for (const customerEmail of ["pas-une-adresse", "patient@", "a b@example.test", `${"x".repeat(320)}@example.test`]) {
+      await expect(admin().appointments.updateCustomerEmail({ trackingId: "APTFIXMAIL03", customerEmail }))
+        .rejects.toMatchObject({ code: "BAD_REQUEST", message: expect.stringContaining("Adresse email invalide") });
+    }
+    await expect(admin().appointments.updateCustomerEmail({ trackingId: "APTFIXMAIL04", customerEmail: "retour@example.test" }))
+      .rejects.toMatchObject({ code: "CONFLICT", message: expect.stringContaining("effacées (RGPD)") });
+    await expect(admin().appointments.updateCustomerEmail({ trackingId: "APTUNKNOWN99", customerEmail: "retour@example.test" }))
+      .rejects.toMatchObject({ code: "NOT_FOUND" });
+    await expect(admin().appointments.updateCustomerEmail({ trackingId: "APTFIXMAIL03", customerEmail: "aptfixmail03@example.test" }))
+      .resolves.toEqual({ success: true, unchanged: true });
+
+    expect(memory.rows(appointments).map(row => row.customer_email)).toEqual(["aptfixmail03@example.test", ""]);
+    expect(corrections()).toEqual([]);
   });
 });
