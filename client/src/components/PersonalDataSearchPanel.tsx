@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { AdminErrorState } from "@/components/AdminStatePanel";
 import PublicContentSkeleton from "@/components/PublicContentSkeleton";
 import { downloadJsonFile } from "./jsonFileDownload";
-import { GDPR_REQUEST_STATUS_LABELS, GDPR_REQUEST_TYPE_LABELS } from "./gdprRequestAdmin";
+import { formatGdprRequestDate, GDPR_REQUEST_STATUS_LABELS, GDPR_REQUEST_TYPE_LABELS } from "./gdprRequestAdmin";
 
 export type PersonalData = inferRouterOutputs<AppRouter>["admin"]["personalData"]["find"];
 type ErasureReport = inferRouterOutputs<AppRouter>["admin"]["personalData"]["erase"];
@@ -124,7 +124,7 @@ export function PersonalDataResult({ data, onChanged }: { data: PersonalData; on
           {data.medicalQuestions.map(question => <li key={question.id}><span className="font-mono text-xs">{question.trackingId}</span> · {formatDate(question.createdAt)} · {MEDICAL_QUESTION_STATUS_LABELS[question.status] ?? question.status} · {excerpt(question.question)}</li>)}
         </Group>
         <Group title="Demandes RGPD" count={data.totals.gdprRequests} shown={data.gdprRequests.length}>
-          {data.gdprRequests.map(request => <li key={request.id}><span className="font-mono text-xs">{request.trackingId}</span> · {formatDate(request.createdAt)} · {GDPR_REQUEST_TYPE_LABELS[request.requestType] ?? request.requestType} · {GDPR_REQUEST_STATUS_LABELS[request.status] ?? request.status}</li>)}
+          {data.gdprRequests.map(request => <li key={request.id}><span className="font-mono text-xs">{request.trackingId}</span> · {formatGdprRequestDate(request.createdAt)} · {GDPR_REQUEST_TYPE_LABELS[request.requestType] ?? request.requestType} · {GDPR_REQUEST_STATUS_LABELS[request.status] ?? request.status}</li>)}
         </Group>
         <Group title="Rendez-vous" count={data.totals.appointments} shown={data.appointments.length}>
           {data.appointments.map(booking => <li key={booking.id}><span className="font-mono text-xs">{booking.trackingId}</span> · {formatDate(booking.appointmentDate)} · {APPOINTMENT_STATUS_LABELS[booking.appointmentStatus] ?? booking.appointmentStatus} · {PAYMENT_STATUS_LABELS[booking.paymentStatus] ?? booking.paymentStatus} · {booking.finalPrice} €{booking.invoiceNumber ? ` · facture ${booking.invoiceNumber}` : ""}</li>)}
@@ -186,15 +186,21 @@ export function revealPersonalDataSearch(section: Pick<HTMLElement, "scrollIntoV
   section.scrollIntoView({ block: "start" });
 }
 
-/** « Rechercher une personne par email » (RGPD-12), at the top of the GDPR tab; `reveal` when opened by « Ses données ». */
-export default function PersonalDataSearchPanel({ requestedEmail = "", reveal = false }: { requestedEmail?: string; reveal?: boolean }) {
+/**
+ * « Rechercher une personne par email » (RGPD-12), at the top of the GDPR tab;
+ * `reveal` when opened by « Ses données », then `onRevealed`, so that a panel
+ * mounted again later leaves the page and the focus where they are.
+ */
+export default function PersonalDataSearchPanel({ requestedEmail = "", reveal = false, onRevealed }: { requestedEmail?: string; reveal?: boolean; onRevealed?: () => void }) {
   const [email, setEmail] = useState(requestedEmail);
   const [searchedEmail, setSearchedEmail] = useState(requestedEmail);
   const found = trpc.admin.personalData.find.useQuery({ email: searchedEmail }, { enabled: searchedEmail.length > 0 });
   const sectionRef = useRef<HTMLElement>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
-    if (reveal) revealPersonalDataSearch(sectionRef.current, titleRef.current);
+    if (!reveal) return;
+    revealPersonalDataSearch(sectionRef.current, titleRef.current);
+    onRevealed?.();
   }, [reveal]);
   // Written after the first render, even for results already in cache, so that each one is read out.
   const summary = found.data ? describePersonalDataFound(found.data) : "";

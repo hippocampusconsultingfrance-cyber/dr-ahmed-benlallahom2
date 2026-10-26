@@ -5,6 +5,8 @@ export const PATIENT_REFUND_DEADLINE_HOURS = BOOKING_PATIENT_REFUND_DEADLINE_HOU
 
 /** Said before and after refunding a booking whose patient data was erased (RGPD-12). */
 export const PATIENT_DATA_ERASED_REFUND_NOTICE = "Données du patient effacées (RGPD) : il n’est plus joignable par le site et ne sera pas prévenu par email.";
+/** The reason is stored on a row reduced to its accounting record: nothing that identifies the patient goes back into it. */
+export const PATIENT_DATA_ERASED_REASON_PROMPT = "Motif (obligatoire, sans donnée personnelle : ni nom, ni coordonnées, ni état de santé) :";
 
 export type AdminAppointmentRow = {
   appointmentDate: string | Date;

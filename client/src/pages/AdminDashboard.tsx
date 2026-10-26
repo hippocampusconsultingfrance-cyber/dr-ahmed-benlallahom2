@@ -28,7 +28,7 @@ import { adminSearchStatus, useAdminSearch } from "@/components/adminSearch";
 import PublicContentSkeleton from "@/components/PublicContentSkeleton";
 import { getActiveAdminTabLabel } from "./adminDashboardMobileTabs";
 import { buildAppointmentsAgenda } from "./appointmentsAgenda";
-import { getAppointmentAdminActions, PATIENT_DATA_ERASED_REFUND_NOTICE } from "./appointmentAdminActions";
+import { getAppointmentAdminActions, PATIENT_DATA_ERASED_REASON_PROMPT, PATIENT_DATA_ERASED_REFUND_NOTICE } from "./appointmentAdminActions";
 
 type Tab = "overview" | "appointments" | "contacts" | "gdpr" | "testimonials" | "availability" | "recruitment" | "candidateDocuments" | "security" | "vivier" | "mailing" | "employerBriefs" | "medicalQuestions";
 
@@ -475,7 +475,7 @@ export function AppointmentsTab() {
                       {actions.canPractitionerCancel && (
                         <Button size="sm" variant="outline" className={buttonClass} disabled={refundAppointment.isPending}
                           onClick={() => askRefund(apt.trackingId, "practitioner", actions.patientDataErased
-                            ? `Annuler ${apt.trackingId} et rembourser intégralement ${apt.finalPrice} €.\n${PATIENT_DATA_ERASED_REFUND_NOTICE}\nMotif (obligatoire) :`
+                            ? `Annuler ${apt.trackingId} et rembourser intégralement ${apt.finalPrice} €.\n${PATIENT_DATA_ERASED_REFUND_NOTICE}\n${PATIENT_DATA_ERASED_REASON_PROMPT}`
                             : `Annuler ${apt.trackingId} et rembourser intégralement ${apt.finalPrice} € au patient.\nMotif communiqué au patient (obligatoire) :`)}>
                           <XCircle className="w-3 h-3 mr-1" />
                           Annuler (praticien) et rembourser
@@ -490,7 +490,7 @@ export function AppointmentsTab() {
                       )}
                       {(actions.canPractitionerRefund || actions.unconfirmedPayment) && (
                         <Button size="sm" variant="outline" className={buttonClass} disabled={refundAppointment.isPending}
-                          onClick={() => askRefund(apt.trackingId, "practitioner", `Rembourser intégralement le paiement de ${apt.trackingId}.${actions.patientDataErased ? `\n${PATIENT_DATA_ERASED_REFUND_NOTICE}` : ""}\nMotif (obligatoire) :`)}>
+                          onClick={() => askRefund(apt.trackingId, "practitioner", `Rembourser intégralement le paiement de ${apt.trackingId}.${actions.patientDataErased ? `\n${PATIENT_DATA_ERASED_REFUND_NOTICE}\n${PATIENT_DATA_ERASED_REASON_PROMPT}` : "\nMotif (obligatoire) :"}`)}>
                           <DollarSign className="w-3 h-3 mr-1" />
                           {actions.unconfirmedPayment ? "Rembourser ce paiement" : "Rembourser"}
                         </Button>
@@ -668,6 +668,8 @@ export function GdprTab() {
   // Note or reason being typed, per request (RGPD-12); the saved note otherwise.
   const [notes, setNotes] = useState<Record<number, string>>({});
   const [personalDataSearch, setPersonalDataSearch] = useState({ email: "", nonce: 0 });
+  // The last « Ses données » brought on screen: the panel mounted again after an error state does not move the page.
+  const [revealedNonce, setRevealedNonce] = useState(0);
   const updateStatus = trpc.admin.gdprRequests.updateStatus.useMutation({
     onSuccess: () => {
       toast.success("Demande mise à jour");
@@ -695,8 +697,8 @@ export function GdprTab() {
 
   return (
     <div className="space-y-8">
-      {/* « Ses données » mounts the panel again on the request's address, which brings it on screen and focuses its title. */}
-      <PersonalDataSearchPanel key={personalDataSearchKey(personalDataSearch)} requestedEmail={personalDataSearch.email} reveal={personalDataSearch.nonce > 0} />
+      {/* « Ses données » mounts the panel again on the request's address, which brings it on screen once and focuses its title. */}
+      <PersonalDataSearchPanel key={personalDataSearchKey(personalDataSearch)} requestedEmail={personalDataSearch.email} reveal={personalDataSearch.nonce > revealedNonce} onRevealed={() => setRevealedNonce(personalDataSearch.nonce)} />
       <div>
         <p className="text-sm text-muted-foreground mb-4">{adminListCount(items.length, total, "demande(s) RGPD")} · réponse due un mois après réception, au plus tard à la fin du jour d’échéance (heure de Paris)</p>
         <div className="space-y-3">

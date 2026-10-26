@@ -297,6 +297,18 @@ describe("RGPD-12 — rechercher une personne par email", () => {
     expect(state.findInputs.at(-1)).toEqual({ email: "demandeur1@test.local" });
   });
 
+  it("n’amène le panneau à l’écran qu’une fois par clic, pas quand il est remonté ensuite (après un état d’erreur)", () => {
+    state.gdprPage = { items: [gdprRequest(1)], total: 1 };
+    const revealed: TabAction = tree => (elements(tree).find(element => element.type === PersonalDataSearchPanel)!.props.onRevealed as () => void)();
+
+    const panels = renderGdprTabActing(click("Ses données"), revealed, click("Ses données"));
+    // Once on screen, the same panel is told not to reveal itself again: mounted
+    // anew (the tab shows its error state, then the list again), it leaves the
+    // page and the focus where the administrator is. The next click reveals it.
+    expect(panels.map(panel => panel.reveal)).toEqual([false, true, false, true]);
+    expect(panels[2]!.key).toBe(panels[1]!.key);
+  });
+
   it("amène le panneau sous l’en-tête collant, place le focus sur son titre, puis annonce les résultats", () => {
     // The focus first, without scrolling, then the scroll that honours the panel's scroll-mt.
     const calls: string[] = [];
@@ -307,7 +319,8 @@ describe("RGPD-12 — rechercher une personne par email", () => {
     expect(calls).toEqual(['focus {"preventScroll":true}', 'scroll {"block":"start"}']);
 
     state.found = { data: found, isLoading: false, error: null };
-    const panel = () => renderStateful(() => PersonalDataSearchPanel({ requestedEmail: "jeanne@test.local", reveal: true })) as ReactElement;
+    const onRevealed = vi.fn();
+    const panel = () => renderStateful(() => PersonalDataSearchPanel({ requestedEmail: "jeanne@test.local", reveal: true, onRevealed })) as ReactElement;
     const statusOf = (tree: ReactElement) => elementsOf(tree).find(element => element.props.role === "status")!.props.children;
     const section = panel();
     expect(section.props.className).toMatch(/(^| )scroll-mt-28 .*sm:scroll-mt-20/);
@@ -316,6 +329,15 @@ describe("RGPD-12 — rechercher une personne par email", () => {
     // cache, then filled: screen readers read each result out.
     expect(statusOf(section)).toBe("");
     expect(statusOf(panel())).toBe("4 élément(s) enregistré(s) pour jeanne@test.local.");
+    // Revealed once, on mount, and the tab told so.
+    expect(onRevealed).toHaveBeenCalledTimes(1);
+  });
+
+  it("date les demandes RGPD de la personne à l’heure de Paris, comme l’onglet RGPD", () => {
+    // 00:30 in Paris on 26/10, still 25/10 in UTC or further west.
+    const late = { ...found, gdprRequests: [{ ...found.gdprRequests[0]!, createdAt: new Date("2026-10-25T23:30:00Z") }] };
+    const html = render(createElement(PersonalDataResult, { data: late as never, onChanged: vi.fn() }));
+    expect(html).toContain("GJEANNE</span> · 26/10/2026 · Accès");
   });
 
   it("exporte le JSON préparé par le serveur", () => {

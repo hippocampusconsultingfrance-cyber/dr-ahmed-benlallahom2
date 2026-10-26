@@ -41,7 +41,7 @@ vi.mock("@/lib/trpc", () => {
 
 const { AppointmentsTab } = await import("./AdminDashboard");
 const { default: AppointmentDeliveries } = await import("@/components/AppointmentDeliveries");
-const { PATIENT_DATA_ERASED_REFUND_NOTICE } = await import("./appointmentAdminActions");
+const { PATIENT_DATA_ERASED_REASON_PROMPT, PATIENT_DATA_ERASED_REFUND_NOTICE } = await import("./appointmentAdminActions");
 
 const DAY = 24 * 60 * 60 * 1000;
 const booking = (id: number, extra: Record<string, unknown> = {}) => ({
@@ -96,6 +96,8 @@ describe("RGPD-12 — rendez-vous dont les données sont effacées", () => {
     const tree = renderStateful(AppointmentsTab) as ReactElement;
     (clickable(card(tree, 1), "Rembourser")!.props.onClick as () => void)();
     expect(window.prompt).toHaveBeenLastCalledWith(expect.stringContaining(PATIENT_DATA_ERASED_REFUND_NOTICE));
+    // The reason is stored on the anonymised row: asked without personal data.
+    expect(window.prompt).toHaveBeenLastCalledWith(expect.stringMatching(/Motif \(obligatoire, sans donnée personnelle[^)]*\) :$/));
     expect(view.mutate.refund).toHaveBeenLastCalledWith({ trackingId: "APTERASE1", reason: "Geste commercial", initiator: "practitioner" });
 
     view.options.refund!.onSuccess!({ success: true, refundAmount: "100.00", patientNotified: false, patientDataErased: true } as never);
@@ -107,6 +109,8 @@ describe("RGPD-12 — rendez-vous dont les données sont effacées", () => {
     const tree = renderStateful(AppointmentsTab) as ReactElement;
     (clickable(card(tree, 2), "Rembourser")!.props.onClick as () => void)();
     expect(window.prompt).toHaveBeenLastCalledWith(expect.not.stringContaining(PATIENT_DATA_ERASED_REFUND_NOTICE));
+    expect(window.prompt).toHaveBeenLastCalledWith(expect.not.stringContaining(PATIENT_DATA_ERASED_REASON_PROMPT));
+    expect(window.prompt).toHaveBeenLastCalledWith(expect.stringMatching(/\nMotif \(obligatoire\) :$/));
 
     view.options.refund!.onSuccess!({ success: true, refundAmount: "100.00", patientNotified: false, patientDataErased: false } as never);
     expect(view.toasts.at(-1)).toEqual(["warning", "L’email au patient n’a pas pu être envoyé : prévenez-le directement."]);
