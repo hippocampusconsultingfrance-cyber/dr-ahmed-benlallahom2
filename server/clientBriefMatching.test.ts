@@ -86,11 +86,29 @@ describe("matching mission–candidat", () => {
     expect(certificationDateIsCurrent("2020-01-01", new Date("2026-01-01T00:00:00Z"))).toBe(false);
   });
 
+  it("une certification renouvelée dans le CV compte jusqu’à sa dernière date d’expiration", () => {
+    const blsBrief = { ...brief, requiredCertifications: "BLS" };
+    const renewed = certificationFacts(null, [extracted("BLS", { expiresAt: "2019-06", confirmedAt }), extracted("BLS", { expiresAt: "2099-06", confirmedAt })]);
+    expect(renewed).toEqual([{ name: "BLS", origins: ["extracted", "confirmed"], expiresAt: "2099-06" }]);
+    expect(computeBriefCandidateMatch(blsBrief, { ...anaesthetist, certificationFacts: renewed }).breakdown.certifications).toBe(20);
+    // In either order, and a row without a date (current) wins over a dated one.
+    expect(certificationFacts(null, [extracted("BLS", { expiresAt: "2099" }), extracted("bls", { expiresAt: "2019-06-30" })])[0]!.expiresAt).toBe("2099");
+    expect(certificationFacts(null, [extracted("BLS", { expiresAt: "2019-06" }), extracted("BLS")])[0]!.expiresAt).toBeNull();
+    // Once confirmed, only the confirmed rows date it: those alone earn points.
+    const confirmedExpired = certificationFacts(null, [extracted("BLS", { expiresAt: "2019-06", confirmedAt }), extracted("BLS", { expiresAt: "2099-06" })]);
+    expect(confirmedExpired[0]!.expiresAt).toBe("2019-06");
+    expect(computeBriefCandidateMatch(blsBrief, { ...anaesthetist, certificationFacts: confirmedExpired }).breakdown.certifications).toBe(0);
+  });
+
   it("réunit sous un seul nom ce que le candidat a déclaré, ce que l’IA a lu et ce que l’admin a confirmé", () => {
-    expect(certificationFacts("Licence DHA; BLS", [extracted("licence dha", { expiresAt: "2028-05" }), { name: "Licence DHA", source: "declared", confirmedAt, expiresAt: null }])).toEqual([
+    expect(certificationFacts("Licence DHA; BLS; ACLS", [extracted("licence dha", { expiresAt: "2028-05", confirmedAt }), { name: "bls", source: "declared", confirmedAt, expiresAt: null }])).toEqual([
       { name: "Licence DHA", origins: ["declared", "extracted", "confirmed"], expiresAt: "2028-05" },
-      { name: "BLS", origins: ["declared"], expiresAt: null },
+      { name: "BLS", origins: ["declared", "confirmed"], expiresAt: null },
+      { name: "ACLS", origins: ["declared"], expiresAt: null },
     ]);
+    // A declared term longer than a stored row (180 characters) still meets its confirmed row.
+    const longName = `Diplôme ${"universitaire ".repeat(20)}`.trim();
+    expect(certificationFacts(longName, [{ name: longName.slice(0, 180), source: "declared", confirmedAt, expiresAt: null }])).toEqual([{ name: longName, origins: ["declared", "confirmed"], expiresAt: null }]);
     expect(languageFacts('["Français","English"]', [{ language: "français", source: "extracted" }])).toEqual([
       { name: "Français", origins: ["declared", "extracted"] },
       { name: "English", origins: ["declared"] },

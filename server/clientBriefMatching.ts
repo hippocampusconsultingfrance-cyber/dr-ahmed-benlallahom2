@@ -58,24 +58,47 @@ function parseTerms(value: string | null | undefined) {
   return value.split(/[,;\n]/).map(item => item.trim()).filter(Boolean);
 }
 
-export function certificationDateIsCurrent(
-  expiresAt: string | null | undefined,
-  referenceDate = new Date()
-) {
-  if (!expiresAt) return true;
+/** Last moment a certification is valid (YYYY, YYYY-MM or YYYY-MM-DD), or null when the date cannot be read. */
+function certificationExpiry(expiresAt: string) {
   const match = /^(\d{4})(?:-(\d{2})(?:-(\d{2}))?)?$/.exec(expiresAt.trim());
-  if (!match) return false;
+  if (!match) return null;
   const year = Number(match[1]);
   const month = match[2] ? Number(match[2]) : 12;
   const day = match[3]
     ? Number(match[3])
     : new Date(Date.UTC(year, month, 0)).getUTCDate();
   const expiry = new Date(Date.UTC(year, month - 1, day, 23, 59, 59, 999));
-  return Number.isFinite(expiry.getTime()) && expiry >= referenceDate;
+  return Number.isFinite(expiry.getTime()) ? expiry : null;
 }
 
-/** Two spellings of one certification or language: same letters, case and accents aside. */
-export const sameRecruitmentFact = (left: string, right: string) => normalise(left) === normalise(right);
+export function certificationDateIsCurrent(
+  expiresAt: string | null | undefined,
+  referenceDate = new Date()
+) {
+  if (!expiresAt) return true;
+  const expiry = certificationExpiry(expiresAt);
+  return expiry !== null && expiry >= referenceDate;
+}
+
+/**
+ * The latest of these expiries: none (current) when one of them has no date,
+ * an unreadable one counting as expired.
+ */
+function latestCertificationExpiry(expiries: Array<string | null>) {
+  if (expiries.some(expiresAt => !expiresAt)) return null;
+  const time = (expiresAt: string) => certificationExpiry(expiresAt)?.getTime() ?? -Infinity;
+  return (expiries as string[]).reduce((latest, expiresAt) => time(expiresAt) > time(latest) ? expiresAt : latest);
+}
+
+/** Length of a cv_candidate_certifications name: a longer declared term is stored cut to it. */
+export const CERTIFICATION_NAME_MAX_LENGTH = 180;
+
+/**
+ * Two spellings of one certification or language: same letters, case and
+ * accents aside, within the characters a stored row keeps.
+ */
+export const sameRecruitmentFact = (left: string, right: string) =>
+  normalise(left.trim().slice(0, CERTIFICATION_NAME_MAX_LENGTH)) === normalise(right.trim().slice(0, CERTIFICATION_NAME_MAX_LENGTH));
 
 /** The certifications declared in the form (free text), one per term. */
 export const declaredCertificationNames = (declared: string | null | undefined) => parseTerms(declared);
@@ -98,11 +121,20 @@ export function certificationFacts(declared: string | null | undefined, rows: Ce
   const facts: CertificationFact[] = [];
   const create = (name: string): CertificationFact => ({ name, origins: [], expiresAt: null });
   for (const name of declaredCertificationNames(declared)) addFact(facts, name, "declared", create);
+  const rowsByFact = new Map<CertificationFact, CertificationRow[]>();
   for (const row of rows) {
     const fact = addFact(facts, row.name, row.source, create);
+    if (!fact) continue;
     if (row.confirmedAt) addFact(facts, row.name, "confirmed", create);
-    if (fact) fact.expiresAt ??= row.expiresAt;
+    rowsByFact.set(fact, [...(rowsByFact.get(fact) ?? []), row]);
   }
+  // A certification renewed in the CV has a row per date: it is current while
+  // its latest one is. Once one is confirmed, only the confirmed rows count,
+  // since only a confirmation earns points.
+  rowsByFact.forEach((factRows, fact) => {
+    const confirmedRows = factRows.filter(row => row.confirmedAt);
+    fact.expiresAt = latestCertificationExpiry((confirmedRows.length ? confirmedRows : factRows).map(row => row.expiresAt));
+  });
   return facts;
 }
 
