@@ -82,6 +82,11 @@ export function getExpiredAppointmentHoldUpdate(cancelledAt = new Date()) {
 type Database = NonNullable<Awaited<ReturnType<typeof getDb>>>;
 type ExpiredHoldOutcome = "released" | "confirmed" | "kept";
 type ExpiredHold = { id: number; trackingId: string; stripeSessionId: string; createdAt: Date };
+/**
+ * `fulfillmentTimeoutMs`: how long the post-payment emails of a paid hold are
+ * tried right away (the webhook's budget by default); 0 only queues them.
+ */
+type SettleOptions = { fulfillmentTimeoutMs?: number };
 
 /**
  * Stripe's definitive answer that the session does not exist on the account of
@@ -146,7 +151,7 @@ async function keepExpiredHold(db: Database, hold: ExpiredHold, now: Date) {
  * Stripe does not know at all can never be paid there, so its hold is released
  * and the owner told.
  */
-async function settleExpiredHold(db: Database, stripe: () => Stripe, hold: ExpiredHold, now: Date): Promise<ExpiredHoldOutcome> {
+async function settleExpiredHold(db: Database, stripe: () => Stripe, hold: ExpiredHold, now: Date, options: SettleOptions): Promise<ExpiredHoldOutcome> {
   let session: Stripe.Checkout.Session;
   try {
     session = await stripe().checkout.sessions.retrieve(hold.stripeSessionId);
@@ -172,7 +177,7 @@ async function settleExpiredHold(db: Database, stripe: () => Stripe, hold: Expir
     try {
       // Once the consultation time has passed, the fulfillment queue skips the
       // patient confirmation and alerts the owner instead.
-      const completion = await handleCheckoutSessionCompleted(session);
+      const completion = await handleCheckoutSessionCompleted(session, { fulfillmentTimeoutMs: options.fulfillmentTimeoutMs });
       return completion.outcome === "confirmed" || completion.outcome === "duplicate" ? "confirmed" : "kept";
     } catch {
       console.error("[AppointmentHolds] Paid session of an expired hold could not be confirmed; hold kept until the next run", { trackingId: hold.trackingId });
@@ -192,9 +197,11 @@ async function settleExpiredHold(db: Database, stripe: () => Stripe, hold: Expir
  * Stripe is only asked about holds whose webhook did not arrive. A hold kept
  * because Stripe could not settle it takes its slot a few more minutes
  * (KEPT_HOLD_RECHECK_MS). Idempotent, so it can safely run from a heartbeat and
- * immediately before a new hold.
+ * immediately before a new hold; there, `fulfillmentTimeoutMs: 0` leaves the
+ * emails of a hold it confirms to the queue, so another patient's booking never
+ * waits for them.
  */
-export async function releaseExpiredAppointmentHolds(stripe: () => Stripe, now = new Date()) {
+export async function releaseExpiredAppointmentHolds(stripe: () => Stripe, now = new Date(), options: SettleOptions = {}) {
   const db = await getDb();
   if (!db) throw new Error("appointment_hold_database_unavailable");
   const expiredHold = and(
@@ -214,7 +221,7 @@ export async function releaseExpiredAppointmentHolds(stripe: () => Stripe, now =
     .limit(EXPIRED_HOLDS_CHECKED_PER_RUN);
   const outcomes = await Promise.all(withSession.map(async row => {
     const hold = { ...row, stripeSessionId: row.stripeSessionId! };
-    const outcome = await settleExpiredHold(db, stripe, hold, now);
+    const outcome = await settleExpiredHold(db, stripe, hold, now, options);
     if (outcome === "kept") await keepExpiredHold(db, hold, now);
     return outcome;
   }));

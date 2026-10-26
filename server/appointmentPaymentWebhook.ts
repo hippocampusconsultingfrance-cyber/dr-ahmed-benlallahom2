@@ -184,12 +184,16 @@ async function fulfill(appointmentId: number, timeoutMs: number) {
   // Persisted fulfillment is idempotent. Re-enqueueing on a Stripe retry
   // protects a payment whose previous acknowledgement failed after the DB update.
   await enqueueAppointmentFulfillment(appointmentId);
-  await processFulfillmentBestEffort(appointmentId, timeoutMs);
+  // No budget: the emails are left to the queue (see handleCheckoutSessionCompleted).
+  if (timeoutMs > 0) await processFulfillmentBestEffort(appointmentId, timeoutMs);
 }
 
 /**
  * Handles a signed `checkout.session.completed` event. Database and queue
  * errors propagate so the caller answers 500 and Stripe retries the delivery.
+ * `fulfillmentTimeoutMs`: how long the post-payment emails are tried right
+ * away; 0 confirms the slot and only queues them, for a caller that must not
+ * wait for them (another patient's booking settling an expired hold, EXPL-01).
  */
 export async function handleCheckoutSessionCompleted(
   session: CheckoutSessionPayload,

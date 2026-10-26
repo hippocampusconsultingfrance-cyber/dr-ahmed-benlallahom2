@@ -492,6 +492,24 @@ describe("EXPL-01 — un paiement reçu est confirmé même sans webhook", () =>
     await expect(bookedSlots(slot)).resolves.toEqual([slot]);
   });
 
+  it("une autre réservation confirme le maintien expiré payé sans webhook sans attendre ses envois, que la tâche planifiée fait partir ensuite", async () => {
+    const paidSlot = bookableSlot();
+    stripeSession();
+    seedAppointment({ appointmentDate: paidSlot, slotKey: paidSlot.toISOString(), createdAt: new Date(Date.now() - 33 * 60 * 1000), holdExpiresAt: new Date(Date.now() - 60 * 1000) });
+
+    await expect(book(bookableSlot(60))).resolves.toMatchObject({ success: true });
+
+    // Confirmed in the database; its emails stay in the queue, as they were, for the next processing.
+    expect(appointmentRow()).toMatchObject({ paymentStatus: "completed", appointmentStatus: "confirmed", stripePaymentIntentId: PAYMENT_INTENT, slotKey: paidSlot.toISOString() });
+    expect(db().rows(appointmentFulfillmentJobs).map(job => [job.jobType, job.status, job.attempts])).toEqual([["owner", "queued", 0], ["confirmation", "queued", 0], ["invoice", "queued", 0]]);
+    expect(emails.sendOwnerNotificationEmail).not.toHaveBeenCalled();
+    expect(emails.sendConfirmationEmail).not.toHaveBeenCalled();
+    expect(emails.sendInvoiceEmail).not.toHaveBeenCalled();
+
+    expect((await runFulfillment()).status).toBe(200);
+    expectPostPaymentEmailsSentOnce();
+  });
+
   it("garde le créneau tant que Stripe ne répond pas : pris quelques minutes, refusé clairement, puis de nouveau réglé avec Stripe", async () => {
     const slot = bookableSlot();
     const seeded = seedAbandonedHold(slot);
