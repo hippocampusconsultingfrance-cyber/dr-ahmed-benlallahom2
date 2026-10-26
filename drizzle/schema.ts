@@ -366,6 +366,10 @@ export const cvCandidateCertifications = mysqlTable("cv_candidate_certifications
   expiresAt: varchar("expires_at", { length: 10 }),
   evidence: text("evidence"),
   source: mysqlEnum("source", ["declared", "extracted"]).default("extracted").notNull(),
+  // Set when an admin confirmed the certification after checking it (IA-02):
+  // only a confirmed one earns points in a mission's matching. A declared
+  // certification gets its own row (source "declared") once confirmed.
+  confirmedAt: timestamp("confirmed_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, table => ({
   applicationIdx: index("cv_candidate_certifications_application_idx").on(table.applicationId),
@@ -544,6 +548,9 @@ export const clientBriefCandidates = mysqlTable("client_brief_candidates", {
   matchBreakdown: text("match_breakdown"),
   status: mysqlEnum("association_status", ["suggested", "reviewing", "shortlisted", "declined"]).default("suggested").notNull(),
   notes: text("notes"),
+  // Date the candidate agreed to be presented for this mission, entered by the
+  // admin (RGPD-03): the shortlist export carries only the candidates who have one.
+  candidateConsentAt: timestamp("candidate_consent_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, table => ({

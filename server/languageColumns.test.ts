@@ -8,9 +8,9 @@ vi.mock("@neondatabase/serverless", async importOriginal => ({
   neon: vi.fn(() => neonDriver.client),
 }));
 
-import { appointments, availabilitySlots, candidateAccounts, cvApplications, users } from "../drizzle/schema";
+import { appointments, availabilitySlots, candidateAccounts, clientBriefCandidates, clientBriefs, cvApplications, cvCandidateCertifications, users } from "../drizzle/schema";
 import { getDb, LANGUAGE_COLUMNS_MAX_RETRY_DELAY_MS, LANGUAGE_COLUMNS_RETRY_DELAY_MS, resetDbForTests } from "./db";
-import { ensureLanguageColumns, LANGUAGE_COLUMN_DDL, LANGUAGE_COLUMN_TABLES, resetLanguageColumnsMemo } from "./languageColumns";
+import { ensureLanguageColumns, LANGUAGE_COLUMN_DDL, LANGUAGE_COLUMN_TABLES, MISSION_COLUMN_DDL, MISSION_COLUMNS, resetLanguageColumnsMemo, RUNTIME_COLUMNS } from "./languageColumns";
 
 // EN-01 / EN-02 — colonne « language » ajoutée à l’exécution tant que la
 // migration 0002 n’est pas appliquée, une seule fois par instance, sans faire
@@ -20,7 +20,6 @@ const dialect = new PgDialect();
 const textOf = (query: Parameters<PgDialect["sqlToQuery"]>[0]) => dialect.sqlToQuery(query).sql;
 const alteredTable = (text: string) => /ALTER TABLE "([a-z_]+)"/.exec(text)?.[1];
 const isCheck = (text: string) => text.includes("to_regclass");
-const namesLanguage = (text: string) => /\blanguage\b/.test(text);
 
 /** Database double: `missing` lists the tables still without the column; ALTER adds it. */
 function fakeDatabase(options: { missing: string[]; alterFailures?: Record<string, unknown> }) {
@@ -74,8 +73,8 @@ function neonDatabase(options: { missing?: string[]; alter?: (table: string) => 
       missing.delete(altered);
       return { rows: [] };
     }
-    const table = LANGUAGE_COLUMN_TABLES.find(name => new RegExp(`\\b${name}\\b`).test(text));
-    if (table && missing.has(table) && namesLanguage(text)) throw Object.assign(new Error(`column "language" of relation "${table}" does not exist`), { code: "42703" });
+    const named = RUNTIME_COLUMNS.find(({ table, column }) => new RegExp(`\\b${table}\\b`).test(text) && new RegExp(`\\b${column}\\b`).test(text) && missing.has(table));
+    if (named) throw Object.assign(new Error(`column "${named.column}" of relation "${named.table}" does not exist`), { code: "42703" });
     return { rows: [] };
   };
   const send = (text: string) => {
@@ -477,5 +476,80 @@ describe("getDb() : seules les requêtes sur ces tables attendent les colonnes",
     vi.stubEnv("DATABASE_URL", "");
     neonDatabase();
     await expect(getDb()).resolves.toBeNull();
+  });
+});
+
+// IA-02 / RGPD-03 — confirmed_at et candidate_consent_at (0003) suivent le même
+// chemin que « language » : un déploiement avant la migration ne casse ni la
+// shortlist d’une mission ni les certifications, et ne retient rien d’autre.
+describe("colonnes des missions (0003) créées à l’exécution", () => {
+  it("reprennent exactement la déclaration Drizzle : timestamp nullable, sans valeur par défaut", () => {
+    for (const [table, name] of [[cvCandidateCertifications, "confirmed_at"], [clientBriefCandidates, "candidate_consent_at"]] as const) {
+      const config = getTableConfig(table);
+      const column = config.columns.find(item => item.name === name)!;
+      expect(column.getSQLType(), config.name).toBe("timestamp");
+      expect(column.notNull).toBe(false);
+      expect(column.hasDefault).toBe(false);
+      expect(MISSION_COLUMNS).toContainEqual({ table: config.name, column: name, definition: "timestamp" });
+    }
+    expect(MISSION_COLUMN_DDL.map(textOf)).toEqual([
+      `ALTER TABLE "cv_candidate_certifications" ADD COLUMN IF NOT EXISTS "confirmed_at" timestamp`,
+      `ALTER TABLE "client_brief_candidates" ADD COLUMN IF NOT EXISTS "candidate_consent_at" timestamp`,
+    ]);
+    // The check answers with table names: one runtime column per table at most.
+    expect(new Set(RUNTIME_COLUMNS.map(({ table }) => table)).size).toBe(RUNTIME_COLUMNS.length);
+  });
+
+  it("vérifie chaque table avec sa propre colonne, en une seule lecture du catalogue", async () => {
+    const { db, executed } = fakeDatabase({ missing: ["client_brief_candidates"] });
+    await ensureLanguageColumns(db);
+    expect(executed.filter(isCheck)).toHaveLength(1);
+    const check = dialect.sqlToQuery(db.execute.mock.calls[0]![0]);
+    expect(check.sql).toContain("unnest(ARRAY[");
+    expect(check.sql).toContain("attname = attribute");
+    expect(check.params).toEqual([...RUNTIME_COLUMNS.map(({ table }) => table), ...RUNTIME_COLUMNS.map(({ column }) => column)]);
+    expect(executed.filter(text => alteredTable(text))).toEqual([
+      `DO $$ BEGIN SET LOCAL lock_timeout = '2s'; ALTER TABLE "client_brief_candidates" ADD COLUMN IF NOT EXISTS "candidate_consent_at" timestamp; END $$`,
+    ]);
+  });
+
+  it("colonnes absentes : la shortlist et les certifications attendent l’ALTER, le reste du site part aussitôt", async () => {
+    const { sent, missing } = neonDatabase({ missing: ["cv_candidate_certifications", "client_brief_candidates"] });
+    const db = (await getDb())!;
+
+    // Neither the missions list, nor erasing a certification, nor the slot grid names those columns.
+    await db.select().from(clientBriefs);
+    await db.delete(cvCandidateCertifications).where(eq(cvCandidateCertifications.applicationId, 1));
+    await db.select({ applicationId: clientBriefCandidates.applicationId }).from(clientBriefCandidates);
+    await db.select({ appointmentDate: appointments.appointmentDate }).from(appointments);
+    expect(sent.filter(isCheck)).toEqual([]);
+
+    await expect(Promise.all([
+      db.select().from(clientBriefCandidates).where(eq(clientBriefCandidates.briefId, 1)),
+      db.update(cvCandidateCertifications).set({ confirmedAt: new Date("2026-10-26T10:00:00Z") }).where(eq(cvCandidateCertifications.id, 1)),
+      db.insert(cvCandidateCertifications).values({ applicationId: 1, name: "BLS", source: "declared", confirmedAt: new Date("2026-10-26T10:00:00Z") }),
+    ])).resolves.toHaveLength(3);
+    expect(missing.size).toBe(0);
+    expect(sent.map(alteredTable).filter(Boolean)).toEqual(["cv_candidate_certifications", "client_brief_candidates"]);
+  });
+
+  it("verrou pris sur client_brief_candidates : les certifications reçoivent leur colonne, la shortlist échoue sans bloquer, puis repart", async () => {
+    vi.useFakeTimers({ now: new Date("2026-10-26T10:00:00Z"), toFake: ["Date"] });
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    vi.spyOn(console, "log").mockImplementation(() => undefined);
+    let lock: "held" | "free" = "held";
+    const alter = (table: string) => (table === "client_brief_candidates" && lock === "held" ? Promise.reject(lockTimeout) : Promise.resolve());
+    const { missing } = neonDatabase({ missing: ["cv_candidate_certifications", "client_brief_candidates"], alter });
+    const db = (await getDb())!;
+
+    await expect(db.select().from(clientBriefCandidates)).rejects.toThrow();
+    expect([...missing]).toEqual(["client_brief_candidates"]);
+    await expect(db.select().from(cvCandidateCertifications)).resolves.toEqual([]);
+    expect(error).toHaveBeenCalledWith("[Database] Language columns check failed:", "Error", "55P03");
+
+    lock = "free";
+    vi.setSystemTime(Date.now() + LANGUAGE_COLUMNS_RETRY_DELAY_MS);
+    await expect(db.select().from(clientBriefCandidates)).resolves.toEqual([]);
+    expect(missing.size).toBe(0);
   });
 });

@@ -29,7 +29,9 @@ let languageColumnsRetryDelay = 0;
 const languageColumnsLoggedFailures = new Set<string>();
 
 // Queries that read or write "language" on appointments, cv_applications or
-// candidate_accounts (EN-01, EN-02): until migration 0002 is applied, the first
+// candidate_accounts (EN-01, EN-02), confirmed_at on cv_candidate_certifications
+// (IA-02) or candidate_consent_at on client_brief_candidates (RGPD-03): until
+// migrations 0002 and 0003 are applied, the first
 // one of the instance adds the missing columns, and those queries wait for it,
 // sharing one check (memoised by ensureLanguageColumns). Other queries never
 // wait. After a failure (lock not obtained within 2 s, role not allowed to
