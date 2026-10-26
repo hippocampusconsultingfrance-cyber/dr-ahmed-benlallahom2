@@ -106,6 +106,11 @@ function seedJob(appointmentId: unknown, jobType: string, overrides: Record<stri
   }])[0]!;
 }
 
+/** The next whole minute of the clock: the jobs seeded until now are due, and the retry delays stay whole minutes. */
+function nextWholeMinute() {
+  return new Date(Math.floor(Date.now() / 60_000) * 60_000 + 60_000);
+}
+
 function seedInvoice(appointmentId: unknown, sequence: number) {
   return memory.seed(appointmentInvoices, [{
     appointment_id: appointmentId,
@@ -282,7 +287,7 @@ describe("EXPL-02 — « Télécharger la facture »", () => {
     seedInvoice(paid.id, 43);
     state.down.add("invoice");
     vi.useFakeTimers({ toFake: ["Date"] });
-    vi.setSystemTime(new Date("2026-10-26T10:00:00Z"));
+    vi.setSystemTime(nextWholeMinute());
     for (let attempt = 1; attempt < APPOINTMENT_FULFILLMENT_MAX_ATTEMPTS; attempt += 1) {
       await processAppointmentFulfillmentNow(paid.id as number);
       vi.setSystemTime(new Date(`${job(paid.id, "invoice").scheduled_for}Z`));
@@ -428,7 +433,7 @@ describe("EXPL-02 — tentatives automatiques", () => {
 
     state.down.add("confirmation");
     vi.useFakeTimers({ toFake: ["Date"] });
-    const start = new Date("2026-10-26T10:00:00Z");
+    const start = nextWholeMinute();
     vi.setSystemTime(start);
     const delays: number[] = [];
     for (let attempt = 1; attempt <= 7; attempt += 1) {
