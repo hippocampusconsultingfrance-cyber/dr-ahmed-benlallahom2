@@ -293,6 +293,7 @@ export type DisputePayload = {
   id?: unknown;
   amount?: unknown;
   reason?: unknown;
+  status?: unknown;
   payment_intent?: unknown;
   evidence_details?: { due_by?: unknown } | null;
 };
@@ -357,18 +358,23 @@ export function buildDisputeAlert(input: {
   disputeId: string;
   amountCents: number | null;
   reason: string | null;
+  status: string | null;
   dueBy: Date | null;
   paymentIntentId: string | null;
   appointment: Pick<Appointment, "trackingId" | "paymentStatus" | "appointmentStatus" | "appointmentDate"> | null;
 }) {
   const amount = formatAlertAmount(input.amountCents);
   const appointment = input.appointment;
+  // An inquiry (warning_* status) withdraws nothing yet; unanswered, it can become a chargeback.
+  const funds = input.status?.startsWith("warning_")
+    ? `Il s’agit pour l’instant d’une demande d’information de la banque (pré-litige) : aucun montant n’est retenu sur votre compte (paiement de ${amount}), mais sans réponse elle peut devenir un litige.`
+    : `Stripe retient ${amount} sur votre compte jusqu’à l’issue du litige.`;
   return {
     title: `Contestation bancaire d’un paiement (${appointment?.trackingId ?? input.paymentIntentId ?? input.disputeId})`,
     content: [
       appointment
-        ? `Le titulaire de la carte conteste auprès de sa banque le paiement du rendez-vous ${appointment.trackingId}. Stripe retient ${amount} sur votre compte jusqu’à l’issue du litige.`
-        : `Le titulaire de la carte conteste auprès de sa banque un paiement Stripe rattaché à aucun rendez-vous du site. Stripe retient ${amount} sur votre compte jusqu’à l’issue du litige.`,
+        ? `Le titulaire de la carte conteste auprès de sa banque le paiement du rendez-vous ${appointment.trackingId}. ${funds}`
+        : `Le titulaire de la carte conteste auprès de sa banque un paiement Stripe rattaché à aucun rendez-vous du site. ${funds}`,
       `Motif indiqué par la banque : ${input.reason ?? "non communiqué"}.`,
       input.dueBy
         ? `Répondez depuis le tableau de bord Stripe (Paiements > Litiges) avant le ${formatAlertDate(input.dueBy)} (heure de Paris), avec les éléments utiles : confirmation de réservation, échanges avec le patient, déroulement de la consultation.`
@@ -482,6 +488,7 @@ export async function handleChargeDisputeCreated(dispute: DisputePayload): Promi
     disputeId,
     amountCents: finiteNumber(dispute.amount),
     reason: typeof dispute.reason === "string" ? dispute.reason : null,
+    status: typeof dispute.status === "string" ? dispute.status : null,
     dueBy: dueBySeconds ? new Date(dueBySeconds * 1000) : null,
     paymentIntentId,
     appointment,

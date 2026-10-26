@@ -341,6 +341,17 @@ describe("RES-06 — remboursements et contestations faits dans Stripe", () => {
     expect(String(appointmentRow().cancellationReason)).toContain("Indisponibilité du médecin");
   });
 
+  it("garde le statut d’une consultation déjà faite remboursée dans Stripe et le signale au médecin", async () => {
+    const appointmentDate = new Date(Date.now() - 48 * HOUR);
+    seedAppointment({ ...paid, appointmentStatus: "completed", appointmentDate, slotKey: appointmentDate.toISOString() });
+
+    expect((await postEvent("charge.refunded", charge())).body).toEqual({ received: true, refunded: true });
+    expect(appointmentRow()).toMatchObject({ paymentStatus: "refunded", appointmentStatus: "completed", slotKey: appointmentDate.toISOString(), refundAmount: "100.00" });
+    expect(emails.sendRefundConfirmationEmail).toHaveBeenCalledWith(expect.anything(), expect.anything(), TRACKING_ID, expect.any(Date), "100.00", expect.objectContaining({ context: "refund" }));
+    expect(owner.notifyOwner).toHaveBeenCalledTimes(1);
+    expect(owner.notifyOwner.mock.calls[0][0].content).toContain("Le statut du rendez-vous (completed) est conservé");
+  });
+
   it("laisse payé un rendez-vous remboursé en partie et prévient seulement le médecin", async () => {
     seedAppointment(paid);
 
@@ -386,5 +397,15 @@ describe("RES-06 — remboursements et contestations faits dans Stripe", () => {
     // Le litige peut être gagné : le rendez-vous n’est pas modifié.
     expect(appointmentRow()).toMatchObject({ paymentStatus: "completed", appointmentStatus: "confirmed" });
     expect(emails.sendRefundConfirmationEmail).not.toHaveBeenCalled();
+  });
+
+  it("ne dit pas que des fonds sont retenus pour une simple demande d’information de la banque", async () => {
+    seedAppointment(paid);
+    const inquiry = { id: "dp_test_reconciliation_2", object: "dispute", amount: 10000, reason: "general", status: "warning_needs_response", payment_intent: PAYMENT_INTENT, evidence_details: { due_by: 0 } };
+
+    expect(await postEvent("charge.dispute.created", inquiry)).toEqual({ status: 200, body: { received: true } });
+    const [alert] = owner.notifyOwner.mock.calls[0];
+    expect(alert.content).toContain("demande d’information de la banque (pré-litige) : aucun montant n’est retenu");
+    expect(alert.content).not.toContain("Stripe retient");
   });
 });
