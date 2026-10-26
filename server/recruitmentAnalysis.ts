@@ -328,7 +328,7 @@ const UNVERIFIABLE_REASONS: Record<UnverifiableTextReason, { warning: string; la
   image: { warning: "pdf_text_on_image", label: "texte sans encre posé sur une image, comme la couche OCR d’un scan" },
   unfinished: { warning: "pdf_visibility_check_unfinished", label: "contrôle de visibilité non terminé (document long ou lourd)" },
   unmatched: { warning: "pdf_text_unmatched", label: "texte que l’outil n’a pas pu rattacher à son dessin" },
-  drawing: { warning: "docx_white_text_near_drawing", label: "texte blanc dans une zone de texte ou près d’une image ou d’une forme" },
+  drawing: { warning: "docx_white_text_near_drawing", label: "texte blanc ou peu contrasté sur un fond incertain : zone de texte, image ou forme proche, style de tableau" },
 };
 
 /**
