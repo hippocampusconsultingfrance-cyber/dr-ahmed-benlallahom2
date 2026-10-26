@@ -66,6 +66,8 @@ function describeSecurityActor(input: { actorKind: string; actorReference?: stri
  * actor and a pseudonymised network; later events of that category are only
  * recorded until the window has passed. A burst of N failures therefore sends
  * one email instead of N, and the daily posture review still counts them all.
+ * An email that could not leave is sent by the next event of the category
+ * a few minutes later (sendOwnerAlertOncePerWindow).
  */
 async function notifyOwnerOfSecurityAlert(input: {
   actorKind: string;
@@ -75,32 +77,65 @@ async function notifyOwnerOfSecurityAlert(input: {
   severity?: string;
   ipHash?: string | null;
 }) {
-  const slot = await recordPersistentRateLimitAttempt({
+  await sendOwnerAlertOncePerWindow({
     action: "security_alert_email",
     subject: input.category,
-    maxAttempts: 1,
     windowMs: SECURITY_ALERT_EMAIL_WINDOW_MS,
     blockMs: SECURITY_ALERT_EMAIL_WINDOW_MS,
+  }, async () => {
+    const db = await getDb();
+    if (!db) return false;
+    const since = new Date(Date.now() - 2 * SECURITY_ALERT_EMAIL_WINDOW_MS);
+    const recent = await db.select({ id: securityEvents.id }).from(securityEvents).where(and(
+      eq(securityEvents.category, input.category),
+      gte(securityEvents.createdAt, since),
+      inArray(securityEvents.severity, ["high", "critical"]),
+    )).limit(10_000);
+    const windowMinutes = Math.round(SECURITY_ALERT_EMAIL_WINDOW_MS / 60_000);
+    return notifyOwner({
+      title: `Alerte sécurité — ${input.category} — Hippocampus Consulting`,
+      content: [
+        `Catégorie : ${input.category} · ${input.outcome} (gravité ${input.severity ?? "high"}).`,
+        `Événements de ce type sur la dernière heure : ${recent.length}.`,
+        `Dernier acteur : ${describeSecurityActor(input)}${input.ipHash ? ` · réseau ${input.ipHash.slice(0, 12)}…` : ""}.`,
+        `Les événements suivants de cette catégorie sont enregistrés sans nouvel email pendant au moins ${windowMinutes} minutes ; consultez le journal de sécurité de l’administration.`,
+      ].join("\n"),
+    });
   });
-  if (slot.blocked || slot.attemptCount > 1) return;
+}
+
+/**
+ * Wait before an owner alert that could not be delivered is tried again:
+ * short next to the alerts' windows (30 minutes to a day), so the alert is not
+ * lost for the whole window, and long enough that a flood of requests during a
+ * Resend outage (or a used-up quota) costs one new attempt every few minutes,
+ * not one per request.
+ */
+export const OWNER_ALERT_RETRY_AFTER_FAILURE_MS = 5 * 60 * 1000;
+
+/**
+ * Sends an owner alert at most once per window (CAND-15, ABUS-01, ABUS-02,
+ * REC-08, REC-09). The slot is taken before the email, so simultaneous callers
+ * never send it twice, and settled after it: a delivered alert holds it for
+ * the whole window (blockMs from the delivery); when `send` reports a failure
+ * (Resend down, still rate-limited after its retry, quota used up), it opens
+ * again OWNER_ALERT_RETRY_AFTER_FAILURE_MS later, whatever simultaneous callers
+ * counted meanwhile, and the next caller sends the alert. Returns whether this
+ * call delivered it.
+ */
+export async function sendOwnerAlertOncePerWindow(slot: Omit<PersistentRateLimitPolicy, "maxAttempts">, send: () => Promise<boolean>): Promise<boolean> {
+  const policy = { ...slot, maxAttempts: 1 };
+  const state = await recordPersistentRateLimitAttempt(policy);
+  if (state.blocked || state.attemptCount > 1) return false;
+  const delivered = await send().catch(() => false);
   const db = await getDb();
-  if (!db) return;
-  const since = new Date(Date.now() - 2 * SECURITY_ALERT_EMAIL_WINDOW_MS);
-  const recent = await db.select({ id: securityEvents.id }).from(securityEvents).where(and(
-    eq(securityEvents.category, input.category),
-    gte(securityEvents.createdAt, since),
-    inArray(securityEvents.severity, ["high", "critical"]),
-  )).limit(10_000);
-  const windowMinutes = Math.round(SECURITY_ALERT_EMAIL_WINDOW_MS / 60_000);
-  await notifyOwner({
-    title: `Alerte sécurité — ${input.category} — Hippocampus Consulting`,
-    content: [
-      `Catégorie : ${input.category} · ${input.outcome} (gravité ${input.severity ?? "high"}).`,
-      `Événements de ce type sur la dernière heure : ${recent.length}.`,
-      `Dernier acteur : ${describeSecurityActor(input)}${input.ipHash ? ` · réseau ${input.ipHash.slice(0, 12)}…` : ""}.`,
-      `Les événements suivants de cette catégorie sont enregistrés sans nouvel email pendant au moins ${windowMinutes} minutes ; consultez le journal de sécurité de l’administration.`,
-    ].join("\n"),
-  });
+  const now = new Date();
+  await db?.update(candidateSecurityRateLimits).set({
+    attemptCount: policy.maxAttempts + 1,
+    blockedUntil: new Date(now.getTime() + (delivered ? policy.blockMs : OWNER_ALERT_RETRY_AFTER_FAILURE_MS)),
+    lastAttemptAt: now,
+  }).where(and(eq(candidateSecurityRateLimits.action, policy.action), eq(candidateSecurityRateLimits.subjectHash, hashSecurityValue(policy.subject))));
+  return delivered;
 }
 
 export type PersistentRateLimitPolicy = {

@@ -1,7 +1,7 @@
 import { and, eq, gt, gte, inArray } from "drizzle-orm";
 import { appointments, securityEvents } from "../drizzle/schema";
 import { APPOINTMENT_HOLD_MS } from "./appointmentHolds";
-import { logSecurityEvent, recordPersistentRateLimitAttempt } from "./candidateSecurity";
+import { logSecurityEvent, sendOwnerAlertOncePerWindow } from "./candidateSecurity";
 import { getDb } from "./db";
 import { notifyOwner } from "./_core/notification";
 
@@ -34,17 +34,16 @@ function holdTrackingId(metadata: string | null): string | null {
   }
 }
 
+/** Once a day at most; an alert that could not leave is sent by a later booking above the threshold. */
 async function notifyOwnerOfHeldSlots() {
-  const slot = await recordPersistentRateLimitAttempt({ action: "booking_held_slots_alert", subject: "global", maxAttempts: 1, windowMs: DAY_MS, blockMs: DAY_MS });
-  if (slot.blocked) return;
-  await notifyOwner({
+  await sendOwnerAlertOncePerWindow({ action: "booking_held_slots_alert", subject: "global", windowMs: DAY_MS, blockMs: DAY_MS }, () => notifyOwner({
     title: `Réservations : au moins ${HELD_SLOTS_ALERT_THRESHOLD} créneaux retenus sans paiement`,
     content: [
       `Au moins ${HELD_SLOTS_ALERT_THRESHOLD} créneaux sont retenus en attente de paiement en même temps. Chaque maintien dure une trentaine de minutes ; un tel nombre peut signaler un blocage volontaire de l’agenda.`,
       "Tant que ce nombre reste élevé, chaque nouvelle réservation passe par la vérification anti-robot avant le paiement ; les patients peuvent toujours réserver.",
       "Vérifiez les réservations en attente dans l’administration. En cas d’attaque, activez l’Attack Challenge Mode du pare-feu Vercel. Cette alerte n’est envoyée qu’une fois par jour.",
     ].join("\n\n"),
-  });
+  }));
 }
 
 /**

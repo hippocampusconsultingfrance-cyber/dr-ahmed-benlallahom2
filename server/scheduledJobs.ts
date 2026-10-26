@@ -111,8 +111,9 @@ export async function runSecurityPostureReview(now = new Date()) {
   const db = await getDb();
   if (!db) return { available: false as const };
   const cleanupBefore = new Date(now.getTime() - 48 * HOUR_MS);
-  // Every rate-limit window is at most 24 h: rows idle for 48 h and not currently
-  // blocked (including never-blocked rows, whose blockedUntil is NULL) are inert.
+  // Every rate-limit window is at most 24 h, and a longer owner-alert slot stays
+  // blocked while it lasts: rows idle for 48 h and not currently blocked
+  // (including never-blocked rows, whose blockedUntil is NULL) are inert.
   await db.delete(candidateSecurityRateLimits).where(and(
     lt(candidateSecurityRateLimits.lastAttemptAt, cleanupBefore),
     or(isNull(candidateSecurityRateLimits.blockedUntil), lt(candidateSecurityRateLimits.blockedUntil, now)),

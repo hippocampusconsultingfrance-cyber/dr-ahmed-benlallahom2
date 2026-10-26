@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { googleDriveConnections } from "../drizzle/schema";
+import { candidateSecurityRateLimits, googleDriveConnections } from "../drizzle/schema";
 import { createMemoryPg, type MemoryPg } from "./testing/memoryPgProxy";
 
 const state = vi.hoisted(() => {
@@ -29,7 +29,7 @@ function seedConnection() {
 
 describe("suppression des copies Google Drive d’un CV", () => {
   beforeEach(() => {
-    memory = createMemoryPg([googleDriveConnections]);
+    memory = createMemoryPg([googleDriveConnections, candidateSecurityRateLimits]);
     state.memory = memory;
     driveFiles = new Map([["known", "CVTRACK00001"], ["orphan", "CVTRACK00001"], ["other", "CVOTHER00001"]]);
     tokenFails = false;
