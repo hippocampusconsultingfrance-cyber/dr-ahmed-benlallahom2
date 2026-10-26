@@ -181,7 +181,7 @@ export default function RecruitmentTab() {
     : { items: applications, firstUnscored: -1 };
 
   const updateStatus = trpc.admin.recruitment.updateStatus.useMutation({
-    onSuccess: (_result, input) => {
+    onSuccess: async (_result, input) => {
       toast.success("Candidature mise à jour");
       // ADM-01: with a status filter, the dossier may leave the list and shift the following pages,
       // which are all reloaded. Without one, nothing moves (the order and the other filters do not
@@ -192,7 +192,12 @@ export default function RecruitmentTab() {
       }
       const changes = { status: input.status, ...(input.adminNotes !== undefined ? { adminNotes: input.adminNotes || null } : {}) };
       for (const offset of adminPageOffsets(pageCount)) {
-        utils.admin.recruitment.list.setData({ ...filters, limit: ADMIN_PAGE_SIZE, offset }, page => updateAdminPageItem(page, input.id, changes));
+        const page = { ...filters, limit: ADMIN_PAGE_SIZE, offset };
+        // A page still loading for the first time is left to its fetch. A refetch of a loaded page started
+        // before the update (on window focus…) would bring the old status back over it: it is cancelled.
+        if (!utils.admin.recruitment.list.getData(page)) continue;
+        await utils.admin.recruitment.list.cancel(page);
+        utils.admin.recruitment.list.setData(page, loaded => updateAdminPageItem(loaded, input.id, changes));
       }
     },
     onError: mutationError => toast.error(mutationError.message),

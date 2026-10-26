@@ -13,6 +13,8 @@ type MutationOptions = { onSuccess?: (result: unknown, input: never) => unknown 
 const state = vi.hoisted(() => ({
   updateStatusOptions: null as null | MutationOptions,
   invalidate: vi.fn(),
+  cancel: vi.fn(async () => undefined),
+  getData: vi.fn((): unknown => ({ items: [], total: 0 })),
   setData: vi.fn(),
 }));
 
@@ -29,7 +31,7 @@ vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), warning: v
 vi.mock("./Candidate360Dialog", () => ({ default: () => null }));
 vi.mock("@/lib/trpc", () => ({
   trpc: {
-    useUtils: () => ({ admin: { recruitment: { list: { invalidate: state.invalidate, setData: state.setData } } } }),
+    useUtils: () => ({ admin: { recruitment: { list: { invalidate: state.invalidate, cancel: state.cancel, getData: state.getData, setData: state.setData } } } }),
     useQueries: (build: (t: unknown) => unknown[]) => {
       const t = { admin: { recruitment: { list: (input: unknown) => input } } };
       return build(t).map(() => ({ data: { items: [dossier(1), dossier(2)], total: 2 }, isLoading: false, error: null, refetch: vi.fn() }));
@@ -59,6 +61,8 @@ const { default: RecruitmentTab } = await import("./RecruitmentTab");
 
 beforeEach(() => {
   state.invalidate.mockClear();
+  state.cancel.mockClear();
+  state.getData.mockClear();
   state.setData.mockClear();
   renderToStaticMarkup(createElement(RecruitmentTab));
 });
@@ -71,6 +75,9 @@ describe("ADM-01 — changement de statut d’une candidature", () => {
     expect(state.setData).toHaveBeenCalledTimes(1);
     const [input, updater] = state.setData.mock.calls[0] as [Record<string, unknown>, (page: Page | undefined) => Page | undefined];
     expect(input).toMatchObject({ limit: 50, offset: 0, status: undefined });
+    // A refetch of that page still in flight (started before the update) is cancelled first, so it cannot bring the old status back.
+    expect(state.cancel.mock.calls).toEqual([[input]]);
+    expect(state.cancel.mock.invocationCallOrder[0]).toBeLessThan(state.setData.mock.invocationCallOrder[0]!);
     const updated = updater({ items: [dossier(1), dossier(2, { adminNotes: "Appeler lundi" })], total: 2 });
     expect(updated?.items.map(item => [item.id, item.status, item.adminNotes])).toEqual([[1, "new", null], [2, "shortlisted", "Appeler lundi"]]);
     expect(updated?.total).toBe(2);
@@ -81,6 +88,14 @@ describe("ADM-01 — changement de statut d’une candidature", () => {
     const [, updater] = state.setData.mock.calls[0] as [unknown, (page: Page | undefined) => Page | undefined];
     expect(updater({ items: [dossier(1, { adminNotes: "Ancienne note" })], total: 1 })?.items[0]?.adminNotes).toBeNull();
     expect(updater(undefined)).toBeUndefined();
+  });
+
+  it("laisse à sa requête une page qui se charge pour la première fois, sans l’annuler", async () => {
+    state.getData.mockReturnValueOnce(undefined);
+    await state.updateStatusOptions!.onSuccess!({ success: true }, { id: 2, status: "shortlisted" } as never);
+    expect(state.cancel).not.toHaveBeenCalled();
+    expect(state.setData).not.toHaveBeenCalled();
+    expect(state.invalidate).not.toHaveBeenCalled();
   });
 });
 
