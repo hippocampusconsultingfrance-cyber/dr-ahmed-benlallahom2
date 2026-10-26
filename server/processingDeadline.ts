@@ -80,6 +80,18 @@ export function pauseWithinDeadline(waitMs: number): Promise<void> {
 }
 
 /**
+ * Whether a step may still start now, before the end of the whole budget (the
+ * end allowed to the first pause); always true outside a deadline. A step
+ * given up here is recorded like a refused pause (deadlineCutShort).
+ */
+export function startFitsDeadline(): boolean {
+  const context = deadlineStorage.getStore();
+  if (!context || context.now() <= context.firstPauseDeadlineAt) return true;
+  context.pauseRefused = true;
+  return false;
+}
+
+/**
  * Whether this processing gave up a pause for its deadline: its work stopped
  * short of its own retries because time ran out, not because it failed.
  */

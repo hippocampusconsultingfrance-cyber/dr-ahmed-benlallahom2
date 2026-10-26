@@ -12,6 +12,7 @@ import {
   sendRefundConfirmationEmail,
 } from "./_core/notifications";
 import { notifyOwner } from "./_core/notification";
+import { runWithSendSlot } from "./_core/resendDelivery";
 import { emailLanguageFor } from "./emailLanguage";
 import { generateInvoicePDF, type InvoiceData } from "./invoice";
 import { allocateAppointmentInvoice, findAppointmentInvoices, type AppointmentInvoiceRecord } from "./invoiceNumbering";
@@ -93,7 +94,8 @@ async function waitForFulfillmentTurn(): Promise<(claimed: boolean) => void> {
  * jobs; an invoice, sent once its PDF is built, could otherwise leave less than
  * a pause before the next job of another processing. The slot is taken in
  * order and released as soon as the send starts, so one waits at most one
- * pause.
+ * pause. A send made again after Resend's retry-after or a short backoff
+ * takes a new slot too (runWithSendSlot in processDueAppointmentFulfillmentJobs).
  */
 async function waitForSendSlot() {
   const previousSlot = lastSendSlot;
@@ -552,10 +554,12 @@ export async function processDueAppointmentFulfillmentJobs(limit = MAX_BATCH, op
       endTurn(claimed);
     }
     if (!claimed) continue;
+    // A send made again within the job (retry-after, short backoff) takes its slot as well.
+    const run = () => runWithSendSlot(waitForSendSlot, () => runJob(job.id));
     try {
       results.push(await (deadlineAt === undefined
-        ? runJob(job.id)
-        : runWithProcessingDeadline(deadlineAt - (jobs.length - 1 - index) * immediateFulfillmentBudget.reservePerJobMs, () => runJob(job.id), Date.now, { firstPauseDeadlineAt: deadlineAt })));
+        ? run()
+        : runWithProcessingDeadline(deadlineAt - (jobs.length - 1 - index) * immediateFulfillmentBudget.reservePerJobMs, run, Date.now, { firstPauseDeadlineAt: deadlineAt })));
     } finally {
       lastJobRunAt = Date.now();
     }
