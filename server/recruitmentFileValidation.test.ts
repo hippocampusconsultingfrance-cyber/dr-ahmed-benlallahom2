@@ -326,7 +326,8 @@ describe("REC-02 — PDF réels acceptés, actions dangereuses cherchées aussi 
         expect((await extractCvDocument(trap, "application/pdf")).text, String(index)).toContain("Dr Camille Martin");
         expect(() => validate(trap), String(index)).toThrow("cv_validation_pdf_active_content");
       }
-    });
+      // Ten extractions, each drawing the page it reads to keep only its visible text (IA-01).
+    }, 20_000);
   });
 
   describe("compte les pages distinctes, une fois chacune", () => {
@@ -388,7 +389,8 @@ describe("REC-02 — PDF réels acceptés, actions dangereuses cherchées aussi 
       expect(() => validate(packed)).toThrow("cv_validation_pdf_page_limit_exceeded");
       // Under the limit, such a file keeps all its pages.
       expect(validate(appendWithoutXref(textPages(20), annotations(8))).pageCount).toBe(20);
-    });
+      // Two extractions of 25 pages, each drawn to keep only its visible text (IA-01).
+    }, 20_000);
   });
 
   it("refuse un formulaire XFA, qui porte ses propres scripts, même dans un flux d’objets ou derrière un nom échappé", () => {
