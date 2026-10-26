@@ -2454,6 +2454,20 @@ export const appRouter = router({
 
           return { success: true };
         }),
+
+      /** Deletes one message (GDPR erasure or withdrawn consent); the trace names no one (RGPD-12). */
+      delete: adminProcedure
+        .input(z.object({ id: z.number().int().positive() }))
+        .mutation(async ({ input, ctx }) => {
+          const db = await getDb();
+          if (!db) throw new Error("Database connection failed");
+
+          const deleted = mutationRowCount(await db.delete(contactMessages).where(eq(contactMessages.id, input.id)));
+          if (deleted === 0) throw new TRPCError({ code: "NOT_FOUND", message: "Message introuvable : il a peut-être déjà été supprimé." });
+          await logSecurityEvent({ actorKind: "admin", actorReference: ctx.user.openId, category: "admin_contact_message_deleted", outcome: "allowed", metadata: { deleted } });
+
+          return { success: true };
+        }),
     }),
 
     // List all GDPR requests
@@ -2488,16 +2502,20 @@ export const appRouter = router({
           z.object({
             id: z.number(),
             status: z.enum(["pending", "in_progress", "completed", "rejected"]),
-            notes: z.string().optional(),
+            notes: z.string().trim().max(5000).optional(),
           })
         )
         .mutation(async ({ input }) => {
           const db = await getDb();
           if (!db) throw new Error("Database connection failed");
+          // A refusal is always reasoned (RGPD-12): the reason is kept with the request.
+          if (input.status === "rejected" && !input.notes) throw new TRPCError({ code: "BAD_REQUEST", message: "Indiquez le motif du refus avant de refuser la demande." });
 
-          const updateData: Record<string, any> = { status: input.status };
+          const now = new Date();
+          const updateData: Record<string, any> = { status: input.status, updatedAt: now };
           if (input.notes) updateData.notes = input.notes;
-          if (input.status === "completed") updateData.responseDate = new Date();
+          // Answer date of a closed request, from which its 1-year retention runs (RGPD-09).
+          if (input.status === "completed" || input.status === "rejected") updateData.responseDate = now;
 
           await db
             .update(gdprRequests)
@@ -2505,6 +2523,31 @@ export const appRouter = router({
             .where(eq(gdprRequests.id, input.id));
 
           return { success: true };
+        }),
+    }),
+
+    // Everything kept under one email address in the patient and contact
+    // tables: listing, JSON export and erasure (RGPD-12, docs/PROCEDURE_DEMANDES_RGPD.md).
+    personalData: router({
+      find: adminProcedure
+        .input(z.object({ email: z.string().trim().email().max(320) }))
+        .query(async ({ input }) => {
+          const { findPersonalData } = await import("./personalDataAdmin");
+          return findPersonalData(input.email);
+        }),
+
+      export: adminProcedure
+        .input(z.object({ email: z.string().trim().email().max(320) }))
+        .mutation(async ({ input, ctx }) => {
+          const { exportPersonalData } = await import("./personalDataAdmin");
+          return exportPersonalData({ email: input.email, actorOpenId: ctx.user.openId });
+        }),
+
+      erase: adminProcedure
+        .input(z.object({ email: z.string().trim().email().max(320) }))
+        .mutation(async ({ input, ctx }) => {
+          const { erasePersonalData } = await import("./personalDataAdmin");
+          return erasePersonalData({ email: input.email, actorOpenId: ctx.user.openId });
         }),
     }),
 
