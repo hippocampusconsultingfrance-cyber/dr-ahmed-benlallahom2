@@ -8,20 +8,24 @@ import { ensureLanguageColumns, postgresErrorCode, waitForLanguageColumns } from
 let _db: ReturnType<typeof drizzle> | null = null;
 
 /**
- * After a failed check of the language columns, queries skip it for this long.
- * Short: until the column exists, queries naming it fail (42703), and the lock
- * of a long query on the table is usually released within seconds.
+ * After the first failed check of the language columns, queries skip it for
+ * this long. Short: until the column exists, queries naming it fail (42703),
+ * and the lock of a long query on the table is usually released within seconds.
  */
 export const LANGUAGE_COLUMNS_RETRY_DELAY_MS = 5_000;
 /**
- * The delay doubles after each consecutive failure, up to this. Under a lock
- * held for minutes, each attempt makes the readers of the table wait up to 2 s
- * behind its queued ALTER: once a minute at most per instance.
+ * Delay after a retry that waited for the lock again (55P03): the lock has
+ * then been held for several seconds and may be for minutes, and each attempt
+ * makes the readers of the table wait up to 2 s behind its queued ALTER, so
+ * the attempts come once a minute at most per instance. Other failures do not
+ * hold the readers back: their delay doubles from 5 s up to this.
  */
 export const LANGUAGE_COLUMNS_MAX_RETRY_DELAY_MS = 60_000;
+/** SQLSTATE lock_not_available: the ALTER waited for the lock until lock_timeout. */
+const LOCK_NOT_AVAILABLE = "55P03";
 let languageColumnsRetryAt = 0;
-// Failed checks since the last success.
-let languageColumnsFailedChecks = 0;
+// Delay set by the last failed check, 0 since the last success.
+let languageColumnsRetryDelay = 0;
 // Kinds of failure (error name and SQLSTATE) logged since the last success.
 const languageColumnsLoggedFailures = new Set<string>();
 
@@ -31,24 +35,29 @@ const languageColumnsLoggedFailures = new Set<string>();
 // sharing one check (memoised by ensureLanguageColumns). Other queries never
 // wait. After a failure (lock not obtained within 2 s, role not allowed to
 // alter the table) the queries go on without waiting, and the first one after
-// the delay (5 s, then 10, 20, 40 and at most 60 s) checks again, with the same
-// 2 s bound. Each kind of failure is logged once until a check succeeds, so
-// retries failing again stay silent, and the success is logged once.
+// the delay checks again, with the same 2 s bound: 5 s after the first failure;
+// after a retry that waited for the lock again, 60 s, and so on while the
+// checks fail; after a retry failing otherwise (without holding the readers
+// back), the delay doubles (10, 20, 40 s), up to 60 s. Each kind of failure is
+// logged once until a check succeeds, so retries failing again stay silent,
+// and the success is logged once.
 function languageColumnsReady(ddl: Parameters<typeof ensureLanguageColumns>[0]): Promise<void> {
   if (Date.now() < languageColumnsRetryAt) return Promise.resolve();
   return ensureLanguageColumns(ddl).then(() => {
-    languageColumnsFailedChecks = 0;
+    languageColumnsRetryDelay = 0;
     if (languageColumnsLoggedFailures.size === 0) return;
     languageColumnsLoggedFailures.clear();
     console.log("[Database] Language columns check succeeded after a failure");
   }, error => {
-    // Queries waiting together share one check: only the first of them counts its failure.
-    if (Date.now() >= languageColumnsRetryAt) {
-      languageColumnsRetryAt = Date.now() + Math.min(LANGUAGE_COLUMNS_RETRY_DELAY_MS * 2 ** languageColumnsFailedChecks, LANGUAGE_COLUMNS_MAX_RETRY_DELAY_MS);
-      languageColumnsFailedChecks += 1;
-    }
     const name = error instanceof Error ? error.name : "UnknownError";
     const code = postgresErrorCode(error) ?? "";
+    // Queries waiting together share one check: only the first of them counts its failure.
+    if (Date.now() >= languageColumnsRetryAt) {
+      languageColumnsRetryDelay = languageColumnsRetryDelay === 0 ? LANGUAGE_COLUMNS_RETRY_DELAY_MS
+        : code === LOCK_NOT_AVAILABLE ? LANGUAGE_COLUMNS_MAX_RETRY_DELAY_MS
+        : Math.min(languageColumnsRetryDelay * 2, LANGUAGE_COLUMNS_MAX_RETRY_DELAY_MS);
+      languageColumnsRetryAt = Date.now() + languageColumnsRetryDelay;
+    }
     if (languageColumnsLoggedFailures.has(`${name} ${code}`)) return;
     languageColumnsLoggedFailures.add(`${name} ${code}`);
     console.error("[Database] Language columns check failed:", name, code);
@@ -75,7 +84,7 @@ export async function getDb() {
 export function resetDbForTests() {
   _db = null;
   languageColumnsRetryAt = 0;
-  languageColumnsFailedChecks = 0;
+  languageColumnsRetryDelay = 0;
   languageColumnsLoggedFailures.clear();
 }
 
