@@ -293,7 +293,8 @@ describe("envois après paiement — propriétaire d’abord, essais courts, ale
   });
 
   it("ne perd pas de pause quand deux traitements du même paiement se disputent ses envois (webhook et page de retour)", async () => {
-    appointmentFulfillmentPacing.delayMs = 200;
+    // Long pauses: two pauses (1 000 ms) and three (1 500 ms) stay apart on a loaded CI runner.
+    appointmentFulfillmentPacing.delayMs = 500;
     memoryDatabase([job(1, "owner"), job(2, "confirmation"), job(3, "invoice")]);
 
     const [first, second] = await Promise.all([processDueAppointmentFulfillmentJobs(), processDueAppointmentFulfillmentJobs()]);
@@ -302,11 +303,12 @@ describe("envois après paiement — propriétaire d’abord, essais courts, ale
     expect(first.processed + second.processed).toBe(3);
     expect(subjects().map(subject => subject.split(" ")[0])).toEqual(["Nouvelle", "Confirmation", "Facture"]);
     const [owner, confirmation, invoice] = resend.calls.map(call => call.at);
-    expect(confirmation - owner).toBeGreaterThanOrEqual(198);
-    expect(invoice - confirmation).toBeGreaterThanOrEqual(198);
-    // A turn whose job the other processing had already claimed gives its pause back.
-    expect(invoice - owner).toBeLessThan(3 * 200);
-  });
+    expect(confirmation - owner).toBeGreaterThanOrEqual(498);
+    expect(invoice - confirmation).toBeGreaterThanOrEqual(498);
+    // A turn whose job the other processing had already claimed gives its pause back:
+    // two pauses, not three.
+    expect(invoice - owner).toBeLessThan(2.5 * 500);
+  }, 15_000);
 
   it("un claim dont la requête en base ne répond pas ne bloque pas les autres traitements de l’instance", async () => {
     appointmentFulfillmentPacing.claimTurnLimitMs = 100;
