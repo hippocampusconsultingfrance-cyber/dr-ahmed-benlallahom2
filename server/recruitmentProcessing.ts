@@ -135,11 +135,6 @@ export async function executeCvExternalPipeline(
   // Persist the source evidence before calling the AI provider: a provider
   // failure must not erase an otherwise successful document extraction.
   await onExtracted?.({ validation, extraction });
-  // A partial OCR (currently capped to the first rendered pages) must never
-  // produce a trustworthy whole-document score even if those pages are clear.
-  const analysisOcrConfidence = extraction.warnings.includes("vision_ocr_first_3_pages_only")
-    ? 0
-    : extraction.ocrConfidence;
   const analysisExecution = await steps.analyze({
     firstName: input.firstName,
     lastName: input.lastName,
@@ -150,7 +145,11 @@ export async function executeCvExternalPipeline(
     message: input.message ?? undefined,
     extractedText: extraction.text,
     extractionMethod: extraction.method,
-    ocrConfidence: analysisOcrConfidence,
+    // The vision's own confidence, kept as the admin sees it: a partial OCR
+    // (pages of a scan neither the vision nor its OCR layer read) never gets a
+    // whole-document score, since its reading is incomplete (below), but the
+    // quotes found on the pages read stay found.
+    ocrConfidence: extraction.ocrConfidence,
     // IA-01: incomplete too when invisible text could not be ruled out, when
     // the file hides more of it than a CV template does, or when too much of
     // its text could not be checked and was set aside.

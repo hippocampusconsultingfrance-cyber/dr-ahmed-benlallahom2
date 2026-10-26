@@ -66,11 +66,13 @@ describe("libellés des preuves IA d’un CV (IA-01)", () => {
     expect(extractionWarningLabel("pdf_text_page_3_insufficient_text")).toBe("page 3 : texte insuffisant");
     // Pages read by the vision, and what it noted on them.
     expect(extractionWarningLabel("vision_ocr_pages:2,3")).toBe("page(s) 2,3 relue(s) par la lecture visuelle (scan sous sa couche de texte)");
-    expect(extractionWarningLabel("vision_ocr_first_3_pages_only")).toBe("seules les 3 premières pages ont été lues par la lecture visuelle");
+    expect(extractionWarningLabel("vision_ocr_first_3_pages_only")).toBe("seules les 3 premières pages ont été lues par la lecture visuelle, les suivantes ne l’ont pas été (ni par une couche OCR conforme)");
+    // Pages of a scan read from its OCR layer, once the vision found the same words on the pages it read (IA-01).
+    expect(extractionWarningLabel("ocr_layer_pages:4,5")).toBe("page(s) 4,5 lue(s) par la couche OCR du scan, conforme à la lecture visuelle des pages relues : à comparer au CV");
     expect(extractionWarningLabel("page_2:tampon partiellement illisible")).toBe("page 2 (lecture visuelle) : tampon partiellement illisible");
     // Dossiers analysed before these warnings were named.
     expect(extractionWarningLabel("pdf_visibility_check_incomplete")).toBe("contrôle de visibilité incomplet (police non incorporée ou pages non contrôlées)");
-    for (const code of ["pdf_text_on_image", "pdf_text_faint", "pdf_text_unmatched", "docx_white_text_near_drawing", "pdf_visibility_check_unavailable", "vision_ocr_fallback", "vision_ocr_no_rendered_pages", "white_text_on_drawing_kept:12"]) expect(extractionWarningLabel(code)).not.toMatch(/^[a-z_]+(:\d+)?$/);
+    for (const code of ["pdf_text_on_image", "pdf_text_faint", "pdf_text_unmatched", "docx_white_text_near_drawing", "pdf_visibility_check_unavailable", "vision_ocr_fallback", "vision_ocr_no_rendered_pages", "pdf_ocr_layer_mismatch", "white_text_on_drawing_kept:12"]) expect(extractionWarningLabel(code)).not.toMatch(/^[a-z_]+(:\d+)?$/);
     expect(extractionWarningLabel("legacy_doc_format_limited_extraction")).toBe("legacy_doc_format_limited_extraction");
   });
 });

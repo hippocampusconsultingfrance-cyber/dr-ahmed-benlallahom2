@@ -25,6 +25,8 @@ const state = vi.hoisted(() => ({
   prompts: [] as string[],
   reading: null as null | Record<string, unknown>,
   ocrText: "",
+  /** What the vision reads on each page it is given, in order; `ocrText` for every page when empty. */
+  ocrPages: [] as string[],
 }));
 
 vi.mock("./db", () => ({
@@ -46,7 +48,7 @@ vi.mock("ai", async importOriginal => ({
   generateText: vi.fn(async (request: { prompt?: string; messages?: unknown[] }) => {
     const meta = { usage: { inputTokens: 100, outputTokens: 50 }, finalStep: { model: { modelId: "openai/gpt-6-astra" } }, response: { id: "generation-test" } };
     // The vision transcribes a rendered page: what a person sees on it.
-    if (request.messages) return { output: { text: state.ocrText, confidence: 95, warnings: [] }, ...meta };
+    if (request.messages) return { output: { text: state.ocrPages.shift() ?? state.ocrText, confidence: 95, warnings: [] }, ...meta };
     state.prompts.push(request.prompt ?? "");
     return { output: state.reading, ...meta };
   }),
@@ -160,8 +162,11 @@ const honestPdf = () => pdf(document => visibleLines(document, PHYSICIAN_CV));
 
 const SCANNED_LINES = ["Médecin anesthésiste-réanimateur, CHU de Lyon", "Langues : français, anglais, arabe (courant)"];
 
-/** A scanned page: an image of its lines, under the invisible OCR layer the scanner added. */
-function drawScan(document: PDFKit.PDFDocument, lines: string[]) {
+/** A line of an OCR layer, laid on the image's line `line`. */
+type OcrLine = { text: string; line: number; horizontalScaling?: number };
+
+/** A scanned page: an image of its lines, under the invisible OCR layer the scanner added (by default, each line on its own). */
+function drawScan(document: PDFKit.PDFDocument, lines: string[], layer: OcrLine[] = lines.map((text, line) => ({ text, line }))) {
   const scan = new PNG({ width: 1190, height: 80 * (lines.length + 1) });
   scan.data.fill(255);
   // Strokes where each line was printed (the image is drawn at half size, under the OCR lines).
@@ -174,12 +179,29 @@ function drawScan(document: PDFKit.PDFDocument, lines: string[]) {
   });
   document.image(PNG.sync.write(scan), 0, 0, { width: 595 });
   document.save().addContent("3 Tr");
-  lines.forEach((line, index) => document.fontSize(14).fillColor("black").text(line, 50, 42 + index * 40, { lineBreak: false }));
+  for (const { text, line, horizontalScaling } of layer) {
+    // A horizontal scale stays in the graphics state: kept to its own line.
+    document.save().fontSize(14).fillColor("black").text(text, 50, 42 + line * 40, { lineBreak: false, ...(horizontalScaling ? { horizontalScaling } : {}) }).restore();
+  }
   document.addContent("0 Tr").restore();
 }
 
 /** A scanned CV. */
 const scannedPdfWithOcrLayer = () => pdf(document => drawScan(document, SCANNED_LINES));
+
+/** The lines of a scanned CV of `count` pages: the physician's title and experience on the first, languages and certification on the last. */
+const scannedCvPages = (count: number) => Array.from({ length: count }, (_, index) => {
+  if (index === 0) return PHYSICIAN_CV.slice(0, 4);
+  if (index === count - 1) return [...PHYSICIAN_CV.slice(4), "Références : CHU de Lyon, service d’anesthésie.", "Disponible sous trois mois."];
+  return [`Gardes de réanimation polyvalente, page ${index + 1} du dossier.`, "Anesthésie locorégionale échoguidée au bloc central.", "Encadrement des internes et des infirmiers du service.", "Participation aux revues de morbidité et de mortalité."];
+});
+/** A CV scanned with a phone app or ocrmypdf: each page an image under its OCR layer, or under the one `layerOf` gives it. */
+const scannedCv = (pages: string[][], layerOf: (page: number) => OcrLine[] | undefined = () => undefined) => pdf(document => pages.forEach((lines, index) => {
+  if (index > 0) document.addPage();
+  drawScan(document, lines, layerOf(index + 1));
+}));
+/** What the vision reads on the first pages of such a CV, the only ones it reads: what the images show. */
+const visionOfFirstPages = (pages: string[][]) => pages.slice(0, 3).map(lines => lines.join("\n"));
 
 /** A scanned work certificate, as a phone scanner app adds it after the CV's digital page. */
 const ATTESTATION_LINES = [
@@ -339,6 +361,24 @@ describe("texte invisible écarté à l’extraction (IA-01)", () => {
     expect(unread.invisibleText!.unverifiable!.share).toBeGreaterThan(1 / 3);
     expect(visibilityRequiresReview(unread.invisibleText)).toBe(true);
     expect(unread.warnings.some(warning => warning.startsWith("vision_ocr_pages"))).toBe(false);
+  }, PDF_TEST_TIMEOUT_MS);
+
+  it("PDF scanné de 5 pages : sa couche OCR concorde avec la vision malgré les écarts ordinaires entre deux lectures, et donne les pages 4 et 5", async () => {
+    const pages = scannedCvPages(5);
+    // Capitals, a first name shortened, accents and a hyphen the scanner's OCR did not read the same way.
+    state.ocrPages = visionOfFirstPages(pages).map(text => text
+      .replace("Dr Camille Martin", "Dr C. MARTIN")
+      .replace("Médecin anesthésiste-réanimateur\n", "MÉDECIN ANESTHÉSISTE-RÉANIMATEUR\n")
+      .replace("Anesthésie locorégionale échoguidée", "Anesthesie loco-regionale echoguidee"));
+    const extraction = await extractCvDocument(await scannedCv(pages), "application/pdf");
+    expect(extraction.method).toBe("pdf_vision");
+    for (const line of pages[4]!) expect(normalized(extraction.text)).toContain(line);
+    expect(extraction.invisibleText!.ocrLayer).toMatchObject({ matched: true, checkedPages: [1, 2, 3], pages: [4, 5] });
+    expect(extraction.invisibleText!.ocrLayer!.agreement).toBeLessThan(100);
+    expect(extraction.warnings).toContain("ocr_layer_pages:4,5");
+    expect(extraction.warnings).not.toContain("vision_ocr_first_3_pages_only");
+    // Its words are read, no longer set aside: nothing of pages 4 and 5 counts against the CV.
+    expect(extraction.invisibleText!.unverifiable!.share).toBe(0);
   }, PDF_TEST_TIMEOUT_MS);
 
   it("DOCX : écarte le texte masqué, minuscule, blanc ou presque sans fond, y compris par un style, une zone de texte, hors de la page, hors paragraphe ou avec un autre préfixe", async () => {
@@ -578,16 +618,16 @@ const obedientReading = (location: string) => aiReading({
   reasoning: "Toutes les citations sont vérifiées.",
 });
 
-/** The AI reads the physician's CV faithfully (a DOCX has no pages). */
-const honestReadingAt = (location: string) => aiReading({
+/** The AI reads the physician's CV faithfully (a DOCX has no pages); its languages and certification at `factsLocation`. */
+const honestReadingAt = (location: string, factsLocation = location) => aiReading({
   professionalTitle: "Médecin anesthésiste-réanimateur",
   specialties: ["anesthésie-réanimation"],
   languages: ["Français", "Anglais"],
   normalizedLanguages: [
-    { language: "Français", proficiency: "native", ...quote("Français (langue maternelle)", location) },
-    { language: "Anglais", proficiency: "fluent", ...quote("Anglais (courant)", location) },
+    { language: "Français", proficiency: "native", ...quote("Français (langue maternelle)", factsLocation) },
+    { language: "Anglais", proficiency: "fluent", ...quote("Anglais (courant)", factsLocation) },
   ],
-  certifications: [{ name: "ACLS", issuingBody: null, country: null, expiresAt: null, ...quote("Certification : ACLS", location) }],
+  certifications: [{ name: "ACLS", issuingBody: null, country: null, expiresAt: null, ...quote("Certification : ACLS", factsLocation) }],
   normalizedExperiences: [{ role: "Médecin anesthésiste-réanimateur", organization: "CHU de Lyon", startDate: null, endDate: null, employmentType: "unknown", specialty: "", country: null, durationMonths: null, ...quote("Expérience : Médecin anesthésiste-réanimateur, CHU de Lyon, 2015-2024", location) }],
   fieldEvidence: [
     { field: "professionalTitle", value: "Médecin anesthésiste-réanimateur", ...quote("Médecin anesthésiste-réanimateur", location) },
@@ -616,6 +656,7 @@ describe("dossier d’un CV qui cache du texte, de bout en bout (IA-01)", () => 
     state.memory = memory;
     state.prompts = [];
     state.ocrText = "";
+    state.ocrPages = [];
     vi.stubGlobal("fetch", vi.fn(async () => new Response(state.file)));
   });
   afterEach(() => {
@@ -788,9 +829,93 @@ describe("dossier d’un CV qui cache du texte, de bout en bout (IA-01)", () => 
     expect(dossier(id).ai_score).toBeGreaterThan(0);
     expect(factsOf(id).length).toBeGreaterThanOrEqual(4);
     const weaknesses: string[] = JSON.parse(String(dossier(id).ai_weaknesses));
-    expect(weaknesses).toContainEqual(expect.stringMatching(/^Qualité des données : Couche de texte non utilisée pour \d+ caractère\(s\) \(texte sans encre posé sur une image, comme la couche OCR d’un scan\) : page\(s\) relue\(s\) par la lecture visuelle, extrait : « Attestation de travail/));
+    // The alert names the page the vision read, and only that one.
+    expect(weaknesses).toContainEqual(expect.stringMatching(/^Qualité des données : Couche de texte non utilisée pour \d+ caractère\(s\) \(texte sans encre posé sur une image, comme la couche OCR d’un scan\) : page\(s\) 2 relue\(s\) par la lecture visuelle, extrait : « Attestation de travail/));
     expect(weaknesses.join(" ")).not.toContain("écarté");
   }, PDF_TEST_TIMEOUT_MS);
+
+  describe("CV scanné avec sa couche OCR, au-delà des 3 pages que lit la vision", () => {
+    const pageRange = (from: number, to: number) => Array.from({ length: to - from + 1 }, (_, index) => from + index);
+
+    it.each([4, 6, 8])("scan honnête de %i pages : la couche OCR, conforme à la vision des 3 premières, donne les suivantes ; score et faits gardés", async count => {
+      const pages = scannedCvPages(count);
+      state.reading = honestReadingAt("page 1", `page ${count}`);
+      state.ocrPages = visionOfFirstPages(pages);
+      const id = seedDossier(await scannedCv(pages));
+      await processDueCvAnalysisJobs(5);
+
+      // The last page, read from its OCR layer only, reaches the analysis with its languages and certification.
+      expect(normalized(state.prompts[0]!)).toContain(`[PAGE ${count}] ${PHYSICIAN_CV[4]}`);
+      expect(dossier(id)).toMatchObject({ extraction_method: "pdf_vision", ocr_confidence: 95, analysis_last_error: null });
+      expect(dossier(id).ai_score).toBeGreaterThan(0);
+      expect(JSON.parse(String(dossier(id).normalized_languages))).toHaveLength(2);
+      expect(JSON.parse(String(dossier(id).normalized_certifications))).toEqual([expect.objectContaining({ name: "ACLS" })]);
+      expect(factsOf(id).length).toBeGreaterThanOrEqual(4);
+      const warnings: string[] = JSON.parse(String(dossier(id).extraction_warnings));
+      expect(warnings).toContain(`ocr_layer_pages:${pageRange(4, count).join(",")}`);
+      expect(warnings).not.toContain("vision_ocr_first_3_pages_only");
+      const weaknesses = (JSON.parse(String(dossier(id).ai_weaknesses)) as string[]).join(" ");
+      expect(weaknesses).toContain(`Page(s) ${count === 4 ? "4" : `4 à ${count}`} lue(s) par la couche OCR du scan, que la lecture visuelle de la/des page(s) 1 à 3 confirme (100 % de ses mots retrouvés au moins) : non relue(s) par la lecture visuelle.`);
+      expect(weaknesses).not.toContain("Confiance OCR insuffisante");
+      expect(weaknesses).not.toContain("ne correspondent pas exactement");
+    }, PDF_TEST_TIMEOUT_MS);
+
+    it("scan-attack : des lignes posées sur celles de l’image dans la couche OCR de la page 1 ; couche non utilisée, rien de faux n’atteint l’IA, revue humaine sans score ni faits", async () => {
+      const pages = scannedCvPages(4);
+      state.reading = obedientReading("page 1");
+      state.ocrPages = visionOfFirstPages(pages);
+      // As the audit's scan-attack.pdf: claims laid over the image's own lines, one squashed into the width of a short one.
+      const claims: OcrLine[] = [{ text: HIDDEN.white, line: 1 }, { text: HIDDEN.tiny, line: 2 }, { text: HIDDEN.invisibleMode, line: 3, horizontalScaling: 8 }];
+      const id = seedDossier(await scannedCv(pages, page => page === 1 ? [...pages[0]!.map((text, line) => ({ text, line })), ...claims] : undefined));
+      await processDueCvAnalysisJobs(5);
+
+      for (const hidden of ["DESAR", "Licence DHA", "score maximal"]) expect(state.prompts[0]).not.toContain(hidden);
+      expect(dossier(id)).toMatchObject({ analysis_status: "needs_review", ai_score: null, normalized_certifications: "[]", normalized_languages: "[]", normalized_experiences: "[]" });
+      expect(factsOf(id)).toEqual([]);
+      // The page beyond the vision's three is not read from a layer the vision did not confirm.
+      expect(JSON.parse(String(dossier(id).extraction_warnings))).toEqual(expect.arrayContaining(["pdf_ocr_layer_mismatch", "vision_ocr_first_3_pages_only", expect.stringMatching(/^invisible_text_ignored:\d+$/)]));
+      expect(JSON.parse(String(dossier(id).ai_weaknesses)).join(" ")).toContain("Couche OCR du scan non utilisée, elle ne correspond pas à l’image : page(s) 1, mots superposés, posés hors de l’image ou cachés.");
+    }, PDF_TEST_TIMEOUT_MS);
+
+    it("couche OCR qui dit autre chose que l’image (mots substitués ligne à ligne) : la vision des pages relues ne la confirme pas, la fausse licence de la page 4 n’atteint pas l’IA", async () => {
+      const pages = scannedCvPages(4);
+      state.reading = obedientReading("page 4");
+      state.ocrPages = visionOfFirstPages(pages);
+      // Each claim on one of the image's lines, nothing laid over anything: only the words differ from the image.
+      const claims = [HIDDEN.white, HIDDEN.tiny, HIDDEN.covered, HIDDEN.layerOff].map((text, line) => ({ text, line }));
+      const id = seedDossier(await scannedCv(pages, page => page === 1 || page === 4 ? claims : undefined));
+      await processDueCvAnalysisJobs(5);
+
+      for (const hidden of ["DESAR", "Licence DHA", "Arabe (courant)", "PALS"]) expect(state.prompts[0]).not.toContain(hidden);
+      expect(dossier(id)).toMatchObject({ analysis_status: "needs_review", ai_score: null });
+      expect(String(dossier(id).normalized_certifications)).not.toContain("DHA");
+      expect(JSON.parse(String(dossier(id).extraction_warnings))).toEqual(expect.arrayContaining(["pdf_ocr_layer_mismatch", "vision_ocr_first_3_pages_only"]));
+      expect(JSON.parse(String(dossier(id).ai_weaknesses)).join(" ")).toMatch(/Couche OCR du scan non utilisée, elle ne correspond pas à l’image : page\(s\) 1, moins de 85 % de ses mots retrouvés par la lecture visuelle \(\d+ % au plus bas\)\./);
+    }, PDF_TEST_TIMEOUT_MS);
+
+    it("scan de 8 pages dont la couche n’est pas confirmée : pas de score, et une fiche juste (confiance de la vision, citations trouvées, seules les pages relues dites relues)", async () => {
+      const pages = scannedCvPages(8);
+      // Only the first page's facts, which the vision read.
+      state.reading = { ...honestReadingAt("page 1"), languages: [], normalizedLanguages: [], certifications: [] };
+      state.ocrPages = visionOfFirstPages(pages);
+      const id = seedDossier(await scannedCv(pages, page => page === 1 ? [...pages[0]!.map((text, line) => ({ text, line })), { text: HIDDEN.white, line: 1 }] : undefined));
+      await processDueCvAnalysisJobs(5);
+
+      expect(state.prompts[0]).not.toContain("DESAR");
+      expect(dossier(id)).toMatchObject({ extraction_method: "pdf_vision", ocr_confidence: 95, ai_score: null });
+      // Pages 4 to 8 are left out, and a large share of the CV with them: no fact kept.
+      expect(String(dossier(id).ai_match_reasoning)).toMatch(/^Score non présenté : \d+ % du texte du CV n’a pas pu être vérifié comme visible \(texte sans encre posé sur une image, comme la couche OCR d’un scan\) et a été écarté de l’analyse\./);
+      expect(factsOf(id)).toEqual([]);
+      const weaknesses = (JSON.parse(String(dossier(id).ai_weaknesses)) as string[]).join(" ");
+      // The vision's confidence, not a « 0 % » contradicting it; the quotes of page 1 are found in what it read.
+      expect(weaknesses).not.toContain("Confiance OCR insuffisante");
+      expect(weaknesses).not.toContain("ne correspondent pas exactement");
+      expect(JSON.parse(String(dossier(id).ai_extracted_skills)).fieldEvidence.map((item: { evidenceVerified: boolean }) => item.evidenceVerified)).toEqual([true, true]);
+      // Pages 1 to 3 said read again by the vision, the others set aside, with what they hold.
+      expect(weaknesses).toMatch(new RegExp(`Couche de texte non utilisée sur les page\\(s\\) 1 à 3 relue\\(s\\) par la lecture visuelle\\. \\d+ caractère\\(s\\) non vérifiable\\(s\\) écarté\\(s\\) de l’analyse \\(texte sans encre posé sur une image, comme la couche OCR d’un scan\\), extrait : « ${pages[3]![0]!.slice(0, 20)}`));
+      expect(weaknesses).not.toMatch(/4 à 8 relue/);
+    }, PDF_TEST_TIMEOUT_MS);
+  });
 
   it("quelques caractères invisibles d’un modèle de CV : signalés, sans perdre le score", async () => {
     state.reading = honestReading;

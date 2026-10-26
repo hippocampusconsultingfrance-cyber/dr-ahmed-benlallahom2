@@ -20,8 +20,6 @@ describe("traçabilité reproductible des analyses CV", () => {
       .toBeLessThan(processing.indexOf("await steps.analyze({"));
     expect(processing).toContain("analysisModel: pipeline.analysisModel");
     expect(processing).toContain("analysisPromptVersion: RECRUITMENT_ANALYSIS_PROMPT_VERSION");
-    expect(processing).toContain('extraction.warnings.includes("vision_ocr_first_3_pages_only")');
-    expect(processing).toContain(": extraction.ocrConfidence");
     expect(analysis).toContain("await db.batch([");
     expect(analysis).toContain("analysisPromptVersion: RECRUITMENT_ANALYSIS_PROMPT_VERSION");
   });

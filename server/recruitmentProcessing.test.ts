@@ -151,6 +151,27 @@ describe("règles déterministes du pipeline de traitement CV", () => {
     expect(extractionIncomplete).toBe(true);
   });
 
+  it("un scan dont la vision n’a lu que les premières pages reste incomplet, avec la confiance de la vision telle quelle (IA-01)", async () => {
+    let received: Pick<Parameters<typeof steps.analyze>[0], "extractionIncomplete" | "ocrConfidence"> | undefined;
+    await executeCvExternalPipeline(input, {
+      ...steps,
+      extract: async () => ({
+        text: "[PAGE 1]\nDocument fictif avec assez de texte.",
+        method: "pdf_vision" as const,
+        totalPages: 8,
+        ocrConfidence: 92,
+        ocrModelVersion: "google/gemini-3.8-flash",
+        warnings: ["vision_ocr_fallback", "vision_ocr_first_3_pages_only"],
+      }),
+      analyze: async analysisInput => {
+        received = { extractionIncomplete: analysisInput.extractionIncomplete, ocrConfidence: analysisInput.ocrConfidence };
+        return analysisExecution;
+      },
+    });
+    // No whole-document score, but no « 0 % » either: the quotes found on the pages read stay found.
+    expect(received).toEqual({ extractionIncomplete: true, ocrConfidence: 92 });
+  });
+
   it("traite comme une extraction incomplète un texte lu sans contrôle de visibilité, un texte invisible au-delà de 30 caractères, ou un texte non vérifiable d’un tiers au moins (IA-01)", async () => {
     const received: Array<Pick<Parameters<typeof steps.analyze>[0], "extractionIncomplete" | "invisibleText" | "visibilityUnchecked">> = [];
     const extractWith = (extra: { warnings: string[]; invisibleText?: InvisibleTextSummary }) => executeCvExternalPipeline(input, {
