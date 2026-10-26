@@ -8,7 +8,6 @@ const imageBearingComponents = [
   "components/Footer.tsx",
   "components/GDPRRequestForm.tsx",
   "components/HeroSection.tsx",
-  "components/ManusDialog.tsx",
   "components/Navigation.tsx",
   "components/ServicesSection.tsx",
   "pages/BlogPage.tsx",

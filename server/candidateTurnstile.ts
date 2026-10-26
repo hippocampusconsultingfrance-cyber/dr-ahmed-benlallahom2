@@ -7,7 +7,6 @@ type TurnstileResponse = {
 const TRUSTED_HOSTS = new Set([
   "drahmedbenlallahom.com",
   "www.drahmedbenlallahom.com",
-  "drbenlallah-esc8d3hd.manus.space",
   "localhost",
   "127.0.0.1",
 ]);

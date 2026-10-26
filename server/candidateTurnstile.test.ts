@@ -36,6 +36,16 @@ describe("vérification Turnstile côté serveur, dans tous les environnements",
     await expect(verifyCandidateTurnstile({ token: "token-from-another-site" })).rejects.toThrow("candidate_turnstile_invalid");
   });
 
+  it("n’accepte plus un jeton obtenu sur l’ancienne préversion Manus, seulement sur le site et en local (CODE-05)", async () => {
+    cloudflareAnswers({ success: true, hostname: "drbenlallah-esc8d3hd.manus.space" });
+    await expect(verifyCandidateTurnstile({ token: "token-from-the-manus-preview" })).rejects.toThrow("candidate_turnstile_invalid");
+
+    for (const hostname of ["www.drahmedbenlallahom.com", "localhost"]) {
+      cloudflareAnswers({ success: true, hostname });
+      await expect(verifyCandidateTurnstile({ token: "token-from-the-widget" })).resolves.toBeUndefined();
+    }
+  });
+
   it("refuse sans interroger Cloudflare un envoi sans jeton ou un serveur sans secret", async () => {
     const siteverify = cloudflareAnswers({ success: true, hostname: "drahmedbenlallahom.com" });
 

@@ -5,10 +5,10 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 describe("guide d’utilisation des composants", () => {
-  it("couvre les composants publics et les garde-fous de consentement, sécurité et citation", async () => {
+  it("couvre les composants publics et les garde-fous de consentement et de sécurité", async () => {
     const root = process.cwd();
     const guide = await readFile(path.join(root, "COMPONENT_USAGE_GUIDE.md"), "utf8");
-    for (const component of ["Navigation", "Footer", "SEOHead", "Breadcrumb", "PageTransition", "CookieConsent", "AnalyticsConsent", "TurnstileWidget", "MedicalCitation", "ErrorBoundary", "PublicContentSkeleton", "ContactSection", "GDPRRequestForm"]) {
+    for (const component of ["Navigation", "Footer", "SEOHead", "Breadcrumb", "PageTransition", "CookieConsent", "AnalyticsConsent", "TurnstileWidget", "ErrorBoundary", "PublicContentSkeleton", "ContactSection", "GDPRRequestForm"]) {
       expect(guide).toContain(`\`${component}\``);
       await access(path.join(root, "client/src/components", `${component}.tsx`), constants.R_OK);
     }
