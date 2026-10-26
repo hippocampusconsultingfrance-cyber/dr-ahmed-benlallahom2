@@ -17,6 +17,5 @@ describe("planification Vercel du traitement des CV", () => {
     expect(source).not.toContain("req.headers.authorization !== `Bearer ${cronSecret}`");
     expect(cronAuth).toContain("process.env.CRON_SECRET?.trim()");
     expect(cronAuth).toContain("timingSafeEqual(");
-    expect(source).toContain("retryDueFailedCvConfirmationEmails");
   });
 });

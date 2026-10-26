@@ -16,7 +16,6 @@ const mocks = vi.hoisted(() => {
     runSecurityPostureReview: vi.fn(),
     runRecruitmentProcessingWorker: vi.fn(),
     runPersonalDataRetention: vi.fn(),
-    authenticateRequest: vi.fn(),
   };
 });
 
@@ -34,7 +33,6 @@ vi.mock("./scheduledJobs", async importOriginal => ({
 }));
 vi.mock("./recruitmentProcessingWorker", () => ({ runRecruitmentProcessingWorker: mocks.runRecruitmentProcessingWorker }));
 vi.mock("./personalDataRetention", () => ({ runPersonalDataRetention: mocks.runPersonalDataRetention }));
-vi.mock("./_core/sdk", () => ({ sdk: { authenticateRequest: mocks.authenticateRequest } }));
 
 const { createApp } = await import("./_core/index");
 
@@ -72,15 +70,13 @@ beforeEach(() => {
   mocks.runSecurityPostureReview.mockReset();
   mocks.runRecruitmentProcessingWorker.mockReset();
   mocks.runPersonalDataRetention.mockReset();
-  mocks.authenticateRequest.mockReset();
   pings.length = 0;
   vi.spyOn(console, "error").mockImplementation(() => undefined);
   vi.spyOn(console, "info").mockImplementation(() => undefined);
 });
 
-async function call(path: string, init: { method?: "GET" | "POST"; authorization?: string } = {}) {
+async function call(path: string, init: { authorization?: string } = {}) {
   const response = await realFetch(`${baseUrl}${path}`, {
-    method: init.method ?? "GET",
     headers: init.authorization ? { authorization: init.authorization } : {},
   });
   return { status: response.status, body: await response.json() as Record<string, unknown> };
@@ -110,21 +106,12 @@ describe("surveillance externe des tâches planifiées (EXPL-03)", () => {
     expect(pings.map(ping => ping.url)).toEqual([`${REMINDER_PING}/fail`]);
   });
 
-  it("un appel non authentifié n’envoie aucun signal, ni succès ni échec", async () => {
+  it("un appel non authentifié, ou l’ancien POST du Heartbeat de Manus, n’envoie aucun signal, ni succès ni échec", async () => {
     expect((await call("/api/scheduled/reminder", { authorization: "Bearer wrong-secret" })).status).toBe(403);
-    mocks.authenticateRequest.mockRejectedValueOnce(new Error("Invalid session cookie"));
-    expect((await call("/api/scheduled/reminder", { method: "POST" })).status).toBe(500);
-    mocks.authenticateRequest.mockResolvedValueOnce({ isCron: false, taskUid: null });
-    expect((await call("/api/scheduled/reminder", { method: "POST" })).status).toBe(403);
+    expect((await call("/api/scheduled/reminder")).status).toBe(403);
+    expect((await realFetch(`${baseUrl}/api/scheduled/reminder`, { method: "POST", headers: cron })).status).toBe(404);
     expect(mocks.sendDueAppointmentReminders).not.toHaveBeenCalled();
     expect(pings).toEqual([]);
-  });
-
-  it("le Heartbeat authentifié signale aussi son passage", async () => {
-    mocks.authenticateRequest.mockResolvedValueOnce({ isCron: true, taskUid: "task-synthetic" });
-    mocks.sendDueAppointmentReminders.mockResolvedValueOnce({ reminded: 0 });
-    expect((await call("/api/scheduled/reminder", { method: "POST" })).status).toBe(200);
-    expect(pings.map(ping => ping.url)).toEqual([REMINDER_PING]);
   });
 
   it("une revue de sécurité sans base de données (503) signale un échec", async () => {

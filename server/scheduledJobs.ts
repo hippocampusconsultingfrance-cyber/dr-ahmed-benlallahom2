@@ -10,9 +10,6 @@ const HOUR_MS = 60 * 60 * 1000;
 
 export type ReminderWindow = { fromMs: number; toMs: number };
 
-/** Hourly Heartbeat (POST): appointments 22–26 h ahead, as originally designed. */
-export const HOURLY_REMINDER_WINDOW: ReminderWindow = { fromMs: 22 * HOUR_MS, toMs: 26 * HOUR_MS };
-
 /**
  * Daily Vercel cron (GET): 29 h of lookahead for a job that runs every ~24 h
  * (Hobby crons may fire anywhere within their hour), so each confirmed
@@ -49,8 +46,8 @@ export async function sendDueAppointmentReminders(window: ReminderWindow, now = 
   let sent = 0;
   let failed = 0;
   for (const apt of upcoming) {
-    // Claim before sending so the hourly Heartbeat and the daily cron can never
-    // both email the same patient; a failed delivery releases the claim for a retry.
+    // Claim before sending so two overlapping runs can never both email the
+    // same patient; a failed delivery releases the claim for a retry.
     const claim = await db.update(appointments)
       .set({ reminderSent: 1 })
       .where(and(eq(appointments.id, apt.id), eq(appointments.reminderSent, 0)));

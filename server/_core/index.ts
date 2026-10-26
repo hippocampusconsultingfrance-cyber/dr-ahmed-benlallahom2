@@ -892,60 +892,41 @@ export async function createApp() {
       allowMethodOverride: true,
     })
   );
-  // Scheduled jobs. Each job is reachable two ways:
-  // - GET, called once a day by Vercel Cron (see vercel.json "crons") with
-  //   `Authorization: Bearer ${CRON_SECRET}`, checked in constant time by requireVercelCron;
-  // - POST, the legacy Manus Heartbeat callback authenticated by the platform SDK,
-  //   kept for compatibility (it never fires on Vercel).
-  // Each run, once authenticated, pings its external monitor (EXPL-03, see
-  // scheduledJobMonitor.ts): the URL on success, the URL + /fail on failure.
-  type ScheduledTrigger = { scheduler: "vercel-cron" } | { scheduler: "heartbeat"; taskUid: string };
+  // Scheduled jobs: GET only, called once a day by Vercel Cron (see vercel.json
+  // "crons") with `Authorization: Bearer ${CRON_SECRET}`, checked in constant
+  // time by requireVercelCron. Each run, once authenticated, pings its external
+  // monitor (EXPL-03, see scheduledJobMonitor.ts): the URL on success, the
+  // URL + /fail on failure.
   type ScheduledJobResult = { httpStatus?: number } & Record<string, unknown>;
 
-  function registerScheduledJob(path: string, label: string, run: (trigger: ScheduledTrigger) => Promise<ScheduledJobResult>) {
+  function registerScheduledJob(path: string, label: string, run: () => Promise<ScheduledJobResult>) {
     app.get(path, requireVercelCron, async (_req, res) => {
       try {
-        const { httpStatus, ...result } = await runMonitoredScheduledJob(path, () => run({ scheduler: "vercel-cron" }));
+        const { httpStatus, ...result } = await runMonitoredScheduledJob(path, run);
         if (httpStatus) return res.status(httpStatus).json(result);
         return res.json({ ok: true, scheduler: "vercel-cron", ...result });
       } catch (error) {
         return sendScheduledJobFailure(res, `[${label}] Vercel cron error`, error);
       }
     });
-
-    app.post(path, async (req, res) => {
-      try {
-        const { sdk: sdkInstance } = await import("./sdk");
-        const user = await sdkInstance.authenticateRequest(req);
-        if (!user.isCron || !user.taskUid) return res.status(403).json({ error: "cron-only" });
-        const taskUid = user.taskUid;
-        const { httpStatus, ...result } = await runMonitoredScheduledJob(path, () => run({ scheduler: "heartbeat", taskUid }));
-        if (httpStatus) return res.status(httpStatus).json(result);
-        return res.json({ ok: true, taskUid: user.taskUid, ...result });
-      } catch (error) {
-        return sendScheduledJobFailure(res, `[${label}] Handler error`, error);
-      }
-    });
   }
 
-  // Appointment reminder. The hourly Heartbeat keeps its 22–26 h window; the
-  // daily Vercel cron uses a 1–30 h window so no appointment falls between runs.
-  registerScheduledJob("/api/scheduled/reminder", "Reminder", async trigger => {
-    const { DAILY_REMINDER_WINDOW, HOURLY_REMINDER_WINDOW, sendDueAppointmentReminders } = await import("../scheduledJobs");
-    return sendDueAppointmentReminders(trigger.scheduler === "vercel-cron" ? DAILY_REMINDER_WINDOW : HOURLY_REMINDER_WINDOW);
+  // Appointment reminder: a 1–30 h window so no appointment falls between two daily runs.
+  registerScheduledJob("/api/scheduled/reminder", "Reminder", async () => {
+    const { DAILY_REMINDER_WINDOW, sendDueAppointmentReminders } = await import("../scheduledJobs");
+    return sendDueAppointmentReminders(DAILY_REMINDER_WINDOW);
   });
 
   // Retention: erases expired recruitment dossiers and vault documents (a
   // bounded batch per run, same routine as a GDPR erasure) and reports to the owner.
-  registerScheduledJob("/api/scheduled/recruitment-retention", "RecruitmentRetention", async trigger => {
+  registerScheduledJob("/api/scheduled/recruitment-retention", "RecruitmentRetention", async () => {
     const { runRecruitmentRetentionCleanup } = await import("../recruitmentRetention");
-    return runRecruitmentRetentionCleanup(trigger.scheduler === "vercel-cron" ? "vercel-cron" : `heartbeat:${trigger.taskUid}`);
+    return runRecruitmentRetentionCleanup("vercel-cron");
   });
 
-  // CV processing worker: Heartbeat invokes a small idempotent batch so uploads
-  // remain fast and failures can be retried without losing the candidate dossier.
-  // Its analyses may run until 55 s (RECRUITMENT_PROCESSING_BUDGET): a shorter
-  // monitor ping leaves more of the 60 s function limit to the work (EXPL-03).
+  // CV processing worker. Its analyses may run until 55 s
+  // (RECRUITMENT_PROCESSING_BUDGET): a shorter monitor ping leaves more of the
+  // 60 s function limit to the work (EXPL-03).
   const recruitmentProcessingMonitor = { timeoutMs: 1_500 };
   app.get("/api/scheduled/recruitment-processing", requireVercelCron, async (_req, res) => {
     try {
@@ -969,37 +950,11 @@ export async function createApp() {
     }
   });
 
-  app.post("/api/scheduled/recruitment-processing", async (req, res) => {
-    try {
-      const { sdk: sdkInstance } = await import("./sdk");
-      const user = await sdkInstance.authenticateRequest(req);
-      if (!user.isCron || !user.taskUid) return res.status(403).json({ error: "cron-only" });
-      const { backfillLegacyCvAnalysisJobs, processDueCvAnalysisJobs, recoverStaleCvAnalysisJobs } = await import("../recruitmentProcessing");
-      const { backfillCvGoogleDriveExportJobs, processDueCvGoogleDriveExports, recoverStaleCvGoogleDriveExportJobs } = await import("../googleDriveExport");
-      const { retryDueFailedCvConfirmationEmails } = await import("../recruitmentEmailTrace");
-      const result = await runMonitoredScheduledJob("/api/scheduled/recruitment-processing", async () => {
-        const analysisRecovery = await recoverStaleCvAnalysisJobs();
-        const driveRecovery = await recoverStaleCvGoogleDriveExportJobs();
-        const analysisBackfill = await backfillLegacyCvAnalysisJobs(2);
-        const driveBackfill = await backfillCvGoogleDriveExportJobs(2);
-        const analysis = await processDueCvAnalysisJobs(2);
-        const driveExports = await processDueCvGoogleDriveExports(2);
-        const confirmationEmails = await retryDueFailedCvConfirmationEmails(2);
-        return { analysisRecovery, driveRecovery, analysisBackfill, driveBackfill, analysis, driveExports, confirmationEmails };
-      }, recruitmentProcessingMonitor);
-      return res.json({ ok: true, taskUid: user.taskUid, ...result });
-    } catch (error) {
-      return sendScheduledJobFailure(res, "[RecruitmentProcessing] Handler error", error);
-    }
-  });
-
   // Post-payment confirmation + invoice. The Stripe webhook already sends them
   // immediately; this job recovers interrupted workers and retries failures.
-  registerScheduledJob("/api/scheduled/appointment-fulfillment", "AppointmentFulfillment", async trigger => {
+  registerScheduledJob("/api/scheduled/appointment-fulfillment", "AppointmentFulfillment", async () => {
     const { runAppointmentFulfillmentWorker } = await import("../scheduledJobs");
-    return runAppointmentFulfillmentWorker(trigger.scheduler === "vercel-cron"
-      ? { batchSize: 5, maxBatches: 4, budgetMs: 35_000 }
-      : { batchSize: 3, maxBatches: 1, budgetMs: 0 });
+    return runAppointmentFulfillmentWorker({ batchSize: 5, maxBatches: 4, budgetMs: 35_000 });
   });
 
   // An expired hold that has a Checkout session is released only after Stripe
@@ -1009,11 +964,7 @@ export async function createApp() {
     return releaseExpiredAppointmentHolds(getStripeClient);
   });
 
-  registerScheduledJob("/api/scheduled/candidate-document-processing", "CandidateDocumentProcessing", async trigger => {
-    if (trigger.scheduler === "heartbeat") {
-      const { processDueCandidateDocumentAnalysisJobs } = await import("../candidateDocumentProcessing");
-      return processDueCandidateDocumentAnalysisJobs(2);
-    }
+  registerScheduledJob("/api/scheduled/candidate-document-processing", "CandidateDocumentProcessing", async () => {
     // One document at a time, and no new analysis after ~20 s, to stay well
     // inside the 60 s function limit while still draining a daily backlog.
     const { runCandidateDocumentProcessingWorker } = await import("../scheduledJobs");
