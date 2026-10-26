@@ -288,6 +288,21 @@ describe("Google Drive déconnecté (REC-09)", () => {
     expect(state.tokenRequests).toBe(0);
   });
 
+  it("« Relancer toutes les copies échouées » sans copie à relancer donne quand même l’état réel de la connexion", async () => {
+    seedConnection("google_drive_token_invalid_grant");
+    seedCopy(1);
+    expect(await admin().admin.recruitment.driveExport.retryAllFailed()).toEqual({ success: true, requeued: 0, processed: 0, copied: 0, failedAgain: 0, reconnectRequired: true, notConnected: false });
+    expect(state.tokenRequests).toBe(0);
+
+    // Reconnected: connected again.
+    await saveGoogleDriveConnection({ authorizedByOpenId: "user_owner", refreshToken: "new-refresh-token" });
+    expect(await admin().admin.recruitment.driveExport.retryAllFailed()).toMatchObject({ requeued: 0, reconnectRequired: false, notConnected: false });
+  });
+
+  it("« Relancer toutes les copies échouées » sans copie ni autorisation : « non connecté »", async () => {
+    expect(await admin().admin.recruitment.driveExport.retryAllFailed()).toEqual({ success: true, requeued: 0, processed: 0, copied: 0, failedAgain: 0, reconnectRequired: false, notConnected: true });
+  });
+
   it("un refus inline lors d’une relance unitaire le dit aussi, et n’alerte qu’une fois", async () => {
     seedConnection();
     const id = seedCopy(1, { status: "failed", attempts: 5, last_error: "google_drive_upload_500_Backend Error" });

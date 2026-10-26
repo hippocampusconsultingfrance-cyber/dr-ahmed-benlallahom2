@@ -1527,15 +1527,16 @@ export const appRouter = router({
         }),
         // « Relancer toutes les copies échouées » (REC-09).
         retryAllFailed: adminProcedure.mutation(async ({ ctx }) => {
-          const { processDueCvGoogleDriveExports, retryAllFailedCvGoogleDriveExports } = await import("./googleDriveExport");
+          const { googleDriveConnectionWait, processDueCvGoogleDriveExports, retryAllFailedCvGoogleDriveExports } = await import("./googleDriveExport");
           const queue = await retryAllFailedCvGoogleDriveExports();
           for (const applicationId of queue.applicationIds) {
             await logRecruitmentAction({ applicationId, adminOpenId: ctx.user.openId, action: "export", metadata: { event: "google_drive_retry", batch: true } });
           }
           // A few copies inline (each one downloads and uploads a CV); the cron copies the rest.
+          // Nothing to copy: the connection's real state all the same (REC-09).
           const processing = queue.requeued > 0
             ? await processDueCvGoogleDriveExports(3, queue.applicationIds)
-            : { processed: 0, waitingForAuthorization: false, reconnectRequired: false, results: [] as Array<Record<string, unknown>> };
+            : { processed: 0, ...await googleDriveConnectionWait(), results: [] as Array<Record<string, unknown>> };
           return {
             success: true,
             requeued: queue.requeued,

@@ -425,6 +425,20 @@ export async function googleDriveReconnectionRequired(): Promise<boolean> {
   return isGoogleDriveReconnectionError(connection?.lastError);
 }
 
+/**
+ * Where the Drive connection stands, as processDueCvGoogleDriveExports reports
+ * it, for a batch retry that had no copy to process (REC-09): never « connected »
+ * when no authorization is saved or when it is « à renouveler ».
+ */
+export async function googleDriveConnectionWait() {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+  const [connection] = await db.select({ lastError: googleDriveConnections.lastError }).from(googleDriveConnections)
+    .where(eq(googleDriveConnections.connectionKey, CONNECTION_KEY)).limit(1);
+  const reconnectRequired = isGoogleDriveReconnectionError(connection?.lastError);
+  return { waitingForAuthorization: !connection || reconnectRequired, reconnectRequired };
+}
+
 export async function enqueueCvGoogleDriveExport(applicationId: number, scheduledFor = new Date()) {
   const db = await getDb();
   if (!db) throw new Error("Database connection failed");
