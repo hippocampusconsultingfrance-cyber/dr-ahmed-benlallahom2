@@ -3,6 +3,7 @@ import { drizzle } from "drizzle-orm/neon-http";
 import { and, eq } from "drizzle-orm";
 import { cvApplications } from "../drizzle/schema";
 import { analysisCompletionStatus, cvAnalysisEnqueueDisposition, cvExtractionPersistenceFields, didClaimProcessingJob, executeCvExternalPipeline, extractionMethodFor, recoveredCvAnalysisRetryIsCurrent, retryDelayMs } from "./recruitmentProcessing";
+import type { InvisibleTextSummary } from "./recruitmentAnalysis";
 
 const checksum = "a".repeat(64);
 const input = {
@@ -150,9 +151,9 @@ describe("règles déterministes du pipeline de traitement CV", () => {
     expect(extractionIncomplete).toBe(true);
   });
 
-  it("traite comme une extraction incomplète un texte invisible non écarté à coup sûr, ou au-delà de 30 caractères (IA-01)", async () => {
+  it("traite comme une extraction incomplète un texte lu sans contrôle de visibilité, un texte invisible au-delà de 30 caractères, ou un texte non vérifiable d’un tiers au moins (IA-01)", async () => {
     const received: Array<Pick<Parameters<typeof steps.analyze>[0], "extractionIncomplete" | "invisibleText" | "visibilityUnchecked">> = [];
-    const extractWith = (extra: { warnings: string[]; invisibleText?: { characters: number; excerpt: string } }) => executeCvExternalPipeline(input, {
+    const extractWith = (extra: { warnings: string[]; invisibleText?: InvisibleTextSummary }) => executeCvExternalPipeline(input, {
       ...steps,
       extract: async () => ({ text: "[PAGE 1]\nDocument fictif avec assez de texte.", method: "pdf_text" as const, totalPages: 1, ocrConfidence: null, ocrModelVersion: null, ...extra }),
       analyze: async analysisInput => {
@@ -160,15 +161,18 @@ describe("règles déterministes du pipeline de traitement CV", () => {
         return analysisExecution;
       },
     });
-    await extractWith({ warnings: ["pdf_visibility_check_incomplete"] });
+    const unverifiable = (characters: number, share: number): InvisibleTextSummary => ({ characters: 0, excerpt: "", unverifiable: { characters, excerpt: "x".repeat(Math.min(characters, 80)), reasons: ["unfinished"], share } });
     await extractWith({ warnings: ["pdf_visibility_check_unavailable"] });
     await extractWith({ warnings: ["invisible_text_ignored:31"], invisibleText: { characters: 31, excerpt: "x".repeat(31) } });
     await extractWith({ warnings: ["invisible_text_ignored:30"], invisibleText: { characters: 30, excerpt: "réf. modèle de CV, 30 signes." } });
-    expect(received.map(item => item.extractionIncomplete)).toEqual([true, true, true, false]);
+    // Text set aside as unverifiable: not held against the CV, unless it is a third of it or more.
+    await extractWith({ warnings: ["unverifiable_text_set_aside:900", "pdf_visibility_check_unfinished"], invisibleText: unverifiable(900, 0.4) });
+    await extractWith({ warnings: ["unverifiable_text_set_aside:300", "pdf_visibility_check_unfinished"], invisibleText: unverifiable(300, 0.1) });
+    expect(received.map(item => item.extractionIncomplete)).toEqual([true, true, false, true, false]);
     // Text read without the check keeps its facts out of the filters, as text that hides too much.
-    expect(received.map(item => item.visibilityUnchecked)).toEqual([true, true, false, false]);
+    expect(received.map(item => item.visibilityUnchecked)).toEqual([true, false, false, false, false]);
     // The admin alert needs the count and the excerpt, whatever the threshold.
-    expect(received[3]!.invisibleText).toEqual({ characters: 30, excerpt: "réf. modèle de CV, 30 signes." });
+    expect(received[2]!.invisibleText).toEqual({ characters: 30, excerpt: "réf. modèle de CV, 30 signes." });
   });
 
   it("propage de manière contrôlée les échecs de stockage, OCR et IA pour la logique de reprise", async () => {

@@ -1,5 +1,6 @@
 import { invokeLLM, type Message } from "./_core/llm";
-import { extractCvDocument } from "./recruitmentAnalysis";
+import { extractCvDocument, type InvisibleTextSummary } from "./recruitmentAnalysis";
+import { hiddenTextFlags } from "../shared/candidateDocumentHiddenText";
 
 export type CandidateDocumentAnalysis = {
   documentKind: string;
@@ -10,6 +11,8 @@ export type CandidateDocumentAnalysis = {
   confidence: number;
   flags: string[];
   missingInformation: string[];
+  /** Text of the file left out before the AI read it, as for a CV (IA-01). */
+  hiddenText?: InvisibleTextSummary;
 };
 
 const documentAnalysisSchema = {
@@ -61,11 +64,13 @@ function prompt(declaredCategory: string) {
 
 export async function analyzeCandidateDocument(input: { buffer: Buffer; mimeType: string; declaredCategory: string; attempt: number }): Promise<{ analysis: CandidateDocumentAnalysis; model: string }> {
   let messages: Message[];
+  let hiddenText: InvisibleTextSummary | undefined;
   if (input.mimeType === "image/jpeg" || input.mimeType === "image/png") {
     const dataUrl = `data:${input.mimeType};base64,${input.buffer.toString("base64")}`;
     messages = [{ role: "user", content: [{ type: "text", text: prompt(input.declaredCategory) }, { type: "image_url", image_url: { url: dataUrl, detail: "high" } }] }];
   } else {
     const extraction = await extractCvDocument(input.buffer, input.mimeType);
+    hiddenText = extraction.invisibleText;
     const text = extraction.text.trim();
     if (text.length < 20) throw new Error("candidate_document_text_unavailable");
     messages = [{ role: "user", content: `${prompt(input.declaredCategory)}\n\nContenu à examiner :\n${text.slice(0, 30000)}` }];
@@ -91,7 +96,9 @@ export async function analyzeCandidateDocument(input: { buffer: Buffer; mimeType
         failures.push(`${model}: contenu vide`);
         continue;
       }
-      return { analysis: parseCandidateDocumentAnalysis(content), model };
+      const analysis = parseCandidateDocumentAnalysis(content);
+      // The admin is told, in the document's flags, what was left out of what the AI read.
+      return { analysis: hiddenText ? { ...analysis, flags: [...hiddenTextFlags(hiddenText), ...analysis.flags], hiddenText } : analysis, model };
     } catch (error) {
       failures.push(`${model}: ${error instanceof Error ? error.message.slice(0, 160) : "erreur inconnue"}`);
     }

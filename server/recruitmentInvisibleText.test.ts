@@ -13,8 +13,11 @@ import { buildZip } from "./testing/zipFixture";
 // Ce texte ne doit ni parvenir à l’IA, ni servir à « vérifier » une citation ;
 // au-delà d’un seuil, le dossier part en revue humaine sans score et sans faits
 // structurés, comme un texte lu sans ce contrôle. Un CV honnête (polices
-// standard non embarquées comprises, sans polices sur la machine), un scan avec
-// couche OCR et un DOCX à bandeau coloré en texte blanc restent lus.
+// standard non embarquées comprises, sans polices sur la machine) et un DOCX à
+// bandeau coloré en texte blanc restent lus. Le texte dont la visibilité ne peut
+// pas être établie (couche OCR d’un scan, police que l’outil ne sait pas
+// dessiner, texte blanc sur un dessin) est écarté aussi, sans être compté comme
+// caché ; il ne prive le CV de score que s’il en fait une part importante.
 
 const state = vi.hoisted(() => ({
   memory: null as null | { db: unknown },
@@ -56,7 +59,7 @@ vi.mock("./pdfExtractionSandbox", async importOriginal => {
   return { ...actual, readPdfIsolated: vi.fn(actual.readPdfIsolated) };
 });
 
-const { extractCvDocument, INVISIBLE_TEXT_REVIEW_MODEL } = await import("./recruitmentAnalysis");
+const { extractCvDocument, INVISIBLE_TEXT_REVIEW_MODEL, visibilityRequiresReview } = await import("./recruitmentAnalysis");
 const { processDueCvAnalysisJobs } = await import("./recruitmentProcessing");
 const { PdfReaderUnavailableError, readPdfIsolated } = await import("./pdfExtractionSandbox");
 const { ProcessingDeadlineError, runWithProcessingDeadline } = await import("./processingDeadline");
@@ -138,35 +141,74 @@ function hiddenLines(document: PDFKit.PDFDocument) {
 }
 
 const trappedPdf = () => pdf(document => { visibleLines(document, NURSE_CV); hiddenLines(document); });
+/** The bypass of the first check: each hidden line laid exactly over a visible one, in render mode 3, at opacity 0 or in white. */
+const overlayPdf = () => pdf(document => {
+  visibleLines(document, NURSE_CV);
+  const over = (text: string, index: number) => document.text(text, 50, 60 + index * 20, { lineBreak: false });
+  document.fontSize(11).fillColor("black").save().addContent("3 Tr");
+  over(HIDDEN.white, 1);
+  over(HIDDEN.tiny, 2);
+  document.addContent("0 Tr").restore();
+  document.fillOpacity(0);
+  over(HIDDEN.invisibleMode, 3);
+  document.fillOpacity(1).fillColor("white");
+  over(HIDDEN.covered, 0);
+});
 /** The page looks blank: only the hidden lines, well over the 80 characters that skip the vision. */
 const blankTrappedPdf = () => pdf(hiddenLines);
 const honestPdf = () => pdf(document => visibleLines(document, PHYSICIAN_CV));
 
 const SCANNED_LINES = ["Médecin anesthésiste-réanimateur, CHU de Lyon", "Langues : français, anglais, arabe (courant)"];
 
-/** A scanned CV: an image of its lines, under the invisible OCR layer the scanner added. */
-function scannedPdfWithOcrLayer() {
-  const scan = new PNG({ width: 1190, height: 200 });
+/** A scanned page: an image of its lines, under the invisible OCR layer the scanner added. */
+function drawScan(document: PDFKit.PDFDocument, lines: string[]) {
+  const scan = new PNG({ width: 1190, height: 80 * (lines.length + 1) });
   scan.data.fill(255);
   // Strokes where each line was printed (the image is drawn at half size, under the OCR lines).
-  for (const top of [80, 160]) {
-    for (let y = top; y < top + 32; y += 4) {
+  lines.forEach((_, index) => {
+    for (let y = 80 + index * 80; y < 112 + index * 80; y += 4) {
       for (let x = 90; x < 1100; x += 1) {
         if ((x >> 3) % 3 !== 0) scan.data.fill(30, (y * 1190 + x) * 4, (y * 1190 + x) * 4 + 3);
       }
     }
-  }
-  return pdf(document => {
-    document.image(PNG.sync.write(scan), 0, 0, { width: 595 });
-    document.save().addContent("3 Tr");
-    SCANNED_LINES.forEach((line, index) => document.fontSize(14).fillColor("black").text(line, 50, 42 + index * 40, { lineBreak: false }));
-    document.addContent("0 Tr").restore();
   });
+  document.image(PNG.sync.write(scan), 0, 0, { width: 595 });
+  document.save().addContent("3 Tr");
+  lines.forEach((line, index) => document.fontSize(14).fillColor("black").text(line, 50, 42 + index * 40, { lineBreak: false }));
+  document.addContent("0 Tr").restore();
+}
+
+/** A scanned CV. */
+const scannedPdfWithOcrLayer = () => pdf(document => drawScan(document, SCANNED_LINES));
+
+/** A scanned work certificate, as a phone scanner app adds it after the CV's digital page. */
+const ATTESTATION_LINES = [
+  "Attestation de travail, CHU de Lyon (anesthésie).",
+  "Le Dr Camille Martin y exerce à temps plein depuis 2015",
+  "comme médecin anesthésiste-réanimateur, avec satisfaction.",
+  "Fait à Lyon, pour servir et valoir ce que de droit.",
+];
+
+const VERDANA_LINES = ["Infirmier diplômé d'État, Clinique Exemple (Tunisie).", "Service de chirurgie, de 2022-09 à 2024-09."];
+
+/** Lines in Verdana, neither embedded nor one of the standard fonts; then, if given, lines in Helvetica (standard, not embedded either). */
+function verdanaPdf(helveticaLines: string[] = []) {
+  const escape = (text: string) => text.replace(/[()\\]/g, "\\$&");
+  const content = `BT /F1 11 Tf 50 780 Td ${VERDANA_LINES.map(text => `(${escape(text)}) Tj 0 -20 Td`).join(" ")} ET BT /F2 11 Tf 50 600 Td ${helveticaLines.map(text => `(${escape(text)}) Tj 0 -20 Td`).join(" ")} ET`;
+  return classicPdf([
+    "<</Type/Catalog/Pages 2 0 R>>",
+    "<</Type/Pages/Kids[3 0 R]/Count 1>>",
+    "<</Type/Page/Parent 2 0 R/MediaBox[0 0 595 842]/Resources<</Font<</F1 4 0 R/F2 7 0 R>>>>/Contents 5 0 R>>",
+    `<</Type/Font/Subtype/TrueType/BaseFont/Verdana/FirstChar 32/LastChar 255/Widths[${Array(224).fill(600).join(" ")}]/FontDescriptor 6 0 R/Encoding/WinAnsiEncoding>>`,
+    `<</Length ${Buffer.byteLength(content, "latin1")}>>\nstream\n${content}\nendstream`,
+    "<</Type/FontDescriptor/FontName/Verdana/Flags 32/FontBBox[-49 -206 1446 1000]/ItalicAngle 0/Ascent 1005/Descent -209/CapHeight 727/StemV 80>>",
+    "<</Type/Font/Subtype/Type1/BaseFont/Helvetica/Encoding/WinAnsiEncoding>>",
+  ]);
 }
 
 const W_NAMESPACE = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 
-function docx(body: string, styles = "") {
+function docx(body: string, styles = "", otherParts: Array<{ name: string; content: string }> = []) {
   const run = (text: string) => text.replace(/&/g, "&amp;").replace(/</g, "&lt;");
   return buildZip([
     { name: "[Content_Types].xml", content: '<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/></Types>' },
@@ -174,6 +216,7 @@ function docx(body: string, styles = "") {
     { name: "word/_rels/document.xml.rels", content: '<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>' },
     { name: "word/document.xml", content: `<?xml version="1.0" encoding="UTF-8"?><w:document xmlns:w="${W_NAMESPACE}" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"><w:body>${body.replace(/\{\{(.*?)\}\}/g, (_, text: string) => run(text))}</w:body></w:document>` },
     { name: "word/styles.xml", content: `<?xml version="1.0" encoding="UTF-8"?><w:styles xmlns:w="${W_NAMESPACE}">${styles}</w:styles>` },
+    ...otherParts,
   ]);
 }
 
@@ -245,7 +288,7 @@ describe("texte invisible écarté à l’extraction (IA-01)", () => {
     expect(reading.visibility!.uncheckedPages).toEqual([]);
   }, PDF_TEST_TIMEOUT_MS);
 
-  it("PDF : signale le texte écarté, et lit un CV honnête et la couche OCR d’un scan comme avant", async () => {
+  it("PDF : signale le texte écarté, et lit un CV honnête comme avant", async () => {
     const trapped = await extractCvDocument(await trappedPdf(), "application/pdf");
     expect(trapped.method).toBe("pdf_text");
     expect(trapped.invisibleText!.characters).toBeGreaterThan(300);
@@ -256,10 +299,46 @@ describe("texte invisible écarté à l’extraction (IA-01)", () => {
     const honest = await extractCvDocument(await honestPdf(), "application/pdf");
     expect(honest).toMatchObject({ method: "pdf_text", invisibleText: undefined, warnings: [] });
     for (const line of PHYSICIAN_CV) expect(normalized(honest.text)).toContain(line);
+  }, PDF_TEST_TIMEOUT_MS);
 
+  it("PDF scanné : sa couche OCR, qu’on ne peut pas comparer à l’image, est écartée sans accusation, et la vision relit la page", async () => {
+    // The vision transcribes the page image: what a person sees on it.
+    state.ocrText = SCANNED_LINES.join("\n");
     const scanned = await extractCvDocument(await scannedPdfWithOcrLayer(), "application/pdf");
-    expect(scanned).toMatchObject({ method: "pdf_text", invisibleText: undefined });
+    expect(scanned.method).toBe("pdf_vision");
     for (const line of SCANNED_LINES) expect(scanned.text).toContain(line);
+    const setAside = SCANNED_LINES.join(" ").length;
+    // Not hidden text, and not a partial reading either: the vision read the whole page.
+    expect(scanned.invisibleText).toMatchObject({ characters: 0, excerpt: "", unverifiable: { characters: setAside, reasons: ["image"], share: 0 } });
+    expect(scanned.warnings).toEqual(expect.arrayContaining(["vision_ocr_fallback", `unverifiable_text_set_aside:${setAside}`, "pdf_text_on_image"]));
+    expect(scanned.warnings.some(warning => warning.startsWith("invisible_text_ignored"))).toBe(false);
+  }, PDF_TEST_TIMEOUT_MS);
+
+  it("PDF numérique suivi d’une page scannée avec sa couche OCR : la vision relit cette page seule, et le CV se lit en entier", async () => {
+    state.ocrText = ATTESTATION_LINES.join("\n");
+    vi.mocked(readPdfIsolated).mockClear();
+    const file = await pdf(document => {
+      visibleLines(document, PHYSICIAN_CV);
+      document.addPage();
+      drawScan(document, ATTESTATION_LINES);
+    });
+    const mixed = await extractCvDocument(file, "application/pdf");
+    expect(vi.mocked(readPdfIsolated)).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ kind: "render", pages: [2] }), expect.anything());
+    expect(mixed).toMatchObject({ method: "pdf_text", ocrConfidence: 95 });
+    for (const line of [...PHYSICIAN_CV, ...ATTESTATION_LINES]) expect(normalized(mixed.text)).toContain(line);
+    const setAside = ATTESTATION_LINES.join(" ").length;
+    // The OCR layer is not used, but the page was read: the reading is not partial.
+    expect(mixed.invisibleText).toMatchObject({ characters: 0, unverifiable: { characters: setAside, reasons: ["image"], share: 0 } });
+    expect(visibilityRequiresReview(mixed.invisibleText)).toBe(false);
+    expect(mixed.warnings).toEqual(expect.arrayContaining(["vision_ocr_pages:2", "pdf_text_on_image"]));
+
+    // A vision that sees nothing there (a blank drawing) reads nothing again: the layer stays set aside, and counts.
+    state.ocrText = "";
+    const unread = await extractCvDocument(file, "application/pdf");
+    expect(unread.text).not.toContain(ATTESTATION_LINES[1]);
+    expect(unread.invisibleText!.unverifiable!.share).toBeGreaterThan(1 / 3);
+    expect(visibilityRequiresReview(unread.invisibleText)).toBe(true);
+    expect(unread.warnings.some(warning => warning.startsWith("vision_ocr_pages"))).toBe(false);
   }, PDF_TEST_TIMEOUT_MS);
 
   it("DOCX : écarte le texte masqué, minuscule, blanc ou presque sans fond, y compris par un style, une zone de texte, hors de la page, hors paragraphe ou avec un autre préfixe", async () => {
@@ -267,8 +346,11 @@ describe("texte invisible écarté à l’extraction (IA-01)", () => {
     expect(extraction.method).toBe("docx");
     for (const line of NURSE_CV) expect(extraction.text).toContain(line);
     for (const [technique, line] of Object.entries(DOCX_HIDDEN)) expect(extraction.text, technique).not.toContain(line);
-    expect(extraction.invisibleText!.characters).toBe(Object.values(DOCX_HIDDEN).join(" ").length);
+    // White in a text box without fill may lie on a picture: set aside too, but not counted as hidden.
+    const { textBox, ...hidden } = DOCX_HIDDEN;
+    expect(extraction.invisibleText!.characters).toBe(Object.values(hidden).join(" ").length);
     expect(extraction.invisibleText!.excerpt).toMatch(/^Titre : Médecin anesthésiste-réanimateur, titulaire du DESAR\. Licence DHA/);
+    expect(extraction.invisibleText!.unverifiable).toMatchObject({ characters: textBox.length, excerpt: textBox, reasons: ["drawing"] });
     expect(extraction.warnings).toContain(`invisible_text_ignored:${extraction.invisibleText!.characters}`);
   });
 
@@ -279,20 +361,77 @@ describe("texte invisible écarté à l’extraction (IA-01)", () => {
     expect(extraction.warnings.filter(warning => warning.startsWith("invisible_text"))).toEqual([]);
   });
 
-  it("DOCX : garde le texte blanc posé sur un dessin d’arrière-plan, mais le signale, hors du seuil de 30 caractères", async () => {
-    // A coloured shape or picture laid behind the text: its place is unknown, so white text stays read.
-    const title = "Médecin anesthésiste-réanimateur, CHU de Lyon";
-    const behindText = '<w:p><w:r><w:drawing><wp:anchor behindDoc="1" distT="0" distB="0" distL="0" distR="0" simplePos="0" relativeHeight="0" locked="0" layoutInCell="1" allowOverlap="1"><wp:extent cx="7560000" cy="1440000"/></wp:anchor></w:drawing></w:r></w:p>';
-    const onDrawing = await extractCvDocument(docx(behindText + paragraph(title, '<w:color w:val="FFFFFF"/>')), DOCX);
-    expect(onDrawing.text).toContain(title);
-    expect(onDrawing.invisibleText).toEqual({ characters: 0, excerpt: "", unverified: { characters: title.length, excerpt: title } });
-    expect(onDrawing.warnings).toEqual([`white_text_on_drawing_kept:${title.length}`]);
+  describe("DOCX : texte blanc sans fond connu près d’une image ou d’une forme", () => {
+    const title = "Bandeau : Dr Camille Martin, Lyon";
+    const white = '<w:color w:val="FFFFFF"/>';
+    /** A picture anchored to its paragraph, behind the text or in front of it, of this size (EMU), placed from the page or from its paragraph if said. */
+    const anchored = (behind: boolean, cx: number, cy: number, from?: "page" | "paragraph") =>
+      `<w:drawing><wp:anchor behindDoc="${behind ? 1 : 0}" distT="0" distB="0" distL="0" distR="0" simplePos="0" relativeHeight="0" locked="0" layoutInCell="1" allowOverlap="1">${from ? `<wp:positionV relativeFrom="${from}"><wp:posOffset>0</wp:posOffset></wp:positionV>` : ""}<wp:extent cx="${cx}" cy="${cy}"/></wp:anchor></w:drawing>`;
+    const picture = (behind: boolean, cx: number, cy: number, from?: "page" | "paragraph") => `<w:p><w:r>${anchored(behind, cx, cy, from)}</w:r></w:p>`;
+    const banner = picture(true, 7_560_000, 1_440_000);
+    const visible = PHYSICIAN_CV.slice(1).map(line => paragraph(line)).join("");
 
-    // The drawing does not exempt text hidden some other way, nor white text anywhere without it.
-    const vanished = await extractCvDocument(docx(behindText + paragraph(DOCX_HIDDEN.vanish, '<w:vanish/><w:color w:val="FFFFFF"/>')), DOCX);
-    expect(vanished.text).not.toContain("DESAR");
-    expect(vanished.invisibleText).toEqual({ characters: DOCX_HIDDEN.vanish.length, excerpt: DOCX_HIDDEN.vanish });
-    expect((await extractCvDocument(docx(paragraph(title, '<w:color w:val="FFFFFF"/>')), DOCX)).text).not.toContain("Médecin anesthésiste-réanimateur");
+    it("écarte comme non vérifiable, sans l’accuser, le texte blanc du paragraphe qui porte ou jouxte un dessin", async () => {
+      const onDrawing = await extractCvDocument(docx(banner + paragraph(title, white) + visible), DOCX);
+      expect(onDrawing.text).not.toContain(title);
+      expect(onDrawing.text).toContain(PHYSICIAN_CV[1]);
+      expect(onDrawing.invisibleText).toMatchObject({ characters: 0, excerpt: "", unverifiable: { characters: title.length, excerpt: title, reasons: ["drawing"] } });
+      expect(onDrawing.warnings).toEqual([`unverifiable_text_set_aside:${title.length}`, "docx_white_text_near_drawing"]);
+    });
+
+    it("compte comme caché le texte blanc d’un paragraphe ordinaire, même avec une petite image décorative ailleurs (behindDoc)", async () => {
+      // The audit's bypass: one small picture behind the text, in a corner, far from the claims.
+      const claims = [DOCX_HIDDEN.vanish, DOCX_HIDDEN.white, DOCX_HIDDEN.tiny];
+      const trapped = await extractCvDocument(docx(visible + claims.map(claim => paragraph(claim, white)).join("") + paragraph("Disponible immédiatement.") + picture(true, 360_000, 360_000)), DOCX);
+      for (const claim of claims) expect(trapped.text).not.toContain(claim);
+      expect(trapped.invisibleText).toEqual({ characters: claims.join(" ").length, excerpt: expect.stringMatching(/^Titre : Médecin anesthésiste-réanimateur/) });
+      // Nor does the picture exempt text hidden some other way, even next to it.
+      const vanished = await extractCvDocument(docx(banner + paragraph(DOCX_HIDDEN.vanish, `<w:vanish/>${white}`)), DOCX);
+      expect(vanished.invisibleText).toEqual({ characters: DOCX_HIDDEN.vanish.length, excerpt: DOCX_HIDDEN.vanish });
+    });
+
+    it("écarte comme non vérifiable, sans l’accuser, le texte blanc d’une zone de texte sans fond posée sur une image placée devant le texte", async () => {
+      const header = picture(false, 7_560_000, 1_440_000) + textBox('filled="f" stroked="f" style="position:absolute;margin-left:40pt;margin-top:25pt;width:450pt;height:70pt;z-index:251659264"', paragraph("Dr Camille Martin", white) + paragraph(title, white));
+      const extraction = await extractCvDocument(docx(header + visible), DOCX);
+      expect(extraction.text).not.toContain("Dr Camille Martin");
+      expect(extraction.invisibleText).toMatchObject({ characters: 0, unverifiable: { characters: `Dr Camille Martin ${title}`.length, reasons: ["drawing"] } });
+      expect(extraction.invisibleText!.unverifiable!.share).toBeLessThan(1 / 3);
+    });
+
+    it("écarte comme non vérifiable, sans l’accuser, le texte blanc d’un bandeau de trois lignes placé depuis le haut de la page", async () => {
+      // A dark 21 x 6 cm picture behind the text, from the top of the page, anchored in the name's paragraph.
+      const lines = ["Yassine Belhadj", "Infirmier anesthésiste diplômé d'État", "yassine.belhadj@example.com · +216 20 000 000"];
+      const band = `<w:p><w:r>${anchored(true, 7_560_000, 2_160_000, "page")}</w:r><w:r><w:rPr>${white}</w:rPr><w:t>{{${lines[0]}}}</w:t></w:r></w:p>`;
+      const extraction = await extractCvDocument(docx(band + paragraph(lines[1]!, white) + paragraph(lines[2]!, white) + visible), DOCX);
+      for (const line of lines) expect(extraction.text).not.toContain(line);
+      expect(extraction.text).toContain(PHYSICIAN_CV[1]);
+      expect(extraction.invisibleText).toMatchObject({ characters: 0, excerpt: "", unverifiable: { characters: lines.join(" ").length, reasons: ["drawing"] } });
+      expect(extraction.warnings.some(warning => warning.startsWith("invisible_text_ignored"))).toBe(false);
+    });
+
+    it("compte comme caché le texte blanc au-delà de ce que la hauteur d’une image placée depuis son paragraphe peut couvrir", async () => {
+      // A 1 cm picture behind the text, from its paragraph: it may lie under the next few paragraphs, not under the claims further down.
+      const near = "Infirmier, Clinique Exemple";
+      const extraction = await extractCvDocument(docx(picture(true, 360_000, 360_000, "paragraph") + paragraph(near, white) + visible + paragraph(DOCX_HIDDEN.white, white) + paragraph(DOCX_HIDDEN.tiny, white)), DOCX);
+      expect(extraction.text).not.toContain(near);
+      expect(extraction.text).not.toContain(DOCX_HIDDEN.white);
+      expect(extraction.invisibleText).toMatchObject({ characters: `${DOCX_HIDDEN.white} ${DOCX_HIDDEN.tiny}`.length, unverifiable: { characters: near.length, reasons: ["drawing"] } });
+    });
+
+    it("écarte comme non vérifiable, sans l’accuser, le texte blanc sans fond quand une image derrière le texte est dans l’en-tête, sur chaque page", async () => {
+      const header = { name: "word/header1.xml", content: `<?xml version="1.0" encoding="UTF-8"?><w:hdr xmlns:w="${W_NAMESPACE}" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"><w:p><w:r>${anchored(true, 7_560_000, 1_440_000, "paragraph")}</w:r></w:p></w:hdr>` };
+      const extraction = await extractCvDocument(docx(visible + paragraph(title, white), "", [header]), DOCX);
+      expect(extraction.text).not.toContain(title);
+      expect(extraction.invisibleText).toMatchObject({ characters: 0, unverifiable: { characters: title.length, reasons: ["drawing"] } });
+    });
+
+    it("écarte comme non vérifiable tout texte blanc sans fond quand une image derrière le texte couvre une grande partie de la page", async () => {
+      // A sidebar picture laid behind the text, from the top to the bottom of the page (a quarter of it).
+      const sidebar = picture(true, 2_160_000, 10_692_000);
+      const extraction = await extractCvDocument(docx(sidebar + visible + paragraph("Langues", white) + paragraph(title, white)), DOCX);
+      expect(extraction.text).not.toContain(title);
+      expect(extraction.invisibleText).toMatchObject({ characters: 0, unverifiable: { reasons: ["drawing"] } });
+    });
   });
 
   it("les CV piégés de l’audit (cv-piege.pdf, cv-piege.docx) : seul le CV d’infirmier visible est lu", async () => {
@@ -313,31 +452,23 @@ describe("texte invisible écarté à l’extraction (IA-01)", () => {
     // pdfkit embeds none of them: without server/fonts/pdfjs, a host without fonts (a Vercel function) would draw nothing.
     const fonts = ["Helvetica", "Helvetica-Bold", "Helvetica-Oblique", "Helvetica-BoldOblique", "Times-Roman", "Times-Bold", "Times-Italic", "Times-BoldItalic", "Courier", "Courier-Bold", "Courier-Oblique", "Courier-BoldOblique", "Symbol", "ZapfDingbats"];
     const reading = await readPdfIsolated(await pdf(document => fonts.forEach((font, index) => document.font(font).fontSize(11).fillColor("black").text(`Ligne ${index} en ${font}`, 50, 60 + index * 20, { lineBreak: false }))), { kind: "text", first: 25 });
-    expect(reading.visibility).toEqual({ invisibleText: [], uncheckedPages: [], uncheckedText: [] });
+    expect(reading.visibility).toEqual({ invisibleText: [], uncheckedPages: [], unverifiableText: [] });
     for (const font of fonts.filter(font => font !== "Symbol" && font !== "ZapfDingbats")) expect(reading.pages[0]!.text).toContain(`en ${font}`);
   }, PDF_TEST_TIMEOUT_MS);
 
-  it("PDF : garde sans le contrôler le texte d’une police que pdf.js ne peut pas charger, et le signale", async () => {
+  it("PDF : écarte comme non vérifiable, sans l’accuser, le texte d’une police que pdf.js ne peut pas charger", async () => {
     // Verdana, not embedded and not a standard font: drawn with the host's fonts, when it has some.
-    const lines = ["Infirmier diplômé d'État, Clinique Exemple (Tunisie).", "Service de chirurgie, de 2022-09 à 2024-09."];
-    const line = lines.join(" ");
-    const content = `BT /F1 11 Tf 50 780 Td ${lines.map(text => `(${text.replace(/[()\\]/g, "\\$&")}) Tj 0 -20 Td`).join(" ")} ET`;
-    const verdana = classicPdf([
-      "<</Type/Catalog/Pages 2 0 R>>",
-      "<</Type/Pages/Kids[3 0 R]/Count 1>>",
-      "<</Type/Page/Parent 2 0 R/MediaBox[0 0 595 842]/Resources<</Font<</F1 4 0 R>>>>/Contents 5 0 R>>",
-      `<</Type/Font/Subtype/TrueType/BaseFont/Verdana/FirstChar 32/LastChar 255/Widths[${Array(224).fill(600).join(" ")}]/FontDescriptor 6 0 R/Encoding/WinAnsiEncoding>>`,
-      `<</Length ${content.length}>>\nstream\n${content}\nendstream`,
-      "<</Type/FontDescriptor/FontName/Verdana/Flags 32/FontBBox[-49 -206 1446 1000]/ItalicAngle 0/Ascent 1005/Descent -209/CapHeight 727/StemV 80>>",
-    ]);
-    const reading = await readPdfIsolated(verdana, { kind: "text", first: 25 });
-    expect(normalized(reading.pages[0]!.text)).toContain(line);
+    const reading = await readPdfIsolated(verdanaPdf(), { kind: "text", first: 25 });
+    expect(normalized(reading.pages[0]!.text).trim()).toBe("");
     expect(reading.visibility!.invisibleText).toEqual([]);
-    expect(normalized(reading.visibility!.uncheckedText.join(" "))).toBe(line);
+    expect(new Set(reading.visibility!.unverifiableText.map(passage => passage.reason))).toEqual(new Set(["font"]));
+    expect(normalized(reading.visibility!.unverifiableText.map(passage => passage.text).join(" "))).toBe(VERDANA_LINES.join(" "));
 
-    const extraction = await extractCvDocument(verdana, "application/pdf");
-    expect(extraction.text).toContain("Clinique Exemple");
-    expect(extraction.warnings).toContain("pdf_visibility_check_incomplete");
+    // The vision then reads the page as drawn (here, by the test: nothing).
+    const extraction = await extractCvDocument(verdanaPdf(), "application/pdf");
+    expect(extraction.text).not.toContain("Clinique Exemple");
+    expect(extraction.invisibleText).toMatchObject({ characters: 0, unverifiable: { reasons: ["font"], excerpt: expect.stringMatching(/^Infirmier diplômé d'État, Clinique Exemple/) } });
+    expect(extraction.warnings).toEqual(expect.arrayContaining([`unverifiable_text_set_aside:${VERDANA_LINES.join(" ").length}`, "pdf_font_not_drawable"]));
   }, PDF_TEST_TIMEOUT_MS);
 
   it("PDF : lit une police Type3 dont l’échelle est dans sa matrice (Tf 1), et écarte le texte écrasé horizontalement", async () => {
@@ -367,27 +498,39 @@ describe("texte invisible écarté à l’extraction (IA-01)", () => {
   }, PDF_TEST_TIMEOUT_MS);
 
   it("ne signale pas un tiret ou une puce trop petits, écartés comme le reste", async () => {
-    vi.mocked(readPdfIsolated).mockResolvedValueOnce({ total: 1, pages: [{ num: 1, text: PHYSICIAN_CV.join("\n") }], visibility: { invisibleText: ["-", "•", "–"], uncheckedPages: [], uncheckedText: [] } });
+    vi.mocked(readPdfIsolated).mockResolvedValueOnce({ total: 1, pages: [{ num: 1, text: PHYSICIAN_CV.join("\n") }], visibility: { invisibleText: ["-", "•", "–"], uncheckedPages: [], unverifiableText: [] } });
     expect(await extractCvDocument(await honestPdf(), "application/pdf")).toMatchObject({ invisibleText: undefined, warnings: [] });
   });
 
-  it("documents du coffre : la même extraction n’envoie pas non plus le texte caché à l’IA (IA-06)", async () => {
-    for (const [buffer, mimeType] of [[await trappedPdf(), "application/pdf"], [trappedDocx(), DOCX]] as const) {
+  it("documents du coffre : la même extraction n’envoie pas non plus le texte caché à l’IA, et le signale dans la fiche (IA-06)", async () => {
+    for (const [buffer, mimeType] of [[await trappedPdf(), "application/pdf"], [await overlayPdf(), "application/pdf"], [trappedDocx(), DOCX]] as const) {
       vi.mocked(invokeLLM).mockClear();
-      await analyzeCandidateDocument({ buffer, mimeType, declaredCategory: "Licence d’exercice", attempt: 1 });
+      const { analysis } = await analyzeCandidateDocument({ buffer, mimeType, declaredCategory: "Licence d’exercice", attempt: 1 });
       const sent = JSON.stringify(vi.mocked(invokeLLM).mock.calls[0]![0].messages);
       expect(sent).toContain("Infirmier diplômé d'État (IDE)");
       for (const hidden of ["DESAR", "Licence DHA", "score maximal"]) expect(sent, mimeType).not.toContain(hidden);
+      // ai_flags and ai_extracted_data of the document: the count, and the excerpt to compare with the file.
+      expect(analysis.flags[0]).toBe(`invisible_text_ignored:${analysis.hiddenText!.characters}`);
+      expect(analysis.hiddenText!.excerpt).toMatch(/^Titre : Médecin anesthésiste-réanimateur/);
     }
+    vi.mocked(invokeLLM).mockClear();
+    // White text in a text box without fill: left out as unverifiable, said apart.
+    const { analysis } = await analyzeCandidateDocument({ buffer: docx(NURSE_CV.map(line => paragraph(line)).join("") + textBox('filled="f" style="position:absolute;width:200pt;height:50pt"', paragraph(DOCX_HIDDEN.textBox, '<w:color w:val="FFFFFF"/>'))), mimeType: DOCX, declaredCategory: "Diplôme", attempt: 1 });
+    expect(JSON.stringify(vi.mocked(invokeLLM).mock.calls[0]![0].messages)).not.toContain("ECMO");
+    expect(analysis.flags).toEqual([`unverifiable_text_set_aside:${DOCX_HIDDEN.textBox.length}`]);
   }, PDF_TEST_TIMEOUT_MS);
 
   describe("quand le contrôle de visibilité ne va pas au bout", () => {
     const twoPages = { total: 2, pages: [{ num: 1, text: PHYSICIAN_CV.join("\n") }, { num: 2, text: "" }] };
+    const page2 = "Expérience : Médecin anesthésiste-réanimateur, Hôpital Exemple, 2010-2015";
 
-    it("le dit au lieu de laisser passer le texte en silence : pages non contrôlées, ou lecteur isolé indisponible", async () => {
-      vi.mocked(readPdfIsolated).mockResolvedValueOnce({ ...twoPages, visibility: { invisibleText: [], uncheckedPages: [2], uncheckedText: [] } });
+    it("le dit clairement : texte des pages non contrôlées écarté comme non vérifiable, ou lu sans contrôle quand le lecteur isolé manque", async () => {
+      vi.mocked(readPdfIsolated).mockResolvedValueOnce({ ...twoPages, visibility: { invisibleText: [], uncheckedPages: [2], unverifiableText: [{ page: 2, reason: "unfinished", text: page2 }] } });
       const partial = await extractCvDocument(await honestPdf(), "application/pdf");
-      expect(partial.warnings).toEqual(expect.arrayContaining(["pdf_visibility_check_incomplete", "pdf_text_page_2_insufficient_text"]));
+      // Not the misleading « page 2: too little text »: the page had text, left unchecked.
+      expect(partial.warnings).toEqual([`unverifiable_text_set_aside:${page2.length}`, "pdf_visibility_check_unfinished"]);
+      expect(partial.invisibleText).toMatchObject({ characters: 0, unverifiable: { characters: page2.length, excerpt: page2, reasons: ["unfinished"] } });
+      expect(partial.text).not.toContain("Hôpital Exemple");
 
       vi.mocked(readPdfIsolated).mockRejectedValueOnce(new PdfReaderUnavailableError("test"));
       const inProcess = await extractCvDocument(await honestPdf(), "application/pdf");
@@ -396,7 +539,7 @@ describe("texte invisible écarté à l’extraction (IA-01)", () => {
     });
 
     it("rend le CV à la file quand c’est la limite du cron qui a raccourci la lecture", async () => {
-      vi.mocked(readPdfIsolated).mockResolvedValueOnce({ ...twoPages, visibility: { invisibleText: [], uncheckedPages: [2], uncheckedText: [] } });
+      vi.mocked(readPdfIsolated).mockResolvedValueOnce({ ...twoPages, visibility: { invisibleText: [], uncheckedPages: [2], unverifiableText: [{ page: 2, reason: "unfinished", text: page2 }] } });
       const buffer = await honestPdf();
       await expect(runWithProcessingDeadline(Date.now() + 20_000, () => extractCvDocument(buffer, "application/pdf"))).rejects.toBeInstanceOf(ProcessingDeadlineError);
     });
@@ -553,17 +696,101 @@ describe("dossier d’un CV qui cache du texte, de bout en bout (IA-01)", () => 
     expect(JSON.parse(String(dossier(id).extraction_warnings))).toContain("pdf_visibility_check_unavailable");
   }, PDF_TEST_TIMEOUT_MS);
 
-  it("DOCX à texte blanc sur un dessin d’arrière-plan : texte lu, score gardé, alerte avec extrait", async () => {
+  it("PDF où chaque consigne est posée sur une ligne visible (mode 3, opacité 0, blanc) : rien ne passe, revue humaine sans score, aucun fait", async () => {
+    state.reading = obedientReading("page 1");
+    const id = seedDossier(await overlayPdf());
+    await processDueCvAnalysisJobs(5);
+    expect(state.prompts[0]).toContain("Infirmier diplômé d'État (IDE)");
+    for (const hidden of ["DESAR", "Licence DHA", "score maximal", "Anglais (courant)"]) expect(state.prompts[0]).not.toContain(hidden);
+    expect(dossier(id)).toMatchObject({ analysis_status: "needs_review", ai_score: null });
+    expect(factsOf(id)).toEqual([]);
+    expect(JSON.parse(String(dossier(id).ai_weaknesses))).toContainEqual(expect.stringMatching(/^Qualité des données : \d+ caractère\(s\) de texte invisible ignoré\(s\), extrait : « Titre : Médecin anesthésiste-réanimateur/));
+  }, PDF_TEST_TIMEOUT_MS);
+
+  it("DOCX avec une petite image derrière le texte et des consignes en blanc : rien ne passe, revue humaine sans score", async () => {
+    state.reading = obedientReading("section Expérience");
+    const corner = '<w:p><w:r><w:drawing><wp:anchor behindDoc="1"><wp:extent cx="360000" cy="360000"/></wp:anchor></w:drawing></w:r></w:p>';
+    const claims = [DOCX_HIDDEN.vanish, DOCX_HIDDEN.white, DOCX_HIDDEN.tiny, DOCX_HIDDEN.webHidden];
+    const id = seedDossier(docx(NURSE_CV.map(line => paragraph(line)).join("") + claims.map(claim => paragraph(claim, '<w:color w:val="FFFFFF"/>')).join("") + paragraph("Disponible immédiatement.") + corner), DOCX);
+    await processDueCvAnalysisJobs(5);
+    for (const hidden of ["DESAR", "Licence DHA", "Anglais (courant)"]) expect(state.prompts[0]).not.toContain(hidden);
+    expect(dossier(id)).toMatchObject({ analysis_status: "needs_review", ai_score: null });
+    expect(factsOf(id)).toEqual([]);
+  });
+
+  it("DOCX honnête au nom en blanc dans une zone de texte posée sur une image : nom écarté sans accusation, score et faits gardés", async () => {
     state.reading = honestReadingAt("section Profil");
+    const header = '<w:p><w:r><w:drawing><wp:anchor behindDoc="0"><wp:extent cx="7560000" cy="1440000"/></wp:anchor></w:drawing></w:r></w:p>' +
+      textBox('filled="f" stroked="f" style="position:absolute;margin-left:40pt;margin-top:25pt;width:450pt;height:70pt"', paragraph("Yassine Belhadj", '<w:color w:val="FFFFFF"/>'));
+    const id = seedDossier(docx(header + PHYSICIAN_CV.slice(1).map(line => paragraph(line)).join("")), DOCX);
+    await processDueCvAnalysisJobs(5);
+    expect(state.prompts[0]).not.toContain("Yassine Belhadj");
+    expect(dossier(id).ai_score).toBeGreaterThan(0);
+    expect(factsOf(id).length).toBeGreaterThanOrEqual(4);
+    const weaknesses: string[] = JSON.parse(String(dossier(id).ai_weaknesses));
+    expect(weaknesses).toContain("Qualité des données : 15 caractère(s) non vérifiable(s) écarté(s) de l’analyse (texte blanc dans une zone de texte ou près d’une image ou d’une forme), extrait : « Yassine Belhadj ». Ouvrir le CV pour le comparer.");
+    expect(weaknesses.join(" ")).not.toContain("texte invisible");
+  });
+
+  it("DOCX tout en blanc sur une grande image derrière le texte : rien n’est lu, revue humaine sans score et sans appel à l’IA, sans accusation", async () => {
     const sidebar = '<w:p><w:r><w:drawing><wp:anchor behindDoc="1"><wp:extent cx="2160000" cy="10692000"/></wp:anchor></w:drawing></w:r></w:p>';
     const id = seedDossier(docx(sidebar + PHYSICIAN_CV.map(line => paragraph(line, '<w:color w:val="FFFFFF"/>')).join("")), DOCX);
     await processDueCvAnalysisJobs(5);
-    for (const line of PHYSICIAN_CV) expect(state.prompts[0]).toContain(line);
+    expect(state.prompts).toEqual([]);
+    expect(dossier(id)).toMatchObject({ analysis_status: "needs_review", ai_score: null, analysis_model: INVISIBLE_TEXT_REVIEW_MODEL });
+    expect(String(dossier(id).ai_summary)).toContain("n’a pas pu être vérifié comme visible");
+    const setAside = PHYSICIAN_CV.join(" ");
+    expect(JSON.parse(String(dossier(id).ai_weaknesses))).toContain(`Qualité des données : ${setAside.length} caractère(s) non vérifiable(s) écarté(s) de l’analyse (texte blanc dans une zone de texte ou près d’une image ou d’une forme), extrait : « ${setAside.slice(0, 79).trimEnd()}… ». Ouvrir le CV pour le comparer.`);
+  });
+
+  it("PDF dont une grande part est dans une police que l’outil ne sait pas dessiner : écartée, revue sans score, motif clair", async () => {
+    state.reading = honestReading;
+    const id = seedDossier(verdanaPdf(PHYSICIAN_CV.slice(0, 3)));
+    await processDueCvAnalysisJobs(5);
+    expect(state.prompts[0]).toContain(PHYSICIAN_CV[1]);
+    expect(state.prompts[0]).not.toContain("Clinique Exemple");
+    expect(dossier(id)).toMatchObject({ analysis_status: "needs_review", ai_score: null });
+    expect(factsOf(id)).toEqual([]);
+    // The reason is the text set aside, not the quotes (100 % of them are found in what was read).
+    const reasoning = String(dossier(id).ai_match_reasoning);
+    expect(reasoning).toMatch(/^Score non présenté : \d+ % du texte du CV n’a pas pu être vérifié comme visible \(police non incorporée au PDF que l’outil ne sait pas dessiner\) et a été écarté de l’analyse\./);
+    expect(reasoning).not.toContain("couverture");
+    expect(JSON.parse(String(dossier(id).extraction_warnings))).toEqual(expect.arrayContaining(["pdf_font_not_drawable", `unverifiable_text_set_aside:${VERDANA_LINES.join(" ").length}`]));
+  }, PDF_TEST_TIMEOUT_MS);
+
+  it("long CV honnête en Times 10 pt, une opération par ligne : mots courts gardés, aucune accusation, score gardé", async () => {
+    state.reading = honestReading;
+    const id = seedDossier(await pdf(document => {
+      document.font("Times-Roman").fontSize(10).fillColor("black");
+      PHYSICIAN_CV.forEach((line, index) => document.text(line, 48, 48 + index * 11, { lineBreak: false }));
+      for (let page = 0; page < 4; page += 1) {
+        if (page > 0) document.addPage();
+        for (let index = page === 0 ? 8 : 0; index < 64; index += 1) document.text(`Score ASA 1 à 4, 1 à 2 internes, y a eu 3 procédures - ligne ${index}.`, 48, 48 + index * 11, { lineBreak: false });
+      }
+    }));
+    await processDueCvAnalysisJobs(5);
+    expect(state.prompts[0]).toContain("Score ASA 1 à 4, 1 à 2 internes, y a eu 3 procédures - ligne 63.");
+    expect(dossier(id).ai_score).toBeGreaterThan(0);
+    expect(JSON.parse(String(dossier(id).extraction_warnings))).toEqual([]);
+  }, PDF_TEST_TIMEOUT_MS);
+
+  it("CV numérique suivi d’une attestation scannée : la vision relit la page scannée, score et faits gardés, sans rien dire d’écarté", async () => {
+    state.reading = honestReading;
+    state.ocrText = ATTESTATION_LINES.join("\n");
+    const id = seedDossier(await pdf(document => {
+      visibleLines(document, PHYSICIAN_CV);
+      document.addPage();
+      drawScan(document, ATTESTATION_LINES);
+    }));
+    await processDueCvAnalysisJobs(5);
+    expect(normalized(state.prompts[0]!)).toContain(ATTESTATION_LINES[1]);
+    expect(dossier(id)).toMatchObject({ extraction_method: "pdf_text", ocr_confidence: 95 });
     expect(dossier(id).ai_score).toBeGreaterThan(0);
     expect(factsOf(id).length).toBeGreaterThanOrEqual(4);
-    const unverified = PHYSICIAN_CV.join(" ");
-    expect(JSON.parse(String(dossier(id).ai_weaknesses))).toContain(`Qualité des données : Texte blanc posé sur une image ou une forme d’arrière-plan (${unverified.length} caractère(s)), lu sans pouvoir vérifier qu’il se voit, extrait : « ${unverified.slice(0, 79).trimEnd()}… ». Ouvrir le CV pour le comparer.`);
-  });
+    const weaknesses: string[] = JSON.parse(String(dossier(id).ai_weaknesses));
+    expect(weaknesses).toContainEqual(expect.stringMatching(/^Qualité des données : Couche de texte non utilisée pour \d+ caractère\(s\) \(texte sans encre posé sur une image, comme la couche OCR d’un scan\) : page\(s\) relue\(s\) par la lecture visuelle, extrait : « Attestation de travail/));
+    expect(weaknesses.join(" ")).not.toContain("écarté");
+  }, PDF_TEST_TIMEOUT_MS);
 
   it("quelques caractères invisibles d’un modèle de CV : signalés, sans perdre le score", async () => {
     state.reading = honestReading;

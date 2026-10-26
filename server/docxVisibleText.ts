@@ -12,14 +12,23 @@ import { DOCUMENT_DECOMPRESSION_LIMITS, inspectDocxArchive } from "./documentDec
  * are cut out of the main document part, text boxes included, before it
  * reads the file. Run formatting is resolved as Word does: document
  * defaults, paragraph style, character style, then the run's own properties.
- * When a picture or a shape lies behind the text, as in many CV templates,
- * white text may sit on it: it is kept, and returned as `unverifiedText`.
+ *
+ * White text without a known background may still show on a picture or a
+ * shape, as in many CV templates: in a text box without fill, in a paragraph
+ * that holds a drawing or next to one, in the paragraphs and tables a
+ * picture behind the text may cover from its paragraph (as many as its
+ * height could hold), or anywhere when Word places such a picture from the
+ * page (a header band, a sidebar) or in a header. Its visibility cannot be
+ * established: it is cut out too, but returned apart as `unverifiableText`,
+ * never counted as hidden text. White text without background beyond the
+ * reach of any picture is invisible.
  */
 
 /** Canonical prefixes, whatever prefix the file binds to these namespaces (as mammoth reads them). */
 const NAMESPACES: Record<string, string> = {
   "http://schemas.openxmlformats.org/wordprocessingml/2006/main": "w",
   "http://purl.oclc.org/ooxml/wordprocessingml/main": "w",
+  "http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing": "wp",
   "urn:schemas-microsoft-com:vml": "v",
   "http://schemas.openxmlformats.org/markup-compatibility/2006": "mc",
   "http://schemas.openxmlformats.org/package/2006/relationships": "relationships",
@@ -28,6 +37,17 @@ const OFFICE_DOCUMENT_RELATIONSHIP = "http://schemas.openxmlformats.org/officeDo
 const STYLES_RELATIONSHIP = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles";
 /** VML shapes that can hold a text box. */
 const VML_SHAPES = new Set(["v:shape", "v:rect", "v:roundrect", "v:oval"]);
+/** What draws a picture or a shape in a paragraph. */
+const DRAWINGS = new Set(["w:drawing", "w:pict", "w:object"]);
+/** Elements whose paragraphs follow one another, for « next to a drawing ». */
+const PARAGRAPH_CONTAINERS = new Set(["w:body", "w:tc", "w:txbxContent", "w:hdr", "w:ftr", "w:footnote", "w:endnote", "w:comment"]);
+/** Elements of the body laid one under the other: a table counts as one, however tall. */
+const BODY_BLOCKS = new Set(["w:p", "w:tbl", "w:sdt", "w:customXml"]);
+/** Lowest height of a paragraph (a line of 7 pt type): a picture covers at most its height's worth of them. */
+const MIN_PARAGRAPH_PT = 8;
+const EMU_PER_PT = 12_700;
+/** Vertical positions Word takes from the page or its margins rather than from the anchor paragraph (DrawingML, VML). */
+const FROM_PAGE = /^(page|margin|topMargin|bottomMargin|insideMargin|outsideMargin|top-margin-area|bottom-margin-area|inner-margin-area|outer-margin-area)$/i;
 
 type XmlTag = { name: string; attributes: Map<string, string>; closing: boolean; selfClosing: boolean; start: number; end: number };
 
@@ -99,17 +119,20 @@ function vmlFillIsColoured(fill: string) {
 
 const VML_UNITS_PT: Record<string, number> = { pt: 1, px: 0.75, in: 72, cm: 72 / 2.54, mm: 72 / 25.4, pc: 12 };
 
+/** A length of a VML style, in points (0 when absent). */
+function vmlLength(style: string, property: string) {
+  const match = new RegExp(`(?:^|;)\\s*${property}\\s*:\\s*(-?[\\d.]+)\\s*(pt|px|in|cm|mm|pc)?\\s*(?:;|$)`, "i").exec(style);
+  const value = match ? Number(match[1]) * VML_UNITS_PT[(match[2] ?? "px").toLowerCase()]! : 0;
+  return Number.isFinite(value) ? value : 0;
+}
+
 /**
  * A VML shape whose style places it wholly off the page, whatever it is
  * positioned from (page, margin, column or paragraph, all on the page).
  */
 function vmlShapeIsOffPage(style: string | undefined, page: { width: number; height: number }) {
   if (!style || !/(^|;)\s*position\s*:\s*absolute/i.test(style)) return false;
-  const length = (property: string) => {
-    const match = new RegExp(`(?:^|;)\\s*${property}\\s*:\\s*(-?[\\d.]+)\\s*(pt|px|in|cm|mm|pc)?\\s*(?:;|$)`, "i").exec(style);
-    const value = match ? Number(match[1]) * VML_UNITS_PT[(match[2] ?? "px").toLowerCase()]! : 0;
-    return Number.isFinite(value) ? value : 0;
-  };
+  const length = (property: string) => vmlLength(style, property);
   const left = length("margin-left") + length("left");
   const top = length("margin-top") + length("top");
   return left >= page.width || top >= page.height || left + length("width") <= -page.width || top + length("height") <= -page.height;
@@ -124,6 +147,92 @@ function largestPage(xml: string) {
     page.height = Math.max(page.height, Number(tag.attributes.get("w:h")) / 20 || 0);
   });
   return { width: page.width || 612, height: page.height || 842 };
+}
+
+/**
+ * visitXmlTags, also giving the paragraph (w:p) each tag is in, by a key
+ * naming its place among the paragraphs of its container (body, table cell,
+ * text box, header…): `${container}:${index ± 1}` names its neighbours.
+ */
+function visitParagraphs(xml: string, visit: (tag: XmlTag, paragraph: string | null) => void) {
+  const top = { id: -1, next: 0 };
+  const containers: Array<{ id: number; next: number }> = [];
+  const paragraphs: string[] = [];
+  let ids = 0;
+  visitXmlTags(xml, tag => {
+    if (tag.closing) {
+      visit(tag, paragraphs.at(-1) ?? null);
+      if (PARAGRAPH_CONTAINERS.has(tag.name)) containers.pop();
+      if (tag.name === "w:p") paragraphs.pop();
+      return;
+    }
+    if (tag.name === "w:p") {
+      const container = containers.at(-1) ?? top;
+      const key = `${container.id}:${container.next++}`;
+      if (!tag.selfClosing) paragraphs.push(key);
+      visit(tag, key);
+      return;
+    }
+    if (PARAGRAPH_CONTAINERS.has(tag.name) && !tag.selfClosing) containers.push({ id: ids++, next: 0 });
+    visit(tag, paragraphs.at(-1) ?? null);
+  });
+}
+
+/**
+ * What white text the pictures and shapes of a part may lie under: the
+ * paragraphs holding one (`drawings`), and for each picture behind the text
+ * (wp:anchor behindDoc, VML z-index below 0) placed from its paragraph, the
+ * blocks of the body its height may reach (`reaches`, by `blocks` index); one
+ * placed from the page may lie under any text (`fromPage`).
+ */
+function drawingReach(xml: string) {
+  const drawings = new Set<string>();
+  const blocks = new Map<string, number>();
+  const reaches: Array<[number, number]> = [];
+  let fromPage = false;
+  const path: string[] = [];
+  let block = -1;
+  let anchor: { block: number; behind: boolean; fromPage: boolean; offset: number; height: number } | null = null;
+  let offsetStart: number | null = null;
+  /** Offset and height in points, from the anchor paragraph's top. */
+  const reach = (start: number, offset: number, height: number) => {
+    const span = (length: number) => Math.ceil(Math.max(0, length) / MIN_PARAGRAPH_PT);
+    reaches.push([start - span(-offset), start + span(offset + height)]);
+  };
+  visitParagraphs(xml, (tag, paragraph) => {
+    if (tag.closing) {
+      path.pop();
+      if (tag.name === "wp:posOffset" && offsetStart !== null && anchor) anchor.offset = Number(xml.slice(offsetStart, tag.start).trim()) / EMU_PER_PT || 0;
+      offsetStart = null;
+      if (tag.name === "wp:anchor" && anchor?.behind) {
+        if (anchor.fromPage) fromPage = true;
+        else reach(anchor.block, anchor.offset, anchor.height);
+      }
+      if (tag.name === "wp:anchor") anchor = null;
+      return;
+    }
+    if (path.at(-1) === "w:body" && BODY_BLOCKS.has(tag.name)) block += 1;
+    if (paragraph && !blocks.has(paragraph)) blocks.set(paragraph, block);
+    if (paragraph && DRAWINGS.has(tag.name)) drawings.add(paragraph);
+    if (tag.name === "wp:anchor") {
+      anchor = { block, behind: /^(1|true|on)$/i.test(tag.attributes.get("behindDoc") ?? ""), fromPage: false, offset: 0, height: 0 };
+    } else if (anchor && tag.name === "wp:positionV") {
+      anchor.fromPage = FROM_PAGE.test(tag.attributes.get("relativeFrom") ?? "");
+    } else if (anchor && tag.name === "wp:posOffset" && path.at(-1) === "wp:positionV" && !tag.selfClosing) {
+      offsetStart = tag.end;
+    } else if (anchor && tag.name === "wp:extent") {
+      anchor.height = Number(tag.attributes.get("cy")) / EMU_PER_PT || 0;
+    } else if (tag.name.startsWith("v:")) {
+      const style = tag.attributes.get("style") ?? "";
+      if (/(^|;)\s*z-index\s*:\s*-\d/i.test(style)) {
+        const relative = /(?:^|;)\s*mso-position-vertical-relative\s*:\s*([\w-]+)/i.exec(style)?.[1] ?? "";
+        if (FROM_PAGE.test(relative)) fromPage = true;
+        else reach(block, vmlLength(style, "margin-top") + vmlLength(style, "top"), vmlLength(style, "height"));
+      }
+    }
+    if (!tag.selfClosing) path.push(tag.name);
+  });
+  return { drawings, blocks, reaches, fromPage };
 }
 
 /** Scripts Word sets in the complex script size (w:szCs), like a run marked w:cs or w:rtl. */
@@ -191,27 +300,35 @@ function styleChain(styles: Styles, id: string | undefined, type: string) {
   return chain;
 }
 
-type Frame = { name: string; background: boolean; offPage?: boolean; style?: string; layer?: RunLayer; texts?: Array<[number, number]>; passages?: Passages };
-type Passages = { invisible: string[]; unverified: string[] };
+type Frame = { name: string; background: boolean; offPage?: boolean; style?: string; key?: string; layer?: RunLayer; texts?: Array<[number, number]>; passages?: Passages };
+type Passages = { invisible: string[]; unverifiable: string[] };
 
 /**
- * The main document part without the text of its invisible runs; that text,
- * and the white text kept on a drawing behind the text (`unverified`),
- * paragraph by paragraph.
+ * The main document part without the text of its invisible runs, nor of the
+ * white ones that may show on a drawing; the text of each, paragraph by
+ * paragraph. `fromPage`: a picture behind the text may lie under any text.
  */
-function cutInvisibleRuns(xml: string, styles: Styles, layerBehindText: boolean) {
+function cutInvisibleRuns(xml: string, styles: Styles, fromPage: boolean) {
   const page = largestPage(xml);
   const stack: Frame[] = [];
   const cuts: Array<[number, number]> = [];
-  const found: Passages = { invisible: [], unverified: [] };
+  const found: Passages = { invisible: [], unverifiable: [] };
   let textStart: number | null = null;
+  const pictures = drawingReach(xml);
+  const nearDrawing = (key: string | undefined) => {
+    if (!key) return false;
+    const [container, index] = key.split(":");
+    if ([-1, 0, 1].some(offset => pictures.drawings.has(`${container}:${Number(index) + offset}`))) return true;
+    const block = pictures.blocks.get(key);
+    return block !== undefined && pictures.reaches.some(([from, to]) => block >= from && block <= to);
+  };
   const nearest = (name: string) => stack.findLast(frame => frame.name === name);
   const hasBackground = (frame: Frame) =>
     frame.background ||
     (frame.name === "w:p" && styleChain(styles, frame.style, "paragraph").some(style => style.paragraphShading)) ||
     (frame.name === "w:tbl" && styleChain(styles, frame.style, "table").some(style => style.anyShading));
   // Decided once the whole run is read, inside its paragraph, cell, table and text box.
-  const visibility = (run: Frame, text: string): "visible" | "invisible" | "unverified" => {
+  const visibility = (run: Frame, text: string): "visible" | "invisible" | "unverifiable" => {
     const effective: RunLayer = Object.assign({}, styles.defaults,
       ...styleChain(styles, nearest("w:p")?.style, "paragraph").map(style => style.run),
       ...styleChain(styles, run.style, "character").map(style => style.run),
@@ -224,7 +341,9 @@ function cutInvisibleRuns(xml: string, styles: Styles, layerBehindText: boolean)
       : (complexScript && tiny(effective.complexScriptSize)) || ((!complexScript || OTHER_LETTER.test(text)) && tiny(effective.size));
     if (effective["w:vanish"] || effective["w:specVanish"] || effective["w:webHidden"] || tinyText || stack.some(frame => frame.offPage)) return "invisible";
     if (!effective.white || effective.shading || effective.highlight || stack.some(hasBackground)) return "visible";
-    return layerBehindText ? "unverified" : "invisible";
+    // White on what? A text box without fill, or a paragraph a drawing holds, neighbours or covers, may lie on a picture.
+    const onDrawing = fromPage || pictures.fromPage || stack.some(frame => frame.name === "w:txbxContent") || nearDrawing(nearest("w:p")?.key);
+    return onDrawing ? "unverifiable" : "invisible";
   };
   const record = (kind: keyof Passages, texts: string[]) => {
     // mammoth reads text boxes from mc:Fallback only: what mc:Choice repeats is not counted.
@@ -233,7 +352,7 @@ function cutInvisibleRuns(xml: string, styles: Styles, layerBehindText: boolean)
     if (paragraph) paragraph[kind].push(...texts);
     else found[kind].push(texts.join(""));
   };
-  visitXmlTags(xml, tag => {
+  visitParagraphs(xml, (tag, paragraph) => {
     if (tag.closing) {
       const frame = stack.pop();
       if (frame?.name === "w:t" && textStart !== null) {
@@ -242,17 +361,19 @@ function cutInvisibleRuns(xml: string, styles: Styles, layerBehindText: boolean)
       } else if (frame?.name === "w:r" && frame.texts?.length) {
         const texts = frame.texts.map(([start, end]) => decodeXml(xml.slice(start, end)));
         const seen = visibility(frame, texts.join(""));
-        if (seen === "invisible") cuts.push(...frame.texts);
-        if (seen !== "visible") record(seen, texts);
+        if (seen !== "visible") {
+          cuts.push(...frame.texts);
+          record(seen, texts);
+        }
       } else if (frame?.name === "w:p" && frame.passages) {
-        for (const kind of ["invisible", "unverified"] as const) if (frame.passages[kind].length) found[kind].push(frame.passages[kind].join(""));
+        for (const kind of ["invisible", "unverifiable"] as const) if (frame.passages[kind].length) found[kind].push(frame.passages[kind].join(""));
       }
       return;
     }
     const parent = stack.at(-1);
     const grandParent = stack.at(-2);
     const frame: Frame = { name: tag.name, background: false };
-    if (tag.name === "w:p") frame.passages = { invisible: [], unverified: [] };
+    if (tag.name === "w:p") Object.assign(frame, { passages: { invisible: [], unverifiable: [] }, key: paragraph ?? undefined });
     if (tag.name === "w:r") Object.assign(frame, { layer: {}, texts: [] });
     if (VML_SHAPES.has(tag.name)) {
       const fill = tag.attributes.get("fillcolor")?.trim();
@@ -279,7 +400,7 @@ function cutInvisibleRuns(xml: string, styles: Styles, layerBehindText: boolean)
     visible += xml.slice(from, start);
     from = end;
   }
-  return { xml: visible + xml.slice(from), cut: cuts.length > 0, invisibleText: found.invisible, unverifiedText: found.unverified };
+  return { xml: visible + xml.slice(from), cut: cuts.length > 0, invisibleText: found.invisible, unverifiableText: found.unverifiable };
 }
 
 /** The first existing target of a relationship of that type, resolved as mammoth resolves it. */
@@ -335,25 +456,27 @@ function storedZip(parts: Map<string, Buffer>) {
 }
 
 /**
- * The DOCX to hand to mammoth, without its invisible text, that text, and
- * the white text kept on a drawing behind the text. Also bounds the
- * decompression (inspectDocxArchive). An unchanged file is returned as is.
+ * The DOCX to hand to mammoth, without its invisible text nor the white text
+ * that may show on a drawing; the text of each. Also bounds the decompression
+ * (inspectDocxArchive). An unchanged file is returned as is.
  */
-export function withoutInvisibleDocxText(buffer: Buffer, limits = DOCUMENT_DECOMPRESSION_LIMITS): { buffer: Buffer; invisibleText: string[]; unverifiedText: string[] } {
+export function withoutInvisibleDocxText(buffer: Buffer, limits = DOCUMENT_DECOMPRESSION_LIMITS): { buffer: Buffer; invisibleText: string[]; unverifiableText: string[] } {
   const parts = new Map<string, Buffer>();
   inspectDocxArchive(buffer, limits, (name, content) => parts.set(name, content));
   const mainDocument = relatedPart(parts, "_rels/.rels", OFFICE_DOCUMENT_RELATIONSHIP, "") ?? "word/document.xml";
   const xml = parts.get(mainDocument)?.toString("utf8");
-  if (!xml) return { buffer, invisibleText: [], unverifiedText: [] };
+  if (!xml) return { buffer, invisibleText: [], unverifiableText: [] };
   const folder = mainDocument.includes("/") ? mainDocument.slice(0, mainDocument.lastIndexOf("/")) : "";
   const relationships = `${folder ? `${folder}/` : ""}_rels/${mainDocument.slice(folder ? folder.length + 1 : 0)}.rels`;
   const stylesPart = relatedPart(parts, relationships, STYLES_RELATIONSHIP, folder) ?? "word/styles.xml";
-  // A drawing behind the text (wp:anchor behindDoc, VML z-index below 0), in the body or a header.
-  const layerBehindText = Array.from(parts.keys()).some(name =>
-    (name === mainDocument || /(^|\/)header\d*\.xml$/i.test(name)) &&
-    /\bbehindDoc\s*=\s*["'](1|true|on)["']|z-index\s*:\s*-\d/i.test(parts.get(name)!.toString("utf8")));
-  const visible = cutInvisibleRuns(xml, readStyles(parts.get(stylesPart)?.toString("utf8")), layerBehindText);
-  if (!visible.cut) return { buffer, invisibleText: [], unverifiedText: visible.unverifiedText };
+  // A picture behind the text in a header or a footer lies on every page, wherever the text falls.
+  const onEveryPage = Array.from(parts.keys()).some(name => {
+    if (!/(^|\/)(header|footer)\d*\.xml$/i.test(name)) return false;
+    const margin = drawingReach(parts.get(name)!.toString("utf8"));
+    return margin.fromPage || margin.reaches.length > 0;
+  });
+  const visible = cutInvisibleRuns(xml, readStyles(parts.get(stylesPart)?.toString("utf8")), onEveryPage);
+  if (!visible.cut) return { buffer, invisibleText: [], unverifiableText: [] };
   parts.set(mainDocument, Buffer.from(visible.xml, "utf8"));
-  return { buffer: storedZip(parts), invisibleText: visible.invisibleText, unverifiedText: visible.unverifiedText };
+  return { buffer: storedZip(parts), invisibleText: visible.invisibleText, unverifiableText: visible.unverifiableText };
 }
