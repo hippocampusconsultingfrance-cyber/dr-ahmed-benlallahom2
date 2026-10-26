@@ -13,6 +13,7 @@ vi.mock("@/contexts/LanguageContext", () => ({ useLanguage: () => ({ language: "
 const { default: CookieConsent, COOKIE_BANNER_OPEN_ATTRIBUTE, COOKIE_POLICY_HREF, cookieCopy } = await import("./CookieConsent");
 const { COOKIE_CONSENT_STORAGE_KEY, createCookieConsent } = await import("./cookieConsentState");
 const { Dialog, DialogContent } = await import("@/components/ui/dialog");
+const { default: WhatsAppButton } = await import("./WhatsAppButton");
 
 type Element = { type: unknown; props: Record<string, any> };
 const copy = cookieCopy.fr;
@@ -122,5 +123,16 @@ describe("bandeau et préférences cookies (PUB-COOKIE-01 / PUB-COOKIE-04)", () 
     stored.set(COOKIE_CONSENT_STORAGE_KEY, JSON.stringify(createCookieConsent(false)));
     render({ showPreferencesShortcut: false });
     expect(render({ showPreferencesShortcut: false }).find(element => element.props["aria-label"] === copy.settings && String(element.props.className).includes("cookie-preferences-shortcut"))).toBeUndefined();
+  });
+
+  it("passe le bandeau devant le bouton WhatsApp, qui reste au-dessus de la zone sûre des petits écrans", () => {
+    render();
+    const banner = render().find(element => String(element.props.className).includes("cookie-consent-banner"))!;
+    const whatsapp = (WhatsAppButton() as unknown as Element).props.className as string;
+    const layer = (className: string) => Number(/(?:^|\s)z-(\d+)(?:\s|$)/.exec(className)?.[1]);
+    expect(banner.props.className).toContain("fixed bottom-0 left-0 right-0");
+    expect(layer(banner.props.className)).toBeGreaterThan(layer(whatsapp));
+    expect(whatsapp).toContain("bottom-[calc(env(safe-area-inset-bottom)+1rem)]");
+    expect(whatsapp).toContain("right-4");
   });
 });
