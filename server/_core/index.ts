@@ -18,7 +18,7 @@ import { registerGoogleDriveOAuthRoutes } from "../googleDriveOAuthRoutes";
 import { registerStorageProxy } from "./storageProxy";
 import { appRouter, getStripeClient } from "../routers";
 import { createContext } from "./context";
-import { storageGetSignedUrl, storagePut } from "../storage";
+import { storageDelete, storageGetSignedUrl, storagePut } from "../storage";
 import { notifyOwner } from "./notification";
 import { and, desc, eq, isNotNull, isNull, sql } from "drizzle-orm";
 import { RECRUITMENT_CV_FORMAT_MESSAGE, recruitmentCvValidationMessage, validateCvFile } from "../recruitmentFileValidation";
@@ -32,6 +32,7 @@ import { isSameRecruitmentSubmission } from "../recruitmentSubmissionDeduplicati
 import { sendTrackedCvApplicationConfirmationEmail } from "../recruitmentEmailTrace";
 import { resendApplicationReferenceFromTags, resendRecipientMatchesApplication } from "../resendWebhookCorrelation";
 import { postgresErrorCode } from "../languageColumns";
+import { CV_APPLICATION_SUBMISSION_UNIQUE_INDEX, isUniqueViolation } from "../databaseConstraints";
 import { internalErrorReference, internalErrorSummary } from "./trpc";
 
 function safeErrorName(error: unknown) {
@@ -561,16 +562,20 @@ export async function createApp() {
         }
         releaseIpAttempt = () => releasePublicEmailIpRateLimit("recruitmentApply", emailIpHash);
 
-        recruitmentStage = "duplicate-check";
-        const duplicateCandidates = await db.select({
-          id: cvApplications.id,
-          trackingId: cvApplications.trackingId,
-          email: cvApplications.email,
-          specialty: cvApplications.specialty,
-          targetCountries: cvApplications.targetCountries,
-        }).from(cvApplications).where(eq(cvApplications.fileChecksum, fileValidation.checksum)).limit(20);
-        const duplicate = duplicateCandidates.find(candidate => isSameRecruitmentSubmission(candidate, parsed.data));
-        if (duplicate) {
+        // The application already received from this candidate for the same
+        // pathway, target countries and CV file, if any.
+        const findSameSubmission = async () => {
+          const sameFile = await db.select({
+            id: cvApplications.id,
+            trackingId: cvApplications.trackingId,
+            email: cvApplications.email,
+            specialty: cvApplications.specialty,
+            targetCountries: cvApplications.targetCountries,
+          }).from(cvApplications).where(eq(cvApplications.fileChecksum, fileValidation.checksum)).limit(20);
+          return sameFile.find(candidate => isSameRecruitmentSubmission(candidate, parsed.data)) ?? null;
+        };
+        // A repeated sending stores nothing new: the candidate gets the stored application's reference and confirmation.
+        const answerAlreadyReceived = async (duplicate: { id: number; trackingId: string }) => {
           const candidatePortalInviteUrl = `${PUBLIC_APP_ORIGIN}/candidate/access?invite=${encodeURIComponent(createCandidateInvitationToken(Number(duplicate.id)))}`;
           // ABUS-01: beyond the day's volume, no confirmation goes to the typed address.
           if (await countPublicFormDailyVolume("recruitmentApply")) {
@@ -587,6 +592,12 @@ export async function createApp() {
           releaseIpAttempt = null;
           await logSecurityEvent({ actorKind: "anonymous", actorReference: parsed.data.email, category: "public_recruitment_apply_duplicate_file", outcome: "allowed", severity: "info", ipHash });
           res.status(200).json({ success: true, duplicate: true, trackingId: duplicate.trackingId });
+        };
+
+        recruitmentStage = "duplicate-check";
+        const duplicate = await findSameSubmission();
+        if (duplicate) {
+          await answerAlreadyReceived(duplicate);
           return;
         }
         // A long analysis queue never refuses a candidate: the dossier is
@@ -614,21 +625,34 @@ export async function createApp() {
         retentionUntil.setFullYear(retentionUntil.getFullYear() + 2);
 
         recruitmentStage = "application-insert";
-        const insertResult = await db.execute(sql`INSERT INTO cv_applications (
-          tracking_id, first_name, last_name, email, phone, specialty, diploma_country,
-          target_countries, languages, years_experience, availability, mobility, certifications, message,
-          cv_file_key, cv_original_name, cv_mime_type, cv_size_bytes,
-          file_validation_status, file_checksum, file_validation_notes,
-          gdpr_consent, marketing_consent, status, consent_at, retention_until, language
-        ) VALUES (
-          ${trackingId}, ${parsed.data.firstName}, ${parsed.data.lastName}, ${parsed.data.email},
-          ${parsed.data.phone || null}, ${parsed.data.specialty}, ${parsed.data.diplomaCountry}, ${JSON.stringify(parsed.data.targetCountries)},
-          ${JSON.stringify(parsed.data.languages)}, ${parsed.data.yearsExperience ?? null},
-          ${parsed.data.availability || null}, ${parsed.data.mobility || null}, ${parsed.data.certifications || null},
-          ${parsed.data.message || null}, ${storageResult.key}, ${originalName}, ${file.mimetype}, ${file.size},
-          'quarantined', ${fileValidation.checksum}, ${fileValidation.notes}, 1,
-          ${parsed.data.marketingConsent === "1" ? 1 : 0}, 'new', NOW(), ${retentionUntil}, ${parsed.data.language}
-        ) RETURNING id`);
+        let insertResult: Awaited<ReturnType<typeof db.execute>>;
+        try {
+          insertResult = await db.execute(sql`INSERT INTO cv_applications (
+            tracking_id, first_name, last_name, email, phone, specialty, diploma_country,
+            target_countries, languages, years_experience, availability, mobility, certifications, message,
+            cv_file_key, cv_original_name, cv_mime_type, cv_size_bytes,
+            file_validation_status, file_checksum, file_validation_notes,
+            gdpr_consent, marketing_consent, status, consent_at, retention_until, language
+          ) VALUES (
+            ${trackingId}, ${parsed.data.firstName}, ${parsed.data.lastName}, ${parsed.data.email},
+            ${parsed.data.phone || null}, ${parsed.data.specialty}, ${parsed.data.diplomaCountry}, ${JSON.stringify(parsed.data.targetCountries)},
+            ${JSON.stringify(parsed.data.languages)}, ${parsed.data.yearsExperience ?? null},
+            ${parsed.data.availability || null}, ${parsed.data.mobility || null}, ${parsed.data.certifications || null},
+            ${parsed.data.message || null}, ${storageResult.key}, ${originalName}, ${file.mimetype}, ${file.size},
+            'quarantined', ${fileValidation.checksum}, ${fileValidation.notes}, 1,
+            ${parsed.data.marketingConsent === "1" ? 1 : 0}, 'new', NOW(), ${retentionUntil}, ${parsed.data.language}
+          ) RETURNING id`);
+        } catch (insertError) {
+          // DATA-11: a simultaneous sending of the same application was stored
+          // first (unique index of drizzle/pg/0004). Answered like a repeated
+          // sending; this request's copy of the CV is not kept.
+          if (!isUniqueViolation(insertError, CV_APPLICATION_SUBMISSION_UNIQUE_INDEX)) throw insertError;
+          const stored = await findSameSubmission();
+          if (!stored) throw insertError;
+          await storageDelete([storageResult.key]).catch(deleteError => console.error("Recruitment duplicate CV cleanup error:", safeErrorName(deleteError)));
+          await answerAlreadyReceived(stored);
+          return;
+        }
 
         const insertedId = Number((insertResult.rows[0] as { id?: number } | undefined)?.id || 0);
 
