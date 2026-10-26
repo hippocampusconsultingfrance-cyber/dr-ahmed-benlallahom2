@@ -38,7 +38,7 @@ vi.mock("@/lib/trpc", () => ({
 }));
 
 const { default: AppointmentDeliveries, canRetryDeliveries, deliveryLabel, refundEmailWarning } = await import("./AppointmentDeliveries");
-const { default: AdminAttentionPanel, retryingDetail } = await import("./AdminAttentionPanel");
+const { default: AdminAttentionPanel, retryingDetail, waitingDetail } = await import("./AdminAttentionPanel");
 
 type Delivery = Parameters<typeof deliveryLabel>[0];
 const delivery = (jobType: Delivery["jobType"], deliveryState: Delivery["state"], attempts = 1, maxAttempts = 6): Delivery => ({ jobType, state: deliveryState, attempts, maxAttempts });
@@ -272,9 +272,31 @@ describe("EXPL-02 — encart « À traiter » du tableau de bord", () => {
     expect(html).not.toContain("nouvel essai automatique au plus tôt");
   });
 
+  it("liste les envois pas encore partis quelques minutes après le paiement, sans les dire en échec (ABUS-03)", () => {
+    state.attention = {
+      isLoading: false,
+      error: null,
+      data: {
+        failedDeliveries: { total: 0, items: [] },
+        refusedDeliveries: { total: 0, items: [] },
+        retryingDeliveries: { total: 0, items: [] },
+        waitingDeliveries: { total: 1, items: [{ trackingId: "APTTODOUI006", customerName: "Farid Benali", appointmentDate: "2026-10-30T09:00:00.000Z", jobTypes: ["confirmation", "invoice"], dueSince: "2026-10-26T10:02:00.000Z" }] },
+        unconfirmedPayments: { total: 0, items: [] },
+      },
+    };
+    const html = renderToStaticMarkup(createElement(AdminAttentionPanel, { onOpenAppointments: vi.fn() }));
+    expect(html).not.toContain("Rien à traiter");
+    expect(html).toContain("Envois pas encore partis (1)");
+    expect(html).toContain("aucune tentative n’a encore échoué");
+    expect(html).toContain("« Renvoyer » sur le rendez-vous les envoie tout de suite.");
+    expect(html).toContain("APTTODOUI006");
+    expect(waitingDetail({ jobTypes: ["confirmation", "invoice"], dueSince: "2026-10-26T10:02:00.000Z" })).toBe("Confirmation, Facture · en attente depuis le 26/10/2026 11:02:00, essai à la prochaine exécution planifiée");
+    expect(html).toContain("Confirmation, Facture · en attente depuis le 26/10/2026 11:02:00");
+  });
+
   it("dit qu’il n’y a rien à traiter, ou que l’encart n’a pas pu être chargé", () => {
-    state.attention = { isLoading: false, error: null, data: { failedDeliveries: { total: 0, items: [] }, refusedDeliveries: { total: 0, items: [] }, retryingDeliveries: { total: 0, items: [] }, unconfirmedPayments: { total: 0, items: [] } } };
-    expect(renderToStaticMarkup(createElement(AdminAttentionPanel, { onOpenAppointments: vi.fn() }))).toContain("Rien à traiter");
+    state.attention = { isLoading: false, error: null, data: { failedDeliveries: { total: 0, items: [] }, refusedDeliveries: { total: 0, items: [] }, retryingDeliveries: { total: 0, items: [] }, waitingDeliveries: { total: 0, items: [] }, unconfirmedPayments: { total: 0, items: [] } } };
+    expect(renderToStaticMarkup(createElement(AdminAttentionPanel, { onOpenAppointments: vi.fn() }))).toContain("Rien à traiter : aucun envoi après paiement en échec ou en attente, aucun paiement à régulariser.");
     state.attention = { isLoading: false, error: { message: "Base de données indisponible." }, data: undefined };
     expect(renderToStaticMarkup(createElement(AdminAttentionPanel, { onOpenAppointments: vi.fn() }))).toContain("n’ont pas pu être chargés : Base de données indisponible.");
   });

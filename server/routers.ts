@@ -2837,7 +2837,8 @@ export const appRouter = router({
     /**
      * « À traiter » en tête du tableau de bord, lu depuis la base (EXPL-02) :
      * envois après paiement en échec (tentatives épuisées, refus du service
-     * d’envoi, ou nouvel essai automatique en attente), et paiements reçus
+     * d’envoi, ou nouvel essai automatique en attente), envois pas encore
+     * partis quelques minutes après le paiement (ABUS-03), et paiements reçus
      * sans rendez-vous confirmé (patient à contacter, puis à rembourser).
      */
     attention: adminProcedure.query(async () => {
@@ -2858,6 +2859,7 @@ export const appRouter = router({
         failedDeliveries: deliveries.failed,
         refusedDeliveries: deliveries.refused,
         retryingDeliveries: deliveries.retrying,
+        waitingDeliveries: deliveries.waiting,
         unconfirmedPayments: { total: Number(unconfirmedCount?.count ?? 0), items: unconfirmedItems },
       };
     }),

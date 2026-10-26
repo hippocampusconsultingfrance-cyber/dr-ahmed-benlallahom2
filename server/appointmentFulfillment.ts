@@ -19,6 +19,14 @@ import { deadlineCutShort, runWithProcessingDeadline } from "./processingDeadlin
 const MAX_BATCH = 5;
 /** Well above the 60 s function limit: a job still "running" after this was interrupted. */
 export const APPOINTMENT_FULFILLMENT_STALE_AFTER_MS = 15 * 60_000;
+/**
+ * A job still waiting for its first attempt this long after it was due was not
+ * sent right after the payment (immediate budget spent under a rate limit or an
+ * outage of Resend, function stopped): it is listed in « À traiter » (ABUS-03,
+ * EXPL-02), as the next automatic attempt may only come with the next
+ * scheduled run, without counting an attempt nor alerting the owner.
+ */
+export const APPOINTMENT_FULFILLMENT_WAITING_AFTER_MS = 5 * 60_000;
 
 /**
  * Pause between two jobs (ABUS-03): the owner notification, the confirmation
@@ -31,7 +39,9 @@ export const APPOINTMENT_FULFILLMENT_STALE_AFTER_MS = 15 * 60_000;
  * A job holds its turn while it is claimed, at most claimTurnLimitMs: a
  * database request that does not answer no longer holds up the other
  * processings of the instance, the conditional claim still preventing any
- * duplicate. Mutable for tests.
+ * duplicate. The same pause also separates the sends themselves (see
+ * waitForSendSlot): an invoice leaves once its PDF is built, well after the
+ * start of its job. Mutable for tests.
  */
 export const appointmentFulfillmentPacing = { delayMs: 600, claimTurnLimitMs: 5_000 };
 /** End of the last job run in this instance. */
@@ -40,6 +50,10 @@ let lastJobRunAt: number | null = null;
 let lastJobStartAt: number | null = null;
 /** Turn of the last job that queued; the next one waits for it. */
 let lastJobTurn: Promise<void> = Promise.resolve();
+/** Moment the last send of this instance left for Resend. */
+let lastSendAt: number | null = null;
+/** Slot of the last send that queued; the next one waits for it. */
+let lastSendSlot: Promise<void> = Promise.resolve();
 
 /**
  * Waits for this job's turn, then for the pause after the start of the
@@ -68,6 +82,30 @@ async function waitForFulfillmentTurn(): Promise<(claimed: boolean) => void> {
     if (!claimed && lastJobStartAt === startAt) lastJobStartAt = previousStartAt;
     endTurn();
   };
+}
+
+/**
+ * Waits, right before a job's email leaves, for the pause after the previous
+ * send of this instance (ABUS-03). The turn of a job spaces the starts of the
+ * jobs; an invoice, sent once its PDF is built, could otherwise leave less than
+ * a pause before the next job of another processing. The slot is taken in
+ * order and released as soon as the send starts, so one waits at most one
+ * pause.
+ */
+async function waitForSendSlot() {
+  const previousSlot = lastSendSlot;
+  let release!: () => void;
+  lastSendSlot = new Promise<void>(resolve => { release = resolve; });
+  try {
+    await previousSlot;
+    const delayMs = appointmentFulfillmentPacing.delayMs;
+    // Never more than one pause, even with a clock set back (or stopped, in tests).
+    const waitMs = lastSendAt === null ? 0 : Math.min(lastSendAt + delayMs - Date.now(), delayMs);
+    if (waitMs > 0) await new Promise(resolve => setTimeout(resolve, waitMs));
+    lastSendAt = Date.now();
+  } finally {
+    release();
+  }
 }
 
 /**
@@ -330,15 +368,18 @@ async function runJob(id: number) {
   const language = emailLanguageFor(appointment.language);
   try {
     if (jobType === "owner") {
+      await waitForSendSlot();
       await sendOwnerNotificationEmail(appointment.customerName, appointment.customerEmail, appointment.customerPhone, appointment.trackingId, appointment.appointmentDate, finalPrice, { idempotencyKey: ownerNotificationKey(appointment), language: appointment.language });
     } else if (jobType === "confirmation") {
       await ensureOwnerNotification(db, appointment, finalPrice);
+      await waitForSendSlot();
       // The job is created at the payment confirmation: its creation time stamps
       // the attached .ics, identical on every retry (RES-05).
       await sendConfirmationEmail(appointment.customerEmail, appointment.customerName, appointment.trackingId, appointment.appointmentDate, finalPrice, undefined, { idempotencyKey: `appointment-confirmation-${appointment.trackingId}`, language, confirmedAt: job.createdAt ?? appointment.appointmentDate });
       const smsSent = await sendCustomerConfirmationSMS(appointment.customerPhone, appointment.trackingId, appointment.appointmentDate);
       await db.update(appointments).set({ emailSent: 1, smsSent: smsSent ? 1 : 0 }).where(eq(appointments.id, appointment.id));
     } else if (jobType === "refund") {
+      await waitForSendSlot();
       // One key whatever the refund's origin: the patient is told once. Its
       // failure carries its cause, so a refused address is told apart (RES-06).
       await sendRefundConfirmationEmail(appointment.customerEmail, appointment.customerName, appointment.trackingId, appointment.appointmentDate, appointment.refundAmount ?? appointment.finalPrice, { ...refundNotice!.email, idempotencyKey: `appointment-refund-${appointment.trackingId}`, language });
@@ -348,6 +389,7 @@ async function runJob(id: number) {
         .where(and(eq(appointmentFulfillmentJobs.appointmentId, appointment.id), eq(appointmentFulfillmentJobs.jobType, "refund"))).limit(1);
       const patientEmail = patientJob?.status === "completed" && !patientJob.lastError ? "sent" : isRefusedJob(patientJob) ? "refused" : "pending";
       const { buildStripeRefundAlert } = await import("./appointmentPaymentWebhook");
+      await waitForSendSlot();
       const delivered = await notifyOwner(buildStripeRefundAlert({
         trackingId: appointment.trackingId,
         refundAmount: appointment.refundAmount ?? appointment.finalPrice,
@@ -369,6 +411,8 @@ async function runJob(id: number) {
       // payment date.
       const invoiceRecord = await allocateAppointmentInvoice({ appointmentId: appointment.id, paidAt: job.createdAt ?? new Date() });
       const invoice = await generateInvoicePDF(appointmentInvoiceData(appointment, invoiceRecord));
+      // Its pause counts from here, once the PDF is built.
+      await waitForSendSlot();
       // The PDF stays in French whatever the language of the email (EN-01).
       await sendInvoiceEmail(appointment.customerEmail, appointment.customerName, appointment.trackingId, finalPrice, invoice.buffer, invoiceRecord.invoiceNumber, { idempotencyKey: `appointment-invoice-${invoiceRecord.invoiceNumber}`, language });
     }
@@ -380,7 +424,8 @@ async function runJob(id: number) {
       // its own retries (ABUS-03): neither the email nor the provider failed
       // for good. It goes back to the queue as it was, due, without counting
       // this attempt nor alerting the owner, for the next processing (another
-      // webhook, the scheduled run).
+      // webhook, the scheduled run). Still unsent a few minutes later, it is
+      // listed in « À traiter » (listAppointmentDeliveriesToHandle).
       await db.update(appointmentFulfillmentJobs).set({ status: job.attempts > 1 ? "retry" : "queued", attempts: job.attempts - 1, startedAt: null }).where(eq(appointmentFulfillmentJobs.id, id));
       console.warn("[AppointmentFulfillment] Immediate processing out of time; job left for the next run", { trackingId: appointment.trackingId, jobType });
       return { completed: false, retry: true, deadlineReached: true };
@@ -421,7 +466,10 @@ async function runJob(id: number) {
 /**
  * `deadlineAt`: end of the time budget of an immediate processing (see
  * immediateFulfillmentBudget); without it (scheduled run, « Renvoyer ») a job
- * waits for Resend as long as its own retries allow.
+ * waits for Resend as long as its own retries allow. Once that budget is
+ * spent, no new job starts: the request it serves has answered, and work left
+ * after the answer may be frozen with the function. The jobs not started stay
+ * due, as they were, for the next processing.
  */
 export async function processDueAppointmentFulfillmentJobs(limit = MAX_BATCH, options: { appointmentId?: number; deadlineAt?: number } = {}) {
   const db = await getDb();
@@ -437,9 +485,17 @@ export async function processDueAppointmentFulfillmentJobs(limit = MAX_BATCH, op
     .where(dueJobs)
     .orderBy(appointmentFulfillmentJobs.scheduledFor, appointmentFulfillmentJobs.id).limit(Math.min(Math.max(1, limit), MAX_BATCH));
   const results = [];
+  const { deadlineAt } = options;
+  const budgetSpent = () => deadlineAt !== undefined && Date.now() >= deadlineAt;
   for (let index = 0; index < jobs.length; index += 1) {
     const job = jobs[index];
+    if (budgetSpent()) break;
     const endTurn = await waitForFulfillmentTurn();
+    if (budgetSpent()) {
+      // Spent while waiting for the turn: the pause goes back to the next job.
+      endTurn(false);
+      break;
+    }
     let claimed = false;
     try {
       claimed = await claimFulfillmentJob(db, job);
@@ -448,7 +504,6 @@ export async function processDueAppointmentFulfillmentJobs(limit = MAX_BATCH, op
     }
     if (!claimed) continue;
     try {
-      const { deadlineAt } = options;
       results.push(await (deadlineAt === undefined
         ? runJob(job.id)
         : runWithProcessingDeadline(deadlineAt - (jobs.length - 1 - index) * immediateFulfillmentBudget.reservePerJobMs, () => runJob(job.id), Date.now, { firstPauseDeadlineAt: deadlineAt })));
@@ -656,7 +711,8 @@ export async function closeUnsentAppointmentFulfillment(appointmentId: number, n
  * (address, content), with no new automatic attempt.
  * « retrying »: an attempt failed (or was interrupted) and the next automatic
  * one may only come with the next scheduled run, days before the attempts run
- * out. Refunded appointments too, for the notices of their refund (RES-06).
+ * out. « waiting »: not attempted yet, due for APPOINTMENT_FULFILLMENT_WAITING_AFTER_MS
+ * (see there). Refunded appointments too, for the notices of their refund (RES-06).
  */
 export async function listAppointmentDeliveriesToHandle(limit = 20, now = new Date()) {
   const db = await getDb();
@@ -674,6 +730,7 @@ export async function listAppointmentDeliveriesToHandle(limit = 20, now = new Da
     .where(or(
       inArray(appointmentFulfillmentJobs.status, ["failed", "retry"]),
       and(eq(appointmentFulfillmentJobs.status, "running"), lte(appointmentFulfillmentJobs.startedAt, new Date(now.getTime() - APPOINTMENT_FULFILLMENT_STALE_AFTER_MS))),
+      and(eq(appointmentFulfillmentJobs.status, "queued"), lte(appointmentFulfillmentJobs.scheduledFor, new Date(now.getTime() - APPOINTMENT_FULFILLMENT_WAITING_AFTER_MS))),
     ))
     .orderBy(appointmentFulfillmentJobs.updatedAt, appointmentFulfillmentJobs.id);
   const candidateIds = Array.from(new Set(candidates.map(job => job.appointmentId)));
@@ -688,11 +745,21 @@ export async function listAppointmentDeliveriesToHandle(limit = 20, now = new Da
   const refused = new Map<number, FulfillmentJobType[]>();
   // Earliest next automatic attempt; null when only interrupted jobs wait for the next scheduled run.
   const retrying = new Map<number, { jobTypes: FulfillmentJobType[]; nextAttemptAt: Date | null }>();
+  // Earliest moment a job still waiting for its first attempt was due.
+  const waiting = new Map<number, { jobTypes: FulfillmentJobType[]; dueSince: Date }>();
   for (const job of jobs) {
     const jobType = job.jobType as FulfillmentJobType;
     if (job.status === "failed") {
       const group = isRefusedJob(job) ? refused : failed;
       group.set(job.appointmentId, [...(group.get(job.appointmentId) ?? []), jobType]);
+      continue;
+    }
+    if (job.status === "queued") {
+      const previous = waiting.get(job.appointmentId);
+      waiting.set(job.appointmentId, {
+        jobTypes: [...(previous?.jobTypes ?? []), jobType],
+        dueSince: previous && previous.dueSince < job.scheduledFor ? previous.dueSince : job.scheduledFor,
+      });
       continue;
     }
     const previous = retrying.get(job.appointmentId);
@@ -708,6 +775,7 @@ export async function listAppointmentDeliveriesToHandle(limit = 20, now = new Da
     failed: withJobTypes(failed),
     refused: withJobTypes(refused),
     retrying: page(Array.from(retrying.entries()).map(([appointmentId, delivery]) => ({ ...byId.get(appointmentId)!.appointment, ...delivery }))),
+    waiting: page(Array.from(waiting.entries()).map(([appointmentId, delivery]) => ({ ...byId.get(appointmentId)!.appointment, ...delivery }))),
   };
 }
 

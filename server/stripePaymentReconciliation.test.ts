@@ -112,6 +112,7 @@ const { appRouter } = await import("./routers");
 const { refundAppointmentPayment } = await import("./appointmentAdminActions");
 const { paymentStatusPageFulfillment } = await import("./appointmentPublicStatus");
 const { KEPT_HOLD_RECHECK_MS } = await import("./appointmentHolds");
+const { generateInvoicePDF } = await import("./invoice");
 const { APPOINTMENT_FULFILLMENT_STALE_AFTER_MS, appointmentFulfillmentPacing, closeUnsentAppointmentFulfillment, getAppointmentDeliveries, processDueAppointmentFulfillmentJobs, recoverStaleAppointmentFulfillmentJobs } = await import("./appointmentFulfillment");
 const PAGE_FULFILLMENT_TIMEOUT_MS = paymentStatusPageFulfillment.timeoutMs;
 const signer = new Stripe(process.env.STRIPE_SECRET_KEY!);
@@ -345,6 +346,11 @@ describe("EXPL-01 — un paiement reçu est confirmé même sans webhook", () =>
     const sentAt: number[] = [];
     const sends = [emails.sendOwnerNotificationEmail, emails.sendConfirmationEmail, emails.sendInvoiceEmail];
     for (const send of sends) send.mockImplementation(async () => { sentAt.push(Date.now()); });
+    // The invoice leaves once its PDF is built, well after the start of its job.
+    vi.mocked(generateInvoicePDF).mockImplementation(async () => {
+      await new Promise(resolve => setTimeout(resolve, 100));
+      return { buffer: Buffer.from("pdf"), key: "invoices/test.pdf", url: "" };
+    });
     seedAppointment();
     stripeSession();
     const otherDate = new Date(Date.now() + 75 * HOUR);
@@ -357,12 +363,43 @@ describe("EXPL-01 — un paiement reçu est confirmé même sans webhook", () =>
       expect(responses.map(response => response.status)).toEqual([200, 200]);
       expect(db().rows(appointmentFulfillmentJobs).map(job => job.status)).toEqual(Array(6).fill("completed"));
       expect(sentAt).toHaveLength(6);
-      // The pause separates the starts of the jobs; each send follows its start
-      // after a few database reads, which the other webhook (or a loaded test
-      // machine) may delay: the sends are well apart, never at the same instant.
-      for (let index = 1; index < sentAt.length; index += 1) expect(sentAt[index] - sentAt[index - 1]).toBeGreaterThanOrEqual(appointmentFulfillmentPacing.delayMs / 2);
+      // The pause separates the sends themselves (setTimeout may fire a millisecond early).
+      for (let index = 1; index < sentAt.length; index += 1) expect(sentAt[index] - sentAt[index - 1]).toBeGreaterThanOrEqual(appointmentFulfillmentPacing.delayMs - 2);
     } finally {
       for (const send of sends) send.mockImplementation(async () => undefined);
+      vi.mocked(generateInvoicePDF).mockImplementation(async () => ({ buffer: Buffer.from("pdf"), key: "invoices/test.pdf", url: "" }));
+    }
+  });
+
+  it("garde la pause entre l’envoi d’une facture lente et l’envoi suivant d’un autre traitement (ABUS-03)", async () => {
+    appointmentFulfillmentPacing.delayMs = 150;
+    const sent: Array<{ kind: string; at: number }> = [];
+    const sends = { owner: emails.sendOwnerNotificationEmail, confirmation: emails.sendConfirmationEmail, invoice: emails.sendInvoiceEmail };
+    for (const [kind, send] of Object.entries(sends)) send.mockImplementation(async () => { sent.push({ kind, at: Date.now() }); });
+    // PDF built in 100 ms: without a pause counted from the send, the other
+    // processing's job, started a pause after the invoice job, would send 50 ms after it.
+    vi.mocked(generateInvoicePDF).mockImplementation(async () => {
+      await new Promise(resolve => setTimeout(resolve, 100));
+      return { buffer: Buffer.from("pdf"), key: "invoices/test.pdf", url: "" };
+    });
+    const paid = { paymentStatus: "completed", appointmentStatus: "confirmed", holdExpiresAt: null } as const;
+    // A: only its invoice is left; B: its notification and confirmation.
+    const { id: invoiceOnly } = seedAppointment({ ...paid, stripePaymentIntentId: "pi_test_slow_invoice_a" }) as { id: number };
+    const otherDate = new Date(Date.now() + 75 * HOUR);
+    const { id: twoEmails } = seedAppointment({ ...paid, trackingId: "APTRECON00032", stripeSessionId: "cs_test_reconciliation_32", stripePaymentIntentId: "pi_test_slow_invoice_b", appointmentDate: otherDate, slotKey: otherDate.toISOString() }) as { id: number };
+    const seedJob = (appointmentId: number, jobType: string) => db().seed(appointmentFulfillmentJobs, { appointmentId, jobType, status: "queued", attempts: 0, maxAttempts: 7, scheduledFor: new Date(Date.now() - 1000) });
+    seedJob(invoiceOnly, "invoice");
+    seedJob(twoEmails, "owner");
+    seedJob(twoEmails, "confirmation");
+
+    try {
+      await Promise.all([processDueAppointmentFulfillmentJobs(5, { appointmentId: invoiceOnly }), processDueAppointmentFulfillmentJobs(5, { appointmentId: twoEmails })]);
+
+      expect(sent.map(email => email.kind).sort()).toEqual(["confirmation", "invoice", "owner"]);
+      for (let index = 1; index < sent.length; index += 1) expect(sent[index].at - sent[index - 1].at).toBeGreaterThanOrEqual(appointmentFulfillmentPacing.delayMs - 2);
+    } finally {
+      for (const send of Object.values(sends)) send.mockImplementation(async () => undefined);
+      vi.mocked(generateInvoicePDF).mockImplementation(async () => ({ buffer: Buffer.from("pdf"), key: "invoices/test.pdf", url: "" }));
     }
   });
 

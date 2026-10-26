@@ -376,7 +376,37 @@ describe("EXPL-02 — encart « À traiter »", () => {
   it("est vide quand tout est parti", async () => {
     const paid = seedAppointment("APTTODO00006");
     seedJob(paid.id, "confirmation", { status: "completed", attempts: 1 });
-    await expect(admin().attention()).resolves.toEqual({ failedDeliveries: { total: 0, items: [] }, refusedDeliveries: { total: 0, items: [] }, retryingDeliveries: { total: 0, items: [] }, unconfirmedPayments: { total: 0, items: [] } });
+    await expect(admin().attention()).resolves.toEqual({ failedDeliveries: { total: 0, items: [] }, refusedDeliveries: { total: 0, items: [] }, retryingDeliveries: { total: 0, items: [] }, waitingDeliveries: { total: 0, items: [] }, unconfirmedPayments: { total: 0, items: [] } });
+  });
+
+  it("liste les envois pas encore partis quelques minutes après le paiement (traitement immédiat à court de temps), sans les compter en échec (ABUS-03)", async () => {
+    // As a payment's processing leaves them when its time budget runs out: due, not attempted.
+    const cut = seedAppointment("APTTODO00013", { customer_name: "Élise Moreau" });
+    const dueSince = new Date(Date.now() - 7 * 60_000);
+    seedJob(cut.id, "owner", { status: "completed", attempts: 1 });
+    seedJob(cut.id, "confirmation", { scheduled_for: new Date(Date.now() - 6 * 60_000) });
+    seedJob(cut.id, "invoice", { scheduled_for: dueSince });
+    seedInvoice(cut.id, 8);
+    // Paid a minute ago: its processing may still be sending them.
+    const fresh = seedAppointment("APTTODO00014");
+    seedJob(fresh.id, "confirmation", { scheduled_for: new Date(Date.now() - 60_000) });
+    // Refunded meanwhile: nothing left to send.
+    const refunded = seedAppointment("APTTODO00015", { payment_status: "refunded", appointment_status: "cancelled" });
+    seedJob(refunded.id, "invoice", { scheduled_for: new Date(Date.now() - 60 * 60_000) });
+
+    const attention = await admin().attention();
+
+    expect(attention.waitingDeliveries).toEqual({
+      total: 1,
+      items: [{ trackingId: "APTTODO00013", customerName: "Élise Moreau", appointmentDate: expect.any(Date), jobTypes: ["confirmation", "invoice"], dueSince }],
+    });
+    expect([attention.failedDeliveries.total, attention.refusedDeliveries.total, attention.retryingDeliveries.total]).toEqual([0, 0, 0]);
+    expect((await admin().appointments.list({ search: "APTTODO00013" })).items[0]?.deliveries.map(delivery => [delivery.state, delivery.attempts])).toEqual([["sent", 1], ["pending", 0], ["pending", 0]]);
+
+    // « Renvoyer » sends them right away; the panel empties.
+    await admin().appointments.retryFulfillment({ trackingId: "APTTODO00013" });
+    expect(state.sent.map(email => email.kind)).toEqual(["confirmation", "invoice"]);
+    await expect(admin().attention()).resolves.toMatchObject({ waitingDeliveries: { total: 0, items: [] } });
   });
 });
 
