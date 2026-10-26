@@ -1,13 +1,16 @@
 import Stripe from "stripe";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { appointmentFulfillmentJobs, appointments } from "../drizzle/schema";
+import type { TrpcContext } from "./_core/context";
 import { createInMemoryDrizzle, type InMemoryDrizzle } from "./testSupport/inMemoryDrizzle";
 import { listen } from "./testSupport/candidateUploadApp";
 
-// RES-06 (remboursements et contestations faits dans Stripe), à travers la
-// vraie route du webhook (évènements signés).
+// EXPL-01 (paiement confirmé sans webhook), RES-06 (remboursements et
+// contestations faits dans Stripe), à travers la vraie route du webhook
+// (évènements signés), la vraie page d’état et la vraie tâche de nettoyage.
 
 const WEBHOOK_SECRET = "whsec_test_payment_reconciliation";
+const CRON_SECRET = "cron_test_payment_reconciliation_secret";
 
 type FakeSession = { id: string; object: "checkout.session"; status: "open" | "complete" | "expired"; payment_status: "paid" | "unpaid"; amount_total: number; payment_intent: string | null; metadata: { trackingId: string } };
 
@@ -26,6 +29,7 @@ const state = vi.hoisted(() => {
 });
 process.env.STRIPE_WEBHOOK_SECRET = WEBHOOK_SECRET;
 process.env.STRIPE_SECRET_KEY = "sk_test_payment_reconciliation_never_sent";
+process.env.CRON_SECRET = CRON_SECRET;
 
 vi.mock("stripe", async importOriginal => {
   const { default: RealStripe } = await importOriginal<typeof import("stripe")>();
@@ -90,6 +94,7 @@ vi.mock("./invoiceNumbering", () => ({
 }));
 
 const { createApp } = await import("./_core/index");
+const { appRouter } = await import("./routers");
 const { refundAppointmentPayment } = await import("./appointmentAdminActions");
 const signer = new Stripe(process.env.STRIPE_SECRET_KEY!);
 
@@ -157,6 +162,101 @@ async function postEvent(type: string, object: Record<string, unknown>, id = `ev
   });
   return { status: response.status, body: await response.json() as Record<string, unknown> };
 }
+
+function publicStatus() {
+  return appRouter.createCaller({
+    user: null,
+    req: { protocol: "https", headers: {}, ip: "192.0.2.10" } as unknown as TrpcContext["req"],
+    res: { clearCookie: vi.fn() } as unknown as TrpcContext["res"],
+  }).appointments.publicStatus({ trackingId: TRACKING_ID, sessionId: SESSION_ID });
+}
+
+async function runHoldCleanup() {
+  const response = await fetch(`${baseUrl}/api/scheduled/appointment-hold-cleanup`, { headers: { authorization: `Bearer ${CRON_SECRET}` } });
+  return { status: response.status, body: await response.json() as Record<string, unknown> };
+}
+
+function expectPostPaymentEmailsSentOnce() {
+  expect(emails.sendOwnerNotificationEmail).toHaveBeenCalledTimes(1);
+  expect(emails.sendConfirmationEmail).toHaveBeenCalledTimes(1);
+  expect(emails.sendInvoiceEmail).toHaveBeenCalledTimes(1);
+  expect(db().rows(appointmentFulfillmentJobs).map(job => job.status)).toEqual(["completed", "completed", "completed"]);
+}
+
+describe("EXPL-01 — un paiement reçu est confirmé même sans webhook", () => {
+  it("confirme depuis la page de retour le paiement que Stripe dit reçu, une seule fois, puis ignore le webhook tardif", async () => {
+    const seeded = seedAppointment();
+    stripeSession();
+
+    await expect(publicStatus()).resolves.toEqual({
+      state: "confirmed",
+      appointment: { appointmentDate: (seeded.appointmentDate as Date).toISOString(), durationMinutes: 30, amountEur: 100 },
+    });
+    expect(appointmentRow()).toMatchObject({ paymentStatus: "completed", appointmentStatus: "confirmed", stripePaymentIntentId: PAYMENT_INTENT, holdExpiresAt: null, slotKey: seeded.slotKey });
+    expectPostPaymentEmailsSentOnce();
+
+    // Nouvelle vérification de la page, puis le webhook qui arrive enfin.
+    await expect(publicStatus()).resolves.toMatchObject({ state: "confirmed" });
+    expect(await postEvent("checkout.session.completed", stripeSession())).toEqual({ status: 200, body: { received: true, duplicate: true } });
+    expectPostPaymentEmailsSentOnce();
+    expect(owner.notifyOwner).not.toHaveBeenCalled();
+  });
+
+  it("ne confirme qu’une fois quand le webhook (et sa relivraison) croise les vérifications de la page", async () => {
+    seedAppointment();
+    const session = stripeSession();
+
+    const [webhook, redelivery, ...pages] = await Promise.all([
+      postEvent("checkout.session.completed", session),
+      postEvent("checkout.session.completed", session),
+      publicStatus(),
+      publicStatus(),
+      publicStatus(),
+    ]);
+
+    expect([webhook.status, redelivery.status]).toEqual([200, 200]);
+    for (const page of pages) expect(page).toMatchObject({ state: "confirmed" });
+    expect(appointmentRow()).toMatchObject({ paymentStatus: "completed", appointmentStatus: "confirmed" });
+    expectPostPaymentEmailsSentOnce();
+    expect(owner.notifyOwner).not.toHaveBeenCalled();
+  });
+
+  it("la tâche de nettoyage confirme une réservation expirée dont la session a été payée, au lieu de libérer le créneau", async () => {
+    const seeded = seedAppointment({ holdExpiresAt: new Date(Date.now() - 60 * 1000) });
+    stripeSession();
+
+    expect(await runHoldCleanup()).toEqual({ status: 200, body: { ok: true, scheduler: "vercel-cron", released: 0, confirmed: 1, kept: 0 } });
+    expect(appointmentRow()).toMatchObject({ paymentStatus: "completed", appointmentStatus: "confirmed", slotKey: seeded.slotKey });
+    expectPostPaymentEmailsSentOnce();
+  });
+
+  it("garde le créneau tant que Stripe ne répond pas, puis le libère quand la session a expiré sans paiement", async () => {
+    const seeded = seedAppointment({ holdExpiresAt: new Date(Date.now() - 60 * 1000) });
+    stripeSession({ status: "expired", payment_status: "unpaid", payment_intent: null });
+    state.stripe.reachable = false;
+
+    expect((await runHoldCleanup()).body).toMatchObject({ released: 0, confirmed: 0, kept: 1 });
+    expect(appointmentRow()).toMatchObject({ paymentStatus: "pending", appointmentStatus: "held", slotKey: seeded.slotKey });
+
+    state.stripe.reachable = true;
+    expect((await runHoldCleanup()).body).toMatchObject({ released: 1, confirmed: 0, kept: 0 });
+    expect(appointmentRow()).toMatchObject({ paymentStatus: "pending", appointmentStatus: "cancelled", slotKey: null, holdExpiresAt: null });
+    expect(emails.sendConfirmationEmail).not.toHaveBeenCalled();
+  });
+
+  it("ferme chez Stripe une session encore ouverte avant de libérer le créneau, et ne touche pas une réservation en cours", async () => {
+    seedAppointment({ holdExpiresAt: new Date(Date.now() - 60 * 1000) });
+    stripeSession({ status: "open", payment_status: "unpaid", payment_intent: null });
+    const ongoing = db().seed(appointments, { ...appointmentRow(), id: undefined, trackingId: "APTRECON00002", slotKey: "2030-01-01T10:00:00.000Z", holdExpiresAt: new Date(Date.now() + 10 * 60 * 1000), stripeSessionId: "cs_test_reconciliation_2", appointmentStatus: "held", cancelledAt: null });
+    const withoutSession = db().seed(appointments, { ...appointmentRow(), id: undefined, trackingId: "APTRECON00003", slotKey: "2030-01-01T11:00:00.000Z", holdExpiresAt: new Date(Date.now() - 60 * 1000), stripeSessionId: null });
+
+    expect((await runHoldCleanup()).body).toMatchObject({ released: 2, confirmed: 0, kept: 0 });
+    expect(state.stripe.expireCalls).toEqual([SESSION_ID]);
+    expect(appointmentRow()).toMatchObject({ appointmentStatus: "cancelled", slotKey: null });
+    expect(withoutSession).toMatchObject({ appointmentStatus: "cancelled", slotKey: null });
+    expect(ongoing).toMatchObject({ appointmentStatus: "held", slotKey: "2030-01-01T10:00:00.000Z" });
+  });
+});
 
 describe("RES-06 — remboursements et contestations faits dans Stripe", () => {
   const paid = { paymentStatus: "completed", appointmentStatus: "confirmed", holdExpiresAt: null, stripePaymentIntentId: PAYMENT_INTENT } as const;

@@ -15,7 +15,7 @@ import { requireVercelCron } from "./cronAuth";
 import { secureReference } from "./secureReference";
 import { registerGoogleDriveOAuthRoutes } from "../googleDriveOAuthRoutes";
 import { registerStorageProxy } from "./storageProxy";
-import { appRouter } from "../routers";
+import { appRouter, getStripeClient } from "../routers";
 import { createContext } from "./context";
 import { storageGetSignedUrl, storagePut } from "../storage";
 import { notifyOwner } from "./notification";
@@ -968,9 +968,11 @@ export async function createApp() {
       : { batchSize: 3, maxBatches: 1, budgetMs: 0 });
   });
 
+  // An expired hold that has a Checkout session is released only after Stripe
+  // confirms it was not paid; a paid one is confirmed (webhook missing).
   registerScheduledJob("/api/scheduled/appointment-hold-cleanup", "AppointmentHoldCleanup", async () => {
     const { releaseExpiredAppointmentHolds } = await import("../appointmentHolds");
-    return releaseExpiredAppointmentHolds();
+    return releaseExpiredAppointmentHolds(getStripeClient);
   });
 
   registerScheduledJob("/api/scheduled/candidate-document-processing", "CandidateDocumentProcessing", async trigger => {
