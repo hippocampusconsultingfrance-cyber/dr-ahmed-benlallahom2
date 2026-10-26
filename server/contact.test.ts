@@ -295,7 +295,7 @@ describe("contrôle anti-robot des formulaires contact et RGPD", () => {
       message: "Message envoyé par un script.",
       gdprConsent: 1,
       turnstileToken: "turnstile-token-refused-by-the-mock",
-    })).rejects.toThrow();
+    })).rejects.toMatchObject({ code: "BAD_REQUEST" });
 
     expect(verifyCandidateTurnstile).toHaveBeenCalledWith(expect.objectContaining({ token: "turnstile-token-refused-by-the-mock" }));
     expect((await getDb())!.execute).not.toHaveBeenCalled();
@@ -311,7 +311,7 @@ describe("contrôle anti-robot des formulaires contact et RGPD", () => {
       email: "robot@example.com",
       requestType: "deletion",
       turnstileToken: "turnstile-token-refused-by-the-mock",
-    })).rejects.toThrow();
+    })).rejects.toMatchObject({ code: "BAD_REQUEST" });
 
     expect(verifyCandidateTurnstile).toHaveBeenCalledWith(expect.objectContaining({ token: "turnstile-token-refused-by-the-mock" }));
     expect((await getDb())!.execute).not.toHaveBeenCalled();

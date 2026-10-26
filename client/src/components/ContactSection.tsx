@@ -1,6 +1,6 @@
 import { useLanguage } from "@/contexts/LanguageContext";
 import { siteConfig } from "@/data/site-config";
-import { getContactFormCopy, publicFormCopy } from "@/lib/publicFormCopy";
+import { getContactFormCopy, publicFormCopy, publicFormErrorMessage } from "@/lib/publicFormCopy";
 import { trpc } from "@/lib/trpc";
 import { Phone, Mail, Linkedin, Send, CheckCircle, Loader2 } from "lucide-react";
 import { useState } from "react";
@@ -30,7 +30,7 @@ export default function ContactSection() {
       toast.success(copy.sent);
     },
     onError: (error) => {
-      toast.error(copy.sendError);
+      toast.error(publicFormErrorMessage(error, copy.refusals, copy.sendError));
       console.error("Contact form error:", error);
     },
   });
@@ -231,7 +231,7 @@ export default function ContactSection() {
 
                 {submitMutation.error && (
                   <p role="alert" className="form-alert text-sm text-destructive">
-                    {copy.sendError}
+                    {publicFormErrorMessage(submitMutation.error, copy.refusals, copy.sendError)}
                   </p>
                 )}
 

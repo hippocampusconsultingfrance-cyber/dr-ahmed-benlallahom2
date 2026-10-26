@@ -12,12 +12,12 @@ describe("feedbacks publics après soumission", () => {
 
     expect(contact).toContain("const [submitted, setSubmitted] = useState(false)");
     expect(contact).toContain("success-panel");
-    expect(contact).toContain("toast.error(copy.sendError)");
+    expect(contact).toContain("toast.error(publicFormErrorMessage(error, copy.refusals, copy.sendError))");
     expect(contact).toContain("toast.error(copy.consentRequired)");
     expect(gdpr).toContain("const [submitted, setSubmitted] = useState(false)");
     expect(gdpr).toContain("setSubmitted(true)");
     expect(gdpr).toContain("{copy.received}");
-    expect(gdpr).toContain("toast.error(copy.error)");
+    expect(gdpr).toContain("toast.error(errorMessage(error))");
     expect(booking).toContain("alert(content.paymentError);");
     expect(booking).toContain("alert(getBookingErrorMessage(error, content));");
     expect(bookingConfirmation).toContain('export type BookingConfirmationState = "success" | "canceled" | "unknown"');

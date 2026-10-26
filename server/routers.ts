@@ -49,6 +49,7 @@ import {
   isPlausiblePhoneNumber,
   type BookingRefusalReason,
 } from "../shared/bookingPolicy";
+import type { PublicFormRefusalReason } from "../shared/publicFormRefusalReasons";
 
 const ADMIN_MFA_RATE_LIMITED_MESSAGE = "Trop de tentatives de double authentification. Patientez 15 minutes avant de réessayer.";
 
@@ -75,16 +76,16 @@ type PublicFormRateLimitPolicy = {
   windowMs: number;
   blockMs: number;
   blockedMessage?: string;
-  /** Motif stable joint au refus, que la page de réservation traduit (EN-06). */
-  reason?: BookingRefusalReason;
+  /** Motif stable joint au refus, que la page de réservation (EN-06), le contact et le RGPD (ABUS-01) traduisent. */
+  reason: BookingRefusalReason | PublicFormRefusalReason;
 };
 
 const DEFAULT_PUBLIC_FORM_BLOCKED_MESSAGE = "Veuillez patienter avant de soumettre une nouvelle demande.";
 export const BOOKING_RATE_LIMIT_MESSAGE = "Trop de tentatives de réservation ont été effectuées. Veuillez réessayer dans une heure ou nous contacter directement.";
 
 export const PUBLIC_FORM_RATE_LIMITS = {
-  contact: { action: "public_contact_submit", scope: "ip_email", maxAttempts: 5, windowMs: 15 * 60 * 1000, blockMs: 60 * 60 * 1000 },
-  gdpr: { action: "public_gdpr_submit", scope: "ip_email", maxAttempts: 3, windowMs: 24 * 60 * 60 * 1000, blockMs: 24 * 60 * 60 * 1000 },
+  contact: { action: "public_contact_submit", scope: "ip_email", maxAttempts: 5, windowMs: 15 * 60 * 1000, blockMs: 60 * 60 * 1000, reason: "rate_limited" },
+  gdpr: { action: "public_gdpr_submit", scope: "ip_email", maxAttempts: 3, windowMs: 24 * 60 * 60 * 1000, blockMs: 24 * 60 * 60 * 1000, reason: "rate_limited" },
   // Chaque réservation bloque un créneau de 30 minutes et ouvre une session
   // Stripe. Le compteur par IP borne un script qui change d’email à chaque
   // appel ; le compteur par email borne une même identité qui change d’IP.
@@ -120,8 +121,32 @@ async function enforcePublicFormRateLimit(input: {
       severity: "warning",
       ipHash,
     });
-    const message = blockedMessage ?? DEFAULT_PUBLIC_FORM_BLOCKED_MESSAGE;
-    throw reason ? bookingRefusal("TOO_MANY_REQUESTS", reason, message) : new TRPCError({ code: "TOO_MANY_REQUESTS", message });
+    throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: blockedMessage ?? DEFAULT_PUBLIC_FORM_BLOCKED_MESSAGE, cause: new PublicErrorReason(reason) });
+  }
+}
+
+export const PUBLIC_FORM_SECURITY_CHECK_FAILED_MESSAGE = "La vérification anti-robot a échoué. Rechargez la page, puis renvoyez votre demande.";
+
+/** Refus du contact ou du RGPD : message français et motif stable que le formulaire traduit (ABUS-01). */
+function publicFormRefusal(code: "BAD_REQUEST" | "TOO_MANY_REQUESTS", reason: PublicFormRefusalReason, message: string) {
+  return new TRPCError({ code, message, cause: new PublicErrorReason(reason) });
+}
+
+function publicFormIpHash(req: { headers: unknown; ip?: string | null }) {
+  return requestIpHash(req.headers as Record<string, unknown>) ?? (req.ip ? hashSecurityValue(req.ip) : null);
+}
+
+/**
+ * Anti-robot du contact et du RGPD : un jeton refusé ou absent est un refus
+ * 400 avec un motif stable, et non plus une erreur interne (500). Appelé avant
+ * la limite par IP seule, il n’entame pas son budget.
+ */
+async function verifyPublicFormTurnstile(kind: "contact" | "gdpr", token: string | undefined, req: { headers: unknown; ip?: string | null }) {
+  try {
+    await verifyCandidateTurnstile({ token: token ?? "", remoteIp: req.ip });
+  } catch {
+    await logSecurityEvent({ actorKind: "anonymous", category: `${PUBLIC_FORM_RATE_LIMITS[kind].action}_turnstile`, outcome: "blocked", severity: "warning", ipHash: publicFormIpHash(req) }).catch(() => undefined);
+    throw publicFormRefusal("BAD_REQUEST", "security_check_failed", PUBLIC_FORM_SECURITY_CHECK_FAILED_MESSAGE);
   }
 }
 
@@ -132,13 +157,13 @@ async function enforcePublicFormRateLimit(input: {
  * l’enregistrement échoue ensuite.
  */
 async function enforcePublicFormIpLimit(kind: "contact" | "gdpr", req: { headers: unknown; ip?: string | null }) {
-  const ipHash = requestIpHash(req.headers as Record<string, unknown>) ?? (req.ip ? hashSecurityValue(req.ip) : null);
+  const ipHash = publicFormIpHash(req);
   try {
     await enforcePublicEmailIpRateLimit(kind, ipHash);
   } catch (error) {
     if (!(error instanceof Error && error.message === "candidate_security_rate_limited")) throw error;
     await logSecurityEvent({ actorKind: "anonymous", category: `${PUBLIC_EMAIL_IP_RATE_LIMITS[kind].action}_rate_limit`, outcome: "blocked", severity: "warning", ipHash });
-    throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: DEFAULT_PUBLIC_FORM_BLOCKED_MESSAGE });
+    throw publicFormRefusal("TOO_MANY_REQUESTS", "rate_limited", DEFAULT_PUBLIC_FORM_BLOCKED_MESSAGE);
   }
   return ipHash;
 }
@@ -617,7 +642,7 @@ export const appRouter = router({
           email: input.email,
           headers: ctx.req.headers as Record<string, unknown>,
         });
-        await verifyCandidateTurnstile({ token: input.turnstileToken ?? "", remoteIp: ctx.req.ip });
+        await verifyPublicFormTurnstile("contact", input.turnstileToken, ctx.req);
 
         const ipHash = await enforcePublicFormIpLimit("contact", ctx.req);
 
@@ -667,7 +692,7 @@ export const appRouter = router({
           email: input.email,
           headers: ctx.req.headers as Record<string, unknown>,
         });
-        await verifyCandidateTurnstile({ token: input.turnstileToken ?? "", remoteIp: ctx.req.ip });
+        await verifyPublicFormTurnstile("gdpr", input.turnstileToken, ctx.req);
         const ipHash = await enforcePublicFormIpLimit("gdpr", ctx.req);
         // Unpredictable tracking ID (13 chars, column is varchar(20))
         const trackingId = createPublicTrackingId("G");
