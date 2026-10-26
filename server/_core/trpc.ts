@@ -11,15 +11,17 @@ export const GENERIC_INTERNAL_ERROR_MESSAGE = "Une erreur interne est survenue. 
  * Stable, language-neutral reason of a deliberate refusal (EN-06), passed as
  * the `cause` of a TRPCError and sent to the client as `data.reason`: the page
  * shows its own translation, the French message stays for any other client.
+ * `date` (YYYY-MM-DD), sent as `data.date`, is the day the refusal names, for
+ * the page to write it in its language.
  */
 export class PublicErrorReason extends Error {
-  constructor(readonly reason: string) {
+  constructor(readonly reason: string, readonly date?: string) {
     super(reason);
     this.name = "PublicErrorReason";
   }
 }
 
-type ErrorShapeWithReason<TShape extends { data: object }> = TShape & { data: TShape["data"] & { reason?: string } };
+type ErrorShapeWithReason<TShape extends { data: object }> = TShape & { data: TShape["data"] & { reason?: string; date?: string } };
 
 /** Short reference of an unexpected error, given to the caller and logged with the error. */
 export function internalErrorReference(): string {
@@ -44,7 +46,7 @@ export function formatTrpcErrorShape<TShape extends { message: string; data: { c
   error: { code: string; cause?: unknown },
   reference: () => string = internalErrorReference,
 ): ErrorShapeWithReason<TShape> {
-  if (error.cause instanceof PublicErrorReason) return { ...shape, data: { ...shape.data, reason: error.cause.reason } };
+  if (error.cause instanceof PublicErrorReason) return { ...shape, data: { ...shape.data, reason: error.cause.reason, ...(error.cause.date ? { date: error.cause.date } : {}) } };
   if (error.code !== "INTERNAL_SERVER_ERROR" || error.cause === undefined) return shape as ErrorShapeWithReason<TShape>;
   const ref = reference();
   console.error(`[tRPC] Internal error ref=${ref}`, internalErrorSummary(error.cause));

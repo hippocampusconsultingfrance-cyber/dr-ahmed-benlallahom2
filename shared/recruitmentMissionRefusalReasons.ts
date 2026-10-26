@@ -1,10 +1,10 @@
 /**
  * Stable reasons of a refused candidate agreement for a mission (RGPD-03) or a
- * refused certification renewal (IA-02), sent by the server as `data.reason`
- * next to its French message. The mission screen, written in the admin's
- * language, shows its own translation of the agreement refusals instead of
- * the French text. The renewal ones are sent for a translated screen to come:
- * the 360° sheet that confirms a renewal is in French and shows the message.
+ * refused certification confirmation (IA-02), sent by the server as
+ * `data.reason` next to its French message, with `data.date` (YYYY-MM-DD,
+ * Paris) when the refusal depends on a day. The mission screen and the
+ * certifications of the 360° sheet, written in the admin's language, show
+ * their own translation instead of the French text.
  */
 export const MISSION_CONSENT_REFUSAL_REASONS = [
   "consent_date_invalid",
@@ -16,10 +16,15 @@ export const MISSION_CONSENT_REFUSAL_REASONS = [
 
 export type MissionConsentRefusalReason = (typeof MISSION_CONSENT_REFUSAL_REASONS)[number];
 
-export const CERTIFICATION_RENEWAL_REFUSAL_REASONS = ["renewal_date_invalid", "renewal_date_past", "renewal_date_too_far"] as const;
+/** renewal_required: an expired certification is confirmed only with its renewal. */
+export const CERTIFICATION_RENEWAL_REFUSAL_REASONS = ["renewal_date_invalid", "renewal_date_past", "renewal_date_too_far", "renewal_required"] as const;
 
 export type CertificationRenewalRefusalReason = (typeof CERTIFICATION_RENEWAL_REFUSAL_REASONS)[number];
 
 export function isMissionConsentRefusalReason(value: unknown): value is MissionConsentRefusalReason {
   return typeof value === "string" && (MISSION_CONSENT_REFUSAL_REASONS as readonly string[]).includes(value);
+}
+
+export function isCertificationRenewalRefusalReason(value: unknown): value is CertificationRenewalRefusalReason {
+  return typeof value === "string" && (CERTIFICATION_RENEWAL_REFUSAL_REASONS as readonly string[]).includes(value);
 }

@@ -1729,11 +1729,17 @@ export function buildInvisibleTextReview(input: RecruitmentAnalysisInput): Recru
   };
 }
 
-/** Facts allowed to influence filters and matching after deterministic evidence checks. */
+/**
+ * Facts allowed to influence filters and matching after deterministic evidence
+ * checks. A certification the CV says has expired is kept with its date
+ * (IA-02): a mission and the 360° sheet show it « expirée », and it earns no
+ * point until an admin confirms its renewal. Left out, it was only « déclarée
+ * par le candidat » without a date, and a mere confirmation counted it.
+ */
 export function verifiedRecruitmentFacts(analysis: RecruitmentAnalysisResult) {
   return {
     certifications: analysis.certifications.filter(
-      item => isVerifiedFact(item) && certificationIsCurrent(item)
+      isVerifiedFact
     ),
     languages: analysis.normalizedLanguages.filter(
       isVerifiedFact
@@ -1854,11 +1860,14 @@ export async function saveCvAnalysis(
   const verifiedFacts = analysis.contradictions.length > 0 || visibilityRequiresReview(analysis.invisibleText) || analysis.visibilityUnchecked
     ? { certifications: [], languages: [], experiences: [], skills: [] }
     : verifiedRecruitmentFacts(analysis);
-  // Certifications an admin confirmed survive a new analysis, and are not read again.
+  // Certifications an admin confirmed survive a new analysis, and are not read
+  // again. A confirmed renewal is no reading of the CV (IA-02): the row read
+  // there is stored again with the CV's expired date, so that withdrawing the
+  // renewal leaves the certification expired, not merely declared.
   const confirmedCertifications = await db
     .select({ name: cvCandidateCertifications.name })
     .from(cvCandidateCertifications)
-    .where(and(eq(cvCandidateCertifications.applicationId, applicationId), isNotNull(cvCandidateCertifications.confirmedAt)));
+    .where(and(eq(cvCandidateCertifications.applicationId, applicationId), isNotNull(cvCandidateCertifications.confirmedAt), sql`${cvCandidateCertifications.source} <> 'renewed'`));
   const verifiedCertifications = verifiedFacts.certifications.filter(certification =>
     !confirmedCertifications.some(confirmed => sameRecruitmentFact(confirmed.name, certification.name)));
   const verifiedLanguages = verifiedFacts.languages;

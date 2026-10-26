@@ -183,6 +183,20 @@ describe("analyse IA refusée pour facturation (REC-08)", () => {
     expect(jobsOf(outdated)).toEqual([expect.objectContaining({ job_status: "completed" })]);
   });
 
+  it("garde « à confirmer » une licence lue dans le CV dont la confirmation est retirée après une analyse dégradée, qui n’a pas relu le CV (IA-02)", async () => {
+    // Analysed under the current prompt: the licence was read in the CV, then confirmed by the admin.
+    const id = seedDossier(1, { analysis_status: "completed", analysis_model: "openai/gpt-6-astra", analysis_prompt_version: RECRUITMENT_ANALYSIS_PROMPT_VERSION, normalized_certifications: '[{"name":"Licence DHA"}]' }, { job_status: "completed", attempts: 1 });
+    memory.seed(cvCandidateCertifications, [{ application_id: id, name: "Licence DHA", source: "extracted", confirmed_at: "2026-10-20 09:00:00.000" }]);
+    // « Relancer l’analyse » while the AI Gateway refuses: a degraded result, without any fact read in the CV.
+    await expect(admin().admin.recruitment.reanalyze({ id })).resolves.toMatchObject({ outcome: "ai_unavailable" });
+    expect(dossier(id)).toMatchObject({ analysis_status: "degraded", analysis_prompt_version: RECRUITMENT_ANALYSIS_PROMPT_VERSION, normalized_certifications: "[]" });
+
+    // That analysis did not read the CV: it says nothing of the licence, which stays « à confirmer », and the toast and the history say nothing more.
+    await expect(admin().admin.recruitment.candidate.confirmCertification({ id, name: "Licence DHA", confirmed: false })).resolves.toEqual({ success: true, changed: true });
+    expect(memory.rows(cvCandidateCertifications).map(row => [row.name, row.source, row.confirmed_at])).toEqual([["Licence DHA", "extracted", null]]);
+    expect(memory.rows(recruitmentAuditLogs).filter(row => String(row.metadata).includes("certification")).map(row => JSON.parse(String(row.metadata)))).toEqual([{ event: "certification_unconfirmed", certification: "Licence DHA" }]);
+  });
+
   it("« Relancer l’analyse » d’un dossier quand le crédit manque toujours répond « IA indisponible », pas « analyse actualisée »", async () => {
     const id = seedDossier(1, {}, { job_status: "completed", attempts: 1 });
     const result = await admin().admin.recruitment.reanalyze({ id });

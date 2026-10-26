@@ -262,11 +262,13 @@ describe("écran d’une mission employeur", () => {
       candidates: [{ ...candidate(11, "Amal", "Haddad", { status: "shortlisted", candidateConsentAt: null }), createdAt: new Date("2026-10-20T22:30:00.000Z") }],
     });
     render();
-    // The server's French message and its stable reason, as tRPC delivers them.
-    const refusal = (reason: string | undefined, message = "Message du serveur en français.") => state.consentOptions!.onError?.({ message, data: { code: "BAD_REQUEST", reason } }, { briefId: 7, applicationId: 11, consentDate: "2026-10-01" } as never);
-    for (const reason of ["consent_before_application", "consent_before_mission", "consent_date_future", "consent_not_associated"]) await refusal(reason);
+    // The server's French message, its stable reason and the day it names, as tRPC delivers them.
+    const refusal = (reason: string | undefined, date?: string, message = "Message du serveur en français.") => state.consentOptions!.onError?.({ message, data: { code: "BAD_REQUEST", reason, ...(date ? { date } : {}) } }, { briefId: 7, applicationId: 11, consentDate: "2026-10-01" } as never);
+    await refusal("consent_before_application", "2026-10-21");
+    await refusal("consent_before_mission", "2026-10-19");
+    for (const reason of ["consent_date_future", "consent_not_associated"]) await refusal(reason);
     // Any other failure keeps the server's message.
-    await refusal(undefined, "Une erreur interne est survenue. Veuillez réessayer dans quelques instants. (réf. 1a2b3c4d)");
+    await refusal(undefined, undefined, "Une erreur interne est survenue. Veuillez réessayer dans quelques instants. (réf. 1a2b3c4d)");
     expect(state.toasts).toEqual([
       ["error", beforeApplication],
       ["error", beforeMission],
@@ -276,26 +278,33 @@ describe("écran d’une mission employeur", () => {
     ]);
   });
 
-  it("garde le message du serveur quand la mission ou la candidature refusée n’est plus à l’écran pour la dater (RGPD-03)", async () => {
-    state.language = "en";
+  it.each([
+    ["en", "The candidate’s agreement cannot be dated before the mission was created, on 24/10/2026.", "The candidate’s agreement cannot be dated before their application, received on 25/10/2026.", "The candidate’s agreement cannot be dated in the future."],
+    ["de", "Die Zustimmung des Kandidaten kann nicht vor der Erstellung der Mission am 24.10.2026 datiert sein.", "Die Zustimmung des Kandidaten kann nicht vor dem Eingang seiner Bewerbung am 25.10.2026 datiert sein.", "Die Zustimmung des Kandidaten kann nicht in der Zukunft datiert sein."],
+    ["zh", "候选人同意日期不能早于任务创建日期（2026/10/24）。", "候选人同意日期不能早于其申请收到日期（2026/10/25）。", "候选人同意日期不能晚于今天。"],
+  ] as const)("date le refus avec le jour envoyé par le serveur, même quand l’admin a changé de mission pendant la requête (%s, RGPD-03)", async (language, beforeMission, beforeApplication, future) => {
+    state.language = language;
+    // Mission 7 on screen, created on 19 October in Paris.
     state.data = missionData({
       brief: { ...brief, createdAt: new Date("2026-10-18T22:30:00.000Z") },
       candidates: [{ ...candidate(11, "Amal", "Haddad", { status: "shortlisted", candidateConsentAt: null }), createdAt: new Date("2026-10-20T22:30:00.000Z") }],
     });
     render();
-    const refusal = (reason: string, variables: Record<string, unknown>) => state.consentOptions!.onError?.({ message: `Message du serveur : ${reason}.`, data: { code: "BAD_REQUEST", reason } }, { consentDate: "2026-10-01", ...variables } as never);
-    // The admin moved to mission 7 while the agreement for mission 8 was being saved: not dated with mission 7.
-    await refusal("consent_before_mission", { briefId: 8, applicationId: 11 });
-    await refusal("consent_before_application", { briefId: 8, applicationId: 11 });
-    // The candidate is no longer among those shown.
-    await refusal("consent_before_application", { briefId: 7, applicationId: 99 });
-    // A reason that needs no date is still translated.
+    const refusal = (reason: string, variables: Record<string, unknown>, date?: string) => state.consentOptions!.onError?.({ message: `Message du serveur : ${reason}.`, data: { code: "BAD_REQUEST", reason, ...(date ? { date } : {}) } }, { consentDate: "2026-10-01", ...variables } as never);
+    // The admin moved to mission 7 while the agreement for mission 8, created
+    // on 24 October, was being saved: dated with mission 8, in their language.
+    await refusal("consent_before_mission", { briefId: 8, applicationId: 11 }, "2026-10-24");
+    // A candidate no longer among those shown, whose application came on 25 October.
+    await refusal("consent_before_application", { briefId: 7, applicationId: 99 }, "2026-10-25");
+    // A reason that needs no date.
     await refusal("consent_date_future", { briefId: 8, applicationId: 11 });
+    // Without the day (a server of an earlier version), the server's message rather than a wrong date.
+    await refusal("consent_before_mission", { briefId: 7, applicationId: 11 });
     expect(state.toasts).toEqual([
+      ["error", beforeMission],
+      ["error", beforeApplication],
+      ["error", future],
       ["error", "Message du serveur : consent_before_mission."],
-      ["error", "Message du serveur : consent_before_application."],
-      ["error", "Message du serveur : consent_before_application."],
-      ["error", "The candidate’s agreement cannot be dated in the future."],
     ]);
   });
 

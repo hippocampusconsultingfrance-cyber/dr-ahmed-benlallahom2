@@ -114,3 +114,24 @@ describe("emails envoyés depuis l’admin aux adresses saisies dans le formulai
     for (const payload of [english!, french!, firstNameOnly!]) expectNoTrapText(payload.html);
   });
 });
+
+describe("audience « filtrée » d’une campagne de recrutement", () => {
+  beforeEach(() => {
+    vi.stubEnv("RESEND_API_KEY", "re_test_admin_recruitment_emails");
+    memory = createMemoryPg([cvApplications, cvCandidateCertifications, cvCandidateLanguages, recruitmentAuditLogs, recruitmentCampaigns, recruitmentCampaignRecipients, recruitmentFollowUpTasks]);
+    state.memory = memory;
+    state.sendEmail.mockReset();
+    state.sendEmail.mockResolvedValue({ data: { id: "email-admin" }, error: null });
+  });
+
+  it("envoie aux candidats du pays visé quelle que soit la casse saisie, comme le vivier et les candidatures le filtrent", async () => {
+    memory.seed(cvApplications, [["Suisse", "geneve"], ["Émirats arabes unis", "dubai"], ["Canada", "montreal"]].map(([country, city], index) => ({
+      tracking_id: `CVCOUNTRY${index}`, first_name: "Zoë", last_name: "Nom", email: `${city}@test.local`, specialty: "Anesthésie", target_countries: JSON.stringify([country]),
+      cv_file_key: `recruitment/cv/c${index}.pdf`, cv_original_name: "cv.pdf", cv_mime_type: "application/pdf", cv_size_bytes: 1000, marketing_consent: 1,
+    })));
+    const send = (country: string) => admin().admin.recruitment.campaigns.send({ title: "Mission", subject: "Offre", body: "Une mission, répondez par email.", language: "fr", mode: "filtered", country, confirmed: true });
+    await expect(send("suisse")).resolves.toMatchObject({ total: 1, sent: 1 });
+    await expect(send("ÉMIRATS")).resolves.toMatchObject({ total: 1, sent: 1 });
+    expect(sentPayloads().map(payload => payload.to[0])).toEqual(["geneve@test.local", "dubai@test.local"]);
+  });
+});
