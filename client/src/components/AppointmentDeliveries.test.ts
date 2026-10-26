@@ -372,10 +372,10 @@ describe("EXPL-02 — encart « À traiter » du tableau de bord", () => {
       },
     };
     const html = renderToStaticMarkup(createElement(AdminAttentionPanel, { onOpenAppointments: vi.fn() }));
-    expect(html).toContain("Notification médecin : c’est votre adresse de notification qui est refusée ; vérifiez-la dans les réglages du site (variable OWNER_NOTIFICATION_EMAIL), puis « Renvoyer » sur le rendez-vous.");
+    expect(html).toContain("Notification médecin : c’est votre adresse de notification qui est refusée ; corrigez la variable OWNER_NOTIFICATION_EMAIL dans Vercel et redéployez le site, puis « Renvoyer » sur le rendez-vous.");
     expect(html).not.toContain("Corriger l’email du patient");
 
-    expect(refusedDetail({ jobTypes: ["owner", "confirmation", "invoice"] })).toBe("Confirmation, Facture : vérifiez l’adresse du patient et prévenez-le directement ; sur le rendez-vous, « Corriger l’email du patient », puis « Renvoyer » l’envoie à la nouvelle adresse. Notification médecin : c’est votre adresse de notification qui est refusée ; vérifiez-la dans les réglages du site (variable OWNER_NOTIFICATION_EMAIL), puis « Renvoyer » sur le rendez-vous.");
+    expect(refusedDetail({ jobTypes: ["owner", "confirmation", "invoice"] })).toBe("Confirmation, Facture : vérifiez l’adresse du patient et prévenez-le directement ; sur le rendez-vous, « Corriger l’email du patient », puis « Renvoyer » l’envoie à la nouvelle adresse. Notification médecin : c’est votre adresse de notification qui est refusée ; corrigez la variable OWNER_NOTIFICATION_EMAIL dans Vercel et redéployez le site, puis « Renvoyer » sur le rendez-vous.");
     expect(refusedDetail({ jobTypes: ["refund"] })).toBe("Email de remboursement : vérifiez l’adresse du patient et prévenez-le directement ; sur le rendez-vous, « Corriger l’email du patient », puis « Renvoyer » l’envoie à la nouvelle adresse.");
   });
 

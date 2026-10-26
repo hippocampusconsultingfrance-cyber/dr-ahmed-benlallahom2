@@ -14,7 +14,7 @@ import {
 import { notifyOwner } from "./_core/notification";
 import { runWithSendSlot } from "./_core/resendDelivery";
 import { emailLanguageFor } from "./emailLanguage";
-import { generateInvoicePDF, type InvoiceData } from "./invoice";
+import { generateInvoicePDF, renderInvoicePDF, type InvoiceData } from "./invoice";
 import { allocateAppointmentInvoice, findAppointmentInvoices, type AppointmentInvoiceRecord } from "./invoiceNumbering";
 import { deadlineCutShort, runWithProcessingDeadline } from "./processingDeadline";
 import { hasErasedPatientData } from "./personalDataRetention";
@@ -870,8 +870,10 @@ export async function listAppointmentDeliveriesToHandle(limit = 20, now = new Da
  * appointment, the copy stored at its issue, identical to the PDF emailed to
  * the patient even after the address was corrected; when none was stored
  * yet, built from its recorded number and dates and the appointment's current
- * data, then stored once (generateInvoicePDF). Never allocates a number: null
- * when no invoice was issued yet.
+ * data, then stored once (generateInvoicePDF). On a booking reduced to its
+ * accounting record (RGPD-12), rebuilt without the identity, the stored copy
+ * neither read nor written, as the GDPR procedure states. Never allocates a
+ * number: null when no invoice was issued yet.
  */
 export async function regenerateAppointmentInvoice(trackingId: string): Promise<{ invoiceNumber: string; buffer: Buffer } | null> {
   const db = await getDb();
@@ -880,5 +882,7 @@ export async function regenerateAppointmentInvoice(trackingId: string): Promise<
   if (!appointment) return null;
   const invoiceRecord = (await findAppointmentInvoices([appointment.id])).get(appointment.id);
   if (!invoiceRecord) return null;
-  return { invoiceNumber: invoiceRecord.invoiceNumber, buffer: (await generateInvoicePDF(appointmentInvoiceData(appointment, invoiceRecord))).buffer };
+  const data = appointmentInvoiceData(appointment, invoiceRecord);
+  if (hasErasedPatientData(appointment)) return { invoiceNumber: invoiceRecord.invoiceNumber, buffer: await renderInvoicePDF(data) };
+  return { invoiceNumber: invoiceRecord.invoiceNumber, buffer: (await generateInvoicePDF(data)).buffer };
 }

@@ -1,3 +1,4 @@
+import { eq } from "drizzle-orm";
 import { PgDialect } from "drizzle-orm/pg-core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { appointmentFulfillmentJobs, appointmentInvoices, appointments, securityEvents } from "../drizzle/schema";
@@ -68,6 +69,7 @@ vi.mock("./_core/notifications", async importOriginal => {
 import { appRouter } from "./routers";
 import { APPOINTMENT_INVOICE_SCHEMA_OBJECTS } from "./invoiceNumbering";
 import { APPOINTMENT_FULFILLMENT_MAX_ATTEMPTS, enqueueAppointmentFulfillment, processAppointmentFulfillmentNow } from "./appointmentFulfillment";
+import { anonymisedAppointmentFields } from "./personalDataRetention";
 
 const dialect = new PgDialect();
 let memory: MemoryPg;
@@ -318,16 +320,21 @@ describe("EXPL-02 — « Télécharger la facture »", () => {
     expect(blobStore.objects.get("invoices/FAC-2026-000043-APTINVOICE03.pdf")!.equals(emailed.pdf!)).toBe(true);
   });
 
-  /** Lines printed under « Facturé à : » (name, email, phone), as pdf.js reads them. */
-  async function billedTo(pdf: Buffer) {
+  /** Lines of the PDF, as pdf.js reads them. */
+  async function pdfLines(pdf: Buffer) {
     const { PDFParse } = await import("pdf-parse");
     const parser = new PDFParse({ data: pdf });
     try {
-      const lines = (await parser.getText()).text.split("\n").map(line => line.trim()).filter(Boolean);
-      return lines.slice(lines.indexOf("Facturé à :") + 1, lines.indexOf("Facturé à :") + 4);
+      return (await parser.getText()).text.split("\n").map(line => line.trim()).filter(Boolean);
     } finally {
       await parser.destroy();
     }
+  }
+
+  /** Lines printed under « Facturé à : » (name, email, phone). */
+  async function billedTo(pdf: Buffer) {
+    const lines = await pdfLines(pdf);
+    return lines.slice(lines.indexOf("Facturé à :") + 1, lines.indexOf("Facturé à :") + 4);
   }
 
   it("facture refusée puis adresse corrigée : l’email envoyé après correction et le téléchargement sont la facture émise, octet pour octet, à l’adresse d’origine", async () => {
@@ -408,6 +415,28 @@ describe("EXPL-02 — « Télécharger la facture »", () => {
     expect(state.sent).toEqual([]);
     expect(job(paid.id, "invoice")).toMatchObject({ status: "retry", attempts: 1 });
     expect(blobStore.uploads).toHaveLength(1);
+  });
+
+  it("rendez-vous effacé (RGPD) : le téléchargement reconstruit la facture sans l’identité, sans lire ni remplacer la copie archivée", async () => {
+    const paid = seedAppointment("APTINVFIX005");
+    seedInvoice(paid.id, 55);
+    // Issued and stored before the erasure, with the patient's identity.
+    await admin().appointments.invoicePdf({ trackingId: "APTINVFIX005" });
+    const issued = blobStore.objects.get("invoices/FAC-2026-000055-APTINVFIX005.pdf")!;
+    expect(await billedTo(issued)).toEqual(["Patient Test", "aptinvfix005@example.test", "+33600000000"]);
+
+    // Reduced to its accounting record, as an erasure leaves it.
+    await memory.db.update(appointments).set(anonymisedAppointmentFields()).where(eq(appointments.trackingId, "APTINVFIX005"));
+    const download = await admin().appointments.invoicePdf({ trackingId: "APTINVFIX005" });
+
+    expect(download.invoiceNumber).toBe("FAC-2026-000055");
+    const lines = await pdfLines(Buffer.from(download.contentBase64, "base64"));
+    expect(lines[lines.indexOf("Facturé à :") + 1]).toBe("Anonymisé");
+    expect(lines.join("\n")).not.toMatch(/Patient Test|aptinvfix005@example\.test|\+33600000000/);
+    // The stored copy, kept for the accounting, is neither read nor replaced.
+    expect(blobStore.reads).toEqual([]);
+    expect(blobStore.uploads).toHaveLength(1);
+    expect(blobStore.objects.get("invoices/FAC-2026-000055-APTINVFIX005.pdf")!.equals(issued)).toBe(true);
   });
 
   it("n’attribue jamais de numéro : sans facture émise, rien n’est créé", async () => {

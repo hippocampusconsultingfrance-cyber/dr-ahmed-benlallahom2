@@ -15,7 +15,8 @@ export function retryingDetail(item: { jobTypes: string[]; nextAttemptAt: string
 /**
  * What to do about a refused email, by recipient (EXPL-02): the patient's
  * address is corrected on the appointment; the doctor notification goes to the
- * site's own notification address, which no button of the appointment changes.
+ * site's own notification address, which no button of the appointment changes:
+ * a Vercel variable, read when the site starts, so only a redeployment applies it.
  */
 export function refusedDetail(item: { jobTypes: string[] }): string {
   const isPatientJob = (jobType: string) => PATIENT_JOBS.includes(jobType as AppointmentDeliveryJob);
@@ -23,7 +24,7 @@ export function refusedDetail(item: { jobTypes: string[] }): string {
   const ownerJobs = item.jobTypes.filter(jobType => !isPatientJob(jobType));
   return [
     patientJobs.length > 0 ? `${jobLabels(patientJobs)} : vérifiez l’adresse du patient et prévenez-le directement ; sur le rendez-vous, « Corriger l’email du patient », puis « Renvoyer » l’envoie à la nouvelle adresse.` : "",
-    ownerJobs.length > 0 ? `${jobLabels(ownerJobs)} : c’est votre adresse de notification qui est refusée ; vérifiez-la dans les réglages du site (variable OWNER_NOTIFICATION_EMAIL), puis « Renvoyer » sur le rendez-vous.` : "",
+    ownerJobs.length > 0 ? `${jobLabels(ownerJobs)} : c’est votre adresse de notification qui est refusée ; corrigez la variable OWNER_NOTIFICATION_EMAIL dans Vercel et redéployez le site, puis « Renvoyer » sur le rendez-vous.` : "",
   ].filter(Boolean).join(" ");
 }
 
