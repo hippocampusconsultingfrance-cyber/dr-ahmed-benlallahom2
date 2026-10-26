@@ -57,6 +57,9 @@ describe("ADM-02 — termes de recherche", () => {
     expect(adminSearchPatterns("  Hélène   DUPONT hélène ")).toEqual(["%Helene%", "%DUPONT%", "%helene%"]);
     expect(adminSearchPatterns("50%_off a\\b")).toEqual(["%50\\%\\_off%", "%a\\\\b%"]);
     expect(adminSearchPatterns("Łukasz Søren")).toEqual(["%Łukasz%", "%Søren%"]);
+    // Typed decomposed, or a lone accent: compared without it.
+    expect(adminSearchPatterns("Hélène".normalize("NFD"))).toEqual(["%Helene%"]);
+    expect(adminSearchPatterns("q\u0303 \u0301")).toEqual(["%q%"]);
     expect(adminSearchPatterns("   ")).toEqual([]);
     expect(adminSearchPatterns(undefined)).toEqual([]);
   });
@@ -80,6 +83,14 @@ describe("ADM-02 — Candidatures", () => {
     // A letter without accented form is compared as typed.
     expect(lastNames((await list({ search: "søren" })).items)).toEqual(["Dupond"]);
     expect(lastNames((await list({ search: "dupon" })).items)).toEqual(["DUPONT", "Dupond"]);
+  });
+
+  it("retrouve un nom enregistré décomposé (accents combinants, collé depuis un PDF)", async () => {
+    seedCandidate(6, "Hélène".normalize("NFD"), "Moreau");
+    const list = caller().admin.recruitment.list;
+    expect(lastNames((await list({ search: "helene" })).items)).toEqual(["DUPONT", "Moreau"]);
+    expect(lastNames((await list({ search: "Hélène moreau" })).items)).toEqual(["Moreau"]);
+    expect(lastNames((await list({ search: "Hélène moreau".normalize("NFD") })).items)).toEqual(["Moreau"]);
   });
 
   it("retrouve un dossier par email ou par référence, et prend % et _ au pied de la lettre", async () => {
