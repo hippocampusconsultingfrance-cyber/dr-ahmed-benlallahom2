@@ -53,4 +53,14 @@ describe("vérification Turnstile côté serveur, dans tous les environnements",
     cloudflareAnswers({ success: false, "error-codes": ["internal-error"] });
     await expect(verifyCandidateTurnstile({ token: "token-from-the-widget" })).rejects.toThrow("candidate_turnstile_unavailable");
   });
+
+  it("ne tient pas pour refusé un jeton que Cloudflare n’a pas jugé à cause du serveur (secret erroné ou absent, requête mal formée)", async () => {
+    for (const code of ["invalid-input-secret", "missing-input-secret", "bad-request"]) {
+      cloudflareAnswers({ success: false, "error-codes": [code] });
+      await expect(verifyCandidateTurnstile({ token: "token-from-the-widget" })).rejects.toThrow("candidate_turnstile_unavailable");
+    }
+    // Un jeton expiré ou déjà utilisé, lui, est bien refusé : le patient refait la vérification.
+    cloudflareAnswers({ success: false, "error-codes": ["timeout-or-duplicate"] });
+    await expect(verifyCandidateTurnstile({ token: "token-from-the-widget" })).rejects.toThrow("candidate_turnstile_invalid");
+  });
 });
