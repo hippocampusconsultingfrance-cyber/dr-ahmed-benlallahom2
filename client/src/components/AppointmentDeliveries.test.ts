@@ -40,7 +40,7 @@ vi.mock("@/lib/trpc", () => ({
   },
 }));
 
-const { default: AppointmentDeliveries, canCorrectPatientEmail, canRetryDeliveries, deliveryLabel, refundEmailWarning } = await import("./AppointmentDeliveries");
+const { default: AppointmentDeliveries, canCorrectPatientEmail, canRetryDeliveries, deliveryLabel, refundEmailWarning, retryOutcome } = await import("./AppointmentDeliveries");
 const { default: AdminAttentionPanel, retryingDetail, waitingDetail } = await import("./AdminAttentionPanel");
 
 type Delivery = Parameters<typeof deliveryLabel>[0];
@@ -176,6 +176,26 @@ describe("EXPL-02 — envois après paiement sur la fiche du rendez-vous", () =>
     expect(tone).toBe("warning");
     expect(message).toContain("Le service d’envoi refuse de nouveau l’email");
     expect(message).toContain("aucun nouvel essai automatique n’aura lieu");
+  });
+
+  it("accorde l’état au libellé : « Email de remboursement » au masculin, les autres au féminin", () => {
+    expect(deliveryLabel(delivery("refund", "sent"))).toBe("Email de remboursement : envoyé");
+    expect(deliveryLabel(delivery("refund", "refused", 1, 7))).toBe("Email de remboursement : refusé par le service d’envoi, sans nouvel essai automatique");
+    expect(deliveryLabel(delivery("refund", "not_sent"))).toBe("Email de remboursement : non envoyé");
+    expect(deliveryLabel(delivery("refund", "retrying", 1, 7))).toBe("Email de remboursement : en échec, nouvel essai prévu (1/7)");
+    for (const [jobType, label] of [["confirmation", "Confirmation"], ["invoice", "Facture"], ["owner", "Notification médecin"], ["refund_owner", "Alerte remboursement"]] as const) {
+      expect(deliveryLabel(delivery(jobType, "sent"))).toBe(`${label} : envoyée`);
+      expect(deliveryLabel(delivery(jobType, "refused"))).toBe(`${label} : refusée par le service d’envoi, sans nouvel essai automatique`);
+    }
+    const html = renderToStaticMarkup(createElement(AppointmentDeliveries, { trackingId: "APTUI0000010", paymentStatus: "refunded", invoiceNumber: null, deliveries: [delivery("refund", "sent"), delivery("refund_owner", "sent")] }));
+    expect(html).toContain("Email de remboursement : envoyé<");
+    expect(html).toContain("Alerte remboursement : envoyée<");
+
+    // The toast after « Renvoyer » agrees too.
+    expect(retryOutcome({ requeuedJobTypes: ["refund", "refund_owner"], deliveries: [delivery("refund", "sent"), { ...delivery("refund_owner", "not_sent"), notSentReason: "not_paid" }] }).message)
+      .toBe("Envoyés : Email de remboursement. Alerte remboursement non envoyée : le rendez-vous n’est plus payé.");
+    expect(retryOutcome({ requeuedJobTypes: ["refund", "refund_owner"], deliveries: [{ ...delivery("refund", "not_sent"), notSentReason: "not_paid" }, delivery("refund_owner", "sent")] }).message)
+      .toBe("Envoyées : Alerte remboursement. Email de remboursement non envoyé : le rendez-vous n’est plus payé.");
   });
 
   it("propose de corriger l’adresse du patient après un refus, puis « Renvoyer » l’utilise (EXPL-02)", async () => {

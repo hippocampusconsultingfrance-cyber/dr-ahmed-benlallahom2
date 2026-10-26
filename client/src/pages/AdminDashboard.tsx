@@ -29,8 +29,7 @@ import PublicContentSkeleton from "@/components/PublicContentSkeleton";
 import { getActiveAdminTabLabel } from "./adminDashboardMobileTabs";
 import { buildAppointmentsAgenda } from "./appointmentsAgenda";
 import { getAppointmentAdminActions } from "./appointmentAdminActions";
-
-const REFUND_AMOUNT_FORMAT = new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR" });
+import { formatAdminAmount } from "@/components/adminAmount";
 
 type Tab = "overview" | "appointments" | "contacts" | "gdpr" | "testimonials" | "availability" | "recruitment" | "candidateDocuments" | "security" | "vivier" | "mailing" | "employerBriefs" | "medicalQuestions";
 
@@ -203,7 +202,7 @@ export default function AdminDashboard() {
   );
 }
 
-function OverviewTab({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
+export function OverviewTab({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
   const { data: stats, isLoading, error } = trpc.admin.stats.useQuery();
 
   if (error) {
@@ -218,7 +217,7 @@ function OverviewTab({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
     { label: "Réservations", value: stats?.appointments || 0, icon: Calendar, color: "text-cyan-400" },
     { label: "Messages", value: stats?.contacts || 0, icon: MessageSquare, color: "text-green-400" },
     { label: "Demandes RGPD", value: stats?.gdpr || 0, icon: Shield, color: "text-yellow-400" },
-    { label: "Revenus", value: `${stats?.revenue || 0}€`, icon: DollarSign, color: "text-emerald-400" },
+    { label: "Revenus", value: formatAdminAmount(stats?.revenue), icon: DollarSign, color: "text-emerald-400" },
   ];
 
   return (
@@ -299,7 +298,7 @@ export function AppointmentsTab() {
   });
   const notifyRefundResult = ({ refundAmount, patientNotified, patientEmail }: { refundAmount: string; patientNotified: boolean; patientEmail?: AppointmentDeliveryState | null }) => {
     // « 100,00 € », as in the emails.
-    toast.success(`Remboursement confirmé : ${REFUND_AMOUNT_FORMAT.format(Number(refundAmount))}`);
+    toast.success(`Remboursement confirmé : ${formatAdminAmount(refundAmount)}`);
     // Its patient email goes through the refund queue (EXPL-02): refused, or waiting for its next automatic attempt.
     if (!patientNotified) toast.warning(refundEmailWarning(patientEmail), { duration: 10_000 });
     utils.admin.appointments.list.invalidate();
@@ -425,7 +424,7 @@ export function AppointmentsTab() {
                   <span className="break-all">{apt.customerEmail}</span>
                   <span>{apt.customerPhone}</span>
                   <span>{new Date(apt.appointmentDate).toLocaleString("fr-FR", { timeZone: "Europe/Paris" })}</span>
-                  <span className="font-semibold text-foreground">{apt.finalPrice}€</span>
+                  <span className="font-semibold text-foreground">{formatAdminAmount(apt.finalPrice)}</span>
                   {/* Langue de la page de réservation : emails patients en anglais sauf pour FR (EN-01). */}
                   <span title="Langue de la réservation et des emails au patient">Langue : {(apt.language || "fr").toUpperCase()}</span>
                 </div>
@@ -474,14 +473,14 @@ export function AppointmentsTab() {
                       )}
                       {actions.canPractitionerCancel && (
                         <Button size="sm" variant="outline" className={buttonClass} disabled={refundAppointment.isPending}
-                          onClick={() => askRefund(apt.trackingId, "practitioner", `Annuler ${apt.trackingId} et rembourser intégralement ${apt.finalPrice} € au patient.\nMotif communiqué au patient (obligatoire) :`)}>
+                          onClick={() => askRefund(apt.trackingId, "practitioner", `Annuler ${apt.trackingId} et rembourser intégralement ${formatAdminAmount(apt.finalPrice)} au patient.\nMotif communiqué au patient (obligatoire) :`)}>
                           <XCircle className="w-3 h-3 mr-1" />
                           Annuler (praticien) et rembourser
                         </Button>
                       )}
                       {actions.canPatientRefund && (
                         <Button size="sm" variant="outline" className={buttonClass} disabled={refundAppointment.isPending}
-                          onClick={() => askRefund(apt.trackingId, "patient", `Annulation demandée par le patient (plus de 24 h avant) : remboursement de ${apt.finalPrice} €.\nMotif (obligatoire) :`)}>
+                          onClick={() => askRefund(apt.trackingId, "patient", `Annulation demandée par le patient (plus de 24 h avant) : remboursement de ${formatAdminAmount(apt.finalPrice)}.\nMotif (obligatoire) :`)}>
                           <DollarSign className="w-3 h-3 mr-1" />
                           Annulation patient (remboursement)
                         </Button>

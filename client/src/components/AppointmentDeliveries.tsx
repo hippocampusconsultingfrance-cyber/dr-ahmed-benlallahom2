@@ -33,6 +33,14 @@ const RETRYABLE_JOBS: Record<string, AppointmentDeliveryJob[]> = {
 /** Emails written to the patient's address, which the dashboard can correct after a refusal (EXPL-02). */
 const PATIENT_EMAIL_JOBS: AppointmentDeliveryJob[] = ["confirmation", "invoice", "refund"];
 
+/** « Email de remboursement » is masculine; the other labels are feminine. */
+const MASCULINE_JOBS: AppointmentDeliveryJob[] = ["refund"];
+
+/** A participle agreeing with the labels it follows: masculine as soon as one of them is. */
+function agree(jobTypes: AppointmentDeliveryJob[], feminine: string, masculine: string) {
+  return jobTypes.some(jobType => MASCULINE_JOBS.includes(jobType)) ? masculine : feminine;
+}
+
 const DELIVERY_STATE_LABELS: Record<AppointmentDeliveryState, string> = {
   sent: "envoyée",
   failed: "en échec",
@@ -44,6 +52,17 @@ const DELIVERY_STATE_LABELS: Record<AppointmentDeliveryState, string> = {
   interrupted: "envoi interrompu",
   not_sent: "non envoyée",
 };
+
+/** The labels above that agree with a masculine job label. */
+const MASCULINE_STATE_LABELS: Partial<Record<AppointmentDeliveryState, string>> = {
+  sent: "envoyé",
+  refused: "refusé par le service d’envoi, sans nouvel essai automatique",
+  not_sent: "non envoyé",
+};
+
+function stateLabel(delivery: AppointmentDeliveryView) {
+  return agree([delivery.jobType], DELIVERY_STATE_LABELS[delivery.state], MASCULINE_STATE_LABELS[delivery.state] ?? DELIVERY_STATE_LABELS[delivery.state]);
+}
 
 const DELIVERY_STATE_TONES: Record<AppointmentDeliveryState, string> = {
   sent: "bg-green-500/20 text-green-400",
@@ -61,10 +80,10 @@ const NOT_SENT_REASONS: Record<AppointmentDeliveryNotSentReason, string> = {
   not_paid: "le rendez-vous n’est plus payé",
 };
 
-/** « Facture : en échec (6/6) », « Confirmation : envoyée »… */
+/** « Facture : en échec (6/6) », « Confirmation : envoyée », « Email de remboursement : envoyé »… */
 export function deliveryLabel(delivery: AppointmentDeliveryView): string {
   const attempts = delivery.state === "failed" || delivery.state === "retrying" ? ` (${delivery.attempts}/${delivery.maxAttempts})` : "";
-  return `${DELIVERY_JOB_LABELS[delivery.jobType]} : ${DELIVERY_STATE_LABELS[delivery.state]}${attempts}`;
+  return `${DELIVERY_JOB_LABELS[delivery.jobType]} : ${stateLabel(delivery)}${attempts}`;
 }
 
 /**
@@ -108,9 +127,9 @@ export function retryOutcome(result: { requeuedJobTypes: AppointmentDeliveryJob[
   const ordered = inReadingOrder(deliveries);
   const skipped = ordered.filter(delivery => delivery.state === "not_sent");
   if (skipped.length === 0) return { tone: "success", message: "Envois relancés et effectués." };
-  const sent = ordered.filter(delivery => delivery.state === "sent").map(delivery => DELIVERY_JOB_LABELS[delivery.jobType]);
-  const notSent = skipped.map(delivery => `${DELIVERY_JOB_LABELS[delivery.jobType]} non envoyée${delivery.notSentReason ? ` : ${NOT_SENT_REASONS[delivery.notSentReason]}` : ""}.`);
-  return { tone: "info", message: [sent.length > 0 ? `Envoyées : ${sent.join(", ")}.` : "Rien n’a été envoyé.", ...notSent].join(" ") };
+  const sent = ordered.filter(delivery => delivery.state === "sent").map(delivery => delivery.jobType);
+  const notSent = skipped.map(delivery => `${DELIVERY_JOB_LABELS[delivery.jobType]} ${agree([delivery.jobType], "non envoyée", "non envoyé")}${delivery.notSentReason ? ` : ${NOT_SENT_REASONS[delivery.notSentReason]}` : ""}.`);
+  return { tone: "info", message: [sent.length > 0 ? `${agree(sent, "Envoyées", "Envoyés")} : ${sent.map(jobType => DELIVERY_JOB_LABELS[jobType]).join(", ")}.` : "Rien n’a été envoyé.", ...notSent].join(" ") };
 }
 
 /**

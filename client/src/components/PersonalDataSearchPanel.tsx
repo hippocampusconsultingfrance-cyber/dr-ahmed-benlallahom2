@@ -10,6 +10,7 @@ import { AdminErrorState } from "@/components/AdminStatePanel";
 import PublicContentSkeleton from "@/components/PublicContentSkeleton";
 import { downloadJsonFile } from "./jsonFileDownload";
 import { GDPR_REQUEST_STATUS_LABELS, GDPR_REQUEST_TYPE_LABELS } from "./gdprRequestAdmin";
+import { formatAdminAmount } from "./adminAmount";
 
 export type PersonalData = inferRouterOutputs<AppRouter>["admin"]["personalData"]["find"];
 type ErasureReport = inferRouterOutputs<AppRouter>["admin"]["personalData"]["erase"];
@@ -93,7 +94,7 @@ export function PersonalDataResult({ data, onChanged }: { data: PersonalData; on
           {data.gdprRequests.map(request => <li key={request.id}><span className="font-mono text-xs">{request.trackingId}</span> · {formatDate(request.createdAt)} · {GDPR_REQUEST_TYPE_LABELS[request.requestType] ?? request.requestType} · {GDPR_REQUEST_STATUS_LABELS[request.status] ?? request.status}</li>)}
         </Group>
         <Group title="Rendez-vous" count={data.appointments.length}>
-          {data.appointments.map(booking => <li key={booking.id}><span className="font-mono text-xs">{booking.trackingId}</span> · {formatDate(booking.appointmentDate)} · {APPOINTMENT_STATUS_LABELS[booking.appointmentStatus] ?? booking.appointmentStatus} · {PAYMENT_STATUS_LABELS[booking.paymentStatus] ?? booking.paymentStatus} · {booking.finalPrice} €{booking.invoiceNumber ? ` · facture ${booking.invoiceNumber}` : ""}</li>)}
+          {data.appointments.map(booking => <li key={booking.id}><span className="font-mono text-xs">{booking.trackingId}</span> · {formatDate(booking.appointmentDate)} · {APPOINTMENT_STATUS_LABELS[booking.appointmentStatus] ?? booking.appointmentStatus} · {PAYMENT_STATUS_LABELS[booking.paymentStatus] ?? booking.paymentStatus} · {formatAdminAmount(booking.finalPrice)}{booking.invoiceNumber ? ` · facture ${booking.invoiceNumber}` : ""}</li>)}
         </Group>
       </div>
 
