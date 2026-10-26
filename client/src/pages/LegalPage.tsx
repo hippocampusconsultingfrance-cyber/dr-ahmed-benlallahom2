@@ -553,7 +553,7 @@ function LegalPageEn() {
                   </ul>
 
                   <h3 className="font-semibold text-foreground mt-4">11. Right to lodge a complaint</h3>
-                  <p>If you believe your GDPR rights are not being respected, you have the right to lodge a complaint with the competent supervisory authority.</p>
+                  <p>If you believe your GDPR rights are not being respected, you have the right to lodge a complaint with the CNIL (Commission Nationale de l'Informatique et des Libertés), the French supervisory authority.</p>
                 </div>
               </section>
             )}

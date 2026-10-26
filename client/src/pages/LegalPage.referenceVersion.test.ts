@@ -62,6 +62,7 @@ describe("RGPD-01 — version de référence des traductions de la politique de 
       "10. Record of processing activities",
       "<strong>Processing 6 - Free medical questions:</strong>",
       "any writing assistance receives only an administrator’s draft without contact details",
+      "the right to lodge a complaint with the CNIL (Commission Nationale de l&#x27;Informatique et des Libertés), the French supervisory authority.",
     ]) expect(html).toContain(text);
   });
 
