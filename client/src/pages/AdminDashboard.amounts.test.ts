@@ -116,6 +116,9 @@ describe("montants au format français dans l’administration", () => {
       gdprRequests: [],
       appointments: [{ id: 4, trackingId: "APTAMOUNT004", appointmentDate: new Date(2026, 8, 10), finalPrice: "100.00", paymentStatus: "completed", appointmentStatus: "completed", invoiceNumber: null }],
       recruitment: { applications: [], candidateAccountWithoutApplication: false },
+      // Totals per table and rows an erasure would touch (RGPD-12).
+      totals: { contactMessages: 0, medicalQuestions: 0, gdprRequests: 0, appointments: 1, recruitmentApplications: 0 },
+      erasableRows: 1,
     };
     const html = shown(renderToStaticMarkup(createElement(PersonalDataResult, { data: data as never, onChanged: vi.fn() })));
     expect(html).toContain("· 100,00 €");
