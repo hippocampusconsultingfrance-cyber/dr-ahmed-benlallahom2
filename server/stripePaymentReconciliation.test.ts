@@ -181,6 +181,17 @@ async function runHoldCleanup() {
   return { status: response.status, body: await response.json() as Record<string, unknown> };
 }
 
+/** Calendar day of the appointment in Paris, as the booking page asks for it. */
+const parisDay = (date: Date) => new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Paris" }).format(date);
+
+function bookedSlots(date: Date) {
+  return appRouter.createCaller({
+    user: null,
+    req: { protocol: "https", headers: {}, ip: "192.0.2.10" } as unknown as TrpcContext["req"],
+    res: { clearCookie: vi.fn() } as unknown as TrpcContext["res"],
+  }).availability.getBookedSlots({ date: parisDay(date) });
+}
+
 function expectPostPaymentEmailsSentOnce() {
   expect(emails.sendOwnerNotificationEmail).toHaveBeenCalledTimes(1);
   expect(emails.sendConfirmationEmail).toHaveBeenCalledTimes(1);
@@ -286,11 +297,29 @@ describe("EXPL-01 — un paiement reçu est confirmé même sans webhook", () =>
 
     expect((await runHoldCleanup()).body).toMatchObject({ released: 0, confirmed: 0, kept: 1 });
     expect(appointmentRow()).toMatchObject({ paymentStatus: "pending", appointmentStatus: "held", slotKey: seeded.slotKey });
+    // Gardé, son maintien pourtant expiré : le créneau reste affiché pris, comme l’index unique le tient.
+    await expect(bookedSlots(seeded.appointmentDate as Date)).resolves.toEqual([seeded.appointmentDate]);
 
     state.stripe.reachable = true;
     expect((await runHoldCleanup()).body).toMatchObject({ released: 1, confirmed: 0, kept: 0 });
     expect(appointmentRow()).toMatchObject({ paymentStatus: "pending", appointmentStatus: "cancelled", slotKey: null, holdExpiresAt: null });
+    await expect(bookedSlots(seeded.appointmentDate as Date)).resolves.toEqual([]);
     expect(emails.sendConfirmationEmail).not.toHaveBeenCalled();
+  });
+
+  it("affiche pris un créneau retenu, confirmé ou payé, et libre un créneau libéré, annulé ou remboursé", async () => {
+    const day = new Date(Date.now() + 72 * HOUR);
+    const at = (minutes: number) => new Date(day.getTime() + minutes * 60_000);
+    const seed = (trackingId: string, minutes: number, overrides: Record<string, unknown>) => db().seed(appointments, { ...appointmentRow(), id: undefined, trackingId, appointmentDate: at(minutes), slotKey: at(minutes).toISOString(), ...overrides });
+    seedAppointment({ appointmentDate: at(0), slotKey: at(0).toISOString() });
+    seed("APTRECON00011", 30, { paymentStatus: "completed", appointmentStatus: "confirmed", holdExpiresAt: null });
+    seed("APTRECON00012", 60, { holdExpiresAt: new Date(Date.now() - 60_000) });
+    seed("APTRECON00013", 90, { appointmentStatus: "cancelled", slotKey: null, holdExpiresAt: null });
+    seed("APTRECON00014", 120, { paymentStatus: "refunded", appointmentStatus: "cancelled", slotKey: null, holdExpiresAt: null });
+    seed("APTRECON00015", 150, { paymentStatus: "pending", appointmentStatus: "held", slotKey: null, holdExpiresAt: new Date(Date.now() - 60_000) });
+
+    const taken = (await bookedSlots(day)).map(date => new Date(date).getTime()).sort();
+    expect(taken).toEqual([at(0), at(30), at(60)].map(date => date.getTime()));
   });
 
   it("ferme chez Stripe une session encore ouverte avant de libérer le créneau, et ne touche pas une réservation en cours", async () => {

@@ -35,6 +35,7 @@ import { googleDriveExportStatus } from "./googleDriveExport";
 import { buildCandidatePortalInvitationEmailEvent, candidatePortalAccountMatchesApplication, resolveCandidatePortalActivationDelivery, resolveCandidatePortalInvitationDelivery, resolveCvConfirmationDelivery, retryCvConfirmationEmail } from "./recruitmentEmailTrace";
 import { AI_ANALYSIS_BILLING_UNAVAILABLE_ERROR, MANUAL_REVIEW_FALLBACK_MODEL, RECRUITMENT_ANALYSIS_PROMPT_VERSION } from "./recruitmentAnalysis";
 import { medicalQuestionsRouter } from "./medicalQuestionsRouter";
+import { postgresErrorCode } from "./languageColumns";
 import { AdminMfaRateLimitError, issueAdminMfaChallenge, revokeCurrentAdminMfaSession, verifyAdminMfaChallenge } from "./adminMfa";
 import {
   BOOKING_INVALID_NAME_MESSAGE,
@@ -154,6 +155,40 @@ export const BOOKING_SECURITY_CHECK_MESSAGE = "Pour finaliser cette réservation
 /** Refus métier d’une réservation : message français et motif stable que la page traduit (EN-06). */
 function bookingRefusal(code: "BAD_REQUEST" | "CONFLICT" | "UNPROCESSABLE_CONTENT" | "TOO_MANY_REQUESTS" | "SERVICE_UNAVAILABLE" | "PRECONDITION_FAILED", reason: BookingRefusalReason, message: string) {
   return new TRPCError({ code, message, cause: new PublicErrorReason(reason) });
+}
+
+/** Index unique de slot_key : un seul rendez-vous retient un créneau à la fois. */
+const ACTIVE_SLOT_UNIQUE_INDEX = "appointments_active_slot_unique";
+
+/**
+ * Réservation simultanée du même créneau perdue sur son index unique (23505).
+ * drizzle-orm enveloppe l’erreur PostgreSQL dans une DrizzleQueryError
+ * (« Failed query: … ») : le code et le nom de la contrainte sont dans sa
+ * cause, jamais dans son propre texte.
+ */
+function isActiveSlotConflict(error: unknown): boolean {
+  if (postgresErrorCode(error) !== "23505") return false;
+  for (let current: unknown = error, depth = 0; current && typeof current === "object" && depth < 4; depth += 1) {
+    const { code, constraint, message } = current as { code?: unknown; constraint?: unknown; message?: unknown };
+    if (typeof code === "string") return constraint === ACTIVE_SLOT_UNIQUE_INDEX || (typeof message === "string" && message.includes(`"${ACTIVE_SLOT_UNIQUE_INDEX}"`));
+    current = (current as { cause?: unknown }).cause;
+  }
+  return false;
+}
+
+/**
+ * Rendez-vous qui occupent leur créneau, pour la disponibilité publique et le
+ * contrôle de chevauchement : réservation temporaire en cours, ou expirée mais
+ * pas encore libérée (elle garde son slot_key, que l’index unique protège : le
+ * nettoyage ne la libère qu’une fois Stripe sûr que sa session ne sera pas
+ * payée, EXPL-01), rendez-vous confirmé ou payé.
+ */
+function occupiesSlot() {
+  return or(
+    and(eq(appointments.paymentStatus, "pending"), eq(appointments.appointmentStatus, "held"), or(sql`${appointments.holdExpiresAt} > NOW()`, isNotNull(appointments.slotKey))),
+    and(eq(appointments.paymentStatus, "pending"), eq(appointments.appointmentStatus, "confirmed")),
+    and(eq(appointments.paymentStatus, "completed"), inArray(appointments.appointmentStatus, ["confirmed", "completed"])),
+  );
 }
 
 /** Refuse NUL and other control characters (PostgreSQL rejects NUL in text). */
@@ -841,11 +876,7 @@ export const appRouter = router({
               and(
                 sql`appointment_date < ${appointmentEnd}`,
                 sql`appointment_date + (duration * INTERVAL '1 minute') > ${date}`,
-                sql`(
-                  (payment_status = 'pending' AND appointment_status = 'held' AND hold_expires_at > NOW())
-                  OR (payment_status = 'pending' AND appointment_status = 'confirmed')
-                  OR (payment_status = 'completed' AND appointment_status IN ('confirmed', 'completed'))
-                )`
+                occupiesSlot(),
               )
             )
             .limit(1);
@@ -926,7 +957,7 @@ export const appRouter = router({
         } catch (dbError) {
           if (dbError instanceof TRPCError) throw dbError;
           console.error("Appointment creation failed:", dbError instanceof Error ? dbError.name : "UnknownError");
-          if (String(dbError).toLowerCase().includes("appointments_active_slot_unique") || String(dbError).toLowerCase().includes("duplicate")) {
+          if (isActiveSlotConflict(dbError)) {
             throw bookingRefusal("CONFLICT", "slot_taken", "Ce créneau vient d’être réservé par un autre patient. Veuillez en choisir un autre.");
           }
           // Jamais de requête SQL ni de message de fournisseur dans la réponse.
@@ -1186,11 +1217,7 @@ export const appRouter = router({
             and(
               gte(appointments.appointmentDate, start),
               lt(appointments.appointmentDate, end),
-              sql`(
-                (payment_status = 'pending' AND appointment_status = 'held' AND hold_expires_at > NOW())
-                OR (payment_status = 'pending' AND appointment_status = 'confirmed')
-                OR (payment_status = 'completed' AND appointment_status IN ('confirmed', 'completed'))
-              )`
+              occupiesSlot(),
             )
           );
 
