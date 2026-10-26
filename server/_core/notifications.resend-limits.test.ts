@@ -9,7 +9,7 @@ process.env.CANDIDATE_AUTH_PEPPER ||= TEST_PEPPER;
 const state = vi.hoisted(() => ({ db: null as unknown, send: vi.fn() }));
 vi.mock("resend", () => ({ Resend: vi.fn(() => ({ emails: { send: state.send } })) }));
 vi.mock("../db", () => ({ getDb: async () => state.db }));
-vi.mock("./notification", () => ({ notifyOwner: vi.fn(async () => true) }));
+vi.mock("./notification", async importOriginal => ({ ...await importOriginal<typeof import("./notification")>(), notifyOwner: vi.fn(async () => true) }));
 
 const {
   candidatePortalAccessEmailFailureCode,
@@ -19,6 +19,7 @@ const {
   sendCandidatePortalAccessEmail,
   sendConfirmationEmail,
   sendCvApplicationConfirmationEmail,
+  sendOwnerNotificationEmail,
 } = await import("./notifications");
 const { buildCvConfirmationEmailEvent } = await import("../recruitmentEmailTrace");
 const { runSecurityPostureReview } = await import("../scheduledJobs");
@@ -31,6 +32,7 @@ function db() { return state.db as InMemoryDrizzle; }
 const quotaEvents = () => db().rows(securityEvents).filter(event => event.category === "resend_quota_exceeded");
 
 const confirmation = () => sendConfirmationEmail("patient@example.test", "Patient Test", "APTLIMIT0001", new Date("2026-11-20T09:00:00Z"), 100, undefined, { idempotencyKey: "appointment-confirmation-APTLIMIT0001" });
+const ownerBooking = () => sendOwnerNotificationEmail("Patient Test", "patient@example.test", "+33600000000", "APTLIMIT0001", new Date("2026-11-20T09:00:00Z"), 100, { idempotencyKey: "appointment-owner-APTLIMIT0001" });
 const access = () => sendCandidatePortalAccessEmail({ to: "candidate@example.test", firstName: "Camille", kind: "verify", actionUrl: "https://drahmedbenlallahom.com/candidate/verify?token=t", idempotencyKey: "candidate-portal-activation-abc" });
 
 beforeEach(() => {
@@ -87,6 +89,35 @@ describe("limite de débit Resend (429 rate_limit_exceeded) : échec passager", 
     state.send.mockResolvedValue(rateLimited("0"));
     await expect(confirmation()).rejects.toMatchObject({ cause: expect.objectContaining({ failureCode: "rate_limited" }) });
     expect(state.send).toHaveBeenCalledTimes(2 * (postPaymentDeliveryRetry.delaysMs.length + 1));
+  });
+
+  it("la notification de réservation payée au propriétaire attend le délai retry-after avant de renvoyer, puis est délivrée", async () => {
+    vi.useFakeTimers();
+    state.send.mockResolvedValueOnce(rateLimited("2")).mockResolvedValueOnce(sent);
+
+    const delivery = ownerBooking();
+    await vi.advanceTimersByTimeAsync(1_999);
+    expect(state.send).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    await expect(delivery).resolves.toBeUndefined();
+
+    expect(state.send).toHaveBeenCalledTimes(2);
+    expect(state.send.mock.calls[1][0]).toMatchObject({ subject: "Nouvelle réservation payée : Patient Test - 100 €" });
+    expect(state.send.mock.calls.map(call => call[1])).toEqual([{ idempotencyKey: "appointment-owner-APTLIMIT0001" }, { idempotencyKey: "appointment-owner-APTLIMIT0001" }]);
+  });
+
+  it("la notification de réservation payée n’insiste pas avant un retry-after trop long, ni après un refus ou un quota : son job réessaiera", async () => {
+    state.send.mockResolvedValue(rateLimited("60"));
+    await expect(ownerBooking()).rejects.toThrow("owner_notification_failed");
+    expect(state.send).toHaveBeenCalledTimes(1);
+
+    for (const refusal of [quotaExceeded("daily_quota_exceeded"), { data: null, error: { name: "validation_error", statusCode: 422, message: "invalid recipient" }, headers: {} }]) {
+      state.send.mockReset();
+      state.send.mockResolvedValue(refusal);
+      await expect(ownerBooking()).rejects.toThrow("owner_notification_failed");
+      expect(state.send).toHaveBeenCalledTimes(1);
+    }
+    expect(quotaEvents().map(event => JSON.parse(String(event.metadata)))).toEqual([{ quota: "daily", emailKind: "post_payment" }]);
   });
 
   it("garde comme non envoyée une confirmation de candidature encore limitée, pour un nouvel essai planifié", async () => {

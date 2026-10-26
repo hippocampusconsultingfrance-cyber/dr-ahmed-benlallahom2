@@ -17,7 +17,7 @@ vi.mock("resend", () => ({
 }));
 
 const owner = vi.hoisted(() => ({ notifyOwner: vi.fn(async (_payload: { title: string; content: string }, _options?: unknown) => true) }));
-vi.mock("./_core/notification", () => owner);
+vi.mock("./_core/notification", async importOriginal => ({ ...await importOriginal<typeof import("./_core/notification")>(), ...owner }));
 
 import { siteConfig } from "../client/src/data/site-config";
 import { DEFAULT_TRANSACTIONAL_FROM, resolveConsultationContact } from "./consultationContact";
@@ -211,8 +211,9 @@ describe("emails patients dans la langue de la réservation (EN-01) et fichier a
 
   it("la notification au médecin indique la langue de la réservation", async () => {
     await sendOwnerNotificationEmail("John Smith", "patient@example.test", "+971500000000", "APTMAIL0002", NIGHT_APPOINTMENT, 150, { language: "en" });
-    expect(owner.notifyOwner.mock.calls.at(-1)![0].content).toContain("Langue : EN");
+    expect(String(last().text)).toContain("Langue : EN");
     await sendOwnerNotificationEmail("Patient Test", "patient@example.test", "+33600000000", "APTMAIL0001", NIGHT_APPOINTMENT, 100);
-    expect(owner.notifyOwner.mock.calls.at(-1)![0].content).toContain("Langue : FR");
+    expect(last().subject).toBe("Nouvelle réservation payée : Patient Test - 100 €");
+    expect(String(last().text)).toContain("Langue : FR");
   });
 });

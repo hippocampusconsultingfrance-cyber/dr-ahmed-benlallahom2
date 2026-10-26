@@ -1,9 +1,10 @@
 import { Resend } from "resend";
-import { notifyOwner } from "./notification";
+import { buildOwnerNotificationEmail } from "./notification";
 import { CANDIDATE_INVITATION_MAX_AGE_MS, CANDIDATE_TOKEN_MAX_AGE_MS, formatCandidateLinkValidity } from "../candidateAuth";
 import { PATIENT_CANCELLATION_POLICY, PATIENT_CANCELLATION_POLICY_EN, resolveConsultationContact, type ConsultationContact } from "../consultationContact";
 import { appointmentCalendarFilename, buildAppointmentCalendarEvent } from "../appointmentCalendar";
 import { withEmailLanguage, type EmailLanguage } from "../emailLanguage";
+import { reportResendQuotaError, resendDeliveryFailureCode, resendRetryAfterMs, sendWithRateLimitRetry, type ResendDeliveryFailureCode } from "./resendDelivery";
 import {
   buildResendApplicationTags,
   RESEND_APPLICATION_ACTIVATION_KIND,
@@ -64,70 +65,10 @@ const FROM_EMAIL = "Hippocampus Consulting <recrutement@drahmedbenlallahom.com>"
 const RECRUITMENT_REPLY_TO = "hippocampusconsultingfrance@gmail.com";
 const HIPPOCAMPUS_LOGO_URL = "https://drahmedbenlallahom.com/assets/abl-logo.svg";
 
-/**
- * Why Resend did not take an email (ABUS-03):
- * - delivery_exception: network, timeout, 5xx or concurrent idempotent request;
- *   the email may have left, so it is retried with its idempotency key;
- * - rate_limited: more requests per second than the plan allows (429
- *   rate_limit_exceeded); nothing left, a new attempt follows Resend's
- *   retry-after delay;
- * - quota: the daily or monthly quota of the plan is used up; nothing leaves
- *   until it resets, so no immediate retry, and a high-severity security event;
- * - provider_rejected: this very message is refused (address, content).
- */
-export type ResendDeliveryFailureCode = "provider_rejected" | "delivery_exception" | "rate_limited" | "quota";
-
-const RESEND_QUOTA_ERRORS = new Set(["daily_quota_exceeded", "monthly_quota_exceeded"]);
-
-function resendDeliveryFailureCode(error: { name?: string; statusCode?: number | null }): ResendDeliveryFailureCode {
-  const statusCode = typeof error.statusCode === "number" ? error.statusCode : null;
-  const providerErrorName = typeof error.name === "string" ? error.name : null;
-  if (providerErrorName && RESEND_QUOTA_ERRORS.has(providerErrorName)) return "quota";
-  if (providerErrorName === "rate_limit_exceeded" || statusCode === 429) return "rate_limited";
-  return statusCode === null
-    || statusCode === 408
-    || statusCode >= 500
-    || providerErrorName === "concurrent_idempotent_requests"
-    ? "delivery_exception"
-    : "provider_rejected";
-}
-
-/**
- * Delay before a new attempt after Resend's rate limit: its retry-after header
- * (seconds), 1 s without one. A request waits at most maxDelayMs; a longer
- * delay is left to the later retries. Mutable so tests can shorten it.
- */
-export const resendRateLimitRetry = { defaultDelayMs: 1_000, maxDelayMs: 5_000 };
-
-function resendRetryAfterMs(headers: Record<string, string> | null | undefined): number | null {
-  const header = headers?.["retry-after"];
-  const seconds = header === undefined ? Number.NaN : Number(header);
-  const delayMs = Number.isFinite(seconds) && seconds >= 0 ? seconds * 1000 : resendRateLimitRetry.defaultDelayMs;
-  return delayMs <= resendRateLimitRetry.maxDelayMs ? delayMs : null;
-}
-
-/**
- * An exhausted quota stops every email at once, the admin sign-in code and the
- * payment emails included: it is logged as a high-severity security event,
- * which the daily security review reports.
- */
-async function reportResendQuotaExhausted(error: { name?: string }, emailKind: string) {
-  try {
-    const { logSecurityEvent } = await import("../candidateSecurity");
-    await logSecurityEvent({ actorKind: "system", category: "resend_quota_exceeded", outcome: "failed", severity: "high", metadata: { quota: error.name === "monthly_quota_exceeded" ? "monthly" : "daily", emailKind } });
-  } catch (logError) {
-    console.error("resend_quota_report_failed", logError instanceof Error ? logError.name : "UnknownError");
-  }
-}
-
-/**
- * The owner's own notifications (contact, GDPR, alerts) go through notifyOwner,
- * which reports here a quota found in its Resend error: they are the first
- * emails a flood spends. Any other error is left alone.
- */
-export async function reportResendQuotaError(error: { name?: string }, emailKind: string) {
-  if (typeof error.name === "string" && RESEND_QUOTA_ERRORS.has(error.name)) await reportResendQuotaExhausted(error, emailKind);
-}
+// Shared with the owner notifications of notification.ts; still exported from
+// here for the callers of these emails.
+export { resendRateLimitRetry } from "./resendDelivery";
+export type { ResendDeliveryFailureCode };
 
 const wait = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
 
@@ -145,17 +86,10 @@ async function sendThroughResend(message: ResendSendPayload, options: ResendSend
   | { id: string | null; error: null; failureCode: null; retryLater: false }
   | { id: null; error: { message: string; name?: string; statusCode?: number | null }; failureCode: ResendDeliveryFailureCode; retryLater: boolean }
 > {
-  let response = await getResendClient().emails.send(message, options);
-  if (response.error && resendDeliveryFailureCode(response.error) === "rate_limited") {
-    const retryAfterMs = resendRetryAfterMs(response.headers);
-    if (retryAfterMs !== null) {
-      await wait(retryAfterMs);
-      response = await getResendClient().emails.send(message, options);
-    }
-  }
+  const response = await sendWithRateLimitRetry(() => getResendClient().emails.send(message, options));
   if (!response.error) return { id: response.data?.id ?? null, error: null, failureCode: null, retryLater: false };
   const failureCode = resendDeliveryFailureCode(response.error);
-  if (failureCode === "quota") await reportResendQuotaExhausted(response.error, emailKind);
+  await reportResendQuotaError(response.error, emailKind);
   return { id: null, error: response.error, failureCode, retryLater: failureCode === "rate_limited" && resendRetryAfterMs(response.headers) === null };
 }
 
@@ -514,8 +448,10 @@ export async function sendConfirmationEmail(
 
 /**
  * The owner's single "new paid booking" email (the former SMS substitute that
- * duplicated it is gone). Throws when it could not be delivered after the short
- * retries, so its own fulfillment job is retried later.
+ * duplicated it is gone). Same short retries as the patient's emails (ABUS-03):
+ * Resend's retry-after is respected, a refusal or a used-up quota is not sent
+ * again within the attempt. Throws when it could not be delivered, so its own
+ * fulfillment job is retried later.
  */
 export async function sendOwnerNotificationEmail(
   customerName: string,
@@ -548,19 +484,13 @@ export async function sendOwnerNotificationEmail(
     "Objet de la demande : consultable uniquement dans le tableau de bord (jamais recopié par email).",
   ].join("\n");
 
-  const delays = postPaymentDeliveryRetry.delaysMs;
-  for (let attempt = 0; attempt <= delays.length; attempt += 1) {
-    if (attempt > 0) await wait(delays[attempt - 1]);
-    const delivered = await notifyOwner({
-      title: `Nouvelle réservation payée : ${customerName} - ${finalPrice} €`,
-      content: notificationContent,
-    }, { idempotencyKey: delivery.idempotencyKey }).catch(() => false);
-    if (delivered) {
-      console.log("Owner booking notification sent");
-      return;
-    }
+  try {
+    const email = buildOwnerNotificationEmail({ title: `Nouvelle réservation payée : ${customerName} - ${finalPrice} €`, content: notificationContent });
+    await sendPostPaymentEmail({ rejected: "owner_notification_rejected", failed: "owner_notification_failed" }, email, delivery.idempotencyKey);
+    console.log("Owner booking notification sent");
+  } catch (error) {
+    throw new Error("owner_notification_failed", { cause: error });
   }
-  throw new Error("owner_notification_failed");
 }
 
 export async function sendInvoiceEmail(
