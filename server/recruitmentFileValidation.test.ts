@@ -8,6 +8,13 @@ import { buildDocx } from "./testing/zipFixture";
 import { appendWithoutXref, classicPdf, libreOfficeChineseCvPdf, libreOfficeCvPdf, packPdfIntoObjectStream, pathologicalPdfs, pngPredict, saveIncrementally, withObjectInStreamData, withTrailerInStreamData } from "./testing/pdfFixture";
 
 const DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+/**
+ * Tests that run pdf.js, or validate a 4 to 20 MB document, several times in a
+ * row: 1 to 3 s on an idle machine, above the default 5 s on a loaded one.
+ * Each read stays bounded inside the test (its own time assertion, or the
+ * pdf.js time limit); only their total gets more room.
+ */
+const SEVERAL_HEAVY_READS_TIMEOUT_MS = 30_000;
 const validPdf = Buffer.concat([Buffer.from("%PDF-1.7\n1 0 obj << /Type /Page >> endobj\n"), Buffer.alloc(300, 65)]);
 const validDoc = Buffer.concat([Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]), Buffer.alloc(300, 66)]);
 const validDocx = buildDocx(["Dr Docx Candidate", "Infirmier anesthésiste IADE — 6 ans d’expérience", "Langues : Français, Anglais"]);
@@ -326,7 +333,7 @@ describe("REC-02 — PDF réels acceptés, actions dangereuses cherchées aussi 
         expect((await extractCvDocument(trap, "application/pdf")).text, String(index)).toContain("Dr Camille Martin");
         expect(() => validate(trap), String(index)).toThrow("cv_validation_pdf_active_content");
       }
-    });
+    }, SEVERAL_HEAVY_READS_TIMEOUT_MS);
   });
 
   describe("compte les pages distinctes, une fois chacune", () => {
@@ -388,7 +395,7 @@ describe("REC-02 — PDF réels acceptés, actions dangereuses cherchées aussi 
       expect(() => validate(packed)).toThrow("cv_validation_pdf_page_limit_exceeded");
       // Under the limit, such a file keeps all its pages.
       expect(validate(appendWithoutXref(textPages(20), annotations(8))).pageCount).toBe(20);
-    });
+    }, SEVERAL_HEAVY_READS_TIMEOUT_MS);
   });
 
   it("refuse un formulaire XFA, qui porte ses propres scripts, même dans un flux d’objets ou derrière un nom échappé", () => {
@@ -495,7 +502,7 @@ describe("bombes de décompression : plafonds avant extraction", () => {
       expect(performance.now() - started, JSON.stringify(unit)).toBeLessThan(4_000);
     }
     expect(recruitmentCvValidationMessage("cv_validation_pdf_stream_count_exceeded")).toContain("imprimez-le en PDF depuis votre navigateur");
-  });
+  }, SEVERAL_HEAVY_READS_TIMEOUT_MS);
 
   it.each(pathologicalPdfs())("juge en moins de deux secondes un PDF de 4 Mo fait pour bloquer le serveur : $label", ({ pdf, outcome }) => {
     // 1 MB of "stream stream…" without an end of line blocked the server for 84 s; 4 MB, for more than 5 minutes.
@@ -520,7 +527,7 @@ describe("bombes de décompression : plafonds avant extraction", () => {
       expect(performance.now() - started, unit).toBeLessThan(2_000);
     }
     expect(recruitmentCvValidationMessage("cv_validation_docx_container_invalid")).toContain("Réenregistrez votre CV en DOCX");
-  });
+  }, SEVERAL_HEAVY_READS_TIMEOUT_MS);
 
   it("tronque le texte extrait à 200 000 caractères avec un avertissement", async () => {
     expect(truncateExtractedText("abc", 2)).toEqual({ text: "ab", truncated: true });
