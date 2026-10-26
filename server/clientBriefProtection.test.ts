@@ -102,6 +102,16 @@ describe("formulaire employeur /api/client-briefs", () => {
     expect((await postBrief(brief("rh9@clinique.test"), "198.51.100.81")).status).toBe(200);
   });
 
+  it("compte la connexion vue par le proxy de Vercel, pas l’adresse que le client écrit en tête de X-Forwarded-For", async () => {
+    // Only the last hop is the proxy's own (trust proxy 1): changing the first one does not reset the limit.
+    for (let index = 1; index <= 5; index += 1) {
+      expect((await postBrief(brief(`rh${index}@clinique.test`), `203.0.113.${index}, 198.51.100.90`)).status, `brief ${index}`).toBe(200);
+    }
+
+    expect(await postBrief(brief("rh6@clinique.test"), "203.0.113.6, 198.51.100.90")).toEqual({ status: 429, body: RATE_LIMITED });
+    expect((await postBrief(brief("rh7@clinique.test"), "203.0.113.1, 198.51.100.91")).status).toBe(200);
+  });
+
   it("limite à 10 briefs par jour pour une même adresse, d’où qu’ils viennent, pendant 24 h", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-10-26T08:00:00.000Z"));
