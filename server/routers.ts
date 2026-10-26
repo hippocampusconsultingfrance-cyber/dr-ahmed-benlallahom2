@@ -646,8 +646,12 @@ async function deliverCampaignRecipient(
       db.insert(recruitmentAuditLogs).values({ applicationId: candidate.id, adminOpenId, action: "email", metadata: JSON.stringify({ campaignId: campaign.id, resendId: email.id, language: campaign.language }) }),
     ]);
   } catch (error) {
-    // The recipient stays « queued », which no retry picks up: the email is not sent again.
     console.error("[RecruitmentCampaign] Email accepted by the provider but its recording failed", { campaignId: campaign.id, recipientId, resendId: email.id ?? null, error: error instanceof Error ? error.name : "UnknownError" });
+    // The recipient alone, if it can be: « sent » with the provider's id, the
+    // link its bounce or complaint events need (DATA-04). Otherwise it stays
+    // « queued », which no retry picks up: the email is not sent again either way.
+    await db.update(recruitmentCampaignRecipients).set({ deliveryStatus: "sent", providerEmailId: email.id || null, error: null, sentAt: contactedAt, lastEventAt: contactedAt }).where(eq(recruitmentCampaignRecipients.id, recipientId))
+      .catch(linkError => console.error("[RecruitmentCampaign] Sent recipient not recorded", { campaignId: campaign.id, recipientId, error: linkError instanceof Error ? linkError.name : "UnknownError" }));
   }
   return true;
 }
