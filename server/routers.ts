@@ -91,8 +91,9 @@ export const PUBLIC_FORM_RATE_LIMITS = {
   bookingEmail: { action: "public_booking_create_email", scope: "email", maxAttempts: 5, windowMs: 60 * 60 * 1000, blockMs: 60 * 60 * 1000, blockedMessage: BOOKING_RATE_LIMIT_MESSAGE, reason: "rate_limited" },
   // Réservations refusées faute de vérification anti-robot, que les deux
   // compteurs précédents ne retiennent pas (ABUS-02) : bornées à part, bien
-  // plus haut, pour qu’un script qui ne la passe jamais ne puisse pas réessayer
-  // sans fin. Un patient n’en reçoit qu’une par réservation.
+  // plus haut. Au-delà, ces refus comptent de nouveau dans les deux compteurs
+  // précédents, qui arrêtent un script qui ne la passe jamais avant l’agenda.
+  // Un patient n’en reçoit qu’une par réservation.
   bookingChallengeIp: { action: "public_booking_challenge_ip", scope: "ip", maxAttempts: 30, windowMs: 60 * 60 * 1000, blockMs: 60 * 60 * 1000, blockedMessage: BOOKING_RATE_LIMIT_MESSAGE, reason: "rate_limited" },
 } as const satisfies Record<string, PublicFormRateLimitPolicy>;
 
@@ -926,13 +927,15 @@ export const appRouter = router({
           };
           // Vérification seulement demandée (pas de jeton) ou impossible : la
           // réservation ne consomme pas d’essai, le nouvel essai avec son jeton
-          // compte une fois ; ces refus ont leur propre plafond. Un jeton refusé
-          // reste compté. Service anti-robot en panne : refus distinct, pour ne
-          // pas renvoyer en boucle vers la vérification.
+          // compte une fois ; ces refus ont leur propre plafond, vérifié avant
+          // de rendre l’essai : au-delà, il reste compté et le compteur par IP
+          // arrête le script avant l’agenda. Un jeton refusé reste compté.
+          // Service anti-robot en panne : refus distinct, pour ne pas renvoyer
+          // en boucle vers la vérification.
           const challengeRefusal = async (outcome: "missing" | "refused" | "unavailable") => {
             if (outcome !== "refused") {
-              await Promise.all([giveBackIpAttempt(), giveBackEmailAttempt()]).catch(error => console.error("Booking attempt could not be given back:", error instanceof Error ? error.name : "UnknownError"));
               await enforcePublicFormRateLimit({ kind: "bookingChallengeIp", ...rateLimitRequest });
+              await Promise.all([giveBackIpAttempt(), giveBackEmailAttempt()]).catch(error => console.error("Booking attempt could not be given back:", error instanceof Error ? error.name : "UnknownError"));
             }
             return outcome === "unavailable"
               ? bookingRefusal("SERVICE_UNAVAILABLE", "security_check_unavailable", BOOKING_SECURITY_CHECK_UNAVAILABLE_MESSAGE)

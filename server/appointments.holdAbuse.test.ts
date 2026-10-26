@@ -22,6 +22,7 @@ const mocks = vi.hoisted(() => ({
   logSecurityEvent: vi.fn(async (_event: Record<string, unknown>) => undefined),
   bookingChallengeRequired: vi.fn(async (_db: unknown, _ipHash: string | null, _options?: { afterOwnHold?: boolean }) => false),
   recordBookingHold: vi.fn(async () => undefined),
+  releaseExpiredAppointmentHolds: vi.fn(async () => ({ released: 0 })),
   verifyCandidateTurnstile: vi.fn(async ({ token }: { token?: string }) => {
     if (!token) throw new Error("candidate_turnstile_required");
     // Siteverify injoignable : fetch échoue avant toute réponse de Cloudflare.
@@ -41,7 +42,7 @@ vi.mock("./candidateTurnstile", () => ({ verifyCandidateTurnstile: mocks.verifyC
 vi.mock("./appointmentHoldAbuse", () => ({ bookingChallengeRequired: mocks.bookingChallengeRequired, recordBookingHold: mocks.recordBookingHold }));
 vi.mock("./appointmentHolds", async importOriginal => ({
   ...await importOriginal<typeof import("./appointmentHolds")>(),
-  releaseExpiredAppointmentHolds: vi.fn(async () => ({ released: 0 })),
+  releaseExpiredAppointmentHolds: mocks.releaseExpiredAppointmentHolds,
 }));
 vi.mock("stripe", () => ({
   default: vi.fn().mockImplementation(() => ({ checkout: { sessions: { create: mocks.stripeCreate, retrieve: vi.fn() } } })),
@@ -263,17 +264,32 @@ describe("appointments.create — essais comptés quand la vérification est dem
     expect(counted(PUBLIC_FORM_RATE_LIMITS.bookingEmail.action)).toBe(1);
   });
 
-  it("borne à part les refus sans jeton d’une même IP : au-delà de 30 par heure, la réservation est limitée", async () => {
+  it("borne à part les refus sans jeton d’une même IP, puis arrête le script avant l’agenda", async () => {
     const { maxAttempts, action } = PUBLIC_FORM_RATE_LIMITS.bookingChallengeIp;
+    const bookingIp = PUBLIC_FORM_RATE_LIMITS.bookingIp;
     for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
       expect((await postCreate({ customerEmail: `patient${attempt}@example.com` })).error?.json.data.reason).toBe("security_check_required");
     }
     expect(counted(action)).toBe(maxAttempts);
-    // Les compteurs de réservation, eux, n’ont rien retenu : ils n’ont pas arrêté ce script.
-    expect(counted(PUBLIC_FORM_RATE_LIMITS.bookingIp.action)).toBe(0);
+    // Sous le plafond, les compteurs de réservation n’ont rien retenu.
+    expect(counted(bookingIp.action)).toBe(0);
 
-    expect((await postCreate({ customerEmail: "patient-next@example.com" })).error?.json).toMatchObject({ data: { code: "TOO_MANY_REQUESTS", reason: "rate_limited" } });
+    // Au-delà, la réservation est limitée et l’essai n’est plus rendu : le compteur par IP reprend.
+    for (let attempt = 1; attempt <= bookingIp.maxAttempts; attempt += 1) {
+      expect((await postCreate({ customerEmail: `patient-next${attempt}@example.com` })).error?.json).toMatchObject({ data: { code: "TOO_MANY_REQUESTS", reason: "rate_limited" } });
+      expect(counted(bookingIp.action)).toBe(attempt);
+    }
     expect(mocks.logSecurityEvent).toHaveBeenCalledWith(expect.objectContaining({ category: `${action}_rate_limit`, outcome: "blocked" }));
+
+    // Le suivant est refusé par le compteur par IP, avant toute lecture de la base, du nettoyage ou du contrôle.
+    mocks.getDb.mockClear();
+    mocks.releaseExpiredAppointmentHolds.mockClear();
+    mocks.bookingChallengeRequired.mockClear();
+    expect((await postCreate({ customerEmail: "patient-last@example.com" })).error?.json).toMatchObject({ data: { code: "TOO_MANY_REQUESTS", reason: "rate_limited" } });
+    expect(mocks.logSecurityEvent).toHaveBeenLastCalledWith(expect.objectContaining({ category: `${bookingIp.action}_rate_limit`, outcome: "blocked" }));
+    expect(mocks.getDb).not.toHaveBeenCalled();
+    expect(mocks.releaseExpiredAppointmentHolds).not.toHaveBeenCalled();
+    expect(mocks.bookingChallengeRequired).not.toHaveBeenCalled();
     expect(mocks.stripeCreate).not.toHaveBeenCalled();
   });
 
