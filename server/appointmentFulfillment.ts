@@ -468,6 +468,8 @@ async function runJob(id: number) {
         // refused, not yet, or no longer reachable), as Resend refuses a key
         // reused with another content (409).
         idempotencyKey: `appointment-stripe-refund-${appointment.trackingId}-${appointment.appointmentStatus}-${patientDataErased ? "erased" : patientEmail === "sent" ? "notified" : patientEmail}`,
+        // Not asked again after the immediate budget: the job goes back to the queue (ABUS-03).
+        stopAtDeadline: true,
       }).catch(() => false);
       if (!delivered) throw new Error("owner_refund_alert_failed");
     } else {

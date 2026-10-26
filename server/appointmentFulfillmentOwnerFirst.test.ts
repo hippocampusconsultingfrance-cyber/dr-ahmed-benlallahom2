@@ -565,4 +565,46 @@ describe("page de statut aux valeurs de production : un 429 passager garde son n
     expect(jobs.find(row => row.id === 6)).toMatchObject({ status: "completed", attempts: 1 });
     expect(resend.calls.filter(call => (call.message.to as string[])[0] === "z2@example.test" && String(call.message.subject).startsWith("Facture"))).toHaveLength(1);
   });
+
+  it("l’alerte « Échec d’envoi » d’une confirmation refusée, dont la réponse incertaine arrive après le budget de la page, est redemandée sous la même clé : rien ne la remet en file", async () => {
+    // Resend à 1,6 s : le refus de la confirmation revient vers +1,9 s, la
+    // réponse 5xx de l’alerte après la fin du budget (+3 s).
+    resend.latencyMs = 1_600;
+    resend.script.push("422", "5xx");
+    const { jobs } = memoryDatabase([job(1, "owner", { status: "completed", attempts: 1 }), job(2, "confirmation")]);
+    const startedAt = Date.now();
+
+    const page = processFulfillmentBestEffort(42, paymentStatusPageFulfillment.timeoutMs);
+    await vi.advanceTimersByTimeAsync(10_000);
+    await page;
+
+    expect(jobs.find(row => row.jobType === "confirmation")).toMatchObject({ status: "failed" });
+    const alerts = resend.calls.filter(call => String(call.message.subject).startsWith("Échec d’envoi après paiement"));
+    expect(alerts[0].at - startedAt).toBeGreaterThan(paymentStatusPageFulfillment.timeoutMs);
+    expect(alerts.map(call => call.options?.idempotencyKey)).toEqual(["appointment-confirmation-failure-APTOWNER0001-refused", "appointment-confirmation-failure-APTOWNER0001-refused"]);
+  });
+
+  it("l’alerte de remboursement au médecin, dont la réponse incertaine arrive après le budget de la page, n’est pas redemandée après la réponse : son job retourne en file et le passage suivant l’envoie sous la même clé", async () => {
+    const { STRIPE_REFUND_CANCELLATION_REASON } = await import("./appointmentPaymentWebhook");
+    resend.latencyMs = 3_000;
+    resend.script.push("5xx");
+    const { jobs } = memoryDatabase([job(1, "refund", { status: "completed", attempts: 1 }), job(2, "refund_owner")], appointmentRow({ paymentStatus: "refunded", appointmentStatus: "cancelled", cancellationReason: STRIPE_REFUND_CANCELLATION_REASON }));
+    const startedAt = Date.now();
+    const alerts = () => resend.calls.filter(call => (call.message.to as string[])[0] === "owner@example.test");
+
+    const page = processFulfillmentBestEffort(42, paymentStatusPageFulfillment.timeoutMs);
+    await vi.advanceTimersByTimeAsync(10_000);
+    await page;
+
+    expect(alerts()).toHaveLength(1);
+    expect(alerts()[0].at - startedAt).toBeGreaterThan(paymentStatusPageFulfillment.timeoutMs);
+    expect(jobs.find(row => row.jobType === "refund_owner")).toMatchObject({ status: "queued", attempts: 0, startedAt: null });
+
+    const next = processDueAppointmentFulfillmentJobs();
+    await vi.advanceTimersByTimeAsync(5_000);
+    await next;
+    expect(jobs.find(row => row.jobType === "refund_owner")).toMatchObject({ status: "completed", attempts: 1 });
+    expect(new Set(alerts().map(call => call.options?.idempotencyKey)).size).toBe(1);
+    expect(alerts()).toHaveLength(2);
+  });
 });

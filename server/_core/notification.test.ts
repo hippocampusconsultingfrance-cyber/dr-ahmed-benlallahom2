@@ -105,7 +105,7 @@ describe("notifyOwner", () => {
     expect(send).toHaveBeenCalledTimes(2);
   });
 
-  it("does not ask again once the immediate budget of the processing it runs in is spent: the request has answered (ABUS-03)", async () => {
+  it("an alert queued as a job (stopAtDeadline) is not asked again once the immediate budget of the processing it runs in is spent: the request has answered (ABUS-03)", async () => {
     const { runWithProcessingDeadline, deadlineCutShort } = await import("../processingDeadline");
     const { notifyOwner } = await import("./notification");
     let now = 2_500;
@@ -116,11 +116,27 @@ describe("notifyOwner", () => {
     });
 
     await runWithProcessingDeadline(3_000, async () => {
-      await expect(notifyOwner({ title: "Remboursement", content: "APT1" }, { idempotencyKey: "appointment-stripe-refund-APT1" })).resolves.toBe(false);
+      await expect(notifyOwner({ title: "Remboursement", content: "APT1" }, { idempotencyKey: "appointment-stripe-refund-APT1", stopAtDeadline: true })).resolves.toBe(false);
       // Its job goes back to the queue without counting the attempt.
       expect(deadlineCutShort()).toBe(true);
     }, () => now);
     expect(send).toHaveBeenCalledTimes(1);
+  });
+
+  it("an alert queued nowhere is asked again under its key even after the immediate budget, rather than lost", async () => {
+    const { runWithProcessingDeadline, deadlineCutShort } = await import("../processingDeadline");
+    const { notifyOwner } = await import("./notification");
+    let now = 2_500;
+    send.mockImplementationOnce(async () => {
+      now = 3_100;
+      return { data: null, error: { name: "internal_server_error", statusCode: 500, message: "Internal server error" } };
+    });
+
+    await runWithProcessingDeadline(3_000, async () => {
+      await expect(notifyOwner({ title: "Échec d’envoi après paiement (APT1)", content: "APT1" }, { idempotencyKey: "appointment-confirmation-failure-APT1-refused" })).resolves.toBe(true);
+      expect(deadlineCutShort()).toBe(false);
+    }, () => now);
+    expect(send.mock.calls.map(([, options]) => options)).toEqual([{ idempotencyKey: "appointment-confirmation-failure-APT1-refused" }, { idempotencyKey: "appointment-confirmation-failure-APT1-refused" }]);
   });
 
   it("does not ask again without a key (a second email could leave), nor after a clear refusal", async () => {
