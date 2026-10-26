@@ -2,7 +2,7 @@ import { deflateSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
 import { candidateDocumentValidationMessage, safeCandidateDocumentName, validateCandidateDocument } from "./candidateDocumentValidation";
 import { DOCUMENT_DECOMPRESSION_LIMITS } from "./documentDecompressionLimits";
-import { appendWithoutXref, classicPdf, libreOfficeChineseCvPdf, libreOfficeCvPdf, packPdfIntoObjectStream, pathologicalPdfs, pngPredict, saveIncrementally, withObjectInStreamData } from "./testing/pdfFixture";
+import { appendWithoutXref, classicPdf, IMAGE_DATA_OBJ_KEYWORDS, libreOfficeChineseCvPdf, libreOfficeCvPdf, packPdfIntoObjectStream, pathologicalPdfs, pngPredict, saveIncrementally, scannedPdf, withObjectInStreamData } from "./testing/pdfFixture";
 
 describe("validation des documents candidats", () => {
   it("nettoie les noms de fichiers et rejette les chemins", () => {
@@ -89,6 +89,20 @@ describe("REC-02 — PDF du coffre : mêmes lectures que pour les CV", () => {
     expect(() => validate(appendWithoutXref(thirty, Array.from({ length: 6 }, (_, index) => ({ number: index + 3, body: "<</Type/Annot/Subtype/Text/Rect[0 0 10 10]>>" }))))).toThrow("candidate_document_pdf_page_limit");
     const xfa = packPdfIntoObjectStream(libreOfficeCvPdf(), { edit: source => source.replace("/PageMode/UseOutlines", "/AcroForm<</Fields[]/XFA 99 0 R>>") });
     expect(() => validate(xfa)).toThrow("candidate_document_pdf_active_content");
+  });
+
+  it("accepte un document scanné de 12, 24 ou 25 pages quels que soient les octets de ses images, refuse 26 pages", () => {
+    // Each image ends with bytes that the check took for an object: the vault refused such scans like the CV forms.
+    for (const keyword of IMAGE_DATA_OBJ_KEYWORDS) {
+      for (const ascii85 of [true, false]) expect(validate(scannedPdf(12, { ascii85, keywords: [keyword] })).mimeType, `${keyword} ${ascii85}`).toBe("application/pdf");
+    }
+    const full = scannedPdf(24, { pageBytes: 110_000 });
+    expect(full.length).toBeGreaterThan(3_000_000);
+    expect(validate(full).mimeType).toBe("application/pdf");
+    expect(validate(scannedPdf(25, { ascii85: false })).mimeType).toBe("application/pdf");
+    expect(() => validate(scannedPdf(26))).toThrow("candidate_document_pdf_page_limit");
+    const hidden = withObjectInStreamData(scannedPdf(12), { number: 99, body: "<</S/JavaScript/JS(app.alert\\(1\\))>>" }, [{ number: 1, body: "<</Type/Catalog/Pages 2 0 R/OpenAction 99 0 R>>" }]);
+    expect(() => validate(hidden)).toThrow("candidate_document_pdf_active_content");
   });
 
   it("distingue un PDF sans page d’un PDF trop long, et borne la décompression", () => {

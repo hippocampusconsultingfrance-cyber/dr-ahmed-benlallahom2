@@ -5,7 +5,7 @@ import { recruitmentCvValidationMessage, validateCvFile } from "./recruitmentFil
 import { DOCUMENT_DECOMPRESSION_LIMITS, truncateExtractedText } from "./documentDecompressionLimits";
 import { extractCvDocument } from "./recruitmentAnalysis";
 import { buildDocx } from "./testing/zipFixture";
-import { appendWithoutXref, classicPdf, libreOfficeChineseCvPdf, libreOfficeCvPdf, packPdfIntoObjectStream, pathologicalPdfs, pngPredict, saveIncrementally, withObjectInStreamData, withTrailerInStreamData } from "./testing/pdfFixture";
+import { appendWithoutXref, classicPdf, IMAGE_DATA_OBJ_KEYWORDS, libreOfficeChineseCvPdf, libreOfficeCvPdf, packPdfIntoObjectStream, pathologicalPdfs, pngPredict, saveIncrementally, scannedPdf, withObjectInStreamData, withTrailerInStreamData } from "./testing/pdfFixture";
 
 const DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 /**
@@ -322,8 +322,9 @@ describe("REC-02 — PDF réels acceptés, actions dangereuses cherchées aussi 
         withTrailerInStreamData(libreOfficeCvPdf(), `<</Type/Catalog/Pages 10 0 R/OpenAction ${JAVASCRIPT_ACTION}>>`),
         // A comment fakes a stream inside the catalog: pdf.js skips it and reads the action after it.
         saveIncrementally(libreOfficeCvPdf(), [{ number: 20, body: `<</Type/Catalog/Pages 10 0 R\n% 98 0 obj <<>> stream\n/OpenAction ${JAVASCRIPT_ACTION}\n>>` }]),
-        // pdf.js reads "0.", "0-" or "0E+" as the generation number 0, then the "obj" keyword.
-        ...["99 0.obj", "99 0-obj", "99 0E+obj"].map(header => withObjectInStreamData(libreOfficeCvPdf(), { number: 99, header, body: JAVASCRIPT_ACTION }, [catalog("/OpenAction 99 0 R")])),
+        // pdf.js reads "0.", "0-" or "0E+" as the generation number 0, then the "obj" keyword; "99+0" and
+        // "99..0" as the numbers 99 and 0; a comment between the numbers like white-space.
+        ...["99 0.obj", "99 0-obj", "99 0E+obj", "99+0obj", "99..0obj", "99 %c\n0 obj"].map(header => withObjectInStreamData(libreOfficeCvPdf(), { number: 99, header, body: JAVASCRIPT_ACTION }, [catalog("/OpenAction 99 0 R")])),
         withObjectInStreamData(packPdfIntoObjectStream(libreOfficeCvPdf()), { number: 99, header: "99 0.obj", body: JAVASCRIPT_ACTION }, [catalog("/OpenAction 99 0 R")]),
         // The same catalog with a fake stream in a comment, which "upstream" closes, and no real stream.
         saveIncrementally(libreOfficeCvPdf(), [{ number: 20, header: "20 0.obj", body: `<</Type/Catalog/Pages 10 0 R\n% 98 0 obj <<>> stream\n/OpenAction ${JAVASCRIPT_ACTION}/Lang(upstream)\n>>` }]),
@@ -333,7 +334,34 @@ describe("REC-02 — PDF réels acceptés, actions dangereuses cherchées aussi 
         expect((await extractCvDocument(trap, "application/pdf")).text, String(index)).toContain("Dr Camille Martin");
         expect(() => validate(trap), String(index)).toThrow("cv_validation_pdf_active_content");
       }
-      // Ten extractions, each drawing the page it reads to keep only its visible text (IA-01).
+      // Thirteen extractions, each drawing the page it reads to keep only its visible text (IA-01).
+    }, SEVERAL_HEAVY_READS_TIMEOUT_MS);
+  });
+
+  describe("accepte un CV scanné, quels que soient les octets de ses images", () => {
+    it.each(IMAGE_DATA_OBJ_KEYWORDS.flatMap(keyword => [[keyword, "ASCII85"], [keyword, "brut"]]))("accepte 12 pages dont chaque image finit par %j (%s)", (keyword, encoding) => {
+      // The check refused such scans as unreadable (the two arrays) or active (the "/JS" after "obj").
+      expect(validate(scannedPdf(12, { ascii85: encoding === "ASCII85", keywords: [keyword] })).pageCount).toBe(12);
+    });
+
+    it("accepte 24 et 25 pages, refuse 26 pages pour leur nombre, et trouve encore une action cachée", async () => {
+      // 24 pages of about 110 KB in ASCII85: 3.3 MB, near the 3.6 MB of the 24-page scan that was refused.
+      const full = scannedPdf(24, { pageBytes: 110_000 });
+      expect(full.length).toBeGreaterThan(3_000_000);
+      const started = performance.now();
+      expect(validate(full).pageCount).toBe(24);
+      expect(performance.now() - started).toBeLessThan(2_000);
+      for (const ascii85 of [true, false]) {
+        expect(validate(scannedPdf(25, { ascii85 })).pageCount).toBe(25);
+        expect(() => validate(scannedPdf(26, { ascii85 }))).toThrow("cv_validation_pdf_page_limit_exceeded");
+      }
+      // pdf.js reads the scan: a valid PDF of 12 pages, not a fixture only the check accepts.
+      const extraction = await extractCvDocument(scannedPdf(12), "application/pdf");
+      expect(extraction.totalPages).toBe(12);
+      expect(extraction.text).toContain("anesthesiste-reanimateur, page 12");
+      // An opening JavaScript action that the xref places inside the data of a stream is still found.
+      const hidden = withObjectInStreamData(scannedPdf(12), { number: 99, body: "<</S/JavaScript/JS(app.alert\\(1\\))>>" }, [{ number: 1, body: "<</Type/Catalog/Pages 2 0 R/OpenAction 99 0 R>>" }]);
+      expect(() => validate(hidden)).toThrow("cv_validation_pdf_active_content");
     }, SEVERAL_HEAVY_READS_TIMEOUT_MS);
   });
 
