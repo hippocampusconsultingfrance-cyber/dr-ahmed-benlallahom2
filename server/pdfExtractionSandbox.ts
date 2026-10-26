@@ -1,6 +1,8 @@
+import { existsSync } from "node:fs";
 // Aliased: the Vercel bundle's banner already declares `createRequire` (package.json build).
 import { createRequire as createModuleRequire } from "node:module";
-import { pathToFileURL } from "node:url";
+import path from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { Worker } from "node:worker_threads";
 import { DOCUMENT_DECOMPRESSION_LIMITS, type DocumentDecompressionLimits } from "./documentDecompressionLimits";
 
@@ -19,24 +21,48 @@ import { DOCUMENT_DECOMPRESSION_LIMITS, type DocumentDecompressionLimits } from 
  *
  * The text task also keeps only the text a reader sees (IA-01): each page
  * read is drawn at 72 dpi and every word of pdf.js's text layer must be at
- * least 4 pt, inside the page, and stand out from the pixels where it sits.
- * That one test covers white on white, tiny fonts, invisible rendering mode,
- * covered or clipped text, layers switched off, opacity 0 and text off the
- * page, while an OCR layer laid on a scan stays readable. Drawing pages stops
- * at `VISIBILITY_TIME_SHARE` of the time allowed: the pages left unchecked
- * then give no text and are listed in `uncheckedPages`.
+ * least 4 pt high, not squashed, inside the page, and stand out from the
+ * pixels where it sits. That one test covers white on white, tiny fonts,
+ * invisible rendering mode, covered or clipped text, layers switched off,
+ * opacity 0 and text off the page, while an OCR layer laid on a scan stays
+ * readable. Drawing pages stops at `VISIBILITY_TIME_SHARE` of the time
+ * allowed: the pages left unchecked then give no text and are listed in
+ * `uncheckedPages`. The words of a font pdf.js could not load (not embedded
+ * and not one of its standard fonts, or unreadable) would be drawn with the
+ * host's fonts, if it has any: they are kept unchecked, in `uncheckedText`.
  */
 
 export type PdfTextReading = {
   total: number | null;
   pages: Array<{ num: number; text: string }>;
   /** Absent when the text was read without the visibility check (in-process fallback). */
-  visibility?: { invisibleText: string[]; uncheckedPages: number[] };
+  visibility?: { invisibleText: string[]; uncheckedPages: number[]; uncheckedText: string[] };
 };
 export type PdfRendering = { total: number | null; pages: Array<{ pageNumber: number; dataUrl: string | null }> };
 export type PdfReaderTask = { kind: "text"; first: number } | { kind: "render"; first: number; desiredWidth: number };
 
 const VISIBILITY_TIME_SHARE = 0.6;
+
+let standardFontDirectory: string | null | undefined;
+
+/**
+ * pdf.js's standard fonts (server/fonts/pdfjs, copied from pdfjs-dist), for
+ * the PDFs that do not embed Helvetica, Times or Courier (PDFKit, FPDF,
+ * ReportLab…). Without them pdf.js draws that text with the host's fonts,
+ * and a Vercel function has none: the page would come out blank. Looked for
+ * next to this file (tsx, vitest), then under the project root (esbuild
+ * bundles, included by vercel.json), as the invoice fonts are.
+ */
+export function pdfStandardFontDataUrl() {
+  if (standardFontDirectory === undefined) {
+    standardFontDirectory = [fileURLToPath(new URL("./fonts/pdfjs/", import.meta.url)), path.resolve(process.cwd(), "server", "fonts", "pdfjs")]
+      // pdf.js wants the trailing slash.
+      .map(directory => `${directory.replace(/[\\/]+$/, "")}/`)
+      .find(directory => existsSync(`${directory}LiberationSans-Regular.ttf`)) ?? null;
+    if (!standardFontDirectory) console.error("[PdfReader] pdf.js standard fonts not found: text in a font that is not embedded stays unchecked");
+  }
+  return standardFontDirectory ?? undefined;
+}
 
 /**
  * pdf.js could not be loaded in a worker (deployment or runtime issue, never
@@ -54,6 +80,8 @@ const WORKER_SOURCE = `
 const { parentPort, workerData } = require("node:worker_threads");
 const startedAt = Date.now();
 const MIN_FONT_SIZE_PT = 4;
+// Average advance of a character below which text is squashed out of sight.
+const MIN_ADVANCE_PT = 1;
 const MIN_CONTRAST = 32;
 const MAX_RENDER_PIXELS = 2000000;
 // A word, or one ideograph: pdf.js merges runs of any colour into one item, so each word is checked.
@@ -84,7 +112,7 @@ function contrastIn(pixels, width, height, corners) {
 }
 
 /** The text content of a page without the words nobody sees on it, which go to \`invisibleText\`. */
-async function visibleTextContent(page, content, canvasFactory, invisibleText) {
+async function visibleTextContent(page, content, canvasFactory, { invisibleText, uncheckedText }) {
   const base = page.getViewport({ scale: 1 });
   const viewport = page.getViewport({ scale: Math.min(1, Math.sqrt(MAX_RENDER_PIXELS / (base.width * base.height))) });
   const target = canvasFactory.create(Math.ceil(viewport.width), Math.ceil(viewport.height));
@@ -106,11 +134,20 @@ async function visibleTextContent(page, content, canvasFactory, invisibleText) {
     const t = [a * m[0] + c * m[1], b * m[0] + d * m[1], a * m[2] + c * m[3], b * m[2] + d * m[3], a * m[4] + c * m[5] + e, b * m[4] + d * m[5] + f];
     const along = Math.hypot(t[0], t[1]);
     const up = Math.hypot(t[2], t[3]);
-    const readable = Math.min(along, up) / viewport.scale >= MIN_FONT_SIZE_PT;
+    // The height of the item, and its width per character: a Type3 font keeps its scale in its own
+    // matrix, which pdf.js applies to the height of the item but not to its horizontal scale.
+    const readable = up / viewport.scale >= MIN_FONT_SIZE_PT && item.width / item.str.length >= MIN_ADVANCE_PT;
     const length = readable ? item.width * along / Math.hypot(m[0], m[1]) : 0;
     const point = (advance, rise) => [t[4] + t[0] / along * advance + t[2] / up * rise, t[5] + t[1] / along * advance + t[3] / up * rise];
+    const font = item.fontName && page.commonObjs.has(item.fontName) ? page.commonObjs.get(item.fontName) : null;
+    const unloaded = Boolean(font && font.missingFile);
     const hidden = [];
+    const unchecked = [];
     const str = item.str.replace(WORDS, (word, index) => {
+      if (readable && unloaded) {
+        unchecked.push(word);
+        return word;
+      }
       // pdf.js gives no glyph positions: each word takes its share of the item, from the right in right-to-left text.
       let start = length * index / item.str.length;
       let end = length * (index + word.length) / item.str.length;
@@ -119,6 +156,7 @@ async function visibleTextContent(page, content, canvasFactory, invisibleText) {
       hidden.push(word);
       return "";
     });
+    if (unchecked.length > 0) uncheckedText.push(unchecked.join(" "));
     if (hidden.length === 0) return item;
     invisibleText.push(hidden.join(" "));
     return { ...item, str };
@@ -142,7 +180,7 @@ async function visibleTextContent(page, content, canvasFactory, invisibleText) {
       return;
     }
     parentPort.postMessage({ type: "ready" });
-    parser = new PDFParse({ data: workerData.data, CanvasFactory, maxImageSize: workerData.maxImagePixels, isEvalSupported: false });
+    parser = new PDFParse({ data: workerData.data, CanvasFactory, maxImageSize: workerData.maxImagePixels, isEvalSupported: false, standardFontDataUrl: workerData.standardFontDataUrl });
     const task = workerData.task;
     if (task.kind === "text") {
       // What parser.getText({ first }) does, page by page, with the visible text content only: its
@@ -151,12 +189,12 @@ async function visibleTextContent(page, content, canvasFactory, invisibleText) {
       const doc = await parser.load();
       const total = doc.numPages;
       const pages = [];
-      const visibility = { invisibleText: [], uncheckedPages: [] };
+      const visibility = { invisibleText: [], uncheckedPages: [], uncheckedText: [] };
       for (let num = 1; num <= Math.min(total, task.first); num += 1) {
         const page = await doc.getPage(num);
         let content = await page.getTextContent();
         if (Date.now() - startedAt < task.visibilityBudgetMs) {
-          content = await visibleTextContent(page, content, doc.canvasFactory, visibility.invisibleText);
+          content = await visibleTextContent(page, content, doc.canvasFactory, visibility);
         } else {
           visibility.uncheckedPages.push(num);
           content = { ...content, items: [] };
@@ -216,7 +254,7 @@ export function readPdfIsolated(buffer: Buffer, task: PdfReaderTask, limits: Doc
       worker = new Worker(WORKER_SOURCE, {
         eval: true,
         execArgv: [],
-        workerData: { ...modules, task: workerTask, maxImagePixels: limits.pdfMaxImagePixels, data: new Uint8Array(buffer) },
+        workerData: { ...modules, task: workerTask, maxImagePixels: limits.pdfMaxImagePixels, standardFontDataUrl: pdfStandardFontDataUrl(), data: new Uint8Array(buffer) },
         resourceLimits: { maxOldGenerationSizeMb: limits.pdfReaderMaxHeapMb },
       });
     } catch (error) {

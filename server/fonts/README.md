@@ -39,3 +39,22 @@ remplace un caractère sans dessin par sa forme simple quand elle s’imprime
 pictogramme, et met « ? » à la place de tout autre caractère. Un nom fait
 seulement d’emoji s’imprime « - » : la ligne du nom reste, et l’email, le
 téléphone et le tableau ne remontent pas.
+
+# Polices standard de pdf.js (`pdfjs/`)
+
+Copie à l’identique de `pdfjs-dist/standard_fonts/` (pdfjs-dist 5.4.296,
+dépendance de pdf-parse 2.4.5), utilisée par `server/pdfExtractionSandbox.ts`
+(`standardFontDataUrl`). Beaucoup de PDF n’embarquent pas les 14 polices
+standard (Helvetica, Times, Courier, Symbol, ZapfDingbats, ou Arial et Times
+New Roman qui y sont ramenées) : PDFKit, FPDF/TCPDF, ReportLab, certains
+exports d’ATS. Sans ces fichiers, pdf.js ne peut dessiner ce texte qu’avec les
+polices du système, absentes d’une fonction Vercel : la page sortirait blanche,
+le contrôle de visibilité du CV (IA-01) prendrait tout le texte pour invisible
+et la vision lirait une page vide. Le même `includeFiles` de `vercel.json` les
+inclut dans la fonction.
+
+Polices Foxit (`Foxit*.pfb`, licence BSD de PDFium : `LICENSE_FOXIT`) et
+Liberation Sans 2 (`LiberationSans-*.ttf`, SIL Open Font License 1.1 :
+`LICENSE_LIBERATION`). À recopier si pdf-parse passe à une autre version de
+pdfjs-dist : le test « polices standard » de
+`server/recruitmentInvisibleText.test.ts` signale un fichier manquant.

@@ -1,7 +1,7 @@
 import { and, desc, eq, exists, gte, inArray, isNull, lt, lte, ne, or } from "drizzle-orm";
 import { cvApplications, cvProcessingJobs } from "../drizzle/schema";
 import { getDb } from "./db";
-import { AI_ANALYSIS_BILLING_UNAVAILABLE_ERROR, extractCvDocument, analyzeCvText, invisibleTextRequiresReview, MANUAL_REVIEW_FALLBACK_MODEL, RECRUITMENT_ANALYSIS_PROMPT_VERSION, saveCvAnalysis } from "./recruitmentAnalysis";
+import { AI_ANALYSIS_BILLING_UNAVAILABLE_ERROR, extractCvDocument, analyzeCvText, invisibleTextRequiresReview, isVisibilityCheckWarning, MANUAL_REVIEW_FALLBACK_MODEL, RECRUITMENT_ANALYSIS_PROMPT_VERSION, saveCvAnalysis } from "./recruitmentAnalysis";
 import { storageGetSignedUrl, storagePut } from "./storage";
 import { validateCvFile } from "./recruitmentFileValidation";
 import { isProcessingDeadlineError } from "./processingDeadline";
@@ -140,9 +140,10 @@ export async function executeCvExternalPipeline(
       warning.startsWith("pdf_text_page_") ||
       warning === "pdf_text_pages_missing" ||
       warning === "vision_ocr_first_3_pages_only" ||
-      warning.startsWith("pdf_visibility_check_")
+      isVisibilityCheckWarning(warning)
     ) || invisibleTextRequiresReview(extraction.invisibleText),
     invisibleText: extraction.invisibleText,
+    visibilityUnchecked: extraction.warnings.some(isVisibilityCheckWarning),
   });
   return {
     validation,

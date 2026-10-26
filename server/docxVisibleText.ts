@@ -3,14 +3,17 @@ import { DOCUMENT_DECOMPRESSION_LIMITS, inspectDocxArchive } from "./documentDec
 
 /**
  * DOCX text Word does not show (IA-01): runs marked hidden (w:vanish,
- * w:specVanish, w:webHidden), smaller than 4 pt (w:sz under 8 half-points),
- * or white with no coloured background under them (shading of the run, its
- * paragraph, table cell or table, highlight, filled text box, page colour;
- * no white text is cut when a picture or a shape lies behind the text, as in
- * many CV templates). mammoth reads such runs like any other text, so they
+ * w:specVanish, w:webHidden), smaller than 4 pt (w:sz under 8 half-points,
+ * w:szCs for complex script text: Arabic, Hebrew…), white or nearly (each
+ * channel at least E0, as the PDF contrast check) with no coloured
+ * background under them (shading of the run, its paragraph, table cell or
+ * table, highlight, filled text box, page colour), or in a VML text box
+ * placed off the page. mammoth reads such runs like any other text, so they
  * are cut out of the main document part, text boxes included, before it
  * reads the file. Run formatting is resolved as Word does: document
  * defaults, paragraph style, character style, then the run's own properties.
+ * When a picture or a shape lies behind the text, as in many CV templates,
+ * white text may sit on it: it is kept, and returned as `unverifiedText`.
  */
 
 /** Canonical prefixes, whatever prefix the file binds to these namespaces (as mammoth reads them). */
@@ -74,22 +77,66 @@ function visitXmlTags(xml: string, visit: (tag: XmlTag) => void) {
 }
 
 /** What one layer of run formatting says; keys left unset inherit from the layer below. */
-type RunLayer = Partial<Record<"w:vanish" | "w:specVanish" | "w:webHidden" | "white" | "shading" | "highlight", boolean> & { size: number }>;
+type RunLayer = Partial<Record<"w:vanish" | "w:specVanish" | "w:webHidden" | "w:cs" | "w:rtl" | "white" | "shading" | "highlight", boolean> & { size: number; complexScriptSize: number }>;
 
-const isColour = (value: string | undefined) => value !== undefined && /^[0-9a-f]{6}$/i.test(value) && !/^ffffff$/i.test(value);
+/** A hex colour each channel of which is within 32/255 of white (FEFEFE looks white too). */
+const isNearWhite = (value: string) => /^[0-9a-f]{6}$/i.test(value) && [0, 2, 4].every(index => Number.parseInt(value.slice(index, index + 2), 16) >= 0xe0);
+const isColour = (value: string | undefined) => value !== undefined && /^[0-9a-f]{6}$/i.test(value) && !isNearWhite(value);
 
 /** w:shd paints a colour: a fill, or a pattern drawn in a colour other than white. */
 function shadingIsColoured(tag: XmlTag) {
   const pattern = tag.attributes.get("w:val") ?? "clear";
   if (pattern === "nil") return false;
-  return isColour(tag.attributes.get("w:fill")) || (pattern !== "clear" && !/^ffffff$/i.test(tag.attributes.get("w:color") ?? "auto"));
+  return isColour(tag.attributes.get("w:fill")) || (pattern !== "clear" && !isNearWhite(tag.attributes.get("w:color") ?? "auto"));
 }
+
+/** A VML fill colour (#rgb, #rrggbb, white), possibly followed by a theme index. */
+function vmlFillIsColoured(fill: string) {
+  const hex = /^#?([0-9a-f]{6}|[0-9a-f]{3})\b/i.exec(fill)?.[1];
+  if (/^white\b/i.test(fill)) return false;
+  return hex === undefined || !isNearWhite(hex.length === 3 ? Array.from(hex, digit => digit + digit).join("") : hex);
+}
+
+const VML_UNITS_PT: Record<string, number> = { pt: 1, px: 0.75, in: 72, cm: 72 / 2.54, mm: 72 / 25.4, pc: 12 };
+
+/**
+ * A VML shape whose style places it wholly off the page, whatever it is
+ * positioned from (page, margin, column or paragraph, all on the page).
+ */
+function vmlShapeIsOffPage(style: string | undefined, page: { width: number; height: number }) {
+  if (!style || !/(^|;)\s*position\s*:\s*absolute/i.test(style)) return false;
+  const length = (property: string) => {
+    const match = new RegExp(`(?:^|;)\\s*${property}\\s*:\\s*(-?[\\d.]+)\\s*(pt|px|in|cm|mm|pc)?\\s*(?:;|$)`, "i").exec(style);
+    const value = match ? Number(match[1]) * VML_UNITS_PT[(match[2] ?? "px").toLowerCase()]! : 0;
+    return Number.isFinite(value) ? value : 0;
+  };
+  const left = length("margin-left") + length("left");
+  const top = length("margin-top") + length("top");
+  return left >= page.width || top >= page.height || left + length("width") <= -page.width || top + length("height") <= -page.height;
+}
+
+/** The largest page of the document's sections, in points (w:pgSz is in twips); A4 or Letter when none is given. */
+function largestPage(xml: string) {
+  const page = { width: 0, height: 0 };
+  visitXmlTags(xml, tag => {
+    if (tag.closing || tag.name !== "w:pgSz") return;
+    page.width = Math.max(page.width, Number(tag.attributes.get("w:w")) / 20 || 0);
+    page.height = Math.max(page.height, Number(tag.attributes.get("w:h")) / 20 || 0);
+  });
+  return { width: page.width || 612, height: page.height || 842 };
+}
+
+/** Scripts Word sets in the complex script size (w:szCs), like a run marked w:cs or w:rtl. */
+const COMPLEX_SCRIPTS = "\\p{Script=Arabic}\\p{Script=Hebrew}\\p{Script=Syriac}\\p{Script=Thaana}\\p{Script=Thai}";
+const COMPLEX_SCRIPT = new RegExp(`[${COMPLEX_SCRIPTS}]`, "u");
+const OTHER_LETTER = new RegExp(`(?![${COMPLEX_SCRIPTS}])[\\p{L}\\p{N}]`, "u");
 
 function applyRunProperty(layer: RunLayer, tag: XmlTag) {
   const value = tag.attributes.get("w:val");
-  if (tag.name === "w:vanish" || tag.name === "w:specVanish" || tag.name === "w:webHidden") layer[tag.name] = value === undefined || !/^(false|0|off)$/i.test(value);
+  if (tag.name === "w:vanish" || tag.name === "w:specVanish" || tag.name === "w:webHidden" || tag.name === "w:cs" || tag.name === "w:rtl") layer[tag.name] = value === undefined || !/^(false|0|off)$/i.test(value);
   else if (tag.name === "w:sz" && value && /^\d+$/.test(value)) layer.size = Number(value);
-  else if (tag.name === "w:color" && value) layer.white = /^ffffff$/i.test(value);
+  else if (tag.name === "w:szCs" && value && /^\d+$/.test(value)) layer.complexScriptSize = Number(value);
+  else if (tag.name === "w:color" && value) layer.white = isNearWhite(value);
   else if (tag.name === "w:shd") layer.shading = shadingIsColoured(tag);
   else if (tag.name === "w:highlight") layer.highlight = value !== undefined && !/^(none|white)$/i.test(value);
 }
@@ -144,13 +191,19 @@ function styleChain(styles: Styles, id: string | undefined, type: string) {
   return chain;
 }
 
-type Frame = { name: string; background: boolean; style?: string; layer?: RunLayer; texts?: Array<[number, number]>; passage?: string[] };
+type Frame = { name: string; background: boolean; offPage?: boolean; style?: string; layer?: RunLayer; texts?: Array<[number, number]>; passages?: Passages };
+type Passages = { invisible: string[]; unverified: string[] };
 
-/** The main document part without the text of its invisible runs, and that text, paragraph by paragraph. */
+/**
+ * The main document part without the text of its invisible runs; that text,
+ * and the white text kept on a drawing behind the text (`unverified`),
+ * paragraph by paragraph.
+ */
 function cutInvisibleRuns(xml: string, styles: Styles, layerBehindText: boolean) {
+  const page = largestPage(xml);
   const stack: Frame[] = [];
   const cuts: Array<[number, number]> = [];
-  const passages: string[] = [];
+  const found: Passages = { invisible: [], unverified: [] };
   let textStart: number | null = null;
   const nearest = (name: string) => stack.findLast(frame => frame.name === name);
   const hasBackground = (frame: Frame) =>
@@ -158,14 +211,27 @@ function cutInvisibleRuns(xml: string, styles: Styles, layerBehindText: boolean)
     (frame.name === "w:p" && styleChain(styles, frame.style, "paragraph").some(style => style.paragraphShading)) ||
     (frame.name === "w:tbl" && styleChain(styles, frame.style, "table").some(style => style.anyShading));
   // Decided once the whole run is read, inside its paragraph, cell, table and text box.
-  const isInvisible = (run: Frame) => {
+  const visibility = (run: Frame, text: string): "visible" | "invisible" | "unverified" => {
     const effective: RunLayer = Object.assign({}, styles.defaults,
       ...styleChain(styles, nearest("w:p")?.style, "paragraph").map(style => style.run),
       ...styleChain(styles, run.style, "character").map(style => style.run),
       run.layer);
-    return Boolean(effective["w:vanish"] || effective["w:specVanish"] || effective["w:webHidden"]) ||
-      (effective.size !== undefined && effective.size < 8) ||
-      (Boolean(effective.white) && !layerBehindText && !effective.shading && !effective.highlight && !stack.some(hasBackground));
+    const tiny = (size: number | undefined) => size !== undefined && size < 8;
+    // Word sets the whole run in the complex script size when it is marked so, else only those scripts.
+    const complexScript = COMPLEX_SCRIPT.test(text);
+    const tinyText = effective["w:cs"] || effective["w:rtl"]
+      ? tiny(effective.complexScriptSize)
+      : (complexScript && tiny(effective.complexScriptSize)) || ((!complexScript || OTHER_LETTER.test(text)) && tiny(effective.size));
+    if (effective["w:vanish"] || effective["w:specVanish"] || effective["w:webHidden"] || tinyText || stack.some(frame => frame.offPage)) return "invisible";
+    if (!effective.white || effective.shading || effective.highlight || stack.some(hasBackground)) return "visible";
+    return layerBehindText ? "unverified" : "invisible";
+  };
+  const record = (kind: keyof Passages, texts: string[]) => {
+    // mammoth reads text boxes from mc:Fallback only: what mc:Choice repeats is not counted.
+    if (stack.some(item => item.name === "mc:Choice")) return;
+    const paragraph = nearest("w:p")?.passages;
+    if (paragraph) paragraph[kind].push(...texts);
+    else found[kind].push(texts.join(""));
   };
   visitXmlTags(xml, tag => {
     if (tag.closing) {
@@ -173,23 +239,25 @@ function cutInvisibleRuns(xml: string, styles: Styles, layerBehindText: boolean)
       if (frame?.name === "w:t" && textStart !== null) {
         stack.at(-1)?.texts?.push([textStart, tag.start]);
         textStart = null;
-      } else if (frame?.name === "w:r" && frame.texts?.length && isInvisible(frame)) {
-        cuts.push(...frame.texts);
-        // mammoth reads text boxes from mc:Fallback only: what mc:Choice repeats is not counted.
-        if (!stack.some(item => item.name === "mc:Choice")) nearest("w:p")?.passage?.push(...frame.texts.map(([start, end]) => decodeXml(xml.slice(start, end))));
-      } else if (frame?.name === "w:p" && frame.passage?.length) {
-        passages.push(frame.passage.join(""));
+      } else if (frame?.name === "w:r" && frame.texts?.length) {
+        const texts = frame.texts.map(([start, end]) => decodeXml(xml.slice(start, end)));
+        const seen = visibility(frame, texts.join(""));
+        if (seen === "invisible") cuts.push(...frame.texts);
+        if (seen !== "visible") record(seen, texts);
+      } else if (frame?.name === "w:p" && frame.passages) {
+        for (const kind of ["invisible", "unverified"] as const) if (frame.passages[kind].length) found[kind].push(frame.passages[kind].join(""));
       }
       return;
     }
     const parent = stack.at(-1);
     const grandParent = stack.at(-2);
     const frame: Frame = { name: tag.name, background: false };
-    if (tag.name === "w:p") frame.passage = [];
+    if (tag.name === "w:p") frame.passages = { invisible: [], unverified: [] };
     if (tag.name === "w:r") Object.assign(frame, { layer: {}, texts: [] });
     if (VML_SHAPES.has(tag.name)) {
       const fill = tag.attributes.get("fillcolor")?.trim();
-      frame.background = fill !== undefined && !/^(#?fff(fff)?|white)\b/i.test(fill) && !/^(f|false)$/i.test(tag.attributes.get("filled") ?? "");
+      frame.background = fill !== undefined && vmlFillIsColoured(fill) && !/^(f|false)$/i.test(tag.attributes.get("filled") ?? "");
+      frame.offPage = vmlShapeIsOffPage(tag.attributes.get("style"), page);
     }
     if (tag.name === "w:background" && parent?.name === "w:document") parent.background = isColour(tag.attributes.get("w:color"));
     if (parent?.name === "w:pPr" && grandParent?.name === "w:p") {
@@ -211,7 +279,7 @@ function cutInvisibleRuns(xml: string, styles: Styles, layerBehindText: boolean)
     visible += xml.slice(from, start);
     from = end;
   }
-  return { xml: visible + xml.slice(from), invisibleText: passages };
+  return { xml: visible + xml.slice(from), cut: cuts.length > 0, invisibleText: found.invisible, unverifiedText: found.unverified };
 }
 
 /** The first existing target of a relationship of that type, resolved as mammoth resolves it. */
@@ -267,16 +335,16 @@ function storedZip(parts: Map<string, Buffer>) {
 }
 
 /**
- * The DOCX to hand to mammoth, without its invisible text, and that text.
- * Also bounds the decompression (inspectDocxArchive). An unchanged file is
- * returned as is.
+ * The DOCX to hand to mammoth, without its invisible text, that text, and
+ * the white text kept on a drawing behind the text. Also bounds the
+ * decompression (inspectDocxArchive). An unchanged file is returned as is.
  */
-export function withoutInvisibleDocxText(buffer: Buffer, limits = DOCUMENT_DECOMPRESSION_LIMITS): { buffer: Buffer; invisibleText: string[] } {
+export function withoutInvisibleDocxText(buffer: Buffer, limits = DOCUMENT_DECOMPRESSION_LIMITS): { buffer: Buffer; invisibleText: string[]; unverifiedText: string[] } {
   const parts = new Map<string, Buffer>();
   inspectDocxArchive(buffer, limits, (name, content) => parts.set(name, content));
   const mainDocument = relatedPart(parts, "_rels/.rels", OFFICE_DOCUMENT_RELATIONSHIP, "") ?? "word/document.xml";
   const xml = parts.get(mainDocument)?.toString("utf8");
-  if (!xml) return { buffer, invisibleText: [] };
+  if (!xml) return { buffer, invisibleText: [], unverifiedText: [] };
   const folder = mainDocument.includes("/") ? mainDocument.slice(0, mainDocument.lastIndexOf("/")) : "";
   const relationships = `${folder ? `${folder}/` : ""}_rels/${mainDocument.slice(folder ? folder.length + 1 : 0)}.rels`;
   const stylesPart = relatedPart(parts, relationships, STYLES_RELATIONSHIP, folder) ?? "word/styles.xml";
@@ -285,7 +353,7 @@ export function withoutInvisibleDocxText(buffer: Buffer, limits = DOCUMENT_DECOM
     (name === mainDocument || /(^|\/)header\d*\.xml$/i.test(name)) &&
     /\bbehindDoc\s*=\s*["'](1|true|on)["']|z-index\s*:\s*-\d/i.test(parts.get(name)!.toString("utf8")));
   const visible = cutInvisibleRuns(xml, readStyles(parts.get(stylesPart)?.toString("utf8")), layerBehindText);
-  if (visible.invisibleText.length === 0) return { buffer, invisibleText: [] };
+  if (!visible.cut) return { buffer, invisibleText: [], unverifiedText: visible.unverifiedText };
   parts.set(mainDocument, Buffer.from(visible.xml, "utf8"));
-  return { buffer: storedZip(parts), invisibleText: visible.invisibleText };
+  return { buffer: storedZip(parts), invisibleText: visible.invisibleText, unverifiedText: visible.unverifiedText };
 }

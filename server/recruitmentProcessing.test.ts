@@ -151,12 +151,12 @@ describe("règles déterministes du pipeline de traitement CV", () => {
   });
 
   it("traite comme une extraction incomplète un texte invisible non écarté à coup sûr, ou au-delà de 30 caractères (IA-01)", async () => {
-    const received: Array<Pick<Parameters<typeof steps.analyze>[0], "extractionIncomplete" | "invisibleText">> = [];
+    const received: Array<Pick<Parameters<typeof steps.analyze>[0], "extractionIncomplete" | "invisibleText" | "visibilityUnchecked">> = [];
     const extractWith = (extra: { warnings: string[]; invisibleText?: { characters: number; excerpt: string } }) => executeCvExternalPipeline(input, {
       ...steps,
       extract: async () => ({ text: "[PAGE 1]\nDocument fictif avec assez de texte.", method: "pdf_text" as const, totalPages: 1, ocrConfidence: null, ocrModelVersion: null, ...extra }),
       analyze: async analysisInput => {
-        received.push({ extractionIncomplete: analysisInput.extractionIncomplete, invisibleText: analysisInput.invisibleText });
+        received.push({ extractionIncomplete: analysisInput.extractionIncomplete, invisibleText: analysisInput.invisibleText, visibilityUnchecked: analysisInput.visibilityUnchecked });
         return analysisExecution;
       },
     });
@@ -165,6 +165,8 @@ describe("règles déterministes du pipeline de traitement CV", () => {
     await extractWith({ warnings: ["invisible_text_ignored:31"], invisibleText: { characters: 31, excerpt: "x".repeat(31) } });
     await extractWith({ warnings: ["invisible_text_ignored:30"], invisibleText: { characters: 30, excerpt: "réf. modèle de CV, 30 signes." } });
     expect(received.map(item => item.extractionIncomplete)).toEqual([true, true, true, false]);
+    // Text read without the check keeps its facts out of the filters, as text that hides too much.
+    expect(received.map(item => item.visibilityUnchecked)).toEqual([true, true, false, false]);
     // The admin alert needs the count and the excerpt, whatever the threshold.
     expect(received[3]!.invisibleText).toEqual({ characters: 30, excerpt: "réf. modèle de CV, 30 signes." });
   });
