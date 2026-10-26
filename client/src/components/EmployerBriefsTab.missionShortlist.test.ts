@@ -29,6 +29,7 @@ const state = vi.hoisted(() => ({
   data: null as null | Record<string, unknown>,
   inputs: [] as Array<Record<string, unknown>>,
   consentOptions: null as null | MutationOptions,
+  associateOptions: null as null | MutationOptions,
   exportOptions: null as null | MutationOptions,
   consentMutate: vi.fn(),
   cvMutate: vi.fn(),
@@ -49,7 +50,7 @@ vi.mock("@/lib/trpc", () => ({
         list: { useQuery: () => ({ data: [], isLoading: false, error: null }) },
         candidates: { useQuery: (input: Record<string, unknown>) => { state.inputs.push(input); return { data: state.data, isLoading: false, isFetching: false }; } },
         updateStatus: { useMutation: idle },
-        associateCandidate: { useMutation: idle },
+        associateCandidate: { useMutation: (options: MutationOptions) => { state.associateOptions = options; return idle(); } },
         setCandidateConsent: { useMutation: (options: MutationOptions) => { state.consentOptions = options; return { mutate: state.consentMutate, isPending: false }; } },
       },
       recruitment: {
@@ -274,6 +275,24 @@ describe("écran d’une mission employeur", () => {
       ["error", notAssociated],
       ["error", "Une erreur interne est survenue. Veuillez réessayer dans quelques instants. (réf. 1a2b3c4d)"],
     ]);
+  });
+
+  it.each([
+    ["fr", "Cette mission n’existe plus.", "Cette candidature n’existe plus : elle a peut-être été effacée."],
+    ["en", "This mission no longer exists.", "This application no longer exists: it may have been erased."],
+    ["de", "Diese Mission existiert nicht mehr.", "Diese Bewerbung existiert nicht mehr: Sie wurde möglicherweise gelöscht."],
+    ["zh", "该任务已不存在。", "该申请已不存在：可能已被删除。"],
+  ] as const)("dit dans la langue de l’admin qu’une mission ou une candidature n’existe plus, et relit la liste (%s, DATA-01)", async (language, briefGone, applicationGone) => {
+    state.language = language;
+    render();
+    const refusal = (reason: string | undefined, message = "Message du serveur en français.") => state.associateOptions!.onError?.({ message, data: { code: "NOT_FOUND", reason } }, { briefId: 7, applicationId: 11, status: "shortlisted" } as never);
+    await refusal("association_brief_not_found");
+    await refusal("association_application_not_found");
+    expect(state.invalidateCandidates).toHaveBeenCalledTimes(2);
+    // Any other failure keeps the server's message.
+    await refusal(undefined, "Cet enregistrement existe déjà : rechargez la page pour voir son état actuel.");
+    expect(state.toasts).toEqual([["error", briefGone], ["error", applicationGone], ["error", "Cet enregistrement existe déjà : rechargez la page pour voir son état actuel."]]);
+    expect(state.invalidateCandidates).toHaveBeenCalledTimes(2);
   });
 
   it("garde le message du serveur quand la mission ou la candidature refusée n’est plus à l’écran pour la dater (RGPD-03)", async () => {

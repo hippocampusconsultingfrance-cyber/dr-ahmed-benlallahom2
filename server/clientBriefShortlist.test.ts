@@ -148,6 +148,33 @@ describe("missions employeurs : classement, certifications et accord du candidat
     expect(none.candidates).toEqual([]);
   });
 
+  it("refuse d’associer une mission ou une candidature qui n’existe pas, sans rien écrire (DATA-01)", async () => {
+    const candidate = seedCandidate();
+    const brief = seedBrief();
+    await expect(admin().admin.clientBriefs.associateCandidate({ briefId: 4242, applicationId: 4242, status: "shortlisted" }))
+      .rejects.toMatchObject({ code: "NOT_FOUND", message: "Cette mission n’existe plus.", cause: { reason: "association_brief_not_found" } });
+    await expect(admin().admin.clientBriefs.associateCandidate({ briefId: brief.id as number, applicationId: 999, status: "shortlisted" }))
+      .rejects.toMatchObject({ code: "NOT_FOUND", cause: { reason: "association_application_not_found" } });
+    await expect(admin().admin.clientBriefs.associateCandidate({ briefId: 4242, applicationId: candidate.id as number, status: "shortlisted" }))
+      .rejects.toMatchObject({ cause: { reason: "association_brief_not_found" } });
+    expect(memory.rows(clientBriefCandidates)).toEqual([]);
+  });
+
+  it("garde une seule association par mission et candidat, même pour six appels simultanés, que la décision suivante retire de la shortlist (DATA-01)", async () => {
+    const candidate = seedCandidate();
+    const brief = seedBrief();
+    const pair = { briefId: brief.id as number, applicationId: candidate.id as number };
+    const results = await Promise.all(Array.from({ length: 6 }, () => admin().admin.clientBriefs.associateCandidate({ ...pair, status: "shortlisted", matchScore: 80, notes: "Profil solide" })));
+    expect(results).toEqual(Array.from({ length: 6 }, () => ({ success: true })));
+    expect(memory.rows(clientBriefCandidates)).toEqual([expect.objectContaining({ brief_id: pair.briefId, application_id: pair.applicationId, association_status: "shortlisted" })]);
+
+    // Removed from the shortlist: the one row changes, its score and note kept,
+    // and nothing is left to export.
+    await admin().admin.clientBriefs.associateCandidate({ ...pair, status: "declined" });
+    expect(memory.rows(clientBriefCandidates)).toEqual([expect.objectContaining({ association_status: "declined", match_score: 80, notes: "Profil solide" })]);
+    expect((await admin().admin.clientBriefs.candidates({ briefId: pair.briefId })).shortlistedCount).toBe(0);
+  });
+
   it("une licence lue seulement dans le CV reste « à confirmer » jusqu’à ce que l’admin la confirme, déclarée ou extraite (IA-02)", async () => {
     // The latest analysis read the licence in the CV: its facts and its row.
     const hidden = seedCandidate({ specialty: "Anesthésie-réanimation", target_countries: '["Émirats arabes unis"]', certifications: "BLS", normalized_certifications: '[{"name":"Licence DHA","issuingBody":"Dubai Health Authority"}]', ...scored(80) });
