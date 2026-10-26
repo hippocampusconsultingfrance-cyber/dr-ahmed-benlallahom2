@@ -5,7 +5,7 @@ import PublicContentSkeleton from "@/components/PublicContentSkeleton";
 import AdminLoadMore from "@/components/AdminLoadMore";
 import AdminSearchField from "@/components/AdminSearchField";
 import { adminListCount, adminPageOffsets, ADMIN_PAGE_SIZE, mergeAdminPages, useAdminPageCount } from "@/components/adminPagination";
-import { useAdminSearch } from "@/components/adminSearch";
+import { adminSearchStatus, useAdminSearch } from "@/components/adminSearch";
 import { toast } from "sonner";
 
 const MIN_PRIVATE_RESPONSE_LENGTH = 20;
@@ -178,7 +178,7 @@ export default function MedicalQuestionsAdminTab() {
             </button>
           ))}
         </div>
-        <AdminSearchField id="medical-questions-search" label="Rechercher une question" placeholder="Nom, prénom, email ou référence QMED-…" value={searchText} onChange={setSearchText} onClear={clearSearch} className="mt-4" />
+        <AdminSearchField id="medical-questions-search" label="Rechercher une question" placeholder="Nom, prénom, email ou référence QMED-…" value={searchText} onChange={setSearchText} onClear={clearSearch} status={adminSearchStatus(search, { isLoading, error, shown: items.length, total }, "question(s)")} className="mt-4" />
         {/* Queues and search stay on screen (and keep the focus) while the list loads or fails. */}
         {isLoading ? (
           <div className="mt-4"><PublicContentSkeleton cards={3} label="Chargement des questions médicales" /></div>
@@ -186,7 +186,7 @@ export default function MedicalQuestionsAdminTab() {
           <p className="mt-4 text-destructive">{error.message}</p>
         ) : (
           <>
-            <p className="mt-3 text-sm text-muted-foreground">
+            <p className="mt-3 break-words text-sm text-muted-foreground [overflow-wrap:anywhere]">
               {adminListCount(items.length, total, "question(s)")}{search ? ` pour « ${search} »` : ""}{queue === "todo" ? " · de la plus ancienne à la plus récente" : ""}
             </p>
             <div className="mt-4 space-y-3">
@@ -209,7 +209,7 @@ export default function MedicalQuestionsAdminTab() {
                   </p>
                 </button>
               ))}
-              {items.length === 0 && <p className="rounded-2xl border border-border p-5 text-muted-foreground">{search ? `Aucune question ne correspond à « ${search} » dans cette liste.` : MEDICAL_QUESTION_QUEUES[queue].empty}</p>}
+              {items.length === 0 && <p className="rounded-2xl border border-border p-5 break-words text-muted-foreground [overflow-wrap:anywhere]">{search ? `Aucune question ne correspond à « ${search} » dans cette liste.` : MEDICAL_QUESTION_QUEUES[queue].empty}</p>}
             </div>
             <AdminLoadMore shown={items.length} total={total} loading={isLoadingMore} onLoadMore={loadMore} error={loadMoreError} onRetry={retryLoadMore} />
           </>

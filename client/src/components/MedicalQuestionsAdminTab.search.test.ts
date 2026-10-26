@@ -71,10 +71,14 @@ describe("ADM-02 — recherche dans les questions santé", () => {
     const loading = render();
     expect(view.requests).toEqual([{ statuses: ["submitted", "drafting"], order: "oldest", search: "QMED-ADMIN001", limit: 50, offset: 0 }]);
     expect(renderToStaticMarkup(loading)).toContain('value="QMED-ADMIN001"');
+    // Nothing announced to screen readers before the results are shown.
+    expect(propsOf(loading, AdminSearchField).status).toBe("");
 
     view.loading = false;
     view.page = { items: [], total: 0 };
-    const html = renderToStaticMarkup(render());
+    const loaded = render();
+    expect(propsOf(loaded, AdminSearchField).status).toBe("Aucun résultat pour « QMED-ADMIN001 »");
+    const html = renderToStaticMarkup(loaded);
     expect(html).toContain("0 question(s) pour « QMED-ADMIN001 » · de la plus ancienne à la plus récente");
     expect(html).toContain("Aucune question ne correspond à « QMED-ADMIN001 » dans cette liste.");
 

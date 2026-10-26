@@ -79,6 +79,7 @@ describe("ADM-02 — recherche dans les réservations", () => {
     const loadingHtml = renderToStaticMarkup(tree);
     expect(loadingHtml).toContain('value="aptvol000010"');
     expect(loadingHtml).toContain("Chargement des rendez-vous");
+    expect(propsOf(tree, AdminSearchField).status).toBe("");
 
     view.loading = false;
     (buttonLabelled(tree, "Payé").onClick as () => void)();
@@ -90,6 +91,7 @@ describe("ADM-02 — recherche dans les réservations", () => {
     const html = renderToStaticMarkup(tree);
     expect(html).toContain("0 réservation(s) pour « aptvol000010 »");
     expect(html).toContain("Aucune réservation ne correspond à « aptvol000010 » avec ce filtre.");
+    expect(propsOf(tree, AdminSearchField).status).toBe("Aucun résultat pour « aptvol000010 »");
 
     (propsOf(tree, AdminSearchField).onClear as () => void)();
     render();
@@ -110,5 +112,10 @@ describe("ADM-02 — recherche dans les messages", () => {
     const tree = search(render, "Côté");
     expect(view.requests).toEqual([{ unreadOnly: true, search: "Côté", limit: 50, offset: 0 }]);
     expect(renderToStaticMarkup(tree)).toContain("Aucun message ne correspond à « Côté » parmi les non lus.");
+    expect(propsOf(tree, AdminSearchField).status).toBe("Aucun résultat pour « Côté »");
+
+    // Found: the count of unread messages for the term, as on screen.
+    view.page = { items: [{ id: 7, trackingId: "CSEARCH00001", name: "François Côté", email: "fcote@test.local", phone: null, subject: null, message: "Bonjour", read: 0, createdAt: new Date(Date.UTC(2026, 6, 1)) }], total: 1 };
+    expect(propsOf(render(), AdminSearchField).status).toBe("1 message(s) non lu(s) pour « Côté »");
   });
 });

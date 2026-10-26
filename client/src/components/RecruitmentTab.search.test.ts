@@ -83,11 +83,14 @@ describe("ADM-02 — recherche dans les candidatures", () => {
     // Still typing: the pages already loaded stay as they are.
     expect(sent()).toEqual([{ search: undefined, offset: 0 }, { search: undefined, offset: 50 }]);
     expect(propsOf(tree, AdminSearchField).value).toBe("dupont jean");
+    expect(propsOf(tree, AdminSearchField).status).toBe("");
 
     vi.advanceTimersByTime(ADMIN_SEARCH_DELAY_MS);
     tree = render();
     expect(view.requests).toEqual([{ search: "dupont jean", limit: 50, offset: 0 }]);
     expect(renderToStaticMarkup(tree)).toContain("2 sur 120 candidature(s) pour « dupont jean »");
+    // The same count is read out to screen readers.
+    expect(propsOf(tree, AdminSearchField).status).toBe("2 sur 120 candidature(s) pour « dupont jean »");
   });
 
   it("garde les autres filtres avec la recherche, et la croix revient à la liste complète", () => {
@@ -104,10 +107,11 @@ describe("ADM-02 — recherche dans les candidatures", () => {
     view.page = { items: [], total: 0 };
     tree = render();
     expect(renderToStaticMarkup(tree)).toContain("Aucune candidature ne correspond à « CV1 » avec ces filtres.");
+    expect(propsOf(tree, AdminSearchField).status).toBe("Aucun résultat pour « CV1 »");
 
     (propsOf(tree, AdminSearchField).onClear as () => void)();
     tree = render();
     expect(view.requests).toEqual([{ status: "shortlisted", limit: 50, offset: 0 }]);
-    expect(propsOf(tree, AdminSearchField).value).toBe("");
+    expect(propsOf(tree, AdminSearchField)).toMatchObject({ value: "", status: "" });
   });
 });

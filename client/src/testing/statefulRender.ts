@@ -1,8 +1,9 @@
 /**
- * TEST-ONLY: calls a component as a plain function and keeps its useState and
- * useEffect from one call to the next, so that a behavioural test can type and
- * click through the props of the returned elements, then call it again — the
- * test environment has no DOM. A test file routes React's two hooks here with
+ * TEST-ONLY: calls a component as a plain function and keeps its useState,
+ * useEffect and useRef from one call to the next, so that a behavioural test
+ * can type and click through the props of the returned elements, then call it
+ * again — the test environment has no DOM (a test puts a fake element in a
+ * ref). A test file routes these React hooks here with
  *   vi.mock("react", async importOriginal => (await import("@/testing/statefulRender")).withStatefulHooks(await importOriginal()));
  * Outside renderStateful (for example while react-dom/server renders the
  * returned tree), React's own hooks answer. Never imported by production code.
@@ -18,6 +19,8 @@ const store = {
   stateCursor: 0,
   effects: [] as Effect[],
   effectCursor: 0,
+  refs: [] as Array<{ current: unknown }>,
+  refCursor: 0,
   pending: [] as Array<() => void>,
 };
 
@@ -46,7 +49,13 @@ export function withStatefulHooks<T extends typeof React>(react: T): T {
       store.effects[index]!.cleanup = typeof cleanup === "function" ? cleanup : undefined;
     });
   }
-  return { ...react, useState, useEffect } as T;
+  function useRef(initial: unknown) {
+    if (!store.active) return react.useRef(initial);
+    const index = store.refCursor++;
+    store.refs[index] ??= { current: initial };
+    return store.refs[index];
+  }
+  return { ...react, useState, useEffect, useRef } as T;
 }
 
 /** One render: the component's result, after the effects it scheduled have run. */
@@ -54,6 +63,7 @@ export function renderStateful<T>(component: () => T): T {
   store.active = true;
   store.stateCursor = 0;
   store.effectCursor = 0;
+  store.refCursor = 0;
   let result: T;
   try {
     result = component();
@@ -64,11 +74,12 @@ export function renderStateful<T>(component: () => T): T {
   return result;
 }
 
-/** Unmounts: runs the effects' cleanups and forgets every state. */
+/** Unmounts: runs the effects' cleanups and forgets every state and ref. */
 export function resetStatefulHooks() {
   for (const effect of store.effects) effect?.cleanup?.();
   store.states = [];
   store.effects = [];
+  store.refs = [];
   store.pending = [];
 }
 

@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
+import { adminListCount } from "./adminPagination";
 
-/** ADM-02: the server searches at most 100 characters (adminSearchInput). */
-export const ADMIN_SEARCH_MAX_LENGTH = 100;
 /** Pause in typing after which the list is searched. */
 export const ADMIN_SEARCH_DELAY_MS = 300;
 
@@ -29,4 +28,14 @@ export function useAdminSearch() {
       setSearch("");
     },
   };
+}
+
+/**
+ * What the search box tells screen readers once the first page of a search
+ * has loaded: the list's count for the term, or that nothing matches. Empty
+ * without search, and while that first page loads or fails.
+ */
+export function adminSearchStatus(search: string | undefined, list: { isLoading: boolean; error: unknown; shown: number; total: number }, noun: string): string {
+  if (!search || list.isLoading || list.error) return "";
+  return list.shown ? `${adminListCount(list.shown, list.total, noun)} pour « ${search} »` : `Aucun résultat pour « ${search} »`;
 }

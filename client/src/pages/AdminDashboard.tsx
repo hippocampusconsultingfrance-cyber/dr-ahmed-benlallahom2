@@ -22,7 +22,7 @@ import AdminLoadMore from "@/components/AdminLoadMore";
 import AdminSearchField from "@/components/AdminSearchField";
 import AppointmentDeliveries from "@/components/AppointmentDeliveries";
 import { adminListCount, adminPageOffsets, ADMIN_PAGE_SIZE, mergeAdminPages, useAdminPageCount } from "@/components/adminPagination";
-import { useAdminSearch } from "@/components/adminSearch";
+import { adminSearchStatus, useAdminSearch } from "@/components/adminSearch";
 import PublicContentSkeleton from "@/components/PublicContentSkeleton";
 import { getActiveAdminTabLabel } from "./adminDashboardMobileTabs";
 import { buildAppointmentsAgenda } from "./appointmentsAgenda";
@@ -341,7 +341,7 @@ export function AppointmentsTab() {
           </button>
         ))}
       </div>
-      <AdminSearchField id="appointments-search" label="Rechercher une réservation" placeholder="Nom, email ou référence APT…" value={searchText} onChange={setSearchText} onClear={clearSearch} className="w-full md:max-w-sm" />
+      <AdminSearchField id="appointments-search" label="Rechercher une réservation" placeholder="Nom, email ou référence APT…" value={searchText} onChange={setSearchText} onClear={clearSearch} status={adminSearchStatus(search, { isLoading, error, shown: items.length, total }, "réservation(s)")} className="w-full md:max-w-sm" />
     </div>
   );
 
@@ -372,7 +372,7 @@ export function AppointmentsTab() {
     <div>
       {toolbar}
 
-      <p className="text-sm text-muted-foreground mb-4">{adminListCount(items.length, total, "réservation(s)")}{search ? ` pour « ${search} »` : ""}</p>
+      <p className="text-sm text-muted-foreground mb-4 break-words [overflow-wrap:anywhere]">{adminListCount(items.length, total, "réservation(s)")}{search ? ` pour « ${search} »` : ""}</p>
 
       <section aria-labelledby="appointments-agenda-title" className="mb-6 rounded-xl border border-primary/20 bg-primary/5 p-4 sm:p-5">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
@@ -572,7 +572,7 @@ export function ContactsTab() {
           </button>
         ))}
       </div>
-      <AdminSearchField id="contacts-search" label="Rechercher un message" placeholder="Nom, email ou référence" value={searchText} onChange={setSearchText} onClear={clearSearch} className="w-full md:max-w-sm" />
+      <AdminSearchField id="contacts-search" label="Rechercher un message" placeholder="Nom, email ou référence" value={searchText} onChange={setSearchText} onClear={clearSearch} status={adminSearchStatus(search, { isLoading, error, shown: items.length, total }, unreadOnly ? "message(s) non lu(s)" : "message(s)")} className="w-full md:max-w-sm" />
     </div>
   );
 
@@ -587,7 +587,7 @@ export function ContactsTab() {
   return (
     <div>
       {toolbar}
-      <p className="text-sm text-muted-foreground mb-4">{adminListCount(items.length, total, unreadOnly ? "message(s) non lu(s)" : "message(s)")}{search ? ` pour « ${search} »` : ""}</p>
+      <p className="text-sm text-muted-foreground mb-4 break-words [overflow-wrap:anywhere]">{adminListCount(items.length, total, unreadOnly ? "message(s) non lu(s)" : "message(s)")}{search ? ` pour « ${search} »` : ""}</p>
       <div className="space-y-3">
         {items.map((msg) => (
           <div key={msg.id} className={`bg-card border rounded-lg p-4 ${msg.read === 0 ? "border-primary/50" : "border-border"}`}>

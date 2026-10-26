@@ -6,7 +6,7 @@ import PublicContentSkeleton from "@/components/PublicContentSkeleton";
 import AdminLoadMore from "@/components/AdminLoadMore";
 import AdminSearchField from "@/components/AdminSearchField";
 import { adminListCount, adminPageOffsets, ADMIN_PAGE_SIZE, mergeAdminPages, useAdminPageCount } from "@/components/adminPagination";
-import { useAdminSearch } from "@/components/adminSearch";
+import { adminSearchStatus, useAdminSearch } from "@/components/adminSearch";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import Candidate360Dialog from "./Candidate360Dialog";
@@ -337,7 +337,7 @@ export default function RecruitmentTab() {
       </div>
 
       <div className="grid gap-3 rounded-xl border border-border bg-card/60 p-4 md:grid-cols-3">
-        <AdminSearchField id="recruitment-search" label="Recherche" placeholder="Nom, prénom, email ou référence CV…" value={searchText} onChange={setSearchText} onClear={clearSearch} className="md:col-span-3" />
+        <AdminSearchField id="recruitment-search" label="Recherche" placeholder="Nom, prénom, email ou référence CV…" value={searchText} onChange={setSearchText} onClear={clearSearch} status={adminSearchStatus(search, { isLoading, error, shown: applications.length, total }, "candidature(s)")} className="md:col-span-3" />
         <label className="space-y-1 text-sm text-muted-foreground">
           <span>Statut</span>
           <select value={statusFilter} onChange={event => setStatusFilter(event.target.value as Status | "")} className="h-10 w-full rounded-md border border-border bg-background px-3 text-foreground">
@@ -401,7 +401,7 @@ export default function RecruitmentTab() {
         <PublicContentSkeleton label="Chargement des candidatures" />
       ) : applications.length ? (
         <div className="space-y-3">
-          <p className="text-sm text-muted-foreground">{adminListCount(applications.length, total, "candidature(s)")}{search ? ` pour « ${search} »` : ""}</p>
+          <p className="break-words text-sm text-muted-foreground [overflow-wrap:anywhere]">{adminListCount(applications.length, total, "candidature(s)")}{search ? ` pour « ${search} »` : ""}</p>
           {listedApplications.items.map((application, index) => {
             const countries = parseJsonList(application.targetCountries);
             const languages = parseJsonList(application.languages);
@@ -661,7 +661,7 @@ export default function RecruitmentTab() {
           <AdminLoadMore shown={applications.length} total={total} loading={isLoadingMore} onLoadMore={loadMore} error={loadMoreError} onRetry={retryLoadMore} />
         </div>
       ) : (
-        <div className="rounded-xl border border-dashed border-border py-16 text-center text-muted-foreground">
+        <div className="rounded-xl border border-dashed border-border px-4 py-16 text-center text-muted-foreground break-words [overflow-wrap:anywhere]">
           <FileSearch className="mx-auto mb-3 h-8 w-8" />
           {search ? `Aucune candidature ne correspond à « ${search} » avec ces filtres.` : "Aucune candidature ne correspond aux filtres."}
         </div>
