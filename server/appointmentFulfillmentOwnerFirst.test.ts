@@ -259,4 +259,20 @@ describe("envois après paiement — propriétaire d’abord, essais courts, ale
     expect(confirmation - owner).toBeGreaterThanOrEqual(38);
     expect(invoice - confirmation).toBeGreaterThanOrEqual(38);
   });
+
+  it("ne perd pas de pause quand deux traitements du même paiement se disputent ses envois (webhook et page de retour)", async () => {
+    appointmentFulfillmentPacing.delayMs = 200;
+    memoryDatabase([job(1, "owner"), job(2, "confirmation"), job(3, "invoice")]);
+
+    const [first, second] = await Promise.all([processDueAppointmentFulfillmentJobs(), processDueAppointmentFulfillmentJobs()]);
+
+    // Each job is sent once, by whichever processing claimed it first.
+    expect(first.processed + second.processed).toBe(3);
+    expect(subjects().map(subject => subject.split(" ")[0])).toEqual(["Nouvelle", "Confirmation", "Facture"]);
+    const [owner, confirmation, invoice] = resend.calls.map(call => call.at);
+    expect(confirmation - owner).toBeGreaterThanOrEqual(198);
+    expect(invoice - confirmation).toBeGreaterThanOrEqual(198);
+    // A turn whose job the other processing had already claimed gives its pause back.
+    expect(invoice - owner).toBeLessThan(3 * 200);
+  });
 });

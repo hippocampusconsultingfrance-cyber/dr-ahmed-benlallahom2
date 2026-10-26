@@ -24,15 +24,42 @@ export const APPOINTMENT_FULFILLMENT_STALE_AFTER_MS = 15 * 60_000;
  * and the invoice of one payment would otherwise reach Resend in the same
  * second, above its per-second rate limit. Measured from the last job run in
  * this instance, so it also holds between the successive batches of the
- * scheduled run. Mutable for tests.
+ * scheduled run. The jobs of this instance take their turn in one queue, a
+ * pause after the start of the previous one, so processings running at once
+ * (two webhooks, a webhook and the payment status page) are spaced as well.
+ * Mutable for tests.
  */
 export const appointmentFulfillmentPacing = { delayMs: 600 };
+/** End of the last job run in this instance. */
 let lastJobRunAt: number | null = null;
+/** Start of the last job that took its turn. */
+let lastJobStartAt: number | null = null;
+/** Turn of the last job that queued; the next one waits for it. */
+let lastJobTurn: Promise<void> = Promise.resolve();
 
-async function paceFulfillmentJob() {
-  if (lastJobRunAt === null) return;
-  const waitMs = Math.min(appointmentFulfillmentPacing.delayMs, lastJobRunAt + appointmentFulfillmentPacing.delayMs - Date.now());
+/**
+ * Waits for this job's turn, then for the pause after the start of the
+ * previous job and after the end of the last one. The turn is held until the
+ * returned callback is called, once the job is claimed or found taken by
+ * another worker: a job that sends nothing gives its pause back to the next.
+ */
+async function waitForFulfillmentTurn(): Promise<(claimed: boolean) => void> {
+  const previousTurn = lastJobTurn;
+  let endTurn!: () => void;
+  lastJobTurn = new Promise<void>(resolve => { endTurn = resolve; });
+  await previousTurn;
+  const delayMs = appointmentFulfillmentPacing.delayMs;
+  const now = Date.now();
+  const readyAt = Math.max(lastJobStartAt === null ? now : lastJobStartAt + delayMs, lastJobRunAt === null ? now : lastJobRunAt + delayMs);
+  // Never more than one pause, even with a clock set back (or stopped, in tests).
+  const waitMs = Math.min(readyAt - now, delayMs);
   if (waitMs > 0) await new Promise(resolve => setTimeout(resolve, waitMs));
+  const previousStartAt = lastJobStartAt;
+  lastJobStartAt = Date.now();
+  return claimed => {
+    if (!claimed) lastJobStartAt = previousStartAt;
+    endTurn();
+  };
 }
 
 /**
@@ -320,8 +347,14 @@ export async function processDueAppointmentFulfillmentJobs(limit = MAX_BATCH, op
     .orderBy(appointmentFulfillmentJobs.scheduledFor, appointmentFulfillmentJobs.id).limit(Math.min(Math.max(1, limit), MAX_BATCH));
   const results = [];
   for (const job of jobs) {
-    await paceFulfillmentJob();
-    if (!(await claimFulfillmentJob(db, job))) continue;
+    const endTurn = await waitForFulfillmentTurn();
+    let claimed = false;
+    try {
+      claimed = await claimFulfillmentJob(db, job);
+    } finally {
+      endTurn(claimed);
+    }
+    if (!claimed) continue;
     try {
       results.push(await runJob(job.id));
     } finally {

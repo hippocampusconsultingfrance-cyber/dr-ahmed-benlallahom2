@@ -339,6 +339,32 @@ describe("EXPL-01 — un paiement reçu est confirmé même sans webhook", () =>
     expect(emails.sendInvoiceEmail).toHaveBeenCalledTimes(1);
   });
 
+  it("espace aussi les envois de deux paiements traités en même temps sur cette instance (ABUS-03)", async () => {
+    appointmentFulfillmentPacing.delayMs = 150;
+    const sentAt: number[] = [];
+    const sends = [emails.sendOwnerNotificationEmail, emails.sendConfirmationEmail, emails.sendInvoiceEmail];
+    for (const send of sends) send.mockImplementation(async () => { sentAt.push(Date.now()); });
+    seedAppointment();
+    stripeSession();
+    const otherDate = new Date(Date.now() + 75 * HOUR);
+    seedAppointment({ trackingId: "APTRECON00031", stripeSessionId: "cs_test_reconciliation_31", appointmentDate: otherDate, slotKey: otherDate.toISOString() });
+    const otherSession = stripeSession({ id: "cs_test_reconciliation_31", payment_intent: "pi_test_reconciliation_31", metadata: { trackingId: "APTRECON00031" } });
+
+    try {
+      // Deux webhooks traités en même temps : chaque envoi réserve son tour dans la file de l’instance.
+      const responses = await Promise.all([postEvent("checkout.session.completed", stripeSession(), "evt_paid_a"), postEvent("checkout.session.completed", otherSession, "evt_paid_b")]);
+      expect(responses.map(response => response.status)).toEqual([200, 200]);
+      expect(db().rows(appointmentFulfillmentJobs).map(job => job.status)).toEqual(Array(6).fill("completed"));
+      expect(sentAt).toHaveLength(6);
+      // The pause separates the starts of the jobs; each send follows its start
+      // after a few database reads, which the other webhook (or a loaded test
+      // machine) may delay: the sends are well apart, never at the same instant.
+      for (let index = 1; index < sentAt.length; index += 1) expect(sentAt[index] - sentAt[index - 1]).toBeGreaterThanOrEqual(appointmentFulfillmentPacing.delayMs / 2);
+    } finally {
+      for (const send of sends) send.mockImplementation(async () => undefined);
+    }
+  });
+
   it("ne confirme qu’une fois quand le webhook (et sa relivraison) croise les vérifications de la page", async () => {
     seedAppointment();
     const session = stripeSession();
