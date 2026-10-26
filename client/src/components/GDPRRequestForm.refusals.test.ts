@@ -82,6 +82,19 @@ describe("GDPRRequestForm — refus traduits (ABUS-01)", () => {
     }
   });
 
+  it("dit de réessayer plus tard, ou d'écrire à l'adresse de contact, quand Cloudflare ne peut pas vérifier la demande", () => {
+    const unavailable = refusal("SERVICE_UNAVAILABLE", "security_check_unavailable");
+    expect(renderAlert("fr", unavailable))
+      .toBe(`La vérification anti-robot est momentanément indisponible. Votre demande n’a pas été envoyée : réessayez dans quelques minutes, ou écrivez directement à ${siteConfig.email}.`);
+    expect(renderAlert("en", unavailable))
+      .toBe(`The anti-bot check is temporarily unavailable. Your request has not been sent: please try again in a few minutes, or write directly to ${siteConfig.email}.`);
+    for (const language of ["de", "zh"] as const) {
+      const alert = renderAlert(language, unavailable);
+      expect(alert, language).toBe(gdprRequestCopy[language].refusals.security_check_unavailable.replace("{email}", siteConfig.email));
+      expect(alert, language).toContain(siteConfig.email);
+    }
+  });
+
   it("garde l'échec générique sans motif connu, et n'affiche rien avant un envoi", () => {
     expect(renderAlert("fr", refusal("INTERNAL_SERVER_ERROR"))).toBe(gdprRequestCopy.fr.error);
     expect(renderAlert("zh", new Error("Failed to fetch"))).toBe(gdprRequestCopy.zh.error);
@@ -92,11 +105,13 @@ describe("GDPRRequestForm — refus traduits (ABUS-01)", () => {
     renderAlert("en", null);
     view.onError?.(refusal("TOO_MANY_REQUESTS", "rate_limited"));
     view.onError?.(refusal("BAD_REQUEST", "security_check_failed"));
+    view.onError?.(refusal("SERVICE_UNAVAILABLE", "security_check_unavailable"));
     view.onError?.(refusal("INTERNAL_SERVER_ERROR"));
 
     expect(toastError.mock.calls.map(([message]) => message)).toEqual([
       `Too many requests from this connection. Please try again in 24 hours, or write directly to ${siteConfig.email}.`,
       gdprRequestCopy.en.refusals.security_check_failed,
+      `The anti-bot check is temporarily unavailable. Your request has not been sent: please try again in a few minutes, or write directly to ${siteConfig.email}.`,
       gdprRequestCopy.en.error,
     ]);
   });

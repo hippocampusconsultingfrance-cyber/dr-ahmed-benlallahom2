@@ -3,9 +3,10 @@
  * by the server as `data.reason` next to its French message: the form shows
  * its own translation instead of the generic failure that invites an
  * immediate retry. The per-connection limit is reached (the form says when to
- * try again), or the anti-robot check was refused (the page must be reloaded).
+ * try again), the anti-robot check was refused (the page must be reloaded), or
+ * Cloudflare could not judge it (reloading does not help: try again later).
  */
-export const PUBLIC_FORM_REFUSAL_REASONS = ["rate_limited", "security_check_failed"] as const;
+export const PUBLIC_FORM_REFUSAL_REASONS = ["rate_limited", "security_check_failed", "security_check_unavailable"] as const;
 
 export type PublicFormRefusalReason = (typeof PUBLIC_FORM_REFUSAL_REASONS)[number];
 
