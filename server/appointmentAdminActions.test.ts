@@ -257,13 +257,15 @@ describe("RGPD-12 — rendez-vous anonymisé (effacement ou conservation de 3 an
     const result = await refundAppointmentPayment(fakeStripe().stripe, { trackingId: "APTADMIN0001", reason: "Geste commercial", initiator: "practitioner" }, NOW);
     expect(result).toMatchObject({ success: true, refundAmount: "100.00", patientNotified: false, patientDataErased: true });
     expect(updates[0]).toMatchObject({ paymentStatus: "refunded" });
+    // Neither sent right away nor queued (RES-06 refund queue).
     expect(notifications.sendRefundConfirmationEmail).not.toHaveBeenCalled();
+    expect(fulfillment.sendAppointmentRefundEmail).not.toHaveBeenCalled();
 
-    // A booking still holding its address is told as before.
+    // A booking still holding its address is told as before, through the refund queue.
     fakeDb(row({ appointmentStatus: "completed", appointmentDate: anonymised.appointmentDate }));
     await expect(refundAppointmentPayment(fakeStripe().stripe, { trackingId: "APTADMIN0001", reason: "Geste commercial", initiator: "practitioner" }, NOW))
       .resolves.toMatchObject({ patientNotified: true, patientDataErased: false });
-    expect(notifications.sendRefundConfirmationEmail).toHaveBeenCalledTimes(1);
+    expect(fulfillment.sendAppointmentRefundEmail).toHaveBeenCalledTimes(1);
   });
 
   it("ne relit pas chez Stripe l’adresse d’un patient effacé pour un paiement non rattaché", async () => {

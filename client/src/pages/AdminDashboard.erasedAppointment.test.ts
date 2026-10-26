@@ -101,7 +101,7 @@ describe("RGPD-12 — rendez-vous dont les données sont effacées", () => {
     expect(view.mutate.refund).toHaveBeenLastCalledWith({ trackingId: "APTERASE1", reason: "Geste commercial", initiator: "practitioner" });
 
     view.options.refund!.onSuccess!({ success: true, refundAmount: "100.00", patientNotified: false, patientDataErased: true } as never);
-    expect(view.toasts).toEqual([["success", "Remboursement confirmé : 100.00 €"], ["warning", PATIENT_DATA_ERASED_REFUND_NOTICE]]);
+    expect(view.toasts).toEqual([["success", "Remboursement confirmé : 100,00 €"], ["warning", PATIENT_DATA_ERASED_REFUND_NOTICE]]);
     expect(view.toasts.map(([, message]) => message).join(" ")).not.toContain("prévenez-le");
   });
 
