@@ -17,7 +17,7 @@ vi.mock("./_core/notifications", async importOriginal => ({
 }));
 
 const { appRouter } = await import("./routers");
-const { ADMIN_MFA_COOKIE, issueAdminMfaChallenge, verifyAdminMfaChallenge } = await import("./adminMfa");
+const { ADMIN_MFA_COOKIE, isAdminMfaVerified, issueAdminMfaChallenge, verifyAdminMfaChallenge } = await import("./adminMfa");
 
 /**
  * Procedures open to visitors (public site, booking, candidate portal with its
@@ -77,13 +77,15 @@ function account(openId: string, role: "admin" | "user"): NonNullable<TrpcContex
   return { id: role === "admin" ? 1 : 2, openId, name: "Compte de test", email: `${openId}@example.test`, loginMethod: "clerk", role, createdAt: now, updatedAt: now, lastSignedIn: now };
 }
 
-function context(user: TrpcContext["user"], cookie?: string, onCookie?: (name: string, value: string) => void): TrpcContext {
+/** Same mfaVerified as createContext: the MFA cookie is checked for any signed-in account, admin or not. */
+async function context(user: TrpcContext["user"], cookie?: string, onCookie?: (name: string, value: string) => void): Promise<TrpcContext> {
   const headers: Record<string, string> = { "x-forwarded-for": IP, "user-agent": "vitest" };
   if (cookie) headers.cookie = cookie;
+  const req = { protocol: "https", ip: IP, headers } as unknown as TrpcContext["req"];
   return {
     user,
-    mfaVerified: false,
-    req: { protocol: "https", ip: IP, headers } as unknown as TrpcContext["req"],
+    mfaVerified: user ? await isAdminMfaVerified(req, user.openId) : false,
+    req,
     res: { cookie: onCookie ?? vi.fn(), clearCookie: vi.fn() } as unknown as TrpcContext["res"],
   };
 }
@@ -111,8 +113,8 @@ beforeAll(async () => {
   // The administrator obtains the MFA cookie through the real flow of the admin page.
   let ownerToken = "";
   const owner = account(OWNER_OPEN_ID, "admin");
-  await appRouter.createCaller(context(owner)).adminSecurity.begin();
-  await appRouter.createCaller(context(owner, undefined, (name, value) => { if (name === ADMIN_MFA_COOKIE) ownerToken = value; })).adminSecurity.verify({ code: state.sentCodes.at(-1)! });
+  await appRouter.createCaller(await context(owner)).adminSecurity.begin();
+  await appRouter.createCaller(await context(owner, undefined, (name, value) => { if (name === ADMIN_MFA_COOKIE) ownerToken = value; })).adminSecurity.verify({ code: state.sentCodes.at(-1)! });
   ownerMfaCookie = `${ADMIN_MFA_COOKIE}=${ownerToken}`;
 
   // A valid MFA session left from a time this account was the configured administrator.
@@ -138,6 +140,10 @@ describe("procédures d’administration tRPC : réservées à l’administrateu
     ]));
   });
 
+  it("donne au compte non administrateur une double authentification valide : seul le contrôle du rôle peut le refuser", async () => {
+    expect((await context(account(MEMBER_OPEN_ID, "user"), memberMfaCookie)).mfaVerified).toBe(true);
+  });
+
   it.each([
     ["un visiteur", () => context(null)],
     ["un compte connecté non administrateur, même avec une session de double authentification encore valide", () => context(account(MEMBER_OPEN_ID, "user"), memberMfaCookie)],
@@ -145,7 +151,7 @@ describe("procédures d’administration tRPC : réservées à l’administrateu
   ])("refuse %s sur chaque procédure d’administration", async (_who, makeContext) => {
     const notRefused: string[] = [];
     for (const path of adminPaths) {
-      const outcome = await callWithoutInput(makeContext(), path);
+      const outcome = await callWithoutInput(await makeContext(), path);
       if (outcome !== "refused") notRefused.push(`${path} → ${outcome}`);
     }
     expect(notRefused).toEqual([]);
@@ -153,8 +159,10 @@ describe("procédures d’administration tRPC : réservées à l’administrateu
 
   it("laisse passer l’administrateur qui a validé la double authentification (témoin du parcours)", async () => {
     const verifiedOwner = () => context(account(OWNER_OPEN_ID, "admin"), ownerMfaCookie);
-    await expect(appRouter.createCaller(verifiedOwner()).system.configurationStatus()).resolves.toMatchObject({ ok: expect.any(Boolean) });
+    await expect(appRouter.createCaller(await verifiedOwner()).system.configurationStatus()).resolves.toMatchObject({ ok: expect.any(Boolean) });
+    // adminSecurity.events checks the role and ctx.mfaVerified in its handler, not through adminProcedure.
+    await expect(appRouter.createCaller(await verifiedOwner()).adminSecurity.events()).resolves.toEqual(expect.any(Array));
     // Past the guard, an empty input is refused by validation, not by access control.
-    expect(await callWithoutInput(verifiedOwner(), "admin.appointments.refund")).toBe("BAD_REQUEST");
+    expect(await callWithoutInput(await verifiedOwner(), "admin.appointments.refund")).toBe("BAD_REQUEST");
   });
 });
