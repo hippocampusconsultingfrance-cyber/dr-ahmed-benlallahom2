@@ -12,7 +12,7 @@ import { elementsOf, renderStateful, resetStatefulHooks } from "@/testing/statef
 
 vi.mock("react", async importOriginal => (await import("@/testing/statefulRender")).withStatefulHooks(await importOriginal()));
 
-const view = vi.hoisted(() => ({ testimonials: false }));
+const view = vi.hoisted(() => ({ testimonials: false, seo: [] as Array<{ structuredData?: unknown }> }));
 vi.mock("@shared/publicFeatures", async importOriginal => ({
   ...await importOriginal<typeof import("@shared/publicFeatures")>(),
   isPublicTestimonialsEnabled: () => view.testimonials,
@@ -34,7 +34,8 @@ vi.mock("@/lib/trpc", () => ({
 vi.mock("@/components/Navigation", () => ({ default: () => null }));
 vi.mock("@/hooks/useScrollReveal", () => ({ useScrollReveal: () => ({ current: null }) }));
 vi.mock("@/components/Footer", () => ({ default: () => null }));
-vi.mock("@/components/SEOHead", () => ({ SEOHead: () => null }));
+// Keeps the props: the page's JSON-LD reaches the document through SEOHead, not the rendered markup.
+vi.mock("@/components/SEOHead", () => ({ SEOHead: (props: { structuredData?: unknown }) => { view.seo.push(props); return null; } }));
 vi.mock("wouter", async importOriginal => ({
   ...await importOriginal<typeof import("wouter")>(),
   Link: ({ href, children }: { href: string; children: unknown }) => createElement("a", { href }, children as never),
@@ -53,7 +54,7 @@ function routes() {
   return ([] as unknown[]).concat(switchElement.props.children as unknown[]).flat().filter(Boolean) as Array<{ props: { path?: string; component?: unknown } }>;
 }
 
-beforeEach(() => { view.testimonials = false; });
+beforeEach(() => { view.testimonials = false; view.seo = []; });
 afterEach(() => resetStatefulHooks());
 
 describe("témoignages masqués du site public (M22 / LEGAL-08)", () => {
@@ -91,6 +92,9 @@ describe("témoignages masqués du site public (M22 / LEGAL-08)", () => {
       expect(html, component.name).not.toMatch(/Vérifié|Verified|Verifiziert|已验证/);
       expect(html, component.name).not.toMatch(/aggregateRating/i);
     }
+    // Only the page sets its head; what it gives SEOHead declares neither a rating nor a review.
+    expect(view.seo).toHaveLength(1);
+    expect(JSON.stringify(view.seo[0]!.structuredData ?? null)).not.toMatch(/aggregateRating|review/i);
   });
 
   it("ne déclarent aucune note agrégée dans les pages servies", async () => {
