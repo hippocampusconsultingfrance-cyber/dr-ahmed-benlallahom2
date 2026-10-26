@@ -8,6 +8,9 @@ vi.mock("react", async importOriginal => (await import("@/testing/statefulRender
 type MutationOptions = { onSuccess?: (...args: never[]) => unknown };
 const view = vi.hoisted(() => ({
   documents: [] as Array<Record<string, unknown>>,
+  documentsError: false,
+  documentsLoading: false,
+  refetchDocuments: vi.fn(),
   location: "/candidate/portal",
   navigations: [] as string[],
   calls: [] as string[],
@@ -30,7 +33,7 @@ vi.mock("@/lib/trpc", () => {
       useUtils: () => ({ candidatePortal: { invalidate: vi.fn(), me: { setData: vi.fn(), invalidate: async () => { view.calls.push("me.invalidate"); } }, documents: { invalidate: vi.fn() }, sessions: { invalidate: vi.fn() } } }),
       candidatePortal: {
         me: { useQuery: query(() => ({ id: 7, firstName: "Vera" })) },
-        documents: { useQuery: query(() => view.documents) },
+        documents: { useQuery: () => ({ ...query(() => view.documents)(), isLoading: view.documentsLoading, isError: view.documentsError, refetch: view.refetchDocuments }) },
         sessions: { useQuery: query(() => []) },
         logout: mutation("logout"),
         revokeSession: mutation("revokeSession"),
@@ -59,6 +62,9 @@ const { default: CookieConsent } = await import("@/components/CookieConsent");
 
 beforeEach(() => {
   view.documents = [];
+  view.documentsError = false;
+  view.documentsLoading = false;
+  view.refetchDocuments = vi.fn();
   view.location = "/candidate/portal";
   view.navigations = [];
   view.calls = [];
@@ -97,6 +103,36 @@ describe("CAND-20 — ce que le candidat voit de la revue", () => {
     expect(html).toContain("diplome-vera.pdf");
     expect(html).toContain(candidatePortalCopy.fr.status.rejected);
     for (const hidden of ["Synthèse IA confidentielle", "Signature douteuse", "Note interne", "37 %", "37%"]) expect(html).not.toContain(hidden);
+  });
+});
+
+describe("états du coffre candidat", () => {
+  it("annonce le chargement des documents, puis un coffre vide une fois la liste reçue", () => {
+    const { loadingDocuments, noDocuments } = candidatePortalCopy.fr;
+    view.documentsLoading = true;
+    let html = renderToStaticMarkup(createElement(CandidatePortalPage));
+    expect(html).toContain(`role="status" aria-live="polite" aria-label="${loadingDocuments}"`);
+    expect(html).not.toContain(noDocuments);
+
+    view.documentsLoading = false;
+    html = renderToStaticMarkup(createElement(CandidatePortalPage));
+    expect(html).not.toContain(loadingDocuments);
+    expect(html).toContain(noDocuments);
+  });
+
+
+  it("annonce l’échec du chargement à la place du coffre et relit les documents sur « Réessayer »", () => {
+    view.documentsError = true;
+    const html = renderToStaticMarkup(createElement(CandidatePortalPage));
+    const alert = html.slice(html.indexOf('role="alert"'));
+    expect(alert).toContain("Le coffre ne peut pas être chargé pour le moment. Réessayez dans quelques instants.");
+    expect(html).not.toContain('id="candidate-document-file"');
+    expect(html).not.toContain(candidatePortalCopy.fr.logout);
+
+    const retry = elementsOf(renderStateful(CandidatePortalPage)).find(element => typeof element.props.onClick === "function" && element.props.children === "Réessayer")!;
+    expect(view.refetchDocuments).not.toHaveBeenCalled();
+    (retry.props.onClick as () => void)();
+    expect(view.refetchDocuments).toHaveBeenCalledTimes(1);
   });
 });
 
