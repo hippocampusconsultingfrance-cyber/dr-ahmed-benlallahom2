@@ -1,6 +1,6 @@
 /**
  * TEST-ONLY: calls a component as a plain function and keeps its useState,
- * useEffect, useRef, useMemo and useCallback from one call to the next, so that a behavioural test
+ * useReducer, useEffect, useRef, useMemo and useCallback from one call to the next, so that a behavioural test
  * can type and click through the props of the returned elements, then call it
  * again — the test environment has no DOM (a test puts a fake element in a
  * ref). A test file routes these React hooks here with
@@ -70,7 +70,12 @@ export function withStatefulHooks<T extends typeof React>(react: T): T {
     if (!store.active) return react.useCallback(callback as () => void, deps as never);
     return useMemo(() => callback, deps);
   }
-  return { ...react, useState, useEffect, useRef, useMemo, useCallback } as T;
+  function useReducer(reducer: (state: unknown, action: unknown) => unknown, initialArg: unknown, init?: (arg: unknown) => unknown) {
+    if (!store.active) return react.useReducer(reducer as never, initialArg as never, init as never);
+    const [state, setState] = useState(() => (init ? init(initialArg) : initialArg)) as [unknown, (next: (value: unknown) => unknown) => void];
+    return [state, (action: unknown) => setState(previous => reducer(previous, action))];
+  }
+  return { ...react, useState, useReducer, useEffect, useRef, useMemo, useCallback } as T;
 }
 
 /**
