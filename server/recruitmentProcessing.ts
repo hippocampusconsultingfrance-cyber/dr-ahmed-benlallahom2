@@ -281,7 +281,8 @@ export const CV_ANALYSIS_DEFERRED_DAILY_VOLUME = "analysis_deferred_daily_volume
 /**
  * ABUS-01: an application received beyond the day's volume is kept for human
  * review without queueing its AI analysis, and the legacy backfill leaves it
- * alone; « Relancer l’analyse » queues it like any other.
+ * alone, as does the admin's batch resume; its own « Analyser le CV » queues it
+ * like any other.
  */
 export async function deferCvAnalysisForDailyVolume(applicationId: number) {
   const db = await getDb();

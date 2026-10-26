@@ -96,7 +96,7 @@ const PUBLIC_FORM_SKIPPED_EFFECTS: Record<PublicFormDailyVolumeKind, string> = {
   contact: "sans email de notification pour chacune",
   gdpr: "sans email de notification pour chacune",
   medicalQuestion: "sans accusé de réception à l’adresse saisie ni email de notification pour chacune",
-  recruitmentApply: "sans email de confirmation au candidat, sans email de notification pour chacune et sans analyse IA du CV (« Relancer l’analyse » sur les dossiers légitimes)",
+  recruitmentApply: "sans email de confirmation au candidat, sans email de notification pour chacune et sans analyse IA du CV (« Analyser le CV » sur les dossiers légitimes)",
 };
 
 /**

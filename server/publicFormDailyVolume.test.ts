@@ -13,6 +13,15 @@ const state = vi.hoisted(() => ({ db: null as unknown, sent: [] as SentEmail[], 
 vi.mock("./db", () => ({ getDb: async () => state.db }));
 vi.mock("./_core/notification", () => ({ notifyOwner: vi.fn(async (_payload: { title: string; content: string }) => true) }));
 vi.mock("./candidateTurnstile", () => ({ verifyCandidateTurnstile: vi.fn(async () => undefined) }));
+vi.mock("./adminMfa", async importOriginal => ({
+  ...await importOriginal<typeof import("./adminMfa")>(),
+  isAdminMfaVerified: vi.fn(async () => true),
+}));
+// The admin batch resume runs one analysis inline: only the queueing is observed here.
+vi.mock("./recruitmentProcessing", async importOriginal => ({
+  ...await importOriginal<typeof import("./recruitmentProcessing")>(),
+  processDueCvAnalysisJobs: vi.fn(async () => ({ processed: 0, results: [] })),
+}));
 vi.mock("resend", () => ({
   Resend: class {
     emails = { send: vi.fn(async (payload: SentEmail) => { state.sent.push(payload); return { data: { id: `email_${state.sent.length}` }, error: null }; }) };
@@ -23,7 +32,7 @@ const { appRouter } = await import("./routers");
 const { notifyOwner } = await import("./_core/notification");
 const { PUBLIC_EMAIL_IP_RATE_LIMITS, PUBLIC_FORM_DAILY_VOLUME_THRESHOLDS } = await import("./publicFormRateLimit");
 const { runSecurityPostureReview } = await import("./scheduledJobs");
-const { backfillLegacyCvAnalysisJobs, CV_ANALYSIS_DEFERRED_DAILY_VOLUME, deferCvAnalysisForDailyVolume, enqueueCvAnalysis } = await import("./recruitmentProcessing");
+const { backfillLegacyCvAnalysisJobs, CV_ANALYSIS_DEFERRED_DAILY_VOLUME, deferCvAnalysisForDailyVolume, enqueueCvAnalysis, processDueCvAnalysisJobs } = await import("./recruitmentProcessing");
 
 const dialect = new PgDialect();
 const TURNSTILE_TOKEN = "turnstile-token-accepted-by-the-mock";
@@ -43,6 +52,10 @@ function inMemoryDbWithRawInserts() {
 function caller(ip: string | null) {
   const headers: Record<string, string> = ip ? { "x-forwarded-for": ip } : {};
   return appRouter.createCaller({ user: null, mfaVerified: false, req: { protocol: "https", headers }, res: { clearCookie: vi.fn() } } as never);
+}
+
+function adminCaller() {
+  return appRouter.createCaller({ user: { openId: "user_owner", role: "admin" }, mfaVerified: true, req: { protocol: "https", headers: {} }, res: { clearCookie: vi.fn(), cookie: vi.fn() } } as never);
 }
 
 const contactMessage = (email: string) => ({ name: "Jeanne Martin", email, message: "Bonjour, je souhaite une information sur la consultation.", gdprConsent: 1, turnstileToken: TURNSTILE_TOKEN });
@@ -172,6 +185,19 @@ describe("analyse IA d’une candidature reçue au-delà du seuil (ABUS-01)", ()
     await enqueueCvAnalysis(Number(deferred.id));
     expect(db().rows(cvProcessingJobs).map(job => job.applicationId)).toEqual([ordinary.id, deferred.id]);
     expect(db().rows(cvApplications).find(row => row.id === deferred.id)).toMatchObject({ analysisStatus: "queued", analysisLastError: null });
+  });
+
+  it("n’est pas remise en file par la reprise groupée de l’administration (« Mettre à jour / reprendre l’IA »)", async () => {
+    const deferred = seedApplication(db(), { email: "inondation@test.local" });
+    const ordinary = seedApplication(db(), { email: "jamais-analyse@test.local" });
+    await deferCvAnalysisForDailyVolume(Number(deferred.id));
+
+    const result = await adminCaller().admin.recruitment.reanalyzeFailed({ limit: 10 });
+
+    expect(result).toMatchObject({ success: true, queued: 1 });
+    expect(db().rows(cvProcessingJobs).map(job => job.applicationId)).toEqual([ordinary.id]);
+    expect(vi.mocked(processDueCvAnalysisJobs)).toHaveBeenCalledWith(1, [ordinary.id]);
+    expect(db().rows(cvApplications).find(row => row.id === deferred.id)).toMatchObject({ analysisStatus: "needs_review", analysisLastError: CV_ANALYSIS_DEFERRED_DAILY_VOLUME });
   });
 });
 

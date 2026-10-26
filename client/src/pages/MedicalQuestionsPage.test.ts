@@ -25,6 +25,18 @@ describe("page de questions médicales", () => {
   });
 });
 
+describe("page de questions médicales — confirmation", () => {
+  it("ne promet l’accusé de réception par email que s’il est parti (ABUS-01)", async () => {
+    const { medicalQuestionSuccessBody } = await import("./MedicalQuestionsPage");
+    const emailWords = { fr: /email/i, en: /email/i, de: /E-Mail/, zh: /邮件/ } as const;
+    for (const language of ["fr", "en", "de", "zh"] as const) {
+      expect(medicalQuestionSuccessBody(language, true)).toMatch(emailWords[language]);
+      expect(medicalQuestionSuccessBody(language, false)).not.toMatch(emailWords[language]);
+    }
+    expect(medicalQuestionSuccessBody("fr", false)).toBe("Elle sera examinée avant toute réponse. Notez votre référence confidentielle :");
+  });
+});
+
 describe("page de questions médicales — refus de l’envoi", () => {
   it("distingue le plafond d’envois par connexion d’un anti-robot à renouveler (MAIL-01)", async () => {
     const { medicalQuestionSubmitError } = await import("./MedicalQuestionsPage");

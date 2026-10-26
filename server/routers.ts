@@ -2061,14 +2061,22 @@ export const appRouter = router({
         .mutation(async ({ input, ctx }) => {
           const db = await getDb();
           if (!db) throw new Error("Database connection failed");
+          const { CV_ANALYSIS_DEFERRED_DAILY_VOLUME, enqueueCvAnalysis, processDueCvAnalysisJobs } = await import("./recruitmentProcessing");
+          // Les candidatures reçues au-delà du volume du jour (ABUS-01), jamais
+          // analysées, restent à l’écart comme pour le rattrapage automatique :
+          // seule l’action « Analyser le CV » d’un dossier les met en file.
           const resumableApplications = await db
             .select({ id: cvApplications.id, trackingId: cvApplications.trackingId })
             .from(cvApplications)
-            .where(and(or(inArray(cvApplications.analysisStatus, ["failed", "queued"]), ne(cvApplications.analysisPromptVersion, RECRUITMENT_ANALYSIS_PROMPT_VERSION), isNull(cvApplications.analysisPromptVersion)), ne(cvApplications.status, "rejected"), ne(cvApplications.status, "archived")))
+            .where(and(
+              or(inArray(cvApplications.analysisStatus, ["failed", "queued"]), ne(cvApplications.analysisPromptVersion, RECRUITMENT_ANALYSIS_PROMPT_VERSION), isNull(cvApplications.analysisPromptVersion)),
+              ne(cvApplications.status, "rejected"),
+              ne(cvApplications.status, "archived"),
+              or(isNull(cvApplications.analysisLastError), ne(cvApplications.analysisLastError, CV_ANALYSIS_DEFERRED_DAILY_VOLUME)),
+            ))
             .orderBy(cvApplications.updatedAt)
             .limit(input?.limit ?? 10);
 
-          const { enqueueCvAnalysis, processDueCvAnalysisJobs } = await import("./recruitmentProcessing");
           for (const application of resumableApplications) {
             await enqueueCvAnalysis(application.id);
             await logRecruitmentAction({ applicationId: application.id, adminOpenId: ctx.user.openId, action: "reanalyze", metadata: { queued: true, batch: true } });

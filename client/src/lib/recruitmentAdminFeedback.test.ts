@@ -15,6 +15,8 @@ describe("retours honnêtes dans l’administration du recrutement", () => {
     expect(failed.message).not.toContain("Gateway");
     expect(reanalysisToast({ outcome: "failed", error: "cv_validation_pdf_encrypted" }).tone).toBe("error");
     expect(recruitmentAnalysisErrorLabel("AI Gateway requires a valid credit card (402)")).toContain("fournisseur");
+    // ABUS-01: a dossier never analysed shows « Analyser le CV », the button the label names.
+    expect(recruitmentAnalysisErrorLabel("analysis_deferred_daily_volume")).toContain("« Analyser le CV »");
     expect(recruitmentTab).toContain("recruitmentAnalysisErrorLabel(application.analysisLastError)");
   });
 

@@ -574,7 +574,7 @@ export async function createApp() {
               language: parsed.data.language,
             });
           }
-          // The confirmation has gone out: this application keeps its place in the per-IP cap.
+          // This application keeps its place in the per-IP cap (its confirmation may be skipped beyond the day's volume).
           releaseIpAttempt = null;
           await logSecurityEvent({ actorKind: "anonymous", actorReference: parsed.data.email, category: "public_recruitment_apply_duplicate_file", outcome: "allowed", severity: "info", ipHash });
           res.status(200).json({ success: true, duplicate: true, trackingId: duplicate.trackingId });
