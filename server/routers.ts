@@ -35,6 +35,7 @@ import { googleDriveExportStatus } from "./googleDriveExport";
 import { buildCandidatePortalInvitationEmailEvent, candidatePortalAccountMatchesApplication, resolveCandidatePortalActivationDelivery, resolveCandidatePortalInvitationDelivery, resolveCvConfirmationDelivery, retryCvConfirmationEmail } from "./recruitmentEmailTrace";
 import { AI_ANALYSIS_BILLING_UNAVAILABLE_ERROR, MANUAL_REVIEW_FALLBACK_MODEL, RECRUITMENT_ANALYSIS_PROMPT_VERSION } from "./recruitmentAnalysis";
 import { medicalQuestionsRouter } from "./medicalQuestionsRouter";
+import { adminSearchCondition, adminSearchInput } from "./adminSearch";
 import { AdminMfaRateLimitError, issueAdminMfaChallenge, revokeCurrentAdminMfaSession, verifyAdminMfaChallenge } from "./adminMfa";
 import {
   BOOKING_INVALID_NAME_MESSAGE,
@@ -1233,6 +1234,8 @@ export const appRouter = router({
             limit: z.number().min(1).max(100).optional().default(50),
             offset: z.number().min(0).optional().default(0),
             status: z.enum(["pending", "completed", "failed", "refunded"]).optional(),
+            /** Patient name, email or booking reference (ADM-02). */
+            search: adminSearchInput,
           })
         )
         .query(async ({ input }) => {
@@ -1243,6 +1246,8 @@ export const appRouter = router({
           if (input.status) {
             conditions.push(eq(appointments.paymentStatus, input.status));
           }
+          const search = adminSearchCondition(input.search, [appointments.customerName, appointments.customerEmail, appointments.trackingId]);
+          if (search) conditions.push(search);
 
           const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
@@ -1406,6 +1411,8 @@ export const appRouter = router({
             certification: z.string().trim().max(160).optional(),
             minimumScore: z.number().int().min(0).max(100).optional(),
             profileId: z.number().int().positive().optional(),
+            /** First name, last name, email or application reference (ADM-02). */
+            search: adminSearchInput,
           })
         )
         .query(async ({ input }) => {
@@ -1414,6 +1421,8 @@ export const appRouter = router({
 
           const conditions = [];
           if (input.status) conditions.push(eq(cvApplications.status, input.status));
+          const search = adminSearchCondition(input.search, [cvApplications.firstName, cvApplications.lastName, cvApplications.email, cvApplications.trackingId]);
+          if (search) conditions.push(search);
           if (input.specialty) conditions.push(sql`LOWER(${cvApplications.specialty}) LIKE LOWER(${`%${input.specialty}%`})`);
           if (input.country) conditions.push(sql`${cvApplications.targetCountries} LIKE ${`%${input.country}%`}`);
           if (input.language) conditions.push(sql`((${cvApplications.analysisPromptVersion} = ${RECRUITMENT_ANALYSIS_PROMPT_VERSION} AND ${cvApplications.normalizedLanguages} LIKE ${`%${input.language}%`}) OR ${cvApplications.languages} LIKE ${`%${input.language}%`})`);
@@ -2417,13 +2426,18 @@ export const appRouter = router({
             offset: z.number().min(0).optional().default(0),
             /** Only the messages not marked as read yet (ADM-01). */
             unreadOnly: z.boolean().optional().default(false),
+            /** Sender name, email or message reference (ADM-02). */
+            search: adminSearchInput,
           })
         )
         .query(async ({ input }) => {
           const db = await getDb();
           if (!db) return { items: [], total: 0 };
 
-          const whereClause = input.unreadOnly ? eq(contactMessages.read, 0) : undefined;
+          const whereClause = and(
+            input.unreadOnly ? eq(contactMessages.read, 0) : undefined,
+            adminSearchCondition(input.search, [contactMessages.name, contactMessages.email, contactMessages.trackingId]),
+          );
 
           const items = await db
             .select()
