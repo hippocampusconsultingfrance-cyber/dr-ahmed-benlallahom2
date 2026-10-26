@@ -30,9 +30,23 @@ import { CANDIDATE_UPLOADABLE_DOCUMENT_CATEGORIES, candidateDocumentAllowsAiAnal
 import { isSameRecruitmentSubmission } from "../recruitmentSubmissionDeduplication";
 import { sendTrackedCvApplicationConfirmationEmail } from "../recruitmentEmailTrace";
 import { resendApplicationReferenceFromTags, resendRecipientMatchesApplication } from "../resendWebhookCorrelation";
+import { postgresErrorCode } from "../languageColumns";
+import { internalErrorReference, internalErrorSummary } from "./trpc";
 
 function safeErrorName(error: unknown) {
   return error instanceof Error ? error.name : "UnknownError";
+}
+
+/**
+ * Failed scheduled job: the caller gets a generic error and a short reference,
+ * never the error message (Drizzle puts the whole SQL and its parameters in
+ * it). The server log keeps the detail under that reference, without the
+ * query parameters, like tRPC internal errors, and the SQLSTATE if any.
+ */
+function sendScheduledJobFailure(res: express.Response, logPrefix: string, error: unknown) {
+  const reference = internalErrorReference();
+  console.error(`${logPrefix} ref=${reference}`, internalErrorSummary(error), postgresErrorCode(error) ?? "");
+  return res.status(500).json({ error: "scheduled_job_failed", reference, timestamp: new Date().toISOString() });
 }
 
 function safeErrorMetadata(error: unknown) {
@@ -855,9 +869,8 @@ export async function createApp() {
         const { httpStatus, ...result } = await run({ scheduler: "vercel-cron" });
         if (httpStatus) return res.status(httpStatus).json(result);
         return res.json({ ok: true, scheduler: "vercel-cron", ...result });
-      } catch (error: any) {
-        console.error(`[${label}] Vercel cron error:`, safeErrorName(error));
-        return res.status(500).json({ error: error.message, timestamp: new Date().toISOString() });
+      } catch (error) {
+        return sendScheduledJobFailure(res, `[${label}] Vercel cron error`, error);
       }
     });
 
@@ -869,9 +882,8 @@ export async function createApp() {
         const { httpStatus, ...result } = await run({ scheduler: "heartbeat", taskUid: user.taskUid });
         if (httpStatus) return res.status(httpStatus).json(result);
         return res.json({ ok: true, taskUid: user.taskUid, ...result });
-      } catch (error: any) {
-        console.error(`[${label}] Handler error:`, safeErrorName(error));
-        return res.status(500).json({ error: error.message, timestamp: new Date().toISOString() });
+      } catch (error) {
+        return sendScheduledJobFailure(res, `[${label}] Handler error`, error);
       }
     });
   }
@@ -909,9 +921,8 @@ export async function createApp() {
         analysesWaiting: summary.analysesWaiting,
       });
       return res.json({ ok: true, scheduler: "vercel-cron", ...summary });
-    } catch (error: any) {
-      console.error("[RecruitmentProcessing] Vercel cron error:", safeErrorName(error));
-      return res.status(500).json({ error: error.message, timestamp: new Date().toISOString() });
+    } catch (error) {
+      return sendScheduledJobFailure(res, "[RecruitmentProcessing] Vercel cron error", error);
     }
   });
 
@@ -931,9 +942,8 @@ export async function createApp() {
       const driveExports = await processDueCvGoogleDriveExports(2);
       const confirmationEmails = await retryDueFailedCvConfirmationEmails(2);
       return res.json({ ok: true, taskUid: user.taskUid, analysisRecovery, driveRecovery, analysisBackfill, driveBackfill, analysis, driveExports, confirmationEmails });
-    } catch (error: any) {
-      console.error("[RecruitmentProcessing] Handler error:", safeErrorName(error));
-      return res.status(500).json({ error: error.message, timestamp: new Date().toISOString() });
+    } catch (error) {
+      return sendScheduledJobFailure(res, "[RecruitmentProcessing] Handler error", error);
     }
   });
 
