@@ -33,7 +33,7 @@ import { emailLanguageFor, SITE_LANGUAGES } from "./emailLanguage";
 import { verifyCandidateTurnstile } from "./candidateTurnstile";
 import { googleDriveExportStatus } from "./googleDriveExport";
 import { buildCandidatePortalInvitationEmailEvent, candidatePortalAccountMatchesApplication, resolveCandidatePortalActivationDelivery, resolveCandidatePortalInvitationDelivery, resolveCvConfirmationDelivery, retryCvConfirmationEmail } from "./recruitmentEmailTrace";
-import { RECRUITMENT_ANALYSIS_PROMPT_VERSION } from "./recruitmentAnalysis";
+import { AI_ANALYSIS_BILLING_UNAVAILABLE_ERROR, MANUAL_REVIEW_FALLBACK_MODEL, RECRUITMENT_ANALYSIS_PROMPT_VERSION } from "./recruitmentAnalysis";
 import { medicalQuestionsRouter } from "./medicalQuestionsRouter";
 import { AdminMfaRateLimitError, issueAdminMfaChallenge, revokeCurrentAdminMfaSession, verifyAdminMfaChallenge } from "./adminMfa";
 import {
@@ -434,9 +434,10 @@ async function deliverCampaignRecipient(
 export function reanalysisOutcome(
   queue: { alreadyRunning: boolean },
   processing: { processed: number; results: Array<Record<string, unknown>> },
-): { outcome: "completed" | "needs_review" | "retry_scheduled" | "failed" | "already_running" | "queued"; error: string | null } {
+): { outcome: "completed" | "needs_review" | "ai_unavailable" | "retry_scheduled" | "failed" | "already_running" | "queued"; error: string | null } {
   const result = processing.results[0];
   if (!processing.processed || !result) return { outcome: queue.alreadyRunning ? "already_running" : "queued", error: null };
+  if (result.completed === true && result.aiUnavailable === true) return { outcome: "ai_unavailable", error: AI_ANALYSIS_BILLING_UNAVAILABLE_ERROR };
   if (result.completed === true) return { outcome: result.needsReview ? "needs_review" : "completed", error: null };
   const error = typeof result.error === "string" ? result.error : typeof result.reason === "string" ? result.reason : null;
   return { outcome: result.retry ? "retry_scheduled" : "failed", error };
@@ -445,10 +446,12 @@ export function reanalysisOutcome(
 /** What really happened to a manual Google Drive copy (ADM-DRIVE-01). */
 export function driveRetryOutcome(
   queue: { alreadyCompleted: boolean; alreadyRunning: boolean },
-  processing: { processed: number; waitingForAuthorization?: boolean; results: Array<Record<string, unknown>> },
-): { outcome: "completed" | "already_completed" | "already_running" | "not_connected" | "waiting_validation" | "retry_scheduled" | "failed" | "queued"; error: string | null } {
+  processing: { processed: number; waitingForAuthorization?: boolean; reconnectRequired?: boolean; results: Array<Record<string, unknown>> },
+): { outcome: "completed" | "already_completed" | "already_running" | "not_connected" | "reconnect_required" | "waiting_validation" | "retry_scheduled" | "failed" | "queued"; error: string | null } {
   if (queue.alreadyCompleted) return { outcome: "already_completed", error: null };
   if (queue.alreadyRunning) return { outcome: "already_running", error: null };
+  // Revoked Google token: the copy waits for the reconnection (REC-09).
+  if (processing.reconnectRequired || processing.results[0]?.reconnectRequired === true) return { outcome: "reconnect_required", error: "google_drive_token_invalid_grant" };
   if (processing.waitingForAuthorization) return { outcome: "not_connected", error: "google_drive_not_connected" };
   const result = processing.results[0];
   if (!processing.processed || !result) return { outcome: "queued", error: null };
@@ -1246,7 +1249,7 @@ export const appRouter = router({
           const { processDueCvGoogleDriveExports, retryCvGoogleDriveExport } = await import("./googleDriveExport");
           const queue = await retryCvGoogleDriveExport(application.id);
           const processing = queue.alreadyCompleted || queue.alreadyRunning
-            ? { processed: 0, waitingForAuthorization: false, results: [] as Array<Record<string, unknown>> }
+            ? { processed: 0, waitingForAuthorization: false, reconnectRequired: false, results: [] as Array<Record<string, unknown>> }
             : await processDueCvGoogleDriveExports(1, [application.id]);
           const outcome = driveRetryOutcome(queue, processing);
           await logRecruitmentAction({
@@ -1256,6 +1259,29 @@ export const appRouter = router({
             metadata: { event: "google_drive_retry", ...queue, processed: processing.processed, outcome: outcome.outcome },
           });
           return { success: true, ...queue, processed: processing.processed, ...outcome };
+        }),
+        // « Relancer toutes les copies échouées » (REC-09).
+        retryAllFailed: adminProcedure.mutation(async ({ ctx }) => {
+          const { processDueCvGoogleDriveExports, retryAllFailedCvGoogleDriveExports } = await import("./googleDriveExport");
+          const queue = await retryAllFailedCvGoogleDriveExports();
+          for (const applicationId of queue.applicationIds) {
+            await logRecruitmentAction({ applicationId, adminOpenId: ctx.user.openId, action: "export", metadata: { event: "google_drive_retry", batch: true } });
+          }
+          // A few copies inline (each one downloads and uploads a CV); the cron copies the rest.
+          const processing = queue.requeued > 0
+            ? await processDueCvGoogleDriveExports(3, queue.applicationIds)
+            : { processed: 0, waitingForAuthorization: false, reconnectRequired: false, results: [] as Array<Record<string, unknown>> };
+          return {
+            success: true,
+            requeued: queue.requeued,
+            processed: processing.processed,
+            copied: processing.results.filter(result => result.completed === true).length,
+            // A skipped copy (CV awaiting its security check, claim lost) is not a
+            // failure, nor one waiting for the Drive reconnection (reconnectRequired).
+            failedAgain: processing.results.filter(result => result.completed === false && result.reconnectRequired !== true).length,
+            reconnectRequired: processing.reconnectRequired,
+            notConnected: processing.waitingForAuthorization && !processing.reconnectRequired,
+          };
         }),
       }),
       list: adminProcedure
@@ -1638,7 +1664,8 @@ export const appRouter = router({
           analysesQueued: sql<number>`SUM(CASE WHEN ${cvApplications.analysisStatus} = 'queued' THEN 1 ELSE 0 END)`,
           analysesInProgress: sql<number>`SUM(CASE WHEN ${cvApplications.analysisStatus} IN ('extracting', 'analyzing') THEN 1 ELSE 0 END)`,
           analysesCompleted: sql<number>`SUM(CASE WHEN ${cvApplications.analysisStatus} = 'completed' THEN 1 ELSE 0 END)`,
-          analysesNeedsReview: sql<number>`SUM(CASE WHEN ${cvApplications.analysisStatus} = 'needs_review' THEN 1 ELSE 0 END)`,
+          // A dossier left without AI analysis (degraded) is read by a human too.
+          analysesNeedsReview: sql<number>`SUM(CASE WHEN ${cvApplications.analysisStatus} IN ('needs_review', 'degraded') THEN 1 ELSE 0 END)`,
           analysesFailed: sql<number>`SUM(CASE WHEN ${cvApplications.analysisStatus} = 'failed' THEN 1 ELSE 0 END)`,
           contacted: sql<number>`SUM(CASE WHEN ${cvApplications.lastContactedAt} IS NOT NULL THEN 1 ELSE 0 END)`,
           responded: sql<number>`SUM(CASE WHEN ${cvApplications.lastCandidateResponseAt} IS NOT NULL THEN 1 ELSE 0 END)`,
@@ -1989,22 +2016,29 @@ export const appRouter = router({
           const resumableApplications = await db
             .select({ id: cvApplications.id, trackingId: cvApplications.trackingId })
             .from(cvApplications)
-            .where(and(or(inArray(cvApplications.analysisStatus, ["failed", "queued"]), ne(cvApplications.analysisPromptVersion, RECRUITMENT_ANALYSIS_PROMPT_VERSION), isNull(cvApplications.analysisPromptVersion)), ne(cvApplications.status, "rejected"), ne(cvApplications.status, "archived")))
+            // degraded, or saved as needs_review by the billing fallback before
+            // that status existed: the AI provider refused, the CV was never analysed (REC-08).
+            .where(and(or(inArray(cvApplications.analysisStatus, ["failed", "queued", "degraded"]), eq(cvApplications.analysisModel, MANUAL_REVIEW_FALLBACK_MODEL), ne(cvApplications.analysisPromptVersion, RECRUITMENT_ANALYSIS_PROMPT_VERSION), isNull(cvApplications.analysisPromptVersion)), ne(cvApplications.status, "rejected"), ne(cvApplications.status, "archived")))
             .orderBy(cvApplications.updatedAt)
             .limit(input?.limit ?? 10);
 
           const { enqueueCvAnalysis, processDueCvAnalysisJobs } = await import("./recruitmentProcessing");
+          let processing: { processed: number; results: Array<Record<string, unknown>> } = { processed: 0, results: [] };
+          let queued = 0;
+          let aiUnavailable = false;
           for (const application of resumableApplications) {
             await enqueueCvAnalysis(application.id);
             await logRecruitmentAction({ applicationId: application.id, adminOpenId: ctx.user.openId, action: "reanalyze", metadata: { queued: true, batch: true } });
+            queued += 1;
+            // One analysis inline at most (an AI call can take ~35 s): the rest is
+            // queued for the cron, so the admin request stays under the 60 s limit.
+            if (processing.processed === 0) processing = await processDueCvAnalysisJobs(1, [application.id]);
+            // The AI provider still refuses for billing: the other dossiers keep
+            // their state (each would be refused too) until the credit is restored (REC-08).
+            aiUnavailable = processing.results.some(result => result.aiUnavailable === true);
+            if (aiUnavailable) break;
           }
-          const applicationIds = resumableApplications.map(application => application.id);
-          // One analysis inline at most (an AI call can take ~35 s): the rest is
-          // queued for the cron, so the admin request stays under the 60 s limit.
-          const processing = applicationIds.length > 0
-            ? await processDueCvAnalysisJobs(1, applicationIds)
-            : { processed: 0, results: [] };
-          return { success: true, queued: resumableApplications.length, processed: processing.processed };
+          return { success: true, queued, processed: processing.processed, aiUnavailable };
         }),
 
       sendTemplateEmail: adminProcedure

@@ -16,6 +16,9 @@ import {
   RECRUITMENT_SPECIALIST_TITLE_TERMS,
   RECRUITMENT_SPECIALTY_EQUIVALENTS,
 } from "../shared/recruitmentSpecialtyEquivalents";
+import { MANUAL_REVIEW_FALLBACK_MODEL } from "../shared/recruitmentAiAnalysis";
+
+export { MANUAL_REVIEW_FALLBACK_MODEL } from "../shared/recruitmentAiAnalysis";
 
 export const RECRUITMENT_ANALYSIS_PRIMARY_MODEL = "openai/gpt-6-astra";
 export const RECRUITMENT_ANALYSIS_FALLBACK_MODEL = "google/gemini-3.8-flash";
@@ -1397,6 +1400,9 @@ export function normalizeRecruitmentAnalysis(
   };
 }
 
+/** analysis_last_error of a dossier left without AI analysis for that reason (REC-08). */
+export const AI_ANALYSIS_BILLING_UNAVAILABLE_ERROR = "ai_gateway_billing_unavailable";
+
 /**
  * Vercel AI Gateway refuses every provider when billing has not been activated.
  * This condition should not make an already validated and extracted CV disappear
@@ -1457,7 +1463,7 @@ export function buildManualReviewFallback(input: RecruitmentAnalysisInput): Recr
       },
       reasoning: "Aucun score n’est calculé lorsque le service IA est indisponible. Une revue humaine intégrale est requise.",
     },
-    model: "local/manual-review-fallback",
+    model: MANUAL_REVIEW_FALLBACK_MODEL,
     generationId: null,
     usage: { inputTokens: null, outputTokens: null, totalTokens: null },
   };

@@ -89,12 +89,22 @@ export function reanalysisToast(result: { outcome?: string; error?: string | nul
   switch (result.outcome) {
     case "completed": return { tone: "success", message: "Analyse relancée et résultat actualisé." };
     case "needs_review": return { tone: "success", message: "Analyse actualisée : des points demandent une revue humaine." };
+    case "ai_unavailable": return { tone: "warning", message: `${recruitmentAnalysisErrorLabel(result.error ?? "billing")} « Mettre à jour / reprendre l’IA » relancera l’analyse une fois le crédit du fournisseur rétabli.` };
     case "already_running": return { tone: "info", message: "Une analyse de ce CV est déjà en cours." };
     case "queued": return { tone: "info", message: "Analyse remise en file : elle sera traitée au prochain passage." };
     case "retry_scheduled": return { tone: "warning", message: `L’analyse a échoué ; une nouvelle tentative est programmée. ${recruitmentAnalysisErrorLabel(result.error) ?? ""}`.trim() };
     case "failed": return { tone: "error", message: `L’analyse a échoué. ${recruitmentAnalysisErrorLabel(result.error) ?? ""}`.trim() };
     default: return (result.processed ?? 0) > 0 ? { tone: "success", message: "Analyse relancée." } : { tone: "info", message: "Analyse déjà en cours de traitement." };
   }
+}
+
+/** Toast after « Mettre à jour / reprendre l’IA »: a warning, not a success, while the AI provider still refuses (REC-08). */
+export function reanalyzeFailedToast(result: { queued: number; processed: number; aiUnavailable?: boolean }): AdminToast {
+  if (result.aiUnavailable) return reanalysisToast({ outcome: "ai_unavailable", error: "ai_gateway_billing_unavailable" });
+  const remaining = Math.max(0, result.queued - result.processed);
+  if (result.processed > 0) return { tone: "success", message: `${result.processed} analyse${result.processed > 1 ? "s" : ""} traitée${result.processed > 1 ? "s" : ""} immédiatement${remaining > 0 ? ` · ${remaining} encore en file` : ""}` };
+  if (result.queued > 0) return { tone: "info", message: `${result.queued} analyse${result.queued > 1 ? "s" : ""} remise${result.queued > 1 ? "s" : ""} en file : elle${result.queued > 1 ? "s seront traitées" : " sera traitée"} au prochain passage.` };
+  return { tone: "success", message: "Aucune analyse à mettre à jour ou à reprendre" };
 }
 
 /** Toast after « Relancer la copie » Google Drive (ADM-DRIVE-01). */
@@ -106,6 +116,7 @@ export function driveRetryToast(result: { outcome?: string; error?: string | nul
     case "queued": return { tone: "info", message: "Copie Google Drive remise en file." };
     case "waiting_validation": return { tone: "info", message: "Le CV doit d’abord être validé par le contrôle de sécurité ; la copie suivra automatiquement." };
     case "not_connected": return { tone: "warning", message: "Google Drive n’est pas connecté : connectez-le depuis l’en-tête de l’onglet." };
+    case "reconnect_required": return { tone: "warning", message: "Connexion Google Drive à renouveler : cliquez sur « Reconnexion Google Drive requise ». La copie repartira automatiquement après la reconnexion." };
     case "retry_scheduled":
     case "failed": {
       const reason = recruitmentDriveExportErrorLabel(result.error);
@@ -113,6 +124,19 @@ export function driveRetryToast(result: { outcome?: string; error?: string | nul
     }
     default: return { tone: "info", message: "Copie Google Drive relancée." };
   }
+}
+
+/** Toast after « Relancer toutes les copies échouées » Google Drive (REC-09). */
+export function driveBatchRetryToast(result: { requeued: number; copied: number; failedAgain: number; reconnectRequired?: boolean; notConnected?: boolean }): AdminToast {
+  if (result.requeued === 0) return { tone: "info", message: "Aucune copie Google Drive échouée à relancer." };
+  const requeued = `${result.requeued} copie${result.requeued > 1 ? "s" : ""} Google Drive remise${result.requeued > 1 ? "s" : ""} en file`;
+  if (result.reconnectRequired) return { tone: "warning", message: `${requeued}. Connexion Google Drive à renouveler : cliquez sur « Reconnexion Google Drive requise » ; elles repartiront après la reconnexion.` };
+  if (result.notConnected) return { tone: "warning", message: `${requeued}. Google Drive n’est pas connecté : connectez-le depuis l’en-tête de l’onglet.` };
+  // Not copied inline (time budget, CV awaiting its security check): the cron copies them.
+  const later = result.requeued - result.copied - result.failedAgain;
+  const nextRun = later > 0 ? ` ; ${later} au prochain passage du traitement` : "";
+  if (result.failedAgain > 0) return { tone: "warning", message: `${requeued} : ${result.copied} copiée${result.copied > 1 ? "s" : ""}, ${result.failedAgain} de nouveau en échec${nextRun}. Consultez le détail des dossiers.` };
+  return { tone: "success", message: `${requeued} : ${result.copied} copiée${result.copied > 1 ? "s" : ""} maintenant${nextRun}.` };
 }
 
 /** Header button of the Candidatures tab: never « connecté » when the token was revoked. */

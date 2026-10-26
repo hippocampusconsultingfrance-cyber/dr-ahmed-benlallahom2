@@ -1,13 +1,38 @@
 import { and, desc, eq, exists, gte, inArray, isNull, lt, lte, or } from "drizzle-orm";
 import { cvApplications, cvProcessingJobs } from "../drizzle/schema";
 import { getDb } from "./db";
-import { extractCvDocument, analyzeCvText, RECRUITMENT_ANALYSIS_PROMPT_VERSION, saveCvAnalysis } from "./recruitmentAnalysis";
+import { AI_ANALYSIS_BILLING_UNAVAILABLE_ERROR, extractCvDocument, analyzeCvText, MANUAL_REVIEW_FALLBACK_MODEL, RECRUITMENT_ANALYSIS_PROMPT_VERSION, saveCvAnalysis } from "./recruitmentAnalysis";
 import { storageGetSignedUrl, storagePut } from "./storage";
 import { validateCvFile } from "./recruitmentFileValidation";
 import { isProcessingDeadlineError } from "./processingDeadline";
+import { notifyOwner } from "./_core/notification";
+import { enforcePersistentRateLimit } from "./candidateSecurity";
 
 const MAX_ATTEMPTS = 3;
 const PROCESSING_BATCH_SIZE = 5;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Tells the owner, at most once a day, that the AI provider refuses CV analyses
+ * for billing (card expired, credit exhausted): the dossiers stay readable,
+ * marked « Analyse IA indisponible », until the credit is restored (REC-08).
+ */
+export async function notifyOwnerOfAiAnalysisUnavailable() {
+  try {
+    await enforcePersistentRateLimit({ action: "recruitment_ai_billing_alert", subject: "global", maxAttempts: 1, windowMs: DAY_MS, blockMs: DAY_MS });
+  } catch {
+    return false;
+  }
+  return notifyOwner({
+    title: "Recrutement : analyse IA des CV indisponible (facturation du fournisseur)",
+    content: [
+      "Le service d’IA (Vercel AI Gateway) a refusé l’analyse d’un CV pour une raison de facturation : carte bancaire expirée ou absente, ou crédit épuisé.",
+      "Les candidatures continuent d’être acceptées ; les CV concernés restent consultables et sont marqués « Analyse IA indisponible » dans l’onglet Candidatures, à examiner manuellement.",
+      "Pour reprendre : rétablissez le moyen de paiement ou le crédit dans Vercel > AI Gateway, puis cliquez sur « Mettre à jour / reprendre l’IA » dans l’onglet Candidatures.",
+      "Cette alerte est envoyée au plus une fois par jour.",
+    ].join("\n\n"),
+  }).catch(() => false);
+}
 
 type CvPipelineInput = {
   cvFileKey: string;
@@ -409,18 +434,23 @@ async function processCvAnalysisJob(jobId: number) {
     });
 
     const now = new Date();
-    const completionStatus = analysisCompletionStatus(analysis);
+    // The AI Gateway refused for billing: the manual-review result is kept, in
+    // a status of its own that « Mettre à jour / reprendre l’IA » resumes.
+    const aiUnavailable = pipeline.analysisModel === MANUAL_REVIEW_FALLBACK_MODEL;
+    const completionStatus = aiUnavailable ? "degraded" as const : analysisCompletionStatus(analysis);
+    const lastError = aiUnavailable ? AI_ANALYSIS_BILLING_UNAVAILABLE_ERROR : null;
     await db.update(cvApplications).set({
       analysisStatus: completionStatus,
       analysisAttempts: job.attempts,
-      analysisLastError: null,
+      analysisLastError: lastError,
         analysisModel: pipeline.analysisModel,
       analysisPromptVersion: RECRUITMENT_ANALYSIS_PROMPT_VERSION,
       updatedAt: now,
     }).where(eq(cvApplications.id, application.id));
-    await db.update(cvProcessingJobs).set({ status: "completed", finishedAt: now, lastError: null })
+    await db.update(cvProcessingJobs).set({ status: "completed", finishedAt: now, lastError })
       .where(eq(cvProcessingJobs.id, job.id));
-    return { completed: true, applicationId: application.id, score: analysis.relevanceScore, needsReview: completionStatus === "needs_review" };
+    if (aiUnavailable) await notifyOwnerOfAiAnalysisUnavailable();
+    return { completed: true, applicationId: application.id, score: analysis.relevanceScore, needsReview: completionStatus !== "completed", aiUnavailable };
   } catch (error) {
     const message = error instanceof Error ? error.message.slice(0, 4_000) : "unknown_processing_error";
     const now = new Date();

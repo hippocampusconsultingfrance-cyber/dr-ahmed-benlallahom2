@@ -6,14 +6,16 @@ import PublicContentSkeleton from "@/components/PublicContentSkeleton";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import Candidate360Dialog from "./Candidate360Dialog";
-import { SCORE_UNAVAILABLE_EXPLANATION, SCORE_UNAVAILABLE_HEADING, scoredApplicationsFirst } from "./recruitmentScoreGroups";
+import { AI_ANALYSIS_UNAVAILABLE_LABEL, isAiAnalysisUnavailable, SCORE_UNAVAILABLE_EXPLANATION, SCORE_UNAVAILABLE_HEADING, scoredApplicationsFirst } from "./recruitmentScoreGroups";
 import { contradictionEvidenceLabel, CV_READING_LABELS, CV_REVIEW_REMINDER, cvReadingTextForDisplay, fieldEvidenceStatusLabel, fieldEvidenceStatusTone } from "./recruitmentEvidenceLabels";
 import {
   recruitmentDriveExportLabel,
   recruitmentDriveExportErrorLabel,
   recruitmentAnalysisErrorLabel,
   reanalysisToast,
+  reanalyzeFailedToast,
   driveRetryToast,
+  driveBatchRetryToast,
   googleDriveConnectionState,
   type AdminToast,
   recruitmentDriveExportTone,
@@ -100,6 +102,7 @@ function analysisStatusLabel(status: string | null | undefined) {
     analyzing: "Analyse IA en cours",
     completed: "Analyse terminée",
     needs_review: "Revue humaine requise",
+    degraded: "Revue manuelle · IA à reprendre",
     failed: "Analyse à relancer",
   };
   return labels[status || ""] || "Analyse en attente";
@@ -107,7 +110,7 @@ function analysisStatusLabel(status: string | null | undefined) {
 
 function analysisStatusTone(status: string | null | undefined) {
   if (status === "completed") return "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300";
-  if (status === "needs_review") return "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300";
+  if (status === "needs_review" || status === "degraded") return "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300";
   if (status === "failed") return "border-destructive/30 bg-destructive/10 text-destructive";
   return "border-primary/25 bg-primary/10 text-primary";
 }
@@ -200,11 +203,8 @@ export default function RecruitmentTab() {
   });
 
   const reanalyzeFailed = trpc.admin.recruitment.reanalyzeFailed.useMutation({
-    onSuccess: ({ queued, processed }) => {
-      const remaining = Math.max(0, queued - processed);
-      toast.success(processed > 0
-        ? `${processed} analyse${processed > 1 ? "s" : ""} traitée${processed > 1 ? "s" : ""} immédiatement${remaining > 0 ? ` · ${remaining} encore en file` : ""}`
-        : "Aucune analyse à mettre à jour ou à reprendre");
+    onSuccess: result => {
+      showAdminToast(reanalyzeFailedToast(result));
       utils.admin.recruitment.list.invalidate();
     },
     onError: mutationError => toast.error(mutationError.message),
@@ -213,6 +213,15 @@ export default function RecruitmentTab() {
   const retryDriveExport = trpc.admin.recruitment.driveExport.retry.useMutation({
     onSuccess: result => {
       showAdminToast(driveRetryToast(result));
+      utils.admin.recruitment.list.invalidate();
+      driveExportStatus.refetch();
+    },
+    onError: mutationError => toast.error(mutationError.message),
+  });
+
+  const retryAllDriveExports = trpc.admin.recruitment.driveExport.retryAllFailed.useMutation({
+    onSuccess: result => {
+      showAdminToast(driveBatchRetryToast(result));
       utils.admin.recruitment.list.invalidate();
       driveExportStatus.refetch();
     },
@@ -303,6 +312,12 @@ export default function RecruitmentTab() {
           >
             {googleDriveConnectionState(driveExportStatus.data).label}
           </a>
+          {driveExportStatus.data?.failedExports ? (
+            <Button variant="outline" onClick={() => retryAllDriveExports.mutate()} disabled={retryAllDriveExports.isPending}>
+              <RefreshCw className={`mr-2 h-4 w-4 ${retryAllDriveExports.isPending ? "animate-spin" : ""}`} />
+              Relancer toutes les copies échouées ({driveExportStatus.data.failedExports})
+            </Button>
+          ) : null}
           <Button variant="outline" onClick={() => reanalyzeFailed.mutate({ limit: 10 })} disabled={reanalyzeFailed.isPending}>
             <BrainCircuit className={`mr-2 h-4 w-4 ${reanalyzeFailed.isPending ? "animate-pulse" : ""}`} />
             Mettre à jour / reprendre l’IA
@@ -408,7 +423,7 @@ export default function RecruitmentTab() {
                   </button>
                   <div className="flex flex-wrap items-center gap-2">
                     <span className={`rounded-full border px-2.5 py-1 text-xs font-medium ${scoreTone(verifiedScore)}`}>
-                      {verifiedScore === null ? (application.aiSummary ? (hasVerifiedAnalysis ? SCORE_UNAVAILABLE_HEADING : "Score à recalculer") : "IA en attente") : `Score IA ${verifiedScore}/100`}
+                      {verifiedScore === null ? (isAiAnalysisUnavailable(application) ? AI_ANALYSIS_UNAVAILABLE_LABEL : application.aiSummary ? (hasVerifiedAnalysis ? SCORE_UNAVAILABLE_HEADING : "Score à recalculer") : "IA en attente") : `Score IA ${verifiedScore}/100`}
                     </span>
                     <span className={`rounded-full border px-2.5 py-1 text-xs font-medium ${analysisStatusTone(application.analysisStatus)}`}>
                       {analysisStatusLabel(application.analysisStatus)}
