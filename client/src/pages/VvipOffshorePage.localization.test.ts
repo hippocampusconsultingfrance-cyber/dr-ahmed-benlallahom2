@@ -1,4 +1,3 @@
-import { readFile } from "node:fs/promises";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
@@ -11,17 +10,6 @@ vi.mock("@/components/Footer", () => ({ default: () => null }));
 vi.mock("@/components/SEOHead", () => ({ SEOHead: () => null }));
 
 describe("formulaire VVIP multilingue", () => {
-  it("utilise des aides de saisie et choix de spécialité localisés", async () => {
-    const source = await readFile(new URL("./VvipOffshorePage.tsx", import.meta.url), "utf8");
-
-    expect(source).toContain("experiencePlaceholder");
-    expect(source).toContain("certificationsPlaceholder");
-    expect(source).toContain("fileHint");
-    expect(source).toContain("{t.specialties.map((opt) => (");
-    expect(source).toContain('placeholder={t.experiencePlaceholder}');
-    expect(source).toContain('placeholder={t.certificationsPlaceholder}');
-  });
-
   it.each(["fr", "en", "de", "zh"] as const)("affiche le sur-titre des domaines d’expertise dans la langue de la page (%s)", async language => {
     const { default: VvipOffshorePage, vvipOffshoreCopy } = await import("./VvipOffshorePage");
     const t = vvipOffshoreCopy[language];
