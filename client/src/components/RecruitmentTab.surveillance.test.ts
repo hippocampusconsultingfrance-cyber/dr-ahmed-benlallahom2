@@ -26,6 +26,11 @@ vi.mock("./Candidate360Dialog", () => ({ default: () => null }));
 vi.mock("@/lib/trpc", () => ({
   trpc: {
     useUtils: () => ({ admin: { recruitment: { list: { invalidate: vi.fn() } } } }),
+    // The list loads its pages of 50 through useQueries (ADM-01): one page here.
+    useQueries: (build: (t: unknown) => unknown[]) => {
+      const t = { admin: { recruitment: { list: (input: unknown) => input } } };
+      return build(t).map(() => ({ data: { items: view.items, total: view.items.length }, isLoading: false, error: null, refetch: vi.fn() }));
+    },
     admin: {
       recruitment: {
         list: { useQuery: () => ({ data: { items: view.items, total: view.items.length }, isLoading: false, error: null, refetch: vi.fn() }) },
