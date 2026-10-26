@@ -699,6 +699,21 @@ describe("texte invisible écarté à l’extraction (IA-01)", () => {
     expect(gradient.invisibleText).toBeUndefined();
   });
 
+  it("DOCX : mesure en un passage une longue chaîne de zones de texte VML liées, même bouclée, sans bloquer le serveur", async () => {
+    // 16 000 boxes of 10 pt, each flowing into the next (mso-next-textbox), the
+    // last one back into the first: measured box by box from each one, the
+    // chain took about 87 s for 30 000 boxes.
+    const count = 16_000;
+    const boxes = Array.from({ length: count }, (_, index) =>
+      `<w:p><w:r><w:pict><v:shape id="s${index}" style="position:absolute;width:10pt;height:10pt"><v:textbox style="mso-next-textbox:#s${(index + 1) % count}"><w:txbxContent><w:p><w:r><w:t>x</w:t></w:r></w:p></w:txbxContent></v:textbox></v:shape></w:pict></w:r></w:p>`).join("");
+    const started = performance.now();
+    const extraction = await extractCvDocument(docx(NURSE_CV.map(line => paragraph(line)).join("") + boxes), DOCX);
+    expect(performance.now() - started).toBeLessThan(10_000);
+    for (const line of NURSE_CV) expect(extraction.text).toContain(line);
+    // The loop holds 160 000 pt: room for its text, read as visible.
+    expect(extraction.invisibleText).toBeUndefined();
+  }, 60_000);
+
   describe("DOCX : mammoth lit le mc:Fallback, Word dessine le mc:Choice", () => {
     const visible = NURSE_CV.map(line => paragraph(line)).join("");
     const hidden = (properties = "") => CLAIMS.map(claim => paragraph(claim, properties)).join("");

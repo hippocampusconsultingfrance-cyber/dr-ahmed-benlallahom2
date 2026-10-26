@@ -511,16 +511,31 @@ function linkedBoxHeights(xml: string, freeBoxes: Set<number>) {
   const heights = new Map<number, number>();
   for (const chain of Array.from(drawn.values())) if (chain.linked && chain.start !== undefined) heights.set(chain.start, chain.height);
   const byName = new Map(vml.flatMap(box => box.names.map(name => [name, box] as const)));
-  for (const first of vml) {
-    if (!first.next || first.textbox === undefined) continue;
-    let height = 0;
-    const seen = new Set<VmlBox>();
-    for (let box: VmlBox | undefined = first; box && !seen.has(box); box = box.next ? byName.get(box.next) : undefined) {
-      seen.add(box);
-      height += box.height;
+  // Height of the chain from each box, each box counted once: walked once per
+  // box (linear in the number of boxes, a loop of boxes included), since a
+  // file can chain thousands of boxes.
+  const chainHeights = new Map<VmlBox, number>();
+  for (const start of vml) {
+    const path: VmlBox[] = [];
+    const onPath = new Map<VmlBox, number>();
+    let box: VmlBox | undefined = start;
+    while (box && !chainHeights.has(box) && !onPath.has(box)) {
+      onPath.set(box, path.length);
+      path.push(box);
+      box = box.next ? byName.get(box.next) : undefined;
     }
-    heights.set(first.textbox, height);
+    let height = box ? chainHeights.get(box) ?? 0 : 0;
+    const loop = box ? onPath.get(box) : undefined;
+    if (loop !== undefined) {
+      height = path.slice(loop).reduce((total, item) => total + item.height, 0);
+      for (const item of path.splice(loop)) chainHeights.set(item, height);
+    }
+    for (let index = path.length - 1; index >= 0; index -= 1) {
+      height += path[index]!.height;
+      chainHeights.set(path[index]!, height);
+    }
   }
+  for (const first of vml) if (first.next && first.textbox !== undefined) heights.set(first.textbox, chainHeights.get(first)!);
   return heights;
 }
 
