@@ -430,6 +430,19 @@ Les corrections de code peuvent être faites **par lots testés**, comme pour la
 - **Facture** : INTL-01.
 - **Contenus** : affichage des textes de PUB-03 et du RPPS (PUB-04) dès que vous les fournissez.
 
+**Avancement au 26 octobre — lot 2 corrigé** (sauf PUB-03 et PUB-04, qui attendent vos textes). Trois passages de vérification de bout en bout sur la réplique ont été faits, chacun suivi de ses corrections :
+
+| ID | État | Reste à faire |
+|---|---|---|
+| RES-02, RES-04 | ✅ choix du jour puis grille de créneaux libres de 30 min, au clavier, heure de Paris et heure locale, bouton « Réessayer » si le chargement échoue | Mettre à jour les horaires et dates bloquées dans l'admin |
+| RES-05 | ✅ date, durée et montant sur la confirmation ; fichier agenda `.ics` joint à l'email et téléchargeable | — |
+| EN-01, EN-02 | ✅ emails patients et candidats dans la langue de la page (français ou anglais) ; facture en français expliquée en anglais | Appliquer la migration `drizzle/pg/0002_language_columns.sql` |
+| EN-06, REC-04 | ✅ refus traduits par codes stables ; spécialités en anglais, recherche dans les deux langues | Faire relire les traductions (IDE, IADE, IBODE…) |
+| A11Y-03 | ✅ champs à corriger nommés, curseur placé sur le premier, « CV manquant » distinct de « CV refusé » | — |
+| REC-02 | ✅ PDF valides acceptés ; PDF piégés, bombes et formulaires XFA refusés ; fichiers construits pour bloquer le serveur traités en moins de 0,2 s | — |
+| INTL-02 | ✅ score pour les CV en anglais britannique, allemand, arabe et chinois ; rubrique « Score indisponible – à lire » | Restent sans score : CV arabe imprimé par Chrome et valeurs françaises citées d'un CV arabe ou chinois |
+| INTL-01 | ✅ noms arabes, chinois, vietnamiens, polonais et turcs lisibles sur la facture | Hébreu, coréen et thaï s'impriment en « ? » (polices non embarquées) |
+
 ### Lot 3 — Fiabilité : ne plus rien perdre en silence (≈ 2 semaines)
 - **D'abord** CODE-01 : des tests qui protègent le paiement et l'admin avant d'y toucher.
 - **Paiement et emails** : EXPL-01, EXPL-02, RES-06 (remboursements faits dans Stripe), DATA-03 (remboursement à moitié enregistré).
