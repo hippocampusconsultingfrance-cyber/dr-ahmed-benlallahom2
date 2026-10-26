@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { clientBriefCandidates, clientBriefs, cvApplications, cvCandidateCertifications, cvCandidateExperiences, cvCandidateLanguages, cvGoogleDriveExportJobs, candidateAccounts, recruitmentAuditLogs, recruitmentCampaignRecipients, recruitmentCampaigns, recruitmentEmailEvents, recruitmentFollowUpTasks } from "../drizzle/schema";
-import { buildManualReviewFallback, RECRUITMENT_ANALYSIS_PROMPT_VERSION, saveCvAnalysis, type RecruitmentAnalysisResult } from "./recruitmentAnalysis";
+import { buildInvisibleTextReview, buildManualReviewFallback, RECRUITMENT_ANALYSIS_PROMPT_VERSION, saveCvAnalysis, type RecruitmentAnalysisResult } from "./recruitmentAnalysis";
 import { createMemoryPg, type MemoryPg } from "./testing/memoryPgProxy";
 import type { TRPCError } from "@trpc/server";
 import type { TrpcContext } from "./_core/context";
@@ -617,11 +617,41 @@ describe("missions employeurs : classement, certifications et accord du candidat
     await saveCvAnalysis(id, fallback.result, fallback);
     expect(rows()).toEqual([["ACLS", "cv_expiry", "2023-05", false]]);
     await expect(confirm()).rejects.toMatchObject({ cause: { reason: "renewal_required" } });
+    // Nor does the review of a CV left with too little visible text, which no AI reads.
+    const review = buildInvisibleTextReview({ firstName: "Hana", lastName: "Nom", specialty: "Cardiologie", targetCountries: ["Suisse"], languages: [], extractedText: "ACLS", visibilityUnchecked: true });
+    await saveCvAnalysis(id, review.result, review);
+    expect(rows()).toEqual([["ACLS", "cv_expiry", "2023-05", false]]);
+    await expect(confirm()).rejects.toMatchObject({ cause: { reason: "renewal_required" } });
 
     // An analysis without doubt reads ACLS as a fact, with the same date.
     await saveCvAnalysis(id, cvAnalysis({ specialties: ["Cardiologie"], certifications: contradicted.certifications }));
     expect(rows().filter(row => row[0] === "ACLS")).toEqual([["ACLS", "extracted", "2023-05", false]]);
     expect(await aclsInMission()).toEqual([{ name: "ACLS", origins: ["declared", "extracted"], expiresAt: "2023-05", status: "expired" }]);
+  });
+
+  it("ne garde de date lue dans le CV d’une analyse sans faits que si sa dernière lecture est passée : une certification renouvelée ou sans date dans le CV ne devient pas expirée (IA-02)", async () => {
+    vi.useFakeTimers({ now: new Date("2026-10-26T10:00:00.000Z"), toFake: ["Date"] });
+    const id = seedCandidate({ specialty: "Cardiologie", target_countries: '["Suisse"]', certifications: "ACLS, BLS, PALS" }).id as number;
+    const briefId = seedBrief({ specialty_needed: "Cardiologie", country: "Suisse", required_certifications: "ACLS" }).id as number;
+    const reading = (name: string, expiresAt: string | null, evidence: string) => ({ name, issuingBody: null, country: null, expiresAt, evidence, ...verified });
+    // The CV shows ACLS renewed until 2027, BLS once undated, PALS twice expired;
+    // the analysis finds a contradiction and retains no fact.
+    await saveCvAnalysis(id, cvAnalysis({ specialties: ["Cardiologie"], relevanceScore: null, certifications: [
+      reading("ACLS", "2021-05", "ACLS expiration 2021-05"), reading("ACLS", "2027-05", "ACLS renouvelée expiration 2027-05"),
+      reading("BLS", "2022-01", "BLS expiration 2022-01"), reading("BLS", null, "BLS"),
+      reading("PALS", "2019-01", "PALS expiration 2019-01"), reading("PALS", "2020-03", "PALS expiration 2020-03"),
+    ], contradictions: [{ field: "specialty", declaredValue: "Cardiologie", documentValue: "Infirmier", evidence: "Infirmier diplômé d’État (IDE)", ...verified }] }));
+
+    // Only PALS has expired by its latest reading, with that date alone.
+    expect(memory.rows(cvCandidateCertifications).map(row => [row.name, row.source, row.expires_at])).toEqual([["PALS", "cv_expiry", "2020-03"]]);
+    expect((await admin().admin.recruitment.list({})).items[0]!.certificationFacts).toEqual([
+      { name: "ACLS", origins: ["declared"], expiresAt: null },
+      { name: "BLS", origins: ["declared"], expiresAt: null },
+      { name: "PALS", origins: ["declared"], expiresAt: "2020-03" },
+    ]);
+    // ACLS, valid by the CV, is confirmed as it is and counts in the mission.
+    await expect(admin().admin.recruitment.candidate.confirmCertification({ id, name: "ACLS", confirmed: true })).resolves.toEqual({ success: true, changed: true });
+    expect((await admin().admin.clientBriefs.candidates({ briefId })).candidates[0]!.match).toMatchObject({ matchedCertifications: ["ACLS"], certifications: [{ name: "ACLS", origins: ["declared", "confirmed"], expiresAt: null, status: "matched" }] });
   });
 
   it("garde après une analyse dégradée les langues lues dans le CV, comme ses certifications (IA-02)", async () => {

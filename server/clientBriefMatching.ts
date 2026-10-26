@@ -82,7 +82,7 @@ function parseTerms(value: string | null | undefined) {
  * The latest of these expiries: none (current) when one of them has no date,
  * an unreadable one counting as expired.
  */
-function latestCertificationExpiry(expiries: Array<string | null>) {
+export function latestCertificationExpiry(expiries: Array<string | null>) {
   if (expiries.some(expiresAt => !expiresAt)) return null;
   const time = (expiresAt: string) => certificationExpiry(expiresAt)?.getTime() ?? -Infinity;
   return (expiries as string[]).reduce((latest, expiresAt) => time(expiresAt) > time(latest) ? expiresAt : latest);
