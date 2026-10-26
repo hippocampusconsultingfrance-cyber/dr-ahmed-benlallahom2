@@ -11,6 +11,7 @@ import { SEOHead } from "@/components/SEOHead";
 import Footer from "@/components/Footer";
 import BookingLegalNotice from "@/components/BookingLegalNotice";
 import LanguageMenu from "@/components/LanguageMenu";
+import { TurnstileWidget } from "@/components/TurnstileWidget";
 import { formatVisitorTime, getBookingDateTimeFormat, getBookingLocale } from "@/lib/bookingTime";
 import { getBookingFormCopy } from "@/lib/publicFormCopy";
 import {
@@ -107,6 +108,7 @@ export const bookingContent = {
       too_many_holds: "Vous avez déjà deux réservations en attente de paiement. Finalisez ou annulez l’un de ces paiements, ou patientez une trentaine de minutes avant de réserver un nouveau créneau.",
       payment_unavailable: "Le service de paiement est momentanément indisponible. Votre créneau n’a pas été réservé : réessayez dans quelques minutes ou contactez-nous.",
       invalid_name: "Saisissez votre nom complet : il doit comporter au moins une lettre ou un chiffre.",
+      security_check_required: "Une vérification anti-robot est nécessaire pour finaliser cette réservation : effectuez-la au-dessus du bouton, puis cliquez de nouveau sur « Procéder au paiement ».",
     },
     pricing: {
       title: "Tarification",
@@ -201,6 +203,7 @@ export const bookingContent = {
       too_many_holds: "You already have two bookings awaiting payment. Complete or cancel one of these payments, or wait about thirty minutes before booking a new time slot.",
       payment_unavailable: "The payment service is temporarily unavailable. Your time slot has not been booked: please try again in a few minutes or contact us.",
       invalid_name: "Please enter your full name: it must contain at least one letter or digit.",
+      security_check_required: "An anti-bot check is needed to complete this booking: complete it above the button, then click “Proceed to Payment” again.",
     },
     pricing: {
       title: "Pricing",
@@ -294,6 +297,7 @@ export const bookingContent = {
       too_many_holds: "Sie haben bereits zwei Buchungen, die auf Zahlung warten. Schließen Sie eine dieser Zahlungen ab oder stornieren Sie sie, oder warten Sie etwa dreißig Minuten, bevor Sie einen neuen Termin buchen.",
       payment_unavailable: "Der Zahlungsdienst ist vorübergehend nicht verfügbar. Ihr Termin wurde nicht reserviert: Bitte versuchen Sie es in einigen Minuten erneut oder kontaktieren Sie uns.",
       invalid_name: "Bitte geben Sie Ihren vollständigen Namen ein: Er muss mindestens einen Buchstaben oder eine Ziffer enthalten.",
+      security_check_required: "Für diese Buchung ist eine Bot-Prüfung erforderlich: Führen Sie sie über der Schaltfläche durch und klicken Sie dann erneut auf „Zur Zahlung übergehen“.",
     },
     pricing: {
       title: "Preisgestaltung",
@@ -387,6 +391,7 @@ export const bookingContent = {
       too_many_holds: "您已有两笔待付款的预约。请完成或取消其中一笔付款，或等待约三十分钟后再预约新的时段。",
       payment_unavailable: "支付服务暂时不可用，您的时段尚未预订：请几分钟后重试或联系我们。",
       invalid_name: "请填写您的全名：其中至少须包含一个文字或数字。",
+      security_check_required: "完成此预约需要进行反机器人验证：请在按钮上方完成验证，然后再次点击“继续付款”。",
     },
     pricing: {
       title: "价格",
@@ -754,6 +759,11 @@ export default function BookingPage() {
   const [trackingId, setTrackingId] = useState<string | null>(null);
   const [pendingBooking, setPendingBooking] = useState<PendingBooking | null>(null);
   const [pendingNotice, setPendingNotice] = useState<string | null>(null);
+  // Anti-robot demandé par le serveur seulement en cas d’abus (ABUS-02) : absent du parcours normal.
+  // Un jeton ne sert qu’une fois : chaque nouvel essai affiche une nouvelle vérification.
+  const [securityCheckRequired, setSecurityCheckRequired] = useState(false);
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  const [turnstileAttempt, setTurnstileAttempt] = useState(0);
   // Horloge de la page : délai de 2 h des créneaux proposés et temps restant du paiement en attente.
   const [now, setNow] = useState(() => Date.now());
   const clockSignatureRef = useRef<(time: number) => string>(() => "");
@@ -1066,6 +1076,9 @@ export default function BookingPage() {
       return;
     }
 
+    // Vérification demandée mais pas encore faite : elle signale elle-même ce qui manque.
+    if (securityCheckRequired && !turnstileToken) return;
+
     paymentSubmissionRef.current = true;
     try {
       const appointmentResult = await createAppointment.mutateAsync({
@@ -1075,6 +1088,7 @@ export default function BookingPage() {
         appointmentDate: selectedDate.toISOString(),
         requestDetails: formData.details,
         language,
+        ...(securityCheckRequired && turnstileToken ? { turnstileToken } : {}),
       });
 
       if (appointmentResult.success && appointmentResult.checkoutUrl) {
@@ -1095,10 +1109,18 @@ export default function BookingPage() {
     } catch (error) {
       paymentSubmissionRef.current = false;
       console.error("Booking error:", error);
+      const refusal = getBookingRefusalReason(error);
+      // ABUS-02 : vérification affichée à la demande du serveur, puis renouvelée
+      // après chaque refus, son jeton ayant déjà servi.
+      if (refusal === "security_check_required" || securityCheckRequired) {
+        setSecurityCheckRequired(true);
+        setTurnstileToken(null);
+        setTurnstileAttempt((attempt) => attempt + 1);
+      }
       // Message dans la langue de la page (EN-06), jamais le texte français du serveur.
       alert(getBookingErrorMessage(error, content));
       // Créneau pris entre-temps, date fermée… : agenda rechargé pour que la grille ne le propose plus.
-      if (getBookingRefusalReason(error)) void Promise.all([bookedSlots.refetch(), blockedDates.refetch(), availabilitySlots.refetch()]);
+      if (refusal) void Promise.all([bookedSlots.refetch(), blockedDates.refetch(), availabilitySlots.refetch()]);
     }
   };
 
@@ -1513,10 +1535,13 @@ export default function BookingPage() {
               />
             </div>
 
+            {/* Vérification anti-robot, seulement quand le serveur la demande (ABUS-02). */}
+            {securityCheckRequired && <TurnstileWidget key={turnstileAttempt} onToken={setTurnstileToken} />}
+
             {/* Submit Button */}
             <Button
               type="submit"
-              disabled={isLoading || availabilityPending || availabilityError || isBlockedDate || isBookedSlot || isOutsideConfiguredAvailability || Boolean(bookingWindowIssue) || !selectedDate || !calculatePrice.data}
+              disabled={isLoading || availabilityPending || availabilityError || isBlockedDate || isBookedSlot || isOutsideConfiguredAvailability || Boolean(bookingWindowIssue) || !selectedDate || !calculatePrice.data || (securityCheckRequired && !turnstileToken)}
               className="cta-primary w-full"
               size="lg"
             >

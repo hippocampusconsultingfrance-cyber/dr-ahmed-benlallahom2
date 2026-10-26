@@ -148,8 +148,10 @@ export const CONSULTATION_CHECKOUT_PRODUCT_NAME = "Consultation de conseil sant�
 
 export const BOOKING_PAYMENT_UNAVAILABLE_MESSAGE = "Le service de paiement est momentanément indisponible. Votre créneau n’a pas été réservé : veuillez réessayer dans quelques minutes ou nous contacter.";
 
+export const BOOKING_SECURITY_CHECK_MESSAGE = "Pour finaliser cette réservation, effectuez la vérification anti-robot affichée au-dessus du bouton, puis cliquez de nouveau sur « Procéder au paiement ».";
+
 /** Refus métier d’une réservation : message français et motif stable que la page traduit (EN-06). */
-function bookingRefusal(code: "BAD_REQUEST" | "CONFLICT" | "UNPROCESSABLE_CONTENT" | "TOO_MANY_REQUESTS" | "SERVICE_UNAVAILABLE", reason: BookingRefusalReason, message: string) {
+function bookingRefusal(code: "BAD_REQUEST" | "CONFLICT" | "UNPROCESSABLE_CONTENT" | "TOO_MANY_REQUESTS" | "SERVICE_UNAVAILABLE" | "PRECONDITION_FAILED", reason: BookingRefusalReason, message: string) {
   return new TRPCError({ code, message, cause: new PublicErrorReason(reason) });
 }
 
@@ -743,6 +745,8 @@ export const appRouter = router({
           // Langue affichée par la page de réservation : emails patients en
           // français pour « fr », en anglais sinon (EN-01).
           language: z.enum(SITE_LANGUAGES).optional().default("fr"),
+          // Jeton anti-robot, envoyé seulement après un refus « security_check_required » (ABUS-02).
+          turnstileToken: z.string().min(20).max(4096).optional(),
         })
       )
       .mutation(async ({ input, ctx }) => {
@@ -768,6 +772,9 @@ export const appRouter = router({
         const rateLimitRequest = { email: customerEmailKey, headers: ctx.req.headers as Record<string, unknown>, remoteIp: ctx.req.ip };
         await enforcePublicFormRateLimit({ kind: "bookingIp", ...rateLimitRequest });
         await enforcePublicFormRateLimit({ kind: "bookingEmail", ...rateLimitRequest });
+        // Même règle que les compteurs : les tests d’intégration réservent sans anti-robot.
+        const bookingProtectionsEnabled = process.env.NODE_ENV !== "test" && process.env.VITEST !== "true";
+        const bookingIpHash = requestIpHash(rateLimitRequest.headers) ?? (ctx.req.ip ? hashSecurityValue(ctx.req.ip) : null);
 
         const basePrice = "100.00";
         const isNightRate = isNightRateForParis(date);
@@ -854,6 +861,20 @@ export const appRouter = router({
           if (!holdExpiresAt) {
             throw bookingRefusal("UNPROCESSABLE_CONTENT", "too_soon", BOOKING_TOO_SOON_MESSAGE);
           }
+          // ABUS-02 : pas d’anti-robot sur le parcours normal. Il n’est demandé,
+          // avant de retenir le créneau et d’ouvrir Stripe, que si beaucoup de
+          // créneaux sont déjà retenus sans paiement ou si cette IP en retient deux.
+          const { bookingChallengeRequired, recordBookingHold } = await import("./appointmentHoldAbuse");
+          if (bookingProtectionsEnabled && await bookingChallengeRequired(db, bookingIpHash)) {
+            try {
+              await verifyCandidateTurnstile({ token: input.turnstileToken, remoteIp: ctx.req.ip });
+            } catch {
+              if (input.turnstileToken) {
+                await logSecurityEvent({ actorKind: "anonymous", category: "public_booking_challenge", outcome: "blocked", severity: "warning", ipHash: bookingIpHash }).catch(() => undefined);
+              }
+              throw bookingRefusal("PRECONDITION_FAILED", "security_check_required", BOOKING_SECURITY_CHECK_MESSAGE);
+            }
+          }
           await db.execute(
             sql`INSERT INTO appointments (tracking_id, customer_name, customer_email, customer_phone, consultation_type, request_details, appointment_date, slot_key, duration, base_price, final_price, is_night_rate, payment_status, appointment_status, hold_expires_at, language) VALUES (${trackingId}, ${input.customerName}, ${input.customerEmail}, ${input.customerPhone}, ${'health_advice'}, ${input.requestDetails}, ${appointmentDateFormatted}, ${slotKey}, ${30}, ${basePrice}, ${finalPrice}, ${isNightRate ? 1 : 0}, ${'pending'}, ${'held'}, ${holdExpiresAt}, ${input.language})`
           );
@@ -879,6 +900,9 @@ export const appRouter = router({
             throw bookingRefusal("SERVICE_UNAVAILABLE", "payment_unavailable", BOOKING_PAYMENT_UNAVAILABLE_MESSAGE);
           }
           await db.update(appointments).set({ stripeSessionId: session.id }).where(and(eq(appointments.trackingId, trackingId), eq(appointments.appointmentStatus, "held")));
+          if (bookingProtectionsEnabled) {
+            await recordBookingHold(bookingIpHash, trackingId).catch(error => console.error("Booking hold record failed:", error instanceof Error ? error.name : "UnknownError"));
+          }
           // La page de réservation garde la session et l’expiration du maintien
           // (sessionStorage) pour proposer « Reprendre le paiement » ou
           // « Annuler et choisir un autre créneau » après un retour arrière.

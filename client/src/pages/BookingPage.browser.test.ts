@@ -55,6 +55,8 @@ describe.skipIf(!executablePath)("réservation et confirmation dans un navigateu
   let baseUrl: string;
 
   beforeAll(async () => {
+    // Clé publique de test : le widget anti-robot de la réservation (ABUS-02) se rend avec un faux script Cloudflare.
+    process.env.VITE_TURNSTILE_SITE_KEY ||= "1x00000000000000000000AA";
     server = await createServer({
       configFile: path.join(root, "vite.config.ts"),
       cacheDir: path.join(root, "node_modules/.vite/booking-browser-test"),
@@ -421,6 +423,45 @@ describe.skipIf(!executablePath)("réservation et confirmation dans un navigateu
     const { refusals: messages, bookingError } = bookingContent.en;
     expect(alerts).toEqual([messages.rate_limited, messages.too_many_holds, messages.payment_unavailable, bookingError]);
     for (const alert of alerts) expect(alert).not.toMatch(/réservation|paiement|Veuillez|créneau/);
+    await page.context().close();
+  }, 60_000);
+
+  it("n'affiche l'anti-robot que sur demande du serveur, puis envoie un jeton neuf à chaque essai (ABUS-02)", async () => {
+    const [firstDay] = openDays();
+    const refusals = [
+      refuse("PRECONDITION_FAILED", 412, "Pour finaliser cette réservation, effectuez la vérification anti-robot.", "security_check_required"),
+      refuse("CONFLICT", 409, "Ce créneau vient d’être réservé par un autre patient.", "slot_taken"),
+      refuse("CONFLICT", 409, "Ce créneau vient d’être réservé par un autre patient.", "slot_taken"),
+    ];
+    // Faux Cloudflare : chaque vérification rendue donne aussitôt un jeton différent.
+    const fakeTurnstile = "let rendered = 0; window.turnstile = { render(element, options) { rendered += 1; setTimeout(() => options.callback(`fake-turnstile-token-${rendered}-0123456789`), 0); return `widget-${rendered}`; }, remove() {}, reset() {} };";
+    const { page, calls, alerts } = await open("/booking", bookingProcedures({ "appointments.create": () => refusals.shift() }), {
+      language: "en",
+      beforeGoto: (page) => page.route("https://challenges.cloudflare.com/**", (request) => request.fulfill({ contentType: "text/javascript", body: fakeTurnstile })),
+    });
+    await page.locator("#booking-name").fill("Test Patient");
+    await page.locator("#booking-email").fill("patient@example.test");
+    await page.locator("#booking-phone").fill("+44 20 7946 0958");
+    await page.locator("#booking-day").selectOption(firstDay);
+    await page.getByRole("group", { name: bookingContent.en.form.slotsLegend }).getByRole("radio").first().locator("xpath=..").click();
+    await page.locator("#booking-details").fill("Practical questions");
+    const submit = page.getByRole("button", { name: bookingContent.en.form.submit });
+    const createInputs = () => calls.filter((call) => call.procedure === "appointments.create").map((call) => call.input);
+
+    // Parcours normal : aucune vérification affichée ni jeton envoyé.
+    await page.locator("#availability-status[data-state='available']").waitFor();
+    expect(await page.locator("script#cloudflare-turnstile-script").count()).toBe(0);
+    await submit.click();
+    await expect.poll(() => alerts).toEqual([bookingContent.en.refusals.security_check_required]);
+    expect(createInputs()[0]).not.toHaveProperty("turnstileToken");
+
+    for (const attempt of [1, 2]) {
+      await expect.poll(() => submit.isEnabled()).toBe(true);
+      await submit.click();
+      await expect.poll(() => createInputs().length).toBe(attempt + 1);
+      expect(createInputs()[attempt].turnstileToken).toBe(`fake-turnstile-token-${attempt}-0123456789`);
+    }
+    expect(alerts.slice(1)).toEqual([bookingContent.en.refusals.slot_taken, bookingContent.en.refusals.slot_taken]);
     await page.context().close();
   }, 60_000);
 
