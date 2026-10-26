@@ -49,6 +49,7 @@ vi.mock("./invoiceNumbering", () => ({
 import { appointmentFulfillmentPacing, enqueueAppointmentFulfillment, processDueAppointmentFulfillmentJobs } from "./appointmentFulfillment";
 import { postPaymentDeliveryRetry, sendConfirmationEmail, sendOwnerNotificationEmail } from "./_core/notifications";
 import * as notificationsModule from "./_core/notifications";
+import { drainInBatches } from "./scheduledJobs";
 
 type Job = { id: number; appointmentId: number; jobType: string; status: string; attempts: number; maxAttempts: number; scheduledFor: Date; createdAt?: Date };
 
@@ -177,6 +178,7 @@ describe("envois après paiement — propriétaire d’abord, essais courts, ale
     const alert = ownerEmails.find(call => String(call.message.subject).startsWith("Échec d’envoi après paiement"));
     expect(alert).toBeDefined();
     expect(String(alert?.message.text)).toContain("tentative 1 sur 3");
+    expect(String(alert?.message.text)).toContain("Un nouvel essai automatique aura lieu");
     expect(String(alert?.message.text)).toContain("+33600000000");
     expect(jobs.find(row => row.jobType === "owner")?.status).toBe("completed");
     expect(jobs.find(row => row.jobType === "confirmation")?.status).toBe("retry");
@@ -187,6 +189,21 @@ describe("envois après paiement — propriétaire d’abord, essais courts, ale
     await sendConfirmationEmail("patient@example.test", "Patient Test", "APTOWNER0001", new Date("2026-10-20T08:00:00Z"), 100, undefined, { idempotencyKey: "appointment-confirmation-APTOWNER0001" });
     expect(resend.calls).toHaveLength(3);
     expect(resend.calls.every(call => call.options?.idempotencyKey === "appointment-confirmation-APTOWNER0001")).toBe(true);
+  });
+
+  it("au premier refus définitif (adresse du patient refusée), l’alerte ne promet pas de nouvel essai automatique", async () => {
+    resend.script.push("ok", "422");
+    memoryDatabase([job(1, "owner"), job(2, "confirmation")]);
+
+    await processDueAppointmentFulfillmentJobs();
+
+    expect(subjects().filter(subject => subject.startsWith("Confirmation de réservation"))).toHaveLength(1);
+    const alert = resend.calls.find(call => String(call.message.subject).startsWith("Échec d’envoi après paiement"));
+    const text = String(alert?.message.text);
+    expect(text).toContain("a été refusé par le service d’envoi (adresse email du patient refusée ou invalide");
+    expect(text).toContain("Ce refus n’est pas passager : vérifiez l’adresse du patient et contactez-le directement.");
+    expect(text).not.toContain("nouvel essai automatique");
+    expect(text).toContain("+33600000000");
   });
 
   it("ne réessaie pas un refus définitif du fournisseur", async () => {
@@ -226,6 +243,19 @@ describe("envois après paiement — propriétaire d’abord, essais courts, ale
     expect(subjects().map(subject => subject.split(" ")[0])).toEqual(["Nouvelle", "Confirmation", "Facture"]);
     const [owner, confirmation, invoice] = resend.calls.map(call => call.at);
     // setTimeout may fire a millisecond early on some platforms.
+    expect(confirmation - owner).toBeGreaterThanOrEqual(38);
+    expect(invoice - confirmation).toBeGreaterThanOrEqual(38);
+  });
+
+  it("garde cet espacement entre deux lots du passage planifié", async () => {
+    appointmentFulfillmentPacing.delayMs = 40;
+    memoryDatabase([job(1, "owner"), job(2, "confirmation"), job(3, "invoice")]);
+
+    // The cron drains one job per batch here: each batch starts right after the previous one.
+    const { processed } = await drainInBatches(() => processDueAppointmentFulfillmentJobs(1), { maxBatches: 5, budgetMs: 10_000 });
+
+    expect(processed).toBe(3);
+    const [owner, confirmation, invoice] = resend.calls.map(call => call.at);
     expect(confirmation - owner).toBeGreaterThanOrEqual(38);
     expect(invoice - confirmation).toBeGreaterThanOrEqual(38);
   });

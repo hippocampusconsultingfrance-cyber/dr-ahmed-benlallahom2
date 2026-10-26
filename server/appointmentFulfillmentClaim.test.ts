@@ -9,6 +9,7 @@ const notifications = vi.hoisted(() => ({
   sendCustomerConfirmationSMS: vi.fn(async () => true),
   sendInvoiceEmail: vi.fn(async () => undefined),
   sendOwnerNotificationEmail: vi.fn(async () => undefined),
+  postPaymentEmailFailureCode: vi.fn(() => null),
 }));
 const owner = vi.hoisted(() => ({ notifyOwner: vi.fn(async () => true) }));
 vi.mock("./db", () => ({ getDb: database.getDb }));

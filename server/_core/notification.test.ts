@@ -23,6 +23,7 @@ describe("notifyOwner", () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.unstubAllEnvs();
   });
 
@@ -55,6 +56,34 @@ describe("notifyOwner", () => {
     const { notifyOwner } = await import("./notification");
     await expect(notifyOwner({ title: "Alerte", content: "Contenu" })).resolves.toBe(false);
     expect((state.db as InMemoryDrizzle).rows(securityEvents)).toEqual([]);
+  });
+
+  it("sends once more after a short retry-after when Resend rate-limits it, with the same idempotency key (ABUS-03)", async () => {
+    vi.useFakeTimers();
+    send.mockResolvedValueOnce({ data: null, error: { name: "rate_limit_exceeded", statusCode: 429, message: "Too many requests" }, headers: { "retry-after": "1" } });
+    const { notifyOwner } = await import("./notification");
+
+    const delivery = notifyOwner({ title: "Réservations : au moins 6 créneaux retenus sans paiement", content: "Alerte" }, { idempotencyKey: "owner-alert-1" });
+    await vi.advanceTimersByTimeAsync(999);
+    expect(send).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+
+    await expect(delivery).resolves.toBe(true);
+    expect(send).toHaveBeenCalledTimes(2);
+    expect(send.mock.calls[1][1]).toEqual({ idempotencyKey: "owner-alert-1" });
+    expect((state.db as InMemoryDrizzle).rows(securityEvents)).toEqual([]);
+  });
+
+  it("does not hold the request for a long retry-after, nor retry a rate limit twice", async () => {
+    send.mockResolvedValue({ data: null, error: { name: "rate_limit_exceeded", statusCode: 429, message: "Too many requests" }, headers: { "retry-after": "60" } });
+    const { notifyOwner } = await import("./notification");
+    await expect(notifyOwner({ title: "Alerte", content: "Contenu" })).resolves.toBe(false);
+    expect(send).toHaveBeenCalledTimes(1);
+
+    send.mockReset();
+    send.mockResolvedValue({ data: null, error: { name: "rate_limit_exceeded", statusCode: 429, message: "Too many requests" }, headers: { "retry-after": "0" } });
+    await expect(notifyOwner({ title: "Alerte", content: "Contenu" })).resolves.toBe(false);
+    expect(send).toHaveBeenCalledTimes(2);
   });
 
   it("logs a used-up Resend quota as a high-severity event, without an alert loop (ABUS-03)", async () => {

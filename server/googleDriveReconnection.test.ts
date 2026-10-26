@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cvApplications, cvGoogleDriveExportJobs, googleDriveConnections, recruitmentAuditLogs } from "../drizzle/schema";
+import { candidateSecurityRateLimits, cvApplications, cvGoogleDriveExportJobs, googleDriveConnections, recruitmentAuditLogs } from "../drizzle/schema";
 import { createMemoryPg, type MemoryPg } from "./testing/memoryPgProxy";
 import type { TrpcContext } from "./_core/context";
 
@@ -20,7 +20,10 @@ const state = vi.hoisted(() => {
     uploadFails: false,
     tokenRequests: 0,
     uploads: [] as string[],
+    // Delivered owner emails; while ownerEmailFails, notifyOwner reports a failed send (Resend down or out of quota).
     notifications: [] as Array<{ title: string; content: string }>,
+    ownerEmailFails: false,
+    ownerEmailAttempts: 0,
   };
 });
 
@@ -29,7 +32,14 @@ vi.mock("./adminMfa", async importOriginal => ({
   ...await importOriginal<typeof import("./adminMfa")>(),
   isAdminMfaVerified: vi.fn(async () => true),
 }));
-vi.mock("./_core/notification", () => ({ notifyOwner: vi.fn(async (payload: { title: string; content: string }) => { state.notifications.push(payload); return true; }) }));
+vi.mock("./_core/notification", () => ({
+  notifyOwner: vi.fn(async (payload: { title: string; content: string }) => {
+    state.ownerEmailAttempts += 1;
+    if (state.ownerEmailFails) return false;
+    state.notifications.push(payload);
+    return true;
+  }),
+}));
 vi.mock("./storage", () => ({ storageGetSignedUrl: vi.fn(async (key: string) => `https://blob.test/${key}`) }));
 
 const { deleteCvCopiesFromGoogleDrive, encryptGoogleDriveRefreshToken, googleDriveExportStatus, processDueCvGoogleDriveExports, requeueGoogleDriveExportsAfterReconnection, saveGoogleDriveConnection } = await import("./googleDriveExport");
@@ -69,13 +79,15 @@ const copyOf = (applicationId: number) => memory.rows(cvGoogleDriveExportJobs).f
 const connection = () => memory.rows(googleDriveConnections)[0]!;
 
 beforeEach(() => {
-  memory = createMemoryPg([cvApplications, cvGoogleDriveExportJobs, googleDriveConnections, recruitmentAuditLogs]);
+  memory = createMemoryPg([cvApplications, cvGoogleDriveExportJobs, googleDriveConnections, recruitmentAuditLogs, candidateSecurityRateLimits]);
   state.memory = memory;
   state.tokenRevoked = false;
   state.uploadFails = false;
   state.tokenRequests = 0;
   state.uploads = [];
   state.notifications = [];
+  state.ownerEmailFails = false;
+  state.ownerEmailAttempts = 0;
   vi.stubGlobal("fetch", vi.fn(async (input: string | URL, init?: RequestInit) => {
     const url = new URL(String(input));
     if (url.hostname === "oauth2.googleapis.com") {
@@ -95,9 +107,66 @@ beforeEach(() => {
     throw new Error(`unexpected request ${url}`);
   }));
 });
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+});
 
 describe("Google Drive déconnecté (REC-09)", () => {
+  it("alerte non délivrée (Resend en panne au moment du refus) : renvoyée aux passages suivants du cron jusqu’à sa livraison, puis plus jamais pour cette autorisation", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const DAY_MS = 24 * 60 * 60 * 1000;
+    seedConnection();
+    const id = seedCopy(1);
+    state.tokenRevoked = true;
+    state.ownerEmailFails = true;
+
+    expect(await processDueCvGoogleDriveExports(3)).toMatchObject({ processed: 1, reconnectRequired: true });
+    expect(connection().last_error).toBe("google_drive_token_invalid_grant");
+    expect(state.notifications).toEqual([]);
+    // Resend still down at the next daily pass: tried again, still nothing delivered.
+    vi.setSystemTime(Date.now() + DAY_MS);
+    expect(await processDueCvGoogleDriveExports(3)).toMatchObject({ processed: 0, reconnectRequired: true });
+    expect(state.ownerEmailAttempts).toBe(2);
+    expect(state.notifications).toEqual([]);
+
+    // Resend back: the next pass delivers the alert, without calling Google again.
+    state.ownerEmailFails = false;
+    vi.setSystemTime(Date.now() + DAY_MS);
+    await processDueCvGoogleDriveExports(3);
+    expect(state.notifications.map(notification => notification.title)).toEqual(["Recrutement : Google Drive à reconnecter, copies des CV suspendues"]);
+    for (let pass = 0; pass < 3; pass += 1) {
+      vi.setSystemTime(Date.now() + DAY_MS);
+      await processDueCvGoogleDriveExports(3);
+    }
+    expect(state.notifications).toHaveLength(1);
+    expect(state.ownerEmailAttempts).toBe(3);
+    expect(state.tokenRequests).toBe(1);
+    expect(copyOf(id)).toMatchObject({ attempts: 0 });
+
+    // A new authorization, refused in turn, is alerted once more.
+    await saveGoogleDriveConnection({ authorizedByOpenId: "user_owner", refreshToken: "new-refresh-token" });
+    await requeueGoogleDriveExportsAfterReconnection();
+    await processDueCvGoogleDriveExports(3);
+    await processDueCvGoogleDriveExports(3);
+    expect(state.notifications).toHaveLength(2);
+  });
+
+  it("pendant une panne de Resend, un passage rapproché ne relance pas l’alerte à chaque appel", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    seedConnection();
+    seedCopy(1);
+    state.tokenRevoked = true;
+    state.ownerEmailFails = true;
+    await processDueCvGoogleDriveExports(3);
+    for (let pass = 0; pass < 5; pass += 1) await processDueCvGoogleDriveExports(3);
+    expect(state.ownerEmailAttempts).toBe(1);
+    state.ownerEmailFails = false;
+    vi.setSystemTime(Date.now() + 5 * 60 * 1000 + 1_000);
+    await processDueCvGoogleDriveExports(3);
+    expect(state.notifications).toHaveLength(1);
+  });
+
   it("invalid_grant : aucune tentative consommée, connexion « à renouveler », une seule alerte, plus aucun appel à Google", async () => {
     seedConnection();
     const copies = Array.from({ length: 6 }, (_, index) => seedCopy(index + 1));

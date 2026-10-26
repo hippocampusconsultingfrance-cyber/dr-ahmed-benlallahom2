@@ -111,21 +111,58 @@ export async function runSecurityPostureReview(now = new Date()) {
   const db = await getDb();
   if (!db) return { available: false as const };
   const cleanupBefore = new Date(now.getTime() - 48 * HOUR_MS);
-  // Every rate-limit window is at most 24 h: rows idle for 48 h and not currently
-  // blocked (including never-blocked rows, whose blockedUntil is NULL) are inert.
+  // Every rate-limit window is at most 24 h, and a longer owner-alert slot stays
+  // blocked while it lasts: rows idle for 48 h and not currently blocked
+  // (including never-blocked rows, whose blockedUntil is NULL) are inert.
   await db.delete(candidateSecurityRateLimits).where(and(
     lt(candidateSecurityRateLimits.lastAttemptAt, cleanupBefore),
     or(isNull(candidateSecurityRateLimits.blockedUntil), lt(candidateSecurityRateLimits.blockedUntil, now)),
   ));
   const since = new Date(now.getTime() - 24 * HOUR_MS);
-  const recentAlerts = await db.select({ id: securityEvents.id }).from(securityEvents).where(and(gte(securityEvents.createdAt, since), sql`${securityEvents.severity} IN ('high', 'critical')`));
+  const recentAlerts = await db.select({ id: securityEvents.id, category: securityEvents.category, metadata: securityEvents.metadata }).from(securityEvents).where(and(gte(securityEvents.createdAt, since), sql`${securityEvents.severity} IN ('high', 'critical')`));
+  // ABUS-03: a used-up Resend quota is named, not only counted among the events.
+  const quotaEvents = recentAlerts.filter(event => event.category === "resend_quota_exceeded");
   const busyPublicForms = await publicFormsAboveDailyThreshold(db, since);
+  const pending = await ownerActionsPending();
   const findings = [
     ...(recentAlerts.length > 0 ? [`${recentAlerts.length} événement(s) de sécurité à gravité élevée ont été détectés sur les dernières 24 heures. Consultez le journal administrateur.`] : []),
+    ...(quotaEvents.length > 0 ? [`Quota Resend épuisé (${resendQuotaLabel(quotaEvents)}) : ${quotaEvents.length} email(s) refusé(s) faute de quota sur les dernières 24 heures. Tant que le quota reste épuisé, aucun email ne part : codes de connexion administrateur, emails aux patients après paiement, alertes. Vérifiez la limite de votre offre dans Resend.`] : []),
     ...busyPublicForms.map(kind => `Seuil quotidien dépassé pour les ${PUBLIC_FORM_VOLUME_LABELS[kind]} : plus de ${PUBLIC_FORM_DAILY_VOLUME_THRESHOLDS[kind]} enregistrements sur les dernières 24 heures. Vérifiez dans l’administration qu’il ne s’agit pas d’envois automatisés.`),
+    ...(pending.googleDriveReconnectRequired ? ["Google Drive à reconnecter : Google refuse l’autorisation utilisée pour copier les CV, les copies sont suspendues. Onglet Candidatures, bouton « Reconnexion Google Drive requise » ; les copies repartiront après la reconnexion."] : []),
+    ...(pending.cvAnalysesAwaitingAiCredit > 0 ? [`Analyse IA des CV indisponible (facturation du fournisseur) : ${pending.cvAnalysesAwaitingAiCredit >= AWAITING_AI_CREDIT_CAP ? "au moins " : ""}${pending.cvAnalysesAwaitingAiCredit} dossier(s) attendent leur analyse. Rétablissez le moyen de paiement ou le crédit dans Vercel > AI Gateway, puis cliquez sur « Mettre à jour / reprendre l’IA » dans l’onglet Candidatures.`] : []),
   ];
   if (findings.length > 0) await notifyOwner({ title: "Bilan quotidien de sécurité", content: findings.join("\n\n") });
-  return { available: true as const, highSeverityEvents24h: recentAlerts.length, busyPublicForms };
+  return { available: true as const, highSeverityEvents24h: recentAlerts.length, resendQuotaEvents24h: quotaEvents.length, busyPublicForms, ...pending };
+}
+
+function resendQuotaLabel(events: Array<{ metadata: string | null }>) {
+  const quotas = new Set<string>(events.map(event => {
+    try {
+      return (JSON.parse(event.metadata ?? "{}") as { quota?: unknown }).quota === "monthly" ? "mensuel" : "quotidien";
+    } catch {
+      return "quotidien";
+    }
+  }));
+  return ["quotidien", "mensuel"].filter(quota => quotas.has(quota)).join(" et ");
+}
+
+const AWAITING_AI_CREDIT_CAP = 1_000;
+
+/**
+ * States the owner has to fix, reported every day while they last: their
+ * single alert email may have been lost (Resend down or out of quota at that
+ * moment). A check that fails leaves the rest of the review unchanged.
+ */
+async function ownerActionsPending() {
+  const unavailable = <T>(fallback: T) => (error: unknown) => {
+    console.error("[SecurityReview] Pending-action check failed:", safeErrorName(error));
+    return fallback;
+  };
+  const [googleDriveReconnectRequired, cvAnalysesAwaitingAiCredit] = await Promise.all([
+    import("./googleDriveExport").then(({ googleDriveReconnectionRequired }) => googleDriveReconnectionRequired()).catch(unavailable(false)),
+    import("./recruitmentProcessing").then(({ countCvAnalysesAwaitingAiCredit }) => countCvAnalysesAwaitingAiCredit(AWAITING_AI_CREDIT_CAP)).catch(unavailable(0)),
+  ]);
+  return { googleDriveReconnectRequired, cvAnalysesAwaitingAiCredit };
 }
 
 /**

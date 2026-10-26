@@ -72,11 +72,13 @@ vi.mock("./db", () => ({
 }));
 vi.mock("./_core/notification", () => ({ notifyOwner: vi.fn(async (payload: { title: string; content: string }) => { state.notifications.push(payload); return true; }) }));
 vi.mock("./candidateSecurity", () => ({
-  enforcePersistentRateLimit: vi.fn(async (policy: { action: string; subject: string; maxAttempts: number }) => {
-    const key = `${policy.action}:${policy.subject}`;
+  // One slot per alert, kept once delivered (the real slot is covered in ownerAlertSlot.test.ts).
+  sendOwnerAlertOncePerWindow: vi.fn(async (slot: { action: string; subject: string }, send: () => Promise<boolean>) => {
+    const key = `${slot.action}:${slot.subject}`;
     const count = (state.alertSlots.get(key) ?? 0) + 1;
     state.alertSlots.set(key, count);
-    if (count > policy.maxAttempts) throw new Error("candidate_security_rate_limited");
+    if (count > 1) return false;
+    return send();
   }),
 }));
 

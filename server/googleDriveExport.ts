@@ -1,6 +1,7 @@
 import { createCipheriv, createDecipheriv, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { and, eq, gte, inArray, isNull, like, lt, lte, ne, notInArray, notLike, or, sql } from "drizzle-orm";
 import { cvApplications, cvGoogleDriveExportJobs, googleDriveConnections } from "../drizzle/schema";
+import { sendOwnerAlertOncePerWindow } from "./candidateSecurity";
 import { getDb } from "./db";
 import { logRecruitmentAction } from "./recruitmentAudit";
 import { storageGetSignedUrl } from "./storage";
@@ -267,8 +268,22 @@ async function deleteGoogleDriveFile(accessToken: string, fileId: string): Promi
   return "deleted";
 }
 
-async function notifyOwnerOfGoogleDriveReconnection() {
-  await notifyOwner({
+/** Longer than any authorization stays refused: in practice one alert per authorization. */
+const RECONNECTION_ALERT_WINDOW_MS = 365 * 24 * 60 * 60 * 1000;
+
+/**
+ * One alert per refused authorization (REC-09), kept as sent only once
+ * delivered: while the connection stays « à renouveler », each pass of the
+ * copies tries again an alert that could not leave (Resend down or out of
+ * quota at the refusal), then never again for that authorization.
+ */
+async function notifyOwnerOfGoogleDriveReconnection(connection: { id: number; refreshTokenCiphertext: string }) {
+  await sendOwnerAlertOncePerWindow({
+    action: "google_drive_reconnection_alert",
+    subject: `${connection.id}:${connection.refreshTokenCiphertext}`,
+    windowMs: RECONNECTION_ALERT_WINDOW_MS,
+    blockMs: RECONNECTION_ALERT_WINDOW_MS,
+  }, () => notifyOwner({
     title: "Recrutement : Google Drive à reconnecter, copies des CV suspendues",
     content: [
       "Google a refusé l’autorisation utilisée pour copier les CV dans Google Drive (invalid_grant) : mot de passe Google changé, accès de l’application révoqué ou autorisation expirée.",
@@ -276,13 +291,15 @@ async function notifyOwnerOfGoogleDriveReconnection() {
       "Pour reprendre : onglet Candidatures, bouton « Reconnexion Google Drive requise ». Les copies arrêtées par ce refus repartiront automatiquement après la reconnexion.",
       "Cette alerte n’est envoyée qu’une fois jusqu’à la reconnexion.",
     ].join("\n\n"),
-  }).catch(() => false);
+  })).catch((error: unknown) => console.error("google_drive_reconnection_alert_failed", error instanceof Error ? error.name : "UnknownError"));
 }
 
 /**
  * Notes a Drive failure on the connection. A revoked token marks it « à
  * renouveler » until the next connection or successful copy: the first
- * refusal alone alerts the owner, and no other error overwrites that mark.
+ * refusal alerts the owner (an alert that could not leave is sent again by
+ * the next passes, see notifyOwnerOfGoogleDriveReconnection), and no other
+ * error overwrites that mark.
  * Only on the authorization the failing call used: a reconnection saved
  * meanwhile (new refresh token) is not marked by the old token's refusal.
  */
@@ -294,7 +311,7 @@ async function recordGoogleDriveConnectionError(
   const notMarkedYet = or(isNull(googleDriveConnections.lastError), ne(googleDriveConnections.lastError, TOKEN_REVOKED_ERROR));
   const updated = await db.update(googleDriveConnections).set({ lastError: message, updatedAt: new Date() })
     .where(and(eq(googleDriveConnections.id, connection.id), eq(googleDriveConnections.refreshTokenCiphertext, connection.refreshTokenCiphertext), notMarkedYet));
-  if (isGoogleDriveReconnectionError(message) && googleDriveMutationRowCount(updated) === 1) await notifyOwnerOfGoogleDriveReconnection();
+  if (isGoogleDriveReconnectionError(message) && googleDriveMutationRowCount(updated) === 1) await notifyOwnerOfGoogleDriveReconnection(connection);
 }
 
 export type GoogleDriveCopyDeletion = {
@@ -394,6 +411,18 @@ export async function googleDriveExportStatus() {
   const [failed] = await db.select({ count: sql<number>`count(*)` }).from(cvGoogleDriveExportJobs).where(retryableFailedGoogleDriveExport());
   const failedExports = Number(failed?.count ?? 0);
   return connection ? { connected: true, ...connection, failedExports } : { connected: false, connectedAt: null, lastUsedAt: null, lastError: null, folderId: null, failedExports };
+}
+
+/**
+ * The connection is « à renouveler » (REC-09): the daily security review
+ * reports it every day until the reconnection, whatever became of its alert.
+ */
+export async function googleDriveReconnectionRequired(): Promise<boolean> {
+  const db = await getDb();
+  if (!db) return false;
+  const [connection] = await db.select({ lastError: googleDriveConnections.lastError }).from(googleDriveConnections)
+    .where(eq(googleDriveConnections.connectionKey, CONNECTION_KEY)).limit(1);
+  return isGoogleDriveReconnectionError(connection?.lastError);
 }
 
 export async function enqueueCvGoogleDriveExport(applicationId: number, scheduledFor = new Date()) {
@@ -711,11 +740,15 @@ async function processGoogleDriveExportJob(jobId: number) {
 export async function processDueCvGoogleDriveExports(limit = BATCH_SIZE, applicationIds?: number[], options: { skipQuarantinedCvs?: boolean } = {}) {
   const db = await getDb();
   if (!db) throw new Error("Database connection failed");
-  const connection = (await db.select({ id: googleDriveConnections.id, lastError: googleDriveConnections.lastError }).from(googleDriveConnections).where(eq(googleDriveConnections.connectionKey, CONNECTION_KEY)).limit(1))[0];
+  const connection = (await db.select({ id: googleDriveConnections.id, lastError: googleDriveConnections.lastError, refreshTokenCiphertext: googleDriveConnections.refreshTokenCiphertext }).from(googleDriveConnections).where(eq(googleDriveConnections.connectionKey, CONNECTION_KEY)).limit(1))[0];
   if (!connection) return { processed: 0, waitingForAuthorization: true, reconnectRequired: false, results: [] as Array<Record<string, unknown>> };
   // Revoked authorization: no copy is attempted (each would be refused) until
-  // the admin reconnects Drive, which requeues them (REC-09).
-  if (isGoogleDriveReconnectionError(connection.lastError)) return { processed: 0, waitingForAuthorization: true, reconnectRequired: true, results: [] as Array<Record<string, unknown>> };
+  // the admin reconnects Drive, which requeues them (REC-09). Its alert is sent
+  // again here as long as it has not been delivered.
+  if (isGoogleDriveReconnectionError(connection.lastError)) {
+    await notifyOwnerOfGoogleDriveReconnection(connection);
+    return { processed: 0, waitingForAuthorization: true, reconnectRequired: true, results: [] as Array<Record<string, unknown>> };
+  }
   const now = new Date();
   const dueJobs = and(
     inArray(cvGoogleDriveExportJobs.status, ["queued", "retry"]),
