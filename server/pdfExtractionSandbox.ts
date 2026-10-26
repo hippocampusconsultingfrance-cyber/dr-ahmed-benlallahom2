@@ -22,11 +22,13 @@ import { visibleTextContent, type PdfVisibilityFindings } from "./pdfVisibleText
  *
  * The text task also keeps only the text a reader sees (IA-01): each page
  * with text is drawn at 72 dpi at most, and ink is attributed to each text
- * operation (pdfVisibleText). Text at least 4 pt high, not squashed, with
- * ink of its own is kept; text without ink is hidden (`invisibleText`), or
- * unverifiable (`unverifiableText`, never counted as hidden) when a picture
- * under it may show it, as an OCR layer on a scan, when its font cannot be
+ * operation (pdfVisibleText), then to each word. Text at least 4 pt high,
+ * not squashed, with ink of its own is kept; text without ink is hidden
+ * (`invisibleText`), or unverifiable (`unverifiableText`, never counted as
+ * hidden) when a picture under it may show it, as an OCR layer on a scan,
+ * when it is left with too little ink to be read, when its font cannot be
  * drawn, or when it was not checked in time. Both are left out of the text.
+ * The render task draws the first pages, or those it is given.
  * Drawing pages stops at `VISIBILITY_TIME_SHARE` of the time allowed: the
  * pages not wholly checked are listed in `uncheckedPages`.
  */
@@ -38,7 +40,8 @@ export type PdfTextReading = {
   visibility?: { invisibleText: string[]; uncheckedPages: number[]; unverifiableText: PdfVisibilityFindings["unverifiableText"] };
 };
 export type PdfRendering = { total: number | null; pages: Array<{ pageNumber: number; dataUrl: string | null }> };
-export type PdfReaderTask = { kind: "text"; first: number } | { kind: "render"; first: number; desiredWidth: number };
+/** `pages`, when given, renders those pages instead of the first ones. */
+export type PdfReaderTask = { kind: "text"; first: number } | { kind: "render"; first: number; desiredWidth: number; pages?: number[] };
 
 const VISIBILITY_TIME_SHARE = 0.6;
 
@@ -129,7 +132,7 @@ const visibleTextContent = ${visibleTextContent.toString()};
       }
       parentPort.postMessage({ type: "result", result: { total: Number.isInteger(total) ? total : null, pages, visibility } });
     } else {
-      const result = await parser.getScreenshot({ first: task.first, desiredWidth: task.desiredWidth, imageDataUrl: true, imageBuffer: false });
+      const result = await parser.getScreenshot({ ...(task.pages ? { partial: task.pages } : { first: task.first }), desiredWidth: task.desiredWidth, imageDataUrl: true, imageBuffer: false });
       parentPort.postMessage({ type: "result", result: { total: Number.isInteger(result.total) ? result.total : null, pages: result.pages.map(page => ({ pageNumber: page.pageNumber, dataUrl: page.dataUrl || null })) } });
     }
   } catch (error) {
@@ -160,7 +163,7 @@ type WorkerMessage =
   | { type: "error"; name: string; message: string };
 
 export function readPdfIsolated(buffer: Buffer, task: { kind: "text"; first: number }, limits?: DocumentDecompressionLimits): Promise<PdfTextReading>;
-export function readPdfIsolated(buffer: Buffer, task: { kind: "render"; first: number; desiredWidth: number }, limits?: DocumentDecompressionLimits): Promise<PdfRendering>;
+export function readPdfIsolated(buffer: Buffer, task: { kind: "render"; first: number; desiredWidth: number; pages?: number[] }, limits?: DocumentDecompressionLimits): Promise<PdfRendering>;
 export function readPdfIsolated(buffer: Buffer, task: PdfReaderTask, limits: DocumentDecompressionLimits = DOCUMENT_DECOMPRESSION_LIMITS): Promise<PdfTextReading | PdfRendering> {
   return new Promise((resolve, reject) => {
     let modules: { pdfModuleUrl: string; canvasModuleUrl: string };

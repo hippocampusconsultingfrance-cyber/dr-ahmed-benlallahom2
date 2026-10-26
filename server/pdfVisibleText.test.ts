@@ -10,7 +10,9 @@ import { visibleTextContent, type PdfVisibilityFindings } from "./pdfVisibleText
 // sur une ligne visible (mode 3, opacité 0, blanc) ne profite donc plus de
 // l'encre de cette ligne ; une ligne doublée reste lue une fois ; une ligne
 // écrite d'une seule opération garde ses mots d'un caractère ; un scan ne voit
-// pas sa couche OCR accusée de cacher du texte.
+// pas sa couche OCR accusée de cacher du texte. Dans une ligne visible, chaque
+// mot est jugé sur sa propre encre : recouvert, même par une forme presque
+// opaque, il est écarté ; réduit à quelques traces, il est écarté sans accusation.
 
 /** Each read starts the isolated reader and draws the pages. */
 const PDF_TEST_TIMEOUT_MS = 30_000;
@@ -110,6 +112,58 @@ describe("encre attribuée à chaque opération de texte (IA-01)", () => {
     expect(reading.visibility!.invisibleText).toEqual(["Titulaire du DESAR et de la licence DHA (Dubai)."]);
   }, PDF_TEST_TIMEOUT_MS);
 
+  describe("mots recouverts dans une ligne visible", () => {
+    const shown = "Infirmier diplômé d'État.";
+    const claim = "Titulaire du DESAR, licence DHA (Dubai), 10 ans d'expérience.";
+    /** The visible CV, then one line of a single operation: `shown`, then the claim, and what is drawn over it. */
+    const coveredLine = (cover: (document: PDFKit.PDFDocument, claimX: number) => void) => pdf(document => {
+      visibleLines(document);
+      document.font("Helvetica").fontSize(11).fillColor("black").text(`${shown} ${claim}`, 50, 160, { lineBreak: false });
+      cover(document, 50 + document.widthOfString(`${shown} `));
+    });
+
+    it("écarte la fin d’une ligne sous un rectangle blanc presque opaque (opacité 0,995), qui ne laisse rien voir", async () => {
+      const reading = await readPdfIsolated(await coveredLine((document, claimX) => {
+        document.save().fillOpacity(0.995).rect(claimX - 1, 154, 500, 20).fill("white").restore();
+      }), { kind: "text", first: 25 });
+      const text = textOf(reading);
+      for (const line of NURSE_CV) expect(text).toContain(line);
+      expect(text).toContain(shown);
+      for (const word of ["DESAR", "DHA", "10 ans"]) expect(text).not.toContain(word);
+      expect(normalized(reading.visibility!.invisibleText.join(" "))).toBe(claim);
+      expect(reading.visibility!.unverifiableText).toEqual([]);
+    }, PDF_TEST_TIMEOUT_MS);
+
+    it("écarte un mot court recouvert au milieu d’une ligne visible (« DHA », « DESAR »)", async () => {
+      const reading = await readPdfIsolated(await pdf(document => {
+        visibleLines(document);
+        document.font("Helvetica").fontSize(11).fillColor("black").text("Licence DHA valide. Diplômes : IDE DESAR et DIU.", 50, 160, { lineBreak: false });
+        for (const [before, word] of [["Licence ", "DHA"], ["Licence DHA valide. Diplômes : IDE ", "DESAR"]] as const) {
+          document.rect(50 + document.widthOfString(before) - 0.5, 156, document.widthOfString(word) + 1, 16).fill("white");
+        }
+      }), { kind: "text", first: 25 });
+      const text = textOf(reading);
+      expect(text).toContain("Licence valide. Diplômes : IDE et DIU.");
+      expect(text).not.toContain("DHA");
+      expect(text).not.toContain("DESAR");
+      expect(reading.visibility!.invisibleText).toEqual(["DHA DESAR"]);
+    }, PDF_TEST_TIMEOUT_MS);
+
+    it("écarte sans l’accuser la fin d’une ligne dont il ne reste que le haut des majuscules", async () => {
+      // Covered from 1 pt under the top of the capitals: only specks of each word show.
+      const reading = await readPdfIsolated(await coveredLine((document, claimX) => {
+        document.rect(claimX - 1, 161, 500, 20).fill("white");
+      }), { kind: "text", first: 25 });
+      const text = textOf(reading);
+      expect(text).toContain(shown);
+      for (const word of ["Titulaire", "DESAR", "DHA", "(Dubai)", "10", "d'expérience."]) expect(text).not.toContain(word);
+      const faint = normalized(reading.visibility!.unverifiableText.filter(passage => passage.reason === "faint").map(passage => passage.text).join(" "));
+      for (const word of ["Titulaire", "DESAR,", "DHA", "(Dubai),", "d'expérience."]) expect(faint).toContain(word);
+      // Words with no speck at all are hidden, as under a full cover: all of the claim is set aside.
+      expect(normalized(`${faint} ${reading.visibility!.invisibleText.join(" ")}`).split(" ").sort()).toEqual(claim.split(" ").sort());
+    }, PDF_TEST_TIMEOUT_MS);
+  });
+
   describe("couche OCR d’un scan", () => {
     const SCANNED_LINES = ["Médecin anesthésiste-réanimateur, CHU de Lyon", "Langues : français, anglais, arabe (courant)"];
     /** A scanned CV: an image of its two lines, then the OCR layer in render mode 3, and maybe more lines laid over it. */
@@ -179,7 +233,7 @@ describe("encre attribuée à chaque opération de texte (IA-01)", () => {
       }
     }, PDF_TEST_TIMEOUT_MS);
 
-    it("fait de même pour des lignes qui se chevauchent au-delà du nombre de rendus permis", async () => {
+    it("fait de même pour des lignes qui se chevauchent au-delà du nombre de rendus permis, et pour le mot que l’une recouvre", async () => {
       const read = await page(document => {
         visibleLines(document);
         // A second line laid over the first: it needs a render of its own.
@@ -189,8 +243,11 @@ describe("encre attribuée à chaque opération de texte (IA-01)", () => {
         const findings: PdfVisibilityFindings = { invisibleText: [], unverifiableText: [] };
         const checked = await visibleTextContent(read.page as never, read.content, read.canvasFactory, findings, { pageNumber: 1, deadline: Date.now() + 20_000, maxRenders: 2 });
         expect(checked.complete).toBe(false);
-        for (const line of NURSE_CV) expect(keptText(checked.content)).toContain(line);
-        expect(findings.unverifiableText).toEqual([{ page: 1, reason: "unfinished", text: "Médecin" }]);
+        for (const line of NURSE_CV.slice(1)) expect(keptText(checked.content)).toContain(line);
+        expect(keptText(checked.content)).toMatch(/^Exemple /);
+        // « Jean », lost under the line left unchecked, cannot be told visible either: set aside, not accused.
+        expect(findings.invisibleText).toEqual([]);
+        expect(findings.unverifiableText).toEqual([{ page: 1, reason: "faint", text: "Jean" }, { page: 1, reason: "unfinished", text: "Médecin" }]);
       } finally {
         await read.parser.destroy();
       }

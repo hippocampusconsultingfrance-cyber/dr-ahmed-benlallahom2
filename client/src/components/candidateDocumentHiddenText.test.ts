@@ -15,6 +15,8 @@ describe("texte écarté d’un document du coffre (IA-06)", () => {
   it("range les nombres dans les points à vérifier, et l’extrait avec l’analyse", () => {
     expect(hiddenTextFlags(hiddenText)).toEqual(["invisible_text_ignored:57", "unverifiable_text_set_aside:15"]);
     expect(hiddenTextFlags({ characters: 0, excerpt: "" })).toEqual([]);
+    // A scanned page read by the vision instead of its OCR layer: nothing was left out.
+    expect(hiddenTextFlags({ characters: 0, excerpt: "", unverifiable: { characters: 89, excerpt: "Médecin anesthésiste-réanimateur, CHU de Lyon", share: 0 } })).toEqual([]);
     expect(hiddenTextFlags(undefined)).toEqual([]);
   });
 

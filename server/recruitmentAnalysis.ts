@@ -273,8 +273,8 @@ export type InvisibleTextSummary = {
   /**
    * Text whose visibility could not be established (IA-01): left out of the
    * text like invisible text, but never counted in `characters`. `share` is
-   * its part of the text read, visible text included (0 when the vision read
-   * the pages instead).
+   * its part of the text read, visible text included, leaving out the pages
+   * the vision read instead (0 when it read them all).
    */
   unverifiable?: { characters: number; excerpt: string; reasons: UnverifiableTextReason[]; share: number };
 };
@@ -323,6 +323,7 @@ function textExcerpt(passages: string[]) {
 /** In this order in the warnings and in the admin alert. */
 const UNVERIFIABLE_REASONS: Record<UnverifiableTextReason, { warning: string; label: string }> = {
   font: { warning: "pdf_font_not_drawable", label: "police non incorporée au PDF que l’outil ne sait pas dessiner" },
+  faint: { warning: "pdf_text_faint", label: "mots d’une ligne visible recouverts en grande partie ou trop peu marqués pour être lus avec certitude" },
   image: { warning: "pdf_text_on_image", label: "texte sans encre posé sur une image, comme la couche OCR d’un scan" },
   unfinished: { warning: "pdf_visibility_check_unfinished", label: "contrôle de visibilité non terminé (document long ou lourd)" },
   unmatched: { warning: "pdf_text_unmatched", label: "texte que l’outil n’a pas pu rattacher à son dessin" },
@@ -330,21 +331,23 @@ const UNVERIFIABLE_REASONS: Record<UnverifiableTextReason, { warning: string; la
 };
 
 /**
- * `visibleCharacters`: the text kept, against which the share of the text set
- * aside as unverifiable is measured; null when the vision read the pages.
+ * `visibleCharacters`: the text read, against which the share of the text set
+ * aside as unverifiable is measured; null when the vision read all the pages.
+ * Passages of a page the vision read (`reread`) do not count in that share.
  */
-function invisibleTextSummary(passages: string[], unverifiablePassages: Array<{ reason: UnverifiableTextReason; text: string }>, visibleCharacters: number | null): InvisibleTextSummary | undefined {
+function invisibleTextSummary(passages: string[], unverifiablePassages: Array<{ reason: UnverifiableTextReason; text: string; reread?: boolean }>, visibleCharacters: number | null): InvisibleTextSummary | undefined {
   const invisible = textExcerpt(passages);
   const unverifiable = textExcerpt(unverifiablePassages.map(passage => passage.text));
   if (!invisible && !unverifiable) return undefined;
   const reasons = new Set(unverifiablePassages.filter(passage => LETTER_OR_DIGIT.test(passage.text)).map(passage => passage.reason));
+  const unread = visibleCharacters === null ? undefined : textExcerpt(unverifiablePassages.filter(passage => !passage.reread).map(passage => passage.text));
   return {
     ...(invisible ?? { characters: 0, excerpt: "" }),
     ...(unverifiable ? {
       unverifiable: {
         ...unverifiable,
         reasons: (Object.keys(UNVERIFIABLE_REASONS) as UnverifiableTextReason[]).filter(reason => reasons.has(reason)),
-        share: visibleCharacters === null ? 0 : unverifiable.characters / (unverifiable.characters + visibleCharacters),
+        share: unread && visibleCharacters !== null ? unread.characters / (unread.characters + visibleCharacters) : 0,
       },
     } : {}),
   };
@@ -358,10 +361,14 @@ const invisibleTextWarnings = (invisibleText: InvisibleTextSummary | undefined) 
 const unverifiableReasons = (unverifiable: NonNullable<InvisibleTextSummary["unverifiable"]>) =>
   unverifiable.reasons.map(reason => UNVERIFIABLE_REASONS[reason].label).join(" ; ") || "visibilité non établie";
 
-/** The admin alert, with what the file hid and what could not be checked. */
+/** The admin alert, with what the file hid and what could not be checked, or was read by the vision instead. */
 const invisibleTextAlert = (invisibleText: InvisibleTextSummary) => [
   ...(invisibleText.characters ? [`${invisibleText.characters} caractère(s) de texte invisible ignoré(s), extrait : « ${invisibleText.excerpt} ».`] : []),
-  ...(invisibleText.unverifiable ? [`${invisibleText.unverifiable.characters} caractère(s) non vérifiable(s) écarté(s) de l’analyse (${unverifiableReasons(invisibleText.unverifiable)}), extrait : « ${invisibleText.unverifiable.excerpt} ».`] : []),
+  ...(invisibleText.unverifiable
+    ? [invisibleText.unverifiable.share === 0
+      ? `Couche de texte non utilisée pour ${invisibleText.unverifiable.characters} caractère(s) (${unverifiableReasons(invisibleText.unverifiable)}) : page(s) relue(s) par la lecture visuelle, extrait : « ${invisibleText.unverifiable.excerpt} ».`
+      : `${invisibleText.unverifiable.characters} caractère(s) non vérifiable(s) écarté(s) de l’analyse (${unverifiableReasons(invisibleText.unverifiable)}), extrait : « ${invisibleText.unverifiable.excerpt} ».`]
+    : []),
   "Ouvrir le CV pour le comparer.",
 ].join(" ");
 
@@ -432,7 +439,9 @@ function pdfStepLimits(step: "pdf_text" | "pdf_render", ownTimeoutMs: number, op
   };
 }
 
-async function extractPdfWithVision(buffer: Buffer): Promise<{ text: string; confidence: number | null; warnings: string[] }> {
+/** The first pages, or those given (at most as many), transcribed by the vision as a person sees them. */
+async function extractPdfWithVision(buffer: Buffer, chosenPages?: number[]): Promise<{ text: string; pages: Array<{ pageNumber: number; text: string }>; confidence: number | null; warnings: string[] }> {
+  const selection = chosenPages ? { pages: chosenPages.slice(0, VISION_RENDER.first) } : {};
   const screenshots = await readPdfBounded(
     buffer,
     () => {
@@ -440,15 +449,15 @@ async function extractPdfWithVision(buffer: Buffer): Promise<{ text: string; con
         reserveMs: CV_ANALYSIS_STEP_MINIMUM_MS.ocr + CV_ANALYSIS_STEP_MINIMUM_MS.analysis,
         minimumMs: CV_ANALYSIS_STEP_MINIMUM_MS.pdfRender,
       });
-      return readPdfIsolated(buffer, { kind: "render", ...VISION_RENDER }, step.limits).catch(step.rethrow);
+      return readPdfIsolated(buffer, { kind: "render", ...VISION_RENDER, ...selection }, step.limits).catch(step.rethrow);
     },
     async parser => {
-      const rendered = await parser.getScreenshot({ ...VISION_RENDER, imageDataUrl: true, imageBuffer: false });
+      const rendered = await parser.getScreenshot({ ...(selection.pages ? { partial: selection.pages } : { first: VISION_RENDER.first }), desiredWidth: VISION_RENDER.desiredWidth, imageDataUrl: true, imageBuffer: false });
       return { total: rendered.total, pages: rendered.pages.map(page => ({ pageNumber: page.pageNumber, dataUrl: page.dataUrl || null })) };
     },
   );
   const pages = screenshots.pages.filter((page): page is { pageNumber: number; dataUrl: string } => Boolean(page.dataUrl));
-  if (pages.length === 0) return { text: "", confidence: null, warnings: ["vision_ocr_no_rendered_pages"] };
+  if (pages.length === 0) return { text: "", pages: [], confidence: null, warnings: ["vision_ocr_no_rendered_pages"] };
 
   // Pages are transcribed in parallel: one timeout for all of them.
   const ocrTimeoutMs = stepTimeoutMs("ocr", OCR_PAGE_TIMEOUT_MS, { reserveMs: CV_ANALYSIS_STEP_MINIMUM_MS.analysis, minimumMs: CV_ANALYSIS_STEP_MINIMUM_MS.ocr });
@@ -475,14 +484,15 @@ async function extractPdfWithVision(buffer: Buffer): Promise<{ text: string; con
       warnings: response.output.warnings,
     };
   }));
+  transcriptions.sort((left, right) => left.pageNumber - right.pageNumber);
   return {
     text: cleanText(transcriptions
-      .sort((left, right) => left.pageNumber - right.pageNumber)
       .map(page => `[PAGE ${page.pageNumber}]\n${escapeCvPageMarkers(cleanText(page.text))}`)
       .join("\n\n")),
+    pages: transcriptions.map(page => ({ pageNumber: page.pageNumber, text: cleanText(page.text) })),
     confidence: Math.min(...transcriptions.map(page => page.confidence)),
     warnings: [
-      ...((screenshots.total ?? 0) > pages.length ? ["vision_ocr_first_3_pages_only"] : []),
+      ...(!chosenPages && (screenshots.total ?? 0) > pages.length ? ["vision_ocr_first_3_pages_only"] : []),
       ...transcriptions.flatMap(page => page.warnings.map(warning => `page_${page.pageNumber}:${warning}`)),
     ],
   };
@@ -519,9 +529,11 @@ async function extractCvDocumentUnbounded(buffer: Buffer, mimeType: string): Pro
       },
     );
     const pages = result.pages.map(page => ({ number: page.num, text: cleanText(page.text) }));
-    const extracted = cleanText(pages
+    const withMarkers = (read: typeof pages) => cleanText(read
       .map(page => `[PAGE ${page.number}]\n${escapeCvPageMarkers(page.text)}`)
       .join("\n\n"));
+    const contentLength = (text: string) => cleanText(text.replace(/\[PAGE\s+\d+\]/gi, "")).length;
+    const extracted = withMarkers(pages);
     const totalPages = result.total;
     // A page whose text was set aside as unverifiable is not empty: the
     // unverifiable text says so, and counts on its own (IA-01).
@@ -535,11 +547,37 @@ async function extractCvDocumentUnbounded(buffer: Buffer, mimeType: string): Pro
     // IA-01: the text layer read without the visibility check (in-process
     // fallback) may still hold invisible text.
     const visibilityWarnings = !result.visibility ? ["pdf_visibility_check_unavailable"] : [];
-    const extractedContentLength = cleanText(
-      extracted.replace(/\[PAGE\s+\d+\]/gi, "")
-    ).length;
-    const invisibleText = invisibleTextSummary(result.visibility?.invisibleText ?? [], unverifiable, extractedContentLength);
-    if (extractedContentLength >= 80) return { text: extracted, method: "pdf_text", totalPages, ocrConfidence: null, ocrModelVersion: null, warnings: [...textCoverageWarnings, ...visibilityWarnings, ...invisibleTextWarnings(invisibleText)], invisibleText };
+    const extractedContentLength = contentLength(extracted);
+    if (extractedContentLength >= 80) {
+      // A page whose text lies mostly on a picture (a scanned page under its
+      // OCR layer, as phone scanner apps make them) is read by the vision as a
+      // person sees it, within its page cap: what was set aside there no longer
+      // makes the reading partial, once the vision found about as much text
+      // there. Not a page in a font the reader cannot draw: the vision sees the
+      // same drawing, blank without the host's fonts (server/fonts/README.md).
+      const setAsideOn = (number: number) => unverifiable
+        .filter(passage => passage.page === number && passage.reason === "image")
+        .reduce((characters, passage) => characters + passage.text.length, 0);
+      const toRead = pages.filter(page => setAsideOn(page.number) > page.text.length).map(page => page.number);
+      const vision = toRead.length > 0 ? await extractPdfWithVision(buffer, toRead) : null;
+      const reread = new Map((vision?.pages ?? []).filter(page => 2 * page.text.length >= setAsideOn(page.pageNumber)).map(page => [page.pageNumber, page.text]));
+      const text = reread.size > 0 ? withMarkers(pages.map(page => ({ number: page.number, text: reread.get(page.number) ?? page.text }))) : extracted;
+      const invisibleText = invisibleTextSummary(result.visibility?.invisibleText ?? [], unverifiable.map(passage => ({ ...passage, reread: reread.has(passage.page) })), contentLength(text));
+      return {
+        text,
+        method: "pdf_text",
+        totalPages,
+        ocrConfidence: reread.size > 0 ? vision!.confidence : null,
+        ocrModelVersion: reread.size > 0 ? RECRUITMENT_OCR_MODEL : null,
+        warnings: [
+          ...textCoverageWarnings,
+          ...visibilityWarnings,
+          ...(reread.size > 0 ? [`vision_ocr_pages:${Array.from(reread.keys()).join(",")}`, ...vision!.warnings] : []),
+          ...invisibleTextWarnings(invisibleText),
+        ],
+        invisibleText,
+      };
+    }
     // Too little text, once any invisible or unverifiable text is set aside
     // (a scan under its OCR layer): the vision reads the pages as a person
     // sees them, so its text hides nothing, and what was set aside no longer
@@ -1739,9 +1777,10 @@ Barème professionnel, sans caractéristique protégée : specialtyMatch /30, ex
       targetCountries: input.targetCountries,
       languages: input.languages,
       yearsExperience: input.yearsExperience,
+      // The vision's confidence, when it read the whole CV or some of its pages.
       extractionConfidence: input.extractionMethod === "pdf_vision"
         ? input.ocrConfidence ?? 0
-        : null,
+        : input.ocrConfidence ?? null,
       extractionIncomplete: input.extractionIncomplete,
       invisibleText: input.invisibleText,
       visibilityUnchecked: input.visibilityUnchecked,

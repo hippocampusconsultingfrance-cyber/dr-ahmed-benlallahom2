@@ -6,12 +6,13 @@
  */
 export const HIDDEN_TEXT_FLAGS = { invisible: "invisible_text_ignored", unverifiable: "unverifiable_text_set_aside" } as const;
 
-export type HiddenTextSummary = { characters: number; excerpt: string; unverifiable?: { characters: number; excerpt: string } };
+/** `unverifiable.share` 0: the pages holding that text were read by the vision instead, nothing was left out. */
+export type HiddenTextSummary = { characters: number; excerpt: string; unverifiable?: { characters: number; excerpt: string; share?: number } };
 
 export function hiddenTextFlags(summary: HiddenTextSummary | undefined): string[] {
   return [
     ...(summary?.characters ? [`${HIDDEN_TEXT_FLAGS.invisible}:${summary.characters}`] : []),
-    ...(summary?.unverifiable?.characters ? [`${HIDDEN_TEXT_FLAGS.unverifiable}:${summary.unverifiable.characters}`] : []),
+    ...(summary?.unverifiable?.characters && summary.unverifiable.share !== 0 ? [`${HIDDEN_TEXT_FLAGS.unverifiable}:${summary.unverifiable.characters}`] : []),
   ];
 }
 

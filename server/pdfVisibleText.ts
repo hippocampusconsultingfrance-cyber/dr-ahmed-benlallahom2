@@ -18,23 +18,28 @@
  * together are drawn one at a time, and the text of those that ink kept once.
  *
  * Inside a visible operation (one per line in ReportLab, PDFKit, Word or
- * LibreOffice exports), a part is only set aside when it is clear-cut: a run
- * of words at least three ems long whose pixels it did not change at all
- * (covered, clipped, off the page). Text without ink lying
- * on a picture that shows marks there (the OCR layer of a scan, or text
- * under a photo) cannot be told visible or not, nor can a sign or a lone
- * digit on a picture (too thin to show there): it is set aside as
- * unverifiable, like text in a font pdf.js cannot load (drawn with the host's
- * fonts, if any), text the reader could not match with its drawing, and text
- * left unchecked for lack of time. Unverifiable text is never counted as
- * hidden text.
+ * LibreOffice exports), each word is then judged on its own ink: a word
+ * without any (covered, even by a nearly opaque shape, clipped or off the
+ * page) is text without ink, and a word with far less ink than the words of
+ * the page usually have (mostly covered, or left with a few specks) is set
+ * aside as unverifiable, as is a word without ink where other text or lines
+ * are drawn (it may only be lost in them), and a sign or a lone letter or
+ * digit without ink, which may be too thin to show at this resolution.
+ *
+ * Text without ink lying on a picture that shows marks there (the OCR layer
+ * of a scan, or text under a photo) cannot be told visible or not, nor can a
+ * sign or a lone digit on a picture (too thin to show there): it is set aside
+ * as unverifiable, like text in a font pdf.js cannot load (drawn with the
+ * host's fonts, if any), text the reader could not match with its drawing,
+ * and text left unchecked for lack of time. Unverifiable text is never
+ * counted as hidden text.
  *
  * This function runs in the isolated PDF reader's worker, whose source
  * includes it through Function.prototype.toString: it must not use anything
  * defined outside its own body.
  */
 
-export type PdfUnverifiableReason = "font" | "image" | "unfinished" | "unmatched";
+export type PdfUnverifiableReason = "faint" | "font" | "image" | "unfinished" | "unmatched";
 export type PdfVisibilityFindings = {
   invisibleText: string[];
   unverifiableText: Array<{ page: number; reason: PdfUnverifiableReason; text: string }>;
@@ -71,9 +76,11 @@ export async function visibleTextContent(
   const MIN_INK_PIXELS = 2;
   const MAX_RENDER_PIXELS = 2_000_000;
   const MAX_RENDERS = options.maxRenders ?? 12;
-  // A part of a visible operation is only set aside when it is this long, without any ink.
-  const PARTIAL_MIN_EM = 3;
-  const PARTIAL_MIN_LETTERS = 6;
+  // A word of a visible operation is faint below this share of the usual ink of the page's words (their
+  // median, per pixel of their glyphs' boxes; honest words keep more than half of it), or below this ink
+  // per pixel whatever the page (a page of specks; honest words have 0.18 or more).
+  const FAINT_SHARE = 0.2;
+  const MIN_INK_DENSITY = 0.05;
   // Glyphs the text layer leaves out (off the page, format marks) skipped while matching it with the drawing.
   const ALIGN_WINDOW = 8;
   // Operator codes of pdf.js 5.4.296 (OPS), the version pdf-parse pins.
@@ -91,7 +98,7 @@ export async function visibleTextContent(
 
   type Box = [number, number, number, number];
   type Char = { text: string; space: boolean; q: number; a: number; b: number; status: string };
-  type Segment = { op: number; chars: Char[]; box: Box; core: Box; a: number; b: number; ink: number; changed: number };
+  type Segment = { op: number; chars: Char[]; box: Box; core: Box; a: number; b: number; ink: number; cluttered: boolean };
   type Line = { item: TextItem; chars: Char[]; segments: Segment[]; up: number };
   type Operation = { chars: Char[]; segments: Segment[]; box: Box; up: number; font: PdfFont | null; mode: number; ink: number; result: string };
   const area = (box: Box) => Math.max(0, box[2] - box[0]) * Math.max(0, box[3] - box[1]);
@@ -313,7 +320,7 @@ export async function visibleTextContent(
         }
         const op = stream[char.q]!.op;
         if (!segment || segment.op !== op || IDEOGRAPH.test(char.text) || IDEOGRAPH.test(segment.chars.at(-1)!.text)) {
-          segment = { op, chars: [], box: [0, 0, 0, 0], core: [0, 0, 0, 0], a: char.a, b: char.b, ink: 0, changed: 0 };
+          segment = { op, chars: [], box: [0, 0, 0, 0], core: [0, 0, 0, 0], a: char.a, b: char.b, ink: 0, cluttered: false };
           line.segments.push(segment);
         }
         segment.chars.push(char);
@@ -322,7 +329,7 @@ export async function visibleTextContent(
       }
       for (const found of line.segments) {
         found.box = boxOf(found.a, found.b, 0.15 * up);
-        // Its glyphs alone, for a part set aside: the margin around them may hold the next word.
+        // Its glyphs alone, for the ink of the word: the margin around them may hold the next word.
         found.core = boxOf(found.a, found.b, 0);
         let operation = operations.get(found.op);
         if (!operation) {
@@ -361,8 +368,6 @@ export async function visibleTextContent(
     // before (B). White drawn over dark strokes only erases them, and a line drawn again over itself only
     // mixes colours already there: neither is ink.
     const ink = new Uint8Array(width * height);
-    // Pixels the operation changed at all: a part of it is only set aside where it changed none.
-    const changed = new Uint8Array(width * height);
     const covered = new Uint8Array(width * height);
     const differs = (left: ArrayLike<number>, l: number, right: ArrayLike<number>, r: number) =>
       Math.abs(left[l]! - right[r]!) >= MIN_CONTRAST || Math.abs(left[l + 1]! - right[r + 1]!) >= MIN_CONTRAST || Math.abs(left[l + 2]! - right[r + 2]!) >= MIN_CONTRAST;
@@ -376,8 +381,7 @@ export async function visibleTextContent(
           const green = shown[offset + 1]!;
           const blue = shown[offset + 2]!;
           let value = 0;
-          changed[index] = red !== hidden[offset] || green !== hidden[offset + 1] || blue !== hidden[offset + 2] ? 1 : 0;
-          if (changed[index] && differs(shown, offset, hidden, offset)) {
+          if (differs(shown, offset, hidden, offset)) {
             let lowRed = 255, lowGreen = 255, lowBlue = 255, highRed = 0, highGreen = 0, highBlue = 0;
             for (let yy = Math.max(0, y - radius); yy <= Math.min(height - 1, y + radius); yy += 1) {
               for (let xx = Math.max(0, x - radius); xx <= Math.min(width - 1, x + radius); xx += 1) {
@@ -404,6 +408,25 @@ export async function visibleTextContent(
       for (let y = box[1]; y < box[3]; y += 1) for (let x = box[0]; x < box[2]; x += 1) count += mask[y * width + x]!;
       return count;
     };
+    /** Pixels of the box away from its usual colour (its median), up to `MIN_INK_PIXELS`: a paper texture or the noise of a scan has none. */
+    const marksIn = (pixels: ArrayLike<number>, box: Box) => {
+      const [x0, y0, x1, y1] = box;
+      const histograms = [new Uint32Array(256), new Uint32Array(256), new Uint32Array(256)];
+      for (let y = y0; y < y1; y += 1) for (let x = x0; x < x1; x += 1) for (let channel = 0; channel < 3; channel += 1) histograms[channel]![pixels[(y * width + x) * 4 + channel]!]! += 1;
+      const median = histograms.map(histogram => {
+        let seen = 0;
+        for (let value = 0; value < 256; value += 1) if ((seen += histogram[value]!) * 2 >= area(box)) return value;
+        return 255;
+      });
+      let marks = 0;
+      for (let y = y0; y < y1 && marks < MIN_INK_PIXELS; y += 1) {
+        for (let x = x0; x < x1 && marks < MIN_INK_PIXELS; x += 1) {
+          const offset = (y * width + x) * 4;
+          if ([0, 1, 2].some(channel => Math.abs(pixels[offset + channel]! - median[channel]!) >= MARK_CONTRAST)) marks += 1;
+        }
+      }
+      return marks;
+    };
     /** Measures each operation of `ops` (and its segments) between a render showing it and one hiding it. */
     const measure = (shown: ArrayLike<number>, hidden: ArrayLike<number>, ops: number[]) => {
       for (const op of ops) {
@@ -411,7 +434,8 @@ export async function visibleTextContent(
         operation.ink = measureBox(shown, hidden, operation.box, Math.min(6, Math.max(2, Math.ceil(0.1 * operation.up) + 1)));
         for (const found of operation.segments) {
           found.ink = countIn(ink, found.core);
-          found.changed = countIn(changed, found.core);
+          // A word without ink where something else is drawn (other text, a line) may only be lost in it.
+          found.cluttered = found.ink < MIN_INK_PIXELS && marksIn(hidden, found.core) >= MIN_INK_PIXELS;
         }
       }
     };
@@ -566,36 +590,48 @@ export async function visibleTextContent(
       }
     }
 
-    // A clear-cut part of a visible operation without ink: covered, clipped or off the page.
+    // Each word of a visible operation on its own ink. The usual ink of the page's words, per pixel of their
+    // glyphs' boxes: a word with far less is mostly covered or left with a few specks, and cannot be said to
+    // be read. A lone ideograph is left out: some have a single stroke.
+    const lettersOf = (chars: Char[]) => chars.filter(char => LETTER.test(char.text)).length;
+    const densityOf = (found: Segment, up: number) => found.ink / Math.max(1, Math.abs(found.b - found.a) * up);
+    const densities: number[] = [];
+    for (const line of lines) {
+      if (!line) continue;
+      for (const found of line.segments) {
+        if (operations.get(found.op)!.result === "visible" && found.ink >= MIN_INK_PIXELS && lettersOf(found.chars) >= 2) densities.push(densityOf(found, line.up));
+      }
+    }
+    densities.sort((left, right) => left - right);
+    const faintBelow = Math.max(MIN_INK_DENSITY, FAINT_SHARE * (densities[densities.length >> 1] ?? 0));
+    // Words without ink (covered, clipped or off the page), in runs of the same operation: hidden when
+    // nothing else is drawn where they lie, as a cover leaves it.
     const silentRuns: Segment[][] = [];
     for (const line of lines) {
       if (!line) continue;
       let run: Segment[] = [];
       const close = () => {
-        if (run.length === 0) return;
-        const first = run[0]!;
-        const last = run.at(-1)!;
-        const letters = run.flatMap(found => found.chars).filter(char => LETTER.test(char.text)).length;
-        if (Math.abs(last.b - first.a) >= PARTIAL_MIN_EM * line.up && letters >= PARTIAL_MIN_LETTERS) silentRuns.push(run);
+        if (run.length > 0) silentRuns.push(run);
         run = [];
       };
       for (const found of line.segments) {
-        const operation = operations.get(found.op)!;
-        const untouched = found.ink === 0 && found.changed === 0;
-        if (operation.result !== "visible" || !untouched || (run.length > 0 && run.at(-1)!.op !== found.op)) close();
-        if (operation.result === "visible" && untouched) run.push(found);
+        const visible = operations.get(found.op)!.result === "visible";
+        const silent = visible && found.ink < MIN_INK_PIXELS;
+        if (!silent || (run.length > 0 && run.at(-1)!.op !== found.op)) close();
+        if (silent) run.push(found);
+        else if (visible && lettersOf(found.chars) >= 2 && densityOf(found, line.up) < faintBelow) for (const char of found.chars) char.status = "unverifiable:faint";
       }
       close();
     }
 
     // Text without ink: hidden, unless a picture under it shows marks there (an OCR layer on a scan).
-    const silentBoxes: Array<{ box: Box; chars: Char[]; mark: (status: string) => void }> = [];
+    const silentBoxes: Array<{ box: Box; chars: Char[]; partial: boolean; cluttered: boolean; mark: (status: string) => void }> = [];
     for (const operation of Array.from(operations.values())) {
-      if (operation.result === "noInk") silentBoxes.push({ box: operation.box, chars: operation.chars, mark: status => { operation.result = status; } });
+      if (operation.result === "noInk") silentBoxes.push({ box: operation.box, chars: operation.chars, partial: false, cluttered: false, mark: status => { operation.result = status; } });
     }
     for (const run of silentRuns) {
       const box = run.map(found => found.box).reduce((left, right): Box => [Math.min(left[0], right[0]), Math.min(left[1], right[1]), Math.max(left[2], right[2]), Math.max(left[3], right[3])]);
-      silentBoxes.push({ box, chars: run.flatMap(found => found.chars), mark: status => { for (const found of run) for (const char of found.chars) char.status = status; } });
+      silentBoxes.push({ box, chars: run.flatMap(found => found.chars), partial: true, cluttered: run.some(found => found.cluttered), mark: status => { for (const found of run) for (const char of found.chars) char.status = status; } });
     }
     if (silentBoxes.length > 0 && hasImages) {
       if (candidates.length > 0 && !canRender()) {
@@ -610,31 +646,15 @@ export async function visibleTextContent(
           return fn !== OP.constructPath || argsArray[index]![0] === OP.endPath || fnArray[index - 1] === OP.clip || fnArray[index - 1] === OP.eoClip;
         });
         for (const silentBox of silentBoxes) {
-          // Marks: pixels away from the box's usual colour (its median), which a paper texture or the
-          // noise of a scan is not.
-          const [x0, y0, x1, y1] = silentBox.box;
-          const histograms = [new Uint32Array(256), new Uint32Array(256), new Uint32Array(256)];
-          for (let y = y0; y < y1; y += 1) for (let x = x0; x < x1; x += 1) for (let channel = 0; channel < 3; channel += 1) histograms[channel]![pictures[(y * width + x) * 4 + channel]!]! += 1;
-          const median = histograms.map(histogram => {
-            let seen = 0;
-            for (let value = 0; value < 256; value += 1) if ((seen += histogram[value]!) * 2 >= area(silentBox.box)) return value;
-            return 255;
-          });
-          let marks = 0;
-          for (let y = y0; y < y1 && marks < MIN_INK_PIXELS; y += 1) {
-            for (let x = x0; x < x1; x += 1) {
-              const offset = (y * width + x) * 4;
-              if ([0, 1, 2].some(channel => Math.abs(pictures[offset + channel]! - median[channel]!) >= MARK_CONTRAST)) marks += 1;
-            }
-          }
           // A sign or a lone digit (the slash or page number of a scanned footer) can be too thin to show
           // marks, and says nothing alone: set aside without accusing.
-          const says = silentBox.chars.filter(char => LETTER.test(char.text)).length >= 2;
-          silentBox.mark(marks >= MIN_INK_PIXELS || !says ? "unverifiable:image" : "invisible");
+          if (marksIn(pictures, silentBox.box) >= MIN_INK_PIXELS || lettersOf(silentBox.chars) < 2) silentBox.mark("unverifiable:image");
+          else silentBox.mark(silentBox.cluttered ? "unverifiable:faint" : "invisible");
         }
       }
     } else {
-      for (const silentBox of silentBoxes) silentBox.mark("invisible");
+      // In a visible line, a sign or a lone letter or digit without ink may be too thin to show at this resolution.
+      for (const silentBox of silentBoxes) silentBox.mark(silentBox.partial && (silentBox.cluttered || lettersOf(silentBox.chars) < 2) ? "unverifiable:faint" : "invisible");
     }
 
     for (const operation of Array.from(operations.values())) {
