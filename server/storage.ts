@@ -42,6 +42,15 @@ export function classifyStorageError(error: unknown): string {
   return "storage_unknown";
 }
 
+/**
+ * Storage failures that do not pass with time (EXPL-02): the store or its
+ * token is to be fixed in Vercel (store suspended or missing, access refused,
+ * no token).
+ */
+export function isLastingStorageError(code: unknown): boolean {
+  return typeof code === "string" && ["storage_access_denied", "storage_store_not_found", "storage_store_suspended", "storage_config_missing"].includes(code);
+}
+
 export async function storagePut(
   relKey: string,
   data: Buffer | Uint8Array | string,
@@ -72,7 +81,12 @@ export async function storagePut(
  * Stores an object under this exact key, once: when the key already holds an
  * object (a document rebuilt byte for byte on a retry, such as an invoice),
  * nothing is uploaded and the stored copy is kept. Without a random suffix
- * and with overwriting refused, a second copy cannot be created.
+ * and with overwriting refused, a second copy cannot be created. Throws
+ * "storage_check_failed" when the store could not say whether the key holds
+ * an object (outage, rate limit, access): a copy may be stored, so the caller
+ * must not use the document it built in its place. Throws
+ * "storage_upload_failed" when the key was free and the upload failed, or
+ * when no store is configured.
  */
 export async function storagePutOnce(
   relKey: string,
@@ -82,14 +96,17 @@ export async function storagePutOnce(
   const key = normalizeKey(relKey);
   const body = typeof data === "string" || Buffer.isBuffer(data) ? data : Buffer.from(data);
   let uploaded;
+  let checking = false;
   try {
     const token = getBlobToken();
+    checking = true;
     try {
       const stored = await head(key, { token });
       return { key: stored.pathname, url: stored.url, uploaded: false };
     } catch (error) {
       if (!(error instanceof BlobNotFoundError)) throw error;
     }
+    checking = false;
     uploaded = await put(key, body, {
       access: PRIVATE_BLOB_ACCESS,
       addRandomSuffix: false,
@@ -99,7 +116,7 @@ export async function storagePutOnce(
       token,
     });
   } catch (error) {
-    const wrapped = new Error("storage_upload_failed", { cause: error }) as Error & { code: string };
+    const wrapped = new Error(checking ? "storage_check_failed" : "storage_upload_failed", { cause: error }) as Error & { code: string };
     wrapped.code = classifyStorageError(error);
     throw wrapped;
   }

@@ -16,7 +16,7 @@ import { runWithSendSlot } from "./_core/resendDelivery";
 import { emailLanguageFor } from "./emailLanguage";
 import { generateInvoicePDF, renderInvoicePDF, type InvoiceData } from "./invoice";
 import { allocateAppointmentInvoice, findAppointmentInvoices, type AppointmentInvoiceRecord } from "./invoiceNumbering";
-import { deadlineCutShort, runWithProcessingDeadline } from "./processingDeadline";
+import { deadlineCutShort, ProcessingDeadlineError, runWithProcessingDeadline, startFitsDeadline } from "./processingDeadline";
 import { hasErasedPatientData } from "./personalDataRetention";
 
 const MAX_BATCH = 5;
@@ -97,7 +97,7 @@ async function waitForFulfillmentTurn(): Promise<(claimed: boolean) => void> {
  * pause. A send made again after Resend's retry-after or a short backoff
  * takes a new slot too (runWithSendSlot in processDueAppointmentFulfillmentJobs).
  */
-async function waitForSendSlot(mayStart: () => boolean = () => true): Promise<boolean> {
+async function waitForSendSlot(mayStart: () => boolean): Promise<boolean> {
   const previousSlot = lastSendSlot;
   let release!: () => void;
   lastSendSlot = new Promise<void>(resolve => { release = resolve; });
@@ -114,6 +114,19 @@ async function waitForSendSlot(mayStart: () => boolean = () => true): Promise<bo
   } finally {
     release();
   }
+}
+
+/**
+ * The send slot of a job's email (ABUS-03). Sent right after a payment, the
+ * email starts only within the immediate budget, even though its job was
+ * claimed in time: a send of another processing (a new try after Resend's
+ * retry-after among them) may hold the slot until after the page or the
+ * webhook has answered. Past the budget, the slot goes to the next send and
+ * the job goes back to the queue, due, without counting the attempt (see
+ * runJob), for the next processing or « Renvoyer ».
+ */
+async function waitForJobSendSlot() {
+  if (!startFitsDeadline() || !(await waitForSendSlot(startFitsDeadline))) throw new ProcessingDeadlineError("send_slot");
 }
 
 /**
@@ -419,18 +432,18 @@ async function runJob(id: number) {
   const language = emailLanguageFor(appointment.language);
   try {
     if (jobType === "owner") {
-      await waitForSendSlot();
+      await waitForJobSendSlot();
       await sendOwnerNotificationEmail(appointment.customerName, appointment.customerEmail, appointment.customerPhone, appointment.trackingId, appointment.appointmentDate, finalPrice, { idempotencyKey: ownerNotificationKey(appointment), language: appointment.language });
     } else if (jobType === "confirmation") {
       await ensureOwnerNotification(db, appointment, finalPrice);
-      await waitForSendSlot();
+      await waitForJobSendSlot();
       // The job is created at the payment confirmation: its creation time stamps
       // the attached .ics, identical on every retry (RES-05).
       await sendConfirmationEmail(appointment.customerEmail, appointment.customerName, appointment.trackingId, appointment.appointmentDate, finalPrice, undefined, { idempotencyKey: patientEmailIdempotencyKey(`appointment-confirmation-${appointment.trackingId}`, appointment.customerEmail), language, confirmedAt: job.createdAt ?? appointment.appointmentDate });
       const smsSent = await sendCustomerConfirmationSMS(appointment.customerPhone, appointment.trackingId, appointment.appointmentDate);
       await db.update(appointments).set({ emailSent: 1, smsSent: smsSent ? 1 : 0 }).where(eq(appointments.id, appointment.id));
     } else if (jobType === "refund") {
-      await waitForSendSlot();
+      await waitForJobSendSlot();
       // One key whatever the refund's origin: the patient is told once. Its
       // failure carries its cause, so a refused address is told apart (RES-06).
       await sendRefundConfirmationEmail(appointment.customerEmail, appointment.customerName, appointment.trackingId, appointment.appointmentDate, appointment.refundAmount ?? appointment.finalPrice, { ...refundNotice!.email, idempotencyKey: patientEmailIdempotencyKey(`appointment-refund-${appointment.trackingId}`, appointment.customerEmail), language });
@@ -441,7 +454,7 @@ async function runJob(id: number) {
       const patientEmail = patientJob?.status === "completed" && !patientJob.lastError ? "sent" : isRefusedJob(patientJob) ? "refused" : "pending";
       const patientDataErased = hasErasedPatientData(appointment);
       const { buildStripeRefundAlert } = await import("./appointmentPaymentWebhook");
-      await waitForSendSlot();
+      await waitForJobSendSlot();
       const delivered = await notifyOwner(buildStripeRefundAlert({
         trackingId: appointment.trackingId,
         refundAmount: appointment.refundAmount ?? appointment.finalPrice,
@@ -455,6 +468,8 @@ async function runJob(id: number) {
         // refused, not yet, or no longer reachable), as Resend refuses a key
         // reused with another content (409).
         idempotencyKey: `appointment-stripe-refund-${appointment.trackingId}-${appointment.appointmentStatus}-${patientDataErased ? "erased" : patientEmail === "sent" ? "notified" : patientEmail}`,
+        // Not asked again after the immediate budget: the job goes back to the queue (ABUS-03).
+        stopAtDeadline: true,
       }).catch(() => false);
       if (!delivered) throw new Error("owner_refund_alert_failed");
     } else {
@@ -463,9 +478,11 @@ async function runJob(id: number) {
       // webhook right after the payment confirmation: its creation time is the
       // payment date.
       const invoiceRecord = await allocateAppointmentInvoice({ appointmentId: appointment.id, paidAt: job.createdAt ?? new Date() });
-      const invoice = await generateInvoicePDF(appointmentInvoiceData(appointment, invoiceRecord));
+      // At its first issue, built and sent even while the store cannot be
+      // checked: no copy of a number just allocated can be stored (EXPL-02).
+      const invoice = await generateInvoicePDF(appointmentInvoiceData(appointment, invoiceRecord), undefined, { issuedNow: invoiceRecord.issuedNow });
       // Its pause counts from here, once the PDF is built.
-      await waitForSendSlot();
+      await waitForJobSendSlot();
       // The PDF stays in French whatever the language of the email (EN-01).
       await sendInvoiceEmail(appointment.customerEmail, appointment.customerName, appointment.trackingId, finalPrice, invoice.buffer, invoiceRecord.invoiceNumber, { idempotencyKey: patientEmailIdempotencyKey(`appointment-invoice-${invoiceRecord.invoiceNumber}`, appointment.customerEmail), language });
     }
@@ -474,11 +491,12 @@ async function runJob(id: number) {
   } catch (error) {
     if (deadlineCutShort()) {
       // Sent right after a payment, the job ran out of its time budget before
-      // its own retries (ABUS-03): neither the email nor the provider failed
-      // for good. It goes back to the queue as it was, due, without counting
-      // this attempt nor alerting the owner, for the next processing (another
-      // webhook, the scheduled run). Still unsent a few minutes later, it is
-      // listed in « À traiter » (listAppointmentDeliveriesToHandle).
+      // its send slot or its own retries (ABUS-03): neither the email nor the
+      // provider failed for good. It goes back to the queue as it was, due,
+      // without counting this attempt nor alerting the owner, for the next
+      // processing (another webhook, the scheduled run). Still unsent a few
+      // minutes later, it is listed in « À traiter »
+      // (listAppointmentDeliveriesToHandle).
       await db.update(appointmentFulfillmentJobs).set({ status: job.attempts > 1 ? "retry" : "queued", attempts: job.attempts - 1, startedAt: null }).where(eq(appointmentFulfillmentJobs.id, id));
       console.warn("[AppointmentFulfillment] Immediate processing out of time; job left for the next run", { trackingId: appointment.trackingId, jobType });
       return { completed: false, retry: true, deadlineReached: true };
@@ -663,6 +681,12 @@ export type AppointmentDelivery = {
   nextAttemptAt: Date | null;
   /** Why a job was deliberately not sent: consultation already past, appointment no longer paid, or patient data erased (RGPD-12). */
   notSentReason: "appointment_past" | "not_paid" | "patient_data_erased" | null;
+  /**
+   * A job that did not go out because of the invoice storage (Vercel Blob),
+   * not the email service: the copy stored at the invoice's issue could not be
+   * checked or read, and the invoice is not rebuilt in its place (EXPL-02).
+   */
+  failureCause: "invoice_storage" | null;
 };
 
 /** Same rule as recoverStaleAppointmentFulfillmentJobs: no worker runs that long. */
@@ -683,6 +707,7 @@ function deliveryOf(job: FulfillmentJob, now: Date): AppointmentDelivery {
     notSentReason: state !== "not_sent" ? null
       : job.lastError === "appointment_already_past_confirmation_skipped" ? "appointment_past"
       : job.lastError === PATIENT_DATA_ERASED ? "patient_data_erased" : "not_paid",
+    failureCause: (state === "retrying" || state === "failed") && job.lastError?.startsWith("storage_") ? "invoice_storage" : null,
   };
 }
 
@@ -892,10 +917,11 @@ export async function listAppointmentDeliveriesToHandle(limit = 20, now = new Da
  * appointment, the copy stored at its issue, identical to the PDF emailed to
  * the patient even after the address was corrected; when none was stored
  * yet, built from its recorded number and dates and the appointment's current
- * data, then stored once (generateInvoicePDF). On a booking reduced to its
- * accounting record (RGPD-12), rebuilt without the identity, the stored copy
- * neither read nor written, as the GDPR procedure states. Never allocates a
- * number: null when no invoice was issued yet.
+ * data, then stored once (generateInvoicePDF). Throws while the stored copy
+ * cannot be checked or read (storage outage): never rebuilt in its place. On
+ * a booking reduced to its accounting record (RGPD-12), rebuilt without the
+ * identity, the stored copy neither read nor written, as the GDPR procedure
+ * states. Never allocates a number: null when no invoice was issued yet.
  */
 export async function regenerateAppointmentInvoice(trackingId: string): Promise<{ invoiceNumber: string; buffer: Buffer } | null> {
   const db = await getDb();

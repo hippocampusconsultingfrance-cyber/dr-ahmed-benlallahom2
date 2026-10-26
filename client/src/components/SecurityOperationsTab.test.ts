@@ -67,6 +67,35 @@ describe("RGPD-12 — traces des actions sur les données d’une personne", () 
     expect(html).toContain("更正患者电子邮箱（预约）");
   });
 
+  it("nomme le créneau retenu par une réservation en ligne et son auteur anonyme, dans chaque langue (ABUS-02)", () => {
+    view.events = [event(1, "public_booking_hold_created", null, "anonymous")];
+    const labels = { fr: ["Créneau retenu par une réservation en ligne, en attente de paiement", "Visiteur anonyme"], en: ["Slot held by an online booking, awaiting payment", "Anonymous visitor"], de: ["Termin durch Online-Buchung reserviert, Zahlung ausstehend", "Anonymer Besucher"], zh: ["在线预约暂留时段，待付款", "匿名访客"] };
+    for (const [language, [category, actor]] of Object.entries(labels)) {
+      view.language = language;
+      const html = renderToStaticMarkup(createElement(SecurityOperationsTab));
+      expect(html).toContain(category);
+      expect(html).toContain(actor);
+      expect(html).not.toMatch(/public booking hold|>anonymous</);
+    }
+  });
+
+  it("nomme la vérification anti-robot refusée ou indisponible d’une réservation en ligne, dans chaque langue (ABUS-02)", () => {
+    view.events = [event(1, "public_booking_challenge", null, "anonymous"), event(2, "public_booking_challenge_unavailable", null, "anonymous")];
+    const labels = {
+      fr: ["Vérification anti-robot refusée (réservation en ligne)", "Vérification anti-robot indisponible (réservation en ligne)"],
+      en: ["Anti-bot check refused (online booking)", "Anti-bot check unavailable (online booking)"],
+      de: ["Bot-Prüfung abgelehnt (Online-Buchung)", "Bot-Prüfung nicht verfügbar (Online-Buchung)"],
+      zh: ["反机器人验证未通过（在线预约）", "反机器人验证暂不可用（在线预约）"],
+    };
+    for (const [language, [refused, unavailable]] of Object.entries(labels)) {
+      view.language = language;
+      const html = renderToStaticMarkup(createElement(SecurityOperationsTab));
+      expect(html).toContain(refused);
+      expect(html).toContain(unavailable);
+      expect(html).not.toContain("public booking challenge");
+    }
+  });
+
   it("ignore un compteur sans libellé", () => {
     view.events = [event(1, "admin_contact_message_deleted", { deleted: 1, unexpected: 9 })];
     const html = renderToStaticMarkup(createElement(SecurityOperationsTab));

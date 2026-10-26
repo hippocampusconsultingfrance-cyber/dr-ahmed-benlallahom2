@@ -807,7 +807,7 @@ describe("RES-06 — remboursements et contestations faits dans Stripe", () => {
     expect(alert.content).toContain("Données du patient effacées (RGPD) : il n’est plus joignable par le site et n’a pas été prévenu du remboursement par email.");
     expect(alert.content).not.toContain("renvoie automatiquement");
     expect(alert.content).not.toContain("prévenir le patient");
-    expect(options).toEqual({ idempotencyKey: `appointment-stripe-refund-${TRACKING_ID}-completed-erased` });
+    expect(options).toEqual({ idempotencyKey: `appointment-stripe-refund-${TRACKING_ID}-completed-erased`, stopAtDeadline: true });
 
     // A refund email that failed before the erasure stays unsent; the owner's alert can still go out again.
     const job = (jobType: string) => db().rows(appointmentFulfillmentJobs).find(row => row.jobType === jobType)!;
@@ -864,7 +864,7 @@ describe("RES-06 — remboursements et contestations faits dans Stripe", () => {
     // Alerte écrite avant l’email au patient : sa propre clé, que le texte suivant ne réemploie pas (Resend refuserait un autre contenu).
     const firstAlert = owner.notifyOwner.mock.calls.find(([payload]) => payload.title.startsWith("Remboursement constaté chez Stripe"));
     expect(firstAlert?.[0].content).toContain("n’est pas encore parti");
-    expect(firstAlert?.[1]).toEqual({ idempotencyKey: `appointment-stripe-refund-${TRACKING_ID}-cancelled-pending` });
+    expect(firstAlert?.[1]).toEqual({ idempotencyKey: `appointment-stripe-refund-${TRACKING_ID}-cancelled-pending`, stopAtDeadline: true });
 
     // Resend rétabli : « Renvoyer » fait partir les deux, le patient d’abord.
     emails.sendRefundConfirmationEmail.mockResolvedValue(undefined);
@@ -878,7 +878,7 @@ describe("RES-06 — remboursements et contestations faits dans Stripe", () => {
     expect(alert.title).toBe(`Remboursement constaté chez Stripe (${TRACKING_ID})`);
     expect(alert.content).toContain("(100,00 €)");
     expect(alert.content).toContain("Le patient a été prévenu");
-    expect(options).toEqual({ idempotencyKey: `appointment-stripe-refund-${TRACKING_ID}-cancelled-notified` });
+    expect(options).toEqual({ idempotencyKey: `appointment-stripe-refund-${TRACKING_ID}-cancelled-notified`, stopAtDeadline: true });
     expect((await listAppointmentDeliveriesToHandle()).retrying.total).toBe(0);
   });
 

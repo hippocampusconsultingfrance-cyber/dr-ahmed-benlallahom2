@@ -67,10 +67,17 @@ describe("private Vercel Blob storage", () => {
     expect(Array.from(stored.keys())).toEqual([first.key]);
   });
 
-  it("uploads nothing when the store cannot say whether the document is already there", async () => {
+  it("uploads nothing when the store cannot say whether the document is already there, and says so apart from a failed upload", async () => {
     blob.head.mockRejectedValue(new Error("Vercel Blob: This store has been suspended."));
-    await expect(storagePutOnce("invoices/FAC-2026-000002-APTTEST000002.pdf", "pdf", "application/pdf")).rejects.toMatchObject({ code: "storage_store_suspended" });
+    await expect(storagePutOnce("invoices/FAC-2026-000002-APTTEST000002.pdf", "pdf", "application/pdf")).rejects.toMatchObject({ message: "storage_check_failed", code: "storage_store_suspended" });
+    blob.head.mockRejectedValue(new Error("Vercel Blob: The blob service is currently not available. Please try again."));
+    await expect(storagePutOnce("invoices/FAC-2026-000002-APTTEST000002.pdf", "pdf", "application/pdf")).rejects.toMatchObject({ message: "storage_check_failed", code: "storage_service_unavailable" });
     expect(blob.put).not.toHaveBeenCalled();
+
+    // The key is free, but the upload fails.
+    blob.head.mockRejectedValue(new blob.BlobNotFoundError("Vercel Blob: The requested blob does not exist"));
+    blob.put.mockRejectedValue(new Error("Vercel Blob: The blob service is currently not available. Please try again."));
+    await expect(storagePutOnce("invoices/FAC-2026-000002-APTTEST000002.pdf", "pdf", "application/pdf")).rejects.toMatchObject({ message: "storage_upload_failed", code: "storage_service_unavailable" });
   });
 
   it("creates a five-minute read-only URL for one private pathname", async () => {

@@ -22,12 +22,16 @@ vi.mock("./adminMfa", async importOriginal => ({ ...await importOriginal<typeof 
 vi.mock("./_core/notification", () => ({ notifyOwner: vi.fn(async () => true) }));
 // Private Vercel Blob store held in memory, behind the real storage module;
 // its objects are read through signed URLs (fetch below). `unreadable`: reads fail.
-const blobStore = vi.hoisted(() => ({ objects: new Map<string, Buffer>(), uploads: [] as string[], reads: [] as string[], unreadable: false }));
+// `unavailable`: the service does not answer whether an object is stored;
+// `suspended`: the store is suspended.
+const blobStore = vi.hoisted(() => ({ objects: new Map<string, Buffer>(), uploads: [] as string[], reads: [] as string[], unreadable: false, unavailable: false, suspended: false }));
 vi.mock("@vercel/blob", async importOriginal => {
-  const { BlobNotFoundError } = await importOriginal<typeof import("@vercel/blob")>();
+  const { BlobNotFoundError, BlobServiceNotAvailable, BlobStoreSuspendedError } = await importOriginal<typeof import("@vercel/blob")>();
   return {
     BlobNotFoundError,
     head: vi.fn(async (pathname: string) => {
+      if (blobStore.unavailable) throw new BlobServiceNotAvailable();
+      if (blobStore.suspended) throw new BlobStoreSuspendedError();
       if (!blobStore.objects.has(pathname)) throw new BlobNotFoundError();
       return { pathname, url: `https://blob.test/${pathname}` };
     }),
@@ -42,6 +46,12 @@ vi.mock("@vercel/blob", async importOriginal => {
     list: vi.fn(),
     presignUrl: vi.fn(async (_token: string, { pathname }: { pathname: string }) => ({ presignedUrl: `https://blob.test/${pathname}?signed=1` })),
   };
+});
+// The real numbering; an invoice number allocated by the job is seeded by the
+// test (the in-memory database does not run its INSERT … SELECT).
+vi.mock("./invoiceNumbering", async importOriginal => {
+  const actual = await importOriginal<typeof import("./invoiceNumbering")>();
+  return { ...actual, allocateAppointmentInvoice: vi.fn(actual.allocateAppointmentInvoice) };
 });
 vi.mock("./_core/notifications", async importOriginal => {
   const send = (kind: string) => vi.fn(async (to: string, ...rest: unknown[]) => {
@@ -67,7 +77,7 @@ vi.mock("./_core/notifications", async importOriginal => {
 });
 
 import { appRouter } from "./routers";
-import { APPOINTMENT_INVOICE_SCHEMA_OBJECTS } from "./invoiceNumbering";
+import { allocateAppointmentInvoice, APPOINTMENT_INVOICE_SCHEMA_OBJECTS } from "./invoiceNumbering";
 import { APPOINTMENT_FULFILLMENT_MAX_ATTEMPTS, enqueueAppointmentFulfillment, processAppointmentFulfillmentNow } from "./appointmentFulfillment";
 import { anonymisedAppointmentFields } from "./personalDataRetention";
 
@@ -149,6 +159,8 @@ beforeEach(() => {
   blobStore.uploads = [];
   blobStore.reads = [];
   blobStore.unreadable = false;
+  blobStore.unavailable = false;
+  blobStore.suspended = false;
   vi.stubEnv("BLOB_READ_WRITE_TOKEN", "blob-test-token");
   vi.stubGlobal("fetch", vi.fn(async (url: string) => {
     const pathname = decodeURIComponent(new URL(url).pathname.slice(1));
@@ -415,6 +427,77 @@ describe("EXPL-02 — « Télécharger la facture »", () => {
     expect(state.sent).toEqual([]);
     expect(job(paid.id, "invoice")).toMatchObject({ status: "retry", attempts: 1 });
     expect(blobStore.uploads).toHaveLength(1);
+  });
+
+  it("stockage indisponible après correction de l’adresse : ni l’email ni le téléchargement ne reconstruisent la facture avec la nouvelle adresse ; au retour du stockage, ils donnent la facture émise", async () => {
+    const paid = seedAppointment("APTINVFIX006");
+    seedJob(paid.id, "owner", { status: "completed", attempts: 1 });
+    seedJob(paid.id, "confirmation", { status: "completed", attempts: 1 });
+    seedJob(paid.id, "invoice");
+    seedInvoice(paid.id, 56);
+    state.refused.add("invoice");
+    await processAppointmentFulfillmentNow(paid.id as number);
+    const issued = blobStore.objects.get("invoices/FAC-2026-000056-APTINVFIX006.pdf")!;
+    await admin().appointments.updateCustomerEmail({ trackingId: "APTINVFIX006", customerEmail: "patient.corrige@example.test" });
+    state.refused.clear();
+    // Vercel Blob does not answer whether the invoice is stored (BlobServiceNotAvailable).
+    blobStore.unavailable = true;
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    await expect(admin().appointments.invoicePdf({ trackingId: "APTINVFIX006" })).rejects.toMatchObject({ code: "INTERNAL_SERVER_ERROR", message: expect.stringContaining("le stockage des factures (Vercel Blob) ne répond pas pour l’instant ; réessayez dans un instant") });
+    const retried = await admin().appointments.retryFulfillment({ trackingId: "APTINVFIX006" });
+    expect(state.sent).toEqual([]);
+    expect(job(paid.id, "invoice")).toMatchObject({ status: "retry", attempts: 1 });
+    // The storage, not the email service, kept it from going out.
+    expect(retried.deliveries.find(delivery => delivery.jobType === "invoice")).toMatchObject({ state: "retrying", failureCause: "invoice_storage" });
+    expect(blobStore.uploads).toHaveLength(1);
+
+    blobStore.unavailable = false;
+    await admin().appointments.retryFulfillment({ trackingId: "APTINVFIX006" });
+    const emailed = state.sent.find(email => email.kind === "invoice")!;
+    expect(emailed).toMatchObject({ to: "patient.corrige@example.test", invoiceNumber: "FAC-2026-000056" });
+    expect(emailed.pdf!.equals(issued)).toBe(true);
+    const download = Buffer.from((await admin().appointments.invoicePdf({ trackingId: "APTINVFIX006" })).contentBase64, "base64");
+    expect(download.equals(issued)).toBe(true);
+    expect((await billedTo(download))[1]).toBe("aptinvfix006@example.test");
+    expect(blobStore.uploads).toHaveLength(1);
+  });
+
+  it("store suspendu : le téléchargement d’une facture émise le dit, à corriger dans Vercel, sans la reconstruire", async () => {
+    const paid = seedAppointment("APTINVFIX008");
+    seedInvoice(paid.id, 58);
+    blobStore.suspended = true;
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    await expect(admin().appointments.invoicePdf({ trackingId: "APTINVFIX008" })).rejects.toMatchObject({ code: "INTERNAL_SERVER_ERROR", message: expect.stringContaining("le stockage des factures (Vercel Blob) refuse l’accès (store suspendu ou introuvable") });
+    expect(error).toHaveBeenCalledWith("[AppointmentFulfillment] Invoice download failed", { message: "storage_check_failed", code: "storage_store_suspended" });
+    expect(blobStore.uploads).toEqual([]);
+  });
+
+  it("première émission pendant une panne de Vercel Blob : la facture, dont aucune copie ne peut encore être archivée, est envoyée ; le téléchargement suivant l’archive à l’identique", async () => {
+    const paid = seedAppointment("APTINVFIX007");
+    seedJob(paid.id, "owner", { status: "completed", attempts: 1 });
+    seedJob(paid.id, "confirmation", { status: "completed", attempts: 1 });
+    seedJob(paid.id, "invoice");
+    // The job allocates the appointment's number now.
+    vi.mocked(allocateAppointmentInvoice).mockImplementationOnce(async ({ appointmentId }) => {
+      seedInvoice(appointmentId, 57);
+      return { invoiceNumber: "FAC-2026-000057", issuedAt: new Date("2026-10-12T08:00:00Z"), paidAt: new Date("2026-10-12T07:59:00Z"), issuedNow: true };
+    });
+    blobStore.unavailable = true;
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    await processAppointmentFulfillmentNow(paid.id as number);
+
+    const emailed = state.sent.find(email => email.kind === "invoice")!;
+    expect(emailed).toMatchObject({ to: "aptinvfix007@example.test", invoiceNumber: "FAC-2026-000057" });
+    expect(job(paid.id, "invoice")).toMatchObject({ status: "completed", last_error: null });
+    expect(blobStore.uploads).toEqual([]);
+
+    blobStore.unavailable = false;
+    const download = Buffer.from((await admin().appointments.invoicePdf({ trackingId: "APTINVFIX007" })).contentBase64, "base64");
+    expect(download.equals(emailed.pdf!)).toBe(true);
+    expect(blobStore.uploads).toEqual(["invoices/FAC-2026-000057-APTINVFIX007.pdf"]);
   });
 
   it("rendez-vous effacé (RGPD) : le téléchargement reconstruit la facture sans l’identité, sans lire ni remplacer la copie archivée", async () => {

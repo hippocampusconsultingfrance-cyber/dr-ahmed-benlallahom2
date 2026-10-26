@@ -1,5 +1,6 @@
 import { TRPCError } from "@trpc/server";
 import { Resend } from "resend";
+import { startFitsDeadline } from "../processingDeadline";
 import { reportResendQuotaError, resendDeliveryFailureCode, sendWithRateLimitRetry } from "./resendDelivery";
 
 export type NotificationPayload = {
@@ -95,10 +96,15 @@ export function buildOwnerNotificationEmail(payload: NotificationPayload) {
  * Resend may have taken the email) is asked again once at once under that
  * key (REC-09): Resend keeps a key only 24 hours, and the caller's own retry,
  * minutes or a daily pass later, may come once it is forgotten.
+ * `stopAtDeadline`: for an alert queued as a post-payment job (refund_owner),
+ * not asked again once the immediate budget of the processing it runs in is
+ * spent, the request it serves having answered (ABUS-03): its job goes back to
+ * the queue. Without it (the other alerts, queued nowhere), it is asked again
+ * whatever the time, rather than lost.
  */
 export async function notifyOwner(
   payload: NotificationPayload,
-  options: { idempotencyKey?: string } = {},
+  options: { idempotencyKey?: string; stopAtDeadline?: boolean } = {},
 ): Promise<boolean> {
   const message = buildOwnerNotificationEmail(payload);
   const resend = getResendClient();
@@ -107,7 +113,7 @@ export async function notifyOwner(
     return false;
   }
 
-  const { idempotencyKey } = options;
+  const { idempotencyKey, stopAtDeadline = false } = options;
   const attempts = idempotencyKey ? 2 : 1;
   for (let attempt = 1; ; attempt += 1) {
     try {
@@ -126,5 +132,6 @@ export async function notifyOwner(
       console.warn("[Notification] Owner email delivery failed.");
       if (attempt >= attempts) return false;
     }
+    if (stopAtDeadline && !startFitsDeadline()) return false;
   }
 }

@@ -4,7 +4,7 @@ const { storagePutOnce } = vi.hoisted(() => ({ storagePutOnce: vi.fn() }));
 
 vi.mock("./storage.js", () => ({ storagePutOnce }));
 
-import { buildInvoiceContent, formatInvoiceAmount, generateInvoicePDF, type InvoiceData } from "./invoice";
+import { buildInvoiceContent, formatInvoiceAmount, generateInvoicePDF, renderInvoicePDF, type InvoiceData } from "./invoice";
 import { resolveInvoiceSeller } from "./invoiceSeller";
 import { HIPPOCAMPUS_LEGAL } from "../shared/legalIdentity";
 
@@ -65,6 +65,29 @@ describe("génération de facture PDF", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("ne reconstruit pas une facture dont la copie archivée n’a pas pu être vérifiée : stockage indisponible, elle n’est rendue qu’au nouvel essai (EXPL-02)", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    // Vercel Blob cannot say whether the invoice was stored at its issue (head() fails).
+    storagePutOnce.mockRejectedValueOnce(Object.assign(new Error("storage_check_failed"), { code: "storage_service_unavailable" }));
+    await expect(generateInvoicePDF({ ...nightInvoice, customerEmail: "adresse.corrigee@example.test" }, resolveInvoiceSeller({}))).rejects.toThrow("storage_check_failed");
+
+    // None stored yet, and its upload fails: the invoice just built is the one issued.
+    storagePutOnce.mockRejectedValueOnce(Object.assign(new Error("storage_upload_failed"), { code: "storage_service_unavailable" }));
+    const unstored = await generateInvoicePDF(nightInvoice, resolveInvoiceSeller({}));
+    expect(unstored.buffer.subarray(0, 5).toString()).toBe("%PDF-");
+    expect(unstored.url).toBe("");
+  });
+
+  it("à sa première émission, une facture est rendue même quand le stockage ne peut pas être vérifié : aucune copie d’un numéro tout juste attribué n’existe (EXPL-02)", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    storagePutOnce.mockRejectedValueOnce(Object.assign(new Error("storage_check_failed"), { code: "storage_store_suspended" }));
+    const issued = await generateInvoicePDF(nightInvoice, resolveInvoiceSeller({}), { issuedNow: true });
+    expect(issued.buffer.equals(await renderInvoicePDF(nightInvoice, resolveInvoiceSeller({})))).toBe(true);
+    expect(issued.url).toBe("");
+    // The cause is named in the log, not only the error's class.
+    expect(error).toHaveBeenCalledWith(expect.any(String), "storage_check_failed", "storage_store_suspended");
   });
 
   it("produit un PDF A4 stockable sous son numéro de facture", async () => {

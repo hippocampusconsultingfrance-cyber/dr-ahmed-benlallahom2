@@ -421,9 +421,14 @@ export function buildInvoiceContent(data: InvoiceData, seller: InvoiceSeller = r
   };
 }
 
+/**
+ * `issuedNow`: its number was just allocated by the caller (first issue), so
+ * no copy of it can be stored yet.
+ */
 export async function generateInvoicePDF(
   data: InvoiceData,
   seller: InvoiceSeller = resolveInvoiceSeller(),
+  options: { issuedNow?: boolean } = {},
 ): Promise<{ buffer: Buffer; key: string; url: string }> {
   const buffer = await renderInvoicePDF(data, seller);
   const invoiceKey = `invoices/${data.invoiceNumber}-${data.trackingId}.pdf`;
@@ -433,8 +438,21 @@ export async function generateInvoicePDF(
     // stored (EXPL-02).
     stored = await storagePutOnce(invoiceKey, buffer, "application/pdf");
   } catch (storageError) {
-    // If storage fails, still return the buffer
-    console.error("Failed to upload invoice to private storage:", storageError instanceof Error ? storageError.name : "UnknownError");
+    const message = storageError instanceof Error ? storageError.message : "UnknownError";
+    const code = (storageError as { code?: unknown }).code;
+    // The store could not say whether an invoice issued before was stored at
+    // its issue (outage, rate limit, suspended store): its stored copy, issued
+    // with the details of that time, may differ from the one just built from
+    // the current data (EXPL-02, an address corrected since). Nothing is built
+    // in its place: the caller fails and tries again (the job's next attempt,
+    // a new download).
+    if (message === "storage_check_failed" && !options.issuedNow) {
+      console.error("Invoice archive could not be checked; the invoice is not rebuilt:", message, code);
+      throw storageError;
+    }
+    // None was stored yet (first issue, or no store is configured): the
+    // invoice just built is the one issued; it is stored at its next build.
+    console.error("Failed to upload invoice to private storage:", message, code);
     return { buffer, key: invoiceKey, url: "" };
   }
   // An issued invoice no longer changes (EXPL-02): once stored, the email and

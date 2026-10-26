@@ -60,16 +60,17 @@ export function stepTimeoutMs(step: string, ownTimeoutMs: number, options: { res
 
 /**
  * Whether a pause (a provider's retry-after, a short backoff) still ends before
- * the deadline; always true outside one. The first pause may end as late as
- * `firstPauseDeadlineAt`, the later ones only before the deadline itself: the
- * emails sent right after a payment (appointmentFulfillment.ts) still get
+ * the deadline; always true outside one. The first pause must end strictly
+ * before `firstPauseDeadlineAt`, the later ones before the deadline itself:
+ * the emails sent right after a payment (appointmentFulfillment.ts) still get
  * their new try after a passing rate limit, but no longer wait through a
- * lasting one. A refused pause is recorded (deadlineCutShort).
+ * lasting one. A pause ending at that very end would be followed by no step
+ * (startFitsDeadline). A refused pause is recorded (deadlineCutShort).
  */
 export function waitFitsDeadline(waitMs: number): boolean {
   const context = deadlineStorage.getStore();
   if (!context) return true;
-  const fits = context.now() + waitMs <= (context.paused ? context.deadlineAt : context.firstPauseDeadlineAt);
+  const fits = context.now() + waitMs < (context.paused ? context.deadlineAt : context.firstPauseDeadlineAt);
   if (!fits) context.pauseRefused = true;
   return fits;
 }
@@ -85,15 +86,17 @@ export function pauseWithinDeadline(waitMs: number): Promise<void> {
 }
 
 /**
- * Whether the step that follows a pause may still start now, before the end
- * allowed to that pause (waitFitsDeadline): the end of the whole budget after
- * the first one, the deadline itself after the later ones; always true
- * outside a deadline. A step given up here is recorded like a refused pause
- * (deadlineCutShort).
+ * Whether the step that follows a pause may still start now, strictly before
+ * the end allowed to that pause (waitFitsDeadline): the end of the whole
+ * budget after the first one, the deadline itself after the later ones. The
+ * first step, before any pause, until the end of the whole budget. Always
+ * true outside a deadline. The budget's end is when the request it serves
+ * answers: a step starting at that very moment would start after the answer.
+ * A step given up here is recorded like a refused pause (deadlineCutShort).
  */
 export function startFitsDeadline(): boolean {
   const context = deadlineStorage.getStore();
-  if (!context || context.now() <= (context.lastPauseEndAt ?? context.firstPauseDeadlineAt)) return true;
+  if (!context || context.now() < (context.lastPauseEndAt ?? context.firstPauseDeadlineAt)) return true;
   context.pauseRefused = true;
   return false;
 }
