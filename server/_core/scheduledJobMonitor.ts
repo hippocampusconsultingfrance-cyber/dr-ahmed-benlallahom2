@@ -11,7 +11,8 @@
  * nothing. The ping is a bare GET with no body or query string, so no personal
  * data ever leaves; a failed run pings the same URL followed by /fail (both
  * services accept it), so the alert comes at once instead of after the grace time.
- * Bounded to 3 s, and its own failure is ignored: monitoring never fails a job.
+ * Bounded to 3 s by default (a job can ask for less), and its own failure is
+ * ignored: monitoring never fails a job.
  */
 export const SCHEDULED_JOB_MONITOR_TIMEOUT_MS = 3_000;
 

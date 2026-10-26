@@ -908,12 +908,15 @@ export async function createApp() {
 
   // CV processing worker: Heartbeat invokes a small idempotent batch so uploads
   // remain fast and failures can be retried without losing the candidate dossier.
+  // Its analyses may run until 55 s (RECRUITMENT_PROCESSING_BUDGET): a shorter
+  // monitor ping leaves more of the 60 s function limit to the work (EXPL-03).
+  const recruitmentProcessingMonitor = { timeoutMs: 1_500 };
   app.get("/api/scheduled/recruitment-processing", requireVercelCron, async (_req, res) => {
     try {
       // Drains every queue within a time budget: confirmation-email retries and
       // Drive copies first, then CV analyses (none started after ~25 s).
       const { runRecruitmentProcessingWorker } = await import("../recruitmentProcessingWorker");
-      const summary = await runMonitoredScheduledJob("/api/scheduled/recruitment-processing", () => runRecruitmentProcessingWorker());
+      const summary = await runMonitoredScheduledJob("/api/scheduled/recruitment-processing", () => runRecruitmentProcessingWorker(), recruitmentProcessingMonitor);
       console.info("[RecruitmentProcessing] Vercel cron summary", {
         elapsedMs: summary.elapsedMs,
         analysisRecovery: summary.analysisRecovery,
@@ -947,7 +950,7 @@ export async function createApp() {
         const driveExports = await processDueCvGoogleDriveExports(2);
         const confirmationEmails = await retryDueFailedCvConfirmationEmails(2);
         return { analysisRecovery, driveRecovery, analysisBackfill, driveBackfill, analysis, driveExports, confirmationEmails };
-      });
+      }, recruitmentProcessingMonitor);
       return res.json({ ok: true, taskUid: user.taskUid, ...result });
     } catch (error) {
       return sendScheduledJobFailure(res, "[RecruitmentProcessing] Handler error", error);

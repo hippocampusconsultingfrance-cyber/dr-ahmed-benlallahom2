@@ -138,6 +138,24 @@ describe("surveillance externe des tâches planifiées (EXPL-03)", () => {
     expect(pings.map(ping => ping.url)).toEqual([PROCESSING_PING, `${PROCESSING_PING}/fail`]);
   });
 
+  it("le traitement des candidatures, dont les analyses peuvent durer 55 s, n’attend son service de surveillance que 1,5 s", async () => {
+    mocks.runRecruitmentProcessingWorker.mockResolvedValueOnce({ elapsedMs: 54_000, confirmationEmails: { processed: 0 }, driveExports: { processed: 0 }, analysis: { processed: 1 } });
+    // A monitor that never answers: the ping is abandoned when its timeout aborts it.
+    let abortedAfterMs = -1;
+    vi.mocked(globalThis.fetch).mockImplementationOnce((_input, init) => new Promise((_resolve, reject) => {
+      const startedAt = Date.now();
+      init?.signal?.addEventListener("abort", () => {
+        abortedAfterMs = Date.now() - startedAt;
+        reject(new DOMException("The operation was aborted.", "AbortError"));
+      });
+    }));
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    expect((await call("/api/scheduled/recruitment-processing", cron)).status).toBe(200);
+    expect(abortedAfterMs).toBeGreaterThanOrEqual(1_400);
+    expect(abortedAfterMs).toBeLessThan(2_500);
+    expect(warn).toHaveBeenCalledWith("[ScheduledJobMonitor] HEALTHCHECK_URL_RECRUITMENT_PROCESSING ping failed:", "AbortError");
+  });
+
   it("une tâche sans URL configurée ne contacte aucun service", async () => {
     await call("/api/scheduled/appointment-hold-cleanup", cron);
     expect(pings).toEqual([]);
