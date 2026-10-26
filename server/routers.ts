@@ -2234,15 +2234,20 @@ export const appRouter = router({
             .where(eq(cvCandidateCertifications.applicationId, application.id)))
             .filter(row => sameRecruitmentFact(row.name, input.name));
           const declared = declaredCertificationNames(application.certifications).find(name => sameRecruitmentFact(name, input.name));
-          if (!rows.length && !declared) throw new TRPCError({ code: "NOT_FOUND", message: "Cette certification ne figure pas dans le dossier." });
+          // The expiry the CV gives a declared certification while its
+          // analysis retained no facts is no reading to confirm: it only dates
+          // the certification, and stays unconfirmed until the next analysis.
+          const expiryRows = rows.filter(row => row.source === "cv_expiry");
+          const factRows = rows.filter(row => row.source !== "cv_expiry");
+          if (!factRows.length && !declared) throw new TRPCError({ code: "NOT_FOUND", message: "Cette certification ne figure pas dans le dossier." });
           // Expired, as the mission and the 360° sheet show it (the CV's date,
           // or the confirmed one): only a confirmed renewal makes it count again.
-          const expiresAt = certificationFacts(null, rows)[0]?.expiresAt;
+          const expiresAt = certificationFacts(application.certifications, rows).find(fact => sameRecruitmentFact(fact.name, input.name))?.expiresAt;
           if (input.confirmed && !renewal && !certificationDateIsCurrent(expiresAt)) {
             throw missionRefusal("BAD_REQUEST", "renewal_required", "Cette certification a expiré : confirmez son renouvellement, avec la nouvelle date d’expiration lue sur le justificatif, ou cochez qu’il n’en porte pas.");
           }
-          const renewalRows = rows.filter(row => row.source === "renewed");
-          const readRows = rows.filter(row => row.source !== "renewed");
+          const renewalRows = factRows.filter(row => row.source === "renewed");
+          const readRows = factRows.filter(row => row.source !== "renewed");
           // Rows whose confirmation changes, a renewal new or redated, a
           // declared certification's first confirmation, a renewal withdrawn:
           // nothing is logged when nothing changes.
@@ -2264,7 +2269,7 @@ export const appRouter = router({
           const renewalChanged = renewal !== undefined && (!renewalRows.length || renewalRows.some(row => row.expiresAt !== renewal.expiresAt));
           // A certification declared in the form only: its confirmation gets a
           // row of its own, unless its renewal's row holds it.
-          const declaredConfirmation = input.confirmed && !rows.length && !renewal;
+          const declaredConfirmation = input.confirmed && !factRows.length && !renewal;
           const renewalWithdrawn = !input.confirmed && renewalRows.length > 0;
           if (!changed.length && !renewalChanged && !declaredConfirmation && !renewalWithdrawn) return { success: true, changed: false };
           if (updated.length) await db.update(cvCandidateCertifications).set({ confirmedAt: input.confirmed ? new Date() : null }).where(inArray(cvCandidateCertifications.id, updated.map(row => row.id)));
@@ -2272,16 +2277,16 @@ export const appRouter = router({
           if (declaredConfirmation) await db.insert(cvCandidateCertifications).values({ applicationId: application.id, name: declared!.slice(0, CERTIFICATION_NAME_MAX_LENGTH), source: "declared", confirmedAt: new Date() });
           if (renewal && renewalChanged) {
             if (renewalRows.length) await db.update(cvCandidateCertifications).set({ expiresAt: renewal.expiresAt }).where(inArray(cvCandidateCertifications.id, renewalRows.map(row => row.id)));
-            else await db.insert(cvCandidateCertifications).values({ applicationId: application.id, name: (rows[0]?.name ?? declared!).slice(0, CERTIFICATION_NAME_MAX_LENGTH), source: "renewed", confirmedAt: new Date(), expiresAt: renewal.expiresAt });
+            else await db.insert(cvCandidateCertifications).values({ applicationId: application.id, name: (factRows[0]?.name ?? declared!).slice(0, CERTIFICATION_NAME_MAX_LENGTH), source: "renewed", confirmedAt: new Date(), expiresAt: renewal.expiresAt });
           }
           if (renewalWithdrawn) await db.delete(cvCandidateCertifications).where(inArray(cvCandidateCertifications.id, renewalRows.map(row => row.id)));
-          const certification = rows[0]?.name ?? declared;
+          const certification = factRows[0]?.name ?? declared;
           await logRecruitmentAction({
             applicationId: application.id,
             adminOpenId: ctx.user.openId,
             action: "status_update",
             metadata: renewal
-              ? { event: "certification_renewed", certification, expiresAt: renewal.expiresAt, previousExpiresAt: Array.from(new Set((renewalRows.length ? renewalRows : readRows).map(row => row.expiresAt))) }
+              ? { event: "certification_renewed", certification, expiresAt: renewal.expiresAt, previousExpiresAt: Array.from(new Set((renewalRows.length ? renewalRows : [...readRows, ...expiryRows]).map(row => row.expiresAt))) }
               : { event: input.confirmed ? "certification_confirmed" : "certification_unconfirmed", certification, ...(dropped.length ? { notRetainedByAnalysis: true } : {}) },
           });
           return { success: true, changed: true, ...(dropped.length ? { notRetainedByAnalysis: true } : {}) };

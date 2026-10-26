@@ -39,9 +39,11 @@ type CandidateForMatching = {
 
 /**
  * cv_candidate_certifications row: read in the CV by the AI, declared and then
- * confirmed, or a renewal an admin confirmed, with its new expiry (IA-02).
+ * confirmed, a renewal an admin confirmed, with its new expiry, or the expiry
+ * the CV gives a declared certification when its analysis retained no facts
+ * (IA-02).
  */
-export type CertificationRow = { name: string; source: "declared" | "extracted" | "renewed"; confirmedAt: Date | string | null; expiresAt: string | null };
+export type CertificationRow = { name: string; source: "declared" | "extracted" | "renewed" | "cv_expiry"; confirmedAt: Date | string | null; expiresAt: string | null };
 /** cv_candidate_languages row, read in the CV by the AI. */
 export type LanguageRow = { language: string; source: "declared" | "extracted" };
 
@@ -115,7 +117,9 @@ function addFact<T extends RecruitmentFact>(facts: T[], name: string, origin: Re
  * The candidate's certifications, one per name (IA-02): declared in the form,
  * read in the CV by the AI, confirmed by an admin (a row with confirmed_at).
  * Free-text declared certifications have no machine-readable expiry. A
- * renewal row adds no origin but the admin's confirmation.
+ * renewal row adds no origin but the admin's confirmation. An expiry the CV
+ * gives while its analysis retained no facts adds none either, nor a
+ * certification: it only dates one known otherwise.
  */
 export function certificationFacts(declared: string | null | undefined, rows: CertificationRow[]): CertificationFact[] {
   const facts: CertificationFact[] = [];
@@ -123,10 +127,15 @@ export function certificationFacts(declared: string | null | undefined, rows: Ce
   for (const name of declaredCertificationNames(declared)) addFact(facts, name, "declared", create);
   const rowsByFact = new Map<CertificationFact, CertificationRow[]>();
   for (const row of rows) {
+    if (row.source === "cv_expiry") continue;
     const fact = addFact(facts, row.name, row.source === "renewed" ? "confirmed" : row.source, create);
     if (!fact) continue;
     if (row.confirmedAt) addFact(facts, row.name, "confirmed", create);
     rowsByFact.set(fact, [...(rowsByFact.get(fact) ?? []), row]);
+  }
+  for (const row of rows) {
+    const fact = row.source === "cv_expiry" ? facts.find(item => sameRecruitmentFact(item.name, row.name)) : undefined;
+    if (fact) rowsByFact.set(fact, [...(rowsByFact.get(fact) ?? []), row]);
   }
   // A certification renewed in the CV has a row per date: it is current while
   // its latest one is. Once one is confirmed, only the confirmed rows count,

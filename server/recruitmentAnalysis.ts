@@ -1,9 +1,9 @@
-import { and, eq, isNotNull, isNull, sql } from "drizzle-orm";
+import { and, eq, isNotNull, isNull, ne, sql } from "drizzle-orm";
 import { generateText, Output } from "ai";
 import { z } from "zod";
 import { cvApplications, cvCandidateCertifications, cvCandidateExperiences, cvCandidateLanguages } from "../drizzle/schema";
 import { getDb } from "./db";
-import { sameRecruitmentFact } from "./clientBriefMatching";
+import { declaredCertificationNames, sameRecruitmentFact } from "./clientBriefMatching";
 import { certificationDateIsCurrent, certificationExpiryInFrench } from "../shared/recruitmentFactOrigins";
 import { assertPdfDecompressionWithinLimits, DOCUMENT_DECOMPRESSION_LIMITS, truncateExtractedText } from "./documentDecompressionLimits";
 import { withoutInvisibleDocxText } from "./docxVisibleText";
@@ -1862,9 +1862,11 @@ export async function saveCvAnalysis(
   // A contradiction between the form and the CV makes what was read in the CV
   // doubtful (IA-02), and a CV that hides text, or too much of whose text could
   // not be checked, is not trusted either (IA-01): no structured fact is stored,
-  // so none reaches the pool filters or a mission's matching. Evidence merely
-  // missing does not count.
-  const verifiedFacts = analysis.contradictions.length > 0 || visibilityRequiresReview(analysis.invisibleText) || analysis.visibilityUnchecked
+  // so none reaches the pool filters or a mission's matching, only the expiry
+  // the CV gives a declared certification (below). Evidence merely missing
+  // does not count.
+  const factsWithheld = analysis.contradictions.length > 0 || visibilityRequiresReview(analysis.invisibleText) || analysis.visibilityUnchecked;
+  const verifiedFacts = factsWithheld
     ? { certifications: [], languages: [], experiences: [], skills: [] }
     : verifiedRecruitmentFacts(analysis);
   // The AI was unavailable (IA-02): this analysis did not read the CV and says
@@ -1872,7 +1874,8 @@ export async function saveCvAnalysis(
   // dates, so that one the CV says has expired is not left merely « déclarée »,
   // and so do the facts the filters read, when the previous analysis was
   // under this prompt. A CV that hides text is still not trusted (IA-01).
-  const cvNotRead = generation?.model === MANUAL_REVIEW_FALLBACK_MODEL
+  const aiUnavailable = generation?.model === MANUAL_REVIEW_FALLBACK_MODEL;
+  const cvNotRead = aiUnavailable
     && !visibilityRequiresReview(analysis.invisibleText) && !analysis.visibilityUnchecked;
   const [previousAnalysis] = cvNotRead
     ? await db.select({ analysisPromptVersion: cvApplications.analysisPromptVersion }).from(cvApplications).where(eq(cvApplications.id, applicationId)).limit(1)
@@ -1888,6 +1891,21 @@ export async function saveCvAnalysis(
     .where(and(eq(cvCandidateCertifications.applicationId, applicationId), isNotNull(cvCandidateCertifications.confirmedAt), eq(cvCandidateCertifications.source, "extracted")));
   const verifiedCertifications = verifiedFacts.certifications.filter(certification =>
     !confirmedCertifications.some(confirmed => sameRecruitmentFact(confirmed.name, certification.name)));
+  // An expiry read in the CV can only restrict (IA-02): with the facts
+  // withheld, the expiry the CV gives a certification the candidate declared
+  // is still stored (source "cv_expiry", « expiration selon le CV, à
+  // vérifier »). No fact, it adds no origin, no filter reads it and it is
+  // never confirmed: it only makes the declared certification « expirée »
+  // with that date, so that a mere confirmation no longer counts it, only a
+  // confirmed renewal. Nothing is stored of a certification not declared.
+  const [declaredApplication] = factsWithheld
+    ? await db.select({ certifications: cvApplications.certifications }).from(cvApplications).where(eq(cvApplications.id, applicationId)).limit(1)
+    : [];
+  const declaredCertifications = declaredCertificationNames(declaredApplication?.certifications);
+  const expiredDeclaredCertifications = analysis.certifications.filter(certification =>
+    isVerifiedFact(certification) && !certificationIsCurrent(certification)
+    && declaredCertifications.some(name => sameRecruitmentFact(name, certification.name))
+    && !confirmedCertifications.some(confirmed => sameRecruitmentFact(confirmed.name, certification.name)));
   const verifiedLanguages = verifiedFacts.languages;
   const verifiedExperiences = verifiedFacts.experiences;
   const updateAnalysis = db
@@ -1938,11 +1956,18 @@ export async function saveCvAnalysis(
       analysisPromptVersion: RECRUITMENT_ANALYSIS_PROMPT_VERSION,
     })
     .where(eq(cvApplications.id, applicationId));
+  // An expiry the CV gives can only restrict (IA-02): while the AI is
+  // unavailable, the one stored by an analysis that retained no facts stays,
+  // even for a CV that hides text.
   const deleteCertifications = cvNotRead
     ? db.select({ id: cvApplications.id }).from(cvApplications).where(sql`FALSE`)
     : db
       .delete(cvCandidateCertifications)
-      .where(and(eq(cvCandidateCertifications.applicationId, applicationId), isNull(cvCandidateCertifications.confirmedAt)));
+      .where(and(
+        eq(cvCandidateCertifications.applicationId, applicationId),
+        isNull(cvCandidateCertifications.confirmedAt),
+        aiUnavailable ? ne(cvCandidateCertifications.source, "cv_expiry") : undefined
+      ));
   const deleteLanguages = db
     .delete(cvCandidateLanguages)
     .where(eq(cvCandidateLanguages.applicationId, applicationId));
@@ -1950,18 +1975,26 @@ export async function saveCvAnalysis(
     .delete(cvCandidateExperiences)
     .where(eq(cvCandidateExperiences.applicationId, applicationId));
 
-  const insertCertifications = verifiedCertifications.length > 0
-    ? db.insert(cvCandidateCertifications).values(
-      verifiedCertifications.map(certification => ({
-        applicationId,
-        name: certification.name.slice(0, 180),
-        issuingBody: certification.issuingBody?.slice(0, 180) ?? null,
-        country: certification.country?.slice(0, 100) ?? null,
-        expiresAt: certification.expiresAt?.slice(0, 10) ?? null,
-        evidence: certification.evidence || null,
-        source: "extracted" as const,
-      }))
-    )
+  const certificationRows = [
+    ...verifiedCertifications.map(certification => ({
+      applicationId,
+      name: certification.name.slice(0, 180),
+      issuingBody: certification.issuingBody?.slice(0, 180) ?? null,
+      country: certification.country?.slice(0, 100) ?? null,
+      expiresAt: certification.expiresAt?.slice(0, 10) ?? null,
+      evidence: certification.evidence || null,
+      source: "extracted" as const,
+    })),
+    ...expiredDeclaredCertifications.map(certification => ({
+      applicationId,
+      name: certification.name.slice(0, 180),
+      expiresAt: certification.expiresAt?.slice(0, 10) ?? null,
+      evidence: certification.evidence || null,
+      source: "cv_expiry" as const,
+    })),
+  ];
+  const insertCertifications = certificationRows.length > 0
+    ? db.insert(cvCandidateCertifications).values(certificationRows)
     : db.select({ id: cvApplications.id }).from(cvApplications).where(sql`FALSE`);
   const insertLanguages = verifiedLanguages.length > 0
     ? db.insert(cvCandidateLanguages).values(

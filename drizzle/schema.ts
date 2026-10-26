@@ -366,12 +366,16 @@ export const cvCandidateCertifications = mysqlTable("cv_candidate_certifications
   country: varchar("country", { length: 100 }),
   expiresAt: varchar("expires_at", { length: 10 }),
   evidence: text("evidence"),
-  source: mysqlEnum("source", ["declared", "extracted", "renewed"]).default("extracted").notNull(),
+  source: mysqlEnum("source", ["declared", "extracted", "renewed", "cv_expiry"]).default("extracted").notNull(),
   // Set when an admin confirmed the certification after checking it (IA-02):
   // only a confirmed one earns points in a mission's matching. A declared
   // certification gets its own row (source "declared") once confirmed. So
   // does a renewal the admin confirmed (source "renewed", with the new
-  // expiry): the rows read in the CV keep the date the CV gives.
+  // expiry): the rows read in the CV keep the date the CV gives. An analysis
+  // that retained no facts (a contradiction, hidden text) still stores the
+  // expiry the CV gives a declared certification (source "cv_expiry",
+  // « expiration selon le CV, à vérifier »): no fact, never confirmed, it
+  // only dates the declared one, which then counts once renewed.
   confirmedAt: timestamp("confirmed_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, table => ({
