@@ -129,6 +129,37 @@ describe("matching mission–candidat", () => {
     ]);
   });
 
+  it("date une certification déclarée et confirmée d’après le CV, qui la dit expirée : seul un renouvellement la rend courante (IA-02)", () => {
+    const aclsBrief = { ...brief, requiredCertifications: "ACLS" };
+    const declaredConfirmation: CertificationRow = { name: "ACLS", source: "declared", confirmedAt, expiresAt: null };
+    // Confirmed on the form's word, then read in the CV until 2023-05: the confirmation, undated, does not make it current.
+    const facts = certificationFacts("ACLS", [declaredConfirmation, extracted("ACLS", { expiresAt: "2023-05" })]);
+    expect(facts).toEqual([{ name: "ACLS", origins: ["declared", "confirmed", "extracted"], expiresAt: "2023-05" }]);
+    expect(computeBriefCandidateMatch(aclsBrief, { ...anaesthetist, certificationFacts: facts })).toMatchObject({ breakdown: { certifications: 0 }, certifications: [{ name: "ACLS", status: "expired" }] });
+    // A CV that gives a later date, or a renewal, does.
+    expect(certificationFacts("ACLS", [declaredConfirmation, extracted("ACLS", { expiresAt: "2099-05" })])[0]!.expiresAt).toBe("2099-05");
+    expect(certificationFacts("ACLS", [declaredConfirmation, extracted("ACLS", { expiresAt: "2023-05", confirmedAt }), { name: "ACLS", source: "renewed", confirmedAt, expiresAt: "2099-06-30" }])[0]!.expiresAt).toBe("2099-06-30");
+    // Declared only, it has no date.
+    expect(certificationFacts("ACLS", [declaredConfirmation])[0]!.expiresAt).toBeNull();
+  });
+
+  it("dit expirée une certification lue dans le CV à côté d’une autre du même terme, déclarée sous un autre nom (IA-02)", () => {
+    const aclsBrief = { ...brief, requiredCertifications: "ACLS" };
+    const rows = [extracted("ACLS", { expiresAt: "2023-05" })];
+    // « ACLS AHA » declared, « ACLS » read in the CV until 2023-05: both meet the term.
+    expect(computeBriefCandidateMatch(aclsBrief, { ...anaesthetist, certificationFacts: certificationFacts("ACLS AHA", rows) }).certifications).toEqual([
+      { name: "ACLS AHA", origins: ["declared"], expiresAt: null, status: "to_confirm" },
+      { name: "ACLS", origins: ["extracted"], expiresAt: "2023-05", status: "expired" },
+    ]);
+    // Confirmed on the admin's check of the certificate, it counts, and the CV's expired reading is still said beside it.
+    const confirmed = computeBriefCandidateMatch(aclsBrief, { ...anaesthetist, certificationFacts: certificationFacts("ACLS AHA", [...rows, { name: "ACLS AHA", source: "declared", confirmedAt, expiresAt: null }]) });
+    expect(confirmed.breakdown.certifications).toBe(20);
+    expect(confirmed.certifications).toEqual([
+      { name: "ACLS AHA", origins: ["declared", "confirmed"], expiresAt: null, status: "matched" },
+      { name: "ACLS", origins: ["extracted"], expiresAt: "2023-05", status: "expired" },
+    ]);
+  });
+
   it("une certification renouvelée dans le CV compte jusqu’à sa dernière date d’expiration", () => {
     const blsBrief = { ...brief, requiredCertifications: "BLS" };
     const renewed = certificationFacts(null, [extracted("BLS", { expiresAt: "2019-06", confirmedAt }), extracted("BLS", { expiresAt: "2099-06", confirmedAt })]);

@@ -24,8 +24,8 @@ import {
   type RecruitmentEmailTemplate,
 } from "./_core/notifications";
 import { logRecruitmentAction, matchesRecruitmentProfile, parseRecruitmentJsonArray, RECRUITMENT_PROFILE_SCAN_LIMIT } from "./recruitmentAudit";
-import { analysedCertificationNames, CERTIFICATION_NAME_MAX_LENGTH, certificationFacts, computeBriefCandidateMatch, declaredCertificationNames, languageFacts, sameRecruitmentFact, type CertificationFact, type CertificationRow, type LanguageRow } from "./clientBriefMatching";
-import { certificationDateIsCurrent, certificationExpiryInFrench, latestCertificationRenewalDay, CERTIFICATION_RENEWAL_MAX_YEARS, recruitmentFactLabel, type RecruitmentFact } from "../shared/recruitmentFactOrigins";
+import { analysedCertificationNames, CERTIFICATION_NAME_MAX_LENGTH, certificationFacts, computeBriefCandidateMatch, declaredCertificationNames, languageFacts, sameRecruitmentFact, type CertificationRow, type LanguageRow } from "./clientBriefMatching";
+import { certificationDateIsCurrent, certificationFactLabel, latestCertificationRenewalDay, CERTIFICATION_RENEWAL_MAX_YEARS, recruitmentFactLabel, type RecruitmentFact } from "../shared/recruitmentFactOrigins";
 import { recruitmentApplicationStatusLabel } from "../shared/recruitmentApplicationStatuses";
 import { candidatePortalRouter } from "./candidatePortalRouter";
 import { enforcePersistentRateLimit, hashSecurityValue, logSecurityEvent, releasePersistentRateLimitAttempt, requestIpHash } from "./candidateSecurity";
@@ -314,11 +314,6 @@ function csvListCell(value: string | null) {
   return value?.trim().startsWith("[") ? parseRecruitmentJsonArray(value).join(" ; ") : value;
 }
 
-/** « ACLS (extraite du CV par l’IA), expirée en mai 2023 »: whether a certification is still valid, dated as the admin screens date it. */
-const certificationExportLabel = (fact: CertificationFact) => fact.expiresAt
-  ? `${recruitmentFactLabel(fact)}, ${certificationDateIsCurrent(fact.expiresAt) ? "expire" : "expirée"} ${certificationExpiryInFrench(fact.expiresAt)}`
-  : recruitmentFactLabel(fact);
-
 type AdminDb = NonNullable<Awaited<ReturnType<typeof getDb>>>;
 
 /**
@@ -372,8 +367,9 @@ async function languageFactsByApplication(db: AdminDb, applications: Array<{ id:
  * this term, case aside (IA-02). The certification filters find a confirmed
  * certification even once a new analysis stored no facts (a contradiction,
  * hidden text) and left normalized_certifications empty. They are wider than
- * a mission's matching: accents count, and a confirmed certification that
- * has expired is found too, as the declared text finds one.
+ * a mission's matching: accents count, and a certification that has expired,
+ * confirmed or read in the CV with its date, is found too, as the declared
+ * text finds one. The lists then give its expiry beside its origins.
  */
 async function applicationsWithConfirmedCertification(db: AdminDb, term: string) {
   const rows = await db.select({ applicationId: cvCandidateCertifications.applicationId })
@@ -2381,7 +2377,7 @@ export const appRouter = router({
           // certification's expiry, the application's status in words.
           const facts = <T extends RecruitmentFact>(list: T[] | undefined, label: (fact: T) => string = recruitmentFactLabel) => (list ?? []).map(label).join(" ; ");
           const header = ["Prénom", "Nom", "Email", "Téléphone", "Spécialité", "Pays ciblés", "Langues (origine)", "Expérience (ans)", "Disponibilité", "Mobilité", "Certifications (origine)", "Accord du candidat", "Statut"];
-          csv = [header.map(csvCell).join(";"), ...rows.map(row => [row.firstName, row.lastName, row.email, row.phone, row.specialty, csvListCell(row.targetCountries), facts(languagesByApplication.get(row.id)), row.yearsExperience, row.availability, row.mobility, facts(certificationsByApplication.get(row.id), certificationExportLabel), consentByApplication.get(row.id)?.toLocaleDateString("fr-FR", { timeZone: "Europe/Paris" }), recruitmentApplicationStatusLabel(row.status)].map(csvCell).join(";"))].join("\n");
+          csv = [header.map(csvCell).join(";"), ...rows.map(row => [row.firstName, row.lastName, row.email, row.phone, row.specialty, csvListCell(row.targetCountries), facts(languagesByApplication.get(row.id)), row.yearsExperience, row.availability, row.mobility, facts(certificationsByApplication.get(row.id), certificationFactLabel), consentByApplication.get(row.id)?.toLocaleDateString("fr-FR", { timeZone: "Europe/Paris" }), recruitmentApplicationStatusLabel(row.status)].map(csvCell).join(";"))].join("\n");
         } else {
           const header = ["Prénom", "Nom", "Email", "Téléphone", "Spécialité", "Pays ciblés", "Langues", "Expérience (ans)", "Disponibilité", "Mobilité", "Certifications", "Score IA", "Statut"];
           csv = [header.map(csvCell).join(";"), ...rows.map(row => [row.firstName, row.lastName, row.email, row.phone, row.specialty, row.targetCountries, row.languages, row.yearsExperience, row.availability, row.mobility, row.certifications, row.aiScore, row.status].map(csvCell).join(";"))].join("\n");

@@ -187,14 +187,34 @@ describe("analyse IA refusée pour facturation (REC-08)", () => {
     // Analysed under the current prompt: the licence was read in the CV, then confirmed by the admin.
     const id = seedDossier(1, { analysis_status: "completed", analysis_model: "openai/gpt-6-astra", analysis_prompt_version: RECRUITMENT_ANALYSIS_PROMPT_VERSION, normalized_certifications: '[{"name":"Licence DHA"}]' }, { job_status: "completed", attempts: 1 });
     memory.seed(cvCandidateCertifications, [{ application_id: id, name: "Licence DHA", source: "extracted", confirmed_at: "2026-10-20 09:00:00.000" }]);
-    // « Relancer l’analyse » while the AI Gateway refuses: a degraded result, without any fact read in the CV.
+    // « Relancer l’analyse » while the AI Gateway refuses: a degraded result, without any fact read in the CV. What the filters read stays.
     await expect(admin().admin.recruitment.reanalyze({ id })).resolves.toMatchObject({ outcome: "ai_unavailable" });
-    expect(dossier(id)).toMatchObject({ analysis_status: "degraded", analysis_prompt_version: RECRUITMENT_ANALYSIS_PROMPT_VERSION, normalized_certifications: "[]" });
+    expect(dossier(id)).toMatchObject({ analysis_status: "degraded", analysis_prompt_version: RECRUITMENT_ANALYSIS_PROMPT_VERSION, normalized_certifications: '[{"name":"Licence DHA"}]' });
 
     // That analysis did not read the CV: it says nothing of the licence, which stays « à confirmer », and the toast and the history say nothing more.
     await expect(admin().admin.recruitment.candidate.confirmCertification({ id, name: "Licence DHA", confirmed: false })).resolves.toEqual({ success: true, changed: true });
     expect(memory.rows(cvCandidateCertifications).map(row => [row.name, row.source, row.confirmed_at])).toEqual([["Licence DHA", "extracted", null]]);
     expect(memory.rows(recruitmentAuditLogs).filter(row => String(row.metadata).includes("certification")).map(row => JSON.parse(String(row.metadata)))).toEqual([{ event: "certification_unconfirmed", certification: "Licence DHA" }]);
+  });
+
+  it("garde après une analyse dégradée les certifications lues dans le CV, une expirée avec sa date, sans donner aux filtres celles d’un ancien prompt (IA-02)", async () => {
+    vi.useFakeTimers({ now: new Date("2026-10-26T10:00:00.000Z"), toFake: ["Date"] });
+    // Read under an older prompt: ACLS expired in May 2023, and a licence the admin confirmed.
+    const id = seedDossier(1, { analysis_status: "completed", analysis_model: "openai/gpt-5", analysis_prompt_version: "recruitment-v6", certifications: "ACLS", normalized_certifications: '[{"name":"ACLS","expiresAt":"2023-05"},{"name":"Licence DHA"}]' }, { job_status: "completed", attempts: 1 });
+    memory.seed(cvCandidateCertifications, [
+      { application_id: id, name: "ACLS", source: "extracted", expires_at: "2023-05" },
+      { application_id: id, name: "Licence DHA", source: "extracted", confirmed_at: "2026-10-20 09:00:00.000" },
+    ]);
+    const rows = () => memory.rows(cvCandidateCertifications).map(row => [row.name, row.expires_at, row.confirmed_at !== null]);
+    await expect(admin().admin.recruitment.reanalyze({ id })).resolves.toMatchObject({ outcome: "ai_unavailable" });
+    // The CV was not read again: its rows stay with their dates, but the filters, which read only the current prompt's facts, get none.
+    expect(dossier(id)).toMatchObject({ analysis_status: "degraded", analysis_prompt_version: RECRUITMENT_ANALYSIS_PROMPT_VERSION, normalized_certifications: "[]" });
+    expect(rows()).toEqual([["ACLS", "2023-05", false], ["Licence DHA", null, true]]);
+    // ACLS is still expired as the CV says: a mere confirmation is refused, its renewal asked for.
+    await expect(admin().admin.recruitment.candidate.confirmCertification({ id, name: "ACLS", confirmed: true })).rejects.toMatchObject({ cause: { reason: "renewal_required" } });
+    // The licence's confirmation withdrawn, its row stays « à confirmer »: that analysis said nothing of it.
+    await expect(admin().admin.recruitment.candidate.confirmCertification({ id, name: "Licence DHA", confirmed: false })).resolves.toEqual({ success: true, changed: true });
+    expect(rows()).toEqual([["ACLS", "2023-05", false], ["Licence DHA", null, false]]);
   });
 
   it("« Relancer l’analyse » d’un dossier quand le crédit manque toujours répond « IA indisponible », pas « analyse actualisée »", async () => {

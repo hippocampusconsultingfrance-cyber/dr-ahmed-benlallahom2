@@ -300,10 +300,18 @@ describe("confirmation des certifications par l’admin (IA-02)", () => {
     expect(renderToStaticMarkup(renderTab())).not.toContain("Certification recherchée");
     const certificationInput = elements(renderTab()).find(element => element.type === "input" && element.props.placeholder === "Ex. ACLS, ATLS")!;
     (certificationInput.props.onChange as (event: unknown) => void)({ target: { value: "dha" } });
-    expect(renderToStaticMarkup(renderTab())).toContain("Certification recherchée : Licence DHA (extraite du CV par l’IA)");
+    // With its expiry, as the employer's file dates it.
+    expect(renderToStaticMarkup(renderTab())).toContain("Certification recherchée : Licence DHA (extraite du CV par l’IA), expire en mai 2028</p>");
 
     clickable(renderTab(), "Amal Haddad")();
     const review = elements(renderTab()).find(element => element.type === CertificationReview);
     expect(review?.props).toEqual({ applicationId: 5, certifications: facts });
+  });
+
+  it("le filtre « certification » trouve une licence que le CV dit expirée, et le dit avec sa date", () => {
+    state.items = [dossier({ certificationFacts: [{ name: "Licence DHA", origins: ["extracted"], expiresAt: "2019-03" }] })];
+    const certificationInput = elements(renderTab()).find(element => element.type === "input" && element.props.placeholder === "Ex. ACLS, ATLS")!;
+    (certificationInput.props.onChange as (event: unknown) => void)({ target: { value: "dha" } });
+    expect(renderToStaticMarkup(renderTab())).toContain("Certification recherchée : Licence DHA (extraite du CV par l’IA), expirée en mars 2019</p>");
   });
 });

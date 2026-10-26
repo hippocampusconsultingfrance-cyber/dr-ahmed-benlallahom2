@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import Candidate360Dialog from "./Candidate360Dialog";
 import CertificationReview from "./CertificationReview";
 import { useCvDownload } from "./useCvDownload";
-import { recruitmentFactLabel, recruitmentFactNameContains } from "@shared/recruitmentFactOrigins";
+import { certificationFactLabel, recruitmentFactNameContains } from "@shared/recruitmentFactOrigins";
 import { RECRUITMENT_APPLICATION_STATUS_OPTIONS, type RecruitmentApplicationStatus } from "@shared/recruitmentApplicationStatuses";
 import { AI_ANALYSIS_UNAVAILABLE_LABEL, isAiAnalysisUnavailable, SCORE_UNAVAILABLE_EXPLANATION, SCORE_UNAVAILABLE_HEADING, scoredApplicationsFirst } from "./recruitmentScoreGroups";
 import { contradictionEvidenceLabel, CV_READING_LABELS, CV_REVIEW_REMINDER, cvReadingTextForDisplay, extractionWarningLabel, fieldEvidenceStatusLabel, fieldEvidenceStatusTone } from "./recruitmentEvidenceLabels";
@@ -426,7 +426,7 @@ export default function RecruitmentTab() {
             const hasVerifiedAnalysis = application.analysisPromptVersion === VERIFIED_ANALYSIS_VERSION;
             const verifiedScore = hasVerifiedAnalysis ? application.aiScore : null;
             const expanded = expandedId === application.id;
-            // The certification filter says where each matching certification comes from (IA-02).
+            // The certification filter says where each matching certification comes from, and its expiry (IA-02).
             const searchedCertifications = filters.certification ? (application.certificationFacts ?? []).filter(fact => recruitmentFactNameContains(fact.name, filters.certification!)) : [];
             return (
               <Fragment key={application.id}>
@@ -446,7 +446,7 @@ export default function RecruitmentTab() {
                         <p className="text-sm text-muted-foreground">{application.specialty} · {application.trackingId}</p>
                         <p className="mt-1 text-sm text-muted-foreground">{countries.join(", ") || "Pays non précisés"}</p>
                         {application.diplomaCountry ? <p className="mt-1 text-sm text-muted-foreground">Diplôme obtenu : {application.diplomaCountry}</p> : null}
-                        {searchedCertifications.length > 0 ? <p className="mt-1 text-sm text-muted-foreground">Certification recherchée : {searchedCertifications.map(recruitmentFactLabel).join(" ; ")}</p> : null}
+                        {searchedCertifications.length > 0 ? <p className="mt-1 text-sm text-muted-foreground">Certification recherchée : {searchedCertifications.map(certificationFactLabel).join(" ; ")}</p> : null}
                       </div>
                     </div>
                   </button>
