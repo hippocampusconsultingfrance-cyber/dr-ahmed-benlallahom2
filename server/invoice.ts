@@ -3,7 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import bidiFactory from "bidi-js";
 import PDFDocument from "pdfkit";
-import { storagePutOnce } from "./storage.js";
+import { storageGetBuffer, storagePutOnce } from "./storage.js";
 import { resolveInvoiceSeller, type InvoiceSeller } from "./invoiceSeller";
 
 export const INVOICE_LAYOUT = {
@@ -427,22 +427,29 @@ export async function generateInvoicePDF(
 ): Promise<{ buffer: Buffer; key: string; url: string }> {
   const buffer = await renderInvoicePDF(data, seller);
   const invoiceKey = `invoices/${data.invoiceNumber}-${data.trackingId}.pdf`;
+  let stored: Awaited<ReturnType<typeof storagePutOnce>>;
   try {
-    // One stored copy per invoice number: a retried job rebuilds the very same
-    // PDF (same number, same dates) and keeps the copy already stored (EXPL-02).
-    const result = await storagePutOnce(invoiceKey, buffer, "application/pdf");
-    return { buffer, key: result.key, url: result.url };
+    // One stored copy per invoice number: a retried job keeps the copy already
+    // stored (EXPL-02).
+    stored = await storagePutOnce(invoiceKey, buffer, "application/pdf");
   } catch (storageError) {
     // If storage fails, still return the buffer
     console.error("Failed to upload invoice to private storage:", storageError instanceof Error ? storageError.name : "UnknownError");
     return { buffer, key: invoiceKey, url: "" };
   }
+  // An issued invoice no longer changes (EXPL-02): once stored, the email and
+  // the dashboard download give that very PDF, with the patient details it was
+  // issued with, even after the patient's address was corrected from the
+  // dashboard. A stored copy that cannot be read is not replaced by another
+  // one: the caller fails and tries again.
+  if (!stored.uploaded) return { buffer: await storageGetBuffer(stored.key), key: stored.key, url: stored.url };
+  return { buffer, key: stored.key, url: stored.url };
 }
 
 /**
  * The invoice PDF, without storing it. Deterministic: the same data gives the
- * same bytes, so the dashboard regenerates the very invoice sent to the
- * patient from its recorded number and dates (EXPL-02).
+ * same bytes, so a retried job rebuilds the very invoice from its recorded
+ * number and dates (EXPL-02).
  */
 export function renderInvoicePDF(
   data: InvoiceData,

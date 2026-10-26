@@ -1,6 +1,6 @@
 import { PgDialect } from "drizzle-orm/pg-core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { appointmentFulfillmentJobs, appointmentInvoices, appointments } from "../drizzle/schema";
+import { appointmentFulfillmentJobs, appointmentInvoices, appointments, securityEvents } from "../drizzle/schema";
 import { createMemoryPg, pgTimestamp, type MemoryPg } from "./testing/memoryPgProxy";
 import type { TrpcContext } from "./_core/context";
 
@@ -11,14 +11,17 @@ import type { TrpcContext } from "./_core/context";
 const state = vi.hoisted(() => ({
   memory: null as null | { db: unknown },
   down: new Set<string>(),
+  // Emails the email service refuses for good (address refused): no automatic retry.
+  refused: new Set<string>(),
   sent: [] as Array<{ kind: string; to: string; pdf?: Buffer; invoiceNumber?: string }>,
 }));
 
 vi.mock("./db", () => ({ getDb: async () => state.memory?.db ?? null }));
 vi.mock("./adminMfa", async importOriginal => ({ ...await importOriginal<typeof import("./adminMfa")>(), isAdminMfaVerified: vi.fn(async () => true) }));
 vi.mock("./_core/notification", () => ({ notifyOwner: vi.fn(async () => true) }));
-// Private Vercel Blob store held in memory, behind the real storage module.
-const blobStore = vi.hoisted(() => ({ objects: new Map<string, Buffer>(), uploads: [] as string[] }));
+// Private Vercel Blob store held in memory, behind the real storage module;
+// its objects are read through signed URLs (fetch below). `unreadable`: reads fail.
+const blobStore = vi.hoisted(() => ({ objects: new Map<string, Buffer>(), uploads: [] as string[], reads: [] as string[], unreadable: false }));
 vi.mock("@vercel/blob", async importOriginal => {
   const { BlobNotFoundError } = await importOriginal<typeof import("@vercel/blob")>();
   return {
@@ -34,18 +37,21 @@ vi.mock("@vercel/blob", async importOriginal => {
       return { pathname, url: `https://blob.test/${pathname}` };
     }),
     del: vi.fn(),
-    issueSignedToken: vi.fn(),
+    issueSignedToken: vi.fn(async ({ pathname }: { pathname: string }) => `token-${pathname}`),
     list: vi.fn(),
-    presignUrl: vi.fn(),
+    presignUrl: vi.fn(async (_token: string, { pathname }: { pathname: string }) => ({ presignedUrl: `https://blob.test/${pathname}?signed=1` })),
   };
 });
 vi.mock("./_core/notifications", async importOriginal => {
   const send = (kind: string) => vi.fn(async (to: string, ...rest: unknown[]) => {
+    if (state.refused.has(kind)) throw new Error(`${kind}_email_refused`);
     if (state.down.has(kind)) throw new Error(`${kind}_email_failed`);
     state.sent.push(kind === "invoice" ? { kind, to, pdf: rest[3] as Buffer, invoiceNumber: rest[4] as string } : { kind, to });
   });
   return {
     ...await importOriginal<typeof import("./_core/notifications")>(),
+    // A refusal of the address (Resend 422), as the real senders report it; told apart in appointmentFulfillmentRefusal.test.ts.
+    postPaymentEmailRefused: (error: unknown) => error instanceof Error && error.message.endsWith("_email_refused"),
     sendConfirmationEmail: send("confirmation"),
     sendInvoiceEmail: send("invoice"),
     sendOwnerNotificationEmail: vi.fn(async () => {
@@ -125,7 +131,7 @@ function seedInvoice(appointmentId: unknown, sequence: number) {
 const job = (appointmentId: unknown, jobType: string) => memory.rows(appointmentFulfillmentJobs).find(row => row.appointment_id === appointmentId && row.job_type === jobType)!;
 
 beforeEach(() => {
-  memory = createMemoryPg([appointments, appointmentFulfillmentJobs, appointmentInvoices]);
+  memory = createMemoryPg([appointments, appointmentFulfillmentJobs, appointmentInvoices, securityEvents]);
   // appointment_invoices exists, as in production: the runtime DDL check finds every object.
   const execute = memory.db.execute.bind(memory.db);
   Object.assign(memory.db, {
@@ -135,15 +141,25 @@ beforeEach(() => {
   });
   state.memory = memory;
   state.down.clear();
+  state.refused.clear();
   state.sent = [];
   blobStore.objects.clear();
   blobStore.uploads = [];
+  blobStore.reads = [];
+  blobStore.unreadable = false;
   vi.stubEnv("BLOB_READ_WRITE_TOKEN", "blob-test-token");
+  vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+    const pathname = decodeURIComponent(new URL(url).pathname.slice(1));
+    blobStore.reads.push(pathname);
+    const object = blobStore.unreadable ? undefined : blobStore.objects.get(pathname);
+    return object ? new Response(new Uint8Array(object)) : new Response("unavailable", { status: blobStore.unreadable ? 503 : 404 });
+  }));
 });
 
 afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
 });
 
 describe("EXPL-02 — état des envois sur chaque rendez-vous", () => {
@@ -300,6 +316,98 @@ describe("EXPL-02 — « Télécharger la facture »", () => {
     expect(blobStore.uploads).toEqual(["invoices/FAC-2026-000043-APTINVOICE03.pdf"]);
     const emailed = state.sent.find(email => email.kind === "invoice")!;
     expect(blobStore.objects.get("invoices/FAC-2026-000043-APTINVOICE03.pdf")!.equals(emailed.pdf!)).toBe(true);
+  });
+
+  /** Lines printed under « Facturé à : » (name, email, phone), as pdf.js reads them. */
+  async function billedTo(pdf: Buffer) {
+    const { PDFParse } = await import("pdf-parse");
+    const parser = new PDFParse({ data: pdf });
+    try {
+      const lines = (await parser.getText()).text.split("\n").map(line => line.trim()).filter(Boolean);
+      return lines.slice(lines.indexOf("Facturé à :") + 1, lines.indexOf("Facturé à :") + 4);
+    } finally {
+      await parser.destroy();
+    }
+  }
+
+  it("facture refusée puis adresse corrigée : l’email envoyé après correction et le téléchargement sont la facture émise, octet pour octet, à l’adresse d’origine", async () => {
+    const paid = seedAppointment("APTINVFIX001");
+    seedJob(paid.id, "owner", { status: "completed", attempts: 1 });
+    seedJob(paid.id, "confirmation", { status: "completed", attempts: 1 });
+    seedJob(paid.id, "invoice");
+    seedInvoice(paid.id, 51);
+    state.refused.add("invoice");
+    await processAppointmentFulfillmentNow(paid.id as number);
+    expect(job(paid.id, "invoice")).toMatchObject({ status: "failed", attempts: 1 });
+    // Issued at its first attempt: stored once, with the address of the booking then.
+    expect(blobStore.uploads).toEqual(["invoices/FAC-2026-000051-APTINVFIX001.pdf"]);
+    const issued = blobStore.objects.get("invoices/FAC-2026-000051-APTINVFIX001.pdf")!;
+    expect(await billedTo(issued)).toEqual(["Patient Test", "aptinvfix001@example.test", "+33600000000"]);
+
+    await admin().appointments.updateCustomerEmail({ trackingId: "APTINVFIX001", customerEmail: "patient.corrige@example.test" });
+    state.refused.clear();
+    await admin().appointments.retryFulfillment({ trackingId: "APTINVFIX001" });
+
+    // Sent to the new address, but the invoice issued under this number does not change.
+    const emailed = state.sent.find(email => email.kind === "invoice")!;
+    expect(emailed).toMatchObject({ to: "patient.corrige@example.test", invoiceNumber: "FAC-2026-000051" });
+    expect(emailed.pdf!.equals(issued)).toBe(true);
+    const download = Buffer.from((await admin().appointments.invoicePdf({ trackingId: "APTINVFIX001" })).contentBase64, "base64");
+    expect(download.equals(issued)).toBe(true);
+    expect(await billedTo(download)).toEqual(["Patient Test", "aptinvfix001@example.test", "+33600000000"]);
+    expect(blobStore.uploads).toHaveLength(1);
+  });
+
+  it("facture déjà partie, confirmation refusée puis adresse corrigée : « Télécharger la facture » donne toujours la facture reçue par le patient", async () => {
+    const paid = seedAppointment("APTINVFIX002");
+    seedJob(paid.id, "owner", { status: "completed", attempts: 1 });
+    seedJob(paid.id, "confirmation");
+    seedJob(paid.id, "invoice");
+    seedInvoice(paid.id, 52);
+    state.refused.add("confirmation");
+    await processAppointmentFulfillmentNow(paid.id as number);
+    const received = state.sent.find(email => email.kind === "invoice")!;
+    expect(received.to).toBe("aptinvfix002@example.test");
+
+    await admin().appointments.updateCustomerEmail({ trackingId: "APTINVFIX002", customerEmail: "patient.corrige@example.test" });
+    const download = Buffer.from((await admin().appointments.invoicePdf({ trackingId: "APTINVFIX002" })).contentBase64, "base64");
+
+    expect(download.equals(received.pdf!)).toBe(true);
+    expect((await billedTo(download))[1]).toBe("aptinvfix002@example.test");
+    expect(blobStore.objects.get("invoices/FAC-2026-000052-APTINVFIX002.pdf")!.equals(received.pdf!)).toBe(true);
+  });
+
+  it("sans copie archivée, le téléchargement émet la facture une fois avec les données du moment ; l’email l’envoie ensuite telle quelle", async () => {
+    const paid = seedAppointment("APTINVFIX003");
+    seedInvoice(paid.id, 53);
+
+    const first = Buffer.from((await admin().appointments.invoicePdf({ trackingId: "APTINVFIX003" })).contentBase64, "base64");
+    expect(blobStore.uploads).toEqual(["invoices/FAC-2026-000053-APTINVFIX003.pdf"]);
+    expect(blobStore.objects.get("invoices/FAC-2026-000053-APTINVFIX003.pdf")!.equals(first)).toBe(true);
+
+    seedJob(paid.id, "invoice");
+    await processAppointmentFulfillmentNow(paid.id as number);
+    const second = Buffer.from((await admin().appointments.invoicePdf({ trackingId: "APTINVFIX003" })).contentBase64, "base64");
+
+    expect(state.sent.find(email => email.kind === "invoice")!.pdf!.equals(first)).toBe(true);
+    expect(second.equals(first)).toBe(true);
+    expect(blobStore.uploads).toHaveLength(1);
+  });
+
+  it("ne remplace pas une facture archivée illisible par une autre : le téléchargement échoue et l’envoi attend son nouvel essai", async () => {
+    const paid = seedAppointment("APTINVFIX004");
+    seedInvoice(paid.id, 54);
+    await admin().appointments.invoicePdf({ trackingId: "APTINVFIX004" });
+    blobStore.unreadable = true;
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    await expect(admin().appointments.invoicePdf({ trackingId: "APTINVFIX004" })).rejects.toMatchObject({ code: "INTERNAL_SERVER_ERROR" });
+    seedJob(paid.id, "invoice");
+    await processAppointmentFulfillmentNow(paid.id as number);
+
+    expect(state.sent).toEqual([]);
+    expect(job(paid.id, "invoice")).toMatchObject({ status: "retry", attempts: 1 });
+    expect(blobStore.uploads).toHaveLength(1);
   });
 
   it("n’attribue jamais de numéro : sans facture émise, rien n’est créé", async () => {

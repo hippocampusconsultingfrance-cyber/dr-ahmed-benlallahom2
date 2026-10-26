@@ -27,6 +27,7 @@ beforeEach(() => {
     event(3, "admin_contact_message_deleted", { deleted: 1 }),
     event(4, "admin_medical_question_deleted", { deleted: 1 }),
     event(5, "candidate_login", null, "anonymous"),
+    event(6, "admin_appointment_email_corrected", null),
   ];
 });
 
@@ -41,7 +42,9 @@ describe("RGPD-12 — traces des actions sur les données d’une personne", () 
     expect(html).toContain("Suppression d’une question santé");
     expect(html.match(/Lignes supprimées : 1/g)).toHaveLength(2);
     expect(html).toContain("Administrateur");
-    for (const raw of ["admin personal data", "admin contact message", "admin medical question"]) expect(html).not.toContain(raw);
+    // EXPL-02: a patient's email corrected from the appointment card.
+    expect(html).toContain("Correction de l’email d’un patient (rendez-vous)");
+    for (const raw of ["admin personal data", "admin contact message", "admin medical question", "admin appointment email"]) expect(html).not.toContain(raw);
     // Other events keep their label and show no counter.
     expect(html).toContain("candidate login");
   });
@@ -51,14 +54,17 @@ describe("RGPD-12 — traces des actions sur les données d’une personne", () 
     let html = renderToStaticMarkup(createElement(SecurityOperationsTab));
     expect(html).toContain("Erasure of a person’s data (GDPR)");
     expect(html).toContain("Messages deleted: 2 · Health questions deleted: 1");
+    expect(html).toContain("Patient email corrected (appointment)");
     view.language = "de";
     html = renderToStaticMarkup(createElement(SecurityOperationsTab));
     expect(html).toContain("Löschung der Daten einer Person (DSGVO)");
     expect(html).toContain("Gelöschte Zeilen: 1");
+    expect(html).toContain("E-Mail-Adresse eines Patienten korrigiert (Termin)");
     view.language = "zh";
     html = renderToStaticMarkup(createElement(SecurityOperationsTab));
     expect(html).toContain("删除个人数据（GDPR）");
     expect(html).toContain("已删除行数：1");
+    expect(html).toContain("更正患者电子邮箱（预约）");
   });
 
   it("ignore un compteur sans libellé", () => {

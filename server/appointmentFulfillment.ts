@@ -13,7 +13,7 @@ import {
 } from "./_core/notifications";
 import { notifyOwner } from "./_core/notification";
 import { emailLanguageFor } from "./emailLanguage";
-import { generateInvoicePDF, renderInvoicePDF, type InvoiceData } from "./invoice";
+import { generateInvoicePDF, type InvoiceData } from "./invoice";
 import { allocateAppointmentInvoice, findAppointmentInvoices, type AppointmentInvoiceRecord } from "./invoiceNumbering";
 import { deadlineCutShort, runWithProcessingDeadline } from "./processingDeadline";
 import { hasErasedPatientData } from "./personalDataRetention";
@@ -296,6 +296,21 @@ function isRefusedJob(job: Pick<FulfillmentJob, "status" | "lastError"> | undefi
 }
 
 /**
+ * Whether the email service refused an email to the patient of this
+ * appointment that « Renvoyer » sends again (confirmation and invoice of a
+ * paid appointment, refund email of a refunded one): the only case in which
+ * the dashboard corrects the patient's address (EXPL-02), as its card.
+ */
+export async function hasRefusedPatientEmail(appointment: Pick<Appointment, "id" | "paymentStatus">): Promise<boolean> {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+  const jobs = await db.select({ jobType: appointmentFulfillmentJobs.jobType, status: appointmentFulfillmentJobs.status, lastError: appointmentFulfillmentJobs.lastError })
+    .from(appointmentFulfillmentJobs)
+    .where(and(eq(appointmentFulfillmentJobs.appointmentId, appointment.id), eq(appointmentFulfillmentJobs.status, "failed")));
+  return jobs.some(job => isPatientJob(job.jobType) && jobPaymentStatus(job.jobType) === appointment.paymentStatus && isRefusedJob(job));
+}
+
+/**
  * The refund a refunded appointment's notices are about: recorded from
  * Stripe's notification (RES-06), for the patient email and the owner alert,
  * or made from the dashboard, for the patient email only. The patient email is
@@ -334,7 +349,8 @@ async function claimFulfillmentJob(db: Database, job: FulfillmentJob): Promise<b
 
 /**
  * Invoice of a paid appointment from its recorded number and dates: the job
- * that emails it and the dashboard download build the same PDF (EXPL-02).
+ * that emails it and the dashboard download build the same PDF, and give the
+ * copy stored at its issue once there is one (EXPL-02).
  */
 function appointmentInvoiceData(appointment: Appointment, invoiceRecord: AppointmentInvoiceRecord): InvoiceData {
   return {
@@ -845,9 +861,11 @@ export async function listAppointmentDeliveriesToHandle(limit = 20, now = new Da
 
 /**
  * « Télécharger la facture » (EXPL-02): the invoice already issued for this
- * appointment, rebuilt from its recorded number and dates, identical to the
- * PDF emailed to the patient. Never allocates a number: null when no invoice
- * was issued yet.
+ * appointment, the copy stored at its issue, identical to the PDF emailed to
+ * the patient even after the address was corrected; when none was stored
+ * yet, built from its recorded number and dates and the appointment's current
+ * data, then stored once (generateInvoicePDF). Never allocates a number: null
+ * when no invoice was issued yet.
  */
 export async function regenerateAppointmentInvoice(trackingId: string): Promise<{ invoiceNumber: string; buffer: Buffer } | null> {
   const db = await getDb();
@@ -856,5 +874,5 @@ export async function regenerateAppointmentInvoice(trackingId: string): Promise<
   if (!appointment) return null;
   const invoiceRecord = (await findAppointmentInvoices([appointment.id])).get(appointment.id);
   if (!invoiceRecord) return null;
-  return { invoiceNumber: invoiceRecord.invoiceNumber, buffer: await renderInvoicePDF(appointmentInvoiceData(appointment, invoiceRecord)) };
+  return { invoiceNumber: invoiceRecord.invoiceNumber, buffer: (await generateInvoicePDF(appointmentInvoiceData(appointment, invoiceRecord))).buffer };
 }
