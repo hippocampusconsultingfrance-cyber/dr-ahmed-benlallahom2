@@ -269,3 +269,27 @@ export async function erasePersonalData(input: { email: string; actorOpenId: str
   });
   return report;
 }
+
+/** Traces of the administrator's actions on a person's data, which hold row counts only. */
+export const PERSONAL_DATA_TRACE_CATEGORIES: ReadonlySet<string> = new Set([
+  "admin_personal_data_exported",
+  "admin_personal_data_erased",
+  "admin_contact_message_deleted",
+  "admin_medical_question_deleted",
+]);
+
+/**
+ * Row counts of such a trace, shown in the Security tab (who, when, how many
+ * rows); null for any other event, whose metadata stays on the server.
+ */
+export function personalDataTraceCounts(category: string, metadata: string | null): Record<string, number> | null {
+  if (!PERSONAL_DATA_TRACE_CATEGORIES.has(category) || !metadata) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(metadata);
+  } catch {
+    return null;
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+  return Object.fromEntries(Object.entries(parsed).filter((entry): entry is [string, number] => Number.isSafeInteger(entry[1]) && entry[1] >= 0));
+}

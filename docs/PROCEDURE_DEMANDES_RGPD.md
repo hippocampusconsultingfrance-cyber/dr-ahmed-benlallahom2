@@ -69,8 +69,9 @@ email.
    passage en « Traitée » ou « Refusée ».
 
 Chaque suppression, export et effacement est tracé dans le journal de sécurité
-(onglet Sécurité) : qui, quand, combien de lignes, **sans donnée personnelle**
-de la personne.
+(onglet Sécurité, par exemple « Effacement des données d’une personne
+(RGPD) ») : qui (l’administrateur), quand, combien de lignes, **sans donnée
+personnelle** de la personne.
 
 ## 3. Où se trouvent les données d’une adresse email
 

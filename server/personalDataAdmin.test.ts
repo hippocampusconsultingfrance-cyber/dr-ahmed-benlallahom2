@@ -218,6 +218,23 @@ describe("RGPD-12 — ce que l’effacement ferait", () => {
   });
 });
 
+describe("RGPD-12 — journal de sécurité de l’administration", () => {
+  it("montre les compteurs des actions sur les données d’une personne, et seulement eux", async () => {
+    const jeanne = seedPerson("jeanne@test.local", "Jeanne");
+    await caller().admin.contacts.delete({ id: jeanne.message.id as number });
+    await caller().admin.personalData.erase({ email: "jeanne@test.local" });
+    memory.seed(securityEvents, [{ security_event_actor_kind: "anonymous", actor_reference: "empreinte-ip", category: "candidate_login", security_event_outcome: "blocked", metadata: JSON.stringify({ attempts: 3, email: "jeanne@test.local" }) }]);
+
+    const events = await caller().adminSecurity.events({ limit: 10 });
+    const byCategory = new Map(events.map(event => [event.category, event]));
+    expect(byCategory.get("admin_contact_message_deleted")!.counts).toEqual({ deleted: 1 });
+    expect(byCategory.get("admin_personal_data_erased")!.counts).toEqual({ contactMessagesDeleted: 0, medicalQuestionsDeleted: 1, appointmentsAnonymised: 1, upcomingAppointmentsKept: 1, recruitmentApplicationsLeft: 0 });
+    expect(byCategory.get("candidate_login")!.counts).toBeNull();
+    for (const event of events) expect(event).not.toHaveProperty("metadata");
+    expect(JSON.stringify(events)).not.toContain("jeanne");
+  });
+});
+
 describe("RGPD-12 — effacer / anonymiser une personne", () => {
   it("supprime messages et questions, anonymise les rendez-vous passés en gardant la facture, laisse le reste", async () => {
     const jeanne = seedPerson("jeanne@test.local", "Jeanne");

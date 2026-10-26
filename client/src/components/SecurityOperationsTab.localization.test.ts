@@ -13,6 +13,11 @@ describe("observabilité de sécurité multilingue", () => {
       expect(copy.highEvents.trim()).not.toHaveLength(0);
       expect(copy.noHighEvents.trim()).not.toHaveLength(0);
       expect(copy.categories.candidate_document_upload_protection.trim()).not.toHaveLength(0);
+      // RGPD-12: the administrator's actions on a person's data, and their counts.
+      for (const category of ["admin_personal_data_exported", "admin_personal_data_erased", "admin_contact_message_deleted", "admin_medical_question_deleted"] as const) {
+        expect(copy.categories[category].trim()).not.toHaveLength(0);
+      }
+      expect(Object.keys(copy.counts)).toEqual(Object.keys(securityOperationsCopy.fr.counts));
       expect(copy.outcomes.blocked.trim()).not.toHaveLength(0);
       expect(copy.severities.critical.trim()).not.toHaveLength(0);
     }
