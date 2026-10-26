@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { createServer } from "vite";
 import { describe, expect, it } from "vitest";
 import { TURNSTILE_DEFER_ROOT_MARGIN } from "./components/TurnstileWidget";
 
@@ -65,4 +66,24 @@ describe("cache immuable des fichiers hachés (CACHE-01)", () => {
     expect(main).toContain('import { installChunkLoadRecovery } from "./lib/chunkLoadRecovery";');
     expect(main.indexOf("installChunkLoadRecovery();")).toBeLessThan(main.indexOf("createRoot("));
   });
+});
+
+describe("repères de code source de l'éditeur visuel Manus (CODE-06)", () => {
+  it("compile les composants sans attribut data-loc donnant le fichier et la ligne du code", async () => {
+    const server = await createServer({
+      configFile: resolve(root, "vite.config.ts"),
+      cacheDir: resolve(root, "node_modules/.vite/source-locations-test"),
+      server: { middlewareMode: true, hmr: false, ws: false },
+      optimizeDeps: { noDiscovery: true },
+      logLevel: "error",
+    });
+    try {
+      const component = await server.transformRequest("/src/components/ErrorBoundary.tsx");
+      expect(component?.code).toContain("getDerivedStateFromError");
+      expect(component?.code).not.toContain("data-loc");
+      expect(component?.code).not.toContain("client/src/components/ErrorBoundary.tsx:");
+    } finally {
+      await server.close();
+    }
+  }, 30_000);
 });

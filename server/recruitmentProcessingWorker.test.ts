@@ -114,6 +114,10 @@ describe("cron recruitment-processing : vidage par lots dans un budget de temps"
     expect(state.calls).not.toContain("drive-unfiltered");
     expect(state.calls.indexOf("recoverAnalysis")).toBeLessThan(state.calls.indexOf("emails"));
     expect(state.calls.indexOf("driveErasures")).toBeLessThan(state.calls.indexOf("emails"));
+    // Interrupted and missing jobs are repaired before their queue is processed.
+    expect(state.calls.indexOf("recoverDrive")).toBeLessThan(state.calls.indexOf("drive"));
+    expect(state.calls.indexOf("backfillDrive")).toBeLessThan(state.calls.indexOf("drive"));
+    expect(state.calls.indexOf("backfillAnalysis")).toBeLessThan(firstAnalysis);
   });
 
   it("ne démarre plus d’analyse après 25 s (la dernière se termine dans la limite de 60 s)", async () => {

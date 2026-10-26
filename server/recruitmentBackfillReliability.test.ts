@@ -4,7 +4,6 @@ import { googleDriveFileDisposition, googleDriveFileLookupQuery } from "./google
 
 const analysisSource = readFileSync(new URL("./recruitmentProcessing.ts", import.meta.url), "utf8");
 const driveSource = readFileSync(new URL("./googleDriveExport.ts", import.meta.url), "utf8");
-const serverSource = readFileSync(new URL("./_core/index.ts", import.meta.url), "utf8");
 
 function functionBody(source: string, name: string, nextMarker: string) {
   const exportedStart = source.indexOf(`export async function ${name}`);
@@ -96,17 +95,5 @@ describe("rattrapage fiable des traitements de candidature", () => {
     expect(worker).toContain("lt(cvProcessingJobs.attempts, cvProcessingJobs.maxAttempts)");
     expect(worker).toContain("eq(cvProcessingJobs.attempts, candidate.attempts)");
     expect(worker).toContain("lte(cvProcessingJobs.scheduledFor, startedAt)");
-  });
-
-  it("répare les jobs interrompus et manquants avant chaque passage du worker Heartbeat", () => {
-    const postRoute = serverSource.slice(serverSource.indexOf('app.post("/api/scheduled/recruitment-processing"'));
-    expect(postRoute.indexOf("recoverStaleCvAnalysisJobs()"))
-      .toBeLessThan(postRoute.indexOf("processDueCvAnalysisJobs(2)"));
-    expect(postRoute.indexOf("backfillLegacyCvAnalysisJobs(2)"))
-      .toBeLessThan(postRoute.indexOf("processDueCvAnalysisJobs(2)"));
-    expect(postRoute.indexOf("backfillCvGoogleDriveExportJobs(2)"))
-      .toBeLessThan(postRoute.indexOf("processDueCvGoogleDriveExports(2)"));
-    expect(postRoute.indexOf("recoverStaleCvGoogleDriveExportJobs()"))
-      .toBeLessThan(postRoute.indexOf("processDueCvGoogleDriveExports(2)"));
   });
 });

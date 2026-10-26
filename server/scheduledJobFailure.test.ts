@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { DrizzleQueryError } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { listen } from "./testSupport/candidateUploadApp";
@@ -12,7 +13,6 @@ const mocks = vi.hoisted(() => {
   return {
     sendDueAppointmentReminders: vi.fn(),
     runRecruitmentProcessingWorker: vi.fn(),
-    authenticateRequest: vi.fn(),
   };
 });
 
@@ -28,7 +28,6 @@ vi.mock("./scheduledJobs", async importOriginal => ({
   sendDueAppointmentReminders: mocks.sendDueAppointmentReminders,
 }));
 vi.mock("./recruitmentProcessingWorker", () => ({ runRecruitmentProcessingWorker: mocks.runRecruitmentProcessingWorker }));
-vi.mock("./_core/sdk", () => ({ sdk: { authenticateRequest: mocks.authenticateRequest } }));
 
 const { createApp } = await import("./_core/index");
 
@@ -62,9 +61,8 @@ function failedReminderQuery() {
   );
 }
 
-async function call(path: string, init: { method?: "GET" | "POST"; authorization?: string } = {}) {
+async function call(path: string, init: { authorization?: string } = {}) {
   const response = await fetch(`${baseUrl}${path}`, {
-    method: init.method ?? "GET",
     headers: init.authorization ? { authorization: init.authorization } : {},
   });
   const text = await response.text();
@@ -104,19 +102,17 @@ describe("tâches planifiées en échec : réponse générique, détail au journ
     expect(consoleError).not.toHaveBeenCalled();
   });
 
-  it("Heartbeat (POST) : même réponse générique, que la tâche ou l’authentification échoue", async () => {
-    mocks.authenticateRequest.mockResolvedValueOnce({ isCron: true, taskUid: "task-synthetic" });
-    mocks.sendDueAppointmentReminders.mockRejectedValueOnce(failedReminderQuery());
-    expectGenericFailure(await call("/api/scheduled/reminder", { method: "POST" }), "[Reminder] Handler error");
-
-    consoleError.mockClear();
-    mocks.authenticateRequest.mockRejectedValueOnce(new Error("Invalid session cookie"));
-    const refused = await call("/api/scheduled/reminder", { method: "POST" });
-    const { summary, code } = expectGenericFailure(refused, "[Reminder] Handler error");
-    expect(refused.text).not.toContain("Invalid session cookie");
-    expect(summary).toBe("Error: Invalid session cookie");
-    expect(code).toBe("");
-    expect(mocks.sendDueAppointmentReminders).toHaveBeenCalledTimes(1);
+  it("expose chaque cron de vercel.json en GET réservé à CRON_SECRET, et plus en POST, l’ancien rappel Heartbeat de Manus (CODE-05)", async () => {
+    const { crons } = JSON.parse(readFileSync(new URL("../vercel.json", import.meta.url), "utf8")) as { crons: Array<{ path: string }> };
+    expect(crons.length).toBeGreaterThan(0);
+    for (const { path } of crons) {
+      expect(await call(path), path).toMatchObject({ status: 403, body: { error: "cron-only" } });
+      const legacyHeartbeat = await fetch(`${baseUrl}${path}`, { method: "POST", headers: { authorization: `Bearer ${CRON_SECRET}` } });
+      expect(legacyHeartbeat.status, path).toBe(404);
+    }
+    expect(mocks.sendDueAppointmentReminders).not.toHaveBeenCalled();
+    expect(mocks.runRecruitmentProcessingWorker).not.toHaveBeenCalled();
+    expect(consoleError).not.toHaveBeenCalled();
   });
 
   it("traitement des candidatures : même réponse générique", async () => {

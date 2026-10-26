@@ -343,7 +343,7 @@ async function refundNoticeOf(appointment: Pick<Appointment, "paymentStatus" | "
 }
 
 /**
- * Atomic claim shared by every caller (Stripe webhook, Vercel cron, Heartbeat):
+ * Atomic claim shared by every caller (Stripe webhook, Vercel cron):
  * only the worker whose conditional UPDATE matched the exact queued/retry state
  * and attempt count it read may send. A concurrent worker matches zero rows and
  * skips the job, so a confirmation or invoice is never sent twice in parallel.

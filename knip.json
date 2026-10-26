@@ -1,0 +1,25 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "entry": [
+    "server/_core/vite.ts",
+    "scripts/*.{mjs,ts}",
+    "client/src/pages/BlogPage.tsx",
+    "client/src/pages/BlogPostPage.tsx"
+  ],
+  "project": [
+    "client/src/**/*.{ts,tsx,css}",
+    "server/**/*.ts",
+    "shared/**/*.ts",
+    "drizzle/**/*.ts",
+    "scripts/**/*.{mjs,ts}"
+  ],
+  "ignoreDependencies": ["@fontsource-variable/dm-sans", "@fontsource/playfair-display"],
+  "rules": {
+    "exports": "off",
+    "types": "off",
+    "nsExports": "off",
+    "nsTypes": "off",
+    "enumMembers": "off",
+    "duplicates": "off"
+  }
+}

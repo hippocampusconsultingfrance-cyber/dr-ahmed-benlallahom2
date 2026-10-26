@@ -10,7 +10,6 @@ vi.mock("./_core/notification", () => ({ notifyOwner: vi.fn(async () => true) })
 
 import {
   DAILY_REMINDER_WINDOW,
-  HOURLY_REMINDER_WINDOW,
   drainInBatches,
   reminderWindowBounds,
   sendDueAppointmentReminders,
@@ -42,11 +41,6 @@ const appointment = (id: number, language = "fr") => ({ id, customerEmail: `p${i
 beforeEach(() => vi.clearAllMocks());
 
 describe("fenêtres de rappel", () => {
-  it("garde 22–26 h pour le Heartbeat horaire", () => {
-    const now = new Date("2026-10-07T16:45:00Z");
-    expect(reminderWindowBounds(HOURLY_REMINDER_WINDOW, now)).toEqual({ from: new Date("2026-10-08T14:45:00Z"), to: new Date("2026-10-08T18:45:00Z") });
-  });
-
   it("couvre tout rendez-vous confirmé au moins 30 h à l’avance avec un seul passage par jour", () => {
     // Hobby crons fire anywhere inside their hour: alternate the earliest and
     // latest firing to get the widest possible gap between two runs (~25 h).

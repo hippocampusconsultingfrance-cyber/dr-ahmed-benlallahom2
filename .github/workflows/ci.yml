@@ -44,6 +44,8 @@ jobs:
         run: pnpm test:ci
       - name: Verify production build
         run: pnpm build
+      - name: Find unused files and dependencies
+        run: pnpm knip
 
   dependency-audit:
     name: Dependency vulnerability report

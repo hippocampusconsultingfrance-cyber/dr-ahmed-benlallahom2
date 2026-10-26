@@ -1,6 +1,6 @@
 # Budget de performance public
 
-Le contrôle `pnpm check:performance` construit la version de production puis mesure les fichiers JavaScript compressés avec gzip. Il protège l’impact des nouvelles images, animations et dépendances sur le chargement initial, tout en tenant compte du chargement différé du dashboard administratif.
+Le contrôle `pnpm check:performance` construit la version de production puis mesure les fichiers JavaScript compressés avec gzip. Il protège l’impact des nouvelles images, animations et dépendances sur le chargement initial, tout en tenant compte du chargement différé du dashboard administratif. Il échoue aussi si un fichier JavaScript contient un attribut `data-loc` (chemin et ligne du code source, ajoutés autrefois par l’éditeur visuel Manus : CODE-06).
 
 | Groupe | Budget gzip | Motif |
 |---|---:|---|
