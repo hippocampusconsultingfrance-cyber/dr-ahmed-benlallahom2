@@ -69,16 +69,16 @@ describe("fenêtres de rappel", () => {
 });
 
 describe("envoi des rappels", () => {
-  it("réserve chaque rendez-vous avant l’envoi : le cron quotidien et le Heartbeat horaire simultanés n’envoient qu’un rappel chacun, marqué envoyé", async () => {
-    // About 24 h ahead: inside both windows.
+  it("réserve chaque rendez-vous avant l’envoi : deux passages simultanés (cron relancé) n’envoient qu’un rappel chacun, marqué envoyé", async () => {
+    // About 24 h ahead: inside the window.
     seedAppointment(1, { appointment_date: new Date("2026-10-08T17:00:00Z") });
     seedAppointment(2, { appointment_date: new Date("2026-10-08T17:00:00Z") });
     seedAppointment(3, { reminder_sent: 1 });
     seedAppointment(4, { appointment_date: new Date("2026-10-10T09:00:00Z") });
 
-    const [daily, hourly] = await Promise.all([sendDueAppointmentReminders(DAILY_REMINDER_WINDOW, NOW), sendDueAppointmentReminders(HOURLY_REMINDER_WINDOW, NOW)]);
+    const [first, second] = await Promise.all([sendDueAppointmentReminders(DAILY_REMINDER_WINDOW, NOW), sendDueAppointmentReminders(DAILY_REMINDER_WINDOW, NOW)]);
 
-    expect(daily.sent + hourly.sent).toBe(2);
+    expect(first.sent + second.sent).toBe(2);
     expect(remindedTrackingIds().sort()).toEqual(["APT-1", "APT-2"]);
     expect(notifications.sendReminderEmail).toHaveBeenCalledWith("p1@example.com", "Patient 1", "APT-1", expect.any(Date), { language: "fr" });
     expect(memory.rows(appointments).map(row => row.reminder_sent)).toEqual([1, 1, 1, 0]);
