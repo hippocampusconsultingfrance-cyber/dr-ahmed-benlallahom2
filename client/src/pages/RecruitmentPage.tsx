@@ -13,7 +13,7 @@ import { getTurnstileWidgetCopy } from "@/lib/publicFormCopy";
 import { TurnstileWidget } from "@/components/TurnstileWidget";
 import { filterRecruitmentSpecialties, recruitmentSpecialtyLabel } from "./recruitmentSpecialties";
 
-const countryOptions = [
+export const countryOptions = [
   { value: "France", labels: { fr: "France", en: "France", de: "Frankreich", zh: "法国" } },
   { value: "Allemagne", labels: { fr: "Allemagne", en: "Germany", de: "Deutschland", zh: "德国" } },
   { value: "Suisse", labels: { fr: "Suisse", en: "Switzerland", de: "Schweiz", zh: "瑞士" } },

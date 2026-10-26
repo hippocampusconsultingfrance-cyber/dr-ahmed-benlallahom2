@@ -134,6 +134,21 @@ describe("revendication atomique des envois post-paiement", () => {
     expect(writes.at(-1)).toMatchObject({ table: appointmentFulfillmentJobs, values: { status: "completed", lastError: null } });
   });
 
+  it("n’enregistre un SMS envoyé au patient que s’il est vraiment parti", async () => {
+    for (const smsDelivered of [false, true]) {
+      notifications.sendCustomerConfirmationSMS.mockResolvedValueOnce(smsDelivered);
+      const { writes } = fakeDatabase({
+        jobs: [[queuedJob], [{ ...queuedJob, status: "running", attempts: 1 }]],
+        appointments: [[paidAppointment()]],
+        updateRowCounts: [1],
+      });
+
+      await processDueAppointmentFulfillmentJobs();
+
+      expect(writes.filter(write => write.table === appointments).map(write => write.values)).toEqual([{ emailSent: 1, smsSent: smsDelivered ? 1 : 0 }]);
+    }
+  });
+
   it("restreint le traitement immédiat au rendez-vous payé, avec la même revendication", async () => {
     const { selectWheres, writes } = fakeDatabase({ jobs: [[queuedJob]], updateRowCounts: [0] });
 

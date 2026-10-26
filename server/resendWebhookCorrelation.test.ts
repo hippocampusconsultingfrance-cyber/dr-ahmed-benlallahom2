@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   buildResendApplicationTags,
@@ -49,13 +48,6 @@ describe("Resend recruitment webhook correlation", () => {
     expect(resendRecipientMatchesApplication(null, "candidate@example.com")).toBe(false);
   });
 
-  it("is wired into the production webhook before event insertion", () => {
-    const source = readFileSync(new URL("./_core/index.ts", import.meta.url), "utf8");
-    const correlation = source.indexOf("resendApplicationReferenceFromTags(data.tags)");
-    const insertion = source.indexOf("await db.insert(recruitmentEmailEvents).values({", correlation);
-
-    expect(correlation).toBeGreaterThan(-1);
-    expect(insertion).toBeGreaterThan(correlation);
-    expect(source).toContain("resendRecipientMatchesApplication(recipientEmail, taggedApplication.email)");
-  });
+  // The production webhook's use of these helpers is exercised through the
+  // signed route in resendWebhookRoute.test.ts (tagged confirmation).
 });
