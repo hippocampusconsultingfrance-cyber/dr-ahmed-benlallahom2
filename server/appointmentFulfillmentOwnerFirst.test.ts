@@ -609,3 +609,82 @@ describe("page de statut aux valeurs de production : un 429 passager garde son n
     expect(alerts()).toHaveLength(2);
   });
 });
+
+describe("alertes au médecin envoyées depuis un job : dans le créneau d’envoi, sans dépasser le budget (ABUS-03)", () => {
+  // Valeurs de production (pause de 600 ms, réserve de 800 ms, essais courts),
+  // 250 ms par appel à Resend et 50 ms par requête en base, sur une horloge simulée.
+  let simulatedClockEnd = 0;
+
+  beforeEach(() => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    appointmentFulfillmentPacing.delayMs = PACING_DELAY_MS;
+    postPaymentDeliveryRetry.delaysMs = [...SHORT_RETRY_DELAYS_MS];
+    resend.latencyMs = 250;
+    database.latencyMs = 50;
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"], now: Math.max(Date.now(), simulatedClockEnd) + 10_000 });
+  });
+
+  afterEach(async () => {
+    await vi.runAllTimersAsync();
+    simulatedClockEnd = Date.now();
+    vi.useRealTimers();
+  });
+
+  const timeline = (startedAt: number) => resend.calls.map(call => ({ subject: String(call.message.subject).split(" ")[0]!, startedAt: call.startedAt - startedAt }));
+
+  it("l’alerte « Échec d’envoi » d’une confirmation refusée part une pause après le refus, et la facture une pause après elle", async () => {
+    resend.script.push("ok", "422");
+    const { jobs } = memoryDatabase([job(1, "owner"), job(2, "confirmation"), job(3, "invoice")]);
+    const startedAt = Date.now();
+
+    const webhook = processFulfillmentBestEffort(42);
+    await vi.advanceTimersByTimeAsync(10_000);
+    await webhook;
+
+    const sends = timeline(startedAt);
+    expect(sends.map(send => send.subject)).toEqual(["Nouvelle", "Confirmation", "Échec", "Facture"]);
+    for (let index = 1; index < sends.length; index += 1) expect(sends[index].startedAt - sends[index - 1].startedAt).toBeGreaterThanOrEqual(PACING_DELAY_MS);
+    expect(jobs.map(row => [row.jobType, row.status])).toEqual([["owner", "completed"], ["confirmation", "failed"], ["invoice", "completed"]]);
+  });
+
+  it("sous le budget de la page, une alerte dont le créneau tomberait après la réponse part tout de suite, avant elle, au lieu d’attendre", async () => {
+    // Un 429 passager (retry-after de 1 s) sur la notification au médecin
+    // repousse la confirmation vers la fin du budget de la page (3 s) : son
+    // refus revient alors qu’une pause après elle tomberait après la réponse.
+    resend.script.push("429", "ok", "422");
+    memoryDatabase([job(1, "owner"), job(2, "confirmation"), job(3, "invoice")]);
+    const startedAt = Date.now();
+    let answeredAt = Number.POSITIVE_INFINITY;
+
+    const page = processFulfillmentBestEffort(42, paymentStatusPageFulfillment.timeoutMs).then(() => { answeredAt = Date.now() - startedAt; });
+    await vi.advanceTimersByTimeAsync(10_000);
+    await page;
+
+    const sends = timeline(startedAt);
+    const alert = sends.find(send => send.subject === "Échec")!;
+    const confirmation = sends.find(send => send.subject === "Confirmation")!;
+    expect(alert.startedAt).toBeLessThan(answeredAt);
+    expect(alert.startedAt - confirmation.startedAt).toBeLessThan(PACING_DELAY_MS);
+  });
+
+  it("le nouvel essai d’une alerte sous sa clé, après une réponse incertaine, attend lui aussi une pause après le premier", async () => {
+    const { STRIPE_REFUND_CANCELLATION_REASON } = await import("./appointmentPaymentWebhook");
+    // Alerte de remboursement (job refund_owner), puis alerte d’échec d’une confirmation refusée.
+    resend.script.push("5xx", "ok", "422", "5xx", "ok");
+    memoryDatabase([job(1, "refund", { status: "completed", attempts: 1 }), job(2, "refund_owner")], appointmentRow({ paymentStatus: "refunded", appointmentStatus: "cancelled", cancellationReason: STRIPE_REFUND_CANCELLATION_REASON }));
+    const startedAt = Date.now();
+
+    const run = processDueAppointmentFulfillmentJobs();
+    await vi.advanceTimersByTimeAsync(10_000);
+    await run;
+    memoryDatabase([job(1, "owner", { status: "completed", attempts: 1 }), job(2, "confirmation")]);
+    const next = processDueAppointmentFulfillmentJobs();
+    await vi.advanceTimersByTimeAsync(10_000);
+    await next;
+
+    const sends = timeline(startedAt);
+    expect(sends.map(send => send.subject)).toEqual(["Remboursement", "Remboursement", "Confirmation", "Échec", "Échec"]);
+    for (const index of [1, 3, 4]) expect(sends[index].startedAt - sends[index - 1].startedAt).toBeGreaterThanOrEqual(PACING_DELAY_MS);
+  });
+});
