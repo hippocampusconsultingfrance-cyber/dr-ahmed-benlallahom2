@@ -4,6 +4,7 @@ import { appointments, candidateAccounts, contactMessages, cvApplications, gdprR
 import { HIPPOCAMPUS_LEGAL } from "../shared/legalIdentity";
 import { getDb } from "./db";
 import { mutationRowCount } from "./dbMutation";
+import { isUnconfirmedPaidAppointment } from "./appointmentAdminActions";
 import { logSecurityEvent } from "./candidateSecurity";
 import { anonymisedAppointmentFields } from "./personalDataRetention";
 
@@ -43,6 +44,7 @@ export async function findPersonalData(email: string) {
     phone: contactMessages.phone,
     message: contactMessages.message,
     gdprConsent: contactMessages.gdprConsent,
+    read: contactMessages.read,
     createdAt: contactMessages.createdAt,
   }).from(contactMessages).where(sameEmail(contactMessages.email, email)).orderBy(desc(contactMessages.createdAt)).limit(limit);
   const questions = await db.select({
@@ -73,6 +75,7 @@ export async function findPersonalData(email: string) {
     requestType: gdprRequests.requestType,
     description: gdprRequests.description,
     status: gdprRequests.status,
+    notes: gdprRequests.notes,
     responseDate: gdprRequests.responseDate,
     createdAt: gdprRequests.createdAt,
   }).from(gdprRequests).where(sameEmail(gdprRequests.email, email)).orderBy(desc(gdprRequests.createdAt)).limit(limit);
@@ -91,7 +94,9 @@ export async function findPersonalData(email: string) {
     appointmentStatus: appointments.appointmentStatus,
     refundAmount: appointments.refundAmount,
     refundedAt: appointments.refundedAt,
+    cancellationReason: appointments.cancellationReason,
     cancelledAt: appointments.cancelledAt,
+    language: appointments.language,
     createdAt: appointments.createdAt,
   }).from(appointments).where(sameEmail(appointments.customerEmail, email)).orderBy(desc(appointments.appointmentDate)).limit(limit);
   const { findAppointmentInvoices } = await import("./invoiceNumbering");
@@ -151,11 +156,26 @@ export async function exportPersonalData(input: { email: string; actorOpenId: st
   };
 }
 
+type BookingToErase = Pick<typeof appointments.$inferSelect, "appointmentDate" | "appointmentStatus" | "paymentStatus" | "stripePaymentIntentId">;
+
+/**
+ * A booking the erasure leaves for the administrator to settle first: still to
+ * take place and confirmed, or held while its payment may still arrive (an
+ * expired hold stays held until Stripe says it can no longer be paid, then it
+ * is cancelled), or paid after its slot was released and awaiting its refund.
+ * Any other booking, past, cancelled or abandoned, is anonymised.
+ */
+function isActiveUpcomingBooking(booking: BookingToErase, now: Date) {
+  if (booking.appointmentDate.getTime() < now.getTime()) return false;
+  return booking.appointmentStatus === "confirmed" || booking.appointmentStatus === "held" || isUnconfirmedPaidAppointment(booking);
+}
+
 /**
  * Erasure for one address: contact messages and medical questions (with
- * their journal) are deleted; past bookings are reduced to the accounting
- * record, like after 3 years (the invoice and its stored PDF stay); upcoming
- * bookings are left for the administrator to cancel first. GDPR requests are
+ * their journal) are deleted; past, cancelled and abandoned bookings are
+ * reduced to the accounting record, like after 3 years (the invoice and its
+ * stored PDF stay); active upcoming bookings (isActiveUpcomingBooking) are
+ * left for the administrator to cancel or refund first. GDPR requests are
  * kept as the record of the handling (1 year after closure), and recruitment
  * dossiers are erased from their own routine. The trace holds no personal data.
  */
@@ -169,12 +189,18 @@ export async function erasePersonalData(input: { email: string; actorOpenId: str
     await db.delete(medicalQuestionAuditLogs).where(inArray(medicalQuestionAuditLogs.medicalQuestionId, questionIds));
     medicalQuestionsDeleted = mutationRowCount(await db.delete(medicalQuestions).where(inArray(medicalQuestions.id, questionIds)));
   }
-  const bookings = await db.select({ id: appointments.id, trackingId: appointments.trackingId, appointmentDate: appointments.appointmentDate })
-    .from(appointments).where(sameEmail(appointments.customerEmail, input.email));
-  const past = bookings.filter(booking => booking.appointmentDate.getTime() < now.getTime());
-  const upcoming = bookings.filter(booking => booking.appointmentDate.getTime() >= now.getTime());
-  const appointmentsAnonymised = past.length
-    ? mutationRowCount(await db.update(appointments).set(anonymisedAppointmentFields(now)).where(inArray(appointments.id, past.map(booking => booking.id))))
+  const bookings = await db.select({
+    id: appointments.id,
+    trackingId: appointments.trackingId,
+    appointmentDate: appointments.appointmentDate,
+    appointmentStatus: appointments.appointmentStatus,
+    paymentStatus: appointments.paymentStatus,
+    stripePaymentIntentId: appointments.stripePaymentIntentId,
+  }).from(appointments).where(sameEmail(appointments.customerEmail, input.email));
+  const upcoming = bookings.filter(booking => isActiveUpcomingBooking(booking, now));
+  const ended = bookings.filter(booking => !isActiveUpcomingBooking(booking, now));
+  const appointmentsAnonymised = ended.length
+    ? mutationRowCount(await db.update(appointments).set(anonymisedAppointmentFields(now)).where(inArray(appointments.id, ended.map(booking => booking.id))))
     : 0;
   const [gdprRequestsKept] = await db.select({ count: sql<number>`COUNT(*)` }).from(gdprRequests).where(sameEmail(gdprRequests.email, input.email));
   const applications = await db.select({ id: cvApplications.id, trackingId: cvApplications.trackingId }).from(cvApplications).where(sameEmail(cvApplications.email, input.email));

@@ -1,13 +1,18 @@
-import { createElement } from "react";
+import { createElement, isValidElement, type ReactElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 type ListInput = { statuses?: string[]; order: string; limit: number; offset: number };
+type MutationOptions = { onSuccess?: (result: never) => unknown; onError?: (error: Error) => unknown };
 
 const state = vi.hoisted(() => ({
   requests: [] as ListInput[],
   page: { items: [] as Array<Record<string, unknown>>, total: 0 },
   selected: null as null | Record<string, unknown>,
+  deleteMutate: null as null | ReturnType<typeof vi.fn>,
+  deleteOptions: {} as MutationOptions,
+  invalidated: [] as string[],
+  toasts: [] as Array<[string, string]>,
 }));
 
 const question = (id: number, status: string, extra: Record<string, unknown> = {}) => ({
@@ -16,12 +21,14 @@ const question = (id: number, status: string, extra: Record<string, unknown> = {
   adminResponse: null, publicQuestion: null, publicResponse: null, responseSentAt: null, ...extra,
 });
 
-vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+vi.mock("sonner", () => ({
+  toast: { success: (message: string) => state.toasts.push(["success", message]), error: (message: string) => state.toasts.push(["error", message]) },
+}));
 vi.mock("@/lib/trpc", () => {
   const mutation = () => ({ mutate: vi.fn(), isPending: false });
   return {
     trpc: {
-      useUtils: () => ({ medicalQuestions: { admin: { get: { invalidate: vi.fn() }, list: { invalidate: vi.fn() } } } }),
+      useUtils: () => ({ medicalQuestions: { admin: { get: { invalidate: () => state.invalidated.push("get") }, list: { invalidate: () => state.invalidated.push("list") } } } }),
       useQueries: (build: (t: unknown) => unknown[]) => {
         const t = { medicalQuestions: { admin: { list: (input: ListInput) => { state.requests.push(input); return input; } } } };
         return build(t).map(() => ({ data: state.page, isLoading: false, error: null }));
@@ -35,7 +42,12 @@ vi.mock("@/lib/trpc", () => {
           updatePublication: { useMutation: mutation },
           unpublish: { useMutation: mutation },
           reject: { useMutation: mutation },
-          delete: { useMutation: mutation },
+          delete: {
+            useMutation: (options: MutationOptions = {}) => {
+              state.deleteOptions = options;
+              return { mutate: state.deleteMutate, isPending: false };
+            },
+          },
         },
       },
     },
@@ -46,11 +58,34 @@ const { default: MedicalQuestionsAdminTab } = await import("./MedicalQuestionsAd
 
 const render = () => renderToStaticMarkup(createElement(MedicalQuestionsAdminTab));
 
+function elements(node: ReactNode): ReactElement<Record<string, unknown>>[] {
+  if (Array.isArray(node)) return node.flatMap(elements);
+  if (!isValidElement<Record<string, unknown>>(node)) return [];
+  return [node, ...elements(node.props.children as ReactNode)];
+}
+
+/** Renders the tab and returns the click handler of its button whose text contains `label`. */
+function clickHandler(label: string) {
+  let tree: ReactNode = null;
+  // The tab's hooks run in this wrapper's render, which keeps the element tree the tab returns.
+  const Probe = () => (tree = MedicalQuestionsAdminTab());
+  renderToStaticMarkup(createElement(Probe));
+  const found = elements(tree).find(element => element.type === "button" && typeof element.props.onClick === "function" && renderToStaticMarkup(element).includes(label));
+  if (!found) throw new Error(`no « ${label} » button`);
+  return found.props.onClick as () => void;
+}
+
 beforeEach(() => {
   state.requests = [];
   state.page = { items: [question(1, "submitted"), question(2, "drafting")], total: 30 };
   state.selected = null;
+  state.deleteMutate = vi.fn();
+  state.deleteOptions = {};
+  state.invalidated = [];
+  state.toasts = [];
+  vi.stubGlobal("window", { confirm: vi.fn(() => true) });
 });
+afterEach(() => vi.unstubAllGlobals());
 
 describe("ADM-01 — file des questions santé", () => {
   it("s’ouvre sur « À traiter » : nouvelles et brouillons, de la plus ancienne à la plus récente, 50 par page", () => {
@@ -88,6 +123,22 @@ describe("ADM-01 — file des questions santé", () => {
     }
     state.selected = null;
     expect(render()).not.toContain("Supprimer");
+  });
+
+  it("supprime la question après confirmation, puis recharge la file", () => {
+    state.selected = question(3, "answered", { responseSentAt: new Date(Date.UTC(2026, 7, 4)) });
+    vi.mocked(window.confirm).mockReturnValueOnce(false);
+    clickHandler("Supprimer")();
+    expect(state.deleteMutate).not.toHaveBeenCalled();
+
+    clickHandler("Supprimer")();
+    expect(window.confirm).toHaveBeenLastCalledWith(expect.stringContaining("QMED-ADMIN003-00000"));
+    expect(state.deleteMutate).toHaveBeenCalledWith({ id: 3 });
+    state.deleteOptions.onSuccess!(undefined as never);
+    expect(state.invalidated).toContain("list");
+    expect(state.toasts.at(-1)).toEqual(["success", "Question supprimée définitivement, avec sa version publique et son journal."]);
+    state.deleteOptions.onError!(new Error("Question introuvable"));
+    expect(state.toasts.at(-1)).toEqual(["error", "Question introuvable"]);
   });
 
   it("annonce une file vide sans bouton « Charger plus »", () => {

@@ -1,4 +1,4 @@
-import { createElement, Fragment, type ReactNode } from "react";
+import { createElement, Fragment, isValidElement, type ReactElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -48,7 +48,7 @@ vi.mock("@/lib/trpc", () => {
   return {
     trpc: {
       useUtils: () => ({
-        admin: { contacts: { list: invalidate("contacts") }, gdprRequests: { list: invalidate("gdprRequests") }, appointments: { list: invalidate("appointments") }, recruitment: { list: invalidate("recruitment") } },
+        admin: { contacts: { list: invalidate("contacts") }, gdprRequests: { list: invalidate("gdprRequests") }, appointments: { list: invalidate("appointments") }, recruitment: { list: invalidate("recruitment") }, stats: invalidate("stats") },
         medicalQuestions: { admin: { list: invalidate("medicalQuestions") } },
       }),
       useQueries: (build: (t: unknown) => unknown[]) => {
@@ -83,6 +83,39 @@ const button = (label: string, index = 0) => {
   if (!found[index]) throw new Error(`no « ${label} » button`);
   return found[index]!;
 };
+
+function elements(node: ReactNode): ReactElement<Record<string, unknown>>[] {
+  if (Array.isArray(node)) return node.flatMap(elements);
+  if (!isValidElement<Record<string, unknown>>(node)) return [];
+  return [node, ...elements(node.props.children as ReactNode)];
+}
+const textOf = (node: ReactNode): string => Array.isArray(node) ? node.map(textOf).join("")
+  : typeof node === "string" || typeof node === "number" ? String(node)
+  : isValidElement<{ children?: ReactNode }>(node) ? textOf(node.props.children) : "";
+
+type TabAction = (tree: ReactNode) => void;
+const click = (label: string): TabAction => tree => (elements(tree).find(element => typeof element.props.onClick === "function" && textOf(element.props.children as ReactNode).includes(label))!.props.onClick as () => void)();
+const typeNote = (requestId: number, value: string): TabAction => tree => (elements(tree).find(element => element.props.id === `gdpr-request-note-${requestId}`)!.props.onChange as (event: unknown) => void)({ target: { value } });
+
+/**
+ * Renders the GDPR tab inside a wrapper that runs `actions` (a click, a note
+ * typed) during its own render: the tab's state lives in the wrapper, so each
+ * update renders it again, as in the browser. Returns the search panel (key
+ * and address) of every render.
+ */
+function renderGdprTabActing(...actions: TabAction[]) {
+  const panels: Array<{ key: string | null; requestedEmail: unknown }> = [];
+  const pending = [...actions];
+  const Probe = () => {
+    const tree = GdprTab();
+    const panel = elements(tree).find(element => element.type === PersonalDataSearchPanel)!;
+    panels.push({ key: panel.key, requestedEmail: panel.props.requestedEmail });
+    pending.shift()?.(tree);
+    return tree;
+  };
+  render(createElement(Probe));
+  return panels;
+}
 
 const DAY = 24 * 60 * 60 * 1000;
 const gdprRequest = (id: number, extra: Record<string, unknown> = {}) => ({
@@ -149,6 +182,18 @@ describe("RGPD-12 — onglet RGPD", () => {
     expect(state.mutate.updateStatus).toHaveBeenLastCalledWith({ id: 1, status: "completed", notes: "Identité non vérifiable." });
   });
 
+  it("enregistre une note vidée pour l’effacer, pas une note inchangée", () => {
+    state.gdprPage = { items: [gdprRequest(1, { status: "in_progress", notes: "Note saisie par erreur." })], total: 1 };
+    render(createElement(GdprTab));
+    expect(button("Enregistrer la note").disabled).toBe(true);
+
+    renderGdprTabActing(typeNote(1, ""));
+    expect(button("Enregistrer la note").disabled).toBe(false);
+    expect(button("Refuser").disabled).toBe(true);
+    button("Enregistrer la note").onClick!();
+    expect(state.mutate.updateStatus).toHaveBeenCalledWith({ id: 1, status: "in_progress", notes: "" });
+  });
+
   it("dit pourquoi une mise à jour est refusée", () => {
     render(createElement(GdprTab));
     state.options.updateStatus!.onError!(new Error("Indiquez le motif du refus avant de refuser la demande."));
@@ -169,7 +214,7 @@ describe("RGPD-12 — « Supprimer » un message de contact", () => {
     expect(state.mutate.deleteContact).toHaveBeenCalledWith({ id: 7 });
     state.options.deleteContact!.onSuccess!(undefined as never);
     expect(state.toasts.at(-1)).toEqual(["success", "Message supprimé"]);
-    expect(state.invalidated).toContain("contacts");
+    expect(state.invalidated).toEqual(expect.arrayContaining(["contacts", "stats"]));
   });
 });
 
@@ -199,6 +244,21 @@ describe("RGPD-12 — rechercher une personne par email", () => {
     for (const text of ["Messages de contact (1)", "CJEANNE", "Questions santé (1)", "QMED-JEANNE", "Répondue", "Demandes RGPD (1)", "GJEANNE", "Accès", "À traiter", "Rendez-vous (1)", "APTJEANNE", "Payé", "facture FAC-2026-000004", "CVJEANNE0001"]) expect(html).toContain(text);
   });
 
+  it("« Ses données » relance la recherche sur l’adresse de la demande, même après une recherche manuelle", () => {
+    state.gdprPage = { items: [gdprRequest(1), gdprRequest(2)], total: 2 };
+    const scrollIntoView = vi.fn();
+    vi.stubGlobal("document", { getElementById: vi.fn(() => ({ scrollIntoView })) });
+
+    const panels = renderGdprTabActing(click("Ses données"), click("Ses données"));
+    expect(panels.map(panel => panel.requestedEmail)).toEqual(["", "demandeur1@test.local", "demandeur1@test.local"]);
+    // A new key on every click: the panel starts again on the request's
+    // address, dropping any other address searched by hand meanwhile.
+    expect(new Set(panels.map(panel => panel.key)).size).toBe(3);
+    expect(state.findInputs.at(-1)).toEqual({ email: "demandeur1@test.local" });
+    expect(document.getElementById).toHaveBeenCalledWith("personal-data-search");
+    expect(scrollIntoView).toHaveBeenCalledTimes(2);
+  });
+
   it("exporte le JSON préparé par le serveur", () => {
     render(createElement(PersonalDataResult, { data: found as never, onChanged: vi.fn() }));
     button("Exporter (JSON)").onClick!();
@@ -221,7 +281,7 @@ describe("RGPD-12 — rechercher une personne par email", () => {
     state.options.erase!.onSuccess!({ contactMessagesDeleted: 1, medicalQuestionsDeleted: 1, appointmentsAnonymised: 1, upcomingAppointments: ["APTNEXT"], gdprRequestsKept: 1, recruitmentApplications: ["CVJEANNE0001"] } as never);
     expect(state.toasts.at(-1)?.[0]).toBe("success");
     expect(onChanged).toHaveBeenCalled();
-    expect(state.invalidated).toEqual(expect.arrayContaining(["contacts", "appointments", "medicalQuestions"]));
+    expect(state.invalidated).toEqual(expect.arrayContaining(["contacts", "appointments", "medicalQuestions", "stats"]));
   });
 
   it("renvoie vers l’effacement candidat existant pour un dossier de recrutement", () => {

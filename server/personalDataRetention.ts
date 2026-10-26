@@ -64,7 +64,8 @@ function yearsBefore(now: Date, years: number) {
  * A booking reduced to what the accounting needs: date, amounts, statuses,
  * payment references and invoice number (appointment_invoices) stay; identity,
  * contact details, reason and free texts go. The invoice PDF already stored
- * (invoices/ in Blob, kept 10 years) is never touched.
+ * (invoices/ in Blob, to keep 10 years) is never touched; no rule deletes it,
+ * nor these rows, after those 10 years yet.
  */
 export function anonymisedAppointmentFields(now = new Date()) {
   return {

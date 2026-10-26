@@ -18,7 +18,7 @@ const MEDICAL_QUESTION_STATUS_LABELS: Record<string, string> = { submitted: "Nou
 const APPOINTMENT_STATUS_LABELS: Record<string, string> = { held: "Créneau réservé", confirmed: "Confirmé", cancelled: "Annulé", completed: "Terminé", no_show: "Absent" };
 const PAYMENT_STATUS_LABELS: Record<string, string> = { pending: "En attente", completed: "Payé", failed: "Échoué", refunded: "Remboursé" };
 
-export const PERSONAL_DATA_ERASURE_CONFIRMATION = "Effacer les données de cette personne ? Seront supprimés : ses messages de contact et ses questions santé (avec leur journal). Ses rendez-vous passés seront anonymisés (identité, email, téléphone et motif effacés ; date, montant, statut et facture conservés). Les rendez-vous à venir et les demandes RGPD restent, ainsi que les dossiers de recrutement (à effacer séparément). Action irréversible.";
+export const PERSONAL_DATA_ERASURE_CONFIRMATION = "Effacer les données de cette personne ? Seront supprimés : ses messages de contact et ses questions santé (avec leur journal). Ses rendez-vous passés, annulés ou abandonnés seront anonymisés (identité, email, téléphone et motif effacés ; date, montant, statut et facture conservés). Les rendez-vous à venir encore en cours (confirmés, en attente de paiement ou payés et à rembourser) et les demandes RGPD restent, ainsi que les dossiers de recrutement (à effacer séparément). Action irréversible.";
 
 const candidateErasureConfirmation = (trackingId: string) => `Effacer définitivement le dossier candidat ${trackingId} ? Comme depuis l’onglet « Candidatures » : le CV et ses copies (stockage et Google Drive), les analyses IA, les relances et historiques d’emails, la présence dans les missions, ainsi que l’espace candidat lié, ses sessions et ses documents. Seule une preuve d’effacement anonymisée est conservée. Action irréversible.`;
 
@@ -31,7 +31,7 @@ export function describePersonalDataErasure(report: ErasureReport) {
     `${report.medicalQuestionsDeleted} question(s) santé supprimée(s)`,
     `${report.appointmentsAnonymised} rendez-vous anonymisé(s), factures conservées`,
   ];
-  if (report.upcomingAppointments.length) parts.push(`rendez-vous à venir conservé(s) : ${report.upcomingAppointments.join(", ")} (annulez-les d’abord, puis relancez l’effacement)`);
+  if (report.upcomingAppointments.length) parts.push(`rendez-vous à venir encore en cours conservé(s) : ${report.upcomingAppointments.join(", ")} (annulez ou remboursez-les d’abord, ou attendez la fin d’un paiement en attente, puis relancez l’effacement)`);
   if (report.gdprRequestsKept) parts.push(`${report.gdprRequestsKept} demande(s) RGPD conservée(s) comme preuve du traitement`);
   if (report.recruitmentApplications.length) parts.push(`dossier(s) candidat à effacer séparément : ${report.recruitmentApplications.join(", ")}`);
   return parts.join(" · ");
@@ -61,6 +61,7 @@ export function PersonalDataResult({ data, onChanged }: { data: PersonalData; on
       toast.success("Données effacées ou anonymisées ; trace ajoutée au journal de sécurité.", { description: describePersonalDataErasure(report), duration: 15_000 });
       void utils.admin.contacts.list.invalidate();
       void utils.admin.appointments.list.invalidate();
+      void utils.admin.stats.invalidate();
       void utils.medicalQuestions.admin.list.invalidate();
       onChanged();
     },
@@ -131,6 +132,13 @@ export function PersonalDataResult({ data, onChanged }: { data: PersonalData; on
     </div>
   );
 }
+
+/** Address asked from a GDPR request (« Ses données »); each request gets a new key, so the panel searches it again even after a manual search. */
+export type PersonalDataSearchRequest = { email: string; nonce: number };
+
+export const requestPersonalDataSearch = (current: PersonalDataSearchRequest, email: string): PersonalDataSearchRequest => ({ email, nonce: current.nonce + 1 });
+
+export const personalDataSearchKey = (request: PersonalDataSearchRequest) => `${request.nonce}:${request.email}`;
 
 /** « Rechercher une personne par email » (RGPD-12), at the top of the GDPR tab. */
 export default function PersonalDataSearchPanel({ requestedEmail = "" }: { requestedEmail?: string }) {

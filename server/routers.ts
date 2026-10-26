@@ -2513,7 +2513,8 @@ export const appRouter = router({
 
           const now = new Date();
           const updateData: Record<string, any> = { status: input.status, updatedAt: now };
-          if (input.notes) updateData.notes = input.notes;
+          // An empty note clears the saved one; a status change without a note keeps it.
+          if (input.notes !== undefined) updateData.notes = input.notes || null;
           // Answer date of a closed request, from which its 1-year retention runs (RGPD-09).
           if (input.status === "completed" || input.status === "rejected") updateData.responseDate = now;
 

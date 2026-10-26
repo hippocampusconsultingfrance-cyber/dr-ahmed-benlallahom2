@@ -120,6 +120,16 @@ describe("RGPD-12 — refus motivé et date de réponse", () => {
     expect(memory.rows(gdprRequests)[0]).toMatchObject({ status: "completed", notes: "Export envoyé le 3 novembre." });
     expect(memory.rows(gdprRequests)[0]!.response_date).not.toBeNull();
   });
+
+  it("efface une note enregistrée par erreur quand elle est vidée", async () => {
+    const { request } = seedPerson("jeanne@test.local", "Jeanne");
+    const gdpr = caller().admin.gdprRequests;
+    await gdpr.updateStatus({ id: request.id as number, status: "in_progress", notes: "Note saisie sur la mauvaise demande : Paul Durand." });
+    await gdpr.updateStatus({ id: request.id as number, status: "in_progress", notes: "" });
+    expect(memory.rows(gdprRequests)[0]).toMatchObject({ status: "in_progress", notes: null });
+    // Refusing still needs a reason.
+    await expect(gdpr.updateStatus({ id: request.id as number, status: "rejected", notes: "" })).rejects.toThrow("Indiquez le motif du refus");
+  });
 });
 
 describe("RGPD-12 — rechercher une personne par email", () => {
@@ -157,6 +167,9 @@ describe("RGPD-12 — rechercher une personne par email", () => {
     expect(content.contactMessages).toEqual([expect.objectContaining({ trackingId: "C-Jeanne", message: "Message de Jeanne", email: "jeanne@test.local" })]);
     expect(content.medicalQuestions).toEqual([expect.objectContaining({ question: "Question santé de Jeanne avant mon opération", adminResponse: "Information générale." })]);
     expect(content.appointments).toHaveLength(2);
+    expect(content.appointments[0]).toMatchObject({ language: "fr", cancellationReason: null });
+    expect(content.contactMessages[0]).toMatchObject({ read: 0 });
+    expect(content.gdprRequests[0]).toHaveProperty("notes", null);
     expect(exported.content).not.toContain("Paul");
     expect(content.contactMessages[0]).not.toHaveProperty("id");
     expect(memory.rows(securityEvents)).toEqual([expect.objectContaining({ actor_reference: "user_owner", category: "admin_personal_data_exported" })]);
@@ -198,5 +211,45 @@ describe("RGPD-12 — effacer / anonymiser une personne", () => {
     // Nothing left to find but the upcoming booking and the GDPR request.
     const after = await caller().admin.personalData.find({ email: "jeanne@test.local" });
     expect([after.contactMessages.length, after.medicalQuestions.length, after.appointments.length, after.gdprRequests.length]).toEqual([0, 0, 1, 1]);
+  });
+
+  it("anonymise aussi un rendez-vous futur annulé et un créneau abandonné, et ne garde que ceux encore en cours", async () => {
+    const future = new Date(NOW.getTime() + 5 * DAY);
+    const booking = (trackingId: string, extra: Record<string, unknown>) => ({
+      tracking_id: trackingId, customer_name: "Jeanne", customer_email: "jeanne@test.local", customer_phone: "+33622222222", request_details: "Motif médical",
+      appointment_date: future, base_price: "100.00", final_price: "100.00", ...extra,
+    });
+    const [cancelled, abandoned, confirmed, holding, expiredHold, toRefund] = memory.seed(appointments, [
+      // Cancelled by the practitioner and refunded, date still ahead.
+      booking("APTCANCEL", { payment_status: "refunded", appointment_status: "cancelled", cancellation_reason: "Annulation / remboursement par le praticien : indisponible", cancelled_at: NOW, refund_amount: "100.00", refunded_at: NOW, stripe_payment_intent_id: "pi_cancel" }),
+      // Booking started and never paid: its hold released by the cleanup.
+      booking("APTABANDON", { payment_status: "pending", appointment_status: "cancelled", stripe_session_id: "cs_abandon", cancelled_at: NOW }),
+      booking("APTCONFIRM", { payment_status: "completed", appointment_status: "confirmed", stripe_payment_intent_id: "pi_confirm" }),
+      booking("APTHOLD", { payment_status: "pending", appointment_status: "held", stripe_session_id: "cs_hold", hold_expires_at: new Date(NOW.getTime() + 20 * 60 * 1000) }),
+      // Expired, but Stripe has not said yet that it can no longer be paid.
+      booking("APTHOLDEXP", { payment_status: "pending", appointment_status: "held", stripe_session_id: "cs_hold_expired", hold_expires_at: new Date(NOW.getTime() - 60 * 1000) }),
+      // Paid after its slot was released: the patient must be refunded.
+      booking("APTREFUND", { payment_status: "pending", appointment_status: "cancelled", stripe_session_id: "cs_late", stripe_payment_intent_id: "pi_late", cancelled_at: NOW }),
+    ]);
+
+    const report = await caller().admin.personalData.erase({ email: "jeanne@test.local" });
+    expect(report.appointmentsAnonymised).toBe(2);
+    expect([...report.upcomingAppointments].sort()).toEqual(["APTCONFIRM", "APTHOLD", "APTHOLDEXP", "APTREFUND"]);
+
+    const byId = new Map(memory.rows(appointments).map(row => [row.id, row]));
+    for (const row of [cancelled, abandoned]) {
+      expect(byId.get(row!.id)).toMatchObject({ customer_name: "Anonymisé", customer_email: "", customer_phone: "", request_details: "", cancellation_reason: null, appointment_status: "cancelled" });
+    }
+    expect(byId.get(cancelled!.id)).toMatchObject({ payment_status: "refunded", refund_amount: "100.00", stripe_payment_intent_id: "pi_cancel" });
+    for (const row of [confirmed, holding, expiredHold, toRefund]) {
+      expect(byId.get(row!.id)).toMatchObject({ customer_name: "Jeanne", customer_email: "jeanne@test.local", request_details: "Motif médical" });
+    }
+    expect(JSON.parse(memory.rows(securityEvents)[0]!.metadata as string)).toMatchObject({ appointmentsAnonymised: 2, upcomingAppointmentsKept: 4 });
+
+    // Once refunded, the late payment's booking is erased in turn.
+    memory.rows(appointments).find(row => row.id === toRefund!.id)!.payment_status = "refunded";
+    const again = await caller().admin.personalData.erase({ email: "jeanne@test.local" });
+    expect(again.appointmentsAnonymised).toBe(1);
+    expect([...again.upcomingAppointments].sort()).toEqual(["APTCONFIRM", "APTHOLD", "APTHOLDEXP"]);
   });
 });

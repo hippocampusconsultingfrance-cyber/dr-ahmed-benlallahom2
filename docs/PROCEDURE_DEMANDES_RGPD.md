@@ -28,15 +28,21 @@ email.
    facture) et les dossiers de recrutement de cette adresse.
 4. Selon la demande :
    - **Accès / portabilité** : **Exporter (JSON)**, puis transmettre le fichier
-     à la personne par un canal sûr. Le dossier de recrutement n’est pas dans
+     à la personne par un canal sûr. Il contient aussi les notes internes de
+     ses demandes RGPD (dont le motif d’un refus) : les relire avant l’envoi. Le dossier de recrutement n’est pas dans
      cet export : le rassembler depuis la fiche du candidat (onglet
      Candidatures).
    - **Effacement** : **Effacer / anonymiser** (voir § 4), puis, pour chaque
      dossier de recrutement listé, **Effacer le dossier candidat** (même
      effacement complet que « Effacer RGPD + preuve » de l’onglet
-     Candidatures). Un rendez-vous **à venir** n’est pas touché : l’annuler (et
-     rembourser si besoin) dans l’onglet Réservations, puis relancer
-     l’effacement.
+     Candidatures). Un rendez-vous **à venir encore en cours** n’est pas
+     touché : confirmé, en attente de paiement, ou payé après la libération
+     de son créneau et à rembourser. L’annuler ou le rembourser dans l’onglet
+     Réservations (un créneau en attente de paiement est libéré à son
+     expiration, au plus tard par le nettoyage de la nuit), puis relancer
+     l’effacement. Un rendez-vous annulé ou un créneau
+     abandonné, même à une date future, est anonymisé comme un rendez-vous
+     passé.
    - **Rectification** : il n’y a pas d’écran de modification ; corriger la
      ligne dans Neon (tables du § 3) ou, pour une donnée devenue inutile,
      l’effacer. Noter ce qui a été fait.
@@ -49,7 +55,9 @@ email.
    la note »), puis **Traité**. Pour un **refus** (identité non vérifiable,
    demande manifestement infondée ou excessive, obligation de conservation),
    le motif est obligatoire dans la note avant **Refuser** ; le communiquer à
-   la personne avec la possibilité de saisir la CNIL.
+   la personne avec la possibilité de saisir la CNIL. Tant que la demande est
+   ouverte, vider la note puis « Enregistrer la note » l’efface (par exemple
+   une note saisie par erreur).
 6. Répondre à la personne par email. La date de réponse est enregistrée au
    passage en « Traitée » ou « Refusée ».
 
@@ -69,7 +77,7 @@ Base de données (Neon) :
 | `medical_questions` | `email` | identité, coordonnées, question, réponse, version publique | « Effacer / anonymiser » ou « Supprimer » |
 | `medical_question_audit_logs` | `medical_question_id` | journal de la question | avec la question |
 | `gdpr_requests` | `email` | la demande elle-même | conservée (§ 4) |
-| `appointments` | `customer_email` | identité, coordonnées, motif, date, montant, statuts | anonymisation des rendez-vous passés |
+| `appointments` | `customer_email` | identité, coordonnées, motif, date, montant, statuts | anonymisation des rendez-vous passés, annulés ou abandonnés |
 | `appointment_invoices` | `appointment_id` | numéro et dates de facture | conservé (§ 4) |
 | `appointment_fulfillment_jobs` | `appointment_id` | état des envois après paiement, sans identité | purgé 30 jours après l’envoi |
 | `cv_applications` et tables liées | `email` | candidature, CV, analyses, historique | « Effacer le dossier candidat » |
@@ -82,7 +90,7 @@ Stockage de fichiers (Vercel Blob) :
 
 | Préfixe | Contenu | Effacement |
 | --- | --- | --- |
-| `invoices/<numéro>-<référence>.pdf` | factures PDF émises | **jamais effacées** (§ 4) |
+| `invoices/<numéro>-<référence>.pdf` | factures PDF émises | conservées 10 ans (§ 4) ; aucune suppression automatique n’est encore prévue au-delà |
 | `recruitment/quarantine/`, `recruitment/cv/` | CV déposés | par l’effacement du dossier candidat |
 | `candidate-documents/quarantine/<id du compte>/` | coffre candidat (chiffré) | par l’effacement du dossier candidat |
 
@@ -99,10 +107,13 @@ expressément.
   et le numéro de facture, pour l’obligation de conservation comptable de
   10 ans. Après anonymisation, le nom, l’email, le téléphone et le motif sont
   effacés ; une facture régénérée depuis l’administration ne porte donc plus
-  l’identité : la facture d’origine reste celle stockée dans Blob.
+  l’identité : la facture d’origine reste celle stockée dans Blob. Aucune
+  règle ne supprime encore ces factures (PDF et `appointment_invoices`) ni
+  les rendez-vous anonymisés après 10 ans : suppression à prévoir.
 - **Demandes RGPD** : gardées 1 an après leur clôture comme preuve du
   traitement (registre des traitements), puis supprimées automatiquement.
-- **Rendez-vous à venir** : tant qu’ils ne sont pas annulés.
+- **Rendez-vous à venir encore en cours** (confirmés, en attente de paiement,
+  ou payés et à rembourser) : jusqu’à leur annulation ou leur remboursement.
 - **Preuve d’effacement d’un dossier candidat** : anonymisée (empreintes,
   nombres), dans le journal de recrutement.
 - **Trace des actions de l’administration** : sans donnée personnelle de la

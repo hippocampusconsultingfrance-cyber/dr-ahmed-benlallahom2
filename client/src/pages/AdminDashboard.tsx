@@ -20,7 +20,7 @@ import AdminConfigurationBanner from "@/components/AdminConfigurationBanner";
 import AdminAttentionPanel from "@/components/AdminAttentionPanel";
 import AdminLoadMore from "@/components/AdminLoadMore";
 import AppointmentDeliveries from "@/components/AppointmentDeliveries";
-import PersonalDataSearchPanel from "@/components/PersonalDataSearchPanel";
+import PersonalDataSearchPanel, { personalDataSearchKey, requestPersonalDataSearch } from "@/components/PersonalDataSearchPanel";
 import { GDPR_REQUEST_STATUS_LABELS, GDPR_REQUEST_TYPE_LABELS, gdprRequestDeadline, isGdprRequestOpen, isGdprRequestOverdue } from "@/components/gdprRequestAdmin";
 import { adminListCount, adminPageOffsets, ADMIN_PAGE_SIZE, mergeAdminPages, useAdminPageCount } from "@/components/adminPagination";
 import PublicContentSkeleton from "@/components/PublicContentSkeleton";
@@ -545,6 +545,7 @@ export function ContactsTab() {
     onSuccess: () => {
       toast.success("Message supprimé");
       utils.admin.contacts.list.invalidate();
+      utils.admin.stats.invalidate();
     },
     onError: error => toast.error(error.message),
   });
@@ -633,7 +634,7 @@ export function GdprTab() {
   const { items, total, isLoading, isLoadingMore, error, loadMoreError, retryLoadMore } = mergeAdminPages(pages);
   // Note or reason being typed, per request (RGPD-12); the saved note otherwise.
   const [notes, setNotes] = useState<Record<number, string>>({});
-  const [searchedEmail, setSearchedEmail] = useState("");
+  const [personalDataSearch, setPersonalDataSearch] = useState({ email: "", nonce: 0 });
   const updateStatus = trpc.admin.gdprRequests.updateStatus.useMutation({
     onSuccess: () => {
       toast.success("Demande mise à jour");
@@ -661,7 +662,7 @@ export function GdprTab() {
 
   return (
     <div className="space-y-8">
-      <PersonalDataSearchPanel key={searchedEmail} requestedEmail={searchedEmail} />
+      <PersonalDataSearchPanel key={personalDataSearchKey(personalDataSearch)} requestedEmail={personalDataSearch.email} />
       <div>
         <p className="text-sm text-muted-foreground mb-4">{adminListCount(items.length, total, "demande(s) RGPD")} · réponse due un mois après réception</p>
         <div className="space-y-3">
@@ -718,7 +719,7 @@ export function GdprTab() {
                   </div>
                   <div className="flex w-full flex-wrap gap-2 sm:w-auto sm:flex-nowrap">
                     <Button size="sm" variant="outline" className="min-h-10 flex-1 sm:min-h-0 sm:flex-none" onClick={() => {
-                      setSearchedEmail(req.email);
+                      setPersonalDataSearch(current => requestPersonalDataSearch(current, req.email));
                       document.getElementById("personal-data-search")?.scrollIntoView({ block: "start" });
                     }}>
                       <Eye className="w-3 h-3 mr-1" />
@@ -745,7 +746,7 @@ export function GdprTab() {
                       </Button>
                     )}
                     {open && (
-                      <Button size="sm" variant="ghost" className="min-h-10 flex-1 sm:min-h-0 sm:flex-none" disabled={!reason || reason === (req.notes ?? "")} onClick={() => updateStatus.mutate({ id: req.id, status: req.status, notes: reason })}>
+                      <Button size="sm" variant="ghost" className="min-h-10 flex-1 sm:min-h-0 sm:flex-none" disabled={reason === (req.notes ?? "")} onClick={() => updateStatus.mutate({ id: req.id, status: req.status, notes: reason })}>
                         Enregistrer la note
                       </Button>
                     )}
