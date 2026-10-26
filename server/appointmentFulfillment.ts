@@ -979,11 +979,9 @@ export async function regenerateAppointmentInvoice(trackingId: string): Promise<
  * the change would otherwise store the new details under the same number. A
  * copy already stored is kept. Throws while the store cannot say whether one
  * is there or cannot take it (archiveInvoicePDF): the details must not change
- * yet. Null when no invoice was issued, the invoice number otherwise.
+ * yet. Nothing to do when no invoice was issued.
  */
-export async function archiveIssuedAppointmentInvoice(appointment: Appointment): Promise<string | null> {
+export async function archiveIssuedAppointmentInvoice(appointment: Appointment): Promise<void> {
   const invoiceRecord = (await findAppointmentInvoices([appointment.id])).get(appointment.id);
-  if (!invoiceRecord) return null;
-  await archiveInvoicePDF(appointmentInvoiceData(appointment, invoiceRecord));
-  return invoiceRecord.invoiceNumber;
+  if (invoiceRecord) await archiveInvoicePDF(appointmentInvoiceData(appointment, invoiceRecord));
 }

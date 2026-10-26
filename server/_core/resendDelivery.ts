@@ -79,7 +79,7 @@ export function resendRetryAfterMs(headers: Record<string, string> | null | unde
  * send, when `mayStart` says the send no longer starts. `longestWaitMs`: the
  * longest that wait may last if it starts now.
  */
-export type SendSlot = { wait: (mayStart: () => boolean) => Promise<boolean>; longestWaitMs: () => number };
+type SendSlot = { wait: (mayStart: () => boolean) => Promise<boolean>; longestWaitMs: () => number };
 const sendSlotStorage = new AsyncLocalStorage<SendSlot>();
 
 /**
