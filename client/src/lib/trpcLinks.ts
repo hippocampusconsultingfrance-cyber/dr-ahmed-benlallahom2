@@ -10,6 +10,10 @@ import type { AppRouter } from "../../../server/routers";
  * request: these queries are sent as POST, their input in the request body
  * (the server accepts it, see allowMethodOverride in server/_core/index.ts).
  * The public pages' queries stay GET.
+ * For the candidate links, this only keeps the email and token out of the API
+ * call's URL: the emailed link itself (/candidate/verify, /candidate/
+ * reset-password, /candidate/access?invite=) still carries them in the page's
+ * URL, which is recorded when the page loads.
  */
 const QUERIES_SENT_AS_POST = [
   /^admin\./,

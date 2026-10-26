@@ -55,7 +55,7 @@ const listInput = { search: "François Côté" };
 const batchBody = JSON.stringify({ 0: superjson.serialize(listInput) });
 const getUrl = `/api/trpc/admin.contacts.list?batch=1&input=${encodeURIComponent(batchBody)}`;
 
-async function call(path: string, init: { method?: string; headers?: Record<string, string>; body?: string } = {}) {
+async function call(path: string, init: { method?: string; headers?: Record<string, string>; body?: string | FormData } = {}) {
   const response = await realFetch(`${baseUrl}${path}`, init);
   const text = await response.text();
   return { status: response.status, headers: response.headers, text };
@@ -111,11 +111,28 @@ describe("ADM-02 — requêtes de l’administration en POST", () => {
     expect(post.headers.get("content-security-policy")).toContain("frame-ancestors 'self'");
 
     // What a cross-site <form> can send without a CORS preflight: refused before the procedure runs.
-    for (const contentType of ["text/plain", "application/x-www-form-urlencoded"]) {
-      const forged = await call("/api/trpc/admin.contacts.list?batch=1", { method: "POST", headers: { ...OWNER, "content-type": contentType }, body: batchBody });
+    // tRPC alone would run a query sent as multipart/form-data (its type set by fetch, with the boundary).
+    const form = () => { const body = new FormData(); body.set("search", "François"); body.set("0", batchBody); return body; };
+    const forgeries = [
+      { headers: { "content-type": "text/plain" }, body: batchBody },
+      { headers: { "content-type": "application/x-www-form-urlencoded" }, body: batchBody },
+      { headers: {}, body: form() },
+    ];
+    for (const { headers, body } of forgeries) {
+      const forged = await call("/api/trpc/admin.contacts.list", { method: "POST", headers: { ...OWNER, ...headers }, body });
       expect(forged.status).toBe(415);
       expect(forged.text).not.toContain("François");
+      const batched = await call("/api/trpc/admin.contacts.list?batch=1", { method: "POST", headers: { ...OWNER, ...headers }, body: body instanceof FormData ? form() : body });
+      expect(batched.status).toBe(415);
+      expect(batched.text).not.toContain("François");
     }
+
+    // A mutation sent as multipart/form-data is refused the same way, and changes nothing.
+    const markRead = new FormData();
+    markRead.set("id", "1");
+    const forgedMutation = await call("/api/trpc/admin.contacts.markRead", { method: "POST", headers: OWNER, body: markRead });
+    expect(forgedMutation.status).toBe(415);
+    expect(memory.rows(contactMessages).every(row => row.read === 0)).toBe(true);
   });
 
   it("refuse la même requête POST sans administrateur ou sans double authentification", async () => {
