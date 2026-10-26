@@ -10,32 +10,37 @@ import superjson from "superjson";
 import { build } from "vite";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { venturesFr } from "../client/src/data/ventures-fr";
-import { prerenderFileForRoute, prerenderRouteSeo } from "../scripts/prerender-route-seo";
+import {
+  KEPT_VITE_MANIFEST_FILE,
+  VITE_MANIFEST_FILE,
+  prerenderFileForRoute,
+  prerenderRouteSeo,
+} from "../scripts/prerender-route-seo";
 import { getRouteSeo } from "./routeSeo";
 
 /**
  * Le vrai build (vite build puis scripts/prerender-route-seo.ts) dans un dossier temporaire :
- * chaque page principale de dist/public porte son <noscript>.
+ * chaque page principale de dist/public précharge le chunk de sa page et porte son <noscript>.
  */
 const root = path.resolve(import.meta.dirname, "..");
 
-/** Routes principales (client/src/App.tsx). */
-const MAIN_ROUTES = [
-  "/",
-  "/booking",
-  "/faq",
-  "/legal",
-  "/gdpr",
-  "/press",
-  "/resources",
-  "/questions-anesthesie",
-  "/recruitment",
-  "/recruitment/standard",
-  "/recruitment/vvip-offshore",
-  "/employers",
-  "/why-hippocampus",
-  `/venture/${venturesFr[0].slug}`,
-];
+/** Routes principales et nom du chunk de leur page (client/src/App.tsx). */
+const MAIN_ROUTES: Record<string, string> = {
+  "/": "Home",
+  "/booking": "BookingPage",
+  "/faq": "FAQPage",
+  "/legal": "LegalPage",
+  "/gdpr": "GDPRPage",
+  "/press": "PressPage",
+  "/resources": "ResourcesPage",
+  "/questions-anesthesie": "MedicalQuestionsPage",
+  "/recruitment": "RecruitmentHubPage",
+  "/recruitment/standard": "RecruitmentPage",
+  "/recruitment/vvip-offshore": "VvipOffshorePage",
+  "/employers": "EmployersPage",
+  "/why-hippocampus": "WhyHippocampusPage",
+  [`/venture/${venturesFr[0].slug}`]: "VenturePage",
+};
 
 let directory: string;
 let publicDir: string;
@@ -59,12 +64,35 @@ afterAll(async () => {
 });
 
 const readPage = (route: string) => readFile(path.join(publicDir, prerenderFileForRoute(route)), "utf8");
+const preloadsOf = (html: string) => Array.from(html.matchAll(/<link rel="modulepreload" crossorigin href="([^"]+)">/g), match => match[1]);
+/** Imports statiques d'un chunk construit (Rollup y remonte aussi ceux de ses propres imports). */
+const staticImportsOf = (code: string) => Array.from(code.matchAll(/(?:from|import)\s*"\.\/([^"]+\.js)"/g), match => `/static/${match[1]}`);
 const textOf = (html: string) =>
   html.replace(/&#39;/g, "'").replace(/&quot;/g, '"').replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
 
 describe("pages pré-rendues du build (SEOP-01)", () => {
+  it("précharge dans chaque page principale le chunk de sa page et tous ses imports, une seule fois", async () => {
+    for (const [route, page] of Object.entries(MAIN_ROUTES)) {
+      const html = await readPage(route);
+      const preloads = preloadsOf(html);
+      const entry = html.match(/<script type="module" crossorigin src="([^"]+)"><\/script>/)?.[1];
+      const pageChunk = preloads.find(href => new RegExp(`^/static/${page}-[\\w-]+\\.js$`).test(href));
+
+      expect(pageChunk, route).toBeDefined();
+      for (const file of staticImportsOf(await readFile(path.join(publicDir, pageChunk!), "utf8"))) {
+        if (file !== entry) expect(preloads, `${route} ${file}`).toContain(file);
+      }
+      for (const href of [entry!, ...preloads]) {
+        // Sous /static : servi par la règle de cache immuable de vercel.json, comme avant.
+        expect(href, route).toMatch(/^\/static\/[\w-]+\.js$/);
+        expect(existsSync(path.join(publicDir, href)), href).toBe(true);
+        expect(html.split(`"${href}"`).length - 1, `${route} ${href}`).toBe(1);
+      }
+    }
+  });
+
   it("ajoute à chaque page principale un <noscript> avec son titre, sa description et le lien de réservation", async () => {
-    for (const route of MAIN_ROUTES) {
+    for (const route of Object.keys(MAIN_ROUTES)) {
       const html = await readPage(route);
       const noscript = html.slice(html.indexOf("<noscript>"), html.indexOf("</noscript>"));
 
@@ -73,6 +101,16 @@ describe("pages pré-rendues du build (SEOP-01)", () => {
       expect(textOf(noscript.match(/<p>([^<]*)<\/p>/)?.[1] ?? ""), route).toBe(getRouteSeo(route).description);
       expect(noscript, route).toContain('<a href="/booking"');
     }
+  });
+
+  it("ne publie pas le manifeste de Vite et donne le même résultat à une relance sans nouveau build", async () => {
+    expect(existsSync(path.join(publicDir, VITE_MANIFEST_FILE))).toBe(false);
+    expect(existsSync(path.join(publicDir, KEPT_VITE_MANIFEST_FILE))).toBe(true);
+    const before = await Promise.all(Object.keys(MAIN_ROUTES).map(readPage));
+
+    await prerenderRouteSeo(publicDir);
+
+    expect(await Promise.all(Object.keys(MAIN_ROUTES).map(readPage))).toEqual(before);
   });
 });
 
@@ -132,12 +170,14 @@ describe.skipIf(!executablePath)("page pré-rendue dans un navigateur (SEOP-01)"
     }
   });
 
-  it("avec JavaScript, n’affiche que la page React", async () => {
+  it("avec JavaScript, n’affiche que la page React et ne télécharge qu’une fois chaque chunk préchargé", async () => {
     const context = await browser.newContext();
     try {
       const page = await context.newPage();
       const errors: string[] = [];
       page.on("pageerror", error => errors.push(error.message));
+      const requested: string[] = [];
+      page.on("request", request => requested.push(new URL(request.url()).pathname));
       await page.route("**/api/trpc/**", request => {
         const procedures = new URL(request.request().url()).pathname.replace(/^.*\/api\/trpc\//, "").split(",");
         return request.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(procedures.map(() => ({ result: { data: superjson.serialize(null) } }))) });
@@ -148,6 +188,7 @@ describe.skipIf(!executablePath)("page pré-rendue dans un navigateur (SEOP-01)"
       expect(await page.locator("main").count()).toBe(1);
       expect(await page.getByRole("navigation", { name: "Liens principaux" }).count()).toBe(0);
       expect(await page.getByText("Activez JavaScript dans votre navigateur").isVisible()).toBe(false);
+      for (const href of preloadsOf(await readPage("/faq"))) expect(requested.filter(pathname => pathname === href), href).toHaveLength(1);
       expect(errors).toEqual([]);
     } finally {
       await context.close();

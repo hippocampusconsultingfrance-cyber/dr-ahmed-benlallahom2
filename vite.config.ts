@@ -36,6 +36,9 @@ export default defineConfig({
     // client/public/assets : vercel.json peut ainsi les servir avec un cache immuable d'un an
     // sans figer les photos ni les logos (CACHE-01).
     assetsDir: "static",
+    // Manifeste des chunks (.vite/manifest.json) : scripts/prerender-route-seo.ts y lit le
+    // chunk de la page de chaque route pour le précharger dans son HTML (SEOP-01).
+    manifest: true,
     // Let Rollup keep React, Radix and their shared primitives in a coherent
     // dependency graph. Manual vendor chunks created a framework↔Radix cycle
     // in production, leaving React undefined before the root could render.
