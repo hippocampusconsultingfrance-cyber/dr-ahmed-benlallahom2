@@ -28,7 +28,9 @@ email.
 3. Cliquer **Ses données** (ou saisir l’adresse dans « Rechercher une personne
    par email ») : la recherche ignore la casse et liste les messages de
    contact, questions santé, demandes RGPD, rendez-vous (avec le numéro de
-   facture) et les dossiers de recrutement de cette adresse.
+   facture) et les dossiers de recrutement de cette adresse. Chaque liste
+   affiche au plus les 200 plus récents, avec le nombre total ; l’export et
+   l’effacement portent sur tous.
 4. Selon la demande :
    - **Accès / portabilité** : **Exporter (JSON)**, puis transmettre le fichier
      à la personne par un canal sûr. Il contient aussi les notes internes de
@@ -45,7 +47,9 @@ email.
      expiration, au plus tard par le nettoyage de la nuit), puis relancer
      l’effacement. Un rendez-vous annulé ou un créneau
      abandonné, même à une date future, est anonymisé comme un rendez-vous
-     passé.
+     passé. Quand il ne reste rien à effacer (seulement des demandes RGPD,
+     des rendez-vous à venir encore en cours ou des dossiers de recrutement),
+     **Effacer / anonymiser** est désactivé et le panneau dit ce qui reste.
    - **Rectification** : il n’y a pas d’écran de modification ; corriger la
      ligne dans Neon (tables du § 3) ou, pour une donnée devenue inutile,
      l’effacer. Noter ce qui a été fait.

@@ -31,6 +31,7 @@ vi.mock("./invoiceNumbering", async importOriginal => ({
 }));
 
 import { appRouter } from "./routers";
+import { PERSONAL_DATA_SEARCH_LIMIT } from "./personalDataAdmin";
 
 const NOW = new Date();
 const DAY = 24 * 60 * 60 * 1000;
@@ -174,6 +175,46 @@ describe("RGPD-12 — rechercher une personne par email", () => {
     expect(content.contactMessages[0]).not.toHaveProperty("id");
     expect(memory.rows(securityEvents)).toEqual([expect.objectContaining({ actor_reference: "user_owner", category: "admin_personal_data_exported" })]);
     expectTracesWithoutPersonalData("jeanne");
+  });
+});
+
+describe("RGPD-12 — au-delà des lignes affichées", () => {
+  it("liste les plus récents avec le total de chaque table, et exporte toutes les lignes", async () => {
+    seedPerson("jeanne@test.local", "Jeanne");
+    const extra = PERSONAL_DATA_SEARCH_LIMIT + 4;
+    memory.seed(contactMessages, Array.from({ length: extra }, (_, index) => ({
+      tracking_id: `C-JEANNE-${index}`, name: "Jeanne", email: index % 2 ? "JEANNE@test.local" : "jeanne@test.local", phone: null,
+      message: `Relance ${index}`, createdAt: new Date(NOW.getTime() - (index + 1) * 60_000),
+    })));
+
+    const found = await caller().admin.personalData.find({ email: "jeanne@test.local" });
+    expect(found.contactMessages).toHaveLength(PERSONAL_DATA_SEARCH_LIMIT);
+    expect(found.contactMessages[0]!.trackingId).toBe("C-JEANNE-0");
+    expect(found.totals).toEqual({ contactMessages: extra + 1, medicalQuestions: 1, gdprRequests: 1, appointments: 2, recruitmentApplications: 0 });
+
+    const exported = await caller().admin.personalData.export({ email: "jeanne@test.local" });
+    const content = JSON.parse(exported.content);
+    expect(content.contactMessages).toHaveLength(extra + 1);
+    expect(new Set(content.contactMessages.map((message: { trackingId: string }) => message.trackingId)).size).toBe(extra + 1);
+    expect(JSON.parse(memory.rows(securityEvents)[0]!.metadata as string)).toEqual({ contactMessages: extra + 1, medicalQuestions: 1, gdprRequests: 1, appointments: 2, recruitmentApplications: 0 });
+  });
+});
+
+describe("RGPD-12 — ce que l’effacement ferait", () => {
+  it("compte les lignes à effacer, et rien quand il ne reste que des demandes RGPD ou des rendez-vous à venir", async () => {
+    const jeanne = seedPerson("jeanne@test.local", "Jeanne");
+    // Message, question and past booking: the upcoming confirmed one is left.
+    expect((await caller().admin.personalData.find({ email: "jeanne@test.local" })).erasableRows).toBe(3);
+
+    await caller().admin.personalData.erase({ email: "jeanne@test.local" });
+    const after = await caller().admin.personalData.find({ email: "jeanne@test.local" });
+    expect(after).toMatchObject({ erasableRows: 0, totals: { contactMessages: 0, medicalQuestions: 0, gdprRequests: 1, appointments: 1 } });
+
+    memory.rows(appointments).find(row => row.id === jeanne.upcoming.id)!.appointment_status = "cancelled";
+    expect((await caller().admin.personalData.find({ email: "jeanne@test.local" })).erasableRows).toBe(1);
+
+    memory.seed(gdprRequests, [{ tracking_id: "G-SOLO", name: "Solo", email: "solo@test.local", request_type: "access" }]);
+    expect(await caller().admin.personalData.find({ email: "solo@test.local" })).toMatchObject({ erasableRows: 0, totals: { gdprRequests: 1 } });
   });
 });
 

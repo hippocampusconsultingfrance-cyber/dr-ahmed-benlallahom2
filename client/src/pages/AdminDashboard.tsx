@@ -695,7 +695,8 @@ export function GdprTab() {
 
   return (
     <div className="space-y-8">
-      <PersonalDataSearchPanel key={personalDataSearchKey(personalDataSearch)} requestedEmail={personalDataSearch.email} />
+      {/* « Ses données » mounts the panel again on the request's address, which brings it on screen and focuses its title. */}
+      <PersonalDataSearchPanel key={personalDataSearchKey(personalDataSearch)} requestedEmail={personalDataSearch.email} reveal={personalDataSearch.nonce > 0} />
       <div>
         <p className="text-sm text-muted-foreground mb-4">{adminListCount(items.length, total, "demande(s) RGPD")} · réponse due un mois après réception, au plus tard à la fin du jour d’échéance (heure de Paris)</p>
         <div className="space-y-3">
@@ -751,10 +752,7 @@ export function GdprTab() {
                     ) : null}
                   </div>
                   <div className="flex w-full flex-wrap gap-2 sm:w-auto sm:flex-nowrap">
-                    <Button size="sm" variant="outline" className="min-h-10 flex-1 sm:min-h-0 sm:flex-none" onClick={() => {
-                      setPersonalDataSearch(current => requestPersonalDataSearch(current, req.email));
-                      document.getElementById("personal-data-search")?.scrollIntoView({ block: "start" });
-                    }}>
+                    <Button size="sm" variant="outline" className="min-h-10 flex-1 sm:min-h-0 sm:flex-none" onClick={() => setPersonalDataSearch(current => requestPersonalDataSearch(current, req.email))}>
                       <Eye className="w-3 h-3 mr-1" />
                       Ses données
                     </Button>
