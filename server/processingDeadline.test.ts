@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { cvApplications, cvProcessingJobs } from "../drizzle/schema";
 import { DOCUMENT_DECOMPRESSION_LIMITS } from "./documentDecompressionLimits";
-import { CV_ANALYSIS_STEP_MINIMUM_MS, ProcessingDeadlineError, runWithProcessingDeadline, stepTimeoutMs } from "./processingDeadline";
+import { CV_ANALYSIS_STEP_MINIMUM_MS, deadlineCutShort, pauseWithinDeadline, ProcessingDeadlineError, runWithProcessingDeadline, stepTimeoutMs, waitFitsDeadline } from "./processingDeadline";
 import { RECRUITMENT_PROCESSING_BUDGET } from "./recruitmentProcessingWorker";
 import { createMemoryPg, type MemoryPg } from "./testing/memoryPgProxy";
 
@@ -86,5 +86,33 @@ describe("job rendu à la file à l’approche de la limite", () => {
     expect(failed.results[0]).toMatchObject({ completed: false, retry: true });
     expect(failed.results[0]).not.toHaveProperty("deadlineReached");
     expect(memory.rows(cvProcessingJobs)[0]).toMatchObject({ job_status: "retry", attempts: 1 });
+  });
+});
+
+describe("attentes d’un envoi fait sous une échéance (ABUS-03)", () => {
+  it("la première pause peut finir jusqu’à la fin du budget, les suivantes seulement avant l’échéance ; un refus est retenu", async () => {
+    let now = 0;
+    await runWithProcessingDeadline(1_000, async () => {
+      expect(waitFitsDeadline(3_000)).toBe(true);
+      expect(deadlineCutShort()).toBe(false);
+      await pauseWithinDeadline(0);
+      expect(waitFitsDeadline(1_000)).toBe(true);
+      now = 500;
+      expect(waitFitsDeadline(600)).toBe(false);
+      expect(deadlineCutShort()).toBe(true);
+    }, () => now, { firstPauseDeadlineAt: 3_000 });
+  });
+
+  it("même la première pause ne dépasse pas la fin du budget ; hors échéance, rien n’est refusé", async () => {
+    await runWithProcessingDeadline(1_000, async () => {
+      expect(waitFitsDeadline(3_001)).toBe(false);
+      expect(deadlineCutShort()).toBe(true);
+    }, () => 0, { firstPauseDeadlineAt: 3_000 });
+    // Sans budget de première pause (worker CV), l’échéance vaut pour toutes.
+    await runWithProcessingDeadline(1_000, async () => {
+      expect(waitFitsDeadline(1_001)).toBe(false);
+    }, () => 0);
+    expect(waitFitsDeadline(60_000)).toBe(true);
+    expect(deadlineCutShort()).toBe(false);
   });
 });

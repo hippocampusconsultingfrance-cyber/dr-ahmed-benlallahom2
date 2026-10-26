@@ -30,9 +30,12 @@ type Database = NonNullable<Awaited<ReturnType<typeof getDb>>>;
 
 /**
  * How long the page waits for the post-payment emails it starts (EXPL-01):
- * the owner notification, sent first, goes out well within it even when the
- * webhook never comes; the emails still left are sent by the webhook or the
- * scheduled job. Tests shorten it.
+ * the owner notification, sent first, and the patient's confirmation go out
+ * within it even when the webhook never comes, through one passing rate limit
+ * of Resend as well (a new try after its retry-after). The invoice usually
+ * follows just after, in the same processing; an email that would have to
+ * wait past it goes back to the queue, for the webhook or the scheduled job.
+ * Tests shorten it.
  */
 export const paymentStatusPageFulfillment = { timeoutMs: 3_000 };
 

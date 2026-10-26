@@ -92,8 +92,9 @@ export function buildUnconfirmablePaymentAlert(input: {
  * Best-effort immediate delivery of the confirmation and invoice. It reuses the
  * exact claim of the scheduled worker, never rejects, and stops waiting after
  * `timeoutMs`; anything left over is retried by the scheduled job. The jobs
- * share that budget (ABUS-03): one that would wait for Resend past its share
- * goes to its scheduled retry instead of holding back the next ones.
+ * share that budget (ABUS-03): past a first wait for Resend, one that would
+ * wait beyond its share goes back to the queue, without counting the attempt,
+ * instead of holding back the next ones.
  */
 export async function processFulfillmentBestEffort(
   appointmentId: number,

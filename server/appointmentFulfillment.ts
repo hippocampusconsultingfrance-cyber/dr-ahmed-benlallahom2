@@ -14,7 +14,7 @@ import { notifyOwner } from "./_core/notification";
 import { emailLanguageFor } from "./emailLanguage";
 import { generateInvoicePDF, renderInvoicePDF, type InvoiceData } from "./invoice";
 import { allocateAppointmentInvoice, findAppointmentInvoices, type AppointmentInvoiceRecord } from "./invoiceNumbering";
-import { runWithProcessingDeadline } from "./processingDeadline";
+import { deadlineCutShort, runWithProcessingDeadline } from "./processingDeadline";
 
 const MAX_BATCH = 5;
 /** Well above the 60 s function limit: a job still "running" after this was interrupted. */
@@ -65,12 +65,15 @@ async function waitForFulfillmentTurn(): Promise<(claimed: boolean) => void> {
 
 /**
  * Immediate processing (Stripe webhook, payment status page) has a time
- * budget. A job may wait for Resend (its retry-after, the short backoff) only
- * until that budget minus this reserve for each job still to come: past it,
- * the job goes to its scheduled retry. The owner notification, sent first, can
- * no longer use up the time of the patient's confirmation and invoice, and
- * when all goes well it still goes out first. The reserve covers the pause
- * before a job and one send. Mutable for tests.
+ * budget. A job's first wait for Resend (a retry-after, a short backoff) may
+ * last until the end of that budget, so a passing rate limit is still retried
+ * at once; the next ones only until the budget minus this reserve for each job
+ * still to come. A job that would wait longer goes back to the queue, due,
+ * without counting the attempt (see runJob). The owner notification, sent
+ * first, can no longer use up the time of the patient's confirmation and
+ * invoice under a lasting rate limit, and when all goes well it still goes
+ * out first. The reserve covers the pause before a job and one send. Mutable
+ * for tests.
  */
 export const immediateFulfillmentBudget = { reservePerJobMs: 800 };
 
@@ -318,6 +321,16 @@ async function runJob(id: number) {
     await db.update(appointmentFulfillmentJobs).set({ status: "completed", finishedAt: new Date(), lastError: null }).where(eq(appointmentFulfillmentJobs.id, id));
     return { completed: true };
   } catch (error) {
+    if (deadlineCutShort()) {
+      // Sent right after a payment, the job ran out of its time budget before
+      // its own retries (ABUS-03): neither the email nor the provider failed
+      // for good. It goes back to the queue as it was, due, without counting
+      // this attempt nor alerting the owner, for the next processing (another
+      // webhook, the scheduled run).
+      await db.update(appointmentFulfillmentJobs).set({ status: job.attempts > 1 ? "retry" : "queued", attempts: job.attempts - 1, startedAt: null }).where(eq(appointmentFulfillmentJobs.id, id));
+      console.warn("[AppointmentFulfillment] Immediate processing out of time; job left for the next run", { trackingId: appointment.trackingId, jobType });
+      return { completed: false, retry: true, deadlineReached: true };
+    }
     const message = error instanceof Error ? error.message.slice(0, 4000) : "fulfillment_unknown_error";
     const terminal = job.attempts >= job.maxAttempts;
     await db.update(appointmentFulfillmentJobs).set({ status: terminal ? "failed" : "retry", lastError: message, scheduledFor: retryAt(job.attempts), finishedAt: terminal ? new Date() : null }).where(eq(appointmentFulfillmentJobs.id, id));
@@ -377,7 +390,7 @@ export async function processDueAppointmentFulfillmentJobs(limit = MAX_BATCH, op
       const { deadlineAt } = options;
       results.push(await (deadlineAt === undefined
         ? runJob(job.id)
-        : runWithProcessingDeadline(deadlineAt - (jobs.length - 1 - index) * immediateFulfillmentBudget.reservePerJobMs, () => runJob(job.id))));
+        : runWithProcessingDeadline(deadlineAt - (jobs.length - 1 - index) * immediateFulfillmentBudget.reservePerJobMs, () => runJob(job.id), Date.now, { firstPauseDeadlineAt: deadlineAt })));
     } finally {
       lastJobRunAt = Date.now();
     }

@@ -1,4 +1,4 @@
-import { waitFitsDeadline } from "../processingDeadline";
+import { pauseWithinDeadline, waitFitsDeadline } from "../processingDeadline";
 
 /**
  * How the app reads a Resend refusal (ABUS-03), shared by the emails of
@@ -53,8 +53,6 @@ export function resendRetryAfterMs(headers: Record<string, string> | null | unde
   return delayMs <= resendRateLimitRetry.maxDelayMs && waitFitsDeadline(delayMs) ? delayMs : null;
 }
 
-const wait = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
-
 /**
  * One Resend send, made once more after the retry-after delay when Resend
  * answers with its rate limit and that delay is short enough for a request.
@@ -65,7 +63,7 @@ export async function sendWithRateLimitRetry<T extends { error: ResendError | nu
   if (!response.error || resendDeliveryFailureCode(response.error) !== "rate_limited") return response;
   const retryAfterMs = resendRetryAfterMs(response.headers);
   if (retryAfterMs === null) return response;
-  await wait(retryAfterMs);
+  await pauseWithinDeadline(retryAfterMs);
   return send();
 }
 

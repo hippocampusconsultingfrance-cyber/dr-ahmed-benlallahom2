@@ -1,6 +1,6 @@
 import type { SQL } from "drizzle-orm";
 import { PgDialect } from "drizzle-orm/pg-core";
-import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { appointmentFulfillmentJobs, appointments } from "../drizzle/schema";
 
 const dialect = new PgDialect();
@@ -21,12 +21,15 @@ const resend = vi.hoisted(() => {
     // Limite de débit persistante pour ces adresses, avec ce retry-after (secondes).
     rateLimitedFor: new Set<string>(),
     retryAfterSeconds: "1",
+    // Durée simulée de chaque appel à Resend (ms) ; l’envoi est noté à sa fin.
+    latencyMs: 0,
   };
 });
 vi.mock("resend", () => ({
   Resend: vi.fn().mockImplementation(() => ({
     emails: {
       send: vi.fn(async (message: Record<string, unknown>, options?: { idempotencyKey?: string }) => {
+        if (resend.latencyMs > 0) await new Promise(resolve => setTimeout(resolve, resend.latencyMs));
         resend.calls.push({ message, options, at: Date.now() });
         const to = (message.to as string[])[0];
         const outcome = resend.failFor.has(to) ? "5xx" : resend.rateLimitedFor.has(to) ? "429" : resend.script.shift() ?? "ok";
@@ -39,7 +42,8 @@ vi.mock("resend", () => ({
     },
   })),
 }));
-const database = vi.hoisted(() => ({ getDb: vi.fn() }));
+// latencyMs : durée simulée de chaque requête en base.
+const database = vi.hoisted(() => ({ getDb: vi.fn(), latencyMs: 0 }));
 vi.mock("./db", () => ({ getDb: database.getDb }));
 vi.mock("./storage.js", () => ({ storagePutOnce: vi.fn(async (key: string) => ({ key, url: "https://storage.test/invoice.pdf", uploaded: true })) }));
 vi.mock("./invoiceNumbering", () => ({
@@ -53,6 +57,8 @@ vi.mock("./invoiceNumbering", () => ({
 import { appointmentFulfillmentPacing, enqueueAppointmentFulfillment, immediateFulfillmentBudget, processDueAppointmentFulfillmentJobs } from "./appointmentFulfillment";
 import { postPaymentDeliveryRetry, sendConfirmationEmail, sendOwnerNotificationEmail } from "./_core/notifications";
 import * as notificationsModule from "./_core/notifications";
+import { processFulfillmentBestEffort } from "./appointmentPaymentWebhook";
+import { paymentStatusPageFulfillment } from "./appointmentPublicStatus";
 import { drainInBatches } from "./scheduledJobs";
 
 type Job = { id: number; appointmentId: number; jobType: string; status: string; attempts: number; maxAttempts: number; scheduledFor: Date; createdAt?: Date };
@@ -84,12 +90,14 @@ function appointmentRow(overrides: Record<string, unknown> = {}) {
  */
 function memoryDatabase(initialJobs: Job[], appointment = appointmentRow()) {
   const jobs = initialJobs.map(row => ({ ...row }));
+  const latency = () => new Promise(resolve => setTimeout(resolve, database.latencyMs));
   const inserts: Array<{ jobType: string; conflict: string }> = [];
   let nextId = 100;
   const db = {
     insert: vi.fn(() => ({
       values: (values: Job) => {
         const store = async (conflict: string) => {
+          if (database.latencyMs > 0) await latency();
           inserts.push({ jobType: values.jobType, conflict });
           if (!jobs.some(row => row.appointmentId === values.appointmentId && row.jobType === values.jobType)) {
             jobs.push({ ...values, id: nextId++, createdAt: new Date() });
@@ -107,6 +115,7 @@ function memoryDatabase(initialJobs: Job[], appointment = appointmentRow()) {
           where: (clause: SQL) => { where = clause; return chain; },
           orderBy: () => { ordered = true; return chain; },
           limit: async (count: number) => {
+            if (database.latencyMs > 0) await latency();
             if (table === appointments) return [appointment];
             if (ordered) {
               return jobs
@@ -125,6 +134,7 @@ function memoryDatabase(initialJobs: Job[], appointment = appointmentRow()) {
     update: vi.fn((table: unknown) => ({
       set: (values: Record<string, unknown>) => ({
         where: async (clause: SQL) => {
+          if (database.latencyMs > 0) await latency();
           if (table !== appointmentFulfillmentJobs) return { rowCount: 1 };
           const id = dialect.sqlToQuery(clause).params[0];
           const target = jobs.find(row => row.id === id);
@@ -147,7 +157,10 @@ const subjects = () => resend.calls.map(call => String(call.message.subject));
 
 afterAll(() => vi.unstubAllEnvs());
 
+// Valeurs de production, avant que les tests ne les réduisent.
 const IMMEDIATE_RESERVE_PER_JOB_MS = immediateFulfillmentBudget.reservePerJobMs;
+const PACING_DELAY_MS = appointmentFulfillmentPacing.delayMs;
+const SHORT_RETRY_DELAYS_MS = [...postPaymentDeliveryRetry.delaysMs];
 
 beforeEach(() => {
   resend.calls.length = 0;
@@ -155,6 +168,8 @@ beforeEach(() => {
   resend.failFor.clear();
   resend.rateLimitedFor.clear();
   resend.retryAfterSeconds = "1";
+  resend.latencyMs = 0;
+  database.latencyMs = 0;
   postPaymentDeliveryRetry.delaysMs = [0, 0];
   appointmentFulfillmentPacing.delayMs = 0;
   immediateFulfillmentBudget.reservePerJobMs = IMMEDIATE_RESERVE_PER_JOB_MS;
@@ -299,21 +314,41 @@ describe("envoi immédiat après paiement : la notification au médecin ne retie
     immediateFulfillmentBudget.reservePerJobMs = 200;
   });
 
-  it("sous une limite de débit persistante, met la notification en nouvel essai planifié et envoie confirmation et facture dans le budget", async () => {
+  it("sous une limite de débit persistante, rend la notification à la file et envoie confirmation et facture dans le budget", async () => {
     resend.rateLimitedFor.add("owner@example.test");
     const { jobs } = memoryDatabase([job(1, "owner"), job(2, "confirmation"), job(3, "invoice")]);
 
     const startedAt = Date.now();
     await processDueAppointmentFulfillmentJobs(5, { deadlineAt: startedAt + BUDGET_MS });
 
-    // La notification n’attend que jusqu’à sa part du budget, puis repart plus tard.
-    expect(jobs.find(row => row.jobType === "owner")).toMatchObject({ status: "retry", attempts: 1 });
+    // La notification n’attend que jusqu’à sa part du budget, puis retourne à
+    // la file telle quelle, due, sans que cet essai coupé compte.
+    const owner = jobs.find(row => row.jobType === "owner")!;
+    expect(owner).toMatchObject({ status: "queued", attempts: 0 });
+    expect(owner.scheduledFor.getTime()).toBeLessThanOrEqual(Date.now());
     expect(ownerSends().length).toBeLessThan(6);
     expect(ownerSends().every(call => call.at - startedAt <= BUDGET_MS - 2 * 200)).toBe(true);
     // Le patient reçoit sa confirmation et sa facture avant la fin du budget immédiat.
     expect(jobs.filter(row => row.jobType !== "owner").map(row => row.status)).toEqual(["completed", "completed"]);
     expect(sentAt("Confirmation de réservation")! - startedAt).toBeLessThan(BUDGET_MS);
     expect(sentAt("Facture")! - startedAt).toBeLessThan(BUDGET_MS);
+  });
+
+  it("sous une limite persistante pour l’adresse du patient, rend confirmation et facture à la file sans alerter le médecin ; le passage suivant les envoie en comptant un seul essai", async () => {
+    resend.rateLimitedFor.add("patient@example.test");
+    const { jobs } = memoryDatabase([job(1, "owner"), job(2, "confirmation"), job(3, "invoice")]);
+
+    await processDueAppointmentFulfillmentJobs(5, { deadlineAt: Date.now() + BUDGET_MS });
+
+    expect(jobs.map(row => [row.jobType, row.status, row.attempts])).toEqual([["owner", "completed", 1], ["confirmation", "queued", 0], ["invoice", "queued", 0]]);
+    expect(jobs.filter(row => row.jobType !== "owner").every(row => (row as Job & { startedAt?: Date | null }).startedAt === null)).toBe(true);
+    // Le temps a manqué, l’envoi n’a pas échoué : pas d’alerte « Échec d’envoi ».
+    expect(ownerSends().map(call => String(call.message.subject).split(" ")[0])).toEqual(["Nouvelle"]);
+
+    resend.rateLimitedFor.clear();
+    await processDueAppointmentFulfillmentJobs();
+
+    expect(jobs.map(row => [row.jobType, row.status, row.attempts])).toEqual([["owner", "completed", 1], ["confirmation", "completed", 1], ["invoice", "completed", 1]]);
   });
 
   it("sans échéance (passage planifié, « Renvoyer »), la notification garde tous ses essais avant les envois suivants", async () => {
@@ -336,5 +371,53 @@ describe("envoi immédiat après paiement : la notification au médecin ne retie
     expect(subjects().map(subject => subject.split(" ")[0])).toEqual(["Nouvelle", "Nouvelle", "Confirmation", "Facture"]);
     expect(resend.calls[1].at - resend.calls[0].at).toBeGreaterThanOrEqual(295);
     expect(jobs.map(row => row.status)).toEqual(["completed", "completed", "completed"]);
+  });
+});
+
+describe("page de statut aux valeurs de production : un 429 passager garde son nouvel essai dans le budget (ABUS-03, EXPL-01)", () => {
+  // Budget de 3 s de la page, pause de 600 ms, réserve de 800 ms, essais courts
+  // à 0,5 puis 1,5 s, retry-after de 1 s ; 250 ms par appel à Resend et 50 ms
+  // par requête en base, sur une horloge simulée.
+  let simulatedClockEnd = 0;
+
+  beforeEach(() => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    appointmentFulfillmentPacing.delayMs = PACING_DELAY_MS;
+    postPaymentDeliveryRetry.delaysMs = [...SHORT_RETRY_DELAYS_MS];
+    resend.latencyMs = 250;
+    database.latencyMs = 50;
+    // Instance au repos : son dernier envoi date de plus d’une pause, horloge
+    // simulée d’un test précédent comprise.
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"], now: Math.max(Date.now(), simulatedClockEnd) + 10_000 });
+  });
+
+  afterEach(async () => {
+    // Lets a processing a failed test left midway end before the next test.
+    await vi.runAllTimersAsync();
+    simulatedClockEnd = Date.now();
+    vi.useRealTimers();
+  });
+
+  it.each([
+    ["la notification au médecin", ["429"], "Nouvelle réservation payée"],
+    ["la confirmation au patient", ["ok", "429"], "Confirmation de réservation"],
+  ])("un seul 429 sur %s : nouvel essai après le retry-after, médecin et patient prévenus pendant l’attente de la page, facture juste après, sans nouvel essai planifié ni alerte", async (_target, script, retriedSubject) => {
+    resend.script.push(...script);
+    const { jobs } = memoryDatabase([job(1, "owner"), job(2, "confirmation"), job(3, "invoice")]);
+
+    const page = processFulfillmentBestEffort(42, paymentStatusPageFulfillment.timeoutMs);
+    await vi.advanceTimersByTimeAsync(paymentStatusPageFulfillment.timeoutMs);
+    await page;
+
+    // Pendant les 3 s d’attente de la page : la notification et la confirmation.
+    expect(jobs.slice(0, 2).map(row => [row.jobType, row.status])).toEqual([["owner", "completed"], ["confirmation", "completed"]]);
+    const retried = resend.calls.filter(call => String(call.message.subject).startsWith(retriedSubject));
+    expect(retried).toHaveLength(2);
+    expect(retried[1].at - retried[0].at).toBeGreaterThanOrEqual(1_000);
+    // La facture suit dans le même traitement.
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(jobs.map(row => [row.jobType, row.status, row.attempts])).toEqual([["owner", "completed", 1], ["confirmation", "completed", 1], ["invoice", "completed", 1]]);
+    expect(subjects().some(subject => subject.startsWith("Échec d’envoi"))).toBe(false);
   });
 });
