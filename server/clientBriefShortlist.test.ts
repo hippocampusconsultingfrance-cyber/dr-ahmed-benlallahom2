@@ -63,8 +63,9 @@ function seedBrief(extra: Record<string, unknown> = {}) {
 }
 
 describe("missions employeurs : classement, certifications et accord du candidat", () => {
+  const missionTables = [cvApplications, cvCandidateCertifications, cvCandidateLanguages, cvCandidateExperiences, clientBriefs, clientBriefCandidates, recruitmentAuditLogs, recruitmentCampaigns, recruitmentCampaignRecipients, recruitmentFollowUpTasks, candidateAccounts, cvGoogleDriveExportJobs, recruitmentEmailEvents];
   beforeEach(() => {
-    memory = createMemoryPg([cvApplications, cvCandidateCertifications, cvCandidateLanguages, cvCandidateExperiences, clientBriefs, clientBriefCandidates, recruitmentAuditLogs, recruitmentCampaigns, recruitmentCampaignRecipients, recruitmentFollowUpTasks, candidateAccounts, cvGoogleDriveExportJobs, recruitmentEmailEvents]);
+    memory = createMemoryPg(missionTables);
     state.memory = memory;
     seeded = 0;
   });
@@ -173,6 +174,23 @@ describe("missions employeurs : classement, certifications et accord du candidat
     await admin().admin.clientBriefs.associateCandidate({ ...pair, status: "declined" });
     expect(memory.rows(clientBriefCandidates)).toEqual([expect.objectContaining({ association_status: "declined", match_score: 80, notes: "Profil solide" })]);
     expect((await admin().admin.clientBriefs.candidates({ briefId: pair.briefId })).shortlistedCount).toBe(0);
+  });
+
+  it("associe encore un candidat à une mission tant que 0004 n’est pas appliquée, sur la copie modifiée en dernier (DATA-01)", async () => {
+    // A database 0004 has not reached: the upsert has no index (42P10).
+    memory = createMemoryPg(missionTables, { missingIndexes: ["client_brief_candidates_pair_unique"] });
+    state.memory = memory;
+    const candidate = seedCandidate();
+    const brief = seedBrief();
+    const pair = { briefId: brief.id as number, applicationId: candidate.id as number };
+    await expect(admin().admin.clientBriefs.associateCandidate({ ...pair, status: "shortlisted", matchScore: 80, notes: "Profil solide" })).resolves.toEqual({ success: true });
+    await admin().admin.clientBriefs.associateCandidate({ ...pair, status: "reviewing" });
+    expect(memory.rows(clientBriefCandidates)).toEqual([expect.objectContaining({ association_status: "reviewing", match_score: 80, notes: "Profil solide" })]);
+
+    // A copy left by an earlier race, updated since: the decision goes to it.
+    const [copy] = memory.seed(clientBriefCandidates, [{ brief_id: pair.briefId, application_id: pair.applicationId, association_status: "shortlisted", updated_at: new Date(Date.now() + 60_000) }]);
+    await admin().admin.clientBriefs.associateCandidate({ ...pair, status: "declined" });
+    expect(memory.rows(clientBriefCandidates).map(row => [row.id, row.association_status])).toEqual([[1, "reviewing"], [copy!.id, "declined"]]);
   });
 
   it("une licence lue seulement dans le CV reste « à confirmer » jusqu’à ce que l’admin la confirme, déclarée ou extraite (IA-02)", async () => {
