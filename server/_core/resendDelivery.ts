@@ -14,7 +14,9 @@
  *   retry-after delay;
  * - quota: the daily or monthly quota of the plan is used up; nothing leaves
  *   until it resets, so no immediate retry, and a high-severity security event;
- * - provider_rejected: this very message is refused (address, content).
+ * - provider_rejected: this very message is refused (address, content), or
+ *   the sending configuration (API key, sender); resendRefusedThisMessage
+ *   tells them apart.
  */
 export type ResendDeliveryFailureCode = "provider_rejected" | "delivery_exception" | "rate_limited" | "quota";
 
@@ -33,6 +35,23 @@ export function resendDeliveryFailureCode(error: ResendError): ResendDeliveryFai
     || providerErrorName === "concurrent_idempotent_requests"
     ? "delivery_exception"
     : "provider_rejected";
+}
+
+// The sending configuration, not one message: refused for every email until corrected.
+const RESEND_CONFIGURATION_ERRORS = new Set(["missing_api_key", "invalid_api_key", "restricted_api_key", "invalid_from_address"]);
+
+/**
+ * Whether a provider_rejected refusal is about this very message (an address
+ * or a field of it: 400 or 422), so that sending it again later changes
+ * nothing (EXPL-02). A refusal of the sending configuration (API key, sender
+ * address, sender domain not verified: 401, 403 or invalid_from_address)
+ * passes once the configuration is corrected, so it is not one.
+ */
+export function resendRefusedThisMessage(error: ResendError): boolean {
+  if (resendDeliveryFailureCode(error) !== "provider_rejected") return false;
+  const providerErrorName = typeof error.name === "string" ? error.name : null;
+  return (error.statusCode === 400 || error.statusCode === 422)
+    && !(providerErrorName && RESEND_CONFIGURATION_ERRORS.has(providerErrorName));
 }
 
 /**

@@ -7,7 +7,9 @@ import type { TrpcContext } from "./_core/context";
 // EXPL-02 et RES-06 — un email refusé par le service d’envoi (adresse du
 // patient refusée, 422) termine son envoi tout de suite, comme « refusé », au
 // lieu d’être réessayé 7 fois ; l’écran, « À traiter » et les alertes au
-// médecin le disent. Le remboursement fait depuis le tableau de bord passe par
+// médecin le disent. Un refus de la configuration d’envoi (clé API, domaine
+// d’expédition) bloque tous les emails jusqu’à sa correction : il garde ses
+// essais automatiques. Le remboursement fait depuis le tableau de bord passe par
 // la même file que celui fait dans Stripe. Vraies procédures, vraie file et
 // vrais emails ; seuls Resend (transport) et les alertes au médecin sont simulés.
 
@@ -16,6 +18,8 @@ const resend = vi.hoisted(() => ({
   // Adresses refusées par Resend (422) ou injoignables (503).
   rejected: new Set<string>(),
   down: new Set<string>(),
+  // Configuration d’envoi refusée (clé API, domaine) : tous les emails.
+  configuration: null as null | { name: string; statusCode: number },
 }));
 vi.mock("resend", () => ({
   Resend: vi.fn().mockImplementation(() => ({
@@ -23,6 +27,7 @@ vi.mock("resend", () => ({
       send: vi.fn(async (message: Record<string, unknown>, options?: { idempotencyKey?: string }) => {
         resend.calls.push({ message, options });
         const to = (message.to as string[])[0]!;
+        if (resend.configuration) return { data: null, error: { ...resend.configuration, message: "Sending configuration refused." } };
         if (resend.rejected.has(to)) return { data: null, error: { name: "validation_error", statusCode: 422, message: "Invalid `to` field." } };
         if (resend.down.has(to)) return { data: null, error: { name: "internal_server_error", statusCode: 503, message: "unavailable" } };
         return { data: { id: `email_${resend.calls.length}` }, error: null };
@@ -34,7 +39,8 @@ const state = vi.hoisted(() => ({ memory: null as null | { db: unknown } }));
 vi.mock("./db", () => ({ getDb: async () => state.memory?.db ?? null }));
 vi.mock("./adminMfa", async importOriginal => ({ ...await importOriginal<typeof import("./adminMfa")>(), isAdminMfaVerified: vi.fn(async () => true) }));
 const owner = vi.hoisted(() => ({ notifyOwner: vi.fn(async (_payload: { title: string; content: string }, _options?: { idempotencyKey?: string }) => true) }));
-vi.mock("./_core/notification", () => owner);
+// The owner's booking notification is built for real, sent through the faked transport.
+vi.mock("./_core/notification", async importOriginal => ({ ...await importOriginal<typeof import("./_core/notification")>(), notifyOwner: owner.notifyOwner }));
 
 import { appRouter } from "./routers";
 import { postPaymentDeliveryRetry } from "./_core/notifications";
@@ -97,6 +103,7 @@ beforeEach(() => {
   resend.calls.length = 0;
   resend.rejected.clear();
   resend.down.clear();
+  resend.configuration = null;
   owner.notifyOwner.mockClear();
   postPaymentDeliveryRetry.delaysMs = [0, 0];
   appointmentFulfillmentPacing.delayMs = 0;
@@ -147,7 +154,7 @@ describe("EXPL-02 — un refus du service d’envoi termine l’envoi tout de su
     await expect(processDueAppointmentFulfillmentJobs()).resolves.toMatchObject({ processed: 0 });
     expect(emailsTo("aptrefuse001@example.test")).toHaveLength(1);
 
-    // Address (or sending configuration) corrected: « Renvoyer » sends it.
+    // Address corrected: « Renvoyer » sends it.
     resend.rejected.clear();
     const retry = await admin().appointments.retryFulfillment({ trackingId: "APTREFUSE001" });
     expect(retry.requeuedJobTypes).toEqual(["confirmation"]);
@@ -167,6 +174,42 @@ describe("EXPL-02 — un refus du service d’envoi termine l’envoi tout de su
     expect(job(id, "confirmation")).toMatchObject({ status: "retry", attempts: 1 });
     expect((await deliveriesOf("APTREFUSE002"))[1]).toMatchObject({ jobType: "confirmation", state: "retrying", attempts: 1, maxAttempts: 7 });
     expect(alerts()[0].content).toContain("tentative 1 sur 7");
+  });
+
+  it.each([
+    ["clé API absente", { name: "missing_api_key", statusCode: 401 }],
+    ["clé API restreinte", { name: "restricted_api_key", statusCode: 401 }],
+    ["clé API invalide", { name: "invalid_api_key", statusCode: 403 }],
+    ["domaine d’expédition non vérifié", { name: "validation_error", statusCode: 403 }],
+    ["adresse d’expédition refusée", { name: "invalid_from_address", statusCode: 422 }],
+  ] as const)("garde les essais automatiques pour une configuration d’envoi refusée (%s), et tout repart une fois corrigée", async (_case, refusal) => {
+    const { id } = seedAppointment("APTREFUSE004");
+    seedJob(id, "owner");
+    seedJob(id, "confirmation");
+    resend.configuration = refusal;
+
+    await processAppointmentFulfillmentNow(id);
+
+    // The practitioner's booking notification and the patient's confirmation
+    // both wait for their next automatic attempt; nothing is « refusée ».
+    expect(job(id, "owner")).toMatchObject({ status: "retry", attempts: 1 });
+    expect(job(id, "confirmation")).toMatchObject({ status: "retry", attempts: 1 });
+    expect((await deliveriesOf("APTREFUSE004")).map(({ jobType, state }) => [jobType, state])).toEqual([["owner", "retrying"], ["confirmation", "retrying"]]);
+    const attention = await admin().attention();
+    expect(attention.refusedDeliveries.total).toBe(0);
+    expect(attention.retryingDeliveries.items).toEqual([expect.objectContaining({ trackingId: "APTREFUSE004", jobTypes: ["owner", "confirmation"] })]);
+    expect(alerts()).toHaveLength(1);
+    expect(alerts()[0].content).toContain("tentative 1 sur 7");
+    expect(alerts()[0].key).toBe("appointment-confirmation-failure-APTREFUSE004-first");
+
+    // Configuration corrected: the next scheduled run sends both, with no « Renvoyer ».
+    resend.configuration = null;
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(Math.max(...["owner", "confirmation"].map(jobType => new Date(`${job(id, jobType).scheduled_for}Z`).getTime()))));
+    await processDueAppointmentFulfillmentJobs();
+    expect(job(id, "owner")).toMatchObject({ status: "completed", attempts: 2, last_error: null });
+    expect(job(id, "confirmation")).toMatchObject({ status: "completed", attempts: 2, last_error: null });
+    expect(emailsTo("aptrefuse004@example.test")).toHaveLength(2);
   });
 });
 
@@ -254,5 +297,14 @@ describe("EXPL-02 — remboursement depuis le tableau de bord par la file des re
       .resolves.toMatchObject({ success: true, patientNotified: false, patientEmail: "refused" });
     expect(emailsTo("aptrefund012@example.test")).toHaveLength(1);
     expect(job(id, "refund")).toMatchObject({ status: "failed", attempts: 1 });
+  });
+
+  it("clé API refusée : l’email attend son nouvel essai automatique, il n’est pas « refusé »", async () => {
+    const { id } = seedAppointment("APTREFUND013");
+    resend.configuration = { name: "invalid_api_key", statusCode: 403 };
+
+    await expect(refundAppointmentPayment(stripe, { trackingId: "APTREFUND013", initiator: "practitioner", reason: "Indisponibilité du médecin" }))
+      .resolves.toMatchObject({ success: true, patientNotified: false, patientEmail: "retrying" });
+    expect(job(id, "refund")).toMatchObject({ status: "retry", attempts: 1, max_attempts: 7 });
   });
 });

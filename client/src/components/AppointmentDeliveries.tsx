@@ -66,8 +66,8 @@ export function deliveryLabel(delivery: AppointmentDeliveryView): string {
 
 /**
  * « Renvoyer » has something to send now: a job of a paid appointment failed,
- * was refused by the email service (sent again once the address or the
- * configuration is corrected), was interrupted, or still waits for an attempt
+ * was refused by the email service (sent again once the address is
+ * corrected), was interrupted, or still waits for an attempt
  * (not one being sent). Once the appointment is refunded, only the notices of
  * that refund (RES-06); the server refuses the other payment statuses.
  */
@@ -87,7 +87,7 @@ export function canRetryDeliveries(deliveries: AppointmentDeliveryView[], paymen
 export function retryOutcome(result: { requeuedJobTypes: AppointmentDeliveryJob[]; deliveries: AppointmentDeliveryView[] }): { tone: "success" | "info" | "warning"; message: string } {
   const deliveries = result.deliveries.filter(delivery => result.requeuedJobTypes.includes(delivery.jobType));
   if (deliveries.some(delivery => delivery.state === "refused")) {
-    return { tone: "warning", message: "Le service d’envoi refuse de nouveau l’email (adresse du patient refusée ou invalide, ou configuration de l’envoi) : ce refus n’est pas passager, aucun nouvel essai automatique n’aura lieu. Vérifiez l’adresse et prévenez le patient directement." };
+    return { tone: "warning", message: "Le service d’envoi refuse de nouveau l’email (adresse du patient refusée ou invalide, ou contenu de l’email refusé) : ce refus n’est pas passager, aucun nouvel essai automatique n’aura lieu. Vérifiez l’adresse et prévenez le patient directement." };
   }
   if (!deliveries.every(delivery => delivery.state === "sent" || delivery.state === "not_sent")) {
     return { tone: "warning", message: "Certains envois ont de nouveau échoué ; un nouvel essai automatique est prévu. Vérifiez le service d’envoi d’emails (Resend) ou prévenez le patient directement." };
@@ -169,7 +169,7 @@ export default function AppointmentDeliveries({ trackingId, paymentStatus, deliv
  * Checkout session, email that could not be queued).
  */
 export function refundEmailWarning(patientEmail: AppointmentDeliveryState | null | undefined): string {
-  if (patientEmail === "refused") return "L’email de remboursement au patient a été refusé par le service d’envoi (adresse refusée ou invalide, ou configuration de l’envoi) : ce refus n’est pas passager, prévenez le patient directement. Une fois l’adresse ou la configuration corrigée, « Renvoyer » sur le rendez-vous le renvoie.";
+  if (patientEmail === "refused") return "L’email de remboursement au patient a été refusé par le service d’envoi (adresse refusée ou invalide, ou contenu de l’email refusé) : ce refus n’est pas passager, prévenez le patient directement. Une fois l’adresse corrigée, « Renvoyer » sur le rendez-vous le renvoie.";
   if (patientEmail === "retrying" || patientEmail === "pending" || patientEmail === "sending" || patientEmail === "interrupted") {
     return "L’email de remboursement au patient n’est pas encore parti : un nouvel essai automatique est prévu (état sur le rendez-vous et dans « À traiter »). Vous pouvez aussi prévenir le patient directement.";
   }

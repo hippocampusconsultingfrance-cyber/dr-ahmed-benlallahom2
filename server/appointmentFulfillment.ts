@@ -3,7 +3,7 @@ import { appointmentFulfillmentJobs, appointments } from "../drizzle/schema";
 import { getDb } from "./db";
 import { mutationRowCount } from "./dbMutation";
 import {
-  postPaymentEmailFailureCode,
+  postPaymentEmailRefused,
   sendConfirmationEmail,
   sendCustomerConfirmationSMS,
   sendInvoiceEmail,
@@ -327,11 +327,12 @@ async function runJob(id: number) {
     return { completed: true };
   } catch (error) {
     const message = error instanceof Error ? error.message.slice(0, 4000) : "fulfillment_unknown_error";
-    // A refusal of this very email (address, content, sending configuration)
-    // does not pass with time (EXPL-02): the job ends now, as refused, instead
-    // of failing again at each automatic attempt; « Renvoyer » sends it again
-    // once the address or the configuration is corrected.
-    const refused = postPaymentEmailFailureCode(error) === "provider_rejected";
+    // A refusal of this very email (address, content) does not pass with
+    // time (EXPL-02): the job ends now, as refused, instead of failing again
+    // at each automatic attempt; « Renvoyer » sends it again once the address
+    // is corrected. A refused sending configuration (API key, sender domain)
+    // stops every email until it is corrected: it keeps its automatic attempts.
+    const refused = postPaymentEmailRefused(error);
     const terminal = refused || job.attempts >= job.maxAttempts;
     await db.update(appointmentFulfillmentJobs).set({ status: terminal ? "failed" : "retry", lastError: refused ? `${PROVIDER_REJECTED_ERROR}${message}` : message, scheduledFor: retryAt(job.attempts), finishedAt: terminal ? new Date() : null }).where(eq(appointmentFulfillmentJobs.id, id));
     if (jobType === "owner" || jobType === "refund_owner") {
@@ -345,7 +346,7 @@ async function runJob(id: number) {
       await notifyOwner({
         title: `Échec d’envoi après ${isRefundNoticeJob(jobType) ? "remboursement" : "paiement"} (${appointment.trackingId})`,
         content: refused
-          ? `L’envoi ${JOB_LABELS[jobType]} du rendez-vous ${appointment.trackingId} a été refusé par le service d’envoi (adresse email du patient refusée ou invalide, ou configuration de l’envoi). ${recorded}. Ce refus n’est pas passager : vérifiez l’adresse du patient et contactez-le directement. Le site ne le renverra pas de lui-même : une fois l’adresse ou la configuration corrigée, « Renvoyer » sur le rendez-vous (onglet Réservations) le renvoie. ${patientContact(appointment)}`
+          ? `L’envoi ${JOB_LABELS[jobType]} du rendez-vous ${appointment.trackingId} a été refusé par le service d’envoi (adresse email du patient refusée ou invalide, ou contenu de l’email refusé). ${recorded}. Ce refus n’est pas passager : vérifiez l’adresse du patient et contactez-le directement. Le site ne le renverra pas de lui-même : une fois l’adresse corrigée, « Renvoyer » sur le rendez-vous (onglet Réservations) le renvoie. ${patientContact(appointment)}`
           : terminal
             ? `L’envoi ${JOB_LABELS[jobType]} du rendez-vous ${appointment.trackingId} a échoué ${job.attempts} fois. ${recorded} ; un envoi manuel au patient est nécessaire. ${patientContact(appointment)}`
             : `L’envoi ${JOB_LABELS[jobType]} du rendez-vous ${appointment.trackingId} vient d’échouer (tentative ${job.attempts} sur ${job.maxAttempts}). ${recorded}. Un nouvel essai automatique aura lieu lors de la prochaine exécution planifiée ; en attendant, vous pouvez contacter le patient. ${patientContact(appointment)}`,
@@ -439,8 +440,8 @@ export async function recoverStaleAppointmentFulfillmentJobs(staleAfterMs = APPO
 
 /**
  * What the dashboard shows for a job (EXPL-02): sent; failed for good;
- * refused by the email service (address, sending configuration), with no new
- * automatic attempt; failed and waiting for its next automatic attempt; not
+ * refused by the email service (address, content), with no new automatic
+ * attempt; failed and waiting for its next automatic attempt; not
  * attempted yet; being sent right now; interrupted (still "running" long after
  * its worker stopped); or deliberately not sent (consultation already past,
  * appointment no longer paid).
@@ -578,7 +579,7 @@ export async function closeUnsentAppointmentFulfillment(appointmentId: number, n
  * the « À traiter » panel reads them from the database, not from an alert
  * email sent through the very channel that failed (EXPL-02). « failed »: the
  * attempts ran out. « refused »: the email service refused the email
- * (address, sending configuration), with no new automatic attempt.
+ * (address, content), with no new automatic attempt.
  * « retrying »: an attempt failed (or was interrupted) and the next automatic
  * one may only come with the next scheduled run, days before the attempts run
  * out. Refunded appointments too, for the notices of their refund (RES-06).

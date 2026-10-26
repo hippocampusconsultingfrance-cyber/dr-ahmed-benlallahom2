@@ -313,7 +313,8 @@ export const STRIPE_UNCONFIRMED_REFUND_CANCELLATION_REASON = "Remboursement cons
 /**
  * The payment that a refund recorded from Stripe's notification was for: a
  * paid appointment, or a payment never attached to a confirmed slot. Null for
- * a refund made from the dashboard, which emails the patient itself.
+ * a refund made from the dashboard, whose patient email the refund job reads
+ * from dashboardRefundEmailOf (EXPL-02).
  */
 export function stripeRecordedRefundOf(appointment: Pick<Appointment, "paymentStatus" | "cancellationReason">): "paid" | "unconfirmed" | null {
   if (appointment.paymentStatus !== "refunded") return null;
@@ -351,7 +352,7 @@ export function buildStripeRefundAlert(input: {
       input.patientEmail === "sent"
         ? "Le patient a été prévenu du remboursement par email."
         : input.patientEmail === "refused"
-          ? "L’email de remboursement au patient a été refusé par le service d’envoi (adresse email du patient refusée ou invalide, ou configuration de l’envoi). Ce refus n’est pas passager et le site ne le renverra pas de lui-même : prévenez le patient directement ; une fois l’adresse ou la configuration corrigée, « Renvoyer » sur le rendez-vous (onglet Réservations) le renvoie."
+          ? "L’email de remboursement au patient a été refusé par le service d’envoi (adresse email du patient refusée ou invalide, ou contenu de l’email refusé). Ce refus n’est pas passager et le site ne le renverra pas de lui-même : prévenez le patient directement ; une fois l’adresse corrigée, « Renvoyer » sur le rendez-vous (onglet Réservations) le renvoie."
           : "L’email de remboursement au patient n’est pas encore parti : le site le renvoie automatiquement (état visible sur le rendez-vous, onglet Réservations, et dans « À traiter »). Vous pouvez aussi prévenir le patient directement.",
       `Référence : ${input.trackingId}`,
       `Paiement Stripe (PaymentIntent) : ${input.paymentIntentId}`,

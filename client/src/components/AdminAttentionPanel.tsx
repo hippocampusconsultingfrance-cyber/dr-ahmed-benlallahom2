@@ -92,7 +92,7 @@ export default function AdminAttentionPanel({ onOpenAppointments }: { onOpenAppo
           <AttentionList
             id="admin-attention-refused"
             title="Envois refusés par le service d’envoi"
-            description="Le service d’envoi a refusé l’email (adresse email du patient refusée ou invalide, ou configuration de l’envoi). Ce refus n’est pas passager : aucun nouvel essai automatique n’a lieu. Vérifiez l’adresse du patient et prévenez-le directement ; une fois l’adresse ou la configuration corrigée, « Renvoyer » sur le rendez-vous."
+            description="Le service d’envoi a refusé l’email (adresse email du patient refusée ou invalide, ou contenu de l’email refusé). Ce refus n’est pas passager : aucun nouvel essai automatique n’a lieu. Vérifiez l’adresse du patient et prévenez-le directement ; une fois l’adresse corrigée, « Renvoyer » sur le rendez-vous."
             total={refused.total}
             items={refused.items.map(item => ({ ...item, detail: jobLabels(item.jobTypes) }))}
           />
