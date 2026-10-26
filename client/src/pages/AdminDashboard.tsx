@@ -30,6 +30,7 @@ import { getActiveAdminTabLabel } from "./adminDashboardMobileTabs";
 import { buildAppointmentsAgenda } from "./appointmentsAgenda";
 import { getAppointmentAdminActions, PATIENT_DATA_ERASED_REASON_PROMPT, PATIENT_DATA_ERASED_REFUND_NOTICE } from "./appointmentAdminActions";
 import { formatAdminAmount } from "@/components/adminAmount";
+import { APPOINTMENT_STATUS_LABELS, PAYMENT_STATUS_LABELS } from "@/components/appointmentStatusLabels";
 
 type Tab = "overview" | "appointments" | "contacts" | "gdpr" | "testimonials" | "availability" | "recruitment" | "candidateDocuments" | "security" | "vivier" | "mailing" | "employerBriefs" | "medicalQuestions";
 
@@ -399,7 +400,7 @@ export function AppointmentsTab() {
                   {day.items.map((apt) => (
                     <div key={apt.id} className="flex items-center justify-between gap-2 text-sm">
                       <span className="min-w-0 truncate text-foreground"><span className="font-mono text-primary">{apt.time}</span> · {apt.customerName}</span>
-                      <span className={`shrink-0 rounded px-2 py-0.5 text-[11px] font-medium ${appointmentStatusColors[apt.appointmentStatus] || "bg-muted text-muted-foreground"}`}>{apt.appointmentStatus}</span>
+                      <span className={`shrink-0 rounded px-2 py-0.5 text-[11px] font-medium ${appointmentStatusColors[apt.appointmentStatus] || "bg-muted text-muted-foreground"}`}>{APPOINTMENT_STATUS_LABELS[apt.appointmentStatus] ?? apt.appointmentStatus}</span>
                     </div>
                   ))}
                 </div>
@@ -432,10 +433,10 @@ export function AppointmentsTab() {
               </div>
               <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:flex-nowrap">
                 <span className={`px-2 py-1 rounded text-xs font-medium ${statusColors[apt.paymentStatus] || ""}`}>
-                  {apt.paymentStatus}
+                  {PAYMENT_STATUS_LABELS[apt.paymentStatus] ?? apt.paymentStatus}
                 </span>
                 <span className={`px-2 py-1 rounded text-xs font-medium ${appointmentStatusColors[apt.appointmentStatus] || ""}`}>
-                  {apt.appointmentStatus}
+                  {APPOINTMENT_STATUS_LABELS[apt.appointmentStatus] ?? apt.appointmentStatus}
                 </span>
                 {(() => {
                   const actions = getAppointmentAdminActions(apt);

@@ -11,13 +11,12 @@ import PublicContentSkeleton from "@/components/PublicContentSkeleton";
 import { downloadJsonFile } from "./jsonFileDownload";
 import { formatGdprRequestDate, GDPR_REQUEST_STATUS_LABELS, GDPR_REQUEST_TYPE_LABELS } from "./gdprRequestAdmin";
 import { formatAdminAmount } from "./adminAmount";
+import { APPOINTMENT_STATUS_LABELS, PAYMENT_STATUS_LABELS } from "./appointmentStatusLabels";
 
 export type PersonalData = inferRouterOutputs<AppRouter>["admin"]["personalData"]["find"];
 type ErasureReport = inferRouterOutputs<AppRouter>["admin"]["personalData"]["erase"];
 
 const MEDICAL_QUESTION_STATUS_LABELS: Record<string, string> = { submitted: "Nouvelle", drafting: "Brouillon", answered: "Répondue", published: "Publiée", rejected: "Classée sans suite" };
-const APPOINTMENT_STATUS_LABELS: Record<string, string> = { held: "Créneau réservé", confirmed: "Confirmé", cancelled: "Annulé", completed: "Terminé", no_show: "Absent" };
-const PAYMENT_STATUS_LABELS: Record<string, string> = { pending: "En attente", completed: "Payé", failed: "Échoué", refunded: "Remboursé" };
 
 export const PERSONAL_DATA_ERASURE_CONFIRMATION = "Effacer les données de cette personne ? Seront supprimés : ses messages de contact et ses questions santé (avec leur journal). Ses rendez-vous passés, annulés ou abandonnés seront anonymisés (identité, email, téléphone et motif effacés ; date, montant, statut et facture conservés). Les rendez-vous à venir encore en cours (confirmés, en attente de paiement ou payés et à rembourser) et les demandes RGPD restent, ainsi que les dossiers de recrutement (à effacer séparément). Action irréversible.";
 
