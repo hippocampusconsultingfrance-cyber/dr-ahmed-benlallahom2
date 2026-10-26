@@ -35,6 +35,7 @@ vi.mock("@/lib/trpc", () => {
           updatePublication: { useMutation: mutation },
           unpublish: { useMutation: mutation },
           reject: { useMutation: mutation },
+          delete: { useMutation: mutation },
         },
       },
     },
@@ -78,6 +79,15 @@ describe("ADM-01 — file des questions santé", () => {
     expect(render()).not.toContain("Classer sans suite");
     state.selected = question(4, "rejected");
     expect(render()).not.toContain("Classer sans suite");
+  });
+
+  it("propose « Supprimer » pour toute question ouverte, répondue ou classée (RGPD-12)", () => {
+    for (const selected of [question(1, "submitted"), question(3, "answered", { responseSentAt: new Date(Date.UTC(2026, 7, 4)) }), question(4, "rejected")]) {
+      state.selected = selected;
+      expect(render()).toMatch(/<button[^>]*>.*Supprimer<\/button>/);
+    }
+    state.selected = null;
+    expect(render()).not.toContain("Supprimer");
   });
 
   it("annonce une file vide sans bouton « Charger plus »", () => {
