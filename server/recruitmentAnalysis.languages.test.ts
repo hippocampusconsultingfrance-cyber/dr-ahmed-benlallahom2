@@ -384,6 +384,41 @@ describe("INTL-02 — un titre infirmier, technicien ou secouriste n’est pas u
     expect(english("Nurse Anaesthetist", "Nurse anaesthetist (IADE)", "Infirmier(ère) anesthésiste (IADE)")).toBe(30);
   });
 
+  it("lit chaque partie du titre à part : le nom d’un spécialiste ne compte que dans une partie sans mot infirmier", () => {
+    const points = (language: CvLanguage, title: string, specialty: string, declared: string) => analyse(language, { title, specialty, skill: "enseignement clinique" }, declared).scoreBreakdown.specialtyMatch;
+    // An academic rank, after a comma, a slash, in parentheses or not: no « Anesthesiologist Assistant ».
+    expect(english("Anesthesiologist, Assistant Professor", "Anesthesiology", "Anesthésie-réanimation")).toBe(30);
+    expect(english("Pediatric Anesthesiologist / Assistant Professor", "Anesthesiology", "Anesthésie-réanimation")).toBe(30);
+    expect(english("Anaesthesiologist (Assistant Professor)", "Anaesthesiology", "Anesthésie-réanimation")).toBe(30);
+    expect(english("Consultant Radiologist, Assistant Professor of Radiology", "Radiology", "Radiologie et imagerie médicale")).toBe(30);
+    expect(english("Radiologist Assistant Professor", "Radiology", "Radiologie et imagerie médicale")).toBe(30);
+    expect(english("Anesthesiologist Assistant, Assistant Professor", "Anesthesiology", "Anesthésie-réanimation")).toBe(0);
+    expect(points("français", "Ancien infirmier, anesthésiste-réanimateur", "Anesthésie-réanimation", "Anesthésie-réanimation")).toBe(30);
+    expect(points("chinois", "麻醉师兼护理培训讲师", "麻醉学", "Anesthésie-réanimation")).toBe(30);
+    // In the same part as a nursing or allied health word, or naming someone else, a specialist's name does not count.
+    for (const [language, title, specialty, declared] of [
+      ["français", "Infirmier spécialisé anesthésiste", "Anesthésie", "Anesthésie-réanimation"],
+      ["français", "Infirmière aide-anesthésiste", "Anesthésie", "Anesthésie-réanimation"],
+      ["français", "Aide-anesthésiste", "Anesthésie", "Anesthésie-réanimation"],
+      ["français", "Infirmier de bloc, aide de l’anesthésiste", "Anesthésie", "Anesthésie-réanimation"],
+      ["français", "Infirmier, assistant(e) de l’anesthésiste", "Anesthésie", "Anesthésie-réanimation"],
+      ["français", "Manipulateur radiologue", "Radiologie", "Radiologie et imagerie médicale"],
+      ["français", "Technicien supérieur radiologue", "Radiologie", "Radiologie et imagerie médicale"],
+      ["anglais britannique", "Anesthetist Technician", "Anesthesia", "Anesthésie-réanimation"],
+      ["anglais britannique", "Scrub Nurse for the Neurosurgeon", "Neurosurgery", "Neurochirurgie"],
+      ["anglais britannique", "Radiographer reporting to the Radiologist", "Radiology", "Radiologie et imagerie médicale"],
+      ["anglais britannique", "Endoscopy Nurse, assisting the gastroenterologist", "Gastroenterology", "Hépato-gastro-entérologie"],
+      ["anglais britannique", "Cardiac Nurse, Cardiologist’s assistant", "Cardiology", "Cardiologie"],
+      ["anglais britannique", "Medical Assistant to the Pediatrician", "Pediatrics", "Pédiatrie"],
+      ["anglais britannique", "Physician Assistant to the Neurosurgeon", "Neurosurgery", "Neurochirurgie"],
+      ["allemand", "Pflegefachfrau beim Hausarzt", "Allgemeinmedizin", "Médecine générale"],
+      ["chinois", "麻醉护士，协助麻醉师", "麻醉学", "Anesthésie-réanimation"],
+      ["chinois", "麻醉护士兼麻醉师助手", "麻醉学", "Anesthésie-réanimation"],
+    ] as const) {
+      expect(points(language, title, specialty, declared), title).toBe(0);
+    }
+  });
+
   it("ne prend pour un médecin ni « Physician Assistant », ni « Doctor of Nursing Practice », ni une infirmière de médecine d’urgence", () => {
     expect(english("Emergency Medicine Physician Assistant", "Emergency medicine", "Médecine d’urgence")).toBe(0);
     expect(english("Doctor of Nursing Practice, Nurse Anesthetist", "Anesthesia", "Anesthésie-réanimation")).toBe(0);

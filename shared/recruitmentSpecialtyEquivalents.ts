@@ -137,14 +137,12 @@ export const RECRUITMENT_PHARMACIST_SPECIALTIES: ReadonlySet<string> = new Set([
  * « التمريضية » (the adjective). Only names of professions: not the fields
  * they share with physicians (斜视 "strabismus", "clinical pharmac…"), so that a
  * « Consultant Clinical Pharmacologist » stays a physician. "Rig medic" also
- * names the offshore paramedic profile of the VVIP form in every language.
- * The titles that hold a specialist's name (below) are listed whole: a
- * « Nurse Anaesthetist » or an « Infirmière anesthésiste » is no anaesthetist.
+ * names the offshore paramedic profile of the VVIP form in every language,
+ * « aide-anesthésiste » a nurse who assists the anaesthetist.
  */
 export const RECRUITMENT_PARAMEDICAL_TITLE_TERMS: readonly string[] = [
   ...RECRUITMENT_PHARMACIST_TITLE_TERMS,
-  "nurse anaesthetist", "nurse anesthetist", "anaesthesiologist assistant", "anesthesiologist assistant", "radiologist assistant",
-  "infirmier anesthésiste", "infirmière anesthésiste", "infirmier ère anesthésiste", "infirmier e anesthésiste", "technicien radiologue", "technicienne radiologue",
+  "aide anesthésiste",
   "nurse", "nursing", "midwi", "paramedic", "rig medic", "technician", "technologist", "therapist", "physiotherap", "radiographer", "sonographer",
   "dietitian", "dietician", "nutritionist", "orthoptist", "psychologist", "social worker", "healthcare assistant",
   "care assistant", "medical assistant", "physician assistant", "physician associate",
@@ -159,30 +157,49 @@ export const RECRUITMENT_PARAMEDICAL_TITLE_TERMS: readonly string[] = [
   "أخصائي تغذية", "أخصائية تغذية", "أخصائي نفسي", "أخصائية نفسية", "أخصائي اجتماعي", "أخصائية اجتماعية",
   "护士", "護士", "护理", "護理", "助产", "助產", "技师", "技師", "技术员", "技術員", "护工", "護工", "急救员", "急救員", "急救医护", "急救醫護",
   "治疗师", "治療師", "营养师", "營養師", "心理师", "心理師", "社工", "医师助理", "醫師助理", "医生助理", "醫生助理",
+  "麻醉师助理", "麻醉師助理", "麻醉师助手", "麻醉師助手",
 ];
+
+/**
+ * Nursing or allied health titles named after a specialist (an
+ * « Anesthesiologist Assistant » is no anaesthesiologist), unless an academic
+ * or administrative rank follows: a « Radiologist Assistant Professor » is a
+ * radiologist (server/recruitmentAnalysis.ts).
+ */
+export const RECRUITMENT_SPECIALIST_ASSISTANT_TITLE_TERMS: readonly string[] = ["anaesthesiologist assistant", "anesthesiologist assistant", "radiologist assistant"];
 
 /**
  * Words of a physician's title: a title holding one keeps its specialty
  * points beside a nursing or allied health word (INTL-02), « Facharzt für
  * Psychiatrie, Diplom-Psychologe », « استشاري تخدير ومدرب للممرضين »
- * (consultant anaesthetist, trainer of nurses), « Consultant Paediatrician,
- * Nurse Trainer ». Latin and Arabic ones are whole words: « médecine » (the
- * field) is no « médecin », nor « جراحة » (surgery) a « جراح », nor a
- * « Psychiatric Nurse » a psychiatrist. A word inside a nursing or allied
- * health title (« Physician Assistant », « Nurse Anaesthetist », 医师助理)
- * does not count, nor one that names someone else
- * (server/recruitmentAnalysis.ts: "Doctor of Nursing Practice", 无国界医生,
- * « assistant du médecin »…). Not "consultant" alone: a « Nurse
- * Consultant » is a nurse; nor the specialists' names nurses or technicians
- * also hold (« infirmière urgentiste », « IDE généraliste », "Speech-Language
- * Pathologist").
+ * (consultant anaesthetist, trainer of nurses). Latin and Arabic ones are
+ * whole words: « médecine » (the field) is no « médecin », nor « جراحة »
+ * (surgery) a « جراح ». A word inside a nursing or allied health title
+ * (« Physician Assistant », 医师助理) does not count, nor one that names
+ * someone else (server/recruitmentAnalysis.ts: "Doctor of Nursing
+ * Practice", 无国界医生, « assistant du médecin »…). Not "consultant" alone:
+ * a « Nurse Consultant » is a nurse.
  */
 export const RECRUITMENT_PHYSICIAN_TITLE_TERMS: readonly string[] = [
   "doctor", "physician", "surgeon", "médecin", "chirurgien", "chirurgienne", "praticien hospitalier", "praticienne hospitalière",
   "arzt", "ärztin", "facharzt", "fachärztin", "oberarzt", "oberärztin", "chefarzt", "chefärztin", "assistenzarzt", "assistenzärztin", "notarzt", "notärztin",
   "طبيب", "طبيبة", "استشاري", "استشارية", "جراح",
   "医师", "醫師", "医生", "醫生", "大夫",
-  // Specialists named by their specialty (US and GB spellings, French, German).
+];
+
+/**
+ * Names of specialists, physicians' words like the ones above but only in a
+ * part of the title (between its punctuation and conjunctions) without a
+ * nursing or allied health word: « Consultant Paediatrician, Nurse Trainer »,
+ * « Anästhesist und Praxisanleiter », 麻醉师兼护理培训讲师 are physicians, a
+ * « Nurse Anaesthetist », an « Infirmier spécialisé anesthésiste », a
+ * « Technicien supérieur radiologue » or a « Scrub Nurse for the
+ * Neurosurgeon » are not, nor a « Psychiatric Nurse » (whole words). Not the
+ * names nurses or technicians also hold (« infirmière urgentiste », « IDE
+ * généraliste », "Speech-Language Pathologist").
+ */
+export const RECRUITMENT_SPECIALIST_TITLE_TERMS: readonly string[] = [
+  // US and GB spellings, French, German, Chinese.
   "anaesthetist", "anesthetist", "anaesthesiologist", "anesthesiologist", "intensivist", "paediatrician", "pediatrician", "neonatologist",
   "cardiologist", "psychiatrist", "radiologist", "neurologist", "neurosurgeon", "nephrologist", "oncologist", "haematologist", "hematologist",
   "gastroenterologist", "hepatologist", "endocrinologist", "diabetologist", "rheumatologist", "dermatologist", "pulmonologist", "geriatrician",
@@ -199,4 +216,5 @@ export const RECRUITMENT_PHYSICIAN_TITLE_TERMS: readonly string[] = [
   "dermatologe", "dermatologin", "hautarzt", "hautärztin", "pneumologe", "pneumologin", "geriater", "geriaterin", "urologe", "urologin",
   "gynäkologe", "gynäkologin", "frauenarzt", "frauenärztin", "augenarzt", "augenärztin", "hausarzt", "hausärztin",
   "allgemeinmediziner", "allgemeinmedizinerin", "pathologe", "pathologin",
+  "麻醉师", "麻醉師",
 ];
