@@ -599,7 +599,14 @@ function getSafeCheckoutOrigin(): string {
 
 type CampaignDb = NonNullable<Awaited<ReturnType<typeof getDb>>>;
 
-/** Sends one campaign email and records the outcome; returns true when the provider accepted it. */
+/**
+ * Sends one campaign email and records the outcome; returns true when the
+ * provider accepted it. Only a send the provider did not accept is « failed »
+ * (and offered again by retryFailed). Once accepted, the email counts as sent
+ * whatever happens to its bookkeeping, written in one batch (DATA-05): a
+ * failure there is logged, never turned into a retryable failure, and the
+ * per-recipient key keeps any later attempt from delivering it twice.
+ */
 async function deliverCampaignRecipient(
   db: CampaignDb,
   campaign: { id: number; title: string; subject: string; body: string; language: string },
@@ -611,8 +618,9 @@ async function deliverCampaignRecipient(
   if (!candidate.marketingUnsubscribeToken) {
     await db.update(cvApplications).set({ marketingUnsubscribeToken: unsubscribeToken }).where(eq(cvApplications.id, candidate.id));
   }
+  let email: { id?: string };
   try {
-    const email = await sendRecruitmentCampaignEmail({
+    email = await sendRecruitmentCampaignEmail({
       candidateEmail: candidate.email,
       candidateFirstName: candidate.firstName,
       campaignTitle: campaign.title,
@@ -620,20 +628,28 @@ async function deliverCampaignRecipient(
       body: campaign.body,
       language: campaign.language as RecruitmentEmailLanguage,
       unsubscribeUrl: `${DEFAULT_PUBLIC_ORIGIN}/recruitment/unsubscribe?token=${encodeURIComponent(unsubscribeToken)}`,
+      idempotencyKey: `campaign-${campaign.id}-recipient-${recipientId}`,
     });
-    const contactedAt = new Date();
-    await db.update(recruitmentCampaignRecipients).set({ deliveryStatus: "sent", providerEmailId: email.id || null, error: null, sentAt: contactedAt, lastEventAt: contactedAt }).where(eq(recruitmentCampaignRecipients.id, recipientId));
-    await db.update(cvApplications).set({ lastContactedAt: contactedAt }).where(eq(cvApplications.id, candidate.id));
-    await db.insert(recruitmentFollowUpTasks).values([
-      { applicationId: candidate.id, campaignId: campaign.id, kind: "follow_up_7", dueAt: new Date(contactedAt.getTime() + 7 * 24 * 60 * 60 * 1000), notes: "Relance suggérée à J+7 — aucun email n’est envoyé automatiquement." },
-      { applicationId: candidate.id, campaignId: campaign.id, kind: "follow_up_14", dueAt: new Date(contactedAt.getTime() + 14 * 24 * 60 * 60 * 1000), notes: "Relance suggérée à J+14 — aucun email n’est envoyé automatiquement." },
-    ]);
-    await logRecruitmentAction({ applicationId: candidate.id, adminOpenId, action: "email", metadata: { campaignId: campaign.id, resendId: email.id, language: campaign.language } });
-    return true;
   } catch (error) {
     await db.update(recruitmentCampaignRecipients).set({ deliveryStatus: "failed", error: error instanceof Error ? error.message.slice(0, 2000) : "Unknown campaign email failure" }).where(eq(recruitmentCampaignRecipients.id, recipientId));
     return false;
   }
+  const contactedAt = new Date();
+  try {
+    await db.batch([
+      db.update(recruitmentCampaignRecipients).set({ deliveryStatus: "sent", providerEmailId: email.id || null, error: null, sentAt: contactedAt, lastEventAt: contactedAt }).where(eq(recruitmentCampaignRecipients.id, recipientId)),
+      db.update(cvApplications).set({ lastContactedAt: contactedAt }).where(eq(cvApplications.id, candidate.id)),
+      db.insert(recruitmentFollowUpTasks).values([
+        { applicationId: candidate.id, campaignId: campaign.id, kind: "follow_up_7", dueAt: new Date(contactedAt.getTime() + 7 * 24 * 60 * 60 * 1000), notes: "Relance suggérée à J+7 — aucun email n’est envoyé automatiquement." },
+        { applicationId: candidate.id, campaignId: campaign.id, kind: "follow_up_14", dueAt: new Date(contactedAt.getTime() + 14 * 24 * 60 * 60 * 1000), notes: "Relance suggérée à J+14 — aucun email n’est envoyé automatiquement." },
+      ]),
+      db.insert(recruitmentAuditLogs).values({ applicationId: candidate.id, adminOpenId, action: "email", metadata: JSON.stringify({ campaignId: campaign.id, resendId: email.id, language: campaign.language }) }),
+    ]);
+  } catch (error) {
+    // The recipient stays « queued », which no retry picks up: the email is not sent again.
+    console.error("[RecruitmentCampaign] Email accepted by the provider but its recording failed", { campaignId: campaign.id, recipientId, resendId: email.id ?? null, error: error instanceof Error ? error.name : "UnknownError" });
+  }
+  return true;
 }
 
 /** What really happened to a manual CV re-analysis (ADM-REC-02). */
