@@ -89,6 +89,7 @@ export function reanalysisToast(result: { outcome?: string; error?: string | nul
   switch (result.outcome) {
     case "completed": return { tone: "success", message: "Analyse relancée et résultat actualisé." };
     case "needs_review": return { tone: "success", message: "Analyse actualisée : des points demandent une revue humaine." };
+    case "ai_unavailable": return { tone: "warning", message: `${recruitmentAnalysisErrorLabel(result.error ?? "billing")} « Mettre à jour / reprendre l’IA » relancera l’analyse une fois le crédit du fournisseur rétabli.` };
     case "already_running": return { tone: "info", message: "Une analyse de ce CV est déjà en cours." };
     case "queued": return { tone: "info", message: "Analyse remise en file : elle sera traitée au prochain passage." };
     case "retry_scheduled": return { tone: "warning", message: `L’analyse a échoué ; une nouvelle tentative est programmée. ${recruitmentAnalysisErrorLabel(result.error) ?? ""}`.trim() };

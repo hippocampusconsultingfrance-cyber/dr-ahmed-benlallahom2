@@ -1397,6 +1397,11 @@ export function normalizeRecruitmentAnalysis(
   };
 }
 
+/** Model recorded for the manual-review result saved when the AI Gateway refuses for billing. */
+export const MANUAL_REVIEW_FALLBACK_MODEL = "local/manual-review-fallback";
+/** analysis_last_error of a dossier left without AI analysis for that reason (REC-08). */
+export const AI_ANALYSIS_BILLING_UNAVAILABLE_ERROR = "ai_gateway_billing_unavailable";
+
 /**
  * Vercel AI Gateway refuses every provider when billing has not been activated.
  * This condition should not make an already validated and extracted CV disappear
@@ -1457,7 +1462,7 @@ export function buildManualReviewFallback(input: RecruitmentAnalysisInput): Recr
       },
       reasoning: "Aucun score n’est calculé lorsque le service IA est indisponible. Une revue humaine intégrale est requise.",
     },
-    model: "local/manual-review-fallback",
+    model: MANUAL_REVIEW_FALLBACK_MODEL,
     generationId: null,
     usage: { inputTokens: null, outputTokens: null, totalTokens: null },
   };

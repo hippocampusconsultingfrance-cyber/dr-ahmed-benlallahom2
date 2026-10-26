@@ -332,7 +332,9 @@ export const cvApplications = mysqlTable("cv_applications", {
   aiMatchReasoning: text("ai_match_reasoning"),
   extractedText: text("extracted_text"),
   aiAnalyzedAt: timestamp("ai_analyzed_at"),
-  analysisStatus: mysqlEnum("analysis_status", ["queued", "extracting", "analyzing", "completed", "needs_review", "failed"]).default("queued").notNull(),
+  // degraded: the AI provider refused the analysis (billing); « Mettre à jour /
+  // reprendre l’IA » analyses the CV again (REC-08). Same varchar(32) column.
+  analysisStatus: mysqlEnum("analysis_status", ["queued", "extracting", "analyzing", "completed", "needs_review", "degraded", "failed"]).default("queued").notNull(),
   analysisAttempts: int("analysis_attempts").default(0).notNull(),
   analysisLastError: text("analysis_last_error"),
   analysisModel: varchar("analysis_model", { length: 100 }),

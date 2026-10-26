@@ -33,7 +33,7 @@ import { emailLanguageFor, SITE_LANGUAGES } from "./emailLanguage";
 import { verifyCandidateTurnstile } from "./candidateTurnstile";
 import { googleDriveExportStatus } from "./googleDriveExport";
 import { buildCandidatePortalInvitationEmailEvent, candidatePortalAccountMatchesApplication, resolveCandidatePortalActivationDelivery, resolveCandidatePortalInvitationDelivery, resolveCvConfirmationDelivery, retryCvConfirmationEmail } from "./recruitmentEmailTrace";
-import { RECRUITMENT_ANALYSIS_PROMPT_VERSION } from "./recruitmentAnalysis";
+import { AI_ANALYSIS_BILLING_UNAVAILABLE_ERROR, MANUAL_REVIEW_FALLBACK_MODEL, RECRUITMENT_ANALYSIS_PROMPT_VERSION } from "./recruitmentAnalysis";
 import { medicalQuestionsRouter } from "./medicalQuestionsRouter";
 import { AdminMfaRateLimitError, issueAdminMfaChallenge, revokeCurrentAdminMfaSession, verifyAdminMfaChallenge } from "./adminMfa";
 import {
@@ -433,9 +433,10 @@ async function deliverCampaignRecipient(
 export function reanalysisOutcome(
   queue: { alreadyRunning: boolean },
   processing: { processed: number; results: Array<Record<string, unknown>> },
-): { outcome: "completed" | "needs_review" | "retry_scheduled" | "failed" | "already_running" | "queued"; error: string | null } {
+): { outcome: "completed" | "needs_review" | "ai_unavailable" | "retry_scheduled" | "failed" | "already_running" | "queued"; error: string | null } {
   const result = processing.results[0];
   if (!processing.processed || !result) return { outcome: queue.alreadyRunning ? "already_running" : "queued", error: null };
+  if (result.completed === true && result.aiUnavailable === true) return { outcome: "ai_unavailable", error: AI_ANALYSIS_BILLING_UNAVAILABLE_ERROR };
   if (result.completed === true) return { outcome: result.needsReview ? "needs_review" : "completed", error: null };
   const error = typeof result.error === "string" ? result.error : typeof result.reason === "string" ? result.reason : null;
   return { outcome: result.retry ? "retry_scheduled" : "failed", error };
@@ -1639,7 +1640,8 @@ export const appRouter = router({
           analysesQueued: sql<number>`SUM(CASE WHEN ${cvApplications.analysisStatus} = 'queued' THEN 1 ELSE 0 END)`,
           analysesInProgress: sql<number>`SUM(CASE WHEN ${cvApplications.analysisStatus} IN ('extracting', 'analyzing') THEN 1 ELSE 0 END)`,
           analysesCompleted: sql<number>`SUM(CASE WHEN ${cvApplications.analysisStatus} = 'completed' THEN 1 ELSE 0 END)`,
-          analysesNeedsReview: sql<number>`SUM(CASE WHEN ${cvApplications.analysisStatus} = 'needs_review' THEN 1 ELSE 0 END)`,
+          // A dossier left without AI analysis (degraded) is read by a human too.
+          analysesNeedsReview: sql<number>`SUM(CASE WHEN ${cvApplications.analysisStatus} IN ('needs_review', 'degraded') THEN 1 ELSE 0 END)`,
           analysesFailed: sql<number>`SUM(CASE WHEN ${cvApplications.analysisStatus} = 'failed' THEN 1 ELSE 0 END)`,
           contacted: sql<number>`SUM(CASE WHEN ${cvApplications.lastContactedAt} IS NOT NULL THEN 1 ELSE 0 END)`,
           responded: sql<number>`SUM(CASE WHEN ${cvApplications.lastCandidateResponseAt} IS NOT NULL THEN 1 ELSE 0 END)`,
@@ -1990,7 +1992,9 @@ export const appRouter = router({
           const resumableApplications = await db
             .select({ id: cvApplications.id, trackingId: cvApplications.trackingId })
             .from(cvApplications)
-            .where(and(or(inArray(cvApplications.analysisStatus, ["failed", "queued"]), ne(cvApplications.analysisPromptVersion, RECRUITMENT_ANALYSIS_PROMPT_VERSION), isNull(cvApplications.analysisPromptVersion)), ne(cvApplications.status, "rejected"), ne(cvApplications.status, "archived")))
+            // degraded, or saved as needs_review by the billing fallback before
+            // that status existed: the AI provider refused, the CV was never analysed (REC-08).
+            .where(and(or(inArray(cvApplications.analysisStatus, ["failed", "queued", "degraded"]), eq(cvApplications.analysisModel, MANUAL_REVIEW_FALLBACK_MODEL), ne(cvApplications.analysisPromptVersion, RECRUITMENT_ANALYSIS_PROMPT_VERSION), isNull(cvApplications.analysisPromptVersion)), ne(cvApplications.status, "rejected"), ne(cvApplications.status, "archived")))
             .orderBy(cvApplications.updatedAt)
             .limit(input?.limit ?? 10);
 
