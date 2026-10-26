@@ -13,7 +13,6 @@ const TRUSTED_HOSTS = new Set([
 ]);
 
 export async function verifyCandidateTurnstile(input: { token?: string; remoteIp?: string | null }): Promise<void> {
-  if (process.env.NODE_ENV === "test") return;
   const secret = process.env.TURNSTILE_SECRET_KEY;
   if (!secret || !input.token) throw new Error("candidate_turnstile_required");
 

@@ -73,27 +73,24 @@ export const medicalQuestionsRouter = router({
     if (input.website.trim()) throw new TRPCError({ code: "BAD_REQUEST", message: "La demande n’a pas pu être traitée." });
     const ipHash = requestIpHash(ctx.req.headers);
     const ipSubject = ipHash ?? hashSecurityValue(ctx.req.ip || "unknown");
-    const protectionsEnabled = process.env.NODE_ENV !== "test" && process.env.VITEST !== "true";
-    if (protectionsEnabled) {
-      try {
-        await enforcePersistentRateLimit({
-          action: "public_medical_question_submit",
-          subject: `${ipSubject}:${input.email}`,
-          maxAttempts: 3,
-          windowMs: 24 * 60 * 60 * 1000,
-          blockMs: 24 * 60 * 60 * 1000,
-        });
-        await verifyCandidateTurnstile({ token: input.turnstileToken, remoteIp: ctx.req.ip });
-      } catch {
-        await logSecurityEvent({ actorKind: "anonymous", actorReference: hashSecurityValue(input.email), category: "public_medical_question_protection", outcome: "blocked", severity: "warning", ipHash });
-        throw new TRPCError({ code: "BAD_REQUEST", message: "La vérification de sécurité doit être renouvelée avant l’envoi." });
-      }
+    try {
+      await enforcePersistentRateLimit({
+        action: "public_medical_question_submit",
+        subject: `${ipSubject}:${input.email}`,
+        maxAttempts: 3,
+        windowMs: 24 * 60 * 60 * 1000,
+        blockMs: 24 * 60 * 60 * 1000,
+      });
+      await verifyCandidateTurnstile({ token: input.turnstileToken, remoteIp: ctx.req.ip });
+    } catch {
+      await logSecurityEvent({ actorKind: "anonymous", actorReference: hashSecurityValue(input.email), category: "public_medical_question_protection", outcome: "blocked", severity: "warning", ipHash });
+      throw new TRPCError({ code: "BAD_REQUEST", message: "La vérification de sécurité doit être renouvelée avant l’envoi." });
     }
     const db = await requireDb();
     // MAIL-01: only a question that passed the anti-bot check counts towards the
     // per-IP cap, and is given back if it cannot be recorded. Its refusal has its
     // own code, so the page does not point at the security check.
-    const emailIpHash = protectionsEnabled ? ipHash ?? (ctx.req.ip ? hashSecurityValue(ctx.req.ip) : null) : null;
+    const emailIpHash = ipHash ?? (ctx.req.ip ? hashSecurityValue(ctx.req.ip) : null);
     try {
       await enforcePublicEmailIpRateLimit("medicalQuestion", emailIpHash);
     } catch (error) {

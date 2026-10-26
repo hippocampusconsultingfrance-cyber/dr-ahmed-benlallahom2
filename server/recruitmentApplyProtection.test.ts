@@ -72,12 +72,6 @@ async function apply(input: { email: string; firstName?: string; specialty?: str
   return { status: response.status, body: await response.json() as Record<string, unknown> };
 }
 
-/** Runs the real Turnstile check and rate limits, which test and Vitest environments skip. */
-function enableProductionProtections() {
-  vi.stubEnv("NODE_ENV", "production");
-  vi.stubEnv("VITEST", "false");
-}
-
 function urls(content: string) {
   return content.match(/https?:\/\/[^\s"'<>]+/g) ?? [];
 }
@@ -133,7 +127,6 @@ describe("/api/recruitment/apply — confirmation vers une adresse non vérifié
   });
 
   it("limite à 10 candidatures par heure depuis une même IP (réseaux d’hôpitaux partagés), même en changeant d’adresse destinataire", async () => {
-    enableProductionProtections();
     for (let index = 1; index <= 10; index += 1) {
       expect((await apply({ email: `cible${index}@test.local`, ip: "198.51.100.64" })).status).toBe(201);
     }
@@ -148,7 +141,6 @@ describe("/api/recruitment/apply — confirmation vers une adresse non vérifié
   });
 
   it("ne compte ni un CV refusé, ni un anti-robot à renouveler, ni une panne de notre côté : le candidat peut réessayer", async () => {
-    enableProductionProtections();
     const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const ip = "198.51.100.66";
@@ -184,7 +176,6 @@ describe("/api/recruitment/apply — confirmation vers une adresse non vérifié
   });
 
   it("garde comptée une candidature dont le CV a déjà été déposé quand l’enregistrement échoue ensuite", async () => {
-    enableProductionProtections();
     const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const ip = "198.51.100.68";
     try {
@@ -205,7 +196,6 @@ describe("/api/recruitment/apply — confirmation vers une adresse non vérifié
   });
 
   it("garde comptée une candidature en doublon dont la confirmation est partie avant une panne", async () => {
-    enableProductionProtections();
     const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const ip = "198.51.100.69";
     const existing = seedApplication(db(), { email: "doublon@test.local", trackingId: "CVDUPLICATE0002" });

@@ -34,7 +34,7 @@ const fakeDb = {
   execute: async (query: unknown) => { state.executed.push(query); return { rows: [{ id: 41 }] }; },
 };
 vi.mock("./db", () => ({ getDb: async () => (state.dbAvailable ? fakeDb : null) }));
-// Turnstile and the rate limit only run outside Vitest (see the REC-03 test, which simulates it).
+// Turnstile and the rate limit are simulated; the REC-03 test makes each of them refuse once.
 vi.mock("./candidateTurnstile", async importOriginal => ({
   ...await importOriginal<typeof import("./candidateTurnstile")>(),
   verifyCandidateTurnstile: state.verifyTurnstile,
@@ -102,7 +102,7 @@ function vvipBody(specialty: string, cv: Buffer = validPdfBuffer(), environments
     cv: new File([new Uint8Array(cv)], "cv-amira.pdf", { type: "application/pdf" }),
     specialty,
     diplomaCountry: "Maroc",
-    turnstileToken: "turnstile-token-not-checked-under-vitest",
+    turnstileToken: "turnstile-token-accepted-by-the-mock",
     language: "fr",
   });
 }
@@ -193,9 +193,6 @@ describe("REC-03 — refus de la vraie route affichés par la page VVIP, traduit
 
   it("anti-robot à renouveler, limite de tentatives, service indisponible", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
-    // Turnstile and the rate limit are skipped under Vitest: simulate a real environment.
-    vi.stubEnv("VITEST", "false");
-    vi.stubEnv("NODE_ENV", "production");
     try {
       state.verifyTurnstile.mockRejectedValueOnce(new Error("candidate_turnstile_invalid"));
       const securityCheck = await apply(vvipBody(specialty));
@@ -212,7 +209,6 @@ describe("REC-03 — refus de la vraie route affichés par la page VVIP, traduit
       expect(vvipSubmissionErrorMessage(securityCheck.body, "en")).toBe("The security check must be renewed before sending.");
       expect(vvipSubmissionErrorMessage(rateLimited.body, "en")).toBe("Too many attempts have been made. Wait one hour before trying again.");
     } finally {
-      vi.unstubAllEnvs();
       warn.mockRestore();
     }
   });
