@@ -12,7 +12,7 @@ const blob = vi.hoisted(() => ({
 
 vi.mock("@vercel/blob", () => blob);
 
-import { classifyStorageError, storageDelete, storageGetSignedUrl, storageListKeys, storagePut, storagePutOnce } from "./storage";
+import { classifyStorageError, storageDelete, storageGetSignedUrl, storageListKeys, storageListObjects, storagePut, storagePutOnce } from "./storage";
 
 describe("private Vercel Blob storage", () => {
   beforeEach(() => {
@@ -110,6 +110,12 @@ describe("private Vercel Blob storage", () => {
     await expect(storageListKeys("recruitment/cv/CVX-")).resolves.toEqual(["recruitment/cv/CVX-a.pdf", "recruitment/cv/CVX-b.pdf"]);
     expect(blob.list).toHaveBeenLastCalledWith(expect.objectContaining({ prefix: "recruitment/cv/CVX-", cursor: "next", token: "blob-test-token" }));
     await expect(storageListKeys("recruitment")).rejects.toThrow("storage_list_prefix_too_broad");
+  });
+
+  it("lists objects with their upload date, for the orphan CV cleanup (DATA-02)", async () => {
+    blob.list.mockResolvedValueOnce({ blobs: [{ pathname: "recruitment/quarantine/CVX-cv.pdf", uploadedAt: new Date("2026-10-25T08:00:00Z") }], hasMore: false });
+    await expect(storageListObjects("recruitment/quarantine/", 20_000)).resolves.toEqual([{ key: "recruitment/quarantine/CVX-cv.pdf", uploadedAt: new Date("2026-10-25T08:00:00Z") }]);
+    expect(blob.list).toHaveBeenLastCalledWith(expect.objectContaining({ prefix: "recruitment/quarantine/", limit: 1000 }));
   });
 
   it("classifies Blob failures without exposing their raw message", () => {

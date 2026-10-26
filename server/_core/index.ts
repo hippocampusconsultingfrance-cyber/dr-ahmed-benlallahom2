@@ -868,7 +868,14 @@ export async function createApp() {
   // bounded batch per run, same routine as a GDPR erasure) and reports to the owner.
   registerScheduledJob("/api/scheduled/recruitment-retention", "RecruitmentRetention", async trigger => {
     const { runRecruitmentRetentionCleanup } = await import("../recruitmentRetention");
-    return runRecruitmentRetentionCleanup(trigger.scheduler === "vercel-cron" ? "vercel-cron" : `heartbeat:${trigger.taskUid}`);
+    const retention = await runRecruitmentRetentionCleanup(trigger.scheduler === "vercel-cron" ? "vercel-cron" : `heartbeat:${trigger.taskUid}`);
+    // DATA-02: CVs stored by an application whose row was never written.
+    const { removeOrphanApplicationCvFiles } = await import("../recruitmentOrphanCvCleanup");
+    const orphanCvFiles = await removeOrphanApplicationCvFiles().catch(error => {
+      console.error("[RecruitmentRetention] Orphan CV cleanup failed:", safeErrorName(error));
+      return null;
+    });
+    return { ...retention, orphanCvFiles };
   });
 
   // CV processing worker: Heartbeat invokes a small idempotent batch so uploads
