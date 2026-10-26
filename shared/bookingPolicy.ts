@@ -78,10 +78,12 @@ const VISIBLE_LETTER_OR_DIGIT = new RegExp("(?!\\p{Default_Ignorable_Code_Point}
  * A name the invoice can print: at least one letter or digit, of any script,
  * once trimmed. Spaces, invisible characters (ZWJ, ZWSP, bidi marks, Hangul
  * fillers, which Unicode counts as letters), blank braille (U+2800) or emoji
- * alone are refused.
+ * alone are refused. Read in compatibility form (NFKC), as the invoice prints
+ * it: enclosed or squared letters (Ⓙⓔⓐⓝ, 🄹🄾🄷🄽) are symbols that stand for
+ * letters, while Hangul fillers stay fillers (U+1160).
  */
 export function hasVisibleNameCharacter(value: string): boolean {
-  return VISIBLE_LETTER_OR_DIGIT.test(value.trim());
+  return VISIBLE_LETTER_OR_DIGIT.test(value.trim().normalize("NFKC"));
 }
 
 /**

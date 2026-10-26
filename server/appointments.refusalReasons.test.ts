@@ -202,7 +202,7 @@ describe("appointments.create — motifs de refus stables (EN-06)", () => {
     mocks.getDb.mockResolvedValue(fakeDb());
     const invisibleNames = [
       "   ", " ", "　", // espaces, espace insécable, espace idéographique
-      "‍", "​​", "⠀", "ㅤ", // ZWJ, ZWSP, braille vide, remplissage hangul (une « lettre »)
+      "‍", "​​", "⠀", "ㅤ", "ﾠ", // ZWJ, ZWSP, braille vide, remplissages hangul (des « lettres »)
       "‎😀‏", "😀😀", "👩‍⚕️ 🇫🇷", "́", // emoji seuls, marque combinante seule
     ];
     for (const customerName of invisibleNames) {
@@ -213,14 +213,15 @@ describe("appointments.create — motifs de refus stables (EN-06)", () => {
     expect(mocks.enforcePersistentRateLimit).not.toHaveBeenCalled();
     expect(mocks.stripeCreate).not.toHaveBeenCalled();
 
-    // Any script, a single letter or a digit is a name the invoice can print.
-    for (const customerName of ["Łukasz Kowalski", "王小明", "محمد العتيبي", "  Zoë Ørsted  ", "Nguyễn Văn An", "J", "Ahmed 2", "😀 Kim"]) {
+    // Any script, a single letter or a digit is a name the invoice can print,
+    // and so are enclosed or squared letters (printed as Ali, JOHN).
+    for (const customerName of ["Łukasz Kowalski", "王小明", "محمد العتيبي", "  Zoë Ørsted  ", "Nguyễn Văn An", "J", "Ahmed 2", "😀 Kim", "Ⓐⓛⓘ", "🄹🄾🄷🄽"]) {
       mocks.getDb.mockResolvedValue(fakeDb());
       expect(await postCreate(booking(inThreeDays(), { customerName })), customerName).toBeNull();
     }
-    expect(mocks.stripeCreate).toHaveBeenCalledTimes(8);
-    // Par IP puis par email, pour chacune des 8 réservations.
-    expect(mocks.enforcePersistentRateLimit).toHaveBeenCalledTimes(16);
+    expect(mocks.stripeCreate).toHaveBeenCalledTimes(10);
+    // Par IP puis par email, pour chacune des 10 réservations.
+    expect(mocks.enforcePersistentRateLimit).toHaveBeenCalledTimes(20);
   });
 
   it("accepte la langue affichée par la page, français par défaut, et refuse une langue inconnue", async () => {
