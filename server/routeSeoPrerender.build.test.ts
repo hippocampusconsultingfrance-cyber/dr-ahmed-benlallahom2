@@ -125,6 +125,9 @@ describe.skipIf(!executablePath)("page pré-rendue dans un navigateur (SEOP-01)"
       expect(await description.isVisible()).toBe(true);
       const links = page.getByRole("navigation", { name: "Liens principaux" });
       expect(await links.isVisible()).toBe(true);
+      const englishNotice = page.getByRole("main").locator('p[lang="en"]');
+      await expect(englishNotice.textContent()).resolves.toBe("Enable JavaScript in your browser to view this page in full.");
+      expect(await englishNotice.isVisible()).toBe(true);
       await expect(links.getByRole("link", { name: "Réserver une consultation" }).getAttribute("href")).resolves.toBe("/booking");
       await expect(links.getByRole("link", { name: "Questions fréquentes" }).getAttribute("aria-current")).resolves.toBe("page");
     } finally {
@@ -147,7 +150,10 @@ describe.skipIf(!executablePath)("page pré-rendue dans un navigateur (SEOP-01)"
 
       expect(await page.locator("main").count()).toBe(1);
       expect(await page.getByRole("navigation", { name: "Liens principaux" }).count()).toBe(0);
-      expect(await page.getByText("Activez JavaScript dans votre navigateur").isVisible()).toBe(false);
+      // getByText ne cherche pas dans <noscript> : c'est le texte affiché de la page qui est lu.
+      const visibleText = await page.locator("body").innerText();
+      expect(visibleText).not.toContain("Activez JavaScript dans votre navigateur");
+      expect(visibleText).not.toContain("Enable JavaScript in your browser");
       expect(errors).toEqual([]);
     } finally {
       await context.close();

@@ -161,11 +161,12 @@ describe("contenu sans JavaScript des pages pré-rendues (SEOP-01)", () => {
     expect(noscript).toContain('<a href="/faq" aria-current="page">Questions fréquentes</a>');
   });
 
-  it("est présent dans chaque page pré-rendue et dans la page de repli, en français", () => {
+  it("est présent dans chaque page pré-rendue et dans la page de repli, en français avec l’avis aussi en anglais", () => {
     for (const page of buildPrerenderedPages(TEMPLATE).filter(candidate => candidate.file !== SPA_TEMPLATE_FILE)) {
       expect(page.html.match(/<noscript>/g), page.file).toHaveLength(1);
       expect(page.html, page.file).toMatch(/<a href="\/booking"( aria-current="page")?>Réserver une consultation<\/a>/);
       expect(page.html, page.file).toContain("Activez JavaScript dans votre navigateur pour afficher cette page en entier.");
+      expect(page.html, page.file).toContain('<p lang="en">Enable JavaScript in your browser to view this page in full.</p>');
     }
     expect(pageFor("/booking").html).toContain('<a href="/booking" aria-current="page">');
     expect(buildPrerenderedPages(TEMPLATE).find(page => page.file === SPA_FALLBACK_FILE)?.html).toContain("<h1>Dr. Ahmed Ben Lallahom</h1>");

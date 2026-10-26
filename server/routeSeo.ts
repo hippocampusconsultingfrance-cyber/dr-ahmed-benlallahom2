@@ -222,6 +222,8 @@ function renderNoscript(input: { title: string; description: string; pathname?: 
     `    <h1>${escapeHtml(input.title)}</h1>`,
     `    <p>${escapeHtml(input.description)}</p>`,
     "    <p>Activez JavaScript dans votre navigateur pour afficher cette page en entier.</p>",
+    // Seule phrase en anglais : un visiteur anglophone sans JavaScript sait comment voir la page.
+    '    <p lang="en">Enable JavaScript in your browser to view this page in full.</p>',
     '    <nav aria-label="Liens principaux">',
     "      <ul>",
     ...links,
