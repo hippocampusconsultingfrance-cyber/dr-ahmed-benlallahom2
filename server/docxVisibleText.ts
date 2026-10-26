@@ -6,30 +6,37 @@ import { DOCUMENT_DECOMPRESSION_LIMITS, inspectDocxArchive } from "./documentDec
  * w:specVanish, w:webHidden), smaller than 4 pt (w:sz, or w:szCs for complex
  * script text: Arabic, Hebrew…), squeezed to less than 1 pt a character
  * (w:w, w:spacing), raised or lowered out of their line (w:position
- * beyond twice their size), in a VML text box placed off the page, or without
- * contrast with what lies under them: a WCAG 2 contrast ratio under 1.5:1
- * between the colour of the text (w:color, or its theme colour, tinted or
- * shaded, as Word draws it) and the first colour under it (highlight, shading
- * of the run, its paragraph, table cell or table, set on them or by their
- * style and the table style's formats for the cell's place, fill of its text
- * box, page colour, else white). Black on black, dark blue on dark blue,
- * yellow on a yellow highlight, white or E0E0E0 on white fall under it; light
- * grey on white (BFBFBF, 1.8:1) and white on a coloured band are read. Text in
- * the automatic colour is always seen: Word draws it black or white, against
- * its background. mammoth reads such runs like any other text, so they are cut
- * out of the main document part, text boxes included, before it reads the
- * file (it reads neither headers, footers nor notes). Run formatting is
- * resolved as Word does: document defaults, table style, paragraph style,
- * character style, then the run's own properties.
+ * beyond twice their size), in a text box placed off the page, or without
+ * contrast with what lies under them: as the PDF check, less than 32/255 apart
+ * on each channel from the first colour under it, the colour of the text being
+ * w:color, or its theme colour, tinted or shaded, as Word draws it, and the
+ * first colour under it the highlight, the shading of the run, its paragraph,
+ * table cell or table (set on them, by their style, the document's defaults or
+ * the table style's formats for the cell's place), the fill of its text box,
+ * the page colour when Word shows it (w:displayBackgroundShape), else white.
+ * Black on black, dark blue on dark blue, yellow on a yellow highlight, white
+ * or E0E0E0 on white fall under it; light grey (D9D9D9), bright yellow, green
+ * or cyan on white and white on a coloured band are read. Text in the automatic
+ * colour is always seen: Word draws it black or white, against its background.
+ * mammoth reads such runs like any other text, so they are cut out of the main
+ * document part, text boxes included, before it reads the file (it reads
+ * neither headers, footers nor notes). Run formatting is resolved as Word does:
+ * document defaults, table style, paragraph style, character style, then the
+ * run's own properties.
+ *
+ * Of a mc:AlternateContent, mammoth reads mc:Fallback, but Word draws the
+ * mc:Choice it understands (a DrawingML text box, w14…): a passage of the
+ * fallback is only read if the choice draws it too, and as visibly (its
+ * fill, its place on the page).
  *
  * Text without contrast with the page may still show on a picture or a shape,
  * as the white text of many CV templates: in a text box without fill, in a
  * paragraph that holds a drawing or next to one, in the paragraphs and tables
  * a picture behind the text may cover from its paragraph (as many as its
  * height could hold), or anywhere when Word places such a picture from the
- * page (a header band, a sidebar), in a header, or as the page colour. In a
- * cell coloured by the table style only, in a table that does not say which of
- * its formats it shows (w:tblLook), another format could show it. Its
+ * page (a header band, a sidebar), in a header, or as the page colour shown.
+ * In a cell coloured by the table style only, in a table that does not say
+ * which of its formats it shows (w:tblLook), another format could show it. Its
  * visibility cannot be established: it is cut out too, but returned apart as
  * `unverifiableText`, never counted as hidden text. Such text beyond the reach
  * of any picture, or on a colour of its own (shading, highlight, filled text
@@ -44,6 +51,7 @@ const NAMESPACES: Record<string, string> = {
   "http://schemas.openxmlformats.org/drawingml/2006/main": "a",
   "http://purl.oclc.org/ooxml/drawingml/main": "a",
   "urn:schemas-microsoft-com:vml": "v",
+  "http://schemas.microsoft.com/office/word/2010/wordprocessingShape": "wps",
   "http://schemas.openxmlformats.org/markup-compatibility/2006": "mc",
   "http://schemas.openxmlformats.org/package/2006/relationships": "relationships",
 };
@@ -55,8 +63,8 @@ const SETTINGS_RELATIONSHIP = "http://schemas.openxmlformats.org/officeDocument/
 const MIN_FONT_SIZE_PT = 4;
 /** Narrowest advance of a character, in points, as the PDF check: squeezed more, letters run into one another. */
 const MIN_ADVANCE_PT = 1;
-/** Under this WCAG 2 contrast ratio with what lies under it, text is not seen (legible text has 4.5:1). */
-const MIN_CONTRAST_RATIO = 1.5;
+/** Text this close to what lies under it on each channel (of 255) is not seen, as the PDF contrast check. */
+const MIN_CHANNEL_GAP = 32;
 /** Raised or lowered by more than this many times its size, text has left its line: off the page, or onto other lines. */
 const MAX_SHIFT_IN_SIZES = 2;
 /** Word's size when no style gives one (w:sz 20). */
@@ -74,8 +82,14 @@ const MIN_PARAGRAPH_PT = 8;
 const EMU_PER_PT = 12_700;
 /** Vertical positions Word takes from the page or its margins rather than from the anchor paragraph (DrawingML, VML). */
 const FROM_PAGE = /^(page|margin|topMargin|bottomMargin|insideMargin|outsideMargin|top-margin-area|bottom-margin-area|inner-margin-area|outer-margin-area)$/i;
+/** Namespaces of Office and of the standard: Word draws the mc:Choice that requires them (wps, w14, w15, wpg…). */
+const OFFICE_NAMESPACE = /^(http:\/\/schemas\.microsoft\.com\/office\/|http:\/\/schemas\.openxmlformats\.org\/|http:\/\/purl\.oclc\.org\/ooxml\/|urn:schemas-microsoft-com:)/;
+/** What fills a DrawingML shape: none, a colour, or what may not be one (gradient, picture, pattern, the group's). */
+const DRAWING_FILLS = new Set(["a:noFill", "a:solidFill", "a:gradFill", "a:blipFill", "a:pattFill", "a:grpFill"]);
+const DRAWING_COLOURS = new Set(["a:srgbClr", "a:schemeClr", "a:sysClr", "a:prstClr", "a:scrgbClr", "a:hslClr"]);
 
-type XmlTag = { name: string; attributes: Map<string, string>; closing: boolean; selfClosing: boolean; start: number; end: number };
+/** `namespaces`: the namespace each prefix is bound to there (mc:Choice Requires names prefixes). */
+type XmlTag = { name: string; attributes: Map<string, string>; namespaces: Map<string, string>; closing: boolean; selfClosing: boolean; start: number; end: number };
 
 function decodeXml(text: string) {
   return text
@@ -104,7 +118,7 @@ function visitXmlTags(xml: string, visit: (tag: XmlTag) => void) {
     const position = { start: match.index, end: match.index + match[0].length };
     if (closing) {
       const scope = scopes.length > 1 ? scopes.pop()! : scopes[0]!;
-      visit({ name: canonical(qualifiedName, scope), attributes: new Map(), closing: true, selfClosing: false, ...position });
+      visit({ name: canonical(qualifiedName, scope), attributes: new Map(), namespaces: scope, closing: true, selfClosing: false, ...position });
       continue;
     }
     const raw: Array<[string, string]> = Array.from(attributeText.matchAll(/([^\s=]+)\s*=\s*(?:"([^"]*)"|'([^']*)')/g), attribute => [attribute[1]!, decodeXml(attribute[2] ?? attribute[3] ?? "")]);
@@ -118,7 +132,7 @@ function visitXmlTags(xml: string, visit: (tag: XmlTag) => void) {
     // Unprefixed attributes have no namespace (VML fillcolor, relationship Type and Target).
     const attributes = new Map(raw.map(([name, value]) => [name.includes(":") ? canonical(name, scope) : name, value]));
     if (!selfClosing) scopes.push(scope);
-    visit({ name: canonical(qualifiedName, scope), attributes, closing: false, selfClosing: Boolean(selfClosing), ...position });
+    visit({ name: canonical(qualifiedName, scope), attributes, namespaces: scope, closing: false, selfClosing: Boolean(selfClosing), ...position });
   }
 }
 
@@ -145,18 +159,13 @@ const hexColour = (value: string | undefined) => (value !== undefined && /^[0-9a
 const channels = (hex: string) => [0, 2, 4].map(index => Number.parseInt(hex.slice(index, index + 2), 16));
 const toHex = (values: number[]) => values.map(value => Math.round(Math.min(255, Math.max(0, value))).toString(16).padStart(2, "0")).join("").toUpperCase();
 
-/** A colour each channel of which is within 32/255 of white (FEFEFE looks white too), as the PDF contrast check. */
-const isNearWhite = (hex: string) => channels(hex).every(value => value >= 0xe0);
-
-/** WCAG 2 contrast ratio of two colours: 1 for the same luminance, 21 for black on white. */
-function contrastRatio(left: string, right: string) {
-  const luminance = (hex: string) => {
-    const [red, green, blue] = channels(hex).map(value => (value / 255 <= 0.04045 ? value / 255 / 12.92 : ((value / 255 + 0.055) / 1.055) ** 2.4));
-    return 0.2126 * red! + 0.7152 * green! + 0.0722 * blue!;
-  };
-  const [lighter, darker] = [luminance(left), luminance(right)].sort((first, second) => second - first);
-  return (lighter! + 0.05) / (darker! + 0.05);
-}
+/** Two colours told apart: 32/255 or more apart on a channel, as the PDF contrast check (bright yellow on white is, E0E0E0 is not). */
+const distinct = (left: string, right: string) => {
+  const under = channels(right);
+  return channels(left).some((value, index) => Math.abs(value - under[index]!) >= MIN_CHANNEL_GAP);
+};
+/** A colour each channel of which is within 32/255 of white (FEFEFE looks white too). */
+const isNearWhite = (hex: string) => !distinct(hex, "FFFFFF");
 
 /** A colour with its HSL lightness changed, as Word tints or shades a theme colour. */
 function withLightness(hex: string, change: (lightness: number) => number) {
@@ -213,6 +222,15 @@ function readTheme(themeXml: string | undefined, settingsXml: string | undefined
   return name => scheme.get(THEME_SLOTS[mapping.get(name) ?? THEME_MAPPING[name]?.[1] ?? name] ?? "");
 }
 
+/** Whether Word shows the page colour (w:background) in its page view: only when the settings say so, as LibreOffice. */
+function showsPageColour(settingsXml: string | undefined) {
+  let shown = false;
+  visitXmlTags(settingsXml ?? "", tag => {
+    if (!tag.closing && tag.name === "w:displayBackgroundShape") shown = !/^(false|0|off)$/i.test(tag.attributes.get("w:val") ?? "");
+  });
+  return shown;
+}
+
 /** The colour of w:color, w:shd or w:background: its theme colour, tinted or shaded, else its value; "auto"; undefined when unreadable. */
 function colourOf(theme: Theme, value: string | undefined, themeName: string | undefined, tint: string | undefined, shade: string | undefined) {
   const themed = themeName ? theme(themeName) : undefined;
@@ -262,6 +280,30 @@ function vmlColour(fill: string) {
   return VML_COLOURS[/^[a-z]+/i.exec(fill)?.[0]?.toLowerCase() ?? ""];
 }
 
+/** A VML opacity (0.5, 50%, 32768f), from 0 to 1. */
+function vmlOpacity(value: string | undefined) {
+  const match = /^\s*(\d*\.?\d+)\s*(f|%)?\s*$/i.exec(value ?? "");
+  if (!match) return 1;
+  const unit = match[2]?.toLowerCase();
+  return Math.min(1, Number(match[1]) / (unit === "f" ? 65_536 : unit === "%" ? 100 : 1));
+}
+
+/** DrawingML scheme colours, and the theme colour name each one is in Word. */
+const DRAWING_SCHEME: Record<string, string> = {
+  bg1: "background1", tx1: "text1", bg2: "background2", tx2: "text2", dk1: "dark1", lt1: "light1", dk2: "dark2", lt2: "light2", hlink: "hyperlink", folHlink: "followedHyperlink",
+  accent1: "accent1", accent2: "accent2", accent3: "accent3", accent4: "accent4", accent5: "accent5", accent6: "accent6",
+};
+
+/** The colour a DrawingML colour element names, before its modifiers; undefined when unknown (phClr, scrgbClr…). */
+function drawingColour(tag: XmlTag, theme: Theme) {
+  const value = tag.attributes.get("val") ?? "";
+  if (tag.name === "a:srgbClr") return hexColour(value);
+  if (tag.name === "a:schemeClr") return DRAWING_SCHEME[value] ? theme(DRAWING_SCHEME[value]) : undefined;
+  if (tag.name === "a:sysClr") return hexColour(tag.attributes.get("lastClr")) ?? SYSTEM_COLOURS[value];
+  if (tag.name === "a:prstClr") return VML_COLOURS[value.toLowerCase()];
+  return undefined;
+}
+
 const UNIVERSAL_MEASURE_PT: Record<string, number> = { pt: 1, pc: 12, pi: 12, in: 72, cm: 72 / 2.54, mm: 72 / 25.4 };
 
 /** A length in points: a number of 1/`perPoint` points (half-points, twips), or a strict file's universal measure (3pt, 1mm…). */
@@ -280,16 +322,18 @@ function vmlLength(style: string, property: string) {
   return Number.isFinite(value) ? value : 0;
 }
 
-/**
- * A VML shape whose style places it wholly off the page, whatever it is
- * positioned from (page, margin, column or paragraph, all on the page).
- */
+/** `simple`: placed from the page by wp:simplePos rather than by wp:positionH and wp:positionV. */
+type Box = { left: number; top: number; width: number; height: number; simple?: boolean };
+
+/** A shape placed wholly off the page, whatever it is positioned from (page, margin, column or paragraph, all on the page). In points. */
+const isOffPage = (box: Box, page: { width: number; height: number }) =>
+  box.left >= page.width || box.top >= page.height || box.left + box.width <= -page.width || box.top + box.height <= -page.height;
+
+/** A VML shape whose style places it wholly off the page. */
 function vmlShapeIsOffPage(style: string | undefined, page: { width: number; height: number }) {
   if (!style || !/(^|;)\s*position\s*:\s*absolute/i.test(style)) return false;
   const length = (property: string) => vmlLength(style, property);
-  const left = length("margin-left") + length("left");
-  const top = length("margin-top") + length("top");
-  return left >= page.width || top >= page.height || left + length("width") <= -page.width || top + length("height") <= -page.height;
+  return isOffPage({ left: length("margin-left") + length("left"), top: length("margin-top") + length("top"), width: length("width"), height: length("height") }, page);
 }
 
 /** The largest page of the document's sections, in points (w:pgSz is in twips); A4 or Letter when none is given. */
@@ -422,8 +466,14 @@ function applyRunProperty(layer: RunLayer, tag: XmlTag, theme: Theme) {
 
 /** What a style, or one of a table style's conditional formats (w:tblStylePr), sets for the text and under it. */
 type Formats = { run: RunLayer; paragraphShading?: Paint; cellShading?: Paint };
-type StyleDefinition = Formats & { basedOn?: string; tableShading?: Paint; conditions: Map<string, Formats> };
-type Styles = { byId: Map<string, StyleDefinition>; defaultIds: Map<string, string>; defaults: RunLayer };
+/** Table styles: how many rows or columns each of their bands spans (w:tblStyleRowBandSize, w:tblStyleColBandSize). */
+type BandSizes = { rowBandSize?: number; columnBandSize?: number };
+type StyleDefinition = Formats & BandSizes & { basedOn?: string; tableShading?: Paint; conditions: Map<string, Formats> };
+/** `defaults`, `paragraphShading`: the document's defaults (w:docDefaults). */
+type Styles = { byId: Map<string, StyleDefinition>; defaultIds: Map<string, string>; defaults: RunLayer; paragraphShading?: Paint };
+
+const BAND_SIZES: Record<string, keyof BandSizes> = { "w:tblStyleRowBandSize": "rowBandSize", "w:tblStyleColBandSize": "columnBandSize" };
+const bandSize = (tag: XmlTag) => Math.max(1, Number.parseInt(tag.attributes.get("w:val") ?? "", 10) || 1);
 
 function readStyles(xml: string | undefined, theme: Theme): Styles {
   const styles: Styles = { byId: new Map(), defaultIds: new Map(), defaults: {} };
@@ -453,6 +503,10 @@ function readStyles(xml: string | undefined, theme: Theme): Styles {
       current.conditions.set(tag.attributes.get("w:type") ?? "wholeTable", condition);
     } else if (parent === "w:rPr" && grandParent === "w:rPrDefault") {
       applyRunProperty(styles.defaults, tag, theme);
+    } else if (parent === "w:pPr" && grandParent === "w:pPrDefault" && tag.name === "w:shd") {
+      styles.paragraphShading = shadingPaint(tag, theme);
+    } else if (current && parent === "w:tblPr" && grandParent === "w:style" && BAND_SIZES[tag.name]) {
+      current[BAND_SIZES[tag.name]!] = bandSize(tag);
     } else if (formats && parent === "w:rPr") {
       applyRunProperty(formats.run, tag, theme);
     } else if (formats && tag.name === "w:shd") {
@@ -481,13 +535,13 @@ function tableLook(tag: XmlTag | null): TableLook {
 }
 
 /** The conditional formats that apply to a cell, by its place in the table (cells of each row), in the order Word applies them. */
-function cellConditions(look: TableLook, rows: number[], row: number, column: number) {
+function cellConditions(look: TableLook, rows: number[], row: number, column: number, bands: Required<BandSizes>) {
   const firstRow = look.firstRow && row === 0;
   const lastRow = look.lastRow && row === rows.length - 1;
   const firstColumn = look.firstColumn && column === 0;
   const lastColumn = look.lastColumn && column === (rows[row] ?? 0) - 1;
-  const rowBand = row - (look.firstRow ? 1 : 0);
-  const columnBand = column - (look.firstColumn ? 1 : 0);
+  const rowBand = Math.floor((row - (look.firstRow ? 1 : 0)) / bands.rowBandSize);
+  const columnBand = Math.floor((column - (look.firstColumn ? 1 : 0)) / bands.columnBandSize);
   return [
     "wholeTable",
     ...(look.columnBands && columnBand >= 0 ? [columnBand % 2 === 0 ? "band1Vert" : "band2Vert"] : []),
@@ -525,6 +579,22 @@ function tableRows(xml: string) {
   return tables;
 }
 
+/** The v:fill of each VML shape, by where the shape's tag starts: it may follow the text box. */
+function vmlFills(xml: string) {
+  const fills = new Map<number, XmlTag>();
+  const open: Array<{ name: string; start: number }> = [];
+  visitXmlTags(xml, tag => {
+    if (tag.closing) {
+      open.pop();
+      return;
+    }
+    const parent = open.at(-1);
+    if (tag.name === "v:fill" && parent && VML_SHAPES.has(parent.name)) fills.set(parent.start, tag);
+    if (!tag.selfClosing) open.push({ name: tag.name, start: tag.start });
+  });
+  return fills;
+}
+
 /** A style and the ones it is based on, the base first; the type's default style when none is named. */
 function styleChain(styles: Styles, id: string | undefined, type: string) {
   const chain: StyleDefinition[] = [];
@@ -546,7 +616,11 @@ function styleChain(styles: Styles, id: string | undefined, type: string) {
  */
 type CellFormats = { runs: RunLayer[]; paragraphShading?: Paint; cellShading?: Paint; colours: string[] };
 
-type Frame = {
+type Visibility = "visible" | "invisible" | "unverifiable";
+const SEVERITY: Record<Visibility, number> = { visible: 0, unverifiable: 1, invisible: 2 };
+const worst = (verdicts: Visibility[]) => verdicts.reduce<Visibility>((found, verdict) => (SEVERITY[verdict] > SEVERITY[found] ? verdict : found), "visible");
+
+type Frame = BandSizes & {
   name: string;
   style?: string;
   key?: string;
@@ -556,6 +630,15 @@ type Frame = {
   /** The shading set on a paragraph, cell or table itself (null: none), or the fill of a text box (null: none known). */
   paint?: Paint;
   offPage?: boolean;
+  /** DrawingML anchors: where they place their shape, in points. */
+  box?: Box;
+  /** DrawingML fills, and their colours being read: the shape they fill; the colour's lightness changes (lumMod, lumOff), its opacity. */
+  fillOf?: Frame;
+  colour?: { hex: string | undefined; scale: number; offset: number; alpha: number; shape: Frame };
+  /** mc:AlternateContent: the text of the mc:Choice Word draws, without spaces, the visibility of each of its characters, and how far the fallback's text matched it. */
+  drawn?: { text: string; verdicts: Visibility[]; cursor: number };
+  /** mc:Choice: the one Word draws. */
+  chosen?: boolean;
   /** Tables: their look and the cells of each row; rows: their index; cells: their place, and what the table style sets there. */
   look?: TableLook;
   rows?: number[];
@@ -570,7 +653,11 @@ type Passages = { invisible: string[]; unverifiable: string[] };
 
 function cellFormats(styles: Styles, table: Frame, row: number, column: number): CellFormats {
   const chain = styleChain(styles, table.style, "table");
-  const conditions = cellConditions(table.look ?? tableLook(null), table.rows ?? [], row, column);
+  const bands = {
+    rowBandSize: table.rowBandSize ?? lastSet(chain.map(style => style.rowBandSize)) ?? 1,
+    columnBandSize: table.columnBandSize ?? lastSet(chain.map(style => style.columnBandSize)) ?? 1,
+  };
+  const conditions = cellConditions(table.look ?? tableLook(null), table.rows ?? [], row, column, bands);
   const formats: Formats[] = [...chain, ...conditions.flatMap(condition => chain.flatMap(style => style.conditions.get(condition) ?? []))];
   const anywhere = table.look ? [] : [...chain, ...chain.flatMap(style => Array.from(style.conditions.values()))];
   return {
@@ -588,20 +675,29 @@ function next(frame: Frame | undefined) {
   return frame.count - 1;
 }
 
+/** Whether Word draws a mc:Choice: it understands every namespace it requires. */
+const drawnByWord = (choice: XmlTag) =>
+  (choice.attributes.get("Requires") ?? "").split(/\s+/).filter(Boolean).every(prefix => OFFICE_NAMESPACE.test(choice.namespaces.get(prefix) ?? ""));
+
 /**
  * The main document part without the text of its invisible runs, nor of
  * those that may show on a drawing; the text of each, paragraph by paragraph.
- * `fromPage`: a picture behind the text may lie under any text.
+ * `fromPage`: a picture behind the text may lie under any text. `pageShown`:
+ * Word shows the page colour.
  */
-function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: boolean) {
+function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: boolean, pageShown: boolean) {
   const page = largestPage(xml);
   const tables = tableRows(xml);
+  const fills = vmlFills(xml);
   const stack: Frame[] = [];
   const cuts: Array<[number, number]> = [];
   const found: Passages = { invisible: [], unverifiable: [] };
   let textStart: number | null = null;
+  let offsetStart: number | null = null;
   let pageColour = "FFFFFF";
   let pagePicture = false;
+  // How much of the drawn text failed searches may scan: a fallback that matches nothing is then compared in place only.
+  let searchBudget = xml.length;
   const pictures = drawingReach(xml);
   const nearDrawing = (key: string | undefined) => {
     if (!key) return false;
@@ -619,9 +715,9 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
     }
     return undefined;
   };
-  /** The shading of a paragraph: its own, else its style's, else the table style's for its cell. */
+  /** The shading of a paragraph: its own, else its style's, else the table style's for its cell, else the document's default. */
   const paragraphPaint = (frame: Frame, fromTable = true) =>
-    frame.paint !== undefined ? frame.paint : lastSet([fromTable ? frame.cell?.formats?.paragraphShading : undefined, ...styleChain(styles, frame.style, "paragraph").map(style => style.paragraphShading)]);
+    frame.paint !== undefined ? frame.paint : lastSet([styles.paragraphShading, fromTable ? frame.cell?.formats?.paragraphShading : undefined, ...styleChain(styles, frame.style, "paragraph").map(style => style.paragraphShading)]);
   /** The colours right under the text: highlight, shading of the run, of its paragraph, cell or table, fill of its text box; null for the page. */
   const layerUnder = (effective: RunLayer): Paint => {
     if (effective.highlight) return [effective.highlight];
@@ -629,7 +725,7 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
     for (let index = stack.length - 1; index >= 0; index -= 1) {
       const frame = stack[index]!;
       // A text box shows its fill, else what lies under it.
-      if (VML_SHAPES.has(frame.name)) return frame.paint ?? null;
+      if (VML_SHAPES.has(frame.name) || frame.name === "wps:wsp") return frame.paint ?? null;
       const paint = frame.name === "w:p" ? paragraphPaint(frame)
         : frame.name === "w:tc" ? (frame.paint !== undefined ? frame.paint : frame.formats?.cellShading)
         : frame.name === "w:tbl" ? (frame.paint !== undefined ? frame.paint : lastSet(styleChain(styles, frame.style, "table").map(style => style.tableShading)))
@@ -639,7 +735,7 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
     return null;
   };
   // Decided once the whole run is read, inside its paragraph, cell, table and text box.
-  const visibility = (run: Frame, text: string): "visible" | "invisible" | "unverifiable" => {
+  const visibility = (run: Frame, text: string): Visibility => {
     const paragraph = nearest("w:p");
     const tableFormats = paragraph?.cell?.formats;
     const effective: RunLayer = Object.assign({}, styles.defaults,
@@ -663,7 +759,7 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
     // Word draws text in the automatic colour black or white, whichever shows on its background.
     const colour = effective.colour ?? "auto";
     if (colour === "auto") return "visible";
-    const shows = (under: string) => contrastRatio(colour, under) >= MIN_CONTRAST_RATIO;
+    const shows = (under: string) => distinct(colour, under);
     const layer = layerUnder(effective);
     if ((layer ?? [pageColour]).some(shows)) return "visible";
     // In a cell the table style alone colours, by an assumed look, a format for another place in the table might show it.
@@ -675,9 +771,35 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
     const onDrawing = fromPage || pagePicture || pictures.fromPage || stack.some(frame => frame.name === "w:txbxContent") || nearDrawing(paragraph?.key);
     return onDrawing ? "unverifiable" : "invisible";
   };
+  /** What mammoth reads of a mc:AlternateContent, its fallback, is seen only where the choice Word draws shows the same text. */
+  const asDrawn = (text: string, seen: Visibility): Visibility => {
+    const alternate = stack.findLastIndex(item => item.name === "mc:AlternateContent");
+    const drawn = stack[alternate]?.drawn;
+    const branch = stack[alternate + 1];
+    const letters = text.replace(/\s+/g, "");
+    if (!drawn || !branch || !letters) return seen;
+    if (branch.chosen) {
+      drawn.text += letters;
+      for (let index = 0; index < letters.length; index += 1) drawn.verdicts.push(seen);
+      return seen;
+    }
+    if (branch.name !== "mc:Fallback") return seen;
+    const at = searchBudget > 0 ? drawn.text.indexOf(letters, drawn.cursor) : drawn.text.startsWith(letters, drawn.cursor) ? drawn.cursor : -1;
+    if (at === -1) {
+      searchBudget -= drawn.text.length - drawn.cursor;
+      return "invisible";
+    }
+    drawn.cursor = at + letters.length;
+    return worst(drawn.verdicts.slice(at, drawn.cursor).concat(seen));
+  };
+  const paintShape = ({ hex, scale, offset, alpha, shape }: NonNullable<Frame["colour"]>) => {
+    const colour = hex && (scale === 1 && offset === 0 ? hex : withLightness(hex, lightness => lightness * scale + offset));
+    // Partly transparent, it shows the page through it, as a VML fill.
+    shape.paint = colour ? [alpha < 1 ? blend(pageColour, colour, alpha) : colour] : null;
+  };
   const record = (kind: keyof Passages, texts: string[]) => {
-    // mammoth reads text boxes from mc:Fallback only: what mc:Choice repeats is not counted.
-    if (stack.some(item => item.name === "mc:Choice")) return;
+    // mammoth reads text boxes from mc:Fallback and VML only: what mc:Choice repeats, or a DrawingML text box holds, is not counted.
+    if (stack.some(item => item.name === "mc:Choice" || item.name === "w:drawing")) return;
     const paragraph = nearest("w:p")?.passages;
     if (paragraph) paragraph[kind].push(...texts);
     else found[kind].push(texts.join(""));
@@ -690,13 +812,20 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
         textStart = null;
       } else if (frame?.name === "w:r" && frame.texts?.length) {
         const texts = frame.texts.map(([start, end]) => decodeXml(xml.slice(start, end)));
-        const seen = visibility(frame, texts.join(""));
+        const seen = asDrawn(texts.join(""), visibility(frame, texts.join("")));
         if (seen !== "visible") {
           cuts.push(...frame.texts);
           record(seen, texts);
         }
       } else if (frame?.name === "w:p" && frame.passages) {
         for (const kind of ["invisible", "unverifiable"] as const) if (frame.passages[kind].length) found[kind].push(frame.passages[kind].join(""));
+      } else if (frame?.colour) {
+        paintShape(frame.colour);
+      } else if (frame?.name === "wp:posOffset" && offsetStart !== null) {
+        const box = stack.at(-2)?.box;
+        const offset = Number(xml.slice(offsetStart, tag.start).trim()) / EMU_PER_PT || 0;
+        if (box) box[stack.at(-1)?.name === "wp:positionH" ? "left" : "top"] = offset;
+        offsetStart = null;
       }
       return;
     }
@@ -714,17 +843,52 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
       if (table) frame.formats = cellFormats(styles, table, frame.row!, frame.column!);
     }
     if (VML_SHAPES.has(tag.name)) {
-      const fill = tag.attributes.get("fillcolor")?.trim();
-      const colour = fill === undefined || /^(f|false)$/i.test(tag.attributes.get("filled") ?? "") ? undefined : vmlColour(fill);
-      frame.paint = colour ? [colour] : null;
+      const fill = fills.get(tag.start);
+      const colour = tag.attributes.get("fillcolor")?.trim();
+      const filled = !/^(f|false)$/i.test(tag.attributes.get("filled") ?? "") && !/^(f|false)$/i.test(fill?.attributes.get("on") ?? "");
+      const known = colour === undefined || !filled ? undefined : vmlColour(colour);
+      // A fill partly transparent (v:fill opacity) shows the page through it; a transparent one, the page.
+      const opacity = vmlOpacity(fill?.attributes.get("opacity"));
+      frame.paint = known ? [opacity < 1 ? blend(pageColour, known, opacity) : known] : null;
       frame.offPage = vmlShapeIsOffPage(tag.attributes.get("style"), page);
     }
-    if (tag.name === "w:background" && parent?.name === "w:document") {
+    // DrawingML shapes (Word's text boxes in mc:Choice): their fill, else their style's (fill style 1 is solid), placed by their anchor.
+    if (parent?.name === "wps:spPr" && grandParent?.name === "wps:wsp" && DRAWING_FILLS.has(tag.name)) {
+      // None, or a fill that may not be one colour (gradient, picture): what lies under may show, as under a picture.
+      grandParent.paint = null;
+      if (tag.name === "a:solidFill") frame.fillOf = grandParent;
+    }
+    if (tag.name === "a:fillRef" && parent?.name === "wps:style" && grandParent?.name === "wps:wsp" && grandParent.paint === undefined) {
+      grandParent.paint = null;
+      if (tag.attributes.get("idx") === "1") frame.fillOf = grandParent;
+    }
+    if (parent?.fillOf && DRAWING_COLOURS.has(tag.name)) {
+      frame.colour = { hex: drawingColour(tag, theme), scale: 1, offset: 0, alpha: 1, shape: parent.fillOf };
+      if (tag.selfClosing) paintShape(frame.colour);
+    } else if (parent?.colour) {
+      // Word's lighter and darker theme colours change the lightness, its transparency the opacity; another change makes the colour unknown.
+      const amount = Number(tag.attributes.get("val")) / 100_000;
+      if (tag.name === "a:lumMod" && Number.isFinite(amount)) parent.colour.scale = amount;
+      else if (tag.name === "a:lumOff" && Number.isFinite(amount)) parent.colour.offset = amount;
+      else if (tag.name === "a:alpha" && Number.isFinite(amount)) parent.colour.alpha = Math.min(1, Math.max(0, amount));
+      else parent.colour.hex = undefined;
+    }
+    if (tag.name === "wp:anchor") frame.box = { left: 0, top: 0, width: 0, height: 0, simple: /^(1|true|on)$/i.test(tag.attributes.get("simplePos") ?? "") };
+    if (tag.name === "wp:simplePos" && parent?.box?.simple) Object.assign(parent.box, { left: Number(tag.attributes.get("x")) / EMU_PER_PT || 0, top: Number(tag.attributes.get("y")) / EMU_PER_PT || 0 });
+    if (tag.name === "wp:extent" && parent?.box) Object.assign(parent.box, { width: Number(tag.attributes.get("cx")) / EMU_PER_PT || 0, height: Number(tag.attributes.get("cy")) / EMU_PER_PT || 0 });
+    if (tag.name === "wp:posOffset" && !tag.selfClosing && grandParent?.box && !grandParent.box.simple && (parent?.name === "wp:positionH" || parent?.name === "wp:positionV")) offsetStart = tag.end;
+    // The shape follows its position and size.
+    if (tag.name === "a:graphic" && parent?.box) parent.offPage = isOffPage(parent.box, page);
+    if (tag.name === "mc:Choice" && parent?.name === "mc:AlternateContent" && !parent.drawn && drawnByWord(tag)) {
+      frame.chosen = true;
+      parent.drawn = { text: "", verdicts: [], cursor: 0 };
+    }
+    // Word shows the page colour, and fill effects as the page colour (gradient, texture, picture) under all the text, when the settings say so.
+    if (tag.name === "w:background" && parent?.name === "w:document" && pageShown) {
       const colour = colourOf(theme, tag.attributes.get("w:color"), tag.attributes.get("w:themeColor"), tag.attributes.get("w:themeTint"), tag.attributes.get("w:themeShade"));
       if (colour && colour !== "auto") pageColour = colour;
     }
-    // Fill effects as the page colour (gradient, texture, picture) lie under all the text.
-    if (tag.name === "v:fill" && parent?.name === "v:background") pagePicture = true;
+    if (tag.name === "v:fill" && parent?.name === "v:background" && pageShown) pagePicture = true;
     if (parent?.name === "w:pPr" && grandParent?.name === "w:p") {
       if (tag.name === "w:pStyle") grandParent.style = tag.attributes.get("w:val");
       if (tag.name === "w:shd") grandParent.paint = shadingPaint(tag, theme);
@@ -733,6 +897,7 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
     if (parent?.name === "w:tblPr" && grandParent?.name === "w:tbl") {
       if (tag.name === "w:tblStyle") grandParent.style = tag.attributes.get("w:val");
       if (tag.name === "w:tblLook") grandParent.look = tableLook(tag);
+      if (BAND_SIZES[tag.name]) grandParent[BAND_SIZES[tag.name]!] = bandSize(tag);
     }
     if (parent?.name === "w:rPr" && grandParent?.name === "w:r") {
       if (tag.name === "w:rStyle") grandParent.style = tag.attributes.get("w:val");
@@ -818,14 +983,15 @@ export function withoutInvisibleDocxText(buffer: Buffer, limits = DOCUMENT_DECOM
   const stylesPart = relatedPart(parts, relationships, STYLES_RELATIONSHIP, folder) ?? "word/styles.xml";
   const themePart = relatedPart(parts, relationships, THEME_RELATIONSHIP, folder) ?? "word/theme/theme1.xml";
   const settingsPart = relatedPart(parts, relationships, SETTINGS_RELATIONSHIP, folder) ?? "word/settings.xml";
-  const theme = readTheme(parts.get(themePart)?.toString("utf8"), parts.get(settingsPart)?.toString("utf8"));
+  const settings = parts.get(settingsPart)?.toString("utf8");
+  const theme = readTheme(parts.get(themePart)?.toString("utf8"), settings);
   // A picture behind the text in a header or a footer lies on every page, wherever the text falls.
   const onEveryPage = Array.from(parts.keys()).some(name => {
     if (!/(^|\/)(header|footer)\d*\.xml$/i.test(name)) return false;
     const margin = drawingReach(parts.get(name)!.toString("utf8"));
     return margin.fromPage || margin.reaches.length > 0;
   });
-  const visible = cutInvisibleRuns(xml, readStyles(parts.get(stylesPart)?.toString("utf8"), theme), theme, onEveryPage);
+  const visible = cutInvisibleRuns(xml, readStyles(parts.get(stylesPart)?.toString("utf8"), theme), theme, onEveryPage, showsPageColour(settings));
   if (!visible.cut) return { buffer, invisibleText: [], unverifiableText: [] };
   parts.set(mainDocument, Buffer.from(visible.xml, "utf8"));
   return { buffer: storedZip(parts), invisibleText: visible.invisibleText, unverifiableText: visible.unverifiableText };
