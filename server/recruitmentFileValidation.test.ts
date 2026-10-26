@@ -1,4 +1,6 @@
 import { randomBytes } from "node:crypto";
+import { createRequire } from "node:module";
+import { pathToFileURL } from "node:url";
 import { constants, deflateSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
 import { recruitmentCvValidationMessage, validateCvFile } from "./recruitmentFileValidation";
@@ -18,6 +20,25 @@ const SEVERAL_HEAVY_READS_TIMEOUT_MS = 30_000;
 const validPdf = Buffer.concat([Buffer.from("%PDF-1.7\n1 0 obj << /Type /Page >> endobj\n"), Buffer.alloc(300, 65)]);
 const validDoc = Buffer.concat([Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]), Buffer.alloc(300, 66)]);
 const validDocx = buildDocx(["Dr Docx Candidate", "Infirmier anesthésiste IADE — 6 ans d’expérience", "Langues : Français, Anglais"]);
+
+/**
+ * The JavaScript that pdf.js (the one of pdf-parse, which the extraction runs)
+ * finds in the opening action of `pdf`, or the error it throws reading it:
+ * what a PDF reader built on it would run when the file opens.
+ */
+async function pdfJsOpeningScripts(pdf: Buffer): Promise<string[] | string> {
+  const require = createRequire(import.meta.url);
+  const pdfjsPath = createRequire(require.resolve("pdf-parse")).resolve("pdfjs-dist/legacy/build/pdf.mjs");
+  const pdfjs = await import(pathToFileURL(pdfjsPath).href);
+  const document = await pdfjs.getDocument({ data: new Uint8Array(pdf), verbosity: 0 }).promise;
+  try {
+    return ((await document.getJSActions()) as { OpenAction?: string[] } | null)?.OpenAction ?? [];
+  } catch (error) {
+    return String(error);
+  } finally {
+    await document.destroy();
+  }
+}
 
 function pdfWithStream(dictionary: string, data: Buffer, endOfLine = "\n") {
   return Buffer.concat([
@@ -322,20 +343,31 @@ describe("REC-02 — PDF réels acceptés, actions dangereuses cherchées aussi 
         withTrailerInStreamData(libreOfficeCvPdf(), `<</Type/Catalog/Pages 10 0 R/OpenAction ${JAVASCRIPT_ACTION}>>`),
         // A comment fakes a stream inside the catalog: pdf.js skips it and reads the action after it.
         saveIncrementally(libreOfficeCvPdf(), [{ number: 20, body: `<</Type/Catalog/Pages 10 0 R\n% 98 0 obj <<>> stream\n/OpenAction ${JAVASCRIPT_ACTION}\n>>` }]),
-        // pdf.js reads "0.", "0-" or "0E+" as the generation number 0, then the "obj" keyword; "99+0" and
-        // "99..0" as the numbers 99 and 0; a comment between the numbers like white-space.
-        ...["99 0.obj", "99 0-obj", "99 0E+obj", "99+0obj", "99..0obj", "99 %c\n0 obj"].map(header => withObjectInStreamData(libreOfficeCvPdf(), { number: 99, header, body: JAVASCRIPT_ACTION }, [catalog("/OpenAction 99 0 R")])),
+        // pdf.js reads "0.", "0-" or "0E+" as the generation number 0, then the "obj" keyword; "99+0",
+        // "99E++0" and "99..0" as the numbers 99 and 0; a comment between the numbers like white-space.
+        ...["99 0.obj", "99 0-obj", "99 0E+obj", "99+0obj", "99E++0obj", "99..0obj", "99 %c\n0 obj"].map(header => withObjectInStreamData(libreOfficeCvPdf(), { number: 99, header, body: JAVASCRIPT_ACTION }, [catalog("/OpenAction 99 0 R")])),
         withObjectInStreamData(packPdfIntoObjectStream(libreOfficeCvPdf()), { number: 99, header: "99 0.obj", body: JAVASCRIPT_ACTION }, [catalog("/OpenAction 99 0 R")]),
         // The same catalog with a fake stream in a comment, which "upstream" closes, and no real stream.
         saveIncrementally(libreOfficeCvPdf(), [{ number: 20, header: "20 0.obj", body: `<</Type/Catalog/Pages 10 0 R\n% 98 0 obj <<>> stream\n/OpenAction ${JAVASCRIPT_ACTION}/Lang(upstream)\n>>` }]),
       ];
       for (const [index, trap] of traps.entries()) {
-        // pdf.js reads each of them: the PDF opens on its page, and a PDF reader would run the action.
+        // pdf.js reads each of them: the PDF opens on its page, and pdf.js finds the action a PDF reader would run.
         expect((await extractCvDocument(trap, "application/pdf")).text, String(index)).toContain("Dr Camille Martin");
+        expect(await pdfJsOpeningScripts(trap), String(index)).toEqual(["app.alert(1)"]);
         expect(() => validate(trap), String(index)).toThrow("cv_validation_pdf_active_content");
       }
-      // Thirteen extractions, each drawing the page it reads to keep only its visible text (IA-01).
+      // Fourteen extractions, each drawing the page it reads to keep only its visible text (IA-01).
     }, SEVERAL_HEAVY_READS_TIMEOUT_MS);
+
+    it("ne laisse de côté que des « obj » que pdf.js ne lit pas non plus comme un en-tête d’objet", async () => {
+      // Spellings that the check does not read as a header, like the "obj" of image data: if pdf.js
+      // ever read one of them, an action hidden behind it would be run and never searched.
+      for (const header of ["99 0Eobj", "99]0obj", "99\x850obj"]) {
+        const pdf = withObjectInStreamData(libreOfficeCvPdf(), { number: 99, header, body: JAVASCRIPT_ACTION }, [catalog("/OpenAction 99 0 R")]);
+        expect(validate(pdf).pageCount, JSON.stringify(header)).toBe(1);
+        expect(await pdfJsOpeningScripts(pdf), JSON.stringify(header)).not.toContain("app.alert(1)");
+      }
+    });
   });
 
   describe("accepte un CV scanné, quels que soient les octets de ses images", () => {
