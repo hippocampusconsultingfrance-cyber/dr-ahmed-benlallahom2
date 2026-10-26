@@ -1,29 +1,49 @@
-import { readFileSync } from "node:fs";
-import { describe, expect, it } from "vitest";
-import { bookingLegalNoticeCopy } from "./BookingLegalNotice";
-import { BOOKING_TERMS_OF_SALE_HREF } from "@shared/bookingPolicy";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { describe, expect, it, vi } from "vitest";
 import { footerLandmarkCopy } from "./Footer";
 
-// M6 — LEGAL-23 : liens juridiques au point de collecte et de paiement.
+// M6 — LEGAL-23 : liens juridiques au point de collecte et de paiement. La
+// présence de cet encadré et du pied de page sur /booking et
+// /booking/confirmation est vérifiée au rendu de ces pages
+// (BookingPage.render.test.ts, BookingConfirmationPage.render.test.ts).
 
-const read = (relative: string) => readFileSync(new URL(relative, import.meta.url), "utf8");
+const view = vi.hoisted(() => ({ language: "fr" as "fr" | "en" | "de" | "zh", termsOfSale: null as string | null }));
+vi.mock("@/contexts/LanguageContext", () => ({ useLanguage: () => ({ language: view.language }) }));
+vi.mock("wouter", async () => {
+  const { createElement } = await import("react");
+  return { Link: ({ href, children }: { href: string; children: unknown }) => createElement("a", { href }, children as never) };
+});
+vi.mock("@shared/bookingPolicy", async importOriginal => ({
+  ...await importOriginal<typeof import("@shared/bookingPolicy")>(),
+  get BOOKING_TERMS_OF_SALE_HREF() { return view.termsOfSale; },
+}));
+
+const { default: BookingLegalNotice, bookingLegalNoticeCopy } = await import("./BookingLegalNotice");
+const { BOOKING_TERMS_OF_SALE_HREF } = await vi.importActual<typeof import("@shared/bookingPolicy")>("@shared/bookingPolicy");
+
+const render = (props: Record<string, unknown> = {}) => renderToStaticMarkup(createElement(BookingLegalNotice, props));
+const links = (html: string) => [...html.matchAll(/<a href="([^"]+)">([^<]*)<\/a>/g)].map(match => [match[1], match[2]]);
 
 describe("informations légales des pages de réservation", () => {
-  it("affiche le pied de page et les liens confidentialité / mentions légales sur /booking et /booking/confirmation", () => {
-    for (const page of ["../pages/BookingPage.tsx", "../pages/BookingConfirmationPage.tsx"]) {
-      const source = read(page);
-      expect(source).toContain('import Footer from "@/components/Footer";');
-      expect(source).toContain("<Footer />");
-      expect(source).toContain("<BookingLegalNotice");
-    }
-    const notice = read("./BookingLegalNotice.tsx");
-    expect(notice).toContain('href="/legal?tab=privacy"');
-    expect(notice).toContain('href="/legal"');
+  it.each(["fr", "en", "de", "zh"] as const)("renvoie vers la politique de confidentialité et les mentions légales (%s)", language => {
+    view.language = language;
+    const copy = bookingLegalNoticeCopy[language];
+    const html = render();
+    expect(links(html)).toEqual([["/legal?tab=privacy", copy.privacy], ["/legal", copy.legal]]);
+    expect(html).toContain(`aria-label="${copy.label}"`);
+    expect(html).toContain(copy.purpose);
+    expect(render({ showPurpose: false })).not.toContain(copy.purpose);
   });
 
   it("garde l’emplacement des CGV masqué tant qu’aucune page de CGV n’existe", () => {
+    view.language = "fr";
     expect(BOOKING_TERMS_OF_SALE_HREF).toBeNull();
-    expect(read("./BookingLegalNotice.tsx")).toContain("{BOOKING_TERMS_OF_SALE_HREF && <Link href={BOOKING_TERMS_OF_SALE_HREF}");
+    expect(links(render()).map(([href]) => href)).not.toContain("/cgv");
+
+    view.termsOfSale = "/cgv";
+    expect(links(render())).toContainEqual(["/cgv", bookingLegalNoticeCopy.fr.termsOfSale]);
+    view.termsOfSale = null;
   });
 
   it("est traduit dans les quatre langues", () => {

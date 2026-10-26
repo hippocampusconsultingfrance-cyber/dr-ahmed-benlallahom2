@@ -27,14 +27,6 @@ describe("booking confirmation state", () => {
     expect(confirmationContent.fr.attention.eyebrow).toBe("Réservation à régulariser");
   });
 
-  it("n’affiche les étapes de confirmation qu’après un paiement, avec des liens de contact", async () => {
-    const source = await import("node:fs/promises").then((fs) => fs.readFile(new URL("./BookingConfirmationPage.tsx", import.meta.url), "utf8"));
-    expect(source).toContain('{(displayed === "confirmed" || displayed === "processing") && (');
-    expect(source).toContain("{isConfirmed && (");
-    expect(source).toContain("mailto:${siteConfig.email}");
-    expect(source).toContain("trpc.appointments.publicStatus.useQuery(");
-  });
-
   it("sépare l’annonce de mise à jour automatique de sa variante « vérifiez votre email » après 2 min (RES-05)", () => {
     expect(STATUS_STALLED_AFTER_MS).toBe(2 * 60 * 1000);
     for (const language of ["fr", "en", "de", "zh"] as const) {
@@ -73,16 +65,6 @@ describe("booking confirmation state", () => {
       expect(confirmationContent[language].unknown.description.length).toBeGreaterThan(0);
       expect(confirmationContent[language].unknown.nextSteps.length).toBeGreaterThan(0);
     }
-  });
-
-  it("keeps the confirmation route out of search indexing", async () => {
-    const source = await import("node:fs/promises").then((fs) =>
-      fs.readFile(new URL("./BookingConfirmationPage.tsx", import.meta.url), "utf8")
-    );
-
-    expect(source).toContain("noIndex");
-    // Cartes « email / facture » réservées à un paiement confirmé par le serveur.
-    expect(source).toContain("isConfirmed && (");
   });
 
   it("annonce la facture par e-mail dans les quatre langues sans lien de téléchargement public", () => {

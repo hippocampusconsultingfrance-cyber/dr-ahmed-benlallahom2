@@ -16,10 +16,7 @@ const oklch = (token: string): Oklch => {
 
 describe("repères et structure (PUB-A11Y-01 / PUB-A11Y-02)", () => {
   it("/booking expose un repère principal atteignable par le lien d'évitement", () => {
-    const booking = read("pages/BookingPage.tsx");
-    expect(booking).toContain('<div id="main-content" role="main" tabIndex={-1} className="max-w-3xl mx-auto">');
-    expect(booking).not.toContain('aria-label="Signature médicale"');
-
+    // The booking page renders this landmark: BookingPage.render.test.ts.
     const target = { id: "", tabIndex: 0, focus: () => undefined };
     const root = { querySelector: (selector: string) => (selector.includes('[role="main"]') ? target : null) };
     expect(getMainContentTarget(root)).toBe(target);
