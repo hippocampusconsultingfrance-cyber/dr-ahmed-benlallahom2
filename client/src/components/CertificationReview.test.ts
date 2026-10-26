@@ -227,6 +227,30 @@ describe("confirmation des certifications par l’admin (IA-02)", () => {
     ]);
   });
 
+  it("relit la fiche 360° quand le serveur demande le renouvellement d’une certification qu’elle proposait encore de confirmer (IA-02)", async () => {
+    // Opened before the analysis that read in the CV that ACLS expired in May 2023: « Confirmer » is still offered.
+    const candidate = { id: 5, firstName: "Hana", lastName: "Haddad", specialty: "Cardiologie", trackingId: "CV5", status: "new", createdAt: new Date("2026-10-20T10:00:00Z"), lastCandidateResponseAt: null, adminNotes: null };
+    state.detail = { candidate, audits: [], campaignRecipients: [], followUps: [], certifications: [{ name: "ACLS", origins: ["declared"], expiresAt: null }] };
+    const sheetReview = () => {
+      hooks.index = 0;
+      const review = elements(Candidate360Dialog({ applicationId: 5, onOpenChange: vi.fn() })).find(element => element.type === CertificationReview)!;
+      return CertificationReview(review.props as Parameters<typeof CertificationReview>[0]);
+    };
+    clickable(sheetReview(), "Confirmer ACLS")();
+    expect(state.confirmMutate).toHaveBeenLastCalledWith({ id: 5, name: "ACLS", confirmed: true });
+
+    await state.confirmOptions!.onError?.({ message: "Cette certification a expiré : confirmez son renouvellement, avec la nouvelle date d’expiration lue sur le justificatif, ou cochez qu’il n’en porte pas.", data: { code: "BAD_REQUEST", reason: "renewal_required" } });
+    expect(state.errors).toEqual(["Cette certification a expiré : confirmez son renouvellement, avec la nouvelle date d’expiration lue sur le justificatif, ou cochez qu’il n’en porte pas."]);
+    // The sheet, the Candidatures card and the mission read the dossier again…
+    expect(state.invalidated).toEqual(["recruitment.list", ["candidate.detail", { id: 5 }], "clientBriefs.candidates"]);
+    // …and the sheet, read again, offers the renewal the toast asks for, no longer « Confirmer ».
+    state.detail = { ...state.detail, certifications: [{ name: "ACLS", origins: ["declared"], expiresAt: "2023-05" }] };
+    const html = renderToStaticMarkup(sheetReview());
+    expect(html).toContain("ACLS<span class=\"font-normal text-red-600 dark:text-red-400\"> · expirée en mai 2023</span>");
+    expect(html).toContain('aria-label="Confirmer le renouvellement de ACLS"');
+    expect(html).not.toContain('aria-label="Confirmer ACLS"');
+  });
+
   it.each([
     ["en", {
       expired: " · expired in May 2023</span>", current: " · expires in May 2028</span>",

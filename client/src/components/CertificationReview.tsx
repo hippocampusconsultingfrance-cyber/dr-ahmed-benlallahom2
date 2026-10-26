@@ -169,6 +169,12 @@ export default function CertificationReview({ applicationId, certifications }: C
   const [renewalDrafts, setRenewalDrafts] = useState<Record<string, RenewalDraft>>({});
   const editRenewal = (name: string, change: Partial<RenewalDraft>) => setRenewalDrafts(current => ({ ...current, [name]: { ...(current[name] ?? { date: "", withoutExpiry: false }), ...change } }));
   const expiryOf = (expiresAt: string) => certificationExpiryDate(expiresAt, copy.locale);
+  // Every screen showing the candidate's certifications reads them again.
+  const refresh = () => {
+    void utils.admin.recruitment.list.invalidate();
+    void utils.admin.recruitment.candidate.detail.invalidate({ id: applicationId });
+    void utils.admin.clientBriefs.candidates.invalidate();
+  };
   const confirm = trpc.admin.recruitment.candidate.confirmCertification.useMutation({
     onSuccess: (result, variables) => {
       toast.success(variables.renewal
@@ -176,16 +182,19 @@ export default function CertificationReview({ applicationId, certifications }: C
         : variables.confirmed ? copy.confirmed(variables.name)
           : "notRetainedByAnalysis" in result ? copy.withdrawnNotRetained(variables.name)
             : copy.withdrawn(variables.name));
-      void utils.admin.recruitment.list.invalidate();
-      void utils.admin.recruitment.candidate.detail.invalidate({ id: applicationId });
-      void utils.admin.clientBriefs.candidates.invalidate();
+      refresh();
     },
     // The server's stable reason, worded in the admin's language with the day
     // it names (the latest renewal date accepted); any other error as it came.
+    // A refusal can come from a sheet older than the dossier (renewal_required:
+    // an analysis read since that the certification has expired, while the
+    // sheet still offers « Confirmer »): read again, it shows the renewal box
+    // the toast asks for.
     onError: mutationError => {
       const reason = mutationError.data?.reason;
       const date = mutationError.data?.date;
       toast.error(isCertificationRenewalRefusalReason(reason) && (reason !== "renewal_date_too_far" || date) ? copy.refusals[reason](date ? localeDay(date, copy.locale) : "") : mutationError.message);
+      refresh();
     },
   });
 
