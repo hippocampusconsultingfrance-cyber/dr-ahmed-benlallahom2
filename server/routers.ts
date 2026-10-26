@@ -27,7 +27,7 @@ import { logRecruitmentAction, matchesRecruitmentProfile, parseRecruitmentJsonAr
 import { computeBriefCandidateMatch } from "./clientBriefMatching";
 import { candidatePortalRouter } from "./candidatePortalRouter";
 import { enforcePersistentRateLimit, hashSecurityValue, logSecurityEvent, requestIpHash } from "./candidateSecurity";
-import { publicFormRateLimitSubject, type PublicFormRateLimitScope } from "./publicFormRateLimit";
+import { countPublicFormDailyVolume, enforcePublicEmailIpRateLimit, PUBLIC_EMAIL_IP_RATE_LIMITS, publicFormRateLimitSubject, releasePublicEmailIpRateLimit, type PublicFormRateLimitScope } from "./publicFormRateLimit";
 import { createCandidateInvitationToken } from "./candidateAuth";
 import { emailLanguageFor, SITE_LANGUAGES } from "./emailLanguage";
 import { verifyCandidateTurnstile } from "./candidateTurnstile";
@@ -120,6 +120,24 @@ async function enforcePublicFormRateLimit(input: {
     const message = blockedMessage ?? DEFAULT_PUBLIC_FORM_BLOCKED_MESSAGE;
     throw reason ? bookingRefusal("TOO_MANY_REQUESTS", reason, message) : new TRPCError({ code: "TOO_MANY_REQUESTS", message });
   }
+}
+
+/**
+ * ABUS-01 : limite par IP seule du contact et des demandes RGPD, en plus de
+ * leur limite IP + email. Appelée une fois l’anti-robot passé, pour ne compter
+ * que les demandes acceptées ; renvoie l’empreinte d’IP pour rendre l’essai si
+ * l’enregistrement échoue ensuite.
+ */
+async function enforcePublicFormIpLimit(kind: "contact" | "gdpr", req: { headers: unknown; ip?: string | null }) {
+  const ipHash = requestIpHash(req.headers as Record<string, unknown>) ?? (req.ip ? hashSecurityValue(req.ip) : null);
+  try {
+    await enforcePublicEmailIpRateLimit(kind, ipHash);
+  } catch (error) {
+    if (!(error instanceof Error && error.message === "candidate_security_rate_limited")) throw error;
+    await logSecurityEvent({ actorKind: "anonymous", category: `${PUBLIC_EMAIL_IP_RATE_LIMITS[kind].action}_rate_limit`, outcome: "blocked", severity: "warning", ipHash });
+    throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: DEFAULT_PUBLIC_FORM_BLOCKED_MESSAGE });
+  }
+  return ipHash;
 }
 
 /** Nombre maximal de créneaux retenus (en attente de paiement) par adresse email. */
@@ -542,22 +560,31 @@ export const appRouter = router({
           await verifyCandidateTurnstile({ token: input.turnstileToken ?? "", remoteIp: ctx.req.ip });
         }
 
+        const ipHash = await enforcePublicFormIpLimit("contact", ctx.req);
+
         // Unpredictable tracking ID (13 chars, column is varchar(20))
         const trackingId = createPublicTrackingId("C");
 
         // Save the message to the database using raw SQL (TiDB DEFAULT bug workaround)
         const db = await getDb();
         if (db) {
-          await db.execute(
-            sql`INSERT INTO contact_messages (tracking_id, name, email, phone, message, gdpr_consent) VALUES (${trackingId}, ${input.name}, ${input.email}, ${input.phone || null}, ${input.message}, ${input.gdprConsent})`
-          );
+          try {
+            await db.execute(
+              sql`INSERT INTO contact_messages (tracking_id, name, email, phone, message, gdpr_consent) VALUES (${trackingId}, ${input.name}, ${input.email}, ${input.phone || null}, ${input.message}, ${input.gdprConsent})`
+            );
+          } catch (error) {
+            await releasePublicEmailIpRateLimit("contact", ipHash).catch(() => undefined);
+            throw error;
+          }
         }
 
-        // Notify the owner via Manus notification system
-        await notifyOwner({
-          title: `Nouveau message de contact de ${input.name} (${trackingId})`,
-          content: `**Numéro de suivi:** ${trackingId}\n**De:** ${input.name}\n**Email:** ${input.email}\n**Téléphone:** ${input.phone || "Non renseigné"}\n**Consentement RGPD:** ${input.gdprConsent === 1 ? "✅ Accepté" : "❌ Refusé"}\n\n**Message:**\n${input.message}`,
-        });
+        // ABUS-01 : au-delà du volume du jour, le message est gardé sans email au propriétaire.
+        if (await countPublicFormDailyVolume("contact")) {
+          await notifyOwner({
+            title: `Nouveau message de contact de ${input.name} (${trackingId})`,
+            content: `**Numéro de suivi:** ${trackingId}\n**De:** ${input.name}\n**Email:** ${input.email}\n**Téléphone:** ${input.phone || "Non renseigné"}\n**Consentement RGPD:** ${input.gdprConsent === 1 ? "✅ Accepté" : "❌ Refusé"}\n\n**Message:**\n${input.message}`,
+          });
+        }
 
         return { success: true, trackingId } as const;
       }),
@@ -584,15 +611,21 @@ export const appRouter = router({
         if (process.env.NODE_ENV !== "test" && process.env.VITEST !== "true") {
           await verifyCandidateTurnstile({ token: input.turnstileToken ?? "", remoteIp: ctx.req.ip });
         }
+        const ipHash = await enforcePublicFormIpLimit("gdpr", ctx.req);
         // Unpredictable tracking ID (13 chars, column is varchar(20))
         const trackingId = createPublicTrackingId("G");
 
         // Save the GDPR request to the database using raw SQL (TiDB DEFAULT bug workaround)
         const db = await getDb();
         if (db) {
-          await db.execute(
-            sql`INSERT INTO gdpr_requests (tracking_id, name, email, phone, request_type, description, status) VALUES (${trackingId}, ${input.name}, ${input.email}, ${input.phone || null}, ${input.requestType}, ${input.description || null}, ${'pending'})`
-          );
+          try {
+            await db.execute(
+              sql`INSERT INTO gdpr_requests (tracking_id, name, email, phone, request_type, description, status) VALUES (${trackingId}, ${input.name}, ${input.email}, ${input.phone || null}, ${input.requestType}, ${input.description || null}, ${'pending'})`
+            );
+          } catch (error) {
+            await releasePublicEmailIpRateLimit("gdpr", ipHash).catch(() => undefined);
+            throw error;
+          }
         }
 
         // Notify the owner via Manus notification system
@@ -604,10 +637,13 @@ export const appRouter = router({
           objection: "Opposition au traitement",
         };
 
-        await notifyOwner({
-          title: `Nouvelle demande RGPD de ${input.name} (${trackingId})`,
-          content: `**Numéro de suivi:** ${trackingId}\n**Type de demande:** ${requestTypeLabels[input.requestType]}\n**De:** ${input.name}\n**Email:** ${input.email}\n**Téléphone:** ${input.phone || "Non renseigné"}\n\n**Description:**\n${input.description || "Aucune description fournie"}`,
-        });
+        // ABUS-01 : au-delà du volume du jour, la demande est gardée sans email au propriétaire.
+        if (await countPublicFormDailyVolume("gdpr")) {
+          await notifyOwner({
+            title: `Nouvelle demande RGPD de ${input.name} (${trackingId})`,
+            content: `**Numéro de suivi:** ${trackingId}\n**Type de demande:** ${requestTypeLabels[input.requestType]}\n**De:** ${input.name}\n**Email:** ${input.email}\n**Téléphone:** ${input.phone || "Non renseigné"}\n\n**Description:**\n${input.description || "Aucune description fournie"}`,
+          });
+        }
 
         return { success: true, trackingId } as const;
       }),

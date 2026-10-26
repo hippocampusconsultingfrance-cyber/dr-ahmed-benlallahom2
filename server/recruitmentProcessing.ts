@@ -1,4 +1,4 @@
-import { and, desc, eq, exists, gte, inArray, isNull, lt, lte, or } from "drizzle-orm";
+import { and, desc, eq, exists, gte, inArray, isNull, lt, lte, ne, or } from "drizzle-orm";
 import { cvApplications, cvProcessingJobs } from "../drizzle/schema";
 import { getDb } from "./db";
 import { extractCvDocument, analyzeCvText, RECRUITMENT_ANALYSIS_PROMPT_VERSION, saveCvAnalysis } from "./recruitmentAnalysis";
@@ -275,6 +275,24 @@ export async function enqueueCvAnalysis(applicationId: number, requestedAt = new
   throw new Error("cv_analysis_enqueue_contention");
 }
 
+/** analysisLastError of an application received beyond the day's volume (ABUS-01). */
+export const CV_ANALYSIS_DEFERRED_DAILY_VOLUME = "analysis_deferred_daily_volume";
+
+/**
+ * ABUS-01: an application received beyond the day's volume is kept for human
+ * review without queueing its AI analysis, and the legacy backfill leaves it
+ * alone; « Relancer l’analyse » queues it like any other.
+ */
+export async function deferCvAnalysisForDailyVolume(applicationId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+  await db.update(cvApplications).set({
+    analysisStatus: "needs_review",
+    analysisLastError: CV_ANALYSIS_DEFERRED_DAILY_VOLUME,
+    updatedAt: new Date(),
+  }).where(eq(cvApplications.id, applicationId));
+}
+
 /**
  * Recreates a processing job for legacy applications left in quarantine before
  * the Vercel worker replaced Manus. Active jobs are never duplicated.
@@ -290,6 +308,7 @@ export async function backfillLegacyCvAnalysisJobs(limit = PROCESSING_BATCH_SIZE
       eq(cvApplications.fileValidationStatus, "quarantined"),
       inArray(cvApplications.status, ["new", "reviewing", "shortlisted", "placed"]),
       isNull(cvProcessingJobs.id),
+      or(isNull(cvApplications.analysisLastError), ne(cvApplications.analysisLastError, CV_ANALYSIS_DEFERRED_DAILY_VOLUME)),
     ))
     .orderBy(cvApplications.createdAt)
     .limit(Math.min(Math.max(limit, 1), PROCESSING_BATCH_SIZE));

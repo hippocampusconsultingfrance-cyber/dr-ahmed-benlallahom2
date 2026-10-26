@@ -73,6 +73,8 @@ export function recruitmentDriveExportErrorLabel(error: string | null | undefine
 /** Readable French explanation of a technical CV-analysis error (never the raw provider text). */
 export function recruitmentAnalysisErrorLabel(error: string | null | undefined) {
   if (!error) return null;
+  // ABUS-01: application received beyond the day's volume, kept without AI analysis.
+  if (error === "analysis_deferred_daily_volume") return "Analyse IA non lancée : volume de candidatures inhabituel ce jour-là. Relancez l’analyse si le dossier est légitime.";
   if (/billing|credit card|402|payment required/i.test(error)) return "Analyse IA indisponible (compte du fournisseur à vérifier) : examinez le CV manuellement.";
   if (/^cv_validation_/i.test(error)) return "Le fichier CV a été refusé par le contrôle de sécurité : examinez-le manuellement ou demandez un PDF au candidat.";
   if (/attempts_exhausted/i.test(error)) return "Analyse abandonnée après plusieurs échecs : relancez-la plus tard ou examinez le CV manuellement.";

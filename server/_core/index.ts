@@ -488,7 +488,7 @@ export async function createApp() {
         recruitmentStage = "security-protection";
         const { verifyCandidateTurnstile } = await import("../candidateTurnstile");
         const { enforcePersistentRateLimit, hashSecurityValue, logSecurityEvent } = await import("../candidateSecurity");
-        const { enforcePublicEmailIpRateLimit, releasePublicEmailIpRateLimit } = await import("../publicFormRateLimit");
+        const { countPublicFormDailyVolume, enforcePublicEmailIpRateLimit, releasePublicEmailIpRateLimit } = await import("../publicFormRateLimit");
         const clientIp = req.ip || "unknown";
         const ipHash = hashSecurityValue(clientIp);
         const protectionsEnabled = process.env.NODE_ENV !== "test" && process.env.VITEST !== "true";
@@ -563,14 +563,17 @@ export async function createApp() {
         const duplicate = duplicateCandidates.find(candidate => isSameRecruitmentSubmission(candidate, parsed.data));
         if (duplicate) {
           const candidatePortalInviteUrl = `${PUBLIC_APP_ORIGIN}/candidate/access?invite=${encodeURIComponent(createCandidateInvitationToken(Number(duplicate.id)))}`;
-          await sendTrackedCvApplicationConfirmationEmail({
-            applicationId: Number(duplicate.id),
-            candidateEmail: parsed.data.email,
-            candidateFirstName: parsed.data.firstName,
-            trackingId: duplicate.trackingId,
-            candidatePortalInviteUrl,
-            language: parsed.data.language,
-          });
+          // ABUS-01: beyond the day's volume, no confirmation goes to the typed address.
+          if (await countPublicFormDailyVolume("recruitmentApply")) {
+            await sendTrackedCvApplicationConfirmationEmail({
+              applicationId: Number(duplicate.id),
+              candidateEmail: parsed.data.email,
+              candidateFirstName: parsed.data.firstName,
+              trackingId: duplicate.trackingId,
+              candidatePortalInviteUrl,
+              language: parsed.data.language,
+            });
+          }
           // The confirmation has gone out: this application keeps its place in the per-IP cap.
           releaseIpAttempt = null;
           await logSecurityEvent({ actorKind: "anonymous", actorReference: parsed.data.email, category: "public_recruitment_apply_duplicate_file", outcome: "allowed", severity: "info", ipHash });
@@ -625,7 +628,10 @@ export async function createApp() {
         const candidatePortalInviteUrl = insertedId
           ? `${PUBLIC_APP_ORIGIN}/candidate/access?invite=${encodeURIComponent(createCandidateInvitationToken(Number(insertedId)))}`
           : undefined;
-        await Promise.allSettled([
+        // ABUS-01: beyond the day's volume the application is kept without the
+        // candidate's confirmation, the owner's email or the AI analysis.
+        const withinDailyVolume = await countPublicFormDailyVolume("recruitmentApply");
+        if (withinDailyVolume) await Promise.allSettled([
           (async () => {
             await sendTrackedCvApplicationConfirmationEmail({
               applicationId: insertedId,
@@ -644,10 +650,10 @@ export async function createApp() {
 
         recruitmentStage = "follow-up-queues";
         if (insertedId) {
-          const { enqueueCvAnalysis } = await import("../recruitmentProcessing");
+          const { deferCvAnalysisForDailyVolume, enqueueCvAnalysis } = await import("../recruitmentProcessing");
           const { enqueueCvGoogleDriveExport } = await import("../googleDriveExport");
           const queueResults = await Promise.allSettled([
-            enqueueCvAnalysis(Number(insertedId)),
+            withinDailyVolume ? enqueueCvAnalysis(Number(insertedId)) : deferCvAnalysisForDailyVolume(Number(insertedId)),
             enqueueCvGoogleDriveExport(Number(insertedId)),
           ]);
           for (const queueResult of queueResults) {
