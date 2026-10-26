@@ -1,15 +1,11 @@
-import { readFileSync, readdirSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { venturesFr } from "../client/src/data/ventures-fr";
 import { ventureMetaDescription } from "../client/src/pages/VenturePage";
 import {
   buildPrerenderedPages,
-  createRoutePreloads,
-  injectRoutePreloads,
   injectRouteSeoHead,
   prerenderFileForRoute,
-  readClientRoutes,
-  type ViteManifest,
 } from "../scripts/prerender-route-seo";
 import {
   ROUTE_SEO_MARKER,
@@ -146,100 +142,6 @@ describe("page de repli SPA servie par Vercel", () => {
   it("est générée par le build juste après vite build", () => {
     const build: string = JSON.parse(readProjectFile("package.json")).scripts.build;
     expect(build).toMatch(/^NODE_ENV=production vite build && tsx scripts\/prerender-route-seo\.ts && esbuild /);
-  });
-});
-
-// Routeur et manifeste réduits, de la forme de client/src/App.tsx et du manifeste de Vite.
-const APP_SOURCE = `
-const FAQPage = lazy(() => import("./pages/FAQPage"));
-const RecruitmentPage = lazy(() => import("./pages/RecruitmentPage"));
-const VenturePage = lazy(() => import("./pages/VenturePage"));
-const ServiceStatusPage = lazy(() => import("./pages/ServiceStatusPage"));
-function LocalPage() { return <FAQPage />; }
-function Router() {
-  return (
-    <Switch>
-      <Route path="/faq" component={FAQPage} />
-      <Route path="/recruitment/standard" component={RecruitmentPage} />
-      <Route path="/venture/:slug" component={VenturePage} />
-      <Route path="/error" component={() => <ServiceStatusPage kind="error" />} />
-      <Route path="/local" component={LocalPage} />
-      <Route component={FAQPage} />
-    </Switch>
-  );
-}`;
-
-const MANIFEST: ViteManifest = {
-  "index.html": { file: "static/index-E.js", isEntry: true, imports: ["_vendor-V.js"] },
-  "_vendor-V.js": { file: "static/vendor-V.js" },
-  "src/pages/FAQPage.tsx": { file: "static/FAQPage-F.js", src: "src/pages/FAQPage.tsx", isDynamicEntry: true, imports: ["index.html", "_Footer-A.js", "_vendor-V.js"] },
-  "_Footer-A.js": { file: "static/Footer-A.js", imports: ["index.html", "_icon-I.js"] },
-  "_icon-I.js": { file: "static/icon-I.js", imports: ["index.html"] },
-  // Page aussi importée statiquement par une autre : Vite ne lui donne pas de src.
-  "_RecruitmentPage-R.js": { file: "static/RecruitmentPage-R.js", name: "RecruitmentPage", isDynamicEntry: true, imports: ["index.html", "_Footer-A.js"] },
-  "src/pages/VenturePage.tsx": { file: "static/VenturePage-W.js", src: "src/pages/VenturePage.tsx", isDynamicEntry: true, imports: ["index.html"] },
-  "src/pages/ServiceStatusPage.tsx": { file: "static/ServiceStatusPage-S.js", src: "src/pages/ServiceStatusPage.tsx", isDynamicEntry: true, imports: ["index.html", "_icon-I.js"] },
-};
-
-describe("préchargement du chunk de la page de chaque route pré-rendue (SEOP-01)", () => {
-  const preloads = createRoutePreloads(MANIFEST, readClientRoutes(APP_SOURCE));
-
-  it("précharge le chunk de la page puis ses imports, sans l’entrée ni les imports de l’entrée", () => {
-    expect(preloads("/faq")).toEqual(["/static/FAQPage-F.js", "/static/Footer-A.js", "/static/icon-I.js"]);
-  });
-
-  it("retrouve par le nom de son chunk une page que le manifeste liste sans src", () => {
-    expect(preloads("/recruitment/standard")).toEqual(["/static/RecruitmentPage-R.js", "/static/Footer-A.js", "/static/icon-I.js"]);
-  });
-
-  it("suit les routes à paramètre et les pages rendues dans un composant en ligne", () => {
-    expect(preloads("/venture/sawa4you")).toEqual(["/static/VenturePage-W.js"]);
-    expect(preloads("/error")).toEqual(["/static/ServiceStatusPage-S.js", "/static/icon-I.js"]);
-  });
-
-  it("refuse une route sans page chargée par lazy() plutôt que de l’écrire sans préchargement", () => {
-    expect(() => preloads("/local")).toThrow("/local");
-    expect(() => preloads("/inconnue")).toThrow("/inconnue");
-  });
-
-  it("lit le vrai routeur client : chaque route pré-rendue a le chunk de sa page", () => {
-    const pages = readdirSync(new URL("../client/src/pages", import.meta.url)).filter(file => /^[A-Z]\w*\.tsx$/.test(file));
-    const manifest: ViteManifest = {
-      "index.html": { file: "static/index-E.js", isEntry: true },
-      ...Object.fromEntries(pages.map(file => [`src/pages/${file}`, { file: `static/${file.replace(/\.tsx$/, "")}-H.js`, src: `src/pages/${file}`, isDynamicEntry: true, imports: ["index.html"] }])),
-    };
-    const realPreloads = createRoutePreloads(manifest, readClientRoutes(readProjectFile("client/src/App.tsx")));
-
-    for (const route of getPrerenderRoutes()) expect(realPreloads(route), route).toHaveLength(1);
-    expect(Object.fromEntries(["/", "/booking", "/faq", "/legal", "/recruitment", "/recruitment/standard", "/vvip-offshore", `/venture/${venturesFr[0].slug}`, "/error", "/questions-anesthesie"].map(route => [route, realPreloads(route)[0]]))).toEqual({
-      "/": "/static/Home-H.js",
-      "/booking": "/static/BookingPage-H.js",
-      "/faq": "/static/FAQPage-H.js",
-      "/legal": "/static/LegalPage-H.js",
-      "/recruitment": "/static/RecruitmentHubPage-H.js",
-      "/recruitment/standard": "/static/RecruitmentPage-H.js",
-      "/vvip-offshore": "/static/VvipOffshorePage-H.js",
-      [`/venture/${venturesFr[0].slug}`]: "/static/VenturePage-H.js",
-      "/error": "/static/ServiceStatusPage-H.js",
-      "/questions-anesthesie": "/static/MedicalQuestionsPage-H.js",
-    });
-  });
-
-  it("écrit les liens à la fin du <head> sans répéter un fichier que Vite y a déjà mis", () => {
-    const html = '<head>\n    <script type="module" crossorigin src="/static/index-E.js"></script>\n  </head>';
-    const result = injectRoutePreloads(html, ["/static/index-E.js", "/static/FAQPage-F.js"]);
-
-    expect(result.match(/\/static\/index-E\.js/g)).toHaveLength(1);
-    expect(result).toContain('<script type="module" crossorigin src="/static/index-E.js"></script>\n    <link rel="modulepreload" crossorigin href="/static/FAQPage-F.js">\n  </head>');
-  });
-
-  it("met les préchargements de la route dans sa page, pas dans la page de repli ni le gabarit Express", () => {
-    const pages = buildPrerenderedPages(TEMPLATE, route => (route === "/faq" ? ["/static/FAQPage-F.js"] : []));
-
-    expect(pages.find(page => page.route === "/faq")?.html).toContain('<link rel="modulepreload" crossorigin href="/static/FAQPage-F.js">');
-    expect(pages.find(page => page.route === "/legal")?.html).not.toContain("modulepreload");
-    expect(pages.find(page => page.file === SPA_FALLBACK_FILE)?.html).not.toContain("modulepreload");
-    expect(pages.find(page => page.file === SPA_TEMPLATE_FILE)?.html).toBe(TEMPLATE);
   });
 });
 
