@@ -41,7 +41,7 @@ vi.mock("@/lib/trpc", () => {
   };
 });
 
-const { default: MedicalQuestionsAdminTab } = await import("./MedicalQuestionsAdminTab");
+const { default: MedicalQuestionsAdminTab, revealQuestionDetail } = await import("./MedicalQuestionsAdminTab");
 
 const render = () => renderToStaticMarkup(createElement(MedicalQuestionsAdminTab));
 
@@ -85,5 +85,29 @@ describe("ADM-01 — file des questions santé", () => {
     const html = render();
     expect(html).toContain("Aucune question à traiter.");
     expect(html).not.toContain("Charger plus");
+  });
+});
+
+describe("ADM-01 — détail d’une question sur mobile", () => {
+  const detail = () => ({ focus: vi.fn(), scrollIntoView: vi.fn() });
+  const view = (desktop: boolean) => ({ matchMedia: vi.fn((query: string) => ({ matches: desktop && query === "(min-width: 64rem)" }) as MediaQueryList) });
+
+  it("sous la mise en page en deux colonnes, place le focus sur le détail et le fait défiler jusqu’en haut de l’écran", () => {
+    const narrow = detail();
+    revealQuestionDetail(narrow, view(false));
+    expect(narrow.focus).toHaveBeenCalledWith({ preventScroll: true });
+    expect(narrow.scrollIntoView).toHaveBeenCalledWith({ block: "start" });
+  });
+
+  it("ne bouge ni la page ni le focus sur un bureau, où le détail est à côté de la liste", () => {
+    const wide = detail();
+    revealQuestionDetail(wide, view(true));
+    expect(wide.focus).not.toHaveBeenCalled();
+    expect(wide.scrollIntoView).not.toHaveBeenCalled();
+    expect(() => revealQuestionDetail(null, view(false))).not.toThrow();
+  });
+
+  it("rend le détail focalisable par programme, sans l’ajouter à l’ordre de tabulation", () => {
+    expect(render()).toMatch(/<div tabindex="-1" role="region" aria-label="Question sélectionnée"/);
   });
 });

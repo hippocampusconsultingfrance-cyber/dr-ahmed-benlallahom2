@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Archive, Clock3, Mail, Phone, ShieldCheck, Sparkles, Send, Save } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import PublicContentSkeleton from "@/components/PublicContentSkeleton";
@@ -31,6 +31,19 @@ const STATUS_LABELS: Record<MedicalQuestionStatus, string> = {
   rejected: "Classée sans suite",
 };
 
+/**
+ * ADM-01: below the two-column layout (Tailwind lg, 64rem), the detail sits
+ * under the whole list and its « Charger plus ». Touching a question brings
+ * the detail on screen and moves the focus there, so that a screen reader
+ * reads it next. Side by side on a desktop, the detail is already next to the
+ * list: neither the page nor the focus moves.
+ */
+export function revealQuestionDetail(detail: Pick<HTMLElement, "focus" | "scrollIntoView"> | null, view: Pick<Window, "matchMedia"> = window) {
+  if (!detail || view.matchMedia("(min-width: 64rem)").matches) return;
+  detail.focus({ preventScroll: true });
+  detail.scrollIntoView({ block: "start" });
+}
+
 export default function MedicalQuestionsAdminTab() {
   const [queue, setQueue] = useState<MedicalQuestionQueue>("todo");
   const { pageCount, loadMore } = useAdminPageCount(queue);
@@ -38,6 +51,7 @@ export default function MedicalQuestionsAdminTab() {
   const pages = trpc.useQueries(t => adminPageOffsets(pageCount).map(offset => t.medicalQuestions.admin.list({ statuses: statuses ? [...statuses] : undefined, order, limit: ADMIN_PAGE_SIZE, offset })));
   const { items, total, isLoading, isLoadingMore, error, loadMoreError, retryLoadMore } = mergeAdminPages(pages);
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const detailRef = useRef<HTMLDivElement>(null);
   const [adminResponse, setAdminResponse] = useState("");
   const [publicQuestion, setPublicQuestion] = useState("");
   const [publicResponse, setPublicResponse] = useState("");
@@ -185,7 +199,10 @@ export default function MedicalQuestionsAdminTab() {
             <button
               type="button"
               key={question.id}
-              onClick={() => setSelectedId(question.id)}
+              onClick={() => {
+                setSelectedId(question.id);
+                revealQuestionDetail(detailRef.current);
+              }}
               className={`min-w-0 w-full rounded-2xl border p-4 text-left transition-colors ${selectedId === question.id ? "border-primary bg-primary/10" : "border-border bg-card hover:border-primary/40"}`}
             >
               <div className="flex items-center justify-between gap-3">
@@ -205,7 +222,8 @@ export default function MedicalQuestionsAdminTab() {
         <AdminLoadMore shown={items.length} total={total} loading={isLoadingMore} onLoadMore={loadMore} error={loadMoreError} onRetry={retryLoadMore} />
       </div>
 
-      <div className="min-w-0 rounded-3xl border border-border bg-card/50 p-6">
+      {/* scroll-mt: room for the sticky admin header (two rows below sm). */}
+      <div ref={detailRef} tabIndex={-1} role="region" aria-label="Question sélectionnée" className="min-w-0 scroll-mt-28 rounded-3xl border border-border bg-card/50 p-6 sm:scroll-mt-20">
         {selected.isLoading ? (
           <PublicContentSkeleton cards={1} label="Chargement de la demande" />
         ) : selected.error ? (
