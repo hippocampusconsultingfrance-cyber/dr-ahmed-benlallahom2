@@ -19,8 +19,10 @@ import { AdminEmptyState, AdminErrorState } from "@/components/AdminStatePanel";
 import AdminConfigurationBanner from "@/components/AdminConfigurationBanner";
 import AdminAttentionPanel from "@/components/AdminAttentionPanel";
 import AdminLoadMore from "@/components/AdminLoadMore";
+import AdminSearchField from "@/components/AdminSearchField";
 import AppointmentDeliveries from "@/components/AppointmentDeliveries";
 import { adminListCount, adminPageOffsets, ADMIN_PAGE_SIZE, mergeAdminPages, useAdminPageCount } from "@/components/adminPagination";
+import { adminSearchStatus, useAdminSearch } from "@/components/adminSearch";
 import PublicContentSkeleton from "@/components/PublicContentSkeleton";
 import { getActiveAdminTabLabel } from "./adminDashboardMobileTabs";
 import { buildAppointmentsAgenda } from "./appointmentsAgenda";
@@ -271,12 +273,14 @@ function OverviewTab({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
   );
 }
 
-function AppointmentsTab() {
+export function AppointmentsTab() {
   const [statusFilter, setStatusFilter] = useState<"pending" | "completed" | "failed" | "refunded" | undefined>(undefined);
+  // ADM-02: patient name, email or booking reference, searched by the server.
+  const { text: searchText, search, setText: setSearchText, clear: clearSearch } = useAdminSearch();
   const utils = trpc.useUtils();
-  // ADM-01: 50 rows, then « Charger plus » (offset + 50).
-  const { pageCount, loadMore } = useAdminPageCount(statusFilter ?? "all");
-  const pages = trpc.useQueries(t => adminPageOffsets(pageCount).map(offset => t.admin.appointments.list({ status: statusFilter, limit: ADMIN_PAGE_SIZE, offset })));
+  // ADM-01: 50 rows, then « Charger plus » (offset + 50), back to the first page when the filter or the search changes.
+  const { pageCount, loadMore } = useAdminPageCount(JSON.stringify({ status: statusFilter, search }));
+  const pages = trpc.useQueries(t => adminPageOffsets(pageCount).map(offset => t.admin.appointments.list({ status: statusFilter, search, limit: ADMIN_PAGE_SIZE, offset })));
   const { items, total, isLoading, isLoadingMore, error, loadMoreError, retryLoadMore } = mergeAdminPages(pages);
   const [unconfirmedSessionId, setUnconfirmedSessionId] = useState("");
   const updateStatus = trpc.admin.appointments.updateStatus.useMutation({
@@ -321,8 +325,28 @@ function AppointmentsTab() {
     refundAppointment.mutate({ trackingId, reason, initiator });
   };
 
+  // Filters and search stay on screen (and keep the focus) while the list loads or fails.
+  const toolbar = (
+    <div className="mb-6 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+      <div className="flex gap-2 flex-wrap">
+        {([undefined, "pending", "completed", "failed", "refunded"] as const).map((s) => (
+          <button
+            key={s || "all"}
+            onClick={() => setStatusFilter(s)}
+            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+              statusFilter === s ? "bg-primary text-primary-foreground" : "bg-card border border-border text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {s === undefined ? "Tous" : s === "pending" ? "En attente" : s === "completed" ? "Payé" : s === "failed" ? "Échoué" : "Remboursé"}
+          </button>
+        ))}
+      </div>
+      <AdminSearchField id="appointments-search" label="Rechercher une réservation" placeholder="Nom, email ou référence APT…" value={searchText} onChange={setSearchText} onClear={clearSearch} status={adminSearchStatus(search, { isLoading, error, shown: items.length, total }, "réservation(s)")} className="w-full md:max-w-sm" />
+    </div>
+  );
+
   if (error) {
-    return <AdminErrorState description={error.message} />;
+    return <div>{toolbar}<AdminErrorState description={error.message} /></div>;
   }
 
   const statusColors: Record<string, string> = {
@@ -341,27 +365,14 @@ function AppointmentsTab() {
   const agenda = buildAppointmentsAgenda(items);
 
   if (isLoading) {
-    return <PublicContentSkeleton label="Chargement des rendez-vous" />;
+    return <div>{toolbar}<PublicContentSkeleton label="Chargement des rendez-vous" /></div>;
   }
 
   return (
     <div>
-      {/* Filters */}
-      <div className="flex gap-2 mb-6 flex-wrap">
-        {([undefined, "pending", "completed", "failed", "refunded"] as const).map((s) => (
-          <button
-            key={s || "all"}
-            onClick={() => setStatusFilter(s)}
-            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-              statusFilter === s ? "bg-primary text-primary-foreground" : "bg-card border border-border text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            {s === undefined ? "Tous" : s === "pending" ? "En attente" : s === "completed" ? "Payé" : s === "failed" ? "Échoué" : "Remboursé"}
-          </button>
-        ))}
-      </div>
+      {toolbar}
 
-      <p className="text-sm text-muted-foreground mb-4">{adminListCount(items.length, total, "réservation(s)")}</p>
+      <p className="text-sm text-muted-foreground mb-4 break-words [overflow-wrap:anywhere]">{adminListCount(items.length, total, "réservation(s)")}{search ? ` pour « ${search} »` : ""}</p>
 
       <section aria-labelledby="appointments-agenda-title" className="mb-6 rounded-xl border border-primary/20 bg-primary/5 p-4 sm:p-5">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
@@ -496,7 +507,9 @@ function AppointmentsTab() {
           </div>
         ))}
         {items.length === 0 && (
-          <AdminEmptyState icon={CalendarDays} title="Aucune réservation" description="Les nouvelles réservations apparaîtront ici dès leur confirmation." />
+          search
+            ? <AdminEmptyState icon={CalendarDays} title="Aucun résultat" description={`Aucune réservation ne correspond à « ${search} » avec ce filtre.`} />
+            : <AdminEmptyState icon={CalendarDays} title="Aucune réservation" description="Les nouvelles réservations apparaîtront ici dès leur confirmation." />
         )}
       </div>
       <AdminLoadMore shown={items.length} total={total} loading={isLoadingMore} onLoadMore={loadMore} error={loadMoreError} onRetry={retryLoadMore} />
@@ -526,11 +539,13 @@ function AppointmentsTab() {
   );
 }
 
-function ContactsTab() {
+export function ContactsTab() {
   const utils = trpc.useUtils();
   const [unreadOnly, setUnreadOnly] = useState(false);
-  const { pageCount, loadMore } = useAdminPageCount(unreadOnly ? "unread" : "all");
-  const pages = trpc.useQueries(t => adminPageOffsets(pageCount).map(offset => t.admin.contacts.list({ unreadOnly, limit: ADMIN_PAGE_SIZE, offset })));
+  // ADM-02: sender name, email or message reference, searched by the server.
+  const { text: searchText, search, setText: setSearchText, clear: clearSearch } = useAdminSearch();
+  const { pageCount, loadMore } = useAdminPageCount(JSON.stringify({ unreadOnly, search }));
+  const pages = trpc.useQueries(t => adminPageOffsets(pageCount).map(offset => t.admin.contacts.list({ unreadOnly, search, limit: ADMIN_PAGE_SIZE, offset })));
   const { items, total, isLoading, isLoadingMore, error, loadMoreError, retryLoadMore } = mergeAdminPages(pages);
   const markRead = trpc.admin.contacts.markRead.useMutation({
     onSuccess: () => {
@@ -539,17 +554,10 @@ function ContactsTab() {
     },
   });
 
-  if (error) {
-    return <AdminErrorState description={error.message} />;
-  }
-
-  if (isLoading) {
-    return <PublicContentSkeleton label="Chargement des messages" />;
-  }
-
-  return (
-    <div>
-      <div className="flex gap-2 mb-6 flex-wrap">
+  // Filters and search stay on screen (and keep the focus) while the list loads or fails.
+  const toolbar = (
+    <div className="mb-6 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+      <div className="flex gap-2 flex-wrap">
         {[false, true].map((unread) => (
           <button
             key={String(unread)}
@@ -564,7 +572,22 @@ function ContactsTab() {
           </button>
         ))}
       </div>
-      <p className="text-sm text-muted-foreground mb-4">{adminListCount(items.length, total, unreadOnly ? "message(s) non lu(s)" : "message(s)")}</p>
+      <AdminSearchField id="contacts-search" label="Rechercher un message" placeholder="Nom, email ou référence" value={searchText} onChange={setSearchText} onClear={clearSearch} status={adminSearchStatus(search, { isLoading, error, shown: items.length, total }, unreadOnly ? "message(s) non lu(s)" : "message(s)")} className="w-full md:max-w-sm" />
+    </div>
+  );
+
+  if (error) {
+    return <div>{toolbar}<AdminErrorState description={error.message} /></div>;
+  }
+
+  if (isLoading) {
+    return <div>{toolbar}<PublicContentSkeleton label="Chargement des messages" /></div>;
+  }
+
+  return (
+    <div>
+      {toolbar}
+      <p className="text-sm text-muted-foreground mb-4 break-words [overflow-wrap:anywhere]">{adminListCount(items.length, total, unreadOnly ? "message(s) non lu(s)" : "message(s)")}{search ? ` pour « ${search} »` : ""}</p>
       <div className="space-y-3">
         {items.map((msg) => (
           <div key={msg.id} className={`bg-card border rounded-lg p-4 ${msg.read === 0 ? "border-primary/50" : "border-border"}`}>
@@ -592,7 +615,9 @@ function ContactsTab() {
           </div>
         ))}
         {items.length === 0 && (
-          unreadOnly
+          search
+            ? <AdminEmptyState icon={MessageSquare} title="Aucun résultat" description={`Aucun message ne correspond à « ${search} »${unreadOnly ? " parmi les non lus" : ""}.`} />
+            : unreadOnly
             ? <AdminEmptyState icon={MessageSquare} title="Aucun message non lu" description="Tous les messages reçus ont été lus." />
             : <AdminEmptyState icon={MessageSquare} title="Aucun message" description="Les demandes de contact reçues sur le site seront affichées dans cette section." />
         )}

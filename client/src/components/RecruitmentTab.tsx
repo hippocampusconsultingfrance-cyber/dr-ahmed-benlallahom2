@@ -4,7 +4,9 @@ import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import PublicContentSkeleton from "@/components/PublicContentSkeleton";
 import AdminLoadMore from "@/components/AdminLoadMore";
+import AdminSearchField from "@/components/AdminSearchField";
 import { adminListCount, adminPageOffsets, ADMIN_PAGE_SIZE, mergeAdminPages, useAdminPageCount } from "@/components/adminPagination";
+import { adminSearchStatus, useAdminSearch } from "@/components/adminSearch";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import Candidate360Dialog from "./Candidate360Dialog";
@@ -149,6 +151,8 @@ export default function RecruitmentTab() {
   const [certificationFilter, setCertificationFilter] = useState("");
   const [minimumScore, setMinimumScore] = useState("");
   const [selectedProfileId, setSelectedProfileId] = useState("");
+  // ADM-02: first name, last name, email or reference, searched by the server.
+  const { text: searchText, search, setText: setSearchText, clear: clearSearch } = useAdminSearch();
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [candidate360Id, setCandidate360Id] = useState<number | null>(null);
   const [profileName, setProfileName] = useState("");
@@ -172,8 +176,9 @@ export default function RecruitmentTab() {
     certification: certificationFilter.trim() || undefined,
     minimumScore: minimumScore ? Number(minimumScore) : undefined,
     profileId: selectedProfileId ? Number(selectedProfileId) : undefined,
+    search,
   };
-  // ADM-01: 50 dossiers, then « Charger plus » (offset + 50), back to the first page when a filter changes.
+  // ADM-01: 50 dossiers, then « Charger plus » (offset + 50), back to the first page when a filter or the search changes.
   const { pageCount, loadMore } = useAdminPageCount(JSON.stringify(filters));
   const pages = trpc.useQueries(t => adminPageOffsets(pageCount).map(offset => t.admin.recruitment.list({ ...filters, limit: ADMIN_PAGE_SIZE, offset })));
   const { items: applications, total, isLoading, isLoadingMore, error, loadMoreError, retryLoadMore } = mergeAdminPages(pages);
@@ -287,10 +292,6 @@ export default function RecruitmentTab() {
     onError: mutationError => toast.error(mutationError.message),
   });
 
-  if (error) {
-    return <div className="py-8 text-center text-red-400">Erreur de chargement : {error.message}</div>;
-  }
-
   return (
     <section className="space-y-6" aria-labelledby="recruitment-heading">
       <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
@@ -329,6 +330,7 @@ export default function RecruitmentTab() {
       </div>
 
       <div className="grid gap-3 rounded-xl border border-border bg-card/60 p-4 md:grid-cols-3">
+        <AdminSearchField id="recruitment-search" label="Recherche" placeholder="Nom, prénom, email ou référence CV…" value={searchText} onChange={setSearchText} onClear={clearSearch} status={adminSearchStatus(search, { isLoading, error, shown: applications.length, total }, "candidature(s)")} className="md:col-span-3" />
         <label className="space-y-1 text-sm text-muted-foreground">
           <span>Statut</span>
           <select value={statusFilter} onChange={event => setStatusFilter(event.target.value as Status | "")} className="h-10 w-full rounded-md border border-border bg-background px-3 text-foreground">
@@ -385,11 +387,14 @@ export default function RecruitmentTab() {
         </div>
       </div>
 
-      {isLoading ? (
+      {error ? (
+        // Below the filters, so that a search can still be changed or cleared.
+        <div className="py-8 text-center text-red-400">Erreur de chargement : {error.message}</div>
+      ) : isLoading ? (
         <PublicContentSkeleton label="Chargement des candidatures" />
       ) : applications.length ? (
         <div className="space-y-3">
-          <p className="text-sm text-muted-foreground">{adminListCount(applications.length, total, "candidature(s)")}</p>
+          <p className="break-words text-sm text-muted-foreground [overflow-wrap:anywhere]">{adminListCount(applications.length, total, "candidature(s)")}{search ? ` pour « ${search} »` : ""}</p>
           {listedApplications.items.map((application, index) => {
             const countries = parseJsonList(application.targetCountries);
             const languages = parseJsonList(application.languages);
@@ -657,9 +662,9 @@ export default function RecruitmentTab() {
           <AdminLoadMore shown={applications.length} total={total} loading={isLoadingMore} onLoadMore={loadMore} error={loadMoreError} onRetry={retryLoadMore} />
         </div>
       ) : (
-        <div className="rounded-xl border border-dashed border-border py-16 text-center text-muted-foreground">
+        <div className="rounded-xl border border-dashed border-border px-4 py-16 text-center text-muted-foreground break-words [overflow-wrap:anywhere]">
           <FileSearch className="mx-auto mb-3 h-8 w-8" />
-          Aucune candidature ne correspond aux filtres.
+          {search ? `Aucune candidature ne correspond à « ${search} » avec ces filtres.` : "Aucune candidature ne correspond aux filtres."}
         </div>
       )}
 

@@ -3,7 +3,9 @@ import { Archive, Clock3, Mail, Phone, ShieldCheck, Sparkles, Send, Save } from 
 import { trpc } from "@/lib/trpc";
 import PublicContentSkeleton from "@/components/PublicContentSkeleton";
 import AdminLoadMore from "@/components/AdminLoadMore";
+import AdminSearchField from "@/components/AdminSearchField";
 import { adminListCount, adminPageOffsets, ADMIN_PAGE_SIZE, mergeAdminPages, useAdminPageCount } from "@/components/adminPagination";
+import { adminSearchStatus, useAdminSearch } from "@/components/adminSearch";
 import { toast } from "sonner";
 
 const MIN_PRIVATE_RESPONSE_LENGTH = 20;
@@ -33,9 +35,11 @@ const STATUS_LABELS: Record<MedicalQuestionStatus, string> = {
 
 export default function MedicalQuestionsAdminTab() {
   const [queue, setQueue] = useState<MedicalQuestionQueue>("todo");
-  const { pageCount, loadMore } = useAdminPageCount(queue);
+  // ADM-02: patient name, email or the QMED-… reference of the notification email, searched by the server.
+  const { text: searchText, search, setText: setSearchText, clear: clearSearch } = useAdminSearch();
+  const { pageCount, loadMore } = useAdminPageCount(JSON.stringify({ queue, search }));
   const { statuses, order } = MEDICAL_QUESTION_QUEUES[queue];
-  const pages = trpc.useQueries(t => adminPageOffsets(pageCount).map(offset => t.medicalQuestions.admin.list({ statuses: statuses ? [...statuses] : undefined, order, limit: ADMIN_PAGE_SIZE, offset })));
+  const pages = trpc.useQueries(t => adminPageOffsets(pageCount).map(offset => t.medicalQuestions.admin.list({ statuses: statuses ? [...statuses] : undefined, order, search, limit: ADMIN_PAGE_SIZE, offset })));
   const { items, total, isLoading, isLoadingMore, error, loadMoreError, retryLoadMore } = mergeAdminPages(pages);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [adminResponse, setAdminResponse] = useState("");
@@ -153,9 +157,6 @@ export default function MedicalQuestionsAdminTab() {
     updatePublication.mutate({ id: selected.data.id, publicQuestion, publicResponse });
   }
 
-  if (isLoading) return <PublicContentSkeleton cards={3} label="Chargement des questions médicales" />;
-  if (error) return <p className="text-destructive">{error.message}</p>;
-
   return (
     <section className="grid gap-6 lg:grid-cols-[minmax(0,.9fr)_minmax(0,1.1fr)]">
       <div className="min-w-0">
@@ -177,32 +178,42 @@ export default function MedicalQuestionsAdminTab() {
             </button>
           ))}
         </div>
-        <p className="mt-3 text-sm text-muted-foreground">
-          {adminListCount(items.length, total, "question(s)")}{queue === "todo" ? " · de la plus ancienne à la plus récente" : ""}
-        </p>
-        <div className="mt-4 space-y-3">
-          {items.map(question => (
-            <button
-              type="button"
-              key={question.id}
-              onClick={() => setSelectedId(question.id)}
-              className={`min-w-0 w-full rounded-2xl border p-4 text-left transition-colors ${selectedId === question.id ? "border-primary bg-primary/10" : "border-border bg-card hover:border-primary/40"}`}
-            >
-              <div className="flex items-center justify-between gap-3">
-                <span className="min-w-0 truncate font-semibold text-foreground">{question.firstName} {question.lastName}</span>
-                <span className="rounded-full border border-border px-2 py-1 text-xs text-muted-foreground">{STATUS_LABELS[question.status] ?? question.status}</span>
-              </div>
-              <p className="mt-1 font-mono text-xs text-muted-foreground">{question.trackingId}</p>
-              <p className="mt-2 line-clamp-2 break-words text-sm text-muted-foreground [overflow-wrap:anywhere]">{question.question}</p>
-              <p className="mt-3 flex items-center gap-1.5 text-xs text-muted-foreground">
-                <Clock3 className="h-3.5 w-3.5" />
-                {new Date(question.createdAt).toLocaleString("fr-FR")}
-              </p>
-            </button>
-          ))}
-          {items.length === 0 && <p className="rounded-2xl border border-border p-5 text-muted-foreground">{MEDICAL_QUESTION_QUEUES[queue].empty}</p>}
-        </div>
-        <AdminLoadMore shown={items.length} total={total} loading={isLoadingMore} onLoadMore={loadMore} error={loadMoreError} onRetry={retryLoadMore} />
+        <AdminSearchField id="medical-questions-search" label="Rechercher une question" placeholder="Nom, prénom, email ou référence QMED-…" value={searchText} onChange={setSearchText} onClear={clearSearch} status={adminSearchStatus(search, { isLoading, error, shown: items.length, total }, "question(s)")} className="mt-4" />
+        {/* Queues and search stay on screen (and keep the focus) while the list loads or fails. */}
+        {isLoading ? (
+          <div className="mt-4"><PublicContentSkeleton cards={3} label="Chargement des questions médicales" /></div>
+        ) : error ? (
+          <p className="mt-4 text-destructive">{error.message}</p>
+        ) : (
+          <>
+            <p className="mt-3 break-words text-sm text-muted-foreground [overflow-wrap:anywhere]">
+              {adminListCount(items.length, total, "question(s)")}{search ? ` pour « ${search} »` : ""}{queue === "todo" ? " · de la plus ancienne à la plus récente" : ""}
+            </p>
+            <div className="mt-4 space-y-3">
+              {items.map(question => (
+                <button
+                  type="button"
+                  key={question.id}
+                  onClick={() => setSelectedId(question.id)}
+                  className={`min-w-0 w-full rounded-2xl border p-4 text-left transition-colors ${selectedId === question.id ? "border-primary bg-primary/10" : "border-border bg-card hover:border-primary/40"}`}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="min-w-0 truncate font-semibold text-foreground">{question.firstName} {question.lastName}</span>
+                    <span className="rounded-full border border-border px-2 py-1 text-xs text-muted-foreground">{STATUS_LABELS[question.status] ?? question.status}</span>
+                  </div>
+                  <p className="mt-1 font-mono text-xs text-muted-foreground">{question.trackingId}</p>
+                  <p className="mt-2 line-clamp-2 break-words text-sm text-muted-foreground [overflow-wrap:anywhere]">{question.question}</p>
+                  <p className="mt-3 flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <Clock3 className="h-3.5 w-3.5" />
+                    {new Date(question.createdAt).toLocaleString("fr-FR")}
+                  </p>
+                </button>
+              ))}
+              {items.length === 0 && <p className="rounded-2xl border border-border p-5 break-words text-muted-foreground [overflow-wrap:anywhere]">{search ? `Aucune question ne correspond à « ${search} » dans cette liste.` : MEDICAL_QUESTION_QUEUES[queue].empty}</p>}
+            </div>
+            <AdminLoadMore shown={items.length} total={total} loading={isLoadingMore} onLoadMore={loadMore} error={loadMoreError} onRetry={retryLoadMore} />
+          </>
+        )}
       </div>
 
       <div className="min-w-0 rounded-3xl border border-border bg-card/50 p-6">

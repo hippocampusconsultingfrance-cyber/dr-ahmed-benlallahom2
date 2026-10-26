@@ -3,7 +3,8 @@
  *
  * It plugs into drizzle's `pg-proxy` driver and executes the small SQL subset
  * drizzle generates for the queries of this code base (single-table SELECT /
- * INSERT / UPDATE / DELETE with AND/OR/IN/IS NULL predicates, lower(), ORDER BY, LIMIT,
+ * INSERT / UPDATE / DELETE with AND/OR/IN/IS NULL predicates, lower(), translate(),
+ * LIKE / ILIKE with the backslash escape, ORDER BY, LIMIT,
  * RETURNING, ON CONFLICT DO NOTHING / DO UPDATE). Anything else throws, so a
  * test never passes on a silently ignored statement. DDL statements sent with
  * `db.execute` (CREATE ... IF NOT EXISTS, ALTER ... IF NOT EXISTS) are recorded
@@ -88,6 +89,7 @@ type Expr =
   | { type: "now" }
   | { type: "lower"; expr: Expr }
   | { type: "coalesce"; items: Expr[] }
+  | { type: "translate"; expr: Expr; from: Expr; to: Expr }
   | { type: "count" }
   | { type: "case"; whens: Array<[Expr, Expr]>; otherwise: Expr | null };
 
@@ -224,6 +226,15 @@ class Parser {
       while (this.acceptPunct(",")) items.push(this.expression());
       this.expectPunct(")");
       expr = { type: "coalesce", items };
+    } else if (token.kind === "word" && token.text === "translate" && this.peek(1)?.text === "(") {
+      this.next();
+      this.expectPunct("(");
+      const value = this.expression();
+      this.expectPunct(",");
+      const from = this.expression();
+      this.expectPunct(",");
+      expr = { type: "translate", expr: value, from, to: this.expression() };
+      this.expectPunct(")");
     } else if (token.kind === "word" && token.text === "case") {
       this.next();
       const whens: Array<[Expr, Expr]> = [];
@@ -257,6 +268,23 @@ function compare(a: Value, b: Value) {
   return String(a) < String(b) ? -1 : String(a) > String(b) ? 1 : 0;
 }
 
+/** A LIKE pattern as a regular expression: % and _ are wildcards, and a backslash makes the next character literal (PostgreSQL's default escape). */
+function likePatternSource(pattern: string) {
+  let source = "";
+  const chars = Array.from(pattern);
+  for (let index = 0; index < chars.length; index += 1) {
+    let char = chars[index]!;
+    if (char === "\\") {
+      index += 1;
+      if (index >= chars.length) throw new Error("memoryPgProxy: LIKE pattern must not end with escape character");
+      char = chars[index]!;
+    } else if (char === "%") { source += ".*"; continue; }
+    else if (char === "_") { source += "."; continue; }
+    source += char.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  }
+  return source;
+}
+
 function evaluate(expr: Expr, row: Row, params: unknown[], now: string): Value {
   switch (expr.type) {
     case "param": return normalize(params[expr.index]);
@@ -276,6 +304,20 @@ function evaluate(expr: Expr, row: Row, params: unknown[], now: string): Value {
         if (value !== null) return value;
       }
       return null;
+    }
+    case "translate": {
+      // PostgreSQL: each character of `from` becomes the character at the same
+      // position in `to`, or is removed when `to` is shorter.
+      const value = evaluate(expr.expr, row, params, now);
+      const from = evaluate(expr.from, row, params, now);
+      const to = evaluate(expr.to, row, params, now);
+      if (value === null || from === null || to === null) return null;
+      const source = Array.from(String(from));
+      const target = Array.from(String(to));
+      return Array.from(String(value), char => {
+        const index = source.indexOf(char);
+        return index < 0 ? char : target[index] ?? "";
+      }).join("");
     }
     case "count": throw new Error("memoryPgProxy: count(*) is only supported as a select expression");
     case "case": {
@@ -298,8 +340,7 @@ function evaluate(expr: Expr, row: Row, params: unknown[], now: string): Value {
       const value = evaluate(expr.expr, row, params, now);
       const pattern = evaluate(expr.pattern, row, params, now);
       if (value === null || pattern === null) return null;
-      const source = String(pattern).replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/%/g, ".*").replace(/_/g, ".");
-      const matched = new RegExp(`^${source}$`, expr.caseInsensitive ? "is" : "s").test(String(value));
+      const matched = new RegExp(`^${likePatternSource(String(pattern))}$`, expr.caseInsensitive ? "is" : "s").test(String(value));
       return expr.negated ? !matched : matched;
     }
     case "and": return expr.items.every(item => evaluate(item, row, params, now) === true);

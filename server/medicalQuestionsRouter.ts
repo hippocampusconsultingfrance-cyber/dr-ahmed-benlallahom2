@@ -13,6 +13,7 @@ import { isAdminMfaVerified } from "./adminMfa";
 import { improveMedicalAnswerDraft } from "./medicalQuestionAssistant";
 import { notifyOwner } from "./_core/notification";
 import { buildMedicalQuestionOwnerNotification, sendMedicalQuestionAcknowledgementEmail, sendMedicalQuestionResponseEmail } from "./medicalQuestionEmails";
+import { adminSearchCondition, adminSearchInput } from "./adminSearch";
 
 const PUBLIC_APP_ORIGIN = process.env.PUBLIC_APP_ORIGIN || "https://drahmedbenlallahom.com";
 
@@ -163,10 +164,15 @@ export const medicalQuestionsRouter = router({
       order: z.enum(["oldest", "newest"]).default("newest"),
       limit: z.number().int().min(1).max(100).default(50),
       offset: z.number().int().min(0).default(0),
+      /** Patient name, email or the QMED-… reference of the notification email (ADM-02). */
+      search: adminSearchInput,
     }).optional()).query(async ({ input, ctx }) => {
       await requireMfa(ctx);
       const db = await requireDb();
-      const whereClause = input?.statuses ? inArray(medicalQuestions.status, input.statuses) : undefined;
+      const whereClause = and(
+        input?.statuses ? inArray(medicalQuestions.status, input.statuses) : undefined,
+        adminSearchCondition(input?.search, [medicalQuestions.firstName, medicalQuestions.lastName, medicalQuestions.email, medicalQuestions.trackingId]),
+      );
       const createdAt = input?.order === "oldest" ? asc(medicalQuestions.createdAt) : desc(medicalQuestions.createdAt);
       const items = await db.select().from(medicalQuestions)
         .where(whereClause)
