@@ -97,7 +97,7 @@ async function waitForFulfillmentTurn(): Promise<(claimed: boolean) => void> {
  * pause. A send made again after Resend's retry-after or a short backoff
  * takes a new slot too (runWithSendSlot in processDueAppointmentFulfillmentJobs).
  */
-async function waitForSendSlot() {
+async function waitForSendSlot(mayStart: () => boolean = () => true): Promise<boolean> {
   const previousSlot = lastSendSlot;
   let release!: () => void;
   lastSendSlot = new Promise<void>(resolve => { release = resolve; });
@@ -107,7 +107,10 @@ async function waitForSendSlot() {
     // Never more than one pause, even with a clock set back (or stopped, in tests).
     const waitMs = lastSendAt === null ? 0 : Math.min(lastSendAt + delayMs - Date.now(), delayMs);
     if (waitMs > 0) await new Promise(resolve => setTimeout(resolve, waitMs));
+    // A send given up at its slot (budget spent) does not hold back the next one.
+    if (!mayStart()) return false;
     lastSendAt = Date.now();
+    return true;
   } finally {
     release();
   }
@@ -565,6 +568,25 @@ export async function processDueAppointmentFulfillmentJobs(limit = MAX_BATCH, op
     }
   }
   return { processed: results.length, results };
+}
+
+/**
+ * Whether an email of this appointment has been due for at least `dueForMs`
+ * and is still waiting in the queue: left there by the processing that should
+ * have sent it (immediate budget spent), not about to be sent by a processing
+ * still under way. The payment status page sends those again
+ * (appointmentPublicStatus.ts).
+ */
+export async function hasDeliveriesLeftInQueue(appointmentId: number, dueForMs: number, now = new Date()): Promise<boolean> {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+  const [leftover] = await db.select({ id: appointmentFulfillmentJobs.id }).from(appointmentFulfillmentJobs).where(and(
+    eq(appointmentFulfillmentJobs.appointmentId, appointmentId),
+    inArray(appointmentFulfillmentJobs.status, ["queued", "retry"]),
+    lte(appointmentFulfillmentJobs.scheduledFor, new Date(now.getTime() - dueForMs)),
+    lt(appointmentFulfillmentJobs.attempts, appointmentFulfillmentJobs.maxAttempts),
+  )).limit(1);
+  return Boolean(leftover);
 }
 
 /** Same claim/idempotency path as the scheduled worker, restricted to one appointment. */

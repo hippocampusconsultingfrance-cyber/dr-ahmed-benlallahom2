@@ -29,7 +29,7 @@ vi.mock("./_core/notifications", async importOriginal => ({
   ...await importOriginal<typeof import("./_core/notifications")>(),
   sendUnconfirmablePaymentEmail: mocks.sendUnconfirmablePaymentEmail,
 }));
-vi.mock("./appointmentFulfillment", () => ({ enqueueAppointmentFulfillment: vi.fn(), processAppointmentFulfillmentNow: vi.fn(async () => ({ processed: 0 })) }));
+vi.mock("./appointmentFulfillment", () => ({ enqueueAppointmentFulfillment: vi.fn(), hasDeliveriesLeftInQueue: vi.fn(async () => false), processAppointmentFulfillmentNow: vi.fn(async () => ({ processed: 0 })) }));
 
 import { appRouter, BOOKING_PAYMENT_UNAVAILABLE_MESSAGE, parisDateKey, parseAppointmentDate } from "./routers";
 import { handleCheckoutSessionCompleted } from "./appointmentPaymentWebhook";

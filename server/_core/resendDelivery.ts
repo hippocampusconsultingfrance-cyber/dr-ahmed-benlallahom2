@@ -73,8 +73,13 @@ export function resendRetryAfterMs(headers: Record<string, string> | null | unde
   return delayMs <= resendRateLimitRetry.maxDelayMs && waitFitsDeadline(delayMs) ? delayMs : null;
 }
 
-/** Wait for the send slot of the processing the current send runs in (see runWithSendSlot). */
-const sendSlotStorage = new AsyncLocalStorage<() => Promise<void>>();
+/**
+ * Wait for the send slot of the processing the current send runs in (see
+ * runWithSendSlot): false, the slot left to the next send, when `mayStart`
+ * says the send no longer starts.
+ */
+type WaitForSendSlot = (mayStart: () => boolean) => Promise<boolean>;
+const sendSlotStorage = new AsyncLocalStorage<WaitForSendSlot>();
 
 /**
  * Runs `run` with the send slot its new tries take (ABUS-03): the processing
@@ -83,22 +88,22 @@ const sendSlotStorage = new AsyncLocalStorage<() => Promise<void>>();
  * retry-after, a short backoff) waits for `waitForSendSlot` as well, so it
  * does not leave right after a send of another processing of the instance.
  */
-export function runWithSendSlot<T>(waitForSendSlot: () => Promise<void>, run: () => Promise<T>): Promise<T> {
+export function runWithSendSlot<T>(waitForSendSlot: WaitForSendSlot, run: () => Promise<T>): Promise<T> {
   return sendSlotStorage.run(waitForSendSlot, run);
 }
 
 /**
  * Pause before a new try of a send, then the send slot of the processing it
  * runs in, if any (runWithSendSlot). False when that slot comes after the end
- * of the processing's budget: the new try is given up, as a pause that would
- * not fit (deadlineCutShort), rather than leave after the answer.
+ * allowed to the pause: the new try is given up, as a pause that would not
+ * fit (deadlineCutShort), rather than leave after the answer, and the slot
+ * goes to the next send without counting as one.
  */
 export async function pauseBeforeNewTry(waitMs: number): Promise<boolean> {
   await pauseWithinDeadline(waitMs);
   const waitForSendSlot = sendSlotStorage.getStore();
   if (!waitForSendSlot) return true;
-  await waitForSendSlot();
-  return startFitsDeadline();
+  return waitForSendSlot(startFitsDeadline);
 }
 
 /**

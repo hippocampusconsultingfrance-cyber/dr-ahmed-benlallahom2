@@ -28,6 +28,8 @@ type DeadlineContext = {
   /** End allowed to the first pause only (see waitFitsDeadline). */
   firstPauseDeadlineAt: number;
   paused: boolean;
+  /** End allowed to the last pause taken, for the step that follows it (see startFitsDeadline). */
+  lastPauseEndAt: number | null;
   pauseRefused: boolean;
 };
 
@@ -40,7 +42,7 @@ export function runWithProcessingDeadline<T>(
   options: { firstPauseDeadlineAt?: number } = {},
 ): Promise<T> {
   const firstPauseDeadlineAt = Math.max(deadlineAt, options.firstPauseDeadlineAt ?? deadlineAt);
-  return deadlineStorage.run({ deadlineAt, now, firstPauseDeadlineAt, paused: false, pauseRefused: false }, run);
+  return deadlineStorage.run({ deadlineAt, now, firstPauseDeadlineAt, paused: false, lastPauseEndAt: null, pauseRefused: false }, run);
 }
 
 /**
@@ -75,18 +77,23 @@ export function waitFitsDeadline(waitMs: number): boolean {
 /** Takes a pause that waitFitsDeadline allowed; the next ones keep to the deadline itself. */
 export function pauseWithinDeadline(waitMs: number): Promise<void> {
   const context = deadlineStorage.getStore();
-  if (context) context.paused = true;
+  if (context) {
+    context.lastPauseEndAt = context.paused ? context.deadlineAt : context.firstPauseDeadlineAt;
+    context.paused = true;
+  }
   return new Promise(resolve => setTimeout(resolve, waitMs));
 }
 
 /**
- * Whether a step may still start now, before the end of the whole budget (the
- * end allowed to the first pause); always true outside a deadline. A step
- * given up here is recorded like a refused pause (deadlineCutShort).
+ * Whether the step that follows a pause may still start now, before the end
+ * allowed to that pause (waitFitsDeadline): the end of the whole budget after
+ * the first one, the deadline itself after the later ones; always true
+ * outside a deadline. A step given up here is recorded like a refused pause
+ * (deadlineCutShort).
  */
 export function startFitsDeadline(): boolean {
   const context = deadlineStorage.getStore();
-  if (!context || context.now() <= context.firstPauseDeadlineAt) return true;
+  if (!context || context.now() <= (context.lastPauseEndAt ?? context.firstPauseDeadlineAt)) return true;
   context.pauseRefused = true;
   return false;
 }

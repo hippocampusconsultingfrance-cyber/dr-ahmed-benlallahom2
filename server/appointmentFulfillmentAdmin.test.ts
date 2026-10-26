@@ -540,7 +540,7 @@ describe("EXPL-02 — encart « À traiter »", () => {
     expect([attention.failedDeliveries.total, attention.refusedDeliveries.total, attention.retryingDeliveries.total]).toEqual([0, 0, 0]);
     expect((await admin().appointments.list({ search: "APTTODO00013" })).items[0]?.deliveries.map(delivery => [delivery.state, delivery.attempts])).toEqual([["sent", 1], ["pending", 0], ["pending", 0]]);
 
-    // Updated in another order than they are sent: still listed as the doctor reads them.
+    // Updated in another order than they are sent: still listed in sending order.
     const scrambled = seedAppointment("APTTODO00016");
     const updatedAt = (minutes: number) => ({ scheduled_for: dueSince, updated_at: new Date(Date.now() - minutes * 60_000) });
     seedJob(scrambled.id, "invoice", updatedAt(9));

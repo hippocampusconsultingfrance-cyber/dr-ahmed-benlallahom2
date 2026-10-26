@@ -346,6 +346,30 @@ describe("EXPL-01 — un paiement reçu est confirmé même sans webhook", () =>
     expect(emails.sendInvoiceEmail).toHaveBeenCalledTimes(1);
   });
 
+  it("pendant que le webhook envoie encore, la page répond « confirmé » aussitôt, sans traiter ses envois à côté de lui : chacun part une fois, espacé (ABUS-03)", async () => {
+    const PAUSE_MS = 300;
+    appointmentFulfillmentPacing.delayMs = PAUSE_MS;
+    // Instance au repos : son dernier envoi date de plus d’une pause.
+    await new Promise(resolve => setTimeout(resolve, PAUSE_MS));
+    seedAppointment();
+    const sentAt: number[] = [];
+    for (const send of [emails.sendOwnerNotificationEmail, emails.sendConfirmationEmail, emails.sendInvoiceEmail]) send.mockImplementationOnce(async () => { sentAt.push(Date.now()); });
+
+    // The webhook confirms, sends the notification, then pauses before the confirmation.
+    const webhook = postEvent("checkout.session.completed", stripeSession());
+    await vi.waitFor(() => expect(emails.sendOwnerNotificationEmail).toHaveBeenCalledTimes(1), { timeout: 5_000, interval: 5 });
+    const startedAt = Date.now();
+    await expect(publicStatus()).resolves.toMatchObject({ state: "confirmed" });
+
+    // Answered without waiting for a send slot, before the webhook's next email.
+    expect(Date.now() - startedAt).toBeLessThan(PAUSE_MS / 2);
+    expect(emails.sendConfirmationEmail).not.toHaveBeenCalled();
+    expect((await webhook).status).toBe(200);
+    expectPostPaymentEmailsSentOnce();
+    // setTimeout may fire a millisecond early on some platforms.
+    for (let index = 1; index < sentAt.length; index += 1) expect(sentAt[index] - sentAt[index - 1]).toBeGreaterThanOrEqual(PAUSE_MS - 2);
+  });
+
   it("une fois le rendez-vous confirmé, la page relance dans son budget court les envois restés en file, au plus une fois toutes les 30 s par rendez-vous (ABUS-03)", async () => {
     const { id } = seedAppointment({ paymentStatus: "completed", appointmentStatus: "confirmed", holdExpiresAt: null, stripePaymentIntentId: PAYMENT_INTENT }) as { id: number };
     // As the page that confirmed it left them: its budget spent before their turn.

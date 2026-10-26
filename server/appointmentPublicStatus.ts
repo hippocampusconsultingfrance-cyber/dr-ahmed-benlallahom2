@@ -2,7 +2,8 @@ import type Stripe from "stripe";
 import { eq } from "drizzle-orm";
 import { appointments } from "../drizzle/schema";
 import { getDb } from "./db";
-import { handleCheckoutSessionCompleted, processFulfillmentBestEffort } from "./appointmentPaymentWebhook";
+import { IMMEDIATE_FULFILLMENT_TIMEOUT_MS, handleCheckoutSessionCompleted, processFulfillmentBestEffort } from "./appointmentPaymentWebhook";
+import { hasDeliveriesLeftInQueue } from "./appointmentFulfillment";
 
 /**
  * State shown on /booking/confirmation after Stripe's redirect:
@@ -49,14 +50,22 @@ const lastRelaunchAt = new Map<number, number>();
  * short budget, the emails of this appointment left due in the queue (ABUS-03):
  * the confirmation or invoice that a spent budget held back then leave at the
  * patient's next visit, not only with the webhook, the scheduled run or
- * « Renvoyer ». Only the due jobs, through the same claim as every other
- * processing, and at most once per appointment every relaunchEveryMs in this
- * instance, so a page reloaded in a loop does not hammer the email service.
+ * « Renvoyer ». Only emails due for longer than the webhook's own budget: the
+ * page answers at once while a webhook is still sending them, and does not
+ * process them beside it from another instance, where the pause between two
+ * sends would not hold. Through the same claim as every other processing, and
+ * at most once per appointment every relaunchEveryMs in this instance, so a
+ * page reloaded in a loop does not hammer the email service.
  */
 async function relaunchQueuedEmails(appointmentId: number) {
   const now = Date.now();
   const last = lastRelaunchAt.get(appointmentId);
   if (last !== undefined && now - last < paymentStatusPageFulfillment.relaunchEveryMs) return;
+  const leftInQueue = await hasDeliveriesLeftInQueue(appointmentId, IMMEDIATE_FULFILLMENT_TIMEOUT_MS, new Date(now)).catch(error => {
+    console.error("[AppointmentFulfillment] Queued emails check from the payment status page failed", error instanceof Error ? error.name : "UnknownError");
+    return false;
+  });
+  if (!leftInQueue) return;
   lastRelaunchAt.set(appointmentId, now);
   if (lastRelaunchAt.size > 1_000) {
     lastRelaunchAt.forEach((at, id) => { if (now - at >= paymentStatusPageFulfillment.relaunchEveryMs) lastRelaunchAt.delete(id); });
