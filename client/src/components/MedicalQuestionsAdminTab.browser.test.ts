@@ -142,8 +142,11 @@ describe.skipIf(!executablePath)("Questions santé de l’admin dans un navigate
     const page = await openMedicalQuestions({ viewport: { width: 1440, height: 900 } });
     await page.mouse.wheel(0, 400);
     await page.waitForFunction(() => window.scrollY > 0);
-    const scrolled = await page.evaluate(() => window.scrollY);
     const card = page.getByRole("button", { name: /Patiente5\b/ });
+    // The click itself may first scroll the card into view (search box above the list, ADM-02):
+    // the position is read once the card is on screen.
+    await card.scrollIntoViewIfNeeded();
+    const scrolled = await page.evaluate(() => window.scrollY);
     await card.click();
 
     await detail(page).getByRole("heading", { name: "Jeanne Patiente5" }).waitFor();
