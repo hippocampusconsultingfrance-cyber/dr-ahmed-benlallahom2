@@ -108,6 +108,18 @@ function rowsFor(table: Parameters<MemoryPg["rows"]>[0], column: string, value: 
   return memory.rows(table).filter(row => row[column] === value);
 }
 
+/** A diploma uploaded by the candidate while the erasure runs: row, queued analysis, upload trace and encrypted file. */
+function uploadDuringErasure(accountId: number, applicationId: number) {
+  const storageKey = `candidate-documents/quarantine/${accountId}/1800000000-diplome-tardif.pdf.enc`;
+  const [document] = memory.seed(candidateDocuments, [{
+    candidate_id: accountId, application_id: applicationId, category: "diploma", original_name: "diplome-tardif.pdf", storage_key: storageKey, mime_type: "application/pdf", size_bytes: 10, checksum: "late",
+  }]);
+  memory.seed(candidateDocumentProcessingJobs, [{ document_id: document!.id, status: "queued" }]);
+  memory.seed(candidateDocumentAuditLogs, [{ document_id: document!.id, candidate_id: accountId, actor_type: "candidate", action: "upload" }]);
+  blobs.add(storageKey);
+  return storageKey;
+}
+
 describe("effacement RGPD complet d’un dossier candidat", () => {
   beforeEach(() => {
     process.env.CANDIDATE_AUTH_PEPPER ||= "test-pepper-for-erasure-tests-0123456789";
@@ -191,6 +203,61 @@ describe("effacement RGPD complet d’un dossier candidat", () => {
     const report = await eraseCandidateApplication({ applicationId: id, actorOpenId: "user_owner", reason: "admin_gdpr_request" }, dependencies());
     expect(report.storageObjectsDeleted).toBe(6);
     expect(rowsFor(cvApplications, "id", id)).toHaveLength(0);
+  });
+
+  it("retrouve et efface, fichier compris, un document déposé pendant l’effacement, avant de supprimer le compte (DATA-01)", async () => {
+    const { id, accountId } = seedDossier();
+    const deps = dependencies();
+    let lateKey = "";
+    // Uploaded after the documents were listed and the stored files deleted, while Drive was being cleaned.
+    const deleteDriveCopies = deps.deleteDriveCopies;
+    deps.deleteDriveCopies = async input => {
+      lateKey = uploadDuringErasure(accountId, id);
+      return deleteDriveCopies(input);
+    };
+
+    const report = await eraseCandidateApplication({ applicationId: id, actorOpenId: "user_owner", reason: "admin_gdpr_request" }, deps);
+
+    expect(blobs.has(lateKey)).toBe(false);
+    expect(memory.rows(candidateDocuments)).toHaveLength(0);
+    // Its queued analysis can no longer send it to the AI.
+    expect(memory.rows(candidateDocumentProcessingJobs)).toHaveLength(0);
+    expect(memory.rows(candidateDocumentAuditLogs)).toHaveLength(0);
+    expect(memory.rows(candidateAccounts)).toHaveLength(0);
+    expect(report).toMatchObject({ candidateDocumentsDeleted: 4, storageObjectsDeleted: 7, candidateAccountsErased: 1 });
+    expect(JSON.parse(String(memory.rows(recruitmentAuditLogs)[0]!.metadata))).toMatchObject({ candidateDocumentsDeleted: 4, storageObjectsDeleted: 7 });
+  });
+
+  it("vérifie de nouveau quand la clé étrangère refuse de supprimer un compte qui vient de recevoir un document (DATA-01)", async () => {
+    const { id, accountId } = seedDossier();
+    const database = memory.db as unknown as { delete: (table: unknown) => unknown };
+    let lateKey = "";
+    // The database refuses the first deletion of the account: a document was stored just before it.
+    state.memory = {
+      db: new Proxy(database, {
+        get(target, property, receiver) {
+          if (property !== "delete") return Reflect.get(target, property, receiver);
+          return (table: unknown) => {
+            if (table !== candidateAccounts || lateKey) return target.delete(table);
+            lateKey = uploadDuringErasure(accountId, id);
+            const refusal = Object.assign(new Error("Failed query: delete from \"candidate_accounts\" …"), {
+              cause: Object.assign(new Error('update or delete on table "candidate_accounts" violates foreign key constraint "candidate_documents_candidate_id_fk" on table "candidate_documents"'), { code: "23503", constraint: "candidate_documents_candidate_id_fk" }),
+            });
+            return { where: () => Promise.reject(refusal) };
+          };
+        },
+      }),
+    };
+
+    const report = await eraseCandidateApplication({ applicationId: id, actorOpenId: "user_owner", reason: "admin_gdpr_request" }, dependencies());
+
+    expect(lateKey).not.toBe("");
+    expect(blobs.has(lateKey)).toBe(false);
+    expect(memory.rows(candidateDocuments)).toHaveLength(0);
+    expect(memory.rows(candidateDocumentProcessingJobs)).toHaveLength(0);
+    expect(memory.rows(candidateAccounts)).toHaveLength(0);
+    expect(rowsFor(cvApplications, "id", id)).toHaveLength(0);
+    expect(report).toMatchObject({ candidateDocumentsDeleted: 4, candidateAccountsErased: 1 });
   });
 
   it("refuse l’effacement pendant une analyse en cours", async () => {

@@ -32,7 +32,7 @@ import { isSameRecruitmentSubmission } from "../recruitmentSubmissionDeduplicati
 import { sendTrackedCvApplicationConfirmationEmail } from "../recruitmentEmailTrace";
 import { resendApplicationReferenceFromTags, resendRecipientMatchesApplication } from "../resendWebhookCorrelation";
 import { postgresErrorCode } from "../languageColumns";
-import { CV_APPLICATION_SUBMISSION_UNIQUE_INDEX, isUniqueViolation } from "../databaseConstraints";
+import { CANDIDATE_DOCUMENT_ACCOUNT_FOREIGN_KEY, CV_APPLICATION_SUBMISSION_UNIQUE_INDEX, isForeignKeyViolation, isUniqueViolation } from "../databaseConstraints";
 import { internalErrorReference, internalErrorSummary } from "./trpc";
 
 function safeErrorName(error: unknown) {
@@ -797,7 +797,17 @@ export async function createApp() {
           analysisStatus: "queued",
           retentionUntil,
           ...(aiAnalysis ? {} : candidateHumanReviewOnlyFields()),
-        }).returning({ id: candidateDocuments.id });
+        }).returning({ id: candidateDocuments.id }).catch(async (insertError: unknown) => {
+          // DATA-01: the account was erased while the document was being sent
+          // (foreign key of drizzle/pg/0004); its encrypted file is not kept.
+          if (!isForeignKeyViolation(insertError, CANDIDATE_DOCUMENT_ACCOUNT_FOREIGN_KEY)) throw insertError;
+          await storageDelete([stored.key]).catch(deleteError => console.error("Candidate document cleanup error:", safeErrorName(deleteError)));
+          return null;
+        });
+        if (!result) {
+          res.status(401).json({ error: "Votre session a expiré. Veuillez vous reconnecter." });
+          return;
+        }
         const documentId = Number(result[0].id);
         if (aiAnalysis) await db.insert(candidateDocumentProcessingJobs).values({ documentId, status: "queued" });
         await db.insert(candidateDocumentAuditLogs).values({
