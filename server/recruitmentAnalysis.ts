@@ -371,11 +371,18 @@ function invisibleTextSummary(
   };
 }
 
-// When the vision read some of its pages again, only what stays left out is said set aside.
-const invisibleTextWarnings = (invisibleText: InvisibleTextSummary | undefined) => [
-  ...(invisibleText?.characters ? [`invisible_text_ignored:${invisibleText.characters}`] : []),
-  ...(invisibleText?.unverifiable ? [`unverifiable_text_set_aside:${(invisibleText.unverifiable.unread ?? invisibleText.unverifiable).characters}`, ...invisibleText.unverifiable.reasons.map(reason => UNVERIFIABLE_REASONS[reason].warning)] : []),
-];
+// When the vision read some of its pages again, only what stays left out is said set aside; when it read them all, nothing is,
+// and the text layer it replaced is counted apart, as in the admin alert.
+const invisibleTextWarnings = (invisibleText: InvisibleTextSummary | undefined) => {
+  const unverifiable = invisibleText?.unverifiable;
+  const replaced = Boolean(unverifiable?.rereadPages?.length) && !unverifiable?.unread;
+  return [
+    ...(invisibleText?.characters ? [`invisible_text_ignored:${invisibleText.characters}`] : []),
+    ...(unverifiable
+      ? [replaced ? `text_layer_reread:${unverifiable.characters}` : `unverifiable_text_set_aside:${(unverifiable.unread ?? unverifiable).characters}`, ...unverifiable.reasons.map(reason => UNVERIFIABLE_REASONS[reason].warning)]
+      : []),
+  ];
+};
 
 const unverifiableReasons = (unverifiable: NonNullable<InvisibleTextSummary["unverifiable"]>) =>
   unverifiable.reasons.map(reason => UNVERIFIABLE_REASONS[reason].label).join(" ; ") || "visibilité non établie";

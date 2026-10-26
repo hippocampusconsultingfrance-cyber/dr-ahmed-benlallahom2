@@ -61,6 +61,9 @@ describe("libellés des preuves IA d’un CV (IA-01)", () => {
   it("dit en clair, dans la fiche, le texte écarté de l’analyse et pourquoi, au lieu des codes bruts", () => {
     expect(extractionWarningLabel("invisible_text_ignored:571")).toBe("571 caractère(s) de texte invisible écarté(s) de l’analyse");
     expect(extractionWarningLabel("unverifiable_text_set_aside:74")).toBe("74 caractère(s) non vérifiable(s) écarté(s) de l’analyse");
+    // A scan the vision read in full: its text layer replaced, nothing said set aside.
+    expect(extractionWarningLabel("text_layer_reread:4527")).toBe("couche de texte non utilisée pour 4527 caractère(s) : pages relues par la lecture visuelle");
+    expect(extractionWarningLabel("text_layer_reread:4527")).not.toMatch(/écarté/);
     expect(extractionWarningLabel("pdf_font_not_drawable")).toBe("police non incorporée au PDF que l’outil ne sait pas dessiner : son texte n’a pas pu être vérifié");
     expect(extractionWarningLabel("pdf_visibility_check_unfinished")).toBe("contrôle de visibilité non terminé (document long ou lourd) : le texte non contrôlé est écarté");
     expect(extractionWarningLabel("pdf_text_page_3_insufficient_text")).toBe("page 3 : texte insuffisant");

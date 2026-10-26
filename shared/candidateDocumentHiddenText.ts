@@ -26,7 +26,8 @@ export function hiddenTextFlags(summary: HiddenTextSummary | undefined): string[
 
 /**
  * The admin's wording of such a flag, in their language (`{count}` is
- * replaced by the number of characters); null for any other flag.
+ * replaced by the number of characters, `{excerpt}` by the excerpt, in the
+ * quotation marks of that language); null for any other flag.
  */
 export function hiddenTextFlagLabel(
   flag: string,
@@ -43,5 +44,5 @@ export function hiddenTextFlagLabel(
     hiddenText = undefined;
   }
   const excerpt = invisible ? hiddenText?.excerpt : unverifiableLeftOut(hiddenText)?.excerpt;
-  return `${(invisible ? wording.invisible : wording.unverifiable).replace("{count}", match[2]!)}${excerpt ? ` (${wording.excerpt} : « ${excerpt} »)` : ""}, ${wording.compare}`;
+  return `${(invisible ? wording.invisible : wording.unverifiable).replace("{count}", match[2]!)}${excerpt ? ` (${wording.excerpt.replace("{excerpt}", () => excerpt)})` : ""}, ${wording.compare}`;
 }

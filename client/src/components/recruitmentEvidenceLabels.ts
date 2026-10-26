@@ -47,6 +47,8 @@ const LEGACY_CV_READING_WORDING: ReadonlyArray<readonly [RegExp, string]> = [
 const EXTRACTION_WARNING_LABELS: ReadonlyArray<readonly [RegExp, string]> = [
   [/^invisible_text_ignored:(\d+)$/, "$1 caractère(s) de texte invisible écarté(s) de l’analyse"],
   [/^unverifiable_text_set_aside:(\d+)$/, "$1 caractère(s) non vérifiable(s) écarté(s) de l’analyse"],
+  // Pages the vision read in full instead of their text layer (a scan): nothing is left out, as the alert says.
+  [/^text_layer_reread:(\d+)$/, "couche de texte non utilisée pour $1 caractère(s) : pages relues par la lecture visuelle"],
   [/^pdf_font_not_drawable$/, "police non incorporée au PDF que l’outil ne sait pas dessiner : son texte n’a pas pu être vérifié"],
   [/^pdf_text_faint$/, "mots d’une ligne visible recouverts en grande partie ou trop peu marqués pour être lus avec certitude"],
   [/^pdf_text_on_image$/, "texte sans encre posé sur une image, comme la couche OCR d’un scan : sa page est relue par la lecture visuelle quand il en fait l’essentiel, ou quand le reste est trop court"],
