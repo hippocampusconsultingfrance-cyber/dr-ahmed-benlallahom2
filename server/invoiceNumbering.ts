@@ -1,4 +1,4 @@
-import { eq, sql } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import { appointmentInvoices } from "../drizzle/schema";
 import { getDb } from "./db";
 
@@ -138,6 +138,23 @@ async function findAppointmentInvoice(db: Database, appointmentId: number): Prom
     .where(eq(appointmentInvoices.appointmentId, appointmentId))
     .limit(1);
   return row ?? null;
+}
+
+/**
+ * Factures déjà émises pour ces rendez-vous, par rendez-vous. N’attribue
+ * aucun numéro : le tableau de bord affiche et régénère une facture existante
+ * sans jamais en créer une (EXPL-02).
+ */
+export async function findAppointmentInvoices(appointmentIds: number[]): Promise<Map<number, AppointmentInvoiceRecord>> {
+  if (appointmentIds.length === 0) return new Map();
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+  await ensureInvoiceSchema(db);
+  const rows = await db
+    .select({ appointmentId: appointmentInvoices.appointmentId, invoiceNumber: appointmentInvoices.invoiceNumber, issuedAt: appointmentInvoices.issuedAt, paidAt: appointmentInvoices.paidAt })
+    .from(appointmentInvoices)
+    .where(inArray(appointmentInvoices.appointmentId, appointmentIds));
+  return new Map(rows.map(({ appointmentId, ...record }) => [appointmentId, record]));
 }
 
 /**

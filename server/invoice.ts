@@ -425,8 +425,29 @@ export async function generateInvoicePDF(
   data: InvoiceData,
   seller: InvoiceSeller = resolveInvoiceSeller(),
 ): Promise<{ buffer: Buffer; key: string; url: string }> {
+  const buffer = await renderInvoicePDF(data, seller);
+  const invoiceKey = `invoices/${data.invoiceNumber}-${data.trackingId}.pdf`;
+  try {
+    const result = await storagePut(invoiceKey, buffer, "application/pdf");
+    return { buffer, key: result.key, url: result.url };
+  } catch (storageError) {
+    // If storage fails, still return the buffer
+    console.error("Failed to upload invoice to private storage:", storageError instanceof Error ? storageError.name : "UnknownError");
+    return { buffer, key: invoiceKey, url: "" };
+  }
+}
+
+/**
+ * The invoice PDF, without storing it. Deterministic: the same data gives the
+ * same bytes, so the dashboard regenerates the very invoice sent to the
+ * patient from its recorded number and dates (EXPL-02).
+ */
+export function renderInvoicePDF(
+  data: InvoiceData,
+  seller: InvoiceSeller = resolveInvoiceSeller(),
+): Promise<Buffer> {
   const content = buildInvoiceContent(data, seller);
-  return new Promise(async (resolve, reject) => {
+  return new Promise((resolve, reject) => {
     try {
       const doc = new PDFDocument({
         size: INVOICE_LAYOUT.size,
@@ -440,20 +461,7 @@ export async function generateInvoicePDF(
       const chunks: Buffer[] = [];
 
       doc.on("data", (chunk: Buffer) => chunks.push(chunk));
-      doc.on("end", async () => {
-        const buffer = Buffer.concat(chunks);
-
-        const invoiceKey = `invoices/${content.invoiceNumber}-${data.trackingId}.pdf`;
-        try {
-          const result = await storagePut(invoiceKey, buffer, "application/pdf");
-          resolve({ buffer, key: result.key, url: result.url });
-        } catch (storageError) {
-          // If storage fails, still return the buffer
-          console.error("Failed to upload invoice to private storage:", storageError instanceof Error ? storageError.name : "UnknownError");
-          resolve({ buffer, key: invoiceKey, url: "" });
-        }
-      });
-
+      doc.on("end", () => resolve(Buffer.concat(chunks)));
       doc.on("error", reject);
 
       const font = invoiceFonts(doc);

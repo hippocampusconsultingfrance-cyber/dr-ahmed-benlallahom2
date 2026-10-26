@@ -1,0 +1,91 @@
+import { AlertTriangle, CheckCircle } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { trpc } from "@/lib/trpc";
+import PublicContentSkeleton from "@/components/PublicContentSkeleton";
+import { DELIVERY_JOB_LABELS, type AppointmentDeliveryJob } from "./AppointmentDeliveries";
+
+type AttentionItem = { trackingId: string; customerName: string; appointmentDate: string | Date; detail?: string };
+
+function AttentionList({ id, title, description, items, total }: { id: string; title: string; description: string; items: AttentionItem[]; total: number }) {
+  return (
+    <div className="rounded-xl border border-border bg-card p-4">
+      <h3 id={id} className="font-semibold text-foreground">{title} ({total})</h3>
+      <p className="mt-1 text-sm text-muted-foreground">{description}</p>
+      <ul aria-labelledby={id} className="mt-3 space-y-2">
+        {items.map(item => (
+          <li key={item.trackingId} className="text-sm">
+            <span className="font-mono text-primary">{item.trackingId}</span> · <span className="text-foreground">{item.customerName}</span> · <span className="text-muted-foreground">{new Date(item.appointmentDate).toLocaleString("fr-FR", { timeZone: "Europe/Paris" })}</span>
+            {item.detail && <span className="block text-xs text-red-400">{item.detail}</span>}
+          </li>
+        ))}
+      </ul>
+      {total > items.length && <p className="mt-2 text-xs text-muted-foreground">et {total - items.length} autre(s)</p>}
+    </div>
+  );
+}
+
+/**
+ * « À traiter » at the top of the dashboard (EXPL-02), read from the database:
+ * post-payment emails whose attempts ran out, and payments received without a
+ * confirmed appointment. It no longer depends on an alert email, sent through
+ * the very channel that may have failed.
+ */
+export default function AdminAttentionPanel({ onOpenAppointments }: { onOpenAppointments: () => void }) {
+  const { data, isLoading, error } = trpc.admin.attention.useQuery();
+
+  if (isLoading) return <PublicContentSkeleton cards={1} label="Chargement des points à traiter" />;
+  if (error) {
+    return (
+      <section aria-labelledby="admin-attention-title" className="rounded-2xl border border-red-500/40 bg-red-500/5 p-5">
+        <h2 id="admin-attention-title" className="text-xl font-semibold text-foreground">À traiter</h2>
+        <p className="mt-1 text-sm text-red-400">Les points à traiter n’ont pas pu être chargés : {error.message}</p>
+      </section>
+    );
+  }
+
+  const failed = data?.failedDeliveries ?? { total: 0, items: [] };
+  const unconfirmed = data?.unconfirmedPayments ?? { total: 0, items: [] };
+  if (failed.total === 0 && unconfirmed.total === 0) {
+    return (
+      <section aria-labelledby="admin-attention-title" className="flex items-start gap-3 rounded-2xl border border-border bg-card p-5">
+        <CheckCircle className="mt-0.5 h-5 w-5 shrink-0 text-green-400" aria-hidden="true" />
+        <div>
+          <h2 id="admin-attention-title" className="font-semibold text-foreground">À traiter</h2>
+          <p className="text-sm text-muted-foreground">Rien à traiter : aucun envoi après paiement en échec, aucun paiement à régulariser.</p>
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section aria-labelledby="admin-attention-title" className="rounded-2xl border border-amber-500/40 bg-amber-500/5 p-5 sm:p-6">
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <h2 id="admin-attention-title" className="flex items-center gap-2 text-xl font-semibold text-foreground">
+          <AlertTriangle className="h-5 w-5 text-amber-400" aria-hidden="true" />
+          À traiter
+        </h2>
+        <Button variant="outline" className="min-h-11 w-full md:w-auto md:min-h-0" onClick={onOpenAppointments}>Ouvrir les réservations</Button>
+      </div>
+      <div className="grid gap-4 md:grid-cols-2">
+        {failed.total > 0 && (
+          <AttentionList
+            id="admin-attention-deliveries"
+            title="Envois après paiement en échec"
+            description="Le patient n’a pas reçu sa confirmation ou sa facture, ou vous n’avez pas reçu la notification. Sur le rendez-vous : « Renvoyer », ou « Télécharger la facture » pour l’envoyer vous-même."
+            total={failed.total}
+            items={failed.items.map(item => ({ ...item, detail: item.jobTypes.map(jobType => DELIVERY_JOB_LABELS[jobType as AppointmentDeliveryJob] ?? jobType).join(", ") }))}
+          />
+        )}
+        {unconfirmed.total > 0 && (
+          <AttentionList
+            id="admin-attention-payments"
+            title="Paiements à régulariser"
+            description="Paiement reçu sans rendez-vous confirmé : contactez le patient, puis remboursez ou reprogrammez depuis l’onglet Réservations."
+            total={unconfirmed.total}
+            items={unconfirmed.items}
+          />
+        )}
+      </div>
+    </section>
+  );
+}

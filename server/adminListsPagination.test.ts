@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { appointments, contactMessages, gdprRequests, medicalQuestionAuditLogs, medicalQuestions } from "../drizzle/schema";
+import { appointmentFulfillmentJobs, appointmentInvoices, appointments, contactMessages, gdprRequests, medicalQuestionAuditLogs, medicalQuestions } from "../drizzle/schema";
 import { createMemoryPg, type MemoryPg } from "./testing/memoryPgProxy";
 import type { TrpcContext } from "./_core/context";
 
@@ -42,7 +42,7 @@ function seedQuestion(index: number, status: string, extra: Record<string, unkno
 }
 
 beforeEach(() => {
-  memory = createMemoryPg([medicalQuestions, medicalQuestionAuditLogs, contactMessages, gdprRequests, appointments]);
+  memory = createMemoryPg([medicalQuestions, medicalQuestionAuditLogs, contactMessages, gdprRequests, appointments, appointmentFulfillmentJobs, appointmentInvoices]);
   state.memory = memory;
 });
 
@@ -124,6 +124,9 @@ describe("ADM-01 — messages, RGPD et rendez-vous au-delà de 50", () => {
       request_details: "Avis", appointment_date: day(index), base_price: "100.00", final_price: "100.00",
     })));
     const admin = caller().admin;
+    // This in-memory database cannot run the invoice table check: the list
+    // still answers, without invoice numbers.
+    const logged = vi.spyOn(console, "error").mockImplementation(() => undefined);
 
     const gdpr = await admin.gdprRequests.list({ offset: 50 });
     const appointmentsPage = await admin.appointments.list({ offset: 50 });
@@ -131,5 +134,8 @@ describe("ADM-01 — messages, RGPD et rendez-vous au-delà de 50", () => {
     expect(gdpr).toMatchObject({ total: 55 });
     expect(gdpr.items).toHaveLength(5);
     expect(appointmentsPage).toMatchObject({ total: 52 });
+    expect(appointmentsPage.items.map(item => item.invoiceNumber)).toEqual([null, null]);
+    expect(logged).toHaveBeenCalledWith("[Admin] Issued invoices could not be read", expect.any(String));
+    logged.mockRestore();
   });
 });

@@ -17,7 +17,9 @@ import RecruitmentDashboardPanel from "@/components/RecruitmentDashboardPanel";
 import MedicalQuestionsAdminTab from "@/components/MedicalQuestionsAdminTab";
 import { AdminEmptyState, AdminErrorState } from "@/components/AdminStatePanel";
 import AdminConfigurationBanner from "@/components/AdminConfigurationBanner";
+import AdminAttentionPanel from "@/components/AdminAttentionPanel";
 import AdminLoadMore from "@/components/AdminLoadMore";
+import AppointmentDeliveries from "@/components/AppointmentDeliveries";
 import { adminListCount, adminPageOffsets, ADMIN_PAGE_SIZE, mergeAdminPages, useAdminPageCount } from "@/components/adminPagination";
 import PublicContentSkeleton from "@/components/PublicContentSkeleton";
 import { getActiveAdminTabLabel } from "./adminDashboardMobileTabs";
@@ -215,6 +217,8 @@ function OverviewTab({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
 
   return (
     <div className="space-y-8">
+      <AdminAttentionPanel onOpenAppointments={() => onNavigate("appointments")} />
+
       <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {cards.map((card) => {
           const Icon = card.icon;
@@ -488,6 +492,7 @@ function AppointmentsTab() {
             {apt.requestDetails && (
               <p className="text-sm text-muted-foreground mt-2 line-clamp-2">{apt.requestDetails}</p>
             )}
+            <AppointmentDeliveries trackingId={apt.trackingId} deliveries={apt.deliveries} invoiceNumber={apt.invoiceNumber} />
           </div>
         ))}
         {items.length === 0 && (
