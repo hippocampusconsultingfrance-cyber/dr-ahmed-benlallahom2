@@ -130,9 +130,12 @@ export async function runAppointmentFulfillmentWorker(options: { batchSize: numb
 }
 
 export async function runCandidateDocumentProcessingWorker(options: { batchSize: number; maxBatches: number; budgetMs: number }) {
-  const { processDueCandidateDocumentAnalysisJobs } = await import("./candidateDocumentProcessing");
+  const { processDueCandidateDocumentAnalysisJobs, recreateMissingCandidateDocumentAnalysisJobs } = await import("./candidateDocumentProcessing");
+  // DATA-02: a document whose upload stopped before its job gets it first.
+  const { recreated } = await recreateMissingCandidateDocumentAnalysisJobs();
   const { processed, batches } = await drainInBatches(() => processDueCandidateDocumentAnalysisJobs(options.batchSize), options);
   return {
+    jobsRecreated: recreated,
     processed,
     completed: batches.reduce((total, batch) => total + batch.completed, 0),
     retried: batches.reduce((total, batch) => total + batch.retried, 0),
