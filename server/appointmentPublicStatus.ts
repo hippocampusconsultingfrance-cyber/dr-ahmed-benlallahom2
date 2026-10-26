@@ -2,7 +2,8 @@ import type Stripe from "stripe";
 import { eq } from "drizzle-orm";
 import { appointments } from "../drizzle/schema";
 import { getDb } from "./db";
-import { handleCheckoutSessionCompleted } from "./appointmentPaymentWebhook";
+import { IMMEDIATE_FULFILLMENT_TIMEOUT_MS, handleCheckoutSessionCompleted, processFulfillmentBestEffort } from "./appointmentPaymentWebhook";
+import { hasDeliveriesLeftInQueue } from "./appointmentFulfillment";
 
 /**
  * State shown on /booking/confirmation after Stripe's redirect:
@@ -35,13 +36,46 @@ type Database = NonNullable<Awaited<ReturnType<typeof getDb>>>;
  * of Resend as well (a new try after its retry-after). The invoice usually
  * follows just after, in the same processing; an email that would have to
  * wait past it goes back to the queue, and a job whose turn comes after it
- * does not start: both stay due for the webhook, the scheduled job or
- * « Renvoyer ». Tests shorten it.
+ * does not start: both stay due for the webhook, the scheduled job,
+ * « Renvoyer » or a later visit of this page (relaunchQueuedEmails, at most
+ * once per appointment every relaunchEveryMs). Tests shorten them.
  */
-export const paymentStatusPageFulfillment = { timeoutMs: 3_000 };
+export const paymentStatusPageFulfillment = { timeoutMs: 3_000, relaunchEveryMs: 30_000 };
+
+/** When this page last sent again the emails of each confirmed appointment, in this instance. */
+const lastRelaunchAt = new Map<number, number>();
+
+/**
+ * Once the appointment is confirmed, the page sends again, within the same
+ * short budget, the emails of this appointment left due in the queue (ABUS-03):
+ * the confirmation or invoice that a spent budget held back then leave at the
+ * patient's next visit, not only with the webhook, the scheduled run or
+ * « Renvoyer ». Only emails due for longer than the webhook's own budget: the
+ * page answers at once while a webhook is still sending them, and does not
+ * process them beside it from another instance, where the pause between two
+ * sends would not hold. Through the same claim as every other processing, and
+ * at most once per appointment every relaunchEveryMs in this instance, so a
+ * page reloaded in a loop does not hammer the email service.
+ */
+async function relaunchQueuedEmails(appointmentId: number) {
+  const now = Date.now();
+  const last = lastRelaunchAt.get(appointmentId);
+  if (last !== undefined && now - last < paymentStatusPageFulfillment.relaunchEveryMs) return;
+  const leftInQueue = await hasDeliveriesLeftInQueue(appointmentId, IMMEDIATE_FULFILLMENT_TIMEOUT_MS, new Date(now)).catch(error => {
+    console.error("[AppointmentFulfillment] Queued emails check from the payment status page failed", error instanceof Error ? error.name : "UnknownError");
+    return false;
+  });
+  if (!leftInQueue) return;
+  lastRelaunchAt.set(appointmentId, now);
+  if (lastRelaunchAt.size > 1_000) {
+    lastRelaunchAt.forEach((at, id) => { if (now - at >= paymentStatusPageFulfillment.relaunchEveryMs) lastRelaunchAt.delete(id); });
+  }
+  await processFulfillmentBestEffort(appointmentId, paymentStatusPageFulfillment.timeoutMs);
+}
 
 async function readAppointment(db: Database, trackingId: string) {
   const [appointment] = await db.select({
+    id: appointments.id,
     trackingId: appointments.trackingId,
     paymentStatus: appointments.paymentStatus,
     appointmentStatus: appointments.appointmentStatus,
@@ -82,7 +116,10 @@ export async function getPublicPaymentState(
 
   const ownSession = appointment.stripeSessionId === input.sessionId;
   const confirmed = confirmedStatus(appointment, input.sessionId);
-  if (confirmed) return confirmed;
+  if (confirmed) {
+    await relaunchQueuedEmails(appointment.id);
+    return confirmed;
+  }
 
   let session: Stripe.Checkout.Session;
   try {

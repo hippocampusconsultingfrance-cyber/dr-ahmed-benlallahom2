@@ -35,7 +35,7 @@ const RETRYABLE_JOBS: Record<string, AppointmentDeliveryJob[]> = {
  * is erased (RGPD-12), as the server; correctable by the dashboard after a
  * refusal (EXPL-02).
  */
-const PATIENT_JOBS: AppointmentDeliveryJob[] = ["confirmation", "invoice", "refund"];
+export const PATIENT_JOBS: AppointmentDeliveryJob[] = ["confirmation", "invoice", "refund"];
 
 /** « Email de remboursement » is masculine; the other labels are feminine. */
 const MASCULINE_JOBS: AppointmentDeliveryJob[] = ["refund"];
@@ -115,6 +115,16 @@ export function canCorrectPatientEmail(deliveries: AppointmentDeliveryView[], pa
 }
 
 /**
+ * Toast after « Corriger l’email du patient »: « Renvoyer » now writes to the
+ * new address. An invoice already issued keeps its details, the address it
+ * was issued to included: the copy stored at its issue is the one emailed
+ * again and downloaded (EXPL-02).
+ */
+export function correctedEmailNotice(invoiceNumber: string | null): string {
+  return `Adresse du patient corrigée. « Renvoyer » envoie maintenant les envois refusés à cette adresse.${invoiceNumber ? ` La facture ${invoiceNumber} déjà émise garde ses mentions, dont l’adresse d’origine : elle est renvoyée et téléchargée telle qu’émise.` : ""}`;
+}
+
+/**
  * Toast after « Renvoyer », about the jobs it put back in the queue only (not
  * the ones already sent before it): everything went out; some were
  * deliberately not sent (a confirmation after the consultation…), said apart
@@ -145,7 +155,8 @@ export function retryOutcome(result: { requeuedJobTypes: AppointmentDeliveryJob[
  * pending; « Renvoyer » sends the ones that did not go out right away,
  * « Télécharger la facture » regenerates the invoice already issued,
  * identical to the one emailed. After a refusal, « Corriger l’email du
- * patient » changes the address « Renvoyer » then writes to.
+ * patient » changes the address « Renvoyer » then writes to; the invoice
+ * already issued keeps its details.
  */
 export default function AppointmentDeliveries({ trackingId, paymentStatus, deliveries, invoiceNumber, customerEmail, patientDataErased = false }: { trackingId: string; paymentStatus: string; deliveries: AppointmentDeliveryView[]; invoiceNumber: string | null; customerEmail?: string | null; patientDataErased?: boolean }) {
   const utils = trpc.useUtils();
@@ -156,7 +167,7 @@ export default function AppointmentDeliveries({ trackingId, paymentStatus, deliv
         toast.info("Cette adresse est déjà celle du rendez-vous.");
         return;
       }
-      toast.success("Adresse du patient corrigée. « Renvoyer » envoie maintenant les envois refusés à cette adresse.", { duration: 10_000 });
+      toast.success(correctedEmailNotice(invoiceNumber), { duration: 10_000 });
     },
     onError: error => toast.error(error.message),
   });
@@ -204,7 +215,7 @@ export default function AppointmentDeliveries({ trackingId, paymentStatus, deliv
         {canCorrectPatientEmail(deliveries, paymentStatus, customerEmail) && (
           <Button size="sm" variant="outline" className={buttonClass} disabled={correctEmail.isPending}
             onClick={() => {
-              const next = window.prompt(`Adresse email du patient du rendez-vous ${trackingId}, refusée par le service d’envoi. Saisissez l’adresse corrigée ; « Renvoyer » l’utilisera :`, customerEmail ?? "")?.trim();
+              const next = window.prompt(`Adresse email du patient du rendez-vous ${trackingId}, refusée par le service d’envoi. Saisissez l’adresse corrigée ; « Renvoyer » l’utilisera${invoiceNumber ? ` (la facture ${invoiceNumber} déjà émise garde ses mentions, dont l’adresse d’origine)` : ""} :`, customerEmail ?? "")?.trim();
               if (!next || next === customerEmail) return;
               correctEmail.mutate({ trackingId, customerEmail: next });
             }}>

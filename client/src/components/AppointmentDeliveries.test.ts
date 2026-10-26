@@ -41,7 +41,7 @@ vi.mock("@/lib/trpc", () => ({
 }));
 
 const { default: AppointmentDeliveries, canCorrectPatientEmail, canRetryDeliveries, deliveryLabel, refundEmailWarning, retryOutcome } = await import("./AppointmentDeliveries");
-const { default: AdminAttentionPanel, retryingDetail, waitingDetail } = await import("./AdminAttentionPanel");
+const { default: AdminAttentionPanel, refusedDetail, retryingDetail, waitingDetail } = await import("./AdminAttentionPanel");
 
 type Delivery = Parameters<typeof deliveryLabel>[0];
 const delivery = (jobType: Delivery["jobType"], deliveryState: Delivery["state"], attempts = 1, maxAttempts = 6): Delivery => ({ jobType, state: deliveryState, attempts, maxAttempts });
@@ -250,6 +250,18 @@ describe("EXPL-02 — envois après paiement sur la fiche du rendez-vous", () =>
     expect(state.emailMutate).not.toHaveBeenCalled();
   });
 
+  it("dit, avant et après la correction, que la facture déjà émise garde ses mentions (EXPL-02)", async () => {
+    const prompt = vi.fn(() => "patient.corrige@exemple.fr");
+    vi.stubGlobal("window", { confirm: vi.fn(() => true), prompt });
+    const tree = AppointmentDeliveries({ trackingId: "APTUI0000012", paymentStatus: "completed", invoiceNumber: "FAC-2026-000012", deliveries: [delivery("confirmation", "sent"), delivery("invoice", "refused", 1, 7)], customerEmail: "patient@exemple.fr" });
+
+    button(tree, "Corriger l’email du patient")();
+    expect(prompt).toHaveBeenCalledWith(expect.stringContaining("la facture FAC-2026-000012 déjà émise garde ses mentions, dont l’adresse d’origine"), "patient@exemple.fr");
+    await state.emailOptions!.onSuccess!({ success: true, unchanged: false } as never);
+
+    expect(state.toasts.at(-1)).toEqual(["success", "Adresse du patient corrigée. « Renvoyer » envoie maintenant les envois refusés à cette adresse. La facture FAC-2026-000012 déjà émise garde ses mentions, dont l’adresse d’origine : elle est renvoyée et téléchargée telle qu’émise."]);
+  });
+
   it("explique au médecin pourquoi l’email de remboursement n’est pas parti", () => {
     expect(refundEmailWarning("refused")).toContain("a été refusé par le service d’envoi");
     expect(refundEmailWarning("refused")).toContain("Sur le rendez-vous, « Corriger l’email du patient », puis « Renvoyer » l’envoie à la nouvelle adresse.");
@@ -346,6 +358,25 @@ describe("EXPL-02 — encart « À traiter » du tableau de bord", () => {
     expect(html).toContain("APTTODOUI005");
     expect(html).toContain("Confirmation, Facture");
     expect(html).not.toContain("nouvel essai automatique au plus tôt");
+  });
+
+  it("ne demande de corriger l’email du patient que pour un envoi au patient : la notification médecin va à l’adresse du site (EXPL-02)", () => {
+    state.attention = {
+      isLoading: false,
+      error: null,
+      data: {
+        failedDeliveries: { total: 0, items: [] },
+        refusedDeliveries: { total: 1, items: [{ trackingId: "APTTODOUI007", customerName: "Gaston Leroy", appointmentDate: "2026-10-30T09:00:00.000Z", jobTypes: ["owner"] }] },
+        retryingDeliveries: { total: 0, items: [] },
+        unconfirmedPayments: { total: 0, items: [] },
+      },
+    };
+    const html = renderToStaticMarkup(createElement(AdminAttentionPanel, { onOpenAppointments: vi.fn() }));
+    expect(html).toContain("Notification médecin : c’est votre adresse de notification qui est refusée ; corrigez la variable OWNER_NOTIFICATION_EMAIL dans Vercel et redéployez le site, puis « Renvoyer » sur le rendez-vous.");
+    expect(html).not.toContain("Corriger l’email du patient");
+
+    expect(refusedDetail({ jobTypes: ["owner", "confirmation", "invoice"] })).toBe("Confirmation, Facture : vérifiez l’adresse du patient et prévenez-le directement ; sur le rendez-vous, « Corriger l’email du patient », puis « Renvoyer » l’envoie à la nouvelle adresse. Notification médecin : c’est votre adresse de notification qui est refusée ; corrigez la variable OWNER_NOTIFICATION_EMAIL dans Vercel et redéployez le site, puis « Renvoyer » sur le rendez-vous.");
+    expect(refusedDetail({ jobTypes: ["refund"] })).toBe("Email de remboursement : vérifiez l’adresse du patient et prévenez-le directement ; sur le rendez-vous, « Corriger l’email du patient », puis « Renvoyer » l’envoie à la nouvelle adresse.");
   });
 
   it("liste les envois pas encore partis quelques minutes après le paiement, sans les dire en échec (ABUS-03)", () => {

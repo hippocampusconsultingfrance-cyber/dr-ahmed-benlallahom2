@@ -328,6 +328,56 @@ describe("envois après paiement — propriétaire d’abord, essais courts, ale
   });
 });
 
+describe("un envoi refait après le retry-after de Resend prend lui aussi son créneau d’envoi (ABUS-03)", () => {
+  const PAUSE_MS = 300;
+  const sendTimes = () => resend.calls.map(call => call.at);
+
+  beforeEach(async () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    appointmentFulfillmentPacing.delayMs = PAUSE_MS;
+    // Instance au repos : son dernier envoi date de plus d’une pause.
+    await new Promise(resolve => setTimeout(resolve, PAUSE_MS));
+  });
+
+  it("un 429 passager pendant qu’un autre traitement envoie : le nouvel essai attend une pause après cet envoi, jamais deux envois à moins d’une pause", async () => {
+    // Retry-after plus court que la pause : sans créneau, le nouvel essai de la
+    // notification partirait 50 ms après la confirmation envoyée par l’autre traitement.
+    resend.script.push("429");
+    resend.retryAfterSeconds = "0.35";
+    const { jobs } = memoryDatabase([job(1, "owner"), job(2, "confirmation"), job(3, "invoice")]);
+
+    // Le webhook (la notification, qui reçoit le 429) et la tâche planifiée en même temps.
+    await Promise.all([processDueAppointmentFulfillmentJobs(), processDueAppointmentFulfillmentJobs()]);
+
+    expect(subjects().map(subject => subject.split(" ")[0])).toEqual(["Nouvelle", "Confirmation", "Nouvelle", "Facture"]);
+    expect(jobs.map(row => [row.jobType, row.status, row.attempts])).toEqual([["owner", "completed", 1], ["confirmation", "completed", 1], ["invoice", "completed", 1]]);
+    // setTimeout may fire a millisecond early on some platforms.
+    const times = sendTimes();
+    for (let index = 1; index < times.length; index += 1) expect(times[index] - times[index - 1]).toBeGreaterThanOrEqual(PAUSE_MS - 2);
+  });
+
+  it("sous le budget d’un traitement immédiat, un nouvel essai dont le créneau tombe après ce budget ne part pas : la notification reste en file, sans tentative comptée ni alerte", async () => {
+    resend.script.push("429");
+    resend.retryAfterSeconds = "0.45";
+    const { jobs } = memoryDatabase([job(1, "owner"), job(2, "confirmation"), job(3, "invoice")]);
+
+    // La page de statut (budget de 500 ms) prend la notification ; la tâche
+    // planifiée envoie la confirmation à 300 ms. Le créneau du nouvel essai
+    // (600 ms) tombe après le budget de la page.
+    const startedAt = Date.now();
+    await Promise.all([processDueAppointmentFulfillmentJobs(5, { deadlineAt: startedAt + 500 }), processDueAppointmentFulfillmentJobs()]);
+
+    const ownerSends = resend.calls.filter(call => String(call.message.subject).startsWith("Nouvelle"));
+    expect(ownerSends).toHaveLength(1);
+    expect(jobs.find(row => row.jobType === "owner")).toMatchObject({ status: "queued", attempts: 0 });
+    expect(subjects().map(subject => subject.split(" ")[0])).toEqual(["Nouvelle", "Confirmation", "Facture"]);
+    expect(subjects().some(subject => subject.startsWith("Échec d’envoi"))).toBe(false);
+    const times = sendTimes();
+    for (let index = 1; index < times.length; index += 1) expect(times[index] - times[index - 1]).toBeGreaterThanOrEqual(PAUSE_MS - 2);
+  });
+});
+
 describe("envoi immédiat après paiement : la notification au médecin ne retient plus les envois au patient (ABUS-03, EXPL-01)", () => {
   // Délais réduits : retry-after de 0,3 s, essais courts à 0,1 puis 0,3 s, budget immédiat d’une seconde.
   const BUDGET_MS = 1_000;

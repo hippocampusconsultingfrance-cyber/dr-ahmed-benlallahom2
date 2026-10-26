@@ -346,6 +346,70 @@ describe("EXPL-01 — un paiement reçu est confirmé même sans webhook", () =>
     expect(emails.sendInvoiceEmail).toHaveBeenCalledTimes(1);
   });
 
+  it("pendant que le webhook envoie encore, la page répond « confirmé » aussitôt, sans traiter ses envois à côté de lui : chacun part une fois, espacé (ABUS-03)", async () => {
+    const PAUSE_MS = 300;
+    appointmentFulfillmentPacing.delayMs = PAUSE_MS;
+    // Instance au repos : son dernier envoi date de plus d’une pause.
+    await new Promise(resolve => setTimeout(resolve, PAUSE_MS));
+    seedAppointment();
+    const sentAt: number[] = [];
+    for (const send of [emails.sendOwnerNotificationEmail, emails.sendConfirmationEmail, emails.sendInvoiceEmail]) send.mockImplementationOnce(async () => { sentAt.push(Date.now()); });
+
+    // The webhook confirms, sends the notification, then pauses before the confirmation.
+    const webhook = postEvent("checkout.session.completed", stripeSession());
+    await vi.waitFor(() => expect(emails.sendOwnerNotificationEmail).toHaveBeenCalledTimes(1), { timeout: 5_000, interval: 5 });
+    const startedAt = Date.now();
+    await expect(publicStatus()).resolves.toMatchObject({ state: "confirmed" });
+
+    // Answered without waiting for a send slot, before the webhook's next email.
+    expect(Date.now() - startedAt).toBeLessThan(PAUSE_MS / 2);
+    expect(emails.sendConfirmationEmail).not.toHaveBeenCalled();
+    expect((await webhook).status).toBe(200);
+    expectPostPaymentEmailsSentOnce();
+    // setTimeout may fire a millisecond early on some platforms.
+    for (let index = 1; index < sentAt.length; index += 1) expect(sentAt[index] - sentAt[index - 1]).toBeGreaterThanOrEqual(PAUSE_MS - 2);
+  });
+
+  it("une fois le rendez-vous confirmé, la page relance dans son budget court les envois restés en file, au plus une fois toutes les 30 s par rendez-vous (ABUS-03)", async () => {
+    const { id } = seedAppointment({ paymentStatus: "completed", appointmentStatus: "confirmed", holdExpiresAt: null, stripePaymentIntentId: PAYMENT_INTENT }) as { id: number };
+    // As the page that confirmed it left them: its budget spent before their turn.
+    const seedJob = (jobType: string, overrides: Record<string, unknown> = {}) => db().seed(appointmentFulfillmentJobs, { appointmentId: id, jobType, status: "queued", attempts: 0, maxAttempts: 7, scheduledFor: new Date(Date.now() - 6 * 60 * 1000), ...overrides });
+    seedJob("owner", { status: "completed", attempts: 1 });
+    seedJob("confirmation");
+    seedJob("invoice");
+    const invoiceJob = () => db().rows(appointmentFulfillmentJobs).find(job => job.jobType === "invoice")!;
+    // A clock past the visits of the earlier tests: their throttle does not apply here.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(Date.now() + 10 * 60 * 1000));
+    try {
+      // The patient comes back to the page: confirmed, and the queued confirmation leaves.
+      // The invoice fails this time and gets its next attempt as usual.
+      emails.sendInvoiceEmail.mockRejectedValueOnce(new Error("invoice_email_failed"));
+      await expect(publicStatus()).resolves.toMatchObject({ state: "confirmed" });
+      expect(emails.sendConfirmationEmail).toHaveBeenCalledTimes(1);
+      expect(emails.sendInvoiceEmail).toHaveBeenCalledTimes(1);
+      expect(invoiceJob()).toMatchObject({ status: "retry", attempts: 1 });
+      expect(emails.sendOwnerNotificationEmail).not.toHaveBeenCalled();
+
+      // Due again 10 s later: a reload so soon sends nothing.
+      invoiceJob().scheduledFor = new Date(Date.now() - 1000);
+      vi.setSystemTime(new Date(Date.now() + 10_000));
+      await expect(publicStatus()).resolves.toMatchObject({ state: "confirmed" });
+      expect(emails.sendInvoiceEmail).toHaveBeenCalledTimes(1);
+
+      // 30 s after the previous relaunch, the page sends it, once.
+      vi.setSystemTime(new Date(Date.now() + 21_000));
+      await expect(publicStatus()).resolves.toMatchObject({ state: "confirmed" });
+      expect(emails.sendInvoiceEmail).toHaveBeenCalledTimes(2);
+      expect(jobStates()).toEqual([["owner", "completed"], ["confirmation", "completed"], ["invoice", "completed"]]);
+      await expect(publicStatus()).resolves.toMatchObject({ state: "confirmed" });
+      expect(emails.sendConfirmationEmail).toHaveBeenCalledTimes(1);
+      expect(emails.sendInvoiceEmail).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("espace aussi les envois de deux paiements traités en même temps sur cette instance (ABUS-03)", async () => {
     appointmentFulfillmentPacing.delayMs = 150;
     const sentAt: number[] = [];

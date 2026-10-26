@@ -1,4 +1,5 @@
-import { pauseWithinDeadline, waitFitsDeadline } from "../processingDeadline";
+import { AsyncLocalStorage } from "node:async_hooks";
+import { pauseWithinDeadline, startFitsDeadline, waitFitsDeadline } from "../processingDeadline";
 
 /**
  * How the app reads a Resend refusal (ABUS-03), shared by the emails of
@@ -73,6 +74,39 @@ export function resendRetryAfterMs(headers: Record<string, string> | null | unde
 }
 
 /**
+ * Wait for the send slot of the processing the current send runs in (see
+ * runWithSendSlot): false, the slot left to the next send, when `mayStart`
+ * says the send no longer starts.
+ */
+type WaitForSendSlot = (mayStart: () => boolean) => Promise<boolean>;
+const sendSlotStorage = new AsyncLocalStorage<WaitForSendSlot>();
+
+/**
+ * Runs `run` with the send slot its new tries take (ABUS-03): the processing
+ * that spaces its sends (the post-payment emails, appointmentFulfillment.ts)
+ * takes a slot before a first send; a send made again after a pause (Resend's
+ * retry-after, a short backoff) waits for `waitForSendSlot` as well, so it
+ * does not leave right after a send of another processing of the instance.
+ */
+export function runWithSendSlot<T>(waitForSendSlot: WaitForSendSlot, run: () => Promise<T>): Promise<T> {
+  return sendSlotStorage.run(waitForSendSlot, run);
+}
+
+/**
+ * Pause before a new try of a send, then the send slot of the processing it
+ * runs in, if any (runWithSendSlot). False when that slot comes after the end
+ * allowed to the pause: the new try is given up, as a pause that would not
+ * fit (deadlineCutShort), rather than leave after the answer, and the slot
+ * goes to the next send without counting as one.
+ */
+export async function pauseBeforeNewTry(waitMs: number): Promise<boolean> {
+  await pauseWithinDeadline(waitMs);
+  const waitForSendSlot = sendSlotStorage.getStore();
+  if (!waitForSendSlot) return true;
+  return waitForSendSlot(startFitsDeadline);
+}
+
+/**
  * One Resend send, made once more after the retry-after delay when Resend
  * answers with its rate limit and that delay is short enough for a request.
  * A network error is thrown as before.
@@ -82,7 +116,7 @@ export async function sendWithRateLimitRetry<T extends { error: ResendError | nu
   if (!response.error || resendDeliveryFailureCode(response.error) !== "rate_limited") return response;
   const retryAfterMs = resendRetryAfterMs(response.headers);
   if (retryAfterMs === null) return response;
-  await pauseWithinDeadline(retryAfterMs);
+  if (!(await pauseBeforeNewTry(retryAfterMs))) return response;
   return send();
 }
 

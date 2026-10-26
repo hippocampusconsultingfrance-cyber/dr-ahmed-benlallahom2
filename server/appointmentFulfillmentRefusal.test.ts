@@ -364,7 +364,8 @@ describe("EXPL-02 — adresse du patient corrigée depuis la fiche du rendez-vou
     seedAppointment("APTFIXMAIL03");
     seedAppointment("APTFIXMAIL04", { customer_email: "", customer_name: "Patient effacé" });
 
-    for (const customerEmail of ["pas-une-adresse", "patient@", "a b@example.test", `${"x".repeat(320)}@example.test`]) {
+    // Longer than 400 characters too: the same clear message, not Zod's raw report.
+    for (const customerEmail of ["pas-une-adresse", "patient@", "a b@example.test", `${"x".repeat(320)}@example.test`, `${"x".repeat(400)}@example.test`, "y".repeat(5_000)]) {
       await expect(admin().appointments.updateCustomerEmail({ trackingId: "APTFIXMAIL03", customerEmail }))
         .rejects.toMatchObject({ code: "BAD_REQUEST", message: expect.stringContaining("Adresse email invalide") });
     }
@@ -377,5 +378,35 @@ describe("EXPL-02 — adresse du patient corrigée depuis la fiche du rendez-vou
 
     expect(memory.rows(appointments).map(row => row.customer_email)).toEqual(["aptfixmail03@example.test", ""]);
     expect(corrections()).toEqual([]);
+  });
+
+  it("ne corrige l’adresse qu’après le refus d’un email au patient que « Renvoyer » renvoie, comme la fiche", async () => {
+    const refusal = { status: "failed", attempts: 1, last_error: "provider_rejected:confirmation_email_failed" };
+    const { id: sent } = seedAppointment("APTFIXMAIL05");
+    seedJob(sent, "owner", { status: "completed", attempts: 1 });
+    seedJob(sent, "confirmation", { status: "completed", attempts: 1 });
+    // Only the doctor's notification was refused: the patient's address is not the one at fault.
+    const { id: ownerRefused } = seedAppointment("APTFIXMAIL06");
+    seedJob(ownerRefused, "owner", { ...refusal, last_error: "provider_rejected:owner_notification_failed" });
+    // Failed after all its attempts, not refused: the address was not refused either.
+    const { id: failed } = seedAppointment("APTFIXMAIL07");
+    seedJob(failed, "confirmation", { status: "failed", attempts: 7, last_error: "confirmation_email_failed" });
+    // A paid appointment's confirmation refused before it was refunded: « Renvoyer » no longer sends it.
+    const { id: refunded } = seedAppointment("APTFIXMAIL08", { payment_status: "refunded", appointment_status: "cancelled" });
+    seedJob(refunded, "confirmation", refusal);
+    seedAppointment("APTFIXMAIL09");
+
+    for (const trackingId of ["APTFIXMAIL05", "APTFIXMAIL06", "APTFIXMAIL07", "APTFIXMAIL08", "APTFIXMAIL09"]) {
+      await expect(admin().appointments.updateCustomerEmail({ trackingId, customerEmail: "autre@example.test" }))
+        .rejects.toMatchObject({ code: "PRECONDITION_FAILED", message: expect.stringContaining("ne se corrige qu’après un tel refus") });
+    }
+    expect(memory.rows(appointments).every(row => row.customer_email !== "autre@example.test")).toBe(true);
+    expect(corrections()).toEqual([]);
+
+    // Once the confirmation is refused, the correction goes through.
+    const { id: refused } = seedAppointment("APTFIXMAIL10");
+    seedJob(refused, "confirmation", refusal);
+    await expect(admin().appointments.updateCustomerEmail({ trackingId: "APTFIXMAIL10", customerEmail: "autre@example.test" })).resolves.toEqual({ success: true, unchanged: false });
+    expect(corrections()).toHaveLength(1);
   });
 });

@@ -2,7 +2,7 @@ import { AlertTriangle, CheckCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { trpc } from "@/lib/trpc";
 import PublicContentSkeleton from "@/components/PublicContentSkeleton";
-import { DELIVERY_JOB_LABELS, type AppointmentDeliveryJob } from "./AppointmentDeliveries";
+import { DELIVERY_JOB_LABELS, PATIENT_JOBS, type AppointmentDeliveryJob } from "./AppointmentDeliveries";
 
 const parisTime = (date: string | Date) => new Date(date).toLocaleString("fr-FR", { timeZone: "Europe/Paris" });
 const jobLabels = (jobTypes: string[]) => jobTypes.map(jobType => DELIVERY_JOB_LABELS[jobType as AppointmentDeliveryJob] ?? jobType).join(", ");
@@ -10,6 +10,22 @@ const jobLabels = (jobTypes: string[]) => jobTypes.map(jobType => DELIVERY_JOB_L
 /** « Facture · nouvel essai automatique au plus tôt le … », or interrupted, waiting for the next scheduled run. */
 export function retryingDetail(item: { jobTypes: string[]; nextAttemptAt: string | Date | null }): string {
   return `${jobLabels(item.jobTypes)} · ${item.nextAttemptAt ? `nouvel essai automatique au plus tôt le ${parisTime(item.nextAttemptAt)}` : "envoi interrompu, nouvel essai à la prochaine exécution planifiée"}`;
+}
+
+/**
+ * What to do about a refused email, by recipient (EXPL-02): the patient's
+ * address is corrected on the appointment; the doctor notification goes to the
+ * site's own notification address, which no button of the appointment changes:
+ * a Vercel variable, read when the site starts, so only a redeployment applies it.
+ */
+export function refusedDetail(item: { jobTypes: string[] }): string {
+  const isPatientJob = (jobType: string) => PATIENT_JOBS.includes(jobType as AppointmentDeliveryJob);
+  const patientJobs = item.jobTypes.filter(isPatientJob);
+  const ownerJobs = item.jobTypes.filter(jobType => !isPatientJob(jobType));
+  return [
+    patientJobs.length > 0 ? `${jobLabels(patientJobs)} : vérifiez l’adresse du patient et prévenez-le directement ; sur le rendez-vous, « Corriger l’email du patient », puis « Renvoyer » l’envoie à la nouvelle adresse.` : "",
+    ownerJobs.length > 0 ? `${jobLabels(ownerJobs)} : c’est votre adresse de notification qui est refusée ; corrigez la variable OWNER_NOTIFICATION_EMAIL dans Vercel et redéployez le site, puis « Renvoyer » sur le rendez-vous.` : "",
+  ].filter(Boolean).join(" ");
 }
 
 /** « Confirmation, Facture · en attente depuis le …, essai à la prochaine exécution planifiée ». */
@@ -99,9 +115,9 @@ export default function AdminAttentionPanel({ onOpenAppointments }: { onOpenAppo
           <AttentionList
             id="admin-attention-refused"
             title="Envois refusés par le service d’envoi"
-            description="Le service d’envoi a refusé l’email (adresse email du patient refusée ou invalide, ou contenu de l’email refusé). Ce refus n’est pas passager : aucun nouvel essai automatique n’a lieu. Vérifiez l’adresse du patient et prévenez-le directement ; sur le rendez-vous, « Corriger l’email du patient », puis « Renvoyer » l’envoie à la nouvelle adresse."
+            description="Le service d’envoi a refusé l’email (adresse refusée ou invalide, ou contenu de l’email refusé). Ce refus n’est pas passager : aucun nouvel essai automatique n’a lieu. La marche à suivre, qui dépend de l’envoi refusé, est indiquée sous chaque rendez-vous."
             total={refused.total}
-            items={refused.items.map(item => ({ ...item, detail: jobLabels(item.jobTypes) }))}
+            items={refused.items.map(item => ({ ...item, detail: refusedDetail(item) }))}
           />
         )}
         {retrying.total > 0 && (

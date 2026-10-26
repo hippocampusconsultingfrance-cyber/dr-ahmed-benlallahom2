@@ -1494,11 +1494,15 @@ export const appRouter = router({
 
       /**
        * Corrige l’adresse du patient après un envoi refusé (EXPL-02), avec la
-       * règle de la réservation ; « Renvoyer » écrit ensuite à la nouvelle
-       * adresse. Tracé dans le journal de sécurité, sans les adresses.
+       * règle de la réservation, et seulement après un tel refus, comme la
+       * fiche ; « Renvoyer » écrit ensuite à la nouvelle adresse, la facture
+       * déjà émise gardant ses mentions. Tracé dans le journal de sécurité,
+       * sans les adresses.
        */
       updateCustomerEmail: adminProcedure
-        .input(z.object({ trackingId: z.string().min(1).max(20), customerEmail: z.string().max(400) }))
+        // No length limit here: an address too long gets the same clear message
+        // as any other invalid one, not Zod's raw report (bounded by the JSON body limit).
+        .input(z.object({ trackingId: z.string().min(1).max(20), customerEmail: z.string() }))
         .mutation(async ({ input, ctx }) => {
           const customerEmail = input.customerEmail.trim();
           if (!bookingCustomerEmail.safeParse(customerEmail).success) {
@@ -1512,7 +1516,7 @@ export const appRouter = router({
           return result;
         }),
 
-      /** Facture déjà émise, régénérée à l’identique (même numéro, mêmes dates) ; n’attribue jamais de numéro (EXPL-02). */
+      /** Facture déjà émise : la copie archivée à son émission, celle envoyée au patient ; n’attribue jamais de numéro (EXPL-02). */
       invoicePdf: adminProcedure
         .input(z.object({ trackingId: z.string().min(1).max(20) }))
         .mutation(async ({ input }) => {

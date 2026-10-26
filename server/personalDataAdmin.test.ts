@@ -328,7 +328,8 @@ describe("RGPD-12 — effacer / anonymiser une personne", () => {
       job(paul.past.id, "invoice", "retry"),
     ]);
     const before = await caller().admin.attention();
-    expect(before.failedDeliveries.items).toEqual([expect.objectContaining({ trackingId: jeanne.past.tracking_id, jobTypes: ["confirmation", "owner"] })]);
+    // In processing order: the doctor's notification, then the patient's confirmation.
+    expect(before.failedDeliveries.items).toEqual([expect.objectContaining({ trackingId: jeanne.past.tracking_id, jobTypes: ["owner", "confirmation"] })]);
 
     await caller().admin.personalData.erase({ email: "jeanne@test.local" });
 

@@ -12,6 +12,7 @@ import {
   sendRefundConfirmationEmail,
 } from "./_core/notifications";
 import { notifyOwner } from "./_core/notification";
+import { runWithSendSlot } from "./_core/resendDelivery";
 import { emailLanguageFor } from "./emailLanguage";
 import { generateInvoicePDF, renderInvoicePDF, type InvoiceData } from "./invoice";
 import { allocateAppointmentInvoice, findAppointmentInvoices, type AppointmentInvoiceRecord } from "./invoiceNumbering";
@@ -93,9 +94,10 @@ async function waitForFulfillmentTurn(): Promise<(claimed: boolean) => void> {
  * jobs; an invoice, sent once its PDF is built, could otherwise leave less than
  * a pause before the next job of another processing. The slot is taken in
  * order and released as soon as the send starts, so one waits at most one
- * pause.
+ * pause. A send made again after Resend's retry-after or a short backoff
+ * takes a new slot too (runWithSendSlot in processDueAppointmentFulfillmentJobs).
  */
-async function waitForSendSlot() {
+async function waitForSendSlot(mayStart: () => boolean = () => true): Promise<boolean> {
   const previousSlot = lastSendSlot;
   let release!: () => void;
   lastSendSlot = new Promise<void>(resolve => { release = resolve; });
@@ -105,7 +107,10 @@ async function waitForSendSlot() {
     // Never more than one pause, even with a clock set back (or stopped, in tests).
     const waitMs = lastSendAt === null ? 0 : Math.min(lastSendAt + delayMs - Date.now(), delayMs);
     if (waitMs > 0) await new Promise(resolve => setTimeout(resolve, waitMs));
+    // A send given up at its slot (budget spent) does not hold back the next one.
+    if (!mayStart()) return false;
     lastSendAt = Date.now();
+    return true;
   } finally {
     release();
   }
@@ -296,6 +301,21 @@ function isRefusedJob(job: Pick<FulfillmentJob, "status" | "lastError"> | undefi
 }
 
 /**
+ * Whether the email service refused an email to the patient of this
+ * appointment that « Renvoyer » sends again (confirmation and invoice of a
+ * paid appointment, refund email of a refunded one): the only case in which
+ * the dashboard corrects the patient's address (EXPL-02), as its card.
+ */
+export async function hasRefusedPatientEmail(appointment: Pick<Appointment, "id" | "paymentStatus">): Promise<boolean> {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+  const jobs = await db.select({ jobType: appointmentFulfillmentJobs.jobType, status: appointmentFulfillmentJobs.status, lastError: appointmentFulfillmentJobs.lastError })
+    .from(appointmentFulfillmentJobs)
+    .where(and(eq(appointmentFulfillmentJobs.appointmentId, appointment.id), eq(appointmentFulfillmentJobs.status, "failed")));
+  return jobs.some(job => isPatientJob(job.jobType) && jobPaymentStatus(job.jobType) === appointment.paymentStatus && isRefusedJob(job));
+}
+
+/**
  * The refund a refunded appointment's notices are about: recorded from
  * Stripe's notification (RES-06), for the patient email and the owner alert,
  * or made from the dashboard, for the patient email only. The patient email is
@@ -334,7 +354,8 @@ async function claimFulfillmentJob(db: Database, job: FulfillmentJob): Promise<b
 
 /**
  * Invoice of a paid appointment from its recorded number and dates: the job
- * that emails it and the dashboard download build the same PDF (EXPL-02).
+ * that emails it and the dashboard download build the same PDF, and give the
+ * copy stored at its issue once there is one (EXPL-02).
  */
 function appointmentInvoiceData(appointment: Appointment, invoiceRecord: AppointmentInvoiceRecord): InvoiceData {
   return {
@@ -536,15 +557,36 @@ export async function processDueAppointmentFulfillmentJobs(limit = MAX_BATCH, op
       endTurn(claimed);
     }
     if (!claimed) continue;
+    // A send made again within the job (retry-after, short backoff) takes its slot as well.
+    const run = () => runWithSendSlot(waitForSendSlot, () => runJob(job.id));
     try {
       results.push(await (deadlineAt === undefined
-        ? runJob(job.id)
-        : runWithProcessingDeadline(deadlineAt - (jobs.length - 1 - index) * immediateFulfillmentBudget.reservePerJobMs, () => runJob(job.id), Date.now, { firstPauseDeadlineAt: deadlineAt })));
+        ? run()
+        : runWithProcessingDeadline(deadlineAt - (jobs.length - 1 - index) * immediateFulfillmentBudget.reservePerJobMs, run, Date.now, { firstPauseDeadlineAt: deadlineAt })));
     } finally {
       lastJobRunAt = Date.now();
     }
   }
   return { processed: results.length, results };
+}
+
+/**
+ * Whether an email of this appointment has been due for at least `dueForMs`
+ * and is still waiting in the queue: left there by the processing that should
+ * have sent it (immediate budget spent), not about to be sent by a processing
+ * still under way. The payment status page sends those again
+ * (appointmentPublicStatus.ts).
+ */
+export async function hasDeliveriesLeftInQueue(appointmentId: number, dueForMs: number, now = new Date()): Promise<boolean> {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+  const [leftover] = await db.select({ id: appointmentFulfillmentJobs.id }).from(appointmentFulfillmentJobs).where(and(
+    eq(appointmentFulfillmentJobs.appointmentId, appointmentId),
+    inArray(appointmentFulfillmentJobs.status, ["queued", "retry"]),
+    lte(appointmentFulfillmentJobs.scheduledFor, new Date(now.getTime() - dueForMs)),
+    lt(appointmentFulfillmentJobs.attempts, appointmentFulfillmentJobs.maxAttempts),
+  )).limit(1);
+  return Boolean(leftover);
 }
 
 /** Same claim/idempotency path as the scheduled worker, restricted to one appointment. */
@@ -834,20 +876,26 @@ export async function listAppointmentDeliveriesToHandle(limit = 20, now = new Da
     });
   }
   const page = <T>(items: T[]) => ({ total: items.length, items: items.slice(0, limit) });
-  const withJobTypes = (group: Map<number, FulfillmentJobType[]>) => page(Array.from(group.entries()).map(([appointmentId, jobTypes]) => ({ ...byId.get(appointmentId)!.appointment, jobTypes })));
+  // Appointments oldest first; each one's emails in processing order (notification, confirmation, invoice…).
+  const inJobOrder = (jobTypes: FulfillmentJobType[]) => [...jobTypes].sort((a, b) => JOB_ORDER.indexOf(a) - JOB_ORDER.indexOf(b));
+  const withJobTypes = (group: Map<number, FulfillmentJobType[]>) => page(Array.from(group.entries()).map(([appointmentId, jobTypes]) => ({ ...byId.get(appointmentId)!.appointment, jobTypes: inJobOrder(jobTypes) })));
   return {
     failed: withJobTypes(failed),
     refused: withJobTypes(refused),
-    retrying: page(Array.from(retrying.entries()).map(([appointmentId, delivery]) => ({ ...byId.get(appointmentId)!.appointment, ...delivery }))),
-    waiting: page(Array.from(waiting.entries()).map(([appointmentId, delivery]) => ({ ...byId.get(appointmentId)!.appointment, ...delivery }))),
+    retrying: page(Array.from(retrying.entries()).map(([appointmentId, delivery]) => ({ ...byId.get(appointmentId)!.appointment, ...delivery, jobTypes: inJobOrder(delivery.jobTypes) }))),
+    waiting: page(Array.from(waiting.entries()).map(([appointmentId, delivery]) => ({ ...byId.get(appointmentId)!.appointment, ...delivery, jobTypes: inJobOrder(delivery.jobTypes) }))),
   };
 }
 
 /**
  * « Télécharger la facture » (EXPL-02): the invoice already issued for this
- * appointment, rebuilt from its recorded number and dates, identical to the
- * PDF emailed to the patient. Never allocates a number: null when no invoice
- * was issued yet.
+ * appointment, the copy stored at its issue, identical to the PDF emailed to
+ * the patient even after the address was corrected; when none was stored
+ * yet, built from its recorded number and dates and the appointment's current
+ * data, then stored once (generateInvoicePDF). On a booking reduced to its
+ * accounting record (RGPD-12), rebuilt without the identity, the stored copy
+ * neither read nor written, as the GDPR procedure states. Never allocates a
+ * number: null when no invoice was issued yet.
  */
 export async function regenerateAppointmentInvoice(trackingId: string): Promise<{ invoiceNumber: string; buffer: Buffer } | null> {
   const db = await getDb();
@@ -856,5 +904,7 @@ export async function regenerateAppointmentInvoice(trackingId: string): Promise<
   if (!appointment) return null;
   const invoiceRecord = (await findAppointmentInvoices([appointment.id])).get(appointment.id);
   if (!invoiceRecord) return null;
-  return { invoiceNumber: invoiceRecord.invoiceNumber, buffer: await renderInvoicePDF(appointmentInvoiceData(appointment, invoiceRecord)) };
+  const data = appointmentInvoiceData(appointment, invoiceRecord);
+  if (hasErasedPatientData(appointment)) return { invoiceNumber: invoiceRecord.invoiceNumber, buffer: await renderInvoicePDF(data) };
+  return { invoiceNumber: invoiceRecord.invoiceNumber, buffer: (await generateInvoicePDF(data)).buffer };
 }

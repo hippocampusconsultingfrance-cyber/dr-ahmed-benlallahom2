@@ -4,7 +4,7 @@ import { and, eq } from "drizzle-orm";
 import { appointments } from "../drizzle/schema";
 import { getDb } from "./db";
 import { mutationRowCount } from "./dbMutation";
-import { closeUnsentAppointmentFulfillment, sendAppointmentRefundEmail } from "./appointmentFulfillment";
+import { closeUnsentAppointmentFulfillment, hasRefusedPatientEmail, sendAppointmentRefundEmail } from "./appointmentFulfillment";
 import { sendRefundConfirmationEmail, type RefundEmailContext } from "./_core/notifications";
 import { emailLanguageFor } from "./emailLanguage";
 import { hasErasedPatientData } from "./personalDataRetention";
@@ -272,11 +272,13 @@ export async function refundUnconfirmedCheckoutSession(stripe: Stripe, input: { 
 
 /**
  * Corrects the patient's email of a booking from the dashboard (EXPL-02),
- * typically after the email service refused it: each post-payment or refund
- * email reads the address from the booking at every attempt, so « Renvoyer »
- * then writes to the new one. The address is already validated by the caller.
- * Never on a booking reduced to its accounting record (erasure or retention,
- * RGPD-12): its emptied address stays empty, even under a concurrent erasure.
+ * once the email service refused an email to the patient that « Renvoyer »
+ * sends again, as the card offers it: each post-payment or refund email reads
+ * the address from the booking at every attempt, so « Renvoyer » then writes
+ * to the new one. The invoice already issued keeps its details (its stored
+ * copy). The address is already validated by the caller. Never on a booking
+ * reduced to its accounting record (erasure or retention, RGPD-12): its
+ * emptied address stays empty, even under a concurrent erasure.
  */
 export async function updateAppointmentCustomerEmailByAdmin(input: { trackingId: string; customerEmail: string }, now = new Date()) {
   const db = await database();
@@ -285,6 +287,9 @@ export async function updateAppointmentCustomerEmailByAdmin(input: { trackingId:
     throw new TRPCError({ code: "CONFLICT", message: "Les données de ce patient ont été effacées (RGPD) : son adresse email ne peut plus être renseignée." });
   }
   if (appointment.customerEmail === input.customerEmail) return { success: true as const, unchanged: true };
+  if (!(await hasRefusedPatientEmail(appointment))) {
+    throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Aucun email au patient n’a été refusé par le service d’envoi sur ce rendez-vous : son adresse ne se corrige qu’après un tel refus." });
+  }
   const result = await db.update(appointments).set({ customerEmail: input.customerEmail, updatedAt: now })
     .where(and(eq(appointments.id, appointment.id), eq(appointments.customerEmail, appointment.customerEmail)));
   if (mutationRowCount(result) !== 1) {

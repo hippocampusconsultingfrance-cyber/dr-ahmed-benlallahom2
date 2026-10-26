@@ -132,6 +132,13 @@ export async function storageGetSignedUrl(relKey: string): Promise<string> {
   return presignedUrl;
 }
 
+/** Contents of a private object, read through a short-lived signed URL; throws when it cannot be read. */
+export async function storageGetBuffer(relKey: string): Promise<Buffer> {
+  const response = await fetch(await storageGetSignedUrl(relKey));
+  if (!response.ok) throw new Error(`storage_read_failed_${response.status}`);
+  return Buffer.from(await response.arrayBuffer());
+}
+
 /**
  * Permanently deletes private objects (GDPR erasure, retention). Vercel Blob
  * ignores pathnames that no longer exist, so a retried erasure is idempotent.

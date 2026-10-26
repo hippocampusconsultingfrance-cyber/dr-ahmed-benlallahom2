@@ -4,8 +4,8 @@ import { CANDIDATE_INVITATION_MAX_AGE_MS, CANDIDATE_TOKEN_MAX_AGE_MS, formatCand
 import { PATIENT_CANCELLATION_POLICY, PATIENT_CANCELLATION_POLICY_EN, resolveConsultationContact, type ConsultationContact } from "../consultationContact";
 import { appointmentCalendarFilename, buildAppointmentCalendarEvent } from "../appointmentCalendar";
 import { withEmailLanguage, type EmailLanguage } from "../emailLanguage";
-import { reportResendQuotaError, resendDeliveryFailureCode, resendRefusedThisMessage, resendRetryAfterMs, sendWithRateLimitRetry, type ResendDeliveryFailureCode } from "./resendDelivery";
-import { pauseWithinDeadline, waitFitsDeadline } from "../processingDeadline";
+import { pauseBeforeNewTry, reportResendQuotaError, resendDeliveryFailureCode, resendRefusedThisMessage, resendRetryAfterMs, sendWithRateLimitRetry, type ResendDeliveryFailureCode } from "./resendDelivery";
+import { waitFitsDeadline } from "../processingDeadline";
 import {
   buildResendApplicationTags,
   RESEND_APPLICATION_ACTIVATION_KIND,
@@ -125,9 +125,9 @@ async function sendPostPaymentEmail(
   let lastError: PostPaymentEmailError | null = null;
   for (let attempt = 0; attempt <= delays.length; attempt += 1) {
     if (attempt > 0) {
-      // Sent right after a payment: no new try past the job's deadline, the job goes back to the queue.
-      if (!waitFitsDeadline(delays[attempt - 1])) break;
-      await pauseWithinDeadline(delays[attempt - 1]);
+      // Sent right after a payment: no new try past the job's deadline, the job
+      // goes back to the queue. The new try takes its send slot (ABUS-03).
+      if (!waitFitsDeadline(delays[attempt - 1]) || !(await pauseBeforeNewTry(delays[attempt - 1]))) break;
     }
     try {
       const { id, error, failureCode, retryLater } = await sendThroughResend(message, idempotencyKey ? { idempotencyKey } : undefined, "post_payment");
