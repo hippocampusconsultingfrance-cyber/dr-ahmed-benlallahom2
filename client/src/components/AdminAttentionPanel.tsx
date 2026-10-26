@@ -2,21 +2,27 @@ import { AlertTriangle, CheckCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { trpc } from "@/lib/trpc";
 import PublicContentSkeleton from "@/components/PublicContentSkeleton";
-import { DELIVERY_JOB_LABELS, INVOICE_STORAGE_CAUSE, PATIENT_JOBS, type AppointmentDeliveryJob } from "./AppointmentDeliveries";
+import { DELIVERY_JOB_LABELS, PATIENT_JOBS, type AppointmentDeliveryJob } from "./AppointmentDeliveries";
 
 const parisTime = (date: string | Date) => new Date(date).toLocaleString("fr-FR", { timeZone: "Europe/Paris" });
-const jobLabels = (jobTypes: string[]) => jobTypes.map(jobType => DELIVERY_JOB_LABELS[jobType as AppointmentDeliveryJob] ?? jobType).join(", ");
-/** The invoice storage, named when it kept an email from going out (EXPL-02). */
-const storageCause = (item: { invoiceStorage?: boolean }) => (item.invoiceStorage ? ` · ${INVOICE_STORAGE_CAUSE}` : "");
+/**
+ * « Confirmation, Facture (stockage Vercel Blob indisponible) »: the invoice
+ * storage is named on the label of the very job it kept from going out, not
+ * after the list, where it would read as the cause of every job (EXPL-02).
+ */
+const jobLabels = (jobTypes: string[], storageJobTypes: string[] = []) => jobTypes.map(jobType => {
+  const label = DELIVERY_JOB_LABELS[jobType as AppointmentDeliveryJob] ?? jobType;
+  return storageJobTypes.includes(jobType) ? `${label} (stockage Vercel Blob indisponible)` : label;
+}).join(", ");
 
-/** « Facture · en échec » with its cause, when the invoice storage is the one. */
-export function failedDetail(item: { jobTypes: string[]; invoiceStorage?: boolean }): string {
-  return `${jobLabels(item.jobTypes)}${storageCause(item)}`;
+/** « Confirmation, Facture », the storage named on the job it held (see jobLabels). */
+export function failedDetail(item: { jobTypes: string[]; storageJobTypes?: string[] }): string {
+  return jobLabels(item.jobTypes, item.storageJobTypes);
 }
 
 /** « Facture · nouvel essai automatique au plus tôt le … », or interrupted, waiting for the next scheduled run. */
-export function retryingDetail(item: { jobTypes: string[]; nextAttemptAt: string | Date | null; invoiceStorage?: boolean }): string {
-  return `${jobLabels(item.jobTypes)} · ${item.nextAttemptAt ? `nouvel essai automatique au plus tôt le ${parisTime(item.nextAttemptAt)}` : "envoi interrompu, nouvel essai à la prochaine exécution planifiée"}${storageCause(item)}`;
+export function retryingDetail(item: { jobTypes: string[]; nextAttemptAt: string | Date | null; storageJobTypes?: string[] }): string {
+  return `${jobLabels(item.jobTypes, item.storageJobTypes)} · ${item.nextAttemptAt ? `nouvel essai automatique au plus tôt le ${parisTime(item.nextAttemptAt)}` : "envoi interrompu, nouvel essai à la prochaine exécution planifiée"}`;
 }
 
 /**

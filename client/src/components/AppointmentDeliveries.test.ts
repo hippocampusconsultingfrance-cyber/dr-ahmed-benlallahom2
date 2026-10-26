@@ -447,13 +447,20 @@ describe("EXPL-02 — encart « À traiter » du tableau de bord", () => {
       isLoading: false,
       error: null,
       data: {
-        failedDeliveries: { total: 1, items: [{ trackingId: "APTTODOUI008", customerName: "Hugo Morel", appointmentDate: "2026-10-30T09:00:00.000Z", jobTypes: ["invoice"], invoiceStorage: true }] },
+        failedDeliveries: {
+          total: 2,
+          items: [
+            { trackingId: "APTTODOUI008", customerName: "Hugo Morel", appointmentDate: "2026-10-30T09:00:00.000Z", jobTypes: ["confirmation", "invoice"], storageJobTypes: ["invoice"] },
+            // Its invoice, held by the storage, is in the other group: the confirmation names no storage.
+            { trackingId: "APTTODOUI011", customerName: "Karim Haddad", appointmentDate: "2026-10-30T09:00:00.000Z", jobTypes: ["confirmation"], storageJobTypes: [] },
+          ],
+        },
         refusedDeliveries: { total: 0, items: [] },
         retryingDeliveries: {
           total: 2,
           items: [
-            { trackingId: "APTTODOUI009", customerName: "Inès Faure", appointmentDate: "2026-10-30T09:00:00.000Z", jobTypes: ["invoice"], nextAttemptAt: "2026-10-27T06:20:00.000Z", invoiceStorage: true },
-            { trackingId: "APTTODOUI010", customerName: "Jules Blanc", appointmentDate: "2026-10-30T09:00:00.000Z", jobTypes: ["confirmation"], nextAttemptAt: "2026-10-27T06:20:00.000Z", invoiceStorage: false },
+            { trackingId: "APTTODOUI011", customerName: "Karim Haddad", appointmentDate: "2026-10-30T09:00:00.000Z", jobTypes: ["invoice"], nextAttemptAt: "2026-10-27T06:20:00.000Z", storageJobTypes: ["invoice"] },
+            { trackingId: "APTTODOUI010", customerName: "Jules Blanc", appointmentDate: "2026-10-30T09:00:00.000Z", jobTypes: ["confirmation"], nextAttemptAt: "2026-10-27T06:20:00.000Z", storageJobTypes: [] },
           ],
         },
         waitingDeliveries: { total: 0, items: [] },
@@ -461,9 +468,12 @@ describe("EXPL-02 — encart « À traiter » du tableau de bord", () => {
       },
     };
     const html = renderToStaticMarkup(createElement(AdminAttentionPanel, { onOpenAppointments: vi.fn() }));
-    expect(html).toContain(">Facture · stockage des factures (Vercel Blob) indisponible<");
-    expect(html).toContain(">Facture · nouvel essai automatique au plus tôt le 27/10/2026 07:20:00 · stockage des factures (Vercel Blob) indisponible<");
+    // Named on the invoice alone, not after the list as if the confirmation had been held too.
+    expect(html).toContain(">Confirmation, Facture (stockage Vercel Blob indisponible)<");
+    expect(html).toContain(">Confirmation<");
+    expect(html).toContain(">Facture (stockage Vercel Blob indisponible) · nouvel essai automatique au plus tôt le 27/10/2026 07:20:00<");
     expect(html).toContain(">Confirmation · nouvel essai automatique au plus tôt le 27/10/2026 07:20:00<");
+    expect(html.match(/stockage Vercel Blob indisponible/g)).toHaveLength(2);
   });
 
   it("dit qu’il n’y a rien à traiter, ou que l’encart n’a pas pu être chargé", () => {

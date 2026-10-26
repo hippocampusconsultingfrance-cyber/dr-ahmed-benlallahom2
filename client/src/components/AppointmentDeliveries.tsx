@@ -89,7 +89,7 @@ const NOT_SENT_REASONS: Record<AppointmentDeliveryNotSentReason, string> = {
  * Why a failed email did not go out when the email service is not the cause
  * (EXPL-02): the invoice storage, whose stored copy could not be checked or read.
  */
-export const INVOICE_STORAGE_CAUSE = "stockage des factures (Vercel Blob) indisponible";
+const INVOICE_STORAGE_CAUSE = "stockage des factures (Vercel Blob) indisponible";
 
 /** « Facture : en échec (6/6) », « Confirmation : envoyée », « Email de remboursement : envoyé »… */
 export function deliveryLabel(delivery: AppointmentDeliveryView): string {

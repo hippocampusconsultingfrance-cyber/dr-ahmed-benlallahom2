@@ -876,8 +876,9 @@ export async function closeErasedPatientFulfillment(appointmentIds: number[], no
  * one may only come with the next scheduled run, days before the attempts run
  * out. « waiting »: not attempted yet, due for APPOINTMENT_FULFILLMENT_WAITING_AFTER_MS
  * (see there). Refunded appointments too, for the notices of their refund (RES-06).
- * `invoiceStorage`: a failed or retrying email of the appointment did not go
- * out because of the invoice storage, not the email service.
+ * `storageJobTypes`: the jobs of the group that the invoice storage, not the
+ * email service, kept from going out; another job of the same appointment, or
+ * of another group, is not said to be held by it.
  */
 export async function listAppointmentDeliveriesToHandle(limit = 20, now = new Date()) {
   const db = await getDb();
@@ -912,10 +913,13 @@ export async function listAppointmentDeliveriesToHandle(limit = 20, now = new Da
   const retrying = new Map<number, { jobTypes: FulfillmentJobType[]; nextAttemptAt: Date | null }>();
   // Earliest moment a job still waiting for its first attempt was due.
   const waiting = new Map<number, { jobTypes: FulfillmentJobType[]; dueSince: Date }>();
-  const invoiceStorage = new Set<number>();
+  // Jobs of the failed and retrying groups the invoice storage kept from going out.
+  const failedOnStorage = new Map<number, FulfillmentJobType[]>();
+  const retryingOnStorage = new Map<number, FulfillmentJobType[]>();
   for (const job of jobs) {
     const jobType = job.jobType as FulfillmentJobType;
-    if (failedOnInvoiceStorage(job.lastError) && (job.status === "failed" || job.status === "retry")) invoiceStorage.add(job.appointmentId);
+    const onStorage = job.status === "failed" ? failedOnStorage : job.status === "retry" ? retryingOnStorage : null;
+    if (onStorage && failedOnInvoiceStorage(job.lastError)) onStorage.set(job.appointmentId, [...(onStorage.get(job.appointmentId) ?? []), jobType]);
     if (job.status === "failed") {
       const group = isRefusedJob(job) ? refused : failed;
       group.set(job.appointmentId, [...(group.get(job.appointmentId) ?? []), jobType]);
@@ -939,11 +943,11 @@ export async function listAppointmentDeliveriesToHandle(limit = 20, now = new Da
   const page = <T>(items: T[]) => ({ total: items.length, items: items.slice(0, limit) });
   // Appointments oldest first; each one's emails in processing order (notification, confirmation, invoice…).
   const inJobOrder = (jobTypes: FulfillmentJobType[]) => [...jobTypes].sort((a, b) => JOB_ORDER.indexOf(a) - JOB_ORDER.indexOf(b));
-  const withJobTypes = (group: Map<number, FulfillmentJobType[]>) => page(Array.from(group.entries()).map(([appointmentId, jobTypes]) => ({ ...byId.get(appointmentId)!.appointment, jobTypes: inJobOrder(jobTypes), invoiceStorage: invoiceStorage.has(appointmentId) })));
+  const withJobTypes = (group: Map<number, FulfillmentJobType[]>, onStorage = new Map<number, FulfillmentJobType[]>()) => page(Array.from(group.entries()).map(([appointmentId, jobTypes]) => ({ ...byId.get(appointmentId)!.appointment, jobTypes: inJobOrder(jobTypes), storageJobTypes: inJobOrder(onStorage.get(appointmentId) ?? []) })));
   return {
-    failed: withJobTypes(failed),
+    failed: withJobTypes(failed, failedOnStorage),
     refused: withJobTypes(refused),
-    retrying: page(Array.from(retrying.entries()).map(([appointmentId, delivery]) => ({ ...byId.get(appointmentId)!.appointment, ...delivery, jobTypes: inJobOrder(delivery.jobTypes), invoiceStorage: invoiceStorage.has(appointmentId) }))),
+    retrying: page(Array.from(retrying.entries()).map(([appointmentId, delivery]) => ({ ...byId.get(appointmentId)!.appointment, ...delivery, jobTypes: inJobOrder(delivery.jobTypes), storageJobTypes: inJobOrder(retryingOnStorage.get(appointmentId) ?? []) }))),
     waiting: page(Array.from(waiting.entries()).map(([appointmentId, delivery]) => ({ ...byId.get(appointmentId)!.appointment, ...delivery, jobTypes: inJobOrder(delivery.jobTypes) }))),
   };
 }

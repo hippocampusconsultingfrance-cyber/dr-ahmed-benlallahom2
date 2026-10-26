@@ -611,7 +611,7 @@ describe("EXPL-02 — encart « À traiter »", () => {
 
     expect(attention.failedDeliveries).toEqual({
       total: 1,
-      items: [{ trackingId: "APTTODO00001", customerName: "Alice Martin", appointmentDate: expect.any(Date), jobTypes: ["confirmation", "invoice"], invoiceStorage: false }],
+      items: [{ trackingId: "APTTODO00001", customerName: "Alice Martin", appointmentDate: expect.any(Date), jobTypes: ["confirmation", "invoice"], storageJobTypes: [] }],
     });
     expect(attention.retryingDeliveries).toEqual({ total: 0, items: [] });
     expect(attention.unconfirmedPayments).toEqual({
@@ -644,11 +644,32 @@ describe("EXPL-02 — encart « À traiter »", () => {
     expect(attention.retryingDeliveries).toEqual({
       total: 3,
       items: [
-        { trackingId: "APTTODO00007", customerName: "Chloé Durand", appointmentDate: expect.any(Date), jobTypes: ["confirmation", "invoice"], nextAttemptAt: new Date("2026-10-26T18:00:00Z"), invoiceStorage: false },
-        { trackingId: "APTTODO00008", customerName: "David Roux", appointmentDate: expect.any(Date), jobTypes: ["confirmation"], nextAttemptAt: null, invoiceStorage: false },
-        { trackingId: "APTTODO00013", customerName: "Emma Petit", appointmentDate: expect.any(Date), jobTypes: ["invoice"], nextAttemptAt: new Date("2026-10-27T06:20:00Z"), invoiceStorage: true },
+        { trackingId: "APTTODO00007", customerName: "Chloé Durand", appointmentDate: expect.any(Date), jobTypes: ["confirmation", "invoice"], nextAttemptAt: new Date("2026-10-26T18:00:00Z"), storageJobTypes: [] },
+        { trackingId: "APTTODO00008", customerName: "David Roux", appointmentDate: expect.any(Date), jobTypes: ["confirmation"], nextAttemptAt: null, storageJobTypes: [] },
+        { trackingId: "APTTODO00013", customerName: "Emma Petit", appointmentDate: expect.any(Date), jobTypes: ["invoice"], nextAttemptAt: new Date("2026-10-27T06:20:00Z"), storageJobTypes: ["invoice"] },
       ],
     });
+  });
+
+  it("ne dit retenu par le stockage des factures que l’envoi qu’il a retenu, pas un autre envoi du rendez-vous (EXPL-02)", async () => {
+    // Confirmation out of attempts on the email service, invoice waiting for the storage:
+    // a job cut by the immediate budget does not count its attempt, so they may fall in different groups.
+    const split = seedAppointment("APTTODO00017", { customer_name: "Hugo Morel" });
+    seedJob(split.id, "owner", { status: "completed", attempts: 1 });
+    seedJob(split.id, "confirmation", { status: "failed", attempts: 7, max_attempts: 7, last_error: "resend_send_failed: 500" });
+    seedJob(split.id, "invoice", { status: "retry", attempts: 6, max_attempts: 7, last_error: "storage_check_failed", scheduled_for: new Date("2026-10-27T06:20:00Z") });
+    // Both waiting for a new attempt, one on the email service, the other on the storage.
+    const together = seedAppointment("APTTODO00018", { customer_name: "Inès Faure" });
+    seedJob(together.id, "confirmation", { status: "retry", attempts: 1, max_attempts: 7, last_error: "resend_send_failed: 500", scheduled_for: new Date("2026-10-27T06:20:00Z") });
+    seedJob(together.id, "invoice", { status: "retry", attempts: 1, max_attempts: 7, last_error: "storage_upload_failed", scheduled_for: new Date("2026-10-27T06:20:00Z") });
+
+    const attention = await admin().attention();
+
+    expect(attention.failedDeliveries.items).toEqual([expect.objectContaining({ trackingId: "APTTODO00017", jobTypes: ["confirmation"], storageJobTypes: [] })]);
+    expect(attention.retryingDeliveries.items).toEqual([
+      expect.objectContaining({ trackingId: "APTTODO00017", jobTypes: ["invoice"], storageJobTypes: ["invoice"] }),
+      expect.objectContaining({ trackingId: "APTTODO00018", jobTypes: ["confirmation", "invoice"], storageJobTypes: ["invoice"] }),
+    ]);
   });
 
   it("compte tous les échecs des rendez-vous payés, même derrière de nombreux échecs de rendez-vous remboursés", async () => {
