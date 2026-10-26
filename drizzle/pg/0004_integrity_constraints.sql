@@ -8,14 +8,13 @@
 --
 -- 1. One association per mission and candidate (client_brief_candidates).
 -- Pairs already associated more than once (simultaneous associateCandidate
--- calls) are first merged into one row, nothing lost: the row kept is the one
--- with the furthest status (suggested < reviewing < shortlisted < declined, a
--- removal from the shortlist being the admin's last word), then the latest
--- update; it gets the earliest creation date, the latest update, the first
--- score and breakdown found and every distinct note. The candidate's
--- agreement stays the kept row's own: a date on another copy may be an
--- agreement withdrawn since on the kept one. The table is locked against
--- writes until the index exists, so no new copy slips in between.
+-- calls) are first merged into one row: the row kept is the one updated last
+-- (the admin's latest decision or agreement date, each write setting
+-- updated_at), then the oldest; it gets the earliest creation date, the first
+-- score and breakdown found and every distinct note. The other copies' status
+-- and agreement date are not kept: a date on another copy may be an agreement
+-- withdrawn since on the kept one. The table is locked against writes until
+-- the index exists, so no new copy slips in between.
 DO $$
 DECLARE
   merged integer;
@@ -24,9 +23,7 @@ BEGIN
     LOCK TABLE client_brief_candidates IN SHARE ROW EXCLUSIVE MODE;
     WITH ranked AS (
       SELECT id, brief_id, application_id, match_score, match_breakdown, notes, created_at, updated_at,
-        row_number() OVER (PARTITION BY brief_id, application_id ORDER BY
-          CASE association_status WHEN 'declined' THEN 4 WHEN 'shortlisted' THEN 3 WHEN 'reviewing' THEN 2 WHEN 'suggested' THEN 1 ELSE 0 END DESC,
-          updated_at DESC, id) AS position,
+        row_number() OVER (PARTITION BY brief_id, application_id ORDER BY updated_at DESC, id) AS position,
         count(*) OVER (PARTITION BY brief_id, application_id) AS copies
       FROM client_brief_candidates
     ), merged_values AS (
@@ -92,7 +89,9 @@ ALTER TABLE appointments VALIDATE CONSTRAINT appointments_appointment_status_che
 -- repeated sending. No application is ever deleted here: if some were already
 -- received more than once, the index is not created, their references are
 -- listed in a WARNING, and this file is to be run again once the owner has
--- decided what to do with them (it then creates the index).
+-- decided what to do with them (it then creates the index): run the file
+-- itself (psql or the Neon SQL editor), since drizzle-kit migrate has already
+-- recorded 0004 as applied and never runs it again.
 DO $$
 DECLARE
   repeated integer;
