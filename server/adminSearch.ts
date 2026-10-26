@@ -1,56 +1,67 @@
 import { and, or, sql, type AnyColumn, type SQL } from "drizzle-orm";
 import { z } from "zod";
 import { ADMIN_SEARCH_MAX_LENGTH } from "../shared/adminSearchLimits";
+import { ADMIN_SEARCH_IGNORED_CHARACTERS, ADMIN_SEARCH_LETTER_FOLDS, ADMIN_SEARCH_LIGATURE_FOLDS, adminSearchWords, foldAdminSearchText } from "../shared/adminSearchFolding";
 
 /**
  * ADM-02: the search box of the admin lists (candidatures, réservations,
  * questions santé, messages): a name, an email or a reference, at most 100
  * characters. Each word typed must appear in one of the searched columns,
- * whatever the case and the accents (« helene dupont » finds « Hélène DUPONT »).
+ * whatever the case and the accents (« helene dupont » finds « Hélène DUPONT »,
+ * « nguyen » finds « Nguyễn »), see shared/adminSearchFolding.ts. A NUL
+ * character, which PostgreSQL refuses in a text parameter, is refused here
+ * (400) instead of failing the query; the other control characters are ignored.
  */
-export const adminSearchInput = z.string().trim().max(ADMIN_SEARCH_MAX_LENGTH).optional();
+export const adminSearchInput = z
+  .string()
+  .trim()
+  .max(ADMIN_SEARCH_MAX_LENGTH)
+  .refine(search => !search.includes("\u0000"), "La recherche contient un caractère non autorisé.")
+  .optional();
 
-const COMBINING_MARKS = /[\u0300-\u036f]/g;
-const withoutDiacritics = (text: string) => text.normalize("NFD").replace(COMBINING_MARKS, "");
+/** Chinese, Japanese and Korean names are written without a space between the last and the first name. */
+const WRITTEN_WITHOUT_SPACES = new RegExp("[\\p{Script=Han}\\p{Script=Hiragana}\\p{Script=Katakana}\\p{Script=Hangul}]", "u");
 
-/**
- * The accented Latin letters (Latin-1 and Latin Extended-A) and the same
- * letters without accent. translate() strips them from the columns with this
- * table, and the words typed are stripped with the same one, so both sides
- * compare alike without the unaccent extension (no schema change).
- */
-const ACCENTED = Array.from({ length: 0x17f - 0xc0 + 1 }, (_, index) => String.fromCharCode(0xc0 + index))
-  .filter(letter => withoutDiacritics(letter).length === 1 && withoutDiacritics(letter) !== letter)
-  .join("");
-const UNACCENTED = withoutDiacritics(ACCENTED);
-const UNACCENT = new Map(Array.from(ACCENTED, (letter, index) => [letter, UNACCENTED[index]!]));
-/**
- * translate() also removes the combining accents (U+0300–U+036F, listed after
- * the letters above, without counterpart) of a name stored decomposed, such as
- * « Hélène » pasted from a PDF as « e » + U+0301: they are removed from the
- * words typed too.
- */
-const ACCENTED_AND_COMBINING = ACCENTED + Array.from({ length: 0x36f - 0x300 + 1 }, (_, index) => String.fromCharCode(0x300 + index)).join("");
+/** The words typed, folded, as ILIKE patterns in which %, _ and \ match themselves. */
+function adminSearchWordPatterns(search: string | undefined) {
+  const patterns = new Map<string, boolean>();
+  for (const word of adminSearchWords(search)) {
+    patterns.set(`%${foldAdminSearchText(word).replace(/[\\%_]/g, "\\$&")}%`, WRITTEN_WITHOUT_SPACES.test(word));
+  }
+  return Array.from(patterns, ([pattern, withoutSpaces]) => ({ pattern, withoutSpaces }));
+}
 
-/** The words typed, without accents, as ILIKE patterns in which %, _ and \ match themselves. */
 export function adminSearchPatterns(search: string | undefined): string[] {
-  const words = (search ?? "").normalize("NFC").split(/\s+/).filter(Boolean);
-  const patterns = words
-    .map(word => Array.from(word, letter => UNACCENT.get(letter) ?? letter).join("").replace(COMBINING_MARKS, ""))
-    .filter(Boolean)
-    .map(word => `%${word.replace(/[\\%_]/g, "\\$&")}%`);
-  return Array.from(new Set(patterns));
+  return adminSearchWordPatterns(search).map(({ pattern }) => pattern);
+}
+
+const LETTERS_FROM = ADMIN_SEARCH_LETTER_FOLDS.map(([letter]) => letter).join("");
+const LETTERS_TO = ADMIN_SEARCH_LETTER_FOLDS.map(([, base]) => base).join("");
+
+/**
+ * A column folded like the words typed: normalize(NFD) decomposes it,
+ * translate() replaces the whole letters and removes the ignored characters
+ * (listed after them, without counterpart), replace() writes out each
+ * ligature. Plain SQL, without the unaccent extension (no schema change).
+ */
+function foldedColumn(column: AnyColumn | SQL): SQL {
+  let folded = sql`translate(normalize(${column}, NFD), ${LETTERS_FROM + ADMIN_SEARCH_IGNORED_CHARACTERS}, ${LETTERS_TO})`;
+  for (const [ligature, letters] of ADMIN_SEARCH_LIGATURE_FOLDS) folded = sql`replace(${folded}, ${ligature}, ${letters})`;
+  return folded;
 }
 
 /**
  * Condition of the admin search on these columns, undefined without search:
  * every word typed is found in at least one of them, case and accents ignored.
- * It joins the list's other filters, so its page, its total and « Charger
- * plus » follow the search.
+ * Given the list's first and last name columns, a Chinese, Japanese or Korean
+ * word is also searched in both names written together, in both orders
+ * (« 王小明 » finds 小明 王). It joins the list's other filters, so its page,
+ * its total and « Charger plus » follow the search.
  */
-export function adminSearchCondition(search: string | undefined, columns: AnyColumn[]): SQL | undefined {
-  const patterns = adminSearchPatterns(search);
+export function adminSearchCondition(search: string | undefined, columns: AnyColumn[], names?: { firstName: AnyColumn; lastName: AnyColumn }): SQL | undefined {
+  const patterns = adminSearchWordPatterns(search);
   if (!patterns.length) return undefined;
-  const unaccented = columns.map(column => sql`translate(${column}, ${ACCENTED_AND_COMBINING}, ${UNACCENTED})`);
-  return and(...patterns.map(pattern => or(...unaccented.map(column => sql`${column} ILIKE ${pattern}`))));
+  const folded = columns.map(foldedColumn);
+  const joined = names ? [sql`${names.firstName} || ${names.lastName}`, sql`${names.lastName} || ${names.firstName}`].map(foldedColumn) : [];
+  return and(...patterns.map(({ pattern, withoutSpaces }) => or(...[...folded, ...(withoutSpaces ? joined : [])].map(column => sql`${column} ILIKE ${pattern}`))));
 }

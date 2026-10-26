@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { adminSearchTerm } from "@shared/adminSearchFolding";
 import { adminListCount } from "./adminPagination";
 
 /** Pause in typing after which the list is searched. */
@@ -6,15 +7,16 @@ export const ADMIN_SEARCH_DELAY_MS = 300;
 
 /**
  * Search box of an admin list: the text typed, and the term sent to the
- * server once typing pauses (undefined while empty). « Effacer » empties both
- * at once. A new term is part of the list's filters, so the list starts again
- * from its first page.
+ * server once typing pauses (adminSearchTerm: without control or invisible
+ * characters; undefined while nothing is left to search, such as a lone
+ * accent). « Effacer » empties both at once. A new term is part of the list's
+ * filters, so the list starts again from its first page.
  */
 export function useAdminSearch() {
   const [text, setText] = useState("");
   const [search, setSearch] = useState("");
   useEffect(() => {
-    const term = text.trim();
+    const term = adminSearchTerm(text);
     if (term === search) return;
     const timer = setTimeout(() => setSearch(term), ADMIN_SEARCH_DELAY_MS);
     return () => clearTimeout(timer);

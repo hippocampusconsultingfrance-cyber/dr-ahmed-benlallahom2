@@ -61,6 +61,27 @@ describe("ADM-02 — délai de frappe de la recherche admin", () => {
     vi.advanceTimersByTime(ADMIN_SEARCH_DELAY_MS);
     expect(renderStateful(useAdminSearch).search).toBeUndefined();
   });
+
+  it("n’envoie ni accent isolé ni caractère invisible ou de contrôle, et n’annonce pas « pour « ́ » »", () => {
+    const typed = (text: string) => {
+      renderStateful(useAdminSearch).setText(text);
+      renderStateful(useAdminSearch);
+      vi.advanceTimersByTime(ADMIN_SEARCH_DELAY_MS);
+      return renderStateful(useAdminSearch).search;
+    };
+    const loaded = { isLoading: false, error: null, shown: 50, total: 302 };
+
+    // A lone combining accent, or Arabic harakat alone: nothing to search, the whole list.
+    for (const text of ["́", " ́ ّ ", "​"]) {
+      expect(typed(text)).toBeUndefined();
+      expect(adminSearchStatus(typed(text), loaded, "réservation(s)")).toBe("");
+    }
+    // Pasted with a zero-width space or a control character: the name alone, accents kept.
+    expect(typed("​dupont")).toBe("dupont");
+    expect(typed("du\u0000pont\u0007")).toBe("dupont");
+    expect(typed(" Hélène ​  Dupont ́")).toBe("Hélène Dupont");
+    expect(adminSearchStatus(typed("​dupont"), { ...loaded, total: 121 }, "réservation(s)")).toBe("50 sur 121 réservation(s) pour « dupont »");
+  });
 });
 
 describe("ADM-02 — champ de recherche", () => {

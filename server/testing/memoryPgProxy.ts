@@ -4,7 +4,8 @@
  * It plugs into drizzle's `pg-proxy` driver and executes the small SQL subset
  * drizzle generates for the queries of this code base (single-table SELECT /
  * INSERT / UPDATE / DELETE with AND/OR/IN/IS NULL predicates, lower(), translate(),
- * LIKE / ILIKE with the backslash escape, ORDER BY, LIMIT,
+ * replace(), normalize(), the || concatenation, LIKE / ILIKE with the backslash
+ * escape, ORDER BY, LIMIT,
  * RETURNING, ON CONFLICT DO NOTHING / DO UPDATE). Anything else throws, so a
  * test never passes on a silently ignored statement. DDL statements sent with
  * `db.execute` (CREATE ... IF NOT EXISTS, ALTER ... IF NOT EXISTS) are recorded
@@ -66,7 +67,7 @@ function tokenize(sqlText: string): Token[] {
     }
     const number = /^\d+(\.\d+)?/.exec(sqlText.slice(i));
     if (number) { tokens.push({ kind: "number", text: number[0] }); i += number[0].length; continue; }
-    const op = /^(<>|<=|>=|!=|::|=|<|>|\+|-|\*)/.exec(sqlText.slice(i));
+    const op = /^(<>|<=|>=|!=|::|\|\||=|<|>|\+|-|\*)/.exec(sqlText.slice(i));
     if (op) { tokens.push({ kind: "op", text: op[0] }); i += op[0].length; continue; }
     if ("(),.;".includes(char)) { tokens.push({ kind: "punct", text: char }); i += 1; continue; }
     const word = /^[A-Za-z_][A-Za-z0-9_]*/.exec(sqlText.slice(i));
@@ -90,6 +91,8 @@ type Expr =
   | { type: "lower"; expr: Expr }
   | { type: "coalesce"; items: Expr[] }
   | { type: "translate"; expr: Expr; from: Expr; to: Expr }
+  | { type: "replace"; expr: Expr; from: Expr; to: Expr }
+  | { type: "normalize"; expr: Expr; form: "NFC" | "NFD" | "NFKC" | "NFKD" }
   | { type: "count" }
   | { type: "case"; whens: Array<[Expr, Expr]>; otherwise: Expr | null };
 
@@ -178,7 +181,7 @@ class Parser {
   }
   additive(): Expr {
     let left = this.primary();
-    while (this.peek()?.kind === "op" && ["+", "-"].includes(this.peek()!.text)) {
+    while (this.peek()?.kind === "op" && ["+", "-", "||"].includes(this.peek()!.text)) {
       const op = this.next().text;
       left = { type: "binary", op, left, right: this.primary() };
     }
@@ -234,6 +237,24 @@ class Parser {
       const from = this.expression();
       this.expectPunct(",");
       expr = { type: "translate", expr: value, from, to: this.expression() };
+      this.expectPunct(")");
+    } else if (token.kind === "word" && token.text === "replace" && this.peek(1)?.text === "(") {
+      this.next();
+      this.expectPunct("(");
+      const value = this.expression();
+      this.expectPunct(",");
+      const from = this.expression();
+      this.expectPunct(",");
+      expr = { type: "replace", expr: value, from, to: this.expression() };
+      this.expectPunct(")");
+    } else if (token.kind === "word" && token.text === "normalize" && this.peek(1)?.text === "(") {
+      this.next();
+      this.expectPunct("(");
+      const value = this.expression();
+      this.expectPunct(",");
+      const form = this.next().text.toUpperCase();
+      if (form !== "NFC" && form !== "NFD" && form !== "NFKC" && form !== "NFKD") throw new Error(`memoryPgProxy: unknown normalization form ${form} in ${this.sqlText}`);
+      expr = { type: "normalize", expr: value, form };
       this.expectPunct(")");
     } else if (token.kind === "word" && token.text === "case") {
       this.next();
@@ -319,6 +340,18 @@ function evaluate(expr: Expr, row: Row, params: unknown[], now: string): Value {
         return index < 0 ? char : target[index] ?? "";
       }).join("");
     }
+    case "replace": {
+      // PostgreSQL: every occurrence of `from` replaced by `to`.
+      const value = evaluate(expr.expr, row, params, now);
+      const from = evaluate(expr.from, row, params, now);
+      const to = evaluate(expr.to, row, params, now);
+      if (value === null || from === null || to === null) return null;
+      return String(from) === "" ? String(value) : String(value).replaceAll(String(from), String(to));
+    }
+    case "normalize": {
+      const value = evaluate(expr.expr, row, params, now);
+      return value === null ? null : String(value).normalize(expr.form);
+    }
     case "count": throw new Error("memoryPgProxy: count(*) is only supported as a select expression");
     case "case": {
       for (const [condition, value] of expr.whens) {
@@ -349,6 +382,7 @@ function evaluate(expr: Expr, row: Row, params: unknown[], now: string): Value {
     case "binary": {
       const left = evaluate(expr.left, row, params, now);
       const right = evaluate(expr.right, row, params, now);
+      if (expr.op === "||") return left === null || right === null ? null : `${left}${right}`;
       if (expr.op === "+" || expr.op === "-") {
         if (left === null || right === null) return null;
         return expr.op === "+" ? Number(left) + Number(right) : Number(left) - Number(right);

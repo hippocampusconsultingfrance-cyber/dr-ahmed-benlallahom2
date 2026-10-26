@@ -171,7 +171,7 @@ export const medicalQuestionsRouter = router({
       const db = await requireDb();
       const whereClause = and(
         input?.statuses ? inArray(medicalQuestions.status, input.statuses) : undefined,
-        adminSearchCondition(input?.search, [medicalQuestions.firstName, medicalQuestions.lastName, medicalQuestions.email, medicalQuestions.trackingId]),
+        adminSearchCondition(input?.search, [medicalQuestions.firstName, medicalQuestions.lastName, medicalQuestions.email, medicalQuestions.trackingId], { firstName: medicalQuestions.firstName, lastName: medicalQuestions.lastName }),
       );
       const createdAt = input?.order === "oldest" ? asc(medicalQuestions.createdAt) : desc(medicalQuestions.createdAt);
       const items = await db.select().from(medicalQuestions)
