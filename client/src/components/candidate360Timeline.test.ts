@@ -24,14 +24,16 @@ describe("chronologie candidat 360°", () => {
         audit(4, { event: "mission_consent", briefId: 7, consentDate: null }),
         audit(5, { event: "certification_renewed", certification: "ACLS", expiresAt: "2028-06-30", previousExpiresAt: ["2023-05"] }),
         audit(6, { event: "certification_renewed", certification: "BLS", expiresAt: null, previousExpiresAt: ["2024"] }),
+        audit(7, { event: "certification_unconfirmed", certification: "Licence DHA", notRetainedByAnalysis: true }),
       ],
       campaignRecipients: [],
       followUps: [],
     });
 
     expect(timeline.map(event => event.title)).toEqual([
+      "Confirmation retirée : Licence DHA (non retenue par la dernière analyse du CV)",
       "Renouvellement confirmé : BLS (sans date d’expiration)",
-      "Renouvellement confirmé : ACLS (expire le 2028-06-30)",
+      "Renouvellement confirmé : ACLS (expire le 30/06/2028)",
       "Accord du candidat retiré pour une mission",
       "Accord du candidat noté pour une mission",
       "Confirmation retirée : Licence DHA",

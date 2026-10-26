@@ -117,7 +117,8 @@ describe("confirmation des certifications par l’admin (IA-02)", () => {
     const tree = CertificationReview({ applicationId: 5, certifications: facts as never });
     const html = renderToStaticMarkup(tree);
     expect(html).toContain("Licence DHA");
-    expect(html).toContain("expire le 2028-05");
+    // A month alone, written as the export and the mission write it.
+    expect(html).toContain("Licence DHA<span class=\"font-normal text-muted-foreground\"> · expire en mai 2028</span>");
     expect(html).toContain("extraite du CV par l’IA");
     expect(html).toContain("déclarée par le candidat");
     expect(html).toContain("confirmée par l’admin");
@@ -128,9 +129,16 @@ describe("confirmation des certifications par l’admin (IA-02)", () => {
     clickable(tree, "Annuler la confirmation de BLS")();
     expect(state.confirmMutate).toHaveBeenLastCalledWith({ id: 5, name: "BLS", confirmed: false });
 
-    await state.confirmOptions!.onSuccess?.({ success: true }, { id: 5, name: "Licence DHA", confirmed: true });
-    expect(state.toasts).toEqual(["Certification confirmée : Licence DHA"]);
-    expect(state.invalidated).toEqual(["recruitment.list", ["candidate.detail", { id: 5 }], "clientBriefs.candidates"]);
+    await state.confirmOptions!.onSuccess?.({ success: true, changed: true }, { id: 5, name: "Licence DHA", confirmed: true });
+    await state.confirmOptions!.onSuccess?.({ success: true, changed: true }, { id: 5, name: "BLS", confirmed: false });
+    // Withdrawn, a licence the latest analysis of the CV no longer retains loses its reading by the AI.
+    await state.confirmOptions!.onSuccess?.({ success: true, changed: true, notRetainedByAnalysis: true }, { id: 5, name: "Licence DHA", confirmed: false });
+    expect(state.toasts).toEqual([
+      "Certification confirmée : Licence DHA",
+      "Confirmation retirée : BLS",
+      "Confirmation retirée : Licence DHA. La dernière analyse du CV ne la retient pas : elle n’est plus comptée comme extraite du CV.",
+    ]);
+    expect(state.invalidated.slice(0, 3)).toEqual(["recruitment.list", ["candidate.detail", { id: 5 }], "clientBriefs.candidates"]);
 
     expect(renderToStaticMarkup(CertificationReview({ applicationId: 5, certifications: [] }))).toContain("Aucune certification déclarée ni lue dans le CV.");
   });
@@ -142,13 +150,13 @@ describe("confirmation des certifications par l’admin (IA-02)", () => {
     ];
     const renderReview = () => { hooks.index = 0; return CertificationReview({ applicationId: 5, certifications: certifications as never }); };
     const html = renderToStaticMarkup(renderReview());
-    expect(html).toContain("expirée le 2023-05");
-    expect(html).toContain("expire le 2028-05");
+    expect(html).toContain("ACLS<span class=\"font-normal text-red-600 dark:text-red-400\"> · expirée en mai 2023</span>");
+    expect(html).toContain(" · expire en mai 2028</span>");
     expect(html).toContain("Expirée, elle ne compte pas dans le matching.");
-    // Only the expired one offers a renewal, dated today at the earliest.
+    // Only the expired one offers a renewal, dated today at the earliest and 15 years ahead at most.
     expect(html).toContain('aria-label="Confirmer le renouvellement de ACLS"');
     expect(html).not.toContain("Confirmer le renouvellement de Licence DHA");
-    expect(html.match(/<input[^>]*type="date"[^>]*>/g)).toEqual([expect.stringContaining('min="2026-10-26"')]);
+    expect(html.match(/<input[^>]*type="date"[^>]*>/g)).toEqual([expect.stringMatching(/min="2026-10-26" max="2041-10-26"/)]);
 
     const labelled = (label: string) => elements(renderReview()).find(element => element.props["aria-label"] === label)!;
     const renewButton = () => labelled("Confirmer le renouvellement de ACLS");
