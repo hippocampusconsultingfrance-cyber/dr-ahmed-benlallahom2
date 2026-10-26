@@ -1871,7 +1871,8 @@ export const appRouter = router({
             if (input?.specialty) conditions.push(sql`LOWER(${cvApplications.specialty}) LIKE LOWER(${`%${input.specialty}%`})`);
             if (input?.country) conditions.push(adminFilterContains(cvApplications.targetCountries, input.country));
             if (input?.availability) conditions.push(sql`LOWER(COALESCE(${cvApplications.availability}, '')) LIKE LOWER(${`%${input.availability}%`})`);
-            if (input?.mobility) conditions.push(sql`(LOWER(COALESCE(${cvApplications.mobility}, '')) LIKE LOWER(${`%${input.mobility}%`}) OR LOWER(COALESCE(${cvApplications.targetCountries}, '')) LIKE LOWER(${`%${input.mobility}%`}))`);
+            // Mobility reads the target countries too, accents aside as under « Pays ciblé ».
+            if (input?.mobility) conditions.push(sql`(${adminFilterContains(cvApplications.mobility, input.mobility)} OR ${adminFilterContains(cvApplications.targetCountries, input.mobility)})`);
             if (input?.certification) conditions.push(await certificationFilterCondition(db, input.certification, sql`(${adminFilterContains(cvApplications.certifications, input.certification)} OR (${cvApplications.analysisPromptVersion} = ${RECRUITMENT_ANALYSIS_PROMPT_VERSION} AND ${adminFilterContains(cvApplications.normalizedCertifications, input.certification)}))`));
             if (input?.minimumScore) conditions.push(scoreAtLeastOrUnavailable(input.minimumScore));
             const candidates = await db.select({
