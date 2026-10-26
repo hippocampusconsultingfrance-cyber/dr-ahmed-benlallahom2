@@ -316,7 +316,8 @@ export const STRIPE_UNCONFIRMED_REFUND_CANCELLATION_REASON = "Remboursement cons
 /**
  * The payment that a refund recorded from Stripe's notification was for: a
  * paid appointment, or a payment never attached to a confirmed slot. Null for
- * a refund made from the dashboard, which emails the patient itself.
+ * a refund made from the dashboard, whose patient email the refund job reads
+ * from dashboardRefundEmailOf (EXPL-02).
  */
 export function stripeRecordedRefundOf(appointment: Pick<Appointment, "paymentStatus" | "cancellationReason">): "paid" | "unconfirmed" | null {
   if (appointment.paymentStatus !== "refunded") return null;
@@ -338,7 +339,8 @@ export function buildStripeRefundAlert(input: {
   paymentIntentId: string;
   effect: "cancelled" | "status_kept" | "unconfirmed_payment";
   appointmentStatus: string;
-  patientNotified: boolean;
+  /** The patient's refund email: sent, refused by the email service (not passing), or still to send. */
+  patientEmail: "sent" | "refused" | "pending";
 }) {
   const effect = input.effect === "cancelled"
     ? "Le rendez-vous a été annulé et son créneau libéré ; aucun rappel ne sera envoyé."
@@ -350,9 +352,11 @@ export function buildStripeRefundAlert(input: {
     content: [
       `Stripe signale le remboursement intégral du paiement du rendez-vous ${input.trackingId} (${formatPatientAmount(input.refundAmount)}), qui n’était pas encore enregistré sur le site. Il vient de l’être.`,
       effect,
-      input.patientNotified
+      input.patientEmail === "sent"
         ? "Le patient a été prévenu du remboursement par email."
-        : "L’email de remboursement au patient n’est pas encore parti : le site le renvoie automatiquement (état visible sur le rendez-vous, onglet Réservations, et dans « À traiter »). Vous pouvez aussi prévenir le patient directement.",
+        : input.patientEmail === "refused"
+          ? "L’email de remboursement au patient a été refusé par le service d’envoi (adresse email du patient refusée ou invalide, ou contenu de l’email refusé). Ce refus n’est pas passager et le site ne le renverra pas de lui-même : prévenez le patient directement ; une fois l’adresse corrigée, « Renvoyer » sur le rendez-vous (onglet Réservations) le renvoie."
+          : "L’email de remboursement au patient n’est pas encore parti : le site le renvoie automatiquement (état visible sur le rendez-vous, onglet Réservations, et dans « À traiter »). Vous pouvez aussi prévenir le patient directement.",
       `Référence : ${input.trackingId}`,
       `Paiement Stripe (PaymentIntent) : ${input.paymentIntentId}`,
     ].join("\n"),

@@ -34,8 +34,9 @@ function AttentionList({ id, title, description, items, total }: { id: string; t
 
 /**
  * « À traiter » at the top of the dashboard (EXPL-02), read from the database:
- * post-payment emails whose attempts ran out, or that failed and wait for
- * their next automatic attempt (possibly the next day), and payments received
+ * post-payment emails whose attempts ran out, that the email service refused
+ * (no new automatic attempt), or that failed and wait for their next
+ * automatic attempt (possibly the next day), and payments received
  * without a confirmed appointment. It no longer depends on an alert email,
  * sent through the very channel that may have failed.
  */
@@ -53,9 +54,10 @@ export default function AdminAttentionPanel({ onOpenAppointments }: { onOpenAppo
   }
 
   const failed = data?.failedDeliveries ?? { total: 0, items: [] };
+  const refused = data?.refusedDeliveries ?? { total: 0, items: [] };
   const retrying = data?.retryingDeliveries ?? { total: 0, items: [] };
   const unconfirmed = data?.unconfirmedPayments ?? { total: 0, items: [] };
-  if (failed.total === 0 && retrying.total === 0 && unconfirmed.total === 0) {
+  if (failed.total === 0 && refused.total === 0 && retrying.total === 0 && unconfirmed.total === 0) {
     return (
       <section aria-labelledby="admin-attention-title" className="flex items-start gap-3 rounded-2xl border border-border bg-card p-5">
         <CheckCircle className="mt-0.5 h-5 w-5 shrink-0 text-green-400" aria-hidden="true" />
@@ -84,6 +86,15 @@ export default function AdminAttentionPanel({ onOpenAppointments }: { onOpenAppo
             description="Le patient n’a pas reçu sa confirmation, sa facture ou l’email de son remboursement, ou vous n’avez pas reçu la notification ou l’alerte de remboursement. Sur le rendez-vous : « Renvoyer », ou « Télécharger la facture » pour l’envoyer vous-même."
             total={failed.total}
             items={failed.items.map(item => ({ ...item, detail: jobLabels(item.jobTypes) }))}
+          />
+        )}
+        {refused.total > 0 && (
+          <AttentionList
+            id="admin-attention-refused"
+            title="Envois refusés par le service d’envoi"
+            description="Le service d’envoi a refusé l’email (adresse email du patient refusée ou invalide, ou contenu de l’email refusé). Ce refus n’est pas passager : aucun nouvel essai automatique n’a lieu. Vérifiez l’adresse du patient et prévenez-le directement ; une fois l’adresse corrigée, « Renvoyer » sur le rendez-vous."
+            total={refused.total}
+            items={refused.items.map(item => ({ ...item, detail: jobLabels(item.jobTypes) }))}
           />
         )}
         {retrying.total > 0 && (

@@ -37,7 +37,7 @@ vi.mock("@/lib/trpc", () => ({
   },
 }));
 
-const { default: AppointmentDeliveries, canRetryDeliveries, deliveryLabel } = await import("./AppointmentDeliveries");
+const { default: AppointmentDeliveries, canRetryDeliveries, deliveryLabel, refundEmailWarning } = await import("./AppointmentDeliveries");
 const { default: AdminAttentionPanel, retryingDetail } = await import("./AdminAttentionPanel");
 
 type Delivery = Parameters<typeof deliveryLabel>[0];
@@ -155,6 +155,36 @@ describe("EXPL-02 — envois après paiement sur la fiche du rendez-vous", () =>
     expect(state.retryMutate).not.toHaveBeenCalled();
   });
 
+  it("dit « refusée » sans promettre de nouvel essai pour un envoi refusé par le service d’envoi, et laisse « Renvoyer » après correction", async () => {
+    const html = renderToStaticMarkup(createElement(AppointmentDeliveries, { trackingId: "APTUI0000008", paymentStatus: "completed", invoiceNumber: null, deliveries: [delivery("owner", "sent"), delivery("confirmation", "refused", 1, 7)] }));
+    expect(html).toContain("Confirmation : refusée par le service d’envoi, sans nouvel essai automatique");
+    expect(html).not.toContain("nouvel essai prévu");
+    expect(html).not.toContain("(1/7)");
+    expect(html).toContain("Renvoyer");
+    expect(canRetryDeliveries([delivery("refund", "refused", 1, 7)], "refunded")).toBe(true);
+
+    const tree = AppointmentDeliveries({ trackingId: "APTUI0000008", paymentStatus: "completed", invoiceNumber: null, deliveries: [delivery("confirmation", "refused", 1, 7)] });
+    button(tree, "Renvoyer")();
+    expect(state.retryMutate).toHaveBeenCalledWith({ trackingId: "APTUI0000008" });
+    // Refused again (address not corrected): no new automatic attempt is announced.
+    await state.retryOptions!.onSuccess!({ requeued: 1, requeuedJobTypes: ["confirmation"], deliveries: [delivery("confirmation", "refused", 1, 7)] } as never);
+    const [tone, message] = state.toasts.at(-1)!;
+    expect(tone).toBe("warning");
+    expect(message).toContain("Le service d’envoi refuse de nouveau l’email");
+    expect(message).toContain("aucun nouvel essai automatique n’aura lieu");
+  });
+
+  it("explique au médecin pourquoi l’email de remboursement n’est pas parti", () => {
+    expect(refundEmailWarning("refused")).toContain("a été refusé par le service d’envoi");
+    expect(refundEmailWarning("refused")).toContain("« Renvoyer » sur le rendez-vous");
+    for (const pending of ["retrying", "pending", "sending", "interrupted"] as const) {
+      expect(refundEmailWarning(pending)).toContain("n’est pas encore parti : un nouvel essai automatique est prévu");
+    }
+    // Refund of a Checkout session never attached (sent once, outside the queue), or not queued.
+    expect(refundEmailWarning(undefined)).toBe("L’email au patient n’a pas pu être envoyé : prévenez-le directement.");
+    expect(refundEmailWarning(null)).toBe("L’email au patient n’a pas pu être envoyé : prévenez-le directement.");
+  });
+
   it("« Télécharger la facture » enregistre le PDF régénéré par le serveur", async () => {
     const tree = AppointmentDeliveries({ trackingId: "APTUI0000005", paymentStatus: "completed", invoiceNumber: "FAC-2026-000009", deliveries: [delivery("invoice", "sent")] });
     button(tree, "Télécharger la facture")();
@@ -221,8 +251,29 @@ describe("EXPL-02 — encart « À traiter » du tableau de bord", () => {
     expect(retryingDetail({ jobTypes: ["refund", "refund_owner"], nextAttemptAt: null })).toBe("Email de remboursement, Alerte remboursement · envoi interrompu, nouvel essai à la prochaine exécution planifiée");
   });
 
+  it("liste à part les envois refusés par le service d’envoi, comme l’alerte au médecin", () => {
+    state.attention = {
+      isLoading: false,
+      error: null,
+      data: {
+        failedDeliveries: { total: 0, items: [] },
+        refusedDeliveries: { total: 1, items: [{ trackingId: "APTTODOUI005", customerName: "Emma Petit", appointmentDate: "2026-10-30T09:00:00.000Z", jobTypes: ["confirmation", "invoice"] }] },
+        retryingDeliveries: { total: 0, items: [] },
+        unconfirmedPayments: { total: 0, items: [] },
+      },
+    };
+    const html = renderToStaticMarkup(createElement(AdminAttentionPanel, { onOpenAppointments: vi.fn() }));
+    expect(html).not.toContain("Rien à traiter");
+    expect(html).toContain("Envois refusés par le service d’envoi (1)");
+    expect(html).toContain("Ce refus n’est pas passager : aucun nouvel essai automatique n’a lieu.");
+    expect(html).toContain("« Renvoyer » sur le rendez-vous");
+    expect(html).toContain("APTTODOUI005");
+    expect(html).toContain("Confirmation, Facture");
+    expect(html).not.toContain("nouvel essai automatique au plus tôt");
+  });
+
   it("dit qu’il n’y a rien à traiter, ou que l’encart n’a pas pu être chargé", () => {
-    state.attention = { isLoading: false, error: null, data: { failedDeliveries: { total: 0, items: [] }, retryingDeliveries: { total: 0, items: [] }, unconfirmedPayments: { total: 0, items: [] } } };
+    state.attention = { isLoading: false, error: null, data: { failedDeliveries: { total: 0, items: [] }, refusedDeliveries: { total: 0, items: [] }, retryingDeliveries: { total: 0, items: [] }, unconfirmedPayments: { total: 0, items: [] } } };
     expect(renderToStaticMarkup(createElement(AdminAttentionPanel, { onOpenAppointments: vi.fn() }))).toContain("Rien à traiter");
     state.attention = { isLoading: false, error: { message: "Base de données indisponible." }, data: undefined };
     expect(renderToStaticMarkup(createElement(AdminAttentionPanel, { onOpenAppointments: vi.fn() }))).toContain("n’ont pas pu être chargés : Base de données indisponible.");

@@ -4,7 +4,7 @@ import { CANDIDATE_INVITATION_MAX_AGE_MS, CANDIDATE_TOKEN_MAX_AGE_MS, formatCand
 import { PATIENT_CANCELLATION_POLICY, PATIENT_CANCELLATION_POLICY_EN, resolveConsultationContact, type ConsultationContact } from "../consultationContact";
 import { appointmentCalendarFilename, buildAppointmentCalendarEvent } from "../appointmentCalendar";
 import { withEmailLanguage, type EmailLanguage } from "../emailLanguage";
-import { reportResendQuotaError, resendDeliveryFailureCode, resendRetryAfterMs, sendWithRateLimitRetry, type ResendDeliveryFailureCode } from "./resendDelivery";
+import { reportResendQuotaError, resendDeliveryFailureCode, resendRefusedThisMessage, resendRetryAfterMs, sendWithRateLimitRetry, type ResendDeliveryFailureCode } from "./resendDelivery";
 import { pauseWithinDeadline, waitFitsDeadline } from "../processingDeadline";
 import {
   buildResendApplicationTags,
@@ -102,9 +102,17 @@ async function sendThroughResend(message: ResendSendPayload, options: ResendSend
 export const postPaymentDeliveryRetry = { delaysMs: [500, 1500] as number[] };
 
 class PostPaymentEmailError extends Error {
-  constructor(message: string, readonly failureCode: ResendDeliveryFailureCode, options?: { cause?: unknown }) {
+  /** Resend's own error (name, status code): tells a refused message from a refused configuration. */
+  readonly providerError: { name?: string; statusCode?: number | null } | null;
+
+  constructor(
+    message: string,
+    readonly failureCode: ResendDeliveryFailureCode,
+    options?: { cause?: unknown; providerError?: { name?: string; statusCode?: number | null } },
+  ) {
     super(message, options);
     this.name = "PostPaymentEmailError";
+    this.providerError = options?.providerError ?? null;
   }
 }
 
@@ -124,7 +132,7 @@ async function sendPostPaymentEmail(
     try {
       const { id, error, failureCode, retryLater } = await sendThroughResend(message, idempotencyKey ? { idempotencyKey } : undefined, "post_payment");
       if (!error) return id;
-      lastError = new PostPaymentEmailError(`${errors.rejected}:${error.message}`, failureCode);
+      lastError = new PostPaymentEmailError(`${errors.rejected}:${error.message}`, failureCode, { providerError: error });
       // Neither a refused message nor a used-up quota gets through a few seconds
       // later, nor a rate limit whose retry-after exceeds what a request waits:
       // the job's own retry takes over.
@@ -137,13 +145,16 @@ async function sendPostPaymentEmail(
 }
 
 /**
- * Why a post-payment email (confirmation, invoice, owner notification) did not
- * leave, read from the error its sender threw; null for any other error (PDF,
- * database).
+ * Whether the email service refused this very post-payment email
+ * (confirmation, invoice, owner notification, refund email) for good, read
+ * from the error its sender threw (EXPL-02): an address or a field of the
+ * message, which no later attempt changes. False for a refused sending
+ * configuration (API key, sender domain), which passes once corrected, and
+ * for any other error (network, PDF, database).
  */
-export function postPaymentEmailFailureCode(error: unknown): ResendDeliveryFailureCode | null {
+export function postPaymentEmailRefused(error: unknown): boolean {
   const cause = error instanceof PostPaymentEmailError ? error : error instanceof Error ? error.cause : null;
-  return cause instanceof PostPaymentEmailError ? cause.failureCode : null;
+  return cause instanceof PostPaymentEmailError && cause.providerError !== null && resendRefusedThisMessage(cause.providerError);
 }
 
 export function buildHippocampusEmailShell(content: string, language: EmailLanguage = "fr") {
@@ -640,8 +651,9 @@ export function buildRefundEmail(input: {
  * Refund notice to the patient. "practitioner_cancellation" announces that the
  * practitioner cancelled the consultation (with the reason given to the
  * patient); "unconfirmed_payment" explains that a payment could not be attached
- * to a reserved slot. Returns whether the email was accepted, so the admin can
- * be told to contact the patient otherwise.
+ * to a reserved slot. Throws when it could not be delivered, with the cause its
+ * sender met, as the confirmation and the invoice: the refund job tells a
+ * refused address from a passing failure (postPaymentEmailRefused).
  */
 export async function sendRefundConfirmationEmail(
   customerEmail: string,
@@ -650,15 +662,13 @@ export async function sendRefundConfirmationEmail(
   appointmentDate: Date,
   refundAmount: string,
   details: { context?: RefundEmailContext; reason?: string; idempotencyKey?: string; language?: EmailLanguage } = {},
-): Promise<boolean> {
+) {
   try {
     const email = buildRefundEmail({ customerName, trackingId, appointmentDate, refundAmount, context: details.context, reason: details.reason, language: details.language });
     await sendPatientEmail({ rejected: "refund_email_rejected", failed: "refund_email_failed" }, customerEmail, email, { idempotencyKey: details.idempotencyKey });
     console.log("Refund email sent successfully");
-    return true;
-  } catch {
-    console.error("Refund email delivery failed");
-    return false;
+  } catch (error) {
+    throw new Error("refund_email_failed", { cause: error });
   }
 }
 

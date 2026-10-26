@@ -97,7 +97,8 @@ const emails = vi.hoisted(() => ({
   sendInvoiceEmail: vi.fn(async () => undefined),
   sendOwnerNotificationEmail: vi.fn(async () => undefined),
   sendCustomerConfirmationSMS: vi.fn(async () => false),
-  sendRefundConfirmationEmail: vi.fn(async () => true),
+  // Throws when the email does not leave, as the real one (RES-06).
+  sendRefundConfirmationEmail: vi.fn(async (..._args: unknown[]) => undefined),
   sendUnconfirmablePaymentEmail: vi.fn(async () => true),
 }));
 vi.mock("./_core/notifications", async importOriginal => ({ ...await importOriginal<typeof import("./_core/notifications")>(), ...emails }));
@@ -585,8 +586,10 @@ describe("RES-06 — remboursements et contestations faits dans Stripe", () => {
   });
 
   it.each([
-    // A dashboard refund emails the patient itself: no refund notice is queued.
-    ["depuis le tableau de bord", () => refundAppointmentPayment(new Stripe(process.env.STRIPE_SECRET_KEY!), { trackingId: TRACKING_ID, reason: "Indisponibilité du médecin", initiator: "practitioner" }), []],
+    // A dashboard refund queues its patient email (EXPL-02), which the close leaves alone; the owner made the refund.
+    ["depuis le tableau de bord", () => refundAppointmentPayment(new Stripe(process.env.STRIPE_SECRET_KEY!), { trackingId: TRACKING_ID, reason: "Indisponibilité du médecin", initiator: "practitioner" }), [
+      { jobType: "refund", state: "sent", notSentReason: null },
+    ]],
     // A refund made in Stripe queues its own notices (RES-06), which the close leaves alone.
     ["dans Stripe", () => postEvent("charge.refunded", charge()), [
       { jobType: "refund", state: "sent", notSentReason: null },
@@ -674,7 +677,7 @@ describe("RES-06 — remboursements et contestations faits dans Stripe", () => {
   it("garde en file, réessaie et montre dans « À traiter » l’email au patient et l’alerte au médecin quand Resend est en panne", async () => {
     const { listAppointmentDeliveriesToHandle, retryAppointmentFulfillment } = await import("./appointmentFulfillment");
     seedAppointment(paid);
-    emails.sendRefundConfirmationEmail.mockResolvedValue(false);
+    emails.sendRefundConfirmationEmail.mockRejectedValue(new Error("refund_email_failed"));
     owner.notifyOwner.mockResolvedValue(false);
 
     // Le remboursement est enregistré et Stripe a sa réponse ; les deux envois restent à faire.
@@ -692,7 +695,7 @@ describe("RES-06 — remboursements et contestations faits dans Stripe", () => {
     expect(firstAlert?.[1]).toEqual({ idempotencyKey: `appointment-stripe-refund-${TRACKING_ID}-cancelled-pending` });
 
     // Resend rétabli : « Renvoyer » fait partir les deux, le patient d’abord.
-    emails.sendRefundConfirmationEmail.mockResolvedValue(true);
+    emails.sendRefundConfirmationEmail.mockResolvedValue(undefined);
     owner.notifyOwner.mockClear();
     owner.notifyOwner.mockResolvedValue(true);
     expect(await retryAppointmentFulfillment(TRACKING_ID)).toMatchObject({ outcome: "retried", requeued: 2 });
@@ -709,7 +712,7 @@ describe("RES-06 — remboursements et contestations faits dans Stripe", () => {
 
   it("dit au médecin quand l’email de remboursement n’est pas encore parti, et le renvoie à la tâche planifiée", async () => {
     seedAppointment(paid);
-    emails.sendRefundConfirmationEmail.mockResolvedValue(false);
+    emails.sendRefundConfirmationEmail.mockRejectedValue(new Error("refund_email_failed"));
 
     expect((await postEvent("charge.refunded", charge())).body).toEqual({ received: true, refunded: true });
     expect(jobStates()).toEqual([["refund", "retry"], ["refund_owner", "completed"]]);
@@ -718,11 +721,45 @@ describe("RES-06 — remboursements et contestations faits dans Stripe", () => {
     expect(alerts[0].content).toContain("Le remboursement est bien enregistré");
     expect(alerts[1].content).toContain("L’email de remboursement au patient n’est pas encore parti");
 
-    emails.sendRefundConfirmationEmail.mockResolvedValue(true);
+    emails.sendRefundConfirmationEmail.mockResolvedValue(undefined);
     db().rows(appointmentFulfillmentJobs).forEach(job => { job.scheduledFor = new Date(Date.now() - 1000); });
     expect((await runFulfillment()).status).toBe(200);
     expect(jobStates()).toEqual([["refund", "completed"], ["refund_owner", "completed"]]);
     expect(emails.sendRefundConfirmationEmail).toHaveBeenCalledTimes(2);
+  });
+
+  it("met en file l’email au patient d’un remboursement fait depuis le tableau de bord pendant une panne, le réessaie et ne l’envoie qu’une fois (EXPL-02)", async () => {
+    const { listAppointmentDeliveriesToHandle } = await import("./appointmentFulfillment");
+    seedAppointment(paid);
+    emails.sendRefundConfirmationEmail.mockRejectedValue(new Error("refund_email_failed"));
+
+    const result = await refundAppointmentPayment(new Stripe(process.env.STRIPE_SECRET_KEY!), { trackingId: TRACKING_ID, reason: "Indisponibilité du médecin", initiator: "practitioner" });
+
+    // Un seul essai tout de suite, puis la file : le toast le dit, le rendez-vous reste dans « À traiter ».
+    expect(result).toMatchObject({ success: true, cancelled: true, patientNotified: false, patientEmail: "retrying" });
+    expect(emails.sendRefundConfirmationEmail).toHaveBeenCalledTimes(1);
+    expect(db().rows(appointmentFulfillmentJobs).map(job => [job.jobType, job.status, job.attempts, job.maxAttempts])).toEqual([["refund", "retry", 1, 7]]);
+    expect((await listAppointmentDeliveriesToHandle()).retrying.items).toEqual([expect.objectContaining({ trackingId: TRACKING_ID, jobTypes: ["refund"] })]);
+    const [alert] = owner.notifyOwner.mock.calls.map(([payload]) => payload);
+    expect(alert.title).toBe(`Échec d’envoi après remboursement (${TRACKING_ID})`);
+    expect(alert.content).toContain("tentative 1 sur 7");
+    // La notification Stripe de ce remboursement n’ajoute rien : ni second envoi, ni alerte « constaté chez Stripe ».
+    expect(await postEvent("charge.refunded", charge())).toEqual({ status: 200, body: { received: true, duplicate: true } });
+    expect(emails.sendRefundConfirmationEmail).toHaveBeenCalledTimes(1);
+    expect(jobStates()).toEqual([["refund", "retry"]]);
+
+    // Resend rétabli : la tâche planifiée l’envoie, avec le motif, sous la même clé et le même contenu, une seule fois.
+    emails.sendRefundConfirmationEmail.mockResolvedValue(undefined);
+    db().rows(appointmentFulfillmentJobs).forEach(job => { job.scheduledFor = new Date(Date.now() - 1000); });
+    expect((await runFulfillment()).status).toBe(200);
+    expect((await runFulfillment()).status).toBe(200);
+    expect(jobStates()).toEqual([["refund", "completed"]]);
+    expect(emails.sendRefundConfirmationEmail).toHaveBeenCalledTimes(2);
+    const email = ["patient@example.test", "Patient Test", TRACKING_ID, expect.any(Date), "100.00", { context: "practitioner_cancellation", reason: "Indisponibilité du médecin", idempotencyKey: `appointment-refund-${TRACKING_ID}`, language: "fr" }];
+    expect(emails.sendRefundConfirmationEmail).toHaveBeenNthCalledWith(1, ...email);
+    expect(emails.sendRefundConfirmationEmail).toHaveBeenNthCalledWith(2, ...email);
+    expect((await listAppointmentDeliveriesToHandle()).retrying.total).toBe(0);
+    expect(owner.notifyOwner.mock.calls.map(([payload]) => payload.title)).not.toContain(`Remboursement constaté chez Stripe (${TRACKING_ID})`);
   });
 
   it("met en file à la relivraison les envois d’un remboursement enregistré dont la mise en file avait échoué", async () => {

@@ -2824,9 +2824,9 @@ export const appRouter = router({
 
     /**
      * « À traiter » en tête du tableau de bord, lu depuis la base (EXPL-02) :
-     * envois après paiement en échec (tentatives épuisées, ou nouvel essai
-     * automatique en attente), et paiements reçus sans rendez-vous confirmé
-     * (patient à contacter, puis à rembourser).
+     * envois après paiement en échec (tentatives épuisées, refus du service
+     * d’envoi, ou nouvel essai automatique en attente), et paiements reçus
+     * sans rendez-vous confirmé (patient à contacter, puis à rembourser).
      */
     attention: adminProcedure.query(async () => {
       const db = await getDb();
@@ -2844,6 +2844,7 @@ export const appRouter = router({
       const [unconfirmedCount] = await db.select({ count: sql<number>`COUNT(*)` }).from(appointments).where(unconfirmed);
       return {
         failedDeliveries: deliveries.failed,
+        refusedDeliveries: deliveries.refused,
         retryingDeliveries: deliveries.retrying,
         unconfirmedPayments: { total: Number(unconfirmedCount?.count ?? 0), items: unconfirmedItems },
       };
