@@ -99,6 +99,9 @@ export const sameRecruitmentFact = (left: string, right: string) =>
 /** The certifications declared in the form (free text), one per term. */
 export const declaredCertificationNames = (declared: string | null | undefined) => parseTerms(declared);
 
+/** The certifications an analysis retained among its facts (normalized_certifications), by name. */
+export const analysedCertificationNames = (normalized: string | null | undefined) => parseTerms(normalized);
+
 /** Adds an origin to the fact of that name, created on its first mention. */
 function addFact<T extends RecruitmentFact>(facts: T[], name: string, origin: RecruitmentFactOrigin, create: (name: string) => T) {
   if (!normalise(name)) return null;

@@ -24,8 +24,8 @@ import {
   type RecruitmentEmailTemplate,
 } from "./_core/notifications";
 import { logRecruitmentAction, matchesRecruitmentProfile, parseRecruitmentJsonArray, RECRUITMENT_PROFILE_SCAN_LIMIT } from "./recruitmentAudit";
-import { CERTIFICATION_NAME_MAX_LENGTH, certificationFacts, computeBriefCandidateMatch, declaredCertificationNames, languageFacts, sameRecruitmentFact, type CertificationFact, type CertificationRow, type LanguageRow } from "./clientBriefMatching";
-import { certificationDateIsCurrent, recruitmentFactLabel, type RecruitmentFact } from "../shared/recruitmentFactOrigins";
+import { analysedCertificationNames, CERTIFICATION_NAME_MAX_LENGTH, certificationFacts, computeBriefCandidateMatch, declaredCertificationNames, languageFacts, sameRecruitmentFact, type CertificationFact, type CertificationRow, type LanguageRow } from "./clientBriefMatching";
+import { certificationDateIsCurrent, certificationExpiryInFrench, latestCertificationRenewalDay, CERTIFICATION_RENEWAL_MAX_YEARS, recruitmentFactLabel, type RecruitmentFact } from "../shared/recruitmentFactOrigins";
 import { recruitmentApplicationStatusLabel } from "../shared/recruitmentApplicationStatuses";
 import { candidatePortalRouter } from "./candidatePortalRouter";
 import { enforcePersistentRateLimit, hashSecurityValue, logSecurityEvent, releasePersistentRateLimitAttempt, requestIpHash } from "./candidateSecurity";
@@ -52,6 +52,7 @@ import {
   type BookingRefusalReason,
 } from "../shared/bookingPolicy";
 import type { PublicFormRefusalReason } from "../shared/publicFormRefusalReasons";
+import type { CertificationRenewalRefusalReason, MissionConsentRefusalReason } from "../shared/recruitmentMissionRefusalReasons";
 
 const ADMIN_MFA_RATE_LIMITED_MESSAGE = "Trop de tentatives de double authentification. Patientez 15 minutes avant de réessayer.";
 
@@ -209,6 +210,16 @@ function bookingRefusal(code: "BAD_REQUEST" | "CONFLICT" | "UNPROCESSABLE_CONTEN
   return new TRPCError({ code, message, cause: new PublicErrorReason(reason) });
 }
 
+/**
+ * Refus d’un accord de candidat pour une mission (RGPD-03) ou d’un
+ * renouvellement de certification (IA-02) : message français et motif stable.
+ * L’écran de la mission traduit les refus d’accord ; la fiche 360°, en
+ * français, affiche le message des refus de renouvellement.
+ */
+function missionRefusal(code: "BAD_REQUEST" | "NOT_FOUND", reason: MissionConsentRefusalReason | CertificationRenewalRefusalReason, message: string) {
+  return new TRPCError({ code, message, cause: new PublicErrorReason(reason) });
+}
+
 /** Index unique de slot_key : un seul rendez-vous retient un créneau à la fois. */
 const ACTIVE_SLOT_UNIQUE_INDEX = "appointments_active_slot_unique";
 
@@ -302,12 +313,9 @@ function csvListCell(value: string | null) {
   return value?.trim().startsWith("[") ? parseRecruitmentJsonArray(value).join(" ; ") : value;
 }
 
-/** A certification's expiry (YYYY, YYYY-MM or YYYY-MM-DD) as a file sent to an employer writes dates: « le 30/06/2099 », « en 05/2099 ». */
-const exportExpiry = (expiresAt: string) => `${expiresAt.length === 10 ? "le" : "en"} ${expiresAt.split("-").reverse().join("/")}`;
-
-/** « ACLS (extraite du CV par l’IA), expirée en 05/2023 »: whether a certification is still valid. */
+/** « ACLS (extraite du CV par l’IA), expirée en mai 2023 »: whether a certification is still valid, dated as the admin screens date it. */
 const certificationExportLabel = (fact: CertificationFact) => fact.expiresAt
-  ? `${recruitmentFactLabel(fact)}, ${certificationDateIsCurrent(fact.expiresAt) ? "expire" : "expirée"} ${exportExpiry(fact.expiresAt)}`
+  ? `${recruitmentFactLabel(fact)}, ${certificationDateIsCurrent(fact.expiresAt) ? "expire" : "expirée"} ${certificationExpiryInFrench(fact.expiresAt)}`
   : recruitmentFactLabel(fact);
 
 type AdminDb = NonNullable<Awaited<ReturnType<typeof getDb>>>;
@@ -1648,9 +1656,10 @@ export const appRouter = router({
           const search = adminSearchCondition(input.search, [cvApplications.firstName, cvApplications.lastName, cvApplications.email, cvApplications.trackingId], { firstName: cvApplications.firstName, lastName: cvApplications.lastName });
           if (search) conditions.push(search);
           if (input.specialty) conditions.push(sql`LOWER(${cvApplications.specialty}) LIKE LOWER(${`%${input.specialty}%`})`);
-          if (input.country) conditions.push(sql`${cvApplications.targetCountries} LIKE ${`%${input.country}%`}`);
-          if (input.language) conditions.push(sql`((${cvApplications.analysisPromptVersion} = ${RECRUITMENT_ANALYSIS_PROMPT_VERSION} AND ${cvApplications.normalizedLanguages} LIKE ${`%${input.language}%`}) OR ${cvApplications.languages} LIKE ${`%${input.language}%`})`);
-          if (input.certification) conditions.push(await certificationFilterCondition(db, input.certification, sql`((${cvApplications.analysisPromptVersion} = ${RECRUITMENT_ANALYSIS_PROMPT_VERSION} AND ${cvApplications.normalizedCertifications} LIKE ${`%${input.certification}%`}) OR ${cvApplications.certifications} LIKE ${`%${input.certification}%`})`));
+          // Country, language and certification, case aside, like the pool's certification filter: « dha » finds « Licence DHA ».
+          if (input.country) conditions.push(sql`LOWER(COALESCE(${cvApplications.targetCountries}, '')) LIKE LOWER(${`%${input.country}%`})`);
+          if (input.language) conditions.push(sql`((${cvApplications.analysisPromptVersion} = ${RECRUITMENT_ANALYSIS_PROMPT_VERSION} AND LOWER(COALESCE(${cvApplications.normalizedLanguages}, '')) LIKE LOWER(${`%${input.language}%`})) OR LOWER(COALESCE(${cvApplications.languages}, '')) LIKE LOWER(${`%${input.language}%`}))`);
+          if (input.certification) conditions.push(await certificationFilterCondition(db, input.certification, sql`((${cvApplications.analysisPromptVersion} = ${RECRUITMENT_ANALYSIS_PROMPT_VERSION} AND LOWER(COALESCE(${cvApplications.normalizedCertifications}, '')) LIKE LOWER(${`%${input.certification}%`})) OR LOWER(COALESCE(${cvApplications.certifications}, '')) LIKE LOWER(${`%${input.certification}%`}))`));
 
           let profile: typeof recruitmentMatchProfiles.$inferSelect | null = null;
           if (input.profileId) {
@@ -1660,7 +1669,7 @@ export const appRouter = router({
             if (!selectedProfile) throw new TRPCError({ code: "NOT_FOUND", message: "Profil de matching introuvable" });
             profile = selectedProfile;
             if (selectedProfile.specialty) conditions.push(sql`LOWER(${cvApplications.specialty}) LIKE LOWER(${`%${selectedProfile.specialty}%`})`);
-            if (selectedProfile.targetCountry) conditions.push(sql`${cvApplications.targetCountries} LIKE ${`%${selectedProfile.targetCountry}%`}`);
+            if (selectedProfile.targetCountry) conditions.push(sql`LOWER(COALESCE(${cvApplications.targetCountries}, '')) LIKE LOWER(${`%${selectedProfile.targetCountry}%`})`);
           }
           const minimumScore = Math.max(input.minimumScore ?? 0, profile?.minimumScore ?? 0);
           if (minimumScore > 0) conditions.push(scoreAtLeastOrUnavailable(minimumScore));
@@ -2182,7 +2191,9 @@ export const appRouter = router({
         // the CV. The renewal gets a row of its own with the new expiry (none
         // when the certificate has none), so that an expired certification
         // counts again; the rows read in the CV keep their date. Withdrawing
-        // the confirmation removes the renewal with it.
+        // the confirmation removes the renewal with it, and the rows read in
+        // the CV when the latest analysis, under the current prompt, no longer
+        // retains the certification.
         confirmCertification: adminProcedure.input(z.object({
           id: z.number().int().positive(),
           name: z.string().trim().min(1).max(1000),
@@ -2193,10 +2204,13 @@ export const appRouter = router({
           if (!db) throw new Error("Database connection failed");
           const renewal = input.confirmed ? input.renewal : undefined;
           if (renewal?.expiresAt) {
-            if (!parseAdminDate(renewal.expiresAt)) throw new TRPCError({ code: "BAD_REQUEST", message: "Nouvelle date d’expiration invalide." });
-            if (!certificationDateIsCurrent(renewal.expiresAt)) throw new TRPCError({ code: "BAD_REQUEST", message: "La nouvelle date d’expiration est déjà passée : la certification resterait expirée." });
+            if (!parseAdminDate(renewal.expiresAt)) throw missionRefusal("BAD_REQUEST", "renewal_date_invalid", "Nouvelle date d’expiration invalide.");
+            if (!certificationDateIsCurrent(renewal.expiresAt)) throw missionRefusal("BAD_REQUEST", "renewal_date_past", "La nouvelle date d’expiration est déjà passée : la certification resterait expirée.");
+            // Nor years beyond what a certificate gives: a typing error (9999-12-31) would count it for good.
+            const latest = latestCertificationRenewalDay(parisDateKey(new Date()));
+            if (renewal.expiresAt > latest) throw missionRefusal("BAD_REQUEST", "renewal_date_too_far", `La nouvelle date d’expiration est à plus de ${CERTIFICATION_RENEWAL_MAX_YEARS} ans : vérifiez-la sur le justificatif (le ${latest.split("-").reverse().join("/")} au plus tard).`);
           }
-          const [application] = await db.select({ id: cvApplications.id, certifications: cvApplications.certifications }).from(cvApplications).where(eq(cvApplications.id, input.id)).limit(1);
+          const [application] = await db.select({ id: cvApplications.id, certifications: cvApplications.certifications, normalizedCertifications: cvApplications.normalizedCertifications, analysisPromptVersion: cvApplications.analysisPromptVersion }).from(cvApplications).where(eq(cvApplications.id, input.id)).limit(1);
           if (!application) throw new TRPCError({ code: "NOT_FOUND", message: "Candidature introuvable." });
           const rows = (await db.select({ id: cvCandidateCertifications.id, name: cvCandidateCertifications.name, source: cvCandidateCertifications.source, confirmedAt: cvCandidateCertifications.confirmedAt, expiresAt: cvCandidateCertifications.expiresAt })
             .from(cvCandidateCertifications)
@@ -2210,13 +2224,26 @@ export const appRouter = router({
           // declared certification's first confirmation, a renewal withdrawn:
           // nothing is logged when nothing changes.
           const changed = readRows.filter(row => (row.confirmedAt === null) === input.confirmed);
+          // Withdrawn, a row read in the CV goes when the latest analysis does
+          // not retain the certification (it found a contradiction or hidden
+          // text since, or no longer reads it): nothing vouches for it any
+          // more, and kept unconfirmed it would show « à confirmer » in the
+          // mission and the 360° sheet while the certification filters, which
+          // read that analysis, no longer find it. An analysis under an older
+          // prompt, which the filters do not read, says nothing either way:
+          // its row stays, unconfirmed, until the dossier is analysed again.
+          const analysisIsCurrent = application.analysisPromptVersion === RECRUITMENT_ANALYSIS_PROMPT_VERSION;
+          const retainedByAnalysis = analysedCertificationNames(application.normalizedCertifications).some(name => sameRecruitmentFact(name, input.name));
+          const dropped = input.confirmed || !analysisIsCurrent || retainedByAnalysis ? [] : changed.filter(row => row.source === "extracted");
+          const updated = changed.filter(row => !dropped.includes(row));
           const renewalChanged = renewal !== undefined && (!renewalRows.length || renewalRows.some(row => row.expiresAt !== renewal.expiresAt));
           // A certification declared in the form only: its confirmation gets a
           // row of its own, unless its renewal's row holds it.
           const declaredConfirmation = input.confirmed && !rows.length && !renewal;
           const renewalWithdrawn = !input.confirmed && renewalRows.length > 0;
           if (!changed.length && !renewalChanged && !declaredConfirmation && !renewalWithdrawn) return { success: true, changed: false };
-          if (changed.length) await db.update(cvCandidateCertifications).set({ confirmedAt: input.confirmed ? new Date() : null }).where(inArray(cvCandidateCertifications.id, changed.map(row => row.id)));
+          if (updated.length) await db.update(cvCandidateCertifications).set({ confirmedAt: input.confirmed ? new Date() : null }).where(inArray(cvCandidateCertifications.id, updated.map(row => row.id)));
+          if (dropped.length) await db.delete(cvCandidateCertifications).where(inArray(cvCandidateCertifications.id, dropped.map(row => row.id)));
           if (declaredConfirmation) await db.insert(cvCandidateCertifications).values({ applicationId: application.id, name: declared!.slice(0, CERTIFICATION_NAME_MAX_LENGTH), source: "declared", confirmedAt: new Date() });
           if (renewal && renewalChanged) {
             if (renewalRows.length) await db.update(cvCandidateCertifications).set({ expiresAt: renewal.expiresAt }).where(inArray(cvCandidateCertifications.id, renewalRows.map(row => row.id)));
@@ -2230,9 +2257,9 @@ export const appRouter = router({
             action: "status_update",
             metadata: renewal
               ? { event: "certification_renewed", certification, expiresAt: renewal.expiresAt, previousExpiresAt: Array.from(new Set((renewalRows.length ? renewalRows : readRows).map(row => row.expiresAt))) }
-              : { event: input.confirmed ? "certification_confirmed" : "certification_unconfirmed", certification },
+              : { event: input.confirmed ? "certification_confirmed" : "certification_unconfirmed", certification, ...(dropped.length ? { notRetainedByAnalysis: true } : {}) },
           });
-          return { success: true, changed: true };
+          return { success: true, changed: true, ...(dropped.length ? { notRetainedByAnalysis: true } : {}) };
         }),
         markResponse: adminProcedure.input(z.object({ id: z.number().int().positive(), note: z.string().trim().max(1000).optional() })).mutation(async ({ input, ctx }) => {
           const db = await getDb();
@@ -2714,15 +2741,15 @@ export const appRouter = router({
           const db = await getDb();
           if (!db) throw new Error("Database connection failed");
           const consentAt = input.consentDate === null ? null : parseAdminDate(input.consentDate);
-          if (input.consentDate !== null && !consentAt) throw new TRPCError({ code: "BAD_REQUEST", message: "Date de l’accord invalide." });
+          if (input.consentDate !== null && !consentAt) throw missionRefusal("BAD_REQUEST", "consent_date_invalid", "Date de l’accord invalide.");
           const today = getParisParts(new Date());
           if (input.consentDate !== null && input.consentDate > `${today.year}-${pad(today.month)}-${pad(today.day)}`) {
-            throw new TRPCError({ code: "BAD_REQUEST", message: "La date de l’accord du candidat ne peut pas être dans le futur." });
+            throw missionRefusal("BAD_REQUEST", "consent_date_future", "La date de l’accord du candidat ne peut pas être dans le futur.");
           }
           const [association] = await db.select({ id: clientBriefCandidates.id }).from(clientBriefCandidates)
             .where(and(eq(clientBriefCandidates.briefId, input.briefId), eq(clientBriefCandidates.applicationId, input.applicationId)))
             .limit(1);
-          if (!association) throw new TRPCError({ code: "NOT_FOUND", message: "Ce candidat n’est pas associé à cette mission : présélectionnez-le d’abord." });
+          if (!association) throw missionRefusal("NOT_FOUND", "consent_not_associated", "Ce candidat n’est pas associé à cette mission : présélectionnez-le d’abord.");
           if (input.consentDate !== null) {
             // Nor before the application or the mission: the candidate agreed
             // to be presented for a mission they had applied for, once it
@@ -2733,9 +2760,12 @@ export const appRouter = router({
             ]);
             const applicationDay = application ? parisDateKey(application.createdAt) : "";
             const briefDay = brief ? parisDateKey(brief.createdAt) : "";
-            const earliest = briefDay > applicationDay ? { day: briefDay, event: "la création de la mission, le" } : { day: applicationDay, event: "sa candidature, reçue le" };
+            // The screen words the reason with the mission's or the candidate's date it shows.
+            const earliest = briefDay > applicationDay
+              ? { day: briefDay, event: "la création de la mission, le", reason: "consent_before_mission" as const }
+              : { day: applicationDay, event: "sa candidature, reçue le", reason: "consent_before_application" as const };
             if (input.consentDate < earliest.day) {
-              throw new TRPCError({ code: "BAD_REQUEST", message: `La date de l’accord du candidat ne peut pas précéder ${earliest.event} ${earliest.day.split("-").reverse().join("/")}.` });
+              throw missionRefusal("BAD_REQUEST", earliest.reason, `La date de l’accord du candidat ne peut pas précéder ${earliest.event} ${earliest.day.split("-").reverse().join("/")}.`);
             }
           }
           await db.update(clientBriefCandidates).set({ candidateConsentAt: consentAt, updatedAt: new Date() }).where(eq(clientBriefCandidates.id, association.id));

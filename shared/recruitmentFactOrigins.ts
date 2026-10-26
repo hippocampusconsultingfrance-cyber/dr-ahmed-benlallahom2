@@ -46,6 +46,40 @@ export function certificationExpiry(expiresAt: string) {
   return Number.isFinite(expiry.getTime()) ? expiry : null;
 }
 
+/** How precisely an expiry is known: to the day, the month or the year the CV or the admin gave. */
+export type CertificationExpiryDate = { precision: "day" | "month" | "year"; date: string };
+
+/**
+ * A certification's expiry as every admin screen and the employer's file write
+ * it (IA-02), in that locale: « 30/06/2027 » to the day, « mai 2023 » for a
+ * month alone, « 2023 » for a year; the precision chooses the preposition
+ * (« le 30/06/2027 », « en mai 2023 »). An unreadable date is given as stored.
+ */
+export function certificationExpiryDate(expiresAt: string, locale = "fr-FR"): CertificationExpiryDate {
+  const match = /^(\d{4})(?:-(\d{2})(?:-(\d{2}))?)?$/.exec(expiresAt.trim());
+  const [year, month, day] = match ? [Number(match[1]), Number(match[2] ?? 1), Number(match[3] ?? 1)] : [0, 0, 0];
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (!match || date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return { precision: "day", date: expiresAt };
+  const precision = match[3] ? "day" : match[2] ? "month" : "year";
+  const parts: Intl.DateTimeFormatOptions = precision === "day" ? { day: "2-digit", month: "2-digit", year: "numeric" } : precision === "month" ? { month: "long", year: "numeric" } : { year: "numeric" };
+  return { precision, date: new Intl.DateTimeFormat(locale, { ...parts, timeZone: "UTC" }).format(date) };
+}
+
+/** « le 30/06/2027 », « en mai 2023 », « en 2023 »: an expiry in the French of the admin sheet, its history and the employer's file. */
+export function certificationExpiryInFrench(expiresAt: string) {
+  const { precision, date } = certificationExpiryDate(expiresAt);
+  return `${precision === "day" ? "le" : "en"} ${date}`;
+}
+
+/** A confirmed renewal's expiry lies at most this many years ahead (IA-02): a later one is a typing error. */
+export const CERTIFICATION_RENEWAL_MAX_YEARS = 15;
+
+/** The latest expiry a renewal confirmed on that day (YYYY-MM-DD, Paris) accepts: 2041-10-26 on 2026-10-26. */
+export function latestCertificationRenewalDay(today: string) {
+  const [year, month, day] = today.split("-").map(Number);
+  return new Date(Date.UTC(year! + CERTIFICATION_RENEWAL_MAX_YEARS, month! - 1, day)).toISOString().slice(0, 10);
+}
+
 /**
  * Whether a certification is still valid: no date, or one not yet passed. An
  * unreadable date counts as expired. Shared by the CV analysis, a mission's

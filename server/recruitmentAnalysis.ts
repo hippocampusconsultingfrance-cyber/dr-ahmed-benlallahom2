@@ -4,7 +4,7 @@ import { z } from "zod";
 import { cvApplications, cvCandidateCertifications, cvCandidateExperiences, cvCandidateLanguages } from "../drizzle/schema";
 import { getDb } from "./db";
 import { sameRecruitmentFact } from "./clientBriefMatching";
-import { certificationDateIsCurrent } from "../shared/recruitmentFactOrigins";
+import { certificationDateIsCurrent, certificationExpiryInFrench } from "../shared/recruitmentFactOrigins";
 import { assertPdfDecompressionWithinLimits, DOCUMENT_DECOMPRESSION_LIMITS, truncateExtractedText } from "./documentDecompressionLimits";
 import { withoutInvisibleDocxText } from "./docxVisibleText";
 import { pdfStandardFontDataUrl, PdfReaderUnavailableError, readPdfIsolated, type PdfTextReading } from "./pdfExtractionSandbox";
@@ -1601,7 +1601,8 @@ export function normalizeRecruitmentAnalysis(
       ...analysis.dataQualityWarnings,
       ...deterministicProcessingWarnings,
       ...expiredVerifiedCertifications.map(
-        item => `Certification expirée à confirmer : ${item.name} (${item.expiresAt}).`
+        // Dated like the certification line beside it in the Candidatures card (IA-02).
+        item => `Certification expirée à confirmer : ${item.name} (expirée ${certificationExpiryInFrench(item.expiresAt ?? "")}).`
       ),
       ...(verificationWarning ? [verificationWarning] : []),
     ]),

@@ -3,7 +3,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { todayInParis } from "@/lib/parisDay";
 import { trpc } from "@/lib/trpc";
-import { certificationDateIsCurrent, RECRUITMENT_FACT_ORIGIN_LABELS, RECRUITMENT_FACT_ORIGINS, type RecruitmentFact } from "@shared/recruitmentFactOrigins";
+import { certificationDateIsCurrent, certificationExpiryInFrench, latestCertificationRenewalDay, RECRUITMENT_FACT_ORIGIN_LABELS, RECRUITMENT_FACT_ORIGINS, type RecruitmentFact } from "@shared/recruitmentFactOrigins";
 
 type CertificationReviewProps = {
   applicationId: number;
@@ -23,8 +23,6 @@ function renewalOf(draft: RenewalDraft | undefined) {
   return draft && /^\d{4}-\d{2}-\d{2}$/.test(draft.date) ? { expiresAt: draft.date } : null;
 }
 
-const frenchDay = (day: string) => day.split("-").reverse().join("/");
-
 function originTone(origin: RecruitmentFact["origins"][number]) {
   if (origin === "confirmed") return "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300";
   if (origin === "extracted") return "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300";
@@ -37,17 +35,20 @@ function originTone(origin: RecruitmentFact["origins"][number]) {
  * confirmed earns points in a mission's matching, declared or read in the CV.
  * An expired one earns none, confirmed or not, until the admin confirms its
  * renewal, with the new expiry date, or none when they tick that the
- * certificate gives none.
+ * certificate gives none. Withdrawn, a certification the latest analysis of
+ * the CV no longer retains loses its reading by the AI: the toast says so.
  */
 export default function CertificationReview({ applicationId, certifications }: CertificationReviewProps) {
   const utils = trpc.useUtils();
   const [renewalDrafts, setRenewalDrafts] = useState<Record<string, RenewalDraft>>({});
   const editRenewal = (name: string, change: Partial<RenewalDraft>) => setRenewalDrafts(current => ({ ...current, [name]: { ...(current[name] ?? { date: "", withoutExpiry: false }), ...change } }));
   const confirm = trpc.admin.recruitment.candidate.confirmCertification.useMutation({
-    onSuccess: (_result, variables) => {
+    onSuccess: (result, variables) => {
       toast.success(variables.renewal
-        ? `Renouvellement confirmé : ${variables.name}, ${variables.renewal.expiresAt ? `expire le ${frenchDay(variables.renewal.expiresAt)}` : "sans date d’expiration"}`
-        : variables.confirmed ? `Certification confirmée : ${variables.name}` : `Confirmation retirée : ${variables.name}`);
+        ? `Renouvellement confirmé : ${variables.name}, ${variables.renewal.expiresAt ? `expire ${certificationExpiryInFrench(variables.renewal.expiresAt)}` : "sans date d’expiration"}`
+        : variables.confirmed ? `Certification confirmée : ${variables.name}`
+          : "notRetainedByAnalysis" in result ? `Confirmation retirée : ${variables.name}. La dernière analyse du CV ne la retient pas : elle n’est plus comptée comme extraite du CV.`
+            : `Confirmation retirée : ${variables.name}`);
       void utils.admin.recruitment.list.invalidate();
       void utils.admin.recruitment.candidate.detail.invalidate({ id: applicationId });
       void utils.admin.clientBriefs.candidates.invalidate();
@@ -69,7 +70,7 @@ export default function CertificationReview({ applicationId, certifications }: C
             <li key={certification.name} className="rounded-lg border border-border bg-background p-3">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div className="min-w-0">
-                  <p className="font-medium text-foreground">{certification.name}{certification.expiresAt ? <span className={`font-normal ${expired ? "text-red-600 dark:text-red-400" : "text-muted-foreground"}`}> · {expired ? "expirée" : "expire"} le {certification.expiresAt}</span> : null}</p>
+                  <p className="font-medium text-foreground">{certification.name}{certification.expiresAt ? <span className={`font-normal ${expired ? "text-red-600 dark:text-red-400" : "text-muted-foreground"}`}> · {expired ? "expirée" : "expire"} {certificationExpiryInFrench(certification.expiresAt)}</span> : null}</p>
                   <p className="mt-1 flex flex-wrap gap-1.5">
                     {RECRUITMENT_FACT_ORIGINS.filter(origin => certification.origins.includes(origin)).map(origin => <span key={origin} className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${originTone(origin)}`}>{RECRUITMENT_FACT_ORIGIN_LABELS[origin]}</span>)}
                   </p>
@@ -82,7 +83,7 @@ export default function CertificationReview({ applicationId, certifications }: C
                 <div className="mt-3 flex flex-col gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-200 sm:flex-row sm:items-end sm:justify-between">
                   <p>Expirée, elle ne compte pas dans le matching. Si le justificatif vérifié a été renouvelé, confirmez le renouvellement avec sa nouvelle date d’expiration, ou cochez qu’il n’en porte pas.</p>
                   <div className="flex flex-wrap items-end gap-2">
-                    <label className="space-y-1"><span className="block">Nouvelle date d’expiration</span><input type="date" aria-label={`Nouvelle date d’expiration — ${certification.name}`} value={draft?.date ?? ""} min={todayInParis()} disabled={draft?.withoutExpiry} onChange={event => editRenewal(certification.name, { date: event.target.value })} className="h-9 rounded-md border border-border bg-background px-2 text-sm text-foreground disabled:opacity-50" /></label>
+                    <label className="space-y-1"><span className="block">Nouvelle date d’expiration</span><input type="date" aria-label={`Nouvelle date d’expiration — ${certification.name}`} value={draft?.date ?? ""} min={todayInParis()} max={latestCertificationRenewalDay(todayInParis())} disabled={draft?.withoutExpiry} onChange={event => editRenewal(certification.name, { date: event.target.value })} className="h-9 rounded-md border border-border bg-background px-2 text-sm text-foreground disabled:opacity-50" /></label>
                     <label className="flex h-9 items-center gap-2"><input type="checkbox" aria-label={`Le justificatif de ${certification.name} ne porte pas de date d’expiration`} checked={draft?.withoutExpiry ?? false} onChange={event => editRenewal(certification.name, { withoutExpiry: event.target.checked })} className="h-4 w-4 accent-primary" />Sans date d’expiration</label>
                     <Button size="sm" disabled={confirm.isPending || !renewal} aria-label={`Confirmer le renouvellement de ${certification.name}`} onClick={() => { if (renewal) confirm.mutate({ id: applicationId, name: certification.name, confirmed: true, renewal }); }}>Confirmer le renouvellement</Button>
                   </div>

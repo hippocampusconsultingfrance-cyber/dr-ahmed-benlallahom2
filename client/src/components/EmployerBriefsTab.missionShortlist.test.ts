@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // origine des certifications, accès à la fiche 360° et au CV, et accord du
 // candidat noté avant l’export de la shortlist.
 
-type MutationOptions = { onSuccess?: (result: unknown, variables: never) => unknown; onError?: (error: Error) => unknown };
+type MutationOptions = { onSuccess?: (result: unknown, variables: never) => unknown; onError?: (error: unknown, variables: never) => unknown };
 
 // The component's useState/useMemo, kept between two renders like React does:
 // a click updates the state, the next render() returns the new tree.
@@ -211,10 +211,10 @@ describe("écran d’une mission employeur", () => {
   });
 
   it.each([
-    ["fr", "spécialité compatible · mobilité vers le pays de mission déclarée · expérience déclarée : 8 an(s) pour un minimum de 5 · disponibilité compatible avec le besoin exprimé · certifications correspondantes : BLS (déclarée par le candidat, confirmée par l’admin) · certification à confirmer : Licence DHA (extraite du CV par l’IA) — aucun point tant que l’admin ne l’a pas confirmée · certification hors validité : ACLS (déclarée par le candidat, extraite du CV par l’IA), expirée le 2023-05 — aucun point tant que l’admin n’a pas confirmé son renouvellement · langues correspondantes : Anglais (déclarée par le candidat, extraite du CV par l’IA)", ["Spécialité +35", "Mobilité +15", "Certifications +10", "Langues +15", "Expérience +10", "Disponibilité +5"]],
-    ["en", "compatible specialty · declared mobility to the mission country · declared experience: 8 year(s) for a minimum of 5 · availability compatible with the stated need · matching certifications: BLS (declared by the candidate, confirmed by the admin) · certification to confirm: Licence DHA (read from the CV by the AI) — no points until the admin confirms it · certification no longer valid: ACLS (declared by the candidate, read from the CV by the AI), expired on 2023-05 — no points until the admin confirms its renewal · matching languages: Anglais (declared by the candidate, read from the CV by the AI)", ["Specialty +35", "Mobility +15", "Certifications +10", "Languages +15", "Experience +10", "Availability +5"]],
-    ["de", "passendes Fachgebiet · angegebene Mobilität ins Einsatzland · angegebene Erfahrung: 8 Jahr(e) bei mindestens 5 · Verfügbarkeit passt zum angegebenen Bedarf · passende Zertifikate: BLS (vom Kandidaten angegeben, vom Admin bestätigt) · zu bestätigendes Zertifikat: Licence DHA (von der KI aus dem Lebenslauf gelesen) — keine Punkte, solange der Admin es nicht bestätigt hat · nicht mehr gültiges Zertifikat: ACLS (vom Kandidaten angegeben, von der KI aus dem Lebenslauf gelesen), abgelaufen am 2023-05 — keine Punkte, bis der Admin seine Erneuerung bestätigt · passende Sprachen: Anglais (vom Kandidaten angegeben, von der KI aus dem Lebenslauf gelesen)", ["Fachgebiet +35", "Mobilität +15", "Zertifikate +10", "Sprachen +15", "Erfahrung +10", "Verfügbarkeit +5"]],
-    ["zh", "专业匹配 · 已申报可前往任务所在国家 · 申报经验：8 年（最低要求 5 年） · 可入职时间符合所述需求 · 匹配的证书：BLS (候选人自行申报, 管理员已确认) · 待确认的证书：Licence DHA (AI 从简历中提取)——管理员确认前不计分 · 已失效的证书：ACLS (候选人自行申报, AI 从简历中提取), 已于 2023-05 过期——管理员确认续期前不计分 · 匹配的语言：Anglais (候选人自行申报, AI 从简历中提取)", ["专业 +35", "流动性 +15", "证书 +10", "语言 +15", "经验 +10", "可入职时间 +5"]],
+    ["fr", "spécialité compatible · mobilité vers le pays de mission déclarée · expérience déclarée : 8 an(s) pour un minimum de 5 · disponibilité compatible avec le besoin exprimé · certifications correspondantes : BLS (déclarée par le candidat, confirmée par l’admin) · certification à confirmer : Licence DHA (extraite du CV par l’IA) — aucun point tant que l’admin ne l’a pas confirmée · certification hors validité : ACLS (déclarée par le candidat, extraite du CV par l’IA), expirée en mai 2023 — aucun point tant que l’admin n’a pas confirmé son renouvellement · langues correspondantes : Anglais (déclarée par le candidat, extraite du CV par l’IA)", ["Spécialité +35", "Mobilité +15", "Certifications +10", "Langues +15", "Expérience +10", "Disponibilité +5"]],
+    ["en", "compatible specialty · declared mobility to the mission country · declared experience: 8 year(s) for a minimum of 5 · availability compatible with the stated need · matching certifications: BLS (declared by the candidate, confirmed by the admin) · certification to confirm: Licence DHA (read from the CV by the AI) — no points until the admin confirms it · certification no longer valid: ACLS (declared by the candidate, read from the CV by the AI), expired in May 2023 — no points until the admin confirms its renewal · matching languages: Anglais (declared by the candidate, read from the CV by the AI)", ["Specialty +35", "Mobility +15", "Certifications +10", "Languages +15", "Experience +10", "Availability +5"]],
+    ["de", "passendes Fachgebiet · angegebene Mobilität ins Einsatzland · angegebene Erfahrung: 8 Jahr(e) bei mindestens 5 · Verfügbarkeit passt zum angegebenen Bedarf · passende Zertifikate: BLS (vom Kandidaten angegeben, vom Admin bestätigt) · zu bestätigendes Zertifikat: Licence DHA (von der KI aus dem Lebenslauf gelesen) — keine Punkte, solange der Admin es nicht bestätigt hat · nicht mehr gültiges Zertifikat: ACLS (vom Kandidaten angegeben, von der KI aus dem Lebenslauf gelesen), abgelaufen im Mai 2023 — keine Punkte, bis der Admin seine Erneuerung bestätigt · passende Sprachen: Anglais (vom Kandidaten angegeben, von der KI aus dem Lebenslauf gelesen)", ["Fachgebiet +35", "Mobilität +15", "Zertifikate +10", "Sprachen +15", "Erfahrung +10", "Verfügbarkeit +5"]],
+    ["zh", "专业匹配 · 已申报可前往任务所在国家 · 申报经验：8 年（最低要求 5 年） · 可入职时间符合所述需求 · 匹配的证书：BLS (候选人自行申报, 管理员已确认) · 待确认的证书：Licence DHA (AI 从简历中提取)——管理员确认前不计分 · 已失效的证书：ACLS (候选人自行申报, AI 从简历中提取), 已于 2023年5月 过期——管理员确认续期前不计分 · 匹配的语言：Anglais (候选人自行申报, AI 从简历中提取)", ["专业 +35", "流动性 +15", "证书 +10", "语言 +15", "经验 +10", "可入职时间 +5"]],
   ] as const)("écrit les motifs du classement, l’origine des certifications et des langues, et ce qui manque pour qu’une certification compte, dans la langue de l’administration (%s, IA-02)", (language, reasons, scoreDetail) => {
     state.language = language;
     state.data = missionData({ candidates: [candidate(11, "Amal", "Haddad", null, {
@@ -232,6 +232,71 @@ describe("écran d’une mission employeur", () => {
     for (const chip of scoreDetail) expect(html).toContain(`>${chip}</span>`);
     // Nothing of the card is left in French in another language.
     if (language !== "fr") expect(html).not.toMatch(/spécialité|mobilité|expérience|disponibilité|Spécialité|Mobilité|Expérience|Disponibilité|Langues/);
+  });
+
+  it.each([
+    ["fr", "certification hors validité : ACLS (extraite du CV par l’IA), expirée le 31/05/2023 — ", "certification hors validité : PALS (extraite du CV par l’IA), expirée en 2022 — "],
+    ["en", "certification no longer valid: ACLS (read from the CV by the AI), expired on 31/05/2023 — ", "certification no longer valid: PALS (read from the CV by the AI), expired in 2022 — "],
+    ["de", "nicht mehr gültiges Zertifikat: ACLS (von der KI aus dem Lebenslauf gelesen), abgelaufen am 31.05.2023 — ", "nicht mehr gültiges Zertifikat: PALS (von der KI aus dem Lebenslauf gelesen), abgelaufen im Jahr 2022 — "],
+    ["zh", "已失效的证书：ACLS (AI 从简历中提取), 已于 2023/05/31 过期——", "已失效的证书：PALS (AI 从简历中提取), 已于 2022年 过期——"],
+  ] as const)("date l’expiration d’une certification au jour près ou à l’année, dans la langue de l’administration (%s, IA-02)", (language, toTheDay, year) => {
+    state.language = language;
+    const expiredOn = (name: string, expiresAt: string) => candidate(11, "Amal", "Haddad", null, { certifications: [{ name, origins: ["extracted"], expiresAt, status: "expired" }] });
+    state.data = missionData({ candidates: [expiredOn("ACLS", "2023-05-31"), { ...expiredOn("PALS", "2022"), id: 12 }] });
+    const html = renderToStaticMarkup(render());
+    expect(html).toContain(toTheDay);
+    expect(html).toContain(year);
+    expect(html).not.toContain("2023-05-31");
+  });
+
+  it.each([
+    ["fr", "La date de l’accord du candidat ne peut pas précéder sa candidature, reçue le 21/10/2026.", "La date de l’accord du candidat ne peut pas précéder la création de la mission, le 19/10/2026.", "La date de l’accord du candidat ne peut pas être dans le futur.", "Ce candidat n’est pas associé à cette mission : présélectionnez-le d’abord."],
+    ["en", "The candidate’s agreement cannot be dated before their application, received on 21/10/2026.", "The candidate’s agreement cannot be dated before the mission was created, on 19/10/2026.", "The candidate’s agreement cannot be dated in the future.", "This candidate is not linked to this mission: shortlist them first."],
+    ["de", "Die Zustimmung des Kandidaten kann nicht vor dem Eingang seiner Bewerbung am 21.10.2026 datiert sein.", "Die Zustimmung des Kandidaten kann nicht vor der Erstellung der Mission am 19.10.2026 datiert sein.", "Die Zustimmung des Kandidaten kann nicht in der Zukunft datiert sein.", "Dieser Kandidat ist nicht mit dieser Mission verknüpft: Setzen Sie ihn zuerst auf die Shortlist."],
+    ["zh", "候选人同意日期不能早于其申请收到日期（2026/10/21）。", "候选人同意日期不能早于任务创建日期（2026/10/19）。", "候选人同意日期不能晚于今天。", "该候选人未与此任务关联：请先将其加入候选名单。"],
+  ] as const)("dit pourquoi le serveur refuse une date d’accord, dans la langue de l’administration (%s, RGPD-03)", async (language, beforeApplication, beforeMission, future, notAssociated) => {
+    state.language = language;
+    // The mission was created at 00:30 on 19 October in Paris, the application at 00:30 on 21 October.
+    state.data = missionData({
+      brief: { ...brief, createdAt: new Date("2026-10-18T22:30:00.000Z") },
+      candidates: [{ ...candidate(11, "Amal", "Haddad", { status: "shortlisted", candidateConsentAt: null }), createdAt: new Date("2026-10-20T22:30:00.000Z") }],
+    });
+    render();
+    // The server's French message and its stable reason, as tRPC delivers them.
+    const refusal = (reason: string | undefined, message = "Message du serveur en français.") => state.consentOptions!.onError?.({ message, data: { code: "BAD_REQUEST", reason } }, { briefId: 7, applicationId: 11, consentDate: "2026-10-01" } as never);
+    for (const reason of ["consent_before_application", "consent_before_mission", "consent_date_future", "consent_not_associated"]) await refusal(reason);
+    // Any other failure keeps the server's message.
+    await refusal(undefined, "Une erreur interne est survenue. Veuillez réessayer dans quelques instants. (réf. 1a2b3c4d)");
+    expect(state.toasts).toEqual([
+      ["error", beforeApplication],
+      ["error", beforeMission],
+      ["error", future],
+      ["error", notAssociated],
+      ["error", "Une erreur interne est survenue. Veuillez réessayer dans quelques instants. (réf. 1a2b3c4d)"],
+    ]);
+  });
+
+  it("garde le message du serveur quand la mission ou la candidature refusée n’est plus à l’écran pour la dater (RGPD-03)", async () => {
+    state.language = "en";
+    state.data = missionData({
+      brief: { ...brief, createdAt: new Date("2026-10-18T22:30:00.000Z") },
+      candidates: [{ ...candidate(11, "Amal", "Haddad", { status: "shortlisted", candidateConsentAt: null }), createdAt: new Date("2026-10-20T22:30:00.000Z") }],
+    });
+    render();
+    const refusal = (reason: string, variables: Record<string, unknown>) => state.consentOptions!.onError?.({ message: `Message du serveur : ${reason}.`, data: { code: "BAD_REQUEST", reason } }, { consentDate: "2026-10-01", ...variables } as never);
+    // The admin moved to mission 7 while the agreement for mission 8 was being saved: not dated with mission 7.
+    await refusal("consent_before_mission", { briefId: 8, applicationId: 11 });
+    await refusal("consent_before_application", { briefId: 8, applicationId: 11 });
+    // The candidate is no longer among those shown.
+    await refusal("consent_before_application", { briefId: 7, applicationId: 99 });
+    // A reason that needs no date is still translated.
+    await refusal("consent_date_future", { briefId: 8, applicationId: 11 });
+    expect(state.toasts).toEqual([
+      ["error", "Message du serveur : consent_before_mission."],
+      ["error", "Message du serveur : consent_before_application."],
+      ["error", "Message du serveur : consent_before_application."],
+      ["error", "The candidate’s agreement cannot be dated in the future."],
+    ]);
   });
 
   it("ne propose pas une date d’accord antérieure à la candidature ou à la création de la mission (RGPD-03)", () => {
