@@ -1,6 +1,6 @@
 import { and, eq, gt, gte, inArray } from "drizzle-orm";
 import { appointments, securityEvents } from "../drizzle/schema";
-import { APPOINTMENT_HOLD_MS } from "./appointmentHolds";
+import { APPOINTMENT_HOLD_MS, holdWithinCheckoutSession } from "./appointmentHolds";
 import { logSecurityEvent, sendOwnerAlertOncePerWindow } from "./candidateSecurity";
 import { getDb } from "./db";
 import { notifyOwner } from "./_core/notification";
@@ -21,8 +21,14 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 type Database = NonNullable<Awaited<ReturnType<typeof getDb>>>;
 
+/**
+ * Holds a booking made and nobody paid yet. A hold the cleanup kept because
+ * Stripe did not answer (EXPL-01) is left out: it is no sign of abuse, and
+ * counting it would challenge every patient and alert the owner during an
+ * outage of Stripe.
+ */
 function heldUnpaid(now: Date) {
-  return and(eq(appointments.paymentStatus, "pending"), eq(appointments.appointmentStatus, "held"), gt(appointments.holdExpiresAt, now));
+  return and(eq(appointments.paymentStatus, "pending"), eq(appointments.appointmentStatus, "held"), gt(appointments.holdExpiresAt, now), holdWithinCheckoutSession());
 }
 
 function holdTrackingId(metadata: string | null): string | null {

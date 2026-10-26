@@ -1,5 +1,5 @@
 import type Stripe from "stripe";
-import { and, eq, isNotNull, isNull, lte } from "drizzle-orm";
+import { and, eq, isNotNull, isNull, lte, sql } from "drizzle-orm";
 import { appointments } from "../drizzle/schema";
 import { getDb } from "./db";
 import { mutationRowCount } from "./dbMutation";
@@ -17,6 +17,33 @@ const EXPIRED_HOLDS_CHECKED_PER_RUN = 25;
  */
 export const STRIPE_CHECKOUT_MIN_EXPIRY_MS = 31 * 60 * 1000;
 export const APPOINTMENT_HOLD_MS = 32 * 60 * 1000;
+
+/**
+ * An expired hold is offered as free: booking its slot first settles it with
+ * Stripe (releaseExpiredAppointmentHolds). One the cleanup had to keep (Stripe
+ * did not answer, or has not settled the session yet) is held this much
+ * longer, so its slot shows as taken, then checked again by the next booking
+ * or run (EXPL-01).
+ */
+export const KEPT_HOLD_RECHECK_MS = 5 * 60 * 1000;
+
+/**
+ * A booking's hold ends at most APPOINTMENT_HOLD_MS after its row is written; a
+ * kept one at least STRIPE_CHECKOUT_MIN_EXPIRY_MS + KEPT_HOLD_RECHECK_MS after.
+ * The two minutes between them absorb the clock difference between the app,
+ * which computes the end, and the database, which stamps the creation.
+ */
+const CHECKOUT_HOLD_LIMIT_MINUTES = (APPOINTMENT_HOLD_MS + 2 * 60 * 1000) / 60_000;
+
+/**
+ * Hold still within its Checkout session, as opposed to one the cleanup kept
+ * past it: only the former counts towards the holds of an email address and
+ * the abuse thresholds (ABUS-02), as the patient or a script made it. Both
+ * show their slot as taken while they last.
+ */
+export function holdWithinCheckoutSession() {
+  return sql`${appointments.holdExpiresAt} <= ${appointments.createdAt} + ${sql.raw(`INTERVAL '${CHECKOUT_HOLD_LIMIT_MINUTES} minutes'`)}`;
+}
 
 /**
  * End of the temporary hold, which is also the Stripe Checkout `expires_at`:
@@ -82,11 +109,30 @@ async function releaseExpiredHold(db: Database, hold: ExpiredHold, now: Date) {
 }
 
 /**
+ * A kept hold takes its slot for KEPT_HOLD_RECHECK_MS more, then is offered and
+ * checked again. Best effort: if this write fails, the hold stays expired and
+ * its slot offered, and booking it checks Stripe first all the same.
+ */
+async function keepExpiredHold(db: Database, hold: ExpiredHold, now: Date) {
+  try {
+    await db.update(appointments).set({ holdExpiresAt: new Date(now.getTime() + KEPT_HOLD_RECHECK_MS) }).where(and(
+      eq(appointments.id, hold.id),
+      eq(appointments.stripeSessionId, hold.stripeSessionId),
+      eq(appointments.paymentStatus, "pending"),
+      eq(appointments.appointmentStatus, "held"),
+      lte(appointments.holdExpiresAt, now),
+    ));
+  } catch (error) {
+    console.error("[AppointmentHolds] Kept hold could not be extended", { trackingId: hold.trackingId, error: error instanceof Error ? error.name : "UnknownError" });
+  }
+}
+
+/**
  * An expired hold with a Checkout session is released only once Stripe says
  * the session can no longer be paid. A session Stripe still shows as open is
  * closed first (as cancelPending does); a paid one confirms the slot through
  * the webhook's own conditional update, so the patient who paid keeps it. If
- * Stripe cannot be asked, the hold is kept until the next run; a session
+ * Stripe cannot be asked, the hold is kept (see keepExpiredHold); a session
  * Stripe does not know at all can never be paid there, so its hold is released
  * and the owner told.
  */
@@ -133,8 +179,10 @@ async function settleExpiredHold(db: Database, stripe: () => Stripe, hold: Expir
  * Checkout session can never be paid and is released at once; one with a
  * session is checked with Stripe first (see settleExpiredHold). When the
  * webhook works, `checkout.session.expired` has already released those, so
- * Stripe is only asked about holds whose webhook did not arrive. Idempotent,
- * so it can safely run from a heartbeat and immediately before a new hold.
+ * Stripe is only asked about holds whose webhook did not arrive. A hold kept
+ * because Stripe could not settle it takes its slot a few more minutes
+ * (KEPT_HOLD_RECHECK_MS). Idempotent, so it can safely run from a heartbeat and
+ * immediately before a new hold.
  */
 export async function releaseExpiredAppointmentHolds(stripe: () => Stripe, now = new Date()) {
   const db = await getDb();
@@ -154,7 +202,12 @@ export async function releaseExpiredAppointmentHolds(stripe: () => Stripe, now =
     .where(and(expiredHold, isNotNull(appointments.stripeSessionId)))
     .orderBy(appointments.holdExpiresAt)
     .limit(EXPIRED_HOLDS_CHECKED_PER_RUN);
-  const outcomes = await Promise.all(withSession.map(hold => settleExpiredHold(db, stripe, { ...hold, stripeSessionId: hold.stripeSessionId! }, now)));
+  const outcomes = await Promise.all(withSession.map(async row => {
+    const hold = { ...row, stripeSessionId: row.stripeSessionId! };
+    const outcome = await settleExpiredHold(db, stripe, hold, now);
+    if (outcome === "kept") await keepExpiredHold(db, hold, now);
+    return outcome;
+  }));
   const count = (outcome: ExpiredHoldOutcome) => outcomes.filter(value => value === outcome).length;
   return { released: mutationRowCount(withoutSession) + count("released"), confirmed: count("confirmed"), kept: count("kept") };
 }

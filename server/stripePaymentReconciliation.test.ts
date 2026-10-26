@@ -1,6 +1,8 @@
+import { getTableColumns, type SQL } from "drizzle-orm";
+import { PgDialect } from "drizzle-orm/pg-core";
 import Stripe from "stripe";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { appointmentFulfillmentJobs, appointments } from "../drizzle/schema";
+import { appointmentFulfillmentJobs, appointments, availabilitySlots, blockedDates, securityEvents } from "../drizzle/schema";
 import type { TrpcContext } from "./_core/context";
 import { createInMemoryDrizzle, type InMemoryDrizzle } from "./testSupport/inMemoryDrizzle";
 import { listen } from "./testSupport/candidateUploadApp";
@@ -12,7 +14,7 @@ import { listen } from "./testSupport/candidateUploadApp";
 const WEBHOOK_SECRET = "whsec_test_payment_reconciliation";
 const CRON_SECRET = "cron_test_payment_reconciliation_secret";
 
-type FakeSession = { id: string; object: "checkout.session"; status: "open" | "complete" | "expired"; payment_status: "paid" | "unpaid"; amount_total: number; payment_intent: string | null; metadata: { trackingId: string } };
+type FakeSession = { id: string; object: "checkout.session"; status: "open" | "complete" | "expired"; payment_status: "paid" | "unpaid"; amount_total: number; payment_intent: string | null; metadata: { trackingId: string }; url?: string };
 
 const state = vi.hoisted(() => {
   process.env.VERCEL = "1";
@@ -45,6 +47,13 @@ vi.mock("stripe", async importOriginal => {
       Object.assign(this, {
         checkout: {
           sessions: {
+            create: async (params: { metadata: { trackingId: string }; line_items: Array<{ price_data: { unit_amount: number } }> }) => {
+              if (!fakeStripe.reachable) throw unreachable();
+              const id = `cs_test_booked_${fakeStripe.sessions.size + 1}`;
+              const session: FakeSession = { id, object: "checkout.session", status: "open", payment_status: "unpaid", amount_total: params.line_items[0].price_data.unit_amount, payment_intent: null, metadata: params.metadata, url: `https://checkout.stripe.test/${id}` };
+              fakeStripe.sessions.set(id, session);
+              return { ...session };
+            },
             retrieve: async (id: string) => {
               if (!fakeStripe.reachable) throw unreachable();
               const session = fakeStripe.sessions.get(id);
@@ -101,6 +110,7 @@ const { createApp } = await import("./_core/index");
 const { appRouter } = await import("./routers");
 const { refundAppointmentPayment } = await import("./appointmentAdminActions");
 const { paymentStatusPageFulfillment } = await import("./appointmentPublicStatus");
+const { KEPT_HOLD_RECHECK_MS } = await import("./appointmentHolds");
 const { APPOINTMENT_FULFILLMENT_STALE_AFTER_MS, appointmentFulfillmentPacing, closeUnsentAppointmentFulfillment, getAppointmentDeliveries, processDueAppointmentFulfillmentJobs, recoverStaleAppointmentFulfillmentJobs } = await import("./appointmentFulfillment");
 const PAGE_FULFILLMENT_TIMEOUT_MS = paymentStatusPageFulfillment.timeoutMs;
 const signer = new Stripe(process.env.STRIPE_SECRET_KEY!);
@@ -125,7 +135,7 @@ beforeEach(() => {
   vi.spyOn(console, "log").mockImplementation(() => undefined);
   vi.spyOn(console, "warn").mockImplementation(() => undefined);
   vi.spyOn(console, "error").mockImplementation(() => undefined);
-  state.db = createInMemoryDrizzle([appointments, appointmentFulfillmentJobs]);
+  state.db = withRawAppointmentInsert(createInMemoryDrizzle([appointments, appointmentFulfillmentJobs, availabilitySlots, blockedDates, securityEvents]));
   state.stripe.reachable = true;
   state.stripe.sessions.clear();
   state.stripe.refunds.length = 0;
@@ -136,6 +146,26 @@ beforeEach(() => {
   // previous test: without it, a page's short wait would depend on test order.
   appointmentFulfillmentPacing.delayMs = 0;
 });
+
+/**
+ * appointments.create writes its hold with a raw INSERT, which the in-memory
+ * database does not parse: its columns and values are read from the query, the
+ * consultation time as PostgreSQL reads its UTC text.
+ */
+function withRawAppointmentInsert(memory: InMemoryDrizzle) {
+  const dialect = new PgDialect();
+  const keys = new Map(Object.entries(getTableColumns(appointments)).map(([key, column]) => [column.name, key]));
+  return Object.assign(memory, {
+    execute: async (query: SQL) => {
+      const { sql: text, params } = dialect.sqlToQuery(query);
+      const columns = /^INSERT INTO appointments \(([^)]+)\) VALUES/.exec(text)?.[1].split(",").map(name => keys.get(name.trim())!);
+      if (!columns) throw new Error(`Unexpected raw query: ${text}`);
+      const values = Object.fromEntries(columns.map((key, index) => [key, params[index]]));
+      memory.seed(appointments, { ...values, appointmentDate: new Date(`${String(values.appointmentDate).replace(" ", "T")}Z`) });
+      return { rowCount: 1, rows: [] };
+    },
+  });
+}
 
 function seedAppointment(overrides: Record<string, unknown> = {}) {
   const appointmentDate = new Date(Date.now() + 72 * HOUR);
@@ -204,6 +234,40 @@ function bookedSlots(date: Date) {
     req: { protocol: "https", headers: {}, ip: "192.0.2.10" } as unknown as TrpcContext["req"],
     res: { clearCookie: vi.fn() } as unknown as TrpcContext["res"],
   }).availability.getBookedSlots({ date: parisDay(date) });
+}
+
+/** Half-hour slot three days ahead, as the booking page offers them, with the whole week open. */
+function bookableSlot(offsetMinutes = 0) {
+  if (db().rows(availabilitySlots).length === 0) {
+    for (let dayOfWeek = 0; dayOfWeek < 7; dayOfWeek += 1) db().seed(availabilitySlots, { dayOfWeek, startTime: "00:00", endTime: "00:00" });
+  }
+  const halfHour = 30 * 60 * 1000;
+  return new Date(Math.ceil((Date.now() + 72 * HOUR) / halfHour) * halfHour + offsetMinutes * 60_000);
+}
+
+function book(appointmentDate: Date, customerEmail = "nouveau@example.test") {
+  return appRouter.createCaller({
+    user: null,
+    req: { protocol: "https", headers: { "x-forwarded-for": "192.0.2.20" }, ip: "192.0.2.20" } as unknown as TrpcContext["req"],
+    res: { clearCookie: vi.fn() } as unknown as TrpcContext["res"],
+  }).appointments.create({ customerName: "Nouveau Patient", customerEmail, customerPhone: "+33 6 12 34 56 78", appointmentDate: appointmentDate.toISOString(), requestDetails: "Demande d’avis" });
+}
+
+/** HTTP code and stable reason of a refused booking, which the booking page translates (EN-06). */
+async function bookingRefusal(booking: Promise<unknown>) {
+  const error = await booking.then(() => null, (reason: unknown) => reason as { code?: string; cause?: { reason?: string } });
+  return error && { code: error.code, reason: error.cause?.reason };
+}
+
+/** Expired hold of an abandoned payment whose session Stripe has expired; its webhook never came. */
+function seedAbandonedHold(appointmentDate: Date, overrides: Record<string, unknown> = {}) {
+  stripeSession({ status: "expired", payment_status: "unpaid", payment_intent: null });
+  return seedAppointment({ appointmentDate, slotKey: appointmentDate.toISOString(), createdAt: new Date(Date.now() - 33 * 60 * 1000), holdExpiresAt: new Date(Date.now() - 60 * 1000), ...overrides });
+}
+
+/** Moves a hold's clock back, as if `ms` had passed since it was written or last kept. */
+function letTimePass(row: Record<string, unknown>, ms: number) {
+  for (const key of ["createdAt", "holdExpiresAt"] as const) row[key] = new Date((row[key] as Date).getTime() - ms);
 }
 
 function expectPostPaymentEmailsSentOnce() {
@@ -326,6 +390,9 @@ describe("EXPL-01 — un paiement reçu est confirmé même sans webhook", () =>
     expect(appointmentRow()).toMatchObject({ paymentStatus: "pending", appointmentStatus: "held", slotKey: seeded.slotKey });
     expect(emails.sendConfirmationEmail).not.toHaveBeenCalled();
 
+    // Gardé quelques minutes, puis réglé de nouveau avec Stripe.
+    expect((await runHoldCleanup()).body).toMatchObject({ released: 0, confirmed: 0, kept: 0 });
+    letTimePass(seeded, KEPT_HOLD_RECHECK_MS + 1_000);
     expect((await runHoldCleanup()).body).toMatchObject({ released: 0, confirmed: 1, kept: 0 });
     expect(appointmentRow()).toMatchObject({ paymentStatus: "completed", appointmentStatus: "confirmed", stripePaymentIntentId: PAYMENT_INTENT, slotKey: seeded.slotKey });
     expectPostPaymentEmailsSentOnce();
@@ -347,36 +414,85 @@ describe("EXPL-01 — un paiement reçu est confirmé même sans webhook", () =>
     expect(owner.notifyOwner).toHaveBeenCalledTimes(1);
   });
 
-  it("garde le créneau tant que Stripe ne répond pas, puis le libère quand la session a expiré sans paiement", async () => {
-    const seeded = seedAppointment({ holdExpiresAt: new Date(Date.now() - 60 * 1000) });
-    stripeSession({ status: "expired", payment_status: "unpaid", payment_intent: null });
+  it("propose libre le créneau d’un paiement abandonné dont le webhook n’est pas venu, et le réserver le libère d’abord chez Stripe", async () => {
+    const slot = bookableSlot();
+    seedAbandonedHold(slot);
+
+    // Ni webhook checkout.session.expired, ni passage du nettoyage : le maintien expiré ne cache pas le créneau.
+    await expect(bookedSlots(slot)).resolves.toEqual([]);
+
+    const booking = await book(slot);
+    expect(booking).toMatchObject({ success: true, checkoutUrl: expect.stringContaining("https://checkout.stripe.test/") });
+    expect(appointmentRow()).toMatchObject({ paymentStatus: "pending", appointmentStatus: "cancelled", slotKey: null, holdExpiresAt: null });
+    expect(db().rows(appointments).find(row => row.trackingId === booking.trackingId)).toMatchObject({ appointmentStatus: "held", slotKey: slot.toISOString(), stripeSessionId: booking.checkoutSessionId });
+    await expect(bookedSlots(slot)).resolves.toEqual([slot]);
+  });
+
+  it("garde le créneau tant que Stripe ne répond pas : pris quelques minutes, refusé clairement, puis de nouveau réglé avec Stripe", async () => {
+    const slot = bookableSlot();
+    const seeded = seedAbandonedHold(slot);
     state.stripe.reachable = false;
 
     expect((await runHoldCleanup()).body).toMatchObject({ released: 0, confirmed: 0, kept: 1 });
     expect(appointmentRow()).toMatchObject({ paymentStatus: "pending", appointmentStatus: "held", slotKey: seeded.slotKey });
-    // Gardé, son maintien pourtant expiré : le créneau reste affiché pris, comme l’index unique le tient.
-    await expect(bookedSlots(seeded.appointmentDate as Date)).resolves.toEqual([seeded.appointmentDate]);
+    // Gardé : son maintien repart pour quelques minutes, pendant lesquelles le créneau est affiché pris.
+    const keptUntil = (appointmentRow().holdExpiresAt as Date).getTime();
+    expect(keptUntil).toBeGreaterThan(Date.now() + KEPT_HOLD_RECHECK_MS - 5_000);
+    expect(keptUntil).toBeLessThanOrEqual(Date.now() + KEPT_HOLD_RECHECK_MS);
+    await expect(bookedSlots(slot)).resolves.toEqual([slot]);
+    // Le réserver est refusé comme un créneau pris ; un autre créneau, faute de Stripe, comme un paiement indisponible.
+    await expect(bookingRefusal(book(slot))).resolves.toEqual({ code: "CONFLICT", reason: "slot_taken" });
+    await expect(bookingRefusal(book(bookableSlot(30)))).resolves.toEqual({ code: "SERVICE_UNAVAILABLE", reason: "payment_unavailable" });
 
+    // Quelques minutes plus tard, le créneau est proposé de nouveau ; Stripe toujours muet, le réserver le garde encore.
+    letTimePass(seeded, KEPT_HOLD_RECHECK_MS + 1_000);
+    await expect(bookedSlots(slot)).resolves.toEqual([]);
+    await expect(bookingRefusal(book(slot))).resolves.toEqual({ code: "CONFLICT", reason: "slot_taken" });
+    expect(appointmentRow()).toMatchObject({ appointmentStatus: "held", slotKey: seeded.slotKey });
+    expect((appointmentRow().holdExpiresAt as Date).getTime()).toBeGreaterThan(Date.now() + KEPT_HOLD_RECHECK_MS - 5_000);
+
+    // Stripe de retour : le nettoyage suivant libère le maintien dont la session a expiré sans paiement.
+    letTimePass(seeded, KEPT_HOLD_RECHECK_MS + 1_000);
     state.stripe.reachable = true;
     expect((await runHoldCleanup()).body).toMatchObject({ released: 1, confirmed: 0, kept: 0 });
     expect(appointmentRow()).toMatchObject({ paymentStatus: "pending", appointmentStatus: "cancelled", slotKey: null, holdExpiresAt: null });
-    await expect(bookedSlots(seeded.appointmentDate as Date)).resolves.toEqual([]);
+    await expect(bookedSlots(slot)).resolves.toEqual([]);
+    await expect(book(slot)).resolves.toMatchObject({ success: true });
     expect(emails.sendConfirmationEmail).not.toHaveBeenCalled();
   });
 
-  it("affiche pris un créneau retenu, confirmé ou payé, et libre un créneau libéré, annulé ou remboursé", async () => {
+  it("ne compte pas dans les réservations en attente d’une adresse un maintien gardé faute de réponse de Stripe", async () => {
+    const email = "patient@example.test";
+    // Deux paiements abandonnés, gardés par le nettoyage pendant une panne de Stripe.
+    const first = seedAbandonedHold(bookableSlot());
+    stripeSession({ id: "cs_test_reconciliation_21", status: "expired", payment_status: "unpaid", payment_intent: null, metadata: { trackingId: "APTRECON00021" } });
+    db().seed(appointments, { ...first, id: undefined, trackingId: "APTRECON00021", stripeSessionId: "cs_test_reconciliation_21", appointmentDate: bookableSlot(30), slotKey: bookableSlot(30).toISOString() });
+    state.stripe.reachable = false;
+    expect((await runHoldCleanup()).body).toMatchObject({ kept: 2 });
+    state.stripe.reachable = true;
+
+    await expect(book(bookableSlot(60), email)).resolves.toMatchObject({ success: true });
+    // Deux maintiens que le patient vient de faire, eux, comptent.
+    await expect(book(bookableSlot(90), email)).resolves.toMatchObject({ success: true });
+    await expect(bookingRefusal(book(bookableSlot(120), email))).resolves.toEqual({ code: "TOO_MANY_REQUESTS", reason: "too_many_holds" });
+  });
+
+  it("affiche pris un créneau retenu, gardé, confirmé ou payé, et libre un créneau expiré, libéré, annulé ou remboursé", async () => {
     const day = new Date(Date.now() + 72 * HOUR);
     const at = (minutes: number) => new Date(day.getTime() + minutes * 60_000);
     const seed = (trackingId: string, minutes: number, overrides: Record<string, unknown>) => db().seed(appointments, { ...appointmentRow(), id: undefined, trackingId, appointmentDate: at(minutes), slotKey: at(minutes).toISOString(), ...overrides });
     seedAppointment({ appointmentDate: at(0), slotKey: at(0).toISOString() });
     seed("APTRECON00011", 30, { paymentStatus: "completed", appointmentStatus: "confirmed", holdExpiresAt: null });
+    // Gardé par le nettoyage, Stripe ne répondant pas : maintien prolongé de quelques minutes.
+    seed("APTRECON00016", 180, { createdAt: new Date(Date.now() - 40 * 60_000), holdExpiresAt: new Date(Date.now() + 4 * 60_000) });
+    // Expiré, pas encore réglé avec Stripe : proposé, le réserver le règle d’abord.
     seed("APTRECON00012", 60, { holdExpiresAt: new Date(Date.now() - 60_000) });
     seed("APTRECON00013", 90, { appointmentStatus: "cancelled", slotKey: null, holdExpiresAt: null });
     seed("APTRECON00014", 120, { paymentStatus: "refunded", appointmentStatus: "cancelled", slotKey: null, holdExpiresAt: null });
     seed("APTRECON00015", 150, { paymentStatus: "pending", appointmentStatus: "held", slotKey: null, holdExpiresAt: new Date(Date.now() - 60_000) });
 
     const taken = (await bookedSlots(day)).map(date => new Date(date).getTime()).sort();
-    expect(taken).toEqual([at(0), at(30), at(60)].map(date => date.getTime()));
+    expect(taken).toEqual([at(0), at(30), at(180)].map(date => date.getTime()));
   });
 
   it("ferme chez Stripe une session encore ouverte avant de libérer le créneau, et ne touche pas une réservation en cours", async () => {
