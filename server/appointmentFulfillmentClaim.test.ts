@@ -21,6 +21,7 @@ const invoicing = vi.hoisted(() => ({
     invoiceNumber: "FAC-2026-000003",
     issuedAt: new Date("2026-10-12T08:00:00Z"),
     paidAt: new Date("2026-10-12T07:59:00Z"),
+    issuedNow: true,
   })),
 }));
 vi.mock("./invoice", () => ({ generateInvoicePDF: invoicing.generateInvoicePDF }));
@@ -205,12 +206,13 @@ describe("revendication atomique des envois post-paiement", () => {
 
     expect(result.results).toEqual([{ completed: true }]);
     expect(invoicing.allocateAppointmentInvoice).toHaveBeenCalledWith({ appointmentId: 42, paidAt: createdAt });
+    // Allocated by this attempt: built even if the store cannot be checked (EXPL-02).
     expect(invoicing.generateInvoicePDF).toHaveBeenCalledWith(expect.objectContaining({
       invoiceNumber: "FAC-2026-000003",
       issueDate: new Date("2026-10-12T08:00:00Z"),
       paymentDate: new Date("2026-10-12T07:59:00Z"),
       trackingId: "APT-42",
-    }));
+    }), undefined, { issuedNow: true });
     expect(notifications.sendInvoiceEmail).toHaveBeenCalledWith("patient@example.com", "Patient Test", "APT-42", 100, expect.any(Buffer), "FAC-2026-000003", { idempotencyKey: patientEmailIdempotencyKey("appointment-invoice-FAC-2026-000003", "patient@example.com"), language: "fr" });
   });
 

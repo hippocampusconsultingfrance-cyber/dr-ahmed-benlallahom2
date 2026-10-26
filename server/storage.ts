@@ -42,6 +42,15 @@ export function classifyStorageError(error: unknown): string {
   return "storage_unknown";
 }
 
+/**
+ * Storage failures that do not pass with time (EXPL-02): the store or its
+ * token is to be fixed in Vercel (store suspended or missing, access refused,
+ * no token).
+ */
+export function isLastingStorageError(code: unknown): boolean {
+  return typeof code === "string" && ["storage_access_denied", "storage_store_not_found", "storage_store_suspended", "storage_config_missing"].includes(code);
+}
+
 export async function storagePut(
   relKey: string,
   data: Buffer | Uint8Array | string,

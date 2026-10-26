@@ -196,6 +196,23 @@ describe("EXPL-02 — envois après paiement sur la fiche du rendez-vous", () =>
     expect(message).toContain("aucun nouvel essai automatique n’aura lieu");
   });
 
+  it("après « Renvoyer », une facture retenue par le stockage des factures met en cause Vercel Blob, pas le service d’envoi (EXPL-02)", async () => {
+    const tree = AppointmentDeliveries({ trackingId: "APTUI0000012", paymentStatus: "completed", invoiceNumber: "FAC-2026-000056", deliveries: [delivery("confirmation", "sent"), delivery("invoice", "refused", 1, 7)] });
+    button(tree, "Renvoyer")();
+    expect(state.retryMutate).toHaveBeenCalledWith({ trackingId: "APTUI0000012" });
+
+    await state.retryOptions!.onSuccess!({ requeued: 1, requeuedJobTypes: ["invoice"], deliveries: [delivery("confirmation", "sent"), { ...delivery("invoice", "retrying", 1, 7), failureCause: "invoice_storage" }] } as never);
+    const [tone, message] = state.toasts.at(-1)!;
+    expect(tone).toBe("warning");
+    expect(message).toContain("stockage des factures (Vercel Blob)");
+    expect(message).not.toContain("Resend");
+
+    // With an email the email service failed again too, both are named.
+    await state.retryOptions!.onSuccess!({ requeued: 2, requeuedJobTypes: ["confirmation", "invoice"], deliveries: [delivery("confirmation", "retrying", 1, 7), { ...delivery("invoice", "retrying", 1, 7), failureCause: "invoice_storage" }] } as never);
+    expect(state.toasts.at(-1)?.[1]).toContain("Vérifiez le service d’envoi d’emails (Resend)");
+    expect(state.toasts.at(-1)?.[1]).toContain("stockage des factures (Vercel Blob)");
+  });
+
   it("accorde l’état au libellé : « Email de remboursement » au masculin, les autres au féminin", () => {
     expect(deliveryLabel(delivery("refund", "sent"))).toBe("Email de remboursement : envoyé");
     expect(deliveryLabel(delivery("refund", "refused", 1, 7))).toBe("Email de remboursement : refusé par le service d’envoi, sans nouvel essai automatique");

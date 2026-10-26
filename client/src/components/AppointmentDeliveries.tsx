@@ -7,7 +7,7 @@ import { downloadInvoicePdf } from "./invoicePdfDownload";
 export type AppointmentDeliveryJob = "confirmation" | "invoice" | "owner" | "refund" | "refund_owner";
 export type AppointmentDeliveryState = "sent" | "failed" | "refused" | "retrying" | "pending" | "sending" | "interrupted" | "not_sent";
 export type AppointmentDeliveryNotSentReason = "appointment_past" | "not_paid" | "patient_data_erased";
-export type AppointmentDeliveryView = { jobType: AppointmentDeliveryJob; state: AppointmentDeliveryState; attempts: number; maxAttempts: number; notSentReason?: AppointmentDeliveryNotSentReason | null };
+export type AppointmentDeliveryView = { jobType: AppointmentDeliveryJob; state: AppointmentDeliveryState; attempts: number; maxAttempts: number; notSentReason?: AppointmentDeliveryNotSentReason | null; failureCause?: "invoice_storage" | null };
 
 /** In the order the practitioner reads them (EXPL-02), then the notices of a refund (RES-06). */
 const DELIVERY_ORDER: AppointmentDeliveryJob[] = ["confirmation", "invoice", "owner", "refund", "refund_owner"];
@@ -141,15 +141,21 @@ export function correctedEmailNotice(invoiceNumber: string | null, deliveries: A
  * deliberately not sent (a confirmation after the consultation…), said apart
  * from the ones sent; some were refused again by the email service, with no
  * new automatic attempt; or some failed again and wait for their next
- * automatic attempt.
+ * automatic attempt, the email service or the invoice storage named as the
+ * cause (EXPL-02).
  */
 export function retryOutcome(result: { requeuedJobTypes: AppointmentDeliveryJob[]; deliveries: AppointmentDeliveryView[] }): { tone: "success" | "info" | "warning"; message: string } {
   const deliveries = result.deliveries.filter(delivery => result.requeuedJobTypes.includes(delivery.jobType));
   if (deliveries.some(delivery => delivery.state === "refused")) {
     return { tone: "warning", message: "Le service d’envoi refuse de nouveau l’email (adresse du patient refusée ou invalide, ou contenu de l’email refusé) : ce refus n’est pas passager, aucun nouvel essai automatique n’aura lieu. Vérifiez l’adresse et prévenez le patient directement ; « Corriger l’email du patient » sur le rendez-vous, puis « Renvoyer », l’envoie à la nouvelle adresse." };
   }
-  if (!deliveries.every(delivery => delivery.state === "sent" || delivery.state === "not_sent")) {
-    return { tone: "warning", message: "Certains envois ont de nouveau échoué ; un nouvel essai automatique est prévu. Vérifiez le service d’envoi d’emails (Resend) ou prévenez le patient directement." };
+  const failed = deliveries.filter(delivery => delivery.state !== "sent" && delivery.state !== "not_sent");
+  if (failed.length > 0) {
+    return { tone: "warning", message: [
+      "Certains envois ont de nouveau échoué ; un nouvel essai automatique est prévu.",
+      ...failed.some(delivery => delivery.failureCause !== "invoice_storage") ? ["Vérifiez le service d’envoi d’emails (Resend) ou prévenez le patient directement."] : [],
+      ...failed.some(delivery => delivery.failureCause === "invoice_storage") ? ["La facture n’est pas partie : sa copie archivée dans le stockage des factures (Vercel Blob) n’a pas pu être vérifiée ou lue, et elle n’est pas refaite à sa place. Vérifiez dans Vercel que le stockage Blob est actif ; « Renvoyer » l’envoie une fois le stockage rétabli."] : [],
+    ].join(" ") };
   }
   const ordered = inReadingOrder(deliveries);
   const skipped = ordered.filter(delivery => delivery.state === "not_sent");

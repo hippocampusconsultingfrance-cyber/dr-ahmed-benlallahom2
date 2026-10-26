@@ -478,7 +478,9 @@ async function runJob(id: number) {
       // webhook right after the payment confirmation: its creation time is the
       // payment date.
       const invoiceRecord = await allocateAppointmentInvoice({ appointmentId: appointment.id, paidAt: job.createdAt ?? new Date() });
-      const invoice = await generateInvoicePDF(appointmentInvoiceData(appointment, invoiceRecord));
+      // At its first issue, built and sent even while the store cannot be
+      // checked: no copy of a number just allocated can be stored (EXPL-02).
+      const invoice = await generateInvoicePDF(appointmentInvoiceData(appointment, invoiceRecord), undefined, { issuedNow: invoiceRecord.issuedNow });
       // Its pause counts from here, once the PDF is built.
       await waitForJobSendSlot();
       // The PDF stays in French whatever the language of the email (EN-01).
@@ -679,6 +681,12 @@ export type AppointmentDelivery = {
   nextAttemptAt: Date | null;
   /** Why a job was deliberately not sent: consultation already past, appointment no longer paid, or patient data erased (RGPD-12). */
   notSentReason: "appointment_past" | "not_paid" | "patient_data_erased" | null;
+  /**
+   * A job that did not go out because of the invoice storage (Vercel Blob),
+   * not the email service: the copy stored at the invoice's issue could not be
+   * checked or read, and the invoice is not rebuilt in its place (EXPL-02).
+   */
+  failureCause: "invoice_storage" | null;
 };
 
 /** Same rule as recoverStaleAppointmentFulfillmentJobs: no worker runs that long. */
@@ -699,6 +707,7 @@ function deliveryOf(job: FulfillmentJob, now: Date): AppointmentDelivery {
     notSentReason: state !== "not_sent" ? null
       : job.lastError === "appointment_already_past_confirmation_skipped" ? "appointment_past"
       : job.lastError === PATIENT_DATA_ERASED ? "patient_data_erased" : "not_paid",
+    failureCause: (state === "retrying" || state === "failed") && job.lastError?.startsWith("storage_") ? "invoice_storage" : null,
   };
 }
 

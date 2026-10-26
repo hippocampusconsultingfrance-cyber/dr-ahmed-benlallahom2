@@ -11,7 +11,7 @@ import { getDb } from "./db";
 import { mutationRowCount } from "./dbMutation";
 import { candidateAccounts, candidateDocumentAuditLogs, candidateDocuments, contactMessages, gdprRequests, testimonials, appointments, blogPosts, availabilitySlots, blockedDates, cvApplications, cvCandidateCertifications, cvCandidateLanguages, cvGoogleDriveExportJobs, recruitmentAuditLogs, recruitmentMatchProfiles, clientBriefs, clientBriefCandidates, recruitmentCampaigns, recruitmentCampaignRecipients, recruitmentEmailEvents, recruitmentFollowUpTasks, recruitmentOfferTemplates, securityEvents } from "../drizzle/schema";
 import { notifyOwner } from "./_core/notification";
-import { storageGetSignedUrl } from "./storage";
+import { isLastingStorageError, storageGetSignedUrl } from "./storage";
 import { canAdminDownloadCv, CV_DOWNLOAD_UNAVAILABLE_MESSAGE } from "./recruitmentDownloadPolicy";
 import { eq, and, or, sql, desc, getTableColumns, gte, inArray, isNotNull, isNull, lt, ne, type SQL } from "drizzle-orm";
 import Stripe from "stripe";
@@ -1534,9 +1534,18 @@ export const appRouter = router({
             invoice = await regenerateAppointmentInvoice(input.trackingId);
           } catch (error) {
             // The copy stored at its issue could not be checked or read (storage
-            // outage, EXPL-02): the invoice is not rebuilt in its place.
-            console.error("[AppointmentFulfillment] Invoice download failed", error instanceof Error ? error.name : "UnknownError");
-            throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "La facture n’a pas pu être préparée pour l’instant : réessayez dans un instant." });
+            // outage, EXPL-02): the invoice is not rebuilt in its place. A
+            // storage failure is named, lasting (to fix in Vercel) or passing.
+            const message = error instanceof Error ? error.message : "";
+            const code = (error as { code?: unknown } | null)?.code;
+            const storageFailure = message.startsWith("storage_");
+            console.error("[AppointmentFulfillment] Invoice download failed", storageFailure ? { message, code } : error instanceof Error ? error.name : "UnknownError");
+            throw new TRPCError({
+              code: "INTERNAL_SERVER_ERROR",
+              message: !storageFailure ? "La facture n’a pas pu être préparée pour l’instant : réessayez dans un instant."
+                : isLastingStorageError(code) ? "La facture archivée est inaccessible : le stockage des factures (Vercel Blob) refuse l’accès (store suspendu ou introuvable, jeton BLOB_READ_WRITE_TOKEN absent ou invalide). Vérifiez-le dans Vercel, puis réessayez."
+                  : "La facture archivée n’a pas pu être lue : le stockage des factures (Vercel Blob) ne répond pas pour l’instant ; réessayez dans un instant.",
+            });
           }
           if (!invoice) throw new TRPCError({ code: "NOT_FOUND", message: "Aucune facture n’a encore été émise pour ce rendez-vous." });
           return { invoiceNumber: invoice.invoiceNumber, filename: `Facture-${invoice.invoiceNumber}.pdf`, contentBase64: invoice.buffer.toString("base64") };
