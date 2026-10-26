@@ -1,4 +1,5 @@
-import { index, integer as int, pgTable as mysqlTable, serial, text, timestamp, uniqueIndex, varchar } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import { check, foreignKey, index, integer as int, pgTable as mysqlTable, serial, text, timestamp, uniqueIndex, varchar } from "drizzle-orm/pg-core";
 
 // Keep the existing schema declarations readable while storing enum-like
 // values as typed PostgreSQL varchar columns. This avoids global enum-name
@@ -6,6 +7,11 @@ import { index, integer as int, pgTable as mysqlTable, serial, text, timestamp, 
 function mysqlEnum<const T extends readonly [string, ...string[]]>(name: string, values: T) {
   const length = Math.max(32, ...values.map(value => value.length));
   return varchar(name, { length }).$type<T[number]>();
+}
+
+/** CHECK keeping a mysqlEnum column within its values: the column itself stays a plain varchar (DATA-01). */
+function enumCheck(name: string, column: string, values: readonly string[]) {
+  return check(name, sql.raw(`"${column}" IN (${values.map(value => `'${value}'`).join(", ")})`));
 }
 
 /**
@@ -145,6 +151,9 @@ export type InsertTestimonial = typeof testimonials.$inferInsert;
  * Appointments/Reservations table.
  * Stores health consultation appointments with payment and status tracking.
  */
+const APPOINTMENT_PAYMENT_STATUSES = ["pending", "completed", "failed", "refunded"] as const;
+const APPOINTMENT_STATUSES = ["held", "confirmed", "cancelled", "completed", "no_show"] as const;
+
 export const appointments = mysqlTable("appointments", {
   id: serial("id").primaryKey(),
   trackingId: varchar("tracking_id", { length: 20 }).notNull().unique(), // Unique booking reference
@@ -161,8 +170,8 @@ export const appointments = mysqlTable("appointments", {
   isNightRate: int("is_night_rate").default(0).notNull(), // 1 = night rate (18h-8h), 0 = normal rate
   stripePaymentIntentId: varchar("stripe_payment_intent_id", { length: 255 }), // Stripe Payment Intent ID
   stripeSessionId: varchar("stripe_session_id", { length: 255 }), // Stripe Checkout Session ID
-  paymentStatus: mysqlEnum("payment_status", ["pending", "completed", "failed", "refunded"]).default("pending").notNull(),
-  appointmentStatus: mysqlEnum("appointment_status", ["held", "confirmed", "cancelled", "completed", "no_show"]).default("held").notNull(),
+  paymentStatus: mysqlEnum("payment_status", APPOINTMENT_PAYMENT_STATUSES).default("pending").notNull(),
+  appointmentStatus: mysqlEnum("appointment_status", APPOINTMENT_STATUSES).default("held").notNull(),
   holdExpiresAt: timestamp("hold_expires_at"), // Temporary unpaid booking lock; cleared once paid or released.
   meetLink: varchar("meet_link", { length: 500 }), // Google Meet link
   cancellationReason: text("cancellation_reason"), // Reason for cancellation if applicable
@@ -180,6 +189,8 @@ export const appointments = mysqlTable("appointments", {
 }, table => ({
   activeSlotUnique: uniqueIndex("appointments_active_slot_unique").on(table.slotKey),
   holdExpiry: index("appointments_hold_expiry_idx").on(table.appointmentStatus, table.paymentStatus, table.holdExpiresAt),
+  paymentStatusCheck: enumCheck("appointments_payment_status_check", "payment_status", APPOINTMENT_PAYMENT_STATUSES),
+  appointmentStatusCheck: enumCheck("appointments_appointment_status_check", "appointment_status", APPOINTMENT_STATUSES),
 }));
 
 export type Appointment = typeof appointments.$inferSelect;
@@ -352,7 +363,16 @@ export const cvApplications = mysqlTable("cv_applications", {
   language: varchar("language", { length: 10 }).default("fr").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
-});
+}, table => ({
+  // The same CV sent again by the same candidate for the same pathway and
+  // target countries is one application (DATA-11), even sent simultaneously:
+  // /api/recruitment/apply answers the losing INSERT like a repeated sending.
+  // The target countries are part of it, as in isSameRecruitmentSubmission
+  // (INTL-03), hashed to keep the key short.
+  submissionUnique: uniqueIndex("cv_applications_submission_unique")
+    .on(sql`lower(${table.email})`, sql`lower(${table.specialty})`, table.fileChecksum, sql`md5(${table.targetCountries})`)
+    .where(sql`${table.fileChecksum} IS NOT NULL`),
+}));
 
 export type CvApplication = typeof cvApplications.$inferSelect;
 export type InsertCvApplication = typeof cvApplications.$inferInsert;
@@ -559,6 +579,8 @@ export const clientBriefCandidates = mysqlTable("client_brief_candidates", {
 }, table => ({
   briefIdx: index("client_brief_candidates_brief_idx").on(table.briefId),
   applicationIdx: index("client_brief_candidates_application_idx").on(table.applicationId),
+  // One association per mission and candidate (DATA-01): associateCandidate upserts on it.
+  pairUnique: uniqueIndex("client_brief_candidates_pair_unique").on(table.briefId, table.applicationId),
 }));
 
 export type ClientBriefCandidate = typeof clientBriefCandidates.$inferSelect;
@@ -750,6 +772,10 @@ export const candidateDocuments = mysqlTable("candidate_documents", {
   candidateCreatedIdx: index("candidate_documents_candidate_created_idx").on(table.candidateId, table.createdAt),
   reviewQueueIdx: index("candidate_documents_review_queue_idx").on(table.status, table.analysisStatus),
   applicationIdx: index("candidate_documents_application_idx").on(table.applicationId),
+  // A document never outlives its account (DATA-01): the erasure deletes the
+  // documents first, and the database refuses to delete an account that has
+  // just received one.
+  candidateFk: foreignKey({ name: "candidate_documents_candidate_id_fk", columns: [table.candidateId], foreignColumns: [candidateAccounts.id] }).onDelete("restrict"),
 }));
 
 export type CandidateDocument = typeof candidateDocuments.$inferSelect;

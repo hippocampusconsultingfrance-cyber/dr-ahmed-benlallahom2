@@ -433,7 +433,9 @@ export function createMemoryPg(tables: PgTable[], options: { now?: () => Date } 
       if (column.isUnique || column.primary) uniqueSets.push([column.name]);
     }
     for (const index of config.indexes) {
-      if (index.config.unique) uniqueSets.push(index.config.columns.map(column => (column as { name: string }).name));
+      // Unique indexes on expressions or partial ones (cv_applications_submission_unique) are not emulated.
+      if (!index.config.unique || index.config.where || index.config.columns.some(column => is(column, SQL))) continue;
+      uniqueSets.push(index.config.columns.map(column => (column as { name: string }).name));
     }
     for (const constraint of config.uniqueConstraints) uniqueSets.push(constraint.columns.map(column => column.name));
     meta.set(config.name, { columns, defaults, serial, uniqueSets });
