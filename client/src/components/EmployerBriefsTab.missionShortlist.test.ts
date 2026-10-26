@@ -151,6 +151,11 @@ describe("écran d’une mission employeur", () => {
 
     control(render(), "CV de Amal Haddad")();
     expect(state.cvMutate).toHaveBeenCalledWith({ id: 11 });
+
+    // Opened from this screen, translated, the sheet words its certifications in the admin's language (IA-02).
+    expect(dialogOf().props.certificationLanguage).toBe("fr");
+    state.language = "zh";
+    expect(dialogOf().props.certificationLanguage).toBe("zh");
   });
 
   it("demande au serveur une compatibilité minimale et l’état de présélection, depuis la première page (ADM-04)", () => {

@@ -276,14 +276,14 @@ describe("confirmation des certifications par l’admin (IA-02)", () => {
       errors: ["该证书已过期：请确认其续期，填写证书上的新到期日期，或勾选证书上没有到期日期。", "新的到期日期晚于 15 年之后：请在证书上核对（最晚为 2041/10/26）。", "新的到期日期已过：该证书仍将处于过期状态。", "新的到期日期无效。"],
       none: "未申报证书，简历中也未读到证书。",
     }],
-  ] as const)("écrit les certifications, leur renouvellement, les toasts et les refus du serveur dans la langue de l’administration (%s, IA-02)", async (language, expected) => {
+  ] as const)("écrit les certifications, leur renouvellement, les toasts et les refus du serveur dans la langue que l’écran mission lui donne, celle de l’administration (%s, IA-02)", async (language, expected) => {
     state.language = language;
     const certifications = [
       { name: "ACLS", origins: ["declared", "extracted"], expiresAt: "2023-05" },
       { name: "Licence DHA", origins: ["extracted"], expiresAt: "2028-05" },
       { name: "BLS", origins: ["declared", "confirmed"], expiresAt: null },
     ];
-    const tree = CertificationReview({ applicationId: 5, certifications: certifications as never });
+    const tree = CertificationReview({ applicationId: 5, certifications: certifications as never, language });
     const html = renderToStaticMarkup(tree);
     expect(html).toContain(`ACLS<span class="font-normal text-red-600 dark:text-red-400">${expected.expired}`);
     expect(html).toContain(`Licence DHA<span class="font-normal text-muted-foreground">${expected.current}`);
@@ -310,7 +310,32 @@ describe("confirmation des certifications par l’admin (IA-02)", () => {
     await refuse(undefined, undefined, "Une erreur interne est survenue. Veuillez réessayer dans quelques instants. (réf. 1a2b3c4d)");
     expect(state.errors).toEqual([...expected.errors, "Une erreur interne est survenue. Veuillez réessayer dans quelques instants. (réf. 1a2b3c4d)"]);
 
-    expect(renderToStaticMarkup(CertificationReview({ applicationId: 5, certifications: [] }))).toContain(expected.none);
+    expect(renderToStaticMarkup(CertificationReview({ applicationId: 5, certifications: [], language }))).toContain(expected.none);
+  });
+
+  it("reste en français dans Candidatures et dans la fiche 360° ouverte depuis Candidatures, quelle que soit la langue de l’administration (IA-02)", () => {
+    // The admin reads the site in English; the Candidatures tab and the 360° sheet around the panel are in French.
+    state.language = "en";
+    state.detail = { candidate: { id: 5, firstName: "Amal", lastName: "Haddad", specialty: "Anesthésie", trackingId: "CV5", status: "new", createdAt: new Date("2026-10-20T10:00:00Z"), lastCandidateResponseAt: null, adminNotes: null }, audits: [], campaignRecipients: [], followUps: [], certifications: facts };
+    const rendered = (review: ReactElement<Record<string, unknown>> | undefined) => renderToStaticMarkup(CertificationReview(review!.props as Parameters<typeof CertificationReview>[0]));
+    const inSheet = (certificationLanguage?: "fr" | "en" | "de" | "zh") => {
+      hooks.index = 0;
+      return rendered(elements(Candidate360Dialog({ applicationId: 5, onOpenChange: vi.fn(), certificationLanguage })).find(element => element.type === CertificationReview));
+    };
+
+    clickable(renderTab(), "Amal Haddad")();
+    const inCard = rendered(elements(renderTab()).find(element => element.type === CertificationReview));
+    for (const html of [inCard, inSheet()]) {
+      expect(html).toContain("extraite du CV par l’IA");
+      expect(html).toContain('aria-label="Confirmer Licence DHA"');
+      expect(html).toContain(">Annuler la confirmation</button>");
+      expect(html).not.toMatch(/read from the CV|Confirm |Withdraw/);
+    }
+    // Opened from the translated mission screen, the sheet's panel follows the admin's language.
+    const fromMission = inSheet("en");
+    expect(fromMission).toContain("read from the CV by the AI");
+    expect(fromMission).toContain('aria-label="Confirm Licence DHA"');
+    expect(fromMission).not.toContain("Confirmer");
   });
 
   it("place les certifications et leurs boutons dans la fiche 360°", () => {

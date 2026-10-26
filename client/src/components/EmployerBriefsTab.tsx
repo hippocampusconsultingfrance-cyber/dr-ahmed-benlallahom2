@@ -209,7 +209,7 @@ export default function EmployerBriefsTab() {
           {matches.data.pagination.totalPages > 1 && <div className="mt-5 flex flex-col gap-3 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between"><p className="text-sm text-muted-foreground">{copy.page} {matches.data.pagination.page + 1} {copy.of} {matches.data.pagination.totalPages} · {matches.data.pagination.total} {copy.profiles}</p><div className="flex gap-2"><Button size="sm" variant="outline" disabled={matches.data.pagination.page === 0 || matches.isFetching} onClick={() => setMatchPage(Math.max(0, shownPage - 1))}>{copy.previous}</Button><Button size="sm" variant="outline" disabled={matches.data.pagination.page + 1 >= matches.data.pagination.totalPages || matches.isFetching} onClick={() => setMatchPage(shownPage + 1)}>{copy.next}</Button></div></div>}
         </>}
       </section>
-      <Candidate360Dialog applicationId={candidate360Id} onOpenChange={open => { if (!open) setCandidate360Id(null); }} />
+      <Candidate360Dialog applicationId={candidate360Id} onOpenChange={open => { if (!open) setCandidate360Id(null); }} certificationLanguage={language} />
     </div>
   );
 }

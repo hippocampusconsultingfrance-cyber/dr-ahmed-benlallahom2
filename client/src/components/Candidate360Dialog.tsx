@@ -1,6 +1,7 @@
 import { BadgeCheck, CalendarClock, ClipboardList, FileText, Mail, MessageSquare, UserRound } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import type { UserLanguage } from "@/contexts/userPreferences";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { buildCandidateTimeline, type CandidateTimelineEvent } from "./candidate360Timeline";
@@ -10,6 +11,12 @@ import PublicContentSkeleton from "./PublicContentSkeleton";
 type Candidate360DialogProps = {
   applicationId: number | null;
   onOpenChange: (open: boolean) => void;
+  /**
+   * Language of the certifications panel (IA-02): the admin's, when the sheet
+   * is opened from the translated mission screen; French otherwise, like the
+   * rest of the sheet.
+   */
+  certificationLanguage?: UserLanguage;
 };
 
 function formatDate(value: Date | null | undefined) {
@@ -23,7 +30,7 @@ function eventIcon(kind: CandidateTimelineEvent["kind"]) {
   return <ClipboardList className="h-4 w-4" />;
 }
 
-export default function Candidate360Dialog({ applicationId, onOpenChange }: Candidate360DialogProps) {
+export default function Candidate360Dialog({ applicationId, onOpenChange, certificationLanguage }: Candidate360DialogProps) {
   const utils = trpc.useUtils();
   const detailQuery = trpc.admin.recruitment.candidate.detail.useQuery(
     { id: applicationId || 1 },
@@ -62,7 +69,7 @@ export default function Candidate360Dialog({ applicationId, onOpenChange }: Cand
 
             <section className="rounded-xl border border-border p-4">
               <div className="mb-3 flex items-center gap-2"><BadgeCheck className="h-4 w-4 text-primary" /><h3 className="font-semibold text-foreground">Certifications</h3></div>
-              <CertificationReview applicationId={detail.candidate.id} certifications={detail.certifications} />
+              <CertificationReview applicationId={detail.candidate.id} certifications={detail.certifications} language={certificationLanguage} />
             </section>
 
             <section className="rounded-xl border border-border p-4">

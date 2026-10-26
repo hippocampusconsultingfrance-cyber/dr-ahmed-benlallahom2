@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { useLanguage } from "@/contexts/LanguageContext";
+import type { UserLanguage } from "@/contexts/userPreferences";
 import { localeDay, todayInParis } from "@/lib/parisDay";
 import { trpc } from "@/lib/trpc";
 import { CERTIFICATION_RENEWAL_MAX_YEARS, certificationDateIsCurrent, certificationExpiryDate, latestCertificationRenewalDay, RECRUITMENT_FACT_ORIGIN_LABELS, RECRUITMENT_FACT_ORIGINS, type CertificationExpiryDate, type RecruitmentFact } from "@shared/recruitmentFactOrigins";
@@ -10,16 +10,21 @@ import { isCertificationRenewalRefusalReason } from "@shared/recruitmentMissionR
 type CertificationReviewProps = {
   applicationId: number;
   certifications: Array<RecruitmentFact & { expiresAt?: string | null }>;
+  /**
+   * French by default, like the Candidatures tab and the 360° sheet around
+   * the panel; the mission screen, translated, passes the admin's language.
+   */
+  language?: UserLanguage;
 };
 
 /** What the admin entered to confirm a renewal: the new expiry date, or that the certificate has none. */
 type RenewalDraft = { date: string; withoutExpiry: boolean };
 
 /**
- * In the admin's language, as the mission screen that opens the 360° sheet
- * (IA-02): the expiry with the preposition its precision takes (« le
- * 30/06/2027 », « en mai 2023 »), the toasts and the server's refusals, from
- * their stable reason and the day they name.
+ * In the language of the screen showing the panel (IA-02): the expiry with
+ * the preposition its precision takes (« le 30/06/2027 », « en mai 2023 »),
+ * the toasts and the server's refusals, from their stable reason and the day
+ * they name.
  */
 const reviewCopy = {
   fr: {
@@ -162,9 +167,8 @@ function originTone(origin: RecruitmentFact["origins"][number]) {
  * other way. Withdrawn, a certification the latest analysis of the CV no
  * longer retains loses its reading by the AI: the toast says so.
  */
-export default function CertificationReview({ applicationId, certifications }: CertificationReviewProps) {
-  const { language } = useLanguage();
-  const copy = reviewCopy[language as keyof typeof reviewCopy] ?? reviewCopy.fr;
+export default function CertificationReview({ applicationId, certifications, language = "fr" }: CertificationReviewProps) {
+  const copy = reviewCopy[language] ?? reviewCopy.fr;
   const utils = trpc.useUtils();
   const [renewalDrafts, setRenewalDrafts] = useState<Record<string, RenewalDraft>>({});
   const editRenewal = (name: string, change: Partial<RenewalDraft>) => setRenewalDrafts(current => ({ ...current, [name]: { ...(current[name] ?? { date: "", withoutExpiry: false }), ...change } }));
