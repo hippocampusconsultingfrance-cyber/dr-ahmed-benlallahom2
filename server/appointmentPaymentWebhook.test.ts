@@ -11,8 +11,12 @@ const owner = vi.hoisted(() => ({ notifyOwner: vi.fn(async () => true) }));
 vi.mock("./db", () => ({ getDb: database.getDb }));
 vi.mock("./appointmentFulfillment", () => fulfillment);
 vi.mock("./_core/notification", () => owner);
+vi.mock("./_core/notifications", async importOriginal => ({
+  ...await importOriginal<typeof import("./_core/notifications")>(),
+  sendRefundConfirmationEmail: vi.fn(async () => true),
+}));
 
-import { buildUnconfirmablePaymentAlert, handleCheckoutSessionCompleted, processFulfillmentBestEffort } from "./appointmentPaymentWebhook";
+import { buildUnconfirmablePaymentAlert, handleChargeRefunded, handleCheckoutSessionCompleted, processFulfillmentBestEffort } from "./appointmentPaymentWebhook";
 
 const dialect = new PgDialect();
 
@@ -202,6 +206,31 @@ describe("webhook Stripe checkout.session.completed", () => {
     const result = await handleCheckoutSessionCompleted(paidSession(), { fulfillmentTimeoutMs: 1_000 });
 
     expect(result).toMatchObject({ httpStatus: 200, outcome: "confirmed" });
+  });
+});
+
+describe("webhook Stripe charge.refunded (RES-06)", () => {
+  const paidRow = () => heldAppointment({ paymentStatus: "completed", appointmentStatus: "confirmed", stripePaymentIntentId: "pi_test_1", slotKey: "2026-11-02T09:00:00.000Z", cancelledAt: null });
+  const fullRefund = { id: "ch_test_1", amount: 10000, amount_refunded: 10000, refunded: true, payment_intent: "pi_test_1" };
+
+  it("ne modifie que la ligne encore payée avec ce paiement et ce statut", async () => {
+    const { writes } = fakeDatabase([[paidRow()]], [1]);
+    const result = await handleChargeRefunded(fullRefund);
+
+    expect(result).toMatchObject({ httpStatus: 200, outcome: "refunded" });
+    expect(writes[0].values).toMatchObject({ paymentStatus: "refunded", appointmentStatus: "cancelled", slotKey: null, refundAmount: "100.00" });
+    const { sql, params } = dialect.sqlToQuery(writes[0].where);
+    expect(sql).toContain('"stripe_payment_intent_id" =');
+    expect(params).toEqual(expect.arrayContaining([42, "pi_test_1", "completed", "confirmed"]));
+  });
+
+  it("demande à Stripe de relivrer quand le rendez-vous a changé entre-temps sans être remboursé", async () => {
+    owner.notifyOwner.mockClear();
+    fakeDatabase([[paidRow()], [{ ...paidRow(), appointmentStatus: "completed" }]], [0]);
+    const result = await handleChargeRefunded(fullRefund);
+
+    expect(result).toEqual({ httpStatus: 500, body: { received: false }, outcome: "changed_concurrently" });
+    expect(owner.notifyOwner).not.toHaveBeenCalled();
   });
 });
 
