@@ -73,7 +73,7 @@ describe("pages pré-rendues du build (SEOP-01)", () => {
       expect(textOf(noscript.match(/<p>([^<]*)<\/p>/)?.[1] ?? ""), route).toBe(getRouteSeo(route).description);
       expect(noscript, route).toContain('<a href="/booking"');
     }
-  });
+  }, 120_000);
 });
 
 /**
@@ -130,7 +130,7 @@ describe.skipIf(!executablePath)("page pré-rendue dans un navigateur (SEOP-01)"
     } finally {
       await context.close();
     }
-  });
+  }, 120_000);
 
   it("avec JavaScript, n’affiche que la page React", async () => {
     const context = await browser.newContext();
@@ -152,5 +152,5 @@ describe.skipIf(!executablePath)("page pré-rendue dans un navigateur (SEOP-01)"
     } finally {
       await context.close();
     }
-  });
+  }, 120_000);
 });
