@@ -52,12 +52,16 @@ function fakeDb(appointment: Record<string, unknown> | null, updateRowCount = 1)
 
 function fakeStripe(session?: Partial<Stripe.Checkout.Session>) {
   const refundsCreate = vi.fn(async (params: { payment_intent: string }) => ({ id: "re_test_1", amount: 10000, payment_intent: params.payment_intent }));
+  const refundsList = vi.fn(async (_params: { payment_intent: string; limit?: number }) => ({ data: [] as Array<{ id: string; amount: number; status: string }> }));
   const stripe = {
-    refunds: { create: refundsCreate },
+    refunds: { create: refundsCreate, list: refundsList },
     checkout: { sessions: { retrieve: vi.fn(async () => session) } },
   } as unknown as Stripe;
-  return { stripe, refundsCreate };
+  return { stripe, refundsCreate, refundsList };
 }
+
+/** What Stripe answers once the payment is fully refunded, whatever the idempotency key. */
+const chargeAlreadyRefunded = () => Object.assign(new Error("Charge ch_test has already been refunded."), { name: "StripeInvalidRequestError", type: "StripeInvalidRequestError", code: "charge_already_refunded" });
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -121,6 +125,41 @@ describe("annulation par le praticien et remboursements depuis le tableau de bor
     await refundAppointmentPayment(fakeStripe().stripe, { trackingId: "APTADMIN0001", reason: "Geste commercial", initiator: "practitioner" }, NOW);
     expect(updates[0]).toMatchObject({ paymentStatus: "refunded" });
     expect(updates[0]).not.toHaveProperty("appointmentStatus");
+  });
+
+  it("termine l’enregistrement d’un paiement déjà remboursé chez Stripe au lieu d’échouer (DATA-03)", async () => {
+    // Remboursement déjà fait chez Stripe (essai précédent interrompu après Stripe, clé d’idempotence expirée) : le rendez-vous est resté payé.
+    const { updates } = fakeDb(row());
+    const { stripe, refundsCreate, refundsList } = fakeStripe();
+    refundsCreate.mockRejectedValueOnce(chargeAlreadyRefunded());
+    refundsList.mockResolvedValueOnce({ data: [{ id: "re_test_existing", amount: 10000, status: "succeeded" }, { id: "re_test_failed", amount: 10000, status: "failed" }] });
+
+    const result = await refundAppointmentPayment(stripe, { trackingId: "APTADMIN0001", reason: "Indisponibilité du médecin", initiator: "practitioner" }, NOW);
+
+    expect(refundsList).toHaveBeenCalledWith({ payment_intent: "pi_test_paid", limit: 100 });
+    expect(result).toMatchObject({ success: true, refundId: "re_test_existing", refundAmount: "100.00", cancelled: true, patientNotified: true });
+    expect(updates[0]).toMatchObject({ paymentStatus: "refunded", appointmentStatus: "cancelled", slotKey: null, refundAmount: "100.00" });
+    expect(notifications.sendRefundConfirmationEmail).toHaveBeenCalledWith(
+      "patient@example.test", "Patient Test", "APTADMIN0001", expect.any(Date), "100.00",
+      expect.objectContaining({ context: "practitioner_cancellation", idempotencyKey: "appointment-refund-APTADMIN0001" }),
+    );
+  });
+
+  it("échoue toujours sans rien écrire quand Stripe refuse le remboursement ou qu’aucun remboursement existant n’est retrouvé (DATA-03)", async () => {
+    const { updates } = fakeDb(row());
+    const declined = fakeStripe();
+    declined.refundsCreate.mockRejectedValueOnce(Object.assign(new Error("Insufficient funds"), { code: "balance_insufficient" }));
+    await expect(refundAppointmentPayment(declined.stripe, { trackingId: "APTADMIN0001", reason: "Motif", initiator: "practitioner" }, NOW))
+      .rejects.toMatchObject({ code: "BAD_REQUEST", message: "Le remboursement Stripe a échoué" });
+    expect(declined.refundsList).not.toHaveBeenCalled();
+
+    const unlisted = fakeStripe();
+    unlisted.refundsCreate.mockRejectedValueOnce(chargeAlreadyRefunded());
+    unlisted.refundsList.mockRejectedValueOnce(new Error("Stripe unreachable"));
+    await expect(refundAppointmentPayment(unlisted.stripe, { trackingId: "APTADMIN0001", reason: "Motif", initiator: "practitioner" }, NOW))
+      .rejects.toMatchObject({ code: "BAD_REQUEST" });
+    expect(updates).toHaveLength(0);
+    expect(notifications.sendRefundConfirmationEmail).not.toHaveBeenCalled();
   });
 
   it("refuse un double remboursement et un rendez-vous non payé", async () => {

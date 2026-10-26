@@ -45,6 +45,18 @@ function hoursUntil(date: Date, now = Date.now()) {
 }
 
 /**
+ * The refund Stripe already holds for a fully refunded payment (DATA-03: an
+ * earlier attempt whose database update failed, past the 24 h of its
+ * idempotency key, or a refund made in Stripe): its id and the total refunded.
+ */
+async function existingRefund(stripe: Stripe, paymentIntentId: string): Promise<{ id: string; amount: number } | null> {
+  const { data } = await stripe.refunds.list({ payment_intent: paymentIntentId, limit: 100 });
+  const refunds = data.filter(refund => refund.status !== "failed" && refund.status !== "canceled");
+  if (!refunds.length) return null;
+  return { id: refunds[0].id, amount: refunds.reduce((total, refund) => total + refund.amount, 0) };
+}
+
+/**
  * Full refund of an appointment's payment, then a patient email. A practitioner
  * refund of a confirmed appointment cancels it and frees the slot; a refund
  * after the consultation (commercial gesture) keeps its status.
@@ -73,7 +85,7 @@ export async function refundAppointmentPayment(
     }
   }
 
-  let refund: Stripe.Refund;
+  let refund: { id: string; amount?: number | null };
   try {
     // Only stable parameters: a retry after a failure reuses the idempotency
     // key and must send exactly the same request.
@@ -82,8 +94,17 @@ export async function refundAppointmentPayment(
       { idempotencyKey: `refund_${appointment.trackingId}` },
     );
   } catch (error) {
-    console.error("Stripe refund error:", error instanceof Error ? error.name : "UnknownError");
-    throw new TRPCError({ code: "BAD_REQUEST", message: "Le remboursement Stripe a échoué" });
+    // Already refunded at Stripe: finish recording that refund (database and
+    // patient email) instead of failing on every new attempt.
+    const alreadyRefunded = (error as { code?: unknown } | null)?.code === "charge_already_refunded"
+      ? await existingRefund(stripe, appointment.stripePaymentIntentId!).catch(() => null)
+      : null;
+    if (!alreadyRefunded) {
+      console.error("Stripe refund error:", error instanceof Error ? error.name : "UnknownError");
+      throw new TRPCError({ code: "BAD_REQUEST", message: "Le remboursement Stripe a échoué" });
+    }
+    console.log("Stripe payment already refunded; recording the existing refund", { trackingId: appointment.trackingId });
+    refund = alreadyRefunded;
   }
 
   const refundAmount = ((refund.amount ?? Math.round(Number(appointment.finalPrice) * 100)) / 100).toFixed(2);
