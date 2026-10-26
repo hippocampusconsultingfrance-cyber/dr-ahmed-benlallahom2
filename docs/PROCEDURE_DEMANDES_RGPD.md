@@ -109,7 +109,11 @@ expressément.
   effacés ; une facture régénérée depuis l’administration ne porte donc plus
   l’identité : la facture d’origine reste celle stockée dans Blob. Aucune
   règle ne supprime encore ces factures (PDF et `appointment_invoices`) ni
-  les rendez-vous anonymisés après 10 ans : suppression à prévoir.
+  les rendez-vous anonymisés après 10 ans : suppression à prévoir. Dans
+  l’onglet Réservations, un tel rendez-vous porte le badge « Données
+  effacées » : il peut encore être remboursé, mais le patient n’est plus
+  joignable par le site et ne reçoit aucun email ; il ne peut plus être
+  remis en confirmé.
 - **Demandes RGPD** : gardées 1 an après leur clôture comme preuve du
   traitement (registre des traitements), puis supprimées automatiquement.
 - **Rendez-vous à venir encore en cours** (confirmés, en attente de paiement,

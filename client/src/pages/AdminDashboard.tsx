@@ -28,7 +28,7 @@ import { adminSearchStatus, useAdminSearch } from "@/components/adminSearch";
 import PublicContentSkeleton from "@/components/PublicContentSkeleton";
 import { getActiveAdminTabLabel } from "./adminDashboardMobileTabs";
 import { buildAppointmentsAgenda } from "./appointmentsAgenda";
-import { getAppointmentAdminActions } from "./appointmentAdminActions";
+import { getAppointmentAdminActions, PATIENT_DATA_ERASED_REFUND_NOTICE } from "./appointmentAdminActions";
 
 type Tab = "overview" | "appointments" | "contacts" | "gdpr" | "testimonials" | "availability" | "recruitment" | "candidateDocuments" | "security" | "vivier" | "mailing" | "employerBriefs" | "medicalQuestions";
 
@@ -295,9 +295,10 @@ export function AppointmentsTab() {
       toast.error(mutationError.message);
     },
   });
-  const notifyRefundResult = ({ refundAmount, patientNotified }: { refundAmount: string; patientNotified: boolean }) => {
+  const notifyRefundResult = ({ refundAmount, patientNotified, patientDataErased }: { refundAmount: string; patientNotified: boolean; patientDataErased?: boolean }) => {
     toast.success(`Remboursement confirmé : ${refundAmount} €`);
-    if (!patientNotified) toast.warning("L’email au patient n’a pas pu être envoyé : prévenez-le directement.");
+    if (patientDataErased) toast.warning(PATIENT_DATA_ERASED_REFUND_NOTICE);
+    else if (!patientNotified) toast.warning("L’email au patient n’a pas pu être envoyé : prévenez-le directement.");
     utils.admin.appointments.list.invalidate();
     utils.admin.stats.invalidate();
     // Its post-payment emails waiting for a retry were just closed as not sent (EXPL-02).
@@ -441,6 +442,9 @@ export function AppointmentsTab() {
                       {actions.unconfirmedPayment && (
                         <span className="px-2 py-1 rounded text-xs font-medium bg-amber-500/20 text-amber-400">Paiement à régulariser</span>
                       )}
+                      {actions.patientDataErased && (
+                        <span className="px-2 py-1 rounded text-xs font-medium bg-slate-500/20 text-slate-300" title="Rendez-vous anonymisé (effacement RGPD ou conservation de 3 ans écoulée) : le patient n’est plus joignable par le site.">Données effacées</span>
+                      )}
                       {actions.canComplete && (
                         <Button size="sm" variant="outline" className={buttonClass} disabled={updateStatus.isPending}
                           onClick={() => {
@@ -470,7 +474,9 @@ export function AppointmentsTab() {
                       )}
                       {actions.canPractitionerCancel && (
                         <Button size="sm" variant="outline" className={buttonClass} disabled={refundAppointment.isPending}
-                          onClick={() => askRefund(apt.trackingId, "practitioner", `Annuler ${apt.trackingId} et rembourser intégralement ${apt.finalPrice} € au patient.\nMotif communiqué au patient (obligatoire) :`)}>
+                          onClick={() => askRefund(apt.trackingId, "practitioner", actions.patientDataErased
+                            ? `Annuler ${apt.trackingId} et rembourser intégralement ${apt.finalPrice} €.\n${PATIENT_DATA_ERASED_REFUND_NOTICE}\nMotif (obligatoire) :`
+                            : `Annuler ${apt.trackingId} et rembourser intégralement ${apt.finalPrice} € au patient.\nMotif communiqué au patient (obligatoire) :`)}>
                           <XCircle className="w-3 h-3 mr-1" />
                           Annuler (praticien) et rembourser
                         </Button>
@@ -484,7 +490,7 @@ export function AppointmentsTab() {
                       )}
                       {(actions.canPractitionerRefund || actions.unconfirmedPayment) && (
                         <Button size="sm" variant="outline" className={buttonClass} disabled={refundAppointment.isPending}
-                          onClick={() => askRefund(apt.trackingId, "practitioner", `Rembourser intégralement le paiement de ${apt.trackingId}.\nMotif (obligatoire) :`)}>
+                          onClick={() => askRefund(apt.trackingId, "practitioner", `Rembourser intégralement le paiement de ${apt.trackingId}.${actions.patientDataErased ? `\n${PATIENT_DATA_ERASED_REFUND_NOTICE}` : ""}\nMotif (obligatoire) :`)}>
                           <DollarSign className="w-3 h-3 mr-1" />
                           {actions.unconfirmedPayment ? "Rembourser ce paiement" : "Rembourser"}
                         </Button>
