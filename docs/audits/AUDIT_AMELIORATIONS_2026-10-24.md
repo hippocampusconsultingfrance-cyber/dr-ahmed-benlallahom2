@@ -450,10 +450,39 @@ Les corrections de code peuvent être faites **par lots testés**, comme pour la
 - **Abus** : ABUS-01, ABUS-02 (anti-robot sur la réservation), ABUS-03 (quota Resend).
 - **Admin** : ADM-01.
 
+**Avancement au 26 octobre — lot 3 corrigé.** Quatre passages de vérification de bout en bout sur la réplique ont été faits (paiements Stripe simulés, panne et quota de Resend, panne de l'IA et de Google Drive, rafales sur les formulaires), chacun suivi de ses corrections :
+
+| ID | État | Reste à faire |
+|---|---|---|
+| CODE-01 | ✅ tests qui échouent si l'on retire une protection du webhook Stripe, du remboursement, de l'admin ou de l'anti-robot | — |
+| EXPL-01 | ✅ un paiement reçu est confirmé même sans webhook : par la page de retour du patient, par la tâche de nettoyage des créneaux retenus, ou par la réservation suivante ; le médecin est prévenu avant la réponse à la page | Faire un « Send test webhook » dans Stripe après chaque changement de secret |
+| EXPL-02 | ✅ état de chaque email sur la carte du rendez-vous (envoyé, en attente, refusé, non envoyé et pourquoi), bouton « Renvoyer », facture téléchargeable et identique à celle envoyée, encart « À traiter », correction de l'email du patient après un refus | — |
+| RES-06, DATA-03 | ✅ remboursements et contestations faits dans Stripe enregistrés (rendez-vous annulé, créneau libéré, patient et médecin prévenus une seule fois) ; un remboursement déjà fait dans Stripe est reconnu au lieu de rester à moitié enregistré | Ajouter les évènements `charge.refunded` et `charge.dispute.created` au webhook dans Stripe |
+| EXPL-03 | ✅ chaque tâche planifiée réussie envoie un signal à un service de surveillance, qui vous alerte quand le signal n'arrive pas (tâche en échec ou qui ne tourne pas) | Créer les sondes (par exemple healthchecks.io) et renseigner les variables `HEALTHCHECK_URL_…` dans Vercel (voir `README.md`). Le rappel des rendez-vous envoie encore son signal quand tous ses emails ont échoué |
+| REC-08 | ✅ panne de l'IA (crédit épuisé) : dossiers marqués « Analyse IA indisponible », rappel quotidien au médecin, reprise de tous ces dossiers en un clic depuis l'admin | « Relancer l'analyse » d'un dossier pendant la panne remplace encore son score par « indisponible » |
+| REC-09 | ✅ Google Drive déconnecté : copies mises en attente sans perdre d'essai, alerte unique, reprise après reconnexion | — |
+| ABUS-01 | ✅ limite par IP en plus de la limite par email, plafond journalier sur les formulaires, alerte quand le volume explose | — |
+| ABUS-02 | ✅ réservation : anti-robot demandé seulement en cas de rafale, alerte au médecin, créneaux retenus revérifiés en cas de réservations simultanées | — |
+| ABUS-03 | ✅ quota Resend dépassé traité comme une panne passagère (nouvel essai, pas d'abandon), envois espacés pour rester sous la limite de Resend, alerte au médecin | Vérifier l'offre et le quota Resend ; prévoir un second canal d'alerte |
+| ADM-01 | ✅ questions santé ouvertes sur « À traiter » (de la plus ancienne à la plus récente) avec « Classer sans suite », « Charger plus » et « 50 sur N » sur les listes, filtre « non lus » sur les messages | Au-delà de 1 000 candidatures chargées, « Charger plus » ralentit (1,5 s) |
+
 ### Lot 4 — Recrutement, admin et données personnelles (≈ 2 semaines)
 - **IA de recrutement** : suite de IA-01 (texte invisible écarté), IA-02 (fausse licence prise en compte dans le classement des candidats pour une mission).
 - **Admin** : ADM-02 (recherche), ADM-04 (meilleurs candidats d'abord sur une mission).
 - **RGPD** : RGPD-09 (purge des données hors recrutement), RGPD-12 (demandes RGPD des patients et contacts), RGPD-01 (traductions, après validation du texte français), partie code de RGPD-03 (date « accord candidat »).
+
+**Avancement au 26 octobre — lot 4 corrigé** (sauf le texte de RGPD-01 et RGPD-03, qui attend l'avocat). Trois passages de vérification de bout en bout sur la réplique ont été faits (CV piégés en PDF et DOCX, scans, missions employeurs, recherche dans plusieurs écritures, demandes RGPD), chacun suivi de ses corrections :
+
+| ID | État | Reste à faire |
+|---|---|---|
+| IA-01 | ✅ texte invisible écarté des CV avant l'analyse : en PDF, chaque ligne est jugée sur l'encre réellement imprimée sur la page ; en DOCX, sur son contraste avec ce qu'il y a dessous (ombrage, surlignage, couleur de page, image), sa taille et sa position. Un CV qui cache du texte passe en revue humaine sans score ni faits enregistrés, avec une alerte dans le coffre | Relancer l'analyse des CV déjà reçus ; régler si besoin la part de texte non vérifiable qui déclenche la revue (aujourd'hui un tiers) |
+| IA-02 | ✅ une licence extraite par l'IA reste « à confirmer » tant que vous ne l'avez pas confirmée sur la fiche ; seules les licences confirmées ou déclarées par le candidat comptent dans le classement, le filtre « certification » et l'export d'une mission | — |
+| ADM-02 | ✅ un champ de recherche (nom, email, référence) sur Candidatures, Réservations, Messages et Questions santé, sans tenir compte des majuscules ni des accents ; référence MQ… affichée sur chaque question | Quelques variantes d'écriture ne sont pas encore rapprochées (sigma final grec, tā' marbūṭa arabe, yā' persan) |
+| ADM-04 | ✅ écran mission : candidats classés par compatibilité avec la mission (spécialité, pays, licences confirmées, langues, expérience, disponibilité), avec l'origine de chaque critère (déclaré, confirmé, extrait par l'IA) | Au-delà de 2 000 candidatures ouvertes, seules les 2 000 plus récentes sont classées (l'écran le signale) |
+| RGPD-09 | ✅ purge quotidienne : journaux d'accès à 90 jours, demandes RGPD 1 an après leur clôture, messages et questions 3 ans après le dernier échange, rendez-vous réduits à leur trace comptable 3 ans après la consultation, motif de consultation vidé à 90 jours | Confirmer ces durées avec l'avocat (surtout les 90 jours du motif) ; la purge est irréversible |
+| RGPD-12 | ✅ onglet RGPD avec échéance d'un mois, statuts, notes et refus motivé ; suppression d'un message ou d'une question ; écran « Ses données » : tout ce que le site garde sur une adresse email, export complet et effacement ; procédure écrite dans `docs/PROCEDURE_DEMANDES_RGPD.md` | — |
+| RGPD-01 | ✅ politique en anglais complétée (recrutement, espace candidat, questions médicales) ; versions allemande et chinoise signalées comme incomplètes, avec renvoi au texte français qui fait foi | Faire valider le texte français par l'avocat, puis le traduire en allemand et en chinois (ou retirer ces langues) |
+| RGPD-03 | ⏳ partie code faite : date de l'accord du candidat pour chaque mission, export employeur limité aux candidats qui ont donné leur accord, lien vers la politique | Texte d'information des candidats sur la transmission aux employeurs, y compris hors UE (avocat) ; décider si l'accord est conservé quand un candidat est retiré puis remis dans une mission |
 
 ### Lot 5 — Dette technique et référencement de fond (≈ 3 à 5 semaines, à étaler)
 - **Tests et outillage** : CODE-02 (tests qui vérifient ce que fait le code plutôt que la façon dont il est écrit), CODE-14 (CI plus complète), CODE-05 et CODE-06 (code et plugin hérités de Manus).
