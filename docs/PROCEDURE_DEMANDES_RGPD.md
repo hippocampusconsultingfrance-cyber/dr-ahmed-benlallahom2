@@ -121,7 +121,11 @@ expressément.
   l’onglet Réservations, un tel rendez-vous porte le badge « Données
   effacées » : il peut encore être remboursé, mais le patient n’est plus
   joignable par le site et ne reçoit aucun email ; il ne peut plus être
-  remis en confirmé.
+  remis en confirmé. À l’effacement, ses emails au patient pas encore partis
+  (confirmation, facture, remboursement) sont marqués « non envoyée :
+  données du patient effacées (RGPD) » et quittent « À traiter » ;
+  « Renvoyer » ne relance plus que vos propres alertes. Un remboursement
+  fait ensuite dans Stripe n’écrit pas au patient, et votre alerte le dit.
 - **Demandes RGPD** : gardées 1 an après leur clôture comme preuve du
   traitement (registre des traitements), puis supprimées automatiquement.
 - **Rendez-vous à venir encore en cours** (confirmés, en attente de paiement,

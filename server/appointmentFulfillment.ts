@@ -14,6 +14,7 @@ import { notifyOwner } from "./_core/notification";
 import { emailLanguageFor } from "./emailLanguage";
 import { generateInvoicePDF, renderInvoicePDF, type InvoiceData } from "./invoice";
 import { allocateAppointmentInvoice, findAppointmentInvoices, type AppointmentInvoiceRecord } from "./invoiceNumbering";
+import { hasErasedPatientData } from "./personalDataRetention";
 
 const MAX_BATCH = 5;
 /** Well above the 60 s function limit: a job still "running" after this was interrupted. */
@@ -68,6 +69,16 @@ const JOB_ORDER: readonly FulfillmentJobType[] = [...APPOINTMENT_FULFILLMENT_JOB
 function isRefundNoticeJob(jobType: string): jobType is RefundNoticeJobType {
   return (STRIPE_REFUND_NOTICE_JOB_TYPES as readonly string[]).includes(jobType);
 }
+
+/** Jobs that write to the patient; the others alert the owner. */
+const PATIENT_JOB_TYPES: readonly FulfillmentJobType[] = ["confirmation", "invoice", "refund"];
+
+function isPatientJob(jobType: string) {
+  return (PATIENT_JOB_TYPES as readonly string[]).includes(jobType);
+}
+
+/** Why a patient email was closed unsent: the booking's data was erased, no address is left (RGPD-12). */
+const PATIENT_DATA_ERASED = "patient_data_erased";
 
 /** Payment status an appointment must have for a job to be sent: paid, or refunded for the refund notices. */
 function jobPaymentStatus(jobType: string) {
@@ -218,6 +229,12 @@ async function runJob(id: number) {
     await db.update(appointmentFulfillmentJobs).set({ status: "completed", finishedAt: new Date(), lastError: stripeRefund ? "appointment_not_refunded_from_stripe_or_missing" : "appointment_not_paid_or_missing" }).where(eq(appointmentFulfillmentJobs.id, id));
     return { skipped: true };
   }
+  // RGPD-12: a booking reduced to its accounting record has no address left.
+  // Its patient emails are closed unsent; the owner's still go out.
+  if (isPatientJob(jobType) && hasErasedPatientData(appointment)) {
+    await db.update(appointmentFulfillmentJobs).set({ status: "completed", finishedAt: new Date(), lastError: PATIENT_DATA_ERASED }).where(eq(appointmentFulfillmentJobs.id, id));
+    return { skipped: true };
+  }
   const finalPrice = Number(appointment.finalPrice);
   // A backlog drained late must not tell a patient that a consultation which
   // already took place is "confirmed". The owner job and the invoice still run.
@@ -253,6 +270,7 @@ async function runJob(id: number) {
       const [patientJob] = await db.select({ status: appointmentFulfillmentJobs.status, lastError: appointmentFulfillmentJobs.lastError }).from(appointmentFulfillmentJobs)
         .where(and(eq(appointmentFulfillmentJobs.appointmentId, appointment.id), eq(appointmentFulfillmentJobs.jobType, "refund"))).limit(1);
       const patientNotified = patientJob?.status === "completed" && !patientJob.lastError;
+      const patientDataErased = hasErasedPatientData(appointment);
       const delivered = await notifyOwner(stripeRefund!.buildStripeRefundAlert({
         trackingId: appointment.trackingId,
         refundAmount: appointment.refundAmount ?? appointment.finalPrice,
@@ -260,10 +278,12 @@ async function runJob(id: number) {
         effect: refundOf === "unconfirmed" ? "unconfirmed_payment" : appointment.appointmentStatus === "cancelled" ? "cancelled" : "status_kept",
         appointmentStatus: appointment.appointmentStatus,
         patientNotified,
+        patientDataErased,
       }), {
-        // Written at each attempt: one key per wording (status, patient told or
-        // not), as Resend refuses a key reused with another content (409).
-        idempotencyKey: `appointment-stripe-refund-${appointment.trackingId}-${appointment.appointmentStatus}-${patientNotified ? "notified" : "pending"}`,
+        // Written at each attempt: one key per wording (status, patient told,
+        // not yet, or no longer reachable), as Resend refuses a key reused
+        // with another content (409).
+        idempotencyKey: `appointment-stripe-refund-${appointment.trackingId}-${appointment.appointmentStatus}-${patientDataErased ? "erased" : patientNotified ? "notified" : "pending"}`,
       }).catch(() => false);
       if (!delivered) throw new Error("owner_refund_alert_failed");
     } else {
@@ -389,7 +409,7 @@ export async function recoverStaleAppointmentFulfillmentJobs(staleAfterMs = APPO
  * failed and waiting for its next automatic attempt; not attempted yet; being
  * sent right now; interrupted (still "running" long after its worker stopped);
  * or deliberately not sent (consultation already past, appointment no longer
- * paid).
+ * paid, patient data erased).
  */
 export type AppointmentDeliveryState = "sent" | "failed" | "retrying" | "pending" | "sending" | "interrupted" | "not_sent";
 
@@ -402,8 +422,8 @@ export type AppointmentDelivery = {
   maxAttempts: number;
   /** Next automatic attempt of a job waiting for a retry. */
   nextAttemptAt: Date | null;
-  /** Why a job was deliberately not sent: consultation already past, or appointment no longer paid. */
-  notSentReason: "appointment_past" | "not_paid" | null;
+  /** Why a job was deliberately not sent: consultation already past, appointment no longer paid, or patient data erased (RGPD-12). */
+  notSentReason: "appointment_past" | "not_paid" | "patient_data_erased" | null;
 };
 
 /** Same rule as recoverStaleAppointmentFulfillmentJobs: no worker runs that long. */
@@ -420,7 +440,9 @@ function deliveryOf(job: FulfillmentJob, now: Date): AppointmentDelivery {
     attempts: job.attempts,
     maxAttempts: job.maxAttempts,
     nextAttemptAt: job.status === "retry" ? job.scheduledFor : null,
-    notSentReason: state !== "not_sent" ? null : job.lastError === "appointment_already_past_confirmation_skipped" ? "appointment_past" : "not_paid",
+    notSentReason: state !== "not_sent" ? null
+      : job.lastError === "appointment_already_past_confirmation_skipped" ? "appointment_past"
+      : job.lastError === PATIENT_DATA_ERASED ? "patient_data_erased" : "not_paid",
   };
 }
 
@@ -450,17 +472,19 @@ export type AppointmentFulfillmentRetry =
  * go back to the queue with a full attempt budget and run now, through the
  * same claim and idempotency keys as the scheduled worker. A job already sent,
  * or being sent right now, is left alone. For a refunded appointment, only the
- * notices of a refund recorded from Stripe (RES-06).
+ * notices of a refund recorded from Stripe (RES-06). Once the patient's data
+ * is erased (RGPD-12), only the owner's notices: the patient has no address.
  */
 export async function retryAppointmentFulfillment(trackingId: string): Promise<AppointmentFulfillmentRetry> {
   const db = await getDb();
   if (!db) throw new Error("Database connection failed");
-  const [appointment] = await db.select({ id: appointments.id, paymentStatus: appointments.paymentStatus, cancellationReason: appointments.cancellationReason })
+  const [appointment] = await db.select({ id: appointments.id, paymentStatus: appointments.paymentStatus, cancellationReason: appointments.cancellationReason, customerEmail: appointments.customerEmail })
     .from(appointments).where(eq(appointments.trackingId, trackingId)).limit(1);
   if (!appointment) return { outcome: "not_found" };
   const stripeRefund = appointment.paymentStatus === "refunded" && (await import("./appointmentPaymentWebhook")).stripeRecordedRefundOf(appointment);
   if (appointment.paymentStatus !== "completed" && !stripeRefund) return { outcome: "not_paid" };
-  const jobTypes = JOB_ORDER.filter(jobType => jobPaymentStatus(jobType) === appointment.paymentStatus);
+  const patientDataErased = hasErasedPatientData(appointment);
+  const jobTypes = JOB_ORDER.filter(jobType => jobPaymentStatus(jobType) === appointment.paymentStatus && !(patientDataErased && isPatientJob(jobType)));
   const now = new Date();
   const requeued = await db.update(appointmentFulfillmentJobs).set({
     status: "queued",
@@ -511,6 +535,33 @@ export async function closeUnsentAppointmentFulfillment(appointmentId: number, n
     inArray(appointmentFulfillmentJobs.jobType, [...APPOINTMENT_FULFILLMENT_JOB_TYPES]),
     or(
       inArray(appointmentFulfillmentJobs.status, ["queued", "retry"]),
+      and(eq(appointmentFulfillmentJobs.status, "running"), lte(appointmentFulfillmentJobs.startedAt, new Date(now.getTime() - APPOINTMENT_FULFILLMENT_STALE_AFTER_MS))),
+    ),
+  ));
+  return mutationRowCount(result);
+}
+
+/**
+ * Erasure of a patient's data (RGPD-12): the patient emails of the bookings it
+ * anonymised that did not go out (queued, waiting for a retry, failed for good
+ * or interrupted) are closed as not sent, as no address is left to write to,
+ * and leave « À traiter ». A job being sent right now is left to its worker,
+ * and the owner's notices are kept.
+ */
+export async function closeErasedPatientFulfillment(appointmentIds: number[], now = new Date()) {
+  if (appointmentIds.length === 0) return 0;
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+  const result = await db.update(appointmentFulfillmentJobs).set({
+    status: "completed",
+    finishedAt: now,
+    lastError: PATIENT_DATA_ERASED,
+    updatedAt: now,
+  }).where(and(
+    inArray(appointmentFulfillmentJobs.appointmentId, appointmentIds),
+    inArray(appointmentFulfillmentJobs.jobType, [...PATIENT_JOB_TYPES]),
+    or(
+      inArray(appointmentFulfillmentJobs.status, ["queued", "retry", "failed"]),
       and(eq(appointmentFulfillmentJobs.status, "running"), lte(appointmentFulfillmentJobs.startedAt, new Date(now.getTime() - APPOINTMENT_FULFILLMENT_STALE_AFTER_MS))),
     ),
   ));

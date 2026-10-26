@@ -79,6 +79,15 @@ export function anonymisedAppointmentFields(now = new Date()) {
   };
 }
 
+/**
+ * A booking reduced to its accounting record (erasure or 3-year retention,
+ * RGPD-12): its email is emptied, so the patient can no longer be told
+ * anything by the site.
+ */
+export function hasErasedPatientData(appointment: { customerEmail: string }) {
+  return !appointment.customerEmail.trim();
+}
+
 /** Identity, contact details and private exchange of a question go; its consented anonymised public version stays. */
 export function anonymisedMedicalQuestionFields(now = new Date()) {
   return {

@@ -119,6 +119,24 @@ describe("EXPL-02 — envois après paiement sur la fiche du rendez-vous", () =>
     expect(canRetryDeliveries([delivery("confirmation", "failed")], "pending")).toBe(false);
   });
 
+  it("ne propose plus de renvoyer un email au patient dont les données sont effacées, seulement les alertes du médecin (RGPD-12)", () => {
+    expect(canRetryDeliveries([delivery("invoice", "failed", 7, 7), delivery("confirmation", "retrying")], "completed", true)).toBe(false);
+    expect(canRetryDeliveries([delivery("owner", "failed", 7, 7)], "completed", true)).toBe(true);
+    expect(canRetryDeliveries([delivery("refund", "failed", 7, 7)], "refunded", true)).toBe(false);
+    expect(canRetryDeliveries([delivery("refund", "not_sent"), delivery("refund_owner", "retrying")], "refunded", true)).toBe(true);
+    const html = renderToStaticMarkup(createElement(AppointmentDeliveries, {
+      trackingId: "APTUI0000008",
+      paymentStatus: "completed",
+      invoiceNumber: "FAC-2026-000012",
+      patientDataErased: true,
+      deliveries: [delivery("confirmation", "failed", 7, 7), { ...delivery("invoice", "not_sent"), notSentReason: "patient_data_erased" }],
+    }));
+    expect(html).toContain("Confirmation : en échec (7/7)");
+    expect(html).toContain("Facture : non envoyée");
+    expect(html).not.toContain("Renvoyer");
+    expect(html).toContain("Télécharger la facture");
+  });
+
   it("« Renvoyer » relance le rendez-vous après confirmation et dit si l’envoi est reparti", async () => {
     const tree = AppointmentDeliveries({ trackingId: "APTUI0000004", paymentStatus: "completed", invoiceNumber: null, deliveries: [delivery("confirmation", "failed", 6)] });
     button(tree, "Renvoyer")();

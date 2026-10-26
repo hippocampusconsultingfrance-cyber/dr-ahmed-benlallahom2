@@ -7,6 +7,7 @@ import { mutationRowCount } from "./dbMutation";
 import { closeUnsentAppointmentFulfillment } from "./appointmentFulfillment";
 import { sendRefundConfirmationEmail, type RefundEmailContext } from "./_core/notifications";
 import { emailLanguageFor } from "./emailLanguage";
+import { hasErasedPatientData } from "./personalDataRetention";
 import { BOOKING_PATIENT_REFUND_DEADLINE_HOURS } from "../shared/bookingPolicy";
 
 /** A patient may obtain a full refund up to this many hours before the consultation. */
@@ -39,15 +40,6 @@ async function loadAppointment(trackingId: string): Promise<Appointment> {
 /** A payment received after the hold was released: recorded on the row, never confirmed. */
 export function isUnconfirmedPaidAppointment(appointment: Pick<Appointment, "paymentStatus" | "appointmentStatus" | "stripePaymentIntentId">) {
   return appointment.paymentStatus === "pending" && appointment.appointmentStatus !== "held" && Boolean(appointment.stripePaymentIntentId);
-}
-
-/**
- * A booking reduced to its accounting record (erasure or 3-year retention,
- * RGPD-12): its email is emptied, so the patient can no longer be told
- * anything by the site.
- */
-export function hasErasedPatientData(appointment: Pick<Appointment, "customerEmail">) {
-  return !appointment.customerEmail.trim();
 }
 
 function hoursUntil(date: Date, now = Date.now()) {

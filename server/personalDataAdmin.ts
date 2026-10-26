@@ -5,6 +5,7 @@ import { HIPPOCAMPUS_LEGAL } from "../shared/legalIdentity";
 import { getDb } from "./db";
 import { mutationRowCount } from "./dbMutation";
 import { isUnconfirmedPaidAppointment } from "./appointmentAdminActions";
+import { closeErasedPatientFulfillment } from "./appointmentFulfillment";
 import { logSecurityEvent } from "./candidateSecurity";
 import { anonymisedAppointmentFields } from "./personalDataRetention";
 
@@ -216,10 +217,11 @@ function isActiveUpcomingBooking(booking: BookingToErase, now: Date) {
  * Erasure for one address: contact messages and medical questions (with
  * their journal) are deleted; past, cancelled and abandoned bookings are
  * reduced to the accounting record, like after 3 years (the invoice and its
- * stored PDF stay); active upcoming bookings (isActiveUpcomingBooking) are
- * left for the administrator to cancel or refund first. GDPR requests are
- * kept as the record of the handling (1 year after closure), and recruitment
- * dossiers are erased from their own routine. The trace holds no personal data.
+ * stored PDF stay), and their patient emails not sent yet are dropped; active
+ * upcoming bookings (isActiveUpcomingBooking) are left for the administrator
+ * to cancel or refund first. GDPR requests are kept as the record of the
+ * handling (1 year after closure), and recruitment dossiers are erased from
+ * their own routine. The trace holds no personal data.
  */
 export async function erasePersonalData(input: { email: string; actorOpenId: string; now?: Date }) {
   const db = await requireDb();
@@ -244,6 +246,9 @@ export async function erasePersonalData(input: { email: string; actorOpenId: str
   const appointmentsAnonymised = ended.length
     ? mutationRowCount(await db.update(appointments).set(anonymisedAppointmentFields(now)).where(inArray(appointments.id, ended.map(booking => booking.id))))
     : 0;
+  // Their patient emails still waiting have no address left; the queue would skip them anyway.
+  await closeErasedPatientFulfillment(ended.map(booking => booking.id), now)
+    .catch(error => console.error("[PersonalData] Pending patient emails could not be closed", error instanceof Error ? error.name : "UnknownError"));
   const [gdprRequestsKept] = await db.select({ count: sql<number>`COUNT(*)` }).from(gdprRequests).where(sameEmail(gdprRequests.email, input.email));
   const applications = await db.select({ id: cvApplications.id, trackingId: cvApplications.trackingId }).from(cvApplications).where(sameEmail(cvApplications.email, input.email));
   const report = {

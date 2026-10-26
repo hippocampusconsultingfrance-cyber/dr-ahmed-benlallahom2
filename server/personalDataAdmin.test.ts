@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  appointmentFulfillmentJobs,
   appointmentInvoices,
   appointments,
   candidateAccounts,
@@ -63,7 +64,7 @@ function seedPerson(email: string, name: string) {
 }
 
 beforeEach(() => {
-  memory = createMemoryPg([appointmentInvoices, appointments, candidateAccounts, contactMessages, cvApplications, gdprRequests, medicalQuestionAuditLogs, medicalQuestions, securityEvents]);
+  memory = createMemoryPg([appointmentFulfillmentJobs, appointmentInvoices, appointments, candidateAccounts, contactMessages, cvApplications, gdprRequests, medicalQuestionAuditLogs, medicalQuestions, securityEvents]);
   state.memory = memory;
 });
 
@@ -309,5 +310,42 @@ describe("RGPD-12 — effacer / anonymiser une personne", () => {
     const again = await caller().admin.personalData.erase({ email: "jeanne@test.local" });
     expect(again.appointmentsAnonymised).toBe(1);
     expect([...again.upcomingAppointments].sort()).toEqual(["APTCONFIRM", "APTHOLD", "APTHOLDEXP"]);
+  });
+
+  it("ferme les emails au patient pas encore partis des rendez-vous anonymisés, qui quittent « À traiter », et garde les autres envois", async () => {
+    const jeanne = seedPerson("jeanne@test.local", "Jeanne");
+    const paul = seedPerson("paul@test.local", "Paul");
+    const job = (appointmentId: unknown, jobType: string, status: string, extra: Record<string, unknown> = {}) => ({
+      appointment_id: appointmentId, job_type: jobType, status, attempts: 1, max_attempts: 7, scheduled_for: new Date(NOW.getTime() + 60 * 60 * 1000), ...extra,
+    });
+    memory.seed(appointmentFulfillmentJobs, [
+      job(jeanne.past.id, "invoice", "retry", { last_error: "invoice_email_failed" }),
+      job(jeanne.past.id, "confirmation", "failed", { attempts: 7, last_error: "confirmation_email_failed" }),
+      // The owner's own notification has nothing to do with the patient's address.
+      job(jeanne.past.id, "owner", "failed", { attempts: 7, last_error: "owner_notification_failed" }),
+      // Upcoming booking left to the administrator, and another person's booking: untouched.
+      job(jeanne.upcoming.id, "invoice", "retry"),
+      job(paul.past.id, "invoice", "retry"),
+    ]);
+    const before = await caller().admin.attention();
+    expect(before.failedDeliveries.items).toEqual([expect.objectContaining({ trackingId: jeanne.past.tracking_id, jobTypes: ["confirmation", "owner"] })]);
+
+    await caller().admin.personalData.erase({ email: "jeanne@test.local" });
+
+    const jobOf = (appointmentId: unknown, jobType: string) => memory.rows(appointmentFulfillmentJobs).find(row => row.appointment_id === appointmentId && row.job_type === jobType)!;
+    expect(jobOf(jeanne.past.id, "invoice")).toMatchObject({ status: "completed", last_error: "patient_data_erased" });
+    expect(jobOf(jeanne.past.id, "confirmation")).toMatchObject({ status: "completed", last_error: "patient_data_erased" });
+    expect(jobOf(jeanne.past.id, "owner")).toMatchObject({ status: "failed" });
+    expect(jobOf(jeanne.upcoming.id, "invoice")).toMatchObject({ status: "retry" });
+    expect(jobOf(paul.past.id, "invoice")).toMatchObject({ status: "retry" });
+
+    const after = await caller().admin.attention();
+    expect(after.failedDeliveries.items).toEqual([expect.objectContaining({ trackingId: jeanne.past.tracking_id, jobTypes: ["owner"] })]);
+    const { items } = await caller().admin.appointments.list({});
+    expect(items.find(item => item.id === jeanne.past.id)!.deliveries.map(({ jobType, state, notSentReason }) => ({ jobType, state, notSentReason }))).toEqual([
+      { jobType: "owner", state: "failed", notSentReason: null },
+      { jobType: "confirmation", state: "not_sent", notSentReason: "patient_data_erased" },
+      { jobType: "invoice", state: "not_sent", notSentReason: "patient_data_erased" },
+    ]);
   });
 });

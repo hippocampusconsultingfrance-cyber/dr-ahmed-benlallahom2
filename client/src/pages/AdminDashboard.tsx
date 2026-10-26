@@ -513,7 +513,7 @@ export function AppointmentsTab() {
             {apt.requestDetails && (
               <p className="text-sm text-muted-foreground mt-2 line-clamp-2">{apt.requestDetails}</p>
             )}
-            <AppointmentDeliveries trackingId={apt.trackingId} paymentStatus={apt.paymentStatus} deliveries={apt.deliveries} invoiceNumber={apt.invoiceNumber} />
+            <AppointmentDeliveries trackingId={apt.trackingId} paymentStatus={apt.paymentStatus} deliveries={apt.deliveries} invoiceNumber={apt.invoiceNumber} patientDataErased={getAppointmentAdminActions(apt).patientDataErased} />
           </div>
         ))}
         {items.length === 0 && (

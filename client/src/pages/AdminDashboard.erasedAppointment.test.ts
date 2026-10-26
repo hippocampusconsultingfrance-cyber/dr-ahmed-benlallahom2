@@ -40,6 +40,7 @@ vi.mock("@/lib/trpc", () => {
 });
 
 const { AppointmentsTab } = await import("./AdminDashboard");
+const { default: AppointmentDeliveries } = await import("@/components/AppointmentDeliveries");
 const { PATIENT_DATA_ERASED_REFUND_NOTICE } = await import("./appointmentAdminActions");
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -85,6 +86,10 @@ describe("RGPD-12 — rendez-vous dont les données sont effacées", () => {
     const kept = card(tree, 2);
     expect(withText(kept, "Données effacées")).toHaveLength(0);
     expect(clickable(kept, "Remettre en confirmé")).toBeDefined();
+
+    // Its emails to the patient are no longer offered to « Renvoyer ».
+    const deliveriesOf = (elements: ReturnType<typeof card>) => elements.find(element => element.type === AppointmentDeliveries)!.props.patientDataErased;
+    expect([deliveriesOf(erased), deliveriesOf(kept)]).toEqual([true, false]);
   });
 
   it("garde le remboursement, en disant avant et après que le patient ne sera pas prévenu", () => {
