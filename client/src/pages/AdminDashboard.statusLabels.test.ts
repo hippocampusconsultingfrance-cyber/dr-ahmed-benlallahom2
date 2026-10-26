@@ -83,5 +83,7 @@ describe("statuts d’une réservation en français dans l’onglet Réservation
     // The agenda of the coming days, as the cards.
     expect(html).toMatch(/Patient Test<\/span><span class="[^"]*">Confirmé</);
     expect(html).not.toMatch(/>\s*(refunded|cancelled|confirmed|completed|failed|no_show)\s*</);
+    // The payment filters, in the same words as the badges.
+    expect(Array.from(html.matchAll(/<button[^>]*rounded-lg text-sm font-medium[^>]*>([^<]+)<\/button>/g), match => match[1])).toEqual(["Tous", "En attente", "Payé", "Échoué", "Remboursé"]);
   });
 });

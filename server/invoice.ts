@@ -477,9 +477,8 @@ export async function generateInvoicePDF(
  * store cannot say whether a copy is there or cannot take it
  * ("storage_check_failed", "storage_upload_failed", with its code).
  */
-export async function archiveInvoicePDF(data: InvoiceData, seller: InvoiceSeller = resolveInvoiceSeller()): Promise<{ key: string; uploaded: boolean }> {
-  const { key, uploaded } = await storagePutOnce(invoiceStorageKey(data), await renderInvoicePDF(data, seller), "application/pdf");
-  return { key, uploaded };
+export async function archiveInvoicePDF(data: InvoiceData, seller: InvoiceSeller = resolveInvoiceSeller()): Promise<void> {
+  await storagePutOnce(invoiceStorageKey(data), await renderInvoicePDF(data, seller), "application/pdf");
 }
 
 /**

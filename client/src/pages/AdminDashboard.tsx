@@ -346,7 +346,7 @@ export function AppointmentsTab() {
               statusFilter === s ? "bg-primary text-primary-foreground" : "bg-card border border-border text-muted-foreground hover:text-foreground"
             }`}
           >
-            {s === undefined ? "Tous" : s === "pending" ? "En attente" : s === "completed" ? "Payé" : s === "failed" ? "Échoué" : "Remboursé"}
+            {s === undefined ? "Tous" : PAYMENT_STATUS_LABELS[s]}
           </button>
         ))}
       </div>
