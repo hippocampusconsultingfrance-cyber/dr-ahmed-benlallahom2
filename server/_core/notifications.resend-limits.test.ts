@@ -77,6 +77,18 @@ describe("limite de débit Resend (429 rate_limit_exceeded) : échec passager", 
     expect(state.send).toHaveBeenCalledTimes(1);
   });
 
+  it("après paiement, laisse au nouvel essai du job un retry-after trop long au lieu d’insister avant ce délai", async () => {
+    state.send.mockResolvedValue(rateLimited("60"));
+    await expect(confirmation()).rejects.toMatchObject({ cause: expect.objectContaining({ failureCode: "rate_limited" }) });
+    expect(state.send).toHaveBeenCalledTimes(1);
+
+    // Un délai court est respecté à chaque essai de la boucle, qui continue.
+    state.send.mockReset();
+    state.send.mockResolvedValue(rateLimited("0"));
+    await expect(confirmation()).rejects.toMatchObject({ cause: expect.objectContaining({ failureCode: "rate_limited" }) });
+    expect(state.send).toHaveBeenCalledTimes(2 * (postPaymentDeliveryRetry.delaysMs.length + 1));
+  });
+
   it("garde comme non envoyée une confirmation de candidature encore limitée, pour un nouvel essai planifié", async () => {
     resendRateLimitRetry.defaultDelayMs = 0;
     state.send.mockResolvedValue(rateLimited());

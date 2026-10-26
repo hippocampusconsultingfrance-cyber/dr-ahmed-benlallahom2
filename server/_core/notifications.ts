@@ -120,6 +120,15 @@ async function reportResendQuotaExhausted(error: { name?: string }, emailKind: s
   }
 }
 
+/**
+ * The owner's own notifications (contact, GDPR, alerts) go through notifyOwner,
+ * which reports here a quota found in its Resend error: they are the first
+ * emails a flood spends. Any other error is left alone.
+ */
+export async function reportResendQuotaError(error: { name?: string }, emailKind: string) {
+  if (typeof error.name === "string" && RESEND_QUOTA_ERRORS.has(error.name)) await reportResendQuotaExhausted(error, emailKind);
+}
+
 const wait = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
 
 type ResendSendPayload = Parameters<Resend["emails"]["send"]>[0];
@@ -128,11 +137,13 @@ type ResendSendOptions = Parameters<Resend["emails"]["send"]>[1];
 /**
  * One Resend send, made once more after the retry-after delay when Resend
  * answers with its rate limit. A refusal comes back classified (an exhausted
- * quota is reported); a network error is thrown as before.
+ * quota is reported); a network error is thrown as before. `retryLater`: the
+ * rate limit asks for a longer wait than a request allows, so nothing sent
+ * before that delay can pass.
  */
 async function sendThroughResend(message: ResendSendPayload, options: ResendSendOptions, emailKind: string): Promise<
-  | { id: string | null; error: null; failureCode: null }
-  | { id: null; error: { message: string; name?: string; statusCode?: number | null }; failureCode: ResendDeliveryFailureCode }
+  | { id: string | null; error: null; failureCode: null; retryLater: false }
+  | { id: null; error: { message: string; name?: string; statusCode?: number | null }; failureCode: ResendDeliveryFailureCode; retryLater: boolean }
 > {
   let response = await getResendClient().emails.send(message, options);
   if (response.error && resendDeliveryFailureCode(response.error) === "rate_limited") {
@@ -142,10 +153,10 @@ async function sendThroughResend(message: ResendSendPayload, options: ResendSend
       response = await getResendClient().emails.send(message, options);
     }
   }
-  if (!response.error) return { id: response.data?.id ?? null, error: null, failureCode: null };
+  if (!response.error) return { id: response.data?.id ?? null, error: null, failureCode: null, retryLater: false };
   const failureCode = resendDeliveryFailureCode(response.error);
   if (failureCode === "quota") await reportResendQuotaExhausted(response.error, emailKind);
-  return { id: null, error: response.error, failureCode };
+  return { id: null, error: response.error, failureCode, retryLater: failureCode === "rate_limited" && resendRetryAfterMs(response.headers) === null };
 }
 
 /**
@@ -174,11 +185,13 @@ async function sendPostPaymentEmail(
   for (let attempt = 0; attempt <= delays.length; attempt += 1) {
     if (attempt > 0) await wait(delays[attempt - 1]);
     try {
-      const { id, error, failureCode } = await sendThroughResend(message, idempotencyKey ? { idempotencyKey } : undefined, "post_payment");
+      const { id, error, failureCode, retryLater } = await sendThroughResend(message, idempotencyKey ? { idempotencyKey } : undefined, "post_payment");
       if (!error) return id;
       lastError = new PostPaymentEmailError(`${errors.rejected}:${error.message}`, failureCode);
-      // Neither a refused message nor a used-up quota gets through a few seconds later.
-      if (failureCode === "provider_rejected" || failureCode === "quota") break;
+      // Neither a refused message nor a used-up quota gets through a few seconds
+      // later, nor a rate limit whose retry-after exceeds what a request waits:
+      // the job's own retry takes over.
+      if (failureCode === "provider_rejected" || failureCode === "quota" || retryLater) break;
     } catch (error) {
       lastError = new PostPaymentEmailError(errors.failed, "delivery_exception", { cause: error });
     }
