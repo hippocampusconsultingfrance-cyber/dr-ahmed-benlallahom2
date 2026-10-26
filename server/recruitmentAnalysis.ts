@@ -1729,11 +1729,17 @@ export function buildInvisibleTextReview(input: RecruitmentAnalysisInput): Recru
   };
 }
 
-/** Facts allowed to influence filters and matching after deterministic evidence checks. */
+/**
+ * Facts allowed to influence filters and matching after deterministic evidence
+ * checks. A certification the CV says has expired is kept with its date
+ * (IA-02): a mission and the 360° sheet show it « expirée », and it earns no
+ * point until an admin confirms its renewal. Left out, it was only « déclarée
+ * par le candidat » without a date, and a mere confirmation counted it.
+ */
 export function verifiedRecruitmentFacts(analysis: RecruitmentAnalysisResult) {
   return {
     certifications: analysis.certifications.filter(
-      item => isVerifiedFact(item) && certificationIsCurrent(item)
+      isVerifiedFact
     ),
     languages: analysis.normalizedLanguages.filter(
       isVerifiedFact
@@ -1854,11 +1860,25 @@ export async function saveCvAnalysis(
   const verifiedFacts = analysis.contradictions.length > 0 || visibilityRequiresReview(analysis.invisibleText) || analysis.visibilityUnchecked
     ? { certifications: [], languages: [], experiences: [], skills: [] }
     : verifiedRecruitmentFacts(analysis);
-  // Certifications an admin confirmed survive a new analysis, and are not read again.
+  // The AI was unavailable (IA-02): this analysis did not read the CV and says
+  // nothing of the certifications read there. Their rows stay, with the CV's
+  // dates, so that one the CV says has expired is not left merely « déclarée »,
+  // and so do the facts the filters read, when the previous analysis was
+  // under this prompt. A CV that hides text is still not trusted (IA-01).
+  const cvNotRead = generation?.model === MANUAL_REVIEW_FALLBACK_MODEL
+    && !visibilityRequiresReview(analysis.invisibleText) && !analysis.visibilityUnchecked;
+  const [previousAnalysis] = cvNotRead
+    ? await db.select({ analysisPromptVersion: cvApplications.analysisPromptVersion }).from(cvApplications).where(eq(cvApplications.id, applicationId)).limit(1)
+    : [];
+  const keptNormalizedCertifications = previousAnalysis?.analysisPromptVersion === RECRUITMENT_ANALYSIS_PROMPT_VERSION;
+  // Certifications an admin confirmed in the CV survive a new analysis, and
+  // are not read again. A confirmed renewal or declared certification is no
+  // reading of the CV (IA-02): the row read there is stored with the CV's
+  // date, expired maybe, which a mere confirmation does not make current.
   const confirmedCertifications = await db
     .select({ name: cvCandidateCertifications.name })
     .from(cvCandidateCertifications)
-    .where(and(eq(cvCandidateCertifications.applicationId, applicationId), isNotNull(cvCandidateCertifications.confirmedAt)));
+    .where(and(eq(cvCandidateCertifications.applicationId, applicationId), isNotNull(cvCandidateCertifications.confirmedAt), eq(cvCandidateCertifications.source, "extracted")));
   const verifiedCertifications = verifiedFacts.certifications.filter(certification =>
     !confirmedCertifications.some(confirmed => sameRecruitmentFact(confirmed.name, certification.name)));
   const verifiedLanguages = verifiedFacts.languages;
@@ -1903,7 +1923,7 @@ export async function saveCvAnalysis(
             }
           : undefined,
       }),
-      normalizedCertifications: JSON.stringify(verifiedFacts.certifications),
+      ...(keptNormalizedCertifications ? {} : { normalizedCertifications: JSON.stringify(verifiedFacts.certifications) }),
       normalizedLanguages: JSON.stringify(verifiedFacts.languages),
       normalizedExperiences: JSON.stringify(verifiedFacts.experiences),
       aiMatchReasoning: analysis.reasoning,
@@ -1911,9 +1931,11 @@ export async function saveCvAnalysis(
       analysisPromptVersion: RECRUITMENT_ANALYSIS_PROMPT_VERSION,
     })
     .where(eq(cvApplications.id, applicationId));
-  const deleteCertifications = db
-    .delete(cvCandidateCertifications)
-    .where(and(eq(cvCandidateCertifications.applicationId, applicationId), isNull(cvCandidateCertifications.confirmedAt)));
+  const deleteCertifications = cvNotRead
+    ? db.select({ id: cvApplications.id }).from(cvApplications).where(sql`FALSE`)
+    : db
+      .delete(cvCandidateCertifications)
+      .where(and(eq(cvCandidateCertifications.applicationId, applicationId), isNull(cvCandidateCertifications.confirmedAt)));
   const deleteLanguages = db
     .delete(cvCandidateLanguages)
     .where(eq(cvCandidateLanguages.applicationId, applicationId));

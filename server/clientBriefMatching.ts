@@ -132,9 +132,13 @@ export function certificationFacts(declared: string | null | undefined, rows: Ce
   // its latest one is. Once one is confirmed, only the confirmed rows count,
   // since only a confirmation earns points: a renewal the admin confirmed
   // among them, whose date (or none) prevails over the expired one of the CV.
+  // A declared certification's confirmation has no date: it does not make
+  // current one the CV says has expired, only a renewal does.
   rowsByFact.forEach((factRows, fact) => {
-    const confirmedRows = factRows.filter(row => row.confirmedAt);
-    fact.expiresAt = latestCertificationExpiry((confirmedRows.length ? confirmedRows : factRows).map(row => row.expiresAt));
+    const datedRows = factRows.filter(row => row.source !== "declared");
+    if (!datedRows.length) return;
+    const confirmedRows = datedRows.filter(row => row.confirmedAt);
+    fact.expiresAt = latestCertificationExpiry((confirmedRows.length ? confirmedRows : datedRows).map(row => row.expiresAt));
   });
   return facts;
 }
@@ -204,9 +208,11 @@ export function computeBriefCandidateMatch(brief: BriefForMatching, candidate: C
     } else if (current.length > 0) {
       certificationsToConfirm.push(required);
       retain(current, "to_confirm");
-    } else {
-      retain(facts, "expired");
     }
+    // An expired one stays said next to a current one of another name
+    // (« ACLS AHA » declared, « ACLS » read in the CV until 2023): the admin
+    // sees what the CV says before confirming, or after.
+    retain(facts.filter(fact => !current.includes(fact)), "expired");
   }
   if (matchedCertifications.length > 0) {
     breakdown.certifications = Math.round((matchedCertifications.length / requiredCertifications.length) * 20);

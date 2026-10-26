@@ -381,7 +381,9 @@ Français : courant
     expect(result.scoreBreakdown.credentialReadiness).toBe(0);
     expect(result.dataQualityWarnings.join(" ")).toContain("dates d’expérience inversées");
     expect(result.dataQualityWarnings.join(" ")).toContain("Certification expirée");
-    expect(verifiedRecruitmentFacts(result).certifications).toHaveLength(0);
+    // No score for it, but kept among the facts with its date (IA-02): the
+    // mission and the 360° sheet show it expired, to be renewed to count.
+    expect(verifiedRecruitmentFacts(result).certifications).toEqual([expect.objectContaining({ name: "ACLS", expiresAt: "2020" })]);
   });
 
   it("date une certification expirée comme la fiche de la candidature : au mois, au jour ou à l’année (IA-02)", () => {

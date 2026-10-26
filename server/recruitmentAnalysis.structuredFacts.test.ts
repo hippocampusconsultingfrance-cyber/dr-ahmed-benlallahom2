@@ -5,8 +5,9 @@ import type { RecruitmentAnalysisResult } from "./recruitmentAnalysis";
 
 // IA-02 — les faits structurés (certifications, langues, expériences,
 // compétences) alimentent les filtres et le matching des missions : aucun
-// n’est enregistré quand l’analyse relève une contradiction, et une
-// certification confirmée par l’admin survit à une nouvelle analyse.
+// n’est enregistré quand l’analyse relève une contradiction, une
+// certification expirée l’est avec sa date, et une certification confirmée
+// par l’admin survit à une nouvelle analyse.
 
 const state = vi.hoisted(() => ({ memory: null as null | { db: unknown } }));
 
@@ -64,6 +65,15 @@ describe("faits structurés d’une analyse de CV (IA-02)", () => {
     expect(memory.rows(cvCandidateLanguages).map(row => row.language)).toEqual(["Anglais"]);
     expect(memory.rows(cvCandidateExperiences)).toHaveLength(1);
     expect(JSON.parse(String(memory.rows(cvApplications)[0]!.ai_extracted_skills)).verifiedSkills).toEqual(["Intubation"]);
+  });
+
+  it("enregistre avec sa date une certification que le CV dit expirée, pour que la mission et la fiche 360° la disent expirée", async () => {
+    await saveCvAnalysis(applicationId, analysis({ certifications: [
+      { name: "ACLS", issuingBody: null, country: null, expiresAt: "2023-05", evidence: "Certification ACLS expiration 2023-05", ...verified },
+      { name: "PALS", issuingBody: null, country: null, expiresAt: "2031-06-30", evidence: "Certification PALS expiration 2031-06-30", ...verified },
+    ] }));
+    expect(memory.rows(cvCandidateCertifications).map(row => [row.name, row.source, row.expires_at, row.confirmed_at])).toEqual([["ACLS", "extracted", "2023-05", null], ["PALS", "extracted", "2031-06-30", null]]);
+    expect(JSON.parse(String(memory.rows(cvApplications)[0]!.normalized_certifications)).map((item: { name: string; expiresAt: string }) => [item.name, item.expiresAt])).toEqual([["ACLS", "2023-05"], ["PALS", "2031-06-30"]]);
   });
 
   it("n’enregistre aucun fait structuré quand l’analyse relève une contradiction, mais garde la lecture pour l’admin", async () => {

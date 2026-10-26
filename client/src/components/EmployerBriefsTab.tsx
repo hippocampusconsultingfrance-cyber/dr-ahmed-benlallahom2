@@ -12,7 +12,7 @@ import PublicContentSkeleton from "./PublicContentSkeleton";
 import { downloadRecruitmentCsv } from "./recruitmentCsvDownload";
 import { useCvDownload } from "./useCvDownload";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { parisDay, todayInParis } from "@/lib/parisDay";
+import { localeDay, parisDay, todayInParis } from "@/lib/parisDay";
 
 /** The earliest agreement date the server accepts (RGPD-03): the application or the mission, whichever came last. */
 const earliestConsentDay = (...dates: Array<Date | string | null | undefined>) => dates.filter(date => date).map(date => parisDay(date!)).sort().at(-1);
@@ -84,16 +84,15 @@ export default function EmployerBriefsTab() {
       void utils.admin.clientBriefs.candidates.invalidate();
     },
     // A refusal in the admin's language (RGPD-03): the server's stable reason,
-    // dated with the application or the mission this screen shows, if it is
-    // still the one the agreement was for (else the server's message).
-    onError: (consentError, variables) => {
+    // dated with the day it sends (the creation of the mission or of the
+    // application the agreement was for, whichever screen is shown since).
+    // Without that day, the server's message.
+    onError: consentError => {
       const reason = consentError.data?.reason;
-      const shown = matches.data?.brief?.id === variables.briefId ? matches.data : undefined;
-      const dated = reason === "consent_before_mission" ? shown?.brief?.createdAt
-        : reason === "consent_before_application" ? shown?.candidates.find(candidate => candidate.id === variables.applicationId)?.createdAt
-          : null;
-      const day = dated ? new Date(dated).toLocaleDateString(locale, { timeZone: "Europe/Paris" }) : "";
-      toast.error(isMissionConsentRefusalReason(reason) && (day || dated === null) ? copy.consentRefusals[reason](day) : consentError.message);
+      const date = consentError.data?.date;
+      const day = date ? localeDay(date, locale) : "";
+      const dated = reason === "consent_before_mission" || reason === "consent_before_application";
+      toast.error(isMissionConsentRefusalReason(reason) && (day || !dated) ? copy.consentRefusals[reason](day) : consentError.message);
     },
   });
   const exportShortlist = trpc.admin.recruitment.exportCsv.useMutation({

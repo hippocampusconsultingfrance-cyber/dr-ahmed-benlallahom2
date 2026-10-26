@@ -27,6 +27,8 @@ const trapped = {
   certificationFacts: [
     { name: "BLS", origins: ["declared"], expiresAt: null },
     { name: "Licence DHA", origins: ["extracted"], expiresAt: null },
+    { name: "Licence MOH", origins: ["extracted"], expiresAt: "2019-03" },
+    { name: "ACLS", origins: ["declared", "extracted"], expiresAt: "2031-06-30" },
   ],
 };
 
@@ -78,6 +80,25 @@ describe("IA-02 — vivier filtré par certification", () => {
     expect(html).toContain("<strong class=\"text-foreground\">Certification recherchée:</strong> Licence DHA (extraite du CV par l’IA)");
     // Only the certifications matching the search, not the declared BLS.
     expect(html).not.toContain("BLS (déclarée par le candidat)");
+  });
+
+  it("date la certification recherchée : une licence que le CV dit expirée est trouvée, et le filtre le dit", () => {
+    searchCertification("MOH");
+    expect(renderToStaticMarkup(render())).toContain("Certification recherchée:</strong> Licence MOH (extraite du CV par l’IA), expirée en mars 2019</p>");
+    searchCertification("acls");
+    expect(renderToStaticMarkup(render())).toContain("Certification recherchée:</strong> ACLS (déclarée par le candidat, extraite du CV par l’IA), expire le 30/06/2031</p>");
+  });
+
+  it.each([
+    ["en", "Searched certification:</strong> Licence MOH (read from the CV by the AI), expired in March 2019</p>", "ACLS (declared by the candidate, read from the CV by the AI), expires on 30/06/2031</p>"],
+    ["de", "Gesuchte Zertifizierung:</strong> Licence MOH (von der KI aus dem Lebenslauf gelesen), abgelaufen im März 2019</p>", "ACLS (vom Kandidaten angegeben, von der KI aus dem Lebenslauf gelesen), gültig bis 30.06.2031</p>"],
+    ["zh", "所查认证:</strong> Licence MOH (AI 从简历中提取), 已于 2019年3月 过期</p>", "ACLS (候选人自行申报, AI 从简历中提取), 有效期至 2031/06/30</p>"],
+  ] as const)("date la certification recherchée dans la langue de l’administration (%s)", (language, expired, current) => {
+    view.language = language;
+    searchCertification("MOH");
+    expect(renderToStaticMarkup(render())).toContain(expired);
+    searchCertification("acls");
+    expect(renderToStaticMarkup(render())).toContain(current);
   });
 
   it.each([
