@@ -24,7 +24,7 @@ vi.mock("resend", () => ({
 }));
 const database = vi.hoisted(() => ({ getDb: vi.fn() }));
 vi.mock("./db", () => ({ getDb: database.getDb }));
-vi.mock("./storage.js", () => ({ storagePut: vi.fn(async (key: string) => ({ key, url: "https://storage.test/invoice.pdf" })) }));
+vi.mock("./storage.js", () => ({ storagePutOnce: vi.fn(async (key: string) => ({ key, url: "https://storage.test/invoice.pdf", uploaded: true })) }));
 vi.mock("./invoiceNumbering", () => ({
   allocateAppointmentInvoice: vi.fn(async () => ({
     invoiceNumber: "FAC-2026-000001",

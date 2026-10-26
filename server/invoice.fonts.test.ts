@@ -1,9 +1,9 @@
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { readFileSync, storagePut } = vi.hoisted(() => ({ readFileSync: vi.fn(), storagePut: vi.fn() }));
+const { readFileSync, storagePutOnce } = vi.hoisted(() => ({ readFileSync: vi.fn(), storagePutOnce: vi.fn() }));
 
-vi.mock("./storage.js", () => ({ storagePut }));
+vi.mock("./storage.js", () => ({ storagePutOnce }));
 vi.mock("node:fs", async importOriginal => {
   const actual = await importOriginal<typeof import("node:fs")>();
   readFileSync.mockImplementation(actual.readFileSync);
@@ -74,7 +74,7 @@ describe("polices de la facture PDF", () => {
     vi.resetModules();
     readFileSync.mockClear();
     readFileSync.mockImplementation(originalReadFileSync);
-    storagePut.mockResolvedValue({ key: "invoices/FAC-2026-000009-APTTEST000009_abcd.pdf", url: "https://storage.test/invoice.pdf" });
+    storagePutOnce.mockResolvedValue({ key: "invoices/FAC-2026-000009-APTTEST000009.pdf", url: "https://storage.test/invoice.pdf", uploaded: true });
   });
   afterEach(() => {
     vi.restoreAllMocks();

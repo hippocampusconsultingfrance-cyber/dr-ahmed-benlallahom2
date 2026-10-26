@@ -3,7 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import bidiFactory from "bidi-js";
 import PDFDocument from "pdfkit";
-import { storagePut } from "./storage.js";
+import { storagePutOnce } from "./storage.js";
 import { resolveInvoiceSeller, type InvoiceSeller } from "./invoiceSeller";
 
 export const INVOICE_LAYOUT = {
@@ -428,7 +428,9 @@ export async function generateInvoicePDF(
   const buffer = await renderInvoicePDF(data, seller);
   const invoiceKey = `invoices/${data.invoiceNumber}-${data.trackingId}.pdf`;
   try {
-    const result = await storagePut(invoiceKey, buffer, "application/pdf");
+    // One stored copy per invoice number: a retried job rebuilds the very same
+    // PDF (same number, same dates) and keeps the copy already stored (EXPL-02).
+    const result = await storagePutOnce(invoiceKey, buffer, "application/pdf");
     return { buffer, key: result.key, url: result.url };
   } catch (storageError) {
     // If storage fails, still return the buffer

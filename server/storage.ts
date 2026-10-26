@@ -1,4 +1,4 @@
-import { del, issueSignedToken, list, presignUrl, put } from "@vercel/blob";
+import { BlobNotFoundError, del, head, issueSignedToken, list, presignUrl, put } from "@vercel/blob";
 
 const PRIVATE_BLOB_ACCESS = "private" as const;
 const SIGNED_URL_LIFETIME_MS = 5 * 60 * 1000;
@@ -66,6 +66,45 @@ export async function storagePut(
   }
 
   return { key: uploaded.pathname, url: uploaded.url };
+}
+
+/**
+ * Stores an object under this exact key, once: when the key already holds an
+ * object (a document rebuilt byte for byte on a retry, such as an invoice),
+ * nothing is uploaded and the stored copy is kept. Without a random suffix
+ * and with overwriting refused, a second copy cannot be created.
+ */
+export async function storagePutOnce(
+  relKey: string,
+  data: Buffer | Uint8Array | string,
+  contentType = "application/octet-stream",
+): Promise<{ key: string; url: string; uploaded: boolean }> {
+  const key = normalizeKey(relKey);
+  const body = typeof data === "string" || Buffer.isBuffer(data) ? data : Buffer.from(data);
+  let uploaded;
+  try {
+    const token = getBlobToken();
+    try {
+      const stored = await head(key, { token });
+      return { key: stored.pathname, url: stored.url, uploaded: false };
+    } catch (error) {
+      if (!(error instanceof BlobNotFoundError)) throw error;
+    }
+    uploaded = await put(key, body, {
+      access: PRIVATE_BLOB_ACCESS,
+      addRandomSuffix: false,
+      allowOverwrite: false,
+      cacheControlMaxAge: 60,
+      contentType,
+      token,
+    });
+  } catch (error) {
+    const wrapped = new Error("storage_upload_failed", { cause: error }) as Error & { code: string };
+    wrapped.code = classifyStorageError(error);
+    throw wrapped;
+  }
+
+  return { key: uploaded.pathname, url: uploaded.url, uploaded: true };
 }
 
 export async function storageGet(relKey: string): Promise<{ key: string; url: string }> {
