@@ -61,9 +61,10 @@ export type DocxArchiveInspection = {
  * Walks the ZIP central directory of a DOCX and inflates every entry with a
  * hard output cap: the declared sizes cannot be trusted, the real ones are
  * measured. ZIP64, encrypted entries and unknown compression methods are
- * refused (never needed by a CV produced by a word processor).
+ * refused (never needed by a CV produced by a word processor). `onEntry`
+ * receives each entry once inflated within those bounds.
  */
-export function inspectDocxArchive(buffer: Buffer, limits = DOCUMENT_DECOMPRESSION_LIMITS): DocxArchiveInspection {
+export function inspectDocxArchive(buffer: Buffer, limits = DOCUMENT_DECOMPRESSION_LIMITS, onEntry?: (name: string, content: Buffer) => void): DocxArchiveInspection {
   const invalid = () => new Error("cv_validation_docx_container_invalid");
   const searchStart = Math.max(0, buffer.length - 22 - 0xffff);
   let eocd = -1;
@@ -115,6 +116,7 @@ export function inspectDocxArchive(buffer: Buffer, limits = DOCUMENT_DECOMPRESSI
     if (uncompressedBytes > limits.docxMaxUncompressedBytes) throw new Error("cv_validation_docx_decompressed_size_exceeded");
     entryNames.push(name);
     if (/\.rels$/i.test(name)) relationships.push(content.toString("utf8"));
+    onEntry?.(name, content);
   }
   return { entryNames, uncompressedBytes, relationships };
 }

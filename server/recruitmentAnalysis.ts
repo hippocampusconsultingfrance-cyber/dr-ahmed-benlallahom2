@@ -3,8 +3,9 @@ import { generateText, Output } from "ai";
 import { z } from "zod";
 import { cvApplications, cvCandidateCertifications, cvCandidateExperiences, cvCandidateLanguages } from "../drizzle/schema";
 import { getDb } from "./db";
-import { assertPdfDecompressionWithinLimits, DOCUMENT_DECOMPRESSION_LIMITS, inspectDocxArchive, truncateExtractedText } from "./documentDecompressionLimits";
-import { PdfReaderUnavailableError, readPdfIsolated } from "./pdfExtractionSandbox";
+import { assertPdfDecompressionWithinLimits, DOCUMENT_DECOMPRESSION_LIMITS, truncateExtractedText } from "./documentDecompressionLimits";
+import { withoutInvisibleDocxText } from "./docxVisibleText";
+import { PdfReaderUnavailableError, readPdfIsolated, type PdfTextReading } from "./pdfExtractionSandbox";
 import { CV_ANALYSIS_STEP_MINIMUM_MS, ProcessingDeadlineError, stepTimeoutMs } from "./processingDeadline";
 import {
   RECRUITMENT_PARAMEDICAL_SPECIALTIES,
@@ -122,6 +123,8 @@ export type RecruitmentAnalysisResult = {
     credentialReadiness: number;
   };
   reasoning: string;
+  /** Text of the file left out of the analysis because nobody sees it (IA-01). */
+  invisibleText?: InvisibleTextSummary;
 };
 
 export type RecruitmentAnalysisExecution = {
@@ -143,11 +146,12 @@ export type RecruitmentAnalysisInput = {
   extractionMethod?: CvExtractionResult["method"];
   ocrConfidence?: number | null;
   extractionIncomplete?: boolean;
+  invisibleText?: InvisibleTextSummary;
 };
 
 export type RecruitmentDeclaredContext = Pick<
   RecruitmentAnalysisInput,
-  "specialty" | "targetCountries" | "languages" | "yearsExperience"
+  "specialty" | "targetCountries" | "languages" | "yearsExperience" | "invisibleText"
 > & { extractionConfidence?: number | null; extractionIncomplete?: boolean };
 
 const evidenceSchema = z.string().trim().min(1).max(500);
@@ -251,7 +255,35 @@ export type CvExtractionResult = {
   ocrConfidence: number | null;
   ocrModelVersion: string | null;
   warnings: string[];
+  /** Text found in the file but invisible on screen, left out of `text` (IA-01). */
+  invisibleText?: InvisibleTextSummary;
 };
+
+export type InvisibleTextSummary = { characters: number; excerpt: string };
+
+/**
+ * IA-01: a few invisible characters are common in CV templates (white
+ * separators, a hidden field code); beyond this, the dossier goes to human
+ * review without a score, and no fact read from it is kept for the filters.
+ */
+export const INVISIBLE_TEXT_REVIEW_THRESHOLD = 30;
+
+export function invisibleTextRequiresReview(invisibleText: InvisibleTextSummary | null | undefined) {
+  return (invisibleText?.characters ?? 0) > INVISIBLE_TEXT_REVIEW_THRESHOLD;
+}
+
+function invisibleTextSummary(passages: string[]): InvisibleTextSummary | undefined {
+  const text = passages.join(" ").replace(/\s+/g, " ").trim();
+  if (!text) return undefined;
+  return { characters: text.length, excerpt: text.length > 80 ? `${text.slice(0, 79).trimEnd()}…` : text };
+}
+
+const invisibleTextWarnings = (invisibleText: InvisibleTextSummary | undefined) =>
+  invisibleText ? [`invisible_text_ignored:${invisibleText.characters}`] : [];
+
+/** The admin alert, with what the file hid. */
+const invisibleTextAlert = (invisibleText: InvisibleTextSummary) =>
+  `${invisibleText.characters} caractère(s) de texte invisible ignoré(s), extrait : « ${invisibleText.excerpt} ». Ouvrir le CV pour le comparer.`;
 
 async function createPdfParser(buffer: Buffer) {
   // pdf.js expects browser geometry primitives. The worker entrypoint installs
@@ -292,11 +324,17 @@ const ANALYSIS_TIMEOUT_MS = 35_000;
  */
 function pdfStepLimits(step: "pdf_text" | "pdf_render", ownTimeoutMs: number, options: { reserveMs: number; minimumMs: number }) {
   const timeoutMs = stepTimeoutMs(step, ownTimeoutMs, options);
+  const shortened = timeoutMs < ownTimeoutMs;
   return {
     limits: { ...DOCUMENT_DECOMPRESSION_LIMITS, pdfTextTimeoutMs: timeoutMs, pdfRenderTimeoutMs: timeoutMs },
     rethrow(error: unknown): never {
-      if (timeoutMs < ownTimeoutMs && error instanceof Error && error.message === "cv_validation_pdf_processing_timeout") throw new ProcessingDeadlineError(step);
+      if (shortened && error instanceof Error && error.message === "cv_validation_pdf_processing_timeout") throw new ProcessingDeadlineError(step);
       throw error;
+    },
+    /** Pages left without the visibility check for lack of the time the deadline took: the next run reads the file again. */
+    checkVisibility(reading: PdfTextReading) {
+      if (shortened && reading.visibility?.uncheckedPages.length) throw new ProcessingDeadlineError(step);
+      return reading;
     },
   };
 }
@@ -380,9 +418,9 @@ async function extractCvDocumentUnbounded(buffer: Buffer, mimeType: string): Pro
           reserveMs: CV_ANALYSIS_STEP_MINIMUM_MS.analysis,
           minimumMs: CV_ANALYSIS_STEP_MINIMUM_MS.pdfText,
         });
-        return readPdfIsolated(buffer, { kind: "text", first }, step.limits).catch(step.rethrow);
+        return readPdfIsolated(buffer, { kind: "text", first }, step.limits).then(reading => step.checkVisibility(reading), step.rethrow);
       },
-      async parser => {
+      async (parser): Promise<PdfTextReading> => {
         const read = await parser.getText({ first });
         return { total: Number.isInteger(read.total) ? read.total : null, pages: read.pages.map(page => ({ num: page.num, text: page.text })) };
       },
@@ -397,10 +435,18 @@ async function extractCvDocumentUnbounded(buffer: Buffer, mimeType: string): Pro
         .map(page => `pdf_text_page_${page.number}_insufficient_text`),
       ...(totalPages !== null && pages.length < totalPages ? ["pdf_text_pages_missing"] : []),
     ];
+    // IA-01: the text layer read without the visibility check (in-process
+    // fallback), or partly, may still hold invisible text.
+    const visibilityWarnings = !result.visibility
+      ? ["pdf_visibility_check_unavailable"]
+      : result.visibility.uncheckedPages.length > 0 ? ["pdf_visibility_check_incomplete"] : [];
+    const invisibleText = invisibleTextSummary(result.visibility?.invisibleText ?? []);
     const extractedContentLength = cleanText(
       extracted.replace(/\[PAGE\s+\d+\]/gi, "")
     ).length;
-    if (extractedContentLength >= 80) return { text: extracted, method: "pdf_text", totalPages, ocrConfidence: null, ocrModelVersion: null, warnings: textCoverageWarnings };
+    if (extractedContentLength >= 80) return { text: extracted, method: "pdf_text", totalPages, ocrConfidence: null, ocrModelVersion: null, warnings: [...textCoverageWarnings, ...visibilityWarnings, ...invisibleTextWarnings(invisibleText)], invisibleText };
+    // Too little text, once any invisible text is set aside: the vision
+    // reads the pages as a person sees them, so its text hides nothing.
     const vision = await extractPdfWithVision(buffer);
     return {
       // Vision already carries server-generated page markers. Keeping the empty
@@ -411,15 +457,19 @@ async function extractCvDocumentUnbounded(buffer: Buffer, mimeType: string): Pro
       totalPages,
       ocrConfidence: vision.confidence,
       ocrModelVersion: RECRUITMENT_OCR_MODEL,
-      warnings: ["vision_ocr_fallback", ...vision.warnings],
+      warnings: ["vision_ocr_fallback", ...vision.warnings, ...invisibleTextWarnings(invisibleText)],
+      invisibleText,
     };
   }
 
   if (mimeType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") {
-    inspectDocxArchive(buffer);
+    // Bounds the decompression (inspectDocxArchive), then cuts out the text
+    // Word does not show before mammoth reads the file (IA-01).
+    const visible = withoutInvisibleDocxText(buffer);
     const mammoth = (await import("mammoth")).default;
-    const result = await mammoth.extractRawText({ buffer });
-    return { text: escapeCvPageMarkers(cleanText(result.value)), method: "docx", totalPages: null, ocrConfidence: null, ocrModelVersion: null, warnings: result.messages.map(message => `${message.type}:${message.message}`) };
+    const result = await mammoth.extractRawText({ buffer: visible.buffer });
+    const invisibleText = invisibleTextSummary(visible.invisibleText);
+    return { text: escapeCvPageMarkers(cleanText(result.value)), method: "docx", totalPages: null, ocrConfidence: null, ocrModelVersion: null, warnings: [...result.messages.map(message => `${message.type}:${message.message}`), ...invisibleTextWarnings(invisibleText)], invisibleText };
   }
 
   if (mimeType === "application/msword") {
@@ -1064,6 +1114,7 @@ export function normalizeRecruitmentAnalysis(
   }
 ): RecruitmentAnalysisResult {
   const deterministicProcessingWarnings: string[] = [];
+  if (declared.invisibleText) deterministicProcessingWarnings.push(invisibleTextAlert(declared.invisibleText));
   if (declared.extractionIncomplete) {
     deterministicProcessingWarnings.push(
       "Extraction incomplète du document : au moins une page nécessite une vérification manuelle."
@@ -1397,6 +1448,7 @@ export function normalizeRecruitmentAnalysis(
     reasoning: scoreIsTrustworthy
       ? "Score déterministe calculé uniquement à partir de faits professionnels trouvés dans le texte lu par l’outil et rapprochés de la spécialité déclarée, à comparer au CV."
       : `Score non présenté : les citations trouvées dans le texte lu par l’outil sont insuffisantes, contradictoires ou non rapprochées de la spécialité déclarée (${evidenceCoverage} % de couverture).`,
+    invisibleText: declared.invisibleText,
   };
 }
 
@@ -1413,6 +1465,9 @@ export function isAiGatewayBillingUnavailable(error: unknown): boolean {
   return /AI Gateway requires a valid credit card on file/i.test(message)
     || /AI Gateway.*add a card.*unlock.*credits/i.test(message);
 }
+
+/** Model recorded when a CV only gave invisible text to read and no AI was called (IA-01). */
+export const INVISIBLE_TEXT_REVIEW_MODEL = "local/invisible-text-review";
 
 /**
  * Safe degraded result: it only preserves data explicitly declared in the form,
@@ -1444,7 +1499,10 @@ export function buildManualReviewFallback(input: RecruitmentAnalysisInput): Recr
       relevanceScore: null,
       strengths: [],
       gaps: ["Analyse IA complète indisponible ; aucune conclusion automatique n’a été produite."],
-      dataQualityWarnings: ["Mode dégradé : seules les données déclarées dans le formulaire ont été structurées."],
+      dataQualityWarnings: [
+        ...(input.invisibleText ? [invisibleTextAlert(input.invisibleText)] : []),
+        "Mode dégradé : seules les données déclarées dans le formulaire ont été structurées.",
+      ],
       requiredFollowUps: ["Lire le CV et vérifier manuellement les expériences, diplômes, certifications et langues."],
       fieldEvidence: [
         ...(specialty ? [{ field: "specialty" as const, value: specialty, evidence: specialty, sourceLocation: "formulaire de candidature", confidence: 100, evidenceVerified: false }] : []),
@@ -1462,10 +1520,31 @@ export function buildManualReviewFallback(input: RecruitmentAnalysisInput): Recr
         credentialReadiness: 0,
       },
       reasoning: "Aucun score n’est calculé lorsque le service IA est indisponible. Une revue humaine intégrale est requise.",
+      invisibleText: input.invisibleText,
     },
     model: MANUAL_REVIEW_FALLBACK_MODEL,
     generationId: null,
     usage: { inputTokens: null, outputTokens: null, totalTokens: null },
+  };
+}
+
+/**
+ * IA-01: once its invisible text is set aside, the CV has too little left to
+ * read (a blank page hiding sentences). No AI is called: a human reviews it,
+ * without score, from the form data only.
+ */
+export function buildInvisibleTextReview(input: RecruitmentAnalysisInput): RecruitmentAnalysisExecution {
+  const review = buildManualReviewFallback(input);
+  return {
+    ...review,
+    model: INVISIBLE_TEXT_REVIEW_MODEL,
+    result: {
+      ...review.result,
+      summary: "Le texte visible du CV est trop court pour une lecture automatique, et le fichier contient du texte invisible à l’écran. Ce dossier doit être examiné manuellement.",
+      gaps: ["Lecture automatique impossible ; aucune conclusion automatique n’a été produite."],
+      dataQualityWarnings: input.invisibleText ? [invisibleTextAlert(input.invisibleText)] : [],
+      reasoning: "Aucun score n’est calculé : le texte visible du CV est insuffisant et le fichier cache du texte. Une revue humaine intégrale est requise.",
+    },
   };
 }
 
@@ -1492,7 +1571,10 @@ export function verifiedRecruitmentFacts(analysis: RecruitmentAnalysisResult) {
 export async function analyzeCvText(input: RecruitmentAnalysisInput): Promise<RecruitmentAnalysisExecution> {
   const cvText = cleanText(input.extractedText).slice(0, 60_000);
   const cvContentLength = cleanText(cvText.replace(/\[PAGE\s+\d+\]/gi, "")).length;
-  if (cvContentLength < 80) throw new Error("Le texte extrait du CV est insuffisant pour une analyse fiable.");
+  if (cvContentLength < 80) {
+    if (invisibleTextRequiresReview(input.invisibleText)) return buildInvisibleTextReview(input);
+    throw new Error("Le texte extrait du CV est insuffisant pour une analyse fiable.");
+  }
 
   const analysisTimeoutMs = stepTimeoutMs("analysis", ANALYSIS_TIMEOUT_MS, { minimumMs: CV_ANALYSIS_STEP_MINIMUM_MS.analysis });
   try {
@@ -1551,6 +1633,7 @@ Barème professionnel, sans caractéristique protégée : specialtyMatch /30, ex
         ? input.ocrConfidence ?? 0
         : null,
       extractionIncomplete: input.extractionIncomplete,
+      invisibleText: input.invisibleText,
     });
     const inputTokens = response.usage.inputTokens ?? null;
     const outputTokens = response.usage.outputTokens ?? null;
@@ -1580,7 +1663,10 @@ export async function saveCvAnalysis(
 ): Promise<void> {
   const db = await getDb();
   if (!db) throw new Error("Base de données indisponible.");
-  const verifiedFacts = verifiedRecruitmentFacts(analysis);
+  // IA-01: a CV that hides text feeds neither the pool filters nor the mission matching.
+  const verifiedFacts = invisibleTextRequiresReview(analysis.invisibleText)
+    ? { certifications: [], languages: [], experiences: [], skills: [] }
+    : verifiedRecruitmentFacts(analysis);
   const verifiedCertifications = verifiedFacts.certifications;
   const verifiedLanguages = verifiedFacts.languages;
   const verifiedExperiences = verifiedFacts.experiences;
