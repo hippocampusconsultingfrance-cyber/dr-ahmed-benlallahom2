@@ -32,3 +32,30 @@ export function recruitmentFactLabelWith(fact: RecruitmentFact, labels: Record<R
 
 /** « Licence DHA (extraite du CV par l’IA) », origins in the order above. */
 export const recruitmentFactLabel = (fact: RecruitmentFact) => recruitmentFactLabelWith(fact, RECRUITMENT_FACT_ORIGIN_LABELS);
+
+/** Last moment a certification is valid (YYYY, YYYY-MM or YYYY-MM-DD), or null when the date cannot be read. */
+export function certificationExpiry(expiresAt: string) {
+  const match = /^(\d{4})(?:-(\d{2})(?:-(\d{2}))?)?$/.exec(expiresAt.trim());
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = match[2] ? Number(match[2]) : 12;
+  const day = match[3]
+    ? Number(match[3])
+    : new Date(Date.UTC(year, month, 0)).getUTCDate();
+  const expiry = new Date(Date.UTC(year, month - 1, day, 23, 59, 59, 999));
+  return Number.isFinite(expiry.getTime()) ? expiry : null;
+}
+
+/**
+ * Whether a certification is still valid: no date, or one not yet passed. An
+ * unreadable date counts as expired. Shared by a mission's matching and the
+ * admin sheet, which offers to confirm the renewal of an expired one.
+ */
+export function certificationDateIsCurrent(
+  expiresAt: string | null | undefined,
+  referenceDate = new Date()
+) {
+  if (!expiresAt) return true;
+  const expiry = certificationExpiry(expiresAt);
+  return expiry !== null && expiry >= referenceDate;
+}

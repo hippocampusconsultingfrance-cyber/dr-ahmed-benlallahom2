@@ -1,4 +1,4 @@
-import { recruitmentFactLabel, type RecruitmentFact, type RecruitmentFactOrigin } from "../shared/recruitmentFactOrigins";
+import { certificationDateIsCurrent, certificationExpiry, type RecruitmentFact, type RecruitmentFactOrigin } from "../shared/recruitmentFactOrigins";
 
 type BriefForMatching = {
   specialtyNeeded: string;
@@ -11,6 +11,13 @@ type BriefForMatching = {
 
 /** A certification with its origins (IA-02) and, when the CV gives one, its expiry. */
 export type CertificationFact = RecruitmentFact & { expiresAt: string | null };
+
+/**
+ * Why a certification retained for a mission scores or not (IA-02): confirmed
+ * by an admin, waiting for one, or expired (its renewal to confirm).
+ */
+export type BriefCertificationStatus = "matched" | "to_confirm" | "expired";
+export type BriefCertification = CertificationFact & { status: BriefCertificationStatus };
 
 type CandidateForMatching = {
   specialty: string;
@@ -56,28 +63,6 @@ function parseTerms(value: string | null | undefined) {
     // Free-text values remain valid fallback data for a human-reviewed score.
   }
   return value.split(/[,;\n]/).map(item => item.trim()).filter(Boolean);
-}
-
-/** Last moment a certification is valid (YYYY, YYYY-MM or YYYY-MM-DD), or null when the date cannot be read. */
-function certificationExpiry(expiresAt: string) {
-  const match = /^(\d{4})(?:-(\d{2})(?:-(\d{2}))?)?$/.exec(expiresAt.trim());
-  if (!match) return null;
-  const year = Number(match[1]);
-  const month = match[2] ? Number(match[2]) : 12;
-  const day = match[3]
-    ? Number(match[3])
-    : new Date(Date.UTC(year, month, 0)).getUTCDate();
-  const expiry = new Date(Date.UTC(year, month - 1, day, 23, 59, 59, 999));
-  return Number.isFinite(expiry.getTime()) ? expiry : null;
-}
-
-export function certificationDateIsCurrent(
-  expiresAt: string | null | undefined,
-  referenceDate = new Date()
-) {
-  if (!expiresAt) return true;
-  const expiry = certificationExpiry(expiresAt);
-  return expiry !== null && expiry >= referenceDate;
 }
 
 /**
@@ -183,32 +168,32 @@ export function computeBriefCandidateMatch(brief: BriefForMatching, candidate: C
 
   // A required certification earns its points only once a human confirmed a
   // matching one, declared or read in the CV (IA-02): a licence found only in
-  // the CV text, possibly hidden, is shown « à confirmer » and scores nothing.
+  // the CV text, possibly hidden, is retained « à confirmer » and scores
+  // nothing. One that has expired, confirmed or not, scores nothing either
+  // and is retained « expirée » with its date, until an admin confirms its
+  // renewal.
   const requiredCertifications = parseTerms(brief.requiredCertifications);
-  const currentCertifications = (candidate.certificationFacts || []).filter(fact => certificationDateIsCurrent(fact.expiresAt));
   const matchedCertifications: string[] = [];
   const certificationsToConfirm: string[] = [];
-  const certifications: CertificationFact[] = [];
-  const unconfirmedCertifications: CertificationFact[] = [];
+  const certifications: BriefCertification[] = [];
+  const retain = (facts: CertificationFact[], status: BriefCertificationStatus) => {
+    for (const fact of facts) if (!certifications.some(item => item.name === fact.name)) certifications.push({ ...fact, status });
+  };
   for (const required of requiredCertifications) {
-    const facts = factsMatching(required, currentCertifications);
-    if (facts.length === 0) continue;
-    addUnique(certifications, facts);
-    if (facts.some(isConfirmed)) {
+    const facts = factsMatching(required, candidate.certificationFacts || []);
+    const current = facts.filter(fact => certificationDateIsCurrent(fact.expiresAt));
+    if (current.some(isConfirmed)) {
       matchedCertifications.push(required);
-    } else {
+      retain(current.filter(isConfirmed), "matched");
+    } else if (current.length > 0) {
       certificationsToConfirm.push(required);
-      addUnique(unconfirmedCertifications, facts);
+      retain(current, "to_confirm");
+    } else {
+      retain(facts, "expired");
     }
   }
   if (matchedCertifications.length > 0) {
     breakdown.certifications = Math.round((matchedCertifications.length / requiredCertifications.length) * 20);
-    reasons.push(`certifications correspondantes : ${certifications.filter(isConfirmed).map(recruitmentFactLabel).join(", ")}`);
-  }
-  if (unconfirmedCertifications.length > 0) {
-    reasons.push(unconfirmedCertifications.length === 1
-      ? `certification à confirmer : ${recruitmentFactLabel(unconfirmedCertifications[0]!)} — aucun point tant que l’admin ne l’a pas confirmée`
-      : `certifications à confirmer : ${unconfirmedCertifications.map(recruitmentFactLabel).join(" ; ")} — aucun point tant que l’admin ne les a pas confirmées`);
   }
 
   const requiredLanguages = parseTerms(brief.requiredLanguages);
@@ -222,7 +207,6 @@ export function computeBriefCandidateMatch(brief: BriefForMatching, candidate: C
   }
   if (matchedLanguages.length > 0) {
     breakdown.languages = Math.round((matchedLanguages.length / requiredLanguages.length) * 15);
-    reasons.push(`langues correspondantes : ${languages.map(recruitmentFactLabel).join(", ")}`);
   }
 
   if (brief.minimumYearsExperience && candidate.yearsExperience !== null && candidate.yearsExperience !== undefined && candidate.yearsExperience >= brief.minimumYearsExperience) {
@@ -236,6 +220,9 @@ export function computeBriefCandidateMatch(brief: BriefForMatching, candidate: C
   }
 
   const score = Object.values(breakdown).reduce((total, value) => total + value, 0);
-  // certifications / languages: the candidate's facts retained for the mission, with their origins.
+  // reasons: the other criteria met. certifications / languages: the
+  // candidate's facts retained for the mission, with their origins (and, for
+  // a certification, its status and expiry), as codes the mission screen
+  // words in the admin's language (IA-02).
   return { score: Math.min(score, 100), reasons, matchedCertifications, certificationsToConfirm, matchedLanguages, certifications, languages, breakdown };
 }

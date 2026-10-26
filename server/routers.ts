@@ -13,7 +13,7 @@ import { candidateAccounts, candidateDocumentAuditLogs, candidateDocuments, cont
 import { notifyOwner } from "./_core/notification";
 import { storageGetSignedUrl } from "./storage";
 import { canAdminDownloadCv, CV_DOWNLOAD_UNAVAILABLE_MESSAGE } from "./recruitmentDownloadPolicy";
-import { eq, and, or, sql, desc, getTableColumns, gte, inArray, isNotNull, isNull, lt, ne } from "drizzle-orm";
+import { eq, and, or, sql, desc, getTableColumns, gte, inArray, isNotNull, isNull, lt, ne, type SQL } from "drizzle-orm";
 import Stripe from "stripe";
 import {
   sendCandidatePortalAccessEmail,
@@ -25,7 +25,7 @@ import {
 } from "./_core/notifications";
 import { logRecruitmentAction, matchesRecruitmentProfile, parseRecruitmentJsonArray } from "./recruitmentAudit";
 import { CERTIFICATION_NAME_MAX_LENGTH, certificationFacts, computeBriefCandidateMatch, declaredCertificationNames, languageFacts, sameRecruitmentFact, type CertificationRow, type LanguageRow } from "./clientBriefMatching";
-import { recruitmentFactLabel, type RecruitmentFact } from "../shared/recruitmentFactOrigins";
+import { certificationDateIsCurrent, recruitmentFactLabel, type RecruitmentFact } from "../shared/recruitmentFactOrigins";
 import { candidatePortalRouter } from "./candidatePortalRouter";
 import { enforcePersistentRateLimit, hashSecurityValue, logSecurityEvent, releasePersistentRateLimitAttempt, requestIpHash } from "./candidateSecurity";
 import { countPublicFormDailyVolume, enforcePublicEmailIpRateLimit, PUBLIC_EMAIL_IP_RATE_LIMITS, publicFormRateLimitSubject, releasePublicEmailIpRateLimit, type PublicFormRateLimitScope } from "./publicFormRateLimit";
@@ -329,6 +329,25 @@ async function languageFactsByApplication(db: AdminDb, applications: Array<{ id:
       .where(inArray(cvCandidateLanguages.applicationId, applications.map(application => application.id))))
     : new Map<number, LanguageRow[]>();
   return new Map(applications.map(application => [application.id, languageFacts(application.languages, rows.get(application.id) ?? [])]));
+}
+
+/**
+ * Applications holding a certification an admin confirmed whose name contains
+ * this term (IA-02). The certification filters find it as a mission's
+ * matching counts it, even once a new analysis stored no facts (a
+ * contradiction, hidden text) and left normalized_certifications empty.
+ */
+async function applicationsWithConfirmedCertification(db: AdminDb, term: string) {
+  const rows = await db.select({ applicationId: cvCandidateCertifications.applicationId })
+    .from(cvCandidateCertifications)
+    .where(and(isNotNull(cvCandidateCertifications.confirmedAt), sql`LOWER(${cvCandidateCertifications.name}) LIKE LOWER(${`%${term}%`})`));
+  return Array.from(new Set(rows.map(row => row.applicationId)));
+}
+
+/** The certification filter of the admin lists: the declared or analysed text, or a confirmed certification (IA-02). */
+async function certificationFilterCondition(db: AdminDb, term: string, textCondition: SQL) {
+  const confirmedIds = await applicationsWithConfirmedCertification(db, term);
+  return confirmedIds.length ? or(textCondition, inArray(cvApplications.id, confirmedIds))! : textCondition;
 }
 
 /**
@@ -1565,7 +1584,7 @@ export const appRouter = router({
           if (input.specialty) conditions.push(sql`LOWER(${cvApplications.specialty}) LIKE LOWER(${`%${input.specialty}%`})`);
           if (input.country) conditions.push(sql`${cvApplications.targetCountries} LIKE ${`%${input.country}%`}`);
           if (input.language) conditions.push(sql`((${cvApplications.analysisPromptVersion} = ${RECRUITMENT_ANALYSIS_PROMPT_VERSION} AND ${cvApplications.normalizedLanguages} LIKE ${`%${input.language}%`}) OR ${cvApplications.languages} LIKE ${`%${input.language}%`})`);
-          if (input.certification) conditions.push(sql`((${cvApplications.analysisPromptVersion} = ${RECRUITMENT_ANALYSIS_PROMPT_VERSION} AND ${cvApplications.normalizedCertifications} LIKE ${`%${input.certification}%`}) OR ${cvApplications.certifications} LIKE ${`%${input.certification}%`})`);
+          if (input.certification) conditions.push(await certificationFilterCondition(db, input.certification, sql`((${cvApplications.analysisPromptVersion} = ${RECRUITMENT_ANALYSIS_PROMPT_VERSION} AND ${cvApplications.normalizedCertifications} LIKE ${`%${input.certification}%`}) OR ${cvApplications.certifications} LIKE ${`%${input.certification}%`})`));
 
           let profile: typeof recruitmentMatchProfiles.$inferSelect | null = null;
           if (input.profileId) {
@@ -1732,7 +1751,7 @@ export const appRouter = router({
             if (input?.country) conditions.push(sql`${cvApplications.targetCountries} LIKE ${`%${input.country}%`}`);
             if (input?.availability) conditions.push(sql`LOWER(COALESCE(${cvApplications.availability}, '')) LIKE LOWER(${`%${input.availability}%`})`);
             if (input?.mobility) conditions.push(sql`(LOWER(COALESCE(${cvApplications.mobility}, '')) LIKE LOWER(${`%${input.mobility}%`}) OR LOWER(COALESCE(${cvApplications.targetCountries}, '')) LIKE LOWER(${`%${input.mobility}%`}))`);
-            if (input?.certification) conditions.push(sql`(LOWER(COALESCE(${cvApplications.certifications}, '')) LIKE LOWER(${`%${input.certification}%`}) OR (${cvApplications.analysisPromptVersion} = ${RECRUITMENT_ANALYSIS_PROMPT_VERSION} AND LOWER(COALESCE(${cvApplications.normalizedCertifications}, '')) LIKE LOWER(${`%${input.certification}%`})))`);
+            if (input?.certification) conditions.push(await certificationFilterCondition(db, input.certification, sql`(LOWER(COALESCE(${cvApplications.certifications}, '')) LIKE LOWER(${`%${input.certification}%`}) OR (${cvApplications.analysisPromptVersion} = ${RECRUITMENT_ANALYSIS_PROMPT_VERSION} AND LOWER(COALESCE(${cvApplications.normalizedCertifications}, '')) LIKE LOWER(${`%${input.certification}%`})))`));
             if (input?.minimumScore) conditions.push(scoreAtLeastOrUnavailable(input.minimumScore));
             const candidates = await db.select({
               id: cvApplications.id,
@@ -2062,28 +2081,49 @@ export const appRouter = router({
         // or read in the CV, earns points in a mission's matching.
         // The name is the one shown, as long as the declared term (the form
         // takes 1,000 characters); a row keeps its first 180.
-        confirmCertification: adminProcedure.input(z.object({ id: z.number().int().positive(), name: z.string().trim().min(1).max(1000), confirmed: z.boolean() })).mutation(async ({ input, ctx }) => {
+        // renewal: the certificate checked was renewed since the date read in
+        // the CV. Its rows take the new expiry (none when the certificate has
+        // none), so that an expired certification counts again.
+        confirmCertification: adminProcedure.input(z.object({
+          id: z.number().int().positive(),
+          name: z.string().trim().min(1).max(1000),
+          confirmed: z.boolean(),
+          renewal: z.object({ expiresAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable() }).optional(),
+        })).mutation(async ({ input, ctx }) => {
           const db = await getDb();
           if (!db) throw new Error("Database connection failed");
+          const renewal = input.confirmed ? input.renewal : undefined;
+          if (renewal?.expiresAt) {
+            if (!parseAdminDate(renewal.expiresAt)) throw new TRPCError({ code: "BAD_REQUEST", message: "Nouvelle date d’expiration invalide." });
+            if (!certificationDateIsCurrent(renewal.expiresAt)) throw new TRPCError({ code: "BAD_REQUEST", message: "La nouvelle date d’expiration est déjà passée : la certification resterait expirée." });
+          }
           const [application] = await db.select({ id: cvApplications.id, certifications: cvApplications.certifications }).from(cvApplications).where(eq(cvApplications.id, input.id)).limit(1);
           if (!application) throw new TRPCError({ code: "NOT_FOUND", message: "Candidature introuvable." });
-          const rows = (await db.select({ id: cvCandidateCertifications.id, name: cvCandidateCertifications.name, confirmedAt: cvCandidateCertifications.confirmedAt })
+          const rows = (await db.select({ id: cvCandidateCertifications.id, name: cvCandidateCertifications.name, confirmedAt: cvCandidateCertifications.confirmedAt, expiresAt: cvCandidateCertifications.expiresAt })
             .from(cvCandidateCertifications)
             .where(eq(cvCandidateCertifications.applicationId, application.id)))
             .filter(row => sameRecruitmentFact(row.name, input.name));
           const declared = declaredCertificationNames(application.certifications).find(name => sameRecruitmentFact(name, input.name));
           if (!rows.length && !declared) throw new TRPCError({ code: "NOT_FOUND", message: "Cette certification ne figure pas dans le dossier." });
-          // Rows whose confirmation changes: nothing is logged when none does.
-          const changed = rows.filter(row => (row.confirmedAt === null) === input.confirmed);
+          // Rows whose confirmation, or expiry on a renewal, changes: nothing is logged when none does.
+          const changed = rows.filter(row => (row.confirmedAt === null) === input.confirmed || (renewal !== undefined && row.expiresAt !== renewal.expiresAt));
           if (changed.length) {
-            await db.update(cvCandidateCertifications).set({ confirmedAt: input.confirmed ? new Date() : null }).where(inArray(cvCandidateCertifications.id, changed.map(row => row.id)));
+            await db.update(cvCandidateCertifications).set({ confirmedAt: input.confirmed ? new Date() : null, ...(renewal ? { expiresAt: renewal.expiresAt } : {}) }).where(inArray(cvCandidateCertifications.id, changed.map(row => row.id)));
           } else if (input.confirmed && !rows.length) {
             // A certification declared in the form only: its confirmation gets a row of its own.
-            await db.insert(cvCandidateCertifications).values({ applicationId: application.id, name: declared!.slice(0, CERTIFICATION_NAME_MAX_LENGTH), source: "declared", confirmedAt: new Date() });
+            await db.insert(cvCandidateCertifications).values({ applicationId: application.id, name: declared!.slice(0, CERTIFICATION_NAME_MAX_LENGTH), source: "declared", confirmedAt: new Date(), expiresAt: renewal?.expiresAt ?? null });
           } else {
             return { success: true, changed: false };
           }
-          await logRecruitmentAction({ applicationId: application.id, adminOpenId: ctx.user.openId, action: "status_update", metadata: { event: input.confirmed ? "certification_confirmed" : "certification_unconfirmed", certification: rows[0]?.name ?? declared } });
+          const certification = rows[0]?.name ?? declared;
+          await logRecruitmentAction({
+            applicationId: application.id,
+            adminOpenId: ctx.user.openId,
+            action: "status_update",
+            metadata: renewal
+              ? { event: "certification_renewed", certification, expiresAt: renewal.expiresAt, previousExpiresAt: Array.from(new Set(rows.map(row => row.expiresAt))) }
+              : { event: input.confirmed ? "certification_confirmed" : "certification_unconfirmed", certification },
+          });
           return { success: true, changed: true };
         }),
         markResponse: adminProcedure.input(z.object({ id: z.number().int().positive(), note: z.string().trim().max(1000).optional() })).mutation(async ({ input, ctx }) => {

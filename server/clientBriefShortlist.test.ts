@@ -136,7 +136,10 @@ describe("missions employeurs : classement, certifications et accord du candidat
       score: 50,
       breakdown: { certifications: 0 },
       certificationsToConfirm: ["Licence DHA", "BLS"],
-      reasons: expect.arrayContaining(["certifications à confirmer : Licence DHA (extraite du CV par l’IA) ; BLS (déclarée par le candidat) — aucun point tant que l’admin ne les a pas confirmées"]),
+      certifications: [
+        { name: "Licence DHA", origins: ["extracted"], status: "to_confirm" },
+        { name: "BLS", origins: ["declared"], status: "to_confirm" },
+      ],
     });
 
     // The admin checks the licence on the authority's register and confirms it.
@@ -147,7 +150,10 @@ describe("missions employeurs : classement, certifications et accord du candidat
     // A certification declared in the form only gets its own confirmed row.
     await admin().admin.recruitment.candidate.confirmCertification({ id: hidden.id as number, name: "BLS", confirmed: true });
     expect(memory.rows(cvCandidateCertifications).map(row => [row.name, row.source, row.confirmed_at !== null])).toEqual([["Licence DHA", "extracted", true], ["BLS", "declared", true]]);
-    expect(await matchOf()).toMatchObject({ score: 70, reasons: expect.arrayContaining(["certifications correspondantes : Licence DHA (extraite du CV par l’IA, confirmée par l’admin), BLS (déclarée par le candidat, confirmée par l’admin)"]) });
+    expect(await matchOf()).toMatchObject({ score: 70, certifications: [
+      { name: "Licence DHA", origins: ["extracted", "confirmed"], status: "matched" },
+      { name: "BLS", origins: ["declared", "confirmed"], status: "matched" },
+    ] });
 
     // Withdrawn: the points go again.
     await admin().admin.recruitment.candidate.confirmCertification({ id: hidden.id as number, name: "Licence DHA", confirmed: false });
@@ -193,6 +199,61 @@ describe("missions employeurs : classement, certifications et accord du candidat
       { name: "BLS", origins: ["declared"], expiresAt: null },
       { name: "Licence DHA", origins: ["extracted"], expiresAt: null },
     ]]]);
+  });
+
+  it("les filtres « certification » trouvent une certification confirmée que la mission compte, même après une analyse qui n’a enregistré aucun fait (IA-02)", async () => {
+    // A new analysis found a contradiction (or hidden text): it stored no
+    // facts, but kept the licence the admin had confirmed.
+    const confirmed = seedCandidate({ specialty: "Anesthésie-réanimation", target_countries: '["Émirats arabes unis"]', marketing_consent: 1, normalized_certifications: "[]", ...scored(70) });
+    const unrelated = seedCandidate({ marketing_consent: 1, normalized_certifications: "[]", ...scored(70) });
+    memory.seed(cvCandidateCertifications, [
+      { application_id: confirmed.id, name: "Licence DHA", issuing_body: "Dubai Health Authority", source: "extracted", confirmed_at: "2026-10-20 09:00:00.000" },
+      { application_id: unrelated.id, name: "BLS", source: "declared", confirmed_at: "2026-10-20 09:00:00.000" },
+    ]);
+    const brief = seedBrief({ required_certifications: "Licence DHA" });
+    const [first] = (await admin().admin.clientBriefs.candidates({ briefId: brief.id as number })).candidates;
+    expect(first).toMatchObject({ id: confirmed.id, match: { breakdown: { certifications: 20 }, certifications: [{ name: "Licence DHA", status: "matched" }] } });
+
+    // The Candidatures list and the pool say the same, with the origins.
+    const listed = await admin().admin.recruitment.list({ certification: "DHA" });
+    expect(listed.items.map(item => [item.id, item.certificationFacts])).toEqual([[confirmed.id, [{ name: "Licence DHA", origins: ["extracted", "confirmed"], expiresAt: null }]]]);
+    expect(listed.total).toBe(1);
+    expect((await admin().admin.recruitment.pool.list({ certification: "dha" })).map(candidate => candidate.id)).toEqual([confirmed.id]);
+    // Withdrawn, it no longer counts, and the filters no longer find it.
+    await admin().admin.recruitment.candidate.confirmCertification({ id: confirmed.id as number, name: "Licence DHA", confirmed: false });
+    expect((await admin().admin.recruitment.list({ certification: "DHA" })).items).toEqual([]);
+    expect(await admin().admin.recruitment.pool.list({ certification: "DHA" })).toEqual([]);
+  });
+
+  it("dit qu’une certification a expiré, et la compte une fois son renouvellement confirmé, avec ou sans nouvelle date, journalisé (IA-02)", async () => {
+    // « PALS, ACLS » declared without a date; the AI read ACLS until 2023-05 in the CV.
+    const candidate = seedCandidate({ specialty: "Cardiologie", certifications: "PALS, ACLS" });
+    memory.seed(cvCandidateCertifications, [{ application_id: candidate.id, name: "ACLS", source: "extracted", expires_at: "2023-05" }]);
+    const brief = seedBrief({ specialty_needed: "Cardiologie", country: "Suisse", required_certifications: "ACLS" });
+    const id = candidate.id as number;
+    const matchOf = async () => (await admin().admin.clientBriefs.candidates({ briefId: brief.id as number })).candidates[0]!.match;
+    const confirm = (renewal?: { expiresAt: string | null }) => admin().admin.recruitment.candidate.confirmCertification({ id, name: "ACLS", confirmed: true, renewal });
+
+    expect(await matchOf()).toMatchObject({ score: 35, certificationsToConfirm: [], certifications: [{ name: "ACLS", origins: ["declared", "extracted"], expiresAt: "2023-05", status: "expired" }] });
+    // Confirmed as it is, it stays expired, and the screen still says so.
+    await confirm();
+    expect(await matchOf()).toMatchObject({ score: 35, certifications: [{ origins: ["declared", "extracted", "confirmed"], expiresAt: "2023-05", status: "expired" }] });
+
+    await expect(confirm({ expiresAt: "2025-01-31" })).rejects.toThrow("La nouvelle date d’expiration est déjà passée : la certification resterait expirée.");
+    await expect(confirm({ expiresAt: "2027-02-30" })).rejects.toThrow("Nouvelle date d’expiration invalide.");
+    await expect(confirm({ expiresAt: "2099-06-30" })).resolves.toEqual({ success: true, changed: true });
+    expect(memory.rows(cvCandidateCertifications).map(row => [row.name, row.source, row.expires_at, row.confirmed_at !== null])).toEqual([["ACLS", "extracted", "2099-06-30", true]]);
+    expect(await matchOf()).toMatchObject({ score: 55, breakdown: { certifications: 20 }, certifications: [{ expiresAt: "2099-06-30", status: "matched" }] });
+    // The same renewal again changes nothing; one without a date does.
+    await expect(confirm({ expiresAt: "2099-06-30" })).resolves.toEqual({ success: true, changed: false });
+    await expect(confirm({ expiresAt: null })).resolves.toEqual({ success: true, changed: true });
+    expect(await matchOf()).toMatchObject({ score: 55, certifications: [{ expiresAt: null, status: "matched" }] });
+
+    expect(memory.rows(recruitmentAuditLogs).map(row => JSON.parse(String(row.metadata)))).toEqual([
+      { event: "certification_confirmed", certification: "ACLS" },
+      { event: "certification_renewed", certification: "ACLS", expiresAt: "2099-06-30", previousExpiresAt: ["2023-05"] },
+      { event: "certification_renewed", certification: "ACLS", expiresAt: null, previousExpiresAt: ["2099-06-30"] },
+    ]);
   });
 
   it("note puis retire la date de l’accord du candidat pour une mission (RGPD-03)", async () => {

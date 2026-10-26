@@ -1,12 +1,12 @@
 import { isValidElement, type ReactElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // IA-02 — chaque certification dit d’où elle vient (déclarée, extraite du CV
 // par l’IA, confirmée par l’admin) dans la fiche 360°, la fiche du dossier et
 // le filtre « certification », avec « Confirmer » / « Annuler la confirmation ».
 
-type MutationOptions = { onSuccess?: (result: unknown, variables: { id: number; name: string; confirmed: boolean }) => unknown };
+type MutationOptions = { onSuccess?: (result: unknown, variables: { id: number; name: string; confirmed: boolean; renewal?: { expiresAt: string | null } }) => unknown };
 
 // useState kept between two renders like React does (see EmployerBriefsTab.missionShortlist.test.ts).
 const hooks = vi.hoisted(() => ({ values: [] as unknown[], index: 0 }));
@@ -101,6 +101,8 @@ function renderTab() {
 }
 
 beforeEach(() => {
+  // Whether a certification has expired depends on the day.
+  vi.useFakeTimers({ now: new Date("2026-10-26T10:00:00.000Z"), toFake: ["Date"] });
   hooks.values = [];
   state.items = [dossier()];
   state.detail = null;
@@ -108,6 +110,7 @@ beforeEach(() => {
   state.invalidated = [];
   state.toasts = [];
 });
+afterEach(() => vi.useRealTimers());
 
 describe("confirmation des certifications par l’admin (IA-02)", () => {
   it("affiche l’origine de chaque certification et propose de la confirmer, ou d’annuler la confirmation", async () => {
@@ -130,6 +133,35 @@ describe("confirmation des certifications par l’admin (IA-02)", () => {
     expect(state.invalidated).toEqual(["recruitment.list", ["candidate.detail", { id: 5 }], "clientBriefs.candidates"]);
 
     expect(renderToStaticMarkup(CertificationReview({ applicationId: 5, certifications: [] }))).toContain("Aucune certification déclarée ni lue dans le CV.");
+  });
+
+  it("dit qu’une certification a expiré et propose de confirmer son renouvellement, avec ou sans nouvelle date d’expiration", async () => {
+    const certifications = [
+      { name: "ACLS", origins: ["declared", "extracted", "confirmed"], expiresAt: "2023-05" },
+      { name: "Licence DHA", origins: ["extracted"], expiresAt: "2028-05" },
+    ];
+    const renderReview = () => { hooks.index = 0; return CertificationReview({ applicationId: 5, certifications: certifications as never }); };
+    const html = renderToStaticMarkup(renderReview());
+    expect(html).toContain("expirée le 2023-05");
+    expect(html).toContain("expire le 2028-05");
+    expect(html).toContain("Expirée, elle ne compte pas dans le matching.");
+    // Only the expired one offers a renewal, dated today at the earliest.
+    expect(html).toContain('aria-label="Confirmer le renouvellement de ACLS"');
+    expect(html).not.toContain("Confirmer le renouvellement de Licence DHA");
+    expect(html.match(/<input[^>]*type="date"[^>]*>/g)).toEqual([expect.stringContaining('min="2026-10-26"')]);
+
+    // A certificate renewed without an expiry date…
+    clickable(renderReview(), "Confirmer le renouvellement de ACLS")();
+    expect(state.confirmMutate).toHaveBeenLastCalledWith({ id: 5, name: "ACLS", confirmed: true, renewal: { expiresAt: null } });
+    // …or with the new one the admin read on it.
+    const dateInput = elements(renderReview()).find(element => element.type === "input" && element.props["aria-label"] === "Nouvelle date d’expiration — ACLS")!;
+    (dateInput.props.onChange as (event: unknown) => void)({ target: { value: "2028-06-30" } });
+    clickable(renderReview(), "Confirmer le renouvellement de ACLS")();
+    expect(state.confirmMutate).toHaveBeenLastCalledWith({ id: 5, name: "ACLS", confirmed: true, renewal: { expiresAt: "2028-06-30" } });
+
+    await state.confirmOptions!.onSuccess?.({ success: true, changed: true }, { id: 5, name: "ACLS", confirmed: true, renewal: { expiresAt: "2028-06-30" } });
+    expect(state.toasts).toEqual(["Renouvellement confirmé : ACLS"]);
+    expect(state.invalidated).toContain("clientBriefs.candidates");
   });
 
   it("place les certifications et leurs boutons dans la fiche 360°", () => {

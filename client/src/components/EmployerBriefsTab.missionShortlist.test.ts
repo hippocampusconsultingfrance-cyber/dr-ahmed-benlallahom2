@@ -64,16 +64,16 @@ const { default: EmployerBriefsTab } = await import("./EmployerBriefsTab");
 
 const brief = { id: 7, briefId: "BRIEF-GOLFE", organizationName: "Hôpital du Golfe", specialtyNeeded: "Anesthésie-réanimation", country: "Émirats arabes unis", targetEnvironment: "Hôpital", status: "reviewing" };
 const breakdown = { specialty: 35, mobility: 15, certifications: 0, languages: 0, experience: 0, availability: 0 };
-const candidate = (id: number, firstName: string, lastName: string, association: null | Record<string, unknown>, reasons: string[] = []) => ({
+const candidate = (id: number, firstName: string, lastName: string, association: null | Record<string, unknown>, match: Record<string, unknown> = {}) => ({
   id, firstName, lastName, specialty: "Anesthésie-réanimation", availability: null, association,
-  match: { score: 50, reasons, breakdown, matchedCertifications: [], certificationsToConfirm: [], matchedLanguages: [], certifications: [], languages: [] },
+  match: { score: 50, reasons: [], breakdown, matchedCertifications: [], certificationsToConfirm: [], matchedLanguages: [], certifications: [], languages: [], ...match },
 });
 
 function missionData(extra: Record<string, unknown> = {}) {
   return {
     brief,
     candidates: [
-      candidate(11, "Amal", "Haddad", { status: "shortlisted", candidateConsentAt: null }, ["spécialité compatible", "certification à confirmer : Licence DHA (extraite du CV par l’IA) — aucun point tant que l’admin ne l’a pas confirmée"]),
+      candidate(11, "Amal", "Haddad", { status: "shortlisted", candidateConsentAt: null }, { reasons: ["spécialité compatible"], certifications: [{ name: "Licence DHA", origins: ["extracted"], expiresAt: null, status: "to_confirm" }] }),
       candidate(12, "Jean", "Martin", { status: "shortlisted", candidateConsentAt: new Date("2026-10-20T12:00:00.000Z") }),
       candidate(13, "Lina", "Saleh", null),
     ],
@@ -201,7 +201,33 @@ describe("écran d’une mission employeur", () => {
   });
 
   it("montre pourquoi une certification ne compte pas encore (IA-02)", () => {
-    expect(renderToStaticMarkup(render())).toContain("certification à confirmer : Licence DHA (extraite du CV par l’IA) — aucun point tant que l’admin ne l’a pas confirmée");
+    expect(renderToStaticMarkup(render())).toContain("spécialité compatible · certification à confirmer : Licence DHA (extraite du CV par l’IA) — aucun point tant que l’admin ne l’a pas confirmée");
+    // Two of them, still to confirm.
+    state.data = missionData({ candidates: [candidate(11, "Amal", "Haddad", null, { certifications: [
+      { name: "Licence DHA", origins: ["extracted"], expiresAt: null, status: "to_confirm" },
+      { name: "BLS", origins: ["declared"], expiresAt: null, status: "to_confirm" },
+    ] })] });
+    expect(renderToStaticMarkup(render())).toContain("certifications à confirmer : Licence DHA (extraite du CV par l’IA) ; BLS (déclarée par le candidat) — aucun point tant que l’admin ne les a pas confirmées");
+  });
+
+  it.each([
+    ["fr", "spécialité compatible · certifications correspondantes : BLS (déclarée par le candidat, confirmée par l’admin) · certification à confirmer : Licence DHA (extraite du CV par l’IA) — aucun point tant que l’admin ne l’a pas confirmée · certification hors validité : ACLS (déclarée par le candidat, extraite du CV par l’IA), expirée le 2023-05 — aucun point tant que l’admin n’a pas confirmé son renouvellement · langues correspondantes : Anglais (déclarée par le candidat, extraite du CV par l’IA)"],
+    ["en", "spécialité compatible · matching certifications: BLS (declared by the candidate, confirmed by the admin) · certification to confirm: Licence DHA (read from the CV by the AI) — no points until the admin confirms it · certification no longer valid: ACLS (declared by the candidate, read from the CV by the AI), expired on 2023-05 — no points until the admin confirms its renewal · matching languages: Anglais (declared by the candidate, read from the CV by the AI)"],
+    ["de", "spécialité compatible · passende Zertifikate: BLS (vom Kandidaten angegeben, vom Admin bestätigt) · zu bestätigendes Zertifikat: Licence DHA (von der KI aus dem Lebenslauf gelesen) — keine Punkte, solange der Admin es nicht bestätigt hat · nicht mehr gültiges Zertifikat: ACLS (vom Kandidaten angegeben, von der KI aus dem Lebenslauf gelesen), abgelaufen am 2023-05 — keine Punkte, bis der Admin seine Erneuerung bestätigt · passende Sprachen: Anglais (vom Kandidaten angegeben, von der KI aus dem Lebenslauf gelesen)"],
+    ["zh", "spécialité compatible · 匹配的证书：BLS (候选人自行申报, 管理员已确认) · 待确认的证书：Licence DHA (AI 从简历中提取)——管理员确认前不计分 · 已失效的证书：ACLS (候选人自行申报, AI 从简历中提取), 已于 2023-05 过期——管理员确认续期前不计分 · 匹配的语言：Anglais (候选人自行申报, AI 从简历中提取)"],
+  ] as const)("écrit l’origine des certifications et des langues, et ce qui manque pour qu’une certification compte, dans la langue de l’administration (%s, IA-02)", (language, reasons) => {
+    state.language = language;
+    state.data = missionData({ candidates: [candidate(11, "Amal", "Haddad", null, {
+      reasons: ["spécialité compatible"],
+      certifications: [
+        { name: "BLS", origins: ["declared", "confirmed"], expiresAt: null, status: "matched" },
+        { name: "Licence DHA", origins: ["extracted"], expiresAt: null, status: "to_confirm" },
+        { name: "ACLS", origins: ["declared", "extracted"], expiresAt: "2023-05", status: "expired" },
+      ],
+      languages: [{ name: "Anglais", origins: ["declared", "extracted"] }],
+    })] });
+    const html = renderToStaticMarkup(render());
+    expect(html).toContain(`<p class="mt-2 text-xs text-muted-foreground">${reasons}</p>`);
   });
 
   it("n’offre l’export qu’avec au moins un accord, et dit combien de candidats en sont exclus (RGPD-03)", async () => {
