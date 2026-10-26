@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { TEST_PEPPER } from "./testSupport/candidatePortal";
 import { listen } from "./testSupport/candidateUploadApp";
 import { createInMemoryDrizzle } from "./testSupport/inMemoryDrizzle";
@@ -14,7 +14,13 @@ const state = vi.hoisted(() => {
   process.env.GOOGLE_DRIVE_CLIENT_SECRET ||= "drive-client-secret-for-route-guard-tests";
   process.env.GOOGLE_DRIVE_CV_FOLDER_ID ||= "drive-folder-for-route-guard-tests";
   process.env.JWT_SECRET ||= "jwt-secret-for-route-guard-tests-0123456789";
-  return { db: null as unknown, sentCodes: [] as string[] };
+  return {
+    db: null as unknown,
+    sentCodes: [] as string[],
+    // Past the guard, the callback would exchange the code with Google: it never leaves this file.
+    exchangeGoogleDriveAuthorizationCode: vi.fn(async (_code: string) => ({ refresh_token: "refresh-token", scope: "https://www.googleapis.com/auth/drive.file" })),
+    saveGoogleDriveConnection: vi.fn(async (_input: Record<string, unknown>) => undefined),
+  };
 });
 process.env.CANDIDATE_AUTH_PEPPER ||= TEST_PEPPER;
 
@@ -46,6 +52,11 @@ vi.mock("@clerk/express", () => ({
     },
   },
 }));
+vi.mock("./googleDriveExport", async importOriginal => ({
+  ...await importOriginal<typeof import("./googleDriveExport")>(),
+  exchangeGoogleDriveAuthorizationCode: state.exchangeGoogleDriveAuthorizationCode,
+  saveGoogleDriveConnection: state.saveGoogleDriveConnection,
+}));
 vi.mock("./_core/notification", () => ({ notifyOwner: vi.fn(async () => true) }));
 vi.mock("./_core/notifications", async importOriginal => ({
   ...await importOriginal<typeof import("./_core/notifications")>(),
@@ -54,12 +65,19 @@ vi.mock("./_core/notifications", async importOriginal => ({
 
 const { createApp } = await import("./_core/index");
 const { ADMIN_MFA_COOKIE, issueAdminMfaChallenge, verifyAdminMfaChallenge } = await import("./adminMfa");
+const { createGoogleDriveOAuthState } = await import("./googleDriveExport");
+const { GOOGLE_DRIVE_ADMIN_REQUIRED_MESSAGE, GOOGLE_DRIVE_MFA_REQUIRED_MESSAGE } = await import("./googleDriveOAuthRoutes");
 
-/** Express routes outside tRPC that act as the administrator. */
+// A valid signed state with its cookie: on the callback, only access control can answer 403.
+const DRIVE_STATE = createGoogleDriveOAuthState();
+const DRIVE_STATE_COOKIE = `__Host-google_drive_oauth_state=${DRIVE_STATE}`;
+const DRIVE_CALLBACK = `/api/google-drive/oauth/callback?code=google-code&state=${encodeURIComponent(DRIVE_STATE)}`;
+
+/** Express routes outside tRPC that act as the administrator, with the body of each refusal. */
 const ADMIN_ROUTES = [
-  "/api/admin/candidate-documents/1/download",
-  "/api/google-drive/oauth/connect",
-  "/api/google-drive/oauth/callback?code=google-code&state=google-state",
+  { path: "/api/admin/candidate-documents/1/download", refusal: { admin: JSON.stringify({ error: "Accès administrateur requis." }), mfa: JSON.stringify({ error: "Double authentification requise." }) } },
+  { path: "/api/google-drive/oauth/connect", refusal: { admin: GOOGLE_DRIVE_ADMIN_REQUIRED_MESSAGE, mfa: GOOGLE_DRIVE_MFA_REQUIRED_MESSAGE } },
+  { path: DRIVE_CALLBACK, cookie: DRIVE_STATE_COOKIE, refusal: { admin: GOOGLE_DRIVE_ADMIN_REQUIRED_MESSAGE, mfa: GOOGLE_DRIVE_MFA_REQUIRED_MESSAGE } },
 ];
 
 let baseUrl = "";
@@ -74,10 +92,11 @@ async function completeMfa(openId: string) {
   return `${ADMIN_MFA_COOKIE}=${token}`;
 }
 
-async function get(path: string, as: { userId?: string; cookie?: string }) {
+async function get(path: string, as: { userId?: string; cookie?: string }, routeCookie?: string) {
   const headers: Record<string, string> = { "x-forwarded-for": IP };
   if (as.userId) headers["x-test-clerk-user-id"] = as.userId;
-  if (as.cookie) headers.cookie = as.cookie;
+  const cookie = [as.cookie, routeCookie].filter(Boolean).join("; ");
+  if (cookie) headers.cookie = cookie;
   const response = await fetch(`${baseUrl}${path}`, { headers, redirect: "manual" });
   return { status: response.status, location: response.headers.get("location"), text: await response.text() };
 }
@@ -92,6 +111,10 @@ beforeAll(async () => {
   baseUrl = listening.baseUrl;
   close = () => new Promise(resolve => listening.server.close(() => resolve()));
 });
+beforeEach(() => {
+  state.exchangeGoogleDriveAuthorizationCode.mockClear();
+  state.saveGoogleDriveConnection.mockClear();
+});
 afterAll(async () => {
   await close();
   vi.unstubAllEnvs();
@@ -99,16 +122,18 @@ afterAll(async () => {
 
 describe("routes Express d’administration : réservées à l’administrateur doublement authentifié", () => {
   it.each([
-    ["un visiteur", () => ({})],
-    ["un compte connecté non administrateur, même avec une session de double authentification encore valide", () => ({ userId: MEMBER_OPEN_ID, cookie: mfaCookies.get(MEMBER_OPEN_ID) })],
-    ["l’administrateur sans double authentification", () => ({ userId: OWNER_OPEN_ID })],
-  ])("refuse %s sur chaque route d’administration", async (_who, identity) => {
+    ["un visiteur", () => ({}), "admin"],
+    ["un compte connecté non administrateur, même avec une session de double authentification encore valide", () => ({ userId: MEMBER_OPEN_ID, cookie: mfaCookies.get(MEMBER_OPEN_ID) }), "admin"],
+    ["l’administrateur sans double authentification", () => ({ userId: OWNER_OPEN_ID }), "mfa"],
+  ] as const)("refuse %s sur chaque route d’administration", async (_who, identity, refusal) => {
     const notRefused: string[] = [];
-    for (const path of ADMIN_ROUTES) {
-      const result = await get(path, identity());
-      if (result.status !== 403) notRefused.push(`${path} → ${result.status}`);
+    for (const route of ADMIN_ROUTES) {
+      const result = await get(route.path, identity(), route.cookie);
+      if (result.status !== 403 || result.text !== route.refusal[refusal]) notRefused.push(`${route.path} → ${result.status} ${result.text}`);
     }
     expect(notRefused).toEqual([]);
+    expect(state.exchangeGoogleDriveAuthorizationCode).not.toHaveBeenCalled();
+    expect(state.saveGoogleDriveConnection).not.toHaveBeenCalled();
   });
 
   it("laisse passer l’administrateur qui a validé la double authentification (témoin du parcours)", async () => {
@@ -117,5 +142,9 @@ describe("routes Express d’administration : réservées à l’administrateur 
     const connect = await get("/api/google-drive/oauth/connect", verifiedOwner);
     expect(connect.status).toBe(302);
     expect(connect.location).toMatch(/^https:\/\/accounts\.google\.com\//);
+    // The same state and cookie as in the refusals reach the code exchange.
+    expect(await get(DRIVE_CALLBACK, verifiedOwner, DRIVE_STATE_COOKIE)).toMatchObject({ status: 302, location: "/admin?googleDrive=connected" });
+    expect(state.exchangeGoogleDriveAuthorizationCode).toHaveBeenCalledWith("google-code");
+    expect(state.saveGoogleDriveConnection).toHaveBeenCalledWith(expect.objectContaining({ authorizedByOpenId: OWNER_OPEN_ID }));
   });
 });
