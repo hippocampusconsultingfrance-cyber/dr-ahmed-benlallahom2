@@ -5,7 +5,7 @@ import { recruitmentCvValidationMessage, validateCvFile } from "./recruitmentFil
 import { DOCUMENT_DECOMPRESSION_LIMITS, truncateExtractedText } from "./documentDecompressionLimits";
 import { extractCvDocument } from "./recruitmentAnalysis";
 import { buildDocx } from "./testing/zipFixture";
-import { classicPdf, libreOfficeChineseCvPdf, libreOfficeCvPdf, packPdfIntoObjectStream, pathologicalPdfs, pngPredict, saveIncrementally, withObjectInStreamData, withTrailerInStreamData } from "./testing/pdfFixture";
+import { appendWithoutXref, classicPdf, libreOfficeChineseCvPdf, libreOfficeCvPdf, packPdfIntoObjectStream, pathologicalPdfs, pngPredict, saveIncrementally, withObjectInStreamData, withTrailerInStreamData } from "./testing/pdfFixture";
 
 const DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 const validPdf = Buffer.concat([Buffer.from("%PDF-1.7\n1 0 obj << /Type /Page >> endobj\n"), Buffer.alloc(300, 65)]);
@@ -329,7 +329,7 @@ describe("REC-02 — PDF réels acceptés, actions dangereuses cherchées aussi 
     });
   });
 
-  describe("compte les pages distinctes, chacune dans sa dernière version", () => {
+  describe("compte les pages distinctes, une fois chacune", () => {
     const pageOfCv = (rotate: number) => ({ number: 1, body: `<</Type/Page/Parent 10 0 R/Resources 17 0 R/MediaBox[0 0 595.303937007874 841.889763779528]/Rotate ${rotate}/Contents 2 0 R>>` });
     /** A PDF of `count` blank pages, objects 3 onwards. */
     const blankPages = (count: number) => classicPdf([
@@ -359,6 +359,35 @@ describe("REC-02 — PDF réels acceptés, actions dangereuses cherchées aussi 
       expect(() => validate(added)).toThrow("cv_validation_pdf_page_limit_exceeded");
       expect(() => validate(blankPages(26))).toThrow("cv_validation_pdf_page_limit_exceeded");
       expect(validate(blankPages(25)).pageCount).toBe(25);
+    });
+
+    it("refuse 30 pages dont des numéros sont redéfinis après %%EOF sans xref, que pdf.js ignore", async () => {
+      /** `count` pages of text (objects 3 onwards), so that pdf.js reads them without OCR. */
+      const textPages = (count: number) => {
+        const line = "BT /F1 12 Tf 50 780 Td (Dr Camille Martin, anesthesiste-reanimateur, curriculum vitae) Tj ET";
+        return classicPdf([
+          "<</Type/Catalog/Pages 2 0 R>>",
+          `<</Type/Pages/Count ${count}/Kids[${Array.from({ length: count }, (_, index) => `${index + 3} 0 R`).join(" ")}]>>`,
+          ...Array.from({ length: count }, () => `<</Type/Page/Parent 2 0 R/MediaBox[0 0 595 842]/Resources<</Font<</F1 ${count + 4} 0 R>>>>/Contents ${count + 3} 0 R>>`),
+          `<</Length ${line.length}>>\nstream\n${line}\nendstream`,
+          "<</Type/Font/Subtype/Type1/BaseFont/Helvetica/Encoding/WinAnsiEncoding>>",
+        ]);
+      };
+      /** Pages 3 to `last` written again as annotations, after the end of the file. */
+      const annotations = (last: number) => Array.from({ length: last - 2 }, (_, index) => ({ number: index + 3, body: "<</Type/Annot/Subtype/Text/Rect[0 0 10 10]>>" }));
+      const thirty = textPages(30);
+      const six = appendWithoutXref(thirty, annotations(8));
+      expect((await extractCvDocument(six, "application/pdf")).totalPages).toBe(30);
+      expect(() => validate(thirty)).toThrow("cv_validation_pdf_page_limit_exceeded");
+      expect(() => validate(six)).toThrow("cv_validation_pdf_page_limit_exceeded");
+      // Every page written again: still 30 pages, not a PDF without any.
+      expect(() => validate(appendWithoutXref(thirty, annotations(32)))).toThrow("cv_validation_pdf_page_limit_exceeded");
+      // The same with the pages in an object stream.
+      const packed = appendWithoutXref(packPdfIntoObjectStream(thirty), annotations(8));
+      expect((await extractCvDocument(packed, "application/pdf")).totalPages).toBe(30);
+      expect(() => validate(packed)).toThrow("cv_validation_pdf_page_limit_exceeded");
+      // Under the limit, such a file keeps all its pages.
+      expect(validate(appendWithoutXref(textPages(20), annotations(8))).pageCount).toBe(20);
     });
   });
 

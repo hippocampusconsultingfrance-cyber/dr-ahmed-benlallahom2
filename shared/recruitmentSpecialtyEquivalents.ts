@@ -137,10 +137,12 @@ export const RECRUITMENT_PHARMACIST_SPECIALTIES: ReadonlySet<string> = new Set([
  * « التمريضية » (the adjective). Only names of professions: not the fields
  * they share with physicians (斜视 "strabismus", "clinical pharmac…"), so that a
  * « Consultant Clinical Pharmacologist » stays a physician. "Rig medic" also
- * names the offshore paramedic profile of the VVIP form in every language.
+ * names the offshore paramedic profile of the VVIP form in every language,
+ * « aide-anesthésiste » a nurse who assists the anaesthetist.
  */
 export const RECRUITMENT_PARAMEDICAL_TITLE_TERMS: readonly string[] = [
   ...RECRUITMENT_PHARMACIST_TITLE_TERMS,
+  "aide anesthésiste",
   "nurse", "nursing", "midwi", "paramedic", "rig medic", "technician", "technologist", "therapist", "physiotherap", "radiographer", "sonographer",
   "dietitian", "dietician", "nutritionist", "orthoptist", "psychologist", "social worker", "healthcare assistant",
   "care assistant", "medical assistant", "physician assistant", "physician associate",
@@ -155,7 +157,16 @@ export const RECRUITMENT_PARAMEDICAL_TITLE_TERMS: readonly string[] = [
   "أخصائي تغذية", "أخصائية تغذية", "أخصائي نفسي", "أخصائية نفسية", "أخصائي اجتماعي", "أخصائية اجتماعية",
   "护士", "護士", "护理", "護理", "助产", "助產", "技师", "技師", "技术员", "技術員", "护工", "護工", "急救员", "急救員", "急救医护", "急救醫護",
   "治疗师", "治療師", "营养师", "營養師", "心理师", "心理師", "社工", "医师助理", "醫師助理", "医生助理", "醫生助理",
+  "麻醉师助理", "麻醉師助理", "麻醉师助手", "麻醉師助手",
 ];
+
+/**
+ * Nursing or allied health titles named after a specialist (an
+ * « Anesthesiologist Assistant » is no anaesthesiologist), unless an academic
+ * or administrative rank follows: a « Radiologist Assistant Professor » is a
+ * radiologist (server/recruitmentAnalysis.ts).
+ */
+export const RECRUITMENT_SPECIALIST_ASSISTANT_TITLE_TERMS: readonly string[] = ["anaesthesiologist assistant", "anesthesiologist assistant", "radiologist assistant"];
 
 /**
  * Words of a physician's title: a title holding one keeps its specialty
@@ -174,4 +185,36 @@ export const RECRUITMENT_PHYSICIAN_TITLE_TERMS: readonly string[] = [
   "arzt", "ärztin", "facharzt", "fachärztin", "oberarzt", "oberärztin", "chefarzt", "chefärztin", "assistenzarzt", "assistenzärztin", "notarzt", "notärztin",
   "طبيب", "طبيبة", "استشاري", "استشارية", "جراح",
   "医师", "醫師", "医生", "醫生", "大夫",
+];
+
+/**
+ * Names of specialists, physicians' words like the ones above but only in a
+ * part of the title (between its punctuation and conjunctions) without a
+ * nursing or allied health word: « Consultant Paediatrician, Nurse Trainer »,
+ * « Anästhesist und Praxisanleiter », 麻醉师兼护理培训讲师 are physicians, a
+ * « Nurse Anaesthetist », an « Infirmier spécialisé anesthésiste », a
+ * « Technicien supérieur radiologue » or a « Scrub Nurse for the
+ * Neurosurgeon » are not, nor a « Psychiatric Nurse » (whole words). Not the
+ * names nurses or technicians also hold (« infirmière urgentiste », « IDE
+ * généraliste », "Speech-Language Pathologist").
+ */
+export const RECRUITMENT_SPECIALIST_TITLE_TERMS: readonly string[] = [
+  // US and GB spellings, French, German, Chinese.
+  "anaesthetist", "anesthetist", "anaesthesiologist", "anesthesiologist", "intensivist", "paediatrician", "pediatrician", "neonatologist",
+  "cardiologist", "psychiatrist", "radiologist", "neurologist", "neurosurgeon", "nephrologist", "oncologist", "haematologist", "hematologist",
+  "gastroenterologist", "hepatologist", "endocrinologist", "diabetologist", "rheumatologist", "dermatologist", "pulmonologist", "geriatrician",
+  "urologist", "gynaecologist", "gynecologist", "obstetrician", "ophthalmologist", "otolaryngologist", "otorhinolaryngologist", "internist",
+  "histopathologist", "general practitioner",
+  "anesthésiste", "pédiatre", "pédopsychiatre", "cardiologue", "psychiatre", "radiologue", "neurologue", "neurochirurgien", "neurochirurgienne",
+  "néphrologue", "oncologue", "cancérologue", "hématologue", "gastro entérologue", "gastroentérologue", "hépatologue", "endocrinologue",
+  "diabétologue", "rhumatologue", "dermatologue", "pneumologue", "gériatre", "urologue", "gynécologue", "obstétricien", "obstétricienne",
+  "ophtalmologue", "ophtalmologiste", "interniste", "infectiologue", "anatomopathologiste",
+  "anästhesist", "anästhesistin", "kinderarzt", "kinderärztin", "kardiologe", "kardiologin", "psychiater", "psychiaterin", "chirurg", "chirurgin",
+  "neurochirurg", "neurochirurgin", "radiologe", "radiologin", "intensivmediziner", "intensivmedizinerin", "notfallmediziner", "notfallmedizinerin",
+  "internistin", "neurologe", "neurologin", "nephrologe", "nephrologin", "onkologe", "onkologin", "hämatologe", "hämatologin",
+  "gastroenterologe", "gastroenterologin", "endokrinologe", "endokrinologin", "diabetologe", "diabetologin", "rheumatologe", "rheumatologin",
+  "dermatologe", "dermatologin", "hautarzt", "hautärztin", "pneumologe", "pneumologin", "geriater", "geriaterin", "urologe", "urologin",
+  "gynäkologe", "gynäkologin", "frauenarzt", "frauenärztin", "augenarzt", "augenärztin", "hausarzt", "hausärztin",
+  "allgemeinmediziner", "allgemeinmedizinerin", "pathologe", "pathologin",
+  "麻醉师", "麻醉師",
 ];

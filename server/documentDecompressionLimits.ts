@@ -588,16 +588,19 @@ function packedObjects({ text, first }: { text: string; first: number | null }, 
 }
 
 /**
- * Pages of a PDF: its distinct page objects, each in its latest definition
- * (an incremental save writes the pages it changes again, after the first
- * ones: 14 rotated pages are not 28). A page dictionary outside any object
- * (before its header or after its `endobj`), or in an object stream whose
- * header does not read plainly, counts on its own. `decoded` holds each
- * part's text with #xx names decoded.
+ * Pages of a PDF: its distinct page objects, an object number counting once
+ * when at least one of its definitions is a page (an incremental save writes
+ * the pages it changes again, after the first ones: 14 rotated pages are not
+ * 28). Which definition pdf.js reads depends on the xref, not on the order
+ * in the file: 6 page numbers defined again as annotations after %%EOF,
+ * without an xref, which pdf.js ignores, made a 30-page PDF count 24. A page
+ * dictionary outside any object (before its header or after its `endobj`),
+ * or in an object stream whose header does not read plainly, counts on its
+ * own. `decoded` holds each part's text with #xx names decoded.
  */
 function countPageObjects(parts: PdfSearchedPart[], decoded: string[]) {
-  // Object number → whether its latest definition, in file order, is a page.
-  const pages = new Map<number, boolean>();
+  // Object numbers with at least one definition that is a page.
+  const pages = new Set<number>();
   let unnumbered = 0;
   const budget = { objects: MAX_INDEXED_PACKED_OBJECTS };
   parts.forEach((part, index) => {
@@ -605,18 +608,18 @@ function countPageObjects(parts: PdfSearchedPart[], decoded: string[]) {
       const found = new RegExp(OBJECT_BOUND_OR_PAGE.source, "g");
       let object: number | null = null;
       for (let match = found.exec(decoded[index]!); match; match = found.exec(decoded[index]!)) {
-        if (match[1] !== undefined) pages.set(object = Number(match[1]), false);
+        if (match[1] !== undefined) object = Number(match[1]);
         else if (match[2] !== undefined) object = null;
         else if (object === null) unnumbered += 1;
-        else pages.set(object, true);
+        else pages.add(object);
       }
     } else if (part.kind === "objects") {
       const objects = packedObjects(part, budget);
-      if (objects) objects.forEach(object => pages.set(object.number, PAGE_DICTIONARY.test(decodePdfNames(object.text))));
+      if (objects) objects.forEach(object => { if (PAGE_DICTIONARY.test(decodePdfNames(object.text))) pages.add(object.number); });
       else unnumbered += decoded[index]!.match(PAGE_DICTIONARIES)?.length ?? 0;
     }
   });
-  return unnumbered + Array.from(pages.values()).filter(Boolean).length;
+  return unnumbered + pages.size;
 }
 
 export type PdfStructureInspection = {

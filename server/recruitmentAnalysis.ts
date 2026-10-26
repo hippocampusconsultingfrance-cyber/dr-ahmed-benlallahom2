@@ -12,6 +12,8 @@ import {
   RECRUITMENT_PHARMACIST_SPECIALTIES,
   RECRUITMENT_PHARMACIST_TITLE_TERMS,
   RECRUITMENT_PHYSICIAN_TITLE_TERMS,
+  RECRUITMENT_SPECIALIST_ASSISTANT_TITLE_TERMS,
+  RECRUITMENT_SPECIALIST_TITLE_TERMS,
   RECRUITMENT_SPECIALTY_EQUIVALENTS,
 } from "../shared/recruitmentSpecialtyEquivalents";
 
@@ -758,38 +760,65 @@ function titleTerms(terms: readonly string[], wholeWords = false): TitleTerm[] {
 }
 
 const paramedicalSpecialties = new Set(Array.from(RECRUITMENT_PARAMEDICAL_SPECIALTIES, normalizeSpecialtyText));
-const paramedicalTitleTerms = titleTerms(RECRUITMENT_PARAMEDICAL_TITLE_TERMS);
+/** A rank after "assistant": an « Anesthesiologist Assistant Professor » is no « Anesthesiologist Assistant ». */
+const ASSISTANT_RANK = "(?: clinical)? (?:professor|prof|director|program|programme|chief|dean|lecturer)(?![^ ])";
+const paramedicalTitleTerms: TitleTerm[] = [
+  ...titleTerms(RECRUITMENT_PARAMEDICAL_TITLE_TERMS),
+  ...RECRUITMENT_SPECIALIST_ASSISTANT_TITLE_TERMS.map(normalizeSpecialtyText).map(term => {
+    const title = new RegExp(`(?<![^ ])${term}(?!${ASSISTANT_RANK})`);
+    return { term, isIn: (text: string) => title.test(text) };
+  }),
+];
 const pharmacistSpecialties = new Set(Array.from(RECRUITMENT_PHARMACIST_SPECIALTIES, normalizeSpecialtyText));
 const pharmacistTitleTerms = new Set(RECRUITMENT_PHARMACIST_TITLE_TERMS.map(normalizeSpecialtyText));
 /** For medical biology, toxicology and pharmacology, which pharmacists practise too: « Pharmacien biologiste ». */
 const nonPharmacistTitleTerms = paramedicalTitleTerms.filter(({ term }) => !pharmacistTitleTerms.has(term));
 const physicianTitleTerms = titleTerms(RECRUITMENT_PHYSICIAN_TITLE_TERMS, true);
+const specialistTitleTerms = titleTerms(RECRUITMENT_SPECIALIST_TITLE_TERMS, true);
 
 /**
  * Where a physician's word names someone other than the holder of the title (normalized): "Doctor of …"
- * (a degree: Doctor of Nursing Practice), "physician liaison", « assistant(e) du médecin »,
- * « Notarzt-Einsatz » / « Notarzt-Dienst » (on call with the emergency physician), 无国界医生 (Doctors
- * Without Borders), 协助麻醉医师 "assisting the anaesthetist".
+ * (a degree: Doctor of Nursing Practice), "physician liaison", « assistant(e) du médecin (anesthésiste) »,
+ * « aide de l’anesthésiste », "assistant to the anaesthetist", "assisting the anaesthetist", "the
+ * cardiologist's assistant", « Notarzt-Einsatz » / « Notarzt-Dienst » (on call with the emergency
+ * physician), 无国界医生 (Doctors Without Borders), 协助麻醉医师 "assisting the anaesthetist". The word
+ * "assistant" itself stays: a « Medical Assistant to the Pediatrician » is a medical assistant.
  */
-const OTHER_PHYSICIAN_PHRASES = /(?<![^ ])(?:doctor of|physician liaison|assistante? du medecin|notarzt einsatz|notarzt dienst)(?![^ ])|无国界医生|無國界醫生|(?:协助|協助)[^ ]*?(?:医师|醫師|医生|醫生)/g;
+const OTHER_PHYSICIAN_PHRASES = /(?<![^ ])(?:doctor of|physician liaison|notarzt einsatz|notarzt dienst|assisting (?:the |an? )?[^ ]+|[^ ]+ s(?= assistante?(?![^ ])))(?![^ ])|(?<=(?<![^ ])(?:assistante?|assistant e|aide) )(?:du|des|de la|de l) (?:medecins? )?[^ ]+|(?<=(?<![^ ])assistant )to (?:the |an? )?[^ ]+|无国界医生|無國界醫生|(?:协助|協助)[^ ]*?(?:医师|醫師|医生|醫生|麻醉师|麻醉師)/g;
 
-/** A physician's title: « Facharzt », « استشاري », « 医师 »… */
-function namesPhysician(text: string) {
-  const ownTitle = text.replace(OTHER_PHYSICIAN_PHRASES, " ");
-  return physicianTitleTerms.some(({ isIn }) => isIn(ownTitle));
+/**
+ * The parts of a title (INTL-02), normalized: between its punctuation, a spaced slash or one before a
+ * capital, an aside in parentheses and its conjunctions (and, et, und, &, 兼). An inclusive ending stays
+ * in its word: « Infirmier(ère) », « infirmier/ère ».
+ */
+function titleParts(value: string) {
+  return value
+    .normalize("NFKD")
+    .replace(/\s\(([^()]*)\)|\/(?=[A-Z])/g, ",$1,")
+    .split(/[,;|•،؛、。]|\s[/\-–—]\s|\s(?:and|et|und|&)\s|兼/i)
+    .map(normalizeSpecialtyText);
+}
+
+/** A physician's title: « Facharzt », « استشاري », « 医师 »…, and with `specialists`, « Consultant Anaesthetist ». */
+function namesPhysician(text: string, specialists: boolean) {
+  return physicianTitleTerms.some(({ isIn }) => isIn(text)) || (specialists && specialistTitleTerms.some(({ isIn }) => isIn(text)));
 }
 
 /**
  * A nursing or allied health profession, declared or cited: « Intensive Care Nurse », « Emergency Medical
  * Technician », « 麻醉护士 »… Not when the title also names a physician (« Facharzt für Psychiatrie,
  * Diplom-Psychologe »), outside the nursing or allied health words themselves (« Physician Assistant »,
- * 医师助理).
+ * 医师助理) and the words that name someone else; by a specialist's name, only in a part of the title
+ * without a nursing or allied health word (« Consultant Paediatrician, Nurse Trainer »). Each part is read
+ * on its own: an « Anesthesiologist, Assistant Professor » is no « Anesthesiologist Assistant ».
  */
 function namesParamedicalProfession(value: string, terms = paramedicalTitleTerms) {
-  const text = normalizeSpecialtyText(value);
-  if (paramedicalSpecialties.has(text)) return true;
-  const used = terms.filter(({ isIn }) => isIn(text));
-  return used.length > 0 && !namesPhysician(used.reduce((rest, { term }) => rest.split(term).join(" "), text));
+  if (paramedicalSpecialties.has(normalizeSpecialtyText(value))) return true;
+  const parts = titleParts(value).map(text => {
+    const used = terms.filter(({ isIn }) => isIn(text));
+    return { used, rest: used.reduce((rest, { term }) => rest.split(term).join(" "), text.replace(OTHER_PHYSICIAN_PHRASES, " ")) };
+  });
+  return parts.some(({ used }) => used.length > 0) && !parts.some(({ used, rest }) => namesPhysician(rest, used.length === 0));
 }
 
 /** INTL-02: "Consultant Anaesthetist", "Facharzt für Anästhesiologie", "طبيب تخدير" or "麻醉科医师" match « Anesthésie-réanimation ». */
