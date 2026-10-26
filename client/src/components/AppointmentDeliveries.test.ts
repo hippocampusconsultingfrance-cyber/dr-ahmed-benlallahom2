@@ -346,6 +346,8 @@ describe("EXPL-02 — encart « À traiter » du tableau de bord", () => {
     expect(html).not.toContain("Rien à traiter");
     expect(html).toContain("Envois pas encore partis (1)");
     expect(html).toContain("aucune tentative n’a encore échoué");
+    // Not always the email service: the budget of the processing may have run out first.
+    expect(html).toContain("n’a pas pu les envoyer dans le temps qui lui est donné (temps écoulé, service d’envoi lent ou saturé, traitement interrompu)");
     expect(html).toContain("« Renvoyer » sur le rendez-vous les envoie tout de suite.");
     expect(html).toContain("APTTODOUI006");
     expect(waitingDetail({ jobTypes: ["confirmation", "invoice"], dueSince: "2026-10-26T10:02:00.000Z" })).toBe("Confirmation, Facture · en attente depuis le 26/10/2026 11:02:00, essai à la prochaine exécution planifiée");

@@ -34,8 +34,9 @@ type Database = NonNullable<Awaited<ReturnType<typeof getDb>>>;
  * within it even when the webhook never comes, through one passing rate limit
  * of Resend as well (a new try after its retry-after). The invoice usually
  * follows just after, in the same processing; an email that would have to
- * wait past it goes back to the queue, for the webhook or the scheduled job.
- * Tests shorten it.
+ * wait past it goes back to the queue, and a job whose turn comes after it
+ * does not start: both stay due for the webhook, the scheduled job or
+ * « Renvoyer ». Tests shorten it.
  */
 export const paymentStatusPageFulfillment = { timeoutMs: 3_000 };
 

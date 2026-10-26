@@ -22,8 +22,9 @@ const MAX_BATCH = 5;
 export const APPOINTMENT_FULFILLMENT_STALE_AFTER_MS = 15 * 60_000;
 /**
  * A job still waiting for its first attempt this long after it was due was not
- * sent right after the payment (immediate budget spent under a rate limit or an
- * outage of Resend, function stopped): it is listed in « À traiter » (ABUS-03,
+ * sent right after the payment (immediate budget spent before its turn or
+ * during its send, under a rate limit or an outage of Resend; processing
+ * stopped before its turn): it is listed in « À traiter » (ABUS-03,
  * EXPL-02), as the next automatic attempt may only come with the next
  * scheduled run, without counting an attempt nor alerting the owner.
  */

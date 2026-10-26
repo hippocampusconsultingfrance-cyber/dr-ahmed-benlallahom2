@@ -117,7 +117,7 @@ export default function AdminAttentionPanel({ onOpenAppointments }: { onOpenAppo
           <AttentionList
             id="admin-attention-waiting"
             title="Envois pas encore partis"
-            description="Ces envois n’ont pas pu partir juste après le paiement (service d’envoi saturé ou indisponible à ce moment-là) ; aucune tentative n’a encore échoué, mais le prochain essai automatique n’a lieu qu’à une exécution planifiée, parfois le lendemain. « Renvoyer » sur le rendez-vous les envoie tout de suite."
+            description="Ces envois ne sont pas encore partis : le traitement qui suit le paiement n’a pas pu les envoyer dans le temps qui lui est donné (temps écoulé, service d’envoi lent ou saturé, traitement interrompu) ; aucune tentative n’a encore échoué, mais le prochain essai automatique n’a lieu qu’à une exécution planifiée, parfois le lendemain. « Renvoyer » sur le rendez-vous les envoie tout de suite."
             total={waiting.total}
             items={waiting.items.map(item => ({ ...item, detail: waitingDetail(item) }))}
           />
