@@ -134,9 +134,9 @@ async function sendPostPaymentEmail(
 }
 
 /**
- * Why a post-payment email (confirmation, invoice, owner notification) did not
- * leave, read from the error its sender threw; null for any other error (PDF,
- * database).
+ * Why a post-payment email (confirmation, invoice, owner notification, refund
+ * email) did not leave, read from the error its sender threw; null for any
+ * other error (PDF, database).
  */
 export function postPaymentEmailFailureCode(error: unknown): ResendDeliveryFailureCode | null {
   const cause = error instanceof PostPaymentEmailError ? error : error instanceof Error ? error.cause : null;
@@ -637,8 +637,9 @@ export function buildRefundEmail(input: {
  * Refund notice to the patient. "practitioner_cancellation" announces that the
  * practitioner cancelled the consultation (with the reason given to the
  * patient); "unconfirmed_payment" explains that a payment could not be attached
- * to a reserved slot. Returns whether the email was accepted, so the admin can
- * be told to contact the patient otherwise.
+ * to a reserved slot. Throws when it could not be delivered, with the cause its
+ * sender met, as the confirmation and the invoice: the refund job tells a
+ * refused address from a passing failure (postPaymentEmailFailureCode).
  */
 export async function sendRefundConfirmationEmail(
   customerEmail: string,
@@ -647,15 +648,13 @@ export async function sendRefundConfirmationEmail(
   appointmentDate: Date,
   refundAmount: string,
   details: { context?: RefundEmailContext; reason?: string; idempotencyKey?: string; language?: EmailLanguage } = {},
-): Promise<boolean> {
+) {
   try {
     const email = buildRefundEmail({ customerName, trackingId, appointmentDate, refundAmount, context: details.context, reason: details.reason, language: details.language });
     await sendPatientEmail({ rejected: "refund_email_rejected", failed: "refund_email_failed" }, customerEmail, email, { idempotencyKey: details.idempotencyKey });
     console.log("Refund email sent successfully");
-    return true;
-  } catch {
-    console.error("Refund email delivery failed");
-    return false;
+  } catch (error) {
+    throw new Error("refund_email_failed", { cause: error });
   }
 }
 

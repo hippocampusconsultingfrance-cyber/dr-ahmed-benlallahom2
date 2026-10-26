@@ -20,7 +20,7 @@ import AdminConfigurationBanner from "@/components/AdminConfigurationBanner";
 import AdminAttentionPanel from "@/components/AdminAttentionPanel";
 import AdminLoadMore from "@/components/AdminLoadMore";
 import AdminSearchField from "@/components/AdminSearchField";
-import AppointmentDeliveries from "@/components/AppointmentDeliveries";
+import AppointmentDeliveries, { refundEmailWarning, type AppointmentDeliveryState } from "@/components/AppointmentDeliveries";
 import PersonalDataSearchPanel, { personalDataSearchKey, requestPersonalDataSearch } from "@/components/PersonalDataSearchPanel";
 import { GDPR_REQUEST_STATUS_LABELS, GDPR_REQUEST_TYPE_LABELS, gdprRequestDeadline, isGdprRequestOpen, isGdprRequestOverdue } from "@/components/gdprRequestAdmin";
 import { adminListCount, adminPageOffsets, ADMIN_PAGE_SIZE, mergeAdminPages, useAdminPageCount } from "@/components/adminPagination";
@@ -295,9 +295,10 @@ export function AppointmentsTab() {
       toast.error(mutationError.message);
     },
   });
-  const notifyRefundResult = ({ refundAmount, patientNotified }: { refundAmount: string; patientNotified: boolean }) => {
+  const notifyRefundResult = ({ refundAmount, patientNotified, patientEmail }: { refundAmount: string; patientNotified: boolean; patientEmail?: AppointmentDeliveryState | null }) => {
     toast.success(`Remboursement confirmé : ${refundAmount} €`);
-    if (!patientNotified) toast.warning("L’email au patient n’a pas pu être envoyé : prévenez-le directement.");
+    // Its patient email goes through the refund queue (EXPL-02): refused, or waiting for its next automatic attempt.
+    if (!patientNotified) toast.warning(refundEmailWarning(patientEmail), { duration: 10_000 });
     utils.admin.appointments.list.invalidate();
     utils.admin.stats.invalidate();
     // Its post-payment emails waiting for a retry were just closed as not sent (EXPL-02).

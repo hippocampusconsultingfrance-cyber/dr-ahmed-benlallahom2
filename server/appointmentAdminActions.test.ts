@@ -6,11 +6,22 @@ import { getAppointmentAdminActions } from "../client/src/pages/appointmentAdmin
 // M3 — BOOK-DOCTOR-CANCEL / ADM-APT-01.
 
 const database = vi.hoisted(() => ({ getDb: vi.fn() }));
-const notifications = vi.hoisted(() => ({ sendRefundConfirmationEmail: vi.fn(async () => true) }));
+const notifications = vi.hoisted(() => ({ sendRefundConfirmationEmail: vi.fn(async (..._args: unknown[]) => undefined) }));
+// The patient email of a dashboard refund goes through the refund queue (EXPL-02), which
+// answers its state after the immediate attempt; the queue itself runs in
+// appointmentFulfillmentRefusal.test.ts.
+const fulfillment = vi.hoisted(() => ({
+  closeUnsentAppointmentFulfillment: vi.fn(async () => 0),
+  sendAppointmentRefundEmail: vi.fn(async (_appointmentId: number): Promise<string | null> => "sent"),
+}));
 vi.mock("./db", () => ({ getDb: database.getDb }));
 vi.mock("./_core/notifications", () => notifications);
+vi.mock("./appointmentFulfillment", () => fulfillment);
 
-import { refundAppointmentPayment, refundUnconfirmedCheckoutSession, updateAppointmentStatusByAdmin } from "./appointmentAdminActions";
+import { dashboardRefundEmailOf, refundAppointmentPayment, refundUnconfirmedCheckoutSession, updateAppointmentStatusByAdmin } from "./appointmentAdminActions";
+
+/** The patient email the refund job sends for the refund this update recorded. */
+const queuedEmail = (update: Record<string, unknown>) => dashboardRefundEmailOf({ paymentStatus: "refunded", cancellationReason: String(update.cancellationReason) });
 
 const HOUR = 60 * 60 * 1000;
 const NOW = new Date("2026-10-16T10:00:00.000Z");
@@ -76,22 +87,25 @@ describe("annulation par le praticien et remboursements depuis le tableau de bor
 
     const result = await refundAppointmentPayment(stripe, { trackingId: "APTADMIN0001", reason: "Indisponibilité du médecin", initiator: "practitioner" }, NOW);
 
-    expect(result).toMatchObject({ success: true, refundAmount: "100.00", cancelled: true, patientNotified: true });
+    expect(result).toMatchObject({ success: true, refundAmount: "100.00", cancelled: true, patientNotified: true, patientEmail: "sent" });
     // Paramètres Stripe stables (clé d’idempotence) : le motif reste en base.
     expect(refundsCreate).toHaveBeenCalledWith({ payment_intent: "pi_test_paid", metadata: { trackingId: "APTADMIN0001" } }, { idempotencyKey: "refund_APTADMIN0001" });
     expect(updates[0]).toMatchObject({ paymentStatus: "refunded", appointmentStatus: "cancelled", slotKey: null, refundAmount: "100.00" });
     expect(String(updates[0].cancellationReason)).toContain("praticien");
-    expect(notifications.sendRefundConfirmationEmail).toHaveBeenCalledWith(
-      "patient@example.test", "Patient Test", "APTADMIN0001", expect.any(Date), "100.00",
-      expect.objectContaining({ context: "practitioner_cancellation", reason: "Indisponibilité du médecin", language: "fr" }),
-    );
+    // L’email au patient part par la file des remboursements (EXPL-02), une seule fois, avec le motif.
+    expect(fulfillment.sendAppointmentRefundEmail).toHaveBeenCalledTimes(1);
+    expect(fulfillment.sendAppointmentRefundEmail).toHaveBeenCalledWith(5);
+    expect(notifications.sendRefundConfirmationEmail).not.toHaveBeenCalled();
+    expect(queuedEmail(updates[0])).toEqual({ context: "practitioner_cancellation", reason: "Indisponibilité du médecin" });
   });
 
-  it("prévient en anglais le patient d’une réservation faite dans une autre langue (EN-01)", async () => {
-    fakeDb(row({ language: "en" }));
-    const { stripe } = fakeStripe();
-    await refundAppointmentPayment(stripe, { trackingId: "APTADMIN0001", reason: "Doctor unavailable", initiator: "practitioner" }, NOW);
-    expect(notifications.sendRefundConfirmationEmail).toHaveBeenLastCalledWith(expect.anything(), expect.anything(), expect.anything(), expect.any(Date), "100.00", expect.objectContaining({ context: "practitioner_cancellation", language: "en" }));
+  it("dit si l’email au patient attend un nouvel essai ou a été refusé, sans faire échouer le remboursement (EXPL-02)", async () => {
+    for (const patientEmail of ["retrying", "refused", null]) {
+      fakeDb(row());
+      fulfillment.sendAppointmentRefundEmail.mockResolvedValueOnce(patientEmail);
+      await expect(refundAppointmentPayment(fakeStripe().stripe, { trackingId: "APTADMIN0001", reason: "Indisponibilité du médecin", initiator: "practitioner" }, NOW))
+        .resolves.toMatchObject({ success: true, cancelled: true, patientNotified: false, patientEmail });
+    }
   });
 
   it("garde la règle des 24 h pour une annulation demandée par le patient", async () => {
@@ -101,10 +115,11 @@ describe("annulation par le praticien et remboursements depuis le tableau de bor
       .rejects.toMatchObject({ code: "CONFLICT", message: expect.stringContaining("24 heures") });
     expect(refundsCreate).not.toHaveBeenCalled();
 
-    fakeDb(row({ appointmentDate: new Date(NOW.getTime() + 30 * HOUR) }));
+    const { updates } = fakeDb(row({ appointmentDate: new Date(NOW.getTime() + 30 * HOUR) }));
     await expect(refundAppointmentPayment(stripe, { trackingId: "APTADMIN0001", reason: "Empêchement", initiator: "patient" }, NOW))
       .resolves.toMatchObject({ success: true, cancelled: true });
-    expect(notifications.sendRefundConfirmationEmail).toHaveBeenLastCalledWith(expect.anything(), expect.anything(), expect.anything(), expect.any(Date), "100.00", expect.objectContaining({ context: "refund", reason: undefined }));
+    // The patient's own reason is not written back to them.
+    expect(queuedEmail(updates[0])).toEqual({ context: "refund" });
   });
 
   it("rembourse un paiement arrivé après l’expiration du créneau (non confirmable) depuis le tableau de bord", async () => {
@@ -117,7 +132,7 @@ describe("annulation par le praticien et remboursements depuis le tableau de bor
     expect(refundsCreate).toHaveBeenCalledWith(expect.objectContaining({ payment_intent: "pi_test_late" }), expect.anything());
     expect(updates[0]).toMatchObject({ paymentStatus: "refunded" });
     expect(updates[0]).not.toHaveProperty("appointmentStatus");
-    expect(notifications.sendRefundConfirmationEmail).toHaveBeenCalledWith(expect.anything(), expect.anything(), expect.anything(), expect.any(Date), "100.00", expect.objectContaining({ context: "unconfirmed_payment" }));
+    expect(queuedEmail(updates[0])).toEqual({ context: "unconfirmed_payment", reason: "Paiement tardif" });
   });
 
   it("garde le statut d’une consultation terminée remboursée à titre de geste", async () => {
@@ -125,6 +140,16 @@ describe("annulation par le praticien et remboursements depuis le tableau de bor
     await refundAppointmentPayment(fakeStripe().stripe, { trackingId: "APTADMIN0001", reason: "Geste commercial", initiator: "practitioner" }, NOW);
     expect(updates[0]).toMatchObject({ paymentStatus: "refunded" });
     expect(updates[0]).not.toHaveProperty("appointmentStatus");
+    // A refund confirmation, not a cancellation, with the practitioner's reason; kept even if the status changes later.
+    expect(queuedEmail(updates[0])).toEqual({ context: "refund", reason: "Geste commercial" });
+  });
+
+  it("ne lit l’email d’un remboursement que sur un rendez-vous remboursé depuis le tableau de bord", () => {
+    expect(dashboardRefundEmailOf({ paymentStatus: "completed", cancellationReason: "Annulation / remboursement par le praticien : x" })).toBeNull();
+    expect(dashboardRefundEmailOf({ paymentStatus: "refunded", cancellationReason: null })).toBeNull();
+    expect(dashboardRefundEmailOf({ paymentStatus: "refunded", cancellationReason: "Remboursement constaté chez Stripe (fait hors du tableau de bord du site, ou enregistrement interrompu)" })).toBeNull();
+    // The reason itself may contain the separator.
+    expect(dashboardRefundEmailOf({ paymentStatus: "refunded", cancellationReason: "Annulation / remboursement par le praticien : Absence : urgence" })).toEqual({ context: "practitioner_cancellation", reason: "Absence : urgence" });
   });
 
   it("termine l’enregistrement d’un paiement déjà remboursé chez Stripe au lieu d’échouer (DATA-03)", async () => {
@@ -139,10 +164,8 @@ describe("annulation par le praticien et remboursements depuis le tableau de bor
     expect(refundsList).toHaveBeenCalledWith({ payment_intent: "pi_test_paid", limit: 100 });
     expect(result).toMatchObject({ success: true, refundId: "re_test_existing", refundAmount: "100.00", cancelled: true, patientNotified: true });
     expect(updates[0]).toMatchObject({ paymentStatus: "refunded", appointmentStatus: "cancelled", slotKey: null, refundAmount: "100.00" });
-    expect(notifications.sendRefundConfirmationEmail).toHaveBeenCalledWith(
-      "patient@example.test", "Patient Test", "APTADMIN0001", expect.any(Date), "100.00",
-      expect.objectContaining({ context: "practitioner_cancellation", idempotencyKey: "appointment-refund-APTADMIN0001" }),
-    );
+    expect(fulfillment.sendAppointmentRefundEmail).toHaveBeenCalledWith(5);
+    expect(queuedEmail(updates[0])).toEqual({ context: "practitioner_cancellation", reason: "Indisponibilité du médecin" });
   });
 
   it("échoue toujours sans rien écrire quand Stripe refuse le remboursement ou qu’aucun remboursement existant n’est retrouvé (DATA-03)", async () => {
@@ -159,7 +182,7 @@ describe("annulation par le praticien et remboursements depuis le tableau de bor
     await expect(refundAppointmentPayment(unlisted.stripe, { trackingId: "APTADMIN0001", reason: "Motif", initiator: "practitioner" }, NOW))
       .rejects.toMatchObject({ code: "BAD_REQUEST" });
     expect(updates).toHaveLength(0);
-    expect(notifications.sendRefundConfirmationEmail).not.toHaveBeenCalled();
+    expect(fulfillment.sendAppointmentRefundEmail).not.toHaveBeenCalled();
   });
 
   it("refuse un double remboursement et un rendez-vous non payé", async () => {
@@ -177,8 +200,14 @@ describe("annulation par le praticien et remboursements depuis le tableau de bor
 
     fakeDb(row());
     const other = fakeStripe({ id: "cs_test_double", payment_status: "paid", payment_intent: "pi_test_double", metadata: { trackingId: "APTADMIN0001" }, amount_total: 10000, customer_email: "patient@example.test" });
-    await expect(refundUnconfirmedCheckoutSession(other.stripe, { sessionId: "cs_test_double" })).resolves.toMatchObject({ success: true, refundAmount: "100.00", trackingId: "APTADMIN0001" });
+    await expect(refundUnconfirmedCheckoutSession(other.stripe, { sessionId: "cs_test_double" })).resolves.toMatchObject({ success: true, refundAmount: "100.00", trackingId: "APTADMIN0001", patientNotified: true });
     expect(other.refundsCreate).toHaveBeenCalledWith(expect.objectContaining({ payment_intent: "pi_test_double" }), { idempotencyKey: "refund_session_cs_test_double" });
+    expect(notifications.sendRefundConfirmationEmail).toHaveBeenCalledWith("patient@example.test", "Patient Test", "APTADMIN0001", expect.any(Date), "100.00", expect.objectContaining({ context: "unconfirmed_payment", idempotencyKey: "appointment-refund-session-cs_test_double" }));
+
+    // The email now throws its failure (RES-06): the refund is still done, and the toast says the patient was not told.
+    fakeDb(row());
+    notifications.sendRefundConfirmationEmail.mockRejectedValueOnce(new Error("refund_email_failed"));
+    await expect(refundUnconfirmedCheckoutSession(other.stripe, { sessionId: "cs_test_double" })).resolves.toMatchObject({ success: true, patientNotified: false });
   });
 });
 

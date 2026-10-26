@@ -96,7 +96,7 @@ describe("emails patients", () => {
   });
 
   it("annulation par le praticien : motif, remboursement et coordonnées", async () => {
-    await expect(sendRefundConfirmationEmail("patient@example.test", "Patient Test", "APTMAIL0001", NIGHT_APPOINTMENT, "150.00", { context: "practitioner_cancellation", reason: "Indisponibilité du médecin" })).resolves.toBe(true);
+    await expect(sendRefundConfirmationEmail("patient@example.test", "Patient Test", "APTMAIL0001", NIGHT_APPOINTMENT, "150.00", { context: "practitioner_cancellation", reason: "Indisponibilité du médecin" })).resolves.toBeUndefined();
     const message = last();
     expect(message.subject).toBe("Annulation de votre consultation - APTMAIL0001");
     expect(message.replyTo).toBe(siteConfig.email);

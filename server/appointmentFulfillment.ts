@@ -54,10 +54,12 @@ export const APPOINTMENT_FULFILLMENT_RETRY_DELAYS_MS = [10 * 60_000, 60 * 60_000
  */
 export const APPOINTMENT_FULFILLMENT_JOB_TYPES = ["owner", "confirmation", "invoice"] as const;
 /**
- * Notices of a full refund that reached the site only through Stripe's
- * charge.refunded (RES-06), in this order: the patient email, then the owner
- * alert, which says whether the patient was told. Same queue, attempts and
- * dashboard as the post-payment emails, for a refunded appointment.
+ * Notices of a full refund, in this order: the patient email, then the owner
+ * alert, which says whether the patient was told. Both for a refund that
+ * reached the site only through Stripe's charge.refunded (RES-06); the patient
+ * email only for a refund made from the dashboard, the owner having made it.
+ * Same queue, attempts and dashboard as the post-payment emails, for a
+ * refunded appointment.
  */
 export const STRIPE_REFUND_NOTICE_JOB_TYPES = ["refund", "refund_owner"] as const;
 type PostPaymentJobType = (typeof APPOINTMENT_FULFILLMENT_JOB_TYPES)[number];
@@ -107,6 +109,28 @@ export async function enqueueStripeRefundNotices(appointmentId: number) {
   for (const jobType of STRIPE_REFUND_NOTICE_JOB_TYPES) await queueJob(db, appointmentId, jobType);
 }
 
+/**
+ * Patient email of a refund made from the dashboard (EXPL-02): queued like the
+ * one of a refund made in Stripe (RES-06), with its attempts and its state on
+ * the appointment and in « À traiter », then attempted right away through the
+ * same claim, so it never leaves twice. The refund being done, it never
+ * throws: the email's state after this attempt, null when it could not be
+ * queued or read.
+ */
+export async function sendAppointmentRefundEmail(appointmentId: number): Promise<AppointmentDeliveryState | null> {
+  try {
+    const db = await getDb();
+    if (!db) throw new Error("Database connection failed");
+    await queueJob(db, appointmentId, "refund");
+    await processAppointmentFulfillmentNow(appointmentId);
+    const deliveries = (await getAppointmentDeliveries([appointmentId])).get(appointmentId) ?? [];
+    return deliveries.find(delivery => delivery.jobType === "refund")?.state ?? null;
+  } catch (error) {
+    console.error("[AppointmentFulfillment] Refund email could not be queued or sent", error instanceof Error ? error.name : "UnknownError");
+    return null;
+  }
+}
+
 export async function enqueueAppointmentFulfillment(appointmentId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database connection failed");
@@ -151,6 +175,27 @@ function ownerNotificationKey(appointment: Pick<Appointment, "trackingId">) {
 function retryAt(attempt: number) {
   const delays = APPOINTMENT_FULFILLMENT_RETRY_DELAYS_MS;
   return new Date(Date.now() + delays[Math.min(Math.max(1, attempt), delays.length) - 1]);
+}
+
+/** Start of the last error of a job ended at once because the email service refused its email (EXPL-02). */
+const PROVIDER_REJECTED_ERROR = "provider_rejected:";
+
+function isRefusedJob(job: Pick<FulfillmentJob, "status" | "lastError"> | undefined) {
+  return job?.status === "failed" && Boolean(job.lastError?.startsWith(PROVIDER_REJECTED_ERROR));
+}
+
+/**
+ * The refund a refunded appointment's notices are about: recorded from
+ * Stripe's notification (RES-06), for the patient email and the owner alert,
+ * or made from the dashboard, for the patient email only. The patient email is
+ * read from the appointment, the same at every attempt. Null for neither.
+ */
+async function refundNoticeOf(appointment: Pick<Appointment, "paymentStatus" | "cancellationReason">) {
+  // Loaded only for the refund notices (the webhook module queues the post-payment jobs).
+  const stripeRefundOf = (await import("./appointmentPaymentWebhook")).stripeRecordedRefundOf(appointment);
+  if (stripeRefundOf) return { stripeRefundOf, email: { context: stripeRefundOf === "paid" ? "refund" as const : "unconfirmed_payment" as const } };
+  const email = (await import("./appointmentAdminActions")).dashboardRefundEmailOf(appointment);
+  return email ? { stripeRefundOf: null, email } : null;
 }
 
 /**
@@ -209,13 +254,13 @@ async function runJob(id: number) {
   if (!job || job.status !== "running") return { skipped: true };
   const jobType = job.jobType as FulfillmentJobType;
   const [appointment] = await db.select().from(appointments).where(eq(appointments.id, job.appointmentId)).limit(1);
-  // Loaded only for the refund notices (the webhook module queues the post-payment jobs).
-  const stripeRefund = isRefundNoticeJob(jobType) ? await import("./appointmentPaymentWebhook") : null;
-  const refundOf = stripeRefund && appointment ? stripeRefund.stripeRecordedRefundOf(appointment) : null;
-  // A refund closes the post-payment jobs still waiting; the refund notices
-  // only go out for a refund recorded from Stripe's notification.
-  if (!appointment || appointment.paymentStatus !== jobPaymentStatus(jobType) || (stripeRefund && !refundOf)) {
-    await db.update(appointmentFulfillmentJobs).set({ status: "completed", finishedAt: new Date(), lastError: stripeRefund ? "appointment_not_refunded_from_stripe_or_missing" : "appointment_not_paid_or_missing" }).where(eq(appointmentFulfillmentJobs.id, id));
+  const refundNotice = isRefundNoticeJob(jobType) && appointment ? await refundNoticeOf(appointment) : null;
+  // A refund closes the post-payment jobs still waiting; the patient refund
+  // email only goes out for a refund recorded from Stripe or the dashboard,
+  // the owner refund alert for one recorded from Stripe.
+  const refundNoticeMissing = jobType === "refund" ? !refundNotice : jobType === "refund_owner" && !refundNotice?.stripeRefundOf;
+  if (!appointment || appointment.paymentStatus !== jobPaymentStatus(jobType) || refundNoticeMissing) {
+    await db.update(appointmentFulfillmentJobs).set({ status: "completed", finishedAt: new Date(), lastError: isRefundNoticeJob(jobType) ? "appointment_refund_not_recorded_or_missing" : "appointment_not_paid_or_missing" }).where(eq(appointmentFulfillmentJobs.id, id));
     return { skipped: true };
   }
   const finalPrice = Number(appointment.finalPrice);
@@ -245,25 +290,27 @@ async function runJob(id: number) {
       const smsSent = await sendCustomerConfirmationSMS(appointment.customerPhone, appointment.trackingId, appointment.appointmentDate);
       await db.update(appointments).set({ emailSent: 1, smsSent: smsSent ? 1 : 0 }).where(eq(appointments.id, appointment.id));
     } else if (jobType === "refund") {
-      // Same key as the dashboard refund: the patient is told once.
-      const sent = await sendRefundConfirmationEmail(appointment.customerEmail, appointment.customerName, appointment.trackingId, appointment.appointmentDate, appointment.refundAmount ?? appointment.finalPrice, { context: refundOf === "paid" ? "refund" : "unconfirmed_payment", idempotencyKey: `appointment-refund-${appointment.trackingId}`, language });
-      if (!sent) throw new Error("refund_email_failed");
+      // One key whatever the refund's origin: the patient is told once. Its
+      // failure carries its cause, so a refused address is told apart (RES-06).
+      await sendRefundConfirmationEmail(appointment.customerEmail, appointment.customerName, appointment.trackingId, appointment.appointmentDate, appointment.refundAmount ?? appointment.finalPrice, { ...refundNotice!.email, idempotencyKey: `appointment-refund-${appointment.trackingId}`, language });
     } else if (jobType === "refund_owner") {
       // Queued after the patient email: says whether it went out.
       const [patientJob] = await db.select({ status: appointmentFulfillmentJobs.status, lastError: appointmentFulfillmentJobs.lastError }).from(appointmentFulfillmentJobs)
         .where(and(eq(appointmentFulfillmentJobs.appointmentId, appointment.id), eq(appointmentFulfillmentJobs.jobType, "refund"))).limit(1);
-      const patientNotified = patientJob?.status === "completed" && !patientJob.lastError;
-      const delivered = await notifyOwner(stripeRefund!.buildStripeRefundAlert({
+      const patientEmail = patientJob?.status === "completed" && !patientJob.lastError ? "sent" : isRefusedJob(patientJob) ? "refused" : "pending";
+      const { buildStripeRefundAlert } = await import("./appointmentPaymentWebhook");
+      const delivered = await notifyOwner(buildStripeRefundAlert({
         trackingId: appointment.trackingId,
         refundAmount: appointment.refundAmount ?? appointment.finalPrice,
         paymentIntentId: appointment.stripePaymentIntentId ?? "non communiqué",
-        effect: refundOf === "unconfirmed" ? "unconfirmed_payment" : appointment.appointmentStatus === "cancelled" ? "cancelled" : "status_kept",
+        effect: refundNotice!.stripeRefundOf === "unconfirmed" ? "unconfirmed_payment" : appointment.appointmentStatus === "cancelled" ? "cancelled" : "status_kept",
         appointmentStatus: appointment.appointmentStatus,
-        patientNotified,
+        patientEmail,
       }), {
-        // Written at each attempt: one key per wording (status, patient told or
-        // not), as Resend refuses a key reused with another content (409).
-        idempotencyKey: `appointment-stripe-refund-${appointment.trackingId}-${appointment.appointmentStatus}-${patientNotified ? "notified" : "pending"}`,
+        // Written at each attempt: one key per wording (status, patient told,
+        // refused or not yet), as Resend refuses a key reused with another
+        // content (409).
+        idempotencyKey: `appointment-stripe-refund-${appointment.trackingId}-${appointment.appointmentStatus}-${patientEmail === "sent" ? "notified" : patientEmail}`,
       }).catch(() => false);
       if (!delivered) throw new Error("owner_refund_alert_failed");
     } else {
@@ -280,26 +327,32 @@ async function runJob(id: number) {
     return { completed: true };
   } catch (error) {
     const message = error instanceof Error ? error.message.slice(0, 4000) : "fulfillment_unknown_error";
-    const terminal = job.attempts >= job.maxAttempts;
-    await db.update(appointmentFulfillmentJobs).set({ status: terminal ? "failed" : "retry", lastError: message, scheduledFor: retryAt(job.attempts), finishedAt: terminal ? new Date() : null }).where(eq(appointmentFulfillmentJobs.id, id));
+    // A refusal of this very email (address, content, sending configuration)
+    // does not pass with time (EXPL-02): the job ends now, as refused, instead
+    // of failing again at each automatic attempt; « Renvoyer » sends it again
+    // once the address or the configuration is corrected.
+    const refused = postPaymentEmailFailureCode(error) === "provider_rejected";
+    const terminal = refused || job.attempts >= job.maxAttempts;
+    await db.update(appointmentFulfillmentJobs).set({ status: terminal ? "failed" : "retry", lastError: refused ? `${PROVIDER_REJECTED_ERROR}${message}` : message, scheduledFor: retryAt(job.attempts), finishedAt: terminal ? new Date() : null }).where(eq(appointmentFulfillmentJobs.id, id));
     if (jobType === "owner" || jobType === "refund_owner") {
       // The owner alert would use the very channel that just failed.
       console.error("[AppointmentFulfillment] Owner notification failed", { trackingId: appointment.trackingId, jobType, terminal });
     } else if (job.attempts === 1 || terminal) {
       // Alert at the first failure (the next automatic attempt may only come
-      // with the next scheduled run) and again when retries are exhausted. A
-      // refusal of this very email (address, content) is not passing: no new
-      // attempt is promised for it.
-      const refused = postPaymentEmailFailureCode(error) === "provider_rejected";
-      const recorded = stripeRefund ? "Le remboursement est bien enregistré" : "Le paiement est bien enregistré";
+      // with the next scheduled run), at a refusal, for which no new attempt
+      // is promised, and when retries are exhausted.
+      const recorded = isRefundNoticeJob(jobType) ? "Le remboursement est bien enregistré" : "Le paiement est bien enregistré";
       await notifyOwner({
-        title: `Échec d’envoi après ${stripeRefund ? "remboursement" : "paiement"} (${appointment.trackingId})`,
-        content: terminal
-          ? `L’envoi ${JOB_LABELS[jobType]} du rendez-vous ${appointment.trackingId} a échoué ${job.attempts} fois. ${recorded} ; un envoi manuel au patient est nécessaire. ${patientContact(appointment)}`
-          : refused
-            ? `L’envoi ${JOB_LABELS[jobType]} du rendez-vous ${appointment.trackingId} a été refusé par le service d’envoi (adresse email du patient refusée ou invalide, ou configuration de l’envoi). ${recorded}. Ce refus n’est pas passager : vérifiez l’adresse du patient et contactez-le directement. ${patientContact(appointment)}`
+        title: `Échec d’envoi après ${isRefundNoticeJob(jobType) ? "remboursement" : "paiement"} (${appointment.trackingId})`,
+        content: refused
+          ? `L’envoi ${JOB_LABELS[jobType]} du rendez-vous ${appointment.trackingId} a été refusé par le service d’envoi (adresse email du patient refusée ou invalide, ou configuration de l’envoi). ${recorded}. Ce refus n’est pas passager : vérifiez l’adresse du patient et contactez-le directement. Le site ne le renverra pas de lui-même : une fois l’adresse ou la configuration corrigée, « Renvoyer » sur le rendez-vous (onglet Réservations) le renvoie. ${patientContact(appointment)}`
+          : terminal
+            ? `L’envoi ${JOB_LABELS[jobType]} du rendez-vous ${appointment.trackingId} a échoué ${job.attempts} fois. ${recorded} ; un envoi manuel au patient est nécessaire. ${patientContact(appointment)}`
             : `L’envoi ${JOB_LABELS[jobType]} du rendez-vous ${appointment.trackingId} vient d’échouer (tentative ${job.attempts} sur ${job.maxAttempts}). ${recorded}. Un nouvel essai automatique aura lieu lors de la prochaine exécution planifiée ; en attendant, vous pouvez contacter le patient. ${patientContact(appointment)}`,
-      }, { idempotencyKey: `appointment-${jobType}-failure-${appointment.trackingId}-${terminal ? "final" : "first"}` }).catch(() => false);
+      }, {
+        // One key per wording: a refusal may follow a first failure of the same job.
+        idempotencyKey: `appointment-${jobType}-failure-${appointment.trackingId}-${refused ? "refused" : terminal ? "final" : "first"}`,
+      }).catch(() => false);
     }
     return { completed: false, retry: !terminal };
   }
@@ -386,12 +439,13 @@ export async function recoverStaleAppointmentFulfillmentJobs(staleAfterMs = APPO
 
 /**
  * What the dashboard shows for a job (EXPL-02): sent; failed for good;
- * failed and waiting for its next automatic attempt; not attempted yet; being
- * sent right now; interrupted (still "running" long after its worker stopped);
- * or deliberately not sent (consultation already past, appointment no longer
- * paid).
+ * refused by the email service (address, sending configuration), with no new
+ * automatic attempt; failed and waiting for its next automatic attempt; not
+ * attempted yet; being sent right now; interrupted (still "running" long after
+ * its worker stopped); or deliberately not sent (consultation already past,
+ * appointment no longer paid).
  */
-export type AppointmentDeliveryState = "sent" | "failed" | "retrying" | "pending" | "sending" | "interrupted" | "not_sent";
+export type AppointmentDeliveryState = "sent" | "failed" | "refused" | "retrying" | "pending" | "sending" | "interrupted" | "not_sent";
 
 const DELIVERY_STATES: Record<string, AppointmentDeliveryState> = { failed: "failed", retry: "retrying", queued: "pending", running: "sending" };
 
@@ -413,7 +467,8 @@ function isInterruptedJob(job: Pick<FulfillmentJob, "status" | "startedAt">, now
 
 function deliveryOf(job: FulfillmentJob, now: Date): AppointmentDelivery {
   const state = job.status === "completed" ? job.lastError ? "not_sent" : "sent"
-    : isInterruptedJob(job, now) ? "interrupted" : DELIVERY_STATES[job.status] ?? "pending";
+    : isRefusedJob(job) ? "refused"
+      : isInterruptedJob(job, now) ? "interrupted" : DELIVERY_STATES[job.status] ?? "pending";
   return {
     jobType: job.jobType as FulfillmentJobType,
     state,
@@ -446,11 +501,12 @@ export type AppointmentFulfillmentRetry =
 
 /**
  * « Renvoyer » from the dashboard (EXPL-02): the jobs of a paid appointment
- * that did not go out (failed, waiting for their next attempt, or interrupted)
- * go back to the queue with a full attempt budget and run now, through the
- * same claim and idempotency keys as the scheduled worker. A job already sent,
- * or being sent right now, is left alone. For a refunded appointment, only the
- * notices of a refund recorded from Stripe (RES-06).
+ * that did not go out (failed, refused by the email service, waiting for their
+ * next attempt, or interrupted) go back to the queue with a full attempt
+ * budget and run now, through the same claim and idempotency keys as the
+ * scheduled worker. A job already sent, or being sent right now, is left
+ * alone. For a refunded appointment, only the notices of its refund, recorded
+ * from Stripe (RES-06) or made from the dashboard.
  */
 export async function retryAppointmentFulfillment(trackingId: string): Promise<AppointmentFulfillmentRetry> {
   const db = await getDb();
@@ -458,8 +514,8 @@ export async function retryAppointmentFulfillment(trackingId: string): Promise<A
   const [appointment] = await db.select({ id: appointments.id, paymentStatus: appointments.paymentStatus, cancellationReason: appointments.cancellationReason })
     .from(appointments).where(eq(appointments.trackingId, trackingId)).limit(1);
   if (!appointment) return { outcome: "not_found" };
-  const stripeRefund = appointment.paymentStatus === "refunded" && (await import("./appointmentPaymentWebhook")).stripeRecordedRefundOf(appointment);
-  if (appointment.paymentStatus !== "completed" && !stripeRefund) return { outcome: "not_paid" };
+  const refundNotice = appointment.paymentStatus === "refunded" ? await refundNoticeOf(appointment) : null;
+  if (appointment.paymentStatus !== "completed" && !refundNotice) return { outcome: "not_paid" };
   const jobTypes = JOB_ORDER.filter(jobType => jobPaymentStatus(jobType) === appointment.paymentStatus);
   const now = new Date();
   const requeued = await db.update(appointmentFulfillmentJobs).set({
@@ -521,10 +577,11 @@ export async function closeUnsentAppointmentFulfillment(appointmentId: number, n
  * Paid appointments whose post-payment emails did not go out, oldest first:
  * the « À traiter » panel reads them from the database, not from an alert
  * email sent through the very channel that failed (EXPL-02). « failed »: the
- * attempts ran out. « retrying »: an attempt failed (or was interrupted) and
- * the next automatic one may only come with the next scheduled run, days
- * before the attempts run out. Refunded appointments too, for the notices of
- * a refund recorded from Stripe (RES-06).
+ * attempts ran out. « refused »: the email service refused the email
+ * (address, sending configuration), with no new automatic attempt.
+ * « retrying »: an attempt failed (or was interrupted) and the next automatic
+ * one may only come with the next scheduled run, days before the attempts run
+ * out. Refunded appointments too, for the notices of their refund (RES-06).
  */
 export async function listAppointmentDeliveriesToHandle(limit = 20, now = new Date()) {
   const db = await getDb();
@@ -536,6 +593,7 @@ export async function listAppointmentDeliveriesToHandle(limit = 20, now = new Da
     appointmentId: appointmentFulfillmentJobs.appointmentId,
     jobType: appointmentFulfillmentJobs.jobType,
     status: appointmentFulfillmentJobs.status,
+    lastError: appointmentFulfillmentJobs.lastError,
     scheduledFor: appointmentFulfillmentJobs.scheduledFor,
   }).from(appointmentFulfillmentJobs)
     .where(or(
@@ -552,12 +610,14 @@ export async function listAppointmentDeliveriesToHandle(limit = 20, now = new Da
   // emails of a paid appointment, refund notices of a refunded one.
   const jobs = candidates.filter(job => byId.get(job.appointmentId)?.paymentStatus === jobPaymentStatus(job.jobType));
   const failed = new Map<number, FulfillmentJobType[]>();
+  const refused = new Map<number, FulfillmentJobType[]>();
   // Earliest next automatic attempt; null when only interrupted jobs wait for the next scheduled run.
   const retrying = new Map<number, { jobTypes: FulfillmentJobType[]; nextAttemptAt: Date | null }>();
   for (const job of jobs) {
     const jobType = job.jobType as FulfillmentJobType;
     if (job.status === "failed") {
-      failed.set(job.appointmentId, [...(failed.get(job.appointmentId) ?? []), jobType]);
+      const group = isRefusedJob(job) ? refused : failed;
+      group.set(job.appointmentId, [...(group.get(job.appointmentId) ?? []), jobType]);
       continue;
     }
     const previous = retrying.get(job.appointmentId);
@@ -568,8 +628,10 @@ export async function listAppointmentDeliveriesToHandle(limit = 20, now = new Da
     });
   }
   const page = <T>(items: T[]) => ({ total: items.length, items: items.slice(0, limit) });
+  const withJobTypes = (group: Map<number, FulfillmentJobType[]>) => page(Array.from(group.entries()).map(([appointmentId, jobTypes]) => ({ ...byId.get(appointmentId)!.appointment, jobTypes })));
   return {
-    failed: page(Array.from(failed.entries()).map(([appointmentId, jobTypes]) => ({ ...byId.get(appointmentId)!.appointment, jobTypes }))),
+    failed: withJobTypes(failed),
+    refused: withJobTypes(refused),
     retrying: page(Array.from(retrying.entries()).map(([appointmentId, delivery]) => ({ ...byId.get(appointmentId)!.appointment, ...delivery }))),
   };
 }

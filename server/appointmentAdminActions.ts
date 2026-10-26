@@ -4,7 +4,7 @@ import { and, eq } from "drizzle-orm";
 import { appointments } from "../drizzle/schema";
 import { getDb } from "./db";
 import { mutationRowCount } from "./dbMutation";
-import { closeUnsentAppointmentFulfillment } from "./appointmentFulfillment";
+import { closeUnsentAppointmentFulfillment, sendAppointmentRefundEmail } from "./appointmentFulfillment";
 import { sendRefundConfirmationEmail, type RefundEmailContext } from "./_core/notifications";
 import { emailLanguageFor } from "./emailLanguage";
 import { BOOKING_PATIENT_REFUND_DEADLINE_HOURS } from "../shared/bookingPolicy";
@@ -34,6 +34,36 @@ async function loadAppointment(trackingId: string): Promise<Appointment> {
   const [appointment] = await db.select().from(appointments).where(eq(appointments.trackingId, trackingId)).limit(1);
   if (!appointment) throw new TRPCError({ code: "NOT_FOUND", message: "Rendez-vous introuvable" });
   return appointment;
+}
+
+/**
+ * Start of the cancellation reason a dashboard refund records, one per patient
+ * email; the reason typed in the dashboard follows. The refund email job reads
+ * that email back from it (dashboardRefundEmailOf), the same at every attempt.
+ */
+const DASHBOARD_REFUND_LABELS = {
+  patient: "Annulation à la demande du patient",
+  practitioner_cancellation: "Annulation / remboursement par le praticien",
+  practitioner_refund: "Remboursement par le praticien, statut du rendez-vous conservé",
+  unconfirmed_payment: "Remboursement par le praticien d’un paiement reçu sans créneau confirmé",
+} as const;
+type DashboardRefundKind = keyof typeof DASHBOARD_REFUND_LABELS;
+
+/**
+ * The patient email of a refund made from the dashboard, read from the
+ * cancellation reason it recorded: the practitioner's reason is given to the
+ * patient, the patient's own is not. Null for any other appointment (a refund
+ * recorded from Stripe has its own: stripeRecordedRefundOf).
+ */
+export function dashboardRefundEmailOf(appointment: Pick<Appointment, "paymentStatus" | "cancellationReason">): { context: RefundEmailContext; reason?: string } | null {
+  if (appointment.paymentStatus !== "refunded") return null;
+  for (const kind of Object.keys(DASHBOARD_REFUND_LABELS) as DashboardRefundKind[]) {
+    const start = `${DASHBOARD_REFUND_LABELS[kind]} : `;
+    if (!appointment.cancellationReason?.startsWith(start)) continue;
+    if (kind === "patient") return { context: "refund" };
+    return { context: kind === "practitioner_refund" ? "refund" : kind, reason: appointment.cancellationReason.slice(start.length) };
+  }
+  return null;
 }
 
 /** A payment received after the hold was released: recorded on the row, never confirmed. */
@@ -110,11 +140,14 @@ export async function refundAppointmentPayment(
 
   const refundAmount = ((refund.amount ?? Math.round(Number(appointment.finalPrice) * 100)) / 100).toFixed(2);
   const cancelsAppointment = appointment.appointmentStatus === "confirmed";
-  const reasonLabel = `${input.initiator === "practitioner" ? "Annulation / remboursement par le praticien" : "Annulation à la demande du patient"} : ${input.reason}`;
+  // Also tells the refund email job which email to send (dashboardRefundEmailOf).
+  const refundKind: DashboardRefundKind = unconfirmedPayment
+    ? "unconfirmed_payment"
+    : input.initiator === "patient" ? "patient" : cancelsAppointment ? "practitioner_cancellation" : "practitioner_refund";
   const recorded = await db.update(appointments).set({
     paymentStatus: "refunded",
     ...(cancelsAppointment ? { appointmentStatus: "cancelled" as const, slotKey: null } : {}),
-    cancellationReason: reasonLabel,
+    cancellationReason: `${DASHBOARD_REFUND_LABELS[refundKind]} : ${input.reason}`,
     cancelledAt: appointment.cancelledAt ?? now,
     refundAmount,
     refundedAt: now,
@@ -128,23 +161,11 @@ export async function refundAppointmentPayment(
       .catch(error => console.error("[Refund] Pending post-payment emails could not be closed", error instanceof Error ? error.name : "UnknownError"));
   }
 
-  const context: RefundEmailContext = unconfirmedPayment
-    ? "unconfirmed_payment"
-    : input.initiator === "practitioner" && cancelsAppointment ? "practitioner_cancellation" : "refund";
-  const patientNotified = await sendRefundConfirmationEmail(
-    appointment.customerEmail,
-    appointment.customerName,
-    appointment.trackingId,
-    new Date(appointment.appointmentDate),
-    refundAmount,
-    {
-      context,
-      reason: input.initiator === "practitioner" ? input.reason : undefined,
-      idempotencyKey: `appointment-refund-${appointment.trackingId}`,
-      language: emailLanguageFor(appointment.language),
-    },
-  );
-  return { success: true as const, refundId: refund.id, refundAmount, cancelled: cancelsAppointment, patientNotified };
+  // The patient email goes through the queue of the refund notices (RES-06):
+  // attempted right away, then retried, and shown on the appointment and in
+  // « À traiter » until it goes out.
+  const patientEmail = await sendAppointmentRefundEmail(appointment.id);
+  return { success: true as const, refundId: refund.id, refundAmount, cancelled: cancelsAppointment, patientNotified: patientEmail === "sent", patientEmail };
 }
 
 /**
@@ -229,6 +250,9 @@ export async function refundUnconfirmedCheckoutSession(stripe: Stripe, input: { 
     context: "unconfirmed_payment",
     idempotencyKey: `appointment-refund-session-${session.id}`,
     language: emailLanguageFor(appointment.language),
+  }).then(() => true, () => {
+    console.error("Refund email delivery failed");
+    return false;
   });
   console.log("Unconfirmed Stripe payment refunded", { trackingId });
   return { success: true as const, refundId: refund.id, refundAmount, trackingId, patientNotified };
