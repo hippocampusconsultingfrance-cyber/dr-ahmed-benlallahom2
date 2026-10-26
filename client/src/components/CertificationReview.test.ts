@@ -313,6 +313,26 @@ describe("confirmation des certifications par l’admin (IA-02)", () => {
     expect(renderToStaticMarkup(CertificationReview({ applicationId: 5, certifications: [], language }))).toContain(expected.none);
   });
 
+  it.each([
+    ["fr", " · expirée en mai 2023 selon le CV, à vérifier</span>"],
+    ["en", " · expired in May 2023 according to the CV, to be checked</span>"],
+    ["de", " · abgelaufen im Mai 2023 laut Lebenslauf, zu prüfen</span>"],
+    ["zh", " · 已于 2023年5月 过期（据简历，待核实）</span>"],
+  ] as const)("dit d’une date que seul un CV dont l’analyse n’a retenu aucun fait la donne, à vérifier, à côté de l’origine « déclarée » (%s, IA-02)", (language, expiry) => {
+    const certifications = [{ name: "ACLS", origins: ["declared"], expiresAt: "2023-05", expiryUnverified: true }];
+    const html = renderToStaticMarkup(CertificationReview({ applicationId: 5, certifications: certifications as never, language }));
+    expect(html).toContain(`ACLS<span class="font-normal text-red-600 dark:text-red-400">${expiry}`);
+    // Expired all the same: only its renewal is offered.
+    expect(html.match(/<input[^>]*type="date"[^>]*>/g)).toHaveLength(1);
+  });
+
+  it("le filtre « certification » dit d’une date que seul un CV dont l’analyse n’a retenu aucun fait la donne, à vérifier (IA-02)", () => {
+    state.items = [dossier({ certifications: "ACLS", certificationFacts: [{ name: "ACLS", origins: ["declared"], expiresAt: "2023-05", expiryUnverified: true }] })];
+    const certificationInput = elements(renderTab()).find(element => element.type === "input" && element.props.placeholder === "Ex. ACLS, ATLS")!;
+    (certificationInput.props.onChange as (event: unknown) => void)({ target: { value: "acls" } });
+    expect(renderToStaticMarkup(renderTab())).toContain("Certification recherchée : ACLS (déclarée par le candidat), expirée en mai 2023 selon le CV, à vérifier</p>");
+  });
+
   it("reste en français dans Candidatures et dans la fiche 360° ouverte depuis Candidatures, quelle que soit la langue de l’administration (IA-02)", () => {
     // The admin reads the site in English; the Candidatures tab and the 360° sheet around the panel are in French.
     state.language = "en";

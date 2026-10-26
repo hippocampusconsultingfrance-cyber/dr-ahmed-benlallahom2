@@ -9,8 +9,13 @@ type BriefForMatching = {
   availabilityNeeded?: string | null;
 };
 
-/** A certification with its origins (IA-02) and, when the CV gives one, its expiry. */
-export type CertificationFact = RecruitmentFact & { expiresAt: string | null };
+/**
+ * A certification with its origins (IA-02) and, when the CV gives one, its
+ * expiry: unverified (« selon le CV, à vérifier ») when only an analysis that
+ * retained no facts gives it, since none of the certification's origins then
+ * says it was read in the CV.
+ */
+export type CertificationFact = RecruitmentFact & { expiresAt: string | null; expiryUnverified?: boolean };
 
 /**
  * Why a certification retained for a mission scores or not (IA-02): confirmed
@@ -119,7 +124,8 @@ function addFact<T extends RecruitmentFact>(facts: T[], name: string, origin: Re
  * Free-text declared certifications have no machine-readable expiry. A
  * renewal row adds no origin but the admin's confirmation. An expiry the CV
  * gives while its analysis retained no facts adds none either, nor a
- * certification: it only dates one known otherwise.
+ * certification: it only dates one known otherwise, a date said unverified
+ * since no origin says where it comes from.
  */
 export function certificationFacts(declared: string | null | undefined, rows: CertificationRow[]): CertificationFact[] {
   const facts: CertificationFact[] = [];
@@ -147,7 +153,9 @@ export function certificationFacts(declared: string | null | undefined, rows: Ce
     const datedRows = factRows.filter(row => row.source !== "declared");
     if (!datedRows.length) return;
     const confirmedRows = datedRows.filter(row => row.confirmedAt);
-    fact.expiresAt = latestCertificationExpiry((confirmedRows.length ? confirmedRows : datedRows).map(row => row.expiresAt));
+    const datingRows = confirmedRows.length ? confirmedRows : datedRows;
+    fact.expiresAt = latestCertificationExpiry(datingRows.map(row => row.expiresAt));
+    if (fact.expiresAt && datingRows.every(row => row.source === "cv_expiry")) fact.expiryUnverified = true;
   });
   return facts;
 }

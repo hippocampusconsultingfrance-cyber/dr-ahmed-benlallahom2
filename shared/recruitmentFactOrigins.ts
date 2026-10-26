@@ -98,9 +98,10 @@ export function certificationDateIsCurrent(
 /**
  * « ACLS (extraite du CV par l’IA), expirée en mai 2023 »: a certification with
  * its origins and, when it has one, whether it is still valid, dated as the
- * admin screens date it. The employer's file and the certification filter of
- * the applications, in French (IA-02).
+ * admin screens date it, « selon le CV, à vérifier » when only a CV whose
+ * analysis retained no facts gives that date. The employer's file and the
+ * certification filter of the applications, in French (IA-02).
  */
-export const certificationFactLabel = (fact: RecruitmentFact & { expiresAt?: string | null }) => fact.expiresAt
-  ? `${recruitmentFactLabel(fact)}, ${certificationDateIsCurrent(fact.expiresAt) ? "expire" : "expirée"} ${certificationExpiryInFrench(fact.expiresAt)}`
+export const certificationFactLabel = (fact: RecruitmentFact & { expiresAt?: string | null; expiryUnverified?: boolean }) => fact.expiresAt
+  ? `${recruitmentFactLabel(fact)}, ${certificationDateIsCurrent(fact.expiresAt) ? "expire" : "expirée"} ${certificationExpiryInFrench(fact.expiresAt)}${fact.expiryUnverified ? " selon le CV, à vérifier" : ""}`
   : recruitmentFactLabel(fact);

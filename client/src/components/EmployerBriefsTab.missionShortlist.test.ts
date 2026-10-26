@@ -255,6 +255,17 @@ describe("écran d’une mission employeur", () => {
   });
 
   it.each([
+    ["fr", "certification hors validité : ACLS (déclarée par le candidat), expirée en mai 2023 selon le CV, à vérifier — "],
+    ["en", "certification no longer valid: ACLS (declared by the candidate), expired in May 2023 according to the CV, to be checked — "],
+    ["de", "nicht mehr gültiges Zertifikat: ACLS (vom Kandidaten angegeben), abgelaufen im Mai 2023 laut Lebenslauf, zu prüfen — "],
+    ["zh", "已失效的证书：ACLS (候选人自行申报), 已于 2023年5月 过期（据简历，待核实）——"],
+  ] as const)("dit d’une date d’expiration que seul un CV dont l’analyse n’a retenu aucun fait la donne, à vérifier (%s, IA-02)", (language, expired) => {
+    state.language = language;
+    state.data = missionData({ candidates: [candidate(11, "Amal", "Haddad", null, { certifications: [{ name: "ACLS", origins: ["declared"], expiresAt: "2023-05", expiryUnverified: true, status: "expired" }] })] });
+    expect(renderToStaticMarkup(render())).toContain(expired);
+  });
+
+  it.each([
     ["fr", "La date de l’accord du candidat ne peut pas précéder sa candidature, reçue le 21/10/2026.", "La date de l’accord du candidat ne peut pas précéder la création de la mission, le 19/10/2026.", "La date de l’accord du candidat ne peut pas être dans le futur.", "Ce candidat n’est pas associé à cette mission : présélectionnez-le d’abord."],
     ["en", "The candidate’s agreement cannot be dated before their application, received on 21/10/2026.", "The candidate’s agreement cannot be dated before the mission was created, on 19/10/2026.", "The candidate’s agreement cannot be dated in the future.", "This candidate is not linked to this mission: shortlist them first."],
     ["de", "Die Zustimmung des Kandidaten kann nicht vor dem Eingang seiner Bewerbung am 21.10.2026 datiert sein.", "Die Zustimmung des Kandidaten kann nicht vor der Erstellung der Mission am 19.10.2026 datiert sein.", "Die Zustimmung des Kandidaten kann nicht in der Zukunft datiert sein.", "Dieser Kandidat ist nicht mit dieser Mission verknüpft: Setzen Sie ihn zuerst auf die Shortlist."],

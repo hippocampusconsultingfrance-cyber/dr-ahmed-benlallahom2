@@ -9,7 +9,7 @@ import { isCertificationRenewalRefusalReason } from "@shared/recruitmentMissionR
 
 type CertificationReviewProps = {
   applicationId: number;
-  certifications: Array<RecruitmentFact & { expiresAt?: string | null }>;
+  certifications: Array<RecruitmentFact & { expiresAt?: string | null; expiryUnverified?: boolean }>;
   /**
    * French by default, like the Candidatures tab and the 360° sheet around
    * the panel; the mission screen, translated, passes the admin's language.
@@ -23,7 +23,8 @@ type RenewalDraft = { date: string; withoutExpiry: boolean };
 /**
  * In the language of the screen showing the panel (IA-02): the expiry with
  * the preposition its precision takes (« le 30/06/2027 », « en mai 2023 »),
- * the toasts and the server's refusals, from their stable reason and the day
+ * said to check when only a CV whose analysis retained no facts gives it, the
+ * toasts and the server's refusals, from their stable reason and the day
  * they name.
  */
 const reviewCopy = {
@@ -33,6 +34,7 @@ const reviewCopy = {
     intro: "Une certification ne compte dans le matching des missions qu’une fois confirmée par l’admin, après vérification du justificatif, qu’elle soit déclarée par le candidat ou extraite du CV par l’IA.",
     origins: RECRUITMENT_FACT_ORIGIN_LABELS,
     expiry: (expired: boolean, expiry: CertificationExpiryDate) => `${expired ? "expirée" : "expire"} ${expiry.precision === "day" ? "le" : "en"} ${expiry.date}`,
+    expiryPerCv: (expiry: string) => `${expiry} selon le CV, à vérifier`,
     confirm: "Confirmer",
     confirmOf: (name: string) => `Confirmer ${name}`,
     withdraw: "Annuler la confirmation",
@@ -61,6 +63,7 @@ const reviewCopy = {
     intro: "A certification only counts in the missions’ matching once confirmed by the admin, after checking the certificate, whether declared by the candidate or read from the CV by the AI.",
     origins: { declared: "declared by the candidate", extracted: "read from the CV by the AI", confirmed: "confirmed by the admin" },
     expiry: (expired: boolean, expiry: CertificationExpiryDate) => `${expired ? "expired" : "expires"} ${expiry.precision === "day" ? "on" : "in"} ${expiry.date}`,
+    expiryPerCv: (expiry: string) => `${expiry} according to the CV, to be checked`,
     confirm: "Confirm",
     confirmOf: (name: string) => `Confirm ${name}`,
     withdraw: "Withdraw confirmation",
@@ -89,6 +92,7 @@ const reviewCopy = {
     intro: "Ein Zertifikat zählt im Matching der Missionen erst, wenn der Admin es nach Prüfung des Nachweises bestätigt hat, ob vom Kandidaten angegeben oder von der KI aus dem Lebenslauf gelesen.",
     origins: { declared: "vom Kandidaten angegeben", extracted: "von der KI aus dem Lebenslauf gelesen", confirmed: "vom Admin bestätigt" },
     expiry: (expired: boolean, expiry: CertificationExpiryDate) => expired ? `abgelaufen ${expiry.precision === "day" ? "am" : expiry.precision === "month" ? "im" : "im Jahr"} ${expiry.date}` : `gültig bis ${expiry.date}`,
+    expiryPerCv: (expiry: string) => `${expiry} laut Lebenslauf, zu prüfen`,
     confirm: "Bestätigen",
     confirmOf: (name: string) => `${name} bestätigen`,
     withdraw: "Bestätigung zurücknehmen",
@@ -117,6 +121,7 @@ const reviewCopy = {
     intro: "无论是候选人申报的证书还是 AI 从简历中提取的证书，都须经管理员核实证明文件并确认后才计入任务匹配。",
     origins: { declared: "候选人自行申报", extracted: "AI 从简历中提取", confirmed: "管理员已确认" },
     expiry: (expired: boolean, expiry: CertificationExpiryDate) => expired ? `已于 ${expiry.date} 过期` : `有效期至 ${expiry.date}`,
+    expiryPerCv: (expiry: string) => `${expiry}（据简历，待核实）`,
     confirm: "确认",
     confirmOf: (name: string) => `确认 ${name}`,
     withdraw: "撤销确认",
@@ -210,13 +215,14 @@ export default function CertificationReview({ applicationId, certifications, lan
         {certifications.map(certification => {
           const confirmed = certification.origins.includes("confirmed");
           const expired = !certificationDateIsCurrent(certification.expiresAt);
+          const expiry = certification.expiresAt ? copy.expiry(expired, expiryOf(certification.expiresAt)) : null;
           const draft = renewalDrafts[certification.name];
           const renewal = renewalOf(draft);
           return (
             <li key={certification.name} className="rounded-lg border border-border bg-background p-3">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div className="min-w-0">
-                  <p className="font-medium text-foreground">{certification.name}{certification.expiresAt ? <span className={`font-normal ${expired ? "text-red-600 dark:text-red-400" : "text-muted-foreground"}`}> · {copy.expiry(expired, expiryOf(certification.expiresAt))}</span> : null}</p>
+                  <p className="font-medium text-foreground">{certification.name}{expiry ? <span className={`font-normal ${expired ? "text-red-600 dark:text-red-400" : "text-muted-foreground"}`}> · {certification.expiryUnverified ? copy.expiryPerCv(expiry) : expiry}</span> : null}</p>
                   <p className="mt-1 flex flex-wrap gap-1.5">
                     {RECRUITMENT_FACT_ORIGINS.filter(origin => certification.origins.includes(origin)).map(origin => <span key={origin} className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${originTone(origin)}`}>{copy.origins[origin]}</span>)}
                   </p>
