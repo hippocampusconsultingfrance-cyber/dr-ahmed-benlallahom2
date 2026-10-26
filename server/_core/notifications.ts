@@ -133,6 +133,16 @@ async function sendPostPaymentEmail(
   throw lastError ?? new PostPaymentEmailError(errors.failed, "delivery_exception");
 }
 
+/**
+ * Why a post-payment email (confirmation, invoice, owner notification) did not
+ * leave, read from the error its sender threw; null for any other error (PDF,
+ * database).
+ */
+export function postPaymentEmailFailureCode(error: unknown): ResendDeliveryFailureCode | null {
+  const cause = error instanceof PostPaymentEmailError ? error : error instanceof Error ? error.cause : null;
+  return cause instanceof PostPaymentEmailError ? cause.failureCode : null;
+}
+
 export function buildHippocampusEmailShell(content: string, language: EmailLanguage = "fr") {
   return `
     <div style="margin:0;padding:24px 12px;background:#f1f5f9;font-family:Arial,sans-serif;color:#0f172a;">

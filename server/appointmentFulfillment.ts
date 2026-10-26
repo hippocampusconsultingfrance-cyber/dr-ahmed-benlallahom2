@@ -3,6 +3,7 @@ import { appointmentFulfillmentJobs, appointments } from "../drizzle/schema";
 import { getDb } from "./db";
 import { mutationRowCount } from "./dbMutation";
 import {
+  postPaymentEmailFailureCode,
   sendConfirmationEmail,
   sendCustomerConfirmationSMS,
   sendInvoiceEmail,
@@ -18,11 +19,21 @@ const MAX_BATCH = 5;
 export const APPOINTMENT_FULFILLMENT_STALE_AFTER_MS = 15 * 60_000;
 
 /**
- * Pause between two jobs of a batch (ABUS-03): the owner notification, the
- * confirmation and the invoice of one payment would otherwise reach Resend in
- * the same second, above its per-second rate limit. Mutable for tests.
+ * Pause between two jobs (ABUS-03): the owner notification, the confirmation
+ * and the invoice of one payment would otherwise reach Resend in the same
+ * second, above its per-second rate limit. Measured from the last job run in
+ * this instance, so it also holds between the successive batches of the
+ * scheduled run. Mutable for tests.
  */
 export const appointmentFulfillmentPacing = { delayMs: 600 };
+let lastJobRunAt: number | null = null;
+
+async function paceFulfillmentJob() {
+  if (lastJobRunAt === null) return;
+  const waitMs = Math.min(appointmentFulfillmentPacing.delayMs, lastJobRunAt + appointmentFulfillmentPacing.delayMs - Date.now());
+  if (waitMs > 0) await new Promise(resolve => setTimeout(resolve, waitMs));
+}
+
 /**
  * Attempts per job (EXPL-02). With the daily scheduled run, the six retries
  * after the first attempt span about six days: a provider outage of a day or
@@ -220,12 +231,17 @@ async function runJob(id: number) {
       console.error("[AppointmentFulfillment] Owner notification failed", { trackingId: appointment.trackingId, terminal });
     } else if (job.attempts === 1 || terminal) {
       // Alert at the first failure (the next automatic attempt may only come
-      // with the next scheduled run) and again when retries are exhausted.
+      // with the next scheduled run) and again when retries are exhausted. A
+      // refusal of this very email (address, content) is not passing: no new
+      // attempt is promised for it.
+      const refused = postPaymentEmailFailureCode(error) === "provider_rejected";
       await notifyOwner({
         title: `Échec d’envoi après paiement (${appointment.trackingId})`,
         content: terminal
           ? `L’envoi ${JOB_LABELS[jobType]} du rendez-vous ${appointment.trackingId} a échoué ${job.attempts} fois. Le paiement est bien enregistré ; un envoi manuel au patient est nécessaire. ${patientContact(appointment)}`
-          : `L’envoi ${JOB_LABELS[jobType]} du rendez-vous ${appointment.trackingId} vient d’échouer (tentative ${job.attempts} sur ${job.maxAttempts}). Le paiement est bien enregistré. Un nouvel essai automatique aura lieu lors de la prochaine exécution planifiée ; en attendant, vous pouvez contacter le patient. ${patientContact(appointment)}`,
+          : refused
+            ? `L’envoi ${JOB_LABELS[jobType]} du rendez-vous ${appointment.trackingId} a été refusé par le service d’envoi (adresse email du patient refusée ou invalide, ou configuration de l’envoi). Le paiement est bien enregistré. Ce refus n’est pas passager : vérifiez l’adresse du patient et contactez-le directement. ${patientContact(appointment)}`
+            : `L’envoi ${JOB_LABELS[jobType]} du rendez-vous ${appointment.trackingId} vient d’échouer (tentative ${job.attempts} sur ${job.maxAttempts}). Le paiement est bien enregistré. Un nouvel essai automatique aura lieu lors de la prochaine exécution planifiée ; en attendant, vous pouvez contacter le patient. ${patientContact(appointment)}`,
       }, { idempotencyKey: `appointment-${jobType}-failure-${appointment.trackingId}-${terminal ? "final" : "first"}` }).catch(() => false);
     }
     return { completed: false, retry: !terminal };
@@ -247,9 +263,13 @@ export async function processDueAppointmentFulfillmentJobs(limit = MAX_BATCH, op
     .orderBy(appointmentFulfillmentJobs.scheduledFor, appointmentFulfillmentJobs.id).limit(Math.min(Math.max(1, limit), MAX_BATCH));
   const results = [];
   for (const job of jobs) {
-    if (results.length > 0) await new Promise(resolve => setTimeout(resolve, appointmentFulfillmentPacing.delayMs));
+    await paceFulfillmentJob();
     if (!(await claimFulfillmentJob(db, job))) continue;
-    results.push(await runJob(job.id));
+    try {
+      results.push(await runJob(job.id));
+    } finally {
+      lastJobRunAt = Date.now();
+    }
   }
   return { processed: results.length, results };
 }
