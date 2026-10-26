@@ -7,6 +7,7 @@ import { sameRecruitmentFact } from "./clientBriefMatching";
 import { assertPdfDecompressionWithinLimits, DOCUMENT_DECOMPRESSION_LIMITS, truncateExtractedText } from "./documentDecompressionLimits";
 import { withoutInvisibleDocxText } from "./docxVisibleText";
 import { pdfStandardFontDataUrl, PdfReaderUnavailableError, readPdfIsolated, type PdfTextReading } from "./pdfExtractionSandbox";
+import type { PdfUnverifiableReason } from "./pdfVisibleText";
 import { CV_ANALYSIS_STEP_MINIMUM_MS, ProcessingDeadlineError, stepTimeoutMs } from "./processingDeadline";
 import {
   RECRUITMENT_PARAMEDICAL_SPECIALTIES,
@@ -263,14 +264,19 @@ export type CvExtractionResult = {
   invisibleText?: InvisibleTextSummary;
 };
 
+/** Why text was set aside without being counted as hidden: see pdfVisibleText, and docxVisibleText for `drawing`. */
+export type UnverifiableTextReason = PdfUnverifiableReason | "drawing";
+
 export type InvisibleTextSummary = {
   characters: number;
   excerpt: string;
   /**
-   * White text of a DOCX on a picture or shape behind the text: kept in the
-   * text, as it may show on that drawing, and not counted in `characters`.
+   * Text whose visibility could not be established (IA-01): left out of the
+   * text like invisible text, but never counted in `characters`. `share` is
+   * its part of the text read, visible text included (0 when the vision read
+   * the pages instead).
    */
-  unverified?: { characters: number; excerpt: string };
+  unverifiable?: { characters: number; excerpt: string; reasons: UnverifiableTextReason[]; share: number };
 };
 
 /**
@@ -280,12 +286,30 @@ export type InvisibleTextSummary = {
  */
 export const INVISIBLE_TEXT_REVIEW_THRESHOLD = 30;
 
+/**
+ * IA-01: text set aside as unverifiable is not held against the candidate,
+ * but when it is at least this share of the text read (a third), what is left
+ * is too partial to score the CV: human review without score, as above. A
+ * name and a title on a dark header of a short CV stay under it.
+ */
+export const UNVERIFIABLE_TEXT_REVIEW_SHARE = 1 / 3;
+
 export function invisibleTextRequiresReview(invisibleText: InvisibleTextSummary | null | undefined) {
   return (invisibleText?.characters ?? 0) > INVISIBLE_TEXT_REVIEW_THRESHOLD;
 }
 
-/** Warnings of a PDF text layer read, in part or in full, without the visibility check. */
-export const isVisibilityCheckWarning = (warning: string) => warning.startsWith("pdf_visibility_check_");
+export function unverifiableTextRequiresReview(invisibleText: InvisibleTextSummary | null | undefined) {
+  const unverifiable = invisibleText?.unverifiable;
+  return Boolean(unverifiable && unverifiable.characters > INVISIBLE_TEXT_REVIEW_THRESHOLD && unverifiable.share >= UNVERIFIABLE_TEXT_REVIEW_SHARE);
+}
+
+/** The text read hides too much, or too much of it could not be checked: no score, and no fact kept. */
+export function visibilityRequiresReview(invisibleText: InvisibleTextSummary | null | undefined) {
+  return invisibleTextRequiresReview(invisibleText) || unverifiableTextRequiresReview(invisibleText);
+}
+
+/** Warning of a PDF text layer read without the visibility check (in-process fallback): its text was kept. */
+export const isVisibilityCheckWarning = (warning: string) => warning === "pdf_visibility_check_unavailable";
 
 const LETTER_OR_DIGIT = new RegExp("[\\p{L}\\p{N}]", "u");
 
@@ -296,24 +320,63 @@ function textExcerpt(passages: string[]) {
   return { characters: text.length, excerpt: text.length > 80 ? `${text.slice(0, 79).trimEnd()}…` : text };
 }
 
-function invisibleTextSummary(passages: string[], unverifiedPassages: string[] = []): InvisibleTextSummary | undefined {
+/** In this order in the warnings and in the admin alert. */
+const UNVERIFIABLE_REASONS: Record<UnverifiableTextReason, { warning: string; label: string }> = {
+  font: { warning: "pdf_font_not_drawable", label: "police non incorporée au PDF que l’outil ne sait pas dessiner" },
+  image: { warning: "pdf_text_on_image", label: "texte sans encre posé sur une image, comme la couche OCR d’un scan" },
+  unfinished: { warning: "pdf_visibility_check_unfinished", label: "contrôle de visibilité non terminé (document long ou lourd)" },
+  unmatched: { warning: "pdf_text_unmatched", label: "texte que l’outil n’a pas pu rattacher à son dessin" },
+  drawing: { warning: "docx_white_text_near_drawing", label: "texte blanc dans une zone de texte ou près d’une image ou d’une forme" },
+};
+
+/**
+ * `visibleCharacters`: the text kept, against which the share of the text set
+ * aside as unverifiable is measured; null when the vision read the pages.
+ */
+function invisibleTextSummary(passages: string[], unverifiablePassages: Array<{ reason: UnverifiableTextReason; text: string }>, visibleCharacters: number | null): InvisibleTextSummary | undefined {
   const invisible = textExcerpt(passages);
-  const unverified = textExcerpt(unverifiedPassages);
-  if (!invisible && !unverified) return undefined;
-  return { ...(invisible ?? { characters: 0, excerpt: "" }), ...(unverified ? { unverified } : {}) };
+  const unverifiable = textExcerpt(unverifiablePassages.map(passage => passage.text));
+  if (!invisible && !unverifiable) return undefined;
+  const reasons = new Set(unverifiablePassages.filter(passage => LETTER_OR_DIGIT.test(passage.text)).map(passage => passage.reason));
+  return {
+    ...(invisible ?? { characters: 0, excerpt: "" }),
+    ...(unverifiable ? {
+      unverifiable: {
+        ...unverifiable,
+        reasons: (Object.keys(UNVERIFIABLE_REASONS) as UnverifiableTextReason[]).filter(reason => reasons.has(reason)),
+        share: visibleCharacters === null ? 0 : unverifiable.characters / (unverifiable.characters + visibleCharacters),
+      },
+    } : {}),
+  };
 }
 
 const invisibleTextWarnings = (invisibleText: InvisibleTextSummary | undefined) => [
   ...(invisibleText?.characters ? [`invisible_text_ignored:${invisibleText.characters}`] : []),
-  ...(invisibleText?.unverified ? [`white_text_on_drawing_kept:${invisibleText.unverified.characters}`] : []),
+  ...(invisibleText?.unverifiable ? [`unverifiable_text_set_aside:${invisibleText.unverifiable.characters}`, ...invisibleText.unverifiable.reasons.map(reason => UNVERIFIABLE_REASONS[reason].warning)] : []),
 ];
 
-/** The admin alert, with what the file hid. */
+const unverifiableReasons = (unverifiable: NonNullable<InvisibleTextSummary["unverifiable"]>) =>
+  unverifiable.reasons.map(reason => UNVERIFIABLE_REASONS[reason].label).join(" ; ") || "visibilité non établie";
+
+/** The admin alert, with what the file hid and what could not be checked. */
 const invisibleTextAlert = (invisibleText: InvisibleTextSummary) => [
   ...(invisibleText.characters ? [`${invisibleText.characters} caractère(s) de texte invisible ignoré(s), extrait : « ${invisibleText.excerpt} ».`] : []),
-  ...(invisibleText.unverified ? [`Texte blanc posé sur une image ou une forme d’arrière-plan (${invisibleText.unverified.characters} caractère(s)), lu sans pouvoir vérifier qu’il se voit, extrait : « ${invisibleText.unverified.excerpt} ».`] : []),
+  ...(invisibleText.unverifiable ? [`${invisibleText.unverifiable.characters} caractère(s) non vérifiable(s) écarté(s) de l’analyse (${unverifiableReasons(invisibleText.unverifiable)}), extrait : « ${invisibleText.unverifiable.excerpt} ».`] : []),
   "Ouvrir le CV pour le comparer.",
 ].join(" ");
+
+/** Why an incomplete extraction left the CV without score, in the admin's words (IA-01). */
+function incompleteExtractionReason(declared: Pick<RecruitmentDeclaredContext, "invisibleText" | "visibilityUnchecked">) {
+  if (invisibleTextRequiresReview(declared.invisibleText)) {
+    return "Score non présenté : le CV contient du texte invisible à l’écran, écarté de l’analyse. Revue humaine requise : ouvrir le CV.";
+  }
+  const unverifiable = declared.invisibleText?.unverifiable;
+  if (unverifiable && unverifiableTextRequiresReview(declared.invisibleText)) {
+    return `Score non présenté : ${Math.round(unverifiable.share * 100)} % du texte du CV n’a pas pu être vérifié comme visible (${unverifiableReasons(unverifiable)}) et a été écarté de l’analyse. Revue humaine requise : ouvrir le CV.`;
+  }
+  if (declared.visibilityUnchecked) return "Score non présenté : le texte du CV a été lu sans contrôle de visibilité. Revue humaine requise : ouvrir le CV.";
+  return "Score non présenté : l’extraction du document est incomplète, au moins une page nécessite une vérification manuelle. Revue humaine requise : ouvrir le CV.";
+}
 
 async function createPdfParser(buffer: Buffer) {
   // pdf.js expects browser geometry primitives. The worker entrypoint installs
@@ -460,24 +523,29 @@ async function extractCvDocumentUnbounded(buffer: Buffer, mimeType: string): Pro
       .map(page => `[PAGE ${page.number}]\n${escapeCvPageMarkers(page.text)}`)
       .join("\n\n"));
     const totalPages = result.total;
+    // A page whose text was set aside as unverifiable is not empty: the
+    // unverifiable text says so, and counts on its own (IA-01).
+    const unverifiable = result.visibility?.unverifiableText ?? [];
+    const setAsidePages = new Set(unverifiable.filter(passage => LETTER_OR_DIGIT.test(passage.text)).map(passage => passage.page));
     const textCoverageWarnings = [
-      ...pages.filter(page => page.text.length < 20)
+      ...pages.filter(page => page.text.length < 20 && !setAsidePages.has(page.number))
         .map(page => `pdf_text_page_${page.number}_insufficient_text`),
       ...(totalPages !== null && pages.length < totalPages ? ["pdf_text_pages_missing"] : []),
     ];
     // IA-01: the text layer read without the visibility check (in-process
-    // fallback), or partly, may still hold invisible text.
-    const visibilityWarnings = !result.visibility
-      ? ["pdf_visibility_check_unavailable"]
-      : result.visibility.uncheckedPages.length > 0 || result.visibility.uncheckedText.length > 0 ? ["pdf_visibility_check_incomplete"] : [];
-    const invisibleText = invisibleTextSummary(result.visibility?.invisibleText ?? []);
+    // fallback) may still hold invisible text.
+    const visibilityWarnings = !result.visibility ? ["pdf_visibility_check_unavailable"] : [];
     const extractedContentLength = cleanText(
       extracted.replace(/\[PAGE\s+\d+\]/gi, "")
     ).length;
+    const invisibleText = invisibleTextSummary(result.visibility?.invisibleText ?? [], unverifiable, extractedContentLength);
     if (extractedContentLength >= 80) return { text: extracted, method: "pdf_text", totalPages, ocrConfidence: null, ocrModelVersion: null, warnings: [...textCoverageWarnings, ...visibilityWarnings, ...invisibleTextWarnings(invisibleText)], invisibleText };
-    // Too little text, once any invisible text is set aside: the vision
-    // reads the pages as a person sees them, so its text hides nothing.
+    // Too little text, once any invisible or unverifiable text is set aside
+    // (a scan under its OCR layer): the vision reads the pages as a person
+    // sees them, so its text hides nothing, and what was set aside no longer
+    // makes the reading partial.
     const vision = await extractPdfWithVision(buffer);
+    const setAside = invisibleTextSummary(result.visibility?.invisibleText ?? [], unverifiable, null);
     return {
       // Vision already carries server-generated page markers. Keeping the empty
       // text-parser markers as well would create duplicate page boundaries and
@@ -487,8 +555,8 @@ async function extractCvDocumentUnbounded(buffer: Buffer, mimeType: string): Pro
       totalPages,
       ocrConfidence: vision.confidence,
       ocrModelVersion: RECRUITMENT_OCR_MODEL,
-      warnings: ["vision_ocr_fallback", ...vision.warnings, ...invisibleTextWarnings(invisibleText)],
-      invisibleText,
+      warnings: ["vision_ocr_fallback", ...vision.warnings, ...invisibleTextWarnings(setAside)],
+      invisibleText: setAside,
     };
   }
 
@@ -498,8 +566,9 @@ async function extractCvDocumentUnbounded(buffer: Buffer, mimeType: string): Pro
     const visible = withoutInvisibleDocxText(buffer);
     const mammoth = (await import("mammoth")).default;
     const result = await mammoth.extractRawText({ buffer: visible.buffer });
-    const invisibleText = invisibleTextSummary(visible.invisibleText, visible.unverifiedText);
-    return { text: escapeCvPageMarkers(cleanText(result.value)), method: "docx", totalPages: null, ocrConfidence: null, ocrModelVersion: null, warnings: [...result.messages.map(message => `${message.type}:${message.message}`), ...invisibleTextWarnings(invisibleText)], invisibleText };
+    const text = escapeCvPageMarkers(cleanText(result.value));
+    const invisibleText = invisibleTextSummary(visible.invisibleText, visible.unverifiableText.map(passage => ({ reason: "drawing" as const, text: passage })), text.length);
+    return { text, method: "docx", totalPages: null, ocrConfidence: null, ocrModelVersion: null, warnings: [...result.messages.map(message => `${message.type}:${message.message}`), ...invisibleTextWarnings(invisibleText)], invisibleText };
   }
 
   if (mimeType === "application/msword") {
@@ -1145,7 +1214,8 @@ export function normalizeRecruitmentAnalysis(
 ): RecruitmentAnalysisResult {
   const deterministicProcessingWarnings: string[] = [];
   if (declared.invisibleText) deterministicProcessingWarnings.push(invisibleTextAlert(declared.invisibleText));
-  if (declared.extractionIncomplete) {
+  // When the text set aside is what makes it incomplete, the alert above already says why.
+  if (declared.extractionIncomplete && !visibilityRequiresReview(declared.invisibleText)) {
     deterministicProcessingWarnings.push(
       "Extraction incomplète du document : au moins une page nécessite une vérification manuelle."
     );
@@ -1477,7 +1547,9 @@ export function normalizeRecruitmentAnalysis(
     contradictions: uniqueContradictions,
     reasoning: scoreIsTrustworthy
       ? "Score déterministe calculé uniquement à partir de faits professionnels trouvés dans le texte lu par l’outil et rapprochés de la spécialité déclarée, à comparer au CV."
-      : `Score non présenté : les citations trouvées dans le texte lu par l’outil sont insuffisantes, contradictoires ou non rapprochées de la spécialité déclarée (${evidenceCoverage} % de couverture).`,
+      : declared.extractionIncomplete
+        ? incompleteExtractionReason(declared)
+        : `Score non présenté : les citations trouvées dans le texte lu par l’outil sont insuffisantes, contradictoires ou non rapprochées de la spécialité déclarée (${evidenceCoverage} % de couverture).`,
     invisibleText: declared.invisibleText,
     visibilityUnchecked: declared.visibilityUnchecked,
   };
@@ -1561,21 +1633,27 @@ export function buildManualReviewFallback(input: RecruitmentAnalysisInput): Recr
 }
 
 /**
- * IA-01: once its invisible text is set aside, the CV has too little left to
- * read (a blank page hiding sentences). No AI is called: a human reviews it,
- * without score, from the form data only.
+ * IA-01: once its invisible or unverifiable text is set aside, the CV has too
+ * little left to read (a blank page hiding sentences, a font the reader cannot
+ * draw). No AI is called: a human reviews it, without score, from the form
+ * data only.
  */
 export function buildInvisibleTextReview(input: RecruitmentAnalysisInput): RecruitmentAnalysisExecution {
   const review = buildManualReviewFallback(input);
+  const hidden = invisibleTextRequiresReview(input.invisibleText);
   return {
     ...review,
     model: INVISIBLE_TEXT_REVIEW_MODEL,
     result: {
       ...review.result,
-      summary: "Le texte visible du CV est trop court pour une lecture automatique, et le fichier contient du texte invisible à l’écran. Ce dossier doit être examiné manuellement.",
+      summary: hidden
+        ? "Le texte visible du CV est trop court pour une lecture automatique, et le fichier contient du texte invisible à l’écran. Ce dossier doit être examiné manuellement."
+        : "Le texte visible du CV est trop court pour une lecture automatique : le reste n’a pas pu être vérifié comme visible et a été écarté. Ce dossier doit être examiné manuellement.",
       gaps: ["Lecture automatique impossible ; aucune conclusion automatique n’a été produite."],
       dataQualityWarnings: input.invisibleText ? [invisibleTextAlert(input.invisibleText)] : [],
-      reasoning: "Aucun score n’est calculé : le texte visible du CV est insuffisant et le fichier cache du texte. Une revue humaine intégrale est requise.",
+      reasoning: hidden
+        ? "Aucun score n’est calculé : le texte visible du CV est insuffisant et le fichier cache du texte. Une revue humaine intégrale est requise."
+        : "Aucun score n’est calculé : le texte visible du CV est insuffisant et le reste n’a pas pu être vérifié. Une revue humaine intégrale est requise : ouvrir le CV.",
     },
   };
 }
@@ -1604,7 +1682,7 @@ export async function analyzeCvText(input: RecruitmentAnalysisInput): Promise<Re
   const cvText = cleanText(input.extractedText).slice(0, 60_000);
   const cvContentLength = cleanText(cvText.replace(/\[PAGE\s+\d+\]/gi, "")).length;
   if (cvContentLength < 80) {
-    if (invisibleTextRequiresReview(input.invisibleText)) return buildInvisibleTextReview(input);
+    if (invisibleTextRequiresReview(input.invisibleText) || (input.invisibleText?.unverifiable?.characters ?? 0) > INVISIBLE_TEXT_REVIEW_THRESHOLD) return buildInvisibleTextReview(input);
     throw new Error("Le texte extrait du CV est insuffisant pour une analyse fiable.");
   }
 
@@ -1697,11 +1775,11 @@ export async function saveCvAnalysis(
   const db = await getDb();
   if (!db) throw new Error("Base de données indisponible.");
   // A contradiction between the form and the CV makes what was read in the CV
-  // doubtful (IA-02), and a CV that hides text, or whose text could not all be
-  // checked, is not trusted either (IA-01): no structured fact is stored, so
-  // none reaches the pool filters or a mission's matching. Evidence merely
+  // doubtful (IA-02), and a CV that hides text, or too much of whose text could
+  // not be checked, is not trusted either (IA-01): no structured fact is stored,
+  // so none reaches the pool filters or a mission's matching. Evidence merely
   // missing does not count.
-  const verifiedFacts = analysis.contradictions.length > 0 || invisibleTextRequiresReview(analysis.invisibleText) || analysis.visibilityUnchecked
+  const verifiedFacts = analysis.contradictions.length > 0 || visibilityRequiresReview(analysis.invisibleText) || analysis.visibilityUnchecked
     ? { certifications: [], languages: [], experiences: [], skills: [] }
     : verifiedRecruitmentFacts(analysis);
   // Certifications an admin confirmed survive a new analysis, and are not read again.

@@ -57,4 +57,7 @@ Polices Foxit (`Foxit*.pfb`, licence BSD de PDFium : `LICENSE_FOXIT`) et
 Liberation Sans 2 (`LiberationSans-*.ttf`, SIL Open Font License 1.1 :
 `LICENSE_LIBERATION`). À recopier si pdf-parse passe à une autre version de
 pdfjs-dist : le test « polices standard » de
-`server/recruitmentInvisibleText.test.ts` signale un fichier manquant.
+`server/recruitmentInvisibleText.test.ts` signale un fichier manquant. Le
+contrôle de visibilité (`server/pdfVisibleText.ts`) dépend aussi de cette
+version : codes des opérations et liste d’opérations que pdf.js garde après
+un rendu ; `server/pdfVisibleText.test.ts` le vérifie.

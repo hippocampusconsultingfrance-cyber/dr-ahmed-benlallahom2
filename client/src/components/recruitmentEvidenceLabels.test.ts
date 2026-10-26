@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { contradictionEvidenceLabel, CV_READING_LABELS, CV_REVIEW_REMINDER, cvReadingTextForDisplay, fieldEvidenceStatusLabel, fieldEvidenceStatusTone } from "./recruitmentEvidenceLabels";
+import { contradictionEvidenceLabel, CV_READING_LABELS, CV_REVIEW_REMINDER, cvReadingTextForDisplay, extractionWarningLabel, fieldEvidenceStatusLabel, fieldEvidenceStatusTone } from "./recruitmentEvidenceLabels";
 
 describe("libellés des preuves IA d’un CV (IA-01)", () => {
   it("une citation retrouvée dans le texte lu n’est jamais présentée comme vérifiée", () => {
@@ -56,5 +56,17 @@ describe("libellés des preuves IA d’un CV (IA-01)", () => {
       "Le texte du CV a été extrait avec succès. L’analyse IA complète est temporairement indisponible ; ce dossier doit être examiné manuellement.",
       "Compétence vérifiée : Réanimation, d’après le candidat.",
     ]) expect(cvReadingTextForDisplay(text)).toBe(text);
+  });
+
+  it("dit en clair, dans la fiche, le texte écarté de l’analyse et pourquoi, au lieu des codes bruts", () => {
+    expect(extractionWarningLabel("invisible_text_ignored:571")).toBe("571 caractère(s) de texte invisible écarté(s) de l’analyse");
+    expect(extractionWarningLabel("unverifiable_text_set_aside:74")).toBe("74 caractère(s) non vérifiable(s) écarté(s) de l’analyse");
+    expect(extractionWarningLabel("pdf_font_not_drawable")).toBe("police non incorporée au PDF que l’outil ne sait pas dessiner : son texte n’a pas pu être vérifié");
+    expect(extractionWarningLabel("pdf_visibility_check_unfinished")).toBe("contrôle de visibilité non terminé (document long ou lourd) : le texte non contrôlé est écarté");
+    expect(extractionWarningLabel("pdf_text_page_3_insufficient_text")).toBe("page 3 : texte insuffisant");
+    // Dossiers analysed before these warnings were named.
+    expect(extractionWarningLabel("pdf_visibility_check_incomplete")).toBe("contrôle de visibilité incomplet (police non incorporée ou pages non contrôlées)");
+    for (const code of ["pdf_text_on_image", "pdf_text_unmatched", "docx_white_text_near_drawing", "pdf_visibility_check_unavailable", "white_text_on_drawing_kept:12"]) expect(extractionWarningLabel(code)).not.toMatch(/^[a-z_]+(:\d+)?$/);
+    expect(extractionWarningLabel("legacy_doc_format_limited_extraction")).toBe("legacy_doc_format_limited_extraction");
   });
 });

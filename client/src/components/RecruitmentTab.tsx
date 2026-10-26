@@ -14,7 +14,7 @@ import CertificationReview from "./CertificationReview";
 import { useCvDownload } from "./useCvDownload";
 import { recruitmentFactLabel, recruitmentFactNameContains } from "@shared/recruitmentFactOrigins";
 import { AI_ANALYSIS_UNAVAILABLE_LABEL, isAiAnalysisUnavailable, SCORE_UNAVAILABLE_EXPLANATION, SCORE_UNAVAILABLE_HEADING, scoredApplicationsFirst } from "./recruitmentScoreGroups";
-import { contradictionEvidenceLabel, CV_READING_LABELS, CV_REVIEW_REMINDER, cvReadingTextForDisplay, fieldEvidenceStatusLabel, fieldEvidenceStatusTone } from "./recruitmentEvidenceLabels";
+import { contradictionEvidenceLabel, CV_READING_LABELS, CV_REVIEW_REMINDER, cvReadingTextForDisplay, extractionWarningLabel, fieldEvidenceStatusLabel, fieldEvidenceStatusTone } from "./recruitmentEvidenceLabels";
 import {
   recruitmentDriveExportLabel,
   recruitmentDriveExportErrorLabel,
@@ -656,7 +656,7 @@ export default function RecruitmentTab() {
                             </div>
                           </div>
                           {application.aiMatchReasoning && <p className="border-t border-primary/10 pt-3 text-xs leading-5 text-muted-foreground"><strong className="text-foreground">{verifiedScore === null ? "Conclusion de l’analyse :" : "Justification du score :"}</strong> {cvReadingTextForDisplay(application.aiMatchReasoning)}</p>}
-                          {extractionWarnings.length > 0 && <p className="border-t border-primary/10 pt-3 text-xs leading-5 text-amber-700 dark:text-amber-300"><strong>Qualité d’extraction :</strong> {extractionWarnings.join(" · ")}</p>}
+                          {extractionWarnings.length > 0 && <p className="border-t border-primary/10 pt-3 text-xs leading-5 text-amber-700 dark:text-amber-300"><strong>Qualité d’extraction :</strong> {extractionWarnings.map(extractionWarningLabel).join(" · ")}</p>}
                           {application.aiAnalyzedAt && <p className="text-[11px] text-muted-foreground">Analysé le {new Date(application.aiAnalyzedAt).toLocaleString("fr-FR", { timeZone: "Europe/Paris" })}</p>}
                         </div>
                       ) : (
