@@ -1,10 +1,11 @@
 import { desc, eq, inArray, sql } from "drizzle-orm";
-import type { PgColumn } from "drizzle-orm/pg-core";
+import type { PgColumn, PgSelect, PgTable } from "drizzle-orm/pg-core";
 import { appointments, candidateAccounts, contactMessages, cvApplications, gdprRequests, medicalQuestionAuditLogs, medicalQuestions } from "../drizzle/schema";
 import { HIPPOCAMPUS_LEGAL } from "../shared/legalIdentity";
 import { getDb } from "./db";
 import { mutationRowCount } from "./dbMutation";
 import { isUnconfirmedPaidAppointment } from "./appointmentAdminActions";
+import { closeErasedPatientFulfillment } from "./appointmentFulfillment";
 import { logSecurityEvent } from "./candidateSecurity";
 import { anonymisedAppointmentFields } from "./personalDataRetention";
 
@@ -15,9 +16,15 @@ import { anonymisedAppointmentFields } from "./personalDataRetention";
  * Recruitment data has its own complete erasure (recruitmentErasure.ts): only
  * the dossiers found are listed here. See docs/PROCEDURE_DEMANDES_RGPD.md.
  */
+/** Rows listed per table on screen (the most recent); the export and the erasure cover them all. */
 export const PERSONAL_DATA_SEARCH_LIMIT = 200;
 
 type Database = NonNullable<Awaited<ReturnType<typeof getDb>>>;
+
+/** One row more than the screen shows, to know whether the table has more; every row for the export. */
+function upToLimit<T extends PgSelect>(query: T, limit: number | null) {
+  return limit === null ? query : query.limit(limit + 1);
+}
 
 export function normalizePersonEmail(email: string) {
   return email.trim().toLowerCase();
@@ -33,10 +40,28 @@ async function requireDb(): Promise<Database> {
   return db;
 }
 
-export async function findPersonalData(email: string) {
+/**
+ * What the site keeps under one address. On screen (`limit`, by default),
+ * each list stops at its PERSONAL_DATA_SEARCH_LIMIT most recent rows and
+ * `totals` gives every table's full count; the export reads with `limit: null`,
+ * every row. `erasableRows` is what « Effacer / anonymiser » would delete or
+ * anonymise now: 0 once only kept data is left (GDPR requests, active upcoming
+ * bookings, recruitment dossiers).
+ */
+export async function findPersonalData(email: string, options: { limit?: number | null; now?: Date } = {}) {
   const db = await requireDb();
-  const limit = PERSONAL_DATA_SEARCH_LIMIT;
-  const contacts = await db.select({
+  const limit = options.limit === undefined ? PERSONAL_DATA_SEARCH_LIMIT : options.limit;
+  const now = options.now ?? new Date();
+  const countRows = async (table: PgTable, column: PgColumn) => {
+    const [row] = await db.select({ count: sql<number>`COUNT(*)` }).from(table).where(sameEmail(column, email));
+    return Number(row?.count ?? 0);
+  };
+  /** The rows to show, and the table's total when they had to be cut. */
+  const listed = async <T>(rows: T[], table: PgTable, column: PgColumn) => (limit !== null && rows.length > limit
+    ? { rows: rows.slice(0, limit), total: await countRows(table, column) }
+    : { rows, total: rows.length });
+
+  const contacts = await listed(await upToLimit(db.select({
     id: contactMessages.id,
     trackingId: contactMessages.trackingId,
     name: contactMessages.name,
@@ -46,8 +71,8 @@ export async function findPersonalData(email: string) {
     gdprConsent: contactMessages.gdprConsent,
     read: contactMessages.read,
     createdAt: contactMessages.createdAt,
-  }).from(contactMessages).where(sameEmail(contactMessages.email, email)).orderBy(desc(contactMessages.createdAt)).limit(limit);
-  const questions = await db.select({
+  }).from(contactMessages).where(sameEmail(contactMessages.email, email)).orderBy(desc(contactMessages.createdAt)).$dynamic(), limit), contactMessages, contactMessages.email);
+  const questions = await listed(await upToLimit(db.select({
     id: medicalQuestions.id,
     trackingId: medicalQuestions.trackingId,
     firstName: medicalQuestions.firstName,
@@ -65,8 +90,8 @@ export async function findPersonalData(email: string) {
     responseSentAt: medicalQuestions.responseSentAt,
     publishedAt: medicalQuestions.publishedAt,
     createdAt: medicalQuestions.createdAt,
-  }).from(medicalQuestions).where(sameEmail(medicalQuestions.email, email)).orderBy(desc(medicalQuestions.createdAt)).limit(limit);
-  const requests = await db.select({
+  }).from(medicalQuestions).where(sameEmail(medicalQuestions.email, email)).orderBy(desc(medicalQuestions.createdAt)).$dynamic(), limit), medicalQuestions, medicalQuestions.email);
+  const requests = await listed(await upToLimit(db.select({
     id: gdprRequests.id,
     trackingId: gdprRequests.trackingId,
     name: gdprRequests.name,
@@ -78,8 +103,15 @@ export async function findPersonalData(email: string) {
     notes: gdprRequests.notes,
     responseDate: gdprRequests.responseDate,
     createdAt: gdprRequests.createdAt,
-  }).from(gdprRequests).where(sameEmail(gdprRequests.email, email)).orderBy(desc(gdprRequests.createdAt)).limit(limit);
-  const bookings = await db.select({
+  }).from(gdprRequests).where(sameEmail(gdprRequests.email, email)).orderBy(desc(gdprRequests.createdAt)).$dynamic(), limit), gdprRequests, gdprRequests.email);
+  // Every booking's state, to count them and those the erasure would anonymise.
+  const bookingStates = await db.select({
+    appointmentDate: appointments.appointmentDate,
+    appointmentStatus: appointments.appointmentStatus,
+    paymentStatus: appointments.paymentStatus,
+    stripePaymentIntentId: appointments.stripePaymentIntentId,
+  }).from(appointments).where(sameEmail(appointments.customerEmail, email));
+  const bookingRows = await upToLimit(db.select({
     id: appointments.id,
     trackingId: appointments.trackingId,
     customerName: appointments.customerName,
@@ -98,28 +130,38 @@ export async function findPersonalData(email: string) {
     cancelledAt: appointments.cancelledAt,
     language: appointments.language,
     createdAt: appointments.createdAt,
-  }).from(appointments).where(sameEmail(appointments.customerEmail, email)).orderBy(desc(appointments.appointmentDate)).limit(limit);
+  }).from(appointments).where(sameEmail(appointments.customerEmail, email)).orderBy(desc(appointments.appointmentDate)).$dynamic(), limit);
+  const bookings = limit === null ? bookingRows : bookingRows.slice(0, limit);
   const { findAppointmentInvoices } = await import("./invoiceNumbering");
   const invoices = await findAppointmentInvoices(bookings.map(booking => booking.id)).catch(error => {
     console.error("[PersonalData] Issued invoices could not be read", error instanceof Error ? error.name : "UnknownError");
     return new Map<number, { invoiceNumber: string }>();
   });
-  const applications = await db.select({ id: cvApplications.id, trackingId: cvApplications.trackingId, createdAt: cvApplications.createdAt })
-    .from(cvApplications).where(sameEmail(cvApplications.email, email)).orderBy(desc(cvApplications.createdAt)).limit(limit);
+  const applications = await listed(await upToLimit(db.select({ id: cvApplications.id, trackingId: cvApplications.trackingId, createdAt: cvApplications.createdAt })
+    .from(cvApplications).where(sameEmail(cvApplications.email, email)).orderBy(desc(cvApplications.createdAt)).$dynamic(), limit), cvApplications, cvApplications.email);
   // Candidate accounts store the address normalised (trimmed, lower case).
   const accounts = await db.select({ id: candidateAccounts.id, linkedApplicationId: candidateAccounts.linkedApplicationId })
     .from(candidateAccounts).where(eq(candidateAccounts.email, normalizePersonEmail(email)));
+  const erasableBookings = bookingStates.filter(booking => !isActiveUpcomingBooking(booking, now)).length;
 
   return {
     email: normalizePersonEmail(email),
-    contactMessages: contacts,
-    medicalQuestions: questions,
-    gdprRequests: requests,
+    contactMessages: contacts.rows,
+    medicalQuestions: questions.rows,
+    gdprRequests: requests.rows,
     appointments: bookings.map(booking => ({ ...booking, invoiceNumber: invoices.get(booking.id)?.invoiceNumber ?? null })),
     recruitment: {
-      applications,
-      candidateAccountWithoutApplication: accounts.some(account => account.linkedApplicationId === null) && applications.length === 0,
+      applications: applications.rows,
+      candidateAccountWithoutApplication: accounts.some(account => account.linkedApplicationId === null) && applications.total === 0,
     },
+    totals: {
+      contactMessages: contacts.total,
+      medicalQuestions: questions.total,
+      gdprRequests: requests.total,
+      appointments: bookingStates.length,
+      recruitmentApplications: applications.total,
+    },
+    erasableRows: contacts.total + questions.total + erasableBookings,
   };
 }
 
@@ -140,15 +182,16 @@ export function buildPersonalDataExport(data: PersonalData, generatedAt = new Da
   };
 }
 
+/** Every row of the address, however many: the screen's limit does not apply to the export. */
 export async function exportPersonalData(input: { email: string; actorOpenId: string; now?: Date }) {
-  const data = await findPersonalData(input.email);
   const now = input.now ?? new Date();
+  const data = await findPersonalData(input.email, { limit: null, now });
   await logSecurityEvent({
     actorKind: "admin",
     actorReference: input.actorOpenId,
     category: "admin_personal_data_exported",
     outcome: "allowed",
-    metadata: { contactMessages: data.contactMessages.length, medicalQuestions: data.medicalQuestions.length, gdprRequests: data.gdprRequests.length, appointments: data.appointments.length },
+    metadata: { contactMessages: data.contactMessages.length, medicalQuestions: data.medicalQuestions.length, gdprRequests: data.gdprRequests.length, appointments: data.appointments.length, recruitmentApplications: data.recruitment.applications.length },
   });
   return {
     filename: `donnees-personnelles-${now.toISOString().slice(0, 10)}.json`,
@@ -174,10 +217,11 @@ function isActiveUpcomingBooking(booking: BookingToErase, now: Date) {
  * Erasure for one address: contact messages and medical questions (with
  * their journal) are deleted; past, cancelled and abandoned bookings are
  * reduced to the accounting record, like after 3 years (the invoice and its
- * stored PDF stay); active upcoming bookings (isActiveUpcomingBooking) are
- * left for the administrator to cancel or refund first. GDPR requests are
- * kept as the record of the handling (1 year after closure), and recruitment
- * dossiers are erased from their own routine. The trace holds no personal data.
+ * stored PDF stay), and their patient emails not sent yet are dropped; active
+ * upcoming bookings (isActiveUpcomingBooking) are left for the administrator
+ * to cancel or refund first. GDPR requests are kept as the record of the
+ * handling (1 year after closure), and recruitment dossiers are erased from
+ * their own routine. The trace holds no personal data.
  */
 export async function erasePersonalData(input: { email: string; actorOpenId: string; now?: Date }) {
   const db = await requireDb();
@@ -202,6 +246,9 @@ export async function erasePersonalData(input: { email: string; actorOpenId: str
   const appointmentsAnonymised = ended.length
     ? mutationRowCount(await db.update(appointments).set(anonymisedAppointmentFields(now)).where(inArray(appointments.id, ended.map(booking => booking.id))))
     : 0;
+  // Their patient emails still waiting have no address left; the queue would skip them anyway.
+  await closeErasedPatientFulfillment(ended.map(booking => booking.id), now)
+    .catch(error => console.error("[PersonalData] Pending patient emails could not be closed", error instanceof Error ? error.name : "UnknownError"));
   const [gdprRequestsKept] = await db.select({ count: sql<number>`COUNT(*)` }).from(gdprRequests).where(sameEmail(gdprRequests.email, input.email));
   const applications = await db.select({ id: cvApplications.id, trackingId: cvApplications.trackingId }).from(cvApplications).where(sameEmail(cvApplications.email, input.email));
   const report = {
@@ -226,4 +273,28 @@ export async function erasePersonalData(input: { email: string; actorOpenId: str
     },
   });
   return report;
+}
+
+/** Traces of the administrator's actions on a person's data, which hold row counts only. */
+export const PERSONAL_DATA_TRACE_CATEGORIES: ReadonlySet<string> = new Set([
+  "admin_personal_data_exported",
+  "admin_personal_data_erased",
+  "admin_contact_message_deleted",
+  "admin_medical_question_deleted",
+]);
+
+/**
+ * Row counts of such a trace, shown in the Security tab (who, when, how many
+ * rows); null for any other event, whose metadata stays on the server.
+ */
+export function personalDataTraceCounts(category: string, metadata: string | null): Record<string, number> | null {
+  if (!PERSONAL_DATA_TRACE_CATEGORIES.has(category) || !metadata) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(metadata);
+  } catch {
+    return null;
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+  return Object.fromEntries(Object.entries(parsed).filter((entry): entry is [string, number] => Number.isSafeInteger(entry[1]) && entry[1] >= 0));
 }

@@ -699,9 +699,12 @@ export const appRouter = router({
         category: securityEvents.category,
         outcome: securityEvents.outcome,
         severity: securityEvents.severity,
+        metadata: securityEvents.metadata,
         createdAt: securityEvents.createdAt,
       }).from(securityEvents).orderBy(desc(securityEvents.createdAt)).limit(input?.limit ?? 50);
-      return events;
+      // RGPD-12: only the row counts of the traces of actions on a person's data leave the server.
+      const { personalDataTraceCounts } = await import("./personalDataAdmin");
+      return events.map(({ metadata, ...event }) => ({ ...event, counts: personalDataTraceCounts(event.category, metadata) }));
     }),
   }),
   auth: router({

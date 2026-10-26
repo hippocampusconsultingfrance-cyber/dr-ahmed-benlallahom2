@@ -22,13 +22,13 @@ import AdminLoadMore from "@/components/AdminLoadMore";
 import AdminSearchField from "@/components/AdminSearchField";
 import AppointmentDeliveries, { refundEmailWarning, type AppointmentDeliveryState } from "@/components/AppointmentDeliveries";
 import PersonalDataSearchPanel, { personalDataSearchKey, requestPersonalDataSearch } from "@/components/PersonalDataSearchPanel";
-import { GDPR_REQUEST_STATUS_LABELS, GDPR_REQUEST_TYPE_LABELS, gdprRequestDeadline, isGdprRequestOpen, isGdprRequestOverdue } from "@/components/gdprRequestAdmin";
+import { formatGdprRequestDate, formatGdprRequestDateTime, GDPR_REQUEST_STATUS_LABELS, GDPR_REQUEST_TYPE_LABELS, gdprRequestDeadline, isGdprRequestOpen, isGdprRequestOverdue } from "@/components/gdprRequestAdmin";
 import { adminListCount, adminPageOffsets, ADMIN_PAGE_SIZE, mergeAdminPages, useAdminPageCount } from "@/components/adminPagination";
 import { adminSearchStatus, useAdminSearch } from "@/components/adminSearch";
 import PublicContentSkeleton from "@/components/PublicContentSkeleton";
 import { getActiveAdminTabLabel } from "./adminDashboardMobileTabs";
 import { buildAppointmentsAgenda } from "./appointmentsAgenda";
-import { getAppointmentAdminActions } from "./appointmentAdminActions";
+import { getAppointmentAdminActions, PATIENT_DATA_ERASED_REASON_PROMPT, PATIENT_DATA_ERASED_REFUND_NOTICE } from "./appointmentAdminActions";
 
 const REFUND_AMOUNT_FORMAT = new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR" });
 
@@ -297,11 +297,12 @@ export function AppointmentsTab() {
       toast.error(mutationError.message);
     },
   });
-  const notifyRefundResult = ({ refundAmount, patientNotified, patientEmail }: { refundAmount: string; patientNotified: boolean; patientEmail?: AppointmentDeliveryState | null }) => {
+  const notifyRefundResult = ({ refundAmount, patientNotified, patientEmail, patientDataErased }: { refundAmount: string; patientNotified: boolean; patientEmail?: AppointmentDeliveryState | null; patientDataErased?: boolean }) => {
     // « 100,00 € », as in the emails.
     toast.success(`Remboursement confirmé : ${REFUND_AMOUNT_FORMAT.format(Number(refundAmount))}`);
+    if (patientDataErased) toast.warning(PATIENT_DATA_ERASED_REFUND_NOTICE);
     // Its patient email goes through the refund queue (EXPL-02): refused, or waiting for its next automatic attempt.
-    if (!patientNotified) toast.warning(refundEmailWarning(patientEmail), { duration: 10_000 });
+    else if (!patientNotified) toast.warning(refundEmailWarning(patientEmail), { duration: 10_000 });
     utils.admin.appointments.list.invalidate();
     utils.admin.stats.invalidate();
     // Its post-payment emails waiting for a retry were just closed as not sent (EXPL-02).
@@ -445,6 +446,9 @@ export function AppointmentsTab() {
                       {actions.unconfirmedPayment && (
                         <span className="px-2 py-1 rounded text-xs font-medium bg-amber-500/20 text-amber-400">Paiement à régulariser</span>
                       )}
+                      {actions.patientDataErased && (
+                        <span className="px-2 py-1 rounded text-xs font-medium bg-slate-500/20 text-slate-300" title="Rendez-vous anonymisé (effacement RGPD ou conservation de 3 ans écoulée) : le patient n’est plus joignable par le site.">Données effacées</span>
+                      )}
                       {actions.canComplete && (
                         <Button size="sm" variant="outline" className={buttonClass} disabled={updateStatus.isPending}
                           onClick={() => {
@@ -474,7 +478,9 @@ export function AppointmentsTab() {
                       )}
                       {actions.canPractitionerCancel && (
                         <Button size="sm" variant="outline" className={buttonClass} disabled={refundAppointment.isPending}
-                          onClick={() => askRefund(apt.trackingId, "practitioner", `Annuler ${apt.trackingId} et rembourser intégralement ${apt.finalPrice} € au patient.\nMotif communiqué au patient (obligatoire) :`)}>
+                          onClick={() => askRefund(apt.trackingId, "practitioner", actions.patientDataErased
+                            ? `Annuler ${apt.trackingId} et rembourser intégralement ${apt.finalPrice} €.\n${PATIENT_DATA_ERASED_REFUND_NOTICE}\n${PATIENT_DATA_ERASED_REASON_PROMPT}`
+                            : `Annuler ${apt.trackingId} et rembourser intégralement ${apt.finalPrice} € au patient.\nMotif communiqué au patient (obligatoire) :`)}>
                           <XCircle className="w-3 h-3 mr-1" />
                           Annuler (praticien) et rembourser
                         </Button>
@@ -488,7 +494,7 @@ export function AppointmentsTab() {
                       )}
                       {(actions.canPractitionerRefund || actions.unconfirmedPayment) && (
                         <Button size="sm" variant="outline" className={buttonClass} disabled={refundAppointment.isPending}
-                          onClick={() => askRefund(apt.trackingId, "practitioner", `Rembourser intégralement le paiement de ${apt.trackingId}.\nMotif (obligatoire) :`)}>
+                          onClick={() => askRefund(apt.trackingId, "practitioner", `Rembourser intégralement le paiement de ${apt.trackingId}.${actions.patientDataErased ? `\n${PATIENT_DATA_ERASED_REFUND_NOTICE}\n${PATIENT_DATA_ERASED_REASON_PROMPT}` : "\nMotif (obligatoire) :"}`)}>
                           <DollarSign className="w-3 h-3 mr-1" />
                           {actions.unconfirmedPayment ? "Rembourser ce paiement" : "Rembourser"}
                         </Button>
@@ -511,7 +517,7 @@ export function AppointmentsTab() {
             {apt.requestDetails && (
               <p className="text-sm text-muted-foreground mt-2 line-clamp-2">{apt.requestDetails}</p>
             )}
-            <AppointmentDeliveries trackingId={apt.trackingId} paymentStatus={apt.paymentStatus} deliveries={apt.deliveries} invoiceNumber={apt.invoiceNumber} />
+            <AppointmentDeliveries trackingId={apt.trackingId} paymentStatus={apt.paymentStatus} deliveries={apt.deliveries} invoiceNumber={apt.invoiceNumber} patientDataErased={getAppointmentAdminActions(apt).patientDataErased} />
           </div>
         ))}
         {items.length === 0 && (
@@ -666,6 +672,8 @@ export function GdprTab() {
   // Note or reason being typed, per request (RGPD-12); the saved note otherwise.
   const [notes, setNotes] = useState<Record<number, string>>({});
   const [personalDataSearch, setPersonalDataSearch] = useState({ email: "", nonce: 0 });
+  // The last « Ses données » brought on screen: the panel mounted again after an error state does not move the page.
+  const [revealedNonce, setRevealedNonce] = useState(0);
   const updateStatus = trpc.admin.gdprRequests.updateStatus.useMutation({
     onSuccess: () => {
       toast.success("Demande mise à jour");
@@ -693,9 +701,10 @@ export function GdprTab() {
 
   return (
     <div className="space-y-8">
-      <PersonalDataSearchPanel key={personalDataSearchKey(personalDataSearch)} requestedEmail={personalDataSearch.email} />
+      {/* « Ses données » mounts the panel again on the request's address, which brings it on screen once and focuses its title. */}
+      <PersonalDataSearchPanel key={personalDataSearchKey(personalDataSearch)} requestedEmail={personalDataSearch.email} reveal={personalDataSearch.nonce > revealedNonce} onRevealed={() => setRevealedNonce(personalDataSearch.nonce)} />
       <div>
-        <p className="text-sm text-muted-foreground mb-4">{adminListCount(items.length, total, "demande(s) RGPD")} · réponse due un mois après réception</p>
+        <p className="text-sm text-muted-foreground mb-4">{adminListCount(items.length, total, "demande(s) RGPD")} · réponse due un mois après réception, au plus tard à la fin du jour d’échéance (heure de Paris)</p>
         <div className="space-y-3">
           {items.map((req) => {
             const note = notes[req.id] ?? req.notes ?? "";
@@ -719,13 +728,13 @@ export function GdprTab() {
                     </div>
                     <div className="flex flex-wrap gap-x-3 gap-y-1 text-sm text-muted-foreground">
                       <span className="break-all">{req.email}</span>
-                      <span>Reçue le {new Date(req.createdAt).toLocaleString("fr-FR")}</span>
+                      <span>Reçue le {formatGdprRequestDateTime(req.createdAt)}</span>
                       {open ? (
                         <span className={overdue ? "font-semibold text-red-400" : undefined}>
-                          {overdue ? "Échéance dépassée : " : "Échéance : "}{gdprRequestDeadline(req.createdAt).toLocaleDateString("fr-FR")}
+                          {overdue ? "Échéance dépassée : " : "Échéance : "}{formatGdprRequestDate(gdprRequestDeadline(req.createdAt))}
                         </span>
                       ) : req.responseDate ? (
-                        <span>Répondue le {new Date(req.responseDate).toLocaleDateString("fr-FR")}</span>
+                        <span>Répondue le {formatGdprRequestDate(req.responseDate)}</span>
                       ) : null}
                     </div>
                     {req.description && (
@@ -749,10 +758,7 @@ export function GdprTab() {
                     ) : null}
                   </div>
                   <div className="flex w-full flex-wrap gap-2 sm:w-auto sm:flex-nowrap">
-                    <Button size="sm" variant="outline" className="min-h-10 flex-1 sm:min-h-0 sm:flex-none" onClick={() => {
-                      setPersonalDataSearch(current => requestPersonalDataSearch(current, req.email));
-                      document.getElementById("personal-data-search")?.scrollIntoView({ block: "start" });
-                    }}>
+                    <Button size="sm" variant="outline" className="min-h-10 flex-1 sm:min-h-0 sm:flex-none" onClick={() => setPersonalDataSearch(current => requestPersonalDataSearch(current, req.email))}>
                       <Eye className="w-3 h-3 mr-1" />
                       Ses données
                     </Button>

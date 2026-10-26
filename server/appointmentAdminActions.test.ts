@@ -249,6 +249,45 @@ describe("statuts depuis le tableau de bord", () => {
   });
 });
 
+describe("RGPD-12 — rendez-vous anonymisé (effacement ou conservation de 3 ans écoulée)", () => {
+  const anonymised = { customerName: "Anonymisé", customerEmail: "", customerPhone: "", appointmentStatus: "completed", appointmentDate: new Date(NOW.getTime() - 400 * 24 * HOUR) };
+
+  it("rembourse sans écrire à une adresse vide et dit que le patient n’est plus joignable", async () => {
+    const { updates } = fakeDb(row(anonymised));
+    const result = await refundAppointmentPayment(fakeStripe().stripe, { trackingId: "APTADMIN0001", reason: "Geste commercial", initiator: "practitioner" }, NOW);
+    expect(result).toMatchObject({ success: true, refundAmount: "100.00", patientNotified: false, patientDataErased: true });
+    expect(updates[0]).toMatchObject({ paymentStatus: "refunded" });
+    expect(notifications.sendRefundConfirmationEmail).not.toHaveBeenCalled();
+
+    // A booking still holding its address is told as before.
+    fakeDb(row({ appointmentStatus: "completed", appointmentDate: anonymised.appointmentDate }));
+    await expect(refundAppointmentPayment(fakeStripe().stripe, { trackingId: "APTADMIN0001", reason: "Geste commercial", initiator: "practitioner" }, NOW))
+      .resolves.toMatchObject({ patientNotified: true, patientDataErased: false });
+    expect(notifications.sendRefundConfirmationEmail).toHaveBeenCalledTimes(1);
+  });
+
+  it("ne relit pas chez Stripe l’adresse d’un patient effacé pour un paiement non rattaché", async () => {
+    fakeDb(row({ ...anonymised, appointmentStatus: "confirmed" }));
+    const other = fakeStripe({ id: "cs_test_double", payment_status: "paid", payment_intent: "pi_test_double", metadata: { trackingId: "APTADMIN0001" }, amount_total: 10000, customer_email: "patient@example.test" });
+    await expect(refundUnconfirmedCheckoutSession(other.stripe, { sessionId: "cs_test_double" }))
+      .resolves.toMatchObject({ success: true, refundAmount: "100.00", patientNotified: false, patientDataErased: true });
+    expect(other.refundsCreate).toHaveBeenCalled();
+    expect(notifications.sendRefundConfirmationEmail).not.toHaveBeenCalled();
+  });
+
+  it("refuse de remettre en confirmé un rendez-vous dont les données sont effacées", async () => {
+    const { updates } = fakeDb(row(anonymised));
+    await expect(updateAppointmentStatusByAdmin({ trackingId: "APTADMIN0001", appointmentStatus: "confirmed" }, NOW))
+      .rejects.toMatchObject({ code: "CONFLICT", message: expect.stringContaining("effacées") });
+    expect(updates).toHaveLength(0);
+  });
+
+  it("le tableau de bord le signale, n’offre plus « Remettre en confirmé » mais garde le remboursement", () => {
+    expect(getAppointmentAdminActions(row(anonymised), NOW.getTime())).toMatchObject({ patientDataErased: true, canReconfirm: false, canPractitionerRefund: true });
+    expect(getAppointmentAdminActions(row({ appointmentStatus: "completed" }), NOW.getTime())).toMatchObject({ patientDataErased: false, canReconfirm: true });
+  });
+});
+
 describe("boutons du tableau de bord alignés sur les règles serveur", () => {
   const now = NOW.getTime();
   it("propose Terminer/Absent seulement après le début, l’annulation praticien toujours, la règle des 24 h pour le patient", () => {

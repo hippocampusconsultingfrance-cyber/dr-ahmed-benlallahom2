@@ -7,8 +7,11 @@ email.
 
 ## 1. Délai
 
-- Réponse due **un mois après la réception** (RGPD, art. 12.3). L’onglet RGPD
-  affiche l’échéance de chaque demande ouverte, en rouge une fois dépassée.
+- Réponse due **un mois après la réception** (RGPD, art. 12.3), au plus tard à
+  la fin du jour d’échéance : le même jour du mois suivant, ou son dernier jour
+  s’il est plus court (règlement 1182/71). L’onglet RGPD affiche l’échéance de
+  chaque demande ouverte, comptée en jours de Paris quel que soit le fuseau du
+  navigateur, en rouge une fois ce jour terminé.
 - Le délai peut être prolongé de deux mois pour une demande complexe ou en cas
   de demandes nombreuses, à condition d’en informer la personne, avec les
   raisons, **avant la fin du premier mois**.
@@ -25,7 +28,9 @@ email.
 3. Cliquer **Ses données** (ou saisir l’adresse dans « Rechercher une personne
    par email ») : la recherche ignore la casse et liste les messages de
    contact, questions santé, demandes RGPD, rendez-vous (avec le numéro de
-   facture) et les dossiers de recrutement de cette adresse.
+   facture) et les dossiers de recrutement de cette adresse. Chaque liste
+   affiche au plus les 200 plus récents, avec le nombre total ; l’export et
+   l’effacement portent sur tous.
 4. Selon la demande :
    - **Accès / portabilité** : **Exporter (JSON)**, puis transmettre le fichier
      à la personne par un canal sûr. Il contient aussi les notes internes de
@@ -42,7 +47,9 @@ email.
      expiration, au plus tard par le nettoyage de la nuit), puis relancer
      l’effacement. Un rendez-vous annulé ou un créneau
      abandonné, même à une date future, est anonymisé comme un rendez-vous
-     passé.
+     passé. Quand il ne reste rien à effacer (seulement des demandes RGPD,
+     des rendez-vous à venir encore en cours ou des dossiers de recrutement),
+     **Effacer / anonymiser** est désactivé et le panneau dit ce qui reste.
    - **Rectification** : il n’y a pas d’écran de modification ; corriger la
      ligne dans Neon (tables du § 3) ou, pour une donnée devenue inutile,
      l’effacer. Noter ce qui a été fait.
@@ -62,8 +69,9 @@ email.
    passage en « Traitée » ou « Refusée ».
 
 Chaque suppression, export et effacement est tracé dans le journal de sécurité
-(onglet Sécurité) : qui, quand, combien de lignes, **sans donnée personnelle**
-de la personne.
+(onglet Sécurité, par exemple « Effacement des données d’une personne
+(RGPD) ») : qui (l’administrateur), quand, combien de lignes, **sans donnée
+personnelle** de la personne.
 
 ## 3. Où se trouvent les données d’une adresse email
 
@@ -109,7 +117,15 @@ expressément.
   effacés ; une facture régénérée depuis l’administration ne porte donc plus
   l’identité : la facture d’origine reste celle stockée dans Blob. Aucune
   règle ne supprime encore ces factures (PDF et `appointment_invoices`) ni
-  les rendez-vous anonymisés après 10 ans : suppression à prévoir.
+  les rendez-vous anonymisés après 10 ans : suppression à prévoir. Dans
+  l’onglet Réservations, un tel rendez-vous porte le badge « Données
+  effacées » : il peut encore être remboursé, mais le patient n’est plus
+  joignable par le site et ne reçoit aucun email ; il ne peut plus être
+  remis en confirmé. À l’effacement, ses emails au patient pas encore partis
+  (confirmation, facture, remboursement) sont marqués « non envoyée :
+  données du patient effacées (RGPD) » et quittent « À traiter » ;
+  « Renvoyer » ne relance plus que vos propres alertes. Un remboursement
+  fait ensuite dans Stripe n’écrit pas au patient, et votre alerte le dit.
 - **Demandes RGPD** : gardées 1 an après leur clôture comme preuve du
   traitement (registre des traitements), puis supprimées automatiquement.
 - **Rendez-vous à venir encore en cours** (confirmés, en attente de paiement,

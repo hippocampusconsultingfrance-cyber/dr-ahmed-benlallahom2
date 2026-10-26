@@ -650,6 +650,40 @@ describe("RES-06 — remboursements et contestations faits dans Stripe", () => {
     expect(owner.notifyOwner.mock.calls[0][0].content).toContain("Le statut du rendez-vous (completed) est conservé");
   });
 
+  it("n’écrit pas au patient d’un rendez-vous anonymisé remboursé dans Stripe, le dit au médecin et ne relance que son alerte (RGPD-12)", async () => {
+    const { retryAppointmentFulfillment } = await import("./appointmentFulfillment");
+    const appointmentDate = new Date(Date.now() - 48 * HOUR);
+    // Reduced to its accounting record by an erasure (anonymisedAppointmentFields).
+    const { id } = seedAppointment({ ...paid, appointmentStatus: "completed", appointmentDate, slotKey: appointmentDate.toISOString(), customerName: "Anonymisé", customerEmail: "", customerPhone: "", requestDetails: "" }) as { id: number };
+
+    expect((await postEvent("charge.refunded", charge())).body).toEqual({ received: true, refunded: true });
+    expect(appointmentRow()).toMatchObject({ paymentStatus: "refunded", appointmentStatus: "completed", refundAmount: "100.00" });
+    expect(emails.sendRefundConfirmationEmail).not.toHaveBeenCalled();
+    const deliveries = async () => (await getAppointmentDeliveries([id])).get(id)!.map(({ jobType, state, notSentReason }) => ({ jobType, state, notSentReason }));
+    expect(await deliveries()).toEqual([
+      { jobType: "refund", state: "not_sent", notSentReason: "patient_data_erased" },
+      { jobType: "refund_owner", state: "sent", notSentReason: null },
+    ]);
+    expect(owner.notifyOwner).toHaveBeenCalledTimes(1);
+    const [alert, options] = owner.notifyOwner.mock.calls[0];
+    expect(alert.content).toContain("Données du patient effacées (RGPD) : il n’est plus joignable par le site et n’a pas été prévenu du remboursement par email.");
+    expect(alert.content).not.toContain("renvoie automatiquement");
+    expect(alert.content).not.toContain("prévenir le patient");
+    expect(options).toEqual({ idempotencyKey: `appointment-stripe-refund-${TRACKING_ID}-completed-erased` });
+
+    // A refund email that failed before the erasure stays unsent; the owner's alert can still go out again.
+    const job = (jobType: string) => db().rows(appointmentFulfillmentJobs).find(row => row.jobType === jobType)!;
+    Object.assign(job("refund"), { status: "failed", attempts: 7, lastError: "refund_email_failed" });
+    Object.assign(job("refund_owner"), { status: "failed", attempts: 7, lastError: "owner_refund_alert_failed" });
+    await expect(retryAppointmentFulfillment(TRACKING_ID)).resolves.toMatchObject({ outcome: "retried", requeuedJobTypes: ["refund_owner"] });
+    expect(emails.sendRefundConfirmationEmail).not.toHaveBeenCalled();
+    expect(owner.notifyOwner).toHaveBeenCalledTimes(2);
+    expect(await deliveries()).toEqual([
+      { jobType: "refund", state: "failed", notSentReason: null },
+      { jobType: "refund_owner", state: "sent", notSentReason: null },
+    ]);
+  });
+
   it("laisse payé un rendez-vous remboursé en partie et prévient seulement le médecin", async () => {
     seedAppointment(paid);
 

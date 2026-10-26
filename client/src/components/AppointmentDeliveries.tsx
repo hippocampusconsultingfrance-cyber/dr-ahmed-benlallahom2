@@ -6,7 +6,7 @@ import { downloadInvoicePdf } from "./invoicePdfDownload";
 
 export type AppointmentDeliveryJob = "confirmation" | "invoice" | "owner" | "refund" | "refund_owner";
 export type AppointmentDeliveryState = "sent" | "failed" | "refused" | "retrying" | "pending" | "sending" | "interrupted" | "not_sent";
-export type AppointmentDeliveryNotSentReason = "appointment_past" | "not_paid";
+export type AppointmentDeliveryNotSentReason = "appointment_past" | "not_paid" | "patient_data_erased";
 export type AppointmentDeliveryView = { jobType: AppointmentDeliveryJob; state: AppointmentDeliveryState; attempts: number; maxAttempts: number; notSentReason?: AppointmentDeliveryNotSentReason | null };
 
 /** In the order the practitioner reads them (EXPL-02), then the notices of a refund (RES-06). */
@@ -29,6 +29,9 @@ const RETRYABLE_JOBS: Record<string, AppointmentDeliveryJob[]> = {
   completed: ["confirmation", "invoice", "owner"],
   refunded: ["refund", "refund_owner"],
 };
+
+/** Emails to the patient, never sent again once their data is erased (RGPD-12), as the server. */
+const PATIENT_JOBS: AppointmentDeliveryJob[] = ["confirmation", "invoice", "refund"];
 
 const DELIVERY_STATE_LABELS: Record<AppointmentDeliveryState, string> = {
   sent: "envoyée",
@@ -56,6 +59,7 @@ const DELIVERY_STATE_TONES: Record<AppointmentDeliveryState, string> = {
 const NOT_SENT_REASONS: Record<AppointmentDeliveryNotSentReason, string> = {
   appointment_past: "la consultation est déjà passée",
   not_paid: "le rendez-vous n’est plus payé",
+  patient_data_erased: "données du patient effacées (RGPD)",
 };
 
 /** « Facture : en échec (6/6) », « Confirmation : envoyée »… */
@@ -69,10 +73,11 @@ export function deliveryLabel(delivery: AppointmentDeliveryView): string {
  * was refused by the email service (sent again once the address is
  * corrected), was interrupted, or still waits for an attempt
  * (not one being sent). Once the appointment is refunded, only the notices of
- * that refund (RES-06); the server refuses the other payment statuses.
+ * that refund (RES-06); the server refuses the other payment statuses. Once
+ * the patient's data is erased (RGPD-12), only the owner's notices.
  */
-export function canRetryDeliveries(deliveries: AppointmentDeliveryView[], paymentStatus: string): boolean {
-  const retryable = RETRYABLE_JOBS[paymentStatus] ?? [];
+export function canRetryDeliveries(deliveries: AppointmentDeliveryView[], paymentStatus: string, patientDataErased = false): boolean {
+  const retryable = (RETRYABLE_JOBS[paymentStatus] ?? []).filter(jobType => !patientDataErased || !PATIENT_JOBS.includes(jobType));
   return deliveries.some(delivery => retryable.includes(delivery.jobType) && ["failed", "refused", "retrying", "pending", "interrupted"].includes(delivery.state));
 }
 
@@ -108,7 +113,7 @@ export function retryOutcome(result: { requeuedJobTypes: AppointmentDeliveryJob[
  * « Télécharger la facture » regenerates the invoice already issued,
  * identical to the one emailed.
  */
-export default function AppointmentDeliveries({ trackingId, paymentStatus, deliveries, invoiceNumber }: { trackingId: string; paymentStatus: string; deliveries: AppointmentDeliveryView[]; invoiceNumber: string | null }) {
+export default function AppointmentDeliveries({ trackingId, paymentStatus, deliveries, invoiceNumber, patientDataErased = false }: { trackingId: string; paymentStatus: string; deliveries: AppointmentDeliveryView[]; invoiceNumber: string | null; patientDataErased?: boolean }) {
   const utils = trpc.useUtils();
   const retry = trpc.admin.appointments.retryFulfillment.useMutation({
     onSuccess: result => {
@@ -141,7 +146,7 @@ export default function AppointmentDeliveries({ trackingId, paymentStatus, deliv
         {invoiceNumber && <li className="rounded px-2 py-1 font-mono text-xs text-muted-foreground">{invoiceNumber}</li>}
       </ul>
       <div className="flex w-full flex-wrap gap-2 sm:w-auto">
-        {canRetryDeliveries(deliveries, paymentStatus) && (
+        {canRetryDeliveries(deliveries, paymentStatus, patientDataErased) && (
           <Button size="sm" variant="outline" className={buttonClass} disabled={retry.isPending}
             onClick={() => {
               if (!window.confirm(`Renvoyer maintenant les envois non aboutis du rendez-vous ${trackingId} ? Les envois déjà effectués ne sont pas répétés.`)) return;

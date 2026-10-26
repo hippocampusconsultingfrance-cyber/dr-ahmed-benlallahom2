@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  appointmentFulfillmentJobs,
   appointmentInvoices,
   appointments,
   candidateAccounts,
@@ -31,6 +32,7 @@ vi.mock("./invoiceNumbering", async importOriginal => ({
 }));
 
 import { appRouter } from "./routers";
+import { PERSONAL_DATA_SEARCH_LIMIT } from "./personalDataAdmin";
 
 const NOW = new Date();
 const DAY = 24 * 60 * 60 * 1000;
@@ -62,7 +64,7 @@ function seedPerson(email: string, name: string) {
 }
 
 beforeEach(() => {
-  memory = createMemoryPg([appointmentInvoices, appointments, candidateAccounts, contactMessages, cvApplications, gdprRequests, medicalQuestionAuditLogs, medicalQuestions, securityEvents]);
+  memory = createMemoryPg([appointmentFulfillmentJobs, appointmentInvoices, appointments, candidateAccounts, contactMessages, cvApplications, gdprRequests, medicalQuestionAuditLogs, medicalQuestions, securityEvents]);
   state.memory = memory;
 });
 
@@ -177,6 +179,63 @@ describe("RGPD-12 — rechercher une personne par email", () => {
   });
 });
 
+describe("RGPD-12 — au-delà des lignes affichées", () => {
+  it("liste les plus récents avec le total de chaque table, et exporte toutes les lignes", async () => {
+    seedPerson("jeanne@test.local", "Jeanne");
+    const extra = PERSONAL_DATA_SEARCH_LIMIT + 4;
+    memory.seed(contactMessages, Array.from({ length: extra }, (_, index) => ({
+      tracking_id: `C-JEANNE-${index}`, name: "Jeanne", email: index % 2 ? "JEANNE@test.local" : "jeanne@test.local", phone: null,
+      message: `Relance ${index}`, createdAt: new Date(NOW.getTime() - (index + 1) * 60_000),
+    })));
+
+    const found = await caller().admin.personalData.find({ email: "jeanne@test.local" });
+    expect(found.contactMessages).toHaveLength(PERSONAL_DATA_SEARCH_LIMIT);
+    expect(found.contactMessages[0]!.trackingId).toBe("C-JEANNE-0");
+    expect(found.totals).toEqual({ contactMessages: extra + 1, medicalQuestions: 1, gdprRequests: 1, appointments: 2, recruitmentApplications: 0 });
+
+    const exported = await caller().admin.personalData.export({ email: "jeanne@test.local" });
+    const content = JSON.parse(exported.content);
+    expect(content.contactMessages).toHaveLength(extra + 1);
+    expect(new Set(content.contactMessages.map((message: { trackingId: string }) => message.trackingId)).size).toBe(extra + 1);
+    expect(JSON.parse(memory.rows(securityEvents)[0]!.metadata as string)).toEqual({ contactMessages: extra + 1, medicalQuestions: 1, gdprRequests: 1, appointments: 2, recruitmentApplications: 0 });
+  });
+});
+
+describe("RGPD-12 — ce que l’effacement ferait", () => {
+  it("compte les lignes à effacer, et rien quand il ne reste que des demandes RGPD ou des rendez-vous à venir", async () => {
+    const jeanne = seedPerson("jeanne@test.local", "Jeanne");
+    // Message, question and past booking: the upcoming confirmed one is left.
+    expect((await caller().admin.personalData.find({ email: "jeanne@test.local" })).erasableRows).toBe(3);
+
+    await caller().admin.personalData.erase({ email: "jeanne@test.local" });
+    const after = await caller().admin.personalData.find({ email: "jeanne@test.local" });
+    expect(after).toMatchObject({ erasableRows: 0, totals: { contactMessages: 0, medicalQuestions: 0, gdprRequests: 1, appointments: 1 } });
+
+    memory.rows(appointments).find(row => row.id === jeanne.upcoming.id)!.appointment_status = "cancelled";
+    expect((await caller().admin.personalData.find({ email: "jeanne@test.local" })).erasableRows).toBe(1);
+
+    memory.seed(gdprRequests, [{ tracking_id: "G-SOLO", name: "Solo", email: "solo@test.local", request_type: "access" }]);
+    expect(await caller().admin.personalData.find({ email: "solo@test.local" })).toMatchObject({ erasableRows: 0, totals: { gdprRequests: 1 } });
+  });
+});
+
+describe("RGPD-12 — journal de sécurité de l’administration", () => {
+  it("montre les compteurs des actions sur les données d’une personne, et seulement eux", async () => {
+    const jeanne = seedPerson("jeanne@test.local", "Jeanne");
+    await caller().admin.contacts.delete({ id: jeanne.message.id as number });
+    await caller().admin.personalData.erase({ email: "jeanne@test.local" });
+    memory.seed(securityEvents, [{ security_event_actor_kind: "anonymous", actor_reference: "empreinte-ip", category: "candidate_login", security_event_outcome: "blocked", metadata: JSON.stringify({ attempts: 3, email: "jeanne@test.local" }) }]);
+
+    const events = await caller().adminSecurity.events({ limit: 10 });
+    const byCategory = new Map(events.map(event => [event.category, event]));
+    expect(byCategory.get("admin_contact_message_deleted")!.counts).toEqual({ deleted: 1 });
+    expect(byCategory.get("admin_personal_data_erased")!.counts).toEqual({ contactMessagesDeleted: 0, medicalQuestionsDeleted: 1, appointmentsAnonymised: 1, upcomingAppointmentsKept: 1, recruitmentApplicationsLeft: 0 });
+    expect(byCategory.get("candidate_login")!.counts).toBeNull();
+    for (const event of events) expect(event).not.toHaveProperty("metadata");
+    expect(JSON.stringify(events)).not.toContain("jeanne");
+  });
+});
+
 describe("RGPD-12 — effacer / anonymiser une personne", () => {
   it("supprime messages et questions, anonymise les rendez-vous passés en gardant la facture, laisse le reste", async () => {
     const jeanne = seedPerson("jeanne@test.local", "Jeanne");
@@ -251,5 +310,42 @@ describe("RGPD-12 — effacer / anonymiser une personne", () => {
     const again = await caller().admin.personalData.erase({ email: "jeanne@test.local" });
     expect(again.appointmentsAnonymised).toBe(1);
     expect([...again.upcomingAppointments].sort()).toEqual(["APTCONFIRM", "APTHOLD", "APTHOLDEXP"]);
+  });
+
+  it("ferme les emails au patient pas encore partis des rendez-vous anonymisés, qui quittent « À traiter », et garde les autres envois", async () => {
+    const jeanne = seedPerson("jeanne@test.local", "Jeanne");
+    const paul = seedPerson("paul@test.local", "Paul");
+    const job = (appointmentId: unknown, jobType: string, status: string, extra: Record<string, unknown> = {}) => ({
+      appointment_id: appointmentId, job_type: jobType, status, attempts: 1, max_attempts: 7, scheduled_for: new Date(NOW.getTime() + 60 * 60 * 1000), ...extra,
+    });
+    memory.seed(appointmentFulfillmentJobs, [
+      job(jeanne.past.id, "invoice", "retry", { last_error: "invoice_email_failed" }),
+      job(jeanne.past.id, "confirmation", "failed", { attempts: 7, last_error: "confirmation_email_failed" }),
+      // The owner's own notification has nothing to do with the patient's address.
+      job(jeanne.past.id, "owner", "failed", { attempts: 7, last_error: "owner_notification_failed" }),
+      // Upcoming booking left to the administrator, and another person's booking: untouched.
+      job(jeanne.upcoming.id, "invoice", "retry"),
+      job(paul.past.id, "invoice", "retry"),
+    ]);
+    const before = await caller().admin.attention();
+    expect(before.failedDeliveries.items).toEqual([expect.objectContaining({ trackingId: jeanne.past.tracking_id, jobTypes: ["confirmation", "owner"] })]);
+
+    await caller().admin.personalData.erase({ email: "jeanne@test.local" });
+
+    const jobOf = (appointmentId: unknown, jobType: string) => memory.rows(appointmentFulfillmentJobs).find(row => row.appointment_id === appointmentId && row.job_type === jobType)!;
+    expect(jobOf(jeanne.past.id, "invoice")).toMatchObject({ status: "completed", last_error: "patient_data_erased" });
+    expect(jobOf(jeanne.past.id, "confirmation")).toMatchObject({ status: "completed", last_error: "patient_data_erased" });
+    expect(jobOf(jeanne.past.id, "owner")).toMatchObject({ status: "failed" });
+    expect(jobOf(jeanne.upcoming.id, "invoice")).toMatchObject({ status: "retry" });
+    expect(jobOf(paul.past.id, "invoice")).toMatchObject({ status: "retry" });
+
+    const after = await caller().admin.attention();
+    expect(after.failedDeliveries.items).toEqual([expect.objectContaining({ trackingId: jeanne.past.tracking_id, jobTypes: ["owner"] })]);
+    const { items } = await caller().admin.appointments.list({});
+    expect(items.find(item => item.id === jeanne.past.id)!.deliveries.map(({ jobType, state, notSentReason }) => ({ jobType, state, notSentReason }))).toEqual([
+      { jobType: "owner", state: "failed", notSentReason: null },
+      { jobType: "confirmation", state: "not_sent", notSentReason: "patient_data_erased" },
+      { jobType: "invoice", state: "not_sent", notSentReason: "patient_data_erased" },
+    ]);
   });
 });

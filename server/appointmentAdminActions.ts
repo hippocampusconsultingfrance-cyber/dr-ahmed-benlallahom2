@@ -7,6 +7,7 @@ import { mutationRowCount } from "./dbMutation";
 import { closeUnsentAppointmentFulfillment, sendAppointmentRefundEmail } from "./appointmentFulfillment";
 import { sendRefundConfirmationEmail, type RefundEmailContext } from "./_core/notifications";
 import { emailLanguageFor } from "./emailLanguage";
+import { hasErasedPatientData } from "./personalDataRetention";
 import { BOOKING_PATIENT_REFUND_DEADLINE_HOURS } from "../shared/bookingPolicy";
 
 /** A patient may obtain a full refund up to this many hours before the consultation. */
@@ -161,11 +162,16 @@ export async function refundAppointmentPayment(
       .catch(error => console.error("[Refund] Pending post-payment emails could not be closed", error instanceof Error ? error.name : "UnknownError"));
   }
 
+  // RGPD-12: no address left to write to; the dashboard says so instead of « prévenez-le ».
+  const patientDataErased = hasErasedPatientData(appointment);
+  if (patientDataErased) {
+    return { success: true as const, refundId: refund.id, refundAmount, cancelled: cancelsAppointment, patientNotified: false, patientDataErased };
+  }
   // The patient email goes through the queue of the refund notices (RES-06):
   // attempted right away, then retried, and shown on the appointment and in
   // « À traiter » until it goes out.
   const patientEmail = await sendAppointmentRefundEmail(appointment.id);
-  return { success: true as const, refundId: refund.id, refundAmount, cancelled: cancelsAppointment, patientNotified: patientEmail === "sent", patientEmail };
+  return { success: true as const, refundId: refund.id, refundAmount, cancelled: cancelsAppointment, patientNotified: patientEmail === "sent", patientEmail, patientDataErased };
 }
 
 /**
@@ -198,6 +204,9 @@ export async function updateAppointmentStatusByAdmin(input: { trackingId: string
   } else if (target === "confirmed") {
     if (!["completed", "no_show"].includes(current) || appointment.paymentStatus !== "completed") {
       throw new TRPCError({ code: "CONFLICT", message: "Seul un rendez-vous payé marqué terminé ou absent peut être remis en confirmé." });
+    }
+    if (hasErasedPatientData(appointment)) {
+      throw new TRPCError({ code: "CONFLICT", message: "Les données de ce patient ont été effacées (RGPD) : ce rendez-vous ne peut plus être remis en confirmé." });
     }
   }
 
@@ -245,7 +254,11 @@ export async function refundUnconfirmedCheckoutSession(stripe: Stripe, input: { 
     throw new TRPCError({ code: "BAD_REQUEST", message: "Le remboursement Stripe a échoué" });
   }
   const refundAmount = ((refund.amount ?? session.amount_total ?? 0) / 100).toFixed(2);
-  const customerEmail = session.customer_details?.email ?? session.customer_email ?? appointment.customerEmail;
+  console.log("Unconfirmed Stripe payment refunded", { trackingId });
+  // RGPD-12: once the booking's data is erased, its address is not read back from Stripe.
+  const patientDataErased = hasErasedPatientData(appointment);
+  const customerEmail = patientDataErased ? "" : (session.customer_details?.email ?? session.customer_email ?? appointment.customerEmail).trim();
+  if (!customerEmail) return { success: true as const, refundId: refund.id, refundAmount, trackingId, patientNotified: false, patientDataErased };
   const patientNotified = await sendRefundConfirmationEmail(customerEmail, appointment.customerName, trackingId, new Date(appointment.appointmentDate), refundAmount, {
     context: "unconfirmed_payment",
     idempotencyKey: `appointment-refund-session-${session.id}`,
@@ -254,6 +267,5 @@ export async function refundUnconfirmedCheckoutSession(stripe: Stripe, input: { 
     console.error("Refund email delivery failed");
     return false;
   });
-  console.log("Unconfirmed Stripe payment refunded", { trackingId });
-  return { success: true as const, refundId: refund.id, refundAmount, trackingId, patientNotified };
+  return { success: true as const, refundId: refund.id, refundAmount, trackingId, patientNotified, patientDataErased };
 }
