@@ -625,6 +625,7 @@ export async function createApp() {
         retentionUntil.setFullYear(retentionUntil.getFullYear() + 2);
 
         recruitmentStage = "application-insert";
+        const storedTargetCountries = JSON.stringify(parsed.data.targetCountries);
         let insertResult: Awaited<ReturnType<typeof db.execute>>;
         try {
           insertResult = await db.execute(sql`INSERT INTO cv_applications (
@@ -635,7 +636,7 @@ export async function createApp() {
             gdpr_consent, marketing_consent, status, consent_at, retention_until, language
           ) VALUES (
             ${trackingId}, ${parsed.data.firstName}, ${parsed.data.lastName}, ${parsed.data.email},
-            ${parsed.data.phone || null}, ${parsed.data.specialty}, ${parsed.data.diplomaCountry}, ${JSON.stringify(parsed.data.targetCountries)},
+            ${parsed.data.phone || null}, ${parsed.data.specialty}, ${parsed.data.diplomaCountry}, ${storedTargetCountries},
             ${JSON.stringify(parsed.data.languages)}, ${parsed.data.yearsExperience ?? null},
             ${parsed.data.availability || null}, ${parsed.data.mobility || null}, ${parsed.data.certifications || null},
             ${parsed.data.message || null}, ${storageResult.key}, ${originalName}, ${file.mimetype}, ${file.size},
@@ -647,7 +648,15 @@ export async function createApp() {
           // first (unique index of drizzle/pg/0004). Answered like a repeated
           // sending; this request's copy of the CV is not kept.
           if (!isUniqueViolation(insertError, CV_APPLICATION_SUBMISSION_UNIQUE_INDEX)) throw insertError;
-          const stored = await findSameSubmission();
+          // Found with the index's own expressions: PostgreSQL's lower() and
+          // isSameRecruitmentSubmission differ on a few letters (Turkish İ),
+          // so the copy the index refused may not be the same for the latter.
+          const [stored] = await db.select({ id: cvApplications.id, trackingId: cvApplications.trackingId }).from(cvApplications).where(and(
+            sql`lower(${cvApplications.email}) = lower(${parsed.data.email})`,
+            sql`lower(${cvApplications.specialty}) = lower(${parsed.data.specialty})`,
+            eq(cvApplications.fileChecksum, fileValidation.checksum),
+            sql`md5(${cvApplications.targetCountries}) = md5(${storedTargetCountries})`,
+          )).limit(1);
           if (!stored) throw insertError;
           await storageDelete([storageResult.key]).catch(deleteError => console.error("Recruitment duplicate CV cleanup error:", safeErrorName(deleteError)));
           await answerAlreadyReceived(stored);

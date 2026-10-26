@@ -37,9 +37,15 @@ function insertedApplication(query: SQL) {
   }));
 }
 
+/**
+ * PostgreSQL's lower() (C.UTF-8): « İ » becomes « i », where JavaScript, like
+ * isSameRecruitmentSubmission, gives « i̇ » (i and a combining dot above).
+ */
+const pgLower = (value: unknown) => String(value).replace(/İ/g, "i").toLowerCase();
+
 /** Key of cv_applications_submission_unique: lower(email), lower(specialty), file_checksum, md5(target_countries). */
 function submissionKey(application: Record<string, unknown>) {
-  return [String(application.email).toLowerCase(), String(application.specialty).toLowerCase(), application.file_checksum, application.target_countries].join("|");
+  return [pgLower(application.email), pgLower(application.specialty), application.file_checksum, application.target_countries].join("|");
 }
 
 /** A PostgreSQL refusal as drizzle-orm throws it: the code and the constraint are in the cause. */
@@ -62,8 +68,15 @@ const fakeDb = {
     from: () => ({
       where: (condition: SQL) => ({
         limit: async () => {
+          const { sql: text, params } = dialect.sqlToQuery(condition);
+          // The application a 23505 names, looked up with the index's own expressions.
+          if (text.includes("lower(")) {
+            const [email, specialty, checksum, targetCountries] = params;
+            const key = submissionKey({ email, specialty, file_checksum: checksum, target_countries: targetCountries });
+            return state.applications.filter(application => submissionKey(application) === key).map(application => ({ id: application.id, trackingId: application.tracking_id }));
+          }
           await afterEveryRequestChecked();
-          const [checksum] = dialect.sqlToQuery(condition).params;
+          const [checksum] = params;
           return state.applications.filter(application => application.file_checksum === checksum).map(application => ({
             id: application.id, trackingId: application.tracking_id, email: application.email, specialty: application.specialty, targetCountries: application.target_countries,
           }));
@@ -130,10 +143,10 @@ beforeEach(() => {
   vi.mocked(enqueueCvAnalysis).mockClear();
 });
 
-async function apply() {
+async function apply(specialty = "Anesthésie-réanimation") {
   const body = new FormData();
   const fields: Record<string, string> = {
-    firstName: "Amina", lastName: "Haddad", email: "Amina.Haddad@example.test", specialty: "Anesthésie-réanimation", diplomaCountry: "Algérie",
+    firstName: "Amina", lastName: "Haddad", email: "Amina.Haddad@example.test", specialty, diplomaCountry: "Algérie",
     targetCountries: JSON.stringify(["France", "Canada"]), languages: JSON.stringify(["Français"]), gdprConsent: "1", turnstileToken: "turnstile-token-accepted-by-the-mock",
   };
   for (const [name, value] of Object.entries(fields)) body.append(name, value);
@@ -161,6 +174,23 @@ describe("/api/recruitment/apply — envois simultanés du même dossier (DATA-1
     expect(vi.mocked(enqueueCvAnalysis)).toHaveBeenCalledTimes(1);
     // The two refused copies of the CV are not kept in storage; the stored one is.
     expect(state.deletedKeys).toHaveLength(2);
+    expect(state.deletedKeys).not.toContain(stored!.cv_file_key);
+  });
+
+  it("répond « déjà reçue » à une copie que seul l’index reconnaît, PostgreSQL et JavaScript ne mettant pas certaines lettres en minuscules de la même façon", async () => {
+    // Stored with « İç hastalıkları », sent again with « iç hastalıkları »:
+    // isSameRecruitmentSubmission sees two applications, lower() one.
+    state.duplicateChecks = 3;
+    await apply("İç hastalıkları");
+    const [stored] = state.applications;
+    expect(stored).toMatchObject({ specialty: "İç hastalıkları" });
+    state.confirmations.length = 0;
+
+    const response = await apply("iç hastalıkları");
+    expect(response).toEqual({ status: 200, body: { success: true, duplicate: true, trackingId: stored!.tracking_id } });
+    expect(state.applications).toHaveLength(1);
+    expect(state.confirmations).toEqual([expect.objectContaining({ applicationId: stored!.id, trackingId: stored!.tracking_id })]);
+    expect(state.deletedKeys).toHaveLength(1);
     expect(state.deletedKeys).not.toContain(stored!.cv_file_key);
   });
 
