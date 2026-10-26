@@ -91,6 +91,9 @@ export function deliveryLabel(delivery: AppointmentDeliveryView): string {
   return `${DELIVERY_JOB_LABELS[delivery.jobType]} : ${stateLabel(delivery)}${attempts}`;
 }
 
+/** States of a job « Renvoyer » sends again: it did not go out, and is not being sent. */
+const UNSENT_STATES: AppointmentDeliveryState[] = ["failed", "refused", "retrying", "pending", "interrupted"];
+
 /**
  * « Renvoyer » has something to send now: a job of a paid appointment failed,
  * was refused by the email service (sent again once the address is
@@ -101,7 +104,7 @@ export function deliveryLabel(delivery: AppointmentDeliveryView): string {
  */
 export function canRetryDeliveries(deliveries: AppointmentDeliveryView[], paymentStatus: string, patientDataErased = false): boolean {
   const retryable = (RETRYABLE_JOBS[paymentStatus] ?? []).filter(jobType => !patientDataErased || !PATIENT_JOBS.includes(jobType));
-  return deliveries.some(delivery => retryable.includes(delivery.jobType) && ["failed", "refused", "retrying", "pending", "interrupted"].includes(delivery.state));
+  return deliveries.some(delivery => retryable.includes(delivery.jobType) && UNSENT_STATES.includes(delivery.state));
 }
 
 /**
@@ -115,13 +118,21 @@ export function canCorrectPatientEmail(deliveries: AppointmentDeliveryView[], pa
 }
 
 /**
- * Toast after « Corriger l’email du patient »: « Renvoyer » now writes to the
- * new address. An invoice already issued keeps its details, the address it
- * was issued to included: the copy stored at its issue is the one emailed
- * again and downloaded (EXPL-02).
+ * Toast after « Corriger l’email du patient »: the patient emails « Renvoyer »
+ * now writes to the new address, the ones that did not go out. An invoice
+ * already issued keeps its details, the address it was issued to included:
+ * the copy stored at its issue is the one downloaded, and emailed again only
+ * when its own email did not go out (EXPL-02); an invoice received at the
+ * payment is not sent again with a refund email.
  */
-export function correctedEmailNotice(invoiceNumber: string | null): string {
-  return `Adresse du patient corrigée. « Renvoyer » envoie maintenant les envois refusés à cette adresse.${invoiceNumber ? ` La facture ${invoiceNumber} déjà émise garde ses mentions, dont l’adresse d’origine : elle est renvoyée et téléchargée telle qu’émise.` : ""}`;
+export function correctedEmailNotice(invoiceNumber: string | null, deliveries: AppointmentDeliveryView[], paymentStatus: string): string {
+  const retryable = RETRYABLE_JOBS[paymentStatus] ?? [];
+  const resent = inReadingOrder(deliveries)
+    .filter(delivery => PATIENT_JOBS.includes(delivery.jobType) && retryable.includes(delivery.jobType) && UNSENT_STATES.includes(delivery.state))
+    .map(delivery => delivery.jobType);
+  const invoice = !invoiceNumber ? ""
+    : ` La facture ${invoiceNumber} déjà émise garde ses mentions, dont l’adresse d’origine : ${resent.includes("invoice") ? "elle est renvoyée et téléchargée telle qu’émise." : "elle n’est pas renvoyée, et se télécharge telle qu’émise."}`;
+  return `Adresse du patient corrigée. « Renvoyer » envoie maintenant à cette adresse : ${resent.map(jobType => DELIVERY_JOB_LABELS[jobType]).join(", ")}.${invoice}`;
 }
 
 /**
@@ -167,7 +178,7 @@ export default function AppointmentDeliveries({ trackingId, paymentStatus, deliv
         toast.info("Cette adresse est déjà celle du rendez-vous.");
         return;
       }
-      toast.success(correctedEmailNotice(invoiceNumber), { duration: 10_000 });
+      toast.success(correctedEmailNotice(invoiceNumber, deliveries, paymentStatus), { duration: 10_000 });
     },
     onError: error => toast.error(error.message),
   });

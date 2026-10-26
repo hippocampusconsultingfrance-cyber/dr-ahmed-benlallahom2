@@ -237,7 +237,7 @@ describe("EXPL-02 — envois après paiement sur la fiche du rendez-vous", () =>
     expect(state.emailMutate).toHaveBeenCalledWith({ trackingId: "APTUI0000011", customerEmail: "patient.corrige@exemple.fr" });
 
     await state.emailOptions!.onSuccess!({ success: true, unchanged: false } as never);
-    expect(state.toasts.at(-1)).toEqual(["success", "Adresse du patient corrigée. « Renvoyer » envoie maintenant les envois refusés à cette adresse."]);
+    expect(state.toasts.at(-1)).toEqual(["success", "Adresse du patient corrigée. « Renvoyer » envoie maintenant à cette adresse : Confirmation, Facture."]);
     expect(state.invalidated).toEqual(["appointments.list"]);
     await state.emailOptions!.onError!(new Error("Adresse email invalide : saisissez une adresse complète, par exemple prenom.nom@exemple.fr."));
     expect(state.toasts.at(-1)).toEqual(["error", "Adresse email invalide : saisissez une adresse complète, par exemple prenom.nom@exemple.fr."]);
@@ -259,7 +259,22 @@ describe("EXPL-02 — envois après paiement sur la fiche du rendez-vous", () =>
     expect(prompt).toHaveBeenCalledWith(expect.stringContaining("la facture FAC-2026-000012 déjà émise garde ses mentions, dont l’adresse d’origine"), "patient@exemple.fr");
     await state.emailOptions!.onSuccess!({ success: true, unchanged: false } as never);
 
-    expect(state.toasts.at(-1)).toEqual(["success", "Adresse du patient corrigée. « Renvoyer » envoie maintenant les envois refusés à cette adresse. La facture FAC-2026-000012 déjà émise garde ses mentions, dont l’adresse d’origine : elle est renvoyée et téléchargée telle qu’émise."]);
+    expect(state.toasts.at(-1)).toEqual(["success", "Adresse du patient corrigée. « Renvoyer » envoie maintenant à cette adresse : Facture. La facture FAC-2026-000012 déjà émise garde ses mentions, dont l’adresse d’origine : elle est renvoyée et téléchargée telle qu’émise."]);
+  });
+
+  it("ne dit pas renvoyée une facture déjà reçue quand seul un autre email au patient a été refusé (EXPL-02)", async () => {
+    vi.stubGlobal("window", { confirm: vi.fn(() => true), prompt: vi.fn(() => "patient.corrige@exemple.fr") });
+    // Refunded: the invoice went out at the payment, only the refund email was refused.
+    const refunded = AppointmentDeliveries({ trackingId: "APTUI0000020", paymentStatus: "refunded", invoiceNumber: "FAC-2026-000020", deliveries: [delivery("confirmation", "sent"), delivery("invoice", "sent"), delivery("owner", "sent"), delivery("refund", "refused", 1, 7)], customerEmail: "patient@exemple.fr" });
+    button(refunded, "Corriger l’email du patient")();
+    await state.emailOptions!.onSuccess!({ success: true, unchanged: false } as never);
+    expect(state.toasts.at(-1)).toEqual(["success", "Adresse du patient corrigée. « Renvoyer » envoie maintenant à cette adresse : Email de remboursement. La facture FAC-2026-000020 déjà émise garde ses mentions, dont l’adresse d’origine : elle n’est pas renvoyée, et se télécharge telle qu’émise."]);
+
+    // Paid: the confirmation was refused, the invoice had already gone out.
+    const paid = AppointmentDeliveries({ trackingId: "APTUI0000021", paymentStatus: "completed", invoiceNumber: "FAC-2026-000021", deliveries: [delivery("owner", "sent"), delivery("confirmation", "refused", 1, 7), delivery("invoice", "sent")], customerEmail: "patient@exemple.fr" });
+    button(paid, "Corriger l’email du patient")();
+    await state.emailOptions!.onSuccess!({ success: true, unchanged: false } as never);
+    expect(state.toasts.at(-1)).toEqual(["success", "Adresse du patient corrigée. « Renvoyer » envoie maintenant à cette adresse : Confirmation. La facture FAC-2026-000021 déjà émise garde ses mentions, dont l’adresse d’origine : elle n’est pas renvoyée, et se télécharge telle qu’émise."]);
   });
 
   it("explique au médecin pourquoi l’email de remboursement n’est pas parti", () => {
