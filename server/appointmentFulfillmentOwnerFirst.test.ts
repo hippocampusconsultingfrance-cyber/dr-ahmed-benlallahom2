@@ -42,8 +42,9 @@ vi.mock("resend", () => ({
     },
   })),
 }));
-// latencyMs : durée simulée de chaque requête en base.
-const database = vi.hoisted(() => ({ getDb: vi.fn(), latencyMs: 0 }));
+// latencyMs : durée simulée de chaque requête en base ; hangNextClaim : le
+// prochain claim ne reçoit jamais de réponse.
+const database = vi.hoisted(() => ({ getDb: vi.fn(), latencyMs: 0, hangNextClaim: false }));
 vi.mock("./db", () => ({ getDb: database.getDb }));
 vi.mock("./storage.js", () => ({ storagePutOnce: vi.fn(async (key: string) => ({ key, url: "https://storage.test/invoice.pdf", uploaded: true })) }));
 vi.mock("./invoiceNumbering", () => ({
@@ -136,6 +137,10 @@ function memoryDatabase(initialJobs: Job[], appointment = appointmentRow()) {
         where: async (clause: SQL) => {
           if (database.latencyMs > 0) await latency();
           if (table !== appointmentFulfillmentJobs) return { rowCount: 1 };
+          if (database.hangNextClaim && values.status === "running") {
+            database.hangNextClaim = false;
+            return new Promise(() => undefined);
+          }
           const id = dialect.sqlToQuery(clause).params[0];
           const target = jobs.find(row => row.id === id);
           if (!target || (values.status === "running" && !["queued", "retry"].includes(target.status))) return { rowCount: 0 };
@@ -160,6 +165,7 @@ afterAll(() => vi.unstubAllEnvs());
 // Valeurs de production, avant que les tests ne les réduisent.
 const IMMEDIATE_RESERVE_PER_JOB_MS = immediateFulfillmentBudget.reservePerJobMs;
 const PACING_DELAY_MS = appointmentFulfillmentPacing.delayMs;
+const CLAIM_TURN_LIMIT_MS = appointmentFulfillmentPacing.claimTurnLimitMs;
 const SHORT_RETRY_DELAYS_MS = [...postPaymentDeliveryRetry.delaysMs];
 
 beforeEach(() => {
@@ -170,6 +176,8 @@ beforeEach(() => {
   resend.retryAfterSeconds = "1";
   resend.latencyMs = 0;
   database.latencyMs = 0;
+  database.hangNextClaim = false;
+  appointmentFulfillmentPacing.claimTurnLimitMs = CLAIM_TURN_LIMIT_MS;
   postPaymentDeliveryRetry.delaysMs = [0, 0];
   appointmentFulfillmentPacing.delayMs = 0;
   immediateFulfillmentBudget.reservePerJobMs = IMMEDIATE_RESERVE_PER_JOB_MS;
@@ -298,6 +306,22 @@ describe("envois après paiement — propriétaire d’abord, essais courts, ale
     expect(invoice - confirmation).toBeGreaterThanOrEqual(198);
     // A turn whose job the other processing had already claimed gives its pause back.
     expect(invoice - owner).toBeLessThan(3 * 200);
+  });
+
+  it("un claim dont la requête en base ne répond pas ne bloque pas les autres traitements de l’instance", async () => {
+    appointmentFulfillmentPacing.claimTurnLimitMs = 100;
+    database.hangNextClaim = true;
+    memoryDatabase([job(1, "owner")]);
+
+    // Le claim du premier traitement reste sans réponse.
+    void processDueAppointmentFulfillmentJobs();
+    const startedAt = Date.now();
+    const second = await processDueAppointmentFulfillmentJobs();
+
+    // Le second prend son tour après la limite et envoie le job, une fois.
+    expect(second.processed).toBe(1);
+    expect(subjects().map(subject => subject.split(" ")[0])).toEqual(["Nouvelle"]);
+    expect(Date.now() - startedAt).toBeGreaterThanOrEqual(95);
   });
 });
 

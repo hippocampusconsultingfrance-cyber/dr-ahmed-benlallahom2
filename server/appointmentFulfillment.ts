@@ -28,9 +28,12 @@ export const APPOINTMENT_FULFILLMENT_STALE_AFTER_MS = 15 * 60_000;
  * scheduled run. The jobs of this instance take their turn in one queue, a
  * pause after the start of the previous one, so processings running at once
  * (two webhooks, a webhook and the payment status page) are spaced as well.
- * Mutable for tests.
+ * A job holds its turn while it is claimed, at most claimTurnLimitMs: a
+ * database request that does not answer no longer holds up the other
+ * processings of the instance, the conditional claim still preventing any
+ * duplicate. Mutable for tests.
  */
-export const appointmentFulfillmentPacing = { delayMs: 600 };
+export const appointmentFulfillmentPacing = { delayMs: 600, claimTurnLimitMs: 5_000 };
 /** End of the last job run in this instance. */
 let lastJobRunAt: number | null = null;
 /** Start of the last job that took its turn. */
@@ -56,9 +59,13 @@ async function waitForFulfillmentTurn(): Promise<(claimed: boolean) => void> {
   const waitMs = Math.min(readyAt - now, delayMs);
   if (waitMs > 0) await new Promise(resolve => setTimeout(resolve, waitMs));
   const previousStartAt = lastJobStartAt;
-  lastJobStartAt = Date.now();
+  const startAt = Date.now();
+  lastJobStartAt = startAt;
+  const turnLimit = setTimeout(endTurn, appointmentFulfillmentPacing.claimTurnLimitMs);
   return claimed => {
-    if (!claimed) lastJobStartAt = previousStartAt;
+    clearTimeout(turnLimit);
+    // Past the limit, a later job may have taken its turn: its start stays.
+    if (!claimed && lastJobStartAt === startAt) lastJobStartAt = previousStartAt;
     endTurn();
   };
 }
