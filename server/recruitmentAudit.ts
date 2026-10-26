@@ -40,6 +40,14 @@ export function parseRecruitmentJsonArray(value: string | null | undefined): str
   }
 }
 
+/**
+ * Most dossiers the Candidatures list checks against a matching profile (its
+ * languages and skills are checked here, not in SQL): far above the volume of
+ * the site, so in practice every dossier is checked; past it the list says
+ * that the profile was applied to the first ones only.
+ */
+export const RECRUITMENT_PROFILE_SCAN_LIMIT = 10_000;
+
 export function matchesRecruitmentProfile(input: {
   score: number | null;
   specialty: string;

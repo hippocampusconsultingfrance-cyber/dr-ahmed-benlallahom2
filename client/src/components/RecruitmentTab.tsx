@@ -182,6 +182,8 @@ export default function RecruitmentTab() {
   const { pageCount, loadMore } = useAdminPageCount(JSON.stringify(filters));
   const pages = trpc.useQueries(t => adminPageOffsets(pageCount).map(offset => t.admin.recruitment.list({ ...filters, limit: ADMIN_PAGE_SIZE, offset })));
   const { items: applications, total, isLoading, isLoadingMore, error, loadMoreError, retryLoadMore } = mergeAdminPages(pages);
+  // Set by the server when a matching profile could only be checked on the first dossiers of the list.
+  const profileScanLimit = pages[0]?.data?.profileScanLimit;
   // With a score threshold, the dossiers without a verified score are listed apart, not dropped (INTL-02).
   const scoreThreshold = Math.max(Number(minimumScore) || 0, profilesQuery.data?.find(profile => String(profile.id) === selectedProfileId)?.minimumScore ?? 0);
   const listedApplications = scoreThreshold > 0
@@ -407,7 +409,16 @@ export default function RecruitmentTab() {
         <div className="py-8 text-center text-red-400">Erreur de chargement : {error.message}</div>
       ) : isLoading ? (
         <PublicContentSkeleton label="Chargement des candidatures" />
-      ) : applications.length ? (
+      ) : (
+        <div className="space-y-3">
+        {/* Above the list and the empty state alike: when no dossier within the limit
+            matches the profile, the ones that might are beyond it. */}
+        {profileScanLimit ? (
+          <p className="text-sm font-medium text-amber-700 dark:text-amber-300">
+            Profil appliqué aux {profileScanLimit.toLocaleString("fr-FR")} premières candidatures de la liste seulement : ajoutez un filtre (statut, spécialité, pays) pour qu’il porte sur toutes.
+          </p>
+        ) : null}
+        {applications.length ? (
         <div className="space-y-3">
           <p className="break-words text-sm text-muted-foreground [overflow-wrap:anywhere]">{adminListCount(applications.length, total, "candidature(s)")}{search ? ` pour « ${search} »` : ""}</p>
           {listedApplications.items.map((application, index) => {
@@ -680,6 +691,8 @@ export default function RecruitmentTab() {
         <div className="rounded-xl border border-dashed border-border px-4 py-16 text-center text-muted-foreground break-words [overflow-wrap:anywhere]">
           <FileSearch className="mx-auto mb-3 h-8 w-8" />
           {search ? `Aucune candidature ne correspond à « ${search} » avec ces filtres.` : "Aucune candidature ne correspond aux filtres."}
+        </div>
+        )}
         </div>
       )}
 

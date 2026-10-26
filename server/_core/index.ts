@@ -862,12 +862,34 @@ export async function createApp() {
   registerStorageProxy(app);
   registerGoogleDriveOAuthRoutes(app);
   
-  // tRPC API
+  // tRPC API. A query is also accepted as POST, its input in the body: the
+  // client sends the administration's queries and the candidate links' that
+  // way (client/src/lib/trpcLinks.ts), so that the names, emails and tokens
+  // they carry are not in the API calls' URLs, which Vercel and its log
+  // drains record (a candidate link's own page URL still carries its email
+  // and token). Like a mutation, such a POST needs a JSON body and the
+  // SameSite cookies. A query sent as GET still answers: refusing it would
+  // not keep its URL out of the logs (the request is recorded before the
+  // function answers) and would break an admin tab opened before a
+  // deployment until it is reloaded.
+  // A JSON body cannot come from a cross-site form without a CORS preflight,
+  // never granted. tRPC itself would also take a multipart/form-data body,
+  // which such a form can send, and run a query with it: no procedure takes
+  // one and the client always sends JSON, so any other POST body is refused
+  // here, before tRPC.
+  app.use("/api/trpc", (req, res, next) => {
+    const contentType = String(req.headers["content-type"] ?? "").split(";")[0].trim().toLowerCase();
+    if (req.method === "POST" && contentType !== "application/json") {
+      return res.status(415).json({ error: "Format de requête non pris en charge." });
+    }
+    next();
+  });
   app.use(
     "/api/trpc",
     createExpressMiddleware({
       router: appRouter,
       createContext,
+      allowMethodOverride: true,
     })
   );
   // Scheduled jobs. Each job is reachable two ways:

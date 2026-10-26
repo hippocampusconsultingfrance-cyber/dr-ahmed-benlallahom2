@@ -23,7 +23,7 @@ import {
   type RecruitmentEmailLanguage,
   type RecruitmentEmailTemplate,
 } from "./_core/notifications";
-import { logRecruitmentAction, matchesRecruitmentProfile, parseRecruitmentJsonArray } from "./recruitmentAudit";
+import { logRecruitmentAction, matchesRecruitmentProfile, parseRecruitmentJsonArray, RECRUITMENT_PROFILE_SCAN_LIMIT } from "./recruitmentAudit";
 import { CERTIFICATION_NAME_MAX_LENGTH, certificationFacts, computeBriefCandidateMatch, declaredCertificationNames, languageFacts, sameRecruitmentFact, type CertificationRow, type LanguageRow } from "./clientBriefMatching";
 import { recruitmentFactLabel, type RecruitmentFact } from "../shared/recruitmentFactOrigins";
 import { candidatePortalRouter } from "./candidatePortalRouter";
@@ -1400,7 +1400,7 @@ export const appRouter = router({
           if (input.status) {
             conditions.push(eq(appointments.paymentStatus, input.status));
           }
-          const search = adminSearchCondition(input.search, [appointments.customerName, appointments.customerEmail, appointments.trackingId]);
+          const search = adminSearchCondition(input.search, [appointments.customerName, appointments.customerEmail, appointments.trackingId], { fullName: appointments.customerName });
           if (search) conditions.push(search);
 
           const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
@@ -1576,7 +1576,7 @@ export const appRouter = router({
 
           const conditions = [];
           if (input.status) conditions.push(eq(cvApplications.status, input.status));
-          const search = adminSearchCondition(input.search, [cvApplications.firstName, cvApplications.lastName, cvApplications.email, cvApplications.trackingId]);
+          const search = adminSearchCondition(input.search, [cvApplications.firstName, cvApplications.lastName, cvApplications.email, cvApplications.trackingId], { firstName: cvApplications.firstName, lastName: cvApplications.lastName });
           if (search) conditions.push(search);
           if (input.specialty) conditions.push(sql`LOWER(${cvApplications.specialty}) LIKE LOWER(${`%${input.specialty}%`})`);
           if (input.country) conditions.push(sql`${cvApplications.targetCountries} LIKE ${`%${input.country}%`}`);
@@ -1596,6 +1596,48 @@ export const appRouter = router({
           const minimumScore = Math.max(input.minimumScore ?? 0, profile?.minimumScore ?? 0);
           if (minimumScore > 0) conditions.push(scoreAtLeastOrUnavailable(minimumScore));
           const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+          // With a threshold, the dossiers without a score come after every scored one, not page by page.
+          const listOrder = [...(minimumScore > 0 ? [sql`(${verifiedRecruitmentScore} IS NULL)`] : []), desc(cvApplications.createdAt)];
+
+          // A matching profile's languages and skills are checked here, not in SQL: every dossier the
+          // other filters keep is checked on the few columns it needs (up to RECRUITMENT_PROFILE_SCAN_LIMIT,
+          // said in the answer when reached), then only the page asked for is read in full. The total
+          // counts every match, not only those among the first rows.
+          let profilePage: { ids: number[]; total: number; scanLimited: boolean } | null = null;
+          if (profile) {
+            const matchProfile = profile;
+            const scanned = await db
+              .select({
+                id: cvApplications.id,
+                aiScore: verifiedRecruitmentScore,
+                specialty: cvApplications.specialty,
+                targetCountries: cvApplications.targetCountries,
+                languages: cvApplications.languages,
+                // The AI's skills, the largest of these columns, only for a profile that requires some.
+                aiExtractedSkills: parseRecruitmentJsonArray(matchProfile.requiredSkills).length ? cvApplications.aiExtractedSkills : sql<string | null>`NULL`,
+              })
+              .from(cvApplications)
+              .where(whereClause)
+              // The id breaks ties, so that each page reads the matches in the same order.
+              .orderBy(...listOrder, desc(cvApplications.id))
+              .limit(RECRUITMENT_PROFILE_SCAN_LIMIT + 1);
+            const matchedIds = scanned.slice(0, RECRUITMENT_PROFILE_SCAN_LIMIT)
+              .filter(item => matchesRecruitmentProfile({
+                score: item.aiScore,
+                specialty: item.specialty,
+                targetCountries: parseRecruitmentJsonArray(item.targetCountries),
+                languages: parseRecruitmentJsonArray(item.languages),
+                extractedSkills: (() => {
+                  try {
+                    const parsed = item.aiExtractedSkills ? JSON.parse(item.aiExtractedSkills) : {};
+                    return Array.isArray(parsed.verifiedSkills) ? parsed.verifiedSkills.filter((value: unknown): value is string => typeof value === "string") : [];
+                  } catch { return []; }
+                })(),
+                profile: matchProfile,
+              }))
+              .map(item => item.id);
+            profilePage = { ids: matchedIds.slice(input.offset, input.offset + input.limit), total: matchedIds.length, scanLimited: scanned.length > RECRUITMENT_PROFILE_SCAN_LIMIT };
+          }
 
           const rawItems = await db
             .select({
@@ -1654,27 +1696,16 @@ export const appRouter = router({
               updatedAt: cvApplications.updatedAt,
             })
             .from(cvApplications)
-            .where(whereClause)
-            // With a threshold, the dossiers without a score come after every scored one, not page by page.
-            .orderBy(...(minimumScore > 0 ? [sql`(${verifiedRecruitmentScore} IS NULL)`] : []), desc(cvApplications.createdAt))
-            .limit(profile ? 1000 : input.limit)
-            .offset(profile ? 0 : input.offset);
+            .where(profilePage ? inArray(cvApplications.id, profilePage.ids) : whereClause)
+            .orderBy(...listOrder)
+            .limit(profilePage ? profilePage.ids.length : input.limit)
+            .offset(profilePage ? 0 : input.offset);
+          // A profile's page in the order of its matches.
+          if (profilePage) {
+            const position = new Map(profilePage.ids.map((id, index) => [id, index]));
+            rawItems.sort((left, right) => position.get(left.id)! - position.get(right.id)!);
+          }
 
-          const matchedItems = profile
-            ? rawItems.filter(item => matchesRecruitmentProfile({
-                score: item.aiScore,
-                specialty: item.specialty,
-                targetCountries: parseRecruitmentJsonArray(item.targetCountries),
-                languages: parseRecruitmentJsonArray(item.languages),
-                extractedSkills: (() => {
-                  try {
-                    const parsed = item.aiExtractedSkills ? JSON.parse(item.aiExtractedSkills) : {};
-                    return Array.isArray(parsed.verifiedSkills) ? parsed.verifiedSkills.filter((value: unknown): value is string => typeof value === "string") : [];
-                  } catch { return []; }
-                })(),
-                profile,
-              }))
-            : rawItems;
           const applicationIds = rawItems.map(item => item.id);
           const applicationEmails = Array.from(new Set(rawItems.map(item => item.email.trim().toLowerCase())));
           const portalAccounts = applicationIds.length
@@ -1718,7 +1749,7 @@ export const appRouter = router({
             current.push(event);
             emailEventsByApplicationId.set(event.applicationId, current);
           }
-          const items = (profile ? matchedItems.slice(input.offset, input.offset + input.limit) : matchedItems)
+          const items = rawItems
             .map(item => ({
               ...item,
               candidatePortalActive: portalAccounts.some(account => candidatePortalAccountMatchesApplication(account, item)),
@@ -1728,8 +1759,8 @@ export const appRouter = router({
               emailDelivery: resolveCvConfirmationDelivery(emailEventsByApplicationId.get(item.id) || []),
               certificationFacts: certificationsByApplication.get(item.id) ?? [],
             }));
-          const countResult = profile ? [{ count: matchedItems.length }] : await db.select({ count: sql<number>`COUNT(*)` }).from(cvApplications).where(whereClause);
-          return { items, total: Number(countResult[0]?.count ?? 0) };
+          const countResult = profilePage ? [{ count: profilePage.total }] : await db.select({ count: sql<number>`COUNT(*)` }).from(cvApplications).where(whereClause);
+          return { items, total: Number(countResult[0]?.count ?? 0), ...(profilePage?.scanLimited ? { profileScanLimit: RECRUITMENT_PROFILE_SCAN_LIMIT } : {}) };
         }),
 
       pool: router({
@@ -2686,7 +2717,7 @@ export const appRouter = router({
 
           const whereClause = and(
             input.unreadOnly ? eq(contactMessages.read, 0) : undefined,
-            adminSearchCondition(input.search, [contactMessages.name, contactMessages.email, contactMessages.trackingId]),
+            adminSearchCondition(input.search, [contactMessages.name, contactMessages.email, contactMessages.trackingId], { fullName: contactMessages.name }),
           );
 
           const items = await db

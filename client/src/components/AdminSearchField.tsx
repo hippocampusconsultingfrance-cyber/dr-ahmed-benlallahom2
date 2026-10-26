@@ -10,9 +10,10 @@ import { ADMIN_SEARCH_MAX_LENGTH } from "@shared/adminSearchLimits";
  */
 export default function AdminSearchField({ id, label, placeholder, value, onChange, onClear, status = "", className = "" }: { id: string; label: string; placeholder: string; value: string; onChange: (value: string) => void; onClear: () => void; status?: string; className?: string }) {
   const inputRef = useRef<HTMLInputElement>(null);
+  // 8 px between the label and the field: the focus ring (3 px outline 3 px away, index.css) stays clear of the label.
   return (
-    <div className={`space-y-1 text-sm text-muted-foreground ${className}`}>
-      <label htmlFor={id}>{label}</label>
+    <div className={`space-y-2 text-sm text-muted-foreground ${className}`}>
+      <label htmlFor={id} className="block">{label}</label>
       <div className="relative">
         <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2" aria-hidden="true" />
         <input

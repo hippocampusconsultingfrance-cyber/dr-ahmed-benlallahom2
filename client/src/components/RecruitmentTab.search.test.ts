@@ -114,4 +114,18 @@ describe("ADM-02 — recherche dans les candidatures", () => {
     expect(view.requests).toEqual([{ status: "shortlisted", limit: 50, offset: 0 }]);
     expect(propsOf(tree, AdminSearchField)).toMatchObject({ value: "", status: "" });
   });
+
+  it("dit quand un profil de matching n’a pu être vérifié que sur les premiers dossiers de la liste", () => {
+    expect(renderToStaticMarkup(render())).not.toContain("Profil appliqué");
+
+    view.page = { items: [dossier(1, "Dupont")], total: 1, profileScanLimit: 10_000 } as typeof view.page;
+    expect(renderToStaticMarkup(render())).toMatch(/Profil appliqué aux 10\s000 premières candidatures de la liste seulement : ajoutez un filtre \(statut, spécialité, pays\)/);
+
+    // No match within the limit: the matching dossiers may lie beyond it, so the
+    // empty state keeps the warning.
+    view.page = { items: [], total: 0, profileScanLimit: 10_000 } as typeof view.page;
+    const empty = renderToStaticMarkup(render());
+    expect(empty).toMatch(/Profil appliqué aux 10\s000 premières candidatures de la liste seulement/);
+    expect(empty).toContain("Aucune candidature ne correspond aux filtres.");
+  });
 });
