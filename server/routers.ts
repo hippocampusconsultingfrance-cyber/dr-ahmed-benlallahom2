@@ -248,6 +248,9 @@ function occupiesSlot() {
 const NO_CONTROL_CHARACTERS = /^[^\u0000-\u001F\u007F]*$/;
 const NO_CONTROL_CHARACTERS_EXCEPT_NEWLINES = /^[^\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]*$/;
 
+/** Adresse du patient : la même règle à la réservation et à sa correction depuis l’administration (EXPL-02). */
+const bookingCustomerEmail = z.string().email().max(320);
+
 /** Libellé de la ligne Stripe Checkout, visible sur la page de paiement et le reçu. */
 export function consultationCheckoutProductData(trackingId: string) {
   return { name: CONSULTATION_CHECKOUT_PRODUCT_NAME, description: `Rendez-vous : ${trackingId}` };
@@ -916,7 +919,7 @@ export const appRouter = router({
       .input(
         z.object({
           customerName: z.string().min(1).max(255).regex(NO_CONTROL_CHARACTERS, "Caractères non autorisés"),
-          customerEmail: z.string().email().max(320),
+          customerEmail: bookingCustomerEmail,
           customerPhone: z.string().trim().min(1).max(50).refine(isPlausiblePhoneNumber, BOOKING_INVALID_PHONE_MESSAGE),
           appointmentDate: appointmentDateInput,
           // Objet de la demande, sans information médicale (minimisation) :
@@ -966,10 +969,14 @@ export const appRouter = router({
         }
 
         try {
-          const { getAppointmentHoldExpiry, getExpiredAppointmentHoldUpdate, holdWithinCheckoutSession, releaseExpiredAppointmentHolds, stripeExpiresAt } = await import("./appointmentHolds");
+          const { bookingHoldSettlementFulfillment, getAppointmentHoldExpiry, getExpiredAppointmentHoldUpdate, holdWithinCheckoutSession, releaseExpiredAppointmentHolds, stripeExpiresAt } = await import("./appointmentHolds");
           // Un maintien expiré dont la session a pourtant été payée (webhook
-          // absent) est confirmé au lieu d’être libéré pour cette réservation.
-          await releaseExpiredAppointmentHolds(getStripeClient);
+          // absent) est confirmé au lieu d’être libéré pour cette réservation ;
+          // la notification au médecin et la confirmation de ce patient partent
+          // aussitôt, ce patient-ci ne les attend que quelques secondes au plus
+          // (EXPL-01). Ce qui n’a pas pu partir dans ce délai reste dû pour le
+          // traitement suivant (webhook, tâche planifiée, « Renvoyer »).
+          await releaseExpiredAppointmentHolds(getStripeClient, new Date(), { fulfillmentTimeoutMs: bookingHoldSettlementFulfillment.timeoutMs });
 
           // Plafond de créneaux retenus simultanément par une même adresse
           // (comparaison insensible à la casse) : un patient peut relancer un
@@ -1483,6 +1490,26 @@ export const appRouter = router({
           if (result.outcome === "not_found") throw new TRPCError({ code: "NOT_FOUND", message: "Rendez-vous introuvable." });
           if (result.outcome === "not_paid") throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Ce rendez-vous n’est pas payé : aucun envoi après paiement à relancer." });
           return { requeued: result.requeued, requeuedJobTypes: result.requeuedJobTypes, deliveries: result.deliveries };
+        }),
+
+      /**
+       * Corrige l’adresse du patient après un envoi refusé (EXPL-02), avec la
+       * règle de la réservation ; « Renvoyer » écrit ensuite à la nouvelle
+       * adresse. Tracé dans le journal de sécurité, sans les adresses.
+       */
+      updateCustomerEmail: adminProcedure
+        .input(z.object({ trackingId: z.string().min(1).max(20), customerEmail: z.string().max(400) }))
+        .mutation(async ({ input, ctx }) => {
+          const customerEmail = input.customerEmail.trim();
+          if (!bookingCustomerEmail.safeParse(customerEmail).success) {
+            throw new TRPCError({ code: "BAD_REQUEST", message: "Adresse email invalide : saisissez une adresse complète, par exemple prenom.nom@exemple.fr." });
+          }
+          const { updateAppointmentCustomerEmailByAdmin } = await import("./appointmentAdminActions");
+          const result = await updateAppointmentCustomerEmailByAdmin({ trackingId: input.trackingId, customerEmail });
+          if (!result.unchanged) {
+            await logSecurityEvent({ actorKind: "admin", actorReference: ctx.user.openId, category: "admin_appointment_email_corrected", outcome: "allowed", metadata: { trackingId: input.trackingId } });
+          }
+          return result;
         }),
 
       /** Facture déjà émise, régénérée à l’identique (même numéro, mêmes dates) ; n’attribue jamais de numéro (EXPL-02). */
@@ -2957,7 +2984,8 @@ export const appRouter = router({
     /**
      * « À traiter » en tête du tableau de bord, lu depuis la base (EXPL-02) :
      * envois après paiement en échec (tentatives épuisées, refus du service
-     * d’envoi, ou nouvel essai automatique en attente), et paiements reçus
+     * d’envoi, ou nouvel essai automatique en attente), envois pas encore
+     * partis quelques minutes après le paiement (ABUS-03), et paiements reçus
      * sans rendez-vous confirmé (patient à contacter, puis à rembourser).
      */
     attention: adminProcedure.query(async () => {
@@ -2978,6 +3006,7 @@ export const appRouter = router({
         failedDeliveries: deliveries.failed,
         refusedDeliveries: deliveries.refused,
         retryingDeliveries: deliveries.retrying,
+        waitingDeliveries: deliveries.waiting,
         unconfirmedPayments: { total: Number(unconfirmedCount?.count ?? 0), items: unconfirmedItems },
       };
     }),

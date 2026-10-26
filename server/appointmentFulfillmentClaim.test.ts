@@ -27,6 +27,7 @@ vi.mock("./invoice", () => ({ generateInvoicePDF: invoicing.generateInvoicePDF }
 vi.mock("./invoiceNumbering", () => ({ allocateAppointmentInvoice: invoicing.allocateAppointmentInvoice }));
 
 import {
+  patientEmailIdempotencyKey,
   processAppointmentFulfillmentNow,
   processDueAppointmentFulfillmentJobs,
   recoverStaleAppointmentFulfillmentJobs,
@@ -210,7 +211,7 @@ describe("revendication atomique des envois post-paiement", () => {
       paymentDate: new Date("2026-10-12T07:59:00Z"),
       trackingId: "APT-42",
     }));
-    expect(notifications.sendInvoiceEmail).toHaveBeenCalledWith("patient@example.com", "Patient Test", "APT-42", 100, expect.any(Buffer), "FAC-2026-000003", { idempotencyKey: "appointment-invoice-FAC-2026-000003", language: "fr" });
+    expect(notifications.sendInvoiceEmail).toHaveBeenCalledWith("patient@example.com", "Patient Test", "APT-42", 100, expect.any(Buffer), "FAC-2026-000003", { idempotencyKey: patientEmailIdempotencyKey("appointment-invoice-FAC-2026-000003", "patient@example.com"), language: "fr" });
   });
 
   it("écrit les emails d’une réservation faite en allemand en anglais, la facture PDF restant en français (EN-01)", async () => {
@@ -224,7 +225,7 @@ describe("revendication atomique des envois post-paiement", () => {
     await processDueAppointmentFulfillmentJobs();
     // The .ics stamp is the job's creation time: a retried email stays identical (RES-05).
     expect(notifications.sendConfirmationEmail).toHaveBeenCalledWith("patient@example.com", "Patient Test", "APT-42", expect.any(Date), 100, undefined, {
-      idempotencyKey: "appointment-confirmation-APT-42",
+      idempotencyKey: patientEmailIdempotencyKey("appointment-confirmation-APT-42", "patient@example.com"),
       language: "en",
       confirmedAt: createdAt,
     });

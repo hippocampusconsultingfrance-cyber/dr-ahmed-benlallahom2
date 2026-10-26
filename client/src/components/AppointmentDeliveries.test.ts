@@ -8,8 +8,10 @@ const state = vi.hoisted(() => ({
   attention: { data: undefined as unknown, isLoading: false, error: null as null | { message: string } },
   retryOptions: null as null | MutationOptions,
   invoiceOptions: null as null | MutationOptions,
+  emailOptions: null as null | MutationOptions,
   retryMutate: vi.fn(),
   invoiceMutate: vi.fn(),
+  emailMutate: vi.fn(),
   invalidated: [] as string[],
   toasts: [] as Array<[string, string]>,
   downloads: [] as unknown[],
@@ -32,13 +34,14 @@ vi.mock("@/lib/trpc", () => ({
       appointments: {
         retryFulfillment: { useMutation: (options: MutationOptions) => { state.retryOptions = options; return { mutate: state.retryMutate, isPending: false }; } },
         invoicePdf: { useMutation: (options: MutationOptions) => { state.invoiceOptions = options; return { mutate: state.invoiceMutate, isPending: false }; } },
+        updateCustomerEmail: { useMutation: (options: MutationOptions) => { state.emailOptions = options; return { mutate: state.emailMutate, isPending: false }; } },
       },
     },
   },
 }));
 
-const { default: AppointmentDeliveries, canRetryDeliveries, deliveryLabel, refundEmailWarning } = await import("./AppointmentDeliveries");
-const { default: AdminAttentionPanel, retryingDetail } = await import("./AdminAttentionPanel");
+const { default: AppointmentDeliveries, canCorrectPatientEmail, canRetryDeliveries, deliveryLabel, refundEmailWarning, retryOutcome } = await import("./AppointmentDeliveries");
+const { default: AdminAttentionPanel, retryingDetail, waitingDetail } = await import("./AdminAttentionPanel");
 
 type Delivery = Parameters<typeof deliveryLabel>[0];
 const delivery = (jobType: Delivery["jobType"], deliveryState: Delivery["state"], attempts = 1, maxAttempts = 6): Delivery => ({ jobType, state: deliveryState, attempts, maxAttempts });
@@ -59,6 +62,7 @@ function button(tree: ReactNode, label: string) {
 beforeEach(() => {
   state.retryMutate.mockClear();
   state.invoiceMutate.mockClear();
+  state.emailMutate.mockClear();
   state.invalidated = [];
   state.toasts = [];
   state.downloads = [];
@@ -192,9 +196,63 @@ describe("EXPL-02 — envois après paiement sur la fiche du rendez-vous", () =>
     expect(message).toContain("aucun nouvel essai automatique n’aura lieu");
   });
 
+  it("accorde l’état au libellé : « Email de remboursement » au masculin, les autres au féminin", () => {
+    expect(deliveryLabel(delivery("refund", "sent"))).toBe("Email de remboursement : envoyé");
+    expect(deliveryLabel(delivery("refund", "refused", 1, 7))).toBe("Email de remboursement : refusé par le service d’envoi, sans nouvel essai automatique");
+    expect(deliveryLabel(delivery("refund", "not_sent"))).toBe("Email de remboursement : non envoyé");
+    expect(deliveryLabel(delivery("refund", "retrying", 1, 7))).toBe("Email de remboursement : en échec, nouvel essai prévu (1/7)");
+    for (const [jobType, label] of [["confirmation", "Confirmation"], ["invoice", "Facture"], ["owner", "Notification médecin"], ["refund_owner", "Alerte remboursement"]] as const) {
+      expect(deliveryLabel(delivery(jobType, "sent"))).toBe(`${label} : envoyée`);
+      expect(deliveryLabel(delivery(jobType, "refused"))).toBe(`${label} : refusée par le service d’envoi, sans nouvel essai automatique`);
+    }
+    const html = renderToStaticMarkup(createElement(AppointmentDeliveries, { trackingId: "APTUI0000010", paymentStatus: "refunded", invoiceNumber: null, deliveries: [delivery("refund", "sent"), delivery("refund_owner", "sent")] }));
+    expect(html).toContain("Email de remboursement : envoyé<");
+    expect(html).toContain("Alerte remboursement : envoyée<");
+
+    // The toast after « Renvoyer » agrees too.
+    expect(retryOutcome({ requeuedJobTypes: ["refund", "refund_owner"], deliveries: [delivery("refund", "sent"), { ...delivery("refund_owner", "not_sent"), notSentReason: "not_paid" }] }).message)
+      .toBe("Envoyés : Email de remboursement. Alerte remboursement non envoyée : le rendez-vous n’est plus payé.");
+    expect(retryOutcome({ requeuedJobTypes: ["refund", "refund_owner"], deliveries: [{ ...delivery("refund", "not_sent"), notSentReason: "not_paid" }, delivery("refund_owner", "sent")] }).message)
+      .toBe("Envoyées : Alerte remboursement. Email de remboursement non envoyé : le rendez-vous n’est plus payé.");
+  });
+
+  it("propose de corriger l’adresse du patient après un refus, puis « Renvoyer » l’utilise (EXPL-02)", async () => {
+    const refused = [delivery("owner", "sent"), delivery("confirmation", "refused", 1, 7), delivery("invoice", "refused", 1, 7)];
+    // Only once an email to the patient that « Renvoyer » sends again was refused, and never for a booking whose data was erased.
+    expect(canCorrectPatientEmail(refused, "completed", "patient@exemple.fr")).toBe(true);
+    expect(canCorrectPatientEmail([delivery("refund", "refused", 1, 7)], "refunded", "patient@exemple.fr")).toBe(true);
+    expect(canCorrectPatientEmail([delivery("confirmation", "failed", 7, 7), delivery("owner", "refused")], "completed", "patient@exemple.fr")).toBe(false);
+    expect(canCorrectPatientEmail(refused, "refunded", "patient@exemple.fr")).toBe(false);
+    expect(canCorrectPatientEmail(refused, "completed", "")).toBe(false);
+    expect(renderToStaticMarkup(createElement(AppointmentDeliveries, { trackingId: "APTUI0000011", paymentStatus: "completed", invoiceNumber: null, deliveries: [delivery("confirmation", "sent")], customerEmail: "patient@exemple.fr" })))
+      .not.toContain("Corriger l’email du patient");
+    expect(renderToStaticMarkup(createElement(AppointmentDeliveries, { trackingId: "APTUI0000011", paymentStatus: "completed", invoiceNumber: null, deliveries: refused, customerEmail: "patient@exemple.fr" })))
+      .toContain("Corriger l’email du patient");
+
+    const prompt = vi.fn(() => "  patient.corrige@exemple.fr ");
+    vi.stubGlobal("window", { confirm: vi.fn(() => true), prompt });
+    const tree = AppointmentDeliveries({ trackingId: "APTUI0000011", paymentStatus: "completed", invoiceNumber: null, deliveries: refused, customerEmail: "patient@exemple.fr" });
+    button(tree, "Corriger l’email du patient")();
+    expect(prompt).toHaveBeenCalledWith(expect.stringContaining("APTUI0000011"), "patient@exemple.fr");
+    expect(state.emailMutate).toHaveBeenCalledWith({ trackingId: "APTUI0000011", customerEmail: "patient.corrige@exemple.fr" });
+
+    await state.emailOptions!.onSuccess!({ success: true, unchanged: false } as never);
+    expect(state.toasts.at(-1)).toEqual(["success", "Adresse du patient corrigée. « Renvoyer » envoie maintenant les envois refusés à cette adresse."]);
+    expect(state.invalidated).toEqual(["appointments.list"]);
+    await state.emailOptions!.onError!(new Error("Adresse email invalide : saisissez une adresse complète, par exemple prenom.nom@exemple.fr."));
+    expect(state.toasts.at(-1)).toEqual(["error", "Adresse email invalide : saisissez une adresse complète, par exemple prenom.nom@exemple.fr."]);
+
+    // Cancelled, or the same address: nothing is sent to the server.
+    state.emailMutate.mockClear();
+    prompt.mockReturnValueOnce(null as never).mockReturnValueOnce("patient@exemple.fr");
+    button(tree, "Corriger l’email du patient")();
+    button(tree, "Corriger l’email du patient")();
+    expect(state.emailMutate).not.toHaveBeenCalled();
+  });
+
   it("explique au médecin pourquoi l’email de remboursement n’est pas parti", () => {
     expect(refundEmailWarning("refused")).toContain("a été refusé par le service d’envoi");
-    expect(refundEmailWarning("refused")).toContain("« Renvoyer » sur le rendez-vous");
+    expect(refundEmailWarning("refused")).toContain("Sur le rendez-vous, « Corriger l’email du patient », puis « Renvoyer » l’envoie à la nouvelle adresse.");
     for (const pending of ["retrying", "pending", "sending", "interrupted"] as const) {
       expect(refundEmailWarning(pending)).toContain("n’est pas encore parti : un nouvel essai automatique est prévu");
     }
@@ -284,15 +342,39 @@ describe("EXPL-02 — encart « À traiter » du tableau de bord", () => {
     expect(html).not.toContain("Rien à traiter");
     expect(html).toContain("Envois refusés par le service d’envoi (1)");
     expect(html).toContain("Ce refus n’est pas passager : aucun nouvel essai automatique n’a lieu.");
-    expect(html).toContain("« Renvoyer » sur le rendez-vous");
+    expect(html).toContain("sur le rendez-vous, « Corriger l’email du patient », puis « Renvoyer » l’envoie à la nouvelle adresse.");
     expect(html).toContain("APTTODOUI005");
     expect(html).toContain("Confirmation, Facture");
     expect(html).not.toContain("nouvel essai automatique au plus tôt");
   });
 
+  it("liste les envois pas encore partis quelques minutes après le paiement, sans les dire en échec (ABUS-03)", () => {
+    state.attention = {
+      isLoading: false,
+      error: null,
+      data: {
+        failedDeliveries: { total: 0, items: [] },
+        refusedDeliveries: { total: 0, items: [] },
+        retryingDeliveries: { total: 0, items: [] },
+        waitingDeliveries: { total: 1, items: [{ trackingId: "APTTODOUI006", customerName: "Farid Benali", appointmentDate: "2026-10-30T09:00:00.000Z", jobTypes: ["confirmation", "invoice"], dueSince: "2026-10-26T10:02:00.000Z" }] },
+        unconfirmedPayments: { total: 0, items: [] },
+      },
+    };
+    const html = renderToStaticMarkup(createElement(AdminAttentionPanel, { onOpenAppointments: vi.fn() }));
+    expect(html).not.toContain("Rien à traiter");
+    expect(html).toContain("Envois pas encore partis (1)");
+    expect(html).toContain("aucune tentative n’a encore échoué");
+    // Not always the email service: the budget of the processing may have run out first.
+    expect(html).toContain("n’a pas pu les envoyer dans le temps qui lui est donné (temps écoulé, service d’envoi lent ou saturé, traitement interrompu)");
+    expect(html).toContain("« Renvoyer » sur le rendez-vous les envoie tout de suite.");
+    expect(html).toContain("APTTODOUI006");
+    expect(waitingDetail({ jobTypes: ["confirmation", "invoice"], dueSince: "2026-10-26T10:02:00.000Z" })).toBe("Confirmation, Facture · en attente depuis le 26/10/2026 11:02:00, essai à la prochaine exécution planifiée");
+    expect(html).toContain("Confirmation, Facture · en attente depuis le 26/10/2026 11:02:00");
+  });
+
   it("dit qu’il n’y a rien à traiter, ou que l’encart n’a pas pu être chargé", () => {
-    state.attention = { isLoading: false, error: null, data: { failedDeliveries: { total: 0, items: [] }, refusedDeliveries: { total: 0, items: [] }, retryingDeliveries: { total: 0, items: [] }, unconfirmedPayments: { total: 0, items: [] } } };
-    expect(renderToStaticMarkup(createElement(AdminAttentionPanel, { onOpenAppointments: vi.fn() }))).toContain("Rien à traiter");
+    state.attention = { isLoading: false, error: null, data: { failedDeliveries: { total: 0, items: [] }, refusedDeliveries: { total: 0, items: [] }, retryingDeliveries: { total: 0, items: [] }, waitingDeliveries: { total: 0, items: [] }, unconfirmedPayments: { total: 0, items: [] } } };
+    expect(renderToStaticMarkup(createElement(AdminAttentionPanel, { onOpenAppointments: vi.fn() }))).toContain("Rien à traiter : aucun envoi après paiement en échec ou en attente, aucun paiement à régulariser.");
     state.attention = { isLoading: false, error: { message: "Base de données indisponible." }, data: undefined };
     expect(renderToStaticMarkup(createElement(AdminAttentionPanel, { onOpenAppointments: vi.fn() }))).toContain("n’ont pas pu être chargés : Base de données indisponible.");
   });

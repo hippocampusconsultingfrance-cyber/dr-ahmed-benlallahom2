@@ -55,7 +55,7 @@ vi.mock("./invoiceNumbering", () => ({
   })),
 }));
 
-import { appointmentFulfillmentPacing, enqueueAppointmentFulfillment, immediateFulfillmentBudget, processDueAppointmentFulfillmentJobs } from "./appointmentFulfillment";
+import { appointmentFulfillmentPacing, enqueueAppointmentFulfillment, immediateFulfillmentBudget, patientEmailIdempotencyKey, processDueAppointmentFulfillmentJobs } from "./appointmentFulfillment";
 import { postPaymentDeliveryRetry, sendConfirmationEmail, sendOwnerNotificationEmail } from "./_core/notifications";
 import * as notificationsModule from "./_core/notifications";
 import { processFulfillmentBestEffort } from "./appointmentPaymentWebhook";
@@ -205,7 +205,7 @@ describe("envois après paiement — propriétaire d’abord, essais courts, ale
     // Email patient : 3 essais (1 + 2 essais courts) avec la même clé d’idempotence.
     const patientConfirmations = resend.calls.filter(call => String(call.message.subject).startsWith("Confirmation de réservation"));
     expect(patientConfirmations).toHaveLength(3);
-    expect(new Set(patientConfirmations.map(call => call.options?.idempotencyKey))).toEqual(new Set(["appointment-confirmation-APTOWNER0001"]));
+    expect(new Set(patientConfirmations.map(call => call.options?.idempotencyKey))).toEqual(new Set([patientEmailIdempotencyKey("appointment-confirmation-APTOWNER0001", "patient@example.test")]));
     // Alerte au propriétaire dès le premier échec, avec les coordonnées du patient.
     const alert = ownerEmails.find(call => String(call.message.subject).startsWith("Échec d’envoi après paiement"));
     expect(alert).toBeDefined();
@@ -429,7 +429,7 @@ describe("page de statut aux valeurs de production : un 429 passager garde son n
   it.each([
     ["la notification au médecin", ["429"], "Nouvelle réservation payée"],
     ["la confirmation au patient", ["ok", "429"], "Confirmation de réservation"],
-  ])("un seul 429 sur %s : nouvel essai après le retry-after, médecin et patient prévenus pendant l’attente de la page, facture juste après, sans nouvel essai planifié ni alerte", async (_target, script, retriedSubject) => {
+  ])("un seul 429 sur %s : nouvel essai après le retry-after, médecin et patient prévenus pendant l’attente de la page ; la facture, dont le tour vient après, reste en file sans tentative ni alerte", async (_target, script, retriedSubject) => {
     resend.script.push(...script);
     const { jobs } = memoryDatabase([job(1, "owner"), job(2, "confirmation"), job(3, "invoice")]);
 
@@ -442,9 +442,18 @@ describe("page de statut aux valeurs de production : un 429 passager garde son n
     const retried = resend.calls.filter(call => String(call.message.subject).startsWith(retriedSubject));
     expect(retried).toHaveLength(2);
     expect(retried[1].at - retried[0].at).toBeGreaterThanOrEqual(1_000);
-    // La facture suit dans le même traitement.
-    await vi.advanceTimersByTimeAsync(2_000);
-    expect(jobs.map(row => [row.jobType, row.status, row.attempts])).toEqual([["owner", "completed", 1], ["confirmation", "completed", 1], ["invoice", "completed", 1]]);
+    // Le budget de la page écoulé, aucun envoi ne démarre plus après sa réponse :
+    // la facture reste due, telle quelle, pour le traitement suivant.
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(jobs.map(row => [row.jobType, row.status, row.attempts])).toEqual([["owner", "completed", 1], ["confirmation", "completed", 1], ["invoice", "queued", 0]]);
+    expect(subjects().some(subject => subject.startsWith("Facture"))).toBe(false);
     expect(subjects().some(subject => subject.startsWith("Échec d’envoi"))).toBe(false);
+
+    // Le passage suivant (webhook, tâche planifiée) l’envoie, en comptant un seul essai.
+    const next = processDueAppointmentFulfillmentJobs();
+    await vi.advanceTimersByTimeAsync(2_000);
+    await next;
+    expect(jobs.map(row => [row.jobType, row.status, row.attempts])).toEqual([["owner", "completed", 1], ["confirmation", "completed", 1], ["invoice", "completed", 1]]);
+    expect(subjects().filter(subject => subject.startsWith("Facture"))).toHaveLength(1);
   });
 });

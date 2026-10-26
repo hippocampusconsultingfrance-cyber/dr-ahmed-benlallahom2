@@ -67,7 +67,9 @@ describe("public form rate limits", () => {
   it("protects appointments.create before any agenda access, without depending on Turnstile", async () => {
     const source = await import("node:fs/promises").then(fs => fs.readFile(new URL("./routers.ts", import.meta.url), "utf8"));
     const createBlock = source.slice(source.indexOf("    create: publicProcedure"), source.indexOf("createCheckoutSession: publicProcedure"));
-    expect(createBlock).toContain("customerEmail: z.string().email()");
+    // The booking's email rule, shared with its correction from the dashboard (EXPL-02).
+    expect(source).toContain("const bookingCustomerEmail = z.string().email()");
+    expect(createBlock).toContain("customerEmail: bookingCustomerEmail");
     expect(createBlock).toContain('enforcePublicFormRateLimit({ kind: "bookingIp"');
     expect(createBlock).toContain('enforcePublicFormRateLimit({ kind: "bookingEmail"');
     expect(createBlock).toContain(">= MAX_ACTIVE_APPOINTMENT_HOLDS_PER_EMAIL");

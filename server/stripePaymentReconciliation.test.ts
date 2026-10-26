@@ -111,9 +111,12 @@ const { createApp } = await import("./_core/index");
 const { appRouter } = await import("./routers");
 const { refundAppointmentPayment } = await import("./appointmentAdminActions");
 const { paymentStatusPageFulfillment } = await import("./appointmentPublicStatus");
-const { KEPT_HOLD_RECHECK_MS } = await import("./appointmentHolds");
-const { APPOINTMENT_FULFILLMENT_STALE_AFTER_MS, appointmentFulfillmentPacing, closeUnsentAppointmentFulfillment, getAppointmentDeliveries, processDueAppointmentFulfillmentJobs, recoverStaleAppointmentFulfillmentJobs } = await import("./appointmentFulfillment");
+const { KEPT_HOLD_RECHECK_MS, bookingHoldSettlementFulfillment } = await import("./appointmentHolds");
+const { pauseWithinDeadline, waitFitsDeadline } = await import("./processingDeadline");
+const { generateInvoicePDF } = await import("./invoice");
+const { APPOINTMENT_FULFILLMENT_STALE_AFTER_MS, appointmentFulfillmentPacing, closeUnsentAppointmentFulfillment, getAppointmentDeliveries, patientEmailIdempotencyKey, processDueAppointmentFulfillmentJobs, recoverStaleAppointmentFulfillmentJobs } = await import("./appointmentFulfillment");
 const PAGE_FULFILLMENT_TIMEOUT_MS = paymentStatusPageFulfillment.timeoutMs;
+const BOOKING_FULFILLMENT_TIMEOUT_MS = bookingHoldSettlementFulfillment.timeoutMs;
 const signer = new Stripe(process.env.STRIPE_SECRET_KEY!);
 
 let baseUrl = "";
@@ -130,6 +133,8 @@ const HOUR = 60 * 60 * 1000;
 const TRACKING_ID = "APTRECON00001";
 const SESSION_ID = "cs_test_reconciliation_1";
 const PAYMENT_INTENT = "pi_test_reconciliation_1";
+/** One key per booking and address: the patient is told once (RES-06, EXPL-02). */
+const REFUND_EMAIL_KEY = patientEmailIdempotencyKey(`appointment-refund-${TRACKING_ID}`, "patient@example.test");
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -143,6 +148,7 @@ beforeEach(() => {
   state.stripe.expireCalls.length = 0;
   state.stripe.payWhileClosing = null;
   paymentStatusPageFulfillment.timeoutMs = PAGE_FULFILLMENT_TIMEOUT_MS;
+  bookingHoldSettlementFulfillment.timeoutMs = BOOKING_FULFILLMENT_TIMEOUT_MS;
   // The pause between two jobs (ABUS-03) counts from the last job of the
   // previous test: without it, a page's short wait would depend on test order.
   appointmentFulfillmentPacing.delayMs = 0;
@@ -345,6 +351,11 @@ describe("EXPL-01 — un paiement reçu est confirmé même sans webhook", () =>
     const sentAt: number[] = [];
     const sends = [emails.sendOwnerNotificationEmail, emails.sendConfirmationEmail, emails.sendInvoiceEmail];
     for (const send of sends) send.mockImplementation(async () => { sentAt.push(Date.now()); });
+    // The invoice leaves once its PDF is built, well after the start of its job.
+    vi.mocked(generateInvoicePDF).mockImplementation(async () => {
+      await new Promise(resolve => setTimeout(resolve, 100));
+      return { buffer: Buffer.from("pdf"), key: "invoices/test.pdf", url: "" };
+    });
     seedAppointment();
     stripeSession();
     const otherDate = new Date(Date.now() + 75 * HOUR);
@@ -357,12 +368,43 @@ describe("EXPL-01 — un paiement reçu est confirmé même sans webhook", () =>
       expect(responses.map(response => response.status)).toEqual([200, 200]);
       expect(db().rows(appointmentFulfillmentJobs).map(job => job.status)).toEqual(Array(6).fill("completed"));
       expect(sentAt).toHaveLength(6);
-      // The pause separates the starts of the jobs; each send follows its start
-      // after a few database reads, which the other webhook (or a loaded test
-      // machine) may delay: the sends are well apart, never at the same instant.
-      for (let index = 1; index < sentAt.length; index += 1) expect(sentAt[index] - sentAt[index - 1]).toBeGreaterThanOrEqual(appointmentFulfillmentPacing.delayMs / 2);
+      // The pause separates the sends themselves (setTimeout may fire a millisecond early).
+      for (let index = 1; index < sentAt.length; index += 1) expect(sentAt[index] - sentAt[index - 1]).toBeGreaterThanOrEqual(appointmentFulfillmentPacing.delayMs - 2);
     } finally {
       for (const send of sends) send.mockImplementation(async () => undefined);
+      vi.mocked(generateInvoicePDF).mockImplementation(async () => ({ buffer: Buffer.from("pdf"), key: "invoices/test.pdf", url: "" }));
+    }
+  });
+
+  it("garde la pause entre l’envoi d’une facture lente et l’envoi suivant d’un autre traitement (ABUS-03)", async () => {
+    appointmentFulfillmentPacing.delayMs = 150;
+    const sent: Array<{ kind: string; at: number }> = [];
+    const sends = { owner: emails.sendOwnerNotificationEmail, confirmation: emails.sendConfirmationEmail, invoice: emails.sendInvoiceEmail };
+    for (const [kind, send] of Object.entries(sends)) send.mockImplementation(async () => { sent.push({ kind, at: Date.now() }); });
+    // PDF built in 100 ms: without a pause counted from the send, the other
+    // processing's job, started a pause after the invoice job, would send 50 ms after it.
+    vi.mocked(generateInvoicePDF).mockImplementation(async () => {
+      await new Promise(resolve => setTimeout(resolve, 100));
+      return { buffer: Buffer.from("pdf"), key: "invoices/test.pdf", url: "" };
+    });
+    const paid = { paymentStatus: "completed", appointmentStatus: "confirmed", holdExpiresAt: null } as const;
+    // A: only its invoice is left; B: its notification and confirmation.
+    const { id: invoiceOnly } = seedAppointment({ ...paid, stripePaymentIntentId: "pi_test_slow_invoice_a" }) as { id: number };
+    const otherDate = new Date(Date.now() + 75 * HOUR);
+    const { id: twoEmails } = seedAppointment({ ...paid, trackingId: "APTRECON00032", stripeSessionId: "cs_test_reconciliation_32", stripePaymentIntentId: "pi_test_slow_invoice_b", appointmentDate: otherDate, slotKey: otherDate.toISOString() }) as { id: number };
+    const seedJob = (appointmentId: number, jobType: string) => db().seed(appointmentFulfillmentJobs, { appointmentId, jobType, status: "queued", attempts: 0, maxAttempts: 7, scheduledFor: new Date(Date.now() - 1000) });
+    seedJob(invoiceOnly, "invoice");
+    seedJob(twoEmails, "owner");
+    seedJob(twoEmails, "confirmation");
+
+    try {
+      await Promise.all([processDueAppointmentFulfillmentJobs(5, { appointmentId: invoiceOnly }), processDueAppointmentFulfillmentJobs(5, { appointmentId: twoEmails })]);
+
+      expect(sent.map(email => email.kind).sort()).toEqual(["confirmation", "invoice", "owner"]);
+      for (let index = 1; index < sent.length; index += 1) expect(sent[index].at - sent[index - 1].at).toBeGreaterThanOrEqual(appointmentFulfillmentPacing.delayMs - 2);
+    } finally {
+      for (const send of Object.values(sends)) send.mockImplementation(async () => undefined);
+      vi.mocked(generateInvoicePDF).mockImplementation(async () => ({ buffer: Buffer.from("pdf"), key: "invoices/test.pdf", url: "" }));
     }
   });
 
@@ -453,6 +495,38 @@ describe("EXPL-01 — un paiement reçu est confirmé même sans webhook", () =>
     expect(appointmentRow()).toMatchObject({ paymentStatus: "pending", appointmentStatus: "cancelled", slotKey: null, holdExpiresAt: null });
     expect(db().rows(appointments).find(row => row.trackingId === booking.trackingId)).toMatchObject({ appointmentStatus: "held", slotKey: slot.toISOString(), stripeSessionId: booking.checkoutSessionId });
     await expect(bookedSlots(slot)).resolves.toEqual([slot]);
+  });
+
+  it("une autre réservation confirme le maintien expiré payé sans webhook, prévient aussitôt le médecin et ce patient, et ne les attend que dans un délai borné", async () => {
+    const paidSlot = bookableSlot();
+    stripeSession();
+    seedAppointment({ appointmentDate: paidSlot, slotKey: paidSlot.toISOString(), createdAt: new Date(Date.now() - 33 * 60 * 1000), holdExpiresAt: new Date(Date.now() - 60 * 1000) });
+    bookingHoldSettlementFulfillment.timeoutMs = 1_000;
+    // Limite de débit de Resend qui dure pour la facture : comme le vrai envoi,
+    // un nouvel essai après chaque retry-after (250 ms) tant que le délai le permet.
+    emails.sendInvoiceEmail.mockImplementationOnce(async () => {
+      while (waitFitsDeadline(250)) await pauseWithinDeadline(250);
+      throw new Error("invoice_email_failed:rate_limit_exceeded");
+    });
+
+    const startedAt = Date.now();
+    await expect(book(bookableSlot(60))).resolves.toMatchObject({ success: true });
+    expect(Date.now() - startedAt).toBeLessThan(bookingHoldSettlementFulfillment.timeoutMs + 500);
+
+    // Confirmed, and the owner and the paying patient told during the booking;
+    // the invoice, cut short by the budget, is due again without a counted attempt nor an alert.
+    expect(appointmentRow()).toMatchObject({ paymentStatus: "completed", appointmentStatus: "confirmed", stripePaymentIntentId: PAYMENT_INTENT, slotKey: paidSlot.toISOString() });
+    expect(emails.sendOwnerNotificationEmail).toHaveBeenCalledTimes(1);
+    expect(emails.sendConfirmationEmail).toHaveBeenCalledTimes(1);
+    expect(db().rows(appointmentFulfillmentJobs).map(job => [job.jobType, job.status, job.attempts])).toEqual([["owner", "completed", 1], ["confirmation", "completed", 1], ["invoice", "queued", 0]]);
+    expect(owner.notifyOwner).not.toHaveBeenCalled();
+
+    // No webhook: the scheduled run sends the invoice, and nothing twice.
+    expect((await runFulfillment()).status).toBe(200);
+    expect(jobStates()).toEqual([["owner", "completed"], ["confirmation", "completed"], ["invoice", "completed"]]);
+    expect(emails.sendOwnerNotificationEmail).toHaveBeenCalledTimes(1);
+    expect(emails.sendConfirmationEmail).toHaveBeenCalledTimes(1);
+    expect(emails.sendInvoiceEmail).toHaveBeenCalledTimes(2);
   });
 
   it("garde le créneau tant que Stripe ne répond pas : pris quelques minutes, refusé clairement, puis de nouveau réglé avec Stripe", async () => {
@@ -566,7 +640,7 @@ describe("RES-06 — remboursements et contestations faits dans Stripe", () => {
     expect(appointmentRow()).toMatchObject({ paymentStatus: "refunded", appointmentStatus: "cancelled", slotKey: null, refundAmount: "100.00" });
     expect(appointmentRow().refundedAt).toBeInstanceOf(Date);
     expect(emails.sendRefundConfirmationEmail).toHaveBeenCalledTimes(1);
-    expect(emails.sendRefundConfirmationEmail).toHaveBeenCalledWith("patient@example.test", "Patient Test", TRACKING_ID, expect.any(Date), "100.00", { context: "refund", idempotencyKey: `appointment-refund-${TRACKING_ID}`, language: "fr" });
+    expect(emails.sendRefundConfirmationEmail).toHaveBeenCalledWith("patient@example.test", "Patient Test", TRACKING_ID, expect.any(Date), "100.00", { context: "refund", idempotencyKey: REFUND_EMAIL_KEY, language: "fr" });
     expect(owner.notifyOwner).toHaveBeenCalledTimes(1);
     const [alert] = owner.notifyOwner.mock.calls[0];
     expect(alert.title).toBe(`Remboursement constaté chez Stripe (${TRACKING_ID})`);
@@ -734,7 +808,7 @@ describe("RES-06 — remboursements et contestations faits dans Stripe", () => {
     owner.notifyOwner.mockResolvedValue(true);
     expect(await retryAppointmentFulfillment(TRACKING_ID)).toMatchObject({ outcome: "retried", requeued: 2 });
     expect(jobStates()).toEqual([["refund", "completed"], ["refund_owner", "completed"]]);
-    expect(emails.sendRefundConfirmationEmail).toHaveBeenLastCalledWith("patient@example.test", "Patient Test", TRACKING_ID, expect.any(Date), "100.00", { context: "refund", idempotencyKey: `appointment-refund-${TRACKING_ID}`, language: "fr" });
+    expect(emails.sendRefundConfirmationEmail).toHaveBeenLastCalledWith("patient@example.test", "Patient Test", TRACKING_ID, expect.any(Date), "100.00", { context: "refund", idempotencyKey: REFUND_EMAIL_KEY, language: "fr" });
     expect(owner.notifyOwner).toHaveBeenCalledTimes(1);
     const [alert, options] = owner.notifyOwner.mock.calls[0];
     expect(alert.title).toBe(`Remboursement constaté chez Stripe (${TRACKING_ID})`);
@@ -789,7 +863,7 @@ describe("RES-06 — remboursements et contestations faits dans Stripe", () => {
     expect((await runFulfillment()).status).toBe(200);
     expect(jobStates()).toEqual([["refund", "completed"]]);
     expect(emails.sendRefundConfirmationEmail).toHaveBeenCalledTimes(2);
-    const email = ["patient@example.test", "Patient Test", TRACKING_ID, expect.any(Date), "100.00", { context: "practitioner_cancellation", reason: "Indisponibilité du médecin", idempotencyKey: `appointment-refund-${TRACKING_ID}`, language: "fr" }];
+    const email = ["patient@example.test", "Patient Test", TRACKING_ID, expect.any(Date), "100.00", { context: "practitioner_cancellation", reason: "Indisponibilité du médecin", idempotencyKey: REFUND_EMAIL_KEY, language: "fr" }];
     expect(emails.sendRefundConfirmationEmail).toHaveBeenNthCalledWith(1, ...email);
     expect(emails.sendRefundConfirmationEmail).toHaveBeenNthCalledWith(2, ...email);
     expect((await listAppointmentDeliveriesToHandle()).retrying.total).toBe(0);

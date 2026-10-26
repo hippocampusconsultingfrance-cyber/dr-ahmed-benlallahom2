@@ -1,4 +1,4 @@
-import { Download, RefreshCw } from "lucide-react";
+import { Download, Mail, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { trpc } from "@/lib/trpc";
@@ -30,8 +30,20 @@ const RETRYABLE_JOBS: Record<string, AppointmentDeliveryJob[]> = {
   refunded: ["refund", "refund_owner"],
 };
 
-/** Emails to the patient, never sent again once their data is erased (RGPD-12), as the server. */
+/**
+ * Emails written to the patient's address: never sent again once their data
+ * is erased (RGPD-12), as the server; correctable by the dashboard after a
+ * refusal (EXPL-02).
+ */
 const PATIENT_JOBS: AppointmentDeliveryJob[] = ["confirmation", "invoice", "refund"];
+
+/** « Email de remboursement » is masculine; the other labels are feminine. */
+const MASCULINE_JOBS: AppointmentDeliveryJob[] = ["refund"];
+
+/** A participle agreeing with the labels it follows: masculine as soon as one of them is. */
+function agree(jobTypes: AppointmentDeliveryJob[], feminine: string, masculine: string) {
+  return jobTypes.some(jobType => MASCULINE_JOBS.includes(jobType)) ? masculine : feminine;
+}
 
 const DELIVERY_STATE_LABELS: Record<AppointmentDeliveryState, string> = {
   sent: "envoyée",
@@ -44,6 +56,17 @@ const DELIVERY_STATE_LABELS: Record<AppointmentDeliveryState, string> = {
   interrupted: "envoi interrompu",
   not_sent: "non envoyée",
 };
+
+/** The labels above that agree with a masculine job label. */
+const MASCULINE_STATE_LABELS: Partial<Record<AppointmentDeliveryState, string>> = {
+  sent: "envoyé",
+  refused: "refusé par le service d’envoi, sans nouvel essai automatique",
+  not_sent: "non envoyé",
+};
+
+function stateLabel(delivery: AppointmentDeliveryView) {
+  return agree([delivery.jobType], DELIVERY_STATE_LABELS[delivery.state], MASCULINE_STATE_LABELS[delivery.state] ?? DELIVERY_STATE_LABELS[delivery.state]);
+}
 
 const DELIVERY_STATE_TONES: Record<AppointmentDeliveryState, string> = {
   sent: "bg-green-500/20 text-green-400",
@@ -62,10 +85,10 @@ const NOT_SENT_REASONS: Record<AppointmentDeliveryNotSentReason, string> = {
   patient_data_erased: "données du patient effacées (RGPD)",
 };
 
-/** « Facture : en échec (6/6) », « Confirmation : envoyée »… */
+/** « Facture : en échec (6/6) », « Confirmation : envoyée », « Email de remboursement : envoyé »… */
 export function deliveryLabel(delivery: AppointmentDeliveryView): string {
   const attempts = delivery.state === "failed" || delivery.state === "retrying" ? ` (${delivery.attempts}/${delivery.maxAttempts})` : "";
-  return `${DELIVERY_JOB_LABELS[delivery.jobType]} : ${DELIVERY_STATE_LABELS[delivery.state]}${attempts}`;
+  return `${DELIVERY_JOB_LABELS[delivery.jobType]} : ${stateLabel(delivery)}${attempts}`;
 }
 
 /**
@@ -82,6 +105,16 @@ export function canRetryDeliveries(deliveries: AppointmentDeliveryView[], paymen
 }
 
 /**
+ * « Corriger l’email du patient » is offered once the email service refused an
+ * email to the patient that « Renvoyer » would send again (EXPL-02), never on a
+ * booking whose data was erased (RGPD-12: its address is empty), as the server.
+ */
+export function canCorrectPatientEmail(deliveries: AppointmentDeliveryView[], paymentStatus: string, customerEmail: string | null | undefined): boolean {
+  const retryable = RETRYABLE_JOBS[paymentStatus] ?? [];
+  return Boolean(customerEmail?.trim()) && deliveries.some(delivery => PATIENT_JOBS.includes(delivery.jobType) && retryable.includes(delivery.jobType) && delivery.state === "refused");
+}
+
+/**
  * Toast after « Renvoyer », about the jobs it put back in the queue only (not
  * the ones already sent before it): everything went out; some were
  * deliberately not sent (a confirmation after the consultation…), said apart
@@ -92,7 +125,7 @@ export function canRetryDeliveries(deliveries: AppointmentDeliveryView[], paymen
 export function retryOutcome(result: { requeuedJobTypes: AppointmentDeliveryJob[]; deliveries: AppointmentDeliveryView[] }): { tone: "success" | "info" | "warning"; message: string } {
   const deliveries = result.deliveries.filter(delivery => result.requeuedJobTypes.includes(delivery.jobType));
   if (deliveries.some(delivery => delivery.state === "refused")) {
-    return { tone: "warning", message: "Le service d’envoi refuse de nouveau l’email (adresse du patient refusée ou invalide, ou contenu de l’email refusé) : ce refus n’est pas passager, aucun nouvel essai automatique n’aura lieu. Vérifiez l’adresse et prévenez le patient directement." };
+    return { tone: "warning", message: "Le service d’envoi refuse de nouveau l’email (adresse du patient refusée ou invalide, ou contenu de l’email refusé) : ce refus n’est pas passager, aucun nouvel essai automatique n’aura lieu. Vérifiez l’adresse et prévenez le patient directement ; « Corriger l’email du patient » sur le rendez-vous, puis « Renvoyer », l’envoie à la nouvelle adresse." };
   }
   if (!deliveries.every(delivery => delivery.state === "sent" || delivery.state === "not_sent")) {
     return { tone: "warning", message: "Certains envois ont de nouveau échoué ; un nouvel essai automatique est prévu. Vérifiez le service d’envoi d’emails (Resend) ou prévenez le patient directement." };
@@ -100,9 +133,9 @@ export function retryOutcome(result: { requeuedJobTypes: AppointmentDeliveryJob[
   const ordered = inReadingOrder(deliveries);
   const skipped = ordered.filter(delivery => delivery.state === "not_sent");
   if (skipped.length === 0) return { tone: "success", message: "Envois relancés et effectués." };
-  const sent = ordered.filter(delivery => delivery.state === "sent").map(delivery => DELIVERY_JOB_LABELS[delivery.jobType]);
-  const notSent = skipped.map(delivery => `${DELIVERY_JOB_LABELS[delivery.jobType]} non envoyée${delivery.notSentReason ? ` : ${NOT_SENT_REASONS[delivery.notSentReason]}` : ""}.`);
-  return { tone: "info", message: [sent.length > 0 ? `Envoyées : ${sent.join(", ")}.` : "Rien n’a été envoyé.", ...notSent].join(" ") };
+  const sent = ordered.filter(delivery => delivery.state === "sent").map(delivery => delivery.jobType);
+  const notSent = skipped.map(delivery => `${DELIVERY_JOB_LABELS[delivery.jobType]} ${agree([delivery.jobType], "non envoyée", "non envoyé")}${delivery.notSentReason ? ` : ${NOT_SENT_REASONS[delivery.notSentReason]}` : ""}.`);
+  return { tone: "info", message: [sent.length > 0 ? `${agree(sent, "Envoyées", "Envoyés")} : ${sent.map(jobType => DELIVERY_JOB_LABELS[jobType]).join(", ")}.` : "Rien n’a été envoyé.", ...notSent].join(" ") };
 }
 
 /**
@@ -111,10 +144,22 @@ export function retryOutcome(result: { requeuedJobTypes: AppointmentDeliveryJob[
  * owner alert for a refund made in Stripe, RES-06), sent, failed, refused or
  * pending; « Renvoyer » sends the ones that did not go out right away,
  * « Télécharger la facture » regenerates the invoice already issued,
- * identical to the one emailed.
+ * identical to the one emailed. After a refusal, « Corriger l’email du
+ * patient » changes the address « Renvoyer » then writes to.
  */
-export default function AppointmentDeliveries({ trackingId, paymentStatus, deliveries, invoiceNumber, patientDataErased = false }: { trackingId: string; paymentStatus: string; deliveries: AppointmentDeliveryView[]; invoiceNumber: string | null; patientDataErased?: boolean }) {
+export default function AppointmentDeliveries({ trackingId, paymentStatus, deliveries, invoiceNumber, customerEmail, patientDataErased = false }: { trackingId: string; paymentStatus: string; deliveries: AppointmentDeliveryView[]; invoiceNumber: string | null; customerEmail?: string | null; patientDataErased?: boolean }) {
   const utils = trpc.useUtils();
+  const correctEmail = trpc.admin.appointments.updateCustomerEmail.useMutation({
+    onSuccess: result => {
+      void utils.admin.appointments.list.invalidate();
+      if (result.unchanged) {
+        toast.info("Cette adresse est déjà celle du rendez-vous.");
+        return;
+      }
+      toast.success("Adresse du patient corrigée. « Renvoyer » envoie maintenant les envois refusés à cette adresse.", { duration: 10_000 });
+    },
+    onError: error => toast.error(error.message),
+  });
   const retry = trpc.admin.appointments.retryFulfillment.useMutation({
     onSuccess: result => {
       void utils.admin.appointments.list.invalidate();
@@ -156,6 +201,17 @@ export default function AppointmentDeliveries({ trackingId, paymentStatus, deliv
             {retry.isPending ? "Envoi…" : "Renvoyer"}
           </Button>
         )}
+        {canCorrectPatientEmail(deliveries, paymentStatus, customerEmail) && (
+          <Button size="sm" variant="outline" className={buttonClass} disabled={correctEmail.isPending}
+            onClick={() => {
+              const next = window.prompt(`Adresse email du patient du rendez-vous ${trackingId}, refusée par le service d’envoi. Saisissez l’adresse corrigée ; « Renvoyer » l’utilisera :`, customerEmail ?? "")?.trim();
+              if (!next || next === customerEmail) return;
+              correctEmail.mutate({ trackingId, customerEmail: next });
+            }}>
+            <Mail className="w-3 h-3 mr-1" />
+            {correctEmail.isPending ? "Enregistrement…" : "Corriger l’email du patient"}
+          </Button>
+        )}
         {invoiceNumber && (
           <Button size="sm" variant="outline" className={buttonClass} disabled={invoice.isPending} onClick={() => invoice.mutate({ trackingId })}>
             <Download className="w-3 h-3 mr-1" />
@@ -174,7 +230,7 @@ export default function AppointmentDeliveries({ trackingId, paymentStatus, deliv
  * Checkout session, email that could not be queued).
  */
 export function refundEmailWarning(patientEmail: AppointmentDeliveryState | null | undefined): string {
-  if (patientEmail === "refused") return "L’email de remboursement au patient a été refusé par le service d’envoi (adresse refusée ou invalide, ou contenu de l’email refusé) : ce refus n’est pas passager, prévenez le patient directement. Une fois l’adresse corrigée, « Renvoyer » sur le rendez-vous le renvoie.";
+  if (patientEmail === "refused") return "L’email de remboursement au patient a été refusé par le service d’envoi (adresse refusée ou invalide, ou contenu de l’email refusé) : ce refus n’est pas passager, prévenez le patient directement. Sur le rendez-vous, « Corriger l’email du patient », puis « Renvoyer » l’envoie à la nouvelle adresse.";
   if (patientEmail === "retrying" || patientEmail === "pending" || patientEmail === "sending" || patientEmail === "interrupted") {
     return "L’email de remboursement au patient n’est pas encore parti : un nouvel essai automatique est prévu (état sur le rendez-vous et dans « À traiter »). Vous pouvez aussi prévenir le patient directement.";
   }
