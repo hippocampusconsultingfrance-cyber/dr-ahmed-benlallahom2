@@ -466,11 +466,14 @@ describe("texte invisible écarté à l’extraction (IA-01)", () => {
     const scanned = await extractCvDocument(await scannedPdfWithOcrLayer(), "application/pdf");
     expect(scanned.method).toBe("pdf_vision");
     for (const line of SCANNED_LINES) expect(scanned.text).toContain(line);
-    const setAside = SCANNED_LINES.join(" ").length;
-    // Not hidden text, and not a partial reading either: the vision read the whole page.
-    expect(scanned.invisibleText).toMatchObject({ characters: 0, excerpt: "", unverifiable: { characters: setAside, reasons: ["image"], share: 0 } });
-    expect(scanned.warnings).toEqual(expect.arrayContaining(["vision_ocr_fallback", `unverifiable_text_set_aside:${setAside}`, "pdf_text_on_image"]));
-    expect(scanned.warnings.some(warning => warning.startsWith("invisible_text_ignored"))).toBe(false);
+    const replaced = SCANNED_LINES.join(" ").length;
+    // Not hidden text, and not a partial reading either: the vision read the whole page, whose text layer it replaced.
+    expect(scanned.invisibleText).toMatchObject({ characters: 0, excerpt: "", unverifiable: { characters: replaced, reasons: ["image"], share: 0, rereadPages: [1] } });
+    expect(scanned.warnings).toEqual(expect.arrayContaining(["vision_ocr_fallback", `text_layer_reread:${replaced}`, "pdf_text_on_image"]));
+    expect(scanned.warnings.some(warning => warning.startsWith("invisible_text_ignored") || warning.startsWith("unverifiable_text_set_aside"))).toBe(false);
+    // Nothing set aside in the vault either.
+    const { analysis } = await analyzeCandidateDocument({ buffer: await scannedPdfWithOcrLayer(), mimeType: "application/pdf", declaredCategory: "Diplôme", attempt: 1 });
+    expect(analysis.flags).toEqual([]);
   }, PDF_TEST_TIMEOUT_MS);
 
   it("PDF numérique suivi d’une page scannée avec sa couche OCR : la vision relit cette page seule, et le CV se lit en entier", async () => {
@@ -824,7 +827,8 @@ describe("texte invisible écarté à l’extraction (IA-01)", () => {
     expect(new Set(reading.visibility!.unverifiableText.map(passage => passage.reason))).toEqual(new Set(["font"]));
     expect(normalized(reading.visibility!.unverifiableText.map(passage => passage.text).join(" "))).toBe(VERDANA_LINES.join(" "));
 
-    // The vision then reads the page as drawn (here, by the test: nothing).
+    // The vision then reads the page as drawn (here, by the test: nothing, whatever an earlier test gave it).
+    state.ocrText = "";
     const extraction = await extractCvDocument(verdanaPdf(), "application/pdf");
     expect(extraction.text).not.toContain("Clinique Exemple");
     expect(extraction.invisibleText).toMatchObject({ characters: 0, unverifiable: { reasons: ["font"], excerpt: expect.stringMatching(/^Infirmier diplômé d'État, Clinique Exemple/) } });
@@ -1228,6 +1232,11 @@ describe("dossier d’un CV qui cache du texte, de bout en bout (IA-01)", () => 
       expect(weaknesses).not.toContain("écarté");
       expect(weaknesses).not.toContain("Confiance OCR insuffisante");
       expect(weaknesses).not.toContain("ne correspondent pas exactement");
+      // The quality line says the same as the alert, with the same count: a text layer replaced, nothing set aside.
+      const warnings: string[] = JSON.parse(String(dossier(id).extraction_warnings));
+      const replaced = /Couche de texte non utilisée pour (\d+) caractère/.exec(weaknesses)![1];
+      expect(warnings).toContain(`text_layer_reread:${replaced}`);
+      expect(warnings.some(warning => warning.startsWith("unverifiable_text_set_aside"))).toBe(false);
     }, PDF_TEST_TIMEOUT_MS);
 
     it("pages 1 à 3 honnêtes, couche OCR de la page 4 seule falsifiée (mots posés sur ceux de l’image) : la vision lit la page 4, la fausse licence n’atteint pas l’IA", async () => {
