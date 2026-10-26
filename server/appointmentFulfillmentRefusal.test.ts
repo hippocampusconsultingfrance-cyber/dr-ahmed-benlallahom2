@@ -1,6 +1,7 @@
 import type Stripe from "stripe";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { appointmentFulfillmentJobs, appointments, securityEvents } from "../drizzle/schema";
+import { PgDialect } from "drizzle-orm/pg-core";
+import { appointmentFulfillmentJobs, appointmentInvoices, appointments, securityEvents } from "../drizzle/schema";
 import { createMemoryPg, type MemoryPg } from "./testing/memoryPgProxy";
 import type { TrpcContext } from "./_core/context";
 
@@ -47,7 +48,9 @@ import { postPaymentDeliveryRetry } from "./_core/notifications";
 import { appointmentFulfillmentPacing, enqueueStripeRefundNotices, patientEmailIdempotencyKey, processAppointmentFulfillmentNow, processDueAppointmentFulfillmentJobs } from "./appointmentFulfillment";
 import { refundAppointmentPayment } from "./appointmentAdminActions";
 import { STRIPE_REFUND_CANCELLATION_REASON } from "./appointmentPaymentWebhook";
+import { APPOINTMENT_INVOICE_SCHEMA_OBJECTS } from "./invoiceNumbering";
 
+const dialect = new PgDialect();
 let memory: MemoryPg;
 
 function admin() {
@@ -98,7 +101,14 @@ const deliveriesOf = async (trackingId: string) => (await admin().appointments.l
 const stripe = { refunds: { create: vi.fn(async () => ({ id: "re_test_1", amount: 10000 })), list: vi.fn(async () => ({ data: [] })) } } as unknown as Stripe;
 
 beforeEach(() => {
-  memory = createMemoryPg([appointments, appointmentFulfillmentJobs, securityEvents]);
+  memory = createMemoryPg([appointments, appointmentFulfillmentJobs, appointmentInvoices, securityEvents]);
+  // appointment_invoices exists, as in production: the runtime DDL check finds every object.
+  const execute = memory.db.execute.bind(memory.db);
+  Object.assign(memory.db, {
+    execute: (query: Parameters<typeof execute>[0]) => dialect.sqlToQuery(query as never).sql.includes("to_regclass")
+      ? Promise.resolve({ rows: APPOINTMENT_INVOICE_SCHEMA_OBJECTS.map(name => ({ name })) })
+      : execute(query),
+  });
   state.memory = memory;
   resend.calls.length = 0;
   resend.rejected.clear();

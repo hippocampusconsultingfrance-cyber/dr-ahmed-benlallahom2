@@ -421,6 +421,11 @@ export function buildInvoiceContent(data: InvoiceData, seller: InvoiceSeller = r
   };
 }
 
+/** Where the copy of an issued invoice is stored, one per number. */
+function invoiceStorageKey(data: Pick<InvoiceData, "invoiceNumber" | "trackingId">) {
+  return `invoices/${data.invoiceNumber}-${data.trackingId}.pdf`;
+}
+
 /**
  * `issuedNow`: its number was just allocated by the caller (first issue), so
  * no copy of it can be stored yet.
@@ -431,7 +436,7 @@ export async function generateInvoicePDF(
   options: { issuedNow?: boolean } = {},
 ): Promise<{ buffer: Buffer; key: string; url: string }> {
   const buffer = await renderInvoicePDF(data, seller);
-  const invoiceKey = `invoices/${data.invoiceNumber}-${data.trackingId}.pdf`;
+  const invoiceKey = invoiceStorageKey(data);
   let stored: Awaited<ReturnType<typeof storagePutOnce>>;
   try {
     // One stored copy per invoice number: a retried job keeps the copy already
@@ -462,6 +467,19 @@ export async function generateInvoicePDF(
   // one: the caller fails and tries again.
   if (!stored.uploaded) return { buffer: await storageGetBuffer(stored.key), key: stored.key, url: stored.url };
   return { buffer, key: stored.key, url: stored.url };
+}
+
+/**
+ * Stores the invoice built from this data, unless a copy of it is stored
+ * already, which is kept as it is (EXPL-02): an invoice issued while the store
+ * could not be checked was emailed without a stored copy, and is stored this
+ * way before the details it carries change. Throws, nothing stored, when the
+ * store cannot say whether a copy is there or cannot take it
+ * ("storage_check_failed", "storage_upload_failed", with its code).
+ */
+export async function archiveInvoicePDF(data: InvoiceData, seller: InvoiceSeller = resolveInvoiceSeller()): Promise<{ key: string; uploaded: boolean }> {
+  const { key, uploaded } = await storagePutOnce(invoiceStorageKey(data), await renderInvoicePDF(data, seller), "application/pdf");
+  return { key, uploaded };
 }
 
 /**

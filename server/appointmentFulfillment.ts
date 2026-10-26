@@ -14,7 +14,7 @@ import {
 import { notifyOwner } from "./_core/notification";
 import { runWithSendSlot } from "./_core/resendDelivery";
 import { emailLanguageFor } from "./emailLanguage";
-import { generateInvoicePDF, renderInvoicePDF, type InvoiceData } from "./invoice";
+import { archiveInvoicePDF, generateInvoicePDF, renderInvoicePDF, type InvoiceData } from "./invoice";
 import { allocateAppointmentInvoice, findAppointmentInvoices, type AppointmentInvoiceRecord } from "./invoiceNumbering";
 import { deadlineCutShort, ProcessingDeadlineError, runWithProcessingDeadline, startFitsDeadline } from "./processingDeadline";
 import { hasErasedPatientData } from "./personalDataRetention";
@@ -933,4 +933,21 @@ export async function regenerateAppointmentInvoice(trackingId: string): Promise<
   const data = appointmentInvoiceData(appointment, invoiceRecord);
   if (hasErasedPatientData(appointment)) return { invoiceNumber: invoiceRecord.invoiceNumber, buffer: await renderInvoicePDF(data) };
   return { invoiceNumber: invoiceRecord.invoiceNumber, buffer: (await generateInvoicePDF(data)).buffer };
+}
+
+/**
+ * Before the patient's details of an appointment change (address corrected
+ * from the dashboard, EXPL-02), the invoice already issued for it is stored
+ * as it was issued, from the details it carries now: one issued during a
+ * storage outage was emailed without a stored copy, and its first build after
+ * the change would otherwise store the new details under the same number. A
+ * copy already stored is kept. Throws while the store cannot say whether one
+ * is there or cannot take it (archiveInvoicePDF): the details must not change
+ * yet. Null when no invoice was issued, the invoice number otherwise.
+ */
+export async function archiveIssuedAppointmentInvoice(appointment: Appointment): Promise<string | null> {
+  const invoiceRecord = (await findAppointmentInvoices([appointment.id])).get(appointment.id);
+  if (!invoiceRecord) return null;
+  await archiveInvoicePDF(appointmentInvoiceData(appointment, invoiceRecord));
+  return invoiceRecord.invoiceNumber;
 }
