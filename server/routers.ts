@@ -445,10 +445,12 @@ export function reanalysisOutcome(
 /** What really happened to a manual Google Drive copy (ADM-DRIVE-01). */
 export function driveRetryOutcome(
   queue: { alreadyCompleted: boolean; alreadyRunning: boolean },
-  processing: { processed: number; waitingForAuthorization?: boolean; results: Array<Record<string, unknown>> },
-): { outcome: "completed" | "already_completed" | "already_running" | "not_connected" | "waiting_validation" | "retry_scheduled" | "failed" | "queued"; error: string | null } {
+  processing: { processed: number; waitingForAuthorization?: boolean; reconnectRequired?: boolean; results: Array<Record<string, unknown>> },
+): { outcome: "completed" | "already_completed" | "already_running" | "not_connected" | "reconnect_required" | "waiting_validation" | "retry_scheduled" | "failed" | "queued"; error: string | null } {
   if (queue.alreadyCompleted) return { outcome: "already_completed", error: null };
   if (queue.alreadyRunning) return { outcome: "already_running", error: null };
+  // Revoked Google token: the copy waits for the reconnection (REC-09).
+  if (processing.reconnectRequired || processing.results[0]?.reconnectRequired === true) return { outcome: "reconnect_required", error: "google_drive_token_invalid_grant" };
   if (processing.waitingForAuthorization) return { outcome: "not_connected", error: "google_drive_not_connected" };
   const result = processing.results[0];
   if (!processing.processed || !result) return { outcome: "queued", error: null };
@@ -1248,7 +1250,7 @@ export const appRouter = router({
           const { processDueCvGoogleDriveExports, retryCvGoogleDriveExport } = await import("./googleDriveExport");
           const queue = await retryCvGoogleDriveExport(application.id);
           const processing = queue.alreadyCompleted || queue.alreadyRunning
-            ? { processed: 0, waitingForAuthorization: false, results: [] as Array<Record<string, unknown>> }
+            ? { processed: 0, waitingForAuthorization: false, reconnectRequired: false, results: [] as Array<Record<string, unknown>> }
             : await processDueCvGoogleDriveExports(1, [application.id]);
           const outcome = driveRetryOutcome(queue, processing);
           await logRecruitmentAction({
@@ -1258,6 +1260,28 @@ export const appRouter = router({
             metadata: { event: "google_drive_retry", ...queue, processed: processing.processed, outcome: outcome.outcome },
           });
           return { success: true, ...queue, processed: processing.processed, ...outcome };
+        }),
+        // « Relancer toutes les copies échouées » (REC-09).
+        retryAllFailed: adminProcedure.mutation(async ({ ctx }) => {
+          const { processDueCvGoogleDriveExports, retryAllFailedCvGoogleDriveExports } = await import("./googleDriveExport");
+          const queue = await retryAllFailedCvGoogleDriveExports();
+          for (const applicationId of queue.applicationIds) {
+            await logRecruitmentAction({ applicationId, adminOpenId: ctx.user.openId, action: "export", metadata: { event: "google_drive_retry", batch: true } });
+          }
+          // A few copies inline (each one downloads and uploads a CV); the cron copies the rest.
+          const processing = queue.requeued > 0
+            ? await processDueCvGoogleDriveExports(3, queue.applicationIds)
+            : { processed: 0, waitingForAuthorization: false, reconnectRequired: false, results: [] as Array<Record<string, unknown>> };
+          return {
+            success: true,
+            requeued: queue.requeued,
+            processed: processing.processed,
+            copied: processing.results.filter(result => result.completed === true).length,
+            // A skipped copy (CV awaiting its security check, claim lost) is not a failure.
+            failedAgain: processing.results.filter(result => result.completed === false).length,
+            reconnectRequired: processing.reconnectRequired,
+            notConnected: processing.waitingForAuthorization && !processing.reconnectRequired,
+          };
         }),
       }),
       list: adminProcedure

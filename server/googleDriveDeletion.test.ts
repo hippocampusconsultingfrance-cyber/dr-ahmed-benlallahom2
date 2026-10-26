@@ -7,9 +7,10 @@ const state = vi.hoisted(() => {
   process.env.GOOGLE_DRIVE_CLIENT_SECRET ||= "client-secret";
   process.env.GOOGLE_DRIVE_CV_FOLDER_ID ||= "folder-id";
   process.env.CANDIDATE_DOCUMENT_ENCRYPTION_KEY ||= Buffer.alloc(32, 7).toString("base64");
-  return { memory: null as null | { db: unknown } };
+  return { memory: null as null | { db: unknown }, notifications: [] as Array<{ title: string }> };
 });
 vi.mock("./db", () => ({ getDb: async () => state.memory?.db ?? null }));
+vi.mock("./_core/notification", () => ({ notifyOwner: vi.fn(async (payload: { title: string }) => { state.notifications.push(payload); return true; }) }));
 
 import { deleteCvCopiesFromGoogleDrive, encryptGoogleDriveRefreshToken } from "./googleDriveExport";
 
@@ -33,6 +34,7 @@ describe("suppression des copies Google Drive d’un CV", () => {
     driveFiles = new Map([["known", "CVTRACK00001"], ["orphan", "CVTRACK00001"], ["other", "CVOTHER00001"]]);
     tokenFails = false;
     deleteCalls.length = 0;
+    state.notifications = [];
     vi.stubGlobal("fetch", vi.fn(async (input: string | URL, init?: RequestInit) => {
       const url = new URL(String(input));
       if (url.hostname === "oauth2.googleapis.com") {
@@ -73,6 +75,9 @@ describe("suppression des copies Google Drive d’un CV", () => {
     expect(result).toMatchObject({ status: "failed", deleted: 0, error: "google_drive_token_invalid_grant" });
     expect(memory.rows(googleDriveConnections)[0]!.last_error).toBe("google_drive_token_invalid_grant");
     expect(driveFiles.has("known")).toBe(true);
+    // The connection is now « à renouveler »: the owner is told once (REC-09).
+    await deleteCvCopiesFromGoogleDrive({ trackingId: "CVTRACK00001", knownFileIds: ["known"] });
+    expect(state.notifications.map(notification => notification.title)).toEqual(["Recrutement : Google Drive à reconnecter, copies des CV suspendues"]);
   });
 
   it("sans connexion Drive : rien à faire si aucune copie n’est connue, sinon suppression en attente", async () => {

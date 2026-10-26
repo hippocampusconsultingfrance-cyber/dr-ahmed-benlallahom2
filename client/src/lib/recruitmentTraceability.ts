@@ -107,6 +107,7 @@ export function driveRetryToast(result: { outcome?: string; error?: string | nul
     case "queued": return { tone: "info", message: "Copie Google Drive remise en file." };
     case "waiting_validation": return { tone: "info", message: "Le CV doit d’abord être validé par le contrôle de sécurité ; la copie suivra automatiquement." };
     case "not_connected": return { tone: "warning", message: "Google Drive n’est pas connecté : connectez-le depuis l’en-tête de l’onglet." };
+    case "reconnect_required": return { tone: "warning", message: "Connexion Google Drive à renouveler : cliquez sur « Reconnexion Google Drive requise ». La copie repartira automatiquement après la reconnexion." };
     case "retry_scheduled":
     case "failed": {
       const reason = recruitmentDriveExportErrorLabel(result.error);
@@ -114,6 +115,19 @@ export function driveRetryToast(result: { outcome?: string; error?: string | nul
     }
     default: return { tone: "info", message: "Copie Google Drive relancée." };
   }
+}
+
+/** Toast after « Relancer toutes les copies échouées » Google Drive (REC-09). */
+export function driveBatchRetryToast(result: { requeued: number; copied: number; failedAgain: number; reconnectRequired?: boolean; notConnected?: boolean }): AdminToast {
+  if (result.requeued === 0) return { tone: "info", message: "Aucune copie Google Drive échouée à relancer." };
+  const requeued = `${result.requeued} copie${result.requeued > 1 ? "s" : ""} Google Drive remise${result.requeued > 1 ? "s" : ""} en file`;
+  if (result.reconnectRequired) return { tone: "warning", message: `${requeued}. Connexion Google Drive à renouveler : cliquez sur « Reconnexion Google Drive requise » ; elles repartiront après la reconnexion.` };
+  if (result.notConnected) return { tone: "warning", message: `${requeued}. Google Drive n’est pas connecté : connectez-le depuis l’en-tête de l’onglet.` };
+  // Not copied inline (time budget, CV awaiting its security check): the cron copies them.
+  const later = result.requeued - result.copied - result.failedAgain;
+  const nextRun = later > 0 ? ` ; ${later} au prochain passage du traitement` : "";
+  if (result.failedAgain > 0) return { tone: "warning", message: `${requeued} : ${result.copied} copiée${result.copied > 1 ? "s" : ""}, ${result.failedAgain} de nouveau en échec${nextRun}. Consultez le détail des dossiers.` };
+  return { tone: "success", message: `${requeued} : ${result.copied} copiée${result.copied > 1 ? "s" : ""} maintenant${nextRun}.` };
 }
 
 /** Header button of the Candidatures tab: never « connecté » when the token was revoked. */

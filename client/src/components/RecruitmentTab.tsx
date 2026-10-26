@@ -14,6 +14,7 @@ import {
   recruitmentAnalysisErrorLabel,
   reanalysisToast,
   driveRetryToast,
+  driveBatchRetryToast,
   googleDriveConnectionState,
   type AdminToast,
   recruitmentDriveExportTone,
@@ -220,6 +221,15 @@ export default function RecruitmentTab() {
     onError: mutationError => toast.error(mutationError.message),
   });
 
+  const retryAllDriveExports = trpc.admin.recruitment.driveExport.retryAllFailed.useMutation({
+    onSuccess: result => {
+      showAdminToast(driveBatchRetryToast(result));
+      utils.admin.recruitment.list.invalidate();
+      driveExportStatus.refetch();
+    },
+    onError: mutationError => toast.error(mutationError.message),
+  });
+
   const retryConfirmationEmail = trpc.admin.recruitment.confirmationEmail.retry.useMutation({
     onSuccess: result => {
       if (result.outcome === "already_sent") toast.success("L’accusé de dépôt a déjà été envoyé");
@@ -304,6 +314,12 @@ export default function RecruitmentTab() {
           >
             {googleDriveConnectionState(driveExportStatus.data).label}
           </a>
+          {driveExportStatus.data?.failedExports ? (
+            <Button variant="outline" onClick={() => retryAllDriveExports.mutate()} disabled={retryAllDriveExports.isPending}>
+              <RefreshCw className={`mr-2 h-4 w-4 ${retryAllDriveExports.isPending ? "animate-spin" : ""}`} />
+              Relancer toutes les copies échouées ({driveExportStatus.data.failedExports})
+            </Button>
+          ) : null}
           <Button variant="outline" onClick={() => reanalyzeFailed.mutate({ limit: 10 })} disabled={reanalyzeFailed.isPending}>
             <BrainCircuit className={`mr-2 h-4 w-4 ${reanalyzeFailed.isPending ? "animate-pulse" : ""}`} />
             Mettre à jour / reprendre l’IA
