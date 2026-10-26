@@ -86,6 +86,37 @@ describe("notifyOwner", () => {
     expect(send).toHaveBeenCalledTimes(2);
   });
 
+  it("asks again at once under the same key after an uncertain answer, so an email Resend took is not sent twice (REC-09)", async () => {
+    // Resend took the email but answered 500; under the same key it answers with that email.
+    send.mockResolvedValueOnce({ data: null, error: { name: "internal_server_error", statusCode: 500, message: "Internal server error" } });
+    const { notifyOwner } = await import("./notification");
+
+    await expect(notifyOwner({ title: "Recrutement : Google Drive à reconnecter", content: "Alerte" }, { idempotencyKey: "google-drive-reconnection-1" })).resolves.toBe(true);
+    expect(send).toHaveBeenCalledTimes(2);
+    expect(send.mock.calls.map(([, options]) => options)).toEqual([{ idempotencyKey: "google-drive-reconnection-1" }, { idempotencyKey: "google-drive-reconnection-1" }]);
+  });
+
+  it("asks again after a network error too, but only once, and reports the failure to the caller", async () => {
+    send.mockRejectedValueOnce(new TypeError("fetch failed"));
+    send.mockResolvedValueOnce({ data: null, error: { name: "application_error", statusCode: null, message: "Unable to fetch data. The request could not be resolved." } });
+    const { notifyOwner } = await import("./notification");
+
+    await expect(notifyOwner({ title: "Alerte", content: "Contenu" }, { idempotencyKey: "owner-alert-2" })).resolves.toBe(false);
+    expect(send).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not ask again without a key (a second email could leave), nor after a clear refusal", async () => {
+    send.mockResolvedValue({ data: null, error: { name: "internal_server_error", statusCode: 500, message: "Internal server error" } });
+    const { notifyOwner } = await import("./notification");
+    await expect(notifyOwner({ title: "Nouveau message", content: "Référence C123" })).resolves.toBe(false);
+    expect(send).toHaveBeenCalledTimes(1);
+
+    send.mockReset();
+    send.mockResolvedValue({ data: null, error: { name: "validation_error", statusCode: 422, message: "Invalid `to` field" } });
+    await expect(notifyOwner({ title: "Alerte", content: "Contenu" }, { idempotencyKey: "owner-alert-3" })).resolves.toBe(false);
+    expect(send).toHaveBeenCalledTimes(1);
+  });
+
   it("logs a used-up Resend quota as a high-severity event, without an alert loop (ABUS-03)", async () => {
     send.mockResolvedValue({ data: null, error: { name: "daily_quota_exceeded", statusCode: 429, message: "You have reached your daily quota" } });
     const { notifyOwner } = await import("./notification");

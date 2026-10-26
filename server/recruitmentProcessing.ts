@@ -6,7 +6,7 @@ import { storageGetSignedUrl, storagePut } from "./storage";
 import { validateCvFile } from "./recruitmentFileValidation";
 import { isProcessingDeadlineError } from "./processingDeadline";
 import { notifyOwner } from "./_core/notification";
-import { sendOwnerAlertOncePerWindow } from "./candidateSecurity";
+import { dailyOwnerAlertIdempotencyKey, sendOwnerAlertOncePerWindow } from "./candidateSecurity";
 
 const MAX_ATTEMPTS = 3;
 const PROCESSING_BATCH_SIZE = 5;
@@ -19,7 +19,8 @@ const DAY_MS = 24 * 60 * 60 * 1000;
  * An alert that could not leave is sent by a later refused analysis.
  */
 export async function notifyOwnerOfAiAnalysisUnavailable() {
-  return sendOwnerAlertOncePerWindow({ action: "recruitment_ai_billing_alert", subject: "global", windowMs: DAY_MS, blockMs: DAY_MS }, () => notifyOwner({
+  const action = "recruitment_ai_billing_alert";
+  return sendOwnerAlertOncePerWindow({ action, subject: "global", windowMs: DAY_MS, blockMs: DAY_MS }, () => notifyOwner({
     title: "Recrutement : analyse IA des CV indisponible (facturation du fournisseur)",
     content: [
       "Le service d’IA (Vercel AI Gateway) a refusé l’analyse d’un CV pour une raison de facturation : carte bancaire expirée ou absente, ou crédit épuisé.",
@@ -27,7 +28,7 @@ export async function notifyOwnerOfAiAnalysisUnavailable() {
       "Pour reprendre : rétablissez le moyen de paiement ou le crédit dans Vercel > AI Gateway, puis cliquez sur « Mettre à jour / reprendre l’IA » dans l’onglet Candidatures.",
       "Cette alerte est envoyée au plus une fois par jour.",
     ].join("\n\n"),
-  })).catch(() => false);
+  }, { idempotencyKey: dailyOwnerAlertIdempotencyKey(action) })).catch(() => false);
 }
 
 /**

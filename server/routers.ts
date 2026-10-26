@@ -141,8 +141,10 @@ async function enforcePublicFormRateLimit(input: {
 
 export const PUBLIC_FORM_SECURITY_CHECK_FAILED_MESSAGE = "La vérification anti-robot a échoué. Rechargez la page, puis renvoyez votre demande.";
 
+export const PUBLIC_FORM_SECURITY_CHECK_UNAVAILABLE_MESSAGE = "La vérification anti-robot est momentanément indisponible. Votre demande n’a pas été envoyée : veuillez réessayer dans quelques minutes.";
+
 /** Refus du contact ou du RGPD : message français et motif stable que le formulaire traduit (ABUS-01). */
-function publicFormRefusal(code: "BAD_REQUEST" | "TOO_MANY_REQUESTS", reason: PublicFormRefusalReason, message: string) {
+function publicFormRefusal(code: "BAD_REQUEST" | "TOO_MANY_REQUESTS" | "SERVICE_UNAVAILABLE", reason: PublicFormRefusalReason, message: string) {
   return new TRPCError({ code, message, cause: new PublicErrorReason(reason) });
 }
 
@@ -152,15 +154,22 @@ function publicFormIpHash(req: { headers: unknown; ip?: string | null }) {
 
 /**
  * Anti-robot du contact et du RGPD : un jeton refusé ou absent est un refus
- * 400 avec un motif stable, et non plus une erreur interne (500). Appelé avant
- * la limite par IP seule, il n’entame pas son budget.
+ * 400 avec un motif stable, et non plus une erreur interne (500). Quand
+ * Cloudflare n’a pas pu juger le jeton (siteverify injoignable ou en erreur,
+ * secret absent), le visiteur n’y est pour rien et recharger la page n’y
+ * changerait rien : refus 503 distinct, comme à la réservation. Appelé avant
+ * les deux limites (IP + email, puis IP seule), il n’entame pas leur budget.
  */
 async function verifyPublicFormTurnstile(kind: "contact" | "gdpr", token: string | undefined, req: { headers: unknown; ip?: string | null }) {
   try {
     await verifyCandidateTurnstile({ token: token ?? "", remoteIp: req.ip });
-  } catch {
-    await logSecurityEvent({ actorKind: "anonymous", category: `${PUBLIC_FORM_RATE_LIMITS[kind].action}_turnstile`, outcome: "blocked", severity: "warning", ipHash: publicFormIpHash(req) }).catch(() => undefined);
-    throw publicFormRefusal("BAD_REQUEST", "security_check_failed", PUBLIC_FORM_SECURITY_CHECK_FAILED_MESSAGE);
+  } catch (error) {
+    const unavailable = Boolean(token) && !(error instanceof Error && error.message === "candidate_turnstile_invalid");
+    const category = `${PUBLIC_FORM_RATE_LIMITS[kind].action}_turnstile${unavailable ? "_unavailable" : ""}`;
+    await logSecurityEvent({ actorKind: "anonymous", category, outcome: unavailable ? "failed" : "blocked", severity: "warning", ipHash: publicFormIpHash(req) }).catch(() => undefined);
+    throw unavailable
+      ? publicFormRefusal("SERVICE_UNAVAILABLE", "security_check_unavailable", PUBLIC_FORM_SECURITY_CHECK_UNAVAILABLE_MESSAGE)
+      : publicFormRefusal("BAD_REQUEST", "security_check_failed", PUBLIC_FORM_SECURITY_CHECK_FAILED_MESSAGE);
   }
 }
 
@@ -688,12 +697,14 @@ export const appRouter = router({
           throw new TRPCError({ code: 'BAD_REQUEST', message: 'Le consentement RGPD est requis' });
         }
 
+        // Anti-robot d’abord : un jeton refusé ou que Cloudflare n’a pas pu
+        // juger n’entame aucune des deux limites (ABUS-01).
+        await verifyPublicFormTurnstile("contact", input.turnstileToken, ctx.req);
         await enforcePublicFormRateLimit({
           kind: "contact",
           email: input.email,
           headers: ctx.req.headers as Record<string, unknown>,
         });
-        await verifyPublicFormTurnstile("contact", input.turnstileToken, ctx.req);
 
         const ipHash = await enforcePublicFormIpLimit("contact", ctx.req);
 
@@ -738,12 +749,12 @@ export const appRouter = router({
         })
       )
       .mutation(async ({ input, ctx }) => {
+        await verifyPublicFormTurnstile("gdpr", input.turnstileToken, ctx.req);
         await enforcePublicFormRateLimit({
           kind: "gdpr",
           email: input.email,
           headers: ctx.req.headers as Record<string, unknown>,
         });
-        await verifyPublicFormTurnstile("gdpr", input.turnstileToken, ctx.req);
         const ipHash = await enforcePublicFormIpLimit("gdpr", ctx.req);
         // Unpredictable tracking ID (13 chars, column is varchar(20))
         const trackingId = createPublicTrackingId("G");
@@ -1520,15 +1531,16 @@ export const appRouter = router({
         }),
         // « Relancer toutes les copies échouées » (REC-09).
         retryAllFailed: adminProcedure.mutation(async ({ ctx }) => {
-          const { processDueCvGoogleDriveExports, retryAllFailedCvGoogleDriveExports } = await import("./googleDriveExport");
+          const { googleDriveConnectionWait, processDueCvGoogleDriveExports, retryAllFailedCvGoogleDriveExports } = await import("./googleDriveExport");
           const queue = await retryAllFailedCvGoogleDriveExports();
           for (const applicationId of queue.applicationIds) {
             await logRecruitmentAction({ applicationId, adminOpenId: ctx.user.openId, action: "export", metadata: { event: "google_drive_retry", batch: true } });
           }
           // A few copies inline (each one downloads and uploads a CV); the cron copies the rest.
+          // Nothing to copy: the connection's real state all the same (REC-09).
           const processing = queue.requeued > 0
             ? await processDueCvGoogleDriveExports(3, queue.applicationIds)
-            : { processed: 0, waitingForAuthorization: false, reconnectRequired: false, results: [] as Array<Record<string, unknown>> };
+            : { processed: 0, ...await googleDriveConnectionWait(), results: [] as Array<Record<string, unknown>> };
           return {
             success: true,
             requeued: queue.requeued,

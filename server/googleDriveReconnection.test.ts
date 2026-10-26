@@ -24,6 +24,12 @@ const state = vi.hoisted(() => {
     notifications: [] as Array<{ title: string; content: string }>,
     ownerEmailFails: false,
     ownerEmailAttempts: 0,
+    // Idempotency key of each owner email, and the keys Resend keeps (an email
+    // already taken under a kept key is not sent again). While
+    // ownerEmailAnswerLost, Resend takes the email but its answer is lost (5xx, timeout).
+    ownerEmailKeys: [] as Array<string | undefined>,
+    keptKeys: new Set<string>(),
+    ownerEmailAnswerLost: false,
   };
 });
 
@@ -33,11 +39,14 @@ vi.mock("./adminMfa", async importOriginal => ({
   isAdminMfaVerified: vi.fn(async () => true),
 }));
 vi.mock("./_core/notification", () => ({
-  notifyOwner: vi.fn(async (payload: { title: string; content: string }) => {
+  notifyOwner: vi.fn(async (payload: { title: string; content: string }, options: { idempotencyKey?: string } = {}) => {
     state.ownerEmailAttempts += 1;
+    state.ownerEmailKeys.push(options.idempotencyKey);
+    if (options.idempotencyKey && state.keptKeys.has(options.idempotencyKey)) return true;
     if (state.ownerEmailFails) return false;
     state.notifications.push(payload);
-    return true;
+    if (options.idempotencyKey) state.keptKeys.add(options.idempotencyKey);
+    return !state.ownerEmailAnswerLost;
   }),
 }));
 vi.mock("./storage", () => ({ storageGetSignedUrl: vi.fn(async (key: string) => `https://blob.test/${key}`) }));
@@ -88,6 +97,9 @@ beforeEach(() => {
   state.notifications = [];
   state.ownerEmailFails = false;
   state.ownerEmailAttempts = 0;
+  state.ownerEmailKeys = [];
+  state.keptKeys.clear();
+  state.ownerEmailAnswerLost = false;
   vi.stubGlobal("fetch", vi.fn(async (input: string | URL, init?: RequestInit) => {
     const url = new URL(String(input));
     if (url.hostname === "oauth2.googleapis.com") {
@@ -150,6 +162,37 @@ describe("Google Drive déconnecté (REC-09)", () => {
     await processDueCvGoogleDriveExports(3);
     await processDueCvGoogleDriveExports(3);
     expect(state.notifications).toHaveLength(2);
+  });
+
+  it("une clé d’idempotence stable pour l’autorisation : un envoi parti sans réponse claire n’est pas doublé par l’essai suivant ; une nouvelle autorisation a la sienne", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    seedConnection();
+    seedCopy(1);
+    state.tokenRevoked = true;
+    state.ownerEmailAnswerLost = true;
+
+    await processDueCvGoogleDriveExports(3);
+    expect(state.notifications).toHaveLength(1);
+    // The slot opens again a few minutes later: same key, Resend answers with the email already taken.
+    state.ownerEmailAnswerLost = false;
+    vi.setSystemTime(Date.now() + 5 * 60 * 1000 + 1_000);
+    await processDueCvGoogleDriveExports(3);
+    // Now settled as delivered: no further attempt for this authorization.
+    vi.setSystemTime(Date.now() + 24 * 60 * 60 * 1000);
+    await processDueCvGoogleDriveExports(3);
+    expect(state.ownerEmailAttempts).toBe(2);
+    expect(state.notifications).toHaveLength(1);
+    const [firstKey, retryKey] = state.ownerEmailKeys;
+    expect(firstKey).toMatch(/^google-drive-reconnection-[0-9a-f]{32}$/);
+    expect(retryKey).toBe(firstKey);
+
+    // A new authorization, refused in turn: its own key, and its own alert.
+    await saveGoogleDriveConnection({ authorizedByOpenId: "user_owner", refreshToken: "new-refresh-token" });
+    await requeueGoogleDriveExportsAfterReconnection();
+    await processDueCvGoogleDriveExports(3);
+    expect(state.notifications).toHaveLength(2);
+    expect(state.ownerEmailKeys[2]).toMatch(/^google-drive-reconnection-[0-9a-f]{32}$/);
+    expect(state.ownerEmailKeys[2]).not.toBe(firstKey);
   });
 
   it("pendant une panne de Resend, un passage rapproché ne relance pas l’alerte à chaque appel", async () => {
@@ -286,6 +329,21 @@ describe("Google Drive déconnecté (REC-09)", () => {
     expect(copyOf(first)).toMatchObject({ status: "queued", attempts: 0 });
     expect(await admin().admin.recruitment.driveExport.retry({ id: second })).toMatchObject({ outcome: "reconnect_required" });
     expect(state.tokenRequests).toBe(0);
+  });
+
+  it("« Relancer toutes les copies échouées » sans copie à relancer donne quand même l’état réel de la connexion", async () => {
+    seedConnection("google_drive_token_invalid_grant");
+    seedCopy(1);
+    expect(await admin().admin.recruitment.driveExport.retryAllFailed()).toEqual({ success: true, requeued: 0, processed: 0, copied: 0, failedAgain: 0, reconnectRequired: true, notConnected: false });
+    expect(state.tokenRequests).toBe(0);
+
+    // Reconnected: connected again.
+    await saveGoogleDriveConnection({ authorizedByOpenId: "user_owner", refreshToken: "new-refresh-token" });
+    expect(await admin().admin.recruitment.driveExport.retryAllFailed()).toMatchObject({ requeued: 0, reconnectRequired: false, notConnected: false });
+  });
+
+  it("« Relancer toutes les copies échouées » sans copie ni autorisation : « non connecté »", async () => {
+    expect(await admin().admin.recruitment.driveExport.retryAllFailed()).toEqual({ success: true, requeued: 0, processed: 0, copied: 0, failedAgain: 0, reconnectRequired: false, notConnected: true });
   });
 
   it("un refus inline lors d’une relance unitaire le dit aussi, et n’alerte qu’une fois", async () => {

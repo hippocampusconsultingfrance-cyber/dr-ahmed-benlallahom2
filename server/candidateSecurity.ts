@@ -138,6 +138,20 @@ export async function sendOwnerAlertOncePerWindow(slot: Omit<PersistentRateLimit
   return delivered;
 }
 
+/**
+ * Resend idempotency key of an owner alert sent at most once a day (ABUS-01,
+ * ABUS-02, REC-08): an attempt Resend took without a clear answer (5xx,
+ * timeout) is tried again under the same key, and Resend does not send it a
+ * second time. Resend keeps a key 24 hours: the key names the day (UTC) of
+ * the attempt, so the attempts of one day share it, and the next alert, sent
+ * at least 24 hours after the previous one was delivered, never meets a key
+ * Resend still keeps. The alert's content must stay the same within the day
+ * (Resend refuses a key reused with another content).
+ */
+export function dailyOwnerAlertIdempotencyKey(action: string, now = new Date()) {
+  return `owner-alert-${action}-${now.toISOString().slice(0, 10)}`;
+}
+
 export type PersistentRateLimitPolicy = {
   action: string;
   subject: string;

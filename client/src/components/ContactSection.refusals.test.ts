@@ -75,6 +75,17 @@ describe("ContactSection — refus traduits (ABUS-01)", () => {
     }
   });
 
+  it("dit de réessayer plus tard, sans recharger la page, quand Cloudflare ne peut pas vérifier l'envoi", () => {
+    const unavailable = refusal("SERVICE_UNAVAILABLE", "security_check_unavailable");
+    expect(renderAlert("fr", unavailable)).toBe("La vérification anti-robot est momentanément indisponible. Votre message n’a pas été envoyé : réessayez dans quelques minutes.");
+    expect(renderAlert("en", unavailable)).toBe("The anti-bot check is temporarily unavailable. Your message has not been sent: please try again in a few minutes.");
+    for (const language of ["de", "zh"] as const) {
+      const alert = renderAlert(language, unavailable);
+      expect(alert, language).toBe(contactCopy[language].refusals.security_check_unavailable);
+      expect(alert, language).not.toBe(contactCopy[language].refusals.security_check_failed);
+    }
+  });
+
   it("garde l'échec générique sans motif connu, et n'affiche jamais le texte français du serveur", () => {
     expect(renderAlert("en", refusal("INTERNAL_SERVER_ERROR"))).toBe(contactCopy.en.sendError);
     expect(renderAlert("en", refusal("TOO_MANY_REQUESTS", "something_else"))).toBe(contactCopy.en.sendError);
@@ -86,11 +97,13 @@ describe("ContactSection — refus traduits (ABUS-01)", () => {
     renderAlert("de", null);
     view.onError?.(refusal("TOO_MANY_REQUESTS", "rate_limited"));
     view.onError?.(refusal("BAD_REQUEST", "security_check_failed"));
+    view.onError?.(refusal("SERVICE_UNAVAILABLE", "security_check_unavailable"));
     view.onError?.(refusal("INTERNAL_SERVER_ERROR"));
 
     expect(toastError.mock.calls.map(([message]) => message)).toEqual([
       contactCopy.de.refusals.rate_limited,
       contactCopy.de.refusals.security_check_failed,
+      "Die Bot-Prüfung ist vorübergehend nicht verfügbar. Ihre Nachricht wurde nicht gesendet: Bitte versuchen Sie es in einigen Minuten erneut.",
       contactCopy.de.sendError,
     ]);
   });

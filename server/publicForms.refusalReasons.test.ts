@@ -8,9 +8,10 @@ import type { TrpcContext } from "./_core/context";
 import { createInMemoryDrizzle, type InMemoryDrizzle } from "./testSupport/inMemoryDrizzle";
 
 // ABUS-01 — un message de contact ou une demande RGPD refusé porte un motif
-// stable jusqu'au navigateur : la limite par connexion atteinte (429), ou un
-// anti-robot refusé (400, et non plus une erreur interne 500). Le formulaire
-// affiche alors son propre texte traduit au lieu du message d'échec générique.
+// stable jusqu'au navigateur : la limite par connexion atteinte (429), un
+// anti-robot refusé (400, et non plus une erreur interne 500), ou que
+// Cloudflare n'a pas pu juger (503). Le formulaire affiche alors son propre
+// texte traduit au lieu du message d'échec générique.
 
 const state = vi.hoisted(() => ({ db: null as unknown, stored: [] as string[] }));
 
@@ -18,7 +19,7 @@ vi.mock("./db", () => ({ getDb: async () => state.db }));
 vi.mock("./_core/notification", () => ({ notifyOwner: vi.fn(async () => true) }));
 vi.mock("./candidateTurnstile", () => ({ verifyCandidateTurnstile: vi.fn(async () => undefined) }));
 
-const { appRouter, PUBLIC_FORM_RATE_LIMITS, PUBLIC_FORM_SECURITY_CHECK_FAILED_MESSAGE } = await import("./routers");
+const { appRouter, PUBLIC_FORM_RATE_LIMITS, PUBLIC_FORM_SECURITY_CHECK_FAILED_MESSAGE, PUBLIC_FORM_SECURITY_CHECK_UNAVAILABLE_MESSAGE } = await import("./routers");
 const { PUBLIC_EMAIL_IP_RATE_LIMITS } = await import("./publicFormRateLimit");
 const { verifyCandidateTurnstile } = await import("./candidateTurnstile");
 const { notifyOwner } = await import("./_core/notification");
@@ -68,6 +69,15 @@ const submit = (kind: FormKind, email: string, ip: string) => post(kind, forms[k
 
 const db = () => state.db as InMemoryDrizzle;
 const blockedCategories = () => db().rows(securityEvents).filter(event => event.outcome === "blocked").map(event => event.category);
+const failedCategories = () => db().rows(securityEvents).filter(event => event.outcome === "failed").map(event => event.category);
+
+/** The real Turnstile check, against a stubbed Cloudflare siteverify. */
+async function realTurnstileCheck(siteverify: () => Promise<Response>) {
+  vi.stubEnv("TURNSTILE_SECRET_KEY", "turnstile-secret-for-tests");
+  vi.stubGlobal("fetch", vi.fn(siteverify));
+  const actual = await vi.importActual<typeof import("./candidateTurnstile")>("./candidateTurnstile");
+  vi.mocked(verifyCandidateTurnstile).mockImplementation(actual.verifyCandidateTurnstile);
+}
 
 let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
 
@@ -81,6 +91,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
   consoleErrorSpy.mockRestore();
 });
 
@@ -162,5 +173,73 @@ describe("contact et RGPD — anti-robot refusé (ABUS-01)", () => {
     expect(refused.status).toBe(400);
     expect(refused.error?.data).toMatchObject({ code: "BAD_REQUEST", reason: "security_check_failed" });
     expect(verifyCandidateTurnstile).toHaveBeenCalledWith({ token: "", remoteIp: "198.51.100.87" });
+  });
+});
+
+describe("contact et RGPD — anti-robot indisponible chez Cloudflare (ABUS-01)", () => {
+  it.each([
+    ["contact", "siteverify injoignable", () => Promise.reject(new TypeError("fetch failed"))],
+    ["gdpr", "siteverify injoignable", () => Promise.reject(new TypeError("fetch failed"))],
+    ["contact", "siteverify en erreur HTTP", async () => new Response("Service Unavailable", { status: 503 })],
+    ["gdpr", "erreur interne de Cloudflare", async () => Response.json({ success: false, "error-codes": ["internal-error"] })],
+  ] as const)("%s, %s : renvoie 503 avec le motif security_check_unavailable, sans rien enregistrer ni prévenir le cabinet", async (kind, _case, siteverify) => {
+    await realTurnstileCheck(siteverify);
+
+    const refused = await submit(kind, "visiteur@test.local", "198.51.100.88");
+
+    expect(refused.status).toBe(503);
+    expect(refused.error).toMatchObject({ message: PUBLIC_FORM_SECURITY_CHECK_UNAVAILABLE_MESSAGE, data: { code: "SERVICE_UNAVAILABLE", reason: "security_check_unavailable" } });
+    expect(refused.error?.message).not.toContain("Rechargez");
+    expect(state.stored).toEqual([]);
+    expect(notifyOwner).not.toHaveBeenCalled();
+    // Logged apart from refused tokens, as a failure rather than a block.
+    expect(failedCategories()).toEqual([`${PUBLIC_FORM_RATE_LIMITS[kind].action}_turnstile_unavailable`]);
+    expect(blockedCategories()).toEqual([]);
+    expect(consoleErrorSpy).not.toHaveBeenCalled();
+  });
+
+  it("un secret Turnstile absent côté serveur n’est pas imputé au visiteur", async () => {
+    await realTurnstileCheck(async () => Response.json({ success: true }));
+    vi.stubEnv("TURNSTILE_SECRET_KEY", "");
+
+    await expect(submit("contact", "visiteur@test.local", "198.51.100.89")).resolves.toMatchObject({ status: 503, error: { data: { reason: "security_check_unavailable" } } });
+  });
+
+  it("un jeton que Cloudflare juge invalide reste un refus 400 qui demande de recharger la page", async () => {
+    await realTurnstileCheck(async () => Response.json({ success: false, "error-codes": ["invalid-input-response"] }));
+
+    await expect(submit("gdpr", "robot@test.local", "198.51.100.90")).resolves.toMatchObject({ status: 400, error: { message: PUBLIC_FORM_SECURITY_CHECK_FAILED_MESSAGE, data: { reason: "security_check_failed" } } });
+    expect(blockedCategories()).toEqual(["public_gdpr_submit_turnstile"]);
+  });
+
+  it("Cloudflare de retour, l’envoi passe", async () => {
+    await realTurnstileCheck(async () => Response.json({ success: true, hostname: "drahmedbenlallahom.com" }));
+
+    await expect(submit("contact", "visiteur@test.local", "198.51.100.91")).resolves.toEqual({ status: 200, error: null });
+    expect(state.stored).toEqual(["contact_messages"]);
+  });
+});
+
+describe("contact et RGPD — limite IP + email comptée après l’anti-robot (ABUS-01)", () => {
+  it.each([
+    ["contact", "198.51.100.92"],
+    ["gdpr", "198.51.100.93"],
+  ] as const)("%s : des jetons refusés ou que Cloudflare n’a pas pu juger n’entament pas la limite IP + email", async (kind, ip) => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("VITEST", "");
+    const { maxAttempts } = PUBLIC_FORM_RATE_LIMITS[kind];
+    for (let index = 1; index <= maxAttempts + 2; index += 1) {
+      vi.mocked(verifyCandidateTurnstile).mockRejectedValueOnce(new Error("candidate_turnstile_invalid"));
+      await expect(submit(kind, "meme-adresse@test.local", ip)).resolves.toMatchObject({ status: 400, error: { data: { reason: "security_check_failed" } } });
+      vi.mocked(verifyCandidateTurnstile).mockRejectedValueOnce(new Error("candidate_turnstile_unavailable"));
+      await expect(submit(kind, "meme-adresse@test.local", ip)).resolves.toMatchObject({ status: 503, error: { data: { reason: "security_check_unavailable" } } });
+    }
+
+    // The visitor's own messages still get their whole budget.
+    for (let index = 1; index <= maxAttempts; index += 1) {
+      await expect(submit(kind, "meme-adresse@test.local", ip)).resolves.toEqual({ status: 200, error: null });
+    }
+    await expect(submit(kind, "meme-adresse@test.local", ip)).resolves.toMatchObject({ status: 429, error: { data: { reason: "rate_limited" } } });
+    expect(state.stored).toHaveLength(maxAttempts);
   });
 });

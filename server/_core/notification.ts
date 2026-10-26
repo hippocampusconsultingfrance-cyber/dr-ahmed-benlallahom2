@@ -1,6 +1,6 @@
 import { TRPCError } from "@trpc/server";
 import { Resend } from "resend";
-import { reportResendQuotaError, sendWithRateLimitRetry } from "./resendDelivery";
+import { reportResendQuotaError, resendDeliveryFailureCode, sendWithRateLimitRetry } from "./resendDelivery";
 
 export type NotificationPayload = {
   title: string;
@@ -91,6 +91,10 @@ export function buildOwnerNotificationEmail(payload: NotificationPayload) {
  * retry-after delay when that delay is short (a few seconds at most, so a
  * request is not held much longer), and a used-up quota is logged as a
  * high-severity event.
+ * With an idempotency key, an uncertain answer (network error, timeout, 5xx:
+ * Resend may have taken the email) is asked again once at once under that
+ * key (REC-09): Resend keeps a key only 24 hours, and the caller's own retry,
+ * minutes or a daily pass later, may come once it is forgotten.
  */
 export async function notifyOwner(
   payload: NotificationPayload,
@@ -103,22 +107,24 @@ export async function notifyOwner(
     return false;
   }
 
-  try {
-    // A stable idempotency key lets a caller retry without a duplicate email.
-    const { error } = await sendWithRateLimitRetry(() => options.idempotencyKey
-      ? resend.emails.send(message, { idempotencyKey: options.idempotencyKey })
-      : resend.emails.send(message));
-    if (error) {
+  const { idempotencyKey } = options;
+  const attempts = idempotencyKey ? 2 : 1;
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      // A stable idempotency key lets a caller retry without a duplicate email.
+      const { error } = await sendWithRateLimitRetry(() => idempotencyKey
+        ? resend.emails.send(message, { idempotencyKey })
+        : resend.emails.send(message));
+      if (!error) return true;
       console.warn(`[Notification] Resend rejected the owner notification: ${error.message}`);
       // A used-up quota is logged as a high-severity event. Its owner alert,
       // refused in turn, logs one more event; the alert's slot, held during
       // the send, then stops the chain.
       await reportResendQuotaError(error, "owner_notification");
-      return false;
+      if (attempt >= attempts || resendDeliveryFailureCode(error) !== "delivery_exception") return false;
+    } catch {
+      console.warn("[Notification] Owner email delivery failed.");
+      if (attempt >= attempts) return false;
     }
-    return true;
-  } catch {
-    console.warn("[Notification] Owner email delivery failed.");
-    return false;
   }
 }
