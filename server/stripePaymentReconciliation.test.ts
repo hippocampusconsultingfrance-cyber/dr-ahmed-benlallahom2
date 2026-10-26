@@ -658,7 +658,10 @@ describe("EXPL-01 — un paiement reçu est confirmé même sans webhook", () =>
   });
 
   it("affiche pris un créneau retenu, gardé, confirmé ou payé, et libre un créneau expiré, libéré, annulé ou remboursé", async () => {
+    // The morning (Paris) of a day three days ahead: the slots seeded up to three hours later stay on
+    // that Paris day whatever the time of the run (from 9 p.m. the last one fell on the next day).
     const day = new Date(Date.now() + 72 * HOUR);
+    day.setUTCHours(8, 0, 0, 0);
     const at = (minutes: number) => new Date(day.getTime() + minutes * 60_000);
     const seed = (trackingId: string, minutes: number, overrides: Record<string, unknown>) => db().seed(appointments, { ...appointmentRow(), id: undefined, trackingId, appointmentDate: at(minutes), slotKey: at(minutes).toISOString(), ...overrides });
     seedAppointment({ appointmentDate: at(0), slotKey: at(0).toISOString() });
