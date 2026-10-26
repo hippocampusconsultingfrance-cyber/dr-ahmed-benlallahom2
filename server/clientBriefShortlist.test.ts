@@ -65,8 +65,9 @@ function seedBrief(extra: Record<string, unknown> = {}) {
 }
 
 describe("missions employeurs : classement, certifications et accord du candidat", () => {
+  const missionTables = [cvApplications, cvCandidateCertifications, cvCandidateLanguages, cvCandidateExperiences, clientBriefs, clientBriefCandidates, recruitmentAuditLogs, recruitmentCampaigns, recruitmentCampaignRecipients, recruitmentFollowUpTasks, candidateAccounts, cvGoogleDriveExportJobs, recruitmentEmailEvents];
   beforeEach(() => {
-    memory = createMemoryPg([cvApplications, cvCandidateCertifications, cvCandidateLanguages, cvCandidateExperiences, clientBriefs, clientBriefCandidates, recruitmentAuditLogs, recruitmentCampaigns, recruitmentCampaignRecipients, recruitmentFollowUpTasks, candidateAccounts, cvGoogleDriveExportJobs, recruitmentEmailEvents]);
+    memory = createMemoryPg(missionTables);
     state.memory = memory;
     seeded = 0;
   });
@@ -148,6 +149,50 @@ describe("missions employeurs : classement, certifications et accord du candidat
     const none = await admin().admin.clientBriefs.candidates({ briefId, minimumMatch: 100, page: 3 });
     expect(none.pagination).toEqual({ page: 0, limit: 25, total: 0, totalPages: 0 });
     expect(none.candidates).toEqual([]);
+  });
+
+  it("refuse d’associer une mission ou une candidature qui n’existe pas, sans rien écrire (DATA-01)", async () => {
+    const candidate = seedCandidate();
+    const brief = seedBrief();
+    await expect(admin().admin.clientBriefs.associateCandidate({ briefId: 4242, applicationId: 4242, status: "shortlisted" }))
+      .rejects.toMatchObject({ code: "NOT_FOUND", message: "Cette mission n’existe plus.", cause: { reason: "association_brief_not_found" } });
+    await expect(admin().admin.clientBriefs.associateCandidate({ briefId: brief.id as number, applicationId: 999, status: "shortlisted" }))
+      .rejects.toMatchObject({ code: "NOT_FOUND", cause: { reason: "association_application_not_found" } });
+    await expect(admin().admin.clientBriefs.associateCandidate({ briefId: 4242, applicationId: candidate.id as number, status: "shortlisted" }))
+      .rejects.toMatchObject({ cause: { reason: "association_brief_not_found" } });
+    expect(memory.rows(clientBriefCandidates)).toEqual([]);
+  });
+
+  it("garde une seule association par mission et candidat, même pour six appels simultanés, que la décision suivante retire de la shortlist (DATA-01)", async () => {
+    const candidate = seedCandidate();
+    const brief = seedBrief();
+    const pair = { briefId: brief.id as number, applicationId: candidate.id as number };
+    const results = await Promise.all(Array.from({ length: 6 }, () => admin().admin.clientBriefs.associateCandidate({ ...pair, status: "shortlisted", matchScore: 80, notes: "Profil solide" })));
+    expect(results).toEqual(Array.from({ length: 6 }, () => ({ success: true })));
+    expect(memory.rows(clientBriefCandidates)).toEqual([expect.objectContaining({ brief_id: pair.briefId, application_id: pair.applicationId, association_status: "shortlisted" })]);
+
+    // Removed from the shortlist: the one row changes, its score and note kept,
+    // and nothing is left to export.
+    await admin().admin.clientBriefs.associateCandidate({ ...pair, status: "declined" });
+    expect(memory.rows(clientBriefCandidates)).toEqual([expect.objectContaining({ association_status: "declined", match_score: 80, notes: "Profil solide" })]);
+    expect((await admin().admin.clientBriefs.candidates({ briefId: pair.briefId })).shortlistedCount).toBe(0);
+  });
+
+  it("associe encore un candidat à une mission tant que 0004 n’est pas appliquée, sur la copie modifiée en dernier (DATA-01)", async () => {
+    // A database 0004 has not reached: the upsert has no index (42P10).
+    memory = createMemoryPg(missionTables, { missingIndexes: ["client_brief_candidates_pair_unique"] });
+    state.memory = memory;
+    const candidate = seedCandidate();
+    const brief = seedBrief();
+    const pair = { briefId: brief.id as number, applicationId: candidate.id as number };
+    await expect(admin().admin.clientBriefs.associateCandidate({ ...pair, status: "shortlisted", matchScore: 80, notes: "Profil solide" })).resolves.toEqual({ success: true });
+    await admin().admin.clientBriefs.associateCandidate({ ...pair, status: "reviewing" });
+    expect(memory.rows(clientBriefCandidates)).toEqual([expect.objectContaining({ association_status: "reviewing", match_score: 80, notes: "Profil solide" })]);
+
+    // A copy left by an earlier race, updated since: the decision goes to it.
+    const [copy] = memory.seed(clientBriefCandidates, [{ brief_id: pair.briefId, application_id: pair.applicationId, association_status: "shortlisted", updated_at: new Date(Date.now() + 60_000) }]);
+    await admin().admin.clientBriefs.associateCandidate({ ...pair, status: "declined" });
+    expect(memory.rows(clientBriefCandidates).map(row => [row.id, row.association_status])).toEqual([[1, "reviewing"], [copy!.id, "declined"]]);
   });
 
   it("une licence lue seulement dans le CV reste « à confirmer » jusqu’à ce que l’admin la confirme, déclarée ou extraite (IA-02)", async () => {

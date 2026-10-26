@@ -33,6 +33,7 @@ vi.mock("@clerk/express", () => ({
 vi.mock("./storage", () => ({
   storagePut: vi.fn(async (key: string, data: Buffer) => { state.stored.push(key); state.blobs.set(key, Buffer.from(data)); return { key, url: `https://blob.test/${key}` }; }),
   storageGetSignedUrl: vi.fn(async (key: string) => { state.storageReads.push(key); return `https://blob.test/${key}`; }),
+  storageDelete: vi.fn(async (keys: string[]) => { keys.forEach(key => state.blobs.delete(key)); return keys.length; }),
 }));
 vi.mock("./candidateDocumentAnalysis", () => ({
   analyzeCandidateDocument: vi.fn(async (input: { declaredCategory: string }) => {
@@ -202,5 +203,26 @@ describe("REC-02 — PDF réels et PDF piégés déposés dans le coffre", () =>
     expect(candidateDocumentRefusalMessage(result.body, "en")).toContain("print it to PDF from your browser");
     expect(state.stored).toHaveLength(0);
     expect(db().rows(candidateDocuments)).toHaveLength(0);
+  });
+});
+
+describe("DATA-01 — document envoyé pendant l’effacement du compte", () => {
+  it("ne garde ni le document ni son fichier chiffré quand la clé étrangère refuse un compte effacé pendant l’envoi", async () => {
+    const memory = db();
+    const insert = memory.insert.bind(memory);
+    const refusal = Object.assign(new Error("Failed query: insert into \"candidate_documents\" (…)"), {
+      cause: Object.assign(new Error('insert or update on table "candidate_documents" violates foreign key constraint "candidate_documents_candidate_id_fk"'), { code: "23503", constraint: "candidate_documents_candidate_id_fk" }),
+    });
+    memory.insert = ((table: Parameters<typeof insert>[0]) => table === candidateDocuments
+      ? { values: () => ({ returning: () => Promise.reject(refusal) }) }
+      : insert(table)) as typeof memory.insert;
+
+    const result = await uploadDocument(baseUrl, sessionToken, { category: "diploma", buffer: validPdfBuffer(), name: "diplome.pdf" });
+
+    expect(result).toEqual({ status: 401, body: { error: "Votre session a expiré. Veuillez vous reconnecter." } });
+    expect(state.stored).toHaveLength(1);
+    expect(state.blobs.size).toBe(0);
+    expect(db().rows(candidateDocumentProcessingJobs)).toHaveLength(0);
+    expect(db().rows(candidateDocumentAuditLogs)).toHaveLength(0);
   });
 });

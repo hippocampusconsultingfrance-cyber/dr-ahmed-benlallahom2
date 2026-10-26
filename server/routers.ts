@@ -52,7 +52,7 @@ import {
   type BookingRefusalReason,
 } from "../shared/bookingPolicy";
 import type { PublicFormRefusalReason } from "../shared/publicFormRefusalReasons";
-import type { CertificationRenewalRefusalReason, MissionConsentRefusalReason } from "../shared/recruitmentMissionRefusalReasons";
+import type { CertificationRenewalRefusalReason, MissionAssociationRefusalReason, MissionConsentRefusalReason } from "../shared/recruitmentMissionRefusalReasons";
 
 const ADMIN_MFA_RATE_LIMITED_MESSAGE = "Trop de tentatives de double authentification. Patientez 15 minutes avant de réessayer.";
 
@@ -211,13 +211,14 @@ function bookingRefusal(code: "BAD_REQUEST" | "CONFLICT" | "UNPROCESSABLE_CONTEN
 }
 
 /**
- * Refus d’un accord de candidat pour une mission (RGPD-03) ou d’une
- * confirmation de certification (IA-02) : message français, motif stable et,
- * quand le refus nomme un jour, ce jour (YYYY-MM-DD). L’écran de la mission
- * et les certifications de la fiche 360° les traduisent dans la langue de
+ * Refus d’un accord de candidat pour une mission (RGPD-03), d’une association
+ * à une mission ou une candidature disparue (DATA-01) ou d’une confirmation de
+ * certification (IA-02) : message français, motif stable et, quand le refus
+ * nomme un jour, ce jour (YYYY-MM-DD). L’écran de la mission et les
+ * certifications de la fiche 360° les traduisent dans la langue de
  * l’administration, avec ce jour.
  */
-function missionRefusal(code: "BAD_REQUEST" | "NOT_FOUND", reason: MissionConsentRefusalReason | CertificationRenewalRefusalReason, message: string, date?: string) {
+function missionRefusal(code: "BAD_REQUEST" | "NOT_FOUND", reason: MissionConsentRefusalReason | MissionAssociationRefusalReason | CertificationRenewalRefusalReason, message: string, date?: string) {
   return new TRPCError({ code, message, cause: new PublicErrorReason(reason, date) });
 }
 
@@ -2732,24 +2733,47 @@ export const appRouter = router({
         .mutation(async ({ input }) => {
           const db = await getDb();
           if (!db) throw new Error("Database connection failed");
-          const [existing] = await db.select().from(clientBriefCandidates)
-            .where(and(eq(clientBriefCandidates.briefId, input.briefId), eq(clientBriefCandidates.applicationId, input.applicationId)))
-            .limit(1);
-          if (existing) {
-            await db.update(clientBriefCandidates).set({
-              matchScore: input.matchScore ?? existing.matchScore,
-              status: input.status,
-              notes: input.notes ?? existing.notes,
-              updatedAt: new Date(),
-            }).where(eq(clientBriefCandidates.id, existing.id));
-          } else {
-            await db.insert(clientBriefCandidates).values({
-              briefId: input.briefId,
-              applicationId: input.applicationId,
-              matchScore: input.matchScore ?? null,
-              status: input.status,
-              notes: input.notes ?? null,
+          // Never an association to a mission or an application that does not
+          // exist (DATA-01): the table has no foreign key to refuse it.
+          const [[brief], [application]] = await Promise.all([
+            db.select({ id: clientBriefs.id }).from(clientBriefs).where(eq(clientBriefs.id, input.briefId)).limit(1),
+            db.select({ id: cvApplications.id }).from(cvApplications).where(eq(cvApplications.id, input.applicationId)).limit(1),
+          ]);
+          if (!brief) throw missionRefusal("NOT_FOUND", "association_brief_not_found", "Cette mission n’existe plus.");
+          if (!application) throw missionRefusal("NOT_FOUND", "association_application_not_found", "Cette candidature n’existe plus : elle a peut-être été effacée.");
+          // One row per mission and candidate, even for simultaneous calls: an
+          // upsert on the unique index of drizzle/pg/0004. A score or note left
+          // out keeps the stored one.
+          const association = {
+            briefId: input.briefId,
+            applicationId: input.applicationId,
+            matchScore: input.matchScore ?? null,
+            status: input.status,
+            notes: input.notes ?? null,
+          };
+          const changes = {
+            status: input.status,
+            updatedAt: new Date(),
+            ...(input.matchScore !== undefined ? { matchScore: input.matchScore } : {}),
+            ...(input.notes !== undefined ? { notes: input.notes } : {}),
+          };
+          try {
+            await db.insert(clientBriefCandidates).values(association).onConflictDoUpdate({
+              target: [clientBriefCandidates.briefId, clientBriefCandidates.applicationId],
+              set: changes,
             });
+          } catch (error) {
+            // Until 0004 is applied there is no index for the upsert (42P10):
+            // the former read-then-write keeps the shortlist working meanwhile,
+            // on the copy updated last, the one 0004 keeps.
+            if (postgresErrorCode(error) !== "42P10") throw error;
+            console.warn("[Database] client_brief_candidates_pair_unique missing: apply drizzle/pg/0004_integrity_constraints.sql");
+            const [existing] = await db.select({ id: clientBriefCandidates.id }).from(clientBriefCandidates)
+              .where(and(eq(clientBriefCandidates.briefId, input.briefId), eq(clientBriefCandidates.applicationId, input.applicationId)))
+              .orderBy(desc(clientBriefCandidates.updatedAt), clientBriefCandidates.id)
+              .limit(1);
+            if (existing) await db.update(clientBriefCandidates).set(changes).where(eq(clientBriefCandidates.id, existing.id));
+            else await db.insert(clientBriefCandidates).values(association);
           }
           return { success: true };
         }),

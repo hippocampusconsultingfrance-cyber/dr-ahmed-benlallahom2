@@ -110,7 +110,27 @@ describe("source de vérité des migrations Drizzle (M32)", () => {
     expect(MISSION_COLUMN_DDL).toHaveLength(2);
     for (const statement of MISSION_COLUMN_DDL) expect(body).toContain(normalize(dialect.sqlToQuery(statement).sql));
     const journal = JSON.parse(read("drizzle/pg/meta/_journal.json")) as { entries: { idx: number; tag: string }[] };
-    expect(journal.entries.at(-1)).toMatchObject({ idx: 3, tag: "0003_mission_shortlist_columns" });
+    expect(journal.entries.find(entry => entry.idx === 3)).toMatchObject({ idx: 3, tag: "0003_mission_shortlist_columns" });
+  });
+
+  it("0004 pose chaque clé étrangère et CHECK du schéma NOT VALID puis VALIDATE, et ses index uniques sans supprimer de candidature (DATA-01, DATA-11)", () => {
+    const migration = read("drizzle/pg/0004_integrity_constraints.sql");
+    const statements = migration.split("--> statement-breakpoint");
+    const constraints = schemaTables.flatMap(table => [...table.foreignKeys.map(key => key.getName()), ...table.checks.map(check => check.name)]);
+    expect(constraints.sort()).toEqual(["appointments_appointment_status_check", "appointments_payment_status_check", "candidate_documents_candidate_id_fk"]);
+    for (const name of constraints) {
+      const added = statements.findIndex(statement => new RegExp(`ADD CONSTRAINT ${name}\\b[^;]*NOT VALID;`).test(statement));
+      const validated = statements.findIndex(statement => statement.trim().endsWith(`VALIDATE CONSTRAINT ${name};`));
+      expect(added, name).toBeGreaterThanOrEqual(0);
+      expect(validated, name).toBeGreaterThan(added);
+    }
+    for (const name of ["client_brief_candidates_pair_unique", "cv_applications_submission_unique"]) {
+      expect(migration).toContain(`IF to_regclass('${name}') IS NULL THEN`);
+      expect(migration).toContain(`CREATE UNIQUE INDEX ${name} ON`);
+    }
+    expect(migration).not.toMatch(/DELETE FROM cv_applications/i);
+    const journal = JSON.parse(read("drizzle/pg/meta/_journal.json")) as { entries: { idx: number; tag: string }[] };
+    expect(journal.entries.at(-1)).toMatchObject({ idx: 4, tag: "0004_integrity_constraints" });
   });
 
   it("la baseline crée les 36 tables du schéma", () => {

@@ -411,7 +411,11 @@ type TableMeta = {
 
 export type MemoryPg = ReturnType<typeof createMemoryPg>;
 
-export function createMemoryPg(tables: PgTable[], options: { now?: () => Date } = {}) {
+/**
+ * `missingIndexes`: unique indexes of the schema left out, as on a database a
+ * migration has not reached yet (an ON CONFLICT on them is then refused, 42P10).
+ */
+export function createMemoryPg(tables: PgTable[], options: { now?: () => Date; missingIndexes?: string[] } = {}) {
   const clock = options.now ?? (() => new Date());
   const meta = new Map<string, TableMeta>();
   const data = new Map<string, Row[]>();
@@ -433,7 +437,10 @@ export function createMemoryPg(tables: PgTable[], options: { now?: () => Date } 
       if (column.isUnique || column.primary) uniqueSets.push([column.name]);
     }
     for (const index of config.indexes) {
-      if (index.config.unique) uniqueSets.push(index.config.columns.map(column => (column as { name: string }).name));
+      // Unique indexes on expressions or partial ones (cv_applications_submission_unique) are not emulated.
+      if (!index.config.unique || index.config.where || index.config.columns.some(column => is(column, SQL))) continue;
+      if (index.config.name && options.missingIndexes?.includes(index.config.name)) continue;
+      uniqueSets.push(index.config.columns.map(column => (column as { name: string }).name));
     }
     for (const constraint of config.uniqueConstraints) uniqueSets.push(constraint.columns.map(column => column.name));
     meta.set(config.name, { columns, defaults, serial, uniqueSets });
@@ -557,6 +564,10 @@ export function createMemoryPg(tables: PgTable[], options: { now?: () => Date } 
         if (parser.acceptPunct("(")) {
           do target.push(parser.ident()); while (parser.acceptPunct(","));
           parser.expectPunct(")");
+          // As PostgreSQL: the target must be the columns of a unique index.
+          if (!tableMeta(table).uniqueSets.some(set => set.length === target.length && set.every(column => target.includes(column)))) {
+            throw Object.assign(new Error("there is no unique or exclusion constraint matching the ON CONFLICT specification"), { code: "42P10" });
+          }
         }
         parser.expectWord("do");
         if (parser.acceptWord("nothing")) onConflict = { action: "nothing" };
