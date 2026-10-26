@@ -19,6 +19,7 @@ describe("polices auto-hébergées (PUB-COOKIE-02 / PERF-05)", () => {
     expect(csp).not.toMatch(/fonts\.googleapis\.com|fonts\.gstatic\.com/);
     expect(csp).toContain("font-src 'self' data:;");
     expect(read("server/_core/index.ts")).not.toMatch(/fonts\.googleapis\.com|fonts\.gstatic\.com/);
+    expect(read("server/_core/contentSecurityPolicy.ts")).not.toMatch(/fonts\.googleapis\.com|fonts\.gstatic\.com/);
   });
 
   it("sert DM Sans et Playfair Display depuis le build, sous-ensemble latin uniquement", () => {
