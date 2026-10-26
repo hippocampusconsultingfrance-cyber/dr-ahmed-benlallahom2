@@ -9,6 +9,10 @@ import { postgresErrorCode } from "../languageColumns";
 
 export const GENERIC_INTERNAL_ERROR_MESSAGE = "Une erreur interne est survenue. Veuillez réessayer dans quelques instants.";
 
+// Generic server messages, in French like GENERIC_INTERNAL_ERROR_MESSAGE, for
+// refusals no procedure answers itself (reasons duplicate_record and
+// related_record_invalid): a public page in another language shows its own
+// generic message for a reason it does not know, the admin shows this one.
 export const DATABASE_DUPLICATE_MESSAGE = "Cet enregistrement existe déjà : rechargez la page pour voir son état actuel.";
 export const DATABASE_REFERENCE_MESSAGE = "Cette opération vise un élément qui n’existe plus, ou qui est encore utilisé ailleurs : rechargez la page, puis réessayez.";
 

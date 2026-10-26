@@ -290,8 +290,8 @@ describe("écran d’une mission employeur", () => {
     await refusal("association_application_not_found");
     expect(state.invalidateCandidates).toHaveBeenCalledTimes(2);
     // Any other failure keeps the server's message.
-    await refusal(undefined, "Cet enregistrement existe déjà : rechargez la page pour voir son état actuel.");
-    expect(state.toasts).toEqual([["error", briefGone], ["error", applicationGone], ["error", "Cet enregistrement existe déjà : rechargez la page pour voir son état actuel."]]);
+    await refusal(undefined, "Une erreur interne est survenue. Veuillez réessayer dans quelques instants. (réf. 1a2b3c4d)");
+    expect(state.toasts).toEqual([["error", briefGone], ["error", applicationGone], ["error", "Une erreur interne est survenue. Veuillez réessayer dans quelques instants. (réf. 1a2b3c4d)"]]);
     expect(state.invalidateCandidates).toHaveBeenCalledTimes(2);
   });
 
