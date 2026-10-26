@@ -24,6 +24,8 @@ const state = vi.hoisted(() => {
       sessions: new Map<string, FakeSession>(),
       refunds: [] as Array<{ id: string; amount: number; payment_intent: string; status: string }>,
       expireCalls: [] as string[],
+      // Paiement qui aboutit pendant que le site ferme la session.
+      payWhileClosing: null as null | ((session: FakeSession) => void),
     },
   };
 });
@@ -33,7 +35,8 @@ process.env.CRON_SECRET = CRON_SECRET;
 
 vi.mock("stripe", async importOriginal => {
   const { default: RealStripe } = await importOriginal<typeof import("stripe")>();
-  const unreachable = () => Object.assign(new Error("An error occurred with our connection to Stripe."), { name: "StripeConnectionError" });
+  const { StripeConnectionError, StripeInvalidRequestError } = RealStripe.errors;
+  const unreachable = () => new StripeConnectionError({ message: "An error occurred with our connection to Stripe." });
   const fakeStripe = state.stripe;
   // Vraie vérification des signatures ; aucune requête vers Stripe.
   class FakeStripe extends RealStripe {
@@ -45,13 +48,14 @@ vi.mock("stripe", async importOriginal => {
             retrieve: async (id: string) => {
               if (!fakeStripe.reachable) throw unreachable();
               const session = fakeStripe.sessions.get(id);
-              if (!session) throw Object.assign(new Error("No such checkout session"), { name: "StripeInvalidRequestError" });
+              if (!session) throw new StripeInvalidRequestError({ message: `No such checkout.session: '${id}'`, type: "invalid_request_error", code: "resource_missing", statusCode: 404 });
               return { ...session };
             },
             expire: async (id: string) => {
               if (!fakeStripe.reachable) throw unreachable();
               const session = fakeStripe.sessions.get(id);
-              if (!session || session.status !== "open") throw Object.assign(new Error("Only open sessions can be expired"), { name: "StripeInvalidRequestError" });
+              if (session && session.status === "open") fakeStripe.payWhileClosing?.(session);
+              if (!session || session.status !== "open") throw new StripeInvalidRequestError({ message: "Only Checkout Sessions with a status of `open` can be expired.", type: "invalid_request_error", statusCode: 400 });
               fakeStripe.expireCalls.push(id);
               session.status = "expired";
               return { ...session };
@@ -123,6 +127,7 @@ beforeEach(() => {
   state.stripe.sessions.clear();
   state.stripe.refunds.length = 0;
   state.stripe.expireCalls.length = 0;
+  state.stripe.payWhileClosing = null;
 });
 
 function seedAppointment(overrides: Record<string, unknown> = {}) {
@@ -228,6 +233,50 @@ describe("EXPL-01 — un paiement reçu est confirmé même sans webhook", () =>
     expect(await runHoldCleanup()).toEqual({ status: 200, body: { ok: true, scheduler: "vercel-cron", released: 0, confirmed: 1, kept: 0 } });
     expect(appointmentRow()).toMatchObject({ paymentStatus: "completed", appointmentStatus: "confirmed", slotKey: seeded.slotKey });
     expectPostPaymentEmailsSentOnce();
+    expect(owner.notifyOwner).not.toHaveBeenCalled();
+  });
+
+  it("n’envoie pas de confirmation au patient quand le paiement n’est constaté qu’après l’heure de la consultation, et prévient le médecin", async () => {
+    const appointmentDate = new Date(Date.now() - 10 * 60 * 1000);
+    seedAppointment({ appointmentDate, slotKey: appointmentDate.toISOString(), holdExpiresAt: new Date(Date.now() - 40 * 60 * 1000) });
+    stripeSession();
+
+    expect((await runHoldCleanup()).body).toMatchObject({ released: 0, confirmed: 1, kept: 0 });
+    expect(appointmentRow()).toMatchObject({ paymentStatus: "completed", appointmentStatus: "confirmed" });
+    expect(emails.sendConfirmationEmail).not.toHaveBeenCalled();
+    expect(emails.sendOwnerNotificationEmail).toHaveBeenCalledTimes(1);
+    expect(owner.notifyOwner).toHaveBeenCalledTimes(1);
+    expect(owner.notifyOwner.mock.calls[0][0].title).toBe(`Confirmation non envoyée avant le rendez-vous (${TRACKING_ID})`);
+  });
+
+  it("garde le créneau quand la session est payée pendant sa fermeture, puis le confirme au passage suivant", async () => {
+    const seeded = seedAppointment({ holdExpiresAt: new Date(Date.now() - 60 * 1000) });
+    stripeSession({ status: "open", payment_status: "unpaid", payment_intent: null });
+    state.stripe.payWhileClosing = session => Object.assign(session, { status: "complete", payment_status: "paid", payment_intent: PAYMENT_INTENT });
+
+    expect((await runHoldCleanup()).body).toMatchObject({ released: 0, confirmed: 0, kept: 1 });
+    expect(appointmentRow()).toMatchObject({ paymentStatus: "pending", appointmentStatus: "held", slotKey: seeded.slotKey });
+    expect(emails.sendConfirmationEmail).not.toHaveBeenCalled();
+
+    expect((await runHoldCleanup()).body).toMatchObject({ released: 0, confirmed: 1, kept: 0 });
+    expect(appointmentRow()).toMatchObject({ paymentStatus: "completed", appointmentStatus: "confirmed", stripePaymentIntentId: PAYMENT_INTENT, slotKey: seeded.slotKey });
+    expectPostPaymentEmailsSentOnce();
+  });
+
+  it("libère la réservation dont Stripe ne connaît pas la session (autre mode ou compte) et prévient le médecin une fois", async () => {
+    seedAppointment({ holdExpiresAt: new Date(Date.now() - 60 * 1000), stripeSessionId: "cs_live_other_account" });
+
+    expect((await runHoldCleanup()).body).toMatchObject({ released: 1, confirmed: 0, kept: 0 });
+    expect(appointmentRow()).toMatchObject({ paymentStatus: "pending", appointmentStatus: "cancelled", slotKey: null, holdExpiresAt: null });
+    expect(owner.notifyOwner).toHaveBeenCalledTimes(1);
+    const [alert, options] = owner.notifyOwner.mock.calls[0];
+    expect(alert.title).toBe(`Réservation libérée : session Stripe introuvable (${TRACKING_ID})`);
+    expect(alert.content).toContain("Session Stripe : cs_live_other_account");
+    expect(options).toEqual({ idempotencyKey: `appointment-hold-missing-session-${TRACKING_ID}` });
+    expect(console.warn).toHaveBeenCalledWith(expect.stringContaining("hold released"), { trackingId: TRACKING_ID });
+
+    expect((await runHoldCleanup()).body).toMatchObject({ released: 0, confirmed: 0, kept: 0 });
+    expect(owner.notifyOwner).toHaveBeenCalledTimes(1);
   });
 
   it("garde le créneau tant que Stripe ne répond pas, puis le libère quand la session a expiré sans paiement", async () => {
