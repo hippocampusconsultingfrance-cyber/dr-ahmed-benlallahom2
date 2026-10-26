@@ -81,7 +81,7 @@ export default function AdminAttentionPanel({ onOpenAppointments }: { onOpenAppo
           <AttentionList
             id="admin-attention-deliveries"
             title="Envois après paiement en échec"
-            description="Le patient n’a pas reçu sa confirmation ou sa facture, ou vous n’avez pas reçu la notification. Sur le rendez-vous : « Renvoyer », ou « Télécharger la facture » pour l’envoyer vous-même."
+            description="Le patient n’a pas reçu sa confirmation, sa facture ou l’email de son remboursement, ou vous n’avez pas reçu la notification ou l’alerte de remboursement. Sur le rendez-vous : « Renvoyer », ou « Télécharger la facture » pour l’envoyer vous-même."
             total={failed.total}
             items={failed.items.map(item => ({ ...item, detail: jobLabels(item.jobTypes) }))}
           />
@@ -90,7 +90,7 @@ export default function AdminAttentionPanel({ onOpenAppointments }: { onOpenAppo
           <AttentionList
             id="admin-attention-retrying"
             title="Envois en échec, nouvel essai prévu"
-            description="Une tentative a échoué ou a été interrompue ; l’essai automatique suivant n’a lieu qu’à une exécution planifiée, parfois le lendemain. D’ici là, le patient n’a pas sa confirmation ou sa facture, ou vous n’avez pas la notification : « Renvoyer » sur le rendez-vous relance l’envoi tout de suite."
+            description="Une tentative a échoué ou a été interrompue ; l’essai automatique suivant n’a lieu qu’à une exécution planifiée, parfois le lendemain. D’ici là, le patient n’a pas sa confirmation, sa facture ou l’email de son remboursement, ou vous n’avez pas la notification ou l’alerte : « Renvoyer » sur le rendez-vous relance l’envoi tout de suite."
             total={retrying.total}
             items={retrying.items.map(item => ({ ...item, detail: retryingDetail(item) }))}
           />

@@ -70,7 +70,7 @@ describe("EXPL-02 — envois après paiement sur la fiche du rendez-vous", () =>
   it("affiche confirmation, facture et notification médecin : envoyée, en échec ou en attente", () => {
     const html = renderToStaticMarkup(createElement(AppointmentDeliveries, {
       trackingId: "APTUI0000001",
-      paid: true,
+      paymentStatus: "completed",
       invoiceNumber: "FAC-2026-000007",
       deliveries: [delivery("owner", "pending", 0), delivery("confirmation", "sent"), delivery("invoice", "failed", 6)],
     }));
@@ -87,27 +87,40 @@ describe("EXPL-02 — envois après paiement sur la fiche du rendez-vous", () =>
   });
 
   it("ne propose « Renvoyer » que s’il reste un envoi non abouti, et la facture que si elle a été émise", () => {
-    expect(canRetryDeliveries([delivery("confirmation", "sent"), delivery("invoice", "sending"), delivery("owner", "not_sent")], true)).toBe(false);
-    expect(canRetryDeliveries([delivery("confirmation", "retrying")], true)).toBe(true);
-    expect(canRetryDeliveries([delivery("invoice", "pending", 0)], true)).toBe(true);
-    expect(canRetryDeliveries([delivery("invoice", "interrupted")], true)).toBe(true);
-    const html = renderToStaticMarkup(createElement(AppointmentDeliveries, { trackingId: "APTUI0000002", paid: true, invoiceNumber: null, deliveries: [delivery("confirmation", "sent"), delivery("owner", "sending")] }));
+    expect(canRetryDeliveries([delivery("confirmation", "sent"), delivery("invoice", "sending"), delivery("owner", "not_sent")], "completed")).toBe(false);
+    expect(canRetryDeliveries([delivery("confirmation", "retrying")], "completed")).toBe(true);
+    expect(canRetryDeliveries([delivery("invoice", "pending", 0)], "completed")).toBe(true);
+    expect(canRetryDeliveries([delivery("invoice", "interrupted")], "completed")).toBe(true);
+    const html = renderToStaticMarkup(createElement(AppointmentDeliveries, { trackingId: "APTUI0000002", paymentStatus: "completed", invoiceNumber: null, deliveries: [delivery("confirmation", "sent"), delivery("owner", "sending")] }));
     expect(html).toContain("Notification médecin : en cours d’envoi");
     expect(html).not.toContain("Renvoyer");
     expect(html).not.toContain("Télécharger la facture");
-    expect(renderToStaticMarkup(createElement(AppointmentDeliveries, { trackingId: "APTUI0000003", paid: true, invoiceNumber: null, deliveries: [] }))).toBe("");
+    expect(renderToStaticMarkup(createElement(AppointmentDeliveries, { trackingId: "APTUI0000003", paymentStatus: "completed", invoiceNumber: null, deliveries: [] }))).toBe("");
   });
 
   it("ne propose pas « Renvoyer » sur un rendez-vous qui n’est plus payé, mais garde l’état des envois et la facture", () => {
-    expect(canRetryDeliveries([delivery("confirmation", "failed", 3, 3)], false)).toBe(false);
-    const html = renderToStaticMarkup(createElement(AppointmentDeliveries, { trackingId: "APTUI0000006", paid: false, invoiceNumber: "FAC-2026-000011", deliveries: [delivery("confirmation", "failed", 3, 3), delivery("invoice", "sent")] }));
+    expect(canRetryDeliveries([delivery("confirmation", "failed", 3, 3)], "refunded")).toBe(false);
+    const html = renderToStaticMarkup(createElement(AppointmentDeliveries, { trackingId: "APTUI0000006", paymentStatus: "refunded", invoiceNumber: "FAC-2026-000011", deliveries: [delivery("confirmation", "failed", 3, 3), delivery("invoice", "sent")] }));
     expect(html).toContain("Confirmation : en échec (3/3)");
     expect(html).not.toContain("Renvoyer");
     expect(html).toContain("Télécharger la facture");
   });
 
+  it("montre et laisse renvoyer l’email et l’alerte d’un remboursement fait dans Stripe (RES-06)", () => {
+    const refundNotices = [delivery("confirmation", "sent"), delivery("invoice", "failed", 7, 7), delivery("refund", "retrying", 1, 7), delivery("refund_owner", "sent")];
+    const html = renderToStaticMarkup(createElement(AppointmentDeliveries, { trackingId: "APTUI0000007", paymentStatus: "refunded", invoiceNumber: null, deliveries: refundNotices }));
+    expect(html).toContain("Email de remboursement : en échec, nouvel essai prévu (1/7)");
+    expect(html.indexOf("Alerte remboursement : envoyée")).toBeGreaterThan(html.indexOf("Email de remboursement"));
+    expect(html).toContain("Renvoyer");
+    // Refunded: only the refund notices are sent again, never the post-payment emails.
+    expect(canRetryDeliveries([delivery("invoice", "failed", 7, 7), delivery("refund", "sent")], "refunded")).toBe(false);
+    expect(canRetryDeliveries([delivery("refund", "failed", 7, 7)], "completed")).toBe(false);
+    expect(canRetryDeliveries([delivery("refund_owner", "interrupted")], "refunded")).toBe(true);
+    expect(canRetryDeliveries([delivery("confirmation", "failed")], "pending")).toBe(false);
+  });
+
   it("« Renvoyer » relance le rendez-vous après confirmation et dit si l’envoi est reparti", async () => {
-    const tree = AppointmentDeliveries({ trackingId: "APTUI0000004", paid: true, invoiceNumber: null, deliveries: [delivery("confirmation", "failed", 6)] });
+    const tree = AppointmentDeliveries({ trackingId: "APTUI0000004", paymentStatus: "completed", invoiceNumber: null, deliveries: [delivery("confirmation", "failed", 6)] });
     button(tree, "Renvoyer")();
     expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining("APTUI0000004"));
     expect(state.retryMutate).toHaveBeenCalledWith({ trackingId: "APTUI0000004" });
@@ -125,7 +138,7 @@ describe("EXPL-02 — envois après paiement sur la fiche du rendez-vous", () =>
   });
 
   it("« Télécharger la facture » enregistre le PDF régénéré par le serveur", async () => {
-    const tree = AppointmentDeliveries({ trackingId: "APTUI0000005", paid: true, invoiceNumber: "FAC-2026-000009", deliveries: [delivery("invoice", "sent")] });
+    const tree = AppointmentDeliveries({ trackingId: "APTUI0000005", paymentStatus: "completed", invoiceNumber: "FAC-2026-000009", deliveries: [delivery("invoice", "sent")] });
     button(tree, "Télécharger la facture")();
     expect(state.invoiceMutate).toHaveBeenCalledWith({ trackingId: "APTUI0000005" });
     const file = { invoiceNumber: "FAC-2026-000009", filename: "Facture-FAC-2026-000009.pdf", contentBase64: "JVBERi0=" };
@@ -187,6 +200,7 @@ describe("EXPL-02 — encart « À traiter » du tableau de bord", () => {
     expect(html).toContain("APTTODOUI003");
     expect(retryingDetail({ jobTypes: ["confirmation", "invoice"], nextAttemptAt: "2026-10-27T06:20:00.000Z" })).toBe("Confirmation, Facture · nouvel essai automatique au plus tôt le 27/10/2026 07:20:00");
     expect(retryingDetail({ jobTypes: ["confirmation"], nextAttemptAt: null })).toBe("Confirmation · envoi interrompu, nouvel essai à la prochaine exécution planifiée");
+    expect(retryingDetail({ jobTypes: ["refund", "refund_owner"], nextAttemptAt: null })).toBe("Email de remboursement, Alerte remboursement · envoi interrompu, nouvel essai à la prochaine exécution planifiée");
   });
 
   it("dit qu’il n’y a rien à traiter, ou que l’encart n’a pas pu être chargé", () => {

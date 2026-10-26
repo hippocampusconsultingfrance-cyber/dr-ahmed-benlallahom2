@@ -2,9 +2,9 @@ import { and, eq, isNull, ne, or } from "drizzle-orm";
 import { appointments } from "../drizzle/schema";
 import { getDb } from "./db";
 import { mutationRowCount } from "./dbMutation";
-import { enqueueAppointmentFulfillment, processAppointmentFulfillmentNow } from "./appointmentFulfillment";
+import { enqueueAppointmentFulfillment, enqueueStripeRefundNotices, processAppointmentFulfillmentNow } from "./appointmentFulfillment";
 import { notifyOwner } from "./_core/notification";
-import { sendRefundConfirmationEmail, sendUnconfirmablePaymentEmail } from "./_core/notifications";
+import { formatPatientAmount, sendUnconfirmablePaymentEmail } from "./_core/notifications";
 import { emailLanguageFor } from "./emailLanguage";
 import { isUnconfirmedPaidAppointment } from "./appointmentAdminActions";
 
@@ -59,8 +59,9 @@ const UNCONFIRMABLE_REASON_LABELS: Record<UnconfirmablePaymentReason, string> = 
   hold_released: "la réservation temporaire du créneau a expiré ou a été annulée avant la réception du paiement ; le créneau a pu être attribué à un autre patient",
 };
 
+/** French amount of the owner alerts, written as in the patient emails (« 100,00 € »). */
 function formatAlertAmount(cents: number | null) {
-  return cents === null ? "inconnu" : `${(cents / 100).toFixed(2)} €`;
+  return cents === null ? "inconnu" : formatPatientAmount(cents / 100);
 }
 
 export function buildUnconfirmablePaymentAlert(input: {
@@ -308,7 +309,20 @@ export type ChargeEventResult = {
 };
 
 /** Recorded on an appointment whose refund reached the site only through Stripe's notification. */
-const STRIPE_REFUND_CANCELLATION_REASON = "Remboursement constaté chez Stripe (fait hors du tableau de bord du site, ou enregistrement interrompu)";
+export const STRIPE_REFUND_CANCELLATION_REASON = "Remboursement constaté chez Stripe (fait hors du tableau de bord du site, ou enregistrement interrompu)";
+/** Same, for a payment never attached to a confirmed slot: the patient email then says so. */
+export const STRIPE_UNCONFIRMED_REFUND_CANCELLATION_REASON = "Remboursement constaté chez Stripe d’un paiement reçu sans créneau confirmé (fait hors du tableau de bord du site, ou enregistrement interrompu)";
+
+/**
+ * The payment that a refund recorded from Stripe's notification was for: a
+ * paid appointment, or a payment never attached to a confirmed slot. Null for
+ * a refund made from the dashboard, which emails the patient itself.
+ */
+export function stripeRecordedRefundOf(appointment: Pick<Appointment, "paymentStatus" | "cancellationReason">): "paid" | "unconfirmed" | null {
+  if (appointment.paymentStatus !== "refunded") return null;
+  if (appointment.cancellationReason === STRIPE_REFUND_CANCELLATION_REASON) return "paid";
+  return appointment.cancellationReason === STRIPE_UNCONFIRMED_REFUND_CANCELLATION_REASON ? "unconfirmed" : null;
+}
 
 function finiteNumber(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
@@ -334,11 +348,11 @@ export function buildStripeRefundAlert(input: {
   return {
     title: `Remboursement constaté chez Stripe (${input.trackingId})`,
     content: [
-      `Stripe signale le remboursement intégral du paiement du rendez-vous ${input.trackingId} (${input.refundAmount} €), qui n’était pas encore enregistré sur le site. Il vient de l’être.`,
+      `Stripe signale le remboursement intégral du paiement du rendez-vous ${input.trackingId} (${formatPatientAmount(input.refundAmount)}), qui n’était pas encore enregistré sur le site. Il vient de l’être.`,
       effect,
       input.patientNotified
         ? "Le patient a été prévenu du remboursement par email."
-        : "L’email de remboursement au patient n’a pas pu être envoyé : prévenez-le directement.",
+        : "L’email de remboursement au patient n’est pas encore parti : le site le renvoie automatiquement (état visible sur le rendez-vous, onglet Réservations, et dans « À traiter »). Vous pouvez aussi prévenir le patient directement.",
       `Référence : ${input.trackingId}`,
       `Paiement Stripe (PaymentIntent) : ${input.paymentIntentId}`,
     ].join("\n"),
@@ -402,6 +416,17 @@ async function findAppointmentByPaymentIntent(paymentIntentId: string) {
 }
 
 /**
+ * The patient email and the owner alert of a refund recorded from Stripe go
+ * through the post-payment queue (RES-06): attempted right away, then retried,
+ * and shown on the appointment and in « À traiter » while they fail, instead
+ * of being lost when the email provider is down. Queuing is idempotent.
+ */
+async function sendStripeRefundNotices(appointmentId: number) {
+  await enqueueStripeRefundNotices(appointmentId);
+  await processFulfillmentBestEffort(appointmentId);
+}
+
+/**
  * Handles a signed `charge.refunded` event: a full refund made in Stripe (or
  * one the dashboard could not finish recording) is applied to the appointment
  * found by its PaymentIntent, with the same effect as a dashboard refund. The
@@ -415,18 +440,29 @@ export async function handleChargeRefunded(charge: ChargePayload, now = new Date
   // A payment never attached to the row (second payment of a booking) is
   // refunded from the dashboard, which emails the patient itself.
   if (!appointment) return { httpStatus: 200, body: { received: true }, outcome: "not_attached" };
-  if (appointment.paymentStatus === "refunded") return { httpStatus: 200, body: { received: true, duplicate: true }, outcome: "duplicate" };
+  if (appointment.paymentStatus === "refunded") {
+    // Recorded by an earlier delivery of this notification, which may have
+    // failed right after the update: its notices are queued again (no new job
+    // when they exist, nothing sent twice). A dashboard refund sends its own.
+    if (stripeRecordedRefundOf(appointment)) await sendStripeRefundNotices(appointment.id);
+    return { httpStatus: 200, body: { received: true, duplicate: true }, outcome: "duplicate" };
+  }
   const paid = appointment.paymentStatus === "completed";
   if (!paid && !isUnconfirmedPaidAppointment(appointment)) return { httpStatus: 200, body: { received: true }, outcome: "not_attached" };
 
   const refundedCents = finiteNumber(charge.amount_refunded);
   if (charge.refunded !== true) {
     // Partial refund (gesture made in Stripe): the site only records full
-    // refunds, so the appointment stays paid and the owner is told once.
-    await notifyOwner(
+    // refunds, so the appointment stays paid and the owner is told once. The
+    // alert is the only trace of it: Stripe redelivers until it goes out.
+    const delivered = await notifyOwner(
       buildPartialRefundAlert({ trackingId: appointment.trackingId, refundedCents, amountCents: finiteNumber(charge.amount), paymentIntentId }),
       { idempotencyKey: `appointment-partial-refund-${appointment.trackingId}-${refundedCents ?? "unknown"}` },
     ).catch(() => false);
+    if (!delivered) {
+      console.error("Owner alert for a partial Stripe refund was not delivered; asking Stripe to retry", { trackingId: appointment.trackingId });
+      return { httpStatus: 500, body: { received: false }, outcome: "alert_not_delivered" };
+    }
     return { httpStatus: 200, body: { received: true, partial: true }, outcome: "partial_refund" };
   }
 
@@ -435,7 +471,8 @@ export async function handleChargeRefunded(charge: ChargePayload, now = new Date
   const result = await db.update(appointments).set({
     paymentStatus: "refunded",
     ...(cancelsAppointment ? { appointmentStatus: "cancelled" as const, slotKey: null } : {}),
-    cancellationReason: STRIPE_REFUND_CANCELLATION_REASON,
+    // Also tells the queued notices which payment this was (stripeRecordedRefundOf).
+    cancellationReason: paid ? STRIPE_REFUND_CANCELLATION_REASON : STRIPE_UNCONFIRMED_REFUND_CANCELLATION_REASON,
     cancelledAt: appointment.cancelledAt ?? now,
     refundAmount,
     refundedAt: now,
@@ -455,23 +492,8 @@ export async function handleChargeRefunded(charge: ChargePayload, now = new Date
   }
   console.log("Stripe refund recorded for appointment", { trackingId: appointment.trackingId });
 
-  // Same key as the dashboard refund: the patient is told once.
-  const patientNotified = await sendRefundConfirmationEmail(
-    appointment.customerEmail,
-    appointment.customerName,
-    appointment.trackingId,
-    new Date(appointment.appointmentDate),
-    refundAmount,
-    { context: paid ? "refund" : "unconfirmed_payment", idempotencyKey: `appointment-refund-${appointment.trackingId}`, language: emailLanguageFor(appointment.language) },
-  );
-  await notifyOwner(buildStripeRefundAlert({
-    trackingId: appointment.trackingId,
-    refundAmount,
-    paymentIntentId,
-    effect: cancelsAppointment ? "cancelled" : paid ? "status_kept" : "unconfirmed_payment",
-    appointmentStatus: appointment.appointmentStatus,
-    patientNotified,
-  }), { idempotencyKey: `appointment-stripe-refund-${appointment.trackingId}` }).catch(() => false);
+  // A queuing failure answers 500: the redelivery finds the refund recorded and queues them again.
+  await sendStripeRefundNotices(appointment.id);
   return { httpStatus: 200, body: { received: true, refunded: true }, outcome: "refunded" };
 }
 

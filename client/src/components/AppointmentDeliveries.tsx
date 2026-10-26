@@ -4,17 +4,25 @@ import { Button } from "@/components/ui/button";
 import { trpc } from "@/lib/trpc";
 import { downloadInvoicePdf } from "./invoicePdfDownload";
 
-export type AppointmentDeliveryJob = "confirmation" | "invoice" | "owner";
+export type AppointmentDeliveryJob = "confirmation" | "invoice" | "owner" | "refund" | "refund_owner";
 export type AppointmentDeliveryState = "sent" | "failed" | "retrying" | "pending" | "sending" | "interrupted" | "not_sent";
 export type AppointmentDeliveryView = { jobType: AppointmentDeliveryJob; state: AppointmentDeliveryState; attempts: number; maxAttempts: number };
 
-/** In the order the practitioner reads them (EXPL-02). */
-const DELIVERY_ORDER: AppointmentDeliveryJob[] = ["confirmation", "invoice", "owner"];
+/** In the order the practitioner reads them (EXPL-02), then the notices of a refund made in Stripe (RES-06). */
+const DELIVERY_ORDER: AppointmentDeliveryJob[] = ["confirmation", "invoice", "owner", "refund", "refund_owner"];
 
 export const DELIVERY_JOB_LABELS: Record<AppointmentDeliveryJob, string> = {
   confirmation: "Confirmation",
   invoice: "Facture",
   owner: "Notification médecin",
+  refund: "Email de remboursement",
+  refund_owner: "Alerte remboursement",
+};
+
+/** What « Renvoyer » sends again, as the server: post-payment emails of a paid appointment, refund notices of a refunded one. */
+const RETRYABLE_JOBS: Record<string, AppointmentDeliveryJob[]> = {
+  completed: ["confirmation", "invoice", "owner"],
+  refunded: ["refund", "refund_owner"],
 };
 
 const DELIVERY_STATE_LABELS: Record<AppointmentDeliveryState, string> = {
@@ -45,20 +53,23 @@ export function deliveryLabel(delivery: AppointmentDeliveryView): string {
 
 /**
  * « Renvoyer » has something to send now: a job of a paid appointment failed,
- * was interrupted, or still waits for an attempt (not one being sent). The
- * server refuses it once the appointment is no longer paid (refunded…).
+ * was interrupted, or still waits for an attempt (not one being sent). Once
+ * the appointment is refunded, only the notices of that refund (RES-06); the
+ * server refuses the other payment statuses.
  */
-export function canRetryDeliveries(deliveries: AppointmentDeliveryView[], paid: boolean): boolean {
-  return paid && deliveries.some(delivery => ["failed", "retrying", "pending", "interrupted"].includes(delivery.state));
+export function canRetryDeliveries(deliveries: AppointmentDeliveryView[], paymentStatus: string): boolean {
+  const retryable = RETRYABLE_JOBS[paymentStatus] ?? [];
+  return deliveries.some(delivery => retryable.includes(delivery.jobType) && ["failed", "retrying", "pending", "interrupted"].includes(delivery.state));
 }
 
 /**
  * Post-payment emails of an appointment (EXPL-02): confirmation, invoice and
- * practitioner notification, sent, failed or pending; « Renvoyer » sends the
- * ones that did not go out right away, « Télécharger la facture » regenerates
- * the invoice already issued, identical to the one emailed.
+ * practitioner notification, and the notices of a refund made in Stripe
+ * (RES-06), sent, failed or pending; « Renvoyer » sends the ones that did not
+ * go out right away, « Télécharger la facture » regenerates the invoice
+ * already issued, identical to the one emailed.
  */
-export default function AppointmentDeliveries({ trackingId, paid, deliveries, invoiceNumber }: { trackingId: string; paid: boolean; deliveries: AppointmentDeliveryView[]; invoiceNumber: string | null }) {
+export default function AppointmentDeliveries({ trackingId, paymentStatus, deliveries, invoiceNumber }: { trackingId: string; paymentStatus: string; deliveries: AppointmentDeliveryView[]; invoiceNumber: string | null }) {
   const utils = trpc.useUtils();
   const retry = trpc.admin.appointments.retryFulfillment.useMutation({
     onSuccess: result => {
@@ -88,7 +99,7 @@ export default function AppointmentDeliveries({ trackingId, paid, deliveries, in
         {invoiceNumber && <li className="rounded px-2 py-1 font-mono text-xs text-muted-foreground">{invoiceNumber}</li>}
       </ul>
       <div className="flex w-full flex-wrap gap-2 sm:w-auto">
-        {canRetryDeliveries(deliveries, paid) && (
+        {canRetryDeliveries(deliveries, paymentStatus) && (
           <Button size="sm" variant="outline" className={buttonClass} disabled={retry.isPending}
             onClick={() => {
               if (!window.confirm(`Renvoyer maintenant les envois non aboutis du rendez-vous ${trackingId} ? Les envois déjà effectués ne sont pas répétés.`)) return;

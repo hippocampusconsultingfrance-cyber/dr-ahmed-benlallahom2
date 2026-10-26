@@ -7,6 +7,7 @@ import {
   sendCustomerConfirmationSMS,
   sendInvoiceEmail,
   sendOwnerNotificationEmail,
+  sendRefundConfirmationEmail,
 } from "./_core/notifications";
 import { notifyOwner } from "./_core/notification";
 import { emailLanguageFor } from "./emailLanguage";
@@ -41,12 +42,33 @@ export const APPOINTMENT_FULFILLMENT_RETRY_DELAYS_MS = [10 * 60_000, 60 * 60_000
  * booking first, even when the patient email or the invoice fails.
  */
 export const APPOINTMENT_FULFILLMENT_JOB_TYPES = ["owner", "confirmation", "invoice"] as const;
-type FulfillmentJobType = (typeof APPOINTMENT_FULFILLMENT_JOB_TYPES)[number];
+/**
+ * Notices of a full refund that reached the site only through Stripe's
+ * charge.refunded (RES-06), in this order: the patient email, then the owner
+ * alert, which says whether the patient was told. Same queue, attempts and
+ * dashboard as the post-payment emails, for a refunded appointment.
+ */
+export const STRIPE_REFUND_NOTICE_JOB_TYPES = ["refund", "refund_owner"] as const;
+type PostPaymentJobType = (typeof APPOINTMENT_FULFILLMENT_JOB_TYPES)[number];
+type RefundNoticeJobType = (typeof STRIPE_REFUND_NOTICE_JOB_TYPES)[number];
+type FulfillmentJobType = PostPaymentJobType | RefundNoticeJobType;
+const JOB_ORDER: readonly FulfillmentJobType[] = [...APPOINTMENT_FULFILLMENT_JOB_TYPES, ...STRIPE_REFUND_NOTICE_JOB_TYPES];
+
+function isRefundNoticeJob(jobType: string): jobType is RefundNoticeJobType {
+  return (STRIPE_REFUND_NOTICE_JOB_TYPES as readonly string[]).includes(jobType);
+}
+
+/** Payment status an appointment must have for a job to be sent: paid, or refunded for the refund notices. */
+function jobPaymentStatus(jobType: string) {
+  return isRefundNoticeJob(jobType) ? "refunded" : "completed";
+}
 
 const JOB_LABELS: Record<FulfillmentJobType, string> = {
   owner: "de votre notification de nouvelle réservation",
   confirmation: "de la confirmation au patient",
   invoice: "de la facture au patient",
+  refund: "de l’email de remboursement au patient",
+  refund_owner: "de votre alerte de remboursement",
 };
 
 type Database = NonNullable<Awaited<ReturnType<typeof getDb>>>;
@@ -65,6 +87,13 @@ function queueJob(db: Database, appointmentId: number, jobType: FulfillmentJobTy
     target: [appointmentFulfillmentJobs.appointmentId, appointmentFulfillmentJobs.jobType],
     set: { updatedAt: new Date() },
   });
+}
+
+/** Queues the notices of a refund recorded from Stripe's notification (RES-06); idempotent. */
+export async function enqueueStripeRefundNotices(appointmentId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+  for (const jobType of STRIPE_REFUND_NOTICE_JOB_TYPES) await queueJob(db, appointmentId, jobType);
 }
 
 export async function enqueueAppointmentFulfillment(appointmentId: number) {
@@ -167,12 +196,17 @@ async function runJob(id: number) {
   if (!db) throw new Error("Database connection failed");
   const [job] = await db.select().from(appointmentFulfillmentJobs).where(eq(appointmentFulfillmentJobs.id, id)).limit(1);
   if (!job || job.status !== "running") return { skipped: true };
+  const jobType = job.jobType as FulfillmentJobType;
   const [appointment] = await db.select().from(appointments).where(eq(appointments.id, job.appointmentId)).limit(1);
-  if (!appointment || appointment.paymentStatus !== "completed") {
-    await db.update(appointmentFulfillmentJobs).set({ status: "completed", finishedAt: new Date(), lastError: "appointment_not_paid_or_missing" }).where(eq(appointmentFulfillmentJobs.id, id));
+  // Loaded only for the refund notices (the webhook module queues the post-payment jobs).
+  const stripeRefund = isRefundNoticeJob(jobType) ? await import("./appointmentPaymentWebhook") : null;
+  const refundOf = stripeRefund && appointment ? stripeRefund.stripeRecordedRefundOf(appointment) : null;
+  // A refund closes the post-payment jobs still waiting; the refund notices
+  // only go out for a refund recorded from Stripe's notification.
+  if (!appointment || appointment.paymentStatus !== jobPaymentStatus(jobType) || (stripeRefund && !refundOf)) {
+    await db.update(appointmentFulfillmentJobs).set({ status: "completed", finishedAt: new Date(), lastError: stripeRefund ? "appointment_not_refunded_from_stripe_or_missing" : "appointment_not_paid_or_missing" }).where(eq(appointmentFulfillmentJobs.id, id));
     return { skipped: true };
   }
-  const jobType = job.jobType as FulfillmentJobType;
   const finalPrice = Number(appointment.finalPrice);
   // A backlog drained late must not tell a patient that a consultation which
   // already took place is "confirmed". The owner job and the invoice still run.
@@ -199,6 +233,23 @@ async function runJob(id: number) {
       await sendConfirmationEmail(appointment.customerEmail, appointment.customerName, appointment.trackingId, appointment.appointmentDate, finalPrice, undefined, { idempotencyKey: `appointment-confirmation-${appointment.trackingId}`, language, confirmedAt: job.createdAt ?? appointment.appointmentDate });
       const smsSent = await sendCustomerConfirmationSMS(appointment.customerPhone, appointment.trackingId, appointment.appointmentDate);
       await db.update(appointments).set({ emailSent: 1, smsSent: smsSent ? 1 : 0 }).where(eq(appointments.id, appointment.id));
+    } else if (jobType === "refund") {
+      // Same key as the dashboard refund: the patient is told once.
+      const sent = await sendRefundConfirmationEmail(appointment.customerEmail, appointment.customerName, appointment.trackingId, appointment.appointmentDate, appointment.refundAmount ?? appointment.finalPrice, { context: refundOf === "paid" ? "refund" : "unconfirmed_payment", idempotencyKey: `appointment-refund-${appointment.trackingId}`, language });
+      if (!sent) throw new Error("refund_email_failed");
+    } else if (jobType === "refund_owner") {
+      // Queued after the patient email: says whether it went out.
+      const [patientJob] = await db.select({ status: appointmentFulfillmentJobs.status, lastError: appointmentFulfillmentJobs.lastError }).from(appointmentFulfillmentJobs)
+        .where(and(eq(appointmentFulfillmentJobs.appointmentId, appointment.id), eq(appointmentFulfillmentJobs.jobType, "refund"))).limit(1);
+      const delivered = await notifyOwner(stripeRefund!.buildStripeRefundAlert({
+        trackingId: appointment.trackingId,
+        refundAmount: appointment.refundAmount ?? appointment.finalPrice,
+        paymentIntentId: appointment.stripePaymentIntentId ?? "non communiqué",
+        effect: refundOf === "unconfirmed" ? "unconfirmed_payment" : appointment.appointmentStatus === "cancelled" ? "cancelled" : "status_kept",
+        appointmentStatus: appointment.appointmentStatus,
+        patientNotified: patientJob?.status === "completed" && !patientJob.lastError,
+      }), { idempotencyKey: `appointment-stripe-refund-${appointment.trackingId}` }).catch(() => false);
+      if (!delivered) throw new Error("owner_refund_alert_failed");
     } else {
       // Numbered once per paid appointment; a retried job reuses the same
       // number, issue date and payment date. The job row is created by the
@@ -215,17 +266,18 @@ async function runJob(id: number) {
     const message = error instanceof Error ? error.message.slice(0, 4000) : "fulfillment_unknown_error";
     const terminal = job.attempts >= job.maxAttempts;
     await db.update(appointmentFulfillmentJobs).set({ status: terminal ? "failed" : "retry", lastError: message, scheduledFor: retryAt(job.attempts), finishedAt: terminal ? new Date() : null }).where(eq(appointmentFulfillmentJobs.id, id));
-    if (jobType === "owner") {
+    if (jobType === "owner" || jobType === "refund_owner") {
       // The owner alert would use the very channel that just failed.
-      console.error("[AppointmentFulfillment] Owner notification failed", { trackingId: appointment.trackingId, terminal });
+      console.error("[AppointmentFulfillment] Owner notification failed", { trackingId: appointment.trackingId, jobType, terminal });
     } else if (job.attempts === 1 || terminal) {
       // Alert at the first failure (the next automatic attempt may only come
       // with the next scheduled run) and again when retries are exhausted.
+      const recorded = stripeRefund ? "Le remboursement est bien enregistré" : "Le paiement est bien enregistré";
       await notifyOwner({
-        title: `Échec d’envoi après paiement (${appointment.trackingId})`,
+        title: `Échec d’envoi après ${stripeRefund ? "remboursement" : "paiement"} (${appointment.trackingId})`,
         content: terminal
-          ? `L’envoi ${JOB_LABELS[jobType]} du rendez-vous ${appointment.trackingId} a échoué ${job.attempts} fois. Le paiement est bien enregistré ; un envoi manuel au patient est nécessaire. ${patientContact(appointment)}`
-          : `L’envoi ${JOB_LABELS[jobType]} du rendez-vous ${appointment.trackingId} vient d’échouer (tentative ${job.attempts} sur ${job.maxAttempts}). Le paiement est bien enregistré. Un nouvel essai automatique aura lieu lors de la prochaine exécution planifiée ; en attendant, vous pouvez contacter le patient. ${patientContact(appointment)}`,
+          ? `L’envoi ${JOB_LABELS[jobType]} du rendez-vous ${appointment.trackingId} a échoué ${job.attempts} fois. ${recorded} ; un envoi manuel au patient est nécessaire. ${patientContact(appointment)}`
+          : `L’envoi ${JOB_LABELS[jobType]} du rendez-vous ${appointment.trackingId} vient d’échouer (tentative ${job.attempts} sur ${job.maxAttempts}). ${recorded}. Un nouvel essai automatique aura lieu lors de la prochaine exécution planifiée ; en attendant, vous pouvez contacter le patient. ${patientContact(appointment)}`,
       }, { idempotencyKey: `appointment-${jobType}-failure-${appointment.trackingId}-${terminal ? "final" : "first"}` }).catch(() => false);
     }
     return { completed: false, retry: !terminal };
@@ -351,7 +403,7 @@ export async function getAppointmentDeliveries(appointmentIds: number[]): Promis
   const db = await getDb();
   if (!db) throw new Error("Database connection failed");
   const jobs = await db.select().from(appointmentFulfillmentJobs).where(inArray(appointmentFulfillmentJobs.appointmentId, appointmentIds));
-  const order = (jobType: string) => APPOINTMENT_FULFILLMENT_JOB_TYPES.indexOf(jobType as FulfillmentJobType);
+  const order = (jobType: string) => JOB_ORDER.indexOf(jobType as FulfillmentJobType);
   const now = new Date();
   for (const job of [...jobs].sort((a, b) => order(a.jobType) - order(b.jobType))) {
     deliveries.set(job.appointmentId, [...(deliveries.get(job.appointmentId) ?? []), deliveryOf(job, now)]);
@@ -369,15 +421,18 @@ export type AppointmentFulfillmentRetry =
  * that did not go out (failed, waiting for their next attempt, or interrupted)
  * go back to the queue with a full attempt budget and run now, through the
  * same claim and idempotency keys as the scheduled worker. A job already sent,
- * or being sent right now, is left alone.
+ * or being sent right now, is left alone. For a refunded appointment, only the
+ * notices of a refund recorded from Stripe (RES-06).
  */
 export async function retryAppointmentFulfillment(trackingId: string): Promise<AppointmentFulfillmentRetry> {
   const db = await getDb();
   if (!db) throw new Error("Database connection failed");
-  const [appointment] = await db.select({ id: appointments.id, paymentStatus: appointments.paymentStatus })
+  const [appointment] = await db.select({ id: appointments.id, paymentStatus: appointments.paymentStatus, cancellationReason: appointments.cancellationReason })
     .from(appointments).where(eq(appointments.trackingId, trackingId)).limit(1);
   if (!appointment) return { outcome: "not_found" };
-  if (appointment.paymentStatus !== "completed") return { outcome: "not_paid" };
+  const stripeRefund = appointment.paymentStatus === "refunded" && (await import("./appointmentPaymentWebhook")).stripeRecordedRefundOf(appointment);
+  if (appointment.paymentStatus !== "completed" && !stripeRefund) return { outcome: "not_paid" };
+  const jobTypes = JOB_ORDER.filter(jobType => jobPaymentStatus(jobType) === appointment.paymentStatus);
   const now = new Date();
   const result = await db.update(appointmentFulfillmentJobs).set({
     status: "queued",
@@ -390,6 +445,7 @@ export async function retryAppointmentFulfillment(trackingId: string): Promise<A
     updatedAt: now,
   }).where(and(
     eq(appointmentFulfillmentJobs.appointmentId, appointment.id),
+    inArray(appointmentFulfillmentJobs.jobType, jobTypes),
     or(
       inArray(appointmentFulfillmentJobs.status, ["queued", "retry", "failed"]),
       and(eq(appointmentFulfillmentJobs.status, "running"), lte(appointmentFulfillmentJobs.startedAt, new Date(now.getTime() - APPOINTMENT_FULFILLMENT_STALE_AFTER_MS))),
@@ -406,14 +462,16 @@ export async function retryAppointmentFulfillment(trackingId: string): Promise<A
  * email sent through the very channel that failed (EXPL-02). « failed »: the
  * attempts ran out. « retrying »: an attempt failed (or was interrupted) and
  * the next automatic one may only come with the next scheduled run, days
- * before the attempts run out.
+ * before the attempts run out. Refunded appointments too, for the notices of
+ * a refund recorded from Stripe (RES-06).
  */
 export async function listAppointmentDeliveriesToHandle(limit = 20, now = new Date()) {
   const db = await getDb();
   if (!db) throw new Error("Database connection failed");
-  // No cap here: the failed jobs of refunded appointments stay failed, and a
-  // cap applied before the paid filter would push the new failures out.
-  const jobs = await db.select({
+  // No cap here: the failed post-payment jobs of refunded appointments stay
+  // failed, and a cap applied before the payment filter would push the new
+  // failures out.
+  const candidates = await db.select({
     appointmentId: appointmentFulfillmentJobs.appointmentId,
     jobType: appointmentFulfillmentJobs.jobType,
     status: appointmentFulfillmentJobs.status,
@@ -424,6 +482,14 @@ export async function listAppointmentDeliveriesToHandle(limit = 20, now = new Da
       and(eq(appointmentFulfillmentJobs.status, "running"), lte(appointmentFulfillmentJobs.startedAt, new Date(now.getTime() - APPOINTMENT_FULFILLMENT_STALE_AFTER_MS))),
     ))
     .orderBy(appointmentFulfillmentJobs.updatedAt, appointmentFulfillmentJobs.id);
+  const candidateIds = Array.from(new Set(candidates.map(job => job.appointmentId)));
+  const handled = candidateIds.length === 0 ? [] : await db.select({ id: appointments.id, trackingId: appointments.trackingId, customerName: appointments.customerName, appointmentDate: appointments.appointmentDate, paymentStatus: appointments.paymentStatus })
+    .from(appointments)
+    .where(and(inArray(appointments.id, candidateIds), inArray(appointments.paymentStatus, ["completed", "refunded"])));
+  const byId = new Map(handled.map(({ id, paymentStatus, ...appointment }) => [id, { appointment, paymentStatus }]));
+  // A job still to send for its appointment's payment status: post-payment
+  // emails of a paid appointment, refund notices of a refunded one.
+  const jobs = candidates.filter(job => byId.get(job.appointmentId)?.paymentStatus === jobPaymentStatus(job.jobType));
   const failed = new Map<number, FulfillmentJobType[]>();
   // Earliest next automatic attempt; null when only interrupted jobs wait for the next scheduled run.
   const retrying = new Map<number, { jobTypes: FulfillmentJobType[]; nextAttemptAt: Date | null }>();
@@ -440,21 +506,10 @@ export async function listAppointmentDeliveriesToHandle(limit = 20, now = new Da
       nextAttemptAt: previous?.nextAttemptAt && (!nextAttemptAt || previous.nextAttemptAt < nextAttemptAt) ? previous.nextAttemptAt : nextAttemptAt,
     });
   }
-  const appointmentIds = Array.from(new Set([...Array.from(failed.keys()), ...Array.from(retrying.keys())]));
-  const paid = appointmentIds.length === 0 ? [] : await db.select({ id: appointments.id, trackingId: appointments.trackingId, customerName: appointments.customerName, appointmentDate: appointments.appointmentDate })
-    .from(appointments)
-    .where(and(inArray(appointments.id, appointmentIds), eq(appointments.paymentStatus, "completed")));
-  const byId = new Map(paid.map(({ id, ...appointment }) => [id, appointment]));
   const page = <T>(items: T[]) => ({ total: items.length, items: items.slice(0, limit) });
   return {
-    failed: page(Array.from(failed.entries()).flatMap(([appointmentId, jobTypes]) => {
-      const appointment = byId.get(appointmentId);
-      return appointment ? [{ ...appointment, jobTypes }] : [];
-    })),
-    retrying: page(Array.from(retrying.entries()).flatMap(([appointmentId, delivery]) => {
-      const appointment = byId.get(appointmentId);
-      return appointment ? [{ ...appointment, ...delivery }] : [];
-    })),
+    failed: page(Array.from(failed.entries()).map(([appointmentId, jobTypes]) => ({ ...byId.get(appointmentId)!.appointment, jobTypes }))),
+    retrying: page(Array.from(retrying.entries()).map(([appointmentId, delivery]) => ({ ...byId.get(appointmentId)!.appointment, ...delivery }))),
   };
 }
 

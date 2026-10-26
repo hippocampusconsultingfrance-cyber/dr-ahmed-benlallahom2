@@ -190,8 +190,9 @@ export const appointmentFulfillmentJobs = mysqlTable("appointment_fulfillment_jo
   id: serial("id").primaryKey(),
   appointmentId: int("appointment_id").notNull(),
   // varchar column: "owner" (new-booking notification to the owner, sent first)
-  // needs no migration.
-  jobType: mysqlEnum("job_type", ["owner", "confirmation", "invoice"]).notNull(),
+  // and the notices of a refund recorded from Stripe ("refund" to the patient,
+  // "refund_owner" to the owner) need no migration.
+  jobType: mysqlEnum("job_type", ["owner", "confirmation", "invoice", "refund", "refund_owner"]).notNull(),
   status: mysqlEnum("status", ["queued", "running", "retry", "completed", "failed"]).default("queued").notNull(),
   attempts: int("attempts").default(0).notNull(),
   maxAttempts: int("max_attempts").default(3).notNull(),
