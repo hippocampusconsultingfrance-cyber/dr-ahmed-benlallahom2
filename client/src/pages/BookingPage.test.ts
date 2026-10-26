@@ -15,18 +15,6 @@ describe("booking day and time choice", () => {
     }
   });
 
-  it("aide la saisie tactile avec le remplissage automatique et les touches d’action", async () => {
-    const source = await import("node:fs/promises").then((fs) =>
-      fs.readFile(new URL("./BookingPage.tsx", import.meta.url), "utf8")
-    );
-
-    expect(source).toContain('autoComplete="name"');
-    expect(source).toContain('autoComplete="email"');
-    expect(source).toContain('autoComplete="tel"');
-    expect(source).toContain('enterKeyHint="next"');
-    expect(source).toContain('enterKeyHint="done"');
-  });
-
   it("interprète toujours le créneau choisi en heure de Paris", () => {
     const parsed = parisBookingSlotStart("2026-08-21", "10:00");
     expect(parsed?.toISOString()).toBe("2026-08-21T08:00:00.000Z");
@@ -50,29 +38,6 @@ describe("booking day and time choice", () => {
     expect(getBookingAvailabilityState({ selected: true, pending: false, blocked: true, booked: false })).toBe("unavailable");
     expect(getBookingAvailabilityState({ selected: true, pending: false, blocked: false, booked: true })).toBe("unavailable");
     expect(getBookingAvailabilityState({ selected: true, pending: false, blocked: false, booked: false })).toBe("available");
-  });
-
-  it("verrouille immédiatement une soumission de paiement répétée avant le rendu du bouton désactivé", async () => {
-    const source = await import("node:fs/promises").then((fs) =>
-      fs.readFile(new URL("./BookingPage.tsx", import.meta.url), "utf8")
-    );
-
-    expect(source).toContain("const paymentSubmissionRef = useRef(false)");
-    expect(source).toContain("if (paymentSubmissionRef.current || isLoading) return;");
-    expect(source).toContain("paymentSubmissionRef.current = true;");
-    expect(source).toContain("paymentSubmissionRef.current = false;");
-  });
-
-  it("n’expose pas de détail technique dans les alertes publiques de paiement", async () => {
-    const source = await import("node:fs/promises").then((fs) =>
-      fs.readFile(new URL("./BookingPage.tsx", import.meta.url), "utf8")
-    );
-
-    expect(source).toContain("alert(content.paymentError);");
-    expect(source).toContain("alert(getBookingErrorMessage(error, content));");
-    expect(source).not.toContain("alert(`${content.paymentError} ${error.message}`)");
-    expect(source).not.toContain("alert(`${content.bookingError} ${error instanceof Error ? error.message : \"Unknown error\"}`)");
-    expect(source).not.toContain("alert(error.message)");
   });
 
   it("traduit chaque refus à partir de son motif et n’affiche jamais le texte du serveur (EN-06)", () => {
@@ -102,19 +67,14 @@ describe("booking day and time choice", () => {
     expect(bookingContent.de.refusals.payment_unavailable).toContain("Zahlungsdienst");
   });
 
-  it("applique côté client le délai minimal, l’horizon et le contrôle du téléphone, avec un libellé dans chaque langue", async () => {
+  it("applique côté client le délai minimal, l’horizon et le contrôle du téléphone, avec un libellé dans chaque langue", () => {
     for (const language of ["fr", "en", "de", "zh"] as const) {
       expect(bookingContent[language].form.tooSoon).toContain("2");
       expect(bookingContent[language].form.tooFar).toContain("90");
       expect(bookingContent[language].form.windowHint).toContain("90");
       expect(bookingContent[language].form.invalidPhone).toBeTruthy();
     }
-    const source = await import("node:fs/promises").then((fs) =>
-      fs.readFile(new URL("./BookingPage.tsx", import.meta.url), "utf8")
-    );
-    expect(source).toContain("const bookingWindowIssue = selectedDate ? getBookingWindowIssue(selectedDate, now) : null;");
-    expect(source).toContain("Boolean(bookingWindowIssue) || !selectedDate");
-    expect(source).toContain("if (!isPlausiblePhoneNumber(formData.phone))");
+    // The page applies them before sending: BookingPage.render.test.ts.
     expect(getBookingErrorMessage({ message: "Ce créneau n’est plus réservable", data: { code: "UNPROCESSABLE_CONTENT", reason: "too_soon" } }, bookingContent.de))
       .toBe(bookingContent.de.form.tooSoon);
   });
@@ -127,25 +87,4 @@ describe("booking day and time choice", () => {
     for (const language of ["fr", "en", "de", "zh"] as const) expect(bookingContent[language].invalidInput).toBeTruthy();
   });
 
-  it("réduit le poids visuel de l’illustration purement décorative", async () => {
-    const source = await import("node:fs/promises").then((fs) =>
-      fs.readFile(new URL("./BookingPage.tsx", import.meta.url), "utf8")
-    );
-
-    expect(source).toContain('aria-hidden="true"');
-    expect(source).toContain("opacity-70 saturate-75");
-  });
-
-  it("bloque le paiement et informe sans détail technique quand les données asynchrones échouent", async () => {
-    const source = await import("node:fs/promises").then((fs) =>
-      fs.readFile(new URL("./BookingPage.tsx", import.meta.url), "utf8")
-    );
-
-    expect(source).toContain("availabilityError");
-    expect(source).toContain("blockedDates.isError || bookedSlots.isError || availabilitySlots.isError");
-    expect(source).toContain("availabilityQueryError || priceLastFailed");
-    expect(source).toContain("disabled={isLoading || availabilityPending || availabilityError");
-    expect(source).toContain("PublicContentSkeleton cards={1}");
-    expect(source).toContain('role="alert"');
-  });
 });

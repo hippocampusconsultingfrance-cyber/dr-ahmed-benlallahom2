@@ -92,6 +92,9 @@ describe("POST /api/client-briefs — lecture des corps JSON et formulaire (body
     const oversized = JSON.stringify({ ...brief, notes: "é".repeat(600 * 1024) });
     expect(Buffer.byteLength(oversized)).toBeGreaterThan(1024 * 1024);
     expect((await postBrief(oversized, "application/json")).status).toBe(413);
+    const oversizedForm = new URLSearchParams({ ...brief, notes: "é".repeat(600 * 1024) }).toString();
+    expect(Buffer.byteLength(oversizedForm)).toBeGreaterThan(1024 * 1024);
+    expect((await postBrief(oversizedForm, "application/x-www-form-urlencoded")).status).toBe(413);
     expect(state.insertedParams).toEqual([]);
     expect(state.notifications).toEqual([]);
   });

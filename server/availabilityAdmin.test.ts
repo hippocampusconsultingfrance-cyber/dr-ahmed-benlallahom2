@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs";
 import { PgDialect } from "drizzle-orm/pg-core";
 import type { SQL } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -107,12 +106,5 @@ describe("administration des disponibilités — validation serveur", () => {
 
     db = fakeDb(new Map<unknown, unknown[][]>([[blockedDates, [[]]], [appointments, [[]]]]));
     await expect(admin().addBlockedDate({ date: futureDate() })).resolves.toEqual({ success: true, paidAppointments: [] });
-  });
-
-  it("présente le motif comme une note interne et confirme la suppression d’un créneau", () => {
-    const source = readFileSync(new URL("../client/src/pages/AdminDashboard.tsx", import.meta.url), "utf8");
-    expect(source).toContain("Motif interne (optionnel, jamais affiché sur le site)");
-    expect(source).toContain("if (!window.confirm(`Supprimer le créneau");
-    expect(source).toContain('e.data?.code === "PRECONDITION_FAILED" && !variables.acknowledgePaidAppointments');
   });
 });

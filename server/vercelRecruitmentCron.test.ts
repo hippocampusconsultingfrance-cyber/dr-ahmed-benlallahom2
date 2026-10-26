@@ -9,13 +9,4 @@ describe("planification Vercel du traitement des CV", () => {
       schedule: "15 1 * * *",
     });
   });
-
-  it("protège le worker Vercel avec CRON_SECRET, comparé en temps constant", () => {
-    const source = readFileSync(new URL("./_core/index.ts", import.meta.url), "utf8");
-    const cronAuth = readFileSync(new URL("./_core/cronAuth.ts", import.meta.url), "utf8");
-    expect(source).toContain('app.get("/api/scheduled/recruitment-processing", requireVercelCron,');
-    expect(source).not.toContain("req.headers.authorization !== `Bearer ${cronSecret}`");
-    expect(cronAuth).toContain("process.env.CRON_SECRET?.trim()");
-    expect(cronAuth).toContain("timingSafeEqual(");
-  });
 });

@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   clearBookingDraft,
@@ -11,6 +10,7 @@ import {
 } from "./pendingBooking";
 
 // M5 — BOOK-BACKNAV : mémoire par onglet de la réservation en attente et de la saisie.
+// Reprise et annulation sur les pages : BookingPage.render.test.ts et BookingConfirmationPage.render.test.ts.
 
 class MemoryStorage {
   private values = new Map<string, string>();
@@ -65,15 +65,5 @@ describe("réservation en attente après un retour depuis Stripe", () => {
     expect(() => savePendingBooking(pending)).not.toThrow();
     expect(loadPendingBooking(NOW)).toBeNull();
     expect(loadBookingDraft()).toBeNull();
-  });
-
-  it("propose « Reprendre le paiement » et « Annuler et choisir un autre créneau » sur la page de réservation", () => {
-    const source = readFileSync(new URL("../pages/BookingPage.tsx", import.meta.url), "utf8");
-    expect(source).toContain("trpc.appointments.createCheckoutSession.useMutation()");
-    expect(source).toContain("trpc.appointments.cancelPending.useMutation()");
-    expect(source).toContain("savePendingBooking({");
-    expect(source).toContain('window.addEventListener("pageshow", onPageShow)');
-    const confirmation = readFileSync(new URL("../pages/BookingConfirmationPage.tsx", import.meta.url), "utf8");
-    expect(confirmation).toContain("clearPendingBooking({ checkoutSessionId: sessionId })");
   });
 });

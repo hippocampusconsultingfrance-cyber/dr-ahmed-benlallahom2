@@ -1,12 +1,15 @@
 /**
  * TEST-ONLY: calls a component as a plain function and keeps its useState,
- * useEffect and useRef from one call to the next, so that a behavioural test
+ * useReducer, useEffect, useRef, useMemo and useCallback from one call to the next, so that a behavioural test
  * can type and click through the props of the returned elements, then call it
  * again — the test environment has no DOM (a test puts a fake element in a
  * ref). A test file routes these React hooks here with
  *   vi.mock("react", async importOriginal => (await import("@/testing/statefulRender")).withStatefulHooks(await importOriginal()));
  * Outside renderStateful (for example while react-dom/server renders the
  * returned tree), React's own hooks answer. Never imported by production code.
+ * The critical screens (booking payment, admin MFA gate, contact form and its
+ * anti-bot check) are also mounted by React itself in happy-dom with Testing
+ * Library: see the *.dom.test.ts files.
  */
 import type * as React from "react";
 
@@ -21,6 +24,8 @@ const store = {
   effectCursor: 0,
   refs: [] as Array<{ current: unknown }>,
   refCursor: 0,
+  memos: [] as Array<{ deps?: readonly unknown[]; value: unknown }>,
+  memoCursor: 0,
   pending: [] as Array<() => void>,
 };
 
@@ -55,21 +60,45 @@ export function withStatefulHooks<T extends typeof React>(react: T): T {
     store.refs[index] ??= { current: initial };
     return store.refs[index];
   }
-  return { ...react, useState, useEffect, useRef } as T;
+  function useMemo(factory: () => unknown, deps?: readonly unknown[]) {
+    if (!store.active) return react.useMemo(factory, deps as never);
+    const index = store.memoCursor++;
+    const previous = store.memos[index];
+    if (previous && sameDeps(previous.deps, deps)) return previous.value;
+    const value = factory();
+    store.memos[index] = { deps, value };
+    return value;
+  }
+  function useCallback(callback: unknown, deps?: readonly unknown[]) {
+    if (!store.active) return react.useCallback(callback as () => void, deps as never);
+    return useMemo(() => callback, deps);
+  }
+  function useReducer(reducer: (state: unknown, action: unknown) => unknown, initialArg: unknown, init?: (arg: unknown) => unknown) {
+    if (!store.active) return react.useReducer(reducer as never, initialArg as never, init as never);
+    const [state, setState] = useState(() => (init ? init(initialArg) : initialArg)) as [unknown, (next: (value: unknown) => unknown) => void];
+    return [state, (action: unknown) => setState(previous => reducer(previous, action))];
+  }
+  return { ...react, useState, useReducer, useEffect, useRef, useMemo, useCallback } as T;
 }
 
-/** One render: the component's result, after the effects it scheduled have run. */
-export function renderStateful<T>(component: () => T): T {
+/**
+ * One render: the component's result, after the effects it scheduled have run.
+ * `beforeEffects` runs in between, as React attaches refs before running
+ * effects: a test puts its fake element in a ref there.
+ */
+export function renderStateful<T>(component: () => T, beforeEffects?: (result: T) => void): T {
   store.active = true;
   store.stateCursor = 0;
   store.effectCursor = 0;
   store.refCursor = 0;
+  store.memoCursor = 0;
   let result: T;
   try {
     result = component();
   } finally {
     store.active = false;
   }
+  beforeEffects?.(result);
   for (const run of store.pending.splice(0)) run();
   return result;
 }
@@ -80,6 +109,7 @@ export function resetStatefulHooks() {
   store.states = [];
   store.effects = [];
   store.refs = [];
+  store.memos = [];
   store.pending = [];
 }
 

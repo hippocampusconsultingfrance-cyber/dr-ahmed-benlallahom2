@@ -223,4 +223,14 @@ describe("analyse IA refusée pour facturation (REC-08)", () => {
     expect(result).toMatchObject({ outcome: "ai_unavailable", error: "ai_gateway_billing_unavailable", processed: 1 });
     expect(dossier(id).analysis_status).toBe("degraded");
   });
+
+  it("ne traite, pour une relance ciblée, que les dossiers demandés", async () => {
+    const waiting = seedDossier(1);
+    const requested = seedDossier(2);
+
+    const run = await processDueCvAnalysisJobs(5, [requested]);
+
+    expect(run.results.map(result => result.applicationId)).toEqual([requested]);
+    expect(jobsOf(waiting)).toEqual([expect.objectContaining({ job_status: "queued", attempts: 0 })]);
+  });
 });

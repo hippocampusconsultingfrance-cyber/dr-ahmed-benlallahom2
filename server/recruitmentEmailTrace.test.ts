@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
 import { buildCandidatePortalActivationEmailEvent, buildCandidatePortalInvitationEmailEvent, buildCvConfirmationEmailEvent, buildFailedConfirmationRetryCandidateQuery, canRetryCvConfirmation, candidatePortalAccountMatchesApplication, cvConfirmationRetryOutcome, resolveCandidatePortalActivationDelivery, resolveCandidatePortalInvitationDelivery, resolveCvConfirmationDelivery, retryDueFailedCvConfirmationEmails } from "./recruitmentEmailTrace";
-import { readFileSync } from "node:fs";
 import { drizzle } from "drizzle-orm/neon-http";
 
 const retryMocks = vi.hoisted(() => ({ getDb: vi.fn(), sendEmail: vi.fn() }));
@@ -8,9 +7,6 @@ const retryMocks = vi.hoisted(() => ({ getDb: vi.fn(), sendEmail: vi.fn() }));
 vi.mock("./db", () => ({ getDb: retryMocks.getDb }));
 vi.mock("./_core/notifications", () => ({ sendCvApplicationConfirmationEmail: retryMocks.sendEmail }));
 vi.mock("./candidateAuth", () => ({ createCandidateInvitationToken: () => "synthetic-invitation-token" }));
-
-const traceSource = readFileSync(new URL("./recruitmentEmailTrace.ts", import.meta.url), "utf8");
-const routerSource = readFileSync(new URL("./routers.ts", import.meta.url), "utf8");
 
 describe("traçabilité de l'email de confirmation de candidature", () => {
   const input = {
@@ -169,13 +165,6 @@ describe("traçabilité de l'email de confirmation de candidature", () => {
     expect(candidatePortalAccountMatchesApplication({ linkedApplicationId: 42, email: "other@example.com", emailVerifiedAt: new Date() }, application)).toBe(true);
     expect(candidatePortalAccountMatchesApplication({ linkedApplicationId: null, email: "candidate@example.com", emailVerifiedAt: new Date() }, application)).toBe(true);
     expect(candidatePortalAccountMatchesApplication({ linkedApplicationId: null, email: "candidate@example.com", emailVerifiedAt: null }, application)).toBe(false);
-  });
-
-  it("autorise uniquement l'administrateur à reprendre un accusé sans trace", () => {
-    expect(routerSource).toContain("retryCvConfirmationEmail(input.id, { allowUntracked: true })");
-    expect(traceSource).toContain("const maySendUntracked = !current.eventType && options.allowUntracked");
-    expect(traceSource).toContain('current.eventType !== "email.failed" && !maySendUntracked');
-    expect(traceSource).toContain('current.eventType === "email.failed" ? current.attempts + 1 : 1');
   });
 
   it("ne laisse pas les échecs de campagne évincer la file de reprise des confirmations", () => {

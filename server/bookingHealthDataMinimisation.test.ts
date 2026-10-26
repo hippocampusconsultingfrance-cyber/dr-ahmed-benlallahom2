@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { appointmentFulfillmentJobs, appointments } from "../drizzle/schema";
 
@@ -162,8 +161,6 @@ describe("minimisation des données de santé à la réservation", () => {
       expect(bookingContent[language].form.details).toBeTruthy();
       expect(bookingContent[language].form.detailsWarning.length).toBeGreaterThan(20);
     }
-    const source = readFileSync(new URL("../client/src/pages/BookingPage.tsx", import.meta.url), "utf8");
-    expect(source).toContain('aria-describedby="booking-details-warning"');
-    expect(source).toContain("maxLength={BOOKING_REQUEST_SUBJECT_MAX_LENGTH}");
+    // The field is bound to its warning and length limit on the page: BookingPage.render.test.ts.
   });
 });

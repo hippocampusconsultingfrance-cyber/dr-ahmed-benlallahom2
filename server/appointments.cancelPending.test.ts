@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { appRouter } from "./routers";
 import type { TrpcContext } from "./_core/context";
+import { appointments } from "../drizzle/schema";
+import { createInMemoryDrizzle } from "./testSupport/inMemoryDrizzle";
 
 const mocks = vi.hoisted(() => ({
   getDb: vi.fn(),
@@ -82,5 +84,43 @@ describe("appointments.cancelPending — retour depuis Stripe Checkout", () => {
 
     expect(mocks.stripeExpire).not.toHaveBeenCalled();
     expect(db.update).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("appointments.cancelPending — créneau libéré dans la base", () => {
+  function seed(db: ReturnType<typeof createInMemoryDrizzle>, values: Record<string, unknown>) {
+    return db.seed(appointments, {
+      customerName: "Patient Test",
+      customerEmail: "patient@example.test",
+      customerPhone: "+33600000000",
+      requestDetails: "",
+      appointmentDate: new Date("2026-11-05T17:00:00.000Z"),
+      basePrice: "100.00",
+      finalPrice: "100.00",
+      paymentStatus: "pending",
+      ...values,
+    });
+  }
+
+  it("annule immédiatement un checkout abandonné encore retenu, et seulement lui", async () => {
+    const db = createInMemoryDrizzle();
+    mocks.getDb.mockResolvedValue(db);
+    const held = seed(db, { trackingId: "APT-42", stripeSessionId: "cs_test_back", appointmentStatus: "held", slotKey: "2026-11-05T17:00:00.000Z", holdExpiresAt: new Date("2026-10-26T10:30:00.000Z") });
+    mocks.stripeRetrieve.mockResolvedValue(checkoutSession());
+
+    await expect(cancel()).resolves.toEqual({ success: true, cancelled: true });
+
+    expect(held).toMatchObject({ appointmentStatus: "cancelled", slotKey: null, holdExpiresAt: null, cancelledAt: expect.any(Date) });
+  });
+
+  it("ne libère jamais un rendez-vous déjà confirmé, même encore marqué en attente de paiement", async () => {
+    const db = createInMemoryDrizzle();
+    mocks.getDb.mockResolvedValue(db);
+    const confirmed = seed(db, { trackingId: "APT-42", stripeSessionId: "cs_test_back", appointmentStatus: "confirmed", slotKey: "2026-11-05T17:00:00.000Z" });
+    mocks.stripeRetrieve.mockResolvedValue(checkoutSession());
+
+    await expect(cancel()).resolves.toEqual({ success: true, cancelled: false });
+
+    expect(confirmed).toMatchObject({ appointmentStatus: "confirmed", slotKey: "2026-11-05T17:00:00.000Z", cancelledAt: null });
   });
 });

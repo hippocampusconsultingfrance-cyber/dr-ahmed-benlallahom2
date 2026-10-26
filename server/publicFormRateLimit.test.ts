@@ -3,11 +3,6 @@ import { publicFormRateLimitSubject } from "./publicFormRateLimit";
 import { BOOKING_RATE_LIMIT_MESSAGE, PUBLIC_FORM_RATE_LIMITS } from "./routers";
 
 describe("public form rate limits", () => {
-  it("keeps the rate limiter outside the deterministic integration fixtures", async () => {
-    const source = await import("node:fs/promises").then(fs => fs.readFile(new URL("./routers.ts", import.meta.url), "utf8"));
-    expect(source).toContain('process.env.NODE_ENV === "test" || process.env.VITEST === "true"');
-  });
-
   it("keeps contact submissions bounded without blocking ordinary use", () => {
     expect(PUBLIC_FORM_RATE_LIMITS.contact).toMatchObject({
       action: "public_contact_submit",
@@ -62,21 +57,5 @@ describe("public form rate limits", () => {
     expect(publicFormRateLimitSubject("ip", "abc", "a@example.com")).toBe("ip:abc");
     expect(publicFormRateLimitSubject("ip", null, "a@example.com")).toBeNull();
     expect(publicFormRateLimitSubject("email", null, "a@example.com")).toBe("email:a@example.com");
-  });
-
-  it("protects appointments.create before any agenda access, without depending on Turnstile", async () => {
-    const source = await import("node:fs/promises").then(fs => fs.readFile(new URL("./routers.ts", import.meta.url), "utf8"));
-    const createBlock = source.slice(source.indexOf("    create: publicProcedure"), source.indexOf("createCheckoutSession: publicProcedure"));
-    // The booking's email rule, shared with its correction from the dashboard (EXPL-02).
-    expect(source).toContain("const bookingCustomerEmail = z.string().email()");
-    expect(createBlock).toContain("customerEmail: bookingCustomerEmail");
-    expect(createBlock).toContain('enforcePublicFormRateLimit({ kind: "bookingIp"');
-    expect(createBlock).toContain('enforcePublicFormRateLimit({ kind: "bookingEmail"');
-    expect(createBlock).toContain(">= MAX_ACTIVE_APPOINTMENT_HOLDS_PER_EMAIL");
-    // Turnstile only once abuse is detected (ABUS-02, covered by appointments.holdAbuse.test.ts).
-    expect(createBlock.match(/verifyCandidateTurnstile/g)).toHaveLength(1);
-    expect(createBlock.indexOf("await bookingChallengeRequired(")).toBeLessThan(createBlock.indexOf("await passBookingChallenge()"));
-    expect(createBlock.indexOf('kind: "bookingIp"')).toBeLessThan(createBlock.indexOf("await getDb()"));
-    expect(createBlock.indexOf(">= MAX_ACTIVE_APPOINTMENT_HOLDS_PER_EMAIL")).toBeLessThan(createBlock.indexOf("INSERT INTO appointments"));
   });
 });

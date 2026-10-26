@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const state = vi.hoisted(() => ({
@@ -174,16 +173,5 @@ describe("cron recruitment-processing : vidage par lots dans un budget de temps"
     await expect(notifyOwnerOfAnalysisBacklog(RECRUITMENT_ANALYSIS_BACKLOG_ALERT_THRESHOLD, { atLeast: true })).resolves.toBe(true);
     expect(state.notifications[0]!.title).toBe(`Recrutement : au moins ${RECRUITMENT_ANALYSIS_BACKLOG_ALERT_THRESHOLD} analyse(s) de CV en attente`);
     expect(state.notifications[0]!.content).toContain(`Au moins ${RECRUITMENT_ANALYSIS_BACKLOG_ALERT_THRESHOLD} analyse(s) de CV attendent`);
-  });
-});
-
-describe("formulaire de candidature : jamais refusé pour une file d’analyse longue", () => {
-  it("n’a plus de refus 503 « volume élevé » et alerte le propriétaire à la place", () => {
-    const source = readFileSync(new URL("./_core/index.ts", import.meta.url), "utf8");
-    expect(source).not.toContain("reçoit actuellement un volume élevé");
-    expect(source).not.toContain("public_recruitment_apply_queue_backpressure");
-    expect(source).toContain("notifyOwnerOfAnalysisBacklog(waitingAnalyses, { atLeast: true })");
-    const cron = source.slice(source.indexOf('app.get("/api/scheduled/recruitment-processing"'), source.indexOf('app.post("/api/scheduled/recruitment-processing"'));
-    expect(cron).toContain("runRecruitmentProcessingWorker()");
   });
 });

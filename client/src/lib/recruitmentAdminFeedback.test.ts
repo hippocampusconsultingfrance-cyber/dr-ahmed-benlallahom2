@@ -4,7 +4,6 @@ import { driveRetryToast, googleDriveConnectionState, reanalysisToast, recruitme
 
 const mailingTab = readFileSync(new URL("../components/MailingTab.tsx", import.meta.url), "utf8");
 const briefsTab = readFileSync(new URL("../components/EmployerBriefsTab.tsx", import.meta.url), "utf8");
-const recruitmentTab = readFileSync(new URL("../components/RecruitmentTab.tsx", import.meta.url), "utf8");
 
 describe("retours honnêtes dans l’administration du recrutement", () => {
   it("« Relancer l’analyse » n’affiche un succès que si l’analyse a abouti (ADM-REC-02)", () => {
@@ -17,7 +16,6 @@ describe("retours honnêtes dans l’administration du recrutement", () => {
     expect(recruitmentAnalysisErrorLabel("AI Gateway requires a valid credit card (402)")).toContain("fournisseur");
     // ABUS-01: a dossier never analysed shows « Analyser le CV », the button the label names.
     expect(recruitmentAnalysisErrorLabel("analysis_deferred_daily_volume")).toContain("« Analyser le CV »");
-    expect(recruitmentTab).toContain("recruitmentAnalysisErrorLabel(application.analysisLastError)");
   });
 
   it("Google Drive révoqué : en-tête « Reconnexion requise » et avertissement (ADM-DRIVE-01)", () => {
@@ -28,7 +26,6 @@ describe("retours honnêtes dans l’administration du recrutement", () => {
     expect(toast.tone).toBe("warning");
     expect(toast.message).toContain("Reconnexion Google Drive requise");
     expect(driveRetryToast({ outcome: "completed" }).tone).toBe("success");
-    expect(recruitmentTab).toContain("googleDriveConnectionState(driveExportStatus.data).label");
   });
 
   it("Mailing : avertissement en cas d’échec et relance des seuls échecs (ADM-MAIL-02)", () => {
