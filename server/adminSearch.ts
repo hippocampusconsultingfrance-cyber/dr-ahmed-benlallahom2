@@ -50,18 +50,24 @@ function foldedColumn(column: AnyColumn | SQL): SQL {
   return folded;
 }
 
+/** A list's name: its first and last name columns, or the one column holding the whole name. */
+type AdminSearchNames = { firstName: AnyColumn; lastName: AnyColumn } | { fullName: AnyColumn };
+
 /**
  * Condition of the admin search on these columns, undefined without search:
  * every word typed is found in at least one of them, case and accents ignored.
- * Given the list's first and last name columns, a Chinese, Japanese or Korean
- * word is also searched in both names written together, in both orders
- * (« 王小明 » finds 小明 王). It joins the list's other filters, so its page,
- * its total and « Charger plus » follow the search.
+ * Given the list's name, a Chinese, Japanese or Korean word is also searched
+ * in the first and last names written together, in both orders (« 王小明 »
+ * finds 小明 王), or in the whole name without its spaces, ideographic ones
+ * included (« 王小明 » finds « 王 小明 »). It joins the list's other filters,
+ * so its page, its total and « Charger plus » follow the search.
  */
-export function adminSearchCondition(search: string | undefined, columns: AnyColumn[], names?: { firstName: AnyColumn; lastName: AnyColumn }): SQL | undefined {
+export function adminSearchCondition(search: string | undefined, columns: AnyColumn[], names?: AdminSearchNames): SQL | undefined {
   const patterns = adminSearchWordPatterns(search);
   if (!patterns.length) return undefined;
   const folded = columns.map(foldedColumn);
-  const joined = names ? [sql`${names.firstName} || ${names.lastName}`, sql`${names.lastName} || ${names.firstName}`].map(foldedColumn) : [];
+  const joined = (!names ? [] : "fullName" in names
+    ? [sql`translate(${names.fullName}, ${" \u3000"}, ${""})`]
+    : [sql`${names.firstName} || ${names.lastName}`, sql`${names.lastName} || ${names.firstName}`]).map(foldedColumn);
   return and(...patterns.map(({ pattern, withoutSpaces }) => or(...[...folded, ...(withoutSpaces ? joined : [])].map(column => sql`${column} ILIKE ${pattern}`))));
 }

@@ -1385,7 +1385,7 @@ export const appRouter = router({
           if (input.status) {
             conditions.push(eq(appointments.paymentStatus, input.status));
           }
-          const search = adminSearchCondition(input.search, [appointments.customerName, appointments.customerEmail, appointments.trackingId]);
+          const search = adminSearchCondition(input.search, [appointments.customerName, appointments.customerEmail, appointments.trackingId], { fullName: appointments.customerName });
           if (search) conditions.push(search);
 
           const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
@@ -2701,7 +2701,7 @@ export const appRouter = router({
 
           const whereClause = and(
             input.unreadOnly ? eq(contactMessages.read, 0) : undefined,
-            adminSearchCondition(input.search, [contactMessages.name, contactMessages.email, contactMessages.trackingId]),
+            adminSearchCondition(input.search, [contactMessages.name, contactMessages.email, contactMessages.trackingId], { fullName: contactMessages.name }),
           );
 
           const items = await db

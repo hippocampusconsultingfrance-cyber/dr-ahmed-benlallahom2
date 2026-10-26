@@ -238,6 +238,27 @@ describe("ADM-02 — nom décomposé dans les autres listes", () => {
     expect((await caller().medicalQuestions.admin.list({ search: "李明" })).items.map(item => item.trackingId)).toEqual(["QMED-NX000002-00000"]);
     expect((await caller().admin.contacts.list({ search: "nguyễn" })).items.map(item => item.trackingId)).toEqual(["CNX000000002"]);
   });
+
+  it("retrouve une réservation et un message au nom chinois saisi avec une espace, tapé sans espace", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    seedAppointment(1, "王 小明");
+    seedAppointment(2, "Jean Dupont");
+    seedAppointment(3, "李 明");
+    memory.seed(contactMessages, [
+      // An ideographic space, as a Chinese keyboard types it.
+      { tracking_id: "CCJK00000001", name: "王　小明", email: "wang@test.local", message: "Bonjour", read: 0, createdAt: minute(1) },
+      { tracking_id: "CCJK00000002", name: "Jean Dupont", email: "jean@test.local", message: "Bonjour", read: 0, createdAt: minute(2) },
+    ]);
+    const appointmentsFound = async (search: string) => (await caller().admin.appointments.list({ search })).items.map(item => item.trackingId);
+    const messagesFound = async (search: string) => (await caller().admin.contacts.list({ search })).items.map(item => item.trackingId);
+
+    expect(await appointmentsFound("王小明")).toEqual(["APTVOL000001"]);
+    expect(await appointmentsFound("小明")).toEqual(["APTVOL000001"]);
+    expect(await messagesFound("王小明")).toEqual(["CCJK00000001"]);
+    // Latin words keep their spaces: « jeandupont » is not « Jean Dupont ».
+    expect(await appointmentsFound("jeandupont")).toEqual([]);
+    expect(await messagesFound("jeandupont")).toEqual([]);
+  });
 });
 
 describe("ADM-02 — Réservations", () => {
