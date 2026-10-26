@@ -117,6 +117,14 @@ describe("EXPL-02 — envois après paiement sur la fiche du rendez-vous", () =>
     expect(state.invalidated).toEqual(["appointments.list", "attention"]);
     await state.retryOptions!.onSuccess!({ requeued: 1, deliveries: [delivery("confirmation", "retrying")] } as never);
     expect(state.toasts.at(-1)?.[0]).toBe("warning");
+    // A confirmation deliberately skipped (consultation already past) is not reported as sent.
+    await state.retryOptions!.onSuccess!({
+      requeued: 2,
+      deliveries: [delivery("owner", "sent"), { ...delivery("confirmation", "not_sent"), notSentReason: "appointment_past" }, delivery("invoice", "sent")],
+    } as never);
+    expect(state.toasts.at(-1)).toEqual(["info", "Envoyé : Facture, Notification médecin. Confirmation non envoyée : la consultation est déjà passée."]);
+    await state.retryOptions!.onSuccess!({ requeued: 0, deliveries: [delivery("confirmation", "sent")] } as never);
+    expect(state.toasts.at(-1)).toEqual(["info", "Aucun envoi à relancer pour ce rendez-vous."]);
 
     vi.mocked(window.confirm).mockReturnValueOnce(false);
     state.retryMutate.mockClear();

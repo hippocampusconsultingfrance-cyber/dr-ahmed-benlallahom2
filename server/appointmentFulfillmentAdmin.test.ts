@@ -188,6 +188,24 @@ describe("EXPL-02 — « Renvoyer »", () => {
     await expect(admin().appointments.retryFulfillment({ trackingId: "APTUNKNOWN01" })).rejects.toMatchObject({ code: "NOT_FOUND" });
   });
 
+  it("dit pourquoi un envoi relancé n’est pas parti : la confirmation d’une consultation déjà passée est sautée, la facture part", async () => {
+    const past = seedAppointment("APTRETRY0006", { appointment_date: new Date(Date.now() - 3_600_000) });
+    seedJob(past.id, "owner", { status: "completed", attempts: 1 });
+    seedJob(past.id, "confirmation", { status: "failed", attempts: 3 });
+    seedJob(past.id, "invoice", { status: "failed", attempts: 3 });
+    seedInvoice(past.id, 6);
+
+    const result = await admin().appointments.retryFulfillment({ trackingId: "APTRETRY0006" });
+
+    expect(result.requeued).toBe(2);
+    expect(result.deliveries.map(({ jobType, state, notSentReason }) => ({ jobType, state, notSentReason }))).toEqual([
+      { jobType: "owner", state: "sent", notSentReason: null },
+      { jobType: "confirmation", state: "not_sent", notSentReason: "appointment_past" },
+      { jobType: "invoice", state: "sent", notSentReason: null },
+    ]);
+    expect(state.sent.map(email => email.kind)).toEqual(["invoice"]);
+  });
+
   it("relance un envoi resté « en cours » après l’arrêt de son exécution, sans attendre le prochain passage planifié", async () => {
     const paid = seedAppointment("APTRETRY0005");
     seedJob(paid.id, "owner", { status: "completed", attempts: 1 });

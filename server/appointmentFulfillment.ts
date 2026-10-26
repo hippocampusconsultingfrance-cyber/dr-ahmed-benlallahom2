@@ -325,6 +325,8 @@ export type AppointmentDelivery = {
   maxAttempts: number;
   /** Next automatic attempt of a job waiting for a retry. */
   nextAttemptAt: Date | null;
+  /** Why a job was deliberately not sent: consultation already past, or appointment no longer paid. */
+  notSentReason: "appointment_past" | "not_paid" | null;
 };
 
 /** Same rule as recoverStaleAppointmentFulfillmentJobs: no worker runs that long. */
@@ -341,6 +343,7 @@ function deliveryOf(job: FulfillmentJob, now: Date): AppointmentDelivery {
     attempts: job.attempts,
     maxAttempts: job.maxAttempts,
     nextAttemptAt: job.status === "retry" ? job.scheduledFor : null,
+    notSentReason: state !== "not_sent" ? null : job.lastError === "appointment_already_past_confirmation_skipped" ? "appointment_past" : "not_paid",
   };
 }
 
