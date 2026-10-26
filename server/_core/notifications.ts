@@ -880,15 +880,15 @@ export async function sendRecruitmentTemplateEmail(
 ): Promise<{ id?: string }> {
   const message = buildRecruitmentTemplateEmail(candidateFirstName, trackingId, template, options);
 
-  const { data, error } = await getResendClient().emails.send({
+  const { id, error } = await sendThroughResend({
     from: FROM_EMAIL,
     to: [candidateEmail],
     replyTo: RECRUITMENT_REPLY_TO,
     subject: message.subject,
     html: message.html,
-  });
+  }, undefined, "recruitment_template");
   if (error) throw new Error(`Resend recruitment email failed: ${error.message}`);
-  return { id: data?.id };
+  return { id: id ?? undefined };
 }
 
 export async function sendRecruitmentCampaignEmail(input: {
@@ -903,7 +903,7 @@ export async function sendRecruitmentCampaignEmail(input: {
   const copy = input.language === "en"
     ? { footer: "This offer concerns your professional profile.", unsubscribe: "Unsubscribe from future recruitment opportunities" }
     : { footer: "Cette offre concerne votre profil professionnel.", unsubscribe: "Ne plus recevoir d’opportunités de recrutement" };
-  const { data, error } = await getResendClient().emails.send({
+  const { id, error } = await sendThroughResend({
     from: FROM_EMAIL,
     to: [input.candidateEmail],
     replyTo: RECRUITMENT_REPLY_TO,
@@ -915,9 +915,9 @@ export async function sendRecruitmentCampaignEmail(input: {
         <p style="color: #64748b;">${copy.footer}</p>
         <p style="font-size: 12px;"><a href="${escapeHtml(input.unsubscribeUrl)}" style="color: #0e7490;">${copy.unsubscribe}</a></p>
     `, input.language),
-  });
+  }, undefined, "recruitment_campaign");
   if (error) throw new Error(`Resend campaign email failed: ${error.message}`);
-  return { id: data?.id };
+  return { id: id ?? undefined };
 }
 
 export type CandidatePortalAccessEmailContentInput = {

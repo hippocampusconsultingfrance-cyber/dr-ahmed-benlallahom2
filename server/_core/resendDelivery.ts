@@ -1,8 +1,8 @@
 /**
  * How the app reads a Resend refusal (ABUS-03), shared by the emails of
- * notifications.ts and by the owner notifications of notification.ts: a rate
- * limit is retried once after Resend's retry-after delay, a used-up quota is
- * reported as a high-severity security event.
+ * notifications.ts, by the owner notifications of notification.ts and by the
+ * medical-question emails: a rate limit is retried once after Resend's
+ * retry-after delay, a used-up quota is reported as a high-severity security event.
  */
 
 /**
