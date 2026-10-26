@@ -87,6 +87,7 @@ describe("webhook Stripe checkout.session.completed", () => {
   it("confirme uniquement un créneau encore réservé et envoie immédiatement confirmation et facture", async () => {
     const { writes } = fakeDatabase([[heldAppointment()]], [1]);
 
+    const startedAt = Date.now();
     const result = await handleCheckoutSessionCompleted(paidSession(), { fulfillmentTimeoutMs: 1_000 });
 
     expect(result).toMatchObject({ httpStatus: 200, outcome: "confirmed" });
@@ -98,7 +99,11 @@ describe("webhook Stripe checkout.session.completed", () => {
     expect(sql).toContain('"stripe_session_id" is null');
     expect(params).toEqual(expect.arrayContaining([42, "pending", "held", "cs_test_1"]));
     expect(fulfillment.enqueueAppointmentFulfillment).toHaveBeenCalledWith(42);
-    expect(fulfillment.processAppointmentFulfillmentNow).toHaveBeenCalledWith(42);
+    // The jobs share the immediate budget (ABUS-03): it ends with the wait for them.
+    expect(fulfillment.processAppointmentFulfillmentNow).toHaveBeenCalledWith(42, { deadlineAt: expect.any(Number) });
+    const [[, { deadlineAt }]] = fulfillment.processAppointmentFulfillmentNow.mock.calls as unknown as Array<[number, { deadlineAt: number }]>;
+    expect(deadlineAt).toBeGreaterThanOrEqual(startedAt + 1_000);
+    expect(deadlineAt).toBeLessThanOrEqual(Date.now() + 1_000);
     expect(owner.notifyOwner).not.toHaveBeenCalled();
   });
 
@@ -222,7 +227,7 @@ describe("webhook Stripe charge.refunded (RES-06)", () => {
     expect(params).toEqual(expect.arrayContaining([42, "pi_test_1", "completed", "confirmed"]));
     // Patient email and owner alert: queued, then attempted right away (RES-06).
     expect(fulfillment.enqueueStripeRefundNotices).toHaveBeenCalledWith(42);
-    expect(fulfillment.processAppointmentFulfillmentNow).toHaveBeenCalledWith(42);
+    expect(fulfillment.processAppointmentFulfillmentNow).toHaveBeenCalledWith(42, { deadlineAt: expect.any(Number) });
     expect(owner.notifyOwner).not.toHaveBeenCalled();
     // Post-payment emails still waiting for a retry are closed as not sent (EXPL-02).
     expect(fulfillment.closeUnsentAppointmentFulfillment).toHaveBeenCalledWith(42, expect.any(Date));

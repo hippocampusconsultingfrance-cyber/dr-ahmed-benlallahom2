@@ -91,15 +91,18 @@ export function buildUnconfirmablePaymentAlert(input: {
 /**
  * Best-effort immediate delivery of the confirmation and invoice. It reuses the
  * exact claim of the scheduled worker, never rejects, and stops waiting after
- * `timeoutMs`; anything left over is retried by the scheduled job.
+ * `timeoutMs`; anything left over is retried by the scheduled job. The jobs
+ * share that budget (ABUS-03): past a first wait for Resend, one that would
+ * wait beyond its share goes back to the queue, without counting the attempt,
+ * instead of holding back the next ones.
  */
 export async function processFulfillmentBestEffort(
   appointmentId: number,
   timeoutMs = IMMEDIATE_FULFILLMENT_TIMEOUT_MS,
-  processNow: (appointmentId: number) => Promise<{ processed: number }> = processAppointmentFulfillmentNow,
+  processNow: (appointmentId: number, options: { deadlineAt: number }) => Promise<{ processed: number }> = processAppointmentFulfillmentNow,
 ): Promise<{ processed: number; timedOut: boolean; failed: boolean }> {
   let timer: ReturnType<typeof setTimeout> | undefined;
-  const work = processNow(appointmentId).then(
+  const work = processNow(appointmentId, { deadlineAt: Date.now() + timeoutMs }).then(
     result => ({ processed: result.processed, timedOut: false, failed: false }),
     error => {
       console.error("[AppointmentFulfillment] Immediate processing failed; left for scheduled retry", safeErrorName(error));

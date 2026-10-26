@@ -89,6 +89,21 @@ describe("vérification anti-robot de la réservation, seulement en cas d’abus
     expect(vi.mocked(notifyOwner)).not.toHaveBeenCalled();
   });
 
+  it("ne compte pas les maintiens que le nettoyage garde faute de réponse de Stripe (EXPL-01)", async () => {
+    // Paiements abandonnés expirés, gardés et prolongés de quelques minutes pendant une panne de Stripe.
+    const kept = { createdAt: new Date(Date.now() - 40 * MINUTE), holdExpiresAt: new Date(Date.now() + 4 * MINUTE) };
+    for (let index = 0; index < HELD_SLOTS_ALERT_THRESHOLD; index += 1) {
+      await recordBookingHold(IP_A, String(seedAppointment(kept).trackingId));
+    }
+
+    await expect(bookingChallengeRequired(db() as never, IP_A)).resolves.toBe(false);
+    await expect(bookingChallengeRequired(db() as never, null)).resolves.toBe(false);
+    expect(vi.mocked(notifyOwner)).not.toHaveBeenCalled();
+    // Les maintiens faits par les réservations, eux, comptent toujours.
+    for (let index = 0; index < HELD_SLOTS_ALERT_THRESHOLD; index += 1) seedAppointment();
+    await expect(bookingChallengeRequired(db() as never, null)).resolves.toBe(true);
+  });
+
   it("au seuil de créneaux retenus non payés, la demande à chaque réservation et n’alerte le propriétaire qu’une fois par jour", async () => {
     for (let index = 0; index < HELD_SLOTS_ALERT_THRESHOLD; index += 1) seedAppointment();
 

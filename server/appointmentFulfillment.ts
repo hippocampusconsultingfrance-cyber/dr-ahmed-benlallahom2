@@ -14,6 +14,7 @@ import { notifyOwner } from "./_core/notification";
 import { emailLanguageFor } from "./emailLanguage";
 import { generateInvoicePDF, renderInvoicePDF, type InvoiceData } from "./invoice";
 import { allocateAppointmentInvoice, findAppointmentInvoices, type AppointmentInvoiceRecord } from "./invoiceNumbering";
+import { deadlineCutShort, runWithProcessingDeadline } from "./processingDeadline";
 
 const MAX_BATCH = 5;
 /** Well above the 60 s function limit: a job still "running" after this was interrupted. */
@@ -24,16 +25,64 @@ export const APPOINTMENT_FULFILLMENT_STALE_AFTER_MS = 15 * 60_000;
  * and the invoice of one payment would otherwise reach Resend in the same
  * second, above its per-second rate limit. Measured from the last job run in
  * this instance, so it also holds between the successive batches of the
- * scheduled run. Mutable for tests.
+ * scheduled run. The jobs of this instance take their turn in one queue, a
+ * pause after the start of the previous one, so processings running at once
+ * (two webhooks, a webhook and the payment status page) are spaced as well.
+ * A job holds its turn while it is claimed, at most claimTurnLimitMs: a
+ * database request that does not answer no longer holds up the other
+ * processings of the instance, the conditional claim still preventing any
+ * duplicate. Mutable for tests.
  */
-export const appointmentFulfillmentPacing = { delayMs: 600 };
+export const appointmentFulfillmentPacing = { delayMs: 600, claimTurnLimitMs: 5_000 };
+/** End of the last job run in this instance. */
 let lastJobRunAt: number | null = null;
+/** Start of the last job that took its turn. */
+let lastJobStartAt: number | null = null;
+/** Turn of the last job that queued; the next one waits for it. */
+let lastJobTurn: Promise<void> = Promise.resolve();
 
-async function paceFulfillmentJob() {
-  if (lastJobRunAt === null) return;
-  const waitMs = Math.min(appointmentFulfillmentPacing.delayMs, lastJobRunAt + appointmentFulfillmentPacing.delayMs - Date.now());
+/**
+ * Waits for this job's turn, then for the pause after the start of the
+ * previous job and after the end of the last one. The turn is held until the
+ * returned callback is called, once the job is claimed or found taken by
+ * another worker: a job that sends nothing gives its pause back to the next.
+ */
+async function waitForFulfillmentTurn(): Promise<(claimed: boolean) => void> {
+  const previousTurn = lastJobTurn;
+  let endTurn!: () => void;
+  lastJobTurn = new Promise<void>(resolve => { endTurn = resolve; });
+  await previousTurn;
+  const delayMs = appointmentFulfillmentPacing.delayMs;
+  const now = Date.now();
+  const readyAt = Math.max(lastJobStartAt === null ? now : lastJobStartAt + delayMs, lastJobRunAt === null ? now : lastJobRunAt + delayMs);
+  // Never more than one pause, even with a clock set back (or stopped, in tests).
+  const waitMs = Math.min(readyAt - now, delayMs);
   if (waitMs > 0) await new Promise(resolve => setTimeout(resolve, waitMs));
+  const previousStartAt = lastJobStartAt;
+  const startAt = Date.now();
+  lastJobStartAt = startAt;
+  const turnLimit = setTimeout(endTurn, appointmentFulfillmentPacing.claimTurnLimitMs);
+  return claimed => {
+    clearTimeout(turnLimit);
+    // Past the limit, a later job may have taken its turn: its start stays.
+    if (!claimed && lastJobStartAt === startAt) lastJobStartAt = previousStartAt;
+    endTurn();
+  };
 }
+
+/**
+ * Immediate processing (Stripe webhook, payment status page) has a time
+ * budget. A job's first wait for Resend (a retry-after, a short backoff) may
+ * last until the end of that budget, so a passing rate limit is still retried
+ * at once; the next ones only until the budget minus this reserve for each job
+ * still to come. A job that would wait longer goes back to the queue, due,
+ * without counting the attempt (see runJob). The owner notification, sent
+ * first, can no longer use up the time of the patient's confirmation and
+ * invoice under a lasting rate limit, and when all goes well it still goes
+ * out first. The reserve covers the pause before a job and one send. Mutable
+ * for tests.
+ */
+export const immediateFulfillmentBudget = { reservePerJobMs: 800 };
 
 /**
  * Attempts per job (EXPL-02). With the daily scheduled run, the six retries
@@ -279,6 +328,16 @@ async function runJob(id: number) {
     await db.update(appointmentFulfillmentJobs).set({ status: "completed", finishedAt: new Date(), lastError: null }).where(eq(appointmentFulfillmentJobs.id, id));
     return { completed: true };
   } catch (error) {
+    if (deadlineCutShort()) {
+      // Sent right after a payment, the job ran out of its time budget before
+      // its own retries (ABUS-03): neither the email nor the provider failed
+      // for good. It goes back to the queue as it was, due, without counting
+      // this attempt nor alerting the owner, for the next processing (another
+      // webhook, the scheduled run).
+      await db.update(appointmentFulfillmentJobs).set({ status: job.attempts > 1 ? "retry" : "queued", attempts: job.attempts - 1, startedAt: null }).where(eq(appointmentFulfillmentJobs.id, id));
+      console.warn("[AppointmentFulfillment] Immediate processing out of time; job left for the next run", { trackingId: appointment.trackingId, jobType });
+      return { completed: false, retry: true, deadlineReached: true };
+    }
     const message = error instanceof Error ? error.message.slice(0, 4000) : "fulfillment_unknown_error";
     const terminal = job.attempts >= job.maxAttempts;
     await db.update(appointmentFulfillmentJobs).set({ status: terminal ? "failed" : "retry", lastError: message, scheduledFor: retryAt(job.attempts), finishedAt: terminal ? new Date() : null }).where(eq(appointmentFulfillmentJobs.id, id));
@@ -305,7 +364,12 @@ async function runJob(id: number) {
   }
 }
 
-export async function processDueAppointmentFulfillmentJobs(limit = MAX_BATCH, options: { appointmentId?: number } = {}) {
+/**
+ * `deadlineAt`: end of the time budget of an immediate processing (see
+ * immediateFulfillmentBudget); without it (scheduled run, « Renvoyer ») a job
+ * waits for Resend as long as its own retries allow.
+ */
+export async function processDueAppointmentFulfillmentJobs(limit = MAX_BATCH, options: { appointmentId?: number; deadlineAt?: number } = {}) {
   const db = await getDb();
   if (!db) throw new Error("Database connection failed");
   const now = new Date();
@@ -319,11 +383,21 @@ export async function processDueAppointmentFulfillmentJobs(limit = MAX_BATCH, op
     .where(dueJobs)
     .orderBy(appointmentFulfillmentJobs.scheduledFor, appointmentFulfillmentJobs.id).limit(Math.min(Math.max(1, limit), MAX_BATCH));
   const results = [];
-  for (const job of jobs) {
-    await paceFulfillmentJob();
-    if (!(await claimFulfillmentJob(db, job))) continue;
+  for (let index = 0; index < jobs.length; index += 1) {
+    const job = jobs[index];
+    const endTurn = await waitForFulfillmentTurn();
+    let claimed = false;
     try {
-      results.push(await runJob(job.id));
+      claimed = await claimFulfillmentJob(db, job);
+    } finally {
+      endTurn(claimed);
+    }
+    if (!claimed) continue;
+    try {
+      const { deadlineAt } = options;
+      results.push(await (deadlineAt === undefined
+        ? runJob(job.id)
+        : runWithProcessingDeadline(deadlineAt - (jobs.length - 1 - index) * immediateFulfillmentBudget.reservePerJobMs, () => runJob(job.id), Date.now, { firstPauseDeadlineAt: deadlineAt })));
     } finally {
       lastJobRunAt = Date.now();
     }
@@ -332,8 +406,8 @@ export async function processDueAppointmentFulfillmentJobs(limit = MAX_BATCH, op
 }
 
 /** Same claim/idempotency path as the scheduled worker, restricted to one appointment. */
-export function processAppointmentFulfillmentNow(appointmentId: number) {
-  return processDueAppointmentFulfillmentJobs(MAX_BATCH, { appointmentId });
+export function processAppointmentFulfillmentNow(appointmentId: number, options: { deadlineAt?: number } = {}) {
+  return processDueAppointmentFulfillmentJobs(MAX_BATCH, { appointmentId, deadlineAt: options.deadlineAt });
 }
 
 /**

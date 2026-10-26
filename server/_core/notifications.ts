@@ -5,6 +5,7 @@ import { PATIENT_CANCELLATION_POLICY, PATIENT_CANCELLATION_POLICY_EN, resolveCon
 import { appointmentCalendarFilename, buildAppointmentCalendarEvent } from "../appointmentCalendar";
 import { withEmailLanguage, type EmailLanguage } from "../emailLanguage";
 import { reportResendQuotaError, resendDeliveryFailureCode, resendRetryAfterMs, sendWithRateLimitRetry, type ResendDeliveryFailureCode } from "./resendDelivery";
+import { pauseWithinDeadline, waitFitsDeadline } from "../processingDeadline";
 import {
   buildResendApplicationTags,
   RESEND_APPLICATION_ACTIVATION_KIND,
@@ -70,8 +71,6 @@ const HIPPOCAMPUS_LOGO_URL = "https://drahmedbenlallahom.com/assets/abl-logo.svg
 export { resendRateLimitRetry } from "./resendDelivery";
 export type { ResendDeliveryFailureCode };
 
-const wait = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
-
 type ResendSendPayload = Parameters<Resend["emails"]["send"]>[0];
 type ResendSendOptions = Parameters<Resend["emails"]["send"]>[1];
 
@@ -117,7 +116,11 @@ async function sendPostPaymentEmail(
   const delays = postPaymentDeliveryRetry.delaysMs;
   let lastError: PostPaymentEmailError | null = null;
   for (let attempt = 0; attempt <= delays.length; attempt += 1) {
-    if (attempt > 0) await wait(delays[attempt - 1]);
+    if (attempt > 0) {
+      // Sent right after a payment: no new try past the job's deadline, the job goes back to the queue.
+      if (!waitFitsDeadline(delays[attempt - 1])) break;
+      await pauseWithinDeadline(delays[attempt - 1]);
+    }
     try {
       const { id, error, failureCode, retryLater } = await sendThroughResend(message, idempotencyKey ? { idempotencyKey } : undefined, "post_payment");
       if (!error) return id;

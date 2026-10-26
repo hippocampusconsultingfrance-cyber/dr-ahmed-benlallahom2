@@ -220,14 +220,15 @@ function isActiveSlotConflict(error: unknown): boolean {
 
 /**
  * Rendez-vous qui occupent leur créneau, pour la disponibilité publique et le
- * contrôle de chevauchement : réservation temporaire en cours, ou expirée mais
- * pas encore libérée (elle garde son slot_key, que l’index unique protège : le
- * nettoyage ne la libère qu’une fois Stripe sûr que sa session ne sera pas
- * payée, EXPL-01), rendez-vous confirmé ou payé.
+ * contrôle de chevauchement : réservation temporaire en cours, rendez-vous
+ * confirmé ou payé. Un maintien expiré est proposé libre : le réserver le règle
+ * d’abord avec Stripe (releaseExpiredAppointmentHolds), qui le libère, le
+ * confirme s’il a été payé, ou le garde quand Stripe ne répond pas ; gardé, il
+ * est prolongé de quelques minutes et reste pris (EXPL-01).
  */
 function occupiesSlot() {
   return or(
-    and(eq(appointments.paymentStatus, "pending"), eq(appointments.appointmentStatus, "held"), or(sql`${appointments.holdExpiresAt} > NOW()`, isNotNull(appointments.slotKey))),
+    and(eq(appointments.paymentStatus, "pending"), eq(appointments.appointmentStatus, "held"), sql`${appointments.holdExpiresAt} > NOW()`),
     and(eq(appointments.paymentStatus, "pending"), eq(appointments.appointmentStatus, "confirmed")),
     and(eq(appointments.paymentStatus, "completed"), inArray(appointments.appointmentStatus, ["confirmed", "completed"])),
   );
@@ -916,14 +917,16 @@ export const appRouter = router({
         }
 
         try {
-          const { getAppointmentHoldExpiry, getExpiredAppointmentHoldUpdate, releaseExpiredAppointmentHolds, stripeExpiresAt } = await import("./appointmentHolds");
+          const { getAppointmentHoldExpiry, getExpiredAppointmentHoldUpdate, holdWithinCheckoutSession, releaseExpiredAppointmentHolds, stripeExpiresAt } = await import("./appointmentHolds");
           // Un maintien expiré dont la session a pourtant été payée (webhook
           // absent) est confirmé au lieu d’être libéré pour cette réservation.
           await releaseExpiredAppointmentHolds(getStripeClient);
 
           // Plafond de créneaux retenus simultanément par une même adresse
           // (comparaison insensible à la casse) : un patient peut relancer un
-          // paiement abandonné sans pouvoir verrouiller l’agenda en boucle.
+          // paiement abandonné sans pouvoir verrouiller l’agenda en boucle. Un
+          // maintien gardé faute de réponse de Stripe ne compte pas : le
+          // patient n’y peut rien.
           const [activeHolds] = await db
             .select({ count: sql<number>`COUNT(*)` })
             .from(appointments)
@@ -932,7 +935,8 @@ export const appRouter = router({
                 sql`LOWER(${appointments.customerEmail}) = ${customerEmailKey}`,
                 eq(appointments.paymentStatus, "pending"),
                 eq(appointments.appointmentStatus, "held"),
-                sql`${appointments.holdExpiresAt} > NOW()`
+                sql`${appointments.holdExpiresAt} > NOW()`,
+                holdWithinCheckoutSession(),
               )
             );
           if (Number(activeHolds?.count ?? 0) >= MAX_ACTIVE_APPOINTMENT_HOLDS_PER_EMAIL) {

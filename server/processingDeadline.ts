@@ -22,12 +22,25 @@ export function isProcessingDeadlineError(error: unknown) {
   return error instanceof ProcessingDeadlineError || (error instanceof Error && error.message.startsWith("processing_deadline_reached:"));
 }
 
-type DeadlineContext = { deadlineAt: number; now: () => number };
+type DeadlineContext = {
+  deadlineAt: number;
+  now: () => number;
+  /** End allowed to the first pause only (see waitFitsDeadline). */
+  firstPauseDeadlineAt: number;
+  paused: boolean;
+  pauseRefused: boolean;
+};
 
 const deadlineStorage = new AsyncLocalStorage<DeadlineContext>();
 
-export function runWithProcessingDeadline<T>(deadlineAt: number, run: () => Promise<T>, now: () => number = Date.now): Promise<T> {
-  return deadlineStorage.run({ deadlineAt, now }, run);
+export function runWithProcessingDeadline<T>(
+  deadlineAt: number,
+  run: () => Promise<T>,
+  now: () => number = Date.now,
+  options: { firstPauseDeadlineAt?: number } = {},
+): Promise<T> {
+  const firstPauseDeadlineAt = Math.max(deadlineAt, options.firstPauseDeadlineAt ?? deadlineAt);
+  return deadlineStorage.run({ deadlineAt, now, firstPauseDeadlineAt, paused: false, pauseRefused: false }, run);
 }
 
 /**
@@ -41,6 +54,37 @@ export function stepTimeoutMs(step: string, ownTimeoutMs: number, options: { res
   const available = context.deadlineAt - context.now() - (options.reserveMs ?? 0);
   if (available < options.minimumMs) throw new ProcessingDeadlineError(step);
   return Math.min(ownTimeoutMs, available);
+}
+
+/**
+ * Whether a pause (a provider's retry-after, a short backoff) still ends before
+ * the deadline; always true outside one. The first pause may end as late as
+ * `firstPauseDeadlineAt`, the later ones only before the deadline itself: the
+ * emails sent right after a payment (appointmentFulfillment.ts) still get
+ * their new try after a passing rate limit, but no longer wait through a
+ * lasting one. A refused pause is recorded (deadlineCutShort).
+ */
+export function waitFitsDeadline(waitMs: number): boolean {
+  const context = deadlineStorage.getStore();
+  if (!context) return true;
+  const fits = context.now() + waitMs <= (context.paused ? context.deadlineAt : context.firstPauseDeadlineAt);
+  if (!fits) context.pauseRefused = true;
+  return fits;
+}
+
+/** Takes a pause that waitFitsDeadline allowed; the next ones keep to the deadline itself. */
+export function pauseWithinDeadline(waitMs: number): Promise<void> {
+  const context = deadlineStorage.getStore();
+  if (context) context.paused = true;
+  return new Promise(resolve => setTimeout(resolve, waitMs));
+}
+
+/**
+ * Whether this processing gave up a pause for its deadline: its work stopped
+ * short of its own retries because time ran out, not because it failed.
+ */
+export function deadlineCutShort(): boolean {
+  return deadlineStorage.getStore()?.pauseRefused === true;
 }
 
 /** Minimum durations of the CV analysis steps when time is short. */
