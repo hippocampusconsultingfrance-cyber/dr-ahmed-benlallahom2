@@ -11,6 +11,11 @@ vi.mock("./appointmentFulfillment", () => ({
   recoverStaleAppointmentFulfillmentJobs: vi.fn(async () => ({ recovered: 0 })),
   processDueAppointmentFulfillmentJobs: vi.fn(async () => ({ processed: 0, results: [] })),
 }));
+const documentJobs = vi.hoisted(() => ({
+  recreateMissingCandidateDocumentAnalysisJobs: vi.fn(async () => ({ recreated: 0 })),
+  processDueCandidateDocumentAnalysisJobs: vi.fn(async () => ({ processed: 0, completed: 0, retried: 0, needsReview: 0 })),
+}));
+vi.mock("./candidateDocumentProcessing", () => documentJobs);
 
 import {
   DAILY_REMINDER_WINDOW,
@@ -18,6 +23,7 @@ import {
   drainInBatches,
   reminderWindowBounds,
   runAppointmentFulfillmentWorker,
+  runCandidateDocumentProcessingWorker,
   sendDueAppointmentReminders,
 } from "./scheduledJobs";
 
@@ -69,13 +75,14 @@ describe("fenêtres de rappel", () => {
 });
 
 describe("envoi des rappels", () => {
-  it("réserve chaque rendez-vous avant l’envoi : deux passages simultanés n’envoient qu’un rappel chacun, marqué envoyé", async () => {
-    seedAppointment(1);
-    seedAppointment(2);
+  it("réserve chaque rendez-vous avant l’envoi : le cron quotidien et le Heartbeat horaire simultanés n’envoient qu’un rappel chacun, marqué envoyé", async () => {
+    // About 24 h ahead: inside both windows.
+    seedAppointment(1, { appointment_date: new Date("2026-10-08T17:00:00Z") });
+    seedAppointment(2, { appointment_date: new Date("2026-10-08T17:00:00Z") });
     seedAppointment(3, { reminder_sent: 1 });
     seedAppointment(4, { appointment_date: new Date("2026-10-10T09:00:00Z") });
 
-    const [daily, hourly] = await Promise.all([sendDueAppointmentReminders(DAILY_REMINDER_WINDOW, NOW), sendDueAppointmentReminders(DAILY_REMINDER_WINDOW, NOW)]);
+    const [daily, hourly] = await Promise.all([sendDueAppointmentReminders(DAILY_REMINDER_WINDOW, NOW), sendDueAppointmentReminders(HOURLY_REMINDER_WINDOW, NOW)]);
 
     expect(daily.sent + hourly.sent).toBe(2);
     expect(remindedTrackingIds().sort()).toEqual(["APT-1", "APT-2"]);
@@ -142,6 +149,18 @@ describe("envoi des rappels", () => {
     expect(result.reminderRecovery).toEqual({ reminded: 1, sent: 1, failed: 0 });
     expect(remindedTrackingIds()).toEqual(["APT-1"]);
     expect(memory.rows(appointments).map(row => row.reminder_sent)).toEqual([1, 0]);
+  });
+});
+
+describe("traitement quotidien des documents du coffre", () => {
+  it("analyse les documents en file même quand la recréation des tâches manquantes échoue (DATA-02)", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    documentJobs.recreateMissingCandidateDocumentAnalysisJobs.mockRejectedValueOnce(new Error("candidate_document_database_unavailable"));
+    documentJobs.processDueCandidateDocumentAnalysisJobs.mockResolvedValueOnce({ processed: 1, completed: 1, retried: 0, needsReview: 0 });
+
+    await expect(runCandidateDocumentProcessingWorker({ batchSize: 1, maxBatches: 6, budgetMs: 20_000 }))
+      .resolves.toEqual({ jobsRecreated: 0, processed: 1, completed: 1, retried: 0, needsReview: 0 });
+    expect(documentJobs.processDueCandidateDocumentAnalysisJobs).toHaveBeenCalledTimes(2);
   });
 });
 

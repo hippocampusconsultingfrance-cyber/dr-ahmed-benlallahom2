@@ -35,7 +35,11 @@ export const REMINDER_RESERVATION_STALE_MS = 15 * 60 * 1000;
 /**
  * Resend keeps the reminder's idempotency key 24 hours: a reservation is
  * taken back only while a reminder it may have sent would be recognised, so
- * the patient never gets it twice.
+ * the patient does not get it twice. The reservation is dated by updatedAt,
+ * which a later change to the booking also moves (the patient's email
+ * corrected from the dashboard): a reservation the stopped run left more than
+ * 24 hours before can then still be taken back, and Resend no longer knows
+ * the key. A column of its own would date it exactly (needs a migration).
  */
 export const REMINDER_RESERVATION_RETAKE_LIMIT_MS = 23 * HOUR_MS;
 
@@ -131,8 +135,12 @@ export async function runAppointmentFulfillmentWorker(options: { batchSize: numb
 
 export async function runCandidateDocumentProcessingWorker(options: { batchSize: number; maxBatches: number; budgetMs: number }) {
   const { processDueCandidateDocumentAnalysisJobs, recreateMissingCandidateDocumentAnalysisJobs } = await import("./candidateDocumentProcessing");
-  // DATA-02: a document whose upload stopped before its job gets it first.
-  const { recreated } = await recreateMissingCandidateDocumentAnalysisJobs();
+  // DATA-02: a document whose upload stopped before its job gets it first;
+  // a failure here leaves the documents already queued to their analysis.
+  const { recreated } = await recreateMissingCandidateDocumentAnalysisJobs().catch(error => {
+    console.error("[CandidateDocumentProcessing] Missing job recovery failed:", safeErrorName(error));
+    return { recreated: 0 };
+  });
   const { processed, batches } = await drainInBatches(() => processDueCandidateDocumentAnalysisJobs(options.batchSize), options);
   return {
     jobsRecreated: recreated,
