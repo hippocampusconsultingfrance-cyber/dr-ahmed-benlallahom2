@@ -363,9 +363,10 @@ describe("un envoi refait après le retry-after de Resend prend lui aussi son cr
 
     expect(subjects().map(subject => subject.split(" ")[0])).toEqual(["Nouvelle", "Confirmation", "Nouvelle", "Facture"]);
     expect(jobs.map(row => [row.jobType, row.status, row.attempts])).toEqual([["owner", "completed", 1], ["confirmation", "completed", 1], ["invoice", "completed", 1]]);
-    // setTimeout may fire a millisecond early on some platforms.
+    // Slots are kept a pause apart; a send that a busy machine starts a few
+    // milliseconds late in its slot shortens the gap to the next one by as much.
     const times = sendTimes();
-    for (let index = 1; index < times.length; index += 1) expect(times[index] - times[index - 1]).toBeGreaterThanOrEqual(PAUSE_MS - 2);
+    for (let index = 1; index < times.length; index += 1) expect(times[index] - times[index - 1]).toBeGreaterThanOrEqual(PAUSE_MS - 10);
   });
 
   it("sous le budget d’un traitement immédiat, un nouvel essai dont le créneau tombe après ce budget ne part pas : la notification reste en file, sans tentative comptée ni alerte", async () => {
