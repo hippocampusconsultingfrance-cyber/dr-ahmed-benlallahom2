@@ -86,13 +86,43 @@ describe("missions employeurs : classement, certifications et accord du candidat
     expect(notYet.candidates.map(candidate => candidate.id)).toEqual([low.id, unscored.id]);
   });
 
-  it(`ne classe que les ${MISSION_MATCHING_MAX_CANDIDATES} dossiers ouverts les plus récents, et le dit`, async () => {
-    for (let index = 0; index <= MISSION_MATCHING_MAX_CANDIDATES; index += 1) seedCandidate();
+  it(`ne classe que les ${MISSION_MATCHING_MAX_CANDIDATES} dossiers ouverts les plus récents, et le dit, mais toujours les candidats de la mission`, async () => {
+    for (let index = 0; index <= MISSION_MATCHING_MAX_CANDIDATES + 1; index += 1) seedCandidate();
     const brief = seedBrief();
-    const result = await admin().admin.clientBriefs.candidates({ briefId: brief.id as number });
-    expect(result.ranking).toEqual({ eligible: MISSION_MATCHING_MAX_CANDIDATES + 1, ranked: MISSION_MATCHING_MAX_CANDIDATES });
+    const briefId = brief.id as number;
+    const result = await admin().admin.clientBriefs.candidates({ briefId });
+    expect(result.ranking).toEqual({ eligible: MISSION_MATCHING_MAX_CANDIDATES + 2, ranked: MISSION_MATCHING_MAX_CANDIDATES });
     expect(result.pagination.total).toBe(MISSION_MATCHING_MAX_CANDIDATES);
-    expect(result.candidates[0]!.id).toBe(MISSION_MATCHING_MAX_CANDIDATES + 1);
+    expect(result.candidates[0]!.id).toBe(MISSION_MATCHING_MAX_CANDIDATES + 2);
+
+    // The oldest dossier, beyond the bound, was shortlisted: it stays on screen,
+    // to note the candidate's agreement or remove them from the shortlist.
+    await admin().admin.clientBriefs.associateCandidate({ briefId, applicationId: 1, status: "shortlisted" });
+    const shortlisted = await admin().admin.clientBriefs.candidates({ briefId, shortlist: "shortlisted" });
+    expect(shortlisted.candidates.map(candidate => candidate.id)).toEqual([1]);
+    expect(shortlisted).toMatchObject({ shortlistedCount: 1, ranking: { eligible: MISSION_MATCHING_MAX_CANDIDATES + 2, ranked: MISSION_MATCHING_MAX_CANDIDATES + 1 } });
+    expect((await admin().admin.clientBriefs.candidates({ briefId })).pagination.total).toBe(MISSION_MATCHING_MAX_CANDIDATES + 1);
+  });
+
+  it("renvoie la dernière page quand celle demandée s’est vidée, par exemple après un retrait de la shortlist (ADM-04)", async () => {
+    for (let index = 0; index < 11; index += 1) seedCandidate();
+    const brief = seedBrief();
+    const briefId = brief.id as number;
+    for (let id = 1; id <= 11; id += 1) await admin().admin.clientBriefs.associateCandidate({ briefId, applicationId: id, status: "shortlisted" });
+    const secondPage = await admin().admin.clientBriefs.candidates({ briefId, shortlist: "shortlisted", limit: 10, page: 1 });
+    expect(secondPage.candidates.map(candidate => candidate.id)).toEqual([1]);
+    expect(secondPage.pagination).toEqual({ page: 1, limit: 10, total: 11, totalPages: 2 });
+
+    // The admin removes the only candidate of page 2 from the shortlist.
+    await admin().admin.clientBriefs.associateCandidate({ briefId, applicationId: 1, status: "declined" });
+    const after = await admin().admin.clientBriefs.candidates({ briefId, shortlist: "shortlisted", limit: 10, page: 1 });
+    expect(after.pagination).toEqual({ page: 0, limit: 10, total: 10, totalPages: 1 });
+    expect(after.candidates).toHaveLength(10);
+
+    // Nobody left: page 0, empty.
+    const none = await admin().admin.clientBriefs.candidates({ briefId, minimumMatch: 100, page: 3 });
+    expect(none.pagination).toEqual({ page: 0, limit: 25, total: 0, totalPages: 0 });
+    expect(none.candidates).toEqual([]);
   });
 
   it("une licence lue seulement dans le CV reste « à confirmer » jusqu’à ce que l’admin la confirme, déclarée ou extraite (IA-02)", async () => {
@@ -131,6 +161,38 @@ describe("missions employeurs : classement, certifications et accord du candidat
       { name: "Licence DHA", origins: ["extracted"], expiresAt: null },
     ]]);
     expect(memory.rows(recruitmentAuditLogs).map(row => JSON.parse(String(row.metadata)).event)).toEqual(["certification_confirmed", "certification_confirmed", "certification_unconfirmed"]);
+
+    // Nothing changes, nothing is logged: confirmed twice, or withdrawn when not confirmed.
+    await expect(admin().admin.recruitment.candidate.confirmCertification({ id: hidden.id as number, name: "BLS", confirmed: true })).resolves.toEqual({ success: true, changed: false });
+    await expect(admin().admin.recruitment.candidate.confirmCertification({ id: hidden.id as number, name: "Licence DHA", confirmed: false })).resolves.toEqual({ success: true, changed: false });
+    expect(memory.rows(recruitmentAuditLogs)).toHaveLength(3);
+  });
+
+  it("confirme une certification déclarée plus longue qu’une ligne enregistrée (180 caractères) (IA-02)", async () => {
+    const longName = `Diplôme ${"universitaire ".repeat(20)}`.trim();
+    const candidate = seedCandidate({ certifications: `${longName}; BLS` });
+    await expect(admin().admin.recruitment.candidate.confirmCertification({ id: candidate.id as number, name: longName, confirmed: true })).resolves.toEqual({ success: true, changed: true });
+    expect(memory.rows(cvCandidateCertifications).map(row => row.name)).toEqual([longName.slice(0, 180)]);
+    const { items } = await admin().admin.recruitment.list({});
+    expect(items.find(item => item.id === candidate.id)!.certificationFacts).toEqual([
+      { name: longName, origins: ["declared", "confirmed"], expiresAt: null },
+      { name: "BLS", origins: ["declared"], expiresAt: null },
+    ]);
+    // The same name again: already confirmed.
+    await expect(admin().admin.recruitment.candidate.confirmCertification({ id: candidate.id as number, name: longName, confirmed: true })).resolves.toEqual({ success: true, changed: false });
+    await expect(admin().admin.recruitment.candidate.confirmCertification({ id: candidate.id as number, name: longName, confirmed: false })).resolves.toEqual({ success: true, changed: true });
+    expect(memory.rows(cvCandidateCertifications)[0]!.confirmed_at).toBeNull();
+  });
+
+  it("le vivier filtré par certification renvoie l’origine de chaque certification (IA-02)", async () => {
+    const trapped = seedCandidate({ marketing_consent: 1, certifications: "BLS", normalized_certifications: '[{"name":"Licence DHA"}]', analysis_prompt_version: RECRUITMENT_ANALYSIS_PROMPT_VERSION });
+    memory.seed(cvCandidateCertifications, [{ application_id: trapped.id, name: "Licence DHA", source: "extracted" }]);
+    seedCandidate({ marketing_consent: 1, certifications: "ACLS" });
+    const pool = await admin().admin.recruitment.pool.list({ certification: "DHA" });
+    expect(pool.map(candidate => [candidate.id, candidate.certificationFacts])).toEqual([[trapped.id, [
+      { name: "BLS", origins: ["declared"], expiresAt: null },
+      { name: "Licence DHA", origins: ["extracted"], expiresAt: null },
+    ]]]);
   });
 
   it("note puis retire la date de l’accord du candidat pour une mission (RGPD-03)", async () => {

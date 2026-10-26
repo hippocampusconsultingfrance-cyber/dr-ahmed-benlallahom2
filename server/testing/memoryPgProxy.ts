@@ -87,6 +87,7 @@ type Expr =
   | { type: "not"; expr: Expr }
   | { type: "now" }
   | { type: "lower"; expr: Expr }
+  | { type: "coalesce"; items: Expr[] }
   | { type: "count" }
   | { type: "case"; whens: Array<[Expr, Expr]>; otherwise: Expr | null };
 
@@ -216,6 +217,13 @@ class Parser {
       this.expectPunct("(");
       expr = { type: "lower", expr: this.expression() };
       this.expectPunct(")");
+    } else if (token.kind === "word" && token.text === "coalesce" && this.peek(1)?.text === "(") {
+      this.next();
+      this.expectPunct("(");
+      const items = [this.expression()];
+      while (this.acceptPunct(",")) items.push(this.expression());
+      this.expectPunct(")");
+      expr = { type: "coalesce", items };
     } else if (token.kind === "word" && token.text === "case") {
       this.next();
       const whens: Array<[Expr, Expr]> = [];
@@ -261,6 +269,13 @@ function evaluate(expr: Expr, row: Row, params: unknown[], now: string): Value {
     case "lower": {
       const value = evaluate(expr.expr, row, params, now);
       return typeof value === "string" ? value.toLowerCase() : value;
+    }
+    case "coalesce": {
+      for (const item of expr.items) {
+        const value = evaluate(item, row, params, now);
+        if (value !== null) return value;
+      }
+      return null;
     }
     case "count": throw new Error("memoryPgProxy: count(*) is only supported as a select expression");
     case "case": {

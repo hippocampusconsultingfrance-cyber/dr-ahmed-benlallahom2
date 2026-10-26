@@ -24,7 +24,7 @@ import {
   type RecruitmentEmailTemplate,
 } from "./_core/notifications";
 import { logRecruitmentAction, matchesRecruitmentProfile, parseRecruitmentJsonArray } from "./recruitmentAudit";
-import { certificationFacts, computeBriefCandidateMatch, declaredCertificationNames, languageFacts, sameRecruitmentFact, type CertificationRow, type LanguageRow } from "./clientBriefMatching";
+import { CERTIFICATION_NAME_MAX_LENGTH, certificationFacts, computeBriefCandidateMatch, declaredCertificationNames, languageFacts, sameRecruitmentFact, type CertificationRow, type LanguageRow } from "./clientBriefMatching";
 import { recruitmentFactLabel, type RecruitmentFact } from "../shared/recruitmentFactOrigins";
 import { candidatePortalRouter } from "./candidatePortalRouter";
 import { enforcePersistentRateLimit, hashSecurityValue, logSecurityEvent, requestIpHash } from "./candidateSecurity";
@@ -259,7 +259,8 @@ async function languageFactsByApplication(db: AdminDb, applications: Array<{ id:
  * Bound of a mission's ranking (ADM-04): the compatibility of every open
  * application is computed before sorting and paging, in three queries (the
  * applications, their certifications, their languages). Beyond this many open
- * applications, only the most recent ones are ranked, and the screen says so.
+ * applications, only the most recent ones are ranked, with the candidates
+ * already associated with the mission, and the screen says so.
  * About 2 KB a row, a few MB per request at most.
  */
 export const MISSION_MATCHING_MAX_CANDIDATES = 2_000;
@@ -1639,7 +1640,7 @@ export const appRouter = router({
             if (input?.mobility) conditions.push(sql`(LOWER(COALESCE(${cvApplications.mobility}, '')) LIKE LOWER(${`%${input.mobility}%`}) OR LOWER(COALESCE(${cvApplications.targetCountries}, '')) LIKE LOWER(${`%${input.mobility}%`}))`);
             if (input?.certification) conditions.push(sql`(LOWER(COALESCE(${cvApplications.certifications}, '')) LIKE LOWER(${`%${input.certification}%`}) OR (${cvApplications.analysisPromptVersion} = ${RECRUITMENT_ANALYSIS_PROMPT_VERSION} AND LOWER(COALESCE(${cvApplications.normalizedCertifications}, '')) LIKE LOWER(${`%${input.certification}%`})))`);
             if (input?.minimumScore) conditions.push(scoreAtLeastOrUnavailable(input.minimumScore));
-            return db.select({
+            const candidates = await db.select({
               id: cvApplications.id,
               firstName: cvApplications.firstName,
               lastName: cvApplications.lastName,
@@ -1655,6 +1656,9 @@ export const appRouter = router({
               marketingConsent: cvApplications.marketingConsent,
               createdAt: cvApplications.createdAt,
             }).from(cvApplications).where(and(...conditions)).orderBy(verifiedScoreFirst, desc(cvApplications.createdAt)).limit(input?.limit || 200);
+            // With their origins: the certification filter also matches what the AI read in the CV (IA-02).
+            const certificationsByApplication = await certificationFactsByApplication(db, candidates);
+            return candidates.map(candidate => ({ ...candidate, certificationFacts: certificationsByApplication.get(candidate.id) ?? [] }));
           }),
       }),
 
@@ -1962,27 +1966,31 @@ export const appRouter = router({
         // IA-02: an admin confirms a certification after checking it, or
         // withdraws the confirmation. Only a confirmed certification, declared
         // or read in the CV, earns points in a mission's matching.
-        confirmCertification: adminProcedure.input(z.object({ id: z.number().int().positive(), name: z.string().trim().min(1).max(180), confirmed: z.boolean() })).mutation(async ({ input, ctx }) => {
+        // The name is the one shown, as long as the declared term (the form
+        // takes 1,000 characters); a row keeps its first 180.
+        confirmCertification: adminProcedure.input(z.object({ id: z.number().int().positive(), name: z.string().trim().min(1).max(1000), confirmed: z.boolean() })).mutation(async ({ input, ctx }) => {
           const db = await getDb();
           if (!db) throw new Error("Database connection failed");
           const [application] = await db.select({ id: cvApplications.id, certifications: cvApplications.certifications }).from(cvApplications).where(eq(cvApplications.id, input.id)).limit(1);
           if (!application) throw new TRPCError({ code: "NOT_FOUND", message: "Candidature introuvable." });
-          const rows = (await db.select({ id: cvCandidateCertifications.id, name: cvCandidateCertifications.name })
+          const rows = (await db.select({ id: cvCandidateCertifications.id, name: cvCandidateCertifications.name, confirmedAt: cvCandidateCertifications.confirmedAt })
             .from(cvCandidateCertifications)
             .where(eq(cvCandidateCertifications.applicationId, application.id)))
             .filter(row => sameRecruitmentFact(row.name, input.name));
           const declared = declaredCertificationNames(application.certifications).find(name => sameRecruitmentFact(name, input.name));
           if (!rows.length && !declared) throw new TRPCError({ code: "NOT_FOUND", message: "Cette certification ne figure pas dans le dossier." });
-          if (input.confirmed && rows.length) {
-            await db.update(cvCandidateCertifications).set({ confirmedAt: new Date() }).where(and(inArray(cvCandidateCertifications.id, rows.map(row => row.id)), isNull(cvCandidateCertifications.confirmedAt)));
-          } else if (input.confirmed) {
+          // Rows whose confirmation changes: nothing is logged when none does.
+          const changed = rows.filter(row => (row.confirmedAt === null) === input.confirmed);
+          if (changed.length) {
+            await db.update(cvCandidateCertifications).set({ confirmedAt: input.confirmed ? new Date() : null }).where(inArray(cvCandidateCertifications.id, changed.map(row => row.id)));
+          } else if (input.confirmed && !rows.length) {
             // A certification declared in the form only: its confirmation gets a row of its own.
-            await db.insert(cvCandidateCertifications).values({ applicationId: application.id, name: declared!.slice(0, 180), source: "declared", confirmedAt: new Date() });
-          } else if (rows.length) {
-            await db.update(cvCandidateCertifications).set({ confirmedAt: null }).where(inArray(cvCandidateCertifications.id, rows.map(row => row.id)));
+            await db.insert(cvCandidateCertifications).values({ applicationId: application.id, name: declared!.slice(0, CERTIFICATION_NAME_MAX_LENGTH), source: "declared", confirmedAt: new Date() });
+          } else {
+            return { success: true, changed: false };
           }
           await logRecruitmentAction({ applicationId: application.id, adminOpenId: ctx.user.openId, action: "status_update", metadata: { event: input.confirmed ? "certification_confirmed" : "certification_unconfirmed", certification: rows[0]?.name ?? declared } });
-          return { success: true };
+          return { success: true, changed: true };
         }),
         markResponse: adminProcedure.input(z.object({ id: z.number().int().positive(), note: z.string().trim().max(1000).optional() })).mutation(async ({ input, ctx }) => {
           const db = await getDb();
@@ -2342,7 +2350,7 @@ export const appRouter = router({
           const candidateConditions = [sql`${cvApplications.status} NOT IN ('rejected', 'archived')`];
           const [countResult] = await db.select({ total: sql<number>`COUNT(*)` }).from(cvApplications).where(and(...candidateConditions));
           // Every open application is ranked, not one page of the AI score order (ADM-04).
-          const applications = await db.select({
+          const candidateColumns = {
             id: cvApplications.id,
             trackingId: cvApplications.trackingId,
             firstName: cvApplications.firstName,
@@ -2356,14 +2364,27 @@ export const appRouter = router({
             mobility: cvApplications.mobility,
             aiScore: verifiedRecruitmentScore,
             status: cvApplications.status,
-          }).from(cvApplications)
-            .where(and(...candidateConditions))
-            .orderBy(desc(cvApplications.createdAt), desc(cvApplications.id))
-            .limit(MISSION_MATCHING_MAX_CANDIDATES);
-          const [certificationsByApplication, languagesByApplication, associations] = await Promise.all([
+          };
+          const [recentApplications, associations] = await Promise.all([
+            db.select(candidateColumns).from(cvApplications)
+              .where(and(...candidateConditions))
+              .orderBy(desc(cvApplications.createdAt), desc(cvApplications.id))
+              .limit(MISSION_MATCHING_MAX_CANDIDATES),
+            db.select().from(clientBriefCandidates).where(eq(clientBriefCandidates.briefId, brief.id)),
+          ]);
+          // Beyond the bound, the mission's own candidates are ranked too, however
+          // old: a shortlisted one stays on screen, to note their agreement or
+          // remove them from the shortlist.
+          const recentIds = new Set(recentApplications.map(application => application.id));
+          const associatedOutsideBound = recentApplications.length < MISSION_MATCHING_MAX_CANDIDATES
+            ? []
+            : associations.map(association => association.applicationId).filter(id => !recentIds.has(id));
+          const applications = associatedOutsideBound.length
+            ? [...recentApplications, ...await db.select(candidateColumns).from(cvApplications).where(and(...candidateConditions, inArray(cvApplications.id, associatedOutsideBound)))]
+            : recentApplications;
+          const [certificationsByApplication, languagesByApplication] = await Promise.all([
             certificationFactsByApplication(db, applications),
             languageFactsByApplication(db, applications),
-            db.select().from(clientBriefCandidates).where(eq(clientBriefCandidates.briefId, brief.id)),
           ]);
           const associationByApplication = new Map(associations.map(association => [association.applicationId, association]));
           const ranked = applications.map(application => ({
@@ -2384,7 +2405,12 @@ export const appRouter = router({
             .filter(candidate => candidate.match.score >= (input.minimumMatch ?? 0))
             .filter(candidate => input.shortlist === "all" || (candidate.association?.status === "shortlisted") === (input.shortlist === "shortlisted"));
           const total = ranked.length;
-          const candidates = ranked.slice(input.page * input.limit, (input.page + 1) * input.limit);
+          const totalPages = Math.ceil(total / input.limit);
+          // A candidate leaving the filtered list (removed from the shortlist, a
+          // confirmation withdrawn) can empty the page asked for: the last page
+          // is returned instead, and pagination.page says which.
+          const page = Math.min(input.page, Math.max(0, totalPages - 1));
+          const candidates = ranked.slice(page * input.limit, (page + 1) * input.limit);
           // What the shortlist export would carry, across every page (REC-01):
           // only the candidates who agreed to be presented (RGPD-03).
           const shortlist = await openShortlist(db, brief.id);
@@ -2394,7 +2420,7 @@ export const appRouter = router({
             shortlistedCount: shortlist.length,
             consentedCount: shortlist.filter(candidate => candidate.candidateConsentAt).length,
             ranking: { eligible: Number(countResult?.total || 0), ranked: applications.length },
-            pagination: { page: input.page, limit: input.limit, total, totalPages: Math.ceil(total / input.limit) },
+            pagination: { page, limit: input.limit, total, totalPages },
           };
         }),
       associateCandidate: adminProcedure
