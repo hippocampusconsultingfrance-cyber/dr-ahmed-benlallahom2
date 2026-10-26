@@ -40,6 +40,15 @@ export const DOCUMENT_DECOMPRESSION_LIMITS = {
   /** Isolated PDF reader: time allowed for the text of 25 pages / the rendering of 3 pages. */
   pdfTextTimeoutMs: 12_000,
   pdfRenderTimeoutMs: 15_000,
+  /**
+   * Isolated PDF reader: drawing work of the visibility check of a file, in
+   * the units of pdfVisibleText, counted rather than timed so that a file
+   * always gives the same text. About 4 s on the development machine, within
+   * the time share of the text task: 8 pages scanned at 300 dpi, 24 at
+   * 150 dpi or 25 pages of an ordinary CV; a page drawn from 18,000 vector
+   * paths costs about 65,000.
+   */
+  pdfVisibilityWorkUnits: 600_000,
   /** Characters of extracted text kept for the analysis and the database. */
   extractedTextMaxChars: 200_000,
 } as const;

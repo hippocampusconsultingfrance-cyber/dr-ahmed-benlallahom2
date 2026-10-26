@@ -13,9 +13,11 @@
  * text only erases strokes, and is not counted as ink. Operations hidden in
  * the same B do not overlap; overlapping ones go to different renders
  * (greedy colouring), so that a few renders per page are enough, at most
- * `maxRenders`. The same text drawn again at the same place (fake bold) is
- * hidden with its first copy and kept once; operations that only show ink
- * together are drawn one at a time, and the text of those that ink kept once.
+ * `maxRenders`. The same text drawn again at the same place (fake bold, or an
+ * invisible copy laid on its visible line, even at another horizontal scale)
+ * is hidden with its first copy and kept once, never counted as hidden text;
+ * operations that only show ink together are drawn one at a time, and the
+ * text of those that ink kept once.
  *
  * Inside a visible operation (one per line in ReportLab, PDFKit, Word or
  * LibreOffice exports), each word is then judged on its own ink: a word
@@ -34,6 +36,21 @@
  * and text left unchecked for lack of time. Unverifiable text is never
  * counted as hidden text.
  *
+ * The OCR layer of a scanned page is also returned apart (`layer`), each of
+ * its words in place, when its words lie on marks of the picture under them
+ * (all but a few letters, as a light footer may leave none at this
+ * resolution), none on another word of the layer, and the page hides no text
+ * beyond a few signs: the caller may read it once the vision has found the
+ * same words on the pages it read (recruitmentAnalysis). The words given back
+ * are reported as unverifiable (`image`) with `layer` set; a word without
+ * marks under it never is.
+ *
+ * The work is counted, not timed (`budget`, shared by the pages of a file):
+ * a render costs RENDER_UNITS plus one unit per drawing operation of the
+ * page, the first one also the pixels of the pictures it decodes. A file thus
+ * always gives the same text, whatever the load of the machine; `deadline`
+ * only guards against a host far slower than planned.
+ *
  * This function runs in the isolated PDF reader's worker, whose source
  * includes it through Function.prototype.toString: it must not use anything
  * defined outside its own body.
@@ -42,7 +59,8 @@
 export type PdfUnverifiableReason = "faint" | "font" | "image" | "unfinished" | "unmatched";
 export type PdfVisibilityFindings = {
   invisibleText: string[];
-  unverifiableText: Array<{ page: number; reason: PdfUnverifiableReason; text: string }>;
+  /** `layer`: words of the page's OCR layer, given back in its `layer` content. */
+  unverifiableText: Array<{ page: number; reason: PdfUnverifiableReason; text: string; layer?: true }>;
 };
 
 type TextItem = { str?: string; dir?: string; transform: number[]; width: number; height?: number; fontName?: string; hasEOL?: boolean };
@@ -65,8 +83,8 @@ export async function visibleTextContent(
   content: TextContent,
   canvasFactory: CanvasFactory,
   findings: PdfVisibilityFindings,
-  options: { pageNumber: number; deadline: number; maxRenders?: number },
-): Promise<{ content: TextContent; complete: boolean }> {
+  options: { pageNumber: number; deadline: number; maxRenders?: number; budget?: { units: number } },
+): Promise<{ content: TextContent; complete: boolean; layer?: TextContent }> {
   const MIN_FONT_SIZE_PT = 4;
   // Average advance of a character below which text is squashed out of sight.
   const MIN_ADVANCE_PT = 1;
@@ -76,6 +94,18 @@ export async function visibleTextContent(
   const MIN_INK_PIXELS = 2;
   const MAX_RENDER_PIXELS = 2_000_000;
   const MAX_RENDERS = options.maxRenders ?? 12;
+  // Units of `budget` (see above): a render costs about what drawing 5,000 operations does, plus one unit per
+  // operation of the page; the first one also parses them (one more unit each) and decodes the pictures
+  // (one unit per 150 pixels).
+  const RENDER_UNITS = 5_000;
+  const IMAGE_PIXELS_PER_UNIT = 150;
+  // The OCR layer of a page is not given back when a word of it is laid over another one by more than this
+  // share of the smaller one's box, when its words without marks under them hold more than this share of its
+  // letters (a light footer may leave none at this resolution), or with more letters or digits of hidden
+  // text on the page than this.
+  const LAYER_OVERLAP_SHARE = 0.5;
+  const LAYER_UNMARKED_SHARE = 0.05;
+  const MAX_HIDDEN_LETTERS_WITH_LAYER = 3;
   // A word of a visible operation is faint below this share of the usual ink of the page's words (their
   // median, per pixel of their glyphs' boxes; honest words keep more than half of it), or below this ink
   // per pixel whatever the page (a page of specks; honest words have 0.18 or more).
@@ -84,7 +114,7 @@ export async function visibleTextContent(
   // Glyphs the text layer leaves out (off the page, format marks) skipped while matching it with the drawing.
   const ALIGN_WINDOW = 8;
   // Operator codes of pdf.js 5.4.296 (OPS), the version pdf-parse pins.
-  const OP = { save: 10, restore: 11, endPath: 28, clip: 29, eoClip: 30, setTextRenderingMode: 38, showText: 44, shadingFill: 62, formBegin: 74, formEnd: 75, groupBegin: 76, groupEnd: 77, annotationBegin: 80, annotationEnd: 81, constructPath: 91 };
+  const OP = { save: 10, restore: 11, endPath: 28, clip: 29, eoClip: 30, setTextRenderingMode: 38, showText: 44, shadingFill: 62, formBegin: 74, formEnd: 75, groupBegin: 76, groupEnd: 77, annotationBegin: 80, annotationEnd: 81, imageMask: 83, image: 85, inlineImage: 86, constructPath: 91 };
   const IMAGE_OPS = new Set([83, 84, 85, 86, 87, 88, 89, 90]);
   const INVISIBLE_MODE = 3;
   const HIDDEN_CHAR_PROC = "pdfVisibleTextHidden";
@@ -110,12 +140,21 @@ export async function visibleTextContent(
   const textChars = () => lines.flatMap(line => line ? line.chars.filter(char => !char.space) : []);
   if (textChars().length === 0) return { content, complete: true };
 
-  /** The text layer of the page, without the characters not marked visible, which go to `findings`. */
-  const assemble = (complete: boolean) => {
+  /**
+   * The text layer of the page, without the characters not marked visible, which go to `findings`; with
+   * `ocrLayer`, also the page's OCR layer (`layer`), its words given back in place.
+   */
+  const assemble = (complete: boolean, ocrLayer = false) => {
+    if (!ocrLayer) for (const char of textChars()) if (char.status === "layer") char.status = "unverifiable:image";
+    const layerItems: TextItem[] = [];
     const items = content.items.map((item, index) => {
       const line = lines[index];
-      if (!line || line.chars.every(char => char.space || char.status === "visible")) return item;
+      if (!line || line.chars.every(char => char.space || char.status === "visible")) {
+        layerItems.push(item);
+        return item;
+      }
       let str = "";
+      let layerStr = "";
       const words: Record<string, string[]> = {};
       const pending: Record<string, string> = {};
       const flush = () => {
@@ -125,22 +164,27 @@ export async function visibleTextContent(
       for (const char of line.chars) {
         if (char.space) {
           str += char.text;
+          layerStr += char.text;
           flush();
         } else if (char.status === "visible") {
           str += char.text;
+          layerStr += char.text;
         } else {
+          if (char.status === "layer") layerStr += char.text;
           pending[char.status] = (pending[char.status] ?? "") + char.text;
         }
       }
       flush();
       for (const [status, found] of Object.entries(words)) {
         if (status === "invisible") findings.invisibleText.push(found.join(" "));
+        else if (status === "layer") findings.unverifiableText.push({ page: options.pageNumber, reason: "image", text: found.join(" "), layer: true });
         else if (status.startsWith("unverifiable:")) findings.unverifiableText.push({ page: options.pageNumber, reason: status.slice(13) as PdfUnverifiableReason, text: found.join(" ") });
         // "duplicate": the same text drawn again at the same place, kept once.
       }
+      layerItems.push({ ...item, str: layerStr });
       return { ...item, str };
     });
-    return { content: { ...content, items }, complete };
+    return { content: { ...content, items }, complete, ...(ocrLayer ? { layer: { ...content, items: layerItems } } : {}) };
   };
   const setAside = (status: string) => {
     for (const char of textChars()) if (char.status === "visible") char.status = status;
@@ -151,10 +195,16 @@ export async function visibleTextContent(
   const target = canvasFactory.create(Math.ceil(viewport.width), Math.ceil(viewport.height));
   const { width, height } = target.canvas;
   let renders = 0;
-  const canRender = () => renders < MAX_RENDERS && Date.now() < options.deadline;
+  // Units of a render of this page, once its operations are known (after the first one).
+  let renderUnits = RENDER_UNITS;
+  const charge = (units: number) => {
+    if (options.budget) options.budget.units -= units;
+  };
+  const canRender = (count = 1) => renders + count <= MAX_RENDERS && (options.budget?.units ?? Infinity) >= count * renderUnits && Date.now() < options.deadline;
   const draw = async (operationsFilter: ((index: number) => boolean) | null) => {
     await page.render({ canvasContext: target.context, viewport, canvas: target.canvas, operationsFilter }).promise;
     renders += 1;
+    charge(renderUnits);
     return target.context.getImageData(0, 0, width, height).data;
   };
   try {
@@ -175,13 +225,20 @@ export async function visibleTextContent(
     const modeStack: number[] = [];
     let mode = 0;
     let hasImages = false;
+    let imagePixels = 0;
     for (let index = 0; index < fnArray.length; index += 1) {
       const fn = fnArray[index];
       if (fn === OP.save || fn === OP.formBegin || fn === OP.groupBegin || fn === OP.annotationBegin) modeStack.push(mode);
       else if (fn === OP.restore || fn === OP.formEnd || fn === OP.groupEnd || fn === OP.annotationEnd) mode = modeStack.pop() ?? mode;
       else if (fn === OP.setTextRenderingMode) mode = Number(argsArray[index]![0]);
-      else if (IMAGE_OPS.has(fn)) hasImages = true;
-      else if (fn === OP.showText) {
+      else if (IMAGE_OPS.has(fn)) {
+        hasImages = true;
+        // An image XObject is drawn from [id, width, height], an inline image or a mask from its data.
+        const args = argsArray[index]!;
+        const data = args[0] as { width?: unknown; height?: unknown } | null;
+        const pixels = fn === OP.image ? Number(args[1]) * Number(args[2]) : (fn === OP.inlineImage || fn === OP.imageMask) && data && typeof data === "object" ? Number(data.width) * Number(data.height) : 0;
+        if (Number.isFinite(pixels) && pixels > 0) imagePixels += pixels;
+      } else if (fn === OP.showText) {
         modes.set(index, mode);
         (argsArray[index]![0] as Glyph[]).forEach((glyph, position) => {
           if (!glyph || typeof glyph !== "object") return;
@@ -189,6 +246,10 @@ export async function visibleTextContent(
         });
       }
     }
+    // The first render, charged as a base render so far: its operations, drawn and parsed, and the
+    // pictures it decoded.
+    renderUnits = RENDER_UNITS + fnArray.length;
+    charge(2 * fnArray.length + Math.ceil(imagePixels / IMAGE_PIXELS_PER_UNIT));
 
     // Each character of the text layer matched with the glyph that draws it: the text layer follows the
     // content stream, leaving out glyphs off the page and format marks; right-to-left text is reordered.
@@ -441,13 +502,18 @@ export async function visibleTextContent(
     };
     // The same text drawn again at the same place (fake bold, or a generator's double pass) is one unit:
     // its copies are hidden with it, and their text kept once. A second coat only darkens thin strokes.
+    // The same place: the same line, from the same start, to an end that another horizontal scale may move
+    // a little (a copy drawn after a line set at another scale keeps that scale).
+    const samePlace = (left: Box, right: Box, near: number) =>
+      Math.abs(left[0] - right[0]) <= near && Math.abs(left[1] - right[1]) <= near && Math.abs(left[3] - right[3]) <= near &&
+      Math.abs(left[2] - right[2]) <= near + 0.05 * Math.max(left[2] - left[0], right[2] - right[0]);
     const copies = new Map<number, number[]>();
     const copyOf = new Set<number>();
     const units: Array<{ op: number; text: string; box: Box; up: number }> = [];
     for (const [op, operation] of Array.from(operations).sort(([left], [right]) => left - right)) {
       const text = operation.chars.map(char => char.text).join("");
       const near = Math.max(2, 0.1 * operation.up);
-      const unit = units.find(other => other.text === text && other.box.every((value, index) => Math.abs(value - operation.box[index]!) <= near));
+      const unit = units.find(other => other.text === text && samePlace(other.box, operation.box, near));
       if (!unit) {
         units.push({ op, text, box: operation.box, up: operation.up });
         continue;
@@ -553,7 +619,7 @@ export async function visibleTextContent(
     const stacks = groups.filter(group => group.length > 1);
     if (stacks.length > 0) {
       const rounds = Math.max(...stacks.map(group => group.length));
-      if (renders + 1 + rounds > MAX_RENDERS || !canRender()) {
+      if (!canRender(1 + rounds)) {
         unfinished(stacks.flat());
       } else {
         const together = await drawWithout(stacks.flat());
@@ -625,14 +691,17 @@ export async function visibleTextContent(
     }
 
     // Text without ink: hidden, unless a picture under it shows marks there (an OCR layer on a scan).
-    const silentBoxes: Array<{ box: Box; chars: Char[]; partial: boolean; cluttered: boolean; mark: (status: string) => void }> = [];
+    const silentBoxes: Array<{ box: Box; chars: Char[]; partial: boolean; cluttered: boolean; segments: Segment[]; mark: (status: string) => void }> = [];
     for (const operation of Array.from(operations.values())) {
-      if (operation.result === "noInk") silentBoxes.push({ box: operation.box, chars: operation.chars, partial: false, cluttered: false, mark: status => { operation.result = status; } });
+      if (operation.result === "noInk") silentBoxes.push({ box: operation.box, chars: operation.chars, partial: false, cluttered: false, segments: operation.segments, mark: status => { operation.result = status; } });
     }
     for (const run of silentRuns) {
       const box = run.map(found => found.box).reduce((left, right): Box => [Math.min(left[0], right[0]), Math.min(left[1], right[1]), Math.max(left[2], right[2]), Math.max(left[3], right[3])]);
-      silentBoxes.push({ box, chars: run.flatMap(found => found.chars), partial: true, cluttered: run.some(found => found.cluttered), mark: status => { for (const found of run) for (const char of found.chars) char.status = status; } });
+      silentBoxes.push({ box, chars: run.flatMap(found => found.chars), partial: true, cluttered: run.some(found => found.cluttered), segments: [], mark: status => { for (const found of run) for (const char of found.chars) char.status = status; } });
     }
+    // The page's OCR layer: the words of operations without ink lying on a picture, each on marks of it.
+    const layerWords: Segment[] = [];
+    let unmarkedLetters = 0;
     if (silentBoxes.length > 0 && hasImages) {
       if (candidates.length > 0 && !canRender()) {
         complete = false;
@@ -650,6 +719,16 @@ export async function visibleTextContent(
           // marks, and says nothing alone: set aside without accusing.
           if (marksIn(pictures, silentBox.box) >= MIN_INK_PIXELS || lettersOf(silentBox.chars) < 2) silentBox.mark("unverifiable:image");
           else silentBox.mark(silentBox.cluttered ? "unverifiable:faint" : "invisible");
+          // Each word of such an operation on marks of its own, or left out of the layer.
+          if (silentBox.partial) continue;
+          for (const found of silentBox.segments) {
+            if (marksIn(pictures, found.core) >= MIN_INK_PIXELS) {
+              for (const char of found.chars) char.status = "layer";
+              layerWords.push(found);
+            } else {
+              unmarkedLetters += lettersOf(found.chars);
+            }
+          }
         }
       }
     } else {
@@ -661,7 +740,15 @@ export async function visibleTextContent(
       const status = operation.result === "unfinished" ? "unverifiable:unfinished" : operation.result === "visible" ? null : operation.result;
       if (status) for (const char of operation.chars) if (char.status === "visible") char.status = status;
     }
-    return assemble(complete);
+    // The OCR layer is given back only plain: no word of it laid over another one (a line added over the
+    // scan's own), hardly any without marks, and no hidden text on the page beyond a few signs (a tiny
+    // page number).
+    const intersection = (left: Box, right: Box) => area([Math.max(left[0], right[0]), Math.max(left[1], right[1]), Math.min(left[2], right[2]), Math.min(left[3], right[3])]);
+    const stacked = layerWords.some((found, index) => layerWords.slice(index + 1).some(other =>
+      other.op !== found.op && intersection(found.core, other.core) > LAYER_OVERLAP_SHARE * Math.min(area(found.core), area(other.core))));
+    const markedLetters = layerWords.reduce((total, found) => total + lettersOf(found.chars), 0);
+    const hiddenLetters = textChars().filter(char => char.status === "invisible" && LETTER.test(char.text)).length;
+    return assemble(complete, markedLetters > 0 && !stacked && unmarkedLetters <= LAYER_UNMARKED_SHARE * (markedLetters + unmarkedLetters) && hiddenLetters <= MAX_HIDDEN_LETTERS_WITH_LAYER);
   } finally {
     canvasFactory.destroy(target);
   }

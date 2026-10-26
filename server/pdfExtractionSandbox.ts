@@ -28,14 +28,20 @@ import { visibleTextContent, type PdfVisibilityFindings } from "./pdfVisibleText
  * hidden) when a picture under it may show it, as an OCR layer on a scan,
  * when it is left with too little ink to be read, when its font cannot be
  * drawn, or when it was not checked in time. Both are left out of the text.
+ * A scanned page whose OCR layer lies word by word on the picture also gets
+ * that layer apart (`layerText`), for the caller to compare with the vision.
  * The render task draws the first pages, or those it is given.
- * Drawing pages stops at `VISIBILITY_TIME_SHARE` of the time allowed: the
- * pages not wholly checked are listed in `uncheckedPages`.
+ * Drawing pages stops once `pdfVisibilityWorkUnits` of drawing work are
+ * spent (counted, so that a file always gives the same text: see
+ * pdfVisibleText), or at `VISIBILITY_TIME_SHARE` of the time allowed on a
+ * host far slower than planned: the pages not wholly checked are listed in
+ * `uncheckedPages`.
  */
 
 export type PdfTextReading = {
   total: number | null;
-  pages: Array<{ num: number; text: string }>;
+  /** `layerText`: the page's text with its OCR layer given back (pdfVisibleText). */
+  pages: Array<{ num: number; text: string; layerText?: string }>;
   /** Absent when the text was read without the visibility check (in-process fallback). */
   visibility?: { invisibleText: string[]; uncheckedPages: number[]; unverifiableText: PdfVisibilityFindings["unverifiableText"] };
 };
@@ -112,22 +118,26 @@ const visibleTextContent = ${visibleTextContent.toString()};
       const pages = [];
       const visibility = { invisibleText: [], uncheckedPages: [], unverifiableText: [] };
       const deadline = startedAt + task.visibilityBudgetMs;
+      const budget = { units: task.visibilityUnits };
       for (let num = 1; num <= Math.min(total, task.first); num += 1) {
         const page = await doc.getPage(num);
         let content = await page.getTextContent();
-        // Only pages with text are drawn; past the time share, a page's text is set aside unchecked.
+        let ocrLayer = null;
+        // Only pages with text are drawn; past the work budget, a page's text is set aside unchecked.
         const layer = content.items.map(item => typeof item.str === "string" ? item.str : "").join(" ").replace(/\\s+/g, " ").trim();
-        if (layer && Date.now() < deadline) {
-          const checked = await visibleTextContent(page, content, doc.canvasFactory, visibility, { pageNumber: num, deadline });
+        if (layer && budget.units > 0 && Date.now() < deadline) {
+          const checked = await visibleTextContent(page, content, doc.canvasFactory, visibility, { pageNumber: num, deadline, budget });
           content = checked.content;
+          ocrLayer = checked.layer ?? null;
           if (!checked.complete) visibility.uncheckedPages.push(num);
         } else if (layer) {
           visibility.uncheckedPages.push(num);
           visibility.unverifiableText.push({ page: num, reason: "unfinished", text: layer });
           content = { ...content, items: [] };
         }
-        const text = await parser.getPageText({ getViewport: options => page.getViewport(options), getTextContent: async () => content }, {}, total);
-        pages.push({ num, text });
+        const pageText = items => parser.getPageText({ getViewport: options => page.getViewport(options), getTextContent: async () => items }, {}, total);
+        const text = await pageText(content);
+        pages.push(ocrLayer ? { num, text, layerText: await pageText(ocrLayer) } : { num, text });
         page.cleanup();
       }
       parentPort.postMessage({ type: "result", result: { total: Number.isInteger(total) ? total : null, pages, visibility } });
@@ -174,7 +184,7 @@ export function readPdfIsolated(buffer: Buffer, task: PdfReaderTask, limits: Doc
       return;
     }
     const timeoutMs = task.kind === "text" ? limits.pdfTextTimeoutMs : limits.pdfRenderTimeoutMs;
-    const workerTask = task.kind === "text" ? { ...task, visibilityBudgetMs: Math.floor(timeoutMs * VISIBILITY_TIME_SHARE) } : task;
+    const workerTask = task.kind === "text" ? { ...task, visibilityBudgetMs: Math.floor(timeoutMs * VISIBILITY_TIME_SHARE), visibilityUnits: limits.pdfVisibilityWorkUnits } : task;
     const baselineRss = process.memoryUsage.rss();
     let worker: Worker;
     try {
