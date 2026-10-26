@@ -411,6 +411,18 @@ export async function googleDriveExportStatus() {
   return connection ? { connected: true, ...connection, failedExports } : { connected: false, connectedAt: null, lastUsedAt: null, lastError: null, folderId: null, failedExports };
 }
 
+/**
+ * The connection is « à renouveler » (REC-09): the daily security review
+ * reports it every day until the reconnection, whatever became of its alert.
+ */
+export async function googleDriveReconnectionRequired(): Promise<boolean> {
+  const db = await getDb();
+  if (!db) return false;
+  const [connection] = await db.select({ lastError: googleDriveConnections.lastError }).from(googleDriveConnections)
+    .where(eq(googleDriveConnections.connectionKey, CONNECTION_KEY)).limit(1);
+  return isGoogleDriveReconnectionError(connection?.lastError);
+}
+
 export async function enqueueCvGoogleDriveExport(applicationId: number, scheduledFor = new Date()) {
   const db = await getDb();
   if (!db) throw new Error("Database connection failed");

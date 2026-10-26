@@ -30,6 +30,20 @@ export async function notifyOwnerOfAiAnalysisUnavailable() {
   })).catch(() => false);
 }
 
+/**
+ * Dossiers left « Analyse IA indisponible » by a billing refusal, until « Mettre
+ * à jour / reprendre l’IA » requeues them: the daily security review reports
+ * them every day, whatever became of the single alert above (REC-08).
+ */
+export async function countCvAnalysesAwaitingAiCredit(cap = 1_000) {
+  const db = await getDb();
+  if (!db) return 0;
+  const rows = await db.select({ id: cvApplications.id }).from(cvApplications)
+    .where(and(eq(cvApplications.analysisStatus, "degraded"), eq(cvApplications.analysisLastError, AI_ANALYSIS_BILLING_UNAVAILABLE_ERROR)))
+    .limit(cap);
+  return rows.length;
+}
+
 type CvPipelineInput = {
   cvFileKey: string;
   cvMimeType: string;
