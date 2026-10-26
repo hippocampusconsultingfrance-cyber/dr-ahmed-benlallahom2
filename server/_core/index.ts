@@ -997,11 +997,16 @@ export async function createApp() {
     return runCandidateDocumentProcessingWorker({ batchSize: 1, maxBatches: 6, budgetMs: 20_000 });
   });
 
+  // Daily security review, then the retention periods of the privacy policy
+  // for patient, contact and technical data (RGPD-09: no extra cron on the
+  // Hobby plan), within a time budget; the rest waits for the next day.
   registerScheduledJob("/api/scheduled/security-posture", "SecurityPosture", async () => {
     const { runSecurityPostureReview } = await import("../scheduledJobs");
     const review = await runSecurityPostureReview();
     if (!review.available) return { httpStatus: 503, error: "security_database_unavailable" };
-    return { highSeverityEvents24h: review.highSeverityEvents24h };
+    const { runPersonalDataRetention } = await import("../personalDataRetention");
+    const retention = await runPersonalDataRetention();
+    return { highSeverityEvents24h: review.highSeverityEvents24h, retention };
   });
 
   // Development uses Vite. On Vercel, public files are served by the CDN and

@@ -292,5 +292,19 @@ export const medicalQuestionsRouter = router({
       await auditQuestion({ questionId: input.id, actorOpenId: ctx.user.openId, action: "rejected", metadata: { previousStatus: question.status } });
       return { success: true };
     }),
+    /**
+     * « Supprimer » (RGPD-12): erasure request or withdrawn consent. The
+     * question, its public version and its journal are deleted; the security
+     * journal keeps a trace that names no one.
+     */
+    delete: adminProcedure.input(questionIdInput).mutation(async ({ input, ctx }) => {
+      await requireMfa(ctx);
+      const db = await requireDb();
+      await db.delete(medicalQuestionAuditLogs).where(eq(medicalQuestionAuditLogs.medicalQuestionId, input.id));
+      const deleted = mutationRowCount(await db.delete(medicalQuestions).where(eq(medicalQuestions.id, input.id)));
+      if (deleted === 0) throw new TRPCError({ code: "NOT_FOUND", message: "Question introuvable : elle a peut-être déjà été supprimée." });
+      await logSecurityEvent({ actorKind: "admin", actorReference: ctx.user.openId, category: "admin_medical_question_deleted", outcome: "allowed", metadata: { deleted } });
+      return { success: true };
+    }),
   }),
 });

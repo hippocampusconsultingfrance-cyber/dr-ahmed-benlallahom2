@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Archive, Clock3, Mail, Phone, ShieldCheck, Sparkles, Send, Save } from "lucide-react";
+import { Archive, Clock3, Mail, Phone, ShieldCheck, Sparkles, Send, Save, Trash2 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import PublicContentSkeleton from "@/components/PublicContentSkeleton";
 import AdminLoadMore from "@/components/AdminLoadMore";
@@ -96,6 +96,15 @@ export default function MedicalQuestionsAdminTab() {
       void utils.medicalQuestions.admin.get.invalidate();
       void utils.medicalQuestions.admin.list.invalidate();
       toast.success("Question classée sans suite. Le dossier privé et son journal sont conservés ; enregistrer un brouillon la remet à traiter.");
+    },
+    onError: mutationError => toast.error(mutationError.message),
+  });
+  // RGPD-12: erasure request or withdrawn consent; the security journal keeps a trace that names no one.
+  const remove = trpc.medicalQuestions.admin.delete.useMutation({
+    onSuccess: () => {
+      setSelectedId(null);
+      void utils.medicalQuestions.admin.list.invalidate();
+      toast.success("Question supprimée définitivement, avec sa version publique et son journal.");
     },
     onError: mutationError => toast.error(mutationError.message),
   });
@@ -355,6 +364,19 @@ export default function MedicalQuestionsAdminTab() {
                     {reject.isPending ? "Classement…" : "Classer sans suite"}
                   </button>
                 )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (window.confirm(`Supprimer définitivement la question ${selected.data!.trackingId} ? Les coordonnées, la question, la réponse, la version publique éventuelle et le journal de la question seront effacés. Action irréversible.`)) {
+                      remove.mutate({ id: selected.data!.id });
+                    }
+                  }}
+                  disabled={remove.isPending}
+                  className="inline-flex items-center gap-2 rounded-lg border border-destructive/60 px-4 py-2 text-sm font-medium text-destructive transition-colors hover:bg-destructive/10 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  {remove.isPending ? "Suppression…" : "Supprimer"}
+                </button>
               </div>
             </div>
           </div>
