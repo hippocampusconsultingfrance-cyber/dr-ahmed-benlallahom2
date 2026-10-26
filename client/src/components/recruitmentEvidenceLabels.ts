@@ -57,7 +57,8 @@ const EXTRACTION_WARNING_LABELS: ReadonlyArray<readonly [RegExp, string]> = [
   [/^pdf_text_page_(\d+)_insufficient_text$/, "page $1 : texte insuffisant"],
   [/^vision_ocr_fallback$/, "pages relues par la lecture visuelle, le texte du PDF étant trop court une fois le texte écarté retiré"],
   [/^vision_ocr_pages:([\d,]+)$/, "page(s) $1 relue(s) par la lecture visuelle (scan sous sa couche de texte)"],
-  [/^vision_ocr_first_3_pages_only$/, "seules les 3 premières pages ont été lues par la lecture visuelle"],
+  // 3 pages until the vision read up to 8 (IA-01).
+  [/^vision_ocr_first_(\d+)_pages_only$/, "seules les $1 premières pages ont été lues par la lecture visuelle"],
   [/^vision_ocr_no_rendered_pages$/, "aucune page n’a pu être dessinée pour la lecture visuelle"],
   [/^page_(\d+):(.+)$/, "page $1 (lecture visuelle) : $2"],
   // Saved before these warnings were named.

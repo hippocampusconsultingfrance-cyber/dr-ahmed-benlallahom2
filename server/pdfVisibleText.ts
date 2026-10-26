@@ -13,9 +13,11 @@
  * text only erases strokes, and is not counted as ink. Operations hidden in
  * the same B do not overlap; overlapping ones go to different renders
  * (greedy colouring), so that a few renders per page are enough, at most
- * `maxRenders`. The same text drawn again at the same place (fake bold) is
- * hidden with its first copy and kept once; operations that only show ink
- * together are drawn one at a time, and the text of those that ink kept once.
+ * `maxRenders`. The same text drawn again at the same place (fake bold, or an
+ * invisible copy laid on its visible line, even at another horizontal scale)
+ * is hidden with its first copy and kept once, never counted as hidden text;
+ * operations that only show ink together are drawn one at a time, and the
+ * text of those that ink kept once.
  *
  * Inside a visible operation (one per line in ReportLab, PDFKit, Word or
  * LibreOffice exports), each word is then judged on its own ink: a word
@@ -33,6 +35,12 @@
  * host's fonts, if any), text the reader could not match with its drawing,
  * and text left unchecked for lack of time. Unverifiable text is never
  * counted as hidden text.
+ *
+ * The work is counted, not timed (`budget`, shared by the pages of a file):
+ * a render costs RENDER_UNITS plus one unit per drawing operation of the
+ * page, the first one also the pixels of the pictures it decodes. A file thus
+ * always gives the same text, whatever the load of the machine; `deadline`
+ * only guards against a host far slower than planned.
  *
  * This function runs in the isolated PDF reader's worker, whose source
  * includes it through Function.prototype.toString: it must not use anything
@@ -65,7 +73,7 @@ export async function visibleTextContent(
   content: TextContent,
   canvasFactory: CanvasFactory,
   findings: PdfVisibilityFindings,
-  options: { pageNumber: number; deadline: number; maxRenders?: number },
+  options: { pageNumber: number; deadline: number; maxRenders?: number; budget?: { units: number } },
 ): Promise<{ content: TextContent; complete: boolean }> {
   const MIN_FONT_SIZE_PT = 4;
   // Average advance of a character below which text is squashed out of sight.
@@ -76,6 +84,11 @@ export async function visibleTextContent(
   const MIN_INK_PIXELS = 2;
   const MAX_RENDER_PIXELS = 2_000_000;
   const MAX_RENDERS = options.maxRenders ?? 12;
+  // Units of `budget` (see above): a render costs about what drawing 5,000 operations does, plus one unit per
+  // operation of the page; the first one also parses them (one more unit each) and decodes the pictures
+  // (one unit per 150 pixels).
+  const RENDER_UNITS = 5_000;
+  const IMAGE_PIXELS_PER_UNIT = 150;
   // A word of a visible operation is faint below this share of the usual ink of the page's words (their
   // median, per pixel of their glyphs' boxes; honest words keep more than half of it), or below this ink
   // per pixel whatever the page (a page of specks; honest words have 0.18 or more).
@@ -84,7 +97,7 @@ export async function visibleTextContent(
   // Glyphs the text layer leaves out (off the page, format marks) skipped while matching it with the drawing.
   const ALIGN_WINDOW = 8;
   // Operator codes of pdf.js 5.4.296 (OPS), the version pdf-parse pins.
-  const OP = { save: 10, restore: 11, endPath: 28, clip: 29, eoClip: 30, setTextRenderingMode: 38, showText: 44, shadingFill: 62, formBegin: 74, formEnd: 75, groupBegin: 76, groupEnd: 77, annotationBegin: 80, annotationEnd: 81, constructPath: 91 };
+  const OP = { save: 10, restore: 11, endPath: 28, clip: 29, eoClip: 30, setTextRenderingMode: 38, showText: 44, shadingFill: 62, formBegin: 74, formEnd: 75, groupBegin: 76, groupEnd: 77, annotationBegin: 80, annotationEnd: 81, imageMask: 83, image: 85, inlineImage: 86, constructPath: 91 };
   const IMAGE_OPS = new Set([83, 84, 85, 86, 87, 88, 89, 90]);
   const INVISIBLE_MODE = 3;
   const HIDDEN_CHAR_PROC = "pdfVisibleTextHidden";
@@ -151,10 +164,16 @@ export async function visibleTextContent(
   const target = canvasFactory.create(Math.ceil(viewport.width), Math.ceil(viewport.height));
   const { width, height } = target.canvas;
   let renders = 0;
-  const canRender = () => renders < MAX_RENDERS && Date.now() < options.deadline;
+  // Units of a render of this page, once its operations are known (after the first one).
+  let renderUnits = RENDER_UNITS;
+  const charge = (units: number) => {
+    if (options.budget) options.budget.units -= units;
+  };
+  const canRender = (count = 1) => renders + count <= MAX_RENDERS && (options.budget?.units ?? Infinity) >= count * renderUnits && Date.now() < options.deadline;
   const draw = async (operationsFilter: ((index: number) => boolean) | null) => {
     await page.render({ canvasContext: target.context, viewport, canvas: target.canvas, operationsFilter }).promise;
     renders += 1;
+    charge(renderUnits);
     return target.context.getImageData(0, 0, width, height).data;
   };
   try {
@@ -175,13 +194,20 @@ export async function visibleTextContent(
     const modeStack: number[] = [];
     let mode = 0;
     let hasImages = false;
+    let imagePixels = 0;
     for (let index = 0; index < fnArray.length; index += 1) {
       const fn = fnArray[index];
       if (fn === OP.save || fn === OP.formBegin || fn === OP.groupBegin || fn === OP.annotationBegin) modeStack.push(mode);
       else if (fn === OP.restore || fn === OP.formEnd || fn === OP.groupEnd || fn === OP.annotationEnd) mode = modeStack.pop() ?? mode;
       else if (fn === OP.setTextRenderingMode) mode = Number(argsArray[index]![0]);
-      else if (IMAGE_OPS.has(fn)) hasImages = true;
-      else if (fn === OP.showText) {
+      else if (IMAGE_OPS.has(fn)) {
+        hasImages = true;
+        // An image XObject is drawn from [id, width, height], an inline image or a mask from its data.
+        const args = argsArray[index]!;
+        const data = args[0] as { width?: unknown; height?: unknown } | null;
+        const pixels = fn === OP.image ? Number(args[1]) * Number(args[2]) : (fn === OP.inlineImage || fn === OP.imageMask) && data && typeof data === "object" ? Number(data.width) * Number(data.height) : 0;
+        if (Number.isFinite(pixels) && pixels > 0) imagePixels += pixels;
+      } else if (fn === OP.showText) {
         modes.set(index, mode);
         (argsArray[index]![0] as Glyph[]).forEach((glyph, position) => {
           if (!glyph || typeof glyph !== "object") return;
@@ -189,6 +215,10 @@ export async function visibleTextContent(
         });
       }
     }
+    // The first render, charged as a base render so far: its operations, drawn and parsed, and the
+    // pictures it decoded.
+    renderUnits = RENDER_UNITS + fnArray.length;
+    charge(2 * fnArray.length + Math.ceil(imagePixels / IMAGE_PIXELS_PER_UNIT));
 
     // Each character of the text layer matched with the glyph that draws it: the text layer follows the
     // content stream, leaving out glyphs off the page and format marks; right-to-left text is reordered.
@@ -441,13 +471,18 @@ export async function visibleTextContent(
     };
     // The same text drawn again at the same place (fake bold, or a generator's double pass) is one unit:
     // its copies are hidden with it, and their text kept once. A second coat only darkens thin strokes.
+    // The same place: the same line, from the same start, to an end that another horizontal scale may move
+    // a little (a copy drawn after a line set at another scale keeps that scale).
+    const samePlace = (left: Box, right: Box, near: number) =>
+      Math.abs(left[0] - right[0]) <= near && Math.abs(left[1] - right[1]) <= near && Math.abs(left[3] - right[3]) <= near &&
+      Math.abs(left[2] - right[2]) <= near + 0.05 * Math.max(left[2] - left[0], right[2] - right[0]);
     const copies = new Map<number, number[]>();
     const copyOf = new Set<number>();
     const units: Array<{ op: number; text: string; box: Box; up: number }> = [];
     for (const [op, operation] of Array.from(operations).sort(([left], [right]) => left - right)) {
       const text = operation.chars.map(char => char.text).join("");
       const near = Math.max(2, 0.1 * operation.up);
-      const unit = units.find(other => other.text === text && other.box.every((value, index) => Math.abs(value - operation.box[index]!) <= near));
+      const unit = units.find(other => other.text === text && samePlace(other.box, operation.box, near));
       if (!unit) {
         units.push({ op, text, box: operation.box, up: operation.up });
         continue;
@@ -553,7 +588,7 @@ export async function visibleTextContent(
     const stacks = groups.filter(group => group.length > 1);
     if (stacks.length > 0) {
       const rounds = Math.max(...stacks.map(group => group.length));
-      if (renders + 1 + rounds > MAX_RENDERS || !canRender()) {
+      if (!canRender(1 + rounds)) {
         unfinished(stacks.flat());
       } else {
         const together = await drawWithout(stacks.flat());

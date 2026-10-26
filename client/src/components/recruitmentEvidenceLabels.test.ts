@@ -66,6 +66,8 @@ describe("libellés des preuves IA d’un CV (IA-01)", () => {
     expect(extractionWarningLabel("pdf_text_page_3_insufficient_text")).toBe("page 3 : texte insuffisant");
     // Pages read by the vision, and what it noted on them.
     expect(extractionWarningLabel("vision_ocr_pages:2,3")).toBe("page(s) 2,3 relue(s) par la lecture visuelle (scan sous sa couche de texte)");
+    expect(extractionWarningLabel("vision_ocr_first_8_pages_only")).toBe("seules les 8 premières pages ont été lues par la lecture visuelle");
+    // Dossiers analysed when the vision read 3 pages at most.
     expect(extractionWarningLabel("vision_ocr_first_3_pages_only")).toBe("seules les 3 premières pages ont été lues par la lecture visuelle");
     expect(extractionWarningLabel("page_2:tampon partiellement illisible")).toBe("page 2 (lecture visuelle) : tampon partiellement illisible");
     // Dossiers analysed before these warnings were named.

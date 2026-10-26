@@ -1,6 +1,8 @@
+import { Worker } from "node:worker_threads";
 import PDFDocument from "pdfkit";
 import { PNG } from "pngjs";
 import { describe, expect, it } from "vitest";
+import { DOCUMENT_DECOMPRESSION_LIMITS } from "./documentDecompressionLimits";
 import { pdfStandardFontDataUrl, readPdfIsolated } from "./pdfExtractionSandbox";
 import { visibleTextContent, type PdfVisibilityFindings } from "./pdfVisibleText";
 
@@ -79,6 +81,23 @@ describe("encre attribuée à chaque opération de texte (IA-01)", () => {
     expect(text.split(NURSE_CV[1]!)).toHaveLength(2);
     for (const line of NURSE_CV) expect(text).toContain(line);
     expect(reading.visibility!.invisibleText).toEqual([CLAIMS[0]]);
+  }, PDF_TEST_TIMEOUT_MS);
+
+  it("ne compte pas comme cachée la seconde copie d’une ligne, invisible et à une autre échelle horizontale, posée sur elle (faux gras piégé)", async () => {
+    // Each line drawn, a claim in mode 3 over each, then each line again 0.35 pt to the right, still in mode 3 and at
+    // 97 % of its width: the state the claims left (ReportLab keeps Tr and Tz from one text object to the next).
+    const reading = await readPdfIsolated(await pdf(document => {
+      visibleLines(document);
+      document.fillColor("black").save().addContent("3 Tr");
+      CLAIMS.forEach((claim, index) => document.text(claim, 50, lineY(index), { lineBreak: false, horizontalScaling: 97 }));
+      NURSE_CV.forEach((line, index) => document.text(line, 50.35, lineY(index), { lineBreak: false, horizontalScaling: 97 }));
+      document.addContent("0 Tr").restore();
+    }), { kind: "text", first: 25 });
+    const text = textOf(reading);
+    for (const line of NURSE_CV) expect(text.split(line), line).toHaveLength(2);
+    // Only the claims are hidden text: the copies say nothing the lines do not.
+    expect(normalized(reading.visibility!.invisibleText.join(" "))).toBe(normalized(CLAIMS.join(" ")));
+    expect(reading.visibility!.unverifiableText).toEqual([]);
   }, PDF_TEST_TIMEOUT_MS);
 
   it("garde les mots d’un caractère d’un long CV écrit ligne par ligne d’une seule opération (Times 10 pt)", async () => {
@@ -207,6 +226,36 @@ describe("encre attribuée à chaque opération de texte (IA-01)", () => {
       expect(reading.visibility!.unverifiableText.map(passage => [passage.reason, normalized(passage.text)])).toEqual([...SCANNED_LINES, "/", "3"].map(line => ["image", line]));
     }, PDF_TEST_TIMEOUT_MS);
   });
+
+  it("met de côté les mêmes pages à chaque lecture, la machine occupée ou non : le contrôle compte son travail, pas son temps", async () => {
+    const file = await pdf(document => {
+      for (let page = 0; page < 6; page += 1) {
+        if (page > 0) document.addPage();
+        document.font("Helvetica").fontSize(10).fillColor("black");
+        for (let index = 0; index < 40; index += 1) document.text(`Page ${page + 1}, ligne ${index + 1} : garde de réanimation polyvalente au CHU.`, 48, 48 + index * 18, { lineBreak: false });
+      }
+    });
+    // A small budget, for a few pages of this file only.
+    const limits = { ...DOCUMENT_DECOMPRESSION_LIMITS, pdfVisibilityWorkUnits: 60_000 };
+    const quiet = await readPdfIsolated(file, { kind: "text", first: 25 }, limits);
+    // The same file again while other threads keep the processor busy.
+    const busy = Array.from({ length: 3 }, () => new Worker("const end = Date.now() + 3000; while (Date.now() < end) {}", { eval: true }));
+    let loaded: Awaited<ReturnType<typeof readPdfIsolated>>;
+    try {
+      loaded = await readPdfIsolated(file, { kind: "text", first: 25 }, limits);
+    } finally {
+      await Promise.all(busy.map(worker => worker.terminate()));
+    }
+    const unchecked = quiet.visibility!.uncheckedPages;
+    expect(unchecked.length).toBeGreaterThan(0);
+    expect(unchecked[0]).toBeGreaterThan(1);
+    expect(unchecked).toEqual(Array.from({ length: 6 - unchecked[0]! + 1 }, (_, index) => unchecked[0]! + index));
+    expect(loaded.visibility).toEqual(quiet.visibility);
+    expect(loaded.pages).toEqual(quiet.pages);
+    // The pages before the budget ran out are read whole; set aside after, never accused.
+    expect(textOf({ pages: quiet.pages.slice(0, unchecked[0]! - 1) })).toContain(`Page ${unchecked[0]! - 1}, ligne 40`);
+    expect(quiet.visibility!.invisibleText).toEqual([]);
+  }, PDF_TEST_TIMEOUT_MS);
 
   describe("quand la page ne peut pas être vérifiée", () => {
     async function page(draw: (document: PDFKit.PDFDocument) => void) {
