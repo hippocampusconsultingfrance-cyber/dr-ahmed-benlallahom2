@@ -157,12 +157,21 @@ describe("colonnes de langue créées à l’exécution", () => {
     }
   });
 
-  it("ajoute les colonnes des autres tables quand le verrou d’une seule est pris, puis relance la première erreur", async () => {
+  it("ajoute les colonnes des autres tables quand le verrou d’une seule est pris, puis relance le verrou non obtenu, sinon la première erreur", async () => {
     const alterFailures = { appointments: { error: lockTimeout }, candidate_accounts: { error: notOwner } };
     const { db, executed, missing } = fakeDatabase({ missing: [...LANGUAGE_COLUMN_TABLES], alterFailures });
     await expect(ensureLanguageColumns(db)).rejects.toBe(lockTimeout);
     expect(executed.map(alteredTable).filter(Boolean)).toEqual(["appointments", "candidate_accounts", "cv_applications"]);
     expect([...missing]).toEqual(["appointments", "candidate_accounts"]);
+
+    // The lock of a later table comes first: the delay before the next attempt depends on it.
+    resetLanguageColumnsMemo();
+    const network = new TypeError("fetch failed");
+    const later = fakeDatabase({ missing: [...LANGUAGE_COLUMN_TABLES], alterFailures: { appointments: { error: notOwner }, cv_applications: { error: lockTimeout } } });
+    await expect(ensureLanguageColumns(later.db)).rejects.toBe(lockTimeout);
+    resetLanguageColumnsMemo();
+    const withoutLock = fakeDatabase({ missing: [...LANGUAGE_COLUMN_TABLES], alterFailures: { candidate_accounts: { error: network }, cv_applications: { error: notOwner } } });
+    await expect(ensureLanguageColumns(withoutLock.db)).rejects.toBe(network);
   });
 });
 
@@ -386,6 +395,31 @@ describe("getDb() : seules les requêtes sur ces tables attendent les colonnes",
       vi.setSystemTime(Date.now() + LANGUAGE_COLUMNS_MAX_RETRY_DELAY_MS);
       await expect(db.select().from(appointments)).resolves.toEqual([]);
     }
+  });
+
+  it("une table sans droit et une autre qui attend le verrou au même essai : une minute entre les essais, comme pour un verrou seul", async () => {
+    vi.useFakeTimers({ now: new Date("2026-10-25T10:00:00Z"), toFake: ["Date"] });
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const start = Date.now();
+    // appointments, checked first, does not belong to the role (42501); a long
+    // query holds cv_applications, whose readers wait behind each queued ALTER.
+    const readersHeldBack: number[] = [];
+    const alter = async (table: string) => {
+      if (table === "appointments") throw notOwner;
+      readersHeldBack.push(Date.now() - start);
+      throw lockTimeout;
+    };
+    neonDatabase({ missing: ["appointments", "cv_applications"], alter });
+    const db = (await getDb())!;
+
+    // A candidate applies every second for 100 s.
+    for (let elapsed = 0; elapsed <= 100_000; elapsed += 1_000) {
+      vi.setSystemTime(start + elapsed);
+      await expect(db.select().from(cvApplications)).rejects.toThrow();
+    }
+    // 0 s, 5 s after the first failure, then a minute: not 0, 5, 15, 35 and 75 s.
+    expect(readersHeldBack).toEqual([0, 5_000, 65_000]);
   });
 
   it("des échecs de types alternés, à chaque nouvel essai, ne sont journalisés qu’une fois chacun", async () => {

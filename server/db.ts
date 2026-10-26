@@ -3,7 +3,7 @@ import { neon } from "@neondatabase/serverless";
 import { drizzle } from "drizzle-orm/neon-http";
 import { InsertUser, users } from "../drizzle/schema";
 import { isConfiguredAdminOpenId } from './_core/env';
-import { ensureLanguageColumns, postgresErrorCode, waitForLanguageColumns } from "./languageColumns";
+import { ensureLanguageColumns, LOCK_NOT_AVAILABLE, postgresErrorCode, waitForLanguageColumns } from "./languageColumns";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -14,15 +14,14 @@ let _db: ReturnType<typeof drizzle> | null = null;
  */
 export const LANGUAGE_COLUMNS_RETRY_DELAY_MS = 5_000;
 /**
- * Delay after a retry that waited for the lock again (55P03): the lock has
+ * Delay after a retry that waited for the lock again (55P03, on any of the
+ * tables, whatever the others failed with): the lock has
  * then been held for several seconds and may be for minutes, and each attempt
  * makes the readers of the table wait up to 2 s behind its queued ALTER, so
  * the attempts come once a minute at most per instance. Other failures do not
  * hold the readers back: their delay doubles from 5 s up to this.
  */
 export const LANGUAGE_COLUMNS_MAX_RETRY_DELAY_MS = 60_000;
-/** SQLSTATE lock_not_available: the ALTER waited for the lock until lock_timeout. */
-const LOCK_NOT_AVAILABLE = "55P03";
 let languageColumnsRetryAt = 0;
 // Delay set by the last failed check, 0 since the last success.
 let languageColumnsRetryDelay = 0;
