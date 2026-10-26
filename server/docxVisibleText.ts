@@ -26,18 +26,22 @@ import { DOCUMENT_DECOMPRESSION_LIMITS, inspectDocxArchive } from "./documentDec
  *
  * Text its place hides is cut out too, as invisible: what a container of
  * explicit size cannot show at its size, the lines before it in the container
- * filling it first (a table row of exact height, w:trHeight exact; a text box,
- * by its VML style height or its DrawingML wp:extent; a frame of exact height,
- * w:framePr), each line needing 80 % of its size; text set in an exact line
- * spacing under 80 % of its size (its lines overlap, or Word cuts its
- * letters); and text the indents of its paragraph (w:ind, its style's or the
- * document's) place wholly beyond an edge of the page of its section (w:pgSz,
- * w:pgMar, w:cols; A4 with margins of 2.5 cm when not given). Lines are
- * counted at their lowest (0.9 times their size, no space between paragraphs)
- * and letters at their widest (1 em), so that what may show is read: rows of
- * height at least, exact heights or spacings that fit the text, text boxes
- * that grow with their text (a:spAutoFit, mso-fit-shape-to-text) or run top to
- * bottom, indents into the margin.
+ * filling it first (a table row of exact height, w:trHeight exact, below the
+ * cell's top margin; a text box, by its VML style height or its DrawingML
+ * wp:extent, with the boxes its text flows on into; a frame of exact height,
+ * w:framePr), each line needing 80 % of its size, with the spacing before and
+ * after paragraphs (w:spacing, but between paragraphs of one style that drop
+ * it, w:contextualSpacing) and how far a run is lowered (w:position); text set
+ * in an exact line spacing under half its size (its lines overlap, or Word
+ * cuts most of its letters), but a drop cap's; and text the indents of its
+ * paragraph (w:ind, its style's or the document's) place, where it starts,
+ * beyond an edge of the page of its section (w:pgSz, w:pgMar, w:cols; A4 with
+ * margins of 2.5 cm when not given). Hidden text (w:vanish, w:specVanish), its
+ * line breaks and paragraph marks take no room. Lines are counted at their
+ * lowest (0.9 times their size) and letters at their widest (1 em), so that
+ * what may show is read: rows of height at least, exact heights or spacings
+ * that fit the text, text boxes that grow with their text (a:spAutoFit,
+ * mso-fit-shape-to-text) or run top to bottom, indents into the margin.
  *
  * Of a mc:AlternateContent, mammoth reads mc:Fallback, but Word draws the
  * mc:Choice it understands (a DrawingML text box, w14…): a passage of the
@@ -86,6 +90,8 @@ const MAX_SHIFT_IN_SIZES = 2;
 const DEFAULT_FONT_SIZE_PT = 10;
 /** VML shapes that can hold a text box. */
 const VML_SHAPES = new Set(["v:shape", "v:rect", "v:roundrect", "v:oval"]);
+/** What a run holds that moves the text after it along its paragraph. */
+const IN_FLOW = new Set(["w:t", "w:br", "w:cr", "w:tab", "w:ptab", "w:sym"]);
 /** What draws a picture or a shape in a paragraph. */
 const DRAWINGS = new Set(["w:drawing", "w:pict", "w:object"]);
 /** Elements whose paragraphs follow one another, for « next to a drawing ». */
@@ -95,8 +101,10 @@ const BODY_BLOCKS = new Set(["w:p", "w:tbl", "w:sdt", "w:customXml"]);
 /** Lowest height of a paragraph (a line of 7 pt type): a picture covers at most its height's worth of them. */
 const MIN_PARAGRAPH_PT = 8;
 const EMU_PER_PT = 12_700;
-/** Share of its size a line of text needs to be read: less room in its row or box, or an exact line spacing under it, cuts or overlaps its letters. */
+/** Share of its size a line of text needs to be read: less room in its row or box cuts its letters. */
 const MIN_LINE_SHARE = 0.8;
+/** Share of its size under which an exact line spacing hides text: Word cuts more than the top half of its letters, LibreOffice lays its lines over the others. */
+const MIN_EXACT_LINE_SHARE = 0.5;
 /** Lowest height of a line of single spacing, in sizes of its text (fonts give it 1.1 to 1.3 times their size). */
 const MIN_LINE_HEIGHT_IN_SIZES = 0.9;
 /** Widest advance of a character, in sizes of its text (W, a dash, a Chinese character). */
@@ -453,6 +461,70 @@ function freeDrawingBoxes(xml: string) {
 const FREE_VML_TEXT = /mso-fit-shape-to-text\s*:\s*t|layout-flow\s*:\s*vertical/i;
 
 /**
+ * Text boxes whose text flows on into others (wps:linkedTxbx; VML
+ * mso-next-textbox): the height of the whole chain, by where the first box's
+ * wps:txbx or v:textbox starts; infinite when a box of it has no known height
+ * or a free one (freeDrawingBoxes, FREE_VML_TEXT, a VML shape in a group).
+ */
+function linkedBoxHeights(xml: string, freeBoxes: Set<number>) {
+  const drawn = new Map<string, { start?: number; height: number; linked: boolean }>();
+  type VmlBox = { names: string[]; height: number; next?: string; textbox?: number };
+  const vml: VmlBox[] = [];
+  const stack: Array<{ name: string; extent?: number; free?: boolean; box?: VmlBox }> = [];
+  visitXmlTags(xml, tag => {
+    if (tag.closing) {
+      stack.pop();
+      return;
+    }
+    const parent = stack.at(-1);
+    const frame: (typeof stack)[number] = { name: tag.name };
+    if (tag.name === "wp:extent" && (parent?.name === "wp:anchor" || parent?.name === "wp:inline")) parent.extent = emuPt(tag.attributes.get("cy"));
+    if (tag.name === "wps:wsp") frame.free = freeBoxes.has(tag.start);
+    if (tag.name === "wps:txbx" || tag.name === "wps:linkedTxbx") {
+      const id = tag.attributes.get("id") ?? "0";
+      const chain = drawn.get(id) ?? { height: 0, linked: false };
+      const holder = stack.findLast(item => item.name === "wp:anchor" || item.name === "wp:inline");
+      const free = stack.findLast(item => item.name === "wps:wsp")?.free;
+      chain.height += free || holder?.extent === undefined ? Number.POSITIVE_INFINITY : Math.max(0, holder.extent);
+      if (tag.name === "wps:txbx") chain.start = tag.start;
+      else chain.linked = true;
+      drawn.set(id, chain);
+    }
+    if (VML_SHAPES.has(tag.name)) {
+      const style = tag.attributes.get("style") ?? "";
+      const top = parent?.name === "w:pict" || parent?.name === "w:object";
+      const height = top && !FREE_VML_TEXT.test(style) ? vmlMeasure(style, "height") : undefined;
+      // Word names a shape by its id, or by its o:spid.
+      const names = Array.from(tag.attributes).filter(([name]) => name === "id" || /(^|:)spid$/.test(name)).map(([, value]) => value.trim());
+      frame.box = { names, height: height ?? Number.POSITIVE_INFINITY };
+      vml.push(frame.box);
+    }
+    const shape = tag.name === "v:textbox" ? stack.findLast(item => item.box)?.box : undefined;
+    if (shape) {
+      const style = tag.attributes.get("style") ?? "";
+      if (FREE_VML_TEXT.test(style)) shape.height = Number.POSITIVE_INFINITY;
+      shape.next = /(?:^|;)\s*mso-next-textbox\s*:\s*#?([^;]+)/i.exec(style)?.[1]?.trim();
+      shape.textbox = tag.start;
+    }
+    if (!tag.selfClosing) stack.push(frame);
+  });
+  const heights = new Map<number, number>();
+  for (const chain of Array.from(drawn.values())) if (chain.linked && chain.start !== undefined) heights.set(chain.start, chain.height);
+  const byName = new Map(vml.flatMap(box => box.names.map(name => [name, box] as const)));
+  for (const first of vml) {
+    if (!first.next || first.textbox === undefined) continue;
+    let height = 0;
+    const seen = new Set<VmlBox>();
+    for (let box: VmlBox | undefined = first; box && !seen.has(box); box = box.next ? byName.get(box.next) : undefined) {
+      seen.add(box);
+      height += box.height;
+    }
+    heights.set(first.textbox, height);
+  }
+  return heights;
+}
+
+/**
  * visitXmlTags, also giving the paragraph (w:p) each tag is in, by a key
  * naming its place among the paragraphs of its container (body, table cell,
  * text box, header…): `${container}:${index ± 1}` names its neighbours.
@@ -573,6 +645,8 @@ function applyRunProperty(layer: RunLayer, tag: XmlTag, theme: Theme) {
   }
 }
 
+/** Text Word does not show (w:vanish, w:specVanish) takes no room: its line breaks do not move the text after it. */
+const hides = (layer: RunLayer) => Boolean(layer["w:vanish"] || layer["w:specVanish"]);
 /** The smallest size a run's letters may have (w:sz, or w:szCs for complex scripts), for the lowest its lines can be. */
 const smallestSize = (layer: RunLayer) => Math.min(layer.size ?? DEFAULT_FONT_SIZE_PT, layer.complexScriptSize ?? DEFAULT_FONT_SIZE_PT);
 /** The widest advance of a run's characters. */
@@ -584,9 +658,11 @@ const widestAdvance = (layer: RunLayer) =>
  * the layer below. Indents in points, from the edge the paragraph starts from
  * (w:start or w:left, its right edge in a right-to-left paragraph) and the
  * other; `firstLine` negative for a hanging indent. `line` as written: twips
- * for an exact or least spacing, 240ths of a line for a multiple.
+ * for an exact or least spacing, 240ths of a line for a multiple. `before`,
+ * `after`: the space above and below it, in points; `contextual`: dropped
+ * next to a paragraph of its style (w:contextualSpacing).
  */
-type ParagraphLayer = Partial<{ start: number; end: number; firstLine: number; align: string; bidi: boolean; line: string; lineRule: string }>;
+type ParagraphLayer = Partial<{ start: number; end: number; firstLine: number; align: string; bidi: boolean; line: string; lineRule: string; before: number; after: number; contextual: boolean }>;
 
 function applyParagraphProperty(layer: ParagraphLayer, tag: XmlTag) {
   const attribute = (name: string) => tag.attributes.get(`w:${name}`);
@@ -611,17 +687,25 @@ function applyParagraphProperty(layer: ParagraphLayer, tag: XmlTag) {
     const rule = attribute("lineRule");
     if (line !== undefined) layer.line = line;
     if (rule) layer.lineRule = rule;
+    // In lines (hundredths), counted at their lowest, it wins over the length; Word's automatic spacing (HTML's) is not counted.
+    for (const side of ["before", "after"] as const) {
+      const lines = attribute(`${side}Lines`);
+      const space = /^(1|true|on)$/i.test(attribute(`${side}Autospacing`) ?? "") ? 0 : lines !== undefined ? Number(lines) / 100 * MIN_PARAGRAPH_PT : measurePt(attribute(side), 20);
+      if (space !== undefined && Number.isFinite(space)) layer[side] = Math.max(0, space);
+    }
+  } else if (tag.name === "w:contextualSpacing") {
+    layer.contextual = !/^(false|0|off)$/i.test(attribute("val") ?? "");
   }
 }
 
 /** A paragraph's layer once resolved; `line`: its exact or least line height in points, or its multiple of single spacing. */
-type ParagraphFormat = { start: number; end: number; firstLine: number; align?: string; bidi: boolean; line: { rule: "exact" | "atLeast" | "auto"; value: number } };
+type ParagraphFormat = { start: number; end: number; firstLine: number; align?: string; bidi: boolean; line: { rule: "exact" | "atLeast" | "auto"; value: number }; before: number; after: number; contextual: boolean };
 
 function paragraphFormat(layer: ParagraphLayer): ParagraphFormat {
   const rule: ParagraphFormat["line"]["rule"] = layer.lineRule === "exact" || layer.lineRule === "atLeast" ? layer.lineRule : "auto";
   const value = layer.line === undefined ? undefined : rule === "auto" ? Number(layer.line) / 240 : measurePt(layer.line, 20);
   const line: ParagraphFormat["line"] = value !== undefined && Number.isFinite(value) ? { rule, value: Math.abs(value) } : { rule: "auto", value: 1 };
-  return { start: layer.start ?? 0, end: layer.end ?? 0, firstLine: layer.firstLine ?? 0, align: layer.align, bidi: layer.bidi ?? false, line };
+  return { start: layer.start ?? 0, end: layer.end ?? 0, firstLine: layer.firstLine ?? 0, align: layer.align, bidi: layer.bidi ?? false, line, before: layer.before ?? 0, after: layer.after ?? 0, contextual: layer.contextual ?? false };
 }
 
 /** The lowest a line of text of this size can be in a paragraph: its exact spacing, else what its spacing gives single spacing at its lowest. */
@@ -632,9 +716,10 @@ const lineFloor = ({ line }: ParagraphFormat, size: number) =>
 type TextPlace = { start: number; end: number; top: number; before: number; tabbed: boolean };
 
 /**
- * Whether a paragraph's indents place a passage of it wholly beyond an edge
- * of the page, across: before the edge the paragraph starts from (its left
- * one, its right one when right to left) or beyond the other. `advance`: the
+ * Whether a paragraph's indents place a passage of it, where it starts, beyond
+ * an edge of the page, across: before the edge the paragraph starts from (its
+ * left one, its right one when right to left) or beyond the other; a passage
+ * whose lines come back onto the page is cut out whole. `advance`: the
  * widest a character of the passage can be; `width`: the widest the passage
  * can be. Text starts at most from the widest margin and the last column, at
  * least from the narrowest margin; a line too narrow for its letters (its
@@ -665,12 +750,15 @@ function offPage(format: ParagraphFormat, page: PageAcross, place: TextPlace, ad
 type Formats = { run: RunLayer; paragraphShading?: Paint; cellShading?: Paint };
 /** Table styles: how many rows or columns each of their bands spans (w:tblStyleRowBandSize, w:tblStyleColBandSize). */
 type BandSizes = { rowBandSize?: number; columnBandSize?: number };
-type StyleDefinition = Formats & BandSizes & { basedOn?: string; tableShading?: Paint; conditions: Map<string, Formats>; paragraph: ParagraphLayer };
+/** `cellTop`: table styles, the top margin of their cells (w:tblCellMar), in points. */
+type StyleDefinition = Formats & BandSizes & { basedOn?: string; tableShading?: Paint; conditions: Map<string, Formats>; paragraph: ParagraphLayer; cellTop?: number };
 /** `defaults`, `paragraphShading`, `paragraph`: the document's defaults (w:docDefaults). */
 type Styles = { byId: Map<string, StyleDefinition>; defaultIds: Map<string, string>; defaults: RunLayer; paragraphShading?: Paint; paragraph: ParagraphLayer; chains: Map<string, StyleDefinition[]> };
 
 const BAND_SIZES: Record<string, keyof BandSizes> = { "w:tblStyleRowBandSize": "rowBandSize", "w:tblStyleColBandSize": "columnBandSize" };
 const bandSize = (tag: XmlTag) => Math.max(1, Number.parseInt(tag.attributes.get("w:val") ?? "", 10) || 1);
+/** A cell margin (w:top of w:tcMar or w:tblCellMar), in points: in twips, or none (nil). */
+const cellMargin = (tag: XmlTag) => (/^(dxa)?$/i.test(tag.attributes.get("w:type") ?? "") ? Math.max(0, measurePt(tag.attributes.get("w:w"), 20) ?? 0) : 0);
 
 function readStyles(xml: string | undefined, theme: Theme): Styles {
   const styles: Styles = { byId: new Map(), defaultIds: new Map(), defaults: {}, paragraph: {}, chains: new Map() };
@@ -706,6 +794,8 @@ function readStyles(xml: string | undefined, theme: Theme): Styles {
       applyParagraphProperty(styles.paragraph, tag);
     } else if (current && parent === "w:tblPr" && grandParent === "w:style" && BAND_SIZES[tag.name]) {
       current[BAND_SIZES[tag.name]!] = bandSize(tag);
+    } else if (current && tag.name === "w:top" && parent === "w:tblCellMar" && grandParent === "w:tblPr" && path.at(-3) === "w:style") {
+      current.cellTop = cellMargin(tag);
     } else if (formats && parent === "w:rPr") {
       applyRunProperty(formats.run, tag, theme);
     } else if (formats && tag.name === "w:shd") {
@@ -832,6 +922,8 @@ type Frame = BandSizes & {
   style?: string;
   key?: string;
   layer?: RunLayer;
+  /** Runs: their formatting once resolved (runFormat). */
+  effective?: RunLayer;
   texts?: TextPlace[];
   /** w:t: where its text lies, once read. */
   place?: Omit<TextPlace, "start" | "end">;
@@ -843,8 +935,16 @@ type Frame = BandSizes & {
   page?: PageAcross;
   /** Paragraphs: the top of their current line, at its lowest, and the smallest size of its text; the widest their text so far can be, and whether a tab moved it. In points. */
   flow?: { top: number; lineSize: number; advance: number; tabbed: boolean };
-  /** Table cells of a row of exact height, text boxes of a fixed size, frames of exact height: the height they show, and how much of it the paragraphs before fill at least. In points. */
-  room?: { height: number; filled: number };
+  /**
+   * Table cells of a row of exact height, text boxes of a fixed size, frames of exact height: the height they show, and how much
+   * of it the paragraphs before fill at least (from the cell's top margin), in points; the last of these paragraphs, for the space
+   * between it and the next.
+   */
+  room?: { height: number; filled: number; above?: Spacing };
+  /** Paragraphs: a drop cap (w:framePr w:dropCap), its letter set in a spacing smaller than its size. */
+  dropCap?: boolean;
+  /** Tables: the top margin of their cells (w:tblCellMar), in points. */
+  cellTop?: number;
   /** Table rows: their exact height (w:trHeight exact). */
   exactHeight?: number;
   /** DrawingML anchors and inline drawings, VML shapes not in a group: their height, unless their text box grows with its text or runs top to bottom. */
@@ -873,6 +973,8 @@ type Frame = BandSizes & {
   cell?: Frame;
 };
 type Passages = { invisible: string[]; unverifiable: string[] };
+/** A paragraph's style, and the space it leaves below it (dropped next to its style when contextual). In points. */
+type Spacing = { style: string | undefined; after: number; contextual: boolean };
 
 function cellFormats(styles: Styles, table: Frame, row: number, column: number): CellFormats {
   const chain = styleChain(styles, table.style, "table");
@@ -913,6 +1015,7 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
   const tables = tableRows(xml);
   const fills = vmlFills(xml);
   const freeBoxes = freeDrawingBoxes(xml);
+  const linkedHeights = linkedBoxHeights(xml, freeBoxes);
   const sections = sectionPages(xml);
   let section = 0;
   /** The page of the section a paragraph starting there is in (paragraphs come in order). */
@@ -965,19 +1068,27 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
     }
     return null;
   };
-  /** A run's formatting as Word resolves it: document defaults, table style for its cell, paragraph style, character style, its own. */
+  /** A run's formatting as Word resolves it: document defaults, table style for its cell, paragraph style, character style, its own (kept until its w:rPr changes). */
   const runFormat = (run: Frame): RunLayer => {
     const paragraph = nearest("w:p");
-    return Object.assign({}, styles.defaults,
+    run.effective ??= Object.assign({}, styles.defaults,
       ...(paragraph?.cell?.formats?.runs ?? []),
       ...styleChain(styles, paragraph?.style, "paragraph").map(style => style.run),
       ...styleChain(styles, run.style, "character").map(style => style.run),
-      run.layer);
+      run.layer) as RunLayer;
+    return run.effective;
   };
-  /** A paragraph's indents, alignment, direction and line spacing: the document's defaults, its style's, its own (read once its w:pPr is). */
+  /** A paragraph's indents, alignment, direction and spacing: the document's defaults, its style's, its own (read once its w:pPr is). */
   const formatOf = (paragraph: Frame) => {
     paragraph.format ??= paragraphFormat(Object.assign({}, styles.paragraph, ...styleChain(styles, paragraph.style, "paragraph").map(style => style.paragraph), paragraph.paragraph));
     return paragraph.format;
+  };
+  const styleOf = (paragraph: Frame) => paragraph.style ?? styles.defaultIds.get("paragraph");
+  /** The space above a paragraph's first line: its spacing before, and the spacing after the paragraph above, each dropped between paragraphs of one style when contextual. */
+  const spaceAbove = (paragraph: Frame, above: Spacing | undefined) => {
+    const format = formatOf(paragraph);
+    const sameStyle = above !== undefined && above.style === styleOf(paragraph);
+    return (format.contextual && sameStyle ? 0 : format.before) + (above && !(above.contextual && sameStyle) ? above.after : 0);
   };
   // Decided once the whole run is read, inside its paragraph, cell, table and text box.
   const visibility = (text: string, effective: RunLayer): Visibility => {
@@ -995,9 +1106,9 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
     const width = characters.reduce((sum, character) => sum + (WIDE_CHARACTER.test(character) ? 1 : 0.5), 0) * size * (effective.scale ?? 100) / 100;
     const squeezed = characters.length > 0 && width / characters.length + (effective.spacing ?? 0) < MIN_ADVANCE_PT;
     const shifted = Math.abs(effective.position ?? 0) > MAX_SHIFT_IN_SIZES * size;
-    // An exact line spacing much smaller than the letters: Word cuts them, LibreOffice lays the lines over one another.
+    // An exact line spacing much smaller than the letters: Word cuts them, LibreOffice lays the lines over one another. A drop cap's letter only needs a line of text.
     const spacing = paragraph ? formatOf(paragraph).line : undefined;
-    const cramped = spacing?.rule === "exact" && spacing.value < MIN_LINE_SHARE * size;
+    const cramped = spacing?.rule === "exact" && spacing.value < (paragraph?.dropCap ? MIN_FONT_SIZE_PT : MIN_EXACT_LINE_SHARE * size);
     if (effective["w:vanish"] || effective["w:specVanish"] || effective["w:webHidden"] || tinyText || squeezed || shifted || cramped || stack.some(frame => frame.offPage)) return "invisible";
     // Word draws text in the automatic colour black or white, whichever shows on its background.
     const colour = effective.colour ?? "auto";
@@ -1040,15 +1151,16 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
     const at = stack.findLastIndex(item => item.name === "w:p");
     if (at === -1) return false;
     const size = fontSize(effective, text);
-    // The lines of its paragraph before it fill its frame and the cell or text box it is in; the outer ones are filled at least up to them.
+    const paragraph = stack[at]!;
+    // The space above its paragraph and its lines before it, and how far it is lowered, fill its frame and the cell or text box it is in; the outer ones are filled at least up to them.
+    const lowered = Math.max(0, -(effective.position ?? 0));
     let own = true;
     for (let index = at; index >= 0; index -= 1) {
       const frame = stack[index]!;
-      if (frame.room && frame.room.height - frame.room.filled - (own ? place.top : 0) < MIN_LINE_SHARE * size) return true;
+      if (frame.room && frame.room.height - frame.room.filled - (own ? spaceAbove(paragraph, frame.room.above) + place.top + lowered : 0) < MIN_LINE_SHARE * size) return true;
       if (index < at && PARAGRAPH_CONTAINERS.has(frame.name)) own = false;
       if (frame.name === "w:txbxContent") break;
     }
-    const paragraph = stack[at]!;
     const advance = widestAdvance(effective);
     const nested = stack.some(item => item.name === "w:tc" || item.name === "w:txbxContent");
     return paragraph.page !== undefined && offPage(formatOf(paragraph), paragraph.page, place, advance, Array.from(text).length * advance, nested);
@@ -1073,8 +1185,8 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
         run?.texts?.push({ start: textStart, end: tag.start, ...(frame.place ?? { top: 0, before: 0, tabbed: true }) });
         // The text sets its line's size at least, and takes its width on it.
         const flow = nearest("w:p")?.flow;
-        if (run?.texts && flow) {
-          const effective = runFormat(run);
+        const effective = run?.texts && flow ? runFormat(run) : undefined;
+        if (flow && effective && !hides(effective)) {
           flow.lineSize = Math.max(flow.lineSize, smallestSize(effective));
           flow.advance += Array.from(decodeXml(xml.slice(textStart, tag.start))).length * widestAdvance(effective);
         }
@@ -1094,11 +1206,17 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
         }
       } else if (frame?.name === "w:p" && frame.passages) {
         for (const kind of ["invisible", "unverifiable"] as const) if (frame.passages[kind].length) found[kind].push(frame.passages[kind].join(""));
-        // The paragraph fills its cell or text box by its lines, at their lowest.
+        // The paragraph fills its cell or text box by the space above it and its lines, at their lowest.
         const container = stack.findLast(item => PARAGRAPH_CONTAINERS.has(item.name));
         if (container?.room && frame.flow) {
-          const mark = smallestSize(Object.assign({}, styles.defaults, ...styleChain(styles, frame.style, "paragraph").map(style => style.run), frame.mark));
-          container.room.filled += frame.flow.top + lineFloor(formatOf(frame), frame.flow.lineSize || mark);
+          const mark = Object.assign({}, styles.defaults, ...styleChain(styles, frame.style, "paragraph").map(style => style.run), frame.mark);
+          const format = formatOf(frame);
+          // A hidden paragraph mark ends no line: what the paragraph shows goes on with the next one.
+          if (hides(mark)) container.room.filled += frame.flow.top;
+          else {
+            container.room.filled += spaceAbove(frame, container.room.above) + frame.flow.top + lineFloor(format, frame.flow.lineSize || smallestSize(mark));
+            container.room.above = { style: styleOf(frame), after: format.after, contextual: format.contextual };
+          }
         }
       } else if (frame?.colour) {
         paintShape(frame.colour);
@@ -1125,8 +1243,15 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
       const table = nearest("w:tbl");
       Object.assign(frame, { row: row?.row ?? 0, column: next(row) });
       if (table) frame.formats = cellFormats(styles, table, frame.row!, frame.column!);
-      // A row of exact height shows no more of its cells (w:trHeight exact; omitted, its height is 0).
-      if (row?.exactHeight !== undefined) frame.room = { height: row.exactHeight, filled: 0 };
+      // A row of exact height shows no more of its cells (w:trHeight exact; omitted, its height is 0), below their top margin.
+      frame.cellTop = table?.cellTop ?? lastSet(styleChain(styles, table?.style, "table").map(style => style.cellTop)) ?? 0;
+      if (row?.exactHeight !== undefined) frame.room = { height: row.exactHeight, filled: frame.cellTop };
+    }
+    if (tag.name === "w:top" && parent?.name === "w:tblCellMar" && grandParent?.name === "w:tblPr" && stack.at(-3)?.name === "w:tbl") stack.at(-3)!.cellTop = cellMargin(tag);
+    if (tag.name === "w:top" && parent?.name === "w:tcMar" && grandParent?.name === "w:tcPr" && stack.at(-3)?.name === "w:tc") {
+      const cell = stack.at(-3)!;
+      if (cell.room) cell.room.filled += cellMargin(tag) - (cell.cellTop ?? 0);
+      cell.cellTop = cellMargin(tag);
     }
     if (tag.name === "w:trHeight" && parent?.name === "w:trPr" && grandParent?.name === "w:tr" && /^exact$/i.test(tag.attributes.get("w:hRule") ?? "")) {
       grandParent.exactHeight = Math.max(0, measurePt(tag.attributes.get("w:val"), 20) ?? 0);
@@ -1155,6 +1280,12 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
       const holder = stack.findLast(item => item.name === "wp:anchor" || item.name === "wp:inline");
       if (holder) holder.extent = undefined;
     }
+    // A text box whose text flows on into others shows as much as all of them.
+    const chained = tag.name === "wps:txbx" || tag.name === "v:textbox" ? linkedHeights.get(tag.start) : undefined;
+    if (chained !== undefined) {
+      const holder = stack.findLast(item => (tag.name === "v:textbox" ? item.topShape === true : item.name === "wp:anchor" || item.name === "wp:inline"));
+      if (holder) holder.extent = Number.isFinite(chained) ? chained : undefined;
+    }
     if (tag.name === "w:txbxContent") {
       const holder = stack.findLast(item => item.name === "wp:anchor" || item.name === "wp:inline" || item.topShape === true);
       if (holder?.extent !== undefined) frame.room = { height: Math.max(0, holder.extent), filled: 0 };
@@ -1164,7 +1295,9 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
       // As in VML, the colour of v:fill wins over the shape's fillcolor.
       const colour = (fill?.attributes.get("color") ?? tag.attributes.get("fillcolor"))?.trim();
       const filled = !/^(f|false)$/i.test(tag.attributes.get("filled") ?? "") && !/^(f|false)$/i.test(fill?.attributes.get("on") ?? "");
-      const known = colour === undefined || !filled ? undefined : vmlColour(colour);
+      // A fill that is not one colour (gradient, pattern, picture): what lies under may show, as under a DrawingML gradient.
+      const solid = /^(solid)?$/i.test(fill?.attributes.get("type")?.trim() ?? "");
+      const known = colour === undefined || !filled || !solid ? undefined : vmlColour(colour);
       // A fill partly transparent (v:fill opacity) shows the page through it; a transparent one, the page.
       const opacity = vmlOpacity(fill?.attributes.get("opacity"));
       frame.paint = known ? [opacity < 1 ? blend(pageColour, known, opacity) : known] : null;
@@ -1214,6 +1347,7 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
       // A frame of exact height shows no more of its paragraph.
       const height = measurePt(tag.attributes.get("w:h"), 20);
       if (tag.name === "w:framePr" && /^exact$/i.test(tag.attributes.get("w:hRule") ?? "") && height !== undefined) grandParent.room = { height: Math.max(0, height), filled: 0 };
+      if (tag.name === "w:framePr" && /^(drop|margin)$/i.test(tag.attributes.get("w:dropCap") ?? "")) grandParent.dropCap = true;
     }
     if (parent?.name === "w:rPr" && grandParent?.name === "w:pPr" && stack.at(-3)?.name === "w:p") applyRunProperty(stack.at(-3)!.mark!, tag, theme);
     if (tag.name === "w:shd" && ((parent?.name === "w:tcPr" && grandParent?.name === "w:tc") || (parent?.name === "w:tblPr" && grandParent?.name === "w:tbl"))) grandParent.paint = shadingPaint(tag, theme);
@@ -1223,11 +1357,12 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
       if (BAND_SIZES[tag.name]) grandParent[BAND_SIZES[tag.name]!] = bandSize(tag);
     }
     if (parent?.name === "w:rPr" && grandParent?.name === "w:r") {
+      grandParent.effective = undefined;
       if (tag.name === "w:rStyle") grandParent.style = tag.attributes.get("w:val");
       else applyRunProperty(grandParent.layer!, tag, theme);
     }
-    // Where the run's text lies in its paragraph: a line break starts a line below, at least as low as the line's text; a tab may move it anywhere along the line.
-    const flowing = parent?.name === "w:r" ? nearest("w:p") : undefined;
+    // Where the run's text lies in its paragraph: a line break starts a line below, at least as low as the line's text; a tab may move it anywhere along the line. Hidden, they move nothing.
+    const flowing = parent?.name === "w:r" && IN_FLOW.has(tag.name) && !hides(runFormat(parent)) ? nearest("w:p") : undefined;
     const flow = flowing?.flow;
     if (flow && (tag.name === "w:br" || tag.name === "w:cr")) {
       flow.top += lineFloor(formatOf(flowing!), Math.max(flow.lineSize, smallestSize(runFormat(parent!))));

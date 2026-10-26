@@ -344,6 +344,15 @@ const UNSEEN_TECHNIQUES: Record<string, Technique> = {
   "sous la ligne visible d’une ligne de tableau de 14 pt, après un saut de ligne": {
     claim: text => exactRow(280, `<w:p><w:r><w:t>Permis B.</w:t></w:r><w:r><w:br/><w:t xml:space="preserve">{{${text}}}</w:t></w:r></w:p>`),
   },
+  // Pushed below the row by lengths Word's dialogs set: space before or after paragraphs, the cell's top margin, a lowered run.
+  "sous une ligne de tableau de 14 pt, par l’espacement avant de son paragraphe (w:spacing w:before)": { claim: text => exactRow(280, laidOut(text, '<w:spacing w:before="2000"/>')) },
+  "sous une ligne de tableau de 28 pt, par l’espacement après la ligne visible au-dessus (w:spacing w:after)": {
+    claim: text => exactRow(560, laidOut("Permis B.", '<w:spacing w:after="2000"/>') + paragraph(text)),
+  },
+  "sous une ligne de tableau de 14 pt, par la marge haute de sa cellule (w:tcMar)": {
+    claim: text => exactRow(280, `<w:tcPr><w:tcMar><w:top w:w="2000" w:type="dxa"/></w:tcMar></w:tcPr>${paragraph(text)}`),
+  },
+  "abaissé de 20 pt sous une ligne de tableau de 14 pt (w:position)": { claim: text => exactRow(280, paragraph(text, '<w:position w:val="-40"/>')) },
   "dans une zone de texte VML haute de 1 pt": { claim: text => textBox('style="position:absolute;width:200pt;height:1pt"', paragraph(text)) },
   "sous la ligne visible d’une zone de texte VML de 14 pt": { claim: text => textBox('style="position:absolute;width:200pt;height:14pt"', paragraph("Permis B.") + paragraph(text)) },
   // mammoth reads the VML copy, of a normal size; Word draws the DrawingML text box, of 1 x 1 pt.
@@ -408,11 +417,35 @@ const honestTemplateDocx = () => docx([
 const cell = (content: string, properties = "") => `<w:tc>${properties ? `<w:tcPr>${properties}</w:tcPr>` : ""}${content}</w:tc>`;
 const tableRow = (height: string, cells: string) => `<w:tr><w:trPr><w:trHeight ${height}/></w:trPr>${cells}</w:tr>`;
 const ELEVEN_PT = '<w:sz w:val="22"/>';
+/** A drop cap as Word writes it: the letter in a frame three lines high, set in an exact spacing (twips) smaller than its size (half-points). */
+const dropCap = (letter: string, line: number, size: number) =>
+  `<w:p><w:pPr><w:keepNext/><w:framePr w:dropCap="drop" w:lines="3" w:wrap="around" w:vAnchor="text" w:hAnchor="text"/><w:spacing w:after="0" w:line="${line}" w:lineRule="exact"/><w:textAlignment w:val="baseline"/><w:rPr><w:position w:val="-7"/><w:sz w:val="${size}"/></w:rPr></w:pPr>` +
+  `<w:r><w:rPr><w:position w:val="-7"/><w:sz w:val="${size}"/></w:rPr><w:t>${letter}</w:t></w:r></w:p>`;
+const BIG_NAME = "Dr Camille Martin, anesthésiste-réanimatrice";
+const DROP_CAP_LINES: Array<[string, string]> = [["T", "itulaire du DESAR depuis 2015"], ["A", "ttestation de formation à l’hypnose médicale"]];
+const HIDDEN_ABOVE = ["Disponible pour des gardes de nuit", "Mobilité : France entière"];
+const LIST_ITEMS = ["Anesthésie pédiatrique", "Douleur chronique", "Médecine hyperbare"];
+/** Lines flowing from a text box of 20 pt into the one below it, as Word links them (wps:linkedTxbx; mso-next-textbox in the VML copy). */
+const LINKED_LINES = ["Formation continue en soins intensifs", "Diplôme interuniversitaire d’échographie", "Membre de la SFAR depuis 2016"];
+const linkedBoxes = () => {
+  const content = LINKED_LINES.map(line => paragraph(line)).join("");
+  return alternate(
+    drawingBox("<a:noFill/>", content, { cy: 254_000 }).replace("<wps:txbx>", '<wps:txbx id="1">'),
+    `<w:pict><v:shape id="Zone de texte 1" style="position:absolute;width:200pt;height:20pt" filled="f"><v:textbox style="mso-next-textbox:#_x0000_s1027"><w:txbxContent>${content}</w:txbxContent></v:textbox></v:shape></w:pict>`,
+  ) + alternate(
+    drawingBox("<a:noFill/>", "", { cy: 1_270_000 }).replace(/<wps:txbx>.*<\/wps:txbx>/, '<wps:linkedTxbx id="1" seq="1"/>'),
+    '<w:pict><v:shape xmlns:o="urn:schemas-microsoft-com:office:office" id="Zone de texte 2" o:spid="_x0000_s1027" style="position:absolute;margin-top:40pt;width:200pt;height:100pt" filled="f"><v:textbox/></v:shape></w:pict>',
+  );
+};
+/** A list style whose items drop their spacing between them (w:contextualSpacing). */
+const LIST_STYLE = '<w:style w:type="paragraph" w:styleId="Puces"><w:name w:val="List Paragraph"/><w:pPr><w:spacing w:after="400"/><w:contextualSpacing/></w:pPr></w:style>';
 /**
  * The physician's CV laid out as honest templates do, next to what hides text: rows of a height
  * at least, or exact and enough for their lines, a cell merged over rows, text run top to bottom,
  * indents into the margin and hanging lists, an exact spacing of the text's size with line breaks,
- * text boxes of their text's size or growing with it, two columns on narrow margins.
+ * or smaller than a name's, drop caps, text boxes of their text's size, growing with it or linked,
+ * hidden text above a row's line, a list without spacing between its items, a cell's top margin,
+ * two columns on narrow margins.
  */
 const honestLayoutDocx = () => docx([
   `<w:tbl>${tableRow('w:val="20"', cell(paragraph(PHYSICIAN_CV[0]!, ELEVEN_PT)))}${tableRow('w:val="400" w:hRule="exact"', cell(paragraph(PHYSICIAN_CV[1]!, ELEVEN_PT)))}${tableRow('w:val="900" w:hRule="exact"', cell(paragraph("Lyon, France", ELEVEN_PT) + paragraph("Disponible sous trois mois", ELEVEN_PT)))}</w:tbl>`,
@@ -430,8 +463,17 @@ const honestLayoutDocx = () => docx([
   textBox('style="position:absolute;width:200pt;height:5pt"', paragraph("Permis B")).replace("<v:textbox>", '<v:textbox style="mso-fit-shape-to-text:t">'),
   alternate(drawingBox("<a:noFill/>", paragraph("Références sur demande"), { cy: 12_700, body: "<wps:bodyPr><a:spAutoFit/></wps:bodyPr>" }), vmlBox("", paragraph("Références sur demande"))),
   alternate(drawingBox("<a:noFill/>", paragraph("Profil") + paragraph("Contact"), { cy: 127_000, body: '<wps:bodyPr vert="vert270"/>' }), vmlBox("", paragraph("Profil") + paragraph("Contact"))),
+  linkedBoxes(),
+  // A 16 pt name in an exact spacing of 12 pt; drop caps, the second less than half its size, as in a font of short capitals.
+  `<w:p><w:pPr><w:spacing w:line="240" w:lineRule="exact"/></w:pPr><w:r><w:rPr><w:sz w:val="32"/></w:rPr><w:t>{{${BIG_NAME}}}</w:t></w:r></w:p>`,
+  dropCap(DROP_CAP_LINES[0]![0], 827, 110) + paragraph(DROP_CAP_LINES[0]![1]),
+  dropCap(DROP_CAP_LINES[1]![0], 990, 220) + paragraph(DROP_CAP_LINES[1]![1]),
+  // Hidden line breaks, a hidden empty paragraph: they take no room above the line of a row.
+  `<w:tbl>${tableRow('w:val="560" w:hRule="exact"', cell(`<w:p><w:r><w:rPr><w:vanish/></w:rPr><w:br/><w:br/><w:br/></w:r><w:r><w:t>{{${HIDDEN_ABOVE[0]}}}</w:t></w:r></w:p>`))}${tableRow('w:val="300" w:hRule="exact"', cell(`<w:p><w:pPr><w:rPr><w:vanish/></w:rPr></w:pPr></w:p>${paragraph(HIDDEN_ABOVE[1]!)}`))}</w:tbl>`,
+  // A list of three items in a row of 38 pt, without its 20 pt of spacing between them; a cell's top margin of 5 pt in a row of 20 pt.
+  `<w:tbl>${tableRow('w:val="760" w:hRule="exact"', cell(LIST_ITEMS.map(item => laidOut(item, '<w:pStyle w:val="Puces"/>')).join("")))}${tableRow('w:val="400" w:hRule="exact"', cell(paragraph("Thèse soutenue en 2014"), '<w:tcMar><w:top w:w="100" w:type="dxa"/></w:tcMar>'))}</w:tbl>`,
   '<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:left="720" w:right="720" w:gutter="0"/><w:cols w:num="2" w:space="360"/></w:sectPr>',
-].join(""));
+].join(""), LIST_STYLE);
 
 const normalized = (text: string) => text.normalize("NFC").replace(/\s+/g, " ");
 
@@ -631,15 +673,16 @@ describe("texte invisible écarté à l’extraction (IA-01)", () => {
     expect(extraction.invisibleText).toEqual({ characters: CLAIMS[0]!.length, excerpt: CLAIMS[0] });
   });
 
-  it("DOCX : lit sans rien signaler une mise en page honnête : lignes de hauteur au moins ou suffisante, cellule fusionnée, texte vertical, retraits dans la marge, interligne exact à la taille du texte, zones de texte à leur taille ou qui s’agrandissent, colonnes", async () => {
+  it("DOCX : lit sans rien signaler une mise en page honnête : lignes de hauteur au moins ou suffisante, cellule fusionnée, texte vertical, retraits dans la marge, interligne exact à la taille du texte ou plus petit qu’un nom, lettrines, zones de texte à leur taille, qui s’agrandissent ou liées, texte masqué, liste sans espacement entre ses éléments, marge de cellule, colonnes", async () => {
     const extraction = await extractCvDocument(honestLayoutDocx(), DOCX);
     const lines = [...PHYSICIAN_CV, "Lyon, France", "Disponible sous trois mois", "Réanimation polyvalente", "Bloc opératoire central", "2024", "Parcours", "Langues", "Internat à Lyon",
-      "Anesthésie locorégionale échoguidée", "Gardes de réanimation, encadrement des internes", ARABIC_TITLE, "Membre de la SFAR", "Clinique du Parc", "Permis B", "Références sur demande", "Contact"];
+      "Anesthésie locorégionale échoguidée", "Gardes de réanimation, encadrement des internes", ARABIC_TITLE, "Membre de la SFAR", "Clinique du Parc", "Permis B", "Références sur demande", "Contact",
+      ...LINKED_LINES, BIG_NAME, ...DROP_CAP_LINES.map(([, line]) => line), ...HIDDEN_ABOVE, ...LIST_ITEMS, "Thèse soutenue en 2014"];
     for (const line of lines) expect(extraction.text, line).toContain(line);
     expect(extraction).toMatchObject({ invisibleText: undefined, warnings: [] });
   });
 
-  it("DOCX : prend la couleur de fond d’une zone de texte VML dans v:fill, qui l’emporte sur fillcolor", async () => {
+  it("DOCX : prend la couleur de fond d’une zone de texte VML dans v:fill, qui l’emporte sur fillcolor, et pas celle d’un dégradé", async () => {
     const vml = (fillcolor: string, fill: string, content: string) =>
       `<w:p><w:r><w:pict><v:shape ${fillcolor} style="position:absolute;width:200pt;height:120pt"><v:textbox><w:txbxContent>${content}</w:txbxContent></v:textbox>${fill}</v:shape></w:pict></w:r></w:p>`;
     // Black claims in a text box filled in black by v:fill alone.
@@ -650,6 +693,10 @@ describe("texte invisible écarté à l’extraction (IA-01)", () => {
     const banner = await extractCvDocument(docx(vml('fillcolor="white"', '<v:fill color="#1F4E79"/>', paragraph("Dr Camille Martin", WHITE)) + PHYSICIAN_CV.slice(1).map(line => paragraph(line)).join("")), DOCX);
     expect(banner.text).toContain("Dr Camille Martin");
     expect(banner.invisibleText).toBeUndefined();
+    // A gradient from black to white is not one colour: black text on it is read.
+    const gradient = await extractCvDocument(docx(vml('fillcolor="#1F4E79"', '<v:fill type="gradient" color="black" color2="white"/>', paragraph("Dr Camille Martin", '<w:color w:val="000000"/>')) + PHYSICIAN_CV.slice(1).map(line => paragraph(line)).join("")), DOCX);
+    expect(gradient.text).toContain("Dr Camille Martin");
+    expect(gradient.invisibleText).toBeUndefined();
   });
 
   describe("DOCX : mammoth lit le mc:Fallback, Word dessine le mc:Choice", () => {
@@ -1058,7 +1105,7 @@ describe("dossier d’un CV qui cache du texte, de bout en bout (IA-01)", () => 
     expect(String(dossier(id).ai_weaknesses)).not.toMatch(/texte invisible|non vérifiable/);
   });
 
-  it("DOCX honnête mis en page (lignes de tableau de hauteur fixe, cellule fusionnée, retraits dans la marge, interligne exact, zones de texte, colonnes) : tout est lu, score et faits gardés, rien n’est signalé", async () => {
+  it("DOCX honnête mis en page (lignes de tableau de hauteur fixe, cellule fusionnée, retraits dans la marge, interligne exact, lettrines, zones de texte liées ou non, texte masqué, colonnes) : tout est lu, score et faits gardés, rien n’est signalé", async () => {
     state.reading = honestReadingAt("section Profil");
     const id = seedDossier(honestLayoutDocx(), DOCX);
     await processDueCvAnalysisJobs(5);
