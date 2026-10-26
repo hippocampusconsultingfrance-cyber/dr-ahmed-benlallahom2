@@ -43,6 +43,17 @@ export function stepTimeoutMs(step: string, ownTimeoutMs: number, options: { res
   return Math.min(ownTimeoutMs, available);
 }
 
+/**
+ * Whether a pause (a provider's retry-after, a short backoff) still ends before
+ * the deadline; always true outside one. The emails sent right after a payment
+ * run inside a deadline (appointmentFulfillment.ts): past it, they stop waiting
+ * and leave the rest to their job's scheduled retry.
+ */
+export function waitFitsDeadline(waitMs: number): boolean {
+  const context = deadlineStorage.getStore();
+  return !context || context.now() + waitMs <= context.deadlineAt;
+}
+
 /** Minimum durations of the CV analysis steps when time is short. */
 export const CV_ANALYSIS_STEP_MINIMUM_MS = {
   pdfText: 3_000,

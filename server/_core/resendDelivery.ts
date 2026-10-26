@@ -1,3 +1,5 @@
+import { waitFitsDeadline } from "../processingDeadline";
+
 /**
  * How the app reads a Resend refusal (ABUS-03), shared by the emails of
  * notifications.ts, by the owner notifications of notification.ts and by the
@@ -37,8 +39,10 @@ export function resendDeliveryFailureCode(error: ResendError): ResendDeliveryFai
 
 /**
  * Delay before a new attempt after Resend's rate limit: its retry-after header
- * (seconds), 1 s without one. A request waits at most maxDelayMs; a longer
- * delay is left to the later retries. Mutable so tests can shorten it.
+ * (seconds), 1 s without one. A request waits at most maxDelayMs, and never
+ * past the deadline of the processing it runs in (the post-payment emails sent
+ * right away); a longer delay is left to the later retries. Mutable so tests
+ * can shorten it.
  */
 export const resendRateLimitRetry = { defaultDelayMs: 1_000, maxDelayMs: 5_000 };
 
@@ -46,7 +50,7 @@ export function resendRetryAfterMs(headers: Record<string, string> | null | unde
   const header = headers?.["retry-after"];
   const seconds = header === undefined ? Number.NaN : Number(header);
   const delayMs = Number.isFinite(seconds) && seconds >= 0 ? seconds * 1000 : resendRateLimitRetry.defaultDelayMs;
-  return delayMs <= resendRateLimitRetry.maxDelayMs ? delayMs : null;
+  return delayMs <= resendRateLimitRetry.maxDelayMs && waitFitsDeadline(delayMs) ? delayMs : null;
 }
 
 const wait = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));

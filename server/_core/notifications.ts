@@ -5,6 +5,7 @@ import { PATIENT_CANCELLATION_POLICY, PATIENT_CANCELLATION_POLICY_EN, resolveCon
 import { appointmentCalendarFilename, buildAppointmentCalendarEvent } from "../appointmentCalendar";
 import { withEmailLanguage, type EmailLanguage } from "../emailLanguage";
 import { reportResendQuotaError, resendDeliveryFailureCode, resendRetryAfterMs, sendWithRateLimitRetry, type ResendDeliveryFailureCode } from "./resendDelivery";
+import { waitFitsDeadline } from "../processingDeadline";
 import {
   buildResendApplicationTags,
   RESEND_APPLICATION_ACTIVATION_KIND,
@@ -117,7 +118,11 @@ async function sendPostPaymentEmail(
   const delays = postPaymentDeliveryRetry.delaysMs;
   let lastError: PostPaymentEmailError | null = null;
   for (let attempt = 0; attempt <= delays.length; attempt += 1) {
-    if (attempt > 0) await wait(delays[attempt - 1]);
+    if (attempt > 0) {
+      // Sent right after a payment: no new try past the job's deadline, its scheduled retry takes over.
+      if (!waitFitsDeadline(delays[attempt - 1])) break;
+      await wait(delays[attempt - 1]);
+    }
     try {
       const { id, error, failureCode, retryLater } = await sendThroughResend(message, idempotencyKey ? { idempotencyKey } : undefined, "post_payment");
       if (!error) return id;

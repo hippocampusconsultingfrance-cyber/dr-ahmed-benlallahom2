@@ -15,9 +15,12 @@ const resend = vi.hoisted(() => {
   vi.stubEnv("OWNER_NOTIFICATION_EMAIL", "owner@example.test");
   return {
     calls: [] as Array<{ message: Record<string, unknown>; options?: { idempotencyKey?: string }; at: number }>,
-    // Réponse par appel : "ok", "5xx", "422" ou "throw" ; "ok" quand la file est vide.
+    // Réponse par appel : "ok", "5xx", "422", "429" ou "throw" ; "ok" quand la file est vide.
     script: [] as string[],
     failFor: new Set<string>(),
+    // Limite de débit persistante pour ces adresses, avec ce retry-after (secondes).
+    rateLimitedFor: new Set<string>(),
+    retryAfterSeconds: "1",
   };
 });
 vi.mock("resend", () => ({
@@ -26,10 +29,11 @@ vi.mock("resend", () => ({
       send: vi.fn(async (message: Record<string, unknown>, options?: { idempotencyKey?: string }) => {
         resend.calls.push({ message, options, at: Date.now() });
         const to = (message.to as string[])[0];
-        const outcome = resend.failFor.has(to) ? "5xx" : resend.script.shift() ?? "ok";
+        const outcome = resend.failFor.has(to) ? "5xx" : resend.rateLimitedFor.has(to) ? "429" : resend.script.shift() ?? "ok";
         if (outcome === "throw") throw new Error("socket hang up");
         if (outcome === "5xx") return { data: null, error: { name: "internal_server_error", statusCode: 503, message: "unavailable" } };
         if (outcome === "422") return { data: null, error: { name: "validation_error", statusCode: 422, message: "invalid recipient" } };
+        if (outcome === "429") return { data: null, error: { name: "rate_limit_exceeded", statusCode: 429, message: "Too many requests" }, headers: { "retry-after": resend.retryAfterSeconds } };
         return { data: { id: `email_${resend.calls.length}` }, error: null };
       }),
     },
@@ -46,7 +50,7 @@ vi.mock("./invoiceNumbering", () => ({
   })),
 }));
 
-import { appointmentFulfillmentPacing, enqueueAppointmentFulfillment, processDueAppointmentFulfillmentJobs } from "./appointmentFulfillment";
+import { appointmentFulfillmentPacing, enqueueAppointmentFulfillment, immediateFulfillmentBudget, processDueAppointmentFulfillmentJobs } from "./appointmentFulfillment";
 import { postPaymentDeliveryRetry, sendConfirmationEmail, sendOwnerNotificationEmail } from "./_core/notifications";
 import * as notificationsModule from "./_core/notifications";
 import { drainInBatches } from "./scheduledJobs";
@@ -143,12 +147,17 @@ const subjects = () => resend.calls.map(call => String(call.message.subject));
 
 afterAll(() => vi.unstubAllEnvs());
 
+const IMMEDIATE_RESERVE_PER_JOB_MS = immediateFulfillmentBudget.reservePerJobMs;
+
 beforeEach(() => {
   resend.calls.length = 0;
   resend.script.length = 0;
   resend.failFor.clear();
+  resend.rateLimitedFor.clear();
+  resend.retryAfterSeconds = "1";
   postPaymentDeliveryRetry.delaysMs = [0, 0];
   appointmentFulfillmentPacing.delayMs = 0;
+  immediateFulfillmentBudget.reservePerJobMs = IMMEDIATE_RESERVE_PER_JOB_MS;
   vi.stubEnv("RESEND_API_KEY", "re_test_owner_first");
 });
 
@@ -274,5 +283,58 @@ describe("envois après paiement — propriétaire d’abord, essais courts, ale
     expect(invoice - confirmation).toBeGreaterThanOrEqual(198);
     // A turn whose job the other processing had already claimed gives its pause back.
     expect(invoice - owner).toBeLessThan(3 * 200);
+  });
+});
+
+describe("envoi immédiat après paiement : la notification au médecin ne retient plus les envois au patient (ABUS-03, EXPL-01)", () => {
+  // Délais réduits : retry-after de 0,3 s, essais courts à 0,1 puis 0,3 s, budget immédiat d’une seconde.
+  const BUDGET_MS = 1_000;
+  const ownerSends = () => resend.calls.filter(call => (call.message.to as string[])[0] === "owner@example.test");
+  const sentAt = (subjectStart: string) => resend.calls.find(call => String(call.message.subject).startsWith(subjectStart))?.at;
+
+  beforeEach(() => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    postPaymentDeliveryRetry.delaysMs = [100, 300];
+    resend.retryAfterSeconds = "0.3";
+    immediateFulfillmentBudget.reservePerJobMs = 200;
+  });
+
+  it("sous une limite de débit persistante, met la notification en nouvel essai planifié et envoie confirmation et facture dans le budget", async () => {
+    resend.rateLimitedFor.add("owner@example.test");
+    const { jobs } = memoryDatabase([job(1, "owner"), job(2, "confirmation"), job(3, "invoice")]);
+
+    const startedAt = Date.now();
+    await processDueAppointmentFulfillmentJobs(5, { deadlineAt: startedAt + BUDGET_MS });
+
+    // La notification n’attend que jusqu’à sa part du budget, puis repart plus tard.
+    expect(jobs.find(row => row.jobType === "owner")).toMatchObject({ status: "retry", attempts: 1 });
+    expect(ownerSends().length).toBeLessThan(6);
+    expect(ownerSends().every(call => call.at - startedAt <= BUDGET_MS - 2 * 200)).toBe(true);
+    // Le patient reçoit sa confirmation et sa facture avant la fin du budget immédiat.
+    expect(jobs.filter(row => row.jobType !== "owner").map(row => row.status)).toEqual(["completed", "completed"]);
+    expect(sentAt("Confirmation de réservation")! - startedAt).toBeLessThan(BUDGET_MS);
+    expect(sentAt("Facture")! - startedAt).toBeLessThan(BUDGET_MS);
+  });
+
+  it("sans échéance (passage planifié, « Renvoyer »), la notification garde tous ses essais avant les envois suivants", async () => {
+    resend.rateLimitedFor.add("owner@example.test");
+    memoryDatabase([job(1, "owner"), job(2, "confirmation")]);
+
+    const startedAt = Date.now();
+    await processDueAppointmentFulfillmentJobs();
+
+    expect(ownerSends()).toHaveLength(6);
+    expect(sentAt("Confirmation de réservation")! - startedAt).toBeGreaterThanOrEqual(1_200);
+  });
+
+  it("quand la limite n’est que passagère, attend le retry-after et prévient toujours le médecin en premier", async () => {
+    resend.script.push("429");
+    const { jobs } = memoryDatabase([job(1, "owner"), job(2, "confirmation"), job(3, "invoice")]);
+
+    await processDueAppointmentFulfillmentJobs(5, { deadlineAt: Date.now() + BUDGET_MS });
+
+    expect(subjects().map(subject => subject.split(" ")[0])).toEqual(["Nouvelle", "Nouvelle", "Confirmation", "Facture"]);
+    expect(resend.calls[1].at - resend.calls[0].at).toBeGreaterThanOrEqual(295);
+    expect(jobs.map(row => row.status)).toEqual(["completed", "completed", "completed"]);
   });
 });

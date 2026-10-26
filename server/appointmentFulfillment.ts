@@ -14,6 +14,7 @@ import { notifyOwner } from "./_core/notification";
 import { emailLanguageFor } from "./emailLanguage";
 import { generateInvoicePDF, renderInvoicePDF, type InvoiceData } from "./invoice";
 import { allocateAppointmentInvoice, findAppointmentInvoices, type AppointmentInvoiceRecord } from "./invoiceNumbering";
+import { runWithProcessingDeadline } from "./processingDeadline";
 
 const MAX_BATCH = 5;
 /** Well above the 60 s function limit: a job still "running" after this was interrupted. */
@@ -61,6 +62,17 @@ async function waitForFulfillmentTurn(): Promise<(claimed: boolean) => void> {
     endTurn();
   };
 }
+
+/**
+ * Immediate processing (Stripe webhook, payment status page) has a time
+ * budget. A job may wait for Resend (its retry-after, the short backoff) only
+ * until that budget minus this reserve for each job still to come: past it,
+ * the job goes to its scheduled retry. The owner notification, sent first, can
+ * no longer use up the time of the patient's confirmation and invoice, and
+ * when all goes well it still goes out first. The reserve covers the pause
+ * before a job and one send. Mutable for tests.
+ */
+export const immediateFulfillmentBudget = { reservePerJobMs: 800 };
 
 /**
  * Attempts per job (EXPL-02). With the daily scheduled run, the six retries
@@ -332,7 +344,12 @@ async function runJob(id: number) {
   }
 }
 
-export async function processDueAppointmentFulfillmentJobs(limit = MAX_BATCH, options: { appointmentId?: number } = {}) {
+/**
+ * `deadlineAt`: end of the time budget of an immediate processing (see
+ * immediateFulfillmentBudget); without it (scheduled run, « Renvoyer ») a job
+ * waits for Resend as long as its own retries allow.
+ */
+export async function processDueAppointmentFulfillmentJobs(limit = MAX_BATCH, options: { appointmentId?: number; deadlineAt?: number } = {}) {
   const db = await getDb();
   if (!db) throw new Error("Database connection failed");
   const now = new Date();
@@ -346,7 +363,8 @@ export async function processDueAppointmentFulfillmentJobs(limit = MAX_BATCH, op
     .where(dueJobs)
     .orderBy(appointmentFulfillmentJobs.scheduledFor, appointmentFulfillmentJobs.id).limit(Math.min(Math.max(1, limit), MAX_BATCH));
   const results = [];
-  for (const job of jobs) {
+  for (let index = 0; index < jobs.length; index += 1) {
+    const job = jobs[index];
     const endTurn = await waitForFulfillmentTurn();
     let claimed = false;
     try {
@@ -356,7 +374,10 @@ export async function processDueAppointmentFulfillmentJobs(limit = MAX_BATCH, op
     }
     if (!claimed) continue;
     try {
-      results.push(await runJob(job.id));
+      const { deadlineAt } = options;
+      results.push(await (deadlineAt === undefined
+        ? runJob(job.id)
+        : runWithProcessingDeadline(deadlineAt - (jobs.length - 1 - index) * immediateFulfillmentBudget.reservePerJobMs, () => runJob(job.id))));
     } finally {
       lastJobRunAt = Date.now();
     }
@@ -365,8 +386,8 @@ export async function processDueAppointmentFulfillmentJobs(limit = MAX_BATCH, op
 }
 
 /** Same claim/idempotency path as the scheduled worker, restricted to one appointment. */
-export function processAppointmentFulfillmentNow(appointmentId: number) {
-  return processDueAppointmentFulfillmentJobs(MAX_BATCH, { appointmentId });
+export function processAppointmentFulfillmentNow(appointmentId: number, options: { deadlineAt?: number } = {}) {
+  return processDueAppointmentFulfillmentJobs(MAX_BATCH, { appointmentId, deadlineAt: options.deadlineAt });
 }
 
 /**
