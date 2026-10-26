@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { renderStateful, resetStatefulHooks } from "@/testing/statefulRender";
 
-// Toasts du remboursement depuis l’onglet Réservations : ce que devient
-// l’email au patient, qui passe par la file des remboursements (EXPL-02).
+// Toasts du remboursement depuis l’onglet Réservations : montant au format
+// français, comme les emails, et ce que devient l’email au patient, qui passe
+// par la file des remboursements (EXPL-02).
 
 vi.mock("react", async importOriginal => (await import("@/testing/statefulRender")).withStatefulHooks(await importOriginal()));
 
@@ -50,15 +51,19 @@ beforeEach(() => {
 afterEach(() => resetStatefulHooks());
 
 describe("toasts d’un remboursement depuis le tableau de bord", () => {
-  it("ne prévient de rien de plus quand l’email au patient est parti", async () => {
+  it("écrit le montant comme les emails : « 100,00 € »", async () => {
     await view.mutations.refund.onSuccess!({ refundAmount: "100.00", patientNotified: true, patientEmail: "sent" } as never);
-    expect(view.toasts.map(([kind]) => kind)).toEqual(["success"]);
+    await view.mutations.refund.onSuccess!({ refundAmount: "1250.5", patientNotified: true, patientEmail: "sent" } as never);
+    expect(shown(view.toasts)).toEqual([
+      ["success", "Remboursement confirmé : 100,00 €"],
+      ["success", "Remboursement confirmé : 1 250,50 €"],
+    ]);
     expect(view.invalidated).toEqual(expect.arrayContaining(["appointments.list", "stats", "attention"]));
   });
 
   it("dit si l’email au patient attend un nouvel essai automatique ou a été refusé", async () => {
     await view.mutations.refund.onSuccess!({ refundAmount: "100.00", patientNotified: false, patientEmail: "retrying" } as never);
-    expect(view.toasts[0]![0]).toBe("success");
+    expect(shown(view.toasts)[0]).toEqual(["success", "Remboursement confirmé : 100,00 €"]);
     expect(view.toasts[1]![0]).toBe("warning");
     expect(view.toasts[1]![1]).toContain("n’est pas encore parti : un nouvel essai automatique est prévu");
 
@@ -70,6 +75,9 @@ describe("toasts d’un remboursement depuis le tableau de bord", () => {
 
   it("garde l’avertissement d’un paiement non rattaché remboursé dont l’email n’est pas parti", async () => {
     await view.mutations.refundUnconfirmedSession.onSuccess!({ refundAmount: "100.00", patientNotified: false, trackingId: "APTADMIN0001" } as never);
-    expect(shown(view.toasts)[1]).toEqual(["warning", "L’email au patient n’a pas pu être envoyé : prévenez-le directement."]);
+    expect(shown(view.toasts)).toEqual([
+      ["success", "Remboursement confirmé : 100,00 €"],
+      ["warning", "L’email au patient n’a pas pu être envoyé : prévenez-le directement."],
+    ]);
   });
 });

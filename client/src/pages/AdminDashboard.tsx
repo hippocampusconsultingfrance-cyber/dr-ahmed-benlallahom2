@@ -30,6 +30,8 @@ import { getActiveAdminTabLabel } from "./adminDashboardMobileTabs";
 import { buildAppointmentsAgenda } from "./appointmentsAgenda";
 import { getAppointmentAdminActions } from "./appointmentAdminActions";
 
+const REFUND_AMOUNT_FORMAT = new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR" });
+
 type Tab = "overview" | "appointments" | "contacts" | "gdpr" | "testimonials" | "availability" | "recruitment" | "candidateDocuments" | "security" | "vivier" | "mailing" | "employerBriefs" | "medicalQuestions";
 
 export default function AdminDashboard() {
@@ -296,7 +298,8 @@ export function AppointmentsTab() {
     },
   });
   const notifyRefundResult = ({ refundAmount, patientNotified, patientEmail }: { refundAmount: string; patientNotified: boolean; patientEmail?: AppointmentDeliveryState | null }) => {
-    toast.success(`Remboursement confirmé : ${refundAmount} €`);
+    // « 100,00 € », as in the emails.
+    toast.success(`Remboursement confirmé : ${REFUND_AMOUNT_FORMAT.format(Number(refundAmount))}`);
     // Its patient email goes through the refund queue (EXPL-02): refused, or waiting for its next automatic attempt.
     if (!patientNotified) toast.warning(refundEmailWarning(patientEmail), { duration: 10_000 });
     utils.admin.appointments.list.invalidate();
