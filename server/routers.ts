@@ -538,9 +538,7 @@ export const appRouter = router({
           email: input.email,
           headers: ctx.req.headers as Record<string, unknown>,
         });
-        if (process.env.NODE_ENV !== "test" && process.env.VITEST !== "true") {
-          await verifyCandidateTurnstile({ token: input.turnstileToken ?? "", remoteIp: ctx.req.ip });
-        }
+        await verifyCandidateTurnstile({ token: input.turnstileToken ?? "", remoteIp: ctx.req.ip });
 
         // Unpredictable tracking ID (13 chars, column is varchar(20))
         const trackingId = createPublicTrackingId("C");
@@ -581,9 +579,7 @@ export const appRouter = router({
           email: input.email,
           headers: ctx.req.headers as Record<string, unknown>,
         });
-        if (process.env.NODE_ENV !== "test" && process.env.VITEST !== "true") {
-          await verifyCandidateTurnstile({ token: input.turnstileToken ?? "", remoteIp: ctx.req.ip });
-        }
+        await verifyCandidateTurnstile({ token: input.turnstileToken ?? "", remoteIp: ctx.req.ip });
         // Unpredictable tracking ID (13 chars, column is varchar(20))
         const trackingId = createPublicTrackingId("G");
 

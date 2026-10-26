@@ -1,6 +1,9 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { appRouter } from "./routers";
 import type { TrpcContext } from "./_core/context";
+import { verifyCandidateTurnstile } from "./candidateTurnstile";
+import { notifyOwner } from "./_core/notification";
+import { getDb } from "./db";
 
 // Mock the database and notification modules
 vi.mock("./db", () => ({
@@ -14,6 +17,11 @@ vi.mock("./db", () => ({
 
 vi.mock("./_core/notification", () => ({
   notifyOwner: vi.fn().mockResolvedValue(true),
+}));
+
+// Cloudflare is never called from the tests: each one says what the check answers.
+vi.mock("./candidateTurnstile", () => ({
+  verifyCandidateTurnstile: vi.fn(async () => undefined),
 }));
 
 function createPublicContext(): TrpcContext {
@@ -271,5 +279,42 @@ describe("gdpr.submit", () => {
 
     expect(result.success).toBe(true);
     expect(result.trackingId).toBeDefined();
+  });
+});
+
+describe("contrôle anti-robot des formulaires contact et RGPD", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("refuse un message de contact dont le contrôle Turnstile échoue, sans l’enregistrer ni prévenir le cabinet", async () => {
+    const caller = appRouter.createCaller(createPublicContext());
+    vi.mocked(verifyCandidateTurnstile).mockRejectedValueOnce(new Error("candidate_turnstile_invalid"));
+
+    await expect(caller.contact.submit({
+      name: "Robot",
+      email: "robot@example.com",
+      message: "Message envoyé par un script.",
+      gdprConsent: 1,
+      turnstileToken: "turnstile-token-refused-by-the-mock",
+    })).rejects.toThrow();
+
+    expect(verifyCandidateTurnstile).toHaveBeenCalledWith(expect.objectContaining({ token: "turnstile-token-refused-by-the-mock" }));
+    expect((await getDb())!.execute).not.toHaveBeenCalled();
+    expect(notifyOwner).not.toHaveBeenCalled();
+  });
+
+  it("refuse une demande RGPD dont le contrôle Turnstile échoue, sans l’enregistrer ni prévenir le cabinet", async () => {
+    const caller = appRouter.createCaller(createPublicContext());
+    vi.mocked(verifyCandidateTurnstile).mockRejectedValueOnce(new Error("candidate_turnstile_invalid"));
+
+    await expect(caller.gdpr.submit({
+      name: "Robot",
+      email: "robot@example.com",
+      requestType: "deletion",
+      turnstileToken: "turnstile-token-refused-by-the-mock",
+    })).rejects.toThrow();
+
+    expect(verifyCandidateTurnstile).toHaveBeenCalledWith(expect.objectContaining({ token: "turnstile-token-refused-by-the-mock" }));
+    expect((await getDb())!.execute).not.toHaveBeenCalled();
+    expect(notifyOwner).not.toHaveBeenCalled();
   });
 });

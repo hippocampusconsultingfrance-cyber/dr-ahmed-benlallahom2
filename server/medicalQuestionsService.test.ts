@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { medicalQuestionAuditLogs, medicalQuestions, securityEvents } from "../drizzle/schema";
+import { candidateSecurityRateLimits, medicalQuestionAuditLogs, medicalQuestions, securityEvents } from "../drizzle/schema";
 import { createMemoryPg, type MemoryPg } from "./testing/memoryPgProxy";
 import type { TrpcContext } from "./_core/context";
 
@@ -14,6 +14,7 @@ const state = vi.hoisted(() => ({
 vi.mock("./db", () => ({ getDb: async () => state.memory?.db ?? null }));
 vi.mock("./adminMfa", async importOriginal => ({ ...await importOriginal<typeof import("./adminMfa")>(), isAdminMfaVerified: vi.fn(async () => true) }));
 vi.mock("./_core/notification", () => ({ notifyOwner: vi.fn(async (payload: { title: string; content: string }) => { state.ownerNotifications.push(payload); return true; }) }));
+vi.mock("./candidateTurnstile", () => ({ verifyCandidateTurnstile: vi.fn(async () => undefined) }));
 vi.mock("./medicalQuestionEmails", async importOriginal => ({
   ...await importOriginal<typeof import("./medicalQuestionEmails")>(),
   sendMedicalQuestionAcknowledgementEmail: vi.fn(async (input: Record<string, unknown>) => {
@@ -41,7 +42,7 @@ const QUESTION = { firstName: "Jeanne", lastName: "Martin", email: "jeanne@test.
 describe("service gratuit de questions santé", () => {
   beforeEach(() => {
     process.env.CANDIDATE_AUTH_PEPPER ||= "test-pepper-medical-questions-0123456789";
-    memory = createMemoryPg([medicalQuestions, medicalQuestionAuditLogs, securityEvents]);
+    memory = createMemoryPg([medicalQuestions, medicalQuestionAuditLogs, securityEvents, candidateSecurityRateLimits]);
     state.memory = memory;
     state.ownerNotifications = [];
     state.acknowledgements = [];

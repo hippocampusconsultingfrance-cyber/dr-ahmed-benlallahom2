@@ -40,12 +40,6 @@ function question(email: string, firstName = "Jeanne") {
   };
 }
 
-/** Runs the real protections, which test and Vitest environments skip. */
-function enableProductionProtections() {
-  vi.stubEnv("NODE_ENV", "production");
-  vi.stubEnv("VITEST", "false");
-}
-
 beforeEach(() => {
   state.db = createInMemoryDrizzle();
   state.sent.length = 0;
@@ -77,7 +71,6 @@ describe("medicalQuestions.submit — emails vers une adresse non vérifiée (MA
   });
 
   it("limite à 5 envois par heure depuis une même IP, même en changeant d’adresse destinataire", async () => {
-    enableProductionProtections();
     for (let index = 1; index <= 5; index += 1) {
       await expect(caller("198.51.100.47").submit(question(`cible${index}@test.local`, `Offre speciale sur https://promo-${index}.example`))).resolves.toMatchObject({ acknowledgementSent: true });
     }
@@ -92,7 +85,6 @@ describe("medicalQuestions.submit — emails vers une adresse non vérifiée (MA
   });
 
   it("ne compte ni un anti-robot à renouveler ni une question non enregistrée", async () => {
-    enableProductionProtections();
     const ip = "198.51.100.49";
     for (let index = 1; index <= 5; index += 1) {
       vi.mocked(verifyCandidateTurnstile).mockRejectedValueOnce(new Error("candidate_turnstile_invalid"));
@@ -120,7 +112,6 @@ describe("medicalQuestions.submit — emails vers une adresse non vérifiée (MA
   });
 
   it("garde comptée une question déjà enregistrée quand la suite échoue", async () => {
-    enableProductionProtections();
     const ip = "198.51.100.50";
     const db = state.db as InMemoryDrizzle;
     const insert = db.insert.bind(db);
@@ -142,7 +133,6 @@ describe("medicalQuestions.submit — emails vers une adresse non vérifiée (MA
   });
 
   it("ne regroupe pas les visiteurs sans IP identifiable dans un compteur commun", async () => {
-    enableProductionProtections();
     for (let index = 1; index <= 7; index += 1) {
       await expect(caller(null).submit(question(`patient${index}@test.local`))).resolves.toMatchObject({ acknowledgementSent: true });
     }

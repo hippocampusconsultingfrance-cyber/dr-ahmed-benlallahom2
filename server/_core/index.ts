@@ -491,7 +491,6 @@ export async function createApp() {
         const { enforcePublicEmailIpRateLimit, releasePublicEmailIpRateLimit } = await import("../publicFormRateLimit");
         const clientIp = req.ip || "unknown";
         const ipHash = hashSecurityValue(clientIp);
-        const protectionsEnabled = process.env.NODE_ENV !== "test" && process.env.VITEST !== "true";
         const refuseProtection = async (protectionError: unknown) => {
           await logSecurityEvent({ actorKind: "anonymous", actorReference: parsed.data.email, category: "public_recruitment_apply_protection", outcome: "blocked", severity: "warning", ipHash })
             .catch(securityLogError => console.error("Recruitment protection log error:", safeErrorName(securityLogError)));
@@ -504,14 +503,12 @@ export async function createApp() {
             code: rateLimited ? "recruitment_rate_limited" : "recruitment_security_check_required",
           });
         };
-        if (protectionsEnabled) {
-          try {
-            await verifyCandidateTurnstile({ token: parsed.data.turnstileToken, remoteIp: clientIp });
-            await enforcePersistentRateLimit({ action: "public_recruitment_apply", subject: `${clientIp}:${parsed.data.email}`, maxAttempts: 10, windowMs: 24 * 60 * 60 * 1000, blockMs: 60 * 60 * 1000 });
-          } catch (protectionError) {
-            await refuseProtection(protectionError);
-            return;
-          }
+        try {
+          await verifyCandidateTurnstile({ token: parsed.data.turnstileToken, remoteIp: clientIp });
+          await enforcePersistentRateLimit({ action: "public_recruitment_apply", subject: `${clientIp}:${parsed.data.email}`, maxAttempts: 10, windowMs: 24 * 60 * 60 * 1000, blockMs: 60 * 60 * 1000 });
+        } catch (protectionError) {
+          await refuseProtection(protectionError);
+          return;
         }
 
         recruitmentStage = "file-validation";
@@ -540,17 +537,15 @@ export async function createApp() {
         // MAIL-01: only an application that passed every check counts towards the
         // per-IP cap; a refused CV or anti-bot check leaves the budget untouched.
         recruitmentStage = "ip-rate-limit";
-        if (protectionsEnabled) {
-          const emailIpHash = req.ip ? ipHash : null;
-          try {
-            await enforcePublicEmailIpRateLimit("recruitmentApply", emailIpHash);
-          } catch (protectionError) {
-            if (!(protectionError instanceof Error && protectionError.message === "candidate_security_rate_limited")) throw protectionError;
-            await refuseProtection(protectionError);
-            return;
-          }
-          releaseIpAttempt = () => releasePublicEmailIpRateLimit("recruitmentApply", emailIpHash);
+        const emailIpHash = req.ip ? ipHash : null;
+        try {
+          await enforcePublicEmailIpRateLimit("recruitmentApply", emailIpHash);
+        } catch (protectionError) {
+          if (!(protectionError instanceof Error && protectionError.message === "candidate_security_rate_limited")) throw protectionError;
+          await refuseProtection(protectionError);
+          return;
         }
+        releaseIpAttempt = () => releasePublicEmailIpRateLimit("recruitmentApply", emailIpHash);
 
         recruitmentStage = "duplicate-check";
         const duplicateCandidates = await db.select({

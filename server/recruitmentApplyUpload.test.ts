@@ -13,6 +13,13 @@ const state = vi.hoisted(() => {
 // No database: an application that passes the upload and every check stops at 503.
 vi.mock("./db", () => ({ getDb: async () => { state.databaseRequests += 1; return null; } }));
 vi.mock("./_core/notification", () => ({ notifyOwner: vi.fn(async () => true) }));
+// The anti-robot check and the rate limits have their own tests (recruitmentApplyProtection).
+vi.mock("./candidateTurnstile", () => ({ verifyCandidateTurnstile: vi.fn(async () => undefined) }));
+vi.mock("./candidateSecurity", async importOriginal => ({
+  ...await importOriginal<typeof import("./candidateSecurity")>(),
+  enforcePersistentRateLimit: vi.fn(async () => undefined),
+  logSecurityEvent: vi.fn(async () => undefined),
+}));
 vi.mock("@clerk/express", () => ({
   clerkMiddleware: () => (_req: unknown, _res: unknown, next: () => void) => next(),
   getAuth: () => ({ userId: null }),
@@ -45,7 +52,7 @@ async function apply(input: { cvs: CvPart[]; fields?: Record<string, string> }) 
     diplomaCountry: "Algérie",
     targetCountries: JSON.stringify(["France"]),
     gdprConsent: "1",
-    turnstileToken: "turnstile-token-not-checked-under-vitest",
+    turnstileToken: "turnstile-token-accepted-by-the-mock",
     ...input.fields,
   };
   for (const [name, value] of Object.entries(fields)) form.set(name, value);

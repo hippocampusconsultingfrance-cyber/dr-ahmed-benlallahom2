@@ -22,8 +22,11 @@ const fakeDb = {
   execute: async (query: unknown) => { state.executed.push(query); return { rows: [{ id: 52 }] }; },
 };
 vi.mock("./db", () => ({ getDb: async () => fakeDb }));
+// The anti-robot check and the rate limits have their own tests (recruitmentApplyProtection).
+vi.mock("./candidateTurnstile", () => ({ verifyCandidateTurnstile: vi.fn(async () => undefined) }));
 vi.mock("./candidateSecurity", async importOriginal => ({
   ...await importOriginal<typeof import("./candidateSecurity")>(),
+  enforcePersistentRateLimit: vi.fn(async () => undefined),
   logSecurityEvent: vi.fn(async () => undefined),
 }));
 vi.mock("./_core/notification", () => ({ notifyOwner: vi.fn(async () => true) }));
@@ -84,7 +87,7 @@ function applicationBody(language?: string) {
     targetCountries: JSON.stringify(["Canada"]),
     languages: JSON.stringify(["English"]),
     gdprConsent: "1",
-    turnstileToken: "turnstile-token-not-checked-under-vitest",
+    turnstileToken: "turnstile-token-accepted-by-the-mock",
   };
   for (const [name, value] of Object.entries(fields)) body.append(name, value);
   if (language !== undefined) body.append("language", language);
