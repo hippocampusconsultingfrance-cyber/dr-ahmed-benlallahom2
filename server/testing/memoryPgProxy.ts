@@ -9,7 +9,10 @@
  * RETURNING, ON CONFLICT DO NOTHING / DO UPDATE). Anything else throws, so a
  * test never passes on a silently ignored statement. DDL statements sent with
  * `db.execute` (CREATE ... IF NOT EXISTS, ALTER ... IF NOT EXISTS) are recorded
- * and treated as no-ops. Never imported by production code.
+ * and treated as no-ops. `db.batch` runs its statements in order and, like
+ * neon-http's transaction, leaves nothing behind when one fails; `failNext`
+ * makes chosen statements fail, like a query refused between two steps.
+ * Never imported by production code.
  */
 import { drizzle } from "drizzle-orm/pg-proxy";
 import { getTableConfig, type PgTable } from "drizzle-orm/pg-core";
@@ -421,6 +424,7 @@ export function createMemoryPg(tables: PgTable[], options: { now?: () => Date; m
   const data = new Map<string, Row[]>();
   const sequences = new Map<string, number>();
   const statements: Array<{ sql: string; params: unknown[] }> = [];
+  const failures: Array<{ pattern: RegExp; remaining: number }> = [];
 
   for (const table of tables) {
     const config = getTableConfig(table);
@@ -478,6 +482,12 @@ export function createMemoryPg(tables: PgTable[], options: { now?: () => Date; m
 
   function execute(sqlText: string, params: unknown[]) {
     statements.push({ sql: sqlText, params });
+    const failure = failures.find(candidate => candidate.pattern.test(sqlText));
+    if (failure) {
+      failure.remaining -= 1;
+      if (failure.remaining === 0) failures.splice(failures.indexOf(failure), 1);
+      throw new Error(`Failed query: ${sqlText}`);
+    }
     const now = pgTimestamp(clock());
     const tokens = tokenize(sqlText);
     const parser = new Parser(tokens, sqlText);
@@ -653,9 +663,32 @@ export function createMemoryPg(tables: PgTable[], options: { now?: () => Date; m
     return { rows: result.rows as any };
   });
 
+  // drizzle's pg-proxy has no batch. neon-http sends one as a transaction: when
+  // a statement fails, every row is put back as it was before the batch
+  // (sequences, as in PostgreSQL, are not).
+  (db as unknown as { batch: (queries: Array<PromiseLike<unknown>>) => Promise<unknown[]> }).batch = async queries => {
+    const saved = new Map(Array.from(data, ([table, rows]) => [table, rows.map(row => [row, { ...row }] as const)]));
+    try {
+      const results: unknown[] = [];
+      for (const query of queries) results.push(await query);
+      return results;
+    } catch (error) {
+      saved.forEach((entries, table) => {
+        const rows = data.get(table)!;
+        rows.length = 0;
+        for (const [row, values] of entries) rows.push(Object.assign(row, values));
+      });
+      throw error;
+    }
+  };
+
   return {
     db,
     statements,
+    /** The next `times` statements whose SQL matches `pattern` fail ("Failed query: …"), as a trigger refusing them would. */
+    failNext(pattern: RegExp, times = 1) {
+      failures.push({ pattern, remaining: times });
+    },
     rows(table: PgTable | string) {
       const name = typeof table === "string" ? table : getTableConfig(table).name;
       tableMeta(name);

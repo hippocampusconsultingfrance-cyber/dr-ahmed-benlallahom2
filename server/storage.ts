@@ -169,17 +169,22 @@ export async function storageDelete(relKeys: string[]): Promise<number> {
   return keys.length;
 }
 
-/** Lists object pathnames under a prefix (for copies of one dossier). */
-export async function storageListKeys(prefix: string, maxKeys = 500): Promise<string[]> {
+/** Lists the objects under a prefix with their upload date. */
+export async function storageListObjects(prefix: string, maxKeys = 500): Promise<Array<{ key: string; uploadedAt: Date }>> {
   const normalized = normalizeKey(prefix);
   if (!normalized.includes("/")) throw new Error("storage_list_prefix_too_broad");
   const token = getBlobToken();
-  const keys: string[] = [];
+  const objects: Array<{ key: string; uploadedAt: Date }> = [];
   let cursor: string | undefined;
   do {
-    const page = await list({ prefix: normalized, cursor, limit: Math.min(1000, maxKeys - keys.length), token });
-    keys.push(...page.blobs.map(blob => blob.pathname));
+    const page = await list({ prefix: normalized, cursor, limit: Math.min(1000, maxKeys - objects.length), token });
+    objects.push(...page.blobs.map(blob => ({ key: blob.pathname, uploadedAt: new Date(blob.uploadedAt) })));
     cursor = page.hasMore ? page.cursor : undefined;
-  } while (cursor && keys.length < maxKeys);
-  return keys;
+  } while (cursor && objects.length < maxKeys);
+  return objects;
+}
+
+/** Lists object pathnames under a prefix (for copies of one dossier). */
+export async function storageListKeys(prefix: string, maxKeys = 500): Promise<string[]> {
+  return (await storageListObjects(prefix, maxKeys)).map(object => object.key);
 }

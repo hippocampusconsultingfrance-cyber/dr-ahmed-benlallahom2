@@ -7,6 +7,7 @@ import type { TrpcContext } from "./_core/context";
 const state = vi.hoisted(() => ({
   memory: null as null | { db: unknown },
   sentTo: [] as string[],
+  keys: [] as Array<string | undefined>,
   failFor: new Set<string>(),
 }));
 
@@ -17,7 +18,8 @@ vi.mock("./adminMfa", async importOriginal => ({
 }));
 vi.mock("./_core/notifications", async importOriginal => ({
   ...await importOriginal<typeof import("./_core/notifications")>(),
-  sendRecruitmentCampaignEmail: vi.fn(async (input: { candidateEmail: string }) => {
+  sendRecruitmentCampaignEmail: vi.fn(async (input: { candidateEmail: string; idempotencyKey?: string }) => {
+    state.keys.push(input.idempotencyKey);
     if (state.failFor.has(input.candidateEmail)) throw new Error("resend_unavailable");
     state.sentTo.push(input.candidateEmail);
     return { id: `email-${state.sentTo.length}` };
@@ -53,6 +55,7 @@ describe("actions d’administration du recrutement", () => {
     memory = createMemoryPg([cvApplications, cvCandidateCertifications, cvCandidateLanguages, recruitmentAuditLogs, clientBriefs, clientBriefCandidates, recruitmentCampaigns, recruitmentCampaignRecipients, recruitmentFollowUpTasks]);
     state.memory = memory;
     state.sentTo = [];
+    state.keys = [];
     state.failFor.clear();
   });
 
@@ -108,6 +111,55 @@ describe("actions d’administration du recrutement", () => {
     state.sentTo = [];
     await expect(admin().admin.recruitment.campaigns.retryFailed({ campaignId, confirmed: true })).resolves.toMatchObject({ attempted: 0, sent: 0 });
     expect(state.sentTo).toEqual([]);
+  });
+
+  it("un email accepté par Resend reste envoyé quand son enregistrement échoue, et aucune relance ne le renvoie (DATA-05)", async () => {
+    const accepted = seedCandidate(1);
+    const failing = seedCandidate(2);
+    state.failFor = new Set(["c2@test.local"]);
+    // The follow-up tasks of c1 are refused after Resend accepted its email.
+    memory.failNext(/^insert into "recruitment_follow_up_tasks"/);
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const result = await admin().admin.recruitment.campaigns.send({ title: "Offre test", subject: "Offre Suisse", body: "Une mission à Genève, répondez par email.", language: "fr", mode: "selected", selectedIds: [accepted.id as number, failing.id as number], confirmed: true });
+    error.mockRestore();
+    expect(result).toMatchObject({ total: 2, sent: 1, failed: 1 });
+    const recipients = memory.rows(recruitmentCampaignRecipients);
+    const [acceptedRecipient, failedRecipient] = recipients;
+    // Never « failed » once accepted, nor any internal SQL message kept for the admin; the
+    // provider's id is kept, for its bounce or complaint events.
+    expect(acceptedRecipient).toMatchObject({ recipient_email: "c1@test.local", delivery_status: "sent", provider_email_id: "email-1", error: null });
+    expect(failedRecipient).toMatchObject({ recipient_email: "c2@test.local", delivery_status: "failed", error: "resend_unavailable" });
+    // The rest of the bookkeeping is written together or not at all.
+    expect(memory.rows(recruitmentFollowUpTasks)).toEqual([]);
+    expect(memory.rows(recruitmentAuditLogs).filter(row => row.action === "email")).toEqual([]);
+    expect(memory.rows(cvApplications).find(row => row.id === accepted.id)!.last_contacted_at).toBeNull();
+    // One key per recipient.
+    expect(state.keys).toEqual([`campaign-${result.campaignId}-recipient-${acceptedRecipient!.id}`, `campaign-${result.campaignId}-recipient-${failedRecipient!.id}`]);
+
+    // The retry sends only the email Resend refused, under the same key; c1 gets nothing more.
+    state.failFor.clear();
+    state.keys = [];
+    await expect(admin().admin.recruitment.campaigns.retryFailed({ campaignId: result.campaignId, confirmed: true })).resolves.toMatchObject({ attempted: 1, sent: 1, failed: 0 });
+    expect(state.sentTo).toEqual(["c1@test.local", "c2@test.local"]);
+    expect(state.keys).toEqual([`campaign-${result.campaignId}-recipient-${failedRecipient!.id}`]);
+    expect(failedRecipient).toMatchObject({ delivery_status: "sent", provider_email_id: "email-2", error: null });
+    expect(memory.rows(recruitmentCampaigns)[0]).toMatchObject({ status: "sent" });
+    expect(memory.rows(recruitmentFollowUpTasks).map(row => row.application_id)).toEqual([failing.id, failing.id]);
+    expect(memory.rows(recruitmentAuditLogs).filter(row => row.action === "email").map(row => row.application_id)).toEqual([failing.id]);
+    await expect(admin().admin.recruitment.campaigns.retryFailed({ campaignId: result.campaignId, confirmed: true })).resolves.toMatchObject({ attempted: 0, sent: 0 });
+  });
+
+  it("un email accepté dont même le destinataire ne s’enregistre pas reste « queued », jamais renvoyé (DATA-05)", async () => {
+    const candidate = seedCandidate(1);
+    // The batch, then the recipient alone, are refused after Resend accepted the email.
+    memory.failNext(/^update "recruitment_campaign_recipients" set "delivery_status" = \$1, "provider_email_id"/, 2);
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const result = await admin().admin.recruitment.campaigns.send({ title: "Offre test", subject: "Offre Suisse", body: "Une mission à Genève, répondez par email.", language: "fr", mode: "selected", selectedIds: [candidate.id as number], confirmed: true });
+    error.mockRestore();
+    expect(result).toMatchObject({ total: 1, sent: 1, failed: 0 });
+    expect(memory.rows(recruitmentCampaignRecipients)[0]).toMatchObject({ delivery_status: "queued", provider_email_id: null, error: null });
+    await expect(admin().admin.recruitment.campaigns.retryFailed({ campaignId: result.campaignId, confirmed: true })).resolves.toMatchObject({ attempted: 0, sent: 0 });
+    expect(state.sentTo).toEqual(["c1@test.local"]);
   });
 
   it("rapporte l’issue réelle d’une relance d’analyse ou de copie Drive (ADM-REC-02, ADM-DRIVE-01)", () => {

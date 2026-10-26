@@ -180,7 +180,7 @@ export const appointments = mysqlTable("appointments", {
   refundedAt: timestamp("refunded_at"), // Timestamp of refund
   emailSent: int("email_sent").default(0).notNull(), // 1 = confirmation email sent
   smsSent: int("sms_sent").default(0).notNull(), // 1 = SMS notification sent
-  reminderSent: int("reminder_sent").default(0).notNull(), // 1 = 24h reminder sent
+  reminderSent: int("reminder_sent").default(0).notNull(), // 1 = 24h reminder sent, 2 = reserved by the run sending it (server/scheduledJobs.ts)
   // Language of the booking page (fr, en, de, zh): patient emails in French for
   // "fr", in English otherwise (EN-01). Also added at runtime: server/languageColumns.ts.
   language: varchar("language", { length: 10 }).default("fr").notNull(),

@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, lte } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, lt, lte, ne } from "drizzle-orm";
 import { candidateDocumentAuditLogs, candidateDocumentProcessingJobs, candidateDocuments } from "../drizzle/schema";
 import { getDb } from "./db";
 import { analyzeCandidateDocument } from "./candidateDocumentAnalysis";
@@ -31,6 +31,37 @@ export async function enqueueCandidateDocumentAnalysis(documentId: number) {
   await db.insert(candidateDocumentProcessingJobs).values({ documentId, status: "queued", maxAttempts: MAX_DOCUMENT_ANALYSIS_ATTEMPTS, scheduledFor: new Date() });
   await db.update(candidateDocuments).set({ status: "validating", analysisStatus: "queued" }).where(eq(candidateDocuments.id, documentId));
   await db.insert(candidateDocumentAuditLogs).values({ candidateId: (await db.select({ candidateId: candidateDocuments.candidateId }).from(candidateDocuments).where(eq(candidateDocuments.id, documentId)).limit(1))[0]?.candidateId ?? null, documentId, actorType: "system", action: "analysis_requested" });
+}
+
+/** A document uploaded longer ago than this without its analysis job was left by an interrupted upload. */
+export const CANDIDATE_DOCUMENT_MISSING_JOB_AFTER_MS = 15 * 60_000;
+
+/**
+ * DATA-02: the upload stores the document, then its analysis job. A request
+ * stopped between the two leaves a document waiting for an analysis no job
+ * would ever run: the scheduled run gives it the missing job. The job also
+ * settles a document reserved for human review (LEGAL-12) without any AI.
+ */
+export async function recreateMissingCandidateDocumentAnalysisJobs(limit = 25, now = new Date()) {
+  const db = await getDb();
+  if (!db) throw new Error("candidate_document_database_unavailable");
+  const documents = await db.select({ id: candidateDocuments.id, candidateId: candidateDocuments.candidateId })
+    .from(candidateDocuments)
+    .leftJoin(candidateDocumentProcessingJobs, eq(candidateDocumentProcessingJobs.documentId, candidateDocuments.id))
+    .where(and(
+      eq(candidateDocuments.analysisStatus, "queued"),
+      inArray(candidateDocuments.status, ["uploaded", "validating"]),
+      ne(candidateDocuments.validationStatus, "rejected"),
+      lt(candidateDocuments.createdAt, new Date(now.getTime() - CANDIDATE_DOCUMENT_MISSING_JOB_AFTER_MS)),
+      isNull(candidateDocumentProcessingJobs.id),
+    ))
+    .orderBy(asc(candidateDocuments.createdAt))
+    .limit(limit);
+  for (const document of documents) {
+    await db.insert(candidateDocumentProcessingJobs).values({ documentId: document.id, status: "queued", maxAttempts: MAX_DOCUMENT_ANALYSIS_ATTEMPTS, scheduledFor: now });
+    await db.insert(candidateDocumentAuditLogs).values({ candidateId: document.candidateId, documentId: document.id, actorType: "system", action: "analysis_requested", metadata: JSON.stringify({ reason: "analysis_job_missing_after_upload" }) });
+  }
+  return { recreated: documents.length };
 }
 
 async function privateDocumentBytes(input: { storageKey: string; encryptionAlgorithm?: string | null; encryptionIv?: string | null; encryptionAuthTag?: string | null }): Promise<Buffer> {

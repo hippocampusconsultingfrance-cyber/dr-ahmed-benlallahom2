@@ -20,17 +20,17 @@ import { appRouter, getStripeClient } from "../routers";
 import { createContext } from "./context";
 import { storageDelete, storageGetSignedUrl, storagePut } from "../storage";
 import { notifyOwner } from "./notification";
-import { and, desc, eq, isNotNull, isNull, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { RECRUITMENT_CV_FORMAT_MESSAGE, recruitmentCvValidationMessage, validateCvFile } from "../recruitmentFileValidation";
 import { getDb } from "../db";
-import { candidateDocumentAuditLogs, candidateDocumentProcessingJobs, candidateDocuments, cvApplications, cvProcessingJobs, recruitmentCampaignRecipients, recruitmentEmailEvents } from "../../drizzle/schema";
+import { candidateDocumentAuditLogs, candidateDocumentProcessingJobs, candidateDocuments, cvApplications, cvProcessingJobs } from "../../drizzle/schema";
 import { CANDIDATE_DOCUMENT_MAX_BYTES, CANDIDATE_DOCUMENT_TOO_LARGE_MESSAGE, candidateDocumentMimeTypes, candidateDocumentValidationMessage, safeCandidateDocumentName, validateCandidateDocument } from "../candidateDocumentValidation";
 import { createCandidateInvitationToken } from "../candidateAuth";
 import { SITE_LANGUAGES } from "../emailLanguage";
 import { CANDIDATE_UPLOADABLE_DOCUMENT_CATEGORIES, candidateDocumentAllowsAiAnalysis } from "../../shared/candidateDocumentCategories";
 import { isSameRecruitmentSubmission } from "../recruitmentSubmissionDeduplication";
 import { sendTrackedCvApplicationConfirmationEmail } from "../recruitmentEmailTrace";
-import { resendApplicationReferenceFromTags, resendRecipientMatchesApplication } from "../resendWebhookCorrelation";
+import { recordResendEmailEvent } from "../resendWebhookEvents";
 import { postgresErrorCode } from "../languageColumns";
 import { CANDIDATE_DOCUMENT_ACCOUNT_FOREIGN_KEY, CV_APPLICATION_SUBMISSION_UNIQUE_INDEX, isForeignKeyViolation, isUniqueViolation } from "../databaseConstraints";
 import { internalErrorReference, internalErrorSummary } from "./trpc";
@@ -283,81 +283,10 @@ export async function createApp() {
         res.status(400).send("Invalid Resend webhook payload");
         return;
       }
-      const db = await getDb();
-      if (!db) throw new Error("Database connection failed");
-      const [alreadyRecorded] = await db.select({ id: recruitmentEmailEvents.id }).from(recruitmentEmailEvents).where(eq(recruitmentEmailEvents.providerEventId, providerEventId)).limit(1);
-      if (alreadyRecorded) {
-        res.status(200).json({ received: true, duplicate: true });
-        return;
-      }
-
-      const data = event.data || {};
-      const providerEmailId = typeof data.email_id === "string" ? data.email_id : null;
-      const recipientEmail = Array.isArray(data.to) && typeof data.to[0] === "string" ? data.to[0].toLowerCase() : null;
-      const statusByEvent: Record<string, "sent" | "delivered" | "delayed" | "bounced" | "complained" | "failed" | "suppressed" | undefined> = {
-        "email.sent": "sent",
-        "email.delivered": "delivered",
-        "email.delivery_delayed": "delayed",
-        "email.bounced": "bounced",
-        "email.complained": "complained",
-        "email.failed": "failed",
-        "email.suppressed": "suppressed",
-      };
-      const deliveryStatus = statusByEvent[event.type];
-      const recipients = providerEmailId
-        ? await db.select().from(recruitmentCampaignRecipients).where(eq(recruitmentCampaignRecipients.providerEmailId, providerEmailId)).limit(5)
-        : [];
-      const recipient = recipients[0];
-      const [trackedEmail] = !recipient && providerEmailId
-          ? await db.select({ applicationId: recruitmentEmailEvents.applicationId })
-          .from(recruitmentEmailEvents)
-          .where(and(
-            eq(recruitmentEmailEvents.providerEmailId, providerEmailId),
-            isNotNull(recruitmentEmailEvents.applicationId),
-          ))
-          .orderBy(desc(recruitmentEmailEvents.occurredAt))
-          .limit(1)
-        : [];
-      const taggedApplicationReference = resendApplicationReferenceFromTags(data.tags);
-      const [taggedApplication] = !recipient && !trackedEmail?.applicationId && taggedApplicationReference
-        ? await db.select({ id: cvApplications.id, email: cvApplications.email })
-          .from(cvApplications)
-          .where(eq(cvApplications.trackingId, taggedApplicationReference))
-          .limit(1)
-        : [];
-      const taggedApplicationId = taggedApplication && resendRecipientMatchesApplication(recipientEmail, taggedApplication.email)
-        ? taggedApplication.id
-        : null;
-      const applicationId = recipient?.applicationId || trackedEmail?.applicationId || taggedApplicationId || null;
-      const occurredAt = event.created_at && Number.isFinite(new Date(event.created_at).getTime()) ? new Date(event.created_at) : new Date();
-      if (applicationId && providerEmailId) {
-        await db.update(recruitmentEmailEvents)
-          .set({ applicationId })
-          .where(and(eq(recruitmentEmailEvents.providerEmailId, providerEmailId), isNull(recruitmentEmailEvents.applicationId)));
-      }
-      await db.insert(recruitmentEmailEvents).values({
-        providerEventId,
-        providerEmailId,
-        campaignRecipientId: recipient?.id || null,
-        applicationId,
-        eventType: event.type,
-        recipientEmail,
-        payload: payload.slice(0, 20_000),
-        occurredAt,
-      });
-
-      if (recipient && deliveryStatus) {
-        await db.update(recruitmentCampaignRecipients).set({
-          deliveryStatus,
-          error: deliveryStatus === "bounced" || deliveryStatus === "failed" ? String(data.bounce?.message || data.error?.message || data.error || "Email delivery failed").slice(0, 2_000) : null,
-          deliveredAt: deliveryStatus === "delivered" ? occurredAt : recipient.deliveredAt,
-          lastEventAt: occurredAt,
-        }).where(eq(recruitmentCampaignRecipients.id, recipient.id));
-      }
-      if (applicationId && deliveryStatus && ["bounced", "complained", "suppressed"].includes(deliveryStatus)) {
-        await db.update(cvApplications).set({ marketingConsent: 0, marketingSuppressedAt: occurredAt, updatedAt: new Date() }).where(eq(cvApplications.id, applicationId));
-      }
-      res.status(200).json({ received: true });
+      // The event and its effects are written together (DATA-04): a failure
+      // answers an error, and Resend's next delivery applies it all again.
+      const { duplicate } = await recordResendEmailEvent({ providerEventId, event: { type: event.type, created_at: event.created_at, data: event.data }, payload });
+      res.status(200).json(duplicate ? { received: true, duplicate: true } : { received: true });
     } catch (error) {
       console.error("Resend webhook verification failed:", safeErrorName(error));
       res.status(400).send("Invalid Resend webhook");
@@ -964,7 +893,14 @@ export async function createApp() {
   // bounded batch per run, same routine as a GDPR erasure) and reports to the owner.
   registerScheduledJob("/api/scheduled/recruitment-retention", "RecruitmentRetention", async () => {
     const { runRecruitmentRetentionCleanup } = await import("../recruitmentRetention");
-    return runRecruitmentRetentionCleanup("vercel-cron");
+    const retention = await runRecruitmentRetentionCleanup("vercel-cron");
+    // DATA-02: CVs stored by an application whose row was never written.
+    const { removeOrphanApplicationCvFiles } = await import("../recruitmentOrphanCvCleanup");
+    const orphanCvFiles = await removeOrphanApplicationCvFiles().catch(error => {
+      console.error("[RecruitmentRetention] Orphan CV cleanup failed:", safeErrorName(error));
+      return null;
+    });
+    return { ...retention, orphanCvFiles };
   });
 
   // CV processing worker. Its analyses may run until 55 s

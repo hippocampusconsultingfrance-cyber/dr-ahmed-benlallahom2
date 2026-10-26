@@ -55,6 +55,7 @@ globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) =>
   return realFetch(input as RequestInfo, init);
 }) as typeof fetch;
 const { enqueueCandidateDocumentAnalysis, processDueCandidateDocumentAnalysisJobs } = await import("./candidateDocumentProcessing");
+const { runCandidateDocumentProcessingWorker } = await import("./scheduledJobs");
 
 const sessionToken = "candidate-session-token-for-upload-tests";
 let baseUrl = "";
@@ -117,6 +118,32 @@ describe("LEGAL-12 — catégories sensibles et analyse IA des documents candida
     expect(result.status).toBe(201);
     expect(db().rows(candidateDocuments)[0]).toMatchObject({ category: "diploma", analysisStatus: "queued" });
     expect(db().rows(candidateDocumentProcessingJobs)).toHaveLength(1);
+  });
+
+  it("un diplôme enregistré sans sa tâche d’analyse (dépôt interrompu) la reçoit du traitement planifié, puis est analysé (DATA-02)", async () => {
+    // The document is stored, then its analysis job is refused.
+    const insert = db().insert.bind(db());
+    const refusal = vi.spyOn(db(), "insert").mockImplementation((table => table === candidateDocumentProcessingJobs
+      ? { values: () => Promise.reject(new Error("Failed query: insert into \"candidate_document_processing_jobs\"")) }
+      : insert(table)) as typeof insert);
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const result = await uploadDocument(baseUrl, sessionToken, { category: "diploma", buffer: validPdfBuffer(), name: "diplome.pdf" });
+    refusal.mockRestore();
+    error.mockRestore();
+    expect(result.status).toBe(500);
+    const [document] = db().rows(candidateDocuments);
+    expect(document).toMatchObject({ category: "diploma", analysisStatus: "queued" });
+    expect(db().rows(candidateDocumentProcessingJobs)).toHaveLength(0);
+
+    // Left to the upload a little longer, in case it is still running; then the run gives the job.
+    const worker = () => runCandidateDocumentProcessingWorker({ batchSize: 1, maxBatches: 6, budgetMs: 20_000 });
+    await expect(worker()).resolves.toMatchObject({ jobsRecreated: 0, processed: 0 });
+    document.createdAt = new Date(Date.now() - 20 * 60_000);
+    await expect(worker()).resolves.toMatchObject({ jobsRecreated: 1, processed: 1, completed: 1 });
+    expect(state.analyses).toEqual(["diploma"]);
+    expect(document).toMatchObject({ analysisStatus: "completed", status: "needs_review" });
+    expect(db().rows(candidateDocumentAuditLogs).map(log => log.action)).toEqual(["analysis_requested", "analysis_completed"]);
+    await expect(worker()).resolves.toMatchObject({ jobsRecreated: 0, processed: 0 });
   });
 
   it("refuse au-delà de 4 Mo avec un message clair et accepte un fichier à la limite (OPS-09 / CAND-06)", async () => {

@@ -89,6 +89,13 @@ describe("emails envoyés depuis l’admin aux adresses saisies dans le formulai
     expect(byRecipient.get("zoe@test.local")!.html).toContain("<p>Bonjour Zoë,</p>");
   });
 
+  it("chaque destinataire d’une campagne part sous sa propre clé d’idempotence Resend (DATA-05)", async () => {
+    seedCandidates([{ first_name: "Zoë", last_name: "N'Diaye", email: "zoe@test.local" }, { first_name: "Camille", last_name: "Roy", email: "camille@test.local" }]);
+    const { campaignId } = await admin().admin.recruitment.campaigns.send({ title: "Mission à Genève", subject: "Offre Suisse", body: "Une mission à Genève, répondez par email.", language: "fr", mode: "all_eligible", confirmed: true });
+    const recipientIds = memory.rows(recruitmentCampaignRecipients).map(row => row.id);
+    expect(state.sendEmail.mock.calls.map(([, options]) => options)).toEqual(recipientIds.map(id => ({ idempotencyKey: `campaign-${campaignId}-recipient-${id}` })));
+  });
+
   it("une campagne en anglais salue par « Hello, » quand le nom est piégé", async () => {
     seedCandidates([TRAP_CANDIDATES[0]!]);
     await admin().admin.recruitment.campaigns.send({ title: "Geneva assignment", subject: "Swiss offer", body: "An assignment in Geneva, reply by email.", language: "en", mode: "all_eligible", confirmed: true });

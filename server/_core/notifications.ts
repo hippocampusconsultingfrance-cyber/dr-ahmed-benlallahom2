@@ -912,6 +912,8 @@ export async function sendRecruitmentCampaignEmail(input: {
   body: string;
   language: RecruitmentEmailLanguage;
   unsubscribeUrl: string;
+  /** One per campaign recipient: a retried send never delivers the offer twice (DATA-05). */
+  idempotencyKey?: string;
 }): Promise<{ id?: string }> {
   const copy = input.language === "en"
     ? { footer: "This offer concerns your professional profile.", unsubscribe: "Unsubscribe from future recruitment opportunities" }
@@ -928,7 +930,7 @@ export async function sendRecruitmentCampaignEmail(input: {
         <p style="color: #64748b;">${copy.footer}</p>
         <p style="font-size: 12px;"><a href="${escapeHtml(input.unsubscribeUrl)}" style="color: #0e7490;">${copy.unsubscribe}</a></p>
     `, input.language),
-  }, undefined, "recruitment_campaign");
+  }, input.idempotencyKey ? { idempotencyKey: input.idempotencyKey } : undefined, "recruitment_campaign");
   if (error) throw new Error(`Resend campaign email failed: ${error.message}`);
   return { id: id ?? undefined };
 }

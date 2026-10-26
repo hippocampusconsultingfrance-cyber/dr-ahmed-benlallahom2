@@ -11,6 +11,7 @@ const state = vi.hoisted(() => ({
   selected: null as null | Record<string, unknown>,
   deleteMutate: null as null | ReturnType<typeof vi.fn>,
   deleteOptions: {} as MutationOptions,
+  sendOptions: {} as MutationOptions,
   invalidated: [] as string[],
   toasts: [] as Array<[string, string]>,
 }));
@@ -22,7 +23,11 @@ const question = (id: number, status: string, extra: Record<string, unknown> = {
 });
 
 vi.mock("sonner", () => ({
-  toast: { success: (message: string) => state.toasts.push(["success", message]), error: (message: string) => state.toasts.push(["error", message]) },
+  toast: {
+    success: (message: string) => state.toasts.push(["success", message]),
+    warning: (message: string) => state.toasts.push(["warning", message]),
+    error: (message: string) => state.toasts.push(["error", message]),
+  },
 }));
 vi.mock("@/lib/trpc", () => {
   const mutation = () => ({ mutate: vi.fn(), isPending: false });
@@ -38,7 +43,12 @@ vi.mock("@/lib/trpc", () => {
           get: { useQuery: () => ({ data: state.selected, isLoading: false, error: null, refetch: vi.fn() }) },
           saveDraft: { useMutation: mutation },
           improveDraft: { useMutation: mutation },
-          sendValidatedResponse: { useMutation: mutation },
+          sendValidatedResponse: {
+            useMutation: (options: MutationOptions = {}) => {
+              state.sendOptions = options;
+              return { mutate: vi.fn(), isPending: false };
+            },
+          },
           updatePublication: { useMutation: mutation },
           unpublish: { useMutation: mutation },
           reject: { useMutation: mutation },
@@ -81,6 +91,7 @@ beforeEach(() => {
   state.selected = null;
   state.deleteMutate = vi.fn();
   state.deleteOptions = {};
+  state.sendOptions = {};
   state.invalidated = [];
   state.toasts = [];
   vi.stubGlobal("window", { confirm: vi.fn(() => true) });
@@ -139,6 +150,15 @@ describe("ADM-01 — file des questions santé", () => {
     expect(state.toasts.at(-1)).toEqual(["success", "Question supprimée définitivement, avec sa version publique et son journal."]);
     state.deleteOptions.onError!(new Error("Question introuvable"));
     expect(state.toasts.at(-1)).toEqual(["error", "Question introuvable"]);
+  });
+
+  it("dit qu’un envoi interrompu trop ancien est enregistré sans nouvel email, et à quelle date (DATA-02)", () => {
+    render();
+    state.sendOptions.onSuccess!({ success: true, published: false, resent: false, unconfirmedSentAt: new Date(Date.UTC(2026, 9, 20, 8, 30)) } as never);
+    expect(state.invalidated).toEqual(["get", "list"]);
+    expect(state.toasts.at(-1)).toEqual(["warning", "Un envoi du 20/10/2026 10:30:00 s’est interrompu avant d’être enregistré : la personne a peut-être déjà reçu la réponse. Il est enregistré à cette date avec le texte de cet envoi, sans nouvel email : une modification faite depuis n’a été ni envoyée ni conservée. « Renvoyer la réponse » permet un nouvel envoi volontaire."]);
+    state.sendOptions.onSuccess!({ success: true, published: false, resent: false, unconfirmedSentAt: null } as never);
+    expect(state.toasts.at(-1)).toEqual(["success", "Réponse envoyée par email."]);
   });
 
   it("annonce une file vide sans bouton « Charger plus »", () => {
