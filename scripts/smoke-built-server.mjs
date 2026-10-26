@@ -84,13 +84,15 @@ function get(url) {
   });
 }
 
-/** Réessaie tant que la connexion échoue (serveur qui finit de démarrer), jamais sur un code HTTP. */
+const CONNECTION_ERRORS = new Set(["ECONNREFUSED", "ECONNRESET"]);
+
+/** Réessaie tant que la connexion échoue (serveur qui finit de démarrer), jamais sur un code HTTP ni sur une route muette. */
 async function getWithRetries(url, attempts = 5, delayMs = 500) {
   for (let attempt = 1; ; attempt++) {
     try {
       return await get(url);
     } catch (error) {
-      if (attempt >= attempts) throw error;
+      if (attempt >= attempts || !CONNECTION_ERRORS.has(error?.code)) throw error;
       await new Promise(resolve => setTimeout(resolve, delayMs));
     }
   }
@@ -135,13 +137,18 @@ function lastLines(text, count = 40) {
   return text.trimEnd().split("\n").slice(-count).join("\n");
 }
 
-async function stop(child) {
-  if (child.exitCode !== null || child.signalCode !== null) return;
-  const exited = new Promise(resolve => child.once("exit", resolve));
-  child.kill("SIGTERM");
-  const forced = setTimeout(() => child.kill("SIGKILL"), 5_000);
-  await exited;
-  clearTimeout(forced);
+/** Arrête le serveur, puis attend (1 s au plus) la fin de sa sortie : la trace d'une erreur peut suivre « exit ». */
+async function stop(child, closed) {
+  if (child.exitCode === null && child.signalCode === null) {
+    const exited = new Promise(resolve => child.once("exit", resolve));
+    child.kill("SIGTERM");
+    const forced = setTimeout(() => child.kill("SIGKILL"), 5_000);
+    await exited;
+    clearTimeout(forced);
+  }
+  let grace;
+  await Promise.race([closed, new Promise(resolve => { grace = setTimeout(resolve, 1_000); })]);
+  clearTimeout(grace);
 }
 
 /**
@@ -154,6 +161,7 @@ export async function smokeBuiltServer(target, { root = process.cwd(), startTime
   // VERCEL vide plutôt qu'absente : dotenv ne la remplace pas par celle d'un .env.
   const env = { ...process.env, ...SMOKE_ENVIRONMENT, VERCEL: target.vercel ? "1" : "", PORT: String(await freePort()) };
   const child = spawn(process.execPath, args, { cwd: root, env, stdio: ["ignore", "pipe", "pipe"] });
+  const closed = new Promise(resolve => child.once("close", resolve));
   let output = "";
   child.stdout.setEncoding("utf8").on("data", chunk => { output += chunk; });
   child.stderr.setEncoding("utf8").on("data", chunk => { output += chunk; });
@@ -176,10 +184,10 @@ export async function smokeBuiltServer(target, { root = process.cwd(), startTime
     for (const check of target.checks) results.push(await CHECKS[check](base));
     return { port, results };
   } catch (error) {
-    await stop(child);
+    await stop(child, closed);
     throw new Error(`${target.name} : ${error instanceof Error ? error.message : error}\n--- sortie du serveur ---\n${lastLines(output)}`);
   } finally {
-    await stop(child);
+    await stop(child, closed);
   }
 }
 

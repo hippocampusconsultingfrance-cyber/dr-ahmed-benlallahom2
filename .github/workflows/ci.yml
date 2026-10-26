@@ -50,12 +50,17 @@ jobs:
       - name: Run test suite
         run: pnpm test:ci
       - name: Verify production build
+        id: build
         run: pnpm build
+      # The three checks below each run once the build has passed, even if one of them fails,
+      # so a single run reports every regression.
       - name: Check performance budgets
         run: node scripts/check-performance-budgets.mjs
       - name: Start the built server
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         run: node scripts/smoke-built-server.mjs
       - name: Verify migrations match the schema
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         run: |
           node scripts/check-migrations-in-sync.mjs
           git diff --exit-code -- drizzle/pg

@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { createRequire } from "node:module";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -13,21 +14,45 @@ import { pathToFileURL } from "node:url";
  */
 export const IN_SYNC_MESSAGE = "No schema changes, nothing to migrate";
 
-/** `args` : options passées à drizzle-kit (par défaut, drizzle.config.ts). */
-export function checkMigrationsInSync(args = [], { cwd = process.cwd(), timeoutMs = 120_000 } = {}) {
+// Le binaire de drizzle-kit (bin.cjs, non exporté) est à côté de son point d'entrée.
+const DRIZZLE_KIT_BIN = path.join(path.dirname(createRequire(import.meta.url).resolve("drizzle-kit")), "bin.cjs");
+
+/**
+ * `args` : options passées à drizzle-kit (par défaut, drizzle.config.ts).
+ * `bin` : script Node lancé à la place de drizzle-kit (tests).
+ */
+export function checkMigrationsInSync(args = [], { cwd = process.cwd(), timeoutMs = 120_000, bin = DRIZZLE_KIT_BIN } = {}) {
   return new Promise((resolve, reject) => {
-    // stdin fermé : une question de drizzle-kit (table renommée ?) échoue au lieu d'attendre.
-    const child = spawn("pnpm", ["exec", "drizzle-kit", "generate", ...args], { cwd, stdio: ["ignore", "pipe", "pipe"] });
+    // Node lance drizzle-kit lui-même, sans pnpm, dans son propre groupe de processus : à la durée
+    // limite, tout le groupe est tué. stdin fermé : une question (table renommée ?) échoue au lieu d'attendre.
+    const child = spawn(process.execPath, [bin, "generate", ...args], { cwd, detached: true, stdio: ["ignore", "pipe", "pipe"] });
     let output = "";
+    let settled = false;
+    const settle = result => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(result);
+    };
     child.stdout.setEncoding("utf8").on("data", chunk => { output += chunk; });
     child.stderr.setEncoding("utf8").on("data", chunk => { output += chunk; });
-    const timer = setTimeout(() => child.kill("SIGKILL"), timeoutMs);
-    child.once("error", error => { clearTimeout(timer); reject(error); });
-    child.once("close", (code, signal) => {
+    const timer = setTimeout(() => {
+      try {
+        process.kill(-child.pid, "SIGKILL");
+      } catch {
+        child.kill("SIGKILL");
+      }
+      // Un descendant sorti du groupe garderait les tubes ouverts : on n'attend pas « close ».
+      child.stdout.destroy();
+      child.stderr.destroy();
+      settle({ inSync: false, output: `${output}\ndrizzle-kit arrêté par SIGKILL (durée limite : ${timeoutMs / 1000} s).\n` });
+    }, timeoutMs);
+    child.once("error", error => {
+      settled = true;
       clearTimeout(timer);
-      if (signal) output += `\ndrizzle-kit arrêté par ${signal} (durée limite : ${timeoutMs / 1000} s).\n`;
-      resolve({ inSync: code === 0 && output.includes(IN_SYNC_MESSAGE), output });
+      reject(error);
     });
+    child.once("close", code => settle({ inSync: code === 0 && output.includes(IN_SYNC_MESSAGE), output }));
   });
 }
 

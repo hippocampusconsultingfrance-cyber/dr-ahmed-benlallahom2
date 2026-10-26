@@ -1,4 +1,5 @@
-import { cpSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { checkMigrationsInSync, IN_SYNC_MESSAGE } from "../scripts/check-migrations-in-sync.mjs";
@@ -32,6 +33,9 @@ function copyOfMigrations(schemaExtra?: string) {
   return { directory, args: ["--config", relative("drizzle.config.ts")] };
 }
 
+// Sous la limite de 60 s de chaque test : un drizzle-kit bloqué est arrêté par le script, pas par vitest.
+const options = { timeoutMs: 45_000 };
+
 const listing = (directory: string) => readdirSync(path.join(directory, "pg"), { recursive: true }).map(String).sort();
 
 afterEach(() => {
@@ -42,7 +46,7 @@ describe("concordance du schéma et des migrations (CODE-14)", () => {
   it("n'a rien à générer : drizzle/pg décrit exactement drizzle/schema.ts", async () => {
     const { directory, args } = copyOfMigrations();
     const before = listing(directory);
-    const { inSync, output } = await checkMigrationsInSync(args);
+    const { inSync, output } = await checkMigrationsInSync(args, options);
     expect(output).toContain(IN_SYNC_MESSAGE);
     expect(inSync, output).toBe(true);
     expect(listing(directory)).toEqual(before);
@@ -50,7 +54,7 @@ describe("concordance du schéma et des migrations (CODE-14)", () => {
 
   it("signale un schéma en avance sur les migrations", async () => {
     const { directory, args } = copyOfMigrations('import { pgTable, serial } from "drizzle-orm/pg-core";\nexport const ciDriftCheck = pgTable("ci_drift_check", { id: serial("id").primaryKey() });\n');
-    const { inSync } = await checkMigrationsInSync(args);
+    const { inSync } = await checkMigrationsInSync(args, options);
     expect(inSync).toBe(false);
     const written = readdirSync(path.join(directory, "pg")).filter(file => file.endsWith(".sql") && !readdirSync(path.join(root, "drizzle/pg")).includes(file));
     expect(written).toHaveLength(1);
@@ -70,8 +74,41 @@ describe("concordance du schéma et des migrations (CODE-14)", () => {
     writeFileSync(path.join(meta, "_journal.json"), JSON.stringify(journal));
     writeFileSync(path.join(directory, `pg/${next}_parallel_branch.sql`), "SELECT 1;\n");
 
-    const { inSync, output } = await checkMigrationsInSync(args);
+    const { inSync, output } = await checkMigrationsInSync(args, options);
     expect(output).toContain("collision");
     expect(inSync).toBe(false);
   }, 60_000);
+
+  it("arrête à la durée limite drizzle-kit et ce qu'il a lancé, même si un descendant garde la sortie ouverte", async () => {
+    const directory = mkdtempSync(path.join(tmpdir(), "migrations-in-sync-"));
+    directories.push(directory);
+    // Un faux drizzle-kit qui lance un processus héritant de sa sortie, puis ne répond plus.
+    writeFileSync(
+      path.join(directory, "hang.cjs"),
+      'const { spawn } = require("node:child_process");\n' +
+        'const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { stdio: "inherit" });\n' +
+        'require("node:fs").writeFileSync(require("node:path").join(__dirname, "pids"), `${process.pid} ${child.pid}`);\n' +
+        'console.log("Reading config file");\nsetInterval(() => {}, 1000);\n',
+    );
+    const started = Date.now();
+    const { inSync, output } = await checkMigrationsInSync([], { cwd: directory, timeoutMs: 3_000, bin: path.join(directory, "hang.cjs") });
+    expect(Date.now() - started).toBeLessThan(10_000);
+    expect(inSync).toBe(false);
+    expect(output).toContain("Reading config file");
+    expect(output).toContain("drizzle-kit arrêté par SIGKILL (durée limite : 3 s)");
+    const pids = readFileSync(path.join(directory, "pids"), "utf8").split(" ").map(Number);
+    // Un processus tué reste « zombie » (Z) tant qu'aucun parent ne l'a recueilli : il ne tourne plus.
+    const alive = (pid: number) => {
+      try {
+        if (existsSync("/proc/self/stat")) return !/^\d+ \(.*\) Z/s.test(readFileSync(`/proc/${pid}/stat`, "utf8"));
+        process.kill(pid, 0);
+        return true;
+      } catch {
+        return false;
+      }
+    };
+    // SIGKILL est remis par le noyau : on laisse aux processus le temps de disparaître.
+    for (let attempt = 0; attempt < 50 && pids.some(alive); attempt++) await new Promise(resolve => setTimeout(resolve, 100));
+    expect(pids.filter(alive)).toEqual([]);
+  }, 20_000);
 });

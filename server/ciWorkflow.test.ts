@@ -42,6 +42,10 @@ describe("intégration continue GitHub", () => {
       const script = /node (scripts\/\S+\.mjs)/.exec(step)?.[1];
       if (script) expect(existsSync(path.join(root, script)), script).toBe(true);
     }
+    // Un budget dépassé n'empêche pas les deux contrôles suivants de rendre leur résultat.
+    expect(workflow).toMatch(/- name: Verify production build\n\s+id: build\n\s+run: pnpm build\n/);
+    const independent = workflow.match(/if: \$\{\{ !cancelled\(\) && steps\.build\.outcome == 'success' \}\}\n\s+run: (?:\||node scripts\/smoke-built-server\.mjs)/g);
+    expect(independent).toHaveLength(2);
   });
 
   it("borne la durée de chaque job et annule la vérification dépassée d'une pull request", async () => {
@@ -53,15 +57,16 @@ describe("intégration continue GitHub", () => {
     expect(workflow).toContain("concurrency:\n  group: ${{ github.workflow }}-${{ github.ref }}\n  cancel-in-progress: ${{ github.event_name == 'pull_request' }}\n");
   });
 
-  it("prend la version de Node dans .nvmrc, sans champ engines qui changerait celle de Vercel", async () => {
+  it("prend la version de Node dans .nvmrc, et un champ engines éventuel désigne la même version majeure", async () => {
     const [workflow, nvmrc, packageJson] = await Promise.all([read(".github/workflows/ci.yml"), read(".nvmrc"), read("package.json")]);
     expect(nvmrc.trim()).toBe("22");
     const setups = workflow.match(/uses: actions\/setup-node@v4\s+with:\s+node-version-file: \.nvmrc\b/g) ?? [];
     expect(setups).toHaveLength(workflow.match(/uses: actions\/setup-node@/g)?.length ?? 0);
     expect(setups.length).toBeGreaterThan(0);
     expect(workflow).not.toMatch(/node-version:/);
-    // Vercel choisit la version de Node de production d'après `engines` s'il existe :
-    // ce choix reste dans le réglage du projet Vercel (Node.js 22.x).
-    expect(JSON.parse(packageJson).engines).toBeUndefined();
+    // Vercel ne lit pas .nvmrc : il prend `engines.node` s'il existe, sinon le réglage du projet.
+    // Le champ, une fois ajouté, doit faire tourner la production sur la version de la CI.
+    const engine = (JSON.parse(packageJson).engines as { node?: string } | undefined)?.node;
+    if (engine !== undefined) expect(engine).toBe(`${nvmrc.trim()}.x`);
   });
 });

@@ -97,6 +97,13 @@ describe("test de fumée du serveur construit (CODE-14)", { timeout: 20_000 }, (
     await expect(smokeBuiltServer(nodeTarget, { root: contradictory })).rejects.toThrow(/HTTP 200 pour un rapport « error » \(attendu 503\)/);
   });
 
+  it("ne réessaie pas une route qui ne répond pas : un seul délai d'attente, pas cinq", async () => {
+    const root = fixture({ "handler.mjs": "export default function handler() {}\n" });
+    const started = Date.now();
+    await expect(smokeBuiltServer(vercelTarget, { root })).rejects.toThrow(/\/api\/health : pas de réponse en 8 s/);
+    expect(Date.now() - started).toBeLessThan(15_000);
+  });
+
   it("abandonne et arrête un serveur qui n'annonce jamais son port", async () => {
     const root = fixture({ "server.mjs": 'import { writeFileSync } from "node:fs";\nwriteFileSync(new URL("./pid", import.meta.url), String(process.pid));\nsetInterval(() => {}, 1000);\n' });
     await expect(smokeBuiltServer(nodeTarget, { root, startTimeoutMs: 3_000 })).rejects.toThrow(/aucun « Server running on » après 3 s/);
