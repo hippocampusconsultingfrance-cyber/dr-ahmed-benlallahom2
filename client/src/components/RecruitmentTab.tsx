@@ -5,7 +5,7 @@ import { trpc } from "@/lib/trpc";
 import PublicContentSkeleton from "@/components/PublicContentSkeleton";
 import AdminLoadMore from "@/components/AdminLoadMore";
 import AdminSearchField from "@/components/AdminSearchField";
-import { adminListCount, adminPageOffsets, ADMIN_PAGE_SIZE, mergeAdminPages, useAdminPageCount } from "@/components/adminPagination";
+import { adminListCount, adminPageOffsets, ADMIN_PAGE_SIZE, mergeAdminPages, updateAdminPageItem, useAdminPageCount } from "@/components/adminPagination";
 import { adminSearchStatus, useAdminSearch } from "@/components/adminSearch";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -189,9 +189,24 @@ export default function RecruitmentTab() {
     : { items: applications, firstUnscored: -1 };
 
   const updateStatus = trpc.admin.recruitment.updateStatus.useMutation({
-    onSuccess: () => {
+    onSuccess: async (_result, input) => {
       toast.success("Candidature mise à jour");
-      utils.admin.recruitment.list.invalidate();
+      // ADM-01: with a status filter, the dossier may leave the list and shift the following pages,
+      // which are all reloaded. Without one, nothing moves (the order and the other filters do not
+      // depend on the status): the dossier is updated in the pages already loaded.
+      if (filters.status) {
+        void utils.admin.recruitment.list.invalidate();
+        return;
+      }
+      const changes = { status: input.status, ...(input.adminNotes !== undefined ? { adminNotes: input.adminNotes || null } : {}) };
+      for (const offset of adminPageOffsets(pageCount)) {
+        const page = { ...filters, limit: ADMIN_PAGE_SIZE, offset };
+        // A page still loading for the first time is left to its fetch. A refetch of a loaded page started
+        // before the update (on window focus…) would bring the old status back over it: it is cancelled.
+        if (!utils.admin.recruitment.list.getData(page)) continue;
+        await utils.admin.recruitment.list.cancel(page);
+        utils.admin.recruitment.list.setData(page, loaded => updateAdminPageItem(loaded, input.id, changes));
+      }
     },
     onError: mutationError => toast.error(mutationError.message),
   });

@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { storagePut } = vi.hoisted(() => ({ storagePut: vi.fn() }));
+const { storagePutOnce } = vi.hoisted(() => ({ storagePutOnce: vi.fn() }));
 
-vi.mock("./storage.js", () => ({ storagePut }));
+vi.mock("./storage.js", () => ({ storagePutOnce }));
 
 import { buildInvoiceContent, formatInvoiceAmount, generateInvoicePDF, type InvoiceData } from "./invoice";
 import { resolveInvoiceSeller } from "./invoiceSeller";
@@ -43,7 +43,8 @@ const originalTz = process.env.TZ;
 describe("génération de facture PDF", () => {
   beforeEach(() => {
     process.env.TZ = "UTC";
-    storagePut.mockResolvedValue({ key: "invoices/FAC-2026-000042-APTTEST000001_abcd.pdf", url: "https://storage.test/invoice.pdf" });
+    storagePutOnce.mockClear();
+    storagePutOnce.mockResolvedValue({ key: "invoices/FAC-2026-000042-APTTEST000001.pdf", url: "https://storage.test/invoice.pdf", uploaded: true });
   });
   afterEach(() => {
     if (originalTz === undefined) delete process.env.TZ;
@@ -59,6 +60,8 @@ describe("génération de facture PDF", () => {
       vi.setSystemTime(new Date("2026-10-13T06:20:07.000Z"));
       const retry = await generateInvoicePDF(nightInvoice, resolveInvoiceSeller({}));
       expect(retry.buffer.equals(first.buffer)).toBe(true);
+      // Same exact key on every attempt (no random suffix): the copy stored first is kept, never a second one.
+      expect(storagePutOnce.mock.calls.map(([key]) => key)).toEqual(["invoices/FAC-2026-000042-APTTEST000001.pdf", "invoices/FAC-2026-000042-APTTEST000001.pdf"]);
     } finally {
       vi.useRealTimers();
     }
@@ -69,7 +72,7 @@ describe("génération de facture PDF", () => {
 
     expect(invoice.buffer.subarray(0, 5).toString()).toBe("%PDF-");
     expect(invoice.buffer.length).toBeGreaterThan(1_000);
-    expect(storagePut).toHaveBeenCalledWith("invoices/FAC-2026-000042-APTTEST000001.pdf", expect.any(Buffer), "application/pdf");
+    expect(storagePutOnce).toHaveBeenCalledWith("invoices/FAC-2026-000042-APTTEST000001.pdf", expect.any(Buffer), "application/pdf");
   });
 
   it("imprime l’heure de Paris, le numéro séquentiel et l’identité du vendeur même avec TZ=UTC", async () => {

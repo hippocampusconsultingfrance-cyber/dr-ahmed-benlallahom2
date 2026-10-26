@@ -1429,7 +1429,7 @@ export const appRouter = router({
           const result = await retryAppointmentFulfillment(input.trackingId);
           if (result.outcome === "not_found") throw new TRPCError({ code: "NOT_FOUND", message: "Rendez-vous introuvable." });
           if (result.outcome === "not_paid") throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Ce rendez-vous n’est pas payé : aucun envoi après paiement à relancer." });
-          return { requeued: result.requeued, deliveries: result.deliveries };
+          return { requeued: result.requeued, requeuedJobTypes: result.requeuedJobTypes, deliveries: result.deliveries };
         }),
 
       /** Facture déjà émise, régénérée à l’identique (même numéro, mêmes dates) ; n’attribue jamais de numéro (EXPL-02). */

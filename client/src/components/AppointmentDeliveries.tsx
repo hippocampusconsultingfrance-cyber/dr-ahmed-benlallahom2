@@ -6,10 +6,15 @@ import { downloadInvoicePdf } from "./invoicePdfDownload";
 
 export type AppointmentDeliveryJob = "confirmation" | "invoice" | "owner" | "refund" | "refund_owner";
 export type AppointmentDeliveryState = "sent" | "failed" | "retrying" | "pending" | "sending" | "interrupted" | "not_sent";
-export type AppointmentDeliveryView = { jobType: AppointmentDeliveryJob; state: AppointmentDeliveryState; attempts: number; maxAttempts: number };
+export type AppointmentDeliveryNotSentReason = "appointment_past" | "not_paid";
+export type AppointmentDeliveryView = { jobType: AppointmentDeliveryJob; state: AppointmentDeliveryState; attempts: number; maxAttempts: number; notSentReason?: AppointmentDeliveryNotSentReason | null };
 
 /** In the order the practitioner reads them (EXPL-02), then the notices of a refund made in Stripe (RES-06). */
 const DELIVERY_ORDER: AppointmentDeliveryJob[] = ["confirmation", "invoice", "owner", "refund", "refund_owner"];
+
+function inReadingOrder(deliveries: AppointmentDeliveryView[]) {
+  return DELIVERY_ORDER.flatMap(jobType => deliveries.filter(delivery => delivery.jobType === jobType));
+}
 
 export const DELIVERY_JOB_LABELS: Record<AppointmentDeliveryJob, string> = {
   confirmation: "Confirmation",
@@ -45,6 +50,11 @@ const DELIVERY_STATE_TONES: Record<AppointmentDeliveryState, string> = {
   not_sent: "bg-muted text-muted-foreground",
 };
 
+const NOT_SENT_REASONS: Record<AppointmentDeliveryNotSentReason, string> = {
+  appointment_past: "la consultation est déjà passée",
+  not_paid: "le rendez-vous n’est plus payé",
+};
+
 /** « Facture : en échec (6/6) », « Confirmation : envoyée »… */
 export function deliveryLabel(delivery: AppointmentDeliveryView): string {
   const attempts = delivery.state === "failed" || delivery.state === "retrying" ? ` (${delivery.attempts}/${delivery.maxAttempts})` : "";
@@ -63,6 +73,26 @@ export function canRetryDeliveries(deliveries: AppointmentDeliveryView[], paymen
 }
 
 /**
+ * Toast after « Renvoyer », about the jobs it put back in the queue only (not
+ * the ones already sent before it): everything went out; some were
+ * deliberately not sent (a confirmation after the consultation…), said apart
+ * from the ones sent; or some failed again and wait for their next automatic
+ * attempt.
+ */
+export function retryOutcome(result: { requeuedJobTypes: AppointmentDeliveryJob[]; deliveries: AppointmentDeliveryView[] }): { tone: "success" | "info" | "warning"; message: string } {
+  const deliveries = result.deliveries.filter(delivery => result.requeuedJobTypes.includes(delivery.jobType));
+  if (!deliveries.every(delivery => delivery.state === "sent" || delivery.state === "not_sent")) {
+    return { tone: "warning", message: "Certains envois ont de nouveau échoué ; un nouvel essai automatique est prévu. Vérifiez le service d’envoi d’emails (Resend) ou prévenez le patient directement." };
+  }
+  const ordered = inReadingOrder(deliveries);
+  const skipped = ordered.filter(delivery => delivery.state === "not_sent");
+  if (skipped.length === 0) return { tone: "success", message: "Envois relancés et effectués." };
+  const sent = ordered.filter(delivery => delivery.state === "sent").map(delivery => DELIVERY_JOB_LABELS[delivery.jobType]);
+  const notSent = skipped.map(delivery => `${DELIVERY_JOB_LABELS[delivery.jobType]} non envoyée${delivery.notSentReason ? ` : ${NOT_SENT_REASONS[delivery.notSentReason]}` : ""}.`);
+  return { tone: "info", message: [sent.length > 0 ? `Envoyées : ${sent.join(", ")}.` : "Rien n’a été envoyé.", ...notSent].join(" ") };
+}
+
+/**
  * Post-payment emails of an appointment (EXPL-02): confirmation, invoice and
  * practitioner notification, and the notices of a refund made in Stripe
  * (RES-06), sent, failed or pending; « Renvoyer » sends the ones that did not
@@ -75,9 +105,12 @@ export default function AppointmentDeliveries({ trackingId, paymentStatus, deliv
     onSuccess: result => {
       void utils.admin.appointments.list.invalidate();
       void utils.admin.attention.invalidate();
-      if (result.requeued === 0) toast.info("Aucun envoi à relancer pour ce rendez-vous.");
-      else if (result.deliveries.every(delivery => delivery.state === "sent" || delivery.state === "not_sent")) toast.success("Envois relancés et effectués.");
-      else toast.warning("Certains envois ont de nouveau échoué ; un nouvel essai automatique est prévu. Vérifiez le service d’envoi d’emails (Resend) ou prévenez le patient directement.", { duration: 10_000 });
+      if (result.requeued === 0) {
+        toast.info("Aucun envoi à relancer pour ce rendez-vous.");
+        return;
+      }
+      const outcome = retryOutcome(result);
+      toast[outcome.tone](outcome.message, outcome.tone === "success" ? undefined : { duration: 10_000 });
     },
     onError: error => toast.error(error.message),
   });
@@ -87,7 +120,7 @@ export default function AppointmentDeliveries({ trackingId, paymentStatus, deliv
   });
 
   if (deliveries.length === 0 && !invoiceNumber) return null;
-  const ordered = DELIVERY_ORDER.flatMap(jobType => deliveries.filter(delivery => delivery.jobType === jobType));
+  const ordered = inReadingOrder(deliveries);
   const buttonClass = "min-h-10 flex-1 sm:min-h-0 sm:flex-none";
 
   return (

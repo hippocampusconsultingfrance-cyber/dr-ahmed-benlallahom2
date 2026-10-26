@@ -17,7 +17,28 @@ const state = vi.hoisted(() => ({
 vi.mock("./db", () => ({ getDb: async () => state.memory?.db ?? null }));
 vi.mock("./adminMfa", async importOriginal => ({ ...await importOriginal<typeof import("./adminMfa")>(), isAdminMfaVerified: vi.fn(async () => true) }));
 vi.mock("./_core/notification", () => ({ notifyOwner: vi.fn(async () => true) }));
-vi.mock("./storage.js", () => ({ storagePut: vi.fn(async (key: string) => ({ key, url: "https://storage.test/invoice.pdf" })), storageGetSignedUrl: vi.fn() }));
+// Private Vercel Blob store held in memory, behind the real storage module.
+const blobStore = vi.hoisted(() => ({ objects: new Map<string, Buffer>(), uploads: [] as string[] }));
+vi.mock("@vercel/blob", async importOriginal => {
+  const { BlobNotFoundError } = await importOriginal<typeof import("@vercel/blob")>();
+  return {
+    BlobNotFoundError,
+    head: vi.fn(async (pathname: string) => {
+      if (!blobStore.objects.has(pathname)) throw new BlobNotFoundError();
+      return { pathname, url: `https://blob.test/${pathname}` };
+    }),
+    put: vi.fn(async (pathname: string, body: Buffer, options: { allowOverwrite?: boolean }) => {
+      if (blobStore.objects.has(pathname) && options.allowOverwrite === false) throw new Error("Vercel Blob: This blob already exists");
+      blobStore.objects.set(pathname, body);
+      blobStore.uploads.push(pathname);
+      return { pathname, url: `https://blob.test/${pathname}` };
+    }),
+    del: vi.fn(),
+    issueSignedToken: vi.fn(),
+    list: vi.fn(),
+    presignUrl: vi.fn(),
+  };
+});
 vi.mock("./_core/notifications", async importOriginal => {
   const send = (kind: string) => vi.fn(async (to: string, ...rest: unknown[]) => {
     if (state.down.has(kind)) throw new Error(`${kind}_email_failed`);
@@ -112,9 +133,15 @@ beforeEach(() => {
   state.memory = memory;
   state.down.clear();
   state.sent = [];
+  blobStore.objects.clear();
+  blobStore.uploads = [];
+  vi.stubEnv("BLOB_READ_WRITE_TOKEN", "blob-test-token");
 });
 
-afterEach(() => vi.useRealTimers());
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllEnvs();
+});
 
 describe("EXPL-02 — état des envois sur chaque rendez-vous", () => {
   it("donne, rendez-vous par rendez-vous, l’état de la confirmation, de la facture et de la notification, et le numéro de facture", async () => {
@@ -159,6 +186,7 @@ describe("EXPL-02 — « Renvoyer »", () => {
     const result = await admin().appointments.retryFulfillment({ trackingId: "APTRETRY0001" });
 
     expect(result.requeued).toBe(2);
+    expect([...result.requeuedJobTypes].sort()).toEqual(["confirmation", "invoice"]);
     expect(result.deliveries.map(delivery => delivery.state)).toEqual(["sent", "sent", "sent"]);
     expect(state.sent.map(email => email.kind)).toEqual(["confirmation", "invoice"]);
     expect(state.sent[1]).toMatchObject({ to: "aptretry0001@example.test", invoiceNumber: "FAC-2026-000003" });
@@ -185,6 +213,7 @@ describe("EXPL-02 — « Renvoyer »", () => {
     seedJob(paid.id, "invoice", { status: "running", attempts: 1, started_at: new Date() });
     const result = await admin().appointments.retryFulfillment({ trackingId: "APTRETRY0003" });
     expect(result.requeued).toBe(0);
+    expect(result.requeuedJobTypes).toEqual([]);
     expect(result.deliveries.map(delivery => delivery.state)).toEqual(["sent", "sending"]);
     expect(state.sent).toEqual([]);
     expect(job(paid.id, "invoice")).toMatchObject({ status: "running", attempts: 1 });
@@ -192,6 +221,26 @@ describe("EXPL-02 — « Renvoyer »", () => {
     seedAppointment("APTRETRY0004", { payment_status: "refunded" });
     await expect(admin().appointments.retryFulfillment({ trackingId: "APTRETRY0004" })).rejects.toMatchObject({ code: "PRECONDITION_FAILED" });
     await expect(admin().appointments.retryFulfillment({ trackingId: "APTUNKNOWN01" })).rejects.toMatchObject({ code: "NOT_FOUND" });
+  });
+
+  it("dit pourquoi un envoi relancé n’est pas parti : la confirmation d’une consultation déjà passée est sautée, la facture part", async () => {
+    const past = seedAppointment("APTRETRY0006", { appointment_date: new Date(Date.now() - 3_600_000) });
+    seedJob(past.id, "owner", { status: "completed", attempts: 1 });
+    seedJob(past.id, "confirmation", { status: "failed", attempts: 3 });
+    seedJob(past.id, "invoice", { status: "failed", attempts: 3 });
+    seedInvoice(past.id, 6);
+
+    const result = await admin().appointments.retryFulfillment({ trackingId: "APTRETRY0006" });
+
+    expect(result.requeued).toBe(2);
+    // The doctor notification had gone out before: not one of the emails this retry sent or skipped.
+    expect([...result.requeuedJobTypes].sort()).toEqual(["confirmation", "invoice"]);
+    expect(result.deliveries.map(({ jobType, state, notSentReason }) => ({ jobType, state, notSentReason }))).toEqual([
+      { jobType: "owner", state: "sent", notSentReason: null },
+      { jobType: "confirmation", state: "not_sent", notSentReason: "appointment_past" },
+      { jobType: "invoice", state: "sent", notSentReason: null },
+    ]);
+    expect(state.sent.map(email => email.kind)).toEqual(["invoice"]);
   });
 
   it("relance un envoi resté « en cours » après l’arrêt de son exécution, sans attendre le prochain passage planifié", async () => {
@@ -227,6 +276,27 @@ describe("EXPL-02 — « Télécharger la facture »", () => {
     expect(download).toMatchObject({ invoiceNumber: "FAC-2026-000042", filename: "Facture-FAC-2026-000042.pdf" });
     expect(Buffer.from(download.contentBase64, "base64").equals(emailed.pdf!)).toBe(true);
     expect(memory.rows(appointmentInvoices)).toHaveLength(1);
+  });
+
+  it("ne stocke qu’une copie de la facture, quel que soit le nombre de tentatives d’envoi, et c’est celle envoyée", async () => {
+    const paid = seedAppointment("APTINVOICE03");
+    seedJob(paid.id, "invoice", { max_attempts: APPOINTMENT_FULFILLMENT_MAX_ATTEMPTS });
+    seedInvoice(paid.id, 43);
+    state.down.add("invoice");
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-26T10:00:00Z"));
+    for (let attempt = 1; attempt < APPOINTMENT_FULFILLMENT_MAX_ATTEMPTS; attempt += 1) {
+      await processAppointmentFulfillmentNow(paid.id as number);
+      vi.setSystemTime(new Date(`${job(paid.id, "invoice").scheduled_for}Z`));
+    }
+    expect(job(paid.id, "invoice")).toMatchObject({ status: "retry", attempts: APPOINTMENT_FULFILLMENT_MAX_ATTEMPTS - 1 });
+    state.down.delete("invoice");
+    await processAppointmentFulfillmentNow(paid.id as number);
+
+    expect(job(paid.id, "invoice")).toMatchObject({ status: "completed", attempts: APPOINTMENT_FULFILLMENT_MAX_ATTEMPTS });
+    expect(blobStore.uploads).toEqual(["invoices/FAC-2026-000043-APTINVOICE03.pdf"]);
+    const emailed = state.sent.find(email => email.kind === "invoice")!;
+    expect(blobStore.objects.get("invoices/FAC-2026-000043-APTINVOICE03.pdf")!.equals(emailed.pdf!)).toBe(true);
   });
 
   it("n’attribue jamais de numéro : sans facture émise, rien n’est créé", async () => {

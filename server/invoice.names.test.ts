@@ -2,9 +2,9 @@ import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { storagePut } = vi.hoisted(() => ({ storagePut: vi.fn() }));
+const { storagePutOnce } = vi.hoisted(() => ({ storagePutOnce: vi.fn() }));
 
-vi.mock("./storage.js", () => ({ storagePut }));
+vi.mock("./storage.js", () => ({ storagePutOnce }));
 
 import {
   buildInvoiceContent,
@@ -101,7 +101,7 @@ function embeddedFonts(pdf: Buffer): string[] {
 
 describe("noms internationaux sur la facture PDF", () => {
   beforeEach(() => {
-    storagePut.mockResolvedValue({ key: "invoices/FAC-2026-000007-APTTEST000007_abcd.pdf", url: "https://storage.test/invoice.pdf" });
+    storagePutOnce.mockResolvedValue({ key: "invoices/FAC-2026-000007-APTTEST000007.pdf", url: "https://storage.test/invoice.pdf", uploaded: true });
   });
 
   it.each([

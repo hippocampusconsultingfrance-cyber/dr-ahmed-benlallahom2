@@ -402,6 +402,8 @@ export type AppointmentDelivery = {
   maxAttempts: number;
   /** Next automatic attempt of a job waiting for a retry. */
   nextAttemptAt: Date | null;
+  /** Why a job was deliberately not sent: consultation already past, or appointment no longer paid. */
+  notSentReason: "appointment_past" | "not_paid" | null;
 };
 
 /** Same rule as recoverStaleAppointmentFulfillmentJobs: no worker runs that long. */
@@ -418,6 +420,7 @@ function deliveryOf(job: FulfillmentJob, now: Date): AppointmentDelivery {
     attempts: job.attempts,
     maxAttempts: job.maxAttempts,
     nextAttemptAt: job.status === "retry" ? job.scheduledFor : null,
+    notSentReason: state !== "not_sent" ? null : job.lastError === "appointment_already_past_confirmation_skipped" ? "appointment_past" : "not_paid",
   };
 }
 
@@ -439,7 +442,7 @@ export async function getAppointmentDeliveries(appointmentIds: number[]): Promis
 export type AppointmentFulfillmentRetry =
   | { outcome: "not_found" }
   | { outcome: "not_paid" }
-  | { outcome: "retried"; requeued: number; deliveries: AppointmentDelivery[] };
+  | { outcome: "retried"; requeued: number; requeuedJobTypes: FulfillmentJobType[]; deliveries: AppointmentDelivery[] };
 
 /**
  * « Renvoyer » from the dashboard (EXPL-02): the jobs of a paid appointment
@@ -459,7 +462,7 @@ export async function retryAppointmentFulfillment(trackingId: string): Promise<A
   if (appointment.paymentStatus !== "completed" && !stripeRefund) return { outcome: "not_paid" };
   const jobTypes = JOB_ORDER.filter(jobType => jobPaymentStatus(jobType) === appointment.paymentStatus);
   const now = new Date();
-  const result = await db.update(appointmentFulfillmentJobs).set({
+  const requeued = await db.update(appointmentFulfillmentJobs).set({
     status: "queued",
     attempts: 0,
     maxAttempts: APPOINTMENT_FULFILLMENT_MAX_ATTEMPTS,
@@ -475,10 +478,43 @@ export async function retryAppointmentFulfillment(trackingId: string): Promise<A
       inArray(appointmentFulfillmentJobs.status, ["queued", "retry", "failed"]),
       and(eq(appointmentFulfillmentJobs.status, "running"), lte(appointmentFulfillmentJobs.startedAt, new Date(now.getTime() - APPOINTMENT_FULFILLMENT_STALE_AFTER_MS))),
     ),
+  )).returning({ jobType: appointmentFulfillmentJobs.jobType });
+  if (requeued.length > 0) await processAppointmentFulfillmentNow(appointment.id);
+  return {
+    outcome: "retried",
+    requeued: requeued.length,
+    // What this retry sent or skipped, told apart from the jobs already sent before it.
+    requeuedJobTypes: requeued.map(job => job.jobType as FulfillmentJobType),
+    deliveries: (await getAppointmentDeliveries([appointment.id])).get(appointment.id) ?? [],
+  };
+}
+
+/**
+ * Refund of an appointment (dashboard or Stripe, EXPL-02): its post-payment
+ * jobs still waiting for an attempt (queued, waiting for a retry, or
+ * interrupted) are closed right away as not sent, as the next run would do
+ * without sending anything, so the dashboard stops showing them as failed and
+ * waiting for a retry. A job being sent right now is left to its worker, and
+ * the notices of a refund made in Stripe (RES-06), which are meant for a
+ * refunded appointment, are never closed here.
+ */
+export async function closeUnsentAppointmentFulfillment(appointmentId: number, now = new Date()) {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+  const result = await db.update(appointmentFulfillmentJobs).set({
+    status: "completed",
+    finishedAt: now,
+    lastError: "appointment_not_paid_or_missing",
+    updatedAt: now,
+  }).where(and(
+    eq(appointmentFulfillmentJobs.appointmentId, appointmentId),
+    inArray(appointmentFulfillmentJobs.jobType, [...APPOINTMENT_FULFILLMENT_JOB_TYPES]),
+    or(
+      inArray(appointmentFulfillmentJobs.status, ["queued", "retry"]),
+      and(eq(appointmentFulfillmentJobs.status, "running"), lte(appointmentFulfillmentJobs.startedAt, new Date(now.getTime() - APPOINTMENT_FULFILLMENT_STALE_AFTER_MS))),
+    ),
   ));
-  const requeued = mutationRowCount(result);
-  if (requeued > 0) await processAppointmentFulfillmentNow(appointment.id);
-  return { outcome: "retried", requeued, deliveries: (await getAppointmentDeliveries([appointment.id])).get(appointment.id) ?? [] };
+  return mutationRowCount(result);
 }
 
 /**

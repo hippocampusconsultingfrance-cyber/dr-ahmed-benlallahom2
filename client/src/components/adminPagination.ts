@@ -44,6 +44,15 @@ export function mergeAdminPages<T extends { id: number }>(pages: AdminPageQuery<
   };
 }
 
+/**
+ * A loaded page with one row changed in place: after an edit that moves no
+ * row (neither the order nor the filters depend on what changed), the pages
+ * already loaded are updated instead of being all fetched again.
+ */
+export function updateAdminPageItem<T extends { id: number }>(page: { items: T[]; total: number } | undefined, id: number, changes: Partial<T>) {
+  return page && { ...page, items: page.items.map(item => item.id === id ? { ...item, ...changes } : item) };
+}
+
 /** « 50 sur 302 réservation(s) » while rows remain to load, « 302 réservation(s) » once all are shown. */
 export function adminListCount(shown: number, total: number, noun: string): string {
   return shown < total ? `${shown} sur ${total} ${noun}` : `${total} ${noun}`;

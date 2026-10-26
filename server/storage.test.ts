@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const blob = vi.hoisted(() => ({
+  BlobNotFoundError: class BlobNotFoundError extends Error {},
   del: vi.fn(),
+  head: vi.fn(),
   issueSignedToken: vi.fn(),
   list: vi.fn(),
   presignUrl: vi.fn(),
@@ -10,7 +12,7 @@ const blob = vi.hoisted(() => ({
 
 vi.mock("@vercel/blob", () => blob);
 
-import { classifyStorageError, storageDelete, storageGetSignedUrl, storageListKeys, storagePut } from "./storage";
+import { classifyStorageError, storageDelete, storageGetSignedUrl, storageListKeys, storagePut, storagePutOnce } from "./storage";
 
 describe("private Vercel Blob storage", () => {
   beforeEach(() => {
@@ -39,6 +41,36 @@ describe("private Vercel Blob storage", () => {
       expect.any(Buffer),
       expect.objectContaining({ access: "private", addRandomSuffix: false, token: "blob-test-token" }),
     );
+  });
+
+  it("stores a rebuilt document once under its exact key, then keeps the stored copy without uploading it again", async () => {
+    // A private store held in memory: head() finds what put() stored.
+    const stored = new Map<string, Buffer>();
+    blob.head.mockImplementation(async (pathname: string) => {
+      if (!stored.has(pathname)) throw new blob.BlobNotFoundError("Vercel Blob: The requested blob does not exist");
+      return { pathname, url: `https://private.blob.example/${pathname}` };
+    });
+    blob.put.mockImplementation(async (pathname: string, body: Buffer) => {
+      stored.set(pathname, body);
+      return { pathname, url: `https://private.blob.example/${pathname}` };
+    });
+    const pdf = Buffer.from("%PDF-1.3 invoice");
+
+    const first = await storagePutOnce("/invoices/FAC-2026-000001-APTTEST000001.pdf", pdf, "application/pdf");
+    const retries = [];
+    for (let attempt = 2; attempt <= 8; attempt += 1) retries.push(await storagePutOnce("invoices/FAC-2026-000001-APTTEST000001.pdf", pdf, "application/pdf"));
+
+    expect(first).toEqual({ key: "invoices/FAC-2026-000001-APTTEST000001.pdf", url: "https://private.blob.example/invoices/FAC-2026-000001-APTTEST000001.pdf", uploaded: true });
+    expect(retries.every(retry => retry.key === first.key && !retry.uploaded)).toBe(true);
+    expect(blob.put).toHaveBeenCalledTimes(1);
+    expect(blob.put).toHaveBeenCalledWith(first.key, pdf, expect.objectContaining({ access: "private", addRandomSuffix: false, allowOverwrite: false, token: "blob-test-token" }));
+    expect(Array.from(stored.keys())).toEqual([first.key]);
+  });
+
+  it("uploads nothing when the store cannot say whether the document is already there", async () => {
+    blob.head.mockRejectedValue(new Error("Vercel Blob: This store has been suspended."));
+    await expect(storagePutOnce("invoices/FAC-2026-000002-APTTEST000002.pdf", "pdf", "application/pdf")).rejects.toMatchObject({ code: "storage_store_suspended" });
+    expect(blob.put).not.toHaveBeenCalled();
   });
 
   it("creates a five-minute read-only URL for one private pathname", async () => {

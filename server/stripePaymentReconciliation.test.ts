@@ -101,7 +101,7 @@ const { createApp } = await import("./_core/index");
 const { appRouter } = await import("./routers");
 const { refundAppointmentPayment } = await import("./appointmentAdminActions");
 const { paymentStatusPageFulfillment } = await import("./appointmentPublicStatus");
-const { APPOINTMENT_FULFILLMENT_STALE_AFTER_MS } = await import("./appointmentFulfillment");
+const { APPOINTMENT_FULFILLMENT_STALE_AFTER_MS, appointmentFulfillmentPacing, closeUnsentAppointmentFulfillment, getAppointmentDeliveries, processDueAppointmentFulfillmentJobs, recoverStaleAppointmentFulfillmentJobs } = await import("./appointmentFulfillment");
 const PAGE_FULFILLMENT_TIMEOUT_MS = paymentStatusPageFulfillment.timeoutMs;
 const signer = new Stripe(process.env.STRIPE_SECRET_KEY!);
 
@@ -132,6 +132,9 @@ beforeEach(() => {
   state.stripe.expireCalls.length = 0;
   state.stripe.payWhileClosing = null;
   paymentStatusPageFulfillment.timeoutMs = PAGE_FULFILLMENT_TIMEOUT_MS;
+  // The pause between two jobs (ABUS-03) counts from the last job of the
+  // previous test: without it, a page's short wait would depend on test order.
+  appointmentFulfillmentPacing.delayMs = 0;
 });
 
 function seedAppointment(overrides: Record<string, unknown> = {}) {
@@ -422,6 +425,58 @@ describe("RES-06 — remboursements et contestations faits dans Stripe", () => {
     expect(emails.sendRefundConfirmationEmail).toHaveBeenCalledTimes(1);
     expect(owner.notifyOwner).not.toHaveBeenCalled();
     expect(String(appointmentRow().cancellationReason)).toContain("Indisponibilité du médecin");
+  });
+
+  it.each([
+    // A dashboard refund emails the patient itself: no refund notice is queued.
+    ["depuis le tableau de bord", () => refundAppointmentPayment(new Stripe(process.env.STRIPE_SECRET_KEY!), { trackingId: TRACKING_ID, reason: "Indisponibilité du médecin", initiator: "practitioner" }), []],
+    // A refund made in Stripe queues its own notices (RES-06), which the close leaves alone.
+    ["dans Stripe", () => postEvent("charge.refunded", charge()), [
+      { jobType: "refund", state: "sent", notSentReason: null },
+      { jobType: "refund_owner", state: "sent", notSentReason: null },
+    ]],
+  ])("ferme aussitôt comme « non envoyés » les envois qui attendaient un nouvel essai d’un rendez-vous remboursé %s (EXPL-02)", async (_where, refund, refundNotices) => {
+    const { id } = seedAppointment(paid) as { id: number };
+    const seedJob = (jobType: string, overrides: Record<string, unknown>) => db().seed(appointmentFulfillmentJobs, { appointmentId: id, jobType, attempts: 1, maxAttempts: 7, scheduledFor: new Date(Date.now() + HOUR), ...overrides });
+    seedJob("owner", { status: "running", startedAt: new Date() });
+    // Its next attempt is due: the next scheduled run would pick it up.
+    seedJob("confirmation", { status: "retry", lastError: "confirmation_email_failed", scheduledFor: new Date(Date.now() - HOUR) });
+    // Still « running » long after its worker stopped: interrupted.
+    seedJob("invoice", { status: "running", startedAt: new Date(Date.now() - 20 * 60 * 1000) });
+
+    await refund();
+
+    const deliveries = (await getAppointmentDeliveries([id])).get(id)!;
+    expect(deliveries.map(({ jobType, state, notSentReason }) => ({ jobType, state, notSentReason }))).toEqual([
+      // Being sent right now: left to its worker.
+      { jobType: "owner", state: "sending", notSentReason: null },
+      { jobType: "confirmation", state: "not_sent", notSentReason: "not_paid" },
+      { jobType: "invoice", state: "not_sent", notSentReason: "not_paid" },
+      ...refundNotices,
+    ]);
+    // Nothing left for the next scheduled run: without the close, it would requeue the interrupted
+    // invoice and run both jobs again (only to close them, since the appointment is no longer paid).
+    await expect(recoverStaleAppointmentFulfillmentJobs()).resolves.toEqual({ recovered: 0, exhausted: 0 });
+    await expect(processDueAppointmentFulfillmentJobs()).resolves.toMatchObject({ processed: 0 });
+    expect(emails.sendConfirmationEmail).not.toHaveBeenCalled();
+    expect(emails.sendInvoiceEmail).not.toHaveBeenCalled();
+  });
+
+  it("ne ferme jamais les avis d’un remboursement fait dans Stripe qui attendent un nouvel essai (EXPL-02, RES-06)", async () => {
+    const { id } = seedAppointment({ ...paid, paymentStatus: "refunded", appointmentStatus: "cancelled", slotKey: null }) as { id: number };
+    const seedJob = (jobType: string) => db().seed(appointmentFulfillmentJobs, { appointmentId: id, jobType, status: "retry", attempts: 1, maxAttempts: 7, lastError: "refund_email_failed", scheduledFor: new Date(Date.now() + HOUR) });
+    seedJob("confirmation");
+    seedJob("refund");
+    seedJob("refund_owner");
+
+    await expect(closeUnsentAppointmentFulfillment(id)).resolves.toBe(1);
+
+    const deliveries = (await getAppointmentDeliveries([id])).get(id)!;
+    expect(deliveries.map(({ jobType, state }) => ({ jobType, state }))).toEqual([
+      { jobType: "confirmation", state: "not_sent" },
+      { jobType: "refund", state: "retrying" },
+      { jobType: "refund_owner", state: "retrying" },
+    ]);
   });
 
   it("garde le statut d’une consultation déjà faite remboursée dans Stripe et le signale au médecin", async () => {
