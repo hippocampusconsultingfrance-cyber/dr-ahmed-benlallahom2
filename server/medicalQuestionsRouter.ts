@@ -1,4 +1,4 @@
-import { randomInt } from "node:crypto";
+import { randomInt, randomUUID } from "node:crypto";
 import { TRPCError } from "@trpc/server";
 import { and, asc, desc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import { z } from "zod";
@@ -63,6 +63,39 @@ async function auditQuestion(input: { questionId: number; actorOpenId?: string |
     action: input.action,
     metadata: input.metadata ? JSON.stringify(input.metadata) : null,
   });
+}
+
+/**
+ * Resend keeps an idempotency key 24 hours: an unconfirmed attempt younger
+ * than this is tried again under its key (no second email), an older one is
+ * not tried again at all.
+ */
+export const MEDICAL_RESPONSE_KEY_RETRY_WINDOW_MS = 23 * 60 * 60 * 1000;
+
+function auditMetadata(metadata: string | null): { idempotencyKey?: unknown; attempt?: unknown } {
+  try {
+    return metadata ? JSON.parse(metadata) : {};
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * When the first attempt to send the email of this key began, if one began
+ * and none of them ended: neither recorded as sent (which moves the question
+ * to the next key) nor refused by the email service.
+ */
+async function unconfirmedResponseAttemptAt(db: Awaited<ReturnType<typeof requireDb>>, questionId: number, idempotencyKey: string): Promise<Date | null> {
+  const entries = await db.select({ action: medicalQuestionAuditLogs.action, metadata: medicalQuestionAuditLogs.metadata, createdAt: medicalQuestionAuditLogs.createdAt })
+    .from(medicalQuestionAuditLogs)
+    .where(and(eq(medicalQuestionAuditLogs.medicalQuestionId, questionId), inArray(medicalQuestionAuditLogs.action, ["response_send_started", "response_send_failed"])))
+    .orderBy(asc(medicalQuestionAuditLogs.createdAt), asc(medicalQuestionAuditLogs.id));
+  const failed = new Set(entries.filter(entry => entry.action === "response_send_failed").map(entry => auditMetadata(entry.metadata).attempt));
+  const started = entries.find(entry => {
+    const metadata = auditMetadata(entry.metadata);
+    return entry.action === "response_send_started" && metadata.idempotencyKey === idempotencyKey && !failed.has(metadata.attempt);
+  });
+  return started?.createdAt ?? null;
 }
 
 async function requireMfa(ctx: { req: Parameters<typeof isAdminMfaVerified>[0]; user: { openId: string } }) {
@@ -223,21 +256,45 @@ export const medicalQuestionsRouter = router({
       const idempotencyKey = question.responseSentAt
         ? `medical-question-response/${question.id}/after-${question.responseSentAt.getTime()}`
         : `medical-question-response/${question.id}/first`;
+      const published = input.resend ? question.status === "published" : input.publish;
+      // The sending is recorded with the answer and its journal entry in one batch.
+      const recordSending = (sentAt: Date, adminResponse: string, action: string, metadata: Record<string, unknown>) => db.batch([
+        db.update(medicalQuestions).set(input.resend
+          ? { adminResponse, respondedByOpenId: ctx.user.openId, responseSentAt: sentAt }
+          : { adminResponse, publicQuestion: input.publish ? input.publicQuestion : null, publicResponse: input.publish ? input.publicResponse : null, status: input.publish ? "published" : "answered", respondedByOpenId: ctx.user.openId, responseSentAt: sentAt, publishedAt: input.publish ? sentAt : null })
+          .where(eq(medicalQuestions.id, input.id)),
+        db.insert(medicalQuestionAuditLogs).values({ medicalQuestionId: input.id, actorOpenId: ctx.user.openId, action, metadata: JSON.stringify(metadata) }),
+      ]);
+      // DATA-02: an earlier attempt may have sent this email without recording
+      // it (stopped between the two). Past Resend's memory of the key, the
+      // email is not sent again: it is recorded as sent when it was tried.
+      const unconfirmedAt = await unconfirmedResponseAttemptAt(db, question.id, idempotencyKey);
+      if (unconfirmedAt && Date.now() - unconfirmedAt.getTime() >= MEDICAL_RESPONSE_KEY_RETRY_WINDOW_MS) {
+        await recordSending(unconfirmedAt, question.adminResponse ?? input.adminResponse, "response_send_unconfirmed", { published, resend: input.resend });
+        return { success: true, published, resent: input.resend, unconfirmedSentAt: unconfirmedAt };
+      }
+      // The answer and the attempt are recorded before the email leaves.
+      const attempt = randomUUID();
+      await db.batch([
+        db.update(medicalQuestions).set(input.resend
+          ? { adminResponse: input.adminResponse, respondedByOpenId: ctx.user.openId }
+          : { adminResponse: input.adminResponse, publicQuestion: input.publicQuestion || null, publicResponse: input.publicResponse || null, status: "drafting", respondedByOpenId: ctx.user.openId })
+          .where(eq(medicalQuestions.id, input.id)),
+        db.insert(medicalQuestionAuditLogs).values({ medicalQuestionId: input.id, actorOpenId: ctx.user.openId, action: "response_send_started", metadata: JSON.stringify({ idempotencyKey, attempt }) }),
+      ]);
       try {
         await sendMedicalQuestionResponseEmail({ email: question.email, firstName: question.firstName, trackingId: question.trackingId, response: input.adminResponse }, { idempotencyKey });
       } catch {
+        await auditQuestion({ questionId: input.id, actorOpenId: ctx.user.openId, action: "response_send_failed", metadata: { attempt } }).catch(() => undefined);
         throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "L’email n’a pas pu être envoyé. La réponse n’a pas été publiée." });
       }
-      if (input.resend) {
-        const resentAt = new Date();
-        await db.update(medicalQuestions).set({ adminResponse: input.adminResponse, respondedByOpenId: ctx.user.openId, responseSentAt: resentAt }).where(eq(medicalQuestions.id, input.id));
-        await auditQuestion({ questionId: input.id, actorOpenId: ctx.user.openId, action: "response_resent" });
-        return { success: true, published: question.status === "published", resent: true };
+      try {
+        await recordSending(new Date(), input.adminResponse, input.resend ? "response_resent" : input.publish ? "response_sent_and_published" : "response_sent", { published, attempt });
+      } catch (error) {
+        console.error("[MedicalQuestions] Response email sent but its recording failed", { questionId: input.id, error: error instanceof Error ? error.name : "UnknownError" });
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "L’email est parti, mais son enregistrement a échoué. Relancez le même envoi : il sera enregistré sans second email." });
       }
-      const now = new Date();
-      await db.update(medicalQuestions).set({ adminResponse: input.adminResponse, publicQuestion: input.publish ? input.publicQuestion : null, publicResponse: input.publish ? input.publicResponse : null, status: input.publish ? "published" : "answered", respondedByOpenId: ctx.user.openId, responseSentAt: now, publishedAt: input.publish ? now : null }).where(eq(medicalQuestions.id, input.id));
-      await auditQuestion({ questionId: input.id, actorOpenId: ctx.user.openId, action: input.publish ? "response_sent_and_published" : "response_sent", metadata: { published: input.publish } });
-      return { success: true, published: input.publish, resent: false };
+      return { success: true, published, resent: input.resend, unconfirmedSentAt: null };
     }),
     /** Publishes or updates the anonymised version of an answered question, without emailing anyone. */
     updatePublication: adminProcedure.input(z.object({ id: z.number().int().positive(), publicQuestion: z.string().trim().min(1).max(1000), publicResponse: z.string().trim().min(1).max(5000) })).mutation(async ({ input, ctx }) => {

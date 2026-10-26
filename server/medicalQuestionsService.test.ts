@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { candidateSecurityRateLimits, medicalQuestionAuditLogs, medicalQuestions, securityEvents } from "../drizzle/schema";
 import { createMemoryPg, type MemoryPg } from "./testing/memoryPgProxy";
 import type { TrpcContext } from "./_core/context";
@@ -9,6 +9,7 @@ const state = vi.hoisted(() => ({
   acknowledgements: [] as Array<Record<string, unknown>>,
   responses: [] as Array<{ input: Record<string, unknown>; options: Record<string, unknown> }>,
   ackFails: false,
+  responseFails: false,
 }));
 
 vi.mock("./db", () => ({ getDb: async () => state.memory?.db ?? null }));
@@ -21,7 +22,10 @@ vi.mock("./medicalQuestionEmails", async importOriginal => ({
     if (state.ackFails) throw new Error("resend_down");
     state.acknowledgements.push(input);
   }),
-  sendMedicalQuestionResponseEmail: vi.fn(async (input: Record<string, unknown>, options: Record<string, unknown>) => { state.responses.push({ input, options }); }),
+  sendMedicalQuestionResponseEmail: vi.fn(async (input: Record<string, unknown>, options: Record<string, unknown>) => {
+    if (state.responseFails) throw new Error("medical_question_response_email_failed:validation_error");
+    state.responses.push({ input, options });
+  }),
 }));
 
 import { appRouter } from "./routers";
@@ -48,7 +52,9 @@ describe("service gratuit de questions santé", () => {
     state.acknowledgements = [];
     state.responses = [];
     state.ackFails = false;
+    state.responseFails = false;
   });
+  afterEach(() => vi.useRealTimers());
 
   it("accepte une question sans accord de publication, prévient le propriétaire sans contenu de santé et accuse réception (LEGAL-11, PUB-FORM-01)", async () => {
     const result = await caller().medicalQuestions.submit({ ...QUESTION, publicationConsent: false });
@@ -94,6 +100,61 @@ describe("service gratuit de questions santé", () => {
     // Publication needs the person's agreement, and never emails.
     await expect(admin.updatePublication({ id, publicQuestion: "Q", publicResponse: "R" })).rejects.toThrow("accord explicite");
     expect(trackingId).toMatch(/^QMED-/);
+  });
+
+  it("enregistre la réponse avant l’envoi ; un email parti sans être enregistré est repris sous la même clé, puis au-delà de 24 h enregistré sans second email (DATA-02)", async () => {
+    vi.useFakeTimers({ now: new Date("2026-10-20T08:00:00Z"), toFake: ["Date"] });
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const admin = caller(true).medicalQuestions.admin;
+    const answer = "Information générale : suivez les consignes de jeûne données par l’équipe d’anesthésie.";
+    await caller().medicalQuestions.submit({ ...QUESTION, publicationConsent: false });
+    await caller().medicalQuestions.submit({ ...QUESTION, email: "paul@test.local", firstName: "Paul", publicationConsent: false });
+    const [first, second] = memory.rows(medicalQuestions);
+
+    // The email leaves, then its recording is refused.
+    memory.failNext(/^update "medical_questions" set .*"response_sent_at" = /);
+    await expect(admin.sendValidatedResponse({ id: first!.id as number, adminResponse: answer, publish: false })).rejects.toThrow("L’email est parti, mais son enregistrement a échoué");
+    expect(state.responses.map(response => response.options)).toEqual([{ idempotencyKey: `medical-question-response/${first!.id}/first` }]);
+    // The answer was recorded before the email: the question waits as a draft, not as a new one.
+    expect(first).toMatchObject({ status: "drafting", admin_response: answer, response_sent_at: null });
+
+    // A few hours later the same click sends under the same key (Resend keeps the first email) and records it.
+    vi.setSystemTime(new Date("2026-10-20T11:00:00Z"));
+    await expect(admin.sendValidatedResponse({ id: first!.id as number, adminResponse: answer, publish: false })).resolves.toMatchObject({ success: true, published: false, resent: false, unconfirmedSentAt: null });
+    expect(state.responses.map(response => response.options.idempotencyKey)).toEqual([`medical-question-response/${first!.id}/first`, `medical-question-response/${first!.id}/first`]);
+    expect(first).toMatchObject({ status: "answered", response_sent_at: "2026-10-20 11:00:00.000" });
+
+    // Same interruption for the second question, retried two days later: Resend no longer knows the key.
+    memory.failNext(/^update "medical_questions" set .*"response_sent_at" = /);
+    await expect(admin.sendValidatedResponse({ id: second!.id as number, adminResponse: answer, publish: false })).rejects.toThrow("enregistrement a échoué");
+    expect(state.responses).toHaveLength(3);
+    vi.setSystemTime(new Date("2026-10-22T11:00:00Z"));
+    const late = await admin.sendValidatedResponse({ id: second!.id as number, adminResponse: `${answer} Texte modifié.`, publish: false });
+    expect(late).toMatchObject({ success: true, published: false, resent: false, unconfirmedSentAt: new Date("2026-10-20T11:00:00Z") });
+    // No second email; recorded on the day it was tried, with the text that left.
+    expect(state.responses).toHaveLength(3);
+    expect(second).toMatchObject({ status: "answered", admin_response: answer, response_sent_at: "2026-10-20 11:00:00.000" });
+    expect(memory.rows(medicalQuestionAuditLogs).filter(row => row.medical_question_id === second!.id).map(row => row.action))
+      .toEqual(["submitted", "acknowledgement_sent", "response_send_started", "response_send_unconfirmed"]);
+    // From there, only a deliberate resend emails the person again.
+    await expect(admin.sendValidatedResponse({ id: second!.id as number, adminResponse: answer, publish: false })).rejects.toThrow("déjà été envoyée");
+    expect(state.responses).toHaveLength(3);
+    error.mockRestore();
+  });
+
+  it("un envoi refusé par le service d’email ne compte pas comme peut-être parti : il est retenté plus tard (DATA-02)", async () => {
+    vi.useFakeTimers({ now: new Date("2026-10-20T08:00:00Z"), toFake: ["Date"] });
+    const admin = caller(true).medicalQuestions.admin;
+    await caller().medicalQuestions.submit({ ...QUESTION, publicationConsent: false });
+    const id = memory.rows(medicalQuestions)[0]!.id as number;
+    state.responseFails = true;
+    await expect(admin.sendValidatedResponse({ id, adminResponse: "Information générale relue par le médecin, sans urgence.", publish: false })).rejects.toThrow("L’email n’a pas pu être envoyé");
+    state.responseFails = false;
+    vi.setSystemTime(new Date("2026-10-22T08:00:00Z"));
+    await expect(admin.sendValidatedResponse({ id, adminResponse: "Information générale relue par le médecin, sans urgence.", publish: false })).resolves.toMatchObject({ unconfirmedSentAt: null });
+    expect(state.responses).toHaveLength(1);
+    expect(memory.rows(medicalQuestions)[0]).toMatchObject({ status: "answered", response_sent_at: "2026-10-22 08:00:00.000" });
+    expect(memory.rows(medicalQuestionAuditLogs).map(row => row.action)).toEqual(["submitted", "acknowledgement_sent", "response_send_started", "response_send_failed", "response_send_started", "response_sent"]);
   });
 
   it("met à jour la publication d’une question consentie sans renvoyer d’email", async () => {
