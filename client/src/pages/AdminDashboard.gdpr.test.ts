@@ -71,7 +71,7 @@ vi.mock("@/lib/trpc", () => {
 
 const { ContactsTab, GdprTab } = await import("./AdminDashboard");
 const { default: PersonalDataSearchPanel, PersonalDataResult } = await import("@/components/PersonalDataSearchPanel");
-const { gdprRequestDeadline, isGdprRequestOverdue } = await import("@/components/gdprRequestAdmin");
+const { formatGdprRequestDate, gdprRequestDeadline, isGdprRequestOverdue } = await import("@/components/gdprRequestAdmin");
 
 const render = (element: ReactNode) => {
   state.buttons = [];
@@ -139,18 +139,40 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("RGPD-12 — échéance d’une demande", () => {
-  it("tombe un mois après la réception, au dernier jour d’un mois plus court", () => {
-    expect(gdprRequestDeadline(new Date(2026, 9, 26, 10)).toDateString()).toBe(new Date(2026, 10, 26).toDateString());
-    expect(gdprRequestDeadline(new Date(2027, 0, 31, 10)).toDateString()).toBe(new Date(2027, 1, 28).toDateString());
-    expect(gdprRequestDeadline(new Date(2026, 11, 15, 10)).toDateString()).toBe(new Date(2027, 0, 15).toDateString());
+  it("tombe un mois après la réception, jour de Paris, au dernier jour d’un mois plus court", () => {
+    // Reçue le 26/09 à 08:56 à Paris : due jusqu’au 26/10 à 23:59:59, heure de Paris (heure d’hiver depuis le 25/10).
+    expect(gdprRequestDeadline(new Date("2026-09-26T06:56:00Z")).toISOString()).toBe("2026-10-26T22:59:59.999Z");
+    expect(formatGdprRequestDate(gdprRequestDeadline(new Date("2027-01-31T10:00:00Z")))).toBe("28/02/2027");
+    expect(formatGdprRequestDate(gdprRequestDeadline(new Date("2028-01-31T10:00:00Z")))).toBe("29/02/2028");
+    expect(formatGdprRequestDate(gdprRequestDeadline(new Date("2026-12-15T10:00:00Z")))).toBe("15/01/2027");
+    // 31 janvier 23:30 UTC, déjà le 1er février à Paris : échéance le 1er mars, pas le 28 février.
+    expect(formatGdprRequestDate(gdprRequestDeadline(new Date("2026-01-31T23:30:00Z")))).toBe("01/03/2026");
   });
 
-  it("n’est dépassée que pour une demande encore ouverte", () => {
-    const now = new Date(2026, 10, 27, 12);
-    expect(isGdprRequestOverdue({ status: "pending", createdAt: new Date(2026, 9, 26, 10) }, now)).toBe(true);
-    expect(isGdprRequestOverdue({ status: "in_progress", createdAt: new Date(2026, 9, 26, 10) }, now)).toBe(true);
-    expect(isGdprRequestOverdue({ status: "completed", createdAt: new Date(2026, 9, 26, 10) }, now)).toBe(false);
-    expect(isGdprRequestOverdue({ status: "pending", createdAt: new Date(2026, 10, 20, 10) }, now)).toBe(false);
+  it("n’est dépassée qu’une fois le jour d’échéance fini à Paris, pour une demande encore ouverte", () => {
+    const createdAt = new Date("2026-09-26T06:56:00Z");
+    // Le 26/10 à l’heure exacte de la réception (08:56:37 à Paris), le délai court encore.
+    expect(isGdprRequestOverdue({ status: "pending", createdAt }, new Date("2026-10-26T07:56:37Z"))).toBe(false);
+    expect(isGdprRequestOverdue({ status: "pending", createdAt }, new Date("2026-10-26T22:59:59Z"))).toBe(false);
+    expect(isGdprRequestOverdue({ status: "pending", createdAt }, new Date("2026-10-26T23:00:00Z"))).toBe(true);
+    expect(isGdprRequestOverdue({ status: "in_progress", createdAt }, new Date("2026-10-27T12:00:00Z"))).toBe(true);
+    expect(isGdprRequestOverdue({ status: "completed", createdAt }, new Date("2026-10-27T12:00:00Z"))).toBe(false);
+    expect(isGdprRequestOverdue({ status: "rejected", createdAt }, new Date("2026-10-27T12:00:00Z"))).toBe(false);
+  });
+
+  it("compte les jours de Paris quel que soit le fuseau du navigateur", () => {
+    const original = process.env.TZ;
+    try {
+      for (const zone of ["UTC", "Asia/Tokyo", "America/Los_Angeles"]) {
+        process.env.TZ = zone;
+        // 26/09 à 00:30 à Paris (25/09 en UTC, en Californie ; déjà 07:30 le 26 à Tokyo).
+        expect(gdprRequestDeadline(new Date("2026-09-25T22:30:00Z")).toISOString()).toBe("2026-10-26T22:59:59.999Z");
+        expect(formatGdprRequestDate(gdprRequestDeadline(new Date("2026-09-25T22:30:00Z")))).toBe("26/10/2026");
+      }
+    } finally {
+      if (original === undefined) delete process.env.TZ;
+      else process.env.TZ = original;
+    }
   });
 });
 
@@ -158,7 +180,7 @@ describe("RGPD-12 — onglet RGPD", () => {
   it("affiche l’échéance, en rouge une fois dépassée, et les statuts en français", () => {
     state.gdprPage = { items: [gdprRequest(1), gdprRequest(2, { createdAt: new Date(Date.now() - 40 * DAY) }), gdprRequest(3, { status: "completed", responseDate: new Date(Date.now() - DAY), notes: "Données effacées le 25." })], total: 3 };
     const html = render(createElement(GdprTab));
-    expect(html).toContain(`Échéance : ${gdprRequestDeadline(gdprRequest(1).createdAt).toLocaleDateString("fr-FR")}`);
+    expect(html).toContain(`Échéance : ${formatGdprRequestDate(gdprRequestDeadline(gdprRequest(1).createdAt))}`);
     expect(html).toMatch(/<span class="font-semibold text-red-400">Échéance dépassée : /);
     expect(html).toContain("À traiter");
     expect(html).toContain("Traitée");

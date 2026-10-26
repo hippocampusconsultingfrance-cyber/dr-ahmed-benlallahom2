@@ -7,8 +7,11 @@ email.
 
 ## 1. Délai
 
-- Réponse due **un mois après la réception** (RGPD, art. 12.3). L’onglet RGPD
-  affiche l’échéance de chaque demande ouverte, en rouge une fois dépassée.
+- Réponse due **un mois après la réception** (RGPD, art. 12.3), au plus tard à
+  la fin du jour d’échéance : le même jour du mois suivant, ou son dernier jour
+  s’il est plus court (règlement 1182/71). L’onglet RGPD affiche l’échéance de
+  chaque demande ouverte, comptée en jours de Paris quel que soit le fuseau du
+  navigateur, en rouge une fois ce jour terminé.
 - Le délai peut être prolongé de deux mois pour une demande complexe ou en cas
   de demandes nombreuses, à condition d’en informer la personne, avec les
   raisons, **avant la fin du premier mois**.

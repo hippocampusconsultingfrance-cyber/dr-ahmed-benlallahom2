@@ -22,7 +22,7 @@ import AdminLoadMore from "@/components/AdminLoadMore";
 import AdminSearchField from "@/components/AdminSearchField";
 import AppointmentDeliveries from "@/components/AppointmentDeliveries";
 import PersonalDataSearchPanel, { personalDataSearchKey, requestPersonalDataSearch } from "@/components/PersonalDataSearchPanel";
-import { GDPR_REQUEST_STATUS_LABELS, GDPR_REQUEST_TYPE_LABELS, gdprRequestDeadline, isGdprRequestOpen, isGdprRequestOverdue } from "@/components/gdprRequestAdmin";
+import { formatGdprRequestDate, formatGdprRequestDateTime, GDPR_REQUEST_STATUS_LABELS, GDPR_REQUEST_TYPE_LABELS, gdprRequestDeadline, isGdprRequestOpen, isGdprRequestOverdue } from "@/components/gdprRequestAdmin";
 import { adminListCount, adminPageOffsets, ADMIN_PAGE_SIZE, mergeAdminPages, useAdminPageCount } from "@/components/adminPagination";
 import { adminSearchStatus, useAdminSearch } from "@/components/adminSearch";
 import PublicContentSkeleton from "@/components/PublicContentSkeleton";
@@ -697,7 +697,7 @@ export function GdprTab() {
     <div className="space-y-8">
       <PersonalDataSearchPanel key={personalDataSearchKey(personalDataSearch)} requestedEmail={personalDataSearch.email} />
       <div>
-        <p className="text-sm text-muted-foreground mb-4">{adminListCount(items.length, total, "demande(s) RGPD")} · réponse due un mois après réception</p>
+        <p className="text-sm text-muted-foreground mb-4">{adminListCount(items.length, total, "demande(s) RGPD")} · réponse due un mois après réception, au plus tard à la fin du jour d’échéance (heure de Paris)</p>
         <div className="space-y-3">
           {items.map((req) => {
             const note = notes[req.id] ?? req.notes ?? "";
@@ -721,13 +721,13 @@ export function GdprTab() {
                     </div>
                     <div className="flex flex-wrap gap-x-3 gap-y-1 text-sm text-muted-foreground">
                       <span className="break-all">{req.email}</span>
-                      <span>Reçue le {new Date(req.createdAt).toLocaleString("fr-FR")}</span>
+                      <span>Reçue le {formatGdprRequestDateTime(req.createdAt)}</span>
                       {open ? (
                         <span className={overdue ? "font-semibold text-red-400" : undefined}>
-                          {overdue ? "Échéance dépassée : " : "Échéance : "}{gdprRequestDeadline(req.createdAt).toLocaleDateString("fr-FR")}
+                          {overdue ? "Échéance dépassée : " : "Échéance : "}{formatGdprRequestDate(gdprRequestDeadline(req.createdAt))}
                         </span>
                       ) : req.responseDate ? (
-                        <span>Répondue le {new Date(req.responseDate).toLocaleDateString("fr-FR")}</span>
+                        <span>Répondue le {formatGdprRequestDate(req.responseDate)}</span>
                       ) : null}
                     </div>
                     {req.description && (
