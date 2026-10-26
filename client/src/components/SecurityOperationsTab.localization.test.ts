@@ -15,8 +15,8 @@ describe("observabilité de sécurité multilingue", () => {
       expect(copy.categories.candidate_document_upload_protection.trim()).not.toHaveLength(0);
       // RGPD-12: the administrator's actions on a person's data, and their counts.
       // EXPL-02: a patient's email corrected from the appointment card.
-      // ABUS-02: a slot held by an online booking, by an anonymous visitor.
-      for (const category of ["admin_personal_data_exported", "admin_personal_data_erased", "admin_contact_message_deleted", "admin_medical_question_deleted", "admin_appointment_email_corrected", "public_booking_hold_created"] as const) {
+      // ABUS-02: a slot held by an online booking, by an anonymous visitor, and the anti-bot check it may ask for.
+      for (const category of ["admin_personal_data_exported", "admin_personal_data_erased", "admin_contact_message_deleted", "admin_medical_question_deleted", "admin_appointment_email_corrected", "public_booking_hold_created", "public_booking_challenge", "public_booking_challenge_unavailable"] as const) {
         expect(copy.categories[category].trim()).not.toHaveLength(0);
       }
       expect(copy.actors.anonymous.trim()).not.toHaveLength(0);
