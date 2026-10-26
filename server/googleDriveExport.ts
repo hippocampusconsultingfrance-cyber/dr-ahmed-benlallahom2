@@ -297,7 +297,9 @@ async function notifyOwnerOfGoogleDriveReconnection(connection: { id: number; re
 /**
  * Notes a Drive failure on the connection. A revoked token marks it « à
  * renouveler » until the next connection or successful copy: the first
- * refusal alone alerts the owner, and no other error overwrites that mark.
+ * refusal alerts the owner (an alert that could not leave is sent again by
+ * the next passes, see notifyOwnerOfGoogleDriveReconnection), and no other
+ * error overwrites that mark.
  * Only on the authorization the failing call used: a reconnection saved
  * meanwhile (new refresh token) is not marked by the old token's refusal.
  */

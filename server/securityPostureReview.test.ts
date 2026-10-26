@@ -32,9 +32,9 @@ function seedDriveConnection(lastError: string | null) {
   });
 }
 
-function seedDossier(analysisStatus: string, analysisLastError: string | null) {
+function seedDossier(analysisStatus: string, analysisLastError: string | null, status = "new") {
   const row = seedApplication(db(), { email: `candidat${db().rows(cvApplications).length}@test.local` });
-  Object.assign(row, { analysisStatus, analysisLastError });
+  Object.assign(row, { analysisStatus, analysisLastError, status });
 }
 
 beforeEach(() => {
@@ -64,6 +64,9 @@ describe("bilan quotidien de sécurité : quota Resend et états durables", () =
     // Already requeued by « Mettre à jour / reprendre l’IA », or analysed: not counted.
     seedDossier("queued", AI_ANALYSIS_BILLING_UNAVAILABLE_ERROR);
     seedDossier("completed", null);
+    // Rejected or archived: the button leaves them as they are, so not counted either.
+    seedDossier("degraded", AI_ANALYSIS_BILLING_UNAVAILABLE_ERROR, "rejected");
+    seedDossier("degraded", AI_ANALYSIS_BILLING_UNAVAILABLE_ERROR, "archived");
 
     for (let day = 0; day < 2; day += 1) {
       await expect(runSecurityPostureReview()).resolves.toMatchObject({ googleDriveReconnectRequired: true, cvAnalysesAwaitingAiCredit: 2 });
@@ -73,6 +76,14 @@ describe("bilan quotidien de sécurité : quota Resend et états durables", () =
       expect(report()).toContain("« Mettre à jour / reprendre l’IA »");
     }
     expect(vi.mocked(notifyOwner)).toHaveBeenCalledTimes(2);
+  });
+
+  it("ne rappelle pas l’analyse IA pour des dossiers refusés ou archivés, que « Mettre à jour / reprendre l’IA » laisse de côté", async () => {
+    seedDossier("degraded", AI_ANALYSIS_BILLING_UNAVAILABLE_ERROR, "rejected");
+    seedDossier("degraded", AI_ANALYSIS_BILLING_UNAVAILABLE_ERROR, "archived");
+
+    await expect(runSecurityPostureReview()).resolves.toMatchObject({ cvAnalysesAwaitingAiCredit: 0 });
+    expect(vi.mocked(notifyOwner)).not.toHaveBeenCalled();
   });
 
   it("n’écrit rien quand Drive est connecté, l’IA disponible et aucun quota atteint", async () => {
