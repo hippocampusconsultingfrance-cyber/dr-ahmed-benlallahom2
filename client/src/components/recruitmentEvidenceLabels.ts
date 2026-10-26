@@ -52,7 +52,7 @@ const EXTRACTION_WARNING_LABELS: ReadonlyArray<readonly [RegExp, string]> = [
   [/^pdf_text_on_image$/, "texte sans encre posé sur une image, comme la couche OCR d’un scan : sa page est relue par la lecture visuelle quand il en fait l’essentiel, ou quand le reste est trop court"],
   [/^pdf_visibility_check_unfinished$/, "contrôle de visibilité non terminé (document long ou lourd) : le texte non contrôlé est écarté"],
   [/^pdf_text_unmatched$/, "texte que l’outil n’a pas pu rattacher à son dessin"],
-  [/^docx_white_text_near_drawing$/, "texte blanc dans une zone de texte ou près d’une image ou d’une forme"],
+  [/^docx_white_text_near_drawing$/, "texte blanc ou peu contrasté sur un fond incertain : zone de texte, image ou forme proche, style de tableau"],
   [/^pdf_visibility_check_unavailable$/, "texte lu sans contrôle de visibilité (lecteur isolé indisponible)"],
   [/^pdf_text_page_(\d+)_insufficient_text$/, "page $1 : texte insuffisant"],
   [/^vision_ocr_fallback$/, "pages relues par la lecture visuelle, le texte du PDF étant trop court une fois le texte écarté retiré"],

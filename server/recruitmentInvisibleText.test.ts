@@ -9,7 +9,9 @@ import { buildZip } from "./testing/zipFixture";
 
 // IA-01 : un CV piégé cache du texte (blanc sur blanc, police minuscule, texte
 // invisible, recouvert, rogné, calque masqué, transparent, hors page ; dans un
-// DOCX : masqué, minuscule, blanc ou presque sans fond, zone de texte hors page).
+// DOCX : masqué, minuscule, sans contraste avec son fond (blanc sur blanc, noir
+// sur noir, jaune surligné en jaune, couleur de thème), écrasé, sorti de sa
+// ligne, zone de texte hors page).
 // Ce texte ne doit ni parvenir à l’IA, ni servir à « vérifier » une citation ;
 // au-delà d’un seuil, le dossier part en revue humaine sans score et sans faits
 // structurés, comme un texte lu sans ce contrôle. Un CV honnête (polices
@@ -208,13 +210,14 @@ function verdanaPdf(helveticaLines: string[] = []) {
 
 const W_NAMESPACE = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 
-function docx(body: string, styles = "", otherParts: Array<{ name: string; content: string }> = []) {
+/** `beforeBody`: what the document part holds before its body (a page colour). */
+function docx(body: string, styles = "", otherParts: Array<{ name: string; content: string }> = [], beforeBody = "") {
   const run = (text: string) => text.replace(/&/g, "&amp;").replace(/</g, "&lt;");
   return buildZip([
     { name: "[Content_Types].xml", content: '<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/></Types>' },
     { name: "_rels/.rels", content: '<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>' },
     { name: "word/_rels/document.xml.rels", content: '<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>' },
-    { name: "word/document.xml", content: `<?xml version="1.0" encoding="UTF-8"?><w:document xmlns:w="${W_NAMESPACE}" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"><w:body>${body.replace(/\{\{(.*?)\}\}/g, (_, text: string) => run(text))}</w:body></w:document>` },
+    { name: "word/document.xml", content: `<?xml version="1.0" encoding="UTF-8"?><w:document xmlns:w="${W_NAMESPACE}" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing">${beforeBody}<w:body>${body.replace(/\{\{(.*?)\}\}/g, (_, text: string) => run(text))}</w:body></w:document>` },
     { name: "word/styles.xml", content: `<?xml version="1.0" encoding="UTF-8"?><w:styles xmlns:w="${W_NAMESPACE}">${styles}</w:styles>` },
     ...otherParts,
   ]);
@@ -273,6 +276,53 @@ const bannerDocx = () => docx([
   paragraph("Compétences : anesthésie locorégionale, échographie."),
   paragraph(ARABIC_TITLE, '<w:rtl/><w:sz w:val="2"/><w:szCs w:val="24"/>'),
 ].join(""), '<w:style w:type="table" w:styleId="EnTeteBleu"><w:name w:val="En-tête bleu"/><w:tblStylePr w:type="firstRow"><w:tcPr><w:shd w:val="clear" w:color="auto" w:fill="1F4E79"/></w:tcPr></w:tblStylePr></w:style>');
+
+/** Claims the second end-to-end check of lot 4 hid past the white, size and hidden rules, one per technique below. */
+const CLAIMS = [DOCX_HIDDEN.vanish, DOCX_HIDDEN.white, DOCX_HIDDEN.webHidden, DOCX_HIDDEN.style, DOCX_HIDDEN.prefix];
+const shaded = (text: string, fill: string, runProperties: string) => `<w:p><w:pPr><w:shd w:val="clear" w:color="auto" w:fill="${fill}"/></w:pPr><w:r><w:rPr>${runProperties}</w:rPr><w:t xml:space="preserve">{{${text}}}</w:t></w:r></w:p>`;
+/** Each one invisible in Word and in LibreOffice. */
+const UNSEEN_TECHNIQUES: Record<string, (text: string) => string> = {
+  "noir sur un paragraphe ombré en noir": text => shaded(text, "000000", '<w:color w:val="000000"/>'),
+  "bleu foncé sur un paragraphe bleu foncé": text => shaded(text, "1F3864", '<w:color w:val="1F3864"/>'),
+  "jaune surligné en jaune": text => paragraph(text, '<w:color w:val="FFFF00"/><w:highlight w:val="yellow"/>'),
+  "remonté hors de la page (w:position 1600)": text => paragraph(text, '<w:position w:val="1600"/>'),
+  "à 1 % de sa largeur (w:w 1)": text => paragraph(text, '<w:w w:val="1"/>'),
+};
+/** The nurse's CV, and the claims hidden in it by one technique, or one claim by each when none is given. */
+const unseenDocx = (technique?: (text: string) => string) =>
+  docx([...NURSE_CV.map(line => paragraph(line)), ...CLAIMS.map((claim, index) => (technique ?? Object.values(UNSEEN_TECHNIQUES)[index]!)(claim))].join(""));
+
+/** The colour scheme of Word's default theme: background1 is its white, text1 its black, text2 its dark blue. */
+const THEME = {
+  name: "word/theme/theme1.xml",
+  content: '<?xml version="1.0" encoding="UTF-8"?><a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="Office"><a:themeElements><a:clrScheme name="Office">' +
+    '<a:dk1><a:sysClr val="windowText" lastClr="000000"/></a:dk1><a:lt1><a:sysClr val="window" lastClr="FFFFFF"/></a:lt1><a:dk2><a:srgbClr val="1F497D"/></a:dk2><a:lt2><a:srgbClr val="EEECE1"/></a:lt2>' +
+    '<a:accent1><a:srgbClr val="4F81BD"/></a:accent1><a:accent2><a:srgbClr val="C0504D"/></a:accent2><a:accent3><a:srgbClr val="9BBB59"/></a:accent3><a:accent4><a:srgbClr val="8064A2"/></a:accent4>' +
+    '<a:accent5><a:srgbClr val="4BACC6"/></a:accent5><a:accent6><a:srgbClr val="F79646"/></a:accent6><a:hlink><a:srgbClr val="0000FF"/></a:hlink><a:folHlink><a:srgbClr val="800080"/></a:folHlink>' +
+    "</a:clrScheme></a:themeElements></a:theme>",
+};
+/** A table style with a dark header row, its text white, and banded rows. */
+const BLUE_GRID = '<w:style w:type="table" w:styleId="GrilleBleue"><w:name w:val="Grille bleue"/>' +
+  '<w:tblStylePr w:type="firstRow"><w:rPr><w:b/><w:color w:val="FFFFFF"/></w:rPr><w:tcPr><w:shd w:val="clear" w:color="auto" w:fill="1F4E79"/></w:tcPr></w:tblStylePr>' +
+  '<w:tblStylePr w:type="band1Horz"><w:tcPr><w:shd w:val="clear" w:color="auto" w:fill="DEEAF6"/></w:tcPr></w:tblStylePr></w:style>';
+/** A table in that style; `look`: whether it says which formats it shows (header row and row bands), as Word writes it. */
+const blueGrid = (rows: string[][], look = true) => `<w:tbl><w:tblPr><w:tblStyle w:val="GrilleBleue"/>${look ? '<w:tblLook w:val="04A0" w:firstRow="1" w:lastRow="0" w:firstColumn="1" w:lastColumn="0" w:noHBand="0" w:noVBand="1"/>' : ""}</w:tblPr>${rows.map(cells => `<w:tr>${cells.map(cell => `<w:tc>${cell}</w:tc>`).join("")}</w:tr>`).join("")}</w:tbl>`;
+const WHITE = '<w:color w:val="FFFFFF"/>';
+/** The physician's CV laid out as honest templates do: theme colours, light greys, coloured cells and table style, typographic settings, two columns. */
+const honestTemplateDocx = () => docx([
+  `<w:p><w:pPr><w:shd w:val="clear" w:color="auto" w:fill="4F81BD" w:themeFill="accent1"/></w:pPr><w:r><w:rPr><w:color w:val="FFFFFF" w:themeColor="background1"/><w:spacing w:val="40"/></w:rPr><w:t>{{${PHYSICIAN_CV[0]}}}</w:t></w:r></w:p>`,
+  // Word's « Text 1, lighter 50 % » and « Background 1, darker 25 % » greys, and a lighter grey still.
+  paragraph(PHYSICIAN_CV[1]!, '<w:color w:val="7F7F7F" w:themeColor="text1" w:themeTint="80"/>'),
+  paragraph(PHYSICIAN_CV[2]!, '<w:color w:val="BFBFBF" w:themeColor="background1" w:themeShade="BF"/>'),
+  paragraph("Disponible immédiatement", '<w:color w:val="A6A6A6"/>'),
+  blueGrid([[paragraph("Poste"), paragraph("Établissement", WHITE)], [paragraph(PHYSICIAN_CV[3]!), paragraph("Temps plein")], [paragraph("Interne"), paragraph("Hospices civils de Lyon")]]),
+  `<w:tbl><w:tr><w:tc><w:tcPr><w:shd w:val="clear" w:color="auto" w:fill="1F3864"/></w:tcPr>${paragraph(PHYSICIAN_CV[4]!, WHITE)}</w:tc><w:tc><w:tcPr><w:shd w:val="clear" w:color="auto" w:fill="DEEAF6"/></w:tcPr>${paragraph("Arabe (notions)", '<w:color w:val="000000"/>')}</w:tc></w:tr></w:tbl>`,
+  // Condensed by half a point at 90 % width, raised by 3 pt, lowered by 2 pt.
+  paragraph(PHYSICIAN_CV[5]!, '<w:spacing w:val="-10"/><w:w w:val="90"/>'),
+  paragraph("Diplôme d'études spécialisées (1)", '<w:position w:val="6"/>'),
+  paragraph("Thèse soutenue en 2014", '<w:position w:val="-4"/>'),
+  '<w:sectPr><w:cols w:num="2" w:space="720"/></w:sectPr>',
+].join(""), BLUE_GRID, [THEME]);
 
 const normalized = (text: string) => text.normalize("NFC").replace(/\s+/g, " ");
 
@@ -361,6 +411,46 @@ describe("texte invisible écarté à l’extraction (IA-01)", () => {
     expect(extraction.warnings.filter(warning => warning.startsWith("invisible_text"))).toEqual([]);
   });
 
+  it.each(Object.entries(UNSEEN_TECHNIQUES))("DOCX : écarte et compte comme caché le texte %s", async (_, technique) => {
+    const extraction = await extractCvDocument(unseenDocx(technique), DOCX);
+    for (const line of NURSE_CV) expect(extraction.text).toContain(line);
+    for (const claim of CLAIMS) expect(extraction.text).not.toContain(claim);
+    const hidden = CLAIMS.join(" ").length;
+    // Hidden, not merely unverifiable: no picture lies under it.
+    expect(extraction.invisibleText).toEqual({ characters: hidden, excerpt: expect.stringMatching(/^Titre : Médecin anesthésiste-réanimateur, titulaire du DESAR\. Licence DHA/) });
+    expect(extraction.warnings).toEqual([`invisible_text_ignored:${hidden}`]);
+  });
+
+  it("DOCX : même calcul pour une couleur de thème, un motif plein, un style de tableau, la couleur de la page et des lettres rapprochées au point de se chevaucher", async () => {
+    const onWhite = await extractCvDocument(docx([
+      ...NURSE_CV.map(line => paragraph(line)),
+      // Word draws the theme colour, not w:val: background1 is the theme's white, as text2 on text2.
+      paragraph(CLAIMS[0]!, '<w:color w:val="000000" w:themeColor="background1"/>'),
+      `<w:p><w:pPr><w:shd w:val="clear" w:color="auto" w:fill="FFFFFF" w:themeFill="text2"/></w:pPr><w:r><w:rPr><w:color w:val="000000" w:themeColor="text2"/></w:rPr><w:t>{{${CLAIMS[1]}}}</w:t></w:r></w:p>`,
+      // A solid pattern paints its colour over the fill.
+      `<w:p><w:pPr><w:shd w:val="solid" w:color="1F3864" w:fill="FFFFFF"/></w:pPr><w:r><w:rPr><w:color w:val="1F3864"/></w:rPr><w:t>{{${CLAIMS[2]}}}</w:t></w:r></w:p>`,
+      // On the dark header row of the table style.
+      blueGrid([[paragraph(CLAIMS[3]!, '<w:color w:val="1F4E79"/>')]]),
+      // Each letter 10 pt closer to the next than its own width.
+      paragraph(CLAIMS[4]!, '<w:spacing w:val="-200"/>'),
+    ].join(""), BLUE_GRID, [THEME]), DOCX);
+    for (const claim of CLAIMS) expect(onWhite.text).not.toContain(claim);
+    expect(onWhite.invisibleText).toEqual({ characters: CLAIMS.join(" ").length, excerpt: expect.any(String) });
+
+    // On a dark page colour, white text is read, and text of the page's colour is not.
+    const onDarkPage = await extractCvDocument(docx(PHYSICIAN_CV.map(line => paragraph(line, WHITE)).join("") + paragraph(CLAIMS[0]!, '<w:color w:val="1F3864"/>'), "", [], '<w:background w:color="1F3864"/>'), DOCX);
+    for (const line of PHYSICIAN_CV) expect(onDarkPage.text).toContain(line);
+    expect(onDarkPage.invisibleText).toEqual({ characters: CLAIMS[0]!.length, excerpt: CLAIMS[0] });
+  });
+
+  it("DOCX : lit sans rien signaler un modèle honnête : couleurs de thème, gris clairs, cellules et style de tableau colorés, réglages typographiques, colonnes", async () => {
+    const extraction = await extractCvDocument(honestTemplateDocx(), DOCX);
+    for (const line of [...PHYSICIAN_CV, "Disponible immédiatement", "Poste", "Établissement", "Temps plein", "Hospices civils de Lyon", "Arabe (notions)", "Diplôme d'études spécialisées (1)", "Thèse soutenue en 2014"]) {
+      expect(extraction.text).toContain(line);
+    }
+    expect(extraction).toMatchObject({ invisibleText: undefined, warnings: [] });
+  });
+
   describe("DOCX : texte blanc sans fond connu près d’une image ou d’une forme", () => {
     const title = "Bandeau : Dr Camille Martin, Lyon";
     const white = '<w:color w:val="FFFFFF"/>';
@@ -423,6 +513,18 @@ describe("texte invisible écarté à l’extraction (IA-01)", () => {
       const extraction = await extractCvDocument(docx(visible + paragraph(title, white), "", [header]), DOCX);
       expect(extraction.text).not.toContain(title);
       expect(extraction.invisibleText).toMatchObject({ characters: 0, unverifiable: { characters: title.length, reasons: ["drawing"] } });
+    });
+
+    it("écarte comme non vérifiable, sans l’accuser, le texte clair d’une zone de texte sans fond et celui d’une cellule qu’un autre format du style de tableau montrerait", async () => {
+      // Light yellow in a text box without fill, on what? White text on the light band of a table style whose header row is dark,
+      // in a table that does not say which formats it shows.
+      const yellow = "Bandeau : Lyon, disponible";
+      const extraction = await extractCvDocument(docx(visible + textBox('filled="f" style="position:absolute;width:200pt;height:50pt"', paragraph(yellow, '<w:color w:val="FFFF99"/>')) +
+        blueGrid([[paragraph("Poste")], [paragraph(title, white)]], false), BLUE_GRID), DOCX);
+      expect(extraction.text).not.toContain(yellow);
+      expect(extraction.text).not.toContain(title);
+      expect(extraction.text).toContain("Poste");
+      expect(extraction.invisibleText).toMatchObject({ characters: 0, unverifiable: { characters: `${yellow} ${title}`.length, reasons: ["drawing"] } });
     });
 
     it("écarte comme non vérifiable tout texte blanc sans fond quand une image derrière le texte couvre une grande partie de la page", async () => {
@@ -503,7 +605,8 @@ describe("texte invisible écarté à l’extraction (IA-01)", () => {
   });
 
   it("documents du coffre : la même extraction n’envoie pas non plus le texte caché à l’IA, et le signale dans la fiche (IA-06)", async () => {
-    for (const [buffer, mimeType] of [[await trappedPdf(), "application/pdf"], [await overlayPdf(), "application/pdf"], [trappedDocx(), DOCX]] as const) {
+    // The last DOCX hides one claim by each technique the white, size and hidden rules missed (black on black, w:position…).
+    for (const [buffer, mimeType] of [[await trappedPdf(), "application/pdf"], [await overlayPdf(), "application/pdf"], [trappedDocx(), DOCX], [unseenDocx(), DOCX]] as const) {
       vi.mocked(invokeLLM).mockClear();
       const { analysis } = await analyzeCandidateDocument({ buffer, mimeType, declaredCategory: "Licence d’exercice", attempt: 1 });
       const sent = JSON.stringify(vi.mocked(invokeLLM).mock.calls[0]![0].messages);
@@ -651,6 +754,33 @@ describe("dossier d’un CV qui cache du texte, de bout en bout (IA-01)", () => 
     expect(JSON.parse(String(dossier(id).extraction_warnings))).toContainEqual(expect.stringMatching(/^invisible_text_ignored:\d+$/));
   }, PDF_TEST_TIMEOUT_MS);
 
+  it.each(Object.entries(UNSEEN_TECHNIQUES))("DOCX où le texte caché est %s : rien n’atteint l’IA, revue humaine sans score, aucun fait structuré, alerte avec extrait", async (_, technique) => {
+    state.reading = obedientReading("section Expérience");
+    const id = seedDossier(unseenDocx(technique), DOCX);
+    const run = await processDueCvAnalysisJobs(5);
+    expect(run.results).toEqual([expect.objectContaining({ completed: true, applicationId: id, score: null, needsReview: true })]);
+    expect(state.prompts[0]).toContain("Infirmier diplômé d'État (IDE)");
+    for (const hidden of ["DESAR", "Licence DHA", "Anglais (courant)", "score maximal"]) {
+      expect(state.prompts[0]).not.toContain(hidden);
+      expect(String(dossier(id).extracted_text)).not.toContain(hidden);
+    }
+    expect(dossier(id)).toMatchObject({ analysis_status: "needs_review", ai_score: null, normalized_certifications: "[]", normalized_languages: "[]", normalized_experiences: "[]" });
+    expect(factsOf(id)).toEqual([]);
+    expect(JSON.parse(String(dossier(id).extraction_warnings))).toEqual([`invisible_text_ignored:${CLAIMS.join(" ").length}`]);
+    expect(JSON.parse(String(dossier(id).ai_weaknesses))).toContainEqual(expect.stringMatching(/^Qualité des données : \d+ caractère\(s\) de texte invisible ignoré\(s\), extrait : « Titre : Médecin anesthésiste-réanimateur/));
+  });
+
+  it("DOCX honnête mis en forme (thème, gris clairs, style de tableau, cellules colorées, colonnes) : tout est lu, score et faits gardés, rien n’est signalé", async () => {
+    state.reading = honestReadingAt("section Profil");
+    const id = seedDossier(honestTemplateDocx(), DOCX);
+    await processDueCvAnalysisJobs(5);
+    for (const line of PHYSICIAN_CV) expect(state.prompts[0]).toContain(line);
+    expect(dossier(id).ai_score).toBeGreaterThan(0);
+    expect(factsOf(id).length).toBeGreaterThanOrEqual(4);
+    expect(JSON.parse(String(dossier(id).extraction_warnings))).toEqual([]);
+    expect(String(dossier(id).ai_weaknesses)).not.toMatch(/texte invisible|non vérifiable/);
+  });
+
   it("page blanche qui cache plus de 80 caractères : la vision lit la page vide, revue humaine sans score, sans appel à l’IA d’analyse", async () => {
     const id = seedDossier(await blankTrappedPdf());
     await processDueCvAnalysisJobs(5);
@@ -728,7 +858,7 @@ describe("dossier d’un CV qui cache du texte, de bout en bout (IA-01)", () => 
     expect(dossier(id).ai_score).toBeGreaterThan(0);
     expect(factsOf(id).length).toBeGreaterThanOrEqual(4);
     const weaknesses: string[] = JSON.parse(String(dossier(id).ai_weaknesses));
-    expect(weaknesses).toContain("Qualité des données : 15 caractère(s) non vérifiable(s) écarté(s) de l’analyse (texte blanc dans une zone de texte ou près d’une image ou d’une forme), extrait : « Yassine Belhadj ». Ouvrir le CV pour le comparer.");
+    expect(weaknesses).toContain("Qualité des données : 15 caractère(s) non vérifiable(s) écarté(s) de l’analyse (texte blanc ou peu contrasté sur un fond incertain : zone de texte, image ou forme proche, style de tableau), extrait : « Yassine Belhadj ». Ouvrir le CV pour le comparer.");
     expect(weaknesses.join(" ")).not.toContain("texte invisible");
   });
 
@@ -740,7 +870,7 @@ describe("dossier d’un CV qui cache du texte, de bout en bout (IA-01)", () => 
     expect(dossier(id)).toMatchObject({ analysis_status: "needs_review", ai_score: null, analysis_model: INVISIBLE_TEXT_REVIEW_MODEL });
     expect(String(dossier(id).ai_summary)).toContain("n’a pas pu être vérifié comme visible");
     const setAside = PHYSICIAN_CV.join(" ");
-    expect(JSON.parse(String(dossier(id).ai_weaknesses))).toContain(`Qualité des données : ${setAside.length} caractère(s) non vérifiable(s) écarté(s) de l’analyse (texte blanc dans une zone de texte ou près d’une image ou d’une forme), extrait : « ${setAside.slice(0, 79).trimEnd()}… ». Ouvrir le CV pour le comparer.`);
+    expect(JSON.parse(String(dossier(id).ai_weaknesses))).toContain(`Qualité des données : ${setAside.length} caractère(s) non vérifiable(s) écarté(s) de l’analyse (texte blanc ou peu contrasté sur un fond incertain : zone de texte, image ou forme proche, style de tableau), extrait : « ${setAside.slice(0, 79).trimEnd()}… ». Ouvrir le CV pour le comparer.`);
   });
 
   it("PDF dont une grande part est dans une police que l’outil ne sait pas dessiner : écartée, revue sans score, motif clair", async () => {
