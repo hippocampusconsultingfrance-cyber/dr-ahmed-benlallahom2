@@ -1695,6 +1695,34 @@ html[data-cookie-banner-open="true"] .mobile-navigation {
   }
 }
 
+/* Content shown without JavaScript in the prerendered pages (scripts/prerender-route-seo.ts, SEOP-01). */
+.noscript-page {
+  max-width: 42rem;
+  margin: 0 auto;
+  padding: 2rem 1rem;
+  line-height: 1.6;
+}
+
+.noscript-page h1 {
+  font-family: var(--font-display, Georgia, serif);
+  font-size: 1.75rem;
+  line-height: 1.2;
+}
+
+.noscript-page > * + * {
+  margin-top: 1rem;
+}
+
+.noscript-page ul {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.noscript-page a {
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
 @media (prefers-reduced-motion: no-preference) {
   .app-loading-mark {
     animation: app-loading-pulse 1.8s ease-in-out infinite;

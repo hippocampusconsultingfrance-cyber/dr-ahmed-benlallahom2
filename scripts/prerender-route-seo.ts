@@ -19,7 +19,8 @@
  * "/" reste servi par index.html, qui reçoit le <head> de l'accueil.
  *
  * Fichiers produits dans dist/public :
- *  - index.html et <route>.html : <head> propre à chaque route publique ;
+ *  - index.html et <route>.html : <head> propre à chaque route publique, et un
+ *    <noscript> qui donne son titre, sa description et les liens principaux (SEOP-01) ;
  *  - _spa-fallback.html : <head> générique non indexable et sans canonique,
  *    cible de la réécriture SPA de vercel.json pour les routes dynamiques ou
  *    privées (candidate/*, admin, booking/confirmation) et les URL inconnues ;
@@ -36,7 +37,9 @@ import {
   SPA_FALLBACK_FILE,
   SPA_TEMPLATE_FILE,
   getPrerenderRoutes,
+  renderFallbackNoscript,
   renderFallbackSeoHead,
+  renderRouteNoscript,
   renderRouteSeoHead,
   renderSitemapXml,
 } from "../server/routeSeo";
@@ -69,6 +72,12 @@ export function injectRouteSeoHead(template: string, head: string): string {
   return template.replace(ROUTE_SEO_MARKER, () => head);
 }
 
+/** Place le <noscript> en fin de <body>, hors de #root que React remplit seul. */
+export function injectNoscript(html: string, noscript: string): string {
+  if (!html.includes("</body>")) throw new Error("Le shell SPA ne contient pas de </body>.");
+  return html.replace("</body>", () => `  ${noscript}\n  </body>`);
+}
+
 export type PrerenderedPage = { route: string; file: string; html: string };
 
 /** Pages à écrire pour un shell SPA donné (sans accès disque, testable). */
@@ -77,12 +86,12 @@ export function buildPrerenderedPages(template: string): PrerenderedPage[] {
     ...getPrerenderRoutes().map(route => ({
       route,
       file: prerenderFileForRoute(route),
-      html: injectRouteSeoHead(template, renderRouteSeoHead(route)),
+      html: injectNoscript(injectRouteSeoHead(template, renderRouteSeoHead(route)), renderRouteNoscript(route)),
     })),
     {
       route: "(repli SPA)",
       file: SPA_FALLBACK_FILE,
-      html: injectRouteSeoHead(template, renderFallbackSeoHead()),
+      html: injectNoscript(injectRouteSeoHead(template, renderFallbackSeoHead()), renderFallbackNoscript()),
     },
     { route: "(gabarit Express)", file: SPA_TEMPLATE_FILE, html: template },
   ];
