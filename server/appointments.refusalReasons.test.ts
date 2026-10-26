@@ -2,7 +2,7 @@ import { fetchRequestHandler } from "@trpc/server/adapters/fetch";
 import superjson from "superjson";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { TrpcContext } from "./_core/context";
-import { BOOKING_REFUSAL_REASONS, BOOKING_TOO_SOON_MESSAGE } from "../shared/bookingPolicy";
+import { BOOKING_INVALID_NAME_MESSAGE, BOOKING_REFUSAL_REASONS, BOOKING_TOO_SOON_MESSAGE } from "../shared/bookingPolicy";
 
 // EN-06 — refus de réservation : un motif stable accompagne le message français
 // jusqu'au navigateur, pour que la page affiche son propre texte traduit.
@@ -151,7 +151,7 @@ describe("appointments.create — motifs de refus stables (EN-06)", () => {
     expect((await postCreate(booking(inThreeDays(), { customerPhone: "abc" })))?.data.reason).toBeUndefined();
     expect(BOOKING_REFUSAL_REASONS).toEqual([
       "slot_taken", "too_soon", "too_far", "outside_schedule", "no_availability", "date_blocked",
-      "rate_limited", "too_many_holds", "payment_unavailable",
+      "rate_limited", "too_many_holds", "payment_unavailable", "invalid_name",
     ]);
   });
 
@@ -193,6 +193,35 @@ describe("appointments.create — motifs de refus stables (EN-06)", () => {
     const input = { trackingId: held.trackingId, finalPrice: 150, customerEmail: held.customerEmail, customerName: held.customerName };
     expect(await postCreate(input, "appointments.createCheckoutSession"))
       .toMatchObject({ message: BOOKING_PAYMENT_UNAVAILABLE_MESSAGE, data: { code: "SERVICE_UNAVAILABLE", reason: "payment_unavailable" } });
+  });
+
+  it("refuse un nom sans lettre ni chiffre visible, avec un motif, avant tout accès à l'agenda et au compteur anti-abus", async () => {
+    // Limiteur actif comme en production : un nom refusé ne consomme pas de tentative.
+    vi.stubEnv("VITEST", "false");
+    vi.stubEnv("NODE_ENV", "production");
+    mocks.getDb.mockResolvedValue(fakeDb());
+    const invisibleNames = [
+      "   ", " ", "　", // espaces, espace insécable, espace idéographique
+      "‍", "​​", "⠀", "ㅤ", "ﾠ", // ZWJ, ZWSP, braille vide, remplissages hangul (des « lettres »)
+      "‎😀‏", "😀😀", "👩‍⚕️ 🇫🇷", "́", // emoji seuls, marque combinante seule
+    ];
+    for (const customerName of invisibleNames) {
+      expect(await postCreate(booking(inThreeDays(), { customerName })), JSON.stringify(customerName))
+        .toMatchObject({ message: BOOKING_INVALID_NAME_MESSAGE, data: { code: "BAD_REQUEST", reason: "invalid_name" } });
+    }
+    expect(mocks.getDb).not.toHaveBeenCalled();
+    expect(mocks.enforcePersistentRateLimit).not.toHaveBeenCalled();
+    expect(mocks.stripeCreate).not.toHaveBeenCalled();
+
+    // Any script, a single letter or a digit is a name the invoice can print,
+    // and so are enclosed or squared letters (printed as Ali, JOHN).
+    for (const customerName of ["Łukasz Kowalski", "王小明", "محمد العتيبي", "  Zoë Ørsted  ", "Nguyễn Văn An", "J", "Ahmed 2", "😀 Kim", "Ⓐⓛⓘ", "🄹🄾🄷🄽"]) {
+      mocks.getDb.mockResolvedValue(fakeDb());
+      expect(await postCreate(booking(inThreeDays(), { customerName })), customerName).toBeNull();
+    }
+    expect(mocks.stripeCreate).toHaveBeenCalledTimes(10);
+    // Par IP puis par email, pour chacune des 10 réservations.
+    expect(mocks.enforcePersistentRateLimit).toHaveBeenCalledTimes(20);
   });
 
   it("accepte la langue affichée par la page, français par défaut, et refuse une langue inconnue", async () => {

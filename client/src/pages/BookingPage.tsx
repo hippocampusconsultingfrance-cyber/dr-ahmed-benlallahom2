@@ -106,6 +106,7 @@ export const bookingContent = {
       rate_limited: "Trop de tentatives de réservation ont été effectuées. Réessayez dans une heure ou contactez-nous directement.",
       too_many_holds: "Vous avez déjà deux réservations en attente de paiement. Finalisez ou annulez l’un de ces paiements, ou patientez une trentaine de minutes avant de réserver un nouveau créneau.",
       payment_unavailable: "Le service de paiement est momentanément indisponible. Votre créneau n’a pas été réservé : réessayez dans quelques minutes ou contactez-nous.",
+      invalid_name: "Saisissez votre nom complet : il doit comporter au moins une lettre ou un chiffre.",
     },
     pricing: {
       title: "Tarification",
@@ -199,6 +200,7 @@ export const bookingContent = {
       rate_limited: "Too many booking attempts have been made. Please try again in an hour or contact us directly.",
       too_many_holds: "You already have two bookings awaiting payment. Complete or cancel one of these payments, or wait about thirty minutes before booking a new time slot.",
       payment_unavailable: "The payment service is temporarily unavailable. Your time slot has not been booked: please try again in a few minutes or contact us.",
+      invalid_name: "Please enter your full name: it must contain at least one letter or digit.",
     },
     pricing: {
       title: "Pricing",
@@ -291,6 +293,7 @@ export const bookingContent = {
       rate_limited: "Es wurden zu viele Buchungsversuche unternommen. Bitte versuchen Sie es in einer Stunde erneut oder kontaktieren Sie uns direkt.",
       too_many_holds: "Sie haben bereits zwei Buchungen, die auf Zahlung warten. Schließen Sie eine dieser Zahlungen ab oder stornieren Sie sie, oder warten Sie etwa dreißig Minuten, bevor Sie einen neuen Termin buchen.",
       payment_unavailable: "Der Zahlungsdienst ist vorübergehend nicht verfügbar. Ihr Termin wurde nicht reserviert: Bitte versuchen Sie es in einigen Minuten erneut oder kontaktieren Sie uns.",
+      invalid_name: "Bitte geben Sie Ihren vollständigen Namen ein: Er muss mindestens einen Buchstaben oder eine Ziffer enthalten.",
     },
     pricing: {
       title: "Preisgestaltung",
@@ -383,6 +386,7 @@ export const bookingContent = {
       rate_limited: "预约尝试次数过多。请一小时后再试，或直接联系我们。",
       too_many_holds: "您已有两笔待付款的预约。请完成或取消其中一笔付款，或等待约三十分钟后再预约新的时段。",
       payment_unavailable: "支付服务暂时不可用，您的时段尚未预订：请几分钟后重试或联系我们。",
+      invalid_name: "请填写您的全名：其中至少须包含一个文字或数字。",
     },
     pricing: {
       title: "价格",

@@ -82,6 +82,8 @@ describe("booking day and time choice", () => {
       expect(getBookingErrorMessage({ message: "Vous avez déjà deux réservations en attente de paiement.", data: { code: "TOO_MANY_REQUESTS", reason: "too_many_holds" } }, copy)).toBe(copy.refusals.too_many_holds);
       expect(getBookingErrorMessage({ message: "Le service de paiement est momentanément indisponible.", data: { code: "SERVICE_UNAVAILABLE", reason: "payment_unavailable" } }, copy)).toBe(copy.refusals.payment_unavailable);
       expect(getBookingErrorMessage({ message: "Ce créneau n’est plus réservable", data: { code: "UNPROCESSABLE_CONTENT", reason: "too_soon" } }, copy)).toBe(copy.refusals.too_soon);
+      // Saisie refusée avec un motif (nom sans lettre ni chiffre) : son message, pas la consigne générale.
+      expect(getBookingErrorMessage({ message: "Saisissez votre nom complet", data: { code: "BAD_REQUEST", reason: "invalid_name" } }, copy)).toBe(copy.refusals.invalid_name);
 
       // Refus sans motif connu (motif absent ou inconnu) : message générique traduit, sans le texte français.
       expect(getBookingErrorMessage({ message: "Vous avez déjà deux réservations en attente de paiement.", data: { code: "TOO_MANY_REQUESTS" } }, copy)).toBe(copy.bookingError);

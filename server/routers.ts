@@ -37,11 +37,13 @@ import { RECRUITMENT_ANALYSIS_PROMPT_VERSION } from "./recruitmentAnalysis";
 import { medicalQuestionsRouter } from "./medicalQuestionsRouter";
 import { AdminMfaRateLimitError, issueAdminMfaChallenge, revokeCurrentAdminMfaSession, verifyAdminMfaChallenge } from "./adminMfa";
 import {
+  BOOKING_INVALID_NAME_MESSAGE,
   BOOKING_INVALID_PHONE_MESSAGE,
   BOOKING_REQUEST_SUBJECT_MAX_LENGTH,
   BOOKING_TOO_FAR_MESSAGE,
   BOOKING_TOO_SOON_MESSAGE,
   getBookingWindowIssue,
+  hasVisibleNameCharacter,
   isPlausiblePhoneNumber,
   type BookingRefusalReason,
 } from "../shared/bookingPolicy";
@@ -129,7 +131,7 @@ export const CONSULTATION_CHECKOUT_PRODUCT_NAME = "Consultation de conseil sant�
 export const BOOKING_PAYMENT_UNAVAILABLE_MESSAGE = "Le service de paiement est momentanément indisponible. Votre créneau n’a pas été réservé : veuillez réessayer dans quelques minutes ou nous contacter.";
 
 /** Refus métier d’une réservation : message français et motif stable que la page traduit (EN-06). */
-function bookingRefusal(code: "CONFLICT" | "UNPROCESSABLE_CONTENT" | "TOO_MANY_REQUESTS" | "SERVICE_UNAVAILABLE", reason: BookingRefusalReason, message: string) {
+function bookingRefusal(code: "BAD_REQUEST" | "CONFLICT" | "UNPROCESSABLE_CONTENT" | "TOO_MANY_REQUESTS" | "SERVICE_UNAVAILABLE", reason: BookingRefusalReason, message: string) {
   return new TRPCError({ code, message, cause: new PublicErrorReason(reason) });
 }
 
@@ -708,6 +710,13 @@ export const appRouter = router({
         })
       )
       .mutation(async ({ input, ctx }) => {
+        // Nom sans lettre ni chiffre visible (espaces, caractères invisibles,
+        // emoji seuls) : la facture n’aurait pas de nom lisible. Refusé comme
+        // une saisie invalide, avant le compteur anti-abus, avec un motif que
+        // la page traduit.
+        if (!hasVisibleNameCharacter(input.customerName)) {
+          throw bookingRefusal("BAD_REQUEST", "invalid_name", BOOKING_INVALID_NAME_MESSAGE);
+        }
         const date = parseAppointmentDate(input.appointmentDate);
         // Délai minimal (le passé compris) et horizon maximal : refus métier,
         // traduits par la page à partir de leur motif (UNPROCESSABLE_CONTENT).

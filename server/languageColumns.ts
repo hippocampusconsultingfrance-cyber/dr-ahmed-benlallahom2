@@ -42,6 +42,9 @@ function withLockTimeout(statement: SQL): SQL {
  */
 const CONCURRENT_CREATION_CODES = new Set(["42701", "23505"]);
 
+/** SQLSTATE lock_not_available : l’ALTER a attendu le verrou jusqu’à lock_timeout. */
+export const LOCK_NOT_AVAILABLE = "55P03";
+
 export function postgresErrorCode(error: unknown): string | null {
   for (let current: unknown = error, depth = 0; current && typeof current === "object" && depth < 4; depth += 1) {
     const code = (current as { code?: unknown }).code;
@@ -72,8 +75,10 @@ let languageColumnsReady: Promise<void> | null = null;
  * les colonnes sont là (cas normal, ou 0002 appliquée par le propriétaire). Un
  * ajout concurrent par une autre instance compte comme une réussite dès que la
  * colonne existe. Chaque table manquante est tentée même si une autre échoue
- * (verrou pris sur cette seule table) : les colonnes ajoutées le restent, et la
- * première erreur n’est relancée qu’à la fin.
+ * (verrou pris sur cette seule table) : les colonnes ajoutées le restent, et
+ * une erreur n’est relancée qu’à la fin : un verrou non obtenu (55P03) s’il y en
+ * a un, car le délai avant le nouvel essai en dépend (server/db.ts), sinon la
+ * première.
  */
 export function ensureLanguageColumns(db: Executor): Promise<void> {
   languageColumnsReady ??= (async () => {
@@ -90,7 +95,7 @@ export function ensureLanguageColumns(db: Executor): Promise<void> {
         if (!addedConcurrently) failures.push(error);
       }
     }
-    if (failures.length > 0) throw failures[0];
+    if (failures.length > 0) throw failures.find(error => postgresErrorCode(error) === LOCK_NOT_AVAILABLE) ?? failures[0];
   })().catch(error => {
     languageColumnsReady = null;
     throw error;

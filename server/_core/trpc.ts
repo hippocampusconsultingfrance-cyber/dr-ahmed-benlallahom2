@@ -21,6 +21,16 @@ export class PublicErrorReason extends Error {
 
 type ErrorShapeWithReason<TShape extends { data: object }> = TShape & { data: TShape["data"] & { reason?: string } };
 
+/** Short reference of an unexpected error, given to the caller and logged with the error. */
+export function internalErrorReference(): string {
+  return randomUUID().slice(0, 8);
+}
+
+/** Log line of an unexpected error: name and message, without the query parameters (personal data). */
+export function internalErrorSummary(error: unknown): string {
+  return error instanceof Error ? `${error.name}: ${error.message.split("\nparams:")[0].slice(0, 500)}` : "UnknownError";
+}
+
 /**
  * Unexpected errors (anything that is not a deliberate TRPCError: database,
  * provider, programming errors) reach the client as a generic French message
@@ -32,15 +42,12 @@ type ErrorShapeWithReason<TShape extends { data: object }> = TShape & { data: TS
 export function formatTrpcErrorShape<TShape extends { message: string; data: { code: string; stack?: string } }>(
   shape: TShape,
   error: { code: string; cause?: unknown },
-  reference: () => string = () => randomUUID().slice(0, 8),
+  reference: () => string = internalErrorReference,
 ): ErrorShapeWithReason<TShape> {
   if (error.cause instanceof PublicErrorReason) return { ...shape, data: { ...shape.data, reason: error.cause.reason } };
   if (error.code !== "INTERNAL_SERVER_ERROR" || error.cause === undefined) return shape as ErrorShapeWithReason<TShape>;
   const ref = reference();
-  const cause = error.cause instanceof Error ? error.cause : null;
-  // Query parameters (personal data) are left out of the log line.
-  const summary = cause ? `${cause.name}: ${cause.message.split("\nparams:")[0].slice(0, 500)}` : "UnknownError";
-  console.error(`[tRPC] Internal error ref=${ref}`, summary);
+  console.error(`[tRPC] Internal error ref=${ref}`, internalErrorSummary(error.cause));
   return {
     ...shape,
     message: `${GENERIC_INTERNAL_ERROR_MESSAGE} (réf. ${ref})`,
