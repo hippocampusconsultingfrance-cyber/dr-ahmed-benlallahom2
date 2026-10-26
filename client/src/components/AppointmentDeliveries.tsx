@@ -63,11 +63,14 @@ export function canRetryDeliveries(deliveries: AppointmentDeliveryView[], paid: 
 }
 
 /**
- * Toast after « Renvoyer »: everything went out; some jobs were deliberately
- * not sent (a confirmation after the consultation…), said apart from the ones
- * sent; or some failed again and wait for their next automatic attempt.
+ * Toast after « Renvoyer », about the jobs it put back in the queue only (not
+ * the ones already sent before it): everything went out; some were
+ * deliberately not sent (a confirmation after the consultation…), said apart
+ * from the ones sent; or some failed again and wait for their next automatic
+ * attempt.
  */
-export function retryOutcome(deliveries: AppointmentDeliveryView[]): { tone: "success" | "info" | "warning"; message: string } {
+export function retryOutcome(result: { requeuedJobTypes: AppointmentDeliveryJob[]; deliveries: AppointmentDeliveryView[] }): { tone: "success" | "info" | "warning"; message: string } {
+  const deliveries = result.deliveries.filter(delivery => result.requeuedJobTypes.includes(delivery.jobType));
   if (!deliveries.every(delivery => delivery.state === "sent" || delivery.state === "not_sent")) {
     return { tone: "warning", message: "Certains envois ont de nouveau échoué ; un nouvel essai automatique est prévu. Vérifiez le service d’envoi d’emails (Resend) ou prévenez le patient directement." };
   }
@@ -76,7 +79,7 @@ export function retryOutcome(deliveries: AppointmentDeliveryView[]): { tone: "su
   if (skipped.length === 0) return { tone: "success", message: "Envois relancés et effectués." };
   const sent = ordered.filter(delivery => delivery.state === "sent").map(delivery => DELIVERY_JOB_LABELS[delivery.jobType]);
   const notSent = skipped.map(delivery => `${DELIVERY_JOB_LABELS[delivery.jobType]} non envoyée${delivery.notSentReason ? ` : ${NOT_SENT_REASONS[delivery.notSentReason]}` : ""}.`);
-  return { tone: "info", message: [sent.length > 0 ? `Envoyé : ${sent.join(", ")}.` : "Rien n’a été envoyé.", ...notSent].join(" ") };
+  return { tone: "info", message: [sent.length > 0 ? `Envoyées : ${sent.join(", ")}.` : "Rien n’a été envoyé.", ...notSent].join(" ") };
 }
 
 /**
@@ -95,7 +98,7 @@ export default function AppointmentDeliveries({ trackingId, paid, deliveries, in
         toast.info("Aucun envoi à relancer pour ce rendez-vous.");
         return;
       }
-      const outcome = retryOutcome(result.deliveries);
+      const outcome = retryOutcome(result);
       toast[outcome.tone](outcome.message, outcome.tone === "success" ? undefined : { duration: 10_000 });
     },
     onError: error => toast.error(error.message),

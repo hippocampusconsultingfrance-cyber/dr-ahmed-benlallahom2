@@ -365,7 +365,7 @@ export async function getAppointmentDeliveries(appointmentIds: number[]): Promis
 export type AppointmentFulfillmentRetry =
   | { outcome: "not_found" }
   | { outcome: "not_paid" }
-  | { outcome: "retried"; requeued: number; deliveries: AppointmentDelivery[] };
+  | { outcome: "retried"; requeued: number; requeuedJobTypes: FulfillmentJobType[]; deliveries: AppointmentDelivery[] };
 
 /**
  * « Renvoyer » from the dashboard (EXPL-02): the jobs of a paid appointment
@@ -382,7 +382,7 @@ export async function retryAppointmentFulfillment(trackingId: string): Promise<A
   if (!appointment) return { outcome: "not_found" };
   if (appointment.paymentStatus !== "completed") return { outcome: "not_paid" };
   const now = new Date();
-  const result = await db.update(appointmentFulfillmentJobs).set({
+  const requeued = await db.update(appointmentFulfillmentJobs).set({
     status: "queued",
     attempts: 0,
     maxAttempts: APPOINTMENT_FULFILLMENT_MAX_ATTEMPTS,
@@ -397,10 +397,15 @@ export async function retryAppointmentFulfillment(trackingId: string): Promise<A
       inArray(appointmentFulfillmentJobs.status, ["queued", "retry", "failed"]),
       and(eq(appointmentFulfillmentJobs.status, "running"), lte(appointmentFulfillmentJobs.startedAt, new Date(now.getTime() - APPOINTMENT_FULFILLMENT_STALE_AFTER_MS))),
     ),
-  ));
-  const requeued = mutationRowCount(result);
-  if (requeued > 0) await processAppointmentFulfillmentNow(appointment.id);
-  return { outcome: "retried", requeued, deliveries: (await getAppointmentDeliveries([appointment.id])).get(appointment.id) ?? [] };
+  )).returning({ jobType: appointmentFulfillmentJobs.jobType });
+  if (requeued.length > 0) await processAppointmentFulfillmentNow(appointment.id);
+  return {
+    outcome: "retried",
+    requeued: requeued.length,
+    // What this retry sent or skipped, told apart from the jobs already sent before it.
+    requeuedJobTypes: requeued.map(job => job.jobType as FulfillmentJobType),
+    deliveries: (await getAppointmentDeliveries([appointment.id])).get(appointment.id) ?? [],
+  };
 }
 
 /**

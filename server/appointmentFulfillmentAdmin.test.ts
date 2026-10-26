@@ -180,6 +180,7 @@ describe("EXPL-02 — « Renvoyer »", () => {
     const result = await admin().appointments.retryFulfillment({ trackingId: "APTRETRY0001" });
 
     expect(result.requeued).toBe(2);
+    expect([...result.requeuedJobTypes].sort()).toEqual(["confirmation", "invoice"]);
     expect(result.deliveries.map(delivery => delivery.state)).toEqual(["sent", "sent", "sent"]);
     expect(state.sent.map(email => email.kind)).toEqual(["confirmation", "invoice"]);
     expect(state.sent[1]).toMatchObject({ to: "aptretry0001@example.test", invoiceNumber: "FAC-2026-000003" });
@@ -206,6 +207,7 @@ describe("EXPL-02 — « Renvoyer »", () => {
     seedJob(paid.id, "invoice", { status: "running", attempts: 1, started_at: new Date() });
     const result = await admin().appointments.retryFulfillment({ trackingId: "APTRETRY0003" });
     expect(result.requeued).toBe(0);
+    expect(result.requeuedJobTypes).toEqual([]);
     expect(result.deliveries.map(delivery => delivery.state)).toEqual(["sent", "sending"]);
     expect(state.sent).toEqual([]);
     expect(job(paid.id, "invoice")).toMatchObject({ status: "running", attempts: 1 });
@@ -225,6 +227,8 @@ describe("EXPL-02 — « Renvoyer »", () => {
     const result = await admin().appointments.retryFulfillment({ trackingId: "APTRETRY0006" });
 
     expect(result.requeued).toBe(2);
+    // The doctor notification had gone out before: not one of the emails this retry sent or skipped.
+    expect([...result.requeuedJobTypes].sort()).toEqual(["confirmation", "invoice"]);
     expect(result.deliveries.map(({ jobType, state, notSentReason }) => ({ jobType, state, notSentReason }))).toEqual([
       { jobType: "owner", state: "sent", notSentReason: null },
       { jobType: "confirmation", state: "not_sent", notSentReason: "appointment_past" },
