@@ -18,7 +18,7 @@ Site de [drahmedbenlallahom.com](https://drahmedbenlallahom.com) : présentation
 
 ## Démarrage local
 
-Prérequis : Node.js 22 et pnpm 10 (version figée par le champ `packageManager`).
+Prérequis : Node.js 22 (`.nvmrc`, lu par la CI ; `nvm use`) et pnpm 10 (version figée par le champ `packageManager`).
 
 ```bash
 pnpm install --frozen-lockfile
@@ -38,6 +38,8 @@ pnpm dev                  # http://localhost:3000 (Express + Vite en mode middle
 | `pnpm start` | Lance le build Express (hébergement hors Vercel) |
 | `pnpm test:visual` | Régression visuelle (Playwright) |
 | `pnpm check:performance` | Build + budgets de performance |
+| `node scripts/smoke-built-server.mjs` | Après `pnpm build` : démarre `api/index.js` et `dist/index.js` avec des variables factices et interroge `/api/health` (CI) |
+| `node scripts/check-migrations-in-sync.mjs` | Vérifie que `drizzle/pg` décrit exactement `drizzle/schema.ts` (CI) |
 
 ## Structure
 
@@ -47,7 +49,7 @@ server/            API Express/tRPC, webhooks, tâches planifiées, sécurité
 server/_core/      démarrage Express, auth, emails, en-têtes, hébergement statique
 shared/            types et constantes partagés client/serveur
 drizzle/           schéma et migrations SQL (source de vérité : drizzle/MIGRATION_SOURCE_OF_TRUTH.md)
-scripts/           pré-rendu SEO, régression visuelle, budgets de performance
+scripts/           pré-rendu SEO, régression visuelle, budgets de performance, contrôles de la CI
 docs/audits/       rapports d'audit
 ```
 

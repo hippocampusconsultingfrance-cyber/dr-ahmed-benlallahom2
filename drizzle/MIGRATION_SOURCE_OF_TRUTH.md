@@ -15,12 +15,23 @@ Vérifié sur une base PostgreSQL 16 vierge (réplique locale de l'audit) : le m
 ## Procédure obligatoire pour toute évolution du schéma
 
 1. Modifier le schéma TypeScript dans `drizzle/schema.ts`.
-2. Générer la migration incrémentale : `pnpm db:generate` (alias de `drizzle-kit generate`, aucune base requise). Elle est écrite dans `drizzle/pg/`.
-3. Lire intégralement le SQL produit et vérifier son ordre, ses index et sa réversibilité métier. Préférer des instructions idempotentes (`ADD COLUMN IF NOT EXISTS`, `CREATE INDEX IF NOT EXISTS`) lorsque le code crée aussi la colonne à l'exécution.
+2. Générer la migration incrémentale : `pnpm db:generate` (alias de `drizzle-kit generate`, aucune base requise ; `--name=<objet>` pour nommer le fichier). Elle est écrite dans `drizzle/pg/`, avec l'instantané `meta/NNNN_snapshot.json` du nouveau schéma et son entrée dans `meta/_journal.json`.
+3. Lire intégralement le SQL produit et vérifier son ordre, ses index et sa réversibilité métier. Préférer des instructions idempotentes (`ADD COLUMN IF NOT EXISTS`, `CREATE INDEX IF NOT EXISTS`) lorsque le code crée aussi la colonne à l'exécution : on réécrit alors le `.sql` généré (c'est ainsi qu'ont été écrites 0002 et 0003), jamais l'instantané ni le journal.
 4. Appliquer le SQL explicitement avec l'outil de migration de la plateforme, puis comparer les tables et colonnes réellement déployées.
 5. Ajouter ou mettre à jour les tests couvrant le contrat modifié. Le test `server/migrationSourceOfTruth.test.ts` échoue tant que `drizzle/pg` ne couvre pas toutes les tables et colonnes de `drizzle/schema.ts`.
+6. Vérifier que le schéma et les migrations concordent : `node scripts/check-migrations-in-sync.mjs` (voir ci-dessous).
 
 Ne jamais employer `drizzle-kit push` (ni l'ancien `pnpm db:push`) comme raccourci non revu en production.
+
+## Contrôle de la CI : schéma et migrations synchrones
+
+Après le build, le job *quality* de `.github/workflows/ci.yml` lance `node scripts/check-migrations-in-sync.mjs`, qui exécute `drizzle-kit generate` avec `drizzle.config.ts` et exige sa réponse « No schema changes, nothing to migrate » ; `git diff --exit-code -- drizzle/pg` puis l'absence de fichier non suivi dans `drizzle/pg` confirment qu'il n'a rien écrit. Le message est exigé parce que drizzle-kit répond 0 même quand il échoue sans rien écrire (schéma qui ne se charge pas, instantanés en collision, renommage qui attend une réponse au clavier). En local, la même commande écrit dans `drizzle/pg` la migration manquante s'il y en a une : la relire et la garder, ou la supprimer avec son instantané et son entrée de journal. `server/migrationsInSync.test.ts` fait la même vérification sur une copie de `drizzle/pg`, dès `pnpm test:ci`.
+
+Pour ajouter une migration sans casser ce contrôle :
+
+- Toujours partir de `pnpm db:generate` (étape 2). Une migration écrite entièrement à la main (SQL et entrée de journal) laisse l'instantané sur l'ancien schéma : `drizzle-kit generate` produirait de nouveau la même modification et la CI échouerait.
+- `pnpm db:generate --custom --name=<objet>` crée un fichier vide dont l'instantané recopie le précédent : à réserver au SQL qui ne change pas le schéma (données, droits).
+- Deux branches qui ajoutent chacune une migration (par exemple deux `0004`) se heurtent à la fusion (`meta/_journal.json`, `meta/0004_snapshot.json`), et leurs instantanés désignent le même parent : renuméroter à la main ne suffit pas, drizzle-kit refuse la « collision ». La branche fusionnée en second supprime sa migration (le `.sql`, son instantané et son entrée de journal), refait `pnpm db:generate` sur la branche principale à jour (sa migration devient `0005`), y reporte ses retouches manuelles du SQL, puis relance `node scripts/check-migrations-in-sync.mjs`.
 
 ## Utilisation de la baseline
 
