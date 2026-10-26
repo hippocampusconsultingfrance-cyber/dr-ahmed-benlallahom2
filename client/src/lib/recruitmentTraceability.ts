@@ -23,6 +23,8 @@ export function recruitmentEmailDeliveryTone(eventType: string | null | undefine
 export function recruitmentEmailDeliveryErrorLabel(failureCode: string | null | undefined) {
   if (!failureCode) return null;
   if (failureCode === "provider_rejected") return "Resend a refusé temporairement l’envoi";
+  if (failureCode === "rate_limited") return "Trop d’envois simultanés chez Resend : rien n’est parti, nouvel essai possible";
+  if (failureCode === "quota") return "Quota d’envoi Resend épuisé (jour ou mois) : rien n’est parti, vérifiez l’offre Resend";
   if (failureCode === "delivery_exception") return "Réponse de Resend indéterminée — aucune relance automatique pour éviter un doublon";
   return "Échec technique à examiner";
 }
@@ -73,6 +75,8 @@ export function recruitmentDriveExportErrorLabel(error: string | null | undefine
 /** Readable French explanation of a technical CV-analysis error (never the raw provider text). */
 export function recruitmentAnalysisErrorLabel(error: string | null | undefined) {
   if (!error) return null;
+  // ABUS-01: application received beyond the day's volume, kept without AI analysis.
+  if (error === "analysis_deferred_daily_volume") return "Analyse IA non lancée : volume de candidatures inhabituel ce jour-là. Cliquez sur « Analyser le CV » si le dossier est légitime.";
   if (/billing|credit card|402|payment required/i.test(error)) return "Analyse IA indisponible (compte du fournisseur à vérifier) : examinez le CV manuellement.";
   if (/^cv_validation_/i.test(error)) return "Le fichier CV a été refusé par le contrôle de sécurité : examinez-le manuellement ou demandez un PDF au candidat.";
   if (/attempts_exhausted/i.test(error)) return "Analyse abandonnée après plusieurs échecs : relancez-la plus tard ou examinez le CV manuellement.";

@@ -27,7 +27,7 @@ import { logRecruitmentAction, matchesRecruitmentProfile, parseRecruitmentJsonAr
 import { computeBriefCandidateMatch } from "./clientBriefMatching";
 import { candidatePortalRouter } from "./candidatePortalRouter";
 import { enforcePersistentRateLimit, hashSecurityValue, logSecurityEvent, requestIpHash } from "./candidateSecurity";
-import { publicFormRateLimitSubject, type PublicFormRateLimitScope } from "./publicFormRateLimit";
+import { countPublicFormDailyVolume, enforcePublicEmailIpRateLimit, PUBLIC_EMAIL_IP_RATE_LIMITS, publicFormRateLimitSubject, releasePublicEmailIpRateLimit, type PublicFormRateLimitScope } from "./publicFormRateLimit";
 import { createCandidateInvitationToken } from "./candidateAuth";
 import { emailLanguageFor, SITE_LANGUAGES } from "./emailLanguage";
 import { verifyCandidateTurnstile } from "./candidateTurnstile";
@@ -123,6 +123,24 @@ async function enforcePublicFormRateLimit(input: {
   }
 }
 
+/**
+ * ABUS-01 : limite par IP seule du contact et des demandes RGPD, en plus de
+ * leur limite IP + email. Appelée une fois l’anti-robot passé, pour ne compter
+ * que les demandes acceptées ; renvoie l’empreinte d’IP pour rendre l’essai si
+ * l’enregistrement échoue ensuite.
+ */
+async function enforcePublicFormIpLimit(kind: "contact" | "gdpr", req: { headers: unknown; ip?: string | null }) {
+  const ipHash = requestIpHash(req.headers as Record<string, unknown>) ?? (req.ip ? hashSecurityValue(req.ip) : null);
+  try {
+    await enforcePublicEmailIpRateLimit(kind, ipHash);
+  } catch (error) {
+    if (!(error instanceof Error && error.message === "candidate_security_rate_limited")) throw error;
+    await logSecurityEvent({ actorKind: "anonymous", category: `${PUBLIC_EMAIL_IP_RATE_LIMITS[kind].action}_rate_limit`, outcome: "blocked", severity: "warning", ipHash });
+    throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: DEFAULT_PUBLIC_FORM_BLOCKED_MESSAGE });
+  }
+  return ipHash;
+}
+
 /** Nombre maximal de créneaux retenus (en attente de paiement) par adresse email. */
 export const MAX_ACTIVE_APPOINTMENT_HOLDS_PER_EMAIL = 2;
 export const ACTIVE_APPOINTMENT_HOLDS_LIMIT_MESSAGE = "Vous avez déjà deux réservations en attente de paiement. Finalisez ou annulez l’un de ces paiements, ou patientez une trentaine de minutes avant de réserver un nouveau créneau.";
@@ -131,8 +149,10 @@ export const CONSULTATION_CHECKOUT_PRODUCT_NAME = "Consultation de conseil sant�
 
 export const BOOKING_PAYMENT_UNAVAILABLE_MESSAGE = "Le service de paiement est momentanément indisponible. Votre créneau n’a pas été réservé : veuillez réessayer dans quelques minutes ou nous contacter.";
 
+export const BOOKING_SECURITY_CHECK_MESSAGE = "Pour finaliser cette réservation, effectuez la vérification anti-robot affichée au-dessus du bouton, puis cliquez de nouveau sur « Procéder au paiement ».";
+
 /** Refus métier d’une réservation : message français et motif stable que la page traduit (EN-06). */
-function bookingRefusal(code: "BAD_REQUEST" | "CONFLICT" | "UNPROCESSABLE_CONTENT" | "TOO_MANY_REQUESTS" | "SERVICE_UNAVAILABLE", reason: BookingRefusalReason, message: string) {
+function bookingRefusal(code: "BAD_REQUEST" | "CONFLICT" | "UNPROCESSABLE_CONTENT" | "TOO_MANY_REQUESTS" | "SERVICE_UNAVAILABLE" | "PRECONDITION_FAILED", reason: BookingRefusalReason, message: string) {
   return new TRPCError({ code, message, cause: new PublicErrorReason(reason) });
 }
 
@@ -544,22 +564,31 @@ export const appRouter = router({
         });
         await verifyCandidateTurnstile({ token: input.turnstileToken ?? "", remoteIp: ctx.req.ip });
 
+        const ipHash = await enforcePublicFormIpLimit("contact", ctx.req);
+
         // Unpredictable tracking ID (13 chars, column is varchar(20))
         const trackingId = createPublicTrackingId("C");
 
         // Save the message to the database using raw SQL (TiDB DEFAULT bug workaround)
         const db = await getDb();
         if (db) {
-          await db.execute(
-            sql`INSERT INTO contact_messages (tracking_id, name, email, phone, message, gdpr_consent) VALUES (${trackingId}, ${input.name}, ${input.email}, ${input.phone || null}, ${input.message}, ${input.gdprConsent})`
-          );
+          try {
+            await db.execute(
+              sql`INSERT INTO contact_messages (tracking_id, name, email, phone, message, gdpr_consent) VALUES (${trackingId}, ${input.name}, ${input.email}, ${input.phone || null}, ${input.message}, ${input.gdprConsent})`
+            );
+          } catch (error) {
+            await releasePublicEmailIpRateLimit("contact", ipHash).catch(() => undefined);
+            throw error;
+          }
         }
 
-        // Notify the owner via Manus notification system
-        await notifyOwner({
-          title: `Nouveau message de contact de ${input.name} (${trackingId})`,
-          content: `**Numéro de suivi:** ${trackingId}\n**De:** ${input.name}\n**Email:** ${input.email}\n**Téléphone:** ${input.phone || "Non renseigné"}\n**Consentement RGPD:** ${input.gdprConsent === 1 ? "✅ Accepté" : "❌ Refusé"}\n\n**Message:**\n${input.message}`,
-        });
+        // ABUS-01 : au-delà du volume du jour, le message est gardé sans email au propriétaire.
+        if (await countPublicFormDailyVolume("contact")) {
+          await notifyOwner({
+            title: `Nouveau message de contact de ${input.name} (${trackingId})`,
+            content: `**Numéro de suivi:** ${trackingId}\n**De:** ${input.name}\n**Email:** ${input.email}\n**Téléphone:** ${input.phone || "Non renseigné"}\n**Consentement RGPD:** ${input.gdprConsent === 1 ? "✅ Accepté" : "❌ Refusé"}\n\n**Message:**\n${input.message}`,
+          });
+        }
 
         return { success: true, trackingId } as const;
       }),
@@ -584,15 +613,21 @@ export const appRouter = router({
           headers: ctx.req.headers as Record<string, unknown>,
         });
         await verifyCandidateTurnstile({ token: input.turnstileToken ?? "", remoteIp: ctx.req.ip });
+        const ipHash = await enforcePublicFormIpLimit("gdpr", ctx.req);
         // Unpredictable tracking ID (13 chars, column is varchar(20))
         const trackingId = createPublicTrackingId("G");
 
         // Save the GDPR request to the database using raw SQL (TiDB DEFAULT bug workaround)
         const db = await getDb();
         if (db) {
-          await db.execute(
-            sql`INSERT INTO gdpr_requests (tracking_id, name, email, phone, request_type, description, status) VALUES (${trackingId}, ${input.name}, ${input.email}, ${input.phone || null}, ${input.requestType}, ${input.description || null}, ${'pending'})`
-          );
+          try {
+            await db.execute(
+              sql`INSERT INTO gdpr_requests (tracking_id, name, email, phone, request_type, description, status) VALUES (${trackingId}, ${input.name}, ${input.email}, ${input.phone || null}, ${input.requestType}, ${input.description || null}, ${'pending'})`
+            );
+          } catch (error) {
+            await releasePublicEmailIpRateLimit("gdpr", ipHash).catch(() => undefined);
+            throw error;
+          }
         }
 
         // Notify the owner via Manus notification system
@@ -604,10 +639,13 @@ export const appRouter = router({
           objection: "Opposition au traitement",
         };
 
-        await notifyOwner({
-          title: `Nouvelle demande RGPD de ${input.name} (${trackingId})`,
-          content: `**Numéro de suivi:** ${trackingId}\n**Type de demande:** ${requestTypeLabels[input.requestType]}\n**De:** ${input.name}\n**Email:** ${input.email}\n**Téléphone:** ${input.phone || "Non renseigné"}\n\n**Description:**\n${input.description || "Aucune description fournie"}`,
-        });
+        // ABUS-01 : au-delà du volume du jour, la demande est gardée sans email au propriétaire.
+        if (await countPublicFormDailyVolume("gdpr")) {
+          await notifyOwner({
+            title: `Nouvelle demande RGPD de ${input.name} (${trackingId})`,
+            content: `**Numéro de suivi:** ${trackingId}\n**Type de demande:** ${requestTypeLabels[input.requestType]}\n**De:** ${input.name}\n**Email:** ${input.email}\n**Téléphone:** ${input.phone || "Non renseigné"}\n\n**Description:**\n${input.description || "Aucune description fournie"}`,
+          });
+        }
 
         return { success: true, trackingId } as const;
       }),
@@ -707,6 +745,8 @@ export const appRouter = router({
           // Langue affichée par la page de réservation : emails patients en
           // français pour « fr », en anglais sinon (EN-01).
           language: z.enum(SITE_LANGUAGES).optional().default("fr"),
+          // Jeton anti-robot, envoyé seulement après un refus « security_check_required » (ABUS-02).
+          turnstileToken: z.string().min(20).max(4096).optional(),
         })
       )
       .mutation(async ({ input, ctx }) => {
@@ -732,6 +772,9 @@ export const appRouter = router({
         const rateLimitRequest = { email: customerEmailKey, headers: ctx.req.headers as Record<string, unknown>, remoteIp: ctx.req.ip };
         await enforcePublicFormRateLimit({ kind: "bookingIp", ...rateLimitRequest });
         await enforcePublicFormRateLimit({ kind: "bookingEmail", ...rateLimitRequest });
+        // Même règle que les compteurs : les tests d’intégration réservent sans anti-robot.
+        const bookingProtectionsEnabled = process.env.NODE_ENV !== "test" && process.env.VITEST !== "true";
+        const bookingIpHash = requestIpHash(rateLimitRequest.headers) ?? (ctx.req.ip ? hashSecurityValue(ctx.req.ip) : null);
 
         const basePrice = "100.00";
         const isNightRate = isNightRateForParis(date);
@@ -820,9 +863,40 @@ export const appRouter = router({
           if (!holdExpiresAt) {
             throw bookingRefusal("UNPROCESSABLE_CONTENT", "too_soon", BOOKING_TOO_SOON_MESSAGE);
           }
+          // ABUS-02 : pas d’anti-robot sur le parcours normal. Il n’est demandé,
+          // avant de retenir le créneau et d’ouvrir Stripe, que si beaucoup de
+          // créneaux sont déjà retenus sans paiement ou si cette IP en retient deux.
+          const { bookingChallengeRequired, recordBookingHold } = await import("./appointmentHoldAbuse");
+          // Un jeton ne se vérifie qu’une fois ; un jeton refusé est journalisé.
+          const passBookingChallenge = async () => {
+            try {
+              await verifyCandidateTurnstile({ token: input.turnstileToken, remoteIp: ctx.req.ip });
+              return true;
+            } catch {
+              if (input.turnstileToken) {
+                await logSecurityEvent({ actorKind: "anonymous", category: "public_booking_challenge", outcome: "blocked", severity: "warning", ipHash: bookingIpHash }).catch(() => undefined);
+              }
+              return false;
+            }
+          };
+          let bookingChallengePassed = false;
+          if (bookingProtectionsEnabled && await bookingChallengeRequired(db, bookingIpHash)) {
+            if (!await passBookingChallenge()) throw bookingRefusal("PRECONDITION_FAILED", "security_check_required", BOOKING_SECURITY_CHECK_MESSAGE);
+            bookingChallengePassed = true;
+          }
           await db.execute(
             sql`INSERT INTO appointments (tracking_id, customer_name, customer_email, customer_phone, consultation_type, request_details, appointment_date, slot_key, duration, base_price, final_price, is_night_rate, payment_status, appointment_status, hold_expires_at, language) VALUES (${trackingId}, ${input.customerName}, ${input.customerEmail}, ${input.customerPhone}, ${'health_advice'}, ${input.requestDetails}, ${appointmentDateFormatted}, ${slotKey}, ${30}, ${basePrice}, ${finalPrice}, ${isNightRate ? 1 : 0}, ${'pending'}, ${'held'}, ${holdExpiresAt}, ${input.language})`
           );
+          if (bookingProtectionsEnabled) {
+            await recordBookingHold(bookingIpHash, trackingId).catch(error => console.error("Booking hold record failed:", error instanceof Error ? error.name : "UnknownError"));
+            // Réservations simultanées : chacune a pu lire l’état d’avant les
+            // autres. Le contrôle est refait, ce maintien compris, avant Stripe ;
+            // sans vérification passée, le créneau est aussitôt libéré.
+            if (!bookingChallengePassed && await bookingChallengeRequired(db, bookingIpHash, { afterOwnHold: true }) && !await passBookingChallenge()) {
+              await db.update(appointments).set(getExpiredAppointmentHoldUpdate()).where(and(eq(appointments.trackingId, trackingId), eq(appointments.paymentStatus, "pending"), eq(appointments.appointmentStatus, "held")));
+              throw bookingRefusal("PRECONDITION_FAILED", "security_check_required", BOOKING_SECURITY_CHECK_MESSAGE);
+            }
+          }
 
           let session: Stripe.Checkout.Session;
           try {
@@ -2013,16 +2087,24 @@ export const appRouter = router({
         .mutation(async ({ input, ctx }) => {
           const db = await getDb();
           if (!db) throw new Error("Database connection failed");
+          const { CV_ANALYSIS_DEFERRED_DAILY_VOLUME, enqueueCvAnalysis, processDueCvAnalysisJobs } = await import("./recruitmentProcessing");
+          // Les candidatures reçues au-delà du volume du jour (ABUS-01), jamais
+          // analysées, restent à l’écart comme pour le rattrapage automatique :
+          // seule l’action « Analyser le CV » d’un dossier les met en file.
           const resumableApplications = await db
             .select({ id: cvApplications.id, trackingId: cvApplications.trackingId })
             .from(cvApplications)
             // degraded, or saved as needs_review by the billing fallback before
             // that status existed: the AI provider refused, the CV was never analysed (REC-08).
-            .where(and(or(inArray(cvApplications.analysisStatus, ["failed", "queued", "degraded"]), eq(cvApplications.analysisModel, MANUAL_REVIEW_FALLBACK_MODEL), ne(cvApplications.analysisPromptVersion, RECRUITMENT_ANALYSIS_PROMPT_VERSION), isNull(cvApplications.analysisPromptVersion)), ne(cvApplications.status, "rejected"), ne(cvApplications.status, "archived")))
+            .where(and(
+              or(inArray(cvApplications.analysisStatus, ["failed", "queued", "degraded"]), eq(cvApplications.analysisModel, MANUAL_REVIEW_FALLBACK_MODEL), ne(cvApplications.analysisPromptVersion, RECRUITMENT_ANALYSIS_PROMPT_VERSION), isNull(cvApplications.analysisPromptVersion)),
+              ne(cvApplications.status, "rejected"),
+              ne(cvApplications.status, "archived"),
+              or(isNull(cvApplications.analysisLastError), ne(cvApplications.analysisLastError, CV_ANALYSIS_DEFERRED_DAILY_VOLUME)),
+            ))
             .orderBy(cvApplications.updatedAt)
             .limit(input?.limit ?? 10);
 
-          const { enqueueCvAnalysis, processDueCvAnalysisJobs } = await import("./recruitmentProcessing");
           let processing: { processed: number; results: Array<Record<string, unknown>> } = { processed: 0, results: [] };
           let queued = 0;
           let aiUnavailable = false;

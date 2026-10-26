@@ -30,6 +30,9 @@ describe("libellés de traçabilité des candidatures", () => {
   it("explique les échecs d'accusé sans exposer le détail du fournisseur", () => {
     expect(recruitmentEmailDeliveryErrorLabel("provider_rejected")).toBe("Resend a refusé temporairement l’envoi");
     expect(recruitmentEmailDeliveryErrorLabel("delivery_exception")).toContain("aucune relance automatique");
+    // ABUS-03: rate limit and used-up quota are told apart from a refusal.
+    expect(recruitmentEmailDeliveryErrorLabel("rate_limited")).toContain("rien n’est parti");
+    expect(recruitmentEmailDeliveryErrorLabel("quota")).toContain("Quota d’envoi Resend épuisé");
   });
 
   it("distingue l’invitation de l’activation de l’espace candidat", () => {

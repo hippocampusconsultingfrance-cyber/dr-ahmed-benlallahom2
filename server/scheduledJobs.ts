@@ -1,9 +1,10 @@
 import { and, eq, gte, isNull, lt, lte, or, sql } from "drizzle-orm";
-import { appointments, candidateSecurityRateLimits, securityEvents } from "../drizzle/schema";
+import { appointments, candidateAccounts, candidateSecurityRateLimits, contactMessages, cvApplications, gdprRequests, medicalQuestions, securityEvents } from "../drizzle/schema";
 import { getDb } from "./db";
 import { mutationRowCount } from "./dbMutation";
 import { emailLanguageFor } from "./emailLanguage";
 import { notifyOwner } from "./_core/notification";
+import { PUBLIC_FORM_DAILY_VOLUME_THRESHOLDS, PUBLIC_FORM_VOLUME_LABELS, type PublicFormVolumeKind } from "./publicFormRateLimit";
 
 const HOUR_MS = 60 * 60 * 1000;
 
@@ -118,6 +119,32 @@ export async function runSecurityPostureReview(now = new Date()) {
   ));
   const since = new Date(now.getTime() - 24 * HOUR_MS);
   const recentAlerts = await db.select({ id: securityEvents.id }).from(securityEvents).where(and(gte(securityEvents.createdAt, since), sql`${securityEvents.severity} IN ('high', 'critical')`));
-  if (recentAlerts.length > 0) await notifyOwner({ title: "Bilan quotidien de sécurité", content: `${recentAlerts.length} événement(s) de sécurité à gravité élevée ont été détectés sur les dernières 24 heures. Consultez le journal administrateur.` });
-  return { available: true as const, highSeverityEvents24h: recentAlerts.length };
+  const busyPublicForms = await publicFormsAboveDailyThreshold(db, since);
+  const findings = [
+    ...(recentAlerts.length > 0 ? [`${recentAlerts.length} événement(s) de sécurité à gravité élevée ont été détectés sur les dernières 24 heures. Consultez le journal administrateur.`] : []),
+    ...busyPublicForms.map(kind => `Seuil quotidien dépassé pour les ${PUBLIC_FORM_VOLUME_LABELS[kind]} : plus de ${PUBLIC_FORM_DAILY_VOLUME_THRESHOLDS[kind]} enregistrements sur les dernières 24 heures. Vérifiez dans l’administration qu’il ne s’agit pas d’envois automatisés.`),
+  ];
+  if (findings.length > 0) await notifyOwner({ title: "Bilan quotidien de sécurité", content: findings.join("\n\n") });
+  return { available: true as const, highSeverityEvents24h: recentAlerts.length, busyPublicForms };
+}
+
+/**
+ * ABUS-01: public forms whose accepted requests of the last 24 hours exceed
+ * their daily threshold (counted up to the threshold + 1 only).
+ */
+async function publicFormsAboveDailyThreshold(db: NonNullable<Awaited<ReturnType<typeof getDb>>>, since: Date) {
+  const recent = {
+    contact: () => db.select({ id: contactMessages.id }).from(contactMessages).where(gte(contactMessages.createdAt, since)),
+    gdpr: () => db.select({ id: gdprRequests.id }).from(gdprRequests).where(gte(gdprRequests.createdAt, since)),
+    medicalQuestion: () => db.select({ id: medicalQuestions.id }).from(medicalQuestions).where(gte(medicalQuestions.createdAt, since)),
+    recruitmentApply: () => db.select({ id: cvApplications.id }).from(cvApplications).where(gte(cvApplications.createdAt, since)),
+    candidateRegister: () => db.select({ id: candidateAccounts.id }).from(candidateAccounts).where(gte(candidateAccounts.createdAt, since)),
+  } satisfies Record<PublicFormVolumeKind, unknown>;
+  const busy: PublicFormVolumeKind[] = [];
+  for (const kind of Object.keys(recent) as PublicFormVolumeKind[]) {
+    const threshold = PUBLIC_FORM_DAILY_VOLUME_THRESHOLDS[kind];
+    const rows = await recent[kind]().limit(threshold + 1);
+    if (rows.length > threshold) busy.push(kind);
+  }
+  return busy;
 }

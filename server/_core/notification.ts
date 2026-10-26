@@ -94,6 +94,10 @@ export async function notifyOwner(
       : await resend.emails.send(message);
     if (error) {
       console.warn(`[Notification] Resend rejected the owner notification: ${error.message}`);
+      // ABUS-03: a used-up quota is logged as a high-severity event. Its owner
+      // alert, refused in turn, logs one more event; the alert's 30-minute
+      // window then stops the chain.
+      await import("./notifications").then(({ reportResendQuotaError }) => reportResendQuotaError(error, "owner_notification")).catch(() => undefined);
       return false;
     }
     return true;

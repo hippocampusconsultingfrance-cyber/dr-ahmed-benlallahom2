@@ -14,7 +14,7 @@ const dialect = new PgDialect();
 const resend = vi.hoisted(() => {
   vi.stubEnv("OWNER_NOTIFICATION_EMAIL", "owner@example.test");
   return {
-    calls: [] as Array<{ message: Record<string, unknown>; options?: { idempotencyKey?: string } }>,
+    calls: [] as Array<{ message: Record<string, unknown>; options?: { idempotencyKey?: string }; at: number }>,
     // Réponse par appel : "ok", "5xx", "422" ou "throw" ; "ok" quand la file est vide.
     script: [] as string[],
     failFor: new Set<string>(),
@@ -24,7 +24,7 @@ vi.mock("resend", () => ({
   Resend: vi.fn().mockImplementation(() => ({
     emails: {
       send: vi.fn(async (message: Record<string, unknown>, options?: { idempotencyKey?: string }) => {
-        resend.calls.push({ message, options });
+        resend.calls.push({ message, options, at: Date.now() });
         const to = (message.to as string[])[0];
         const outcome = resend.failFor.has(to) ? "5xx" : resend.script.shift() ?? "ok";
         if (outcome === "throw") throw new Error("socket hang up");
@@ -46,7 +46,7 @@ vi.mock("./invoiceNumbering", () => ({
   })),
 }));
 
-import { enqueueAppointmentFulfillment, processDueAppointmentFulfillmentJobs } from "./appointmentFulfillment";
+import { appointmentFulfillmentPacing, enqueueAppointmentFulfillment, processDueAppointmentFulfillmentJobs } from "./appointmentFulfillment";
 import { postPaymentDeliveryRetry, sendConfirmationEmail, sendOwnerNotificationEmail } from "./_core/notifications";
 import * as notificationsModule from "./_core/notifications";
 
@@ -147,6 +147,7 @@ beforeEach(() => {
   resend.script.length = 0;
   resend.failFor.clear();
   postPaymentDeliveryRetry.delaysMs = [0, 0];
+  appointmentFulfillmentPacing.delayMs = 0;
   vi.stubEnv("RESEND_API_KEY", "re_test_owner_first");
 });
 
@@ -214,5 +215,18 @@ describe("envois après paiement — propriétaire d’abord, essais courts, ale
     // Le job propriétaire créé est traité au passage suivant.
     await processDueAppointmentFulfillmentJobs();
     expect(subjects().filter(subject => subject.startsWith("Nouvelle réservation payée"))).toHaveLength(1);
+  });
+
+  it("espace les trois envois d’un même paiement pour rester sous la limite de débit de Resend (ABUS-03)", async () => {
+    appointmentFulfillmentPacing.delayMs = 40;
+    memoryDatabase([job(1, "owner"), job(2, "confirmation"), job(3, "invoice")]);
+
+    await processDueAppointmentFulfillmentJobs();
+
+    expect(subjects().map(subject => subject.split(" ")[0])).toEqual(["Nouvelle", "Confirmation", "Facture"]);
+    const [owner, confirmation, invoice] = resend.calls.map(call => call.at);
+    // setTimeout may fire a millisecond early on some platforms.
+    expect(confirmation - owner).toBeGreaterThanOrEqual(38);
+    expect(invoice - confirmation).toBeGreaterThanOrEqual(38);
   });
 });

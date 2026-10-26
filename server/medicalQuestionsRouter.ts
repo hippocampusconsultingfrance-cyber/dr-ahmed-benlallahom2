@@ -7,7 +7,7 @@ import { adminProcedure, publicProcedure, router } from "./_core/trpc";
 import { getDb } from "./db";
 import { enforcePersistentRateLimit, hashSecurityValue, logSecurityEvent, requestIpHash } from "./candidateSecurity";
 import { verifyCandidateTurnstile } from "./candidateTurnstile";
-import { enforcePublicEmailIpRateLimit, releasePublicEmailIpRateLimit } from "./publicFormRateLimit";
+import { countPublicFormDailyVolume, enforcePublicEmailIpRateLimit, releasePublicEmailIpRateLimit } from "./publicFormRateLimit";
 import { isAdminMfaVerified } from "./adminMfa";
 import { improveMedicalAnswerDraft } from "./medicalQuestionAssistant";
 import { notifyOwner } from "./_core/notification";
@@ -123,6 +123,11 @@ export const medicalQuestionsRouter = router({
     await logSecurityEvent({ actorKind: "anonymous", actorReference: hashSecurityValue(input.email), category: "public_medical_question_submitted", outcome: "allowed", severity: "info", ipHash });
     // PUB-FORM-01: the owner is told (no health content), the person gets an
     // acknowledgement with the reference. Neither failure loses the question.
+    // ABUS-01: beyond the day's volume the question is kept without either email.
+    if (!(await countPublicFormDailyVolume("medicalQuestion"))) {
+      await auditQuestion({ questionId, action: "acknowledgement_skipped_daily_volume" }).catch(() => undefined);
+      return { trackingId, acknowledgementSent: false };
+    }
     const [ownerNotified, acknowledged] = await Promise.all([
       notifyOwner(buildMedicalQuestionOwnerNotification({ trackingId, language: input.language, publicationConsent: input.publicationConsent, adminUrl: `${PUBLIC_APP_ORIGIN}/admin` })).catch(() => false),
       sendMedicalQuestionAcknowledgementEmail({ email: input.email, firstName: input.firstName, trackingId, language: input.language }).then(() => true, () => false),
