@@ -199,6 +199,16 @@ describe("webhook Stripe checkout.session.completed", () => {
     expect(writes).toHaveLength(0);
   });
 
+  it("ne fait que mettre en file les envois quand la page d’état confirme (queueOnly)", async () => {
+    fakeDatabase([[heldAppointment()]], [1]);
+
+    const result = await handleCheckoutSessionCompleted(paidSession(), { queueOnly: true });
+
+    expect(result).toMatchObject({ httpStatus: 200, outcome: "confirmed" });
+    expect(fulfillment.enqueueAppointmentFulfillment).toHaveBeenCalledWith(42);
+    expect(fulfillment.processAppointmentFulfillmentNow).not.toHaveBeenCalled();
+  });
+
   it("répond à Stripe même si l’envoi immédiat échoue", async () => {
     fakeDatabase([[heldAppointment()]], [1]);
     fulfillment.processAppointmentFulfillmentNow.mockRejectedValueOnce(new Error("Database connection failed"));

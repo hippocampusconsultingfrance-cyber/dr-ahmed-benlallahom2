@@ -88,9 +88,12 @@ export async function getPublicPaymentState(
     // Stripe has just said this session is paid: confirm the slot now instead
     // of waiting for the webhook (EXPL-01). Same conditional update as the
     // webhook, so whichever comes first confirms, once, and the confirmation
-    // and invoice go through the same idempotent queue.
+    // and invoice go through the same idempotent queue. The page answers as
+    // soon as the database is confirmed: the emails are only queued (stored
+    // before answering, so a function stopped after the response loses none)
+    // and sent by the webhook when it arrives, or else by the scheduled job.
     try {
-      const completion = await handleCheckoutSessionCompleted(session);
+      const completion = await handleCheckoutSessionCompleted(session, { queueOnly: true });
       if (completion.outcome === "unconfirmable") return { state: "attention" };
     } catch (error) {
       console.error("Confirmation from the payment status page failed; left to the webhook", error instanceof Error ? error.name : "UnknownError");

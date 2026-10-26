@@ -181,6 +181,13 @@ async function runHoldCleanup() {
   return { status: response.status, body: await response.json() as Record<string, unknown> };
 }
 
+async function runFulfillment() {
+  const response = await fetch(`${baseUrl}/api/scheduled/appointment-fulfillment`, { headers: { authorization: `Bearer ${CRON_SECRET}` } });
+  return { status: response.status, body: await response.json() as Record<string, unknown> };
+}
+
+const jobStates = () => db().rows(appointmentFulfillmentJobs).map(job => [job.jobType, job.status]);
+
 /** Calendar day of the appointment in Paris, as the booking page asks for it. */
 const parisDay = (date: Date) => new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Paris" }).format(date);
 
@@ -200,7 +207,7 @@ function expectPostPaymentEmailsSentOnce() {
 }
 
 describe("EXPL-01 — un paiement reçu est confirmé même sans webhook", () => {
-  it("confirme depuis la page de retour le paiement que Stripe dit reçu, une seule fois, puis ignore le webhook tardif", async () => {
+  it("confirme depuis la page de retour le paiement que Stripe dit reçu, une seule fois, et laisse les envois au webhook tardif", async () => {
     const seeded = seedAppointment();
     stripeSession();
 
@@ -209,13 +216,33 @@ describe("EXPL-01 — un paiement reçu est confirmé même sans webhook", () =>
       appointment: { appointmentDate: (seeded.appointmentDate as Date).toISOString(), durationMinutes: 30, amountEur: 100 },
     });
     expect(appointmentRow()).toMatchObject({ paymentStatus: "completed", appointmentStatus: "confirmed", stripePaymentIntentId: PAYMENT_INTENT, holdExpiresAt: null, slotKey: seeded.slotKey });
-    expectPostPaymentEmailsSentOnce();
+    // La page répond dès la confirmation en base : les envois sont en file, rien n’est encore parti.
+    expect(jobStates()).toEqual([["owner", "queued"], ["confirmation", "queued"], ["invoice", "queued"]]);
+    expect(emails.sendConfirmationEmail).not.toHaveBeenCalled();
 
-    // Nouvelle vérification de la page, puis le webhook qui arrive enfin.
+    // Nouvelle vérification de la page, puis le webhook qui arrive enfin et envoie.
     await expect(publicStatus()).resolves.toMatchObject({ state: "confirmed" });
     expect(await postEvent("checkout.session.completed", stripeSession())).toEqual({ status: 200, body: { received: true, duplicate: true } });
     expectPostPaymentEmailsSentOnce();
     expect(owner.notifyOwner).not.toHaveBeenCalled();
+  });
+
+  it("répond à la page sans attendre un service d’envoi lent, et la tâche planifiée envoie sans webhook", async () => {
+    seedAppointment();
+    stripeSession();
+    // Resend qui ne répond plus : l’envoi ne finirait jamais.
+    emails.sendOwnerNotificationEmail.mockImplementation(() => new Promise(() => undefined));
+
+    const startedAt = Date.now();
+    await expect(publicStatus()).resolves.toMatchObject({ state: "confirmed" });
+    expect(Date.now() - startedAt).toBeLessThan(1_000);
+    expect(emails.sendOwnerNotificationEmail).not.toHaveBeenCalled();
+    expect(jobStates()).toEqual([["owner", "queued"], ["confirmation", "queued"], ["invoice", "queued"]]);
+
+    // Aucun webhook : la tâche planifiée appointment-fulfillment fait partir les envois en file.
+    emails.sendOwnerNotificationEmail.mockResolvedValue(undefined);
+    expect((await runFulfillment()).status).toBe(200);
+    expectPostPaymentEmailsSentOnce();
   });
 
   it("ne confirme qu’une fois quand le webhook (et sa relivraison) croise les vérifications de la page", async () => {
