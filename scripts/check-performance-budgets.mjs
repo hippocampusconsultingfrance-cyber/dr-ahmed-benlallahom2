@@ -29,6 +29,12 @@ if (mainEntry.gzip > budgets.entry) failures.push(`Entrée ${mainEntry.file}: ${
 if (/ClerkProvider|@clerk\/|clerk\.browser/.test(await readFile(path.join(assetsDirectory, mainEntry.file), "utf8"))) failures.push(`Entrée ${mainEntry.file}: contient Clerk`);
 if (adminGzip > budgets.admin) failures.push(`Admin ${adminFile}: ${kib(adminGzip)} KiB > ${kib(budgets.admin)} KiB`);
 for (const chunk of publicMeasures) if (chunk.gzip > budgets.public) failures.push(`Route ${chunk.file}: ${kib(chunk.gzip)} KiB > ${kib(budgets.public)} KiB`);
+// Aucun fichier ne doit garder les repères data-loc="client/src/…:ligne" de l'éditeur visuel
+// Manus : du poids pour rien, et les chemins du code source lisibles dans la page (CODE-06).
+for (const file of javascript) {
+  const sourceLocations = (await readFile(path.join(assetsDirectory, file), "utf8")).match(/data-loc/g)?.length ?? 0;
+  if (sourceLocations > 0) failures.push(`${file}: ${sourceLocations} attribut(s) data-loc`);
+}
 
 console.table([
   { groupe: "Entrée publique", fichier: mainEntry.file, gzipKiB: kib(mainEntry.gzip), budgetKiB: kib(budgets.entry) },
