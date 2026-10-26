@@ -100,6 +100,9 @@ vi.mock("./invoiceNumbering", () => ({
 const { createApp } = await import("./_core/index");
 const { appRouter } = await import("./routers");
 const { refundAppointmentPayment } = await import("./appointmentAdminActions");
+const { paymentStatusPageFulfillment } = await import("./appointmentPublicStatus");
+const { APPOINTMENT_FULFILLMENT_STALE_AFTER_MS } = await import("./appointmentFulfillment");
+const PAGE_FULFILLMENT_TIMEOUT_MS = paymentStatusPageFulfillment.timeoutMs;
 const signer = new Stripe(process.env.STRIPE_SECRET_KEY!);
 
 let baseUrl = "";
@@ -128,6 +131,7 @@ beforeEach(() => {
   state.stripe.refunds.length = 0;
   state.stripe.expireCalls.length = 0;
   state.stripe.payWhileClosing = null;
+  paymentStatusPageFulfillment.timeoutMs = PAGE_FULFILLMENT_TIMEOUT_MS;
 });
 
 function seedAppointment(overrides: Record<string, unknown> = {}) {
@@ -181,6 +185,24 @@ async function runHoldCleanup() {
   return { status: response.status, body: await response.json() as Record<string, unknown> };
 }
 
+async function runFulfillment() {
+  const response = await fetch(`${baseUrl}/api/scheduled/appointment-fulfillment`, { headers: { authorization: `Bearer ${CRON_SECRET}` } });
+  return { status: response.status, body: await response.json() as Record<string, unknown> };
+}
+
+const jobStates = () => db().rows(appointmentFulfillmentJobs).map(job => [job.jobType, job.status]);
+
+/** Calendar day of the appointment in Paris, as the booking page asks for it. */
+const parisDay = (date: Date) => new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Paris" }).format(date);
+
+function bookedSlots(date: Date) {
+  return appRouter.createCaller({
+    user: null,
+    req: { protocol: "https", headers: {}, ip: "192.0.2.10" } as unknown as TrpcContext["req"],
+    res: { clearCookie: vi.fn() } as unknown as TrpcContext["res"],
+  }).availability.getBookedSlots({ date: parisDay(date) });
+}
+
 function expectPostPaymentEmailsSentOnce() {
   expect(emails.sendOwnerNotificationEmail).toHaveBeenCalledTimes(1);
   expect(emails.sendConfirmationEmail).toHaveBeenCalledTimes(1);
@@ -198,6 +220,7 @@ describe("EXPL-01 — un paiement reçu est confirmé même sans webhook", () =>
       appointment: { appointmentDate: (seeded.appointmentDate as Date).toISOString(), durationMinutes: 30, amountEur: 100 },
     });
     expect(appointmentRow()).toMatchObject({ paymentStatus: "completed", appointmentStatus: "confirmed", stripePaymentIntentId: PAYMENT_INTENT, holdExpiresAt: null, slotKey: seeded.slotKey });
+    // Sans webhook, les envois sont partis avant la réponse de la page.
     expectPostPaymentEmailsSentOnce();
 
     // Nouvelle vérification de la page, puis le webhook qui arrive enfin.
@@ -205,6 +228,48 @@ describe("EXPL-01 — un paiement reçu est confirmé même sans webhook", () =>
     expect(await postEvent("checkout.session.completed", stripeSession())).toEqual({ status: 200, body: { received: true, duplicate: true } });
     expectPostPaymentEmailsSentOnce();
     expect(owner.notifyOwner).not.toHaveBeenCalled();
+  });
+
+  it("répond à la page dans un délai borné quand le service d’envoi ne répond plus, et la tâche planifiée envoie le reste sans webhook", async () => {
+    seedAppointment();
+    stripeSession();
+    paymentStatusPageFulfillment.timeoutMs = 1_000;
+    // Resend qui ne répond plus : la notification au médecin ne finirait jamais.
+    emails.sendOwnerNotificationEmail.mockImplementationOnce(() => new Promise(() => undefined));
+
+    const startedAt = Date.now();
+    await expect(publicStatus()).resolves.toMatchObject({ state: "confirmed" });
+    expect(Date.now() - startedAt).toBeLessThan(paymentStatusPageFulfillment.timeoutMs + 500);
+    expect(jobStates()).toEqual([["owner", "running"], ["confirmation", "queued"], ["invoice", "queued"]]);
+
+    // Aucun webhook : la tâche planifiée appointment-fulfillment fait partir les envois en file.
+    expect((await runFulfillment()).status).toBe(200);
+    expect(jobStates()).toEqual([["owner", "running"], ["confirmation", "completed"], ["invoice", "completed"]]);
+    expect(emails.sendConfirmationEmail).toHaveBeenCalledTimes(1);
+    expect(emails.sendInvoiceEmail).toHaveBeenCalledTimes(1);
+  });
+
+  it("prévient le médecin avant de répondre à la page même sans webhook, et laisse au webhook tardif les envois qui traînent", async () => {
+    seedAppointment();
+    stripeSession();
+    paymentStatusPageFulfillment.timeoutMs = 1_000;
+    // La notification au médecin part ; la confirmation au patient, elle, traîne.
+    emails.sendConfirmationEmail.mockImplementationOnce(() => new Promise(() => undefined));
+
+    await expect(publicStatus()).resolves.toMatchObject({ state: "confirmed" });
+    expect(emails.sendOwnerNotificationEmail).toHaveBeenCalledTimes(1);
+    expect(jobStates()).toEqual([["owner", "completed"], ["confirmation", "running"], ["invoice", "queued"]]);
+
+    // Le webhook tardif envoie ce qui attend encore, sans renvoyer la notification.
+    expect(await postEvent("checkout.session.completed", stripeSession())).toEqual({ status: 200, body: { received: true, duplicate: true } });
+    expect(jobStates()).toEqual([["owner", "completed"], ["confirmation", "running"], ["invoice", "completed"]]);
+    // L’envoi interrompu est repris par la tâche planifiée une fois tenu pour arrêté.
+    db().rows(appointmentFulfillmentJobs).forEach(job => { if (job.status === "running") job.startedAt = new Date(Date.now() - APPOINTMENT_FULFILLMENT_STALE_AFTER_MS - 1000); });
+    expect((await runFulfillment()).status).toBe(200);
+    expect(jobStates()).toEqual([["owner", "completed"], ["confirmation", "completed"], ["invoice", "completed"]]);
+    expect(emails.sendOwnerNotificationEmail).toHaveBeenCalledTimes(1);
+    expect(emails.sendConfirmationEmail).toHaveBeenCalledTimes(2);
+    expect(emails.sendInvoiceEmail).toHaveBeenCalledTimes(1);
   });
 
   it("ne confirme qu’une fois quand le webhook (et sa relivraison) croise les vérifications de la page", async () => {
@@ -286,11 +351,29 @@ describe("EXPL-01 — un paiement reçu est confirmé même sans webhook", () =>
 
     expect((await runHoldCleanup()).body).toMatchObject({ released: 0, confirmed: 0, kept: 1 });
     expect(appointmentRow()).toMatchObject({ paymentStatus: "pending", appointmentStatus: "held", slotKey: seeded.slotKey });
+    // Gardé, son maintien pourtant expiré : le créneau reste affiché pris, comme l’index unique le tient.
+    await expect(bookedSlots(seeded.appointmentDate as Date)).resolves.toEqual([seeded.appointmentDate]);
 
     state.stripe.reachable = true;
     expect((await runHoldCleanup()).body).toMatchObject({ released: 1, confirmed: 0, kept: 0 });
     expect(appointmentRow()).toMatchObject({ paymentStatus: "pending", appointmentStatus: "cancelled", slotKey: null, holdExpiresAt: null });
+    await expect(bookedSlots(seeded.appointmentDate as Date)).resolves.toEqual([]);
     expect(emails.sendConfirmationEmail).not.toHaveBeenCalled();
+  });
+
+  it("affiche pris un créneau retenu, confirmé ou payé, et libre un créneau libéré, annulé ou remboursé", async () => {
+    const day = new Date(Date.now() + 72 * HOUR);
+    const at = (minutes: number) => new Date(day.getTime() + minutes * 60_000);
+    const seed = (trackingId: string, minutes: number, overrides: Record<string, unknown>) => db().seed(appointments, { ...appointmentRow(), id: undefined, trackingId, appointmentDate: at(minutes), slotKey: at(minutes).toISOString(), ...overrides });
+    seedAppointment({ appointmentDate: at(0), slotKey: at(0).toISOString() });
+    seed("APTRECON00011", 30, { paymentStatus: "completed", appointmentStatus: "confirmed", holdExpiresAt: null });
+    seed("APTRECON00012", 60, { holdExpiresAt: new Date(Date.now() - 60_000) });
+    seed("APTRECON00013", 90, { appointmentStatus: "cancelled", slotKey: null, holdExpiresAt: null });
+    seed("APTRECON00014", 120, { paymentStatus: "refunded", appointmentStatus: "cancelled", slotKey: null, holdExpiresAt: null });
+    seed("APTRECON00015", 150, { paymentStatus: "pending", appointmentStatus: "held", slotKey: null, holdExpiresAt: new Date(Date.now() - 60_000) });
+
+    const taken = (await bookedSlots(day)).map(date => new Date(date).getTime()).sort();
+    expect(taken).toEqual([at(0), at(30), at(60)].map(date => date.getTime()));
   });
 
   it("ferme chez Stripe une session encore ouverte avant de libérer le créneau, et ne touche pas une réservation en cours", async () => {
@@ -359,7 +442,91 @@ describe("RES-06 — remboursements et contestations faits dans Stripe", () => {
     expect(appointmentRow()).toMatchObject({ paymentStatus: "completed", appointmentStatus: "confirmed", refundAmount: null });
     expect(emails.sendRefundConfirmationEmail).not.toHaveBeenCalled();
     expect(owner.notifyOwner).toHaveBeenCalledTimes(1);
-    expect(owner.notifyOwner.mock.calls[0][0].content).toContain("30.00 € remboursés au total, sur 100.00 € payés");
+    // Montants écrits comme dans les emails aux patients.
+    expect(owner.notifyOwner.mock.calls[0][0].content).toContain("30,00 € remboursés au total, sur 100,00 € payés");
+  });
+
+  it("redemande l’évènement d’un remboursement partiel tant que l’alerte au médecin n’est pas partie, puis ne l’envoie qu’une fois", async () => {
+    seedAppointment(paid);
+    const partial = charge({ amount_refunded: 3000, refunded: false });
+
+    owner.notifyOwner.mockResolvedValueOnce(false);
+    expect(await postEvent("charge.refunded", partial)).toEqual({ status: 500, body: { received: false } });
+    expect(await postEvent("charge.refunded", partial)).toEqual({ status: 200, body: { received: true, partial: true } });
+
+    expect(owner.notifyOwner).toHaveBeenCalledTimes(2);
+    for (const [, options] of owner.notifyOwner.mock.calls) expect(options).toEqual({ idempotencyKey: `appointment-partial-refund-${TRACKING_ID}-3000` });
+    expect(appointmentRow()).toMatchObject({ paymentStatus: "completed", appointmentStatus: "confirmed" });
+  });
+
+  it("garde en file, réessaie et montre dans « À traiter » l’email au patient et l’alerte au médecin quand Resend est en panne", async () => {
+    const { listAppointmentDeliveriesToHandle, retryAppointmentFulfillment } = await import("./appointmentFulfillment");
+    seedAppointment(paid);
+    emails.sendRefundConfirmationEmail.mockResolvedValue(false);
+    owner.notifyOwner.mockResolvedValue(false);
+
+    // Le remboursement est enregistré et Stripe a sa réponse ; les deux envois restent à faire.
+    expect(await postEvent("charge.refunded", charge())).toEqual({ status: 200, body: { received: true, refunded: true } });
+    expect(appointmentRow()).toMatchObject({ paymentStatus: "refunded", appointmentStatus: "cancelled", slotKey: null });
+    expect(jobStates()).toEqual([["refund", "retry"], ["refund_owner", "retry"]]);
+    const toHandle = await listAppointmentDeliveriesToHandle();
+    expect(toHandle.retrying.items).toEqual([expect.objectContaining({ trackingId: TRACKING_ID, jobTypes: ["refund", "refund_owner"] })]);
+    // Relivraison de Stripe : rien de plus n’est tenté avant l’heure du nouvel essai.
+    expect(await postEvent("charge.refunded", charge())).toEqual({ status: 200, body: { received: true, duplicate: true } });
+    expect(emails.sendRefundConfirmationEmail).toHaveBeenCalledTimes(1);
+    // Alerte écrite avant l’email au patient : sa propre clé, que le texte suivant ne réemploie pas (Resend refuserait un autre contenu).
+    const firstAlert = owner.notifyOwner.mock.calls.find(([payload]) => payload.title.startsWith("Remboursement constaté chez Stripe"));
+    expect(firstAlert?.[0].content).toContain("n’est pas encore parti");
+    expect(firstAlert?.[1]).toEqual({ idempotencyKey: `appointment-stripe-refund-${TRACKING_ID}-cancelled-pending` });
+
+    // Resend rétabli : « Renvoyer » fait partir les deux, le patient d’abord.
+    emails.sendRefundConfirmationEmail.mockResolvedValue(true);
+    owner.notifyOwner.mockClear();
+    owner.notifyOwner.mockResolvedValue(true);
+    expect(await retryAppointmentFulfillment(TRACKING_ID)).toMatchObject({ outcome: "retried", requeued: 2 });
+    expect(jobStates()).toEqual([["refund", "completed"], ["refund_owner", "completed"]]);
+    expect(emails.sendRefundConfirmationEmail).toHaveBeenLastCalledWith("patient@example.test", "Patient Test", TRACKING_ID, expect.any(Date), "100.00", { context: "refund", idempotencyKey: `appointment-refund-${TRACKING_ID}`, language: "fr" });
+    expect(owner.notifyOwner).toHaveBeenCalledTimes(1);
+    const [alert, options] = owner.notifyOwner.mock.calls[0];
+    expect(alert.title).toBe(`Remboursement constaté chez Stripe (${TRACKING_ID})`);
+    expect(alert.content).toContain("(100,00 €)");
+    expect(alert.content).toContain("Le patient a été prévenu");
+    expect(options).toEqual({ idempotencyKey: `appointment-stripe-refund-${TRACKING_ID}-cancelled-notified` });
+    expect((await listAppointmentDeliveriesToHandle()).retrying.total).toBe(0);
+  });
+
+  it("dit au médecin quand l’email de remboursement n’est pas encore parti, et le renvoie à la tâche planifiée", async () => {
+    seedAppointment(paid);
+    emails.sendRefundConfirmationEmail.mockResolvedValue(false);
+
+    expect((await postEvent("charge.refunded", charge())).body).toEqual({ received: true, refunded: true });
+    expect(jobStates()).toEqual([["refund", "retry"], ["refund_owner", "completed"]]);
+    const alerts = owner.notifyOwner.mock.calls.map(([alert]) => alert);
+    expect(alerts.map(alert => alert.title)).toEqual([`Échec d’envoi après remboursement (${TRACKING_ID})`, `Remboursement constaté chez Stripe (${TRACKING_ID})`]);
+    expect(alerts[0].content).toContain("Le remboursement est bien enregistré");
+    expect(alerts[1].content).toContain("L’email de remboursement au patient n’est pas encore parti");
+
+    emails.sendRefundConfirmationEmail.mockResolvedValue(true);
+    db().rows(appointmentFulfillmentJobs).forEach(job => { job.scheduledFor = new Date(Date.now() - 1000); });
+    expect((await runFulfillment()).status).toBe(200);
+    expect(jobStates()).toEqual([["refund", "completed"], ["refund_owner", "completed"]]);
+    expect(emails.sendRefundConfirmationEmail).toHaveBeenCalledTimes(2);
+  });
+
+  it("met en file à la relivraison les envois d’un remboursement enregistré dont la mise en file avait échoué", async () => {
+    // Remboursement enregistré par une livraison interrompue juste après la mise à jour.
+    const { STRIPE_UNCONFIRMED_REFUND_CANCELLATION_REASON } = await import("./appointmentPaymentWebhook");
+    seedAppointment({ paymentStatus: "refunded", appointmentStatus: "cancelled", slotKey: null, holdExpiresAt: null, stripePaymentIntentId: PAYMENT_INTENT, cancellationReason: STRIPE_UNCONFIRMED_REFUND_CANCELLATION_REASON, refundAmount: "100.00", refundedAt: new Date() });
+
+    expect(await postEvent("charge.refunded", charge())).toEqual({ status: 200, body: { received: true, duplicate: true } });
+    expect(jobStates()).toEqual([["refund", "completed"], ["refund_owner", "completed"]]);
+    expect(emails.sendRefundConfirmationEmail).toHaveBeenCalledWith(expect.anything(), expect.anything(), TRACKING_ID, expect.any(Date), "100.00", expect.objectContaining({ context: "unconfirmed_payment" }));
+    expect(owner.notifyOwner.mock.calls[0][0].content).toContain("n’était rattaché à aucun créneau confirmé");
+
+    // Une nouvelle relivraison ne renvoie rien.
+    expect(await postEvent("charge.refunded", charge())).toEqual({ status: 200, body: { received: true, duplicate: true } });
+    expect(emails.sendRefundConfirmationEmail).toHaveBeenCalledTimes(1);
+    expect(owner.notifyOwner).toHaveBeenCalledTimes(1);
   });
 
   it("marque remboursé un paiement arrivé après la libération du créneau, sans changer son statut", async () => {
@@ -393,7 +560,7 @@ describe("RES-06 — remboursements et contestations faits dans Stripe", () => {
     expect(alert.title).toBe(`Contestation bancaire d’un paiement (${TRACKING_ID})`);
     expect(alert.content).toContain("Motif indiqué par la banque : fraudulent.");
     expect(alert.content).toContain("avant le 12 novembre 2026");
-    expect(alert.content).toContain("100.00 €");
+    expect(alert.content).toContain("100,00 €");
     // Le litige peut être gagné : le rendez-vous n’est pas modifié.
     expect(appointmentRow()).toMatchObject({ paymentStatus: "completed", appointmentStatus: "confirmed" });
     expect(emails.sendRefundConfirmationEmail).not.toHaveBeenCalled();

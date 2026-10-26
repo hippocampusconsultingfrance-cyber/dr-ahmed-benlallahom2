@@ -1,4 +1,6 @@
+import { NeonDbError } from "@neondatabase/serverless";
 import { fetchRequestHandler } from "@trpc/server/adapters/fetch";
+import { DrizzleQueryError } from "drizzle-orm";
 import superjson from "superjson";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { TrpcContext } from "./_core/context";
@@ -25,6 +27,8 @@ vi.mock("./appointmentHolds", async importOriginal => ({
   ...await importOriginal<typeof import("./appointmentHolds")>(),
   releaseExpiredAppointmentHolds: mocks.releaseExpiredAppointmentHolds,
 }));
+// Few holds awaiting payment: no anti-robot check (ABUS-02, covered by appointments.holdAbuse.test.ts).
+vi.mock("./appointmentHoldAbuse", () => ({ bookingChallengeRequired: vi.fn(async () => false), recordBookingHold: vi.fn(async () => undefined) }));
 vi.mock("stripe", () => ({
   default: vi.fn().mockImplementation(() => ({
     checkout: { sessions: { create: mocks.stripeCreate, retrieve: mocks.stripeRetrieve } },
@@ -32,6 +36,15 @@ vi.mock("stripe", () => ({
 }));
 
 import { ACTIVE_APPOINTMENT_HOLDS_LIMIT_MESSAGE, appRouter, BOOKING_PAYMENT_UNAVAILABLE_MESSAGE, BOOKING_RATE_LIMIT_MESSAGE } from "./routers";
+
+/**
+ * Error of the INSERT as drizzle-orm 0.45 throws it with neon-http: a
+ * DrizzleQueryError (« Failed query: … ») whose cause is the PostgreSQL error.
+ */
+function failedInsert(code: string, message: string, constraint?: string) {
+  const postgresError = Object.assign(new NeonDbError(message), { code, constraint });
+  return new DrizzleQueryError("INSERT INTO appointments (tracking_id, slot_key) VALUES ($1, $2)", ["APT000000000001", "2026-11-11T13:00:00.000Z"], postgresError);
+}
 
 const ALL_DAY_SLOTS = Array.from({ length: 7 }, (_, dayOfWeek) => ({ dayOfWeek, startTime: "00:00", endTime: "00:00" }));
 
@@ -135,12 +148,27 @@ describe("appointments.create — motifs de refus stables (EN-06)", () => {
     mocks.getDb.mockResolvedValue(fakeDb({ overlapping: [{ id: 7 }] }));
     expect(await postCreate(booking(inThreeDays()))).toMatchObject({ data: { code: "CONFLICT", reason: "slot_taken" } });
 
-    // Course perdue sur l'index unique du créneau : même motif, sans texte SQL.
-    mocks.getDb.mockResolvedValue(fakeDb({ insertError: new Error('duplicate key value violates unique constraint "appointments_active_slot_unique"') }));
+    // Course perdue sur l'index unique du créneau (erreur PostgreSQL dans la
+    // cause de celle de drizzle) : même motif, sans texte SQL.
+    mocks.getDb.mockResolvedValue(fakeDb({ insertError: failedInsert("23505", 'duplicate key value violates unique constraint "appointments_active_slot_unique"', "appointments_active_slot_unique") }));
     const raced = await postCreate(booking(inThreeDays()));
-    expect(raced).toMatchObject({ data: { code: "CONFLICT", reason: "slot_taken" } });
+    expect(raced).toMatchObject({ message: "Ce créneau vient d’être réservé par un autre patient. Veuillez en choisir un autre.", data: { code: "CONFLICT", reason: "slot_taken" } });
     expect(raced?.message).not.toContain("duplicate");
+    // Sans le champ « constraint », le nom de l'index est lu dans le message PostgreSQL.
+    mocks.getDb.mockResolvedValue(fakeDb({ insertError: failedInsert("23505", 'duplicate key value violates unique constraint "appointments_active_slot_unique"') }));
+    expect(await postCreate(booking(inThreeDays()))).toMatchObject({ data: { code: "CONFLICT", reason: "slot_taken" } });
     expect(mocks.stripeCreate).not.toHaveBeenCalled();
+  });
+
+  it("ne confond pas avec un créneau pris un autre doublon ni une autre erreur PostgreSQL", async () => {
+    // Doublon sur une autre contrainte (numéro de suivi).
+    mocks.getDb.mockResolvedValue(fakeDb({ insertError: failedInsert("23505", 'duplicate key value violates unique constraint "appointments_tracking_id_unique"', "appointments_tracking_id_unique") }));
+    expect(await postCreate(booking(inThreeDays()))).toMatchObject({ data: { code: "INTERNAL_SERVER_ERROR" } });
+    mocks.getDb.mockResolvedValue(fakeDb({ insertError: failedInsert("57P01", "terminating connection due to administrator command") }));
+    const failure = await postCreate(booking(inThreeDays()));
+    expect(failure).toMatchObject({ message: "La réservation n’a pas pu être enregistrée. Veuillez réessayer dans quelques instants.", data: { code: "INTERNAL_SERVER_ERROR" } });
+    expect(failure?.data.reason).toBeUndefined();
+    expect(JSON.stringify(failure)).not.toContain("Failed query");
   });
 
   it("n'ajoute aucun motif aux autres erreurs", async () => {
@@ -151,7 +179,7 @@ describe("appointments.create — motifs de refus stables (EN-06)", () => {
     expect((await postCreate(booking(inThreeDays(), { customerPhone: "abc" })))?.data.reason).toBeUndefined();
     expect(BOOKING_REFUSAL_REASONS).toEqual([
       "slot_taken", "too_soon", "too_far", "outside_schedule", "no_availability", "date_blocked",
-      "rate_limited", "too_many_holds", "payment_unavailable", "invalid_name", "security_check_required",
+      "rate_limited", "too_many_holds", "payment_unavailable", "invalid_name", "security_check_required", "security_check_unavailable",
     ]);
   });
 

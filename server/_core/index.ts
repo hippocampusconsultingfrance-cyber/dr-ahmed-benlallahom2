@@ -223,7 +223,8 @@ export async function createApp() {
       } else if (event.type === "charge.refunded") {
         // A full refund made in Stripe (or not recorded by the dashboard) is
         // applied to the appointment: refunded, cancelled and slot freed if it
-        // was still confirmed, patient emailed and owner alerted, once.
+        // was still confirmed, patient emailed and owner alerted, once, through
+        // the retried post-payment queue.
         const { handleChargeRefunded } = await import("../appointmentPaymentWebhook");
         const refund = await handleChargeRefunded(event.data.object);
         return res.status(refund.httpStatus).json(refund.body);

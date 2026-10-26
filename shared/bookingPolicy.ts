@@ -48,7 +48,8 @@ export function getBookingWindowIssue(appointmentStart: Date, now: number = Date
  * then the anti-abuse limits (attempts per hour, bookings awaiting payment),
  * the payment service being unavailable, a name without any visible letter
  * or digit, and the anti-robot check asked only when unpaid holds pile up
- * (ABUS-02): the page then shows the check and the patient pays as usual.
+ * (ABUS-02): the page then shows the check and the patient pays as usual,
+ * unless the check service itself is down (the patient retries later).
  */
 export const BOOKING_REFUSAL_REASONS = [
   "slot_taken",
@@ -62,6 +63,7 @@ export const BOOKING_REFUSAL_REASONS = [
   "payment_unavailable",
   "invalid_name",
   "security_check_required",
+  "security_check_unavailable",
 ] as const;
 export type BookingRefusalReason = (typeof BOOKING_REFUSAL_REASONS)[number];
 

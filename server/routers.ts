@@ -27,7 +27,7 @@ import { logRecruitmentAction, matchesRecruitmentProfile, parseRecruitmentJsonAr
 import { CERTIFICATION_NAME_MAX_LENGTH, certificationFacts, computeBriefCandidateMatch, declaredCertificationNames, languageFacts, sameRecruitmentFact, type CertificationRow, type LanguageRow } from "./clientBriefMatching";
 import { recruitmentFactLabel, type RecruitmentFact } from "../shared/recruitmentFactOrigins";
 import { candidatePortalRouter } from "./candidatePortalRouter";
-import { enforcePersistentRateLimit, hashSecurityValue, logSecurityEvent, requestIpHash } from "./candidateSecurity";
+import { enforcePersistentRateLimit, hashSecurityValue, logSecurityEvent, releasePersistentRateLimitAttempt, requestIpHash } from "./candidateSecurity";
 import { countPublicFormDailyVolume, enforcePublicEmailIpRateLimit, PUBLIC_EMAIL_IP_RATE_LIMITS, publicFormRateLimitSubject, releasePublicEmailIpRateLimit, type PublicFormRateLimitScope } from "./publicFormRateLimit";
 import { createCandidateInvitationToken } from "./candidateAuth";
 import { emailLanguageFor, SITE_LANGUAGES } from "./emailLanguage";
@@ -37,6 +37,7 @@ import { buildCandidatePortalInvitationEmailEvent, candidatePortalAccountMatches
 import { AI_ANALYSIS_BILLING_UNAVAILABLE_ERROR, MANUAL_REVIEW_FALLBACK_MODEL, RECRUITMENT_ANALYSIS_PROMPT_VERSION } from "./recruitmentAnalysis";
 import { medicalQuestionsRouter } from "./medicalQuestionsRouter";
 import { adminSearchCondition, adminSearchInput } from "./adminSearch";
+import { postgresErrorCode } from "./languageColumns";
 import { AdminMfaRateLimitError, issueAdminMfaChallenge, revokeCurrentAdminMfaSession, verifyAdminMfaChallenge } from "./adminMfa";
 import {
   BOOKING_INVALID_NAME_MESSAGE,
@@ -91,23 +92,35 @@ export const PUBLIC_FORM_RATE_LIMITS = {
   // appel ; le compteur par email borne une même identité qui change d’IP.
   bookingIp: { action: "public_booking_create_ip", scope: "ip", maxAttempts: 6, windowMs: 60 * 60 * 1000, blockMs: 60 * 60 * 1000, blockedMessage: BOOKING_RATE_LIMIT_MESSAGE, reason: "rate_limited" },
   bookingEmail: { action: "public_booking_create_email", scope: "email", maxAttempts: 5, windowMs: 60 * 60 * 1000, blockMs: 60 * 60 * 1000, blockedMessage: BOOKING_RATE_LIMIT_MESSAGE, reason: "rate_limited" },
+  // Réservations refusées faute de vérification anti-robot, que les deux
+  // compteurs précédents ne retiennent pas (ABUS-02) : bornées à part, bien
+  // plus haut. Au-delà, ces refus comptent de nouveau dans les deux compteurs
+  // précédents, qui arrêtent un script qui ne la passe jamais avant l’agenda.
+  // Un patient n’en reçoit qu’une par réservation.
+  bookingChallengeIp: { action: "public_booking_challenge_ip", scope: "ip", maxAttempts: 30, windowMs: 60 * 60 * 1000, blockMs: 60 * 60 * 1000, blockedMessage: BOOKING_RATE_LIMIT_MESSAGE, reason: "rate_limited" },
 } as const satisfies Record<string, PublicFormRateLimitPolicy>;
 
+const NO_ATTEMPT_COUNTED = async () => undefined;
+
+/**
+ * Compte un essai et renvoie de quoi le rendre, pour une demande refusée
+ * ensuite sans y être pour rien (vérification anti-robot demandée, ABUS-02).
+ */
 async function enforcePublicFormRateLimit(input: {
   kind: keyof typeof PUBLIC_FORM_RATE_LIMITS;
   email: string;
   headers: Record<string, unknown>;
   remoteIp?: string | null;
-}) {
+}): Promise<() => Promise<void>> {
   // Les tests d’intégration réemploient volontairement les mêmes adresses dans
   // plusieurs scénarios indépendants. La protection persistante reste active
   // dans tous les environnements réels ; ses seuils sont couverts séparément.
-  if (process.env.NODE_ENV === "test" || process.env.VITEST === "true") return;
+  if (process.env.NODE_ENV === "test" || process.env.VITEST === "true") return NO_ATTEMPT_COUNTED;
 
   const ipHash = requestIpHash(input.headers) ?? (input.remoteIp ? hashSecurityValue(input.remoteIp) : null);
   const { scope, blockedMessage, reason, ...policy }: PublicFormRateLimitPolicy = PUBLIC_FORM_RATE_LIMITS[input.kind];
   const subject = publicFormRateLimitSubject(scope, ipHash, input.email);
-  if (!subject) return;
+  if (!subject) return NO_ATTEMPT_COUNTED;
   try {
     await enforcePersistentRateLimit({
       ...policy,
@@ -123,6 +136,7 @@ async function enforcePublicFormRateLimit(input: {
     });
     throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: blockedMessage ?? DEFAULT_PUBLIC_FORM_BLOCKED_MESSAGE, cause: new PublicErrorReason(reason) });
   }
+  return () => releasePersistentRateLimitAttempt({ ...policy, subject });
 }
 
 export const PUBLIC_FORM_SECURITY_CHECK_FAILED_MESSAGE = "La vérification anti-robot a échoué. Rechargez la page, puis renvoyez votre demande.";
@@ -178,9 +192,45 @@ export const BOOKING_PAYMENT_UNAVAILABLE_MESSAGE = "Le service de paiement est m
 
 export const BOOKING_SECURITY_CHECK_MESSAGE = "Pour finaliser cette réservation, effectuez la vérification anti-robot affichée au-dessus du bouton, puis cliquez de nouveau sur « Procéder au paiement ».";
 
+export const BOOKING_SECURITY_CHECK_UNAVAILABLE_MESSAGE = "La vérification anti-robot est momentanément indisponible. Votre créneau n’a pas été réservé : veuillez réessayer dans quelques minutes ou nous contacter.";
+
 /** Refus métier d’une réservation : message français et motif stable que la page traduit (EN-06). */
 function bookingRefusal(code: "BAD_REQUEST" | "CONFLICT" | "UNPROCESSABLE_CONTENT" | "TOO_MANY_REQUESTS" | "SERVICE_UNAVAILABLE" | "PRECONDITION_FAILED", reason: BookingRefusalReason, message: string) {
   return new TRPCError({ code, message, cause: new PublicErrorReason(reason) });
+}
+
+/** Index unique de slot_key : un seul rendez-vous retient un créneau à la fois. */
+const ACTIVE_SLOT_UNIQUE_INDEX = "appointments_active_slot_unique";
+
+/**
+ * Réservation simultanée du même créneau perdue sur son index unique (23505).
+ * drizzle-orm enveloppe l’erreur PostgreSQL dans une DrizzleQueryError
+ * (« Failed query: … ») : le code et le nom de la contrainte sont dans sa
+ * cause, jamais dans son propre texte.
+ */
+function isActiveSlotConflict(error: unknown): boolean {
+  if (postgresErrorCode(error) !== "23505") return false;
+  for (let current: unknown = error, depth = 0; current && typeof current === "object" && depth < 4; depth += 1) {
+    const { code, constraint, message } = current as { code?: unknown; constraint?: unknown; message?: unknown };
+    if (typeof code === "string") return constraint === ACTIVE_SLOT_UNIQUE_INDEX || (typeof message === "string" && message.includes(`"${ACTIVE_SLOT_UNIQUE_INDEX}"`));
+    current = (current as { cause?: unknown }).cause;
+  }
+  return false;
+}
+
+/**
+ * Rendez-vous qui occupent leur créneau, pour la disponibilité publique et le
+ * contrôle de chevauchement : réservation temporaire en cours, ou expirée mais
+ * pas encore libérée (elle garde son slot_key, que l’index unique protège : le
+ * nettoyage ne la libère qu’une fois Stripe sûr que sa session ne sera pas
+ * payée, EXPL-01), rendez-vous confirmé ou payé.
+ */
+function occupiesSlot() {
+  return or(
+    and(eq(appointments.paymentStatus, "pending"), eq(appointments.appointmentStatus, "held"), or(sql`${appointments.holdExpiresAt} > NOW()`, isNotNull(appointments.slotKey))),
+    and(eq(appointments.paymentStatus, "pending"), eq(appointments.appointmentStatus, "confirmed")),
+    and(eq(appointments.paymentStatus, "completed"), inArray(appointments.appointmentStatus, ["confirmed", "completed"])),
+  );
 }
 
 /** Refuse NUL and other control characters (PostgreSQL rejects NUL in text). */
@@ -850,10 +900,8 @@ export const appRouter = router({
         // persistant par IP puis par email avant tout accès à l’agenda.
         const customerEmailKey = input.customerEmail.trim().toLowerCase();
         const rateLimitRequest = { email: customerEmailKey, headers: ctx.req.headers as Record<string, unknown>, remoteIp: ctx.req.ip };
-        await enforcePublicFormRateLimit({ kind: "bookingIp", ...rateLimitRequest });
-        await enforcePublicFormRateLimit({ kind: "bookingEmail", ...rateLimitRequest });
-        // Même règle que les compteurs : les tests d’intégration réservent sans anti-robot.
-        const bookingProtectionsEnabled = process.env.NODE_ENV !== "test" && process.env.VITEST !== "true";
+        const giveBackIpAttempt = await enforcePublicFormRateLimit({ kind: "bookingIp", ...rateLimitRequest });
+        const giveBackEmailAttempt = await enforcePublicFormRateLimit({ kind: "bookingEmail", ...rateLimitRequest });
         const bookingIpHash = requestIpHash(rateLimitRequest.headers) ?? (ctx.req.ip ? hashSecurityValue(ctx.req.ip) : null);
 
         const basePrice = "100.00";
@@ -921,11 +969,7 @@ export const appRouter = router({
               and(
                 sql`appointment_date < ${appointmentEnd}`,
                 sql`appointment_date + (duration * INTERVAL '1 minute') > ${date}`,
-                sql`(
-                  (payment_status = 'pending' AND appointment_status = 'held' AND hold_expires_at > NOW())
-                  OR (payment_status = 'pending' AND appointment_status = 'confirmed')
-                  OR (payment_status = 'completed' AND appointment_status IN ('confirmed', 'completed'))
-                )`
+                occupiesSlot(),
               )
             )
             .limit(1);
@@ -948,33 +992,53 @@ export const appRouter = router({
           // créneaux sont déjà retenus sans paiement ou si cette IP en retient deux.
           const { bookingChallengeRequired, recordBookingHold } = await import("./appointmentHoldAbuse");
           // Un jeton ne se vérifie qu’une fois ; un jeton refusé est journalisé.
-          const passBookingChallenge = async () => {
+          // « unavailable » : Cloudflare n’a pas pu juger le jeton (siteverify
+          // injoignable ou en erreur, secret absent), le patient n’y est pour rien.
+          const passBookingChallenge = async (): Promise<"passed" | "missing" | "refused" | "unavailable"> => {
             try {
               await verifyCandidateTurnstile({ token: input.turnstileToken, remoteIp: ctx.req.ip });
-              return true;
-            } catch {
-              if (input.turnstileToken) {
-                await logSecurityEvent({ actorKind: "anonymous", category: "public_booking_challenge", outcome: "blocked", severity: "warning", ipHash: bookingIpHash }).catch(() => undefined);
-              }
-              return false;
+              return "passed";
+            } catch (error) {
+              if (!input.turnstileToken) return "missing";
+              const refused = error instanceof Error && error.message === "candidate_turnstile_invalid";
+              await logSecurityEvent({ actorKind: "anonymous", category: refused ? "public_booking_challenge" : "public_booking_challenge_unavailable", outcome: refused ? "blocked" : "failed", severity: "warning", ipHash: bookingIpHash }).catch(() => undefined);
+              return refused ? "refused" : "unavailable";
             }
           };
+          // Vérification seulement demandée (pas de jeton) ou impossible : la
+          // réservation ne consomme pas d’essai, le nouvel essai avec son jeton
+          // compte une fois ; ces refus ont leur propre plafond, vérifié avant
+          // de rendre l’essai : au-delà, il reste compté et le compteur par IP
+          // arrête le script avant l’agenda. Un jeton refusé reste compté.
+          // Service anti-robot en panne : refus distinct, pour ne pas renvoyer
+          // en boucle vers la vérification.
+          const challengeRefusal = async (outcome: "missing" | "refused" | "unavailable") => {
+            if (outcome !== "refused") {
+              await enforcePublicFormRateLimit({ kind: "bookingChallengeIp", ...rateLimitRequest });
+              await Promise.all([giveBackIpAttempt(), giveBackEmailAttempt()]).catch(error => console.error("Booking attempt could not be given back:", error instanceof Error ? error.name : "UnknownError"));
+            }
+            return outcome === "unavailable"
+              ? bookingRefusal("SERVICE_UNAVAILABLE", "security_check_unavailable", BOOKING_SECURITY_CHECK_UNAVAILABLE_MESSAGE)
+              : bookingRefusal("PRECONDITION_FAILED", "security_check_required", BOOKING_SECURITY_CHECK_MESSAGE);
+          };
           let bookingChallengePassed = false;
-          if (bookingProtectionsEnabled && await bookingChallengeRequired(db, bookingIpHash)) {
-            if (!await passBookingChallenge()) throw bookingRefusal("PRECONDITION_FAILED", "security_check_required", BOOKING_SECURITY_CHECK_MESSAGE);
+          if (await bookingChallengeRequired(db, bookingIpHash)) {
+            const challenge = await passBookingChallenge();
+            if (challenge !== "passed") throw await challengeRefusal(challenge);
             bookingChallengePassed = true;
           }
           await db.execute(
             sql`INSERT INTO appointments (tracking_id, customer_name, customer_email, customer_phone, consultation_type, request_details, appointment_date, slot_key, duration, base_price, final_price, is_night_rate, payment_status, appointment_status, hold_expires_at, language) VALUES (${trackingId}, ${input.customerName}, ${input.customerEmail}, ${input.customerPhone}, ${'health_advice'}, ${input.requestDetails}, ${appointmentDateFormatted}, ${slotKey}, ${30}, ${basePrice}, ${finalPrice}, ${isNightRate ? 1 : 0}, ${'pending'}, ${'held'}, ${holdExpiresAt}, ${input.language})`
           );
-          if (bookingProtectionsEnabled) {
-            await recordBookingHold(bookingIpHash, trackingId).catch(error => console.error("Booking hold record failed:", error instanceof Error ? error.name : "UnknownError"));
-            // Réservations simultanées : chacune a pu lire l’état d’avant les
-            // autres. Le contrôle est refait, ce maintien compris, avant Stripe ;
-            // sans vérification passée, le créneau est aussitôt libéré.
-            if (!bookingChallengePassed && await bookingChallengeRequired(db, bookingIpHash, { afterOwnHold: true }) && !await passBookingChallenge()) {
+          await recordBookingHold(bookingIpHash, trackingId).catch(error => console.error("Booking hold record failed:", error instanceof Error ? error.name : "UnknownError"));
+          // Réservations simultanées : chacune a pu lire l’état d’avant les
+          // autres. Le contrôle est refait, ce maintien compris, avant Stripe ;
+          // sans vérification passée, le créneau est aussitôt libéré.
+          if (!bookingChallengePassed && await bookingChallengeRequired(db, bookingIpHash, { afterOwnHold: true })) {
+            const challenge = await passBookingChallenge();
+            if (challenge !== "passed") {
               await db.update(appointments).set(getExpiredAppointmentHoldUpdate()).where(and(eq(appointments.trackingId, trackingId), eq(appointments.paymentStatus, "pending"), eq(appointments.appointmentStatus, "held")));
-              throw bookingRefusal("PRECONDITION_FAILED", "security_check_required", BOOKING_SECURITY_CHECK_MESSAGE);
+              throw await challengeRefusal(challenge);
             }
           }
 
@@ -1006,7 +1070,7 @@ export const appRouter = router({
         } catch (dbError) {
           if (dbError instanceof TRPCError) throw dbError;
           console.error("Appointment creation failed:", dbError instanceof Error ? dbError.name : "UnknownError");
-          if (String(dbError).toLowerCase().includes("appointments_active_slot_unique") || String(dbError).toLowerCase().includes("duplicate")) {
+          if (isActiveSlotConflict(dbError)) {
             throw bookingRefusal("CONFLICT", "slot_taken", "Ce créneau vient d’être réservé par un autre patient. Veuillez en choisir un autre.");
           }
           // Jamais de requête SQL ni de message de fournisseur dans la réponse.
@@ -1266,11 +1330,7 @@ export const appRouter = router({
             and(
               gte(appointments.appointmentDate, start),
               lt(appointments.appointmentDate, end),
-              sql`(
-                (payment_status = 'pending' AND appointment_status = 'held' AND hold_expires_at > NOW())
-                OR (payment_status = 'pending' AND appointment_status = 'confirmed')
-                OR (payment_status = 'completed' AND appointment_status IN ('confirmed', 'completed'))
-              )`
+              occupiesSlot(),
             )
           );
 

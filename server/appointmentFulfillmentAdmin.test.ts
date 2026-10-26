@@ -31,6 +31,12 @@ vi.mock("./_core/notifications", async importOriginal => {
       if (state.down.has("owner")) throw new Error("owner_notification_failed");
       state.sent.push({ kind: "owner", to: "owner" });
     }),
+    // Returns false instead of throwing, as the real one.
+    sendRefundConfirmationEmail: vi.fn(async (to: string) => {
+      if (state.down.has("refund")) return false;
+      state.sent.push({ kind: "refund", to });
+      return true;
+    }),
   };
 });
 
@@ -298,6 +304,36 @@ describe("EXPL-02 — encart « À traiter »", () => {
     const paid = seedAppointment("APTTODO00006");
     seedJob(paid.id, "confirmation", { status: "completed", attempts: 1 });
     await expect(admin().attention()).resolves.toEqual({ failedDeliveries: { total: 0, items: [] }, retryingDeliveries: { total: 0, items: [] }, unconfirmedPayments: { total: 0, items: [] } });
+  });
+});
+
+describe("RES-06 — envois d’un remboursement constaté chez Stripe", () => {
+  it("les montre dans « À traiter » et « Renvoyer » ne relance qu’eux sur le rendez-vous remboursé", async () => {
+    const { STRIPE_REFUND_CANCELLATION_REASON } = await import("./appointmentPaymentWebhook");
+    const refunded = seedAppointment("APTREFUND001", { payment_status: "refunded", appointment_status: "cancelled", cancellation_reason: STRIPE_REFUND_CANCELLATION_REASON, refund_amount: "150.00" });
+    seedJob(refunded.id, "invoice", { status: "failed", attempts: 7, max_attempts: 7 });
+    seedJob(refunded.id, "refund", { status: "failed", attempts: 7, max_attempts: 7, last_error: "refund_email_failed" });
+    seedJob(refunded.id, "refund_owner", { status: "retry", attempts: 1, max_attempts: 7, scheduled_for: new Date("2026-10-27T06:20:00Z") });
+
+    const attention = await admin().attention();
+    expect(attention.failedDeliveries.items).toEqual([expect.objectContaining({ trackingId: "APTREFUND001", jobTypes: ["refund"] })]);
+    expect(attention.retryingDeliveries.items).toEqual([expect.objectContaining({ trackingId: "APTREFUND001", jobTypes: ["refund_owner"] })]);
+
+    const result = await admin().appointments.retryFulfillment({ trackingId: "APTREFUND001" });
+    expect(result.requeued).toBe(2);
+    expect(state.sent).toEqual([{ kind: "refund", to: "aptrefund001@example.test" }]);
+    expect(result.deliveries.map(delivery => [delivery.jobType, delivery.state])).toEqual([["invoice", "failed"], ["refund", "sent"], ["refund_owner", "sent"]]);
+    await expect(admin().attention()).resolves.toMatchObject({ failedDeliveries: { total: 0 }, retryingDeliveries: { total: 0 } });
+  });
+
+  it("n’envoie rien pour un remboursement fait depuis le tableau de bord, qui prévient lui-même le patient", async () => {
+    const refunded = seedAppointment("APTREFUND002", { payment_status: "refunded", appointment_status: "cancelled", cancellation_reason: "Annulation / remboursement par le praticien : indisponibilité" });
+    seedJob(refunded.id, "refund");
+
+    await expect(admin().appointments.retryFulfillment({ trackingId: "APTREFUND002" })).rejects.toMatchObject({ code: "PRECONDITION_FAILED" });
+    await processAppointmentFulfillmentNow(refunded.id as number);
+    expect(state.sent).toEqual([]);
+    expect(job(refunded.id, "refund")).toMatchObject({ status: "completed", last_error: "appointment_not_refunded_from_stripe_or_missing" });
   });
 });
 
