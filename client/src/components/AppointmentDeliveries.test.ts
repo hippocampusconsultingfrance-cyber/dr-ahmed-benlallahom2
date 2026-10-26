@@ -163,7 +163,7 @@ describe("EXPL-02 — encart « À traiter » du tableau de bord", () => {
     const onOpenAppointments = vi.fn();
     const html = renderToStaticMarkup(createElement(AdminAttentionPanel, { onOpenAppointments }));
     expect(html).toContain("À traiter");
-    expect(html).toContain("Envois après paiement en échec (3)");
+    expect(html).toContain("Envois au patient ou au médecin en échec (3)");
     expect(html).toContain("APTTODOUI001");
     expect(html).toContain("Confirmation, Facture");
     expect(html).toContain("et 2 autre(s)");

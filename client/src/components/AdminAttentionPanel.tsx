@@ -80,7 +80,7 @@ export default function AdminAttentionPanel({ onOpenAppointments }: { onOpenAppo
         {failed.total > 0 && (
           <AttentionList
             id="admin-attention-deliveries"
-            title="Envois après paiement en échec"
+            title="Envois au patient ou au médecin en échec"
             description="Le patient n’a pas reçu sa confirmation, sa facture ou l’email de son remboursement, ou vous n’avez pas reçu la notification ou l’alerte de remboursement. Sur le rendez-vous : « Renvoyer », ou « Télécharger la facture » pour l’envoyer vous-même."
             total={failed.total}
             items={failed.items.map(item => ({ ...item, detail: jobLabels(item.jobTypes) }))}

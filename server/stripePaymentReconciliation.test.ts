@@ -474,6 +474,10 @@ describe("RES-06 — remboursements et contestations faits dans Stripe", () => {
     // Relivraison de Stripe : rien de plus n’est tenté avant l’heure du nouvel essai.
     expect(await postEvent("charge.refunded", charge())).toEqual({ status: 200, body: { received: true, duplicate: true } });
     expect(emails.sendRefundConfirmationEmail).toHaveBeenCalledTimes(1);
+    // Alerte écrite avant l’email au patient : sa propre clé, que le texte suivant ne réemploie pas (Resend refuserait un autre contenu).
+    const firstAlert = owner.notifyOwner.mock.calls.find(([payload]) => payload.title.startsWith("Remboursement constaté chez Stripe"));
+    expect(firstAlert?.[0].content).toContain("n’est pas encore parti");
+    expect(firstAlert?.[1]).toEqual({ idempotencyKey: `appointment-stripe-refund-${TRACKING_ID}-cancelled-pending` });
 
     // Resend rétabli : « Renvoyer » fait partir les deux, le patient d’abord.
     emails.sendRefundConfirmationEmail.mockResolvedValue(true);
@@ -487,7 +491,7 @@ describe("RES-06 — remboursements et contestations faits dans Stripe", () => {
     expect(alert.title).toBe(`Remboursement constaté chez Stripe (${TRACKING_ID})`);
     expect(alert.content).toContain("(100,00 €)");
     expect(alert.content).toContain("Le patient a été prévenu");
-    expect(options).toEqual({ idempotencyKey: `appointment-stripe-refund-${TRACKING_ID}` });
+    expect(options).toEqual({ idempotencyKey: `appointment-stripe-refund-${TRACKING_ID}-cancelled-notified` });
     expect((await listAppointmentDeliveriesToHandle()).retrying.total).toBe(0);
   });
 

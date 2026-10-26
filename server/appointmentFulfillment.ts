@@ -241,14 +241,19 @@ async function runJob(id: number) {
       // Queued after the patient email: says whether it went out.
       const [patientJob] = await db.select({ status: appointmentFulfillmentJobs.status, lastError: appointmentFulfillmentJobs.lastError }).from(appointmentFulfillmentJobs)
         .where(and(eq(appointmentFulfillmentJobs.appointmentId, appointment.id), eq(appointmentFulfillmentJobs.jobType, "refund"))).limit(1);
+      const patientNotified = patientJob?.status === "completed" && !patientJob.lastError;
       const delivered = await notifyOwner(stripeRefund!.buildStripeRefundAlert({
         trackingId: appointment.trackingId,
         refundAmount: appointment.refundAmount ?? appointment.finalPrice,
         paymentIntentId: appointment.stripePaymentIntentId ?? "non communiqué",
         effect: refundOf === "unconfirmed" ? "unconfirmed_payment" : appointment.appointmentStatus === "cancelled" ? "cancelled" : "status_kept",
         appointmentStatus: appointment.appointmentStatus,
-        patientNotified: patientJob?.status === "completed" && !patientJob.lastError,
-      }), { idempotencyKey: `appointment-stripe-refund-${appointment.trackingId}` }).catch(() => false);
+        patientNotified,
+      }), {
+        // Written at each attempt: one key per wording (status, patient told or
+        // not), as Resend refuses a key reused with another content (409).
+        idempotencyKey: `appointment-stripe-refund-${appointment.trackingId}-${appointment.appointmentStatus}-${patientNotified ? "notified" : "pending"}`,
+      }).catch(() => false);
       if (!delivered) throw new Error("owner_refund_alert_failed");
     } else {
       // Numbered once per paid appointment; a retried job reuses the same
@@ -353,7 +358,7 @@ export async function recoverStaleAppointmentFulfillmentJobs(staleAfterMs = APPO
   if (exhausted > 0) {
     await notifyOwner({
       title: "Envois post-paiement interrompus",
-      content: `${exhausted} envoi(s) après paiement (notification de réservation, confirmation ou facture) ont été interrompus après le nombre maximal de tentatives. Vérifiez dans le tableau de bord les rendez-vous payés sans confirmation et effectuez un envoi manuel si nécessaire.`,
+      content: `${exhausted} envoi(s) après paiement ou remboursement (notification de réservation, confirmation, facture, email ou alerte de remboursement) ont été interrompus après le nombre maximal de tentatives. Vérifiez dans le tableau de bord les rendez-vous concernés (encart « À traiter ») et effectuez un envoi manuel si nécessaire.`,
     }).catch(() => false);
   }
   return { recovered, exhausted };
