@@ -2,7 +2,7 @@ import { deflateSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
 import { candidateDocumentValidationMessage, safeCandidateDocumentName, validateCandidateDocument } from "./candidateDocumentValidation";
 import { DOCUMENT_DECOMPRESSION_LIMITS } from "./documentDecompressionLimits";
-import { classicPdf, libreOfficeChineseCvPdf, libreOfficeCvPdf, packPdfIntoObjectStream, pathologicalPdfs, pngPredict, saveIncrementally, withObjectInStreamData } from "./testing/pdfFixture";
+import { appendWithoutXref, classicPdf, libreOfficeChineseCvPdf, libreOfficeCvPdf, packPdfIntoObjectStream, pathologicalPdfs, pngPredict, saveIncrementally, withObjectInStreamData } from "./testing/pdfFixture";
 
 describe("validation des documents candidats", () => {
   it("nettoie les noms de fichiers et rejette les chemins", () => {
@@ -84,6 +84,9 @@ describe("REC-02 — PDF du coffre : mêmes lectures que pour les CV", () => {
     const rotated = saveIncrementally(scanned, Array.from({ length: 25 }, (_, index) => ({ number: index + 3, body: page(90) })));
     expect(validate(rotated).mimeType).toBe("application/pdf");
     expect(() => validate(saveIncrementally(rotated, [{ number: 2, body: kids(26) }, { number: 28, body: page(0) }]))).toThrow("candidate_document_pdf_page_limit");
+    // 30 pages, 6 of them written again as annotations after %%EOF without an xref, which pdf.js never reads: still 30 pages.
+    const thirty = classicPdf(["<</Type/Catalog/Pages 2 0 R>>", kids(30), ...Array.from({ length: 30 }, () => page(0))]);
+    expect(() => validate(appendWithoutXref(thirty, Array.from({ length: 6 }, (_, index) => ({ number: index + 3, body: "<</Type/Annot/Subtype/Text/Rect[0 0 10 10]>>" }))))).toThrow("candidate_document_pdf_page_limit");
     const xfa = packPdfIntoObjectStream(libreOfficeCvPdf(), { edit: source => source.replace("/PageMode/UseOutlines", "/AcroForm<</Fields[]/XFA 99 0 R>>") });
     expect(() => validate(xfa)).toThrow("candidate_document_pdf_active_content");
   });

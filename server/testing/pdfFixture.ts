@@ -64,6 +64,11 @@ export function saveIncrementally(pdf: Buffer, objects: FixtureObject[]) {
   return Buffer.from(output, "latin1");
 }
 
+/** Appends objects after %%EOF without any xref section or trailer: pdf.js, which follows the xref, never reads them. */
+export function appendWithoutXref(pdf: Buffer, objects: FixtureObject[]) {
+  return Buffer.concat([pdf, Buffer.from(objects.map(object => `${objectText(object)}\n`).join(""), "latin1")]);
+}
+
 /**
  * Appends a stream object, number 90, whose data holds `hidden` after its
  * zlib data, before `endstream`: pdf.js reads an object or an xref section
