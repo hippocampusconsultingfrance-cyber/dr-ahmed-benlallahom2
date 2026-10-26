@@ -28,6 +28,18 @@ export const APPOINTMENT_HOLD_MS = 32 * 60 * 1000;
 export const KEPT_HOLD_RECHECK_MS = 5 * 60 * 1000;
 
 /**
+ * How long another patient's booking waits for the post-payment emails of an
+ * expired hold it confirms (EXPL-01), as the payment status page does: the
+ * owner notification and the paying patient's confirmation go out within it
+ * even when the webhook never comes, and the booking answers within it under
+ * a lasting rate limit of Resend. A job whose turn comes after it does not
+ * start and stays due for the next processing (webhook, scheduled run,
+ * « Renvoyer »); still unsent a few minutes later, it is listed in « À
+ * traiter ». The scheduled cleanup keeps the webhook's budget. Tests shorten it.
+ */
+export const bookingHoldSettlementFulfillment = { timeoutMs: 3_000 };
+
+/**
  * A kept hold's end moves on at each run, so only the age of its booking tells
  * one Stripe has not settled for a day (payment never confirmed, long outage):
  * it is then logged at each run.
@@ -84,7 +96,7 @@ type ExpiredHoldOutcome = "released" | "confirmed" | "kept";
 type ExpiredHold = { id: number; trackingId: string; stripeSessionId: string; createdAt: Date };
 /**
  * `fulfillmentTimeoutMs`: how long the post-payment emails of a paid hold are
- * tried right away (the webhook's budget by default); 0 only queues them.
+ * tried right away (the webhook's budget by default).
  */
 type SettleOptions = { fulfillmentTimeoutMs?: number };
 
@@ -197,9 +209,9 @@ async function settleExpiredHold(db: Database, stripe: () => Stripe, hold: Expir
  * Stripe is only asked about holds whose webhook did not arrive. A hold kept
  * because Stripe could not settle it takes its slot a few more minutes
  * (KEPT_HOLD_RECHECK_MS). Idempotent, so it can safely run from a heartbeat and
- * immediately before a new hold; there, `fulfillmentTimeoutMs: 0` leaves the
- * emails of a hold it confirms to the queue, so another patient's booking never
- * waits for them.
+ * immediately before a new hold; there, a short `fulfillmentTimeoutMs`
+ * (bookingHoldSettlementFulfillment) bounds what another patient's booking
+ * waits for the emails of a hold it confirms.
  */
 export async function releaseExpiredAppointmentHolds(stripe: () => Stripe, now = new Date(), options: SettleOptions = {}) {
   const db = await getDb();

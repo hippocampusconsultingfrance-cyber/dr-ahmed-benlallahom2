@@ -111,10 +111,12 @@ const { createApp } = await import("./_core/index");
 const { appRouter } = await import("./routers");
 const { refundAppointmentPayment } = await import("./appointmentAdminActions");
 const { paymentStatusPageFulfillment } = await import("./appointmentPublicStatus");
-const { KEPT_HOLD_RECHECK_MS } = await import("./appointmentHolds");
+const { KEPT_HOLD_RECHECK_MS, bookingHoldSettlementFulfillment } = await import("./appointmentHolds");
+const { pauseWithinDeadline, waitFitsDeadline } = await import("./processingDeadline");
 const { generateInvoicePDF } = await import("./invoice");
 const { APPOINTMENT_FULFILLMENT_STALE_AFTER_MS, appointmentFulfillmentPacing, closeUnsentAppointmentFulfillment, getAppointmentDeliveries, patientEmailIdempotencyKey, processDueAppointmentFulfillmentJobs, recoverStaleAppointmentFulfillmentJobs } = await import("./appointmentFulfillment");
 const PAGE_FULFILLMENT_TIMEOUT_MS = paymentStatusPageFulfillment.timeoutMs;
+const BOOKING_FULFILLMENT_TIMEOUT_MS = bookingHoldSettlementFulfillment.timeoutMs;
 const signer = new Stripe(process.env.STRIPE_SECRET_KEY!);
 
 let baseUrl = "";
@@ -146,6 +148,7 @@ beforeEach(() => {
   state.stripe.expireCalls.length = 0;
   state.stripe.payWhileClosing = null;
   paymentStatusPageFulfillment.timeoutMs = PAGE_FULFILLMENT_TIMEOUT_MS;
+  bookingHoldSettlementFulfillment.timeoutMs = BOOKING_FULFILLMENT_TIMEOUT_MS;
   // The pause between two jobs (ABUS-03) counts from the last job of the
   // previous test: without it, a page's short wait would depend on test order.
   appointmentFulfillmentPacing.delayMs = 0;
@@ -494,22 +497,36 @@ describe("EXPL-01 — un paiement reçu est confirmé même sans webhook", () =>
     await expect(bookedSlots(slot)).resolves.toEqual([slot]);
   });
 
-  it("une autre réservation confirme le maintien expiré payé sans webhook sans attendre ses envois, que la tâche planifiée fait partir ensuite", async () => {
+  it("une autre réservation confirme le maintien expiré payé sans webhook, prévient aussitôt le médecin et ce patient, et ne les attend que dans un délai borné", async () => {
     const paidSlot = bookableSlot();
     stripeSession();
     seedAppointment({ appointmentDate: paidSlot, slotKey: paidSlot.toISOString(), createdAt: new Date(Date.now() - 33 * 60 * 1000), holdExpiresAt: new Date(Date.now() - 60 * 1000) });
+    bookingHoldSettlementFulfillment.timeoutMs = 1_000;
+    // Limite de débit de Resend qui dure pour la facture : comme le vrai envoi,
+    // un nouvel essai après chaque retry-after (250 ms) tant que le délai le permet.
+    emails.sendInvoiceEmail.mockImplementationOnce(async () => {
+      while (waitFitsDeadline(250)) await pauseWithinDeadline(250);
+      throw new Error("invoice_email_failed:rate_limit_exceeded");
+    });
 
+    const startedAt = Date.now();
     await expect(book(bookableSlot(60))).resolves.toMatchObject({ success: true });
+    expect(Date.now() - startedAt).toBeLessThan(bookingHoldSettlementFulfillment.timeoutMs + 500);
 
-    // Confirmed in the database; its emails stay in the queue, as they were, for the next processing.
+    // Confirmed, and the owner and the paying patient told during the booking;
+    // the invoice, cut short by the budget, is due again without a counted attempt nor an alert.
     expect(appointmentRow()).toMatchObject({ paymentStatus: "completed", appointmentStatus: "confirmed", stripePaymentIntentId: PAYMENT_INTENT, slotKey: paidSlot.toISOString() });
-    expect(db().rows(appointmentFulfillmentJobs).map(job => [job.jobType, job.status, job.attempts])).toEqual([["owner", "queued", 0], ["confirmation", "queued", 0], ["invoice", "queued", 0]]);
-    expect(emails.sendOwnerNotificationEmail).not.toHaveBeenCalled();
-    expect(emails.sendConfirmationEmail).not.toHaveBeenCalled();
-    expect(emails.sendInvoiceEmail).not.toHaveBeenCalled();
+    expect(emails.sendOwnerNotificationEmail).toHaveBeenCalledTimes(1);
+    expect(emails.sendConfirmationEmail).toHaveBeenCalledTimes(1);
+    expect(db().rows(appointmentFulfillmentJobs).map(job => [job.jobType, job.status, job.attempts])).toEqual([["owner", "completed", 1], ["confirmation", "completed", 1], ["invoice", "queued", 0]]);
+    expect(owner.notifyOwner).not.toHaveBeenCalled();
 
+    // No webhook: the scheduled run sends the invoice, and nothing twice.
     expect((await runFulfillment()).status).toBe(200);
-    expectPostPaymentEmailsSentOnce();
+    expect(jobStates()).toEqual([["owner", "completed"], ["confirmation", "completed"], ["invoice", "completed"]]);
+    expect(emails.sendOwnerNotificationEmail).toHaveBeenCalledTimes(1);
+    expect(emails.sendConfirmationEmail).toHaveBeenCalledTimes(1);
+    expect(emails.sendInvoiceEmail).toHaveBeenCalledTimes(2);
   });
 
   it("garde le créneau tant que Stripe ne répond pas : pris quelques minutes, refusé clairement, puis de nouveau réglé avec Stripe", async () => {

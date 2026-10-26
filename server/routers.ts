@@ -931,11 +931,14 @@ export const appRouter = router({
         }
 
         try {
-          const { getAppointmentHoldExpiry, getExpiredAppointmentHoldUpdate, holdWithinCheckoutSession, releaseExpiredAppointmentHolds, stripeExpiresAt } = await import("./appointmentHolds");
+          const { bookingHoldSettlementFulfillment, getAppointmentHoldExpiry, getExpiredAppointmentHoldUpdate, holdWithinCheckoutSession, releaseExpiredAppointmentHolds, stripeExpiresAt } = await import("./appointmentHolds");
           // Un maintien expiré dont la session a pourtant été payée (webhook
           // absent) est confirmé au lieu d’être libéré pour cette réservation ;
-          // ses emails restent en file, ce patient-ci ne les attend pas (EXPL-01).
-          await releaseExpiredAppointmentHolds(getStripeClient, new Date(), { fulfillmentTimeoutMs: 0 });
+          // la notification au médecin et la confirmation de ce patient partent
+          // aussitôt, ce patient-ci ne les attend que quelques secondes au plus
+          // (EXPL-01). Ce qui n’a pas pu partir dans ce délai reste dû pour le
+          // traitement suivant (webhook, tâche planifiée, « Renvoyer »).
+          await releaseExpiredAppointmentHolds(getStripeClient, new Date(), { fulfillmentTimeoutMs: bookingHoldSettlementFulfillment.timeoutMs });
 
           // Plafond de créneaux retenus simultanément par une même adresse
           // (comparaison insensible à la casse) : un patient peut relancer un
