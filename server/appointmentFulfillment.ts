@@ -538,17 +538,20 @@ async function runJob(id: number) {
       // is promised, and when retries are exhausted. It takes its send slot,
       // a pause after the email that failed (ABUS-03).
       const recorded = isRefundNoticeJob(jobType) ? "Le remboursement est bien enregistré" : "Le paiement est bien enregistré";
+      // The invoice storage, not the email service, is named when it kept the invoice from going out.
+      const storage = failedOnInvoiceStorage(message);
+      const cause = storage ? " : sa copie archivée dans le stockage des factures (Vercel Blob) n’a pas pu être vérifiée ou lue, et elle n’est pas refaite à sa place ; vérifiez dans Vercel que le stockage Blob est actif" : "";
       await alertSendSlot();
       await notifyOwner({
         title: `Échec d’envoi après ${isRefundNoticeJob(jobType) ? "remboursement" : "paiement"} (${appointment.trackingId})`,
         content: refused
           ? `L’envoi ${JOB_LABELS[jobType]} du rendez-vous ${appointment.trackingId} a été refusé par le service d’envoi (adresse email du patient refusée ou invalide, ou contenu de l’email refusé). ${recorded}. Ce refus n’est pas passager : vérifiez l’adresse du patient et contactez-le directement. Le site ne le renverra pas de lui-même : corrigez l’adresse sur le rendez-vous (onglet Réservations, « Corriger l’email du patient »), puis « Renvoyer » l’envoie à la nouvelle adresse. ${patientContact(appointment)}`
           : terminal
-            ? `L’envoi ${JOB_LABELS[jobType]} du rendez-vous ${appointment.trackingId} a échoué ${job.attempts} fois. ${recorded} ; un envoi manuel au patient est nécessaire. ${patientContact(appointment)}`
-            : `L’envoi ${JOB_LABELS[jobType]} du rendez-vous ${appointment.trackingId} vient d’échouer (tentative ${job.attempts} sur ${job.maxAttempts}). ${recorded}. Un nouvel essai automatique aura lieu lors de la prochaine exécution planifiée ; en attendant, vous pouvez contacter le patient. ${patientContact(appointment)}`,
+            ? `L’envoi ${JOB_LABELS[jobType]} du rendez-vous ${appointment.trackingId} a échoué ${job.attempts} fois${cause}. ${recorded} ; un envoi manuel au patient est nécessaire. ${patientContact(appointment)}`
+            : `L’envoi ${JOB_LABELS[jobType]} du rendez-vous ${appointment.trackingId} vient d’échouer (tentative ${job.attempts} sur ${job.maxAttempts})${cause}. ${recorded}. Un nouvel essai automatique aura lieu lors de la prochaine exécution planifiée ; en attendant, vous pouvez contacter le patient. ${patientContact(appointment)}`,
       }, {
         // One key per wording: a refusal may follow a first failure of the same job.
-        idempotencyKey: `appointment-${jobType}-failure-${appointment.trackingId}-${refused ? "refused" : terminal ? "final" : "first"}`,
+        idempotencyKey: `appointment-${jobType}-failure-${appointment.trackingId}-${refused ? "refused" : terminal ? "final" : "first"}${storage ? "-storage" : ""}`,
       }).catch(() => false);
     }
     return { completed: false, retry: !terminal };
@@ -709,6 +712,15 @@ export type AppointmentDelivery = {
   failureCause: "invoice_storage" | null;
 };
 
+/**
+ * A job that did not go out because of the invoice storage (Vercel Blob), not
+ * the email service: the copy stored at the invoice's issue could not be
+ * checked or read, and the invoice is not rebuilt in its place (EXPL-02).
+ */
+function failedOnInvoiceStorage(lastError: string | null | undefined) {
+  return Boolean(lastError?.startsWith("storage_"));
+}
+
 /** Same rule as recoverStaleAppointmentFulfillmentJobs: no worker runs that long. */
 function isInterruptedJob(job: Pick<FulfillmentJob, "status" | "startedAt">, now: Date) {
   return job.status === "running" && job.startedAt !== null && job.startedAt.getTime() <= now.getTime() - APPOINTMENT_FULFILLMENT_STALE_AFTER_MS;
@@ -727,7 +739,7 @@ function deliveryOf(job: FulfillmentJob, now: Date): AppointmentDelivery {
     notSentReason: state !== "not_sent" ? null
       : job.lastError === "appointment_already_past_confirmation_skipped" ? "appointment_past"
       : job.lastError === PATIENT_DATA_ERASED ? "patient_data_erased" : "not_paid",
-    failureCause: (state === "retrying" || state === "failed") && job.lastError?.startsWith("storage_") ? "invoice_storage" : null,
+    failureCause: (state === "retrying" || state === "failed") && failedOnInvoiceStorage(job.lastError) ? "invoice_storage" : null,
   };
 }
 
@@ -864,6 +876,8 @@ export async function closeErasedPatientFulfillment(appointmentIds: number[], no
  * one may only come with the next scheduled run, days before the attempts run
  * out. « waiting »: not attempted yet, due for APPOINTMENT_FULFILLMENT_WAITING_AFTER_MS
  * (see there). Refunded appointments too, for the notices of their refund (RES-06).
+ * `invoiceStorage`: a failed or retrying email of the appointment did not go
+ * out because of the invoice storage, not the email service.
  */
 export async function listAppointmentDeliveriesToHandle(limit = 20, now = new Date()) {
   const db = await getDb();
@@ -898,8 +912,10 @@ export async function listAppointmentDeliveriesToHandle(limit = 20, now = new Da
   const retrying = new Map<number, { jobTypes: FulfillmentJobType[]; nextAttemptAt: Date | null }>();
   // Earliest moment a job still waiting for its first attempt was due.
   const waiting = new Map<number, { jobTypes: FulfillmentJobType[]; dueSince: Date }>();
+  const invoiceStorage = new Set<number>();
   for (const job of jobs) {
     const jobType = job.jobType as FulfillmentJobType;
+    if (failedOnInvoiceStorage(job.lastError) && (job.status === "failed" || job.status === "retry")) invoiceStorage.add(job.appointmentId);
     if (job.status === "failed") {
       const group = isRefusedJob(job) ? refused : failed;
       group.set(job.appointmentId, [...(group.get(job.appointmentId) ?? []), jobType]);
@@ -923,11 +939,11 @@ export async function listAppointmentDeliveriesToHandle(limit = 20, now = new Da
   const page = <T>(items: T[]) => ({ total: items.length, items: items.slice(0, limit) });
   // Appointments oldest first; each one's emails in processing order (notification, confirmation, invoice…).
   const inJobOrder = (jobTypes: FulfillmentJobType[]) => [...jobTypes].sort((a, b) => JOB_ORDER.indexOf(a) - JOB_ORDER.indexOf(b));
-  const withJobTypes = (group: Map<number, FulfillmentJobType[]>) => page(Array.from(group.entries()).map(([appointmentId, jobTypes]) => ({ ...byId.get(appointmentId)!.appointment, jobTypes: inJobOrder(jobTypes) })));
+  const withJobTypes = (group: Map<number, FulfillmentJobType[]>) => page(Array.from(group.entries()).map(([appointmentId, jobTypes]) => ({ ...byId.get(appointmentId)!.appointment, jobTypes: inJobOrder(jobTypes), invoiceStorage: invoiceStorage.has(appointmentId) })));
   return {
     failed: withJobTypes(failed),
     refused: withJobTypes(refused),
-    retrying: page(Array.from(retrying.entries()).map(([appointmentId, delivery]) => ({ ...byId.get(appointmentId)!.appointment, ...delivery, jobTypes: inJobOrder(delivery.jobTypes) }))),
+    retrying: page(Array.from(retrying.entries()).map(([appointmentId, delivery]) => ({ ...byId.get(appointmentId)!.appointment, ...delivery, jobTypes: inJobOrder(delivery.jobTypes), invoiceStorage: invoiceStorage.has(appointmentId) }))),
     waiting: page(Array.from(waiting.entries()).map(([appointmentId, delivery]) => ({ ...byId.get(appointmentId)!.appointment, ...delivery, jobTypes: inJobOrder(delivery.jobTypes) }))),
   };
 }

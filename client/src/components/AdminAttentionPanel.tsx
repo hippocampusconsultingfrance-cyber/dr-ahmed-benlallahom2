@@ -2,14 +2,21 @@ import { AlertTriangle, CheckCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { trpc } from "@/lib/trpc";
 import PublicContentSkeleton from "@/components/PublicContentSkeleton";
-import { DELIVERY_JOB_LABELS, PATIENT_JOBS, type AppointmentDeliveryJob } from "./AppointmentDeliveries";
+import { DELIVERY_JOB_LABELS, INVOICE_STORAGE_CAUSE, PATIENT_JOBS, type AppointmentDeliveryJob } from "./AppointmentDeliveries";
 
 const parisTime = (date: string | Date) => new Date(date).toLocaleString("fr-FR", { timeZone: "Europe/Paris" });
 const jobLabels = (jobTypes: string[]) => jobTypes.map(jobType => DELIVERY_JOB_LABELS[jobType as AppointmentDeliveryJob] ?? jobType).join(", ");
+/** The invoice storage, named when it kept an email from going out (EXPL-02). */
+const storageCause = (item: { invoiceStorage?: boolean }) => (item.invoiceStorage ? ` · ${INVOICE_STORAGE_CAUSE}` : "");
+
+/** « Facture · en échec » with its cause, when the invoice storage is the one. */
+export function failedDetail(item: { jobTypes: string[]; invoiceStorage?: boolean }): string {
+  return `${jobLabels(item.jobTypes)}${storageCause(item)}`;
+}
 
 /** « Facture · nouvel essai automatique au plus tôt le … », or interrupted, waiting for the next scheduled run. */
-export function retryingDetail(item: { jobTypes: string[]; nextAttemptAt: string | Date | null }): string {
-  return `${jobLabels(item.jobTypes)} · ${item.nextAttemptAt ? `nouvel essai automatique au plus tôt le ${parisTime(item.nextAttemptAt)}` : "envoi interrompu, nouvel essai à la prochaine exécution planifiée"}`;
+export function retryingDetail(item: { jobTypes: string[]; nextAttemptAt: string | Date | null; invoiceStorage?: boolean }): string {
+  return `${jobLabels(item.jobTypes)} · ${item.nextAttemptAt ? `nouvel essai automatique au plus tôt le ${parisTime(item.nextAttemptAt)}` : "envoi interrompu, nouvel essai à la prochaine exécution planifiée"}${storageCause(item)}`;
 }
 
 /**
@@ -108,7 +115,7 @@ export default function AdminAttentionPanel({ onOpenAppointments }: { onOpenAppo
             title="Envois au patient ou au médecin en échec"
             description="Le patient n’a pas reçu sa confirmation, sa facture ou l’email de son remboursement, ou vous n’avez pas reçu la notification ou l’alerte de remboursement. Sur le rendez-vous : « Renvoyer », ou « Télécharger la facture » pour l’envoyer vous-même."
             total={failed.total}
-            items={failed.items.map(item => ({ ...item, detail: jobLabels(item.jobTypes) }))}
+            items={failed.items.map(item => ({ ...item, detail: failedDetail(item) }))}
           />
         )}
         {refused.total > 0 && (

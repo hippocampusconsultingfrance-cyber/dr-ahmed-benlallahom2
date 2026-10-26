@@ -82,6 +82,7 @@ import { appRouter } from "./routers";
 import { allocateAppointmentInvoice, APPOINTMENT_INVOICE_SCHEMA_OBJECTS } from "./invoiceNumbering";
 import { APPOINTMENT_FULFILLMENT_MAX_ATTEMPTS, enqueueAppointmentFulfillment, processAppointmentFulfillmentNow } from "./appointmentFulfillment";
 import { anonymisedAppointmentFields } from "./personalDataRetention";
+import { notifyOwner } from "./_core/notification";
 
 const dialect = new PgDialect();
 let memory: MemoryPg;
@@ -451,8 +452,11 @@ describe("EXPL-02 — « Télécharger la facture »", () => {
     const retried = await admin().appointments.retryFulfillment({ trackingId: "APTINVFIX006" });
     expect(state.sent).toEqual([]);
     expect(job(paid.id, "invoice")).toMatchObject({ status: "retry", attempts: 1 });
-    // The storage, not the email service, kept it from going out.
+    // The storage, not the email service, kept it from going out: the card and the owner alert say so.
     expect(retried.deliveries.find(delivery => delivery.jobType === "invoice")).toMatchObject({ state: "retrying", failureCause: "invoice_storage" });
+    expect(vi.mocked(notifyOwner)).toHaveBeenLastCalledWith(expect.objectContaining({
+      content: expect.stringContaining("vient d’échouer (tentative 1 sur 7) : sa copie archivée dans le stockage des factures (Vercel Blob) n’a pas pu être vérifiée ou lue, et elle n’est pas refaite à sa place"),
+    }), { idempotencyKey: "appointment-invoice-failure-APTINVFIX006-first-storage" });
     expect(blobStore.uploads).toHaveLength(1);
 
     blobStore.unavailable = false;
@@ -607,7 +611,7 @@ describe("EXPL-02 — encart « À traiter »", () => {
 
     expect(attention.failedDeliveries).toEqual({
       total: 1,
-      items: [{ trackingId: "APTTODO00001", customerName: "Alice Martin", appointmentDate: expect.any(Date), jobTypes: ["confirmation", "invoice"] }],
+      items: [{ trackingId: "APTTODO00001", customerName: "Alice Martin", appointmentDate: expect.any(Date), jobTypes: ["confirmation", "invoice"], invoiceStorage: false }],
     });
     expect(attention.retryingDeliveries).toEqual({ total: 0, items: [] });
     expect(attention.unconfirmedPayments).toEqual({
@@ -630,15 +634,19 @@ describe("EXPL-02 — encart « À traiter »", () => {
     seedJob(refunded.id, "confirmation", { status: "retry", attempts: 1 });
     const queued = seedAppointment("APTTODO00011");
     seedJob(queued.id, "confirmation");
+    // Kept from going out by the invoice storage (Vercel Blob), not the email service.
+    const storage = seedAppointment("APTTODO00013", { customer_name: "Emma Petit" });
+    seedJob(storage.id, "invoice", { status: "retry", attempts: 1, last_error: "storage_check_failed", scheduled_for: new Date("2026-10-27T06:20:00Z") });
 
     const attention = await admin().attention();
 
     expect(attention.failedDeliveries).toEqual({ total: 0, items: [] });
     expect(attention.retryingDeliveries).toEqual({
-      total: 2,
+      total: 3,
       items: [
-        { trackingId: "APTTODO00007", customerName: "Chloé Durand", appointmentDate: expect.any(Date), jobTypes: ["confirmation", "invoice"], nextAttemptAt: new Date("2026-10-26T18:00:00Z") },
-        { trackingId: "APTTODO00008", customerName: "David Roux", appointmentDate: expect.any(Date), jobTypes: ["confirmation"], nextAttemptAt: null },
+        { trackingId: "APTTODO00007", customerName: "Chloé Durand", appointmentDate: expect.any(Date), jobTypes: ["confirmation", "invoice"], nextAttemptAt: new Date("2026-10-26T18:00:00Z"), invoiceStorage: false },
+        { trackingId: "APTTODO00008", customerName: "David Roux", appointmentDate: expect.any(Date), jobTypes: ["confirmation"], nextAttemptAt: null, invoiceStorage: false },
+        { trackingId: "APTTODO00013", customerName: "Emma Petit", appointmentDate: expect.any(Date), jobTypes: ["invoice"], nextAttemptAt: new Date("2026-10-27T06:20:00Z"), invoiceStorage: true },
       ],
     });
   });
