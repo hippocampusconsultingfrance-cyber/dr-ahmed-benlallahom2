@@ -12,6 +12,7 @@ import { clerkMiddleware } from "@clerk/express";
 import { assertCriticalProductionEnvironment, clerkPublishableKey } from "./env";
 import { registerHealthRoute } from "./health";
 import { requireVercelCron } from "./cronAuth";
+import { runMonitoredScheduledJob } from "./scheduledJobMonitor";
 import { secureReference } from "./secureReference";
 import { registerGoogleDriveOAuthRoutes } from "../googleDriveOAuthRoutes";
 import { registerStorageProxy } from "./storageProxy";
@@ -860,13 +861,15 @@ export async function createApp() {
   //   `Authorization: Bearer ${CRON_SECRET}`, checked in constant time by requireVercelCron;
   // - POST, the legacy Manus Heartbeat callback authenticated by the platform SDK,
   //   kept for compatibility (it never fires on Vercel).
+  // Each run, once authenticated, pings its external monitor (EXPL-03, see
+  // scheduledJobMonitor.ts): the URL on success, the URL + /fail on failure.
   type ScheduledTrigger = { scheduler: "vercel-cron" } | { scheduler: "heartbeat"; taskUid: string };
   type ScheduledJobResult = { httpStatus?: number } & Record<string, unknown>;
 
   function registerScheduledJob(path: string, label: string, run: (trigger: ScheduledTrigger) => Promise<ScheduledJobResult>) {
     app.get(path, requireVercelCron, async (_req, res) => {
       try {
-        const { httpStatus, ...result } = await run({ scheduler: "vercel-cron" });
+        const { httpStatus, ...result } = await runMonitoredScheduledJob(path, () => run({ scheduler: "vercel-cron" }));
         if (httpStatus) return res.status(httpStatus).json(result);
         return res.json({ ok: true, scheduler: "vercel-cron", ...result });
       } catch (error) {
@@ -879,7 +882,8 @@ export async function createApp() {
         const { sdk: sdkInstance } = await import("./sdk");
         const user = await sdkInstance.authenticateRequest(req);
         if (!user.isCron || !user.taskUid) return res.status(403).json({ error: "cron-only" });
-        const { httpStatus, ...result } = await run({ scheduler: "heartbeat", taskUid: user.taskUid });
+        const taskUid = user.taskUid;
+        const { httpStatus, ...result } = await runMonitoredScheduledJob(path, () => run({ scheduler: "heartbeat", taskUid }));
         if (httpStatus) return res.status(httpStatus).json(result);
         return res.json({ ok: true, taskUid: user.taskUid, ...result });
       } catch (error) {
@@ -909,7 +913,7 @@ export async function createApp() {
       // Drains every queue within a time budget: confirmation-email retries and
       // Drive copies first, then CV analyses (none started after ~25 s).
       const { runRecruitmentProcessingWorker } = await import("../recruitmentProcessingWorker");
-      const summary = await runRecruitmentProcessingWorker();
+      const summary = await runMonitoredScheduledJob("/api/scheduled/recruitment-processing", () => runRecruitmentProcessingWorker());
       console.info("[RecruitmentProcessing] Vercel cron summary", {
         elapsedMs: summary.elapsedMs,
         analysisRecovery: summary.analysisRecovery,
@@ -934,14 +938,17 @@ export async function createApp() {
       const { backfillLegacyCvAnalysisJobs, processDueCvAnalysisJobs, recoverStaleCvAnalysisJobs } = await import("../recruitmentProcessing");
       const { backfillCvGoogleDriveExportJobs, processDueCvGoogleDriveExports, recoverStaleCvGoogleDriveExportJobs } = await import("../googleDriveExport");
       const { retryDueFailedCvConfirmationEmails } = await import("../recruitmentEmailTrace");
-      const analysisRecovery = await recoverStaleCvAnalysisJobs();
-      const driveRecovery = await recoverStaleCvGoogleDriveExportJobs();
-      const analysisBackfill = await backfillLegacyCvAnalysisJobs(2);
-      const driveBackfill = await backfillCvGoogleDriveExportJobs(2);
-      const analysis = await processDueCvAnalysisJobs(2);
-      const driveExports = await processDueCvGoogleDriveExports(2);
-      const confirmationEmails = await retryDueFailedCvConfirmationEmails(2);
-      return res.json({ ok: true, taskUid: user.taskUid, analysisRecovery, driveRecovery, analysisBackfill, driveBackfill, analysis, driveExports, confirmationEmails });
+      const result = await runMonitoredScheduledJob("/api/scheduled/recruitment-processing", async () => {
+        const analysisRecovery = await recoverStaleCvAnalysisJobs();
+        const driveRecovery = await recoverStaleCvGoogleDriveExportJobs();
+        const analysisBackfill = await backfillLegacyCvAnalysisJobs(2);
+        const driveBackfill = await backfillCvGoogleDriveExportJobs(2);
+        const analysis = await processDueCvAnalysisJobs(2);
+        const driveExports = await processDueCvGoogleDriveExports(2);
+        const confirmationEmails = await retryDueFailedCvConfirmationEmails(2);
+        return { analysisRecovery, driveRecovery, analysisBackfill, driveBackfill, analysis, driveExports, confirmationEmails };
+      });
+      return res.json({ ok: true, taskUid: user.taskUid, ...result });
     } catch (error) {
       return sendScheduledJobFailure(res, "[RecruitmentProcessing] Handler error", error);
     }
