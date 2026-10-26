@@ -91,7 +91,7 @@ describe("ADM-02 — champ de recherche", () => {
     const props = { id: "test-search", label: "Recherche", placeholder: "Nom, email ou référence", onChange, onClear };
 
     const empty = renderToStaticMarkup(createElement(AdminSearchField, { ...props, value: "" }));
-    expect(empty).toContain('<label for="test-search">Recherche</label>');
+    expect(empty).toContain('<label for="test-search" class="block">Recherche</label>');
     expect(empty).toContain(`maxLength="${ADMIN_SEARCH_MAX_LENGTH}"`);
     expect(empty).toContain('role="searchbox"');
     expect(empty).not.toContain("Effacer la recherche");
