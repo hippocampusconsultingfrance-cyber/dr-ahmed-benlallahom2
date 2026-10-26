@@ -92,6 +92,14 @@ describe("export de la shortlist d’une mission (REC-01)", () => {
     expect(exportButton()).toMatchObject({ disabled: false, label: "Exporter la shortlist (3)" });
   });
 
+  it("compte les seuls candidats qui ont donné leur accord, ceux que le fichier contiendra (RGPD-03)", () => {
+    state.shortlistedCount = 2;
+    state.consentedCount = 1;
+    expect(exportButton()).toMatchObject({ disabled: false, label: "Exporter la shortlist (1)" });
+    state.consentedCount = 0;
+    expect(exportButton()).toMatchObject({ disabled: true, label: "Exporter la shortlist (0)" });
+  });
+
   it("garde le nombre dans chaque langue de l’administration", () => {
     state.shortlistedCount = 2;
     state.language = "en";

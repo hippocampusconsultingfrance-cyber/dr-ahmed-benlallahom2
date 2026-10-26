@@ -24,8 +24,11 @@ export function recruitmentFactNameContains(name: string, search: string) {
   return term.length > 0 && comparable(name).includes(term);
 }
 
-/** « Licence DHA (extraite du CV par l’IA) », origins in the order above. */
-export function recruitmentFactLabel(fact: RecruitmentFact) {
+/** The fact with its origins, in the order above, named by `labels` (a screen translated into the admin's language). */
+export function recruitmentFactLabelWith(fact: RecruitmentFact, labels: Record<RecruitmentFactOrigin, string>) {
   const origins = RECRUITMENT_FACT_ORIGINS.filter(origin => fact.origins.includes(origin));
-  return origins.length ? `${fact.name} (${origins.map(origin => RECRUITMENT_FACT_ORIGIN_LABELS[origin]).join(", ")})` : fact.name;
+  return origins.length ? `${fact.name} (${origins.map(origin => labels[origin]).join(", ")})` : fact.name;
 }
+
+/** « Licence DHA (extraite du CV par l’IA) », origins in the order above. */
+export const recruitmentFactLabel = (fact: RecruitmentFact) => recruitmentFactLabelWith(fact, RECRUITMENT_FACT_ORIGIN_LABELS);

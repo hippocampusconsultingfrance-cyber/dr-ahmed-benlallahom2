@@ -25,6 +25,7 @@ vi.mock("react", async importOriginal => {
 });
 
 const state = vi.hoisted(() => ({
+  language: "fr" as "fr" | "en" | "de" | "zh",
   data: null as null | Record<string, unknown>,
   inputs: [] as Array<Record<string, unknown>>,
   consentOptions: null as null | MutationOptions,
@@ -36,7 +37,7 @@ const state = vi.hoisted(() => ({
 }));
 
 const idle = () => ({ mutate: vi.fn(), isPending: false });
-vi.mock("@/contexts/LanguageContext", () => ({ useLanguage: () => ({ language: "fr" }) }));
+vi.mock("@/contexts/LanguageContext", () => ({ useLanguage: () => ({ language: state.language }) }));
 vi.mock("sonner", () => ({ toast: Object.fromEntries(["success", "error"].map(kind => [kind, (message: string) => state.toasts.push([kind, message])])) }));
 vi.mock("./recruitmentCsvDownload", () => ({ downloadRecruitmentCsv: vi.fn() }));
 vi.mock("./Candidate360Dialog", () => ({ default: function Candidate360Dialog() { return null; } }));
@@ -105,6 +106,7 @@ function control(tree: ReactNode, label: string, handler = "onClick") {
 beforeEach(() => {
   vi.useFakeTimers({ now: new Date("2026-10-26T10:00:00.000Z"), toFake: ["Date"] });
   hooks.values = [];
+  state.language = "fr";
   state.data = missionData();
   state.inputs = [];
   state.consentMutate.mockClear();
@@ -126,11 +128,11 @@ describe("écran d’une mission employeur", () => {
     expect(dateInput).toContain('max="2026-10-26"');
 
     // The agreement came by email two days ago: the admin changes the date, then records it.
-    const dateField = elements(render()).find(element => element.type === "label" && renderToStaticMarkup(element).includes("Date de l’accord"))!;
-    (elements(dateField).find(element => element.props.type === "date")!.props.onChange as (event: unknown) => void)({ target: { value: "2026-10-24" } });
-    control(render(), "Accord du candidat reçu")();
+    // Each control names its candidate.
+    control(render(), "Date de l’accord — Amal Haddad", "onChange")({ target: { value: "2026-10-24" } });
+    control(render(), "Accord du candidat reçu — Amal Haddad")();
     expect(state.consentMutate).toHaveBeenCalledWith({ briefId: 7, applicationId: 11, consentDate: "2026-10-24" });
-    control(render(), "Retirer l’accord")();
+    control(render(), "Retirer l’accord — Jean Martin")();
     expect(state.consentMutate).toHaveBeenLastCalledWith({ briefId: 7, applicationId: 12, consentDate: null });
 
     await state.consentOptions!.onSuccess?.({ success: true }, { consentDate: "2026-10-24" } as never);
@@ -153,7 +155,7 @@ describe("écran d’une mission employeur", () => {
 
   it("demande au serveur une compatibilité minimale et l’état de présélection, depuis la première page (ADM-04)", () => {
     const html = renderToStaticMarkup(render());
-    expect(html).toContain("Classement calculé sur les 2000 dossiers ouverts les plus récents (sur 2500).");
+    expect(html).toContain("Classement calculé sur 2000 des 2500 dossiers ouverts : les plus récents et ceux déjà associés à cette mission.");
     expect(state.inputs.at(-1)).toMatchObject({ briefId: 1, page: 0, minimumMatch: 0, shortlist: "all" });
 
     control(render(), "50 et plus", "onChange")({ target: { value: "50" } });
@@ -169,6 +171,35 @@ describe("écran d’une mission employeur", () => {
     expect(filtered).not.toContain("Classement calculé sur");
   });
 
+  it("suit la page renvoyée par le serveur quand celle demandée s’est vidée (ADM-04)", () => {
+    state.data = missionData({ pagination: { page: 1, limit: 25, total: 51, totalPages: 3 } });
+    control(render(), "Suivant")();
+    render();
+    expect(state.inputs.at(-1)).toMatchObject({ page: 2 });
+    // Two candidates left the list: the server returns the last page, the second.
+    state.data = missionData({ pagination: { page: 1, limit: 25, total: 49, totalPages: 2 } });
+    const html = renderToStaticMarkup(render());
+    expect(html).toContain("Page 2 sur 2 · 49 profil(s) à examiner");
+    control(render(), "Précédent")();
+    render();
+    expect(state.inputs.at(-1)).toMatchObject({ page: 0 });
+  });
+
+  it.each([
+    ["en", ["Minimum compatibility", "Already shortlisted", "Ranking computed on 2000 of 2500 open applications", "Candidate’s agreement received on 20/10/2026 for this mission.", "Candidate’s agreement for this mission not recorded", "1 of 2 with the candidate’s agreement: only those are exported.", "Export shortlist (1)"], "CV of Amal Haddad", "1 candidate(s) left out for lack of agreement."],
+    ["de", ["Mindestkompatibilität", "Bereits auf der Shortlist", "Rangfolge berechnet für 2000 von 2500 offenen Bewerbungen", "Zustimmung des Kandidaten für diese Mission am 20.10.2026 erhalten.", "1 von 2 mit Zustimmung des Kandidaten", "Shortlist exportieren (1)"], "Lebenslauf von Amal Haddad", "1 Kandidat(en) mangels Zustimmung ausgeschlossen."],
+    ["zh", ["最低匹配度", "已列入名单", "排名基于 2500 份未结申请中的 2000 份", "已于 2026/10/20 收到候选人对此任务的同意。", "2 人中有 1 人已同意", "导出候选名单 (1)"], "Amal Haddad 的简历", "1 名候选人因未同意而被排除。"],
+  ] as const)("écrit l’écran de la mission dans la langue de l’administration (%s)", async (language, texts, cvLabel, excluded) => {
+    state.language = language;
+    const html = renderToStaticMarkup(render());
+    for (const text of texts) expect(html).toContain(text);
+    expect(html).not.toContain("Accord du candidat");
+    control(render(), cvLabel)();
+    expect(state.cvMutate).toHaveBeenCalledWith({ id: 11 });
+    await state.exportOptions!.onSuccess?.({ filename: "shortlist.csv", csv: "x", count: 1, excludedWithoutConsent: 1 }, {} as never);
+    expect(state.toasts.at(-1)![1]).toMatch(new RegExp(`${excluded.replace(/[()]/g, "\\$&")}$`));
+  });
+
   it("montre pourquoi une certification ne compte pas encore (IA-02)", () => {
     expect(renderToStaticMarkup(render())).toContain("certification à confirmer : Licence DHA (extraite du CV par l’IA) — aucun point tant que l’admin ne l’a pas confirmée");
   });
@@ -178,6 +209,8 @@ describe("écran d’une mission employeur", () => {
     let html = renderToStaticMarkup(render());
     expect(html).toContain("1 sur 2 avec l’accord du candidat : seuls ceux-là sont exportés.");
     expect(exportButton(html)[1]).not.toMatch(/\sdisabled=""/);
+    // The button counts what the file will carry: the candidates who agreed (REC-01).
+    expect(exportButton(html)[2]!.replace(/<[^>]+>/g, "")).toBe("Exporter la shortlist (1)");
 
     await state.exportOptions!.onSuccess?.({ filename: "shortlist.csv", csv: "x", count: 1, excludedWithoutConsent: 1 }, {} as never);
     expect(state.toasts).toContainEqual(["success", "1 profil(s) de shortlist exporté(s). L’export est journalisé. 1 candidat(s) exclu(s) faute d’accord."]);
