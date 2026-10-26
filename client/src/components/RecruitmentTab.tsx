@@ -409,14 +409,18 @@ export default function RecruitmentTab() {
         <div className="py-8 text-center text-red-400">Erreur de chargement : {error.message}</div>
       ) : isLoading ? (
         <PublicContentSkeleton label="Chargement des candidatures" />
-      ) : applications.length ? (
+      ) : (
+        <div className="space-y-3">
+        {/* Above the list and the empty state alike: when no dossier within the limit
+            matches the profile, the ones that might are beyond it. */}
+        {profileScanLimit ? (
+          <p className="text-sm font-medium text-amber-700 dark:text-amber-300">
+            Profil appliqué aux {profileScanLimit.toLocaleString("fr-FR")} premières candidatures de la liste seulement : ajoutez un filtre (statut, spécialité, pays) pour qu’il porte sur toutes.
+          </p>
+        ) : null}
+        {applications.length ? (
         <div className="space-y-3">
           <p className="break-words text-sm text-muted-foreground [overflow-wrap:anywhere]">{adminListCount(applications.length, total, "candidature(s)")}{search ? ` pour « ${search} »` : ""}</p>
-          {profileScanLimit ? (
-            <p className="text-sm font-medium text-amber-700 dark:text-amber-300">
-              Profil appliqué aux {profileScanLimit.toLocaleString("fr-FR")} premières candidatures de la liste seulement : ajoutez un filtre (statut, spécialité, pays) pour qu’il porte sur toutes.
-            </p>
-          ) : null}
           {listedApplications.items.map((application, index) => {
             const countries = parseJsonList(application.targetCountries);
             const languages = parseJsonList(application.languages);
@@ -687,6 +691,8 @@ export default function RecruitmentTab() {
         <div className="rounded-xl border border-dashed border-border px-4 py-16 text-center text-muted-foreground break-words [overflow-wrap:anywhere]">
           <FileSearch className="mx-auto mb-3 h-8 w-8" />
           {search ? `Aucune candidature ne correspond à « ${search} » avec ces filtres.` : "Aucune candidature ne correspond aux filtres."}
+        </div>
+        )}
         </div>
       )}
 
