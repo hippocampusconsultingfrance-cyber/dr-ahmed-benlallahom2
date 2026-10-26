@@ -18,6 +18,13 @@ const MAX_BATCH = 5;
 export const APPOINTMENT_FULFILLMENT_STALE_AFTER_MS = 15 * 60_000;
 
 /**
+ * Pause between two jobs of a batch (ABUS-03): the owner notification, the
+ * confirmation and the invoice of one payment would otherwise reach Resend in
+ * the same second, above its per-second rate limit. Mutable for tests.
+ */
+export const appointmentFulfillmentPacing = { delayMs: 600 };
+
+/**
  * Independent jobs, processed in this order: the owner learns about the paid
  * booking first, even when the patient email or the invoice fails.
  */
@@ -219,6 +226,7 @@ export async function processDueAppointmentFulfillmentJobs(limit = MAX_BATCH, op
     .orderBy(appointmentFulfillmentJobs.scheduledFor, appointmentFulfillmentJobs.id).limit(Math.min(Math.max(1, limit), MAX_BATCH));
   const results = [];
   for (const job of jobs) {
+    if (results.length > 0) await new Promise(resolve => setTimeout(resolve, appointmentFulfillmentPacing.delayMs));
     if (!(await claimFulfillmentJob(db, job))) continue;
     results.push(await runJob(job.id));
   }

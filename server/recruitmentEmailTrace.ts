@@ -8,6 +8,7 @@ import { emailLanguageFor } from "./emailLanguage";
 import {
   sendCvApplicationConfirmationEmail,
   type CvApplicationConfirmationDelivery,
+  type ResendDeliveryFailureCode,
 } from "./_core/notifications";
 
 export type TrackedCvConfirmationInput = {
@@ -38,14 +39,14 @@ type CvConfirmationAttemptPayload = {
 type CandidatePortalInvitationAttemptPayload = {
   kind: "candidate_portal_invitation";
   outcome?: "sent" | "failed" | "unknown";
-  failureCode?: "provider_rejected" | "delivery_exception";
+  failureCode?: ResendDeliveryFailureCode;
   attempt?: number;
 };
 
 type CandidatePortalActivationAttemptPayload = {
   kind: "candidate_portal_activation";
   outcome?: "sent" | "failed" | "unknown";
-  failureCode?: "provider_rejected" | "delivery_exception";
+  failureCode?: ResendDeliveryFailureCode;
   attempt?: number;
 };
 
@@ -55,12 +56,12 @@ const CONFIRMATION_PAYLOAD_PATTERN = '%"kind":"application_confirmation"%';
 const RETRY_SCAN_PAGE_SIZE = 100;
 const RETRY_CURSOR_EVENT_ID = "internal:cv_confirmation_retry_cursor:v1";
 
-function trackedEmailEventType(delivery: { status: "sent" | "failed"; failureCode: "provider_rejected" | "delivery_exception" | null }) {
+function trackedEmailEventType(delivery: { status: "sent" | "failed"; failureCode: ResendDeliveryFailureCode | null }) {
   if (delivery.status === "sent") return "email.sent";
   return delivery.failureCode === "delivery_exception" ? "email.delivery_unknown" : "email.failed";
 }
 
-function trackedEmailOutcome(delivery: { status: "sent" | "failed"; failureCode: "provider_rejected" | "delivery_exception" | null }) {
+function trackedEmailOutcome(delivery: { status: "sent" | "failed"; failureCode: ResendDeliveryFailureCode | null }) {
   if (delivery.status === "sent") return "sent" as const;
   return delivery.failureCode === "delivery_exception" ? "unknown" as const : "failed" as const;
 }
@@ -151,7 +152,7 @@ export function candidatePortalAccountMatchesApplication(
 
 export function buildCandidatePortalInvitationEmailEvent(
   input: { applicationId: number; candidateEmail: string; trackingId: string; deliveryAttempt?: number },
-  delivery: { status: "sent" | "failed"; providerEmailId: string | null; failureCode: "provider_rejected" | "delivery_exception" | null },
+  delivery: { status: "sent" | "failed"; providerEmailId: string | null; failureCode: ResendDeliveryFailureCode | null },
   options: { now?: Date; localEventId?: string } = {},
 ) {
   return {
@@ -176,7 +177,7 @@ export function buildCandidatePortalInvitationEmailEvent(
 
 export function buildCandidatePortalActivationEmailEvent(
   input: { applicationId: number; candidateEmail: string; trackingId: string },
-  delivery: { status: "sent" | "failed"; providerEmailId: string | null; failureCode: "provider_rejected" | "delivery_exception" | null },
+  delivery: { status: "sent" | "failed"; providerEmailId: string | null; failureCode: ResendDeliveryFailureCode | null },
   options: { now?: Date; localEventId?: string } = {},
 ) {
   return {

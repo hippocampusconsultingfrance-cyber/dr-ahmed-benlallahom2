@@ -64,11 +64,26 @@ const FROM_EMAIL = "Hippocampus Consulting <recrutement@drahmedbenlallahom.com>"
 const RECRUITMENT_REPLY_TO = "hippocampusconsultingfrance@gmail.com";
 const HIPPOCAMPUS_LOGO_URL = "https://drahmedbenlallahom.com/assets/abl-logo.svg";
 
-type ResendDeliveryFailureCode = "provider_rejected" | "delivery_exception";
+/**
+ * Why Resend did not take an email (ABUS-03):
+ * - delivery_exception: network, timeout, 5xx or concurrent idempotent request;
+ *   the email may have left, so it is retried with its idempotency key;
+ * - rate_limited: more requests per second than the plan allows (429
+ *   rate_limit_exceeded); nothing left, a new attempt follows Resend's
+ *   retry-after delay;
+ * - quota: the daily or monthly quota of the plan is used up; nothing leaves
+ *   until it resets, so no immediate retry, and a high-severity security event;
+ * - provider_rejected: this very message is refused (address, content).
+ */
+export type ResendDeliveryFailureCode = "provider_rejected" | "delivery_exception" | "rate_limited" | "quota";
+
+const RESEND_QUOTA_ERRORS = new Set(["daily_quota_exceeded", "monthly_quota_exceeded"]);
 
 function resendDeliveryFailureCode(error: { name?: string; statusCode?: number | null }): ResendDeliveryFailureCode {
   const statusCode = typeof error.statusCode === "number" ? error.statusCode : null;
   const providerErrorName = typeof error.name === "string" ? error.name : null;
+  if (providerErrorName && RESEND_QUOTA_ERRORS.has(providerErrorName)) return "quota";
+  if (providerErrorName === "rate_limit_exceeded" || statusCode === 429) return "rate_limited";
   return statusCode === null
     || statusCode === 408
     || statusCode >= 500
@@ -78,15 +93,69 @@ function resendDeliveryFailureCode(error: { name?: string; statusCode?: number |
 }
 
 /**
- * Post-payment emails (patient confirmation, invoice, owner notification) are
- * retried a few times within the same attempt, with a short backoff, when the
- * failure is transient (network, timeout, 5xx). Each send carries a stable
- * Resend idempotency key, so a retry can never deliver the same email twice.
- * Exported as a mutable object so tests can shorten the delays.
+ * Delay before a new attempt after Resend's rate limit: its retry-after header
+ * (seconds), 1 s without one. A request waits at most maxDelayMs; a longer
+ * delay is left to the later retries. Mutable so tests can shorten it.
  */
-export const postPaymentDeliveryRetry = { delaysMs: [500, 1500] as number[] };
+export const resendRateLimitRetry = { defaultDelayMs: 1_000, maxDelayMs: 5_000 };
+
+function resendRetryAfterMs(headers: Record<string, string> | null | undefined): number | null {
+  const header = headers?.["retry-after"];
+  const seconds = header === undefined ? Number.NaN : Number(header);
+  const delayMs = Number.isFinite(seconds) && seconds >= 0 ? seconds * 1000 : resendRateLimitRetry.defaultDelayMs;
+  return delayMs <= resendRateLimitRetry.maxDelayMs ? delayMs : null;
+}
+
+/**
+ * An exhausted quota stops every email at once, the admin sign-in code and the
+ * payment emails included: it is logged as a high-severity security event,
+ * which the daily security review reports.
+ */
+async function reportResendQuotaExhausted(error: { name?: string }, emailKind: string) {
+  try {
+    const { logSecurityEvent } = await import("../candidateSecurity");
+    await logSecurityEvent({ actorKind: "system", category: "resend_quota_exceeded", outcome: "failed", severity: "high", metadata: { quota: error.name === "monthly_quota_exceeded" ? "monthly" : "daily", emailKind } });
+  } catch (logError) {
+    console.error("resend_quota_report_failed", logError instanceof Error ? logError.name : "UnknownError");
+  }
+}
 
 const wait = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
+
+type ResendSendPayload = Parameters<Resend["emails"]["send"]>[0];
+type ResendSendOptions = Parameters<Resend["emails"]["send"]>[1];
+
+/**
+ * One Resend send, made once more after the retry-after delay when Resend
+ * answers with its rate limit. A refusal comes back classified (an exhausted
+ * quota is reported); a network error is thrown as before.
+ */
+async function sendThroughResend(message: ResendSendPayload, options: ResendSendOptions, emailKind: string): Promise<
+  | { id: string | null; error: null; failureCode: null }
+  | { id: null; error: { message: string; name?: string; statusCode?: number | null }; failureCode: ResendDeliveryFailureCode }
+> {
+  let response = await getResendClient().emails.send(message, options);
+  if (response.error && resendDeliveryFailureCode(response.error) === "rate_limited") {
+    const retryAfterMs = resendRetryAfterMs(response.headers);
+    if (retryAfterMs !== null) {
+      await wait(retryAfterMs);
+      response = await getResendClient().emails.send(message, options);
+    }
+  }
+  if (!response.error) return { id: response.data?.id ?? null, error: null, failureCode: null };
+  const failureCode = resendDeliveryFailureCode(response.error);
+  if (failureCode === "quota") await reportResendQuotaExhausted(response.error, emailKind);
+  return { id: null, error: response.error, failureCode };
+}
+
+/**
+ * Post-payment emails (patient confirmation, invoice, owner notification) are
+ * retried a few times within the same attempt, with a short backoff, when the
+ * failure is transient (network, timeout, 5xx, rate limit). Each send carries
+ * a stable Resend idempotency key, so a retry can never deliver the same email
+ * twice. Exported as a mutable object so tests can shorten the delays.
+ */
+export const postPaymentDeliveryRetry = { delaysMs: [500, 1500] as number[] };
 
 class PostPaymentEmailError extends Error {
   constructor(message: string, readonly failureCode: ResendDeliveryFailureCode, options?: { cause?: unknown }) {
@@ -94,8 +163,6 @@ class PostPaymentEmailError extends Error {
     this.name = "PostPaymentEmailError";
   }
 }
-
-type ResendSendPayload = Parameters<Resend["emails"]["send"]>[0];
 
 async function sendPostPaymentEmail(
   errors: { rejected: string; failed: string },
@@ -107,11 +174,11 @@ async function sendPostPaymentEmail(
   for (let attempt = 0; attempt <= delays.length; attempt += 1) {
     if (attempt > 0) await wait(delays[attempt - 1]);
     try {
-      const { data, error } = await getResendClient().emails.send(message, idempotencyKey ? { idempotencyKey } : undefined);
-      if (!error) return data?.id ?? null;
-      const failureCode = resendDeliveryFailureCode(error);
+      const { id, error, failureCode } = await sendThroughResend(message, idempotencyKey ? { idempotencyKey } : undefined, "post_payment");
+      if (!error) return id;
       lastError = new PostPaymentEmailError(`${errors.rejected}:${error.message}`, failureCode);
-      if (failureCode === "provider_rejected") break;
+      // Neither a refused message nor a used-up quota gets through a few seconds later.
+      if (failureCode === "provider_rejected" || failureCode === "quota") break;
     } catch (error) {
       lastError = new PostPaymentEmailError(errors.failed, "delivery_exception", { cause: error });
     }
@@ -141,7 +208,7 @@ export function buildHippocampusEmailShell(content: string, language: EmailLangu
 export async function sendAdminMfaCodeEmail(email: string, code: string) {
   const html = buildHippocampusEmailShell(`<h2 style="color:#0891b2">Validation de sécurité administrateur</h2><p>Un accès au tableau de bord Hippocampus Consulting vient d’être demandé.</p><p style="margin:24px 0;padding:18px;text-align:center;border-radius:10px;background:#f1f5f9;font-size:28px;letter-spacing:7px;font-weight:700;color:#0f172a">${escapeHtml(code)}</p><p>Ce code expire dans 10 minutes et ne doit être communiqué à personne. Si vous n’êtes pas à l’origine de cette demande, ignorez cet email.</p>`);
   const text = `Validation de sécurité administrateur\n\nCode : ${code}\n\nCe code expire dans 10 minutes. Ne le communiquez à personne.`;
-  const { error } = await getResendClient().emails.send({ from: FROM_EMAIL, to: [email], replyTo: RECRUITMENT_REPLY_TO, subject: "Code de sécurité — Hippocampus Consulting", html, text });
+  const { error } = await sendThroughResend({ from: FROM_EMAIL, to: [email], replyTo: RECRUITMENT_REPLY_TO, subject: "Code de sécurité — Hippocampus Consulting", html, text }, undefined, "admin_mfa");
   if (error) throw new Error(`admin_mfa_email_failed:${error.message}`);
 }
 
@@ -772,10 +839,10 @@ export async function sendCvApplicationConfirmationEmail(
   };
   const sendOnce = async (): Promise<CvApplicationConfirmationDelivery> => {
     try {
-      const { data, error } = await getResendClient().emails.send(message, { idempotencyKey });
-      if (error) return { status: "failed", providerEmailId: null, failureCode: resendDeliveryFailureCode(error) };
-      if (!data?.id) return { status: "failed", providerEmailId: null, failureCode: "delivery_exception" };
-      return { status: "sent", providerEmailId: data.id, failureCode: null };
+      const { id, error, failureCode } = await sendThroughResend(message, { idempotencyKey }, "cv_confirmation");
+      if (error) return { status: "failed", providerEmailId: null, failureCode };
+      if (!id) return { status: "failed", providerEmailId: null, failureCode: "delivery_exception" };
+      return { status: "sent", providerEmailId: id, failureCode: null };
     } catch {
       return { status: "failed", providerEmailId: null, failureCode: "delivery_exception" };
     }
@@ -789,7 +856,7 @@ export async function sendCvApplicationConfirmationEmail(
 export type CvApplicationConfirmationDelivery = {
   status: "sent" | "failed";
   providerEmailId: string | null;
-  failureCode: "provider_rejected" | "delivery_exception" | null;
+  failureCode: ResendDeliveryFailureCode | null;
 };
 
 export type RecruitmentEmailTemplate = "profile_interest" | "additional_information";
@@ -914,7 +981,7 @@ export type CandidatePortalAccessEmailInput = CandidatePortalAccessEmailContentI
   idempotencyKey: string;
 };
 
-export type CandidatePortalAccessEmailFailureCode = "provider_rejected" | "delivery_exception";
+export type CandidatePortalAccessEmailFailureCode = ResendDeliveryFailureCode;
 
 class CandidatePortalAccessEmailError extends Error {
   constructor(
@@ -922,9 +989,9 @@ class CandidatePortalAccessEmailError extends Error {
     readonly providerErrorName: string | null,
     readonly providerStatusCode: number | null,
   ) {
-    super(failureCode === "provider_rejected"
-      ? "Resend candidate access email failed: provider rejected request"
-      : "Resend candidate access email delivery uncertain");
+    super(failureCode === "delivery_exception"
+      ? "Resend candidate access email delivery uncertain"
+      : `Resend candidate access email failed: ${failureCode === "provider_rejected" ? "provider rejected request" : failureCode}`);
     this.name = "CandidatePortalAccessEmailError";
   }
 }
@@ -1048,7 +1115,7 @@ export async function sendCandidatePortalAccessEmail(input: CandidatePortalAcces
     : undefined;
 
   const sendOnce = async (): Promise<{ id: string }> => {
-    const { data, error } = await getResendClient().emails.send(
+    const { id, error } = await sendThroughResend(
       {
         from: FROM_EMAIL,
         to: [input.to],
@@ -1059,16 +1126,18 @@ export async function sendCandidatePortalAccessEmail(input: CandidatePortalAcces
         ...(correlationTags ? { tags: correlationTags } : {}),
       },
       { idempotencyKey: input.idempotencyKey },
+      "candidate_access",
     );
     if (error) throw resendCandidateAccessFailure(error);
-    if (!data?.id) throw new CandidatePortalAccessEmailError("delivery_exception", null, null);
-    return { id: data.id };
+    if (!id) throw new CandidatePortalAccessEmailError("delivery_exception", null, null);
+    return { id };
   };
 
   try {
     return await sendOnce();
   } catch (firstError) {
-    if (candidatePortalAccessEmailFailureCode(firstError) === "provider_rejected") {
+    // A rate limit was already retried after its delay; a refusal or a used-up quota would fail again.
+    if (candidatePortalAccessEmailFailureCode(firstError) !== "delivery_exception") {
       throw firstError;
     }
     try {

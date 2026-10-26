@@ -23,6 +23,8 @@ export function recruitmentEmailDeliveryTone(eventType: string | null | undefine
 export function recruitmentEmailDeliveryErrorLabel(failureCode: string | null | undefined) {
   if (!failureCode) return null;
   if (failureCode === "provider_rejected") return "Resend a refusé temporairement l’envoi";
+  if (failureCode === "rate_limited") return "Trop d’envois simultanés chez Resend : rien n’est parti, nouvel essai possible";
+  if (failureCode === "quota") return "Quota d’envoi Resend épuisé (jour ou mois) : rien n’est parti, vérifiez l’offre Resend";
   if (failureCode === "delivery_exception") return "Réponse de Resend indéterminée — aucune relance automatique pour éviter un doublon";
   return "Échec technique à examiner";
 }

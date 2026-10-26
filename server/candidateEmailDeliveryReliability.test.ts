@@ -18,7 +18,8 @@ describe("fiabilité des e-mails du portail candidat", () => {
   });
 
   it("restaure le dernier lien valable uniquement après un refus explicite", () => {
-    expect(source.match(/if \(failureCode === "provider_rejected"\)/g)).toHaveLength(3);
+    // Refused, rate-limited or over quota: nothing left; an uncertain delivery keeps the new link.
+    expect(source.match(/if \(failureCode !== "delivery_exception"\)/g)).toHaveLength(3);
     expect(source).toContain("verificationTokenHash: previousVerificationState?.tokenHash ?? null");
     expect(source).toContain("eq(candidateAccounts.verificationTokenHash, verificationTokenHash)");
     expect(source).toContain("passwordResetTokenHash: candidate.passwordResetTokenHash");

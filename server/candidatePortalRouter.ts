@@ -30,6 +30,7 @@ import {
   buildCandidatePortalAccessIdempotencyKey,
   candidatePortalAccessEmailFailureCode,
   sendCandidatePortalAccessEmail,
+  type ResendDeliveryFailureCode,
 } from "./_core/notifications";
 import { PublicErrorReason, publicProcedure, router } from "./_core/trpc";
 import { candidateRequestIp, verifyCandidateTurnstile } from "./candidateTurnstile";
@@ -162,7 +163,7 @@ async function logCandidateEmailDelivery(input: {
   outcome: "allowed" | "failed";
   ipHash: string | null;
   providerMessageId?: string;
-  failureCode?: "provider_rejected" | "delivery_exception";
+  failureCode?: ResendDeliveryFailureCode;
 }) {
   const deliveryUncertain = input.failureCode === "delivery_exception";
   await logSecurityEvent({
@@ -184,7 +185,7 @@ async function recordCandidateActivationDelivery(
   db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
   application: { id: number; trackingId: string } | null | undefined,
   candidateEmail: string,
-  delivery: { status: "sent" | "failed"; providerEmailId: string | null; failureCode: "provider_rejected" | "delivery_exception" | null },
+  delivery: { status: "sent" | "failed"; providerEmailId: string | null; failureCode: ResendDeliveryFailureCode | null },
 ) {
   if (!application) return;
   await db.insert(recruitmentEmailEvents).values(buildCandidatePortalActivationEmailEvent({
@@ -360,7 +361,7 @@ export const candidatePortalRouter = router({
           await logCandidateEmailDelivery({ candidateId, category: "candidate_verification_delivery", outcome: "allowed", ipHash, providerMessageId: delivery.id });
         } catch (error) {
           const failureCode = candidatePortalAccessEmailFailureCode(error);
-          if (failureCode === "provider_rejected") {
+          if (failureCode !== "delivery_exception") {
             await candidateDatabaseOperation(() => db.update(candidateAccounts).set({
               verificationTokenHash: previousVerificationState?.tokenHash ?? null,
               verificationExpiresAt: previousVerificationState?.expiresAt ?? null,
@@ -428,7 +429,7 @@ export const candidatePortalRouter = router({
           await logSecurityEvent({ actorKind: "candidate", actorReference: String(candidate.id), category: "candidate_verification_resent", outcome: "allowed", ipHash });
         } catch (error) {
           const failureCode = candidatePortalAccessEmailFailureCode(error);
-          if (failureCode === "provider_rejected") {
+          if (failureCode !== "delivery_exception") {
             await db.update(candidateAccounts).set({
               verificationTokenHash: candidate.verificationTokenHash,
               verificationExpiresAt: candidate.verificationExpiresAt,
@@ -647,7 +648,7 @@ export const candidatePortalRouter = router({
         await logCandidateEmailDelivery({ candidateId: candidate.id, category: "candidate_password_reset_delivery", outcome: "allowed", ipHash, providerMessageId: delivery.id });
       } catch (error) {
         const failureCode = candidatePortalAccessEmailFailureCode(error);
-        if (failureCode === "provider_rejected") {
+        if (failureCode !== "delivery_exception") {
           await db.update(candidateAccounts).set({
             passwordResetTokenHash: candidate.passwordResetTokenHash,
             passwordResetExpiresAt: candidate.passwordResetExpiresAt,
