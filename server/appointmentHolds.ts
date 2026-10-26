@@ -28,6 +28,13 @@ export const APPOINTMENT_HOLD_MS = 32 * 60 * 1000;
 export const KEPT_HOLD_RECHECK_MS = 5 * 60 * 1000;
 
 /**
+ * A kept hold's end moves on at each run, so only the age of its booking tells
+ * one Stripe has not settled for a day (payment never confirmed, long outage):
+ * it is then logged at each run.
+ */
+const KEPT_HOLD_REPORTED_AFTER_MS = 24 * 60 * 60 * 1000;
+
+/**
  * A booking's hold ends at most APPOINTMENT_HOLD_MS after its row is written; a
  * kept one at least STRIPE_CHECKOUT_MIN_EXPIRY_MS + KEPT_HOLD_RECHECK_MS after.
  * The two minutes between them absorb the clock difference between the app,
@@ -74,7 +81,7 @@ export function getExpiredAppointmentHoldUpdate(cancelledAt = new Date()) {
 
 type Database = NonNullable<Awaited<ReturnType<typeof getDb>>>;
 type ExpiredHoldOutcome = "released" | "confirmed" | "kept";
-type ExpiredHold = { id: number; trackingId: string; stripeSessionId: string };
+type ExpiredHold = { id: number; trackingId: string; stripeSessionId: string; createdAt: Date };
 
 /**
  * Stripe's definitive answer that the session does not exist on the account of
@@ -124,6 +131,9 @@ async function keepExpiredHold(db: Database, hold: ExpiredHold, now: Date) {
     ));
   } catch (error) {
     console.error("[AppointmentHolds] Kept hold could not be extended", { trackingId: hold.trackingId, error: error instanceof Error ? error.name : "UnknownError" });
+  }
+  if (now.getTime() - hold.createdAt.getTime() > KEPT_HOLD_REPORTED_AFTER_MS) {
+    console.error("[AppointmentHolds] Hold kept for over a day; check its Stripe session and payment", { trackingId: hold.trackingId });
   }
 }
 
@@ -197,7 +207,7 @@ export async function releaseExpiredAppointmentHolds(stripe: () => Stripe, now =
     .set(getExpiredAppointmentHoldUpdate(now))
     .where(and(expiredHold, isNull(appointments.stripeSessionId)));
   const withSession = await db
-    .select({ id: appointments.id, trackingId: appointments.trackingId, stripeSessionId: appointments.stripeSessionId })
+    .select({ id: appointments.id, trackingId: appointments.trackingId, stripeSessionId: appointments.stripeSessionId, createdAt: appointments.createdAt })
     .from(appointments)
     .where(and(expiredHold, isNotNull(appointments.stripeSessionId)))
     .orderBy(appointments.holdExpiresAt)

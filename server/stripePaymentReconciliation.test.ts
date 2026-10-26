@@ -487,6 +487,21 @@ describe("EXPL-01 — un paiement reçu est confirmé même sans webhook", () =>
     expect(emails.sendConfirmationEmail).not.toHaveBeenCalled();
   });
 
+  it("signale dans le journal un maintien que Stripe n’a toujours pas réglé un jour après la réservation", async () => {
+    const seeded = seedAbandonedHold(bookableSlot());
+    state.stripe.reachable = false;
+
+    expect((await runHoldCleanup()).body).toMatchObject({ kept: 1 });
+    const stuckHoldLogged = () => vi.mocked(console.error).mock.calls.some(([message, details]) => String(message).includes("Hold kept for over a day") && (details as { trackingId?: string }).trackingId === seeded.trackingId);
+    expect(stuckHoldLogged()).toBe(false);
+
+    // Repoussé à chaque passage, son échéance ne vieillit jamais ; l’âge de la réservation, si.
+    letTimePass(seeded, 24 * 60 * 60_000);
+    expect((await runHoldCleanup()).body).toMatchObject({ kept: 1 });
+    expect(stuckHoldLogged()).toBe(true);
+    expect(appointmentRow()).toMatchObject({ appointmentStatus: "held", slotKey: seeded.slotKey });
+  });
+
   it("ne compte pas dans les réservations en attente d’une adresse un maintien gardé faute de réponse de Stripe", async () => {
     const email = "patient@example.test";
     // Deux paiements abandonnés, gardés par le nettoyage pendant une panne de Stripe.
