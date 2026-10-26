@@ -84,6 +84,9 @@ describe("booking day and time choice", () => {
       expect(getBookingErrorMessage({ message: "Ce créneau n’est plus réservable", data: { code: "UNPROCESSABLE_CONTENT", reason: "too_soon" } }, copy)).toBe(copy.refusals.too_soon);
       // Saisie refusée avec un motif (nom sans lettre ni chiffre) : son message, pas la consigne générale.
       expect(getBookingErrorMessage({ message: "Saisissez votre nom complet", data: { code: "BAD_REQUEST", reason: "invalid_name" } }, copy)).toBe(copy.refusals.invalid_name);
+      // Vérification anti-robot impossible (ABUS-02) : le service est indisponible, pas « refaites la vérification ».
+      expect(getBookingErrorMessage({ message: "La vérification anti-robot est momentanément indisponible.", data: { code: "SERVICE_UNAVAILABLE", reason: "security_check_unavailable" } }, copy)).toBe(copy.refusals.security_check_unavailable);
+      expect(copy.refusals.security_check_unavailable).not.toBe(copy.refusals.security_check_required);
 
       // Refus sans motif connu (motif absent ou inconnu) : message générique traduit, sans le texte français.
       expect(getBookingErrorMessage({ message: "Vous avez déjà deux réservations en attente de paiement.", data: { code: "TOO_MANY_REQUESTS" } }, copy)).toBe(copy.bookingError);

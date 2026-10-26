@@ -49,5 +49,8 @@ describe("vérification Turnstile côté serveur, dans tous les environnements",
   it("refuse quand Cloudflare ne répond pas normalement", async () => {
     cloudflareAnswers({}, 503);
     await expect(verifyCandidateTurnstile({ token: "token-from-the-widget" })).rejects.toThrow("candidate_turnstile_unavailable");
+    // Erreur interne de Cloudflare : le jeton n’a pas été jugé (la réservation le dit au patient, ABUS-02).
+    cloudflareAnswers({ success: false, "error-codes": ["internal-error"] });
+    await expect(verifyCandidateTurnstile({ token: "token-from-the-widget" })).rejects.toThrow("candidate_turnstile_unavailable");
   });
 });

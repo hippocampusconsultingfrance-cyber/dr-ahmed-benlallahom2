@@ -25,6 +25,8 @@ export async function verifyCandidateTurnstile(input: { token?: string; remoteIp
   });
   if (!response.ok) throw new Error("candidate_turnstile_unavailable");
   const result = await response.json() as TurnstileResponse;
+  // Cloudflare could not validate the token on its side: the token itself was not judged.
+  if (!result.success && result["error-codes"]?.includes("internal-error")) throw new Error("candidate_turnstile_unavailable");
   if (!result.success || (result.hostname && !TRUSTED_HOSTS.has(result.hostname))) {
     throw new Error("candidate_turnstile_invalid");
   }

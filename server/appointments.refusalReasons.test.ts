@@ -27,6 +27,8 @@ vi.mock("./appointmentHolds", async importOriginal => ({
   ...await importOriginal<typeof import("./appointmentHolds")>(),
   releaseExpiredAppointmentHolds: mocks.releaseExpiredAppointmentHolds,
 }));
+// Few holds awaiting payment: no anti-robot check (ABUS-02, covered by appointments.holdAbuse.test.ts).
+vi.mock("./appointmentHoldAbuse", () => ({ bookingChallengeRequired: vi.fn(async () => false), recordBookingHold: vi.fn(async () => undefined) }));
 vi.mock("stripe", () => ({
   default: vi.fn().mockImplementation(() => ({
     checkout: { sessions: { create: mocks.stripeCreate, retrieve: mocks.stripeRetrieve } },
@@ -177,7 +179,7 @@ describe("appointments.create — motifs de refus stables (EN-06)", () => {
     expect((await postCreate(booking(inThreeDays(), { customerPhone: "abc" })))?.data.reason).toBeUndefined();
     expect(BOOKING_REFUSAL_REASONS).toEqual([
       "slot_taken", "too_soon", "too_far", "outside_schedule", "no_availability", "date_blocked",
-      "rate_limited", "too_many_holds", "payment_unavailable", "invalid_name", "security_check_required",
+      "rate_limited", "too_many_holds", "payment_unavailable", "invalid_name", "security_check_required", "security_check_unavailable",
     ]);
   });
 

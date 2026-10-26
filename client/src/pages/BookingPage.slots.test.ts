@@ -198,6 +198,7 @@ describe("refus de réservation traduits (EN-06)", () => {
     expect(getBookingRefusalReason({ data: { code: "TOO_MANY_REQUESTS", reason: "too_many_holds" } })).toBe("too_many_holds");
     expect(getBookingRefusalReason({ data: { code: "SERVICE_UNAVAILABLE", reason: "payment_unavailable" } })).toBe("payment_unavailable");
     expect(getBookingRefusalReason({ data: { code: "UNPROCESSABLE_CONTENT", reason: "too_soon" } })).toBe("too_soon");
+    expect(getBookingRefusalReason({ data: { code: "SERVICE_UNAVAILABLE", reason: "security_check_unavailable" } })).toBe("security_check_unavailable");
     expect(getBookingRefusalReason({ data: { code: "CONFLICT", reason: "something_else" } })).toBeNull();
     expect(getBookingRefusalReason({ data: { code: "CONFLICT" } })).toBeNull();
     expect(getBookingRefusalReason(new Error("Network request failed"))).toBeNull();
