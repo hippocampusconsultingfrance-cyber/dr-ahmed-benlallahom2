@@ -96,6 +96,114 @@ export function withTrailerInStreamData(pdf: Buffer, root: string) {
   return Buffer.from(`${output}startxref\n${hiddenOffset}\n%%EOF\n`, "latin1");
 }
 
+/** A grey page of four lines, 16×22 pixels, as Pillow saves it in baseline JPEG: the image of a scanned page, which pdf.js decodes. */
+const SCANNED_PAGE_JPEG = Buffer.from(
+  "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAAWABABAREA/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/9oACAEBAAA/APYLyXVUmAsbOzni28tPdtEwPpgRtx05z+FFnLqrzEX1nZwRbeGgu2lYn0wY14685/CqOs6V9uvEl/sDRtQxGF82+k2uOT8o/dPxznr3PFGjaV9hvHl/sDRtPzGV82xk3OeR8p/dJxxnr2HFXrzRdK1GYTX2mWd1Kq7Q88CuwHXGSOnJ/Oiz0XStOmM1jplnaysu0vBAqMR1xkDpwPyr/9k=",
+  "base64",
+);
+
+/**
+ * What the image data of honest scans held where the PDF check took an
+ * `obj` for an object (REC-02), as ASCII85 writes it: "Oobj[" in a reportlab
+ * scan refused from 12 pages on, "]5obj[" as in the tables of Pillow's
+ * JPEGs, and an `obj` followed by "/JS". Read as values, the first two ran
+ * into the next stream (the whole file "unclear"), the last one made the
+ * image's data searched, where "/JS" was found.
+ */
+export const IMAGE_DATA_OBJ_KEYWORDS = ["Oobj[", "!!!!]5obj[", "!!!!]5obj/JS!!!"];
+
+/** ASCII85 (ISO 32000-1, 7.4.3) of `data`, the way reportlab writes it: one line, then "~>". */
+function ascii85(data: Buffer) {
+  let text = "";
+  for (let offset = 0; offset < data.length; offset += 4) {
+    const group = Buffer.alloc(4);
+    data.copy(group, 0, offset, offset + 4);
+    const length = Math.min(4, data.length - offset);
+    let value = group.readUInt32BE(0);
+    if (value === 0 && length === 4) {
+      text += "z";
+      continue;
+    }
+    const digits: string[] = [];
+    for (let index = 0; index < 5; index += 1, value = Math.floor(value / 85)) digits.unshift(String.fromCharCode(33 + (value % 85)));
+    text += digits.slice(0, length + 1).join("");
+  }
+  return `${text}~>`;
+}
+
+/** The bytes that ASCII85 writes as `text`, made of whole groups of five characters. */
+function ascii85Bytes(text: string) {
+  const bytes = Buffer.alloc((text.length / 5) * 4);
+  for (let group = 0; group * 5 < text.length; group += 1) {
+    const value = Array.from(text.slice(group * 5, group * 5 + 5)).reduce((total, char) => total * 85 + char.charCodeAt(0) - 33, 0);
+    bytes.writeUInt32BE(value, group * 4);
+  }
+  return bytes;
+}
+
+/**
+ * The JPEG of a scanned page `index`: SCANNED_PAGE_JPEG, comment segments
+ * of pseudo-random bytes up to about `bytes` bytes (the compressed pixels of
+ * a real page), and after its end, as a phone's motion photo or a scanner's
+ * trailer do, the bytes that the encoding chosen writes as `keyword`: at the
+ * very end of the stream data, whatever follows them in the JPEG cannot end
+ * the value read after them.
+ */
+function scannedPageJpeg(index: number, bytes: number, keyword: string, ascii85Encoded: boolean) {
+  let seed = index * 2_654_435_761 + 1;
+  const random = () => {
+    seed ^= seed << 13;
+    seed ^= seed >>> 17;
+    seed ^= seed << 5;
+    return seed & 0xff;
+  };
+  const comments: Buffer[] = [];
+  for (let left = bytes - SCANNED_PAGE_JPEG.length; left > 0; left -= 65_533) {
+    const length = Math.min(65_533, left);
+    const segment = Buffer.alloc(length + 4);
+    segment.writeUInt16BE(0xfffe, 0);
+    segment.writeUInt16BE(length + 2, 2);
+    for (let at = 4; at < segment.length; at += 1) segment[at] = random();
+    comments.push(segment);
+  }
+  const jpeg = Buffer.concat([SCANNED_PAGE_JPEG.subarray(0, 2), ...comments, SCANNED_PAGE_JPEG.subarray(2)]);
+  // ASCII85 writes each group of four bytes as five characters: the keyword's groups start on a multiple of four.
+  if (!ascii85Encoded) return Buffer.concat([jpeg, Buffer.from(keyword, "latin1")]);
+  return Buffer.concat([jpeg, Buffer.alloc((4 - (jpeg.length % 4)) % 4), ascii85Bytes(keyword)]);
+}
+
+/**
+ * A scanned document of `pages` pages laid out as reportlab writes it (each
+ * page image, then its page; the content streams last): one JPEG per page,
+ * ASCII85-encoded (/Filter [/ASCII85Decode /DCTDecode], reportlab's
+ * default) or as raw bytes (/DCTDecode, img2pdf or a scanner), whose data
+ * ends with the `keywords` in turn (all of IMAGE_DATA_OBJ_KEYWORDS by
+ * default). Each page also writes a line of text, for pdf.js to read the
+ * file without OCR.
+ */
+export function scannedPdf(pages: number, options: { ascii85?: boolean; pageBytes?: number; keywords?: string[] } = {}) {
+  const ascii85Encoded = options.ascii85 ?? true;
+  const keywords = options.keywords ?? IMAGE_DATA_OBJ_KEYWORDS;
+  const firstContent = 3 + pages * 2;
+  const objects = [
+    "<<\n/Pages 2 0 R /Type /Catalog\n>>",
+    `<<\n/Count ${pages} /Kids [ ${Array.from({ length: pages }, (_, index) => `${4 + index * 2} 0 R`).join(" ")} ] /Type /Pages\n>>`,
+  ];
+  for (let index = 0; index < pages; index += 1) {
+    const jpeg = scannedPageJpeg(index, options.pageBytes ?? SCANNED_PAGE_JPEG.length, keywords[index % keywords.length]!, ascii85Encoded);
+    const data = ascii85Encoded ? ascii85(jpeg) : jpeg.toString("latin1");
+    const filter = ascii85Encoded ? "[ /ASCII85Decode /DCTDecode ]" : "/DCTDecode";
+    objects.push(`<<\n/BitsPerComponent 8 /ColorSpace /DeviceGray /Filter ${filter} /Height 22 /Length ${data.length} /Subtype /Image\n  /Type /XObject /Width 16\n>>\nstream\n${data}\nendstream`);
+    objects.push(`<<\n/Contents ${firstContent + index} 0 R /MediaBox [ 0 0 595.2756 841.8898 ] /Parent 2 0 R /Resources <<\n/Font << /F1 ${firstContent + pages} 0 R >> /XObject <<\n/Im${index} ${3 + index * 2} 0 R\n>>\n>> /Type /Page\n>>`);
+  }
+  for (let index = 0; index < pages; index += 1) {
+    const content = `q\n535 0 0 736 30 76 cm\n/Im${index} Do\nQ\nBT /F1 11 Tf 30 40 Td (Dr Camille Martin, anesthesiste-reanimateur, page ${index + 1}) Tj ET\n`;
+    objects.push(`<<\n/Length ${content.length}\n>>\nstream\n${content}endstream`);
+  }
+  objects.push("<<\n/BaseFont /Helvetica /Encoding /WinAnsiEncoding /Subtype /Type1 /Type /Font\n>>");
+  return classicPdf(objects);
+}
+
 /** How the PDF checks must answer a file of `pathologicalPdfs`: accept it (one page), or refuse it with this reason. */
 export type PathologicalPdfOutcome = "accepted" | "object_stream_unreadable" | "stream_count_exceeded" | "decompressed_size_exceeded";
 

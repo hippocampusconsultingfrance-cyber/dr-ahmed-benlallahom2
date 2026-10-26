@@ -5,11 +5,12 @@
  * stream. A window guessed before the keyword can be moved by a long string,
  * a fake `obj` or a comment, and misses the /F and /DP spellings of /Filter
  * and /DecodeParms; so the dictionary is parsed forwards from every `obj`
- * keyword, with pdf.js's rules: strings are single tokens, a token that is
- * not a name where a key is expected is skipped, and the dictionary ends at
- * the `>>` met where a key is expected. When several `obj` lead to the same
- * stream (a fake one written inside a dictionary), the earliest one wins: the
- * text checked can only be larger than the one pdf.js reads.
+ * keyword that may end an object header (mayEndObjectHeader), with pdf.js's
+ * rules: strings are single tokens, a token that is not a name where a key
+ * is expected is skipped, and the dictionary ends at the `>>` met where a key
+ * is expected. When several `obj` lead to the same stream (a fake one
+ * written inside a dictionary), the earliest one wins: the text checked can
+ * only be larger than the one pdf.js reads.
  *
  * Bytes that read two ways make the whole file "unclear", and the checks
  * then refuse it: a stream that no `obj` leads to, a stream nested in a
@@ -146,12 +147,61 @@ function readDictionary(source: string, from: number, work: PdfScanWork, depth: 
   }
 }
 
+function isDigit(code: number) {
+  return code >= 0x30 && code <= 0x39;
+}
+
+/** Characters a number of pdf.js may hold (Lexer.getNumber): digits, point, signs, exponent. */
+function isNumberPart(code: number) {
+  return isDigit(code) || code === 0x2e || code === 0x2b || code === 0x2d || code === 0x45 || code === 0x65;
+}
+
+/**
+ * Whether pdf.js may read the `obj` keyword at `index` as the end of an
+ * object header, from an xref offset anywhere before it: a number, a number,
+ * then `obj` (XRef.fetchUncompressed, Lexer.getNumber). The generation
+ * number ends just before `obj` ("12 0obj", "12 0.obj", "12 0-obj",
+ * "12 0E+obj") or before white-space and comments ("12 0 obj"). In the first
+ * case, the object number ends before the run of number characters, at
+ * white-space, or inside it where pdf.js's number stops and a generation
+ * number holding a digit starts: at a "+" after a digit, a point or a sign
+ * ("12+0obj", "12E++0obj"), or at a second point ("12..0obj", "1.2.0obj").
+ * Any other `obj`, such as the end of "endobj" or the bytes "Oobj[" and
+ * "]5obj[" that the data of an image may hold, starts no object whatever the
+ * xref says: pdf.js 5.4 read none of them among 40,000 spellings tried
+ * (REC-02). The runs looked at for two `obj` do not overlap: the work stays
+ * linear in the size of the file.
+ */
+export function mayEndObjectHeader(source: string, index: number) {
+  const before = index > 0 ? source.charCodeAt(index - 1) : 0x20;
+  if (isWhitespace(before)) return true;
+  // A number never ends with its exponent letter: "0Eobj" is 0, then the command "Eobj".
+  if (!isNumberPart(before) || before === 0x45 || before === 0x65) return false;
+  let start = index - 1;
+  while (start > 0 && isNumberPart(source.charCodeAt(start - 1))) start -= 1;
+  if (start > 0 && isWhitespace(source.charCodeAt(start - 1))) return true;
+  let firstPoint = index;
+  for (let at = start; at < index && firstPoint === index; at += 1) {
+    if (source.charCodeAt(at) === 0x2e) firstPoint = at;
+  }
+  // From the end of the run: `digit` once the generation number would hold one.
+  let digit = false;
+  for (let at = index - 1; at > start; at -= 1) {
+    const code = source.charCodeAt(at);
+    const previous = source.charCodeAt(at - 1);
+    if (digit && code === 0x2b && (isDigit(previous) || previous === 0x2e || previous === 0x2d || previous === 0x2b)) return true;
+    if (digit && code === 0x2e && firstPoint < at) return true;
+    if (isDigit(code)) digit = true;
+  }
+  return false;
+}
+
 export type PdfStreamDictionaries = {
   /** Start (`<<`) and end (after `>>`) of the dictionary of each `stream` keyword, by the keyword's index. */
   byKeyword: Map<number, { start: number; end: number }>;
   /**
    * Where pdf.js may read objects in the raw file, sorted by start: from
-   * every `obj` keyword to the end of its value, and from every `trailer`
+   * every object header's `obj` to the end of its value, and from every `trailer`
    * keyword to the end of its dictionary (or of the file: pdf.js reads a
    * trailer in recovery mode). Stream data that one of them reaches is
    * searched by the checks like the rest of the file.
@@ -160,7 +210,7 @@ export type PdfStreamDictionaries = {
   unclear: boolean;
 };
 
-/** Parses the object after every `obj` keyword of the raw file, as pdf.js does from an xref offset, and the dictionary after every `trailer`. */
+/** Parses the object after every object header of the raw file, as pdf.js does from an xref offset, and the dictionary after every `trailer`. */
 export function readPdfStreamDictionaries(source: string, work: PdfScanWork): PdfStreamDictionaries {
   const byKeyword = new Map<number, { start: number; end: number }>();
   const values: Array<{ start: number; end: number }> = [];
@@ -172,11 +222,10 @@ export function readPdfStreamDictionaries(source: string, work: PdfScanWork): Pd
       // Not "object", not "obj12".
       const after = match.index + 3 < source.length ? source.charCodeAt(match.index + 3) : 0x20;
       if (isRegular(after)) continue;
-      // "12 0 obj", "12 0obj", and "12 0.obj", "12 0-obj" or "12 0E+obj", where pdf.js's number ends
-      // (Lexer.getNumber). Any other "obj" ("endobj") leads to no stream, but its value is kept in
-      // `values`: one too many only widens what the checks search.
-      const before = match.index > 0 ? source.charCodeAt(match.index - 1) : 0x20;
-      const header = !isRegular(before) || (before >= 0x30 && before <= 0x39) || before === 0x2e || before === 0x2d || before === 0x2b;
+      // Not "endobj", nor an "obj" in the data of an image. Read as a value, the bytes after it ran
+      // into the next stream and made a scanned CV of 12 pages unclear, or made an image's data
+      // searched like the rest of the file, where "/JS" turned up (REC-02).
+      if (!mayEndObjectHeader(source, match.index)) continue;
       let value: Value;
       try {
         value = readValue(source, nextToken(source, match.index + 3, work), work, 0);
@@ -185,7 +234,7 @@ export function readPdfStreamDictionaries(source: string, work: PdfScanWork): Pd
         throw error;
       }
       values.push({ start: match.index, end: value.end });
-      if (!header || value.stream === undefined) continue;
+      if (value.stream === undefined) continue;
       const start = nextToken(source, match.index + 3, work).start;
       const known = byKeyword.get(value.stream);
       if (!known || start < known.start) byKeyword.set(value.stream, { start, end: value.end });
