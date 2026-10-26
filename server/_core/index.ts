@@ -15,7 +15,7 @@ import { requireVercelCron } from "./cronAuth";
 import { secureReference } from "./secureReference";
 import { registerGoogleDriveOAuthRoutes } from "../googleDriveOAuthRoutes";
 import { registerStorageProxy } from "./storageProxy";
-import { appRouter } from "../routers";
+import { appRouter, getStripeClient } from "../routers";
 import { createContext } from "./context";
 import { storageGetSignedUrl, storagePut } from "../storage";
 import { notifyOwner } from "./notification";
@@ -219,6 +219,18 @@ export async function createApp() {
         const { handleCheckoutSessionCompleted } = await import("../appointmentPaymentWebhook");
         const completion = await handleCheckoutSessionCompleted(event.data.object);
         return res.status(completion.httpStatus).json(completion.body);
+      } else if (event.type === "charge.refunded") {
+        // A full refund made in Stripe (or not recorded by the dashboard) is
+        // applied to the appointment: refunded, cancelled and slot freed if it
+        // was still confirmed, patient emailed and owner alerted, once.
+        const { handleChargeRefunded } = await import("../appointmentPaymentWebhook");
+        const refund = await handleChargeRefunded(event.data.object);
+        return res.status(refund.httpStatus).json(refund.body);
+      } else if (event.type === "charge.dispute.created") {
+        // A chargeback: the owner is alerted once, with the deadline to answer.
+        const { handleChargeDisputeCreated } = await import("../appointmentPaymentWebhook");
+        const dispute = await handleChargeDisputeCreated(event.data.object);
+        return res.status(dispute.httpStatus).json(dispute.body);
       } else if (event.type === "checkout.session.expired") {
         const session = event.data.object as any;
         const trackingId = session.metadata?.trackingId;
@@ -951,9 +963,11 @@ export async function createApp() {
       : { batchSize: 3, maxBatches: 1, budgetMs: 0 });
   });
 
+  // An expired hold that has a Checkout session is released only after Stripe
+  // confirms it was not paid; a paid one is confirmed (webhook missing).
   registerScheduledJob("/api/scheduled/appointment-hold-cleanup", "AppointmentHoldCleanup", async () => {
     const { releaseExpiredAppointmentHolds } = await import("../appointmentHolds");
-    return releaseExpiredAppointmentHolds();
+    return releaseExpiredAppointmentHolds(getStripeClient);
   });
 
   registerScheduledJob("/api/scheduled/candidate-document-processing", "CandidateDocumentProcessing", async trigger => {

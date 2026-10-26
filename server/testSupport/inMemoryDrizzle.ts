@@ -497,7 +497,8 @@ class SelectQuery extends Thenable<Row[]> {
     }
     contexts = contexts.filter(context => this.db.evaluate(this.condition, context) === true);
     for (const fragment of [...this.order].reverse()) {
-      const rendered = dialect.sqlToQuery(fragment).sql;
+      // A bare column (orderBy(table.column)) sorts ascending.
+      const rendered = is(fragment, Column) ? "" : dialect.sqlToQuery(fragment).sql;
       const descending = /\sdesc$/i.test(rendered);
       const expression = is(fragment, Column) ? sql`${fragment}` : sql.raw(rendered.replace(/\s(asc|desc)$/i, ""));
       contexts = [...contexts].sort((a, b) => {

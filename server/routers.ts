@@ -52,7 +52,8 @@ const ADMIN_MFA_RATE_LIMITED_MESSAGE = "Trop de tentatives de double authentific
 
 let stripeClient: Stripe | undefined;
 
-function getStripeClient(): Stripe {
+/** Shared Stripe client (also used by the hold cleanup job); throws when the key is not configured. */
+export function getStripeClient(): Stripe {
   const apiKey = process.env.STRIPE_SECRET_KEY?.trim();
   if (!apiKey) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Le service de paiement n’est pas configuré." });
   stripeClient ??= new Stripe(apiKey);
@@ -742,7 +743,9 @@ export const appRouter = router({
 
         try {
           const { getAppointmentHoldExpiry, getExpiredAppointmentHoldUpdate, releaseExpiredAppointmentHolds, stripeExpiresAt } = await import("./appointmentHolds");
-          await releaseExpiredAppointmentHolds();
+          // Un maintien expiré dont la session a pourtant été payée (webhook
+          // absent) est confirmé au lieu d’être libéré pour cette réservation.
+          await releaseExpiredAppointmentHolds(getStripeClient);
 
           // Plafond de créneaux retenus simultanément par une même adresse
           // (comparaison insensible à la casse) : un patient peut relancer un

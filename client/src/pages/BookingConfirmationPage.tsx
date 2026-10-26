@@ -51,7 +51,7 @@ export const confirmationContent = {
       eyebrow: "Réservation à régulariser",
       title: "Paiement reçu, créneau non confirmé",
       description: "Votre paiement a bien été reçu, mais le créneau n’était plus réservé à votre nom au moment du paiement (réservation temporaire expirée ou créneau indisponible).",
-      nextSteps: "Notre équipe a été prévenue et vous contactera pour vous rembourser intégralement ou vous proposer un autre créneau. Un email vous a également été envoyé.",
+      nextSteps: "Contactez-nous avec votre référence de suivi (coordonnées ci-dessous) : vous serez intégralement remboursé ou nous vous proposerons un autre créneau.",
       status: "Référence de suivi",
     },
     // Rendez-vous confirmé, rappelé sur la page et dans le fichier agenda (RES-05).
@@ -118,7 +118,7 @@ export const confirmationContent = {
       eyebrow: "Booking to be settled",
       title: "Payment received, time slot not confirmed",
       description: "Your payment was received, but the time slot was no longer held for you at the time of payment (temporary hold expired or slot unavailable).",
-      nextSteps: "Our team has been notified and will contact you to refund you in full or offer another time slot. An email has also been sent to you.",
+      nextSteps: "Contact us with your tracking reference (details below): you will be refunded in full or offered another time slot.",
       status: "Tracking reference",
     },
     appointment: {
@@ -183,7 +183,7 @@ export const confirmationContent = {
       eyebrow: "Buchung zu klären",
       title: "Zahlung erhalten, Termin nicht bestätigt",
       description: "Ihre Zahlung ist eingegangen, aber der Termin war zum Zeitpunkt der Zahlung nicht mehr für Sie reserviert (vorübergehende Reservierung abgelaufen oder Termin nicht verfügbar).",
-      nextSteps: "Unser Team wurde informiert und wird Sie kontaktieren, um Ihnen den vollen Betrag zu erstatten oder einen anderen Termin anzubieten. Sie haben außerdem eine E-Mail erhalten.",
+      nextSteps: "Kontaktieren Sie uns mit Ihrer Verfolgungsnummer (Kontaktdaten unten): Sie erhalten den vollen Betrag zurück oder einen anderen Termin.",
       status: "Verfolgungsnummer",
     },
     appointment: {
@@ -248,7 +248,7 @@ export const confirmationContent = {
       eyebrow: "预约待处理",
       title: "已收到付款，时段未确认",
       description: "我们已收到您的付款，但付款时该时段已不再为您保留（临时保留已过期或时段不可用）。",
-      nextSteps: "我们的团队已收到通知，将与您联系，为您全额退款或提供其他时段。我们也已向您发送了一封邮件。",
+      nextSteps: "请携带您的跟踪编号联系我们（联系方式见下方）：我们将为您全额退款或为您安排其他时段。",
       status: "跟踪编号",
     },
     appointment: {

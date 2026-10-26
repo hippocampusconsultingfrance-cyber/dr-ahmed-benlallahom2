@@ -4,8 +4,9 @@ import { getDb } from "./db";
 import { mutationRowCount } from "./dbMutation";
 import { enqueueAppointmentFulfillment, processAppointmentFulfillmentNow } from "./appointmentFulfillment";
 import { notifyOwner } from "./_core/notification";
-import { sendUnconfirmablePaymentEmail } from "./_core/notifications";
+import { sendRefundConfirmationEmail, sendUnconfirmablePaymentEmail } from "./_core/notifications";
 import { emailLanguageFor } from "./emailLanguage";
+import { isUnconfirmedPaidAppointment } from "./appointmentAdminActions";
 
 /** Keeps the Stripe acknowledgement well inside Stripe's delivery timeout. */
 export const IMMEDIATE_FULFILLMENT_TIMEOUT_MS = 15_000;
@@ -41,8 +42,8 @@ function safeErrorName(error: unknown) {
   return error instanceof Error ? error.name : "UnknownError";
 }
 
-function paymentIntentIdOf(session: CheckoutSessionPayload): string | null {
-  const value = session.payment_intent;
+function paymentIntentIdOf(payment: { payment_intent?: unknown }): string | null {
+  const value = payment.payment_intent;
   if (typeof value === "string" && value) return value;
   if (value && typeof value === "object" && typeof (value as { id?: unknown }).id === "string") return (value as { id: string }).id;
   return null;
@@ -58,6 +59,10 @@ const UNCONFIRMABLE_REASON_LABELS: Record<UnconfirmablePaymentReason, string> = 
   hold_released: "la réservation temporaire du créneau a expiré ou a été annulée avant la réception du paiement ; le créneau a pu être attribué à un autre patient",
 };
 
+function formatAlertAmount(cents: number | null) {
+  return cents === null ? "inconnu" : `${(cents / 100).toFixed(2)} €`;
+}
+
 export function buildUnconfirmablePaymentAlert(input: {
   trackingId: string;
   reason: UnconfirmablePaymentReason;
@@ -67,7 +72,7 @@ export function buildUnconfirmablePaymentAlert(input: {
   paymentStatus: string;
   appointmentStatus: string;
 }) {
-  const amount = input.amountCents === null ? "inconnu" : `${(input.amountCents / 100).toFixed(2)} €`;
+  const amount = formatAlertAmount(input.amountCents);
   return {
     title: `Paiement reçu pour un rendez-vous non confirmable (${input.trackingId})`,
     content: [
@@ -274,4 +279,223 @@ export async function handleCheckoutSessionCompleted(
     sessionId,
     paymentIntentId,
   });
+}
+
+export type ChargePayload = {
+  id?: unknown;
+  amount?: unknown;
+  amount_refunded?: unknown;
+  refunded?: unknown;
+  payment_intent?: unknown;
+};
+
+export type DisputePayload = {
+  id?: unknown;
+  amount?: unknown;
+  reason?: unknown;
+  status?: unknown;
+  payment_intent?: unknown;
+  evidence_details?: { due_by?: unknown } | null;
+};
+
+export type ChargeEventResult = {
+  httpStatus: 200 | 500;
+  body: Record<string, unknown>;
+  outcome: "not_attached" | "duplicate" | "partial_refund" | "refunded" | "changed_concurrently" | "dispute_reported" | "alert_not_delivered";
+};
+
+/** Recorded on an appointment whose refund reached the site only through Stripe's notification. */
+const STRIPE_REFUND_CANCELLATION_REASON = "Remboursement constaté chez Stripe (fait hors du tableau de bord du site, ou enregistrement interrompu)";
+
+function finiteNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function formatAlertDate(date: Date) {
+  return date.toLocaleString("fr-FR", { timeZone: "Europe/Paris", dateStyle: "long", timeStyle: "short" });
+}
+
+export function buildStripeRefundAlert(input: {
+  trackingId: string;
+  refundAmount: string;
+  paymentIntentId: string;
+  effect: "cancelled" | "status_kept" | "unconfirmed_payment";
+  appointmentStatus: string;
+  patientNotified: boolean;
+}) {
+  const effect = input.effect === "cancelled"
+    ? "Le rendez-vous a été annulé et son créneau libéré ; aucun rappel ne sera envoyé."
+    : input.effect === "unconfirmed_payment"
+      ? "Ce paiement n’était rattaché à aucun créneau confirmé : il est marqué remboursé."
+      : `Le statut du rendez-vous (${input.appointmentStatus}) est conservé ; seul le paiement est marqué remboursé.`;
+  return {
+    title: `Remboursement constaté chez Stripe (${input.trackingId})`,
+    content: [
+      `Stripe signale le remboursement intégral du paiement du rendez-vous ${input.trackingId} (${input.refundAmount} €), qui n’était pas encore enregistré sur le site. Il vient de l’être.`,
+      effect,
+      input.patientNotified
+        ? "Le patient a été prévenu du remboursement par email."
+        : "L’email de remboursement au patient n’a pas pu être envoyé : prévenez-le directement.",
+      `Référence : ${input.trackingId}`,
+      `Paiement Stripe (PaymentIntent) : ${input.paymentIntentId}`,
+    ].join("\n"),
+  };
+}
+
+export function buildPartialRefundAlert(input: { trackingId: string; refundedCents: number | null; amountCents: number | null; paymentIntentId: string }) {
+  return {
+    title: `Remboursement partiel fait depuis Stripe (${input.trackingId})`,
+    content: [
+      `Stripe signale un remboursement partiel du paiement du rendez-vous ${input.trackingId} : ${formatAlertAmount(input.refundedCents)} remboursés au total, sur ${formatAlertAmount(input.amountCents)} payés.`,
+      "Le rendez-vous reste payé et son statut est inchangé ; le site n’a envoyé aucun email au patient. Si la consultation doit être annulée, remboursez le solde : le site enregistrera alors le remboursement intégral.",
+      `Référence : ${input.trackingId}`,
+      `Paiement Stripe (PaymentIntent) : ${input.paymentIntentId}`,
+    ].join("\n"),
+  };
+}
+
+export function buildDisputeAlert(input: {
+  disputeId: string;
+  amountCents: number | null;
+  reason: string | null;
+  status: string | null;
+  dueBy: Date | null;
+  paymentIntentId: string | null;
+  appointment: Pick<Appointment, "trackingId" | "paymentStatus" | "appointmentStatus" | "appointmentDate"> | null;
+}) {
+  const amount = formatAlertAmount(input.amountCents);
+  const appointment = input.appointment;
+  // An inquiry (warning_* status) withdraws nothing yet; unanswered, it can become a chargeback.
+  const funds = input.status?.startsWith("warning_")
+    ? `Il s’agit pour l’instant d’une demande d’information de la banque (pré-litige) : aucun montant n’est retenu sur votre compte (paiement de ${amount}), mais sans réponse elle peut devenir un litige.`
+    : `Stripe retient ${amount} sur votre compte jusqu’à l’issue du litige.`;
+  return {
+    title: `Contestation bancaire d’un paiement (${appointment?.trackingId ?? input.paymentIntentId ?? input.disputeId})`,
+    content: [
+      appointment
+        ? `Le titulaire de la carte conteste auprès de sa banque le paiement du rendez-vous ${appointment.trackingId}. ${funds}`
+        : `Le titulaire de la carte conteste auprès de sa banque un paiement Stripe rattaché à aucun rendez-vous du site. ${funds}`,
+      `Motif indiqué par la banque : ${input.reason ?? "non communiqué"}.`,
+      input.dueBy
+        ? `Répondez depuis le tableau de bord Stripe (Paiements > Litiges) avant le ${formatAlertDate(input.dueBy)} (heure de Paris), avec les éléments utiles : confirmation de réservation, échanges avec le patient, déroulement de la consultation.`
+        : "Stripe n’indique pas de date limite de réponse : consultez le litige dans le tableau de bord Stripe (Paiements > Litiges).",
+      ...(appointment
+        ? [
+            "Le rendez-vous n’est pas modifié automatiquement : décidez s’il est maintenu.",
+            `État actuel du rendez-vous : paiement ${appointment.paymentStatus}, statut ${appointment.appointmentStatus}, consultation prévue le ${formatAlertDate(appointment.appointmentDate)}.`,
+          ]
+        : []),
+      `Litige Stripe : ${input.disputeId}`,
+      `Paiement Stripe (PaymentIntent) : ${input.paymentIntentId ?? "non communiqué"}`,
+    ].join("\n"),
+  };
+}
+
+async function findAppointmentByPaymentIntent(paymentIntentId: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+  const [appointment] = await db.select().from(appointments).where(eq(appointments.stripePaymentIntentId, paymentIntentId)).limit(1);
+  return { db, appointment };
+}
+
+/**
+ * Handles a signed `charge.refunded` event: a full refund made in Stripe (or
+ * one the dashboard could not finish recording) is applied to the appointment
+ * found by its PaymentIntent, with the same effect as a dashboard refund. The
+ * conditional UPDATE makes it idempotent: a replay, or the event of a refund
+ * the dashboard already recorded, changes nothing and sends nothing.
+ */
+export async function handleChargeRefunded(charge: ChargePayload, now = new Date()): Promise<ChargeEventResult> {
+  const paymentIntentId = paymentIntentIdOf(charge);
+  if (!paymentIntentId) return { httpStatus: 200, body: { received: true }, outcome: "not_attached" };
+  const { db, appointment } = await findAppointmentByPaymentIntent(paymentIntentId);
+  // A payment never attached to the row (second payment of a booking) is
+  // refunded from the dashboard, which emails the patient itself.
+  if (!appointment) return { httpStatus: 200, body: { received: true }, outcome: "not_attached" };
+  if (appointment.paymentStatus === "refunded") return { httpStatus: 200, body: { received: true, duplicate: true }, outcome: "duplicate" };
+  const paid = appointment.paymentStatus === "completed";
+  if (!paid && !isUnconfirmedPaidAppointment(appointment)) return { httpStatus: 200, body: { received: true }, outcome: "not_attached" };
+
+  const refundedCents = finiteNumber(charge.amount_refunded);
+  if (charge.refunded !== true) {
+    // Partial refund (gesture made in Stripe): the site only records full
+    // refunds, so the appointment stays paid and the owner is told once.
+    await notifyOwner(
+      buildPartialRefundAlert({ trackingId: appointment.trackingId, refundedCents, amountCents: finiteNumber(charge.amount), paymentIntentId }),
+      { idempotencyKey: `appointment-partial-refund-${appointment.trackingId}-${refundedCents ?? "unknown"}` },
+    ).catch(() => false);
+    return { httpStatus: 200, body: { received: true, partial: true }, outcome: "partial_refund" };
+  }
+
+  const refundAmount = (refundedCents === null ? Number(appointment.finalPrice) : refundedCents / 100).toFixed(2);
+  const cancelsAppointment = paid && appointment.appointmentStatus === "confirmed";
+  const result = await db.update(appointments).set({
+    paymentStatus: "refunded",
+    ...(cancelsAppointment ? { appointmentStatus: "cancelled" as const, slotKey: null } : {}),
+    cancellationReason: STRIPE_REFUND_CANCELLATION_REASON,
+    cancelledAt: appointment.cancelledAt ?? now,
+    refundAmount,
+    refundedAt: now,
+    updatedAt: now,
+  }).where(and(
+    eq(appointments.id, appointment.id),
+    eq(appointments.stripePaymentIntentId, paymentIntentId),
+    eq(appointments.paymentStatus, appointment.paymentStatus),
+    eq(appointments.appointmentStatus, appointment.appointmentStatus),
+  ));
+  if (mutationRowCount(result) !== 1) {
+    // Changed since it was read: recorded meanwhile by a concurrent delivery or
+    // by the dashboard (nothing left to do), or another change: Stripe retries.
+    const [current] = await db.select().from(appointments).where(eq(appointments.id, appointment.id)).limit(1);
+    if (current?.paymentStatus === "refunded") return { httpStatus: 200, body: { received: true, duplicate: true }, outcome: "duplicate" };
+    return { httpStatus: 500, body: { received: false }, outcome: "changed_concurrently" };
+  }
+  console.log("Stripe refund recorded for appointment", { trackingId: appointment.trackingId });
+
+  // Same key as the dashboard refund: the patient is told once.
+  const patientNotified = await sendRefundConfirmationEmail(
+    appointment.customerEmail,
+    appointment.customerName,
+    appointment.trackingId,
+    new Date(appointment.appointmentDate),
+    refundAmount,
+    { context: paid ? "refund" : "unconfirmed_payment", idempotencyKey: `appointment-refund-${appointment.trackingId}`, language: emailLanguageFor(appointment.language) },
+  );
+  await notifyOwner(buildStripeRefundAlert({
+    trackingId: appointment.trackingId,
+    refundAmount,
+    paymentIntentId,
+    effect: cancelsAppointment ? "cancelled" : paid ? "status_kept" : "unconfirmed_payment",
+    appointmentStatus: appointment.appointmentStatus,
+    patientNotified,
+  }), { idempotencyKey: `appointment-stripe-refund-${appointment.trackingId}` }).catch(() => false);
+  return { httpStatus: 200, body: { received: true, refunded: true }, outcome: "refunded" };
+}
+
+/**
+ * Handles a signed `charge.dispute.created` event: the owner is alerted, with
+ * the deadline to answer in Stripe, once per dispute. The appointment is left
+ * as it is, since the dispute may be won. Answers 5xx while the alert cannot be
+ * delivered, so that Stripe redelivers: it is the only trace of the dispute.
+ */
+export async function handleChargeDisputeCreated(dispute: DisputePayload): Promise<ChargeEventResult> {
+  const disputeId = typeof dispute.id === "string" ? dispute.id : "unknown";
+  const paymentIntentId = paymentIntentIdOf(dispute);
+  const appointment = paymentIntentId ? (await findAppointmentByPaymentIntent(paymentIntentId)).appointment ?? null : null;
+  // 0 when the bank does not accept a response.
+  const dueBySeconds = finiteNumber(dispute.evidence_details?.due_by);
+  const delivered = await notifyOwner(buildDisputeAlert({
+    disputeId,
+    amountCents: finiteNumber(dispute.amount),
+    reason: typeof dispute.reason === "string" ? dispute.reason : null,
+    status: typeof dispute.status === "string" ? dispute.status : null,
+    dueBy: dueBySeconds ? new Date(dueBySeconds * 1000) : null,
+    paymentIntentId,
+    appointment,
+  }), { idempotencyKey: `stripe-dispute-${disputeId}` }).catch(() => false);
+  if (!delivered) {
+    console.error("Owner alert for a Stripe dispute was not delivered; asking Stripe to retry", { disputeId });
+    return { httpStatus: 500, body: { received: false }, outcome: "alert_not_delivered" };
+  }
+  return { httpStatus: 200, body: { received: true }, outcome: "dispute_reported" };
 }
