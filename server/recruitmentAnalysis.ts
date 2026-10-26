@@ -286,16 +286,6 @@ export type InvisibleTextSummary = {
     rereadPages?: number[];
     unread?: { characters: number; excerpt: string };
   };
-  /**
-   * The OCR layer of a scanned PDF compared with what the vision read on the
-   * pages it read (`checkedPages`; `agreement`: the least share of the
-   * layer's words found there, in %, null when no layer of theirs could be
-   * compared): read on `pages`, beyond the vision's page cap, when it
-   * matched; not used at all when it did not, on `mismatchPages` (too few of
-   * its words found) or `unusablePages` (words laid over others, without
-   * marks of the picture under them, or hidden: see pdfVisibleText).
-   */
-  ocrLayer?: { matched: boolean; checkedPages: number[]; agreement: number | null; pages: number[]; mismatchPages: number[]; unusablePages: number[] };
 };
 
 /**
@@ -358,11 +348,10 @@ function invisibleTextSummary(
   passages: string[],
   unverifiablePassages: Array<{ page?: number; reason: UnverifiableTextReason; text: string; reread?: boolean }>,
   visibleCharacters: number,
-  ocrLayer?: InvisibleTextSummary["ocrLayer"],
 ): InvisibleTextSummary | undefined {
   const invisible = textExcerpt(passages);
   const unverifiable = textExcerpt(unverifiablePassages.map(passage => passage.text));
-  if (!invisible && !unverifiable && !ocrLayer) return undefined;
+  if (!invisible && !unverifiable) return undefined;
   const reasons = new Set(unverifiablePassages.filter(passage => LETTER_OR_DIGIT.test(passage.text)).map(passage => passage.reason));
   const unread = textExcerpt(unverifiablePassages.filter(passage => !passage.reread).map(passage => passage.text));
   const rereadPages = Array.from(new Set(unverifiablePassages
@@ -379,13 +368,13 @@ function invisibleTextSummary(
         ...(rereadPages.length > 0 && unread ? { unread } : {}),
       },
     } : {}),
-    ...(ocrLayer ? { ocrLayer } : {}),
   };
 }
 
+// When the vision read some of its pages again, only what stays left out is said set aside.
 const invisibleTextWarnings = (invisibleText: InvisibleTextSummary | undefined) => [
   ...(invisibleText?.characters ? [`invisible_text_ignored:${invisibleText.characters}`] : []),
-  ...(invisibleText?.unverifiable ? [`unverifiable_text_set_aside:${invisibleText.unverifiable.characters}`, ...invisibleText.unverifiable.reasons.map(reason => UNVERIFIABLE_REASONS[reason].warning)] : []),
+  ...(invisibleText?.unverifiable ? [`unverifiable_text_set_aside:${(invisibleText.unverifiable.unread ?? invisibleText.unverifiable).characters}`, ...invisibleText.unverifiable.reasons.map(reason => UNVERIFIABLE_REASONS[reason].warning)] : []),
 ];
 
 const unverifiableReasons = (unverifiable: NonNullable<InvisibleTextSummary["unverifiable"]>) =>
@@ -402,14 +391,10 @@ function pageList(pages: number[]) {
   return runs.map(run => run.length > 2 ? `${run[0]} à ${run.at(-1)}` : run.join(", ")).join(", ");
 }
 
-/**
- * The admin alert, with what the file hid, what could not be checked, what
- * the vision read instead and what was read from the OCR layer of a scan.
- */
+/** The admin alert, with what the file hid, what could not be checked, and what the vision read instead. */
 const invisibleTextAlert = (invisibleText: InvisibleTextSummary) => {
   const unverifiable = invisibleText.unverifiable;
   const reread = unverifiable?.rereadPages?.length ? `page(s) ${pageList(unverifiable.rereadPages)} relue(s) par la lecture visuelle` : null;
-  const ocrLayer = invisibleText.ocrLayer;
   return [
     ...(invisibleText.characters ? [`${invisibleText.characters} caractère(s) de texte invisible ignoré(s), extrait : « ${invisibleText.excerpt} ».`] : []),
     ...(unverifiable
@@ -418,15 +403,6 @@ const invisibleTextAlert = (invisibleText: InvisibleTextSummary) => {
         : reread && unverifiable.unread
           ? `Couche de texte non utilisée sur les ${reread}. ${unverifiable.unread.characters} caractère(s) non vérifiable(s) écarté(s) de l’analyse (${unverifiableReasons(unverifiable)}), extrait : « ${unverifiable.unread.excerpt} ».`
           : `${unverifiable.characters} caractère(s) non vérifiable(s) écarté(s) de l’analyse (${unverifiableReasons(unverifiable)}), extrait : « ${unverifiable.excerpt} ».`]
-      : []),
-    ...(ocrLayer?.matched && ocrLayer.pages.length > 0
-      ? [`Page(s) ${pageList(ocrLayer.pages)} lue(s) par la couche OCR du scan, que la lecture visuelle de la/des page(s) ${pageList(ocrLayer.checkedPages)} confirme (${ocrLayer.agreement} % de ses mots retrouvés au moins) : non relue(s) par la lecture visuelle.`]
-      : []),
-    ...(ocrLayer && !ocrLayer.matched
-      ? [`Couche OCR du scan non utilisée, elle ne correspond pas à l’image : ${[
-        ...(ocrLayer.unusablePages.length ? [`page(s) ${pageList(ocrLayer.unusablePages)}, mots superposés, posés hors de l’image ou cachés`] : []),
-        ...(ocrLayer.mismatchPages.length ? [`page(s) ${pageList(ocrLayer.mismatchPages)}, moins de ${Math.round(OCR_LAYER_MIN_AGREEMENT * 100)} % de ses mots retrouvés par la lecture visuelle (${ocrLayer.agreement} % au plus bas)`] : []),
-      ].join(" ; ")}.`]
       : []),
     "Ouvrir le CV pour le comparer.",
   ].join(" ");
@@ -474,53 +450,13 @@ async function readPdfBounded<T>(buffer: Buffer, isolated: () => Promise<T>, inP
 }
 
 /**
- * Pages the vision reads (one AI transcription each, of a 1400 px wide image,
- * rendered in about 1 s): at most 3 per document, for cost and for the cron's
- * 60 s. The other pages of a scan are read from its OCR layer, once the
- * vision has found the same words on the pages it read (OCR_LAYER_*).
+ * Pages the vision reads (one AI transcription each, in parallel, of a
+ * 1400 px wide image rendered in about 1 s): at most 8 per document, for cost
+ * and for the cron's 60 s. A scan's pages beyond them stay unread: its OCR
+ * layer is never read in their place, since a layer can say something else
+ * than the picture under it, word for word on its marks (IA-01).
  */
-const VISION_RENDER = { first: 3, desiredWidth: 1400 } as const;
-/**
- * IA-01: the OCR layer of a scan matches the image when, on each page the
- * vision read, at least this share of the layer's words are among those the
- * vision transcribed (each counted once). The vision leaves out protected
- * characteristics and the two OCR differ on a few words; a layer that says
- * something else falls well below, and one with lines added over the scan's
- * own is refused before (pdfVisibleText). On the pages the vision read, its
- * own text is used whatever the layer says: the share only decides whether
- * the layer is trusted for the others.
- */
-const OCR_LAYER_MIN_AGREEMENT = 0.85;
-/** Fewer words of the layer than this on the pages the vision read prove nothing about the others. */
-const OCR_LAYER_MIN_WORDS = 30;
-const IDEOGRAPH = "[\\u3040-\\u30ff\\u3400-\\u4dbf\\u4e00-\\u9fff\\uf900-\\ufaff\\uac00-\\ud7af]";
-const EACH_IDEOGRAPH = new RegExp(`(${IDEOGRAPH})`, "gu");
-const ONE_IDEOGRAPH = new RegExp(`^${IDEOGRAPH}$`, "u");
-const COMBINING_MARKS = new RegExp("\\p{M}", "gu");
-const NOT_A_WORD = new RegExp("[^\\p{L}\\p{N}]+", "u");
-
-/** The words of a text as two OCR can be compared: without case or accents, an ideograph a word. */
-function ocrWords(text: string) {
-  return text.normalize("NFKD").replace(COMBINING_MARKS, "").toLowerCase().replace(EACH_IDEOGRAPH, " $1 ")
-    .split(NOT_A_WORD)
-    .filter(word => word.length >= 2 || ONE_IDEOGRAPH.test(word));
-}
-
-/** Share of the words of `layer` found among those of `vision`, each word of `vision` used once. */
-function ocrLayerAgreement(layer: string, vision: string) {
-  const available = new Map<string, number>();
-  for (const word of ocrWords(vision)) available.set(word, (available.get(word) ?? 0) + 1);
-  const words = ocrWords(layer);
-  let found = 0;
-  for (const word of words) {
-    const left = available.get(word) ?? 0;
-    if (left === 0) continue;
-    available.set(word, left - 1);
-    found += 1;
-  }
-  return { words: words.length, agreement: words.length > 0 ? found / words.length : 0 };
-}
-
+const VISION_RENDER = { first: 8, desiredWidth: 1400 } as const;
 const OCR_PAGE_TIMEOUT_MS = 20_000;
 const ANALYSIS_TIMEOUT_MS = 35_000;
 
@@ -634,8 +570,8 @@ async function extractCvDocumentUnbounded(buffer: Buffer, mimeType: string): Pro
         return { total: Number.isInteger(read.total) ? read.total : null, pages: read.pages.map(page => ({ num: page.num, text: page.text })) };
       },
     );
-    const pages = result.pages.map(page => ({ number: page.num, text: cleanText(page.text), layerText: page.layerText === undefined ? undefined : cleanText(page.layerText) }));
-    const withMarkers = (read: Array<{ number: number; text: string }>) => cleanText(read
+    const pages = result.pages.map(page => ({ number: page.num, text: cleanText(page.text) }));
+    const withMarkers = (read: typeof pages) => cleanText(read
       .map(page => `[PAGE ${page.number}]\n${escapeCvPageMarkers(page.text)}`)
       .join("\n\n"));
     const contentLength = (text: string) => cleanText(text.replace(/\[PAGE\s+\d+\]/gi, "")).length;
@@ -665,74 +601,42 @@ async function extractCvDocumentUnbounded(buffer: Buffer, mimeType: string): Pro
     // a font the reader cannot draw: the vision sees the same drawing, blank
     // without the host's fonts (server/fonts/README.md).
     const scanned = contentLength(extracted) < 80;
-    const toRead = scanned ? pages.map(page => page.number) : pages.filter(page => setAsideOn(page.number, "image") > page.text.length).map(page => page.number);
+    const toRead = scanned ? [] : pages.filter(page => setAsideOn(page.number, "image") > page.text.length).map(page => page.number);
     const vision = scanned || toRead.length > 0 ? await extractPdfWithVision(buffer, scanned ? undefined : toRead) : null;
-    const visionPages = new Map((vision?.pages ?? []).map(page => [page.pageNumber, page.text]));
-    // What was set aside on a page no longer makes the reading partial once
-    // the vision found about as much text there.
-    const reread = new Set(Array.from(visionPages).filter(([number, text]) => 2 * text.length >= setAsideOn(number)).map(([number]) => number));
-    // The OCR layer of the scanned pages the vision read, compared with what it
-    // read there: when it matches, the layer of the other scanned pages is read
-    // in their place, as the isolated reader gives it back (each word on marks
-    // of the picture, none laid over another: pdfVisibleText). Otherwise it is
-    // not used, and those pages stay set aside.
-    const checkedPages = Array.from(visionPages.keys()).filter(number => setAsideOn(number, "image") > 0).sort((left, right) => left - right);
-    const comparisons = checkedPages.map(number => {
-      const layerText = pages.find(page => page.number === number)?.layerText;
-      return { number, usable: layerText !== undefined, ...ocrLayerAgreement(layerText ?? "", visionPages.get(number)!) };
-    });
-    const unusablePages = comparisons.filter(found => !found.usable).map(found => found.number);
-    const mismatchPages = comparisons.filter(found => found.usable && found.agreement < OCR_LAYER_MIN_AGREEMENT).map(found => found.number);
-    const mismatch = unusablePages.length > 0 || mismatchPages.length > 0;
-    const matched = checkedPages.length > 0 && !mismatch && comparisons.reduce((total, found) => total + found.words, 0) >= OCR_LAYER_MIN_WORDS;
-    const layerPages = new Set(matched ? pages.filter(page => toRead.includes(page.number) && !visionPages.has(page.number) && page.layerText !== undefined).map(page => page.number) : []);
-    const agreements = comparisons.filter(found => found.usable).map(found => found.agreement);
-    const ocrLayer = mismatch || layerPages.size > 0 ? {
-      matched,
-      checkedPages,
-      agreement: agreements.length > 0 ? Math.floor(100 * Math.min(...agreements)) : null,
-      pages: Array.from(layerPages),
-      mismatchPages,
-      unusablePages,
-    } : undefined;
-    const usedVision = Array.from(visionPages.values()).some(text => text.length > 0);
-    const text = usedVision || layerPages.size > 0
-      ? withMarkers(pages.map(page => ({ number: page.number, text: visionPages.get(page.number) || (layerPages.has(page.number) ? page.layerText! : page.text) })))
-      : extracted;
-    // The words of the OCR layer read in place of their page are no longer set aside.
-    const leftOut = unverifiable.filter(passage => !(passage.layer && layerPages.has(passage.page)));
-    const invisibleText = invisibleTextSummary(result.visibility?.invisibleText ?? [], leftOut.map(passage => ({ ...passage, reread: reread.has(passage.page) })), contentLength(text), ocrLayer);
-    const ocrLayerWarnings = [
-      ...(layerPages.size > 0 ? [`ocr_layer_pages:${Array.from(layerPages).join(",")}`] : []),
-      ...(mismatch ? ["pdf_ocr_layer_mismatch"] : []),
-    ];
+    // A page the vision read is read as it shows it, and what was set aside
+    // there no longer makes the reading partial: on a scan, any page it
+    // transcribed; otherwise, one where it found about as much text as was set
+    // aside there.
+    const reread = new Map((vision?.pages ?? [])
+      .filter(page => scanned ? page.text.length > 0 : 2 * page.text.length >= setAsideOn(page.pageNumber))
+      .map(page => [page.pageNumber, page.text]));
+    const text = reread.size > 0 ? withMarkers(pages.map(page => ({ number: page.number, text: reread.get(page.number) ?? page.text }))) : extracted;
+    const invisibleText = invisibleTextSummary(result.visibility?.invisibleText ?? [], unverifiable.map(passage => ({ ...passage, reread: reread.has(passage.page) })), contentLength(text));
     if (!scanned) {
       return {
         text,
         method: "pdf_text",
         totalPages,
-        ocrConfidence: usedVision ? vision!.confidence : null,
-        ocrModelVersion: usedVision ? RECRUITMENT_OCR_MODEL : null,
+        ocrConfidence: reread.size > 0 ? vision!.confidence : null,
+        ocrModelVersion: reread.size > 0 ? RECRUITMENT_OCR_MODEL : null,
         warnings: [
           ...textCoverageWarnings,
           ...visibilityWarnings,
-          ...(reread.size > 0 ? [`vision_ocr_pages:${Array.from(reread).sort((left, right) => left - right).join(",")}`] : []),
-          ...(usedVision ? vision!.warnings : []),
-          ...ocrLayerWarnings,
+          ...(reread.size > 0 ? [`vision_ocr_pages:${Array.from(reread.keys()).join(",")}`, ...vision!.warnings] : []),
           ...invisibleTextWarnings(invisibleText),
         ],
         invisibleText,
       };
     }
-    // Pages of the scan neither the vision nor the OCR layer read: the reading is partial.
-    const unreadPages = pages.some(page => !visionPages.has(page.number) && !layerPages.has(page.number)) || (totalPages ?? 0) > pages.length;
+    // Pages of the scan beyond those the vision reads: the reading is partial.
+    const unreadPages = pages.some(page => !vision!.pages.some(read => read.pageNumber === page.number)) || (totalPages ?? 0) > pages.length;
     return {
       text,
       method: "pdf_vision",
       totalPages,
       ocrConfidence: vision!.confidence,
       ocrModelVersion: RECRUITMENT_OCR_MODEL,
-      warnings: ["vision_ocr_fallback", ...(unreadPages ? ["vision_ocr_first_3_pages_only"] : []), ...vision!.warnings, ...ocrLayerWarnings, ...invisibleTextWarnings(invisibleText)],
+      warnings: ["vision_ocr_fallback", ...(unreadPages ? [`vision_ocr_first_${VISION_RENDER.first}_pages_only`] : []), ...vision!.warnings, ...invisibleTextWarnings(invisibleText)],
       invisibleText,
     };
   }

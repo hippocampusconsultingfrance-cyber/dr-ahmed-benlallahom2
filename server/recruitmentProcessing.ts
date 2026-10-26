@@ -146,7 +146,7 @@ export async function executeCvExternalPipeline(
     extractedText: extraction.text,
     extractionMethod: extraction.method,
     // The vision's own confidence, kept as the admin sees it: a partial OCR
-    // (pages of a scan neither the vision nor its OCR layer read) never gets a
+    // (pages of a scan beyond those the vision reads) never gets a
     // whole-document score, since its reading is incomplete (below), but the
     // quotes found on the pages read stay found.
     ocrConfidence: extraction.ocrConfidence,
@@ -156,7 +156,7 @@ export async function executeCvExternalPipeline(
     extractionIncomplete: extraction.warnings.some(warning =>
       warning.startsWith("pdf_text_page_") ||
       warning === "pdf_text_pages_missing" ||
-      warning === "vision_ocr_first_3_pages_only" ||
+      /^vision_ocr_first_\d+_pages_only$/.test(warning) ||
       isVisibilityCheckWarning(warning)
     ) || visibilityRequiresReview(extraction.invisibleText),
     invisibleText: extraction.invisibleText,

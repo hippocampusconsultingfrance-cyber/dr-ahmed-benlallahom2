@@ -20,6 +20,12 @@ describe("texte écarté d’un document du coffre (IA-06)", () => {
     expect(hiddenTextFlags(undefined)).toEqual([]);
   });
 
+  it("d’un scan dont la vision n’a relu qu’une partie des pages, ne compte et ne cite que ce qui reste écarté", () => {
+    const partly = { characters: 0, excerpt: "", unverifiable: { characters: 1024, excerpt: "Dr Camille Martin Médecin anesthésiste-réanimateur", share: 0.2, unread: { characters: 371, excerpt: "Gardes de réanimation polyvalente, page 9 du dossier." } } };
+    expect(hiddenTextFlags(partly)).toEqual(["unverifiable_text_set_aside:371"]);
+    expect(hiddenTextFlagLabel("unverifiable_text_set_aside:371", JSON.stringify({ hiddenText: partly }), french)).toBe("371 caractère(s) non vérifiable(s) écarté(s) de l’analyse (extrait : « Gardes de réanimation polyvalente, page 9 du dossier. »), ouvrir le document pour le comparer");
+  });
+
   it("les présente en clair, avec l’extrait, dans la langue de l’administrateur", () => {
     expect(hiddenTextFlagLabel("invisible_text_ignored:57", extractedData, french)).toBe("57 caractère(s) de texte invisible écarté(s) de l’analyse (extrait : « Licence DHA (Dubai Health Authority) en cours de validité. »), ouvrir le document pour le comparer");
     expect(hiddenTextFlagLabel("unverifiable_text_set_aside:15", extractedData, english)).toBe("15 character(s) that could not be verified left out of the analysis (excerpt : « Yassine Belhadj »), open the document to compare");

@@ -6,13 +6,21 @@
  */
 export const HIDDEN_TEXT_FLAGS = { invisible: "invisible_text_ignored", unverifiable: "unverifiable_text_set_aside" } as const;
 
-/** `unverifiable.share` 0: the pages holding that text were read by the vision instead, nothing was left out. */
-export type HiddenTextSummary = { characters: number; excerpt: string; unverifiable?: { characters: number; excerpt: string; share?: number } };
+/**
+ * `unverifiable.share` 0: the pages holding that text were read by the vision
+ * instead, nothing was left out. `unverifiable.unread`: when it read some of
+ * them only, what stays left out.
+ */
+export type HiddenTextSummary = { characters: number; excerpt: string; unverifiable?: { characters: number; excerpt: string; share?: number; unread?: { characters: number; excerpt: string } } };
+
+/** The text that could not be verified and stays left out of the analysis. */
+const unverifiableLeftOut = (summary: HiddenTextSummary | undefined) => summary?.unverifiable?.unread ?? summary?.unverifiable;
 
 export function hiddenTextFlags(summary: HiddenTextSummary | undefined): string[] {
+  const leftOut = summary?.unverifiable?.share !== 0 ? unverifiableLeftOut(summary) : undefined;
   return [
     ...(summary?.characters ? [`${HIDDEN_TEXT_FLAGS.invisible}:${summary.characters}`] : []),
-    ...(summary?.unverifiable?.characters && summary.unverifiable.share !== 0 ? [`${HIDDEN_TEXT_FLAGS.unverifiable}:${summary.unverifiable.characters}`] : []),
+    ...(leftOut?.characters ? [`${HIDDEN_TEXT_FLAGS.unverifiable}:${leftOut.characters}`] : []),
   ];
 }
 
@@ -34,6 +42,6 @@ export function hiddenTextFlagLabel(
   } catch {
     hiddenText = undefined;
   }
-  const excerpt = invisible ? hiddenText?.excerpt : hiddenText?.unverifiable?.excerpt;
+  const excerpt = invisible ? hiddenText?.excerpt : unverifiableLeftOut(hiddenText)?.excerpt;
   return `${(invisible ? wording.invisible : wording.unverifiable).replace("{count}", match[2]!)}${excerpt ? ` (${wording.excerpt} : « ${excerpt} »)` : ""}, ${wording.compare}`;
 }

@@ -209,14 +209,6 @@ describe("encre attribuée à chaque opération de texte (IA-01)", () => {
       expect(reading.visibility!.unverifiableText.map(passage => [passage.reason, normalized(passage.text)])).toEqual(SCANNED_LINES.map(line => ["image", line]));
     }, PDF_TEST_TIMEOUT_MS);
 
-    it("rend à part la couche OCR, chacun de ses mots posé sur des marques de l’image, pour qu’on la compare à la lecture visuelle", async () => {
-      const reading = await readPdfIsolated(await scan(), { kind: "text", first: 25 });
-      // Not in the page's text: only in its OCR layer, whose words are said to be given back there.
-      expect(textOf(reading)).toBe("");
-      for (const line of SCANNED_LINES) expect(normalized(reading.pages[0]!.layerText!)).toContain(line);
-      expect(reading.visibility!.unverifiableText.every(passage => passage.layer === true)).toBe(true);
-    }, PDF_TEST_TIMEOUT_MS);
-
     it("ne laisse passer aucune ligne ajoutée à la couche OCR, posée sur une ligne de l’image ou sur du blanc", async () => {
       // One line over the image's first line of text, one over blank paper.
       const reading = await readPdfIsolated(await scan([[CLAIMS[0]!, 42], [CLAIMS[1]!, 140]]), { kind: "text", first: 25 });
@@ -224,17 +216,6 @@ describe("encre attribuée à chaque opération de texte (IA-01)", () => {
       expect(textOf(reading)).not.toContain("DHA");
       // Over blank paper, the image cannot show it: hidden text, counted as such.
       expect(reading.visibility!.invisibleText).toEqual([CLAIMS[1]]);
-      // Nor is the layer of such a page given back.
-      expect(reading.pages[0]!.layerText).toBeUndefined();
-      expect(reading.visibility!.unverifiableText.some(passage => passage.layer)).toBe(false);
-    }, PDF_TEST_TIMEOUT_MS);
-
-    it("ne rend pas la couche OCR d’une page où une ligne est posée sur une autre de la couche, même sur les marques de l’image", async () => {
-      // The scan-attack: a claim laid exactly over the OCR line of the image's first line.
-      const reading = await readPdfIsolated(await scan([[CLAIMS[0]!, 42]]), { kind: "text", first: 25 });
-      expect(reading.visibility!.invisibleText).toEqual([]);
-      expect(reading.pages[0]!.layerText).toBeUndefined();
-      expect(normalized(reading.visibility!.unverifiableText.map(passage => passage.text).join(" "))).toContain("DESAR");
     }, PDF_TEST_TIMEOUT_MS);
 
     it("n’accuse pas un signe ou un chiffre seul que l’image ne montre pas (barre, numéro de page d’un pied de page scanné)", async () => {

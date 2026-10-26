@@ -28,8 +28,6 @@ import { visibleTextContent, type PdfVisibilityFindings } from "./pdfVisibleText
  * hidden) when a picture under it may show it, as an OCR layer on a scan,
  * when it is left with too little ink to be read, when its font cannot be
  * drawn, or when it was not checked in time. Both are left out of the text.
- * A scanned page whose OCR layer lies word by word on the picture also gets
- * that layer apart (`layerText`), for the caller to compare with the vision.
  * The render task draws the first pages, or those it is given.
  * Drawing pages stops once `pdfVisibilityWorkUnits` of drawing work are
  * spent (counted, so that a file always gives the same text: see
@@ -40,8 +38,7 @@ import { visibleTextContent, type PdfVisibilityFindings } from "./pdfVisibleText
 
 export type PdfTextReading = {
   total: number | null;
-  /** `layerText`: the page's text with its OCR layer given back (pdfVisibleText). */
-  pages: Array<{ num: number; text: string; layerText?: string }>;
+  pages: Array<{ num: number; text: string }>;
   /** Absent when the text was read without the visibility check (in-process fallback). */
   visibility?: { invisibleText: string[]; uncheckedPages: number[]; unverifiableText: PdfVisibilityFindings["unverifiableText"] };
 };
@@ -122,22 +119,19 @@ const visibleTextContent = ${visibleTextContent.toString()};
       for (let num = 1; num <= Math.min(total, task.first); num += 1) {
         const page = await doc.getPage(num);
         let content = await page.getTextContent();
-        let ocrLayer = null;
         // Only pages with text are drawn; past the work budget, a page's text is set aside unchecked.
         const layer = content.items.map(item => typeof item.str === "string" ? item.str : "").join(" ").replace(/\\s+/g, " ").trim();
         if (layer && budget.units > 0 && Date.now() < deadline) {
           const checked = await visibleTextContent(page, content, doc.canvasFactory, visibility, { pageNumber: num, deadline, budget });
           content = checked.content;
-          ocrLayer = checked.layer ?? null;
           if (!checked.complete) visibility.uncheckedPages.push(num);
         } else if (layer) {
           visibility.uncheckedPages.push(num);
           visibility.unverifiableText.push({ page: num, reason: "unfinished", text: layer });
           content = { ...content, items: [] };
         }
-        const pageText = items => parser.getPageText({ getViewport: options => page.getViewport(options), getTextContent: async () => items }, {}, total);
-        const text = await pageText(content);
-        pages.push(ocrLayer ? { num, text, layerText: await pageText(ocrLayer) } : { num, text });
+        const text = await parser.getPageText({ getViewport: options => page.getViewport(options), getTextContent: async () => content }, {}, total);
+        pages.push({ num, text });
         page.cleanup();
       }
       parentPort.postMessage({ type: "result", result: { total: Number.isInteger(total) ? total : null, pages, visibility } });

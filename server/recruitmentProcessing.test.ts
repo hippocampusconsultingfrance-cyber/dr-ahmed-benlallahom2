@@ -161,7 +161,7 @@ describe("règles déterministes du pipeline de traitement CV", () => {
         totalPages: 8,
         ocrConfidence: 92,
         ocrModelVersion: "google/gemini-3.8-flash",
-        warnings: ["vision_ocr_fallback", "vision_ocr_first_3_pages_only"],
+        warnings: ["vision_ocr_fallback", "vision_ocr_first_8_pages_only"],
       }),
       analyze: async analysisInput => {
         received = { extractionIncomplete: analysisInput.extractionIncomplete, ocrConfidence: analysisInput.ocrConfidence };
