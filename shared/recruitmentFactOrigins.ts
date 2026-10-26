@@ -48,8 +48,9 @@ export function certificationExpiry(expiresAt: string) {
 
 /**
  * Whether a certification is still valid: no date, or one not yet passed. An
- * unreadable date counts as expired. Shared by a mission's matching and the
- * admin sheet, which offers to confirm the renewal of an expired one.
+ * unreadable date counts as expired. Shared by the CV analysis, a mission's
+ * matching and the admin sheet, which offers to confirm the renewal of an
+ * expired one.
  */
 export function certificationDateIsCurrent(
   expiresAt: string | null | undefined,

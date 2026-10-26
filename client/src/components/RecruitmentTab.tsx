@@ -13,6 +13,7 @@ import Candidate360Dialog from "./Candidate360Dialog";
 import CertificationReview from "./CertificationReview";
 import { useCvDownload } from "./useCvDownload";
 import { recruitmentFactLabel, recruitmentFactNameContains } from "@shared/recruitmentFactOrigins";
+import { RECRUITMENT_APPLICATION_STATUS_OPTIONS, type RecruitmentApplicationStatus } from "@shared/recruitmentApplicationStatuses";
 import { AI_ANALYSIS_UNAVAILABLE_LABEL, isAiAnalysisUnavailable, SCORE_UNAVAILABLE_EXPLANATION, SCORE_UNAVAILABLE_HEADING, scoredApplicationsFirst } from "./recruitmentScoreGroups";
 import { contradictionEvidenceLabel, CV_READING_LABELS, CV_REVIEW_REMINDER, cvReadingTextForDisplay, fieldEvidenceStatusLabel, fieldEvidenceStatusTone } from "./recruitmentEvidenceLabels";
 import {
@@ -32,16 +33,10 @@ import {
   recruitmentEmailDeliveryTone,
 } from "@/lib/recruitmentTraceability";
 
-const statusOptions = [
-  { value: "new", label: "Nouvelle" },
-  { value: "reviewing", label: "En revue" },
-  { value: "shortlisted", label: "Présélectionnée" },
-  { value: "placed", label: "Positionnée" },
-  { value: "rejected", label: "Refusée" },
-  { value: "archived", label: "Archivée" },
-] as const;
+// Shared with the shortlist file sent to an employer, which names the status in the same words.
+const statusOptions = RECRUITMENT_APPLICATION_STATUS_OPTIONS;
 
-type Status = (typeof statusOptions)[number]["value"];
+type Status = RecruitmentApplicationStatus;
 type RecruitmentEmailTemplate = "profile_interest" | "additional_information";
 const VERIFIED_ANALYSIS_VERSION = "recruitment-v7-verified-score";
 

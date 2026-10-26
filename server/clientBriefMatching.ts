@@ -19,6 +19,14 @@ export type CertificationFact = RecruitmentFact & { expiresAt: string | null };
 export type BriefCertificationStatus = "matched" | "to_confirm" | "expired";
 export type BriefCertification = CertificationFact & { status: BriefCertificationStatus };
 
+/**
+ * A criterion other than certifications and languages the candidate meets, as
+ * a code the mission screen words in the admin's language.
+ */
+export type BriefMatchReason =
+  | { criterion: "specialty" | "mobility" | "availability" }
+  | { criterion: "experience"; years: number; minimum: number };
+
 type CandidateForMatching = {
   specialty: string;
   targetCountries: string | null;
@@ -29,8 +37,11 @@ type CandidateForMatching = {
   availability?: string | null;
 };
 
-/** cv_candidate_certifications row: read in the CV by the AI, or declared and then confirmed. */
-export type CertificationRow = { name: string; source: "declared" | "extracted"; confirmedAt: Date | string | null; expiresAt: string | null };
+/**
+ * cv_candidate_certifications row: read in the CV by the AI, declared and then
+ * confirmed, or a renewal an admin confirmed, with its new expiry (IA-02).
+ */
+export type CertificationRow = { name: string; source: "declared" | "extracted" | "renewed"; confirmedAt: Date | string | null; expiresAt: string | null };
 /** cv_candidate_languages row, read in the CV by the AI. */
 export type LanguageRow = { language: string; source: "declared" | "extracted" };
 
@@ -100,7 +111,8 @@ function addFact<T extends RecruitmentFact>(facts: T[], name: string, origin: Re
 /**
  * The candidate's certifications, one per name (IA-02): declared in the form,
  * read in the CV by the AI, confirmed by an admin (a row with confirmed_at).
- * Free-text declared certifications have no machine-readable expiry.
+ * Free-text declared certifications have no machine-readable expiry. A
+ * renewal row adds no origin but the admin's confirmation.
  */
 export function certificationFacts(declared: string | null | undefined, rows: CertificationRow[]): CertificationFact[] {
   const facts: CertificationFact[] = [];
@@ -108,14 +120,15 @@ export function certificationFacts(declared: string | null | undefined, rows: Ce
   for (const name of declaredCertificationNames(declared)) addFact(facts, name, "declared", create);
   const rowsByFact = new Map<CertificationFact, CertificationRow[]>();
   for (const row of rows) {
-    const fact = addFact(facts, row.name, row.source, create);
+    const fact = addFact(facts, row.name, row.source === "renewed" ? "confirmed" : row.source, create);
     if (!fact) continue;
     if (row.confirmedAt) addFact(facts, row.name, "confirmed", create);
     rowsByFact.set(fact, [...(rowsByFact.get(fact) ?? []), row]);
   }
   // A certification renewed in the CV has a row per date: it is current while
   // its latest one is. Once one is confirmed, only the confirmed rows count,
-  // since only a confirmation earns points.
+  // since only a confirmation earns points: a renewal the admin confirmed
+  // among them, whose date (or none) prevails over the expired one of the CV.
   rowsByFact.forEach((factRows, fact) => {
     const confirmedRows = factRows.filter(row => row.confirmedAt);
     fact.expiresAt = latestCertificationExpiry((confirmedRows.length ? confirmedRows : factRows).map(row => row.expiresAt));
@@ -152,18 +165,18 @@ const factsMatching = <T extends RecruitmentFact>(required: string, facts: T[]) 
 const addUnique = <T>(list: T[], items: T[]) => { for (const item of items) if (!list.includes(item)) list.push(item); };
 
 export function computeBriefCandidateMatch(brief: BriefForMatching, candidate: CandidateForMatching) {
-  const reasons: string[] = [];
+  const reasons: BriefMatchReason[] = [];
   const breakdown = { specialty: 0, mobility: 0, certifications: 0, languages: 0, experience: 0, availability: 0 };
 
   if (specialtyMatches(candidate.specialty, brief.specialtyNeeded)) {
     breakdown.specialty = 35;
-    reasons.push("spécialité compatible");
+    reasons.push({ criterion: "specialty" });
   }
 
   const countryEvidence = [...parseTerms(candidate.targetCountries), candidate.mobility || ""].join(" · ");
   if (containsTerm(countryEvidence, brief.country)) {
     breakdown.mobility = 15;
-    reasons.push("mobilité vers le pays de mission déclarée");
+    reasons.push({ criterion: "mobility" });
   }
 
   // A required certification earns its points only once a human confirmed a
@@ -211,18 +224,18 @@ export function computeBriefCandidateMatch(brief: BriefForMatching, candidate: C
 
   if (brief.minimumYearsExperience && candidate.yearsExperience !== null && candidate.yearsExperience !== undefined && candidate.yearsExperience >= brief.minimumYearsExperience) {
     breakdown.experience = 10;
-    reasons.push(`expérience déclarée : ${candidate.yearsExperience} an(s) pour un minimum de ${brief.minimumYearsExperience}`);
+    reasons.push({ criterion: "experience", years: candidate.yearsExperience, minimum: brief.minimumYearsExperience });
   }
 
   if (brief.availabilityNeeded && candidate.availability && (containsTerm(candidate.availability, brief.availabilityNeeded) || containsTerm(brief.availabilityNeeded, candidate.availability))) {
     breakdown.availability = 5;
-    reasons.push("disponibilité compatible avec le besoin exprimé");
+    reasons.push({ criterion: "availability" });
   }
 
   const score = Object.values(breakdown).reduce((total, value) => total + value, 0);
   // reasons: the other criteria met. certifications / languages: the
   // candidate's facts retained for the mission, with their origins (and, for
-  // a certification, its status and expiry), as codes the mission screen
+  // a certification, its status and expiry). All as codes the mission screen
   // words in the admin's language (IA-02).
   return { score: Math.min(score, 100), reasons, matchedCertifications, certificationsToConfirm, matchedLanguages, certifications, languages, breakdown };
 }

@@ -39,8 +39,8 @@ describe("matching mission–candidat", () => {
     expect(result.breakdown).toMatchObject({ specialty: 35, mobility: 15, certifications: 0, languages: 15 });
     expect(result.certifications).toEqual([{ name: "Licence DHA", origins: ["extracted"], expiresAt: null, status: "to_confirm" }]);
     expect(result.languages).toEqual([{ name: "Anglais", origins: ["declared"] }]);
-    // Certifications and languages come as codes, worded by the mission screen in the admin's language.
-    expect(result.reasons).toEqual(["spécialité compatible", "mobilité vers le pays de mission déclarée"]);
+    // Every reason comes as a code, worded by the mission screen in the admin's language.
+    expect(result.reasons).toEqual([{ criterion: "specialty" }, { criterion: "mobility" }]);
   });
 
   it("une certification déclarée par le candidat compte, elle aussi, une fois confirmée", () => {
@@ -83,10 +83,10 @@ describe("matching mission–candidat", () => {
       { name: "Arabe", origins: ["extracted"] },
     ]);
     expect(result.reasons).toEqual([
-      "spécialité compatible",
-      "mobilité vers le pays de mission déclarée",
-      "expérience déclarée : 8 an(s) pour un minimum de 5",
-      "disponibilité compatible avec le besoin exprimé",
+      { criterion: "specialty" },
+      { criterion: "mobility" },
+      { criterion: "experience", years: 8, minimum: 5 },
+      { criterion: "availability" },
     ]);
   });
 
@@ -115,12 +115,18 @@ describe("matching mission–candidat", () => {
     expect(expired.certifications).toEqual([{ name: "ACLS", origins: ["declared", "extracted"], expiresAt: "2023-05", status: "expired" }]);
     // Confirmed as it is: still expired, and still said.
     expect(computeBriefCandidateMatch(aclsBrief, { ...anaesthetist, certificationFacts: certificationFacts("PALS, ACLS", [extracted("ACLS", { expiresAt: "2023-05", confirmedAt })]) }).certifications[0]!.status).toBe("expired");
-    // Its renewal confirmed, with a new expiry or none: it counts.
+    // Its renewal confirmed, with a new expiry or none, in a row of its own
+    // beside the one read in the CV: it counts.
     for (const expiresAt of ["2099-06-30", null]) {
-      const renewed = computeBriefCandidateMatch(aclsBrief, { ...anaesthetist, certificationFacts: certificationFacts("PALS, ACLS", [extracted("ACLS", { expiresAt, confirmedAt })]) });
+      const rows: CertificationRow[] = [extracted("ACLS", { expiresAt: "2023-05", confirmedAt }), { name: "ACLS", source: "renewed", confirmedAt, expiresAt }];
+      const renewed = computeBriefCandidateMatch(aclsBrief, { ...anaesthetist, certificationFacts: certificationFacts("PALS, ACLS", rows) });
       expect(renewed.breakdown.certifications).toBe(20);
       expect(renewed.certifications).toEqual([{ name: "ACLS", origins: ["declared", "extracted", "confirmed"], expiresAt, status: "matched" }]);
     }
+    // The renewal adds no origin but the admin's: a certification read in the CV only is not said declared.
+    expect(certificationFacts(null, [extracted("ACLS", { expiresAt: "2023-05", confirmedAt }), { name: "ACLS", source: "renewed", confirmedAt, expiresAt: "2099-06-30" }])).toEqual([
+      { name: "ACLS", origins: ["extracted", "confirmed"], expiresAt: "2099-06-30" },
+    ]);
   });
 
   it("une certification renouvelée dans le CV compte jusqu’à sa dernière date d’expiration", () => {

@@ -26,6 +26,7 @@ import {
 import { logRecruitmentAction, matchesRecruitmentProfile, parseRecruitmentJsonArray } from "./recruitmentAudit";
 import { CERTIFICATION_NAME_MAX_LENGTH, certificationFacts, computeBriefCandidateMatch, declaredCertificationNames, languageFacts, sameRecruitmentFact, type CertificationFact, type CertificationRow, type LanguageRow } from "./clientBriefMatching";
 import { certificationDateIsCurrent, recruitmentFactLabel, type RecruitmentFact } from "../shared/recruitmentFactOrigins";
+import { recruitmentApplicationStatusLabel } from "../shared/recruitmentApplicationStatuses";
 import { candidatePortalRouter } from "./candidatePortalRouter";
 import { enforcePersistentRateLimit, hashSecurityValue, logSecurityEvent, releasePersistentRateLimitAttempt, requestIpHash } from "./candidateSecurity";
 import { countPublicFormDailyVolume, enforcePublicEmailIpRateLimit, PUBLIC_EMAIL_IP_RATE_LIMITS, publicFormRateLimitSubject, releasePublicEmailIpRateLimit, type PublicFormRateLimitScope } from "./publicFormRateLimit";
@@ -288,19 +289,12 @@ function csvListCell(value: string | null) {
   return value?.trim().startsWith("[") ? parseRecruitmentJsonArray(value).join(" ; ") : value;
 }
 
-/** An application's status as the admin Candidatures tab names it, for a file sent to an employer. */
-const CV_APPLICATION_STATUS_LABELS: Record<(typeof CV_APPLICATION_STATUSES)[number], string> = {
-  new: "Nouvelle",
-  reviewing: "En revue",
-  shortlisted: "Présélectionnée",
-  placed: "Positionnée",
-  rejected: "Refusée",
-  archived: "Archivée",
-};
+/** A certification's expiry (YYYY, YYYY-MM or YYYY-MM-DD) as a file sent to an employer writes dates: « le 30/06/2099 », « en 05/2099 ». */
+const exportExpiry = (expiresAt: string) => `${expiresAt.length === 10 ? "le" : "en"} ${expiresAt.split("-").reverse().join("/")}`;
 
-/** « ACLS (extraite du CV par l’IA), expirée le 2023-05 »: whether a certification is still valid. */
+/** « ACLS (extraite du CV par l’IA), expirée en 05/2023 »: whether a certification is still valid. */
 const certificationExportLabel = (fact: CertificationFact) => fact.expiresAt
-  ? `${recruitmentFactLabel(fact)}, ${certificationDateIsCurrent(fact.expiresAt) ? "expire le" : "expirée le"} ${fact.expiresAt}`
+  ? `${recruitmentFactLabel(fact)}, ${certificationDateIsCurrent(fact.expiresAt) ? "expire" : "expirée"} ${exportExpiry(fact.expiresAt)}`
   : recruitmentFactLabel(fact);
 
 type AdminDb = NonNullable<Awaited<ReturnType<typeof getDb>>>;
@@ -353,9 +347,11 @@ async function languageFactsByApplication(db: AdminDb, applications: Array<{ id:
 
 /**
  * Applications holding a certification an admin confirmed whose name contains
- * this term (IA-02). The certification filters find it as a mission's
- * matching counts it, even once a new analysis stored no facts (a
- * contradiction, hidden text) and left normalized_certifications empty.
+ * this term, case aside (IA-02). The certification filters find a confirmed
+ * certification even once a new analysis stored no facts (a contradiction,
+ * hidden text) and left normalized_certifications empty. They are wider than
+ * a mission's matching: accents count, and a confirmed certification that
+ * has expired is found too, as the declared text finds one.
  */
 async function applicationsWithConfirmedCertification(db: AdminDb, term: string) {
   const rows = await db.select({ applicationId: cvCandidateCertifications.applicationId })
@@ -2102,8 +2098,10 @@ export const appRouter = router({
         // The name is the one shown, as long as the declared term (the form
         // takes 1,000 characters); a row keeps its first 180.
         // renewal: the certificate checked was renewed since the date read in
-        // the CV. Its rows take the new expiry (none when the certificate has
-        // none), so that an expired certification counts again.
+        // the CV. The renewal gets a row of its own with the new expiry (none
+        // when the certificate has none), so that an expired certification
+        // counts again; the rows read in the CV keep their date. Withdrawing
+        // the confirmation removes the renewal with it.
         confirmCertification: adminProcedure.input(z.object({
           id: z.number().int().positive(),
           name: z.string().trim().min(1).max(1000),
@@ -2119,29 +2117,38 @@ export const appRouter = router({
           }
           const [application] = await db.select({ id: cvApplications.id, certifications: cvApplications.certifications }).from(cvApplications).where(eq(cvApplications.id, input.id)).limit(1);
           if (!application) throw new TRPCError({ code: "NOT_FOUND", message: "Candidature introuvable." });
-          const rows = (await db.select({ id: cvCandidateCertifications.id, name: cvCandidateCertifications.name, confirmedAt: cvCandidateCertifications.confirmedAt, expiresAt: cvCandidateCertifications.expiresAt })
+          const rows = (await db.select({ id: cvCandidateCertifications.id, name: cvCandidateCertifications.name, source: cvCandidateCertifications.source, confirmedAt: cvCandidateCertifications.confirmedAt, expiresAt: cvCandidateCertifications.expiresAt })
             .from(cvCandidateCertifications)
             .where(eq(cvCandidateCertifications.applicationId, application.id)))
             .filter(row => sameRecruitmentFact(row.name, input.name));
           const declared = declaredCertificationNames(application.certifications).find(name => sameRecruitmentFact(name, input.name));
           if (!rows.length && !declared) throw new TRPCError({ code: "NOT_FOUND", message: "Cette certification ne figure pas dans le dossier." });
-          // Rows whose confirmation, or expiry on a renewal, changes: nothing is logged when none does.
-          const changed = rows.filter(row => (row.confirmedAt === null) === input.confirmed || (renewal !== undefined && row.expiresAt !== renewal.expiresAt));
-          if (changed.length) {
-            await db.update(cvCandidateCertifications).set({ confirmedAt: input.confirmed ? new Date() : null, ...(renewal ? { expiresAt: renewal.expiresAt } : {}) }).where(inArray(cvCandidateCertifications.id, changed.map(row => row.id)));
-          } else if (input.confirmed && !rows.length) {
-            // A certification declared in the form only: its confirmation gets a row of its own.
-            await db.insert(cvCandidateCertifications).values({ applicationId: application.id, name: declared!.slice(0, CERTIFICATION_NAME_MAX_LENGTH), source: "declared", confirmedAt: new Date(), expiresAt: renewal?.expiresAt ?? null });
-          } else {
-            return { success: true, changed: false };
+          const renewalRows = rows.filter(row => row.source === "renewed");
+          const readRows = rows.filter(row => row.source !== "renewed");
+          // Rows whose confirmation changes, a renewal new or redated, a
+          // declared certification's first confirmation, a renewal withdrawn:
+          // nothing is logged when nothing changes.
+          const changed = readRows.filter(row => (row.confirmedAt === null) === input.confirmed);
+          const renewalChanged = renewal !== undefined && (!renewalRows.length || renewalRows.some(row => row.expiresAt !== renewal.expiresAt));
+          // A certification declared in the form only: its confirmation gets a
+          // row of its own, unless its renewal's row holds it.
+          const declaredConfirmation = input.confirmed && !rows.length && !renewal;
+          const renewalWithdrawn = !input.confirmed && renewalRows.length > 0;
+          if (!changed.length && !renewalChanged && !declaredConfirmation && !renewalWithdrawn) return { success: true, changed: false };
+          if (changed.length) await db.update(cvCandidateCertifications).set({ confirmedAt: input.confirmed ? new Date() : null }).where(inArray(cvCandidateCertifications.id, changed.map(row => row.id)));
+          if (declaredConfirmation) await db.insert(cvCandidateCertifications).values({ applicationId: application.id, name: declared!.slice(0, CERTIFICATION_NAME_MAX_LENGTH), source: "declared", confirmedAt: new Date() });
+          if (renewal && renewalChanged) {
+            if (renewalRows.length) await db.update(cvCandidateCertifications).set({ expiresAt: renewal.expiresAt }).where(inArray(cvCandidateCertifications.id, renewalRows.map(row => row.id)));
+            else await db.insert(cvCandidateCertifications).values({ applicationId: application.id, name: (rows[0]?.name ?? declared!).slice(0, CERTIFICATION_NAME_MAX_LENGTH), source: "renewed", confirmedAt: new Date(), expiresAt: renewal.expiresAt });
           }
+          if (renewalWithdrawn) await db.delete(cvCandidateCertifications).where(inArray(cvCandidateCertifications.id, renewalRows.map(row => row.id)));
           const certification = rows[0]?.name ?? declared;
           await logRecruitmentAction({
             applicationId: application.id,
             adminOpenId: ctx.user.openId,
             action: "status_update",
             metadata: renewal
-              ? { event: "certification_renewed", certification, expiresAt: renewal.expiresAt, previousExpiresAt: Array.from(new Set(rows.map(row => row.expiresAt))) }
+              ? { event: "certification_renewed", certification, expiresAt: renewal.expiresAt, previousExpiresAt: Array.from(new Set((renewalRows.length ? renewalRows : readRows).map(row => row.expiresAt))) }
               : { event: input.confirmed ? "certification_confirmed" : "certification_unconfirmed", certification },
           });
           return { success: true, changed: true };
@@ -2254,7 +2261,7 @@ export const appRouter = router({
           // certification's expiry, the application's status in words.
           const facts = <T extends RecruitmentFact>(list: T[] | undefined, label: (fact: T) => string = recruitmentFactLabel) => (list ?? []).map(label).join(" ; ");
           const header = ["Prénom", "Nom", "Email", "Téléphone", "Spécialité", "Pays ciblés", "Langues (origine)", "Expérience (ans)", "Disponibilité", "Mobilité", "Certifications (origine)", "Accord du candidat", "Statut"];
-          csv = [header.map(csvCell).join(";"), ...rows.map(row => [row.firstName, row.lastName, row.email, row.phone, row.specialty, csvListCell(row.targetCountries), facts(languagesByApplication.get(row.id)), row.yearsExperience, row.availability, row.mobility, facts(certificationsByApplication.get(row.id), certificationExportLabel), consentByApplication.get(row.id)?.toLocaleDateString("fr-FR", { timeZone: "Europe/Paris" }), CV_APPLICATION_STATUS_LABELS[row.status] ?? row.status].map(csvCell).join(";"))].join("\n");
+          csv = [header.map(csvCell).join(";"), ...rows.map(row => [row.firstName, row.lastName, row.email, row.phone, row.specialty, csvListCell(row.targetCountries), facts(languagesByApplication.get(row.id)), row.yearsExperience, row.availability, row.mobility, facts(certificationsByApplication.get(row.id), certificationExportLabel), consentByApplication.get(row.id)?.toLocaleDateString("fr-FR", { timeZone: "Europe/Paris" }), recruitmentApplicationStatusLabel(row.status)].map(csvCell).join(";"))].join("\n");
         } else {
           const header = ["Prénom", "Nom", "Email", "Téléphone", "Spécialité", "Pays ciblés", "Langues", "Expérience (ans)", "Disponibilité", "Mobilité", "Certifications", "Score IA", "Statut"];
           csv = [header.map(csvCell).join(";"), ...rows.map(row => [row.firstName, row.lastName, row.email, row.phone, row.specialty, row.targetCountries, row.languages, row.yearsExperience, row.availability, row.mobility, row.certifications, row.aiScore, row.status].map(csvCell).join(";"))].join("\n");

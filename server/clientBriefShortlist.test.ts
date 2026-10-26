@@ -230,9 +230,16 @@ describe("missions employeurs : classement, certifications et accord du candidat
     const candidate = seedCandidate({ specialty: "Cardiologie", certifications: "PALS, ACLS" });
     memory.seed(cvCandidateCertifications, [{ application_id: candidate.id, name: "ACLS", source: "extracted", expires_at: "2023-05" }]);
     const brief = seedBrief({ specialty_needed: "Cardiologie", country: "Suisse", required_certifications: "ACLS" });
+    memory.seed(clientBriefCandidates, [{ brief_id: brief.id, application_id: candidate.id, association_status: "shortlisted", candidate_consent_at: "2026-10-20 12:00:00.000" }]);
     const id = candidate.id as number;
     const matchOf = async () => (await admin().admin.clientBriefs.candidates({ briefId: brief.id as number })).candidates[0]!.match;
     const confirm = (renewal?: { expiresAt: string | null }) => admin().admin.recruitment.candidate.confirmCertification({ id, name: "ACLS", confirmed: true, renewal });
+    const rows = () => memory.rows(cvCandidateCertifications).map(row => [row.name, row.source, row.expires_at, row.confirmed_at !== null]);
+    // The certifications cell of the file sent to the employer.
+    const exportedCertifications = async () => {
+      const [, row] = (await admin().admin.recruitment.exportCsv({ type: "shortlist", briefId: brief.id as number })).csv.split("\n");
+      return row!.split('";"')[10];
+    };
 
     expect(await matchOf()).toMatchObject({ score: 35, certificationsToConfirm: [], certifications: [{ name: "ACLS", origins: ["declared", "extracted"], expiresAt: "2023-05", status: "expired" }] });
     // Confirmed as it is, it stays expired, and the screen still says so.
@@ -242,18 +249,49 @@ describe("missions employeurs : classement, certifications et accord du candidat
     await expect(confirm({ expiresAt: "2025-01-31" })).rejects.toThrow("La nouvelle date d’expiration est déjà passée : la certification resterait expirée.");
     await expect(confirm({ expiresAt: "2027-02-30" })).rejects.toThrow("Nouvelle date d’expiration invalide.");
     await expect(confirm({ expiresAt: "2099-06-30" })).resolves.toEqual({ success: true, changed: true });
-    expect(memory.rows(cvCandidateCertifications).map(row => [row.name, row.source, row.expires_at, row.confirmed_at !== null])).toEqual([["ACLS", "extracted", "2099-06-30", true]]);
-    expect(await matchOf()).toMatchObject({ score: 55, breakdown: { certifications: 20 }, certifications: [{ expiresAt: "2099-06-30", status: "matched" }] });
+    // The renewal has a row of its own: the row read in the CV keeps its date.
+    expect(rows()).toEqual([["ACLS", "extracted", "2023-05", true], ["ACLS", "renewed", "2099-06-30", true]]);
+    expect(await matchOf()).toMatchObject({ score: 55, breakdown: { certifications: 20 }, certifications: [{ origins: ["declared", "extracted", "confirmed"], expiresAt: "2099-06-30", status: "matched" }] });
+    expect(await exportedCertifications()).toBe("PALS (déclarée par le candidat) ; ACLS (déclarée par le candidat, extraite du CV par l’IA, confirmée par l’admin), expire le 30/06/2099");
     // The same renewal again changes nothing; one without a date does.
     await expect(confirm({ expiresAt: "2099-06-30" })).resolves.toEqual({ success: true, changed: false });
     await expect(confirm({ expiresAt: null })).resolves.toEqual({ success: true, changed: true });
+    expect(rows()).toEqual([["ACLS", "extracted", "2023-05", true], ["ACLS", "renewed", null, true]]);
     expect(await matchOf()).toMatchObject({ score: 55, certifications: [{ expiresAt: null, status: "matched" }] });
 
-    expect(memory.rows(recruitmentAuditLogs).map(row => JSON.parse(String(row.metadata)))).toEqual([
+    // The certificate is rejected after all: the confirmation goes, the
+    // renewal with it, and the admin sheet (the same facts as the 360° one),
+    // the mission and the employer's file give the date read in the CV again,
+    // as read by the AI.
+    await expect(admin().admin.recruitment.candidate.confirmCertification({ id, name: "ACLS", confirmed: false })).resolves.toEqual({ success: true, changed: true });
+    expect(rows()).toEqual([["ACLS", "extracted", "2023-05", false]]);
+    expect((await admin().admin.recruitment.list({})).items[0]!.certificationFacts).toEqual([
+      { name: "PALS", origins: ["declared"], expiresAt: null },
+      { name: "ACLS", origins: ["declared", "extracted"], expiresAt: "2023-05" },
+    ]);
+    expect(await matchOf()).toMatchObject({ score: 35, certifications: [{ origins: ["declared", "extracted"], expiresAt: "2023-05", status: "expired" }] });
+    expect(await exportedCertifications()).toBe("PALS (déclarée par le candidat) ; ACLS (déclarée par le candidat, extraite du CV par l’IA), expirée en 05/2023");
+
+    expect(memory.rows(recruitmentAuditLogs).filter(row => row.action !== "export").map(row => JSON.parse(String(row.metadata)))).toEqual([
       { event: "certification_confirmed", certification: "ACLS" },
       { event: "certification_renewed", certification: "ACLS", expiresAt: "2099-06-30", previousExpiresAt: ["2023-05"] },
       { event: "certification_renewed", certification: "ACLS", expiresAt: null, previousExpiresAt: ["2099-06-30"] },
+      { event: "certification_unconfirmed", certification: "ACLS" },
     ]);
+  });
+
+  it("confirme le renouvellement d’une certification seulement déclarée dans sa propre ligne, retirée avec la confirmation (IA-02)", async () => {
+    const candidate = seedCandidate({ certifications: "BLS" });
+    const id = candidate.id as number;
+    await expect(admin().admin.recruitment.candidate.confirmCertification({ id, name: "bls", confirmed: true, renewal: { expiresAt: "2099-01-31" } })).resolves.toEqual({ success: true, changed: true });
+    expect(memory.rows(cvCandidateCertifications).map(row => [row.name, row.source, row.expires_at, row.confirmed_at !== null])).toEqual([["BLS", "renewed", "2099-01-31", true]]);
+    const factsOf = async () => (await admin().admin.recruitment.list({})).items[0]!.certificationFacts;
+    expect(await factsOf()).toEqual([{ name: "BLS", origins: ["declared", "confirmed"], expiresAt: "2099-01-31" }]);
+    // Already confirmed by its renewal.
+    await expect(admin().admin.recruitment.candidate.confirmCertification({ id, name: "BLS", confirmed: true })).resolves.toEqual({ success: true, changed: false });
+    await expect(admin().admin.recruitment.candidate.confirmCertification({ id, name: "BLS", confirmed: false })).resolves.toEqual({ success: true, changed: true });
+    expect(memory.rows(cvCandidateCertifications)).toEqual([]);
+    expect(await factsOf()).toEqual([{ name: "BLS", origins: ["declared"], expiresAt: null }]);
   });
 
   it("refuse une date d’accord antérieure à la candidature ou à la création de la mission, le jour même accepté (RGPD-03)", async () => {
@@ -329,7 +367,7 @@ describe("missions employeurs : classement, certifications et accord du candidat
     expect(rows).toEqual([[
       "Prénom1", "Nom", "m1@test.local", "", "Pédiatrie", "Émirats arabes unis ; Qatar",
       "Anglais (déclarée par le candidat) ; Arabe (extraite du CV par l’IA)", "8", "Immédiate", "Golfe",
-      "BLS (déclarée par le candidat) ; Licence DHA (extraite du CV par l’IA), expire le 2099-05 ; ACLS (extraite du CV par l’IA), expirée le 2023-05",
+      "BLS (déclarée par le candidat) ; Licence DHA (extraite du CV par l’IA), expire en 05/2099 ; ACLS (extraite du CV par l’IA), expirée en 05/2023",
       "20/10/2026", "En revue",
     ].map(cell => `"${cell}"`).join(";")]);
     expect(exported.csv).not.toContain("m2@test.local");

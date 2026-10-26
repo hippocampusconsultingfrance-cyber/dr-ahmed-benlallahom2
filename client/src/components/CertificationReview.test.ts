@@ -135,7 +135,7 @@ describe("confirmation des certifications par l’admin (IA-02)", () => {
     expect(renderToStaticMarkup(CertificationReview({ applicationId: 5, certifications: [] }))).toContain("Aucune certification déclarée ni lue dans le CV.");
   });
 
-  it("dit qu’une certification a expiré et propose de confirmer son renouvellement, avec ou sans nouvelle date d’expiration", async () => {
+  it("dit qu’une certification a expiré et propose de confirmer son renouvellement, avec sa nouvelle date d’expiration ou, si on le coche, sans", async () => {
     const certifications = [
       { name: "ACLS", origins: ["declared", "extracted", "confirmed"], expiresAt: "2023-05" },
       { name: "Licence DHA", origins: ["extracted"], expiresAt: "2028-05" },
@@ -150,17 +150,36 @@ describe("confirmation des certifications par l’admin (IA-02)", () => {
     expect(html).not.toContain("Confirmer le renouvellement de Licence DHA");
     expect(html.match(/<input[^>]*type="date"[^>]*>/g)).toEqual([expect.stringContaining('min="2026-10-26"')]);
 
-    // A certificate renewed without an expiry date…
-    clickable(renderReview(), "Confirmer le renouvellement de ACLS")();
-    expect(state.confirmMutate).toHaveBeenLastCalledWith({ id: 5, name: "ACLS", confirmed: true, renewal: { expiresAt: null } });
-    // …or with the new one the admin read on it.
-    const dateInput = elements(renderReview()).find(element => element.type === "input" && element.props["aria-label"] === "Nouvelle date d’expiration — ACLS")!;
-    (dateInput.props.onChange as (event: unknown) => void)({ target: { value: "2028-06-30" } });
-    clickable(renderReview(), "Confirmer le renouvellement de ACLS")();
-    expect(state.confirmMutate).toHaveBeenLastCalledWith({ id: 5, name: "ACLS", confirmed: true, renewal: { expiresAt: "2028-06-30" } });
+    const labelled = (label: string) => elements(renderReview()).find(element => element.props["aria-label"] === label)!;
+    const renewButton = () => labelled("Confirmer le renouvellement de ACLS");
+    const typeDate = (value: string, badInput = false) => (labelled("Nouvelle date d’expiration — ACLS").props.onChange as (event: unknown) => void)({ target: { value, validity: { badInput } } });
+    const renew = () => (renewButton().props.onClick as () => void)();
 
+    // Neither a date nor « Sans date d’expiration »: nothing to confirm yet.
+    expect(renewButton().props.disabled).toBe(true);
+    renew();
+    expect(state.confirmMutate).not.toHaveBeenCalled();
+    // The new date the admin read on the certificate.
+    typeDate("2028-06-30");
+    expect(renewButton().props.disabled).toBe(false);
+    renew();
+    expect(state.confirmMutate).toHaveBeenLastCalledWith({ id: 5, name: "ACLS", confirmed: true, renewal: { expiresAt: "2028-06-30" } });
+    // A date partly erased (the field then reads ""): never a renewal without an expiry.
+    typeDate("", true);
+    expect(renewButton().props.disabled).toBe(true);
+    renew();
+    expect(state.confirmMutate).toHaveBeenCalledTimes(1);
+    // A certificate without an expiry date, said so explicitly.
+    (labelled("Le justificatif de ACLS ne porte pas de date d’expiration").props.onChange as (event: unknown) => void)({ target: { checked: true } });
+    expect(labelled("Nouvelle date d’expiration — ACLS").props.disabled).toBe(true);
+    expect(renewButton().props.disabled).toBe(false);
+    renew();
+    expect(state.confirmMutate).toHaveBeenLastCalledWith({ id: 5, name: "ACLS", confirmed: true, renewal: { expiresAt: null } });
+
+    // The toast says which expiry the certification now has.
     await state.confirmOptions!.onSuccess?.({ success: true, changed: true }, { id: 5, name: "ACLS", confirmed: true, renewal: { expiresAt: "2028-06-30" } });
-    expect(state.toasts).toEqual(["Renouvellement confirmé : ACLS"]);
+    await state.confirmOptions!.onSuccess?.({ success: true, changed: true }, { id: 5, name: "ACLS", confirmed: true, renewal: { expiresAt: null } });
+    expect(state.toasts).toEqual(["Renouvellement confirmé : ACLS, expire le 30/06/2028", "Renouvellement confirmé : ACLS, sans date d’expiration"]);
     expect(state.invalidated).toContain("clientBriefs.candidates");
   });
 

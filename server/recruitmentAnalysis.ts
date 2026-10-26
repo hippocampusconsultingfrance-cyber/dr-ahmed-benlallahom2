@@ -4,6 +4,7 @@ import { z } from "zod";
 import { cvApplications, cvCandidateCertifications, cvCandidateExperiences, cvCandidateLanguages } from "../drizzle/schema";
 import { getDb } from "./db";
 import { sameRecruitmentFact } from "./clientBriefMatching";
+import { certificationDateIsCurrent } from "../shared/recruitmentFactOrigins";
 import { assertPdfDecompressionWithinLimits, DOCUMENT_DECOMPRESSION_LIMITS, truncateExtractedText } from "./documentDecompressionLimits";
 import { withoutInvisibleDocxText } from "./docxVisibleText";
 import { pdfStandardFontDataUrl, PdfReaderUnavailableError, readPdfIsolated, type PdfTextReading } from "./pdfExtractionSandbox";
@@ -734,20 +735,9 @@ function sanitizeExperienceTimeline(input: {
   return { startDate, endDate, durationMonths, warnings };
 }
 
-function certificationExpiryDate(expiresAt: string) {
-  const [yearText, monthText, dayText] = expiresAt.split("-");
-  const year = Number(yearText);
-  const month = monthText ? Number(monthText) : 12;
-  const day = dayText ? Number(dayText) : new Date(Date.UTC(year, month, 0)).getUTCDate();
-  return new Date(Date.UTC(year, month - 1, day, 23, 59, 59, 999));
-}
-
-function certificationIsCurrent(
-  certification: NormalizedCertification,
-  referenceDate = new Date()
-) {
-  return !certification.expiresAt || certificationExpiryDate(certification.expiresAt) >= referenceDate;
-}
+// The same rule as a mission's matching and the admin sheet (IA-02).
+const certificationIsCurrent = (certification: NormalizedCertification) =>
+  certificationDateIsCurrent(certification.expiresAt);
 
 const employmentEvidenceTerms: Record<NormalizedExperience["employmentType"], string[]> = {
   permanent: ["permanent", "cdi"],
