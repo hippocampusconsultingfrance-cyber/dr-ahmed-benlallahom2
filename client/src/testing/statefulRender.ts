@@ -7,6 +7,9 @@
  *   vi.mock("react", async importOriginal => (await import("@/testing/statefulRender")).withStatefulHooks(await importOriginal()));
  * Outside renderStateful (for example while react-dom/server renders the
  * returned tree), React's own hooks answer. Never imported by production code.
+ * The critical screens (booking payment, admin MFA gate, contact form and its
+ * anti-bot check) are also mounted by React itself in happy-dom with Testing
+ * Library: see the *.dom.test.ts files.
  */
 import type * as React from "react";
 
