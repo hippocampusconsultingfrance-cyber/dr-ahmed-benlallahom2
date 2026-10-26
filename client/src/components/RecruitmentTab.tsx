@@ -182,6 +182,8 @@ export default function RecruitmentTab() {
   const { pageCount, loadMore } = useAdminPageCount(JSON.stringify(filters));
   const pages = trpc.useQueries(t => adminPageOffsets(pageCount).map(offset => t.admin.recruitment.list({ ...filters, limit: ADMIN_PAGE_SIZE, offset })));
   const { items: applications, total, isLoading, isLoadingMore, error, loadMoreError, retryLoadMore } = mergeAdminPages(pages);
+  // Set by the server when a matching profile could only be checked on the first dossiers of the list.
+  const profileScanLimit = pages[0]?.data?.profileScanLimit;
   // With a score threshold, the dossiers without a verified score are listed apart, not dropped (INTL-02).
   const scoreThreshold = Math.max(Number(minimumScore) || 0, profilesQuery.data?.find(profile => String(profile.id) === selectedProfileId)?.minimumScore ?? 0);
   const listedApplications = scoreThreshold > 0
@@ -410,6 +412,11 @@ export default function RecruitmentTab() {
       ) : applications.length ? (
         <div className="space-y-3">
           <p className="break-words text-sm text-muted-foreground [overflow-wrap:anywhere]">{adminListCount(applications.length, total, "candidature(s)")}{search ? ` pour « ${search} »` : ""}</p>
+          {profileScanLimit ? (
+            <p className="text-sm font-medium text-amber-700 dark:text-amber-300">
+              Profil appliqué aux {profileScanLimit.toLocaleString("fr-FR")} premières candidatures de la liste seulement : ajoutez un filtre (statut, spécialité, pays) pour qu’il porte sur toutes.
+            </p>
+          ) : null}
           {listedApplications.items.map((application, index) => {
             const countries = parseJsonList(application.targetCountries);
             const languages = parseJsonList(application.languages);
