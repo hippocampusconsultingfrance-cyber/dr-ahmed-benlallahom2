@@ -30,6 +30,15 @@ const CONTENT_SECURITY_POLICY_DIRECTIVES = [
 export const CONTENT_SECURITY_POLICY = CONTENT_SECURITY_POLICY_DIRECTIVES.join("; ");
 
 /**
+ * Hashes ('sha256-…') of the legitimate inline scripts the observation finds,
+ * allowed by the report-only policy only: next to 'unsafe-inline', a hash makes
+ * browsers ignore 'unsafe-inline' and block every other inline script, which
+ * would enforce the switch before the observation ends. They move to
+ * CONTENT_SECURITY_POLICY_DIRECTIVES when 'unsafe-inline' is removed there.
+ */
+export const OBSERVED_INLINE_SCRIPT_HASHES: readonly string[] = [];
+
+/**
  * SECU-02: the same policy without 'unsafe-inline' in script-src, only
  * observed (reported to CSP_REPORT_ROUTE) before it is enforced. The build has
  * no executable inline script (only application/ld+json data blocks, which
@@ -41,7 +50,7 @@ export const CONTENT_SECURITY_POLICY = CONTENT_SECURITY_POLICY_DIRECTIVES.join("
 export const CONTENT_SECURITY_POLICY_REPORT_ONLY = [
   ...CONTENT_SECURITY_POLICY_DIRECTIVES
     .filter(directive => directive !== "upgrade-insecure-requests")
-    .map(directive => directive.startsWith("script-src ") ? directive.replace(" 'unsafe-inline'", "") : directive),
+    .map(directive => directive.startsWith("script-src ") ? [directive.replace(" 'unsafe-inline'", ""), ...OBSERVED_INLINE_SCRIPT_HASHES].join(" ") : directive),
   `report-uri ${CSP_REPORT_ROUTE}`,
   `report-to ${CSP_REPORTING_ENDPOINT}`,
 ].join("; ");
@@ -49,10 +58,44 @@ export const CONTENT_SECURITY_POLICY_REPORT_ONLY = [
 /** Endpoint named by report-to (Reporting API); report-uri serves the browsers without it. */
 export const REPORTING_ENDPOINTS = `${CSP_REPORTING_ENDPOINT}="${CSP_REPORT_ROUTE}"`;
 
+/**
+ * The policy with a script-src that allows inline scripts: 'unsafe-inline'
+ * after 'self', without the hashes, nonces and 'strict-dynamic' next to which
+ * browsers ignore it.
+ */
+export function withInlineScripts(policy: string) {
+  return policy.split("; ").map(directive => {
+    const [name, ...sources] = directive.split(" ");
+    if (name !== "script-src") return directive;
+    const kept = sources.filter(source => source !== "'unsafe-inline'" && source !== "'strict-dynamic'" && !/^'(?:sha256|sha384|sha512|nonce)-/i.test(source));
+    kept.splice(kept.indexOf("'self'") + 1, 0, "'unsafe-inline'");
+    return [name, ...kept].join(" ");
+  }).join("; ");
+}
+
+/**
+ * The CSP headers Express sends in this environment. Development keeps inline
+ * scripts allowed whatever the enforced policy, and observes nothing: Vite's
+ * page has an inline script (the React refresh preamble of
+ * @vitejs/plugin-react) without which no component loads.
+ */
+export function contentSecurityPolicyHeaders(nodeEnv = process.env.NODE_ENV): Record<string, string> {
+  if (nodeEnv === "development") return { "Content-Security-Policy": withInlineScripts(CONTENT_SECURITY_POLICY) };
+  return {
+    "Content-Security-Policy": CONTENT_SECURITY_POLICY,
+    "Content-Security-Policy-Report-Only": CONTENT_SECURITY_POLICY_REPORT_ONLY,
+    "Reporting-Endpoints": REPORTING_ENDPOINTS,
+  };
+}
+
 /** report-uri sends application/csp-report, report-to application/reports+json. */
 const CSP_REPORT_CONTENT_TYPES = ["application/csp-report", "application/reports+json"];
-/** Each report repeats the policy (about 1 KB); a Reporting API batch holds a few. */
-export const CSP_REPORT_MAX_BYTES = 16 * 1024;
+/**
+ * Each report repeats the policy (about 1.5 KB with its URLs), and a Reporting
+ * API batch holds every report of the last minute or so: room for about 40.
+ * Only CSP_REPORT_MAX_SUMMARIES of them are logged.
+ */
+export const CSP_REPORT_MAX_BYTES = 64 * 1024;
 /** Per client IP: enough for a visit with a few violations on each page, not to flood the logs. */
 export const CSP_REPORT_RATE_LIMIT = { action: "csp_report_ip", maxAttempts: 30, windowMs: 10 * 60 * 1000, blockMs: 10 * 60 * 1000 };
 const CSP_REPORT_MAX_SUMMARIES = 10;

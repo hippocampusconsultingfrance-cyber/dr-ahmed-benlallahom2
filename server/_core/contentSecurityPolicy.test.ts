@@ -9,7 +9,16 @@ const state = vi.hoisted(() => ({ memory: null as null | { db: unknown } }));
 vi.mock("../db", () => ({ getDb: async () => state.memory?.db ?? null }));
 vi.mock("./notification", () => ({ notifyOwner: vi.fn(async () => true) }));
 
-const { CONTENT_SECURITY_POLICY_REPORT_ONLY, CSP_REPORT_MAX_BYTES, CSP_REPORT_RATE_LIMIT, CSP_REPORT_ROUTE, registerCspReportRoute } = await import("./contentSecurityPolicy");
+const {
+  CONTENT_SECURITY_POLICY,
+  CONTENT_SECURITY_POLICY_REPORT_ONLY,
+  CSP_REPORT_MAX_BYTES,
+  CSP_REPORT_RATE_LIMIT,
+  CSP_REPORT_ROUTE,
+  contentSecurityPolicyHeaders,
+  registerCspReportRoute,
+  withInlineScripts,
+} = await import("./contentSecurityPolicy");
 
 let memory: MemoryPg;
 let close: () => Promise<void> = async () => undefined;
@@ -198,5 +207,35 @@ describe("POST /api/csp-report — rapports de la CSP en observation (SECU-02)",
     expect((await postWithFailingLog(report, "application/csp-report")).status).toBe(204);
     expect(failingLog).toHaveBeenCalledTimes(1);
     expect(consoleError).toHaveBeenCalledWith("[CspReport] Report dropped:", "TypeError");
+  });
+});
+
+describe("CSP envoyée par Express selon l'environnement (SECU-02)", () => {
+  const scriptSrc = (policy: string) => policy.split("; ").find(directive => directive.startsWith("script-src "));
+
+  it("envoie hors développement la CSP appliquée, la CSP observée et son point de rapport", () => {
+    for (const nodeEnv of ["production", "test", undefined]) {
+      expect(Object.keys(contentSecurityPolicyHeaders(nodeEnv)), String(nodeEnv)).toEqual(["Content-Security-Policy", "Content-Security-Policy-Report-Only", "Reporting-Endpoints"]);
+      expect(contentSecurityPolicyHeaders(nodeEnv)["Content-Security-Policy"]).toBe(CONTENT_SECURITY_POLICY);
+    }
+  });
+
+  it("garde en développement les scripts inline de Vite autorisés, sans politique observée", () => {
+    const headers = contentSecurityPolicyHeaders("development");
+    expect(Object.keys(headers)).toEqual(["Content-Security-Policy"]);
+    expect(scriptSrc(headers["Content-Security-Policy"]!)?.split(" ")).toContain("'unsafe-inline'");
+    // Only script-src may differ from the enforced policy.
+    expect(headers["Content-Security-Policy"]!.split("; ").filter(directive => !directive.startsWith("script-src "))).toEqual(CONTENT_SECURITY_POLICY.split("; ").filter(directive => !directive.startsWith("script-src ")));
+  });
+
+  it("rend les scripts inline au développement une fois 'unsafe-inline' retiré de la CSP appliquée, empreintes comprises", () => {
+    // The enforced policy after the switch: no 'unsafe-inline', the hash of an allowed third-party script.
+    const switched = CONTENT_SECURITY_POLICY.replace(" 'unsafe-inline' https://js.stripe.com", " https://js.stripe.com 'sha256-q1w2e3r4t5y6u7i8o9p0a1s2d3f4g5h6j7k8l9z0x1c='");
+    expect(scriptSrc(switched)?.split(" ")).not.toContain("'unsafe-inline'");
+
+    // Next to a hash, browsers would ignore 'unsafe-inline': the hash goes, 'unsafe-inline' comes back where it was.
+    expect(withInlineScripts(switched)).toBe(CONTENT_SECURITY_POLICY);
+    expect(withInlineScripts(CONTENT_SECURITY_POLICY)).toBe(CONTENT_SECURITY_POLICY);
+    expect(scriptSrc(withInlineScripts("default-src 'self'; script-src 'nonce-abc' 'strict-dynamic' https://js.stripe.com"))).toBe("script-src 'unsafe-inline' https://js.stripe.com");
   });
 });

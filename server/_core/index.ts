@@ -11,7 +11,7 @@ import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { clerkMiddleware } from "@clerk/express";
 import { assertCriticalProductionEnvironment, clerkPublishableKey } from "./env";
 import { registerHealthRoute } from "./health";
-import { CONTENT_SECURITY_POLICY, CONTENT_SECURITY_POLICY_REPORT_ONLY, REPORTING_ENDPOINTS, registerCspReportRoute } from "./contentSecurityPolicy";
+import { contentSecurityPolicyHeaders, registerCspReportRoute } from "./contentSecurityPolicy";
 import { requireVercelCron } from "./cronAuth";
 import { runMonitoredScheduledJob } from "./scheduledJobMonitor";
 import { secureReference } from "./secureReference";
@@ -161,17 +161,13 @@ export async function createApp() {
   const server = createServer(app);
 
   // Browser-side defense in depth (same values as vercel.json, see contentSecurityPolicy.ts).
+  const cspHeaders = Object.entries(contentSecurityPolicyHeaders());
   app.use((_req, res, next) => {
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
     res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=(self)");
     res.setHeader("Strict-Transport-Security", "max-age=63072000; includeSubDomains; preload");
-    res.setHeader("Content-Security-Policy", CONTENT_SECURITY_POLICY);
-    // Vite's development page has an inline script (React refresh): reports would only be noise there.
-    if (process.env.NODE_ENV !== "development") {
-      res.setHeader("Content-Security-Policy-Report-Only", CONTENT_SECURITY_POLICY_REPORT_ONLY);
-      res.setHeader("Reporting-Endpoints", REPORTING_ENDPOINTS);
-    }
+    for (const [name, value] of cspHeaders) res.setHeader(name, value);
     next();
   });
 

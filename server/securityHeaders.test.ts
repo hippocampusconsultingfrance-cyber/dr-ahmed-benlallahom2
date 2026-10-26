@@ -20,6 +20,7 @@ vi.mock("@clerk/express", () => ({
 }));
 
 const { createApp } = await import("./_core/index");
+const { OBSERVED_INLINE_SCRIPT_HASHES } = await import("./_core/contentSecurityPolicy");
 
 const vercel = JSON.parse(readFileSync(resolve(process.cwd(), "vercel.json"), "utf8")) as {
   headers: { source: string; headers: { key: string; value: string }[] }[];
@@ -80,8 +81,12 @@ describe("en-têtes de défense HTTP", () => {
     const enforced = directives(response.headers.get("content-security-policy") ?? "");
     const observed = directives(response.headers.get("content-security-policy-report-only") ?? "");
 
-    expect(observed["script-src"]).toBe(enforced["script-src"].replace(" 'unsafe-inline'", ""));
+    expect(observed["script-src"]).toBe([enforced["script-src"].replace(" 'unsafe-inline'", ""), ...OBSERVED_INLINE_SCRIPT_HASHES].join(" "));
     expect(observed["script-src"]).not.toContain("unsafe-inline");
+    // Next to 'unsafe-inline', a hash or nonce would make browsers ignore it and already block inline scripts.
+    if (enforced["script-src"].split(" ").includes("'unsafe-inline'")) {
+      expect(enforced["script-src"]).not.toMatch(/'(?:sha256|sha384|sha512|nonce)-|'strict-dynamic'/);
+    }
     // Styles stay as enforced; upgrade-insecure-requests means nothing in a report-only policy.
     expect(observed["style-src"]).toBe("'self' 'unsafe-inline'");
     const { "script-src": _enforcedScripts, "upgrade-insecure-requests": _upgrade, ...enforcedRest } = enforced;
