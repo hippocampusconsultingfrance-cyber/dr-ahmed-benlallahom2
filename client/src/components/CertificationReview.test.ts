@@ -19,6 +19,9 @@ vi.mock("react", async importOriginal => {
       if (!(slot in hooks.values)) hooks.values[slot] = typeof initial === "function" ? (initial as () => unknown)() : initial;
       return [hooks.values[slot], (next: unknown) => { hooks.values[slot] = typeof next === "function" ? (next as (value: unknown) => unknown)(hooks.values[slot]) : next; }];
     },
+    // The tab is called as a plain function: its effects (the search box's
+    // typing delay, ADM-02) do not run, as in a static render.
+    useEffect: () => undefined,
   };
 });
 

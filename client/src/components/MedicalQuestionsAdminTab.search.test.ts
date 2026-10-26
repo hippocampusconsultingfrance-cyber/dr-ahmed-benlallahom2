@@ -34,6 +34,7 @@ vi.mock("@/lib/trpc", () => {
           updatePublication: { useMutation: mutation },
           unpublish: { useMutation: mutation },
           reject: { useMutation: mutation },
+          delete: { useMutation: mutation },
         },
       },
     },

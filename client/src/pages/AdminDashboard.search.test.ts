@@ -29,7 +29,7 @@ vi.mock("@/lib/trpc", () => {
       },
       admin: {
         appointments: { updateStatus: { useMutation: mutation }, refund: { useMutation: mutation }, refundUnconfirmedSession: { useMutation: mutation } },
-        contacts: { markRead: { useMutation: mutation } },
+        contacts: { markRead: { useMutation: mutation }, delete: { useMutation: mutation } },
       },
     },
   };

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { appointmentFulfillmentJobs, appointmentInvoices, appointments, candidateAccounts, contactMessages, cvApplications, cvGoogleDriveExportJobs, medicalQuestionAuditLogs, medicalQuestions, recruitmentEmailEvents, recruitmentMatchProfiles } from "../drizzle/schema";
+import { appointmentFulfillmentJobs, appointmentInvoices, appointments, candidateAccounts, contactMessages, cvApplications, cvCandidateCertifications, cvGoogleDriveExportJobs, medicalQuestionAuditLogs, medicalQuestions, recruitmentEmailEvents, recruitmentMatchProfiles } from "../drizzle/schema";
 import { adminSearchPatterns } from "./adminSearch";
 import { createMemoryPg, type MemoryPg } from "./testing/memoryPgProxy";
 import type { TrpcContext } from "./_core/context";
@@ -44,7 +44,7 @@ function seedAppointment(index: number, customerName: string, extra: Record<stri
 }
 
 beforeEach(() => {
-  memory = createMemoryPg([cvApplications, recruitmentMatchProfiles, candidateAccounts, cvGoogleDriveExportJobs, recruitmentEmailEvents, appointments, appointmentFulfillmentJobs, appointmentInvoices, medicalQuestions, medicalQuestionAuditLogs, contactMessages]);
+  memory = createMemoryPg([cvApplications, cvCandidateCertifications, recruitmentMatchProfiles, candidateAccounts, cvGoogleDriveExportJobs, recruitmentEmailEvents, appointments, appointmentFulfillmentJobs, appointmentInvoices, medicalQuestions, medicalQuestionAuditLogs, contactMessages]);
   state.memory = memory;
 });
 
