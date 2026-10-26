@@ -9,10 +9,17 @@ on:
 permissions:
   contents: read
 
+# One run at a time per ref. A new push to a pull request cancels its run in progress; on main,
+# the run in progress always finishes and the latest push waiting behind it runs next.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   quality:
     name: TypeScript and test suite
     runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     env:
       RESEND_API_KEY: re_test_dummy_key_12345678
@@ -34,7 +41,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version-file: .nvmrc
           cache: pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -44,10 +51,21 @@ jobs:
         run: pnpm test:ci
       - name: Verify production build
         run: pnpm build
+      - name: Check performance budgets
+        run: node scripts/check-performance-budgets.mjs
+      - name: Start the built server
+        run: node scripts/smoke-built-server.mjs
+      - name: Verify migrations match the schema
+        run: |
+          node scripts/check-migrations-in-sync.mjs
+          git diff --exit-code -- drizzle/pg
+          untracked="$(git status --porcelain --untracked-files=all -- drizzle/pg)"
+          if [ -n "$untracked" ]; then echo "$untracked"; exit 1; fi
 
   dependency-audit:
     name: Dependency vulnerability report
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Check out source
         uses: actions/checkout@v4
@@ -56,7 +74,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version-file: .nvmrc
           cache: pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile

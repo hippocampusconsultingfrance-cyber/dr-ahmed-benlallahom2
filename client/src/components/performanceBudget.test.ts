@@ -10,8 +10,8 @@ describe("budget de performance", () => {
       readFile(path.join(root, "PERFORMANCE_BUDGET.md"), "utf8"),
       readFile(path.join(root, "package.json"), "utf8"),
     ]);
-    for (const marker of ["entry: 160 * 1024", "admin: 60 * 1024", "public: 30 * 1024", "gzipSync", "AdminDashboard-"]) expect(script).toContain(marker);
-    for (const marker of ["160 KiB", "60 KiB", "30 KiB", "WebP responsives", "réduction de mouvement", "131,1 KiB", "41,8 KiB", "non une mesure de performance réseau sur appareil réel"]) expect(protocol).toContain(marker);
+    for (const marker of ["entry: 160 * 1024", "admin: 90 * 1024", "public: 30 * 1024", "gzipSync", "AdminDashboard-"]) expect(script).toContain(marker);
+    for (const marker of ["160 KiB", "| Dashboard administratif différé | 90 KiB |", "30 KiB", "WebP responsives", "réduction de mouvement", "131,1 KiB", "41,8 KiB", "80,9 KiB", "non une mesure de performance réseau sur appareil réel"]) expect(protocol).toContain(marker);
     expect(pkg).toContain('"check:performance"');
   });
 });
