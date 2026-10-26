@@ -62,7 +62,7 @@ describe("ADM-02 — délai de frappe de la recherche admin", () => {
     expect(renderStateful(useAdminSearch).search).toBeUndefined();
   });
 
-  it("n’envoie ni accent isolé ni caractère invisible ou de contrôle, et n’annonce pas « pour « ́ » »", () => {
+  it("n’envoie ni accent isolé ni caractère invisible ou de contrôle, et n’annonce pas « pour « \u0301 » »", () => {
     const typed = (text: string) => {
       renderStateful(useAdminSearch).setText(text);
       renderStateful(useAdminSearch);
@@ -72,15 +72,15 @@ describe("ADM-02 — délai de frappe de la recherche admin", () => {
     const loaded = { isLoading: false, error: null, shown: 50, total: 302 };
 
     // A lone combining accent, or Arabic harakat alone: nothing to search, the whole list.
-    for (const text of ["́", " ́ ّ ", "​"]) {
+    for (const text of ["\u0301", " \u0301 \u0651 ", "\u200b"]) {
       expect(typed(text)).toBeUndefined();
       expect(adminSearchStatus(typed(text), loaded, "réservation(s)")).toBe("");
     }
     // Pasted with a zero-width space or a control character: the name alone, accents kept.
-    expect(typed("​dupont")).toBe("dupont");
+    expect(typed("\u200bdupont")).toBe("dupont");
     expect(typed("du\u0000pont\u0007")).toBe("dupont");
-    expect(typed(" Hélène ​  Dupont ́")).toBe("Hélène Dupont");
-    expect(adminSearchStatus(typed("​dupont"), { ...loaded, total: 121 }, "réservation(s)")).toBe("50 sur 121 réservation(s) pour « dupont »");
+    expect(typed(" Hélène \u200b  Dupont \u0301")).toBe("Hélène Dupont");
+    expect(adminSearchStatus(typed("\u200bdupont"), { ...loaded, total: 121 }, "réservation(s)")).toBe("50 sur 121 réservation(s) pour « dupont »");
   });
 });
 

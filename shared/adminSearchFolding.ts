@@ -21,7 +21,7 @@ const range = (first: number, last: number) => Array.from({ length: last - first
  * Invisible characters a name can carry when pasted: soft hyphen, zero-width
  * spaces and joiners, direction marks and isolates, byte order mark.
  */
-const INVISIBLE_CHARACTERS = "­؜᠎" + range(0x200b, 0x200f) + range(0x202a, 0x202e) + range(0x2060, 0x2064) + range(0x2066, 0x2069) + "﻿";
+const INVISIBLE_CHARACTERS = "\u00ad\u061c\u180e" + range(0x200b, 0x200f) + range(0x202a, 0x202e) + range(0x2060, 0x2064) + range(0x2066, 0x2069) + "\ufeff";
 
 /**
  * Removed after the decomposition: the accents of the Latin, Greek and
@@ -30,7 +30,7 @@ const INVISIBLE_CHARACTERS = "­؜᠎" + range(0x200b, 0x200f) + range(0x202a, 0
  * splits off أ إ آ (U+0653–U+0655), so these alefs are searched as ا; the
  * invisible characters.
  */
-export const ADMIN_SEARCH_IGNORED_CHARACTERS = range(0x300, 0x36f) + range(0x64b, 0x655) + "ٰ" + INVISIBLE_CHARACTERS;
+export const ADMIN_SEARCH_IGNORED_CHARACTERS = range(0x300, 0x36f) + range(0x64b, 0x655) + "\u0670" + INVISIBLE_CHARACTERS;
 
 /** Letters without decomposition, searched as their base letter (Ø, Ł, Đ, dotless ı, alef wasla ٱ). */
 export const ADMIN_SEARCH_LETTER_FOLDS: ReadonlyArray<readonly [string, string]> = [
