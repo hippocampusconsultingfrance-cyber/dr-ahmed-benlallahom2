@@ -862,12 +862,21 @@ export async function createApp() {
   registerStorageProxy(app);
   registerGoogleDriveOAuthRoutes(app);
   
-  // tRPC API
+  // tRPC API. A query is also accepted as POST, its input in the body: the
+  // client sends the administration's queries and the candidate links' that
+  // way (client/src/lib/trpcLinks.ts), so that no name, email or token is in
+  // the URLs Vercel and its log drains record. Like a mutation, such a POST
+  // needs a JSON body (a cross-site form cannot send one without a CORS
+  // preflight, never granted) and the SameSite cookies. A query sent as GET
+  // still answers: refusing it would not keep its URL out of the logs (the
+  // request is recorded before the function answers) and would break an admin
+  // tab opened before a deployment until it is reloaded.
   app.use(
     "/api/trpc",
     createExpressMiddleware({
       router: appRouter,
       createContext,
+      allowMethodOverride: true,
     })
   );
   // Scheduled jobs. Each job is reachable two ways:
