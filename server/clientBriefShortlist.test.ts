@@ -253,6 +253,28 @@ describe("missions employeurs : classement, certifications et accord du candidat
     }
   });
 
+  it("filtre par pays, certification et langue sans tenir compte des accents, dans les candidatures, le vivier et l’audience « filtrée » d’une campagne (IA-02)", async () => {
+    const gulf = seedCandidate({ marketing_consent: 1, target_countries: '["Émirats arabes unis"]', languages: '["Français"]', certifications: "Échographie FAST" });
+    const analysed = seedCandidate({ marketing_consent: 1, target_countries: '["Suisse"]', normalized_languages: '[{"language":"Español"}]', normalized_certifications: "[]", ...scored(70) });
+    memory.seed(cvCandidateCertifications, [{ application_id: analysed.id, name: "Réanimation néonatale", source: "declared", confirmed_at: "2026-10-20 09:00:00.000" }]);
+    seedCandidate({ marketing_consent: 1, target_countries: '["Canada"]', languages: '["Anglais"]', certifications: "BLS" });
+    const listed = async (filters: { country?: string; certification?: string; language?: string }) => (await admin().admin.recruitment.list(filters)).items.map(item => item.id).sort();
+    const pooled = async (filters: { country?: string; certification?: string }) => (await admin().admin.recruitment.pool.list(filters)).map(item => item.id).sort();
+    const audience = async (country: string) => (await admin().admin.recruitment.campaigns.previewAudience({ mode: "filtered", country })).map(item => item.id).sort();
+
+    for (const country of ["emirats", "EMIRATS", "Émirats"]) {
+      expect([await listed({ country }), await pooled({ country }), await audience(country)]).toEqual([[gulf.id], [gulf.id], [gulf.id]]);
+    }
+    for (const certification of ["echographie", "ÉCHOGRAPHIE"]) expect([await listed({ certification }), await pooled({ certification })]).toEqual([[gulf.id], [gulf.id]]);
+    // A certification an admin confirmed, found by its name.
+    expect([await listed({ certification: "reanimation neonatale" }), await pooled({ certification: "reanimation neonatale" })]).toEqual([[analysed.id], [analysed.id]]);
+    expect(await listed({ language: "francais" })).toEqual([gulf.id]);
+    expect(await listed({ language: "espanol" })).toEqual([analysed.id]);
+    // % and _ are the characters typed, not wildcards.
+    expect(await listed({ country: "%" })).toEqual([]);
+    expect(await audience("_")).toEqual([]);
+  });
+
   it("les filtres « certification » trouvent une certification confirmée que la mission compte, même après une analyse qui n’a enregistré aucun fait (IA-02)", async () => {
     // A new analysis found a contradiction (or hidden text): it stored no
     // facts, but kept the licence the admin had confirmed.

@@ -50,6 +50,16 @@ function foldedColumn(column: AnyColumn | SQL): SQL {
   return folded;
 }
 
+/**
+ * A filter of the recruitment lists (a country, a certification, a language:
+ * Candidatures, the pool, a campaign's filtered audience) on this column: the
+ * term typed is found in it, case and accents aside, folded like the search
+ * box (« emirats » finds « Émirats arabes unis »). % and _ match themselves.
+ */
+export function adminFilterContains(column: AnyColumn | SQL, term: string): SQL {
+  return sql`${foldedColumn(sql`COALESCE(${column}, '')`)} ILIKE ${`%${foldAdminSearchText(term).replace(/[\\%_]/g, "\\$&")}%`}`;
+}
+
 /** A list's name: its first and last name columns, or the one column holding the whole name. */
 type AdminSearchNames = { firstName: AnyColumn; lastName: AnyColumn } | { fullName: AnyColumn };
 

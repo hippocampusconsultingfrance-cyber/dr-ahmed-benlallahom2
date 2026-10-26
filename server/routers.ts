@@ -37,7 +37,7 @@ import { googleDriveExportStatus } from "./googleDriveExport";
 import { buildCandidatePortalInvitationEmailEvent, candidatePortalAccountMatchesApplication, resolveCandidatePortalActivationDelivery, resolveCandidatePortalInvitationDelivery, resolveCvConfirmationDelivery, retryCvConfirmationEmail } from "./recruitmentEmailTrace";
 import { AI_ANALYSIS_BILLING_UNAVAILABLE_ERROR, MANUAL_REVIEW_FALLBACK_MODEL, RECRUITMENT_ANALYSIS_PROMPT_VERSION } from "./recruitmentAnalysis";
 import { medicalQuestionsRouter } from "./medicalQuestionsRouter";
-import { adminSearchCondition, adminSearchInput } from "./adminSearch";
+import { adminFilterContains, adminSearchCondition, adminSearchInput } from "./adminSearch";
 import { postgresErrorCode } from "./languageColumns";
 import { AdminMfaRateLimitError, issueAdminMfaChallenge, revokeCurrentAdminMfaSession, verifyAdminMfaChallenge } from "./adminMfa";
 import {
@@ -364,17 +364,17 @@ async function languageFactsByApplication(db: AdminDb, applications: Array<{ id:
 
 /**
  * Applications holding a certification an admin confirmed whose name contains
- * this term, case aside (IA-02). The certification filters find a confirmed
- * certification even once a new analysis stored no facts (a contradiction,
- * hidden text) and left normalized_certifications empty. They are wider than
- * a mission's matching: accents count, and a certification that has expired,
+ * this term, case and accents aside (IA-02). The certification filters find a
+ * confirmed certification even once a new analysis stored no facts (a
+ * contradiction, hidden text) and left normalized_certifications empty. They
+ * are wider than a mission's matching: a certification that has expired,
  * confirmed or read in the CV with its date, is found too, as the declared
  * text finds one. The lists then give its expiry beside its origins.
  */
 async function applicationsWithConfirmedCertification(db: AdminDb, term: string) {
   const rows = await db.select({ applicationId: cvCandidateCertifications.applicationId })
     .from(cvCandidateCertifications)
-    .where(and(isNotNull(cvCandidateCertifications.confirmedAt), sql`LOWER(${cvCandidateCertifications.name}) LIKE LOWER(${`%${term}%`})`));
+    .where(and(isNotNull(cvCandidateCertifications.confirmedAt), adminFilterContains(cvCandidateCertifications.name, term)));
   return Array.from(new Set(rows.map(row => row.applicationId)));
 }
 
@@ -1670,10 +1670,11 @@ export const appRouter = router({
           const search = adminSearchCondition(input.search, [cvApplications.firstName, cvApplications.lastName, cvApplications.email, cvApplications.trackingId], { firstName: cvApplications.firstName, lastName: cvApplications.lastName });
           if (search) conditions.push(search);
           if (input.specialty) conditions.push(sql`LOWER(${cvApplications.specialty}) LIKE LOWER(${`%${input.specialty}%`})`);
-          // Country, language and certification, case aside, like the pool's certification filter: « dha » finds « Licence DHA ».
-          if (input.country) conditions.push(sql`LOWER(COALESCE(${cvApplications.targetCountries}, '')) LIKE LOWER(${`%${input.country}%`})`);
-          if (input.language) conditions.push(sql`((${cvApplications.analysisPromptVersion} = ${RECRUITMENT_ANALYSIS_PROMPT_VERSION} AND LOWER(COALESCE(${cvApplications.normalizedLanguages}, '')) LIKE LOWER(${`%${input.language}%`})) OR LOWER(COALESCE(${cvApplications.languages}, '')) LIKE LOWER(${`%${input.language}%`}))`);
-          if (input.certification) conditions.push(await certificationFilterCondition(db, input.certification, sql`((${cvApplications.analysisPromptVersion} = ${RECRUITMENT_ANALYSIS_PROMPT_VERSION} AND LOWER(COALESCE(${cvApplications.normalizedCertifications}, '')) LIKE LOWER(${`%${input.certification}%`})) OR LOWER(COALESCE(${cvApplications.certifications}, '')) LIKE LOWER(${`%${input.certification}%`}))`));
+          // Country, language and certification, case and accents aside, like the pool and a campaign's
+          // filtered audience: « dha » finds « Licence DHA », « emirats » « Émirats arabes unis ».
+          if (input.country) conditions.push(adminFilterContains(cvApplications.targetCountries, input.country));
+          if (input.language) conditions.push(sql`((${cvApplications.analysisPromptVersion} = ${RECRUITMENT_ANALYSIS_PROMPT_VERSION} AND ${adminFilterContains(cvApplications.normalizedLanguages, input.language)}) OR ${adminFilterContains(cvApplications.languages, input.language)})`);
+          if (input.certification) conditions.push(await certificationFilterCondition(db, input.certification, sql`((${cvApplications.analysisPromptVersion} = ${RECRUITMENT_ANALYSIS_PROMPT_VERSION} AND ${adminFilterContains(cvApplications.normalizedCertifications, input.certification)}) OR ${adminFilterContains(cvApplications.certifications, input.certification)})`));
 
           let profile: typeof recruitmentMatchProfiles.$inferSelect | null = null;
           if (input.profileId) {
@@ -1683,7 +1684,7 @@ export const appRouter = router({
             if (!selectedProfile) throw new TRPCError({ code: "NOT_FOUND", message: "Profil de matching introuvable" });
             profile = selectedProfile;
             if (selectedProfile.specialty) conditions.push(sql`LOWER(${cvApplications.specialty}) LIKE LOWER(${`%${selectedProfile.specialty}%`})`);
-            if (selectedProfile.targetCountry) conditions.push(sql`LOWER(COALESCE(${cvApplications.targetCountries}, '')) LIKE LOWER(${`%${selectedProfile.targetCountry}%`})`);
+            if (selectedProfile.targetCountry) conditions.push(adminFilterContains(cvApplications.targetCountries, selectedProfile.targetCountry));
           }
           const minimumScore = Math.max(input.minimumScore ?? 0, profile?.minimumScore ?? 0);
           if (minimumScore > 0) conditions.push(scoreAtLeastOrUnavailable(minimumScore));
@@ -1868,10 +1869,10 @@ export const appRouter = router({
               sql`${cvApplications.status} NOT IN ('rejected', 'archived')`,
             ];
             if (input?.specialty) conditions.push(sql`LOWER(${cvApplications.specialty}) LIKE LOWER(${`%${input.specialty}%`})`);
-            if (input?.country) conditions.push(sql`LOWER(COALESCE(${cvApplications.targetCountries}, '')) LIKE LOWER(${`%${input.country}%`})`);
+            if (input?.country) conditions.push(adminFilterContains(cvApplications.targetCountries, input.country));
             if (input?.availability) conditions.push(sql`LOWER(COALESCE(${cvApplications.availability}, '')) LIKE LOWER(${`%${input.availability}%`})`);
             if (input?.mobility) conditions.push(sql`(LOWER(COALESCE(${cvApplications.mobility}, '')) LIKE LOWER(${`%${input.mobility}%`}) OR LOWER(COALESCE(${cvApplications.targetCountries}, '')) LIKE LOWER(${`%${input.mobility}%`}))`);
-            if (input?.certification) conditions.push(await certificationFilterCondition(db, input.certification, sql`(LOWER(COALESCE(${cvApplications.certifications}, '')) LIKE LOWER(${`%${input.certification}%`}) OR (${cvApplications.analysisPromptVersion} = ${RECRUITMENT_ANALYSIS_PROMPT_VERSION} AND LOWER(COALESCE(${cvApplications.normalizedCertifications}, '')) LIKE LOWER(${`%${input.certification}%`})))`));
+            if (input?.certification) conditions.push(await certificationFilterCondition(db, input.certification, sql`(${adminFilterContains(cvApplications.certifications, input.certification)} OR (${cvApplications.analysisPromptVersion} = ${RECRUITMENT_ANALYSIS_PROMPT_VERSION} AND ${adminFilterContains(cvApplications.normalizedCertifications, input.certification)}))`));
             if (input?.minimumScore) conditions.push(scoreAtLeastOrUnavailable(input.minimumScore));
             const candidates = await db.select({
               id: cvApplications.id,
@@ -1914,7 +1915,7 @@ export const appRouter = router({
             }
             if (input.mode === "filtered") {
               if (input.specialty) conditions.push(sql`LOWER(${cvApplications.specialty}) LIKE LOWER(${`%${input.specialty}%`})`);
-              if (input.country) conditions.push(sql`LOWER(COALESCE(${cvApplications.targetCountries}, '')) LIKE LOWER(${`%${input.country}%`})`);
+              if (input.country) conditions.push(adminFilterContains(cvApplications.targetCountries, input.country));
               if (input.minimumScore !== undefined) {
                 conditions.push(sql`${cvApplications.aiScore} >= ${input.minimumScore}`);
                 conditions.push(eq(cvApplications.analysisPromptVersion, RECRUITMENT_ANALYSIS_PROMPT_VERSION));
@@ -1976,7 +1977,7 @@ export const appRouter = router({
             }
             if (input.mode === "filtered") {
               if (input.specialty) conditions.push(sql`LOWER(${cvApplications.specialty}) LIKE LOWER(${`%${input.specialty}%`})`);
-              if (input.country) conditions.push(sql`LOWER(COALESCE(${cvApplications.targetCountries}, '')) LIKE LOWER(${`%${input.country}%`})`);
+              if (input.country) conditions.push(adminFilterContains(cvApplications.targetCountries, input.country));
               if (input.minimumScore !== undefined) {
                 conditions.push(sql`${cvApplications.aiScore} >= ${input.minimumScore}`);
                 conditions.push(eq(cvApplications.analysisPromptVersion, RECRUITMENT_ANALYSIS_PROMPT_VERSION));
