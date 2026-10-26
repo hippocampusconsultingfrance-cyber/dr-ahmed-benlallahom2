@@ -13,7 +13,7 @@ import { candidateAccounts, candidateDocumentAuditLogs, candidateDocuments, cont
 import { notifyOwner } from "./_core/notification";
 import { storageGetSignedUrl } from "./storage";
 import { canAdminDownloadCv, CV_DOWNLOAD_UNAVAILABLE_MESSAGE } from "./recruitmentDownloadPolicy";
-import { eq, and, or, sql, desc, getTableColumns, gte, inArray, isNull, lt, ne } from "drizzle-orm";
+import { eq, and, or, sql, desc, getTableColumns, gte, inArray, isNotNull, isNull, lt, ne } from "drizzle-orm";
 import Stripe from "stripe";
 import {
   sendCandidatePortalAccessEmail,
@@ -1246,7 +1246,7 @@ export const appRouter = router({
 
           const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
-          const items = await db
+          const rows = await db
             .select()
             .from(appointments)
             .where(whereClause)
@@ -1259,7 +1259,43 @@ export const appRouter = router({
             .from(appointments)
             .where(whereClause);
 
-          return { items, total: countResult[0]?.count || 0 };
+          // Post-payment emails and the issued invoice of each appointment (EXPL-02).
+          const { getAppointmentDeliveries } = await import("./appointmentFulfillment");
+          const { findAppointmentInvoices } = await import("./invoiceNumbering");
+          const appointmentIds = rows.map(row => row.id);
+          const deliveries = await getAppointmentDeliveries(appointmentIds);
+          const invoices = await findAppointmentInvoices(appointmentIds).catch(error => {
+            console.error("[Admin] Issued invoices could not be read", error instanceof Error ? error.name : "UnknownError");
+            return new Map<number, { invoiceNumber: string }>();
+          });
+          const items = rows.map(row => ({
+            ...row,
+            deliveries: deliveries.get(row.id) ?? [],
+            invoiceNumber: invoices.get(row.id)?.invoiceNumber ?? null,
+          }));
+
+          return { items, total: Number(countResult[0]?.count ?? 0) };
+        }),
+
+      /** « Renvoyer » : relance tout de suite les envois après paiement qui n’ont pas abouti (EXPL-02). */
+      retryFulfillment: adminProcedure
+        .input(z.object({ trackingId: z.string().min(1).max(20) }))
+        .mutation(async ({ input }) => {
+          const { retryAppointmentFulfillment } = await import("./appointmentFulfillment");
+          const result = await retryAppointmentFulfillment(input.trackingId);
+          if (result.outcome === "not_found") throw new TRPCError({ code: "NOT_FOUND", message: "Rendez-vous introuvable." });
+          if (result.outcome === "not_paid") throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Ce rendez-vous n’est pas payé : aucun envoi après paiement à relancer." });
+          return { requeued: result.requeued, deliveries: result.deliveries };
+        }),
+
+      /** Facture déjà émise, régénérée à l’identique (même numéro, mêmes dates) ; n’attribue jamais de numéro (EXPL-02). */
+      invoicePdf: adminProcedure
+        .input(z.object({ trackingId: z.string().min(1).max(20) }))
+        .mutation(async ({ input }) => {
+          const { regenerateAppointmentInvoice } = await import("./appointmentFulfillment");
+          const invoice = await regenerateAppointmentInvoice(input.trackingId);
+          if (!invoice) throw new TRPCError({ code: "NOT_FOUND", message: "Aucune facture n’a encore été émise pour ce rendez-vous." });
+          return { invoiceNumber: invoice.invoiceNumber, filename: `Facture-${invoice.invoiceNumber}.pdf`, contentBase64: invoice.buffer.toString("base64") };
         }),
 
       updateStatus: adminProcedure
@@ -1526,7 +1562,7 @@ export const appRouter = router({
               emailDelivery: resolveCvConfirmationDelivery(emailEventsByApplicationId.get(item.id) || []),
             }));
           const countResult = profile ? [{ count: matchedItems.length }] : await db.select({ count: sql<number>`COUNT(*)` }).from(cvApplications).where(whereClause);
-          return { items, total: countResult[0]?.count || 0 };
+          return { items, total: Number(countResult[0]?.count ?? 0) };
         }),
 
       pool: router({
@@ -2379,24 +2415,30 @@ export const appRouter = router({
           z.object({
             limit: z.number().min(1).max(100).optional().default(50),
             offset: z.number().min(0).optional().default(0),
+            /** Only the messages not marked as read yet (ADM-01). */
+            unreadOnly: z.boolean().optional().default(false),
           })
         )
         .query(async ({ input }) => {
           const db = await getDb();
           if (!db) return { items: [], total: 0 };
 
+          const whereClause = input.unreadOnly ? eq(contactMessages.read, 0) : undefined;
+
           const items = await db
             .select()
             .from(contactMessages)
+            .where(whereClause)
             .orderBy(desc(contactMessages.createdAt))
             .limit(input.limit)
             .offset(input.offset);
 
           const countResult = await db
             .select({ count: sql<number>`COUNT(*)` })
-            .from(contactMessages);
+            .from(contactMessages)
+            .where(whereClause);
 
-          return { items, total: countResult[0]?.count || 0 };
+          return { items, total: Number(countResult[0]?.count ?? 0) };
         }),
 
       markRead: adminProcedure
@@ -2438,7 +2480,7 @@ export const appRouter = router({
             .select({ count: sql<number>`COUNT(*)` })
             .from(gdprRequests);
 
-          return { items, total: countResult[0]?.count || 0 };
+          return { items, total: Number(countResult[0]?.count ?? 0) };
         }),
 
       updateStatus: adminProcedure
@@ -2481,6 +2523,33 @@ export const appRouter = router({
         contacts: contactCount?.count || 0,
         gdpr: gdprCount?.count || 0,
         revenue: revenueResult?.total || 0,
+      };
+    }),
+
+    /**
+     * « À traiter » en tête du tableau de bord, lu depuis la base (EXPL-02) :
+     * envois après paiement en échec (tentatives épuisées, ou nouvel essai
+     * automatique en attente), et paiements reçus sans rendez-vous confirmé
+     * (patient à contacter, puis à rembourser).
+     */
+    attention: adminProcedure.query(async () => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Base de données indisponible." });
+      const { listAppointmentDeliveriesToHandle } = await import("./appointmentFulfillment");
+      const deliveries = await listAppointmentDeliveriesToHandle();
+      // Same rule as isUnconfirmedPaidAppointment (server/appointmentAdminActions.ts).
+      const unconfirmed = and(eq(appointments.paymentStatus, "pending"), ne(appointments.appointmentStatus, "held"), isNotNull(appointments.stripePaymentIntentId));
+      const unconfirmedItems = await db
+        .select({ trackingId: appointments.trackingId, customerName: appointments.customerName, appointmentDate: appointments.appointmentDate })
+        .from(appointments)
+        .where(unconfirmed)
+        .orderBy(appointments.updatedAt)
+        .limit(20);
+      const [unconfirmedCount] = await db.select({ count: sql<number>`COUNT(*)` }).from(appointments).where(unconfirmed);
+      return {
+        failedDeliveries: deliveries.failed,
+        retryingDeliveries: deliveries.retrying,
+        unconfirmedPayments: { total: Number(unconfirmedCount?.count ?? 0), items: unconfirmedItems },
       };
     }),
 

@@ -17,6 +17,10 @@ import RecruitmentDashboardPanel from "@/components/RecruitmentDashboardPanel";
 import MedicalQuestionsAdminTab from "@/components/MedicalQuestionsAdminTab";
 import { AdminEmptyState, AdminErrorState } from "@/components/AdminStatePanel";
 import AdminConfigurationBanner from "@/components/AdminConfigurationBanner";
+import AdminAttentionPanel from "@/components/AdminAttentionPanel";
+import AdminLoadMore from "@/components/AdminLoadMore";
+import AppointmentDeliveries from "@/components/AppointmentDeliveries";
+import { adminListCount, adminPageOffsets, ADMIN_PAGE_SIZE, mergeAdminPages, useAdminPageCount } from "@/components/adminPagination";
 import PublicContentSkeleton from "@/components/PublicContentSkeleton";
 import { getActiveAdminTabLabel } from "./adminDashboardMobileTabs";
 import { buildAppointmentsAgenda } from "./appointmentsAgenda";
@@ -213,6 +217,8 @@ function OverviewTab({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
 
   return (
     <div className="space-y-8">
+      <AdminAttentionPanel onOpenAppointments={() => onNavigate("appointments")} />
+
       <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {cards.map((card) => {
           const Icon = card.icon;
@@ -266,11 +272,12 @@ function OverviewTab({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
 }
 
 function AppointmentsTab() {
-  const [statusFilter, setStatusFilter] = useState<string | undefined>(undefined);
+  const [statusFilter, setStatusFilter] = useState<"pending" | "completed" | "failed" | "refunded" | undefined>(undefined);
   const utils = trpc.useUtils();
-  const { data, isLoading, error } = trpc.admin.appointments.list.useQuery({
-    status: statusFilter as any,
-  });
+  // ADM-01: 50 rows, then « Charger plus » (offset + 50).
+  const { pageCount, loadMore } = useAdminPageCount(statusFilter ?? "all");
+  const pages = trpc.useQueries(t => adminPageOffsets(pageCount).map(offset => t.admin.appointments.list({ status: statusFilter, limit: ADMIN_PAGE_SIZE, offset })));
+  const { items, total, isLoading, isLoadingMore, error, loadMoreError, retryLoadMore } = mergeAdminPages(pages);
   const [unconfirmedSessionId, setUnconfirmedSessionId] = useState("");
   const updateStatus = trpc.admin.appointments.updateStatus.useMutation({
     onSuccess: () => {
@@ -331,7 +338,7 @@ function AppointmentsTab() {
     completed: "bg-green-500/20 text-green-400",
     no_show: "bg-gray-500/20 text-gray-400",
   };
-  const agenda = buildAppointmentsAgenda(data?.items ?? []);
+  const agenda = buildAppointmentsAgenda(items);
 
   if (isLoading) {
     return <PublicContentSkeleton label="Chargement des rendez-vous" />;
@@ -341,7 +348,7 @@ function AppointmentsTab() {
     <div>
       {/* Filters */}
       <div className="flex gap-2 mb-6 flex-wrap">
-        {[undefined, "pending", "completed", "failed", "refunded"].map((s) => (
+        {([undefined, "pending", "completed", "failed", "refunded"] as const).map((s) => (
           <button
             key={s || "all"}
             onClick={() => setStatusFilter(s)}
@@ -354,7 +361,7 @@ function AppointmentsTab() {
         ))}
       </div>
 
-      <p className="text-sm text-muted-foreground mb-4">{data?.total || 0} réservation(s)</p>
+      <p className="text-sm text-muted-foreground mb-4">{adminListCount(items.length, total, "réservation(s)")}</p>
 
       <section aria-labelledby="appointments-agenda-title" className="mb-6 rounded-xl border border-primary/20 bg-primary/5 p-4 sm:p-5">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
@@ -387,7 +394,7 @@ function AppointmentsTab() {
 
       {/* Table */}
       <div className="space-y-3">
-        {data?.items.map((apt) => (
+        {items.map((apt) => (
           <div key={apt.id} className="bg-card border border-border rounded-lg p-4">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
               <div className="flex-1 min-w-0">
@@ -485,12 +492,14 @@ function AppointmentsTab() {
             {apt.requestDetails && (
               <p className="text-sm text-muted-foreground mt-2 line-clamp-2">{apt.requestDetails}</p>
             )}
+            <AppointmentDeliveries trackingId={apt.trackingId} paid={apt.paymentStatus === "completed"} deliveries={apt.deliveries} invoiceNumber={apt.invoiceNumber} />
           </div>
         ))}
-        {(!data?.items || data.items.length === 0) && (
+        {items.length === 0 && (
           <AdminEmptyState icon={CalendarDays} title="Aucune réservation" description="Les nouvelles réservations apparaîtront ici dès leur confirmation." />
         )}
       </div>
+      <AdminLoadMore shown={items.length} total={total} loading={isLoadingMore} onLoadMore={loadMore} error={loadMoreError} onRetry={retryLoadMore} />
 
       <section aria-labelledby="unconfirmed-refund-title" className="mt-6 rounded-xl border border-border bg-card p-4">
         <h2 id="unconfirmed-refund-title" className="font-semibold text-foreground">Rembourser un paiement non confirmé</h2>
@@ -519,7 +528,10 @@ function AppointmentsTab() {
 
 function ContactsTab() {
   const utils = trpc.useUtils();
-  const { data, isLoading, error } = trpc.admin.contacts.list.useQuery({});
+  const [unreadOnly, setUnreadOnly] = useState(false);
+  const { pageCount, loadMore } = useAdminPageCount(unreadOnly ? "unread" : "all");
+  const pages = trpc.useQueries(t => adminPageOffsets(pageCount).map(offset => t.admin.contacts.list({ unreadOnly, limit: ADMIN_PAGE_SIZE, offset })));
+  const { items, total, isLoading, isLoadingMore, error, loadMoreError, retryLoadMore } = mergeAdminPages(pages);
   const markRead = trpc.admin.contacts.markRead.useMutation({
     onSuccess: () => {
       toast.success("Marqué comme lu");
@@ -537,9 +549,24 @@ function ContactsTab() {
 
   return (
     <div>
-      <p className="text-sm text-muted-foreground mb-4">{data?.total || 0} message(s)</p>
+      <div className="flex gap-2 mb-6 flex-wrap">
+        {[false, true].map((unread) => (
+          <button
+            key={String(unread)}
+            type="button"
+            onClick={() => setUnreadOnly(unread)}
+            aria-pressed={unreadOnly === unread}
+            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+              unreadOnly === unread ? "bg-primary text-primary-foreground" : "bg-card border border-border text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {unread ? "Non lus" : "Tous"}
+          </button>
+        ))}
+      </div>
+      <p className="text-sm text-muted-foreground mb-4">{adminListCount(items.length, total, unreadOnly ? "message(s) non lu(s)" : "message(s)")}</p>
       <div className="space-y-3">
-        {data?.items.map((msg) => (
+        {items.map((msg) => (
           <div key={msg.id} className={`bg-card border rounded-lg p-4 ${msg.read === 0 ? "border-primary/50" : "border-border"}`}>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div className="flex-1 min-w-0">
@@ -564,17 +591,22 @@ function ContactsTab() {
             </div>
           </div>
         ))}
-        {(!data?.items || data.items.length === 0) && (
-          <AdminEmptyState icon={MessageSquare} title="Aucun message" description="Les demandes de contact reçues sur le site seront affichées dans cette section." />
+        {items.length === 0 && (
+          unreadOnly
+            ? <AdminEmptyState icon={MessageSquare} title="Aucun message non lu" description="Tous les messages reçus ont été lus." />
+            : <AdminEmptyState icon={MessageSquare} title="Aucun message" description="Les demandes de contact reçues sur le site seront affichées dans cette section." />
         )}
       </div>
+      <AdminLoadMore shown={items.length} total={total} loading={isLoadingMore} onLoadMore={loadMore} error={loadMoreError} onRetry={retryLoadMore} />
     </div>
   );
 }
 
 function GdprTab() {
   const utils = trpc.useUtils();
-  const { data, isLoading, error } = trpc.admin.gdprRequests.list.useQuery({});
+  const { pageCount, loadMore } = useAdminPageCount("all");
+  const pages = trpc.useQueries(t => adminPageOffsets(pageCount).map(offset => t.admin.gdprRequests.list({ limit: ADMIN_PAGE_SIZE, offset })));
+  const { items, total, isLoading, isLoadingMore, error, loadMoreError, retryLoadMore } = mergeAdminPages(pages);
   const updateStatus = trpc.admin.gdprRequests.updateStatus.useMutation({
     onSuccess: () => {
       toast.success("Statut mis à jour");
@@ -607,9 +639,9 @@ function GdprTab() {
 
   return (
     <div>
-      <p className="text-sm text-muted-foreground mb-4">{data?.total || 0} demande(s) RGPD</p>
+      <p className="text-sm text-muted-foreground mb-4">{adminListCount(items.length, total, "demande(s) RGPD")}</p>
       <div className="space-y-3">
-        {data?.items.map((req) => (
+        {items.map((req) => (
           <div key={req.id} className="bg-card border border-border rounded-lg p-4">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
               <div className="flex-1 min-w-0">
@@ -647,10 +679,11 @@ function GdprTab() {
             </div>
           </div>
         ))}
-        {(!data?.items || data.items.length === 0) && (
+        {items.length === 0 && (
           <AdminEmptyState icon={Shield} title="Aucune demande RGPD" description="Les demandes d’accès, rectification ou suppression apparaîtront ici." />
         )}
       </div>
+      <AdminLoadMore shown={items.length} total={total} loading={isLoadingMore} onLoadMore={loadMore} error={loadMoreError} onRetry={retryLoadMore} />
     </div>
   );
 }

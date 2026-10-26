@@ -3,6 +3,8 @@ import { BrainCircuit, ClipboardList, Download, FileSearch, Loader2, Mail, Refre
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import PublicContentSkeleton from "@/components/PublicContentSkeleton";
+import AdminLoadMore from "@/components/AdminLoadMore";
+import { adminListCount, adminPageOffsets, ADMIN_PAGE_SIZE, mergeAdminPages, useAdminPageCount } from "@/components/adminPagination";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import Candidate360Dialog from "./Candidate360Dialog";
@@ -159,7 +161,7 @@ export default function RecruitmentTab() {
   const profilesQuery = trpc.admin.recruitment.profiles.list.useQuery();
   const driveExportStatus = trpc.admin.recruitment.driveExport.status.useQuery();
 
-  const { data, isLoading, error, refetch } = trpc.admin.recruitment.list.useQuery({
+  const filters = {
     status: statusFilter || undefined,
     country: countryFilter.trim() || undefined,
     specialty: specialtyFilter.trim() || undefined,
@@ -167,12 +169,16 @@ export default function RecruitmentTab() {
     certification: certificationFilter.trim() || undefined,
     minimumScore: minimumScore ? Number(minimumScore) : undefined,
     profileId: selectedProfileId ? Number(selectedProfileId) : undefined,
-  });
+  };
+  // ADM-01: 50 dossiers, then « Charger plus » (offset + 50), back to the first page when a filter changes.
+  const { pageCount, loadMore } = useAdminPageCount(JSON.stringify(filters));
+  const pages = trpc.useQueries(t => adminPageOffsets(pageCount).map(offset => t.admin.recruitment.list({ ...filters, limit: ADMIN_PAGE_SIZE, offset })));
+  const { items: applications, total, isLoading, isLoadingMore, error, loadMoreError, retryLoadMore } = mergeAdminPages(pages);
   // With a score threshold, the dossiers without a verified score are listed apart, not dropped (INTL-02).
   const scoreThreshold = Math.max(Number(minimumScore) || 0, profilesQuery.data?.find(profile => String(profile.id) === selectedProfileId)?.minimumScore ?? 0);
   const listedApplications = scoreThreshold > 0
-    ? scoredApplicationsFirst(data?.items ?? [], item => item.analysisPromptVersion === VERIFIED_ANALYSIS_VERSION ? item.aiScore : null)
-    : { items: data?.items ?? [], firstUnscored: -1 };
+    ? scoredApplicationsFirst(applications, item => item.analysisPromptVersion === VERIFIED_ANALYSIS_VERSION ? item.aiScore : null)
+    : { items: applications, firstUnscored: -1 };
 
   const updateStatus = trpc.admin.recruitment.updateStatus.useMutation({
     onSuccess: () => {
@@ -322,7 +328,7 @@ export default function RecruitmentTab() {
             <BrainCircuit className={`mr-2 h-4 w-4 ${reanalyzeFailed.isPending ? "animate-pulse" : ""}`} />
             Mettre à jour / reprendre l’IA
           </Button>
-          <Button variant="outline" onClick={() => refetch()} disabled={isLoading}>
+          <Button variant="outline" onClick={() => void utils.admin.recruitment.list.invalidate()} disabled={isLoading}>
             <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
             Actualiser
           </Button>
@@ -388,8 +394,9 @@ export default function RecruitmentTab() {
 
       {isLoading ? (
         <PublicContentSkeleton label="Chargement des candidatures" />
-      ) : data?.items.length ? (
+      ) : applications.length ? (
         <div className="space-y-3">
+          <p className="text-sm text-muted-foreground">{adminListCount(applications.length, total, "candidature(s)")}</p>
           {listedApplications.items.map((application, index) => {
             const countries = parseJsonList(application.targetCountries);
             const languages = parseJsonList(application.languages);
@@ -646,6 +653,7 @@ export default function RecruitmentTab() {
               </Fragment>
             );
           })}
+          <AdminLoadMore shown={applications.length} total={total} loading={isLoadingMore} onLoadMore={loadMore} error={loadMoreError} onRetry={retryLoadMore} />
         </div>
       ) : (
         <div className="rounded-xl border border-dashed border-border py-16 text-center text-muted-foreground">

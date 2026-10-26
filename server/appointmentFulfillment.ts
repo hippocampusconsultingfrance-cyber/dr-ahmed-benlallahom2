@@ -10,8 +10,8 @@ import {
 } from "./_core/notifications";
 import { notifyOwner } from "./_core/notification";
 import { emailLanguageFor } from "./emailLanguage";
-import { generateInvoicePDF } from "./invoice";
-import { allocateAppointmentInvoice } from "./invoiceNumbering";
+import { generateInvoicePDF, renderInvoicePDF, type InvoiceData } from "./invoice";
+import { allocateAppointmentInvoice, findAppointmentInvoices, type AppointmentInvoiceRecord } from "./invoiceNumbering";
 
 const MAX_BATCH = 5;
 /** Well above the 60 s function limit: a job still "running" after this was interrupted. */
@@ -23,6 +23,18 @@ export const APPOINTMENT_FULFILLMENT_STALE_AFTER_MS = 15 * 60_000;
  * the same second, above its per-second rate limit. Mutable for tests.
  */
 export const appointmentFulfillmentPacing = { delayMs: 600 };
+/**
+ * Attempts per job (EXPL-02). With the daily scheduled run, the six retries
+ * after the first attempt span about six days: a provider outage of a day or
+ * two no longer loses the confirmation or the invoice.
+ */
+export const APPOINTMENT_FULFILLMENT_MAX_ATTEMPTS = 7;
+/**
+ * Wait after the 1st, 2nd… failed attempt: about 57 h in all on a worker that
+ * runs often, so a two-day outage is covered there too. Each stays under a
+ * day, so the daily run always finds the job due.
+ */
+export const APPOINTMENT_FULFILLMENT_RETRY_DELAYS_MS = [10 * 60_000, 60 * 60_000, 4 * 3_600_000, 12 * 3_600_000, 20 * 3_600_000, 20 * 3_600_000] as const;
 
 /**
  * Independent jobs, processed in this order: the owner learns about the paid
@@ -47,7 +59,7 @@ function queueJob(db: Database, appointmentId: number, jobType: FulfillmentJobTy
     jobType,
     status: "queued",
     attempts: 0,
-    maxAttempts: 3,
+    maxAttempts: APPOINTMENT_FULFILLMENT_MAX_ATTEMPTS,
     scheduledFor: new Date(),
   }).onConflictDoUpdate({
     target: [appointmentFulfillmentJobs.appointmentId, appointmentFulfillmentJobs.jobType],
@@ -83,7 +95,7 @@ async function ensureOwnerNotification(db: Database, appointment: Appointment, f
       jobType: "owner",
       status: "queued",
       attempts: 0,
-      maxAttempts: 3,
+      maxAttempts: APPOINTMENT_FULFILLMENT_MAX_ATTEMPTS,
       scheduledFor: new Date(),
     }).onConflictDoNothing({ target: [appointmentFulfillmentJobs.appointmentId, appointmentFulfillmentJobs.jobType] });
   } catch {
@@ -97,7 +109,8 @@ function ownerNotificationKey(appointment: Pick<Appointment, "trackingId">) {
 }
 
 function retryAt(attempt: number) {
-  return new Date(Date.now() + Math.min(60 * 60 * 1000, 60_000 * 2 ** Math.max(0, attempt - 1)));
+  const delays = APPOINTMENT_FULFILLMENT_RETRY_DELAYS_MS;
+  return new Date(Date.now() + delays[Math.min(Math.max(1, attempt), delays.length) - 1]);
 }
 
 /**
@@ -121,6 +134,28 @@ async function claimFulfillmentJob(db: Database, job: FulfillmentJob): Promise<b
     lte(appointmentFulfillmentJobs.scheduledFor, startedAt),
   ));
   return mutationRowCount(result) === 1;
+}
+
+/**
+ * Invoice of a paid appointment from its recorded number and dates: the job
+ * that emails it and the dashboard download build the same PDF (EXPL-02).
+ */
+function appointmentInvoiceData(appointment: Appointment, invoiceRecord: AppointmentInvoiceRecord): InvoiceData {
+  return {
+    invoiceNumber: invoiceRecord.invoiceNumber,
+    issueDate: invoiceRecord.issuedAt,
+    paymentDate: invoiceRecord.paidAt,
+    trackingId: appointment.trackingId,
+    customerName: appointment.customerName,
+    customerEmail: appointment.customerEmail,
+    customerPhone: appointment.customerPhone,
+    appointmentDate: appointment.appointmentDate,
+    consultationType: appointment.consultationType || "Conseil en santé",
+    duration: appointment.duration || 30,
+    basePrice: Number(appointment.basePrice),
+    finalPrice: Number(appointment.finalPrice),
+    isNightRate: appointment.isNightRate === 1,
+  };
 }
 
 function patientContact(appointment: Appointment) {
@@ -170,21 +205,7 @@ async function runJob(id: number) {
       // webhook right after the payment confirmation: its creation time is the
       // payment date.
       const invoiceRecord = await allocateAppointmentInvoice({ appointmentId: appointment.id, paidAt: job.createdAt ?? new Date() });
-      const invoice = await generateInvoicePDF({
-        invoiceNumber: invoiceRecord.invoiceNumber,
-        issueDate: invoiceRecord.issuedAt,
-        paymentDate: invoiceRecord.paidAt,
-        trackingId: appointment.trackingId,
-        customerName: appointment.customerName,
-        customerEmail: appointment.customerEmail,
-        customerPhone: appointment.customerPhone,
-        appointmentDate: appointment.appointmentDate,
-        consultationType: appointment.consultationType || "Conseil en santé",
-        duration: appointment.duration || 30,
-        basePrice: Number(appointment.basePrice),
-        finalPrice,
-        isNightRate: appointment.isNightRate === 1,
-      });
+      const invoice = await generateInvoicePDF(appointmentInvoiceData(appointment, invoiceRecord));
       // The PDF stays in French whatever the language of the email (EN-01).
       await sendInvoiceEmail(appointment.customerEmail, appointment.customerName, appointment.trackingId, finalPrice, invoice.buffer, invoiceRecord.invoiceNumber, { idempotencyKey: `appointment-invoice-${invoiceRecord.invoiceNumber}`, language });
     }
@@ -284,4 +305,171 @@ export async function recoverStaleAppointmentFulfillmentJobs(staleAfterMs = APPO
     }).catch(() => false);
   }
   return { recovered, exhausted };
+}
+
+/**
+ * What the dashboard shows for a job (EXPL-02): sent; failed for good;
+ * failed and waiting for its next automatic attempt; not attempted yet; being
+ * sent right now; interrupted (still "running" long after its worker stopped);
+ * or deliberately not sent (consultation already past, appointment no longer
+ * paid).
+ */
+export type AppointmentDeliveryState = "sent" | "failed" | "retrying" | "pending" | "sending" | "interrupted" | "not_sent";
+
+const DELIVERY_STATES: Record<string, AppointmentDeliveryState> = { failed: "failed", retry: "retrying", queued: "pending", running: "sending" };
+
+export type AppointmentDelivery = {
+  jobType: FulfillmentJobType;
+  state: AppointmentDeliveryState;
+  attempts: number;
+  maxAttempts: number;
+  /** Next automatic attempt of a job waiting for a retry. */
+  nextAttemptAt: Date | null;
+};
+
+/** Same rule as recoverStaleAppointmentFulfillmentJobs: no worker runs that long. */
+function isInterruptedJob(job: Pick<FulfillmentJob, "status" | "startedAt">, now: Date) {
+  return job.status === "running" && job.startedAt !== null && job.startedAt.getTime() <= now.getTime() - APPOINTMENT_FULFILLMENT_STALE_AFTER_MS;
+}
+
+function deliveryOf(job: FulfillmentJob, now: Date): AppointmentDelivery {
+  const state = job.status === "completed" ? job.lastError ? "not_sent" : "sent"
+    : isInterruptedJob(job, now) ? "interrupted" : DELIVERY_STATES[job.status] ?? "pending";
+  return {
+    jobType: job.jobType as FulfillmentJobType,
+    state,
+    attempts: job.attempts,
+    maxAttempts: job.maxAttempts,
+    nextAttemptAt: job.status === "retry" ? job.scheduledFor : null,
+  };
+}
+
+/** Delivery state of the post-payment jobs of each appointment, in processing order. */
+export async function getAppointmentDeliveries(appointmentIds: number[]): Promise<Map<number, AppointmentDelivery[]>> {
+  const deliveries = new Map<number, AppointmentDelivery[]>();
+  if (appointmentIds.length === 0) return deliveries;
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+  const jobs = await db.select().from(appointmentFulfillmentJobs).where(inArray(appointmentFulfillmentJobs.appointmentId, appointmentIds));
+  const order = (jobType: string) => APPOINTMENT_FULFILLMENT_JOB_TYPES.indexOf(jobType as FulfillmentJobType);
+  const now = new Date();
+  for (const job of [...jobs].sort((a, b) => order(a.jobType) - order(b.jobType))) {
+    deliveries.set(job.appointmentId, [...(deliveries.get(job.appointmentId) ?? []), deliveryOf(job, now)]);
+  }
+  return deliveries;
+}
+
+export type AppointmentFulfillmentRetry =
+  | { outcome: "not_found" }
+  | { outcome: "not_paid" }
+  | { outcome: "retried"; requeued: number; deliveries: AppointmentDelivery[] };
+
+/**
+ * « Renvoyer » from the dashboard (EXPL-02): the jobs of a paid appointment
+ * that did not go out (failed, waiting for their next attempt, or interrupted)
+ * go back to the queue with a full attempt budget and run now, through the
+ * same claim and idempotency keys as the scheduled worker. A job already sent,
+ * or being sent right now, is left alone.
+ */
+export async function retryAppointmentFulfillment(trackingId: string): Promise<AppointmentFulfillmentRetry> {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+  const [appointment] = await db.select({ id: appointments.id, paymentStatus: appointments.paymentStatus })
+    .from(appointments).where(eq(appointments.trackingId, trackingId)).limit(1);
+  if (!appointment) return { outcome: "not_found" };
+  if (appointment.paymentStatus !== "completed") return { outcome: "not_paid" };
+  const now = new Date();
+  const result = await db.update(appointmentFulfillmentJobs).set({
+    status: "queued",
+    attempts: 0,
+    maxAttempts: APPOINTMENT_FULFILLMENT_MAX_ATTEMPTS,
+    scheduledFor: now,
+    startedAt: null,
+    finishedAt: null,
+    lastError: null,
+    updatedAt: now,
+  }).where(and(
+    eq(appointmentFulfillmentJobs.appointmentId, appointment.id),
+    or(
+      inArray(appointmentFulfillmentJobs.status, ["queued", "retry", "failed"]),
+      and(eq(appointmentFulfillmentJobs.status, "running"), lte(appointmentFulfillmentJobs.startedAt, new Date(now.getTime() - APPOINTMENT_FULFILLMENT_STALE_AFTER_MS))),
+    ),
+  ));
+  const requeued = mutationRowCount(result);
+  if (requeued > 0) await processAppointmentFulfillmentNow(appointment.id);
+  return { outcome: "retried", requeued, deliveries: (await getAppointmentDeliveries([appointment.id])).get(appointment.id) ?? [] };
+}
+
+/**
+ * Paid appointments whose post-payment emails did not go out, oldest first:
+ * the « À traiter » panel reads them from the database, not from an alert
+ * email sent through the very channel that failed (EXPL-02). « failed »: the
+ * attempts ran out. « retrying »: an attempt failed (or was interrupted) and
+ * the next automatic one may only come with the next scheduled run, days
+ * before the attempts run out.
+ */
+export async function listAppointmentDeliveriesToHandle(limit = 20, now = new Date()) {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+  // No cap here: the failed jobs of refunded appointments stay failed, and a
+  // cap applied before the paid filter would push the new failures out.
+  const jobs = await db.select({
+    appointmentId: appointmentFulfillmentJobs.appointmentId,
+    jobType: appointmentFulfillmentJobs.jobType,
+    status: appointmentFulfillmentJobs.status,
+    scheduledFor: appointmentFulfillmentJobs.scheduledFor,
+  }).from(appointmentFulfillmentJobs)
+    .where(or(
+      inArray(appointmentFulfillmentJobs.status, ["failed", "retry"]),
+      and(eq(appointmentFulfillmentJobs.status, "running"), lte(appointmentFulfillmentJobs.startedAt, new Date(now.getTime() - APPOINTMENT_FULFILLMENT_STALE_AFTER_MS))),
+    ))
+    .orderBy(appointmentFulfillmentJobs.updatedAt, appointmentFulfillmentJobs.id);
+  const failed = new Map<number, FulfillmentJobType[]>();
+  // Earliest next automatic attempt; null when only interrupted jobs wait for the next scheduled run.
+  const retrying = new Map<number, { jobTypes: FulfillmentJobType[]; nextAttemptAt: Date | null }>();
+  for (const job of jobs) {
+    const jobType = job.jobType as FulfillmentJobType;
+    if (job.status === "failed") {
+      failed.set(job.appointmentId, [...(failed.get(job.appointmentId) ?? []), jobType]);
+      continue;
+    }
+    const previous = retrying.get(job.appointmentId);
+    const nextAttemptAt = job.status === "retry" ? job.scheduledFor : null;
+    retrying.set(job.appointmentId, {
+      jobTypes: [...(previous?.jobTypes ?? []), jobType],
+      nextAttemptAt: previous?.nextAttemptAt && (!nextAttemptAt || previous.nextAttemptAt < nextAttemptAt) ? previous.nextAttemptAt : nextAttemptAt,
+    });
+  }
+  const appointmentIds = Array.from(new Set([...Array.from(failed.keys()), ...Array.from(retrying.keys())]));
+  const paid = appointmentIds.length === 0 ? [] : await db.select({ id: appointments.id, trackingId: appointments.trackingId, customerName: appointments.customerName, appointmentDate: appointments.appointmentDate })
+    .from(appointments)
+    .where(and(inArray(appointments.id, appointmentIds), eq(appointments.paymentStatus, "completed")));
+  const byId = new Map(paid.map(({ id, ...appointment }) => [id, appointment]));
+  const page = <T>(items: T[]) => ({ total: items.length, items: items.slice(0, limit) });
+  return {
+    failed: page(Array.from(failed.entries()).flatMap(([appointmentId, jobTypes]) => {
+      const appointment = byId.get(appointmentId);
+      return appointment ? [{ ...appointment, jobTypes }] : [];
+    })),
+    retrying: page(Array.from(retrying.entries()).flatMap(([appointmentId, delivery]) => {
+      const appointment = byId.get(appointmentId);
+      return appointment ? [{ ...appointment, ...delivery }] : [];
+    })),
+  };
+}
+
+/**
+ * « Télécharger la facture » (EXPL-02): the invoice already issued for this
+ * appointment, rebuilt from its recorded number and dates, identical to the
+ * PDF emailed to the patient. Never allocates a number: null when no invoice
+ * was issued yet.
+ */
+export async function regenerateAppointmentInvoice(trackingId: string): Promise<{ invoiceNumber: string; buffer: Buffer } | null> {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+  const [appointment] = await db.select().from(appointments).where(eq(appointments.trackingId, trackingId)).limit(1);
+  if (!appointment) return null;
+  const invoiceRecord = (await findAppointmentInvoices([appointment.id])).get(appointment.id);
+  if (!invoiceRecord) return null;
+  return { invoiceNumber: invoiceRecord.invoiceNumber, buffer: await renderInvoicePDF(appointmentInvoiceData(appointment, invoiceRecord)) };
 }
