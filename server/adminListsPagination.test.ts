@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { appointmentFulfillmentJobs, appointmentInvoices, appointments, contactMessages, gdprRequests, medicalQuestionAuditLogs, medicalQuestions } from "../drizzle/schema";
-import { createMemoryPg, type MemoryPg } from "./testing/memoryPgProxy";
+import { createMemoryPg, pgTimestamp, type MemoryPg } from "./testing/memoryPgProxy";
 import type { TrpcContext } from "./_core/context";
 
 // ADM-01 — les listes de l’admin ne s’arrêtent plus à 50 lignes : décalage et
@@ -88,6 +88,26 @@ describe("ADM-01 — questions santé à traiter", () => {
     // Saving a draft puts it back in the queue.
     await admin.saveDraft({ id: pending.id as number, adminResponse: "Information générale relue par le médecin, sans urgence." });
     expect((await admin.list({ statuses: ["submitted", "drafting"], order: "oldest" })).items.map(item => item.id)).toEqual([pending.id]);
+  });
+
+  it("ne classe pas une question répondue entre-temps, et ne journalise qu’une fois un double classement", async () => {
+    const racing = seedQuestion(1, "drafting");
+    const admin = caller().medicalQuestions.admin;
+    // The reply is sent between the read and the update of « Classer sans suite ».
+    const update = memory.db.update.bind(memory.db);
+    vi.spyOn(memory.db, "update").mockImplementationOnce(table => {
+      Object.assign(memory.rows(medicalQuestions).find(row => row.id === racing.id)!, { status: "answered", response_sent_at: pgTimestamp(day(2)) });
+      return update(table);
+    });
+
+    await expect(admin.reject({ id: racing.id as number })).rejects.toThrow("déjà reçu une réponse");
+    expect(memory.rows(medicalQuestions).find(row => row.id === racing.id)).toMatchObject({ status: "answered" });
+    expect(memory.rows(medicalQuestionAuditLogs)).toEqual([]);
+
+    const pending = seedQuestion(2, "submitted");
+    await admin.reject({ id: pending.id as number });
+    await expect(admin.reject({ id: pending.id as number })).resolves.toEqual({ success: true });
+    expect(memory.rows(medicalQuestionAuditLogs).filter(row => row.action === "rejected")).toHaveLength(1);
   });
 });
 

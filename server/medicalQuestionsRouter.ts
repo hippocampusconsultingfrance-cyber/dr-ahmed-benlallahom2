@@ -1,10 +1,11 @@
 import { randomInt } from "node:crypto";
 import { TRPCError } from "@trpc/server";
-import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import { z } from "zod";
 import { medicalQuestionAuditLogs, medicalQuestions } from "../drizzle/schema";
 import { adminProcedure, publicProcedure, router } from "./_core/trpc";
 import { getDb } from "./db";
+import { mutationRowCount } from "./dbMutation";
 import { enforcePersistentRateLimit, hashSecurityValue, logSecurityEvent, requestIpHash } from "./candidateSecurity";
 import { verifyCandidateTurnstile } from "./candidateTurnstile";
 import { enforcePublicEmailIpRateLimit, releasePublicEmailIpRateLimit } from "./publicFormRateLimit";
@@ -262,15 +263,24 @@ export const medicalQuestionsRouter = router({
     /**
      * « Classer sans suite » (ADM-01): a question that will not be answered
      * leaves the queue; the private record and its journal are kept, and
-     * saving a draft puts it back in the queue.
+     * saving a draft puts it back in the queue. The update only matches a
+     * question still without reply: a reply sent meanwhile is never filed
+     * away, and filing twice writes a single journal entry.
      */
     reject: adminProcedure.input(questionIdInput).mutation(async ({ input, ctx }) => {
       await requireMfa(ctx);
       const db = await requireDb();
+      const alreadyAnswered = "Cette question a déjà reçu une réponse : elle ne peut plus être classée sans suite.";
       const [question] = await db.select().from(medicalQuestions).where(eq(medicalQuestions.id, input.id)).limit(1);
       if (!question) throw new TRPCError({ code: "NOT_FOUND", message: "Question introuvable." });
-      if (question.responseSentAt) throw new TRPCError({ code: "BAD_REQUEST", message: "Cette question a déjà reçu une réponse : elle ne peut plus être classée sans suite." });
-      await db.update(medicalQuestions).set({ status: "rejected" }).where(eq(medicalQuestions.id, input.id));
+      if (question.responseSentAt) throw new TRPCError({ code: "BAD_REQUEST", message: alreadyAnswered });
+      const result = await db.update(medicalQuestions).set({ status: "rejected" })
+        .where(and(eq(medicalQuestions.id, input.id), isNull(medicalQuestions.responseSentAt), ne(medicalQuestions.status, "rejected")));
+      if (mutationRowCount(result) === 0) {
+        const [current] = await db.select({ responseSentAt: medicalQuestions.responseSentAt }).from(medicalQuestions).where(eq(medicalQuestions.id, input.id)).limit(1);
+        if (current?.responseSentAt) throw new TRPCError({ code: "BAD_REQUEST", message: alreadyAnswered });
+        return { success: true };
+      }
       await auditQuestion({ questionId: input.id, actorOpenId: ctx.user.openId, action: "rejected", metadata: { previousStatus: question.status } });
       return { success: true };
     }),

@@ -12,13 +12,14 @@ type AdminPageQuery<T> = {
   data?: { items: T[]; total: number };
   isLoading: boolean;
   error?: { message: string } | null;
+  refetch?: () => unknown;
 };
 
 /**
  * The loaded pages of a list as one list: rows in order, without the
  * duplicate a new row shifting the pages can cause; the total, read from the
- * first page; the loading state of the whole list (first page) and of
- * « Charger plus » (later pages).
+ * first page; the loading state and error of the whole list (first page) and
+ * of « Charger plus » (later pages: the rows already shown stay on screen).
  */
 export function mergeAdminPages<T extends { id: number }>(pages: AdminPageQuery<T>[]) {
   const seen = new Set<number>();
@@ -35,7 +36,11 @@ export function mergeAdminPages<T extends { id: number }>(pages: AdminPageQuery<
     total: Number(pages[0]?.data?.total ?? 0),
     isLoading: pages[0]?.isLoading ?? true,
     isLoadingMore: pages.slice(1).some(page => page.isLoading),
-    error: pages.find(page => page.error)?.error ?? null,
+    error: pages[0]?.error ?? null,
+    loadMoreError: pages.slice(1).find(page => page.error)?.error ?? null,
+    retryLoadMore: () => {
+      for (const page of pages.slice(1)) if (page.error) void page.refetch?.();
+    },
   };
 }
 

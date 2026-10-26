@@ -277,7 +277,7 @@ function AppointmentsTab() {
   // ADM-01: 50 rows, then « Charger plus » (offset + 50).
   const { pageCount, loadMore } = useAdminPageCount(statusFilter ?? "all");
   const pages = trpc.useQueries(t => adminPageOffsets(pageCount).map(offset => t.admin.appointments.list({ status: statusFilter, limit: ADMIN_PAGE_SIZE, offset })));
-  const { items, total, isLoading, isLoadingMore, error } = mergeAdminPages(pages);
+  const { items, total, isLoading, isLoadingMore, error, loadMoreError, retryLoadMore } = mergeAdminPages(pages);
   const [unconfirmedSessionId, setUnconfirmedSessionId] = useState("");
   const updateStatus = trpc.admin.appointments.updateStatus.useMutation({
     onSuccess: () => {
@@ -499,7 +499,7 @@ function AppointmentsTab() {
           <AdminEmptyState icon={CalendarDays} title="Aucune réservation" description="Les nouvelles réservations apparaîtront ici dès leur confirmation." />
         )}
       </div>
-      <AdminLoadMore shown={items.length} total={total} loading={isLoadingMore} onLoadMore={loadMore} />
+      <AdminLoadMore shown={items.length} total={total} loading={isLoadingMore} onLoadMore={loadMore} error={loadMoreError} onRetry={retryLoadMore} />
 
       <section aria-labelledby="unconfirmed-refund-title" className="mt-6 rounded-xl border border-border bg-card p-4">
         <h2 id="unconfirmed-refund-title" className="font-semibold text-foreground">Rembourser un paiement non confirmé</h2>
@@ -531,7 +531,7 @@ function ContactsTab() {
   const [unreadOnly, setUnreadOnly] = useState(false);
   const { pageCount, loadMore } = useAdminPageCount(unreadOnly ? "unread" : "all");
   const pages = trpc.useQueries(t => adminPageOffsets(pageCount).map(offset => t.admin.contacts.list({ unreadOnly, limit: ADMIN_PAGE_SIZE, offset })));
-  const { items, total, isLoading, isLoadingMore, error } = mergeAdminPages(pages);
+  const { items, total, isLoading, isLoadingMore, error, loadMoreError, retryLoadMore } = mergeAdminPages(pages);
   const markRead = trpc.admin.contacts.markRead.useMutation({
     onSuccess: () => {
       toast.success("Marqué comme lu");
@@ -597,7 +597,7 @@ function ContactsTab() {
             : <AdminEmptyState icon={MessageSquare} title="Aucun message" description="Les demandes de contact reçues sur le site seront affichées dans cette section." />
         )}
       </div>
-      <AdminLoadMore shown={items.length} total={total} loading={isLoadingMore} onLoadMore={loadMore} />
+      <AdminLoadMore shown={items.length} total={total} loading={isLoadingMore} onLoadMore={loadMore} error={loadMoreError} onRetry={retryLoadMore} />
     </div>
   );
 }
@@ -606,7 +606,7 @@ function GdprTab() {
   const utils = trpc.useUtils();
   const { pageCount, loadMore } = useAdminPageCount("all");
   const pages = trpc.useQueries(t => adminPageOffsets(pageCount).map(offset => t.admin.gdprRequests.list({ limit: ADMIN_PAGE_SIZE, offset })));
-  const { items, total, isLoading, isLoadingMore, error } = mergeAdminPages(pages);
+  const { items, total, isLoading, isLoadingMore, error, loadMoreError, retryLoadMore } = mergeAdminPages(pages);
   const updateStatus = trpc.admin.gdprRequests.updateStatus.useMutation({
     onSuccess: () => {
       toast.success("Statut mis à jour");
@@ -683,7 +683,7 @@ function GdprTab() {
           <AdminEmptyState icon={Shield} title="Aucune demande RGPD" description="Les demandes d’accès, rectification ou suppression apparaîtront ici." />
         )}
       </div>
-      <AdminLoadMore shown={items.length} total={total} loading={isLoadingMore} onLoadMore={loadMore} />
+      <AdminLoadMore shown={items.length} total={total} loading={isLoadingMore} onLoadMore={loadMore} error={loadMoreError} onRetry={retryLoadMore} />
     </div>
   );
 }

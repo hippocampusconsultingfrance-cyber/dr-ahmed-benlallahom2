@@ -170,7 +170,7 @@ export default function RecruitmentTab() {
   // ADM-01: 50 dossiers, then « Charger plus » (offset + 50), back to the first page when a filter changes.
   const { pageCount, loadMore } = useAdminPageCount(JSON.stringify(filters));
   const pages = trpc.useQueries(t => adminPageOffsets(pageCount).map(offset => t.admin.recruitment.list({ ...filters, limit: ADMIN_PAGE_SIZE, offset })));
-  const { items: applications, total, isLoading, isLoadingMore, error } = mergeAdminPages(pages);
+  const { items: applications, total, isLoading, isLoadingMore, error, loadMoreError, retryLoadMore } = mergeAdminPages(pages);
   // With a score threshold, the dossiers without a verified score are listed apart, not dropped (INTL-02).
   const scoreThreshold = Math.max(Number(minimumScore) || 0, profilesQuery.data?.find(profile => String(profile.id) === selectedProfileId)?.minimumScore ?? 0);
   const listedApplications = scoreThreshold > 0
@@ -638,7 +638,7 @@ export default function RecruitmentTab() {
               </Fragment>
             );
           })}
-          <AdminLoadMore shown={applications.length} total={total} loading={isLoadingMore} onLoadMore={loadMore} />
+          <AdminLoadMore shown={applications.length} total={total} loading={isLoadingMore} onLoadMore={loadMore} error={loadMoreError} onRetry={retryLoadMore} />
         </div>
       ) : (
         <div className="rounded-xl border border-dashed border-border py-16 text-center text-muted-foreground">

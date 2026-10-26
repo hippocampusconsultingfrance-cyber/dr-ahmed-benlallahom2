@@ -36,7 +36,7 @@ export default function MedicalQuestionsAdminTab() {
   const { pageCount, loadMore } = useAdminPageCount(queue);
   const { statuses, order } = MEDICAL_QUESTION_QUEUES[queue];
   const pages = trpc.useQueries(t => adminPageOffsets(pageCount).map(offset => t.medicalQuestions.admin.list({ statuses: statuses ? [...statuses] : undefined, order, limit: ADMIN_PAGE_SIZE, offset })));
-  const { items, total, isLoading, isLoadingMore, error } = mergeAdminPages(pages);
+  const { items, total, isLoading, isLoadingMore, error, loadMoreError, retryLoadMore } = mergeAdminPages(pages);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [adminResponse, setAdminResponse] = useState("");
   const [publicQuestion, setPublicQuestion] = useState("");
@@ -202,7 +202,7 @@ export default function MedicalQuestionsAdminTab() {
           ))}
           {items.length === 0 && <p className="rounded-2xl border border-border p-5 text-muted-foreground">{MEDICAL_QUESTION_QUEUES[queue].empty}</p>}
         </div>
-        <AdminLoadMore shown={items.length} total={total} loading={isLoadingMore} onLoadMore={loadMore} />
+        <AdminLoadMore shown={items.length} total={total} loading={isLoadingMore} onLoadMore={loadMore} error={loadMoreError} onRetry={retryLoadMore} />
       </div>
 
       <div className="min-w-0 rounded-3xl border border-border bg-card/50 p-6">

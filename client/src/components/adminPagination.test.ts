@@ -28,7 +28,31 @@ describe("ADM-01 — listes de l’admin par pages de 50", () => {
     expect(merged.items.map(item => item.id)).toEqual(rows(0, 99).map(item => item.id));
     expect(merged).toMatchObject({ total: 302, isLoading: false, isLoadingMore: true, error: null });
     expect(mergeAdminPages([{ data: undefined, isLoading: true }])).toMatchObject({ items: [], total: 0, isLoading: true, isLoadingMore: false });
-    expect(mergeAdminPages([{ data: { items: rows(0, 2), total: 2 }, isLoading: false }, { isLoading: false, error: { message: "Erreur réseau" } }]).error).toEqual({ message: "Erreur réseau" });
+    expect(mergeAdminPages([{ isLoading: false, error: { message: "Erreur réseau" } }]).error).toEqual({ message: "Erreur réseau" });
+  });
+
+  it("garde les lignes affichées quand une page suivante échoue, et ne relance que celle-ci", () => {
+    const refetch = [vi.fn(), vi.fn(), vi.fn()];
+    const merged = mergeAdminPages([
+      { data: { items: rows(0, 50), total: 120 }, isLoading: false, error: null, refetch: refetch[0] },
+      { data: undefined, isLoading: false, error: { message: "Erreur réseau" }, refetch: refetch[1] },
+      { data: { items: rows(100, 120), total: 120 }, isLoading: false, error: null, refetch: refetch[2] },
+    ]);
+    expect(merged).toMatchObject({ error: null, loadMoreError: { message: "Erreur réseau" } });
+    expect(merged.items).toHaveLength(70);
+    merged.retryLoadMore();
+    expect(refetch.map(fn => fn.mock.calls.length)).toEqual([0, 1, 0]);
+
+    const onRetry = vi.fn();
+    const onLoadMore = vi.fn();
+    const html = renderToStaticMarkup(createElement(AdminLoadMore, { shown: 70, total: 120, loading: false, onLoadMore, error: merged.loadMoreError, onRetry }));
+    expect(html).toContain("70 sur 120 affichés");
+    expect(html).toContain("La suite de la liste n’a pas pu être chargée : Erreur réseau");
+    expect(html).not.toContain("Charger plus");
+    const button = elements(AdminLoadMore({ shown: 70, total: 120, loading: false, onLoadMore, error: merged.loadMoreError, onRetry })).find(element => typeof element.props.onClick === "function");
+    (button!.props.onClick as () => void)();
+    expect(onRetry).toHaveBeenCalledTimes(1);
+    expect(onLoadMore).not.toHaveBeenCalled();
   });
 
   it("annonce « 50 sur N » tant que des lignes restent à charger", () => {
