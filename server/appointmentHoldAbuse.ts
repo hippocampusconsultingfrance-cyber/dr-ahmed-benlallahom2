@@ -51,10 +51,18 @@ async function notifyOwnerOfHeldSlots() {
  * Whether this booking must pass the anti-robot check: as many unpaid holds as
  * the threshold (the new one would exceed it), or this network already holding
  * two slots. Without an identifiable IP only the overall count applies.
+ *
+ * `afterOwnHold`: the booking has already written its hold and recorded it for
+ * its network, so that hold is counted on top of the thresholds. Concurrent
+ * bookings may all have read the state before the others' holds; counting again
+ * once written, the last hold written sees them all, so no wave of parallel
+ * requests gets past the thresholds without the check.
  */
-export async function bookingChallengeRequired(db: Database, ipHash: string | null, now = new Date()): Promise<boolean> {
-  const heldSlots = await db.select({ id: appointments.id }).from(appointments).where(heldUnpaid(now)).limit(HELD_SLOTS_ALERT_THRESHOLD);
-  if (heldSlots.length >= HELD_SLOTS_ALERT_THRESHOLD) {
+export async function bookingChallengeRequired(db: Database, ipHash: string | null, options: { now?: Date; afterOwnHold?: boolean } = {}): Promise<boolean> {
+  const now = options.now ?? new Date();
+  const ownHold = options.afterOwnHold ? 1 : 0;
+  const heldSlots = await db.select({ id: appointments.id }).from(appointments).where(heldUnpaid(now)).limit(HELD_SLOTS_ALERT_THRESHOLD + ownHold);
+  if (heldSlots.length >= HELD_SLOTS_ALERT_THRESHOLD + ownHold) {
     await notifyOwnerOfHeldSlots().catch((error: unknown) => console.error("booking_held_slots_alert_failed", error instanceof Error ? error.name : "UnknownError"));
     return true;
   }
@@ -66,11 +74,11 @@ export async function bookingChallengeRequired(db: Database, ipHash: string | nu
     gte(securityEvents.createdAt, new Date(now.getTime() - APPOINTMENT_HOLD_MS)),
   )).limit(50);
   const trackingIds = recentHolds.map(event => holdTrackingId(event.metadata)).filter((trackingId): trackingId is string => Boolean(trackingId));
-  if (trackingIds.length < HELD_SLOTS_PER_IP_CHALLENGE_THRESHOLD) return false;
+  if (trackingIds.length < HELD_SLOTS_PER_IP_CHALLENGE_THRESHOLD + ownHold) return false;
   const stillHeld = await db.select({ id: appointments.id }).from(appointments)
     .where(and(heldUnpaid(now), inArray(appointments.trackingId, trackingIds)))
-    .limit(HELD_SLOTS_PER_IP_CHALLENGE_THRESHOLD);
-  return stillHeld.length >= HELD_SLOTS_PER_IP_CHALLENGE_THRESHOLD;
+    .limit(HELD_SLOTS_PER_IP_CHALLENGE_THRESHOLD + ownHold);
+  return stillHeld.length >= HELD_SLOTS_PER_IP_CHALLENGE_THRESHOLD + ownHold;
 }
 
 /** Records the network that holds a new slot (nothing without an identifiable IP). */

@@ -1,3 +1,4 @@
+import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { appointments, securityEvents } from "../drizzle/schema";
 import { createInMemoryDrizzle, type InMemoryDrizzle } from "./testSupport/inMemoryDrizzle";
@@ -12,6 +13,7 @@ vi.mock("./_core/notification", () => ({ notifyOwner: vi.fn(async (_payload: { t
 
 const { bookingChallengeRequired, HELD_SLOTS_ALERT_THRESHOLD, HELD_SLOTS_PER_IP_CHALLENGE_THRESHOLD, recordBookingHold } = await import("./appointmentHoldAbuse");
 const { notifyOwner } = await import("./_core/notification");
+const { getExpiredAppointmentHoldUpdate } = await import("./appointmentHolds");
 
 const MINUTE = 60_000;
 const IP_A = "a".repeat(64);
@@ -19,6 +21,40 @@ const IP_B = "b".repeat(64);
 let sequence = 0;
 
 function db() { return state.db as InMemoryDrizzle; }
+
+function heldUnpaidCount() {
+  return db().rows(appointments).filter(row => row.appointmentStatus === "held" && row.paymentStatus === "pending").length;
+}
+
+/**
+ * Same order as appointments.create once the slot is free: check, hold written,
+ * hold recorded for the network, check again with it counted (then released
+ * when refused). Every in-memory statement yields, so parallel calls interleave.
+ */
+async function bookWithoutChallenge(ipHash: string) {
+  if (await bookingChallengeRequired(db() as never, ipHash)) return "challenged_before_hold";
+  sequence += 1;
+  const trackingId = `APTRACE${String(sequence).padStart(5, "0")}`;
+  await db().insert(appointments).values({
+    trackingId,
+    customerName: "Patient Synthétique",
+    customerEmail: `race${sequence}@test.local`,
+    customerPhone: "+33600000000",
+    requestDetails: "Demande d’avis",
+    appointmentDate: new Date(Date.now() + 3 * 24 * 60 * MINUTE + sequence * 30 * MINUTE),
+    basePrice: "100.00",
+    finalPrice: "100.00",
+    paymentStatus: "pending",
+    appointmentStatus: "held",
+    holdExpiresAt: new Date(Date.now() + 30 * MINUTE),
+  });
+  await recordBookingHold(ipHash, trackingId);
+  if (await bookingChallengeRequired(db() as never, ipHash, { afterOwnHold: true })) {
+    await db().update(appointments).set(getExpiredAppointmentHoldUpdate()).where(eq(appointments.trackingId, trackingId));
+    return "challenged_after_hold";
+  }
+  return "held";
+}
 
 function seedAppointment(overrides: Record<string, unknown> = {}) {
   sequence += 1;
@@ -84,6 +120,32 @@ describe("vérification anti-robot de la réservation, seulement en cas d’abus
     Object.assign(paid, { paymentStatus: "completed", appointmentStatus: "confirmed", holdExpiresAt: null });
 
     await expect(bookingChallengeRequired(db() as never, IP_A)).resolves.toBe(false);
+  });
+
+  it("ne laisse pas une vague de réservations simultanées dépasser le seuil sans vérification", async () => {
+    // 7 réseaux × 6 réservations lancées en même temps : toutes lisent l’état d’avant la vague.
+    const networks = Array.from({ length: 7 }, (_, index) => String(index + 1).repeat(64));
+    const outcomes = await Promise.all(networks.flatMap(ipHash => Array.from({ length: 6 }, () => bookWithoutChallenge(ipHash))));
+
+    expect(outcomes.filter(outcome => outcome === "challenged_before_hold")).toHaveLength(0);
+    expect(outcomes.filter(outcome => outcome === "held").length).toBeLessThanOrEqual(HELD_SLOTS_ALERT_THRESHOLD);
+    expect(heldUnpaidCount()).toBeLessThanOrEqual(HELD_SLOTS_ALERT_THRESHOLD);
+  });
+
+  it("ne laisse pas une même IP retenir plus de deux créneaux par des réservations simultanées", async () => {
+    const outcomes = await Promise.all(Array.from({ length: 5 }, () => bookWithoutChallenge(IP_A)));
+
+    expect(outcomes.filter(outcome => outcome === "held").length).toBeLessThanOrEqual(HELD_SLOTS_PER_IP_CHALLENGE_THRESHOLD);
+    expect(heldUnpaidCount()).toBeLessThanOrEqual(HELD_SLOTS_PER_IP_CHALLENGE_THRESHOLD);
+    // Une fois la vague passée, les créneaux libérés laissent réserver normalement.
+    await expect(bookWithoutChallenge(IP_B)).resolves.toBe("held");
+  });
+
+  it("compte, après l’écriture, le maintien de la réservation en plus des seuils", async () => {
+    for (let index = 0; index < HELD_SLOTS_ALERT_THRESHOLD; index += 1) seedAppointment();
+    await expect(bookingChallengeRequired(db() as never, null, { afterOwnHold: true })).resolves.toBe(false);
+    seedAppointment();
+    await expect(bookingChallengeRequired(db() as never, null, { afterOwnHold: true })).resolves.toBe(true);
   });
 
   it("n’enregistre aucun maintien sans IP identifiable", async () => {

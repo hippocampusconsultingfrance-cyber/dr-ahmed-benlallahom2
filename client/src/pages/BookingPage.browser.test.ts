@@ -460,8 +460,10 @@ describe.skipIf(!executablePath)("réservation et confirmation dans un navigateu
       await submit.click();
       await expect.poll(() => createInputs().length).toBe(attempt + 1);
       expect(createInputs()[attempt].turnstileToken).toBe(`fake-turnstile-token-${attempt}-0123456789`);
+      // L’alerte du refus arrive après la requête : attendue avant l’essai suivant.
+      await expect.poll(() => alerts.length).toBe(attempt + 1);
     }
-    expect(alerts.slice(1)).toEqual([bookingContent.en.refusals.slot_taken, bookingContent.en.refusals.slot_taken]);
+    await expect.poll(() => alerts.slice(1)).toEqual([bookingContent.en.refusals.slot_taken, bookingContent.en.refusals.slot_taken]);
     await page.context().close();
   }, 60_000);
 

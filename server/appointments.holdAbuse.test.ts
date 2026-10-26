@@ -5,7 +5,8 @@ import type { TrpcContext } from "./_core/context";
 
 // ABUS-02 — appointments.create : sans anti-robot sur le parcours normal, avec
 // lui seulement quand bookingChallengeRequired signale un abus (couvert par
-// appointmentHoldAbuse.test.ts), avant de retenir le créneau et d’ouvrir Stripe.
+// appointmentHoldAbuse.test.ts), avant de retenir le créneau et d’ouvrir Stripe,
+// puis de nouveau une fois le maintien écrit (réservations simultanées).
 
 const VALID_TOKEN = "turnstile-token-accepted-by-the-mock";
 const mocks = vi.hoisted(() => ({
@@ -13,7 +14,7 @@ const mocks = vi.hoisted(() => ({
   stripeCreate: vi.fn(),
   enforcePersistentRateLimit: vi.fn(async () => undefined),
   logSecurityEvent: vi.fn(async () => undefined),
-  bookingChallengeRequired: vi.fn(async () => false),
+  bookingChallengeRequired: vi.fn(async (_db: unknown, _ipHash: string | null, _options?: { afterOwnHold?: boolean }) => false),
   recordBookingHold: vi.fn(async () => undefined),
   verifyCandidateTurnstile: vi.fn(async ({ token }: { token?: string }) => {
     if (token !== "turnstile-token-accepted-by-the-mock") throw new Error("candidate_turnstile_invalid");
@@ -45,7 +46,9 @@ const IP = "198.51.100.91";
 /** Lectures successives d'appointments.create : maintiens de l’adresse, date bloquée, plages ouvertes, chevauchement. */
 function fakeDb() {
   const selectResults: unknown[][] = [[{ count: 0 }], [], ALL_DAY_SLOTS, []];
+  const updateSet = vi.fn((_values: Record<string, unknown>) => ({ where: async () => ({ rowCount: 1 }) }));
   return {
+    updateSet,
     select: vi.fn(() => {
       const result = selectResults.shift() ?? [];
       const query = {
@@ -57,7 +60,7 @@ function fakeDb() {
       return query;
     }),
     execute: vi.fn(async () => ({ rowCount: 1 })),
-    update: vi.fn(() => ({ set: () => ({ where: async () => ({ rowCount: 1 }) }) })),
+    update: vi.fn(() => ({ set: updateSet })),
   };
 }
 
@@ -110,8 +113,13 @@ describe("appointments.create — anti-robot seulement en cas d’abus (ABUS-02)
     expect(body.result?.data.json.checkoutUrl).toBe("https://checkout.stripe.test/session");
     expect(mocks.verifyCandidateTurnstile).not.toHaveBeenCalled();
     const ipHash = requestIpHash({ "x-forwarded-for": IP });
-    expect(mocks.bookingChallengeRequired).toHaveBeenCalledWith(db, ipHash);
+    // Contrôle avant d’écrire le maintien, puis après, ce maintien noté et compté, avant Stripe.
+    expect(mocks.bookingChallengeRequired.mock.calls).toEqual([[db, ipHash], [db, ipHash, { afterOwnHold: true }]]);
     expect(mocks.recordBookingHold).toHaveBeenCalledWith(ipHash, body.result?.data.json.trackingId);
+    expect(db.execute.mock.invocationCallOrder[0]).toBeLessThan(mocks.recordBookingHold.mock.invocationCallOrder[0]);
+    expect(mocks.recordBookingHold.mock.invocationCallOrder[0]).toBeLessThan(mocks.bookingChallengeRequired.mock.invocationCallOrder[1]);
+    expect(mocks.bookingChallengeRequired.mock.invocationCallOrder[1]).toBeLessThan(mocks.stripeCreate.mock.invocationCallOrder[0]);
+    expect(db.updateSet).not.toHaveBeenCalledWith(expect.objectContaining({ appointmentStatus: "cancelled" }));
   });
 
   it("refuse, avec un motif stable traduit par la page, de retenir un créneau sans la vérification demandée", async () => {
@@ -132,6 +140,35 @@ describe("appointments.create — anti-robot seulement en cas d’abus (ABUS-02)
 
     expect(body.result?.data.json.checkoutUrl).toBe("https://checkout.stripe.test/session");
     expect(mocks.verifyCandidateTurnstile).toHaveBeenCalledWith({ token: VALID_TOKEN, remoteIp: IP });
+    // Le jeton, à usage unique, n’est vérifié qu’une fois : pas de second contrôle après le maintien.
+    expect(mocks.verifyCandidateTurnstile).toHaveBeenCalledTimes(1);
+    expect(mocks.bookingChallengeRequired).toHaveBeenCalledTimes(1);
+    expect(mocks.recordBookingHold).toHaveBeenCalledWith(requestIpHash({ "x-forwarded-for": IP }), body.result?.data.json.trackingId);
+    expect(mocks.stripeCreate).toHaveBeenCalledTimes(1);
+  });
+
+  it("libère le maintien et demande la vérification quand des réservations simultanées dépassent le seuil", async () => {
+    // Avant l’écriture, la vague n’est pas encore visible ; après, ce maintien compris, elle l’est.
+    mocks.bookingChallengeRequired.mockImplementation(async (_db, _ipHash, options) => Boolean(options?.afterOwnHold));
+
+    const body = await postCreate();
+
+    expect(body.error?.json).toMatchObject({ message: BOOKING_SECURITY_CHECK_MESSAGE, data: { code: "PRECONDITION_FAILED", reason: "security_check_required" } });
+    expect(db.execute).toHaveBeenCalledTimes(1);
+    expect(db.updateSet).toHaveBeenCalledWith(expect.objectContaining({ appointmentStatus: "cancelled", slotKey: null, holdExpiresAt: null }));
+    expect(mocks.stripeCreate).not.toHaveBeenCalled();
+    expect(mocks.verifyCandidateTurnstile).toHaveBeenCalledWith({ token: undefined, remoteIp: IP });
+    expect(mocks.logSecurityEvent).not.toHaveBeenCalledWith(expect.objectContaining({ category: "public_booking_challenge" }));
+  });
+
+  it("garde le maintien et ouvre Stripe si un jeton valide accompagne une réservation de la vague", async () => {
+    mocks.bookingChallengeRequired.mockImplementation(async (_db, _ipHash, options) => Boolean(options?.afterOwnHold));
+
+    const body = await postCreate({ turnstileToken: VALID_TOKEN });
+
+    expect(body.result?.data.json.checkoutUrl).toBe("https://checkout.stripe.test/session");
+    expect(mocks.verifyCandidateTurnstile).toHaveBeenCalledTimes(1);
+    expect(db.updateSet).not.toHaveBeenCalledWith(expect.objectContaining({ appointmentStatus: "cancelled" }));
     expect(mocks.stripeCreate).toHaveBeenCalledTimes(1);
   });
 

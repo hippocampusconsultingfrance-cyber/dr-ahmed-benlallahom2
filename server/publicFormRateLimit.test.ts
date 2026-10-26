@@ -73,7 +73,7 @@ describe("public form rate limits", () => {
     expect(createBlock).toContain(">= MAX_ACTIVE_APPOINTMENT_HOLDS_PER_EMAIL");
     // Turnstile only once abuse is detected (ABUS-02, covered by appointments.holdAbuse.test.ts).
     expect(createBlock.match(/verifyCandidateTurnstile/g)).toHaveLength(1);
-    expect(createBlock.indexOf("await bookingChallengeRequired(")).toBeLessThan(createBlock.indexOf("verifyCandidateTurnstile"));
+    expect(createBlock.indexOf("await bookingChallengeRequired(")).toBeLessThan(createBlock.indexOf("await passBookingChallenge()"));
     expect(createBlock.indexOf('kind: "bookingIp"')).toBeLessThan(createBlock.indexOf("await getDb()"));
     expect(createBlock.indexOf(">= MAX_ACTIVE_APPOINTMENT_HOLDS_PER_EMAIL")).toBeLessThan(createBlock.indexOf("INSERT INTO appointments"));
   });
