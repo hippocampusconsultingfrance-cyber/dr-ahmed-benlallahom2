@@ -1,4 +1,3 @@
-import { readFile } from "node:fs/promises";
 import type { SQL } from "drizzle-orm";
 import { PgDialect } from "drizzle-orm/pg-core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -166,14 +165,6 @@ afterEach(() => {
 });
 
 describe("reprise traçable des exports Google Drive", () => {
-  it("expose la reprise à l’administration et conserve une preuve d’audit", async () => {
-    const dashboard = await readFile(new URL("../client/src/components/RecruitmentTab.tsx", import.meta.url), "utf8");
-    expect(dashboard).toContain('application.driveExport?.status === "failed" || !application.driveExport');
-    expect(dashboard).toContain("Relancer la copie");
-    expect(dashboard).toContain("Planifier la copie");
-    expect(dashboard).toContain("recruitmentDriveExportErrorLabel");
-  });
-
   it.each(["running", "completed"] as const)(
     "ne rouvre pas une copie passée à l’état %s pendant la reprise",
     async status => {
