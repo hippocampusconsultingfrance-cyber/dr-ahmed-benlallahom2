@@ -93,10 +93,10 @@ describe("attentes d’un envoi fait sous une échéance (ABUS-03)", () => {
   it("la première pause peut finir jusqu’à la fin du budget, les suivantes seulement avant l’échéance ; un refus est retenu", async () => {
     let now = 0;
     await runWithProcessingDeadline(1_000, async () => {
-      expect(waitFitsDeadline(3_000)).toBe(true);
+      expect(waitFitsDeadline(2_999)).toBe(true);
       expect(deadlineCutShort()).toBe(false);
       await pauseWithinDeadline(0);
-      expect(waitFitsDeadline(1_000)).toBe(true);
+      expect(waitFitsDeadline(999)).toBe(true);
       now = 500;
       expect(waitFitsDeadline(600)).toBe(false);
       expect(deadlineCutShort()).toBe(true);
@@ -135,14 +135,14 @@ describe("attentes d’un envoi fait sous une échéance (ABUS-03)", () => {
     expect(startFitsDeadline()).toBe(true);
   });
 
-  it("même la première pause ne dépasse pas la fin du budget ; hors échéance, rien n’est refusé", async () => {
+  it("même la première pause ne dépasse pas la fin du budget, ni ne finit à l’instant même où l’envoi qui la suit serait refusé ; hors échéance, rien n’est refusé", async () => {
     await runWithProcessingDeadline(1_000, async () => {
-      expect(waitFitsDeadline(3_001)).toBe(false);
+      expect(waitFitsDeadline(3_000)).toBe(false);
       expect(deadlineCutShort()).toBe(true);
     }, () => 0, { firstPauseDeadlineAt: 3_000 });
     // Sans budget de première pause (worker CV), l’échéance vaut pour toutes.
     await runWithProcessingDeadline(1_000, async () => {
-      expect(waitFitsDeadline(1_001)).toBe(false);
+      expect(waitFitsDeadline(1_000)).toBe(false);
     }, () => 0);
     expect(waitFitsDeadline(60_000)).toBe(true);
     expect(deadlineCutShort()).toBe(false);

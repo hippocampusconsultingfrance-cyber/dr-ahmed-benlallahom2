@@ -60,16 +60,17 @@ export function stepTimeoutMs(step: string, ownTimeoutMs: number, options: { res
 
 /**
  * Whether a pause (a provider's retry-after, a short backoff) still ends before
- * the deadline; always true outside one. The first pause may end as late as
- * `firstPauseDeadlineAt`, the later ones only before the deadline itself: the
- * emails sent right after a payment (appointmentFulfillment.ts) still get
+ * the deadline; always true outside one. The first pause must end strictly
+ * before `firstPauseDeadlineAt`, the later ones before the deadline itself:
+ * the emails sent right after a payment (appointmentFulfillment.ts) still get
  * their new try after a passing rate limit, but no longer wait through a
- * lasting one. A refused pause is recorded (deadlineCutShort).
+ * lasting one. A pause ending at that very end would be followed by no step
+ * (startFitsDeadline). A refused pause is recorded (deadlineCutShort).
  */
 export function waitFitsDeadline(waitMs: number): boolean {
   const context = deadlineStorage.getStore();
   if (!context) return true;
-  const fits = context.now() + waitMs <= (context.paused ? context.deadlineAt : context.firstPauseDeadlineAt);
+  const fits = context.now() + waitMs < (context.paused ? context.deadlineAt : context.firstPauseDeadlineAt);
   if (!fits) context.pauseRefused = true;
   return fits;
 }
