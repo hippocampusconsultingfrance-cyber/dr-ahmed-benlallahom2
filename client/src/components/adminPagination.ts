@@ -58,9 +58,17 @@ export function adminListCount(shown: number, total: number, noun: string): stri
   return shown < total ? `${shown} sur ${total} ${noun}` : `${total} ${noun}`;
 }
 
-/** Number of pages shown, back to the first page whenever the filters change. */
+/**
+ * Number of pages shown, back to the first page whenever the filters or the
+ * search change, also when they come back to filters or a term shown before:
+ * the pages loaded for them then are not shown again from the cache, the list
+ * starts from its first page like any new search (ADM-01, ADM-02).
+ */
 export function useAdminPageCount(filterKey: string) {
   const [pages, setPages] = useState({ filterKey, count: 1 });
+  // New filters, seen during the render (React's way to reset a state on a new prop):
+  // the count of the previous ones is forgotten at once.
+  if (pages.filterKey !== filterKey) setPages({ filterKey, count: 1 });
   const pageCount = pages.filterKey === filterKey ? pages.count : 1;
   return { pageCount, loadMore: () => setPages({ filterKey, count: pageCount + 1 }) };
 }

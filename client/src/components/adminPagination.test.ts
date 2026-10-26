@@ -1,8 +1,13 @@
 import { createElement, isValidElement, type ReactElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { renderStateful, resetStatefulHooks } from "@/testing/statefulRender";
 import AdminLoadMore from "./AdminLoadMore";
-import { adminListCount, adminPageOffsets, ADMIN_PAGE_SIZE, mergeAdminPages } from "./adminPagination";
+import { adminListCount, adminPageOffsets, ADMIN_PAGE_SIZE, mergeAdminPages, useAdminPageCount } from "./adminPagination";
+
+vi.mock("react", async importOriginal => (await import("@/testing/statefulRender")).withStatefulHooks(await importOriginal()));
+
+afterEach(() => resetStatefulHooks());
 
 const rows = (from: number, to: number) => Array.from({ length: to - from }, (_, index) => ({ id: from + index }));
 
@@ -75,5 +80,27 @@ describe("ADM-01 — listes de l’admin par pages de 50", () => {
     const loading = renderToStaticMarkup(createElement(AdminLoadMore, { shown: 100, total: 302, loading: true, onLoadMore }));
     expect(loading).toContain("Chargement…");
     expect(loading).toMatch(/<button[^>]*disabled=""/);
+  });
+
+  it("repart de la première page à chaque nouvelle recherche ou nouveau filtre, même en revenant à un terme déjà chargé", () => {
+    const pagesFor = (filters: { status?: string; search?: string }) => renderStateful(() => useAdminPageCount(JSON.stringify(filters)));
+
+    expect(pagesFor({ search: "dupont" }).pageCount).toBe(1);
+    pagesFor({ search: "dupont" }).loadMore();
+    expect(pagesFor({ search: "dupont" }).pageCount).toBe(2);
+    // The cross, another term, then « dupont » again: its second page is not shown back from the cache.
+    expect(pagesFor({}).pageCount).toBe(1);
+    expect(pagesFor({ search: "martin" }).pageCount).toBe(1);
+    expect(pagesFor({ search: "dupont" }).pageCount).toBe(1);
+
+    // The same for the filters of ADM-01: Tous + « Charger plus », Payé, then Tous again.
+    pagesFor({}).loadMore();
+    expect(pagesFor({}).pageCount).toBe(2);
+    expect(pagesFor({ status: "completed" }).pageCount).toBe(1);
+    expect(pagesFor({}).pageCount).toBe(1);
+    // A render with the same filters keeps the pages loaded.
+    pagesFor({}).loadMore();
+    expect(pagesFor({}).pageCount).toBe(2);
+    expect(pagesFor({}).pageCount).toBe(2);
   });
 });
