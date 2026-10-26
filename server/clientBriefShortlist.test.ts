@@ -270,6 +270,23 @@ describe("missions employeurs : classement, certifications et accord du candidat
     expect(memory.rows(recruitmentAuditLogs).map(row => JSON.parse(String(row.metadata)))).toEqual([{ event: "certification_unconfirmed", certification: "Licence DHA", notRetainedByAnalysis: true }]);
   });
 
+  it("garde « à confirmer » une licence lue par une analyse sous une ancienne version du prompt quand l’admin retire sa confirmation (IA-02)", async () => {
+    // Analysed under an earlier prompt: the licence was read in the CV, but
+    // the filters no longer read that analysis until the dossier is analysed again.
+    const outdated = seedCandidate({ specialty: "Anesthésie-réanimation", target_countries: '["Émirats arabes unis"]', normalized_certifications: '[{"name":"Licence DHA"}]', ai_score: 70, analysis_prompt_version: "recruitment-analysis-v1" });
+    const id = outdated.id as number;
+    memory.seed(cvCandidateCertifications, [{ application_id: id, name: "Licence DHA", source: "extracted", confirmed_at: "2026-10-20 09:00:00.000" }]);
+    const briefId = seedBrief({ required_certifications: "Licence DHA" }).id as number;
+
+    // Withdrawn right after a confirmation clicked by mistake: the row read in the CV stays, to confirm again.
+    await expect(admin().admin.recruitment.candidate.confirmCertification({ id, name: "Licence DHA", confirmed: false })).resolves.toEqual({ success: true, changed: true });
+    expect(memory.rows(cvCandidateCertifications).map(row => [row.name, row.source, row.confirmed_at])).toEqual([["Licence DHA", "extracted", null]]);
+    expect((await admin().admin.clientBriefs.candidates({ briefId })).candidates.find(item => item.id === id)!.match.certifications).toMatchObject([{ name: "Licence DHA", origins: ["extracted"], status: "to_confirm" }]);
+    expect(memory.rows(recruitmentAuditLogs).map(row => JSON.parse(String(row.metadata)))).toEqual([{ event: "certification_unconfirmed", certification: "Licence DHA" }]);
+    await expect(admin().admin.recruitment.candidate.confirmCertification({ id, name: "Licence DHA", confirmed: true })).resolves.toEqual({ success: true, changed: true });
+    expect(memory.rows(cvCandidateCertifications).map(row => [row.source, row.confirmed_at !== null])).toEqual([["extracted", true]]);
+  });
+
   it("retire partout une licence extraite et confirmée qu’une nouvelle analyse avec contradiction ne retient plus, quand l’admin retire sa confirmation (IA-02)", async () => {
     const candidate = seedCandidate({ specialty: "Anesthésie-réanimation", target_countries: '["Émirats arabes unis"]', marketing_consent: 1 });
     const id = candidate.id as number;

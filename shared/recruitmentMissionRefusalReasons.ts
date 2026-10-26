@@ -1,8 +1,10 @@
 /**
  * Stable reasons of a refused candidate agreement for a mission (RGPD-03) or a
  * refused certification renewal (IA-02), sent by the server as `data.reason`
- * next to its French message: the mission screen, written in the admin's
- * language, shows its own translation instead of the French text.
+ * next to its French message. The mission screen, written in the admin's
+ * language, shows its own translation of the agreement refusals instead of
+ * the French text. The renewal ones are sent for a translated screen to come:
+ * the 360° sheet that confirms a renewal is in French and shows the message.
  */
 export const MISSION_CONSENT_REFUSAL_REASONS = [
   "consent_date_invalid",

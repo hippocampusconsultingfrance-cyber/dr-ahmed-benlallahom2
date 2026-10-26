@@ -276,6 +276,29 @@ describe("écran d’une mission employeur", () => {
     ]);
   });
 
+  it("garde le message du serveur quand la mission ou la candidature refusée n’est plus à l’écran pour la dater (RGPD-03)", async () => {
+    state.language = "en";
+    state.data = missionData({
+      brief: { ...brief, createdAt: new Date("2026-10-18T22:30:00.000Z") },
+      candidates: [{ ...candidate(11, "Amal", "Haddad", { status: "shortlisted", candidateConsentAt: null }), createdAt: new Date("2026-10-20T22:30:00.000Z") }],
+    });
+    render();
+    const refusal = (reason: string, variables: Record<string, unknown>) => state.consentOptions!.onError?.({ message: `Message du serveur : ${reason}.`, data: { code: "BAD_REQUEST", reason } }, { consentDate: "2026-10-01", ...variables } as never);
+    // The admin moved to mission 7 while the agreement for mission 8 was being saved: not dated with mission 7.
+    await refusal("consent_before_mission", { briefId: 8, applicationId: 11 });
+    await refusal("consent_before_application", { briefId: 8, applicationId: 11 });
+    // The candidate is no longer among those shown.
+    await refusal("consent_before_application", { briefId: 7, applicationId: 99 });
+    // A reason that needs no date is still translated.
+    await refusal("consent_date_future", { briefId: 8, applicationId: 11 });
+    expect(state.toasts).toEqual([
+      ["error", "Message du serveur : consent_before_mission."],
+      ["error", "Message du serveur : consent_before_application."],
+      ["error", "Message du serveur : consent_before_application."],
+      ["error", "The candidate’s agreement cannot be dated in the future."],
+    ]);
+  });
+
   it("ne propose pas une date d’accord antérieure à la candidature ou à la création de la mission (RGPD-03)", () => {
     const dateInput = () => renderToStaticMarkup(render()).match(/<input[^>]*type="date"[^>]*>/)?.[0];
     // The mission was created at 00:30 on 19 October in Paris, after the application.

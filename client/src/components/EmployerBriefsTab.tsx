@@ -84,11 +84,13 @@ export default function EmployerBriefsTab() {
       void utils.admin.clientBriefs.candidates.invalidate();
     },
     // A refusal in the admin's language (RGPD-03): the server's stable reason,
-    // dated with the application or the mission this screen shows.
+    // dated with the application or the mission this screen shows, if it is
+    // still the one the agreement was for (else the server's message).
     onError: (consentError, variables) => {
       const reason = consentError.data?.reason;
-      const dated = reason === "consent_before_mission" ? matches.data?.brief?.createdAt
-        : reason === "consent_before_application" ? matches.data?.candidates.find(candidate => candidate.id === variables.applicationId)?.createdAt
+      const shown = matches.data?.brief?.id === variables.briefId ? matches.data : undefined;
+      const dated = reason === "consent_before_mission" ? shown?.brief?.createdAt
+        : reason === "consent_before_application" ? shown?.candidates.find(candidate => candidate.id === variables.applicationId)?.createdAt
           : null;
       const day = dated ? new Date(dated).toLocaleDateString(locale, { timeZone: "Europe/Paris" }) : "";
       toast.error(isMissionConsentRefusalReason(reason) && (day || dated === null) ? copy.consentRefusals[reason](day) : consentError.message);

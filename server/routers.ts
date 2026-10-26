@@ -212,8 +212,9 @@ function bookingRefusal(code: "BAD_REQUEST" | "CONFLICT" | "UNPROCESSABLE_CONTEN
 
 /**
  * Refus d’un accord de candidat pour une mission (RGPD-03) ou d’un
- * renouvellement de certification (IA-02) : message français et motif stable
- * que l’écran de la mission traduit.
+ * renouvellement de certification (IA-02) : message français et motif stable.
+ * L’écran de la mission traduit les refus d’accord ; la fiche 360°, en
+ * français, affiche le message des refus de renouvellement.
  */
 function missionRefusal(code: "BAD_REQUEST" | "NOT_FOUND", reason: MissionConsentRefusalReason | CertificationRenewalRefusalReason, message: string) {
   return new TRPCError({ code, message, cause: new PublicErrorReason(reason) });
@@ -2187,7 +2188,8 @@ export const appRouter = router({
         // when the certificate has none), so that an expired certification
         // counts again; the rows read in the CV keep their date. Withdrawing
         // the confirmation removes the renewal with it, and the rows read in
-        // the CV when the latest analysis no longer retains the certification.
+        // the CV when the latest analysis, under the current prompt, no longer
+        // retains the certification.
         confirmCertification: adminProcedure.input(z.object({
           id: z.number().int().positive(),
           name: z.string().trim().min(1).max(1000),
@@ -2223,10 +2225,12 @@ export const appRouter = router({
           // text since, or no longer reads it): nothing vouches for it any
           // more, and kept unconfirmed it would show « à confirmer » in the
           // mission and the 360° sheet while the certification filters, which
-          // read that analysis, no longer find it.
-          const retainedByAnalysis = application.analysisPromptVersion === RECRUITMENT_ANALYSIS_PROMPT_VERSION
-            && analysedCertificationNames(application.normalizedCertifications).some(name => sameRecruitmentFact(name, input.name));
-          const dropped = input.confirmed || retainedByAnalysis ? [] : changed.filter(row => row.source === "extracted");
+          // read that analysis, no longer find it. An analysis under an older
+          // prompt, which the filters do not read, says nothing either way:
+          // its row stays, unconfirmed, until the dossier is analysed again.
+          const analysisIsCurrent = application.analysisPromptVersion === RECRUITMENT_ANALYSIS_PROMPT_VERSION;
+          const retainedByAnalysis = analysedCertificationNames(application.normalizedCertifications).some(name => sameRecruitmentFact(name, input.name));
+          const dropped = input.confirmed || !analysisIsCurrent || retainedByAnalysis ? [] : changed.filter(row => row.source === "extracted");
           const updated = changed.filter(row => !dropped.includes(row));
           const renewalChanged = renewal !== undefined && (!renewalRows.length || renewalRows.some(row => row.expiresAt !== renewal.expiresAt));
           // A certification declared in the form only: its confirmation gets a

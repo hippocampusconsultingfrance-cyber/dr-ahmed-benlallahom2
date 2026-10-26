@@ -384,6 +384,22 @@ Français : courant
     expect(verifiedRecruitmentFacts(result).certifications).toHaveLength(0);
   });
 
+  it("date une certification expirée comme la fiche de la candidature : au mois, au jour ou à l’année (IA-02)", () => {
+    const result = normalizeRecruitmentAnalysis(analysisFixture({
+      certifications: [
+        { name: "ACLS", issuingBody: null, country: null, expiresAt: "2023-05", evidence: "ACLS expiration 2023-05", sourceLocation: "page 1", confidence: 95 },
+        { name: "BLS", issuingBody: null, country: null, expiresAt: "2022-03-31", evidence: "BLS expiration 2022-03-31", sourceLocation: "page 1", confidence: 95 },
+        { name: "PALS", issuingBody: null, country: null, expiresAt: "2020", evidence: "PALS expiration 2020", sourceLocation: "page 1", confidence: 95 },
+      ],
+    }), "[PAGE 1]\nACLS expiration 2023-05\nBLS expiration 2022-03-31\nPALS expiration 2020");
+
+    expect(result.dataQualityWarnings).toEqual(expect.arrayContaining([
+      "Certification expirée à confirmer : ACLS (expirée en mai 2023).",
+      "Certification expirée à confirmer : BLS (expirée le 31/03/2022).",
+      "Certification expirée à confirmer : PALS (expirée en 2020).",
+    ]));
+  });
+
   it("reconnaît uniquement le blocage de facturation explicite du Gateway", () => {
     expect(isAiGatewayBillingUnavailable(new Error(
       "AI Gateway requires a valid credit card on file to service requests. Please add a card and unlock your free credits.",
