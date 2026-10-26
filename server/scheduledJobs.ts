@@ -1,4 +1,4 @@
-import { and, eq, gte, isNull, lt, lte, or, sql } from "drizzle-orm";
+import { and, eq, gt, gte, isNull, lt, lte, or, sql } from "drizzle-orm";
 import { appointments, candidateAccounts, candidateSecurityRateLimits, contactMessages, cvApplications, gdprRequests, medicalQuestions, securityEvents } from "../drizzle/schema";
 import { getDb } from "./db";
 import { mutationRowCount } from "./dbMutation";
@@ -28,16 +28,39 @@ export function reminderWindowBounds(window: ReminderWindow, now = new Date()) {
   return { from: new Date(now.getTime() + window.fromMs), to: new Date(now.getTime() + window.toMs) };
 }
 
-export async function sendDueAppointmentReminders(window: ReminderWindow, now = new Date()) {
+/** `reminderSent`: 0 to send, 2 reserved by a run that is sending it, 1 sent. */
+const REMINDER_RESERVED = 2;
+/** A reservation older than this was left by a run that stopped (a run sends each email within seconds). */
+export const REMINDER_RESERVATION_STALE_MS = 15 * 60 * 1000;
+/**
+ * Resend keeps the reminder's idempotency key 24 hours: a reservation is
+ * taken back only while a reminder it may have sent would be recognised, so
+ * the patient never gets it twice.
+ */
+export const REMINDER_RESERVATION_RETAKE_LIMIT_MS = 23 * HOUR_MS;
+
+/**
+ * Sends the reminders of the confirmed appointments in the window. Each one is
+ * reserved before its email (the hourly Heartbeat and the daily cron never both
+ * send it) and marked sent after (DATA-02). A reservation a stopped run left
+ * behind, without its email recorded as sent, is taken back by a later run,
+ * under the same idempotency key; `onlyReserved` takes back those alone.
+ */
+export async function sendDueAppointmentReminders(window: ReminderWindow, now = new Date(), options: { onlyReserved?: boolean } = {}) {
   const db = await getDb();
   if (!db) throw new Error("Database connection failed");
   const { from, to } = reminderWindowBounds(window, now);
+  const staleReservation = and(
+    eq(appointments.reminderSent, REMINDER_RESERVED),
+    lt(appointments.updatedAt, new Date(now.getTime() - REMINDER_RESERVATION_STALE_MS)),
+    gt(appointments.updatedAt, new Date(now.getTime() - REMINDER_RESERVATION_RETAKE_LIMIT_MS)),
+  );
 
   const upcoming = await db.select().from(appointments).where(
     and(
       eq(appointments.paymentStatus, "completed"),
       eq(appointments.appointmentStatus, "confirmed"),
-      eq(appointments.reminderSent, 0),
+      options.onlyReserved ? staleReservation : or(eq(appointments.reminderSent, 0), staleReservation),
       gte(appointments.appointmentDate, from),
       lte(appointments.appointmentDate, to)
     )
@@ -49,22 +72,26 @@ export async function sendDueAppointmentReminders(window: ReminderWindow, now = 
   let sent = 0;
   let failed = 0;
   for (const apt of upcoming) {
-    // Claim before sending so the hourly Heartbeat and the daily cron can never
-    // both email the same patient; a failed delivery releases the claim for a retry.
+    // Reserve before sending, dated by updatedAt: a concurrent run that
+    // reserved it first (or took it back just now) wins.
     const claim = await db.update(appointments)
-      .set({ reminderSent: 1 })
-      .where(and(eq(appointments.id, apt.id), eq(appointments.reminderSent, 0)));
+      .set({ reminderSent: REMINDER_RESERVED, updatedAt: now })
+      .where(and(eq(appointments.id, apt.id), apt.reminderSent === 0 ? eq(appointments.reminderSent, 0) : staleReservation));
     if (mutationRowCount(claim) !== 1) continue;
     try {
       await sendReminderEmail(apt.customerEmail, apt.customerName, apt.trackingId, apt.appointmentDate, { language: emailLanguageFor(apt.language) });
-      sent += 1;
-      console.log("[Reminder] Sent successfully");
     } catch (e) {
       failed += 1;
       console.error("[Reminder] Delivery failed:", safeErrorName(e));
-      await db.update(appointments).set({ reminderSent: 0 }).where(eq(appointments.id, apt.id))
+      await db.update(appointments).set({ reminderSent: 0 }).where(and(eq(appointments.id, apt.id), eq(appointments.reminderSent, REMINDER_RESERVED)))
         .catch(releaseError => console.error("[Reminder] Claim release failed:", safeErrorName(releaseError)));
+      continue;
     }
+    sent += 1;
+    console.log("[Reminder] Sent successfully");
+    // Left reserved if this fails: a later run takes it back under the same key.
+    await db.update(appointments).set({ reminderSent: 1 }).where(and(eq(appointments.id, apt.id), eq(appointments.reminderSent, REMINDER_RESERVED)))
+      .catch(markError => console.error("[Reminder] Sent reminder not recorded:", safeErrorName(markError)));
   }
 
   return { reminded: upcoming.length, sent, failed };
@@ -93,7 +120,13 @@ export async function runAppointmentFulfillmentWorker(options: { batchSize: numb
   const { processDueAppointmentFulfillmentJobs, recoverStaleAppointmentFulfillmentJobs } = await import("./appointmentFulfillment");
   const recovery = await recoverStaleAppointmentFulfillmentJobs();
   const { processed, batches } = await drainInBatches(() => processDueAppointmentFulfillmentJobs(options.batchSize), options);
-  return { recovery, processed, results: batches.flatMap(batch => batch.results) };
+  // DATA-02: this job runs half a day after the reminder run, still within
+  // the key's 24 hours: it takes back the reminders a stopped run left reserved.
+  const reminderRecovery = await sendDueAppointmentReminders(DAILY_REMINDER_WINDOW, new Date(), { onlyReserved: true }).catch(error => {
+    console.error("[Reminder] Recovery of reserved reminders failed:", safeErrorName(error));
+    return null;
+  });
+  return { recovery, processed, results: batches.flatMap(batch => batch.results), reminderRecovery };
 }
 
 export async function runCandidateDocumentProcessingWorker(options: { batchSize: number; maxBatches: number; budgetMs: number }) {
