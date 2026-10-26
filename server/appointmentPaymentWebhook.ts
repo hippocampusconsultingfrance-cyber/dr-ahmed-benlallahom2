@@ -2,7 +2,7 @@ import { and, eq, isNull, ne, or } from "drizzle-orm";
 import { appointments } from "../drizzle/schema";
 import { getDb } from "./db";
 import { mutationRowCount } from "./dbMutation";
-import { enqueueAppointmentFulfillment, processAppointmentFulfillmentNow } from "./appointmentFulfillment";
+import { closeUnsentAppointmentFulfillment, enqueueAppointmentFulfillment, processAppointmentFulfillmentNow } from "./appointmentFulfillment";
 import { notifyOwner } from "./_core/notification";
 import { sendRefundConfirmationEmail, sendUnconfirmablePaymentEmail } from "./_core/notifications";
 import { emailLanguageFor } from "./emailLanguage";
@@ -451,6 +451,9 @@ export async function handleChargeRefunded(charge: ChargePayload, now = new Date
     return { httpStatus: 500, body: { received: false }, outcome: "changed_concurrently" };
   }
   console.log("Stripe refund recorded for appointment", { trackingId: appointment.trackingId });
+  // As for a dashboard refund: post-payment emails still waiting for a retry are no longer sent (EXPL-02).
+  await closeUnsentAppointmentFulfillment(appointment.id, now)
+    .catch(error => console.error("[Stripe] Pending post-payment emails could not be closed", error instanceof Error ? error.name : "UnknownError"));
 
   // Same key as the dashboard refund: the patient is told once.
   const patientNotified = await sendRefundConfirmationEmail(

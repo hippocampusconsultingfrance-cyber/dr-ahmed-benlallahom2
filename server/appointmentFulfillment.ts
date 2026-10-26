@@ -404,6 +404,31 @@ export async function retryAppointmentFulfillment(trackingId: string): Promise<A
 }
 
 /**
+ * Refund of an appointment (dashboard or Stripe, EXPL-02): its jobs still
+ * waiting for an attempt (queued, waiting for a retry, or interrupted) are
+ * closed right away as not sent, as the next run would do without sending
+ * anything, so the dashboard stops showing them as failed and waiting for a
+ * retry. A job being sent right now is left to its worker.
+ */
+export async function closeUnsentAppointmentFulfillment(appointmentId: number, now = new Date()) {
+  const db = await getDb();
+  if (!db) throw new Error("Database connection failed");
+  const result = await db.update(appointmentFulfillmentJobs).set({
+    status: "completed",
+    finishedAt: now,
+    lastError: "appointment_not_paid_or_missing",
+    updatedAt: now,
+  }).where(and(
+    eq(appointmentFulfillmentJobs.appointmentId, appointmentId),
+    or(
+      inArray(appointmentFulfillmentJobs.status, ["queued", "retry"]),
+      and(eq(appointmentFulfillmentJobs.status, "running"), lte(appointmentFulfillmentJobs.startedAt, new Date(now.getTime() - APPOINTMENT_FULFILLMENT_STALE_AFTER_MS))),
+    ),
+  ));
+  return mutationRowCount(result);
+}
+
+/**
  * Paid appointments whose post-payment emails did not go out, oldest first:
  * the « À traiter » panel reads them from the database, not from an alert
  * email sent through the very channel that failed (EXPL-02). « failed »: the

@@ -294,6 +294,8 @@ function AppointmentsTab() {
     if (!patientNotified) toast.warning("L’email au patient n’a pas pu être envoyé : prévenez-le directement.");
     utils.admin.appointments.list.invalidate();
     utils.admin.stats.invalidate();
+    // Its post-payment emails waiting for a retry were just closed as not sent (EXPL-02).
+    utils.admin.attention.invalidate();
   };
   const refundAppointment = trpc.admin.appointments.refund.useMutation({
     onSuccess: notifyRefundResult,

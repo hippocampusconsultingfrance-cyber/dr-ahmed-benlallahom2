@@ -100,6 +100,7 @@ vi.mock("./invoiceNumbering", () => ({
 const { createApp } = await import("./_core/index");
 const { appRouter } = await import("./routers");
 const { refundAppointmentPayment } = await import("./appointmentAdminActions");
+const { getAppointmentDeliveries, processDueAppointmentFulfillmentJobs } = await import("./appointmentFulfillment");
 const signer = new Stripe(process.env.STRIPE_SECRET_KEY!);
 
 let baseUrl = "";
@@ -339,6 +340,32 @@ describe("RES-06 — remboursements et contestations faits dans Stripe", () => {
     expect(emails.sendRefundConfirmationEmail).toHaveBeenCalledTimes(1);
     expect(owner.notifyOwner).not.toHaveBeenCalled();
     expect(String(appointmentRow().cancellationReason)).toContain("Indisponibilité du médecin");
+  });
+
+  it.each([
+    ["depuis le tableau de bord", () => refundAppointmentPayment(new Stripe(process.env.STRIPE_SECRET_KEY!), { trackingId: TRACKING_ID, reason: "Indisponibilité du médecin", initiator: "practitioner" })],
+    ["dans Stripe", () => postEvent("charge.refunded", charge())],
+  ])("ferme aussitôt comme « non envoyés » les envois qui attendaient un nouvel essai d’un rendez-vous remboursé %s (EXPL-02)", async (_where, refund) => {
+    const { id } = seedAppointment(paid) as { id: number };
+    const seedJob = (jobType: string, overrides: Record<string, unknown>) => db().seed(appointmentFulfillmentJobs, { appointmentId: id, jobType, attempts: 1, maxAttempts: 7, scheduledFor: new Date(Date.now() + HOUR), ...overrides });
+    seedJob("owner", { status: "running", startedAt: new Date() });
+    seedJob("confirmation", { status: "retry", lastError: "confirmation_email_failed" });
+    // Still « running » long after its worker stopped: interrupted.
+    seedJob("invoice", { status: "running", startedAt: new Date(Date.now() - 20 * 60 * 1000) });
+
+    await refund();
+
+    const deliveries = (await getAppointmentDeliveries([id])).get(id)!;
+    expect(deliveries.map(({ jobType, state, notSentReason }) => ({ jobType, state, notSentReason }))).toEqual([
+      // Being sent right now: left to its worker.
+      { jobType: "owner", state: "sending", notSentReason: null },
+      { jobType: "confirmation", state: "not_sent", notSentReason: "not_paid" },
+      { jobType: "invoice", state: "not_sent", notSentReason: "not_paid" },
+    ]);
+    // Nothing left for a later run, which sends nothing.
+    await expect(processDueAppointmentFulfillmentJobs()).resolves.toMatchObject({ processed: 0 });
+    expect(emails.sendConfirmationEmail).not.toHaveBeenCalled();
+    expect(emails.sendInvoiceEmail).not.toHaveBeenCalled();
   });
 
   it("garde le statut d’une consultation déjà faite remboursée dans Stripe et le signale au médecin", async () => {

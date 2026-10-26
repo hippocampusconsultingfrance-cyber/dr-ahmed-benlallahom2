@@ -4,6 +4,7 @@ import { and, eq } from "drizzle-orm";
 import { appointments } from "../drizzle/schema";
 import { getDb } from "./db";
 import { mutationRowCount } from "./dbMutation";
+import { closeUnsentAppointmentFulfillment } from "./appointmentFulfillment";
 import { sendRefundConfirmationEmail, type RefundEmailContext } from "./_core/notifications";
 import { emailLanguageFor } from "./emailLanguage";
 import { BOOKING_PATIENT_REFUND_DEADLINE_HOURS } from "../shared/bookingPolicy";
@@ -110,7 +111,7 @@ export async function refundAppointmentPayment(
   const refundAmount = ((refund.amount ?? Math.round(Number(appointment.finalPrice) * 100)) / 100).toFixed(2);
   const cancelsAppointment = appointment.appointmentStatus === "confirmed";
   const reasonLabel = `${input.initiator === "practitioner" ? "Annulation / remboursement par le praticien" : "Annulation à la demande du patient"} : ${input.reason}`;
-  await db.update(appointments).set({
+  const recorded = await db.update(appointments).set({
     paymentStatus: "refunded",
     ...(cancelsAppointment ? { appointmentStatus: "cancelled" as const, slotKey: null } : {}),
     cancellationReason: reasonLabel,
@@ -119,6 +120,13 @@ export async function refundAppointmentPayment(
     refundedAt: now,
     updatedAt: now,
   }).where(and(eq(appointments.id, appointment.id), eq(appointments.paymentStatus, appointment.paymentStatus)));
+  // Post-payment emails still waiting for a retry are no longer sent (EXPL-02).
+  // Not recorded here: a concurrent Stripe notification recorded the refund
+  // and closes them itself.
+  if (mutationRowCount(recorded) === 1) {
+    await closeUnsentAppointmentFulfillment(appointment.id, now)
+      .catch(error => console.error("[Refund] Pending post-payment emails could not be closed", error instanceof Error ? error.name : "UnknownError"));
+  }
 
   const context: RefundEmailContext = unconfirmedPayment
     ? "unconfirmed_payment"

@@ -6,6 +6,7 @@ const database = vi.hoisted(() => ({ getDb: vi.fn() }));
 const fulfillment = vi.hoisted(() => ({
   enqueueAppointmentFulfillment: vi.fn(async () => undefined),
   processAppointmentFulfillmentNow: vi.fn(async () => ({ processed: 2, results: [] })),
+  closeUnsentAppointmentFulfillment: vi.fn(async () => 0),
 }));
 const owner = vi.hoisted(() => ({ notifyOwner: vi.fn(async () => true) }));
 vi.mock("./db", () => ({ getDb: database.getDb }));
@@ -222,6 +223,8 @@ describe("webhook Stripe charge.refunded (RES-06)", () => {
     const { sql, params } = dialect.sqlToQuery(writes[0].where);
     expect(sql).toContain('"stripe_payment_intent_id" =');
     expect(params).toEqual(expect.arrayContaining([42, "pi_test_1", "completed", "confirmed"]));
+    // Post-payment emails still waiting for a retry are closed as not sent (EXPL-02).
+    expect(fulfillment.closeUnsentAppointmentFulfillment).toHaveBeenCalledWith(42, expect.any(Date));
   });
 
   it("demande à Stripe de relivrer quand le rendez-vous a changé entre-temps sans être remboursé", async () => {
@@ -231,6 +234,7 @@ describe("webhook Stripe charge.refunded (RES-06)", () => {
 
     expect(result).toEqual({ httpStatus: 500, body: { received: false }, outcome: "changed_concurrently" });
     expect(owner.notifyOwner).not.toHaveBeenCalled();
+    expect(fulfillment.closeUnsentAppointmentFulfillment).not.toHaveBeenCalled();
   });
 });
 
