@@ -14,12 +14,15 @@ const dialect = new PgDialect();
 const resend = vi.hoisted(() => {
   vi.stubEnv("OWNER_NOTIFICATION_EMAIL", "owner@example.test");
   return {
-    calls: [] as Array<{ message: Record<string, unknown>; options?: { idempotencyKey?: string }; at: number }>,
+    // startedAt : début de l’appel ; at : sa fin.
+    calls: [] as Array<{ message: Record<string, unknown>; options?: { idempotencyKey?: string }; startedAt: number; at: number }>,
     // Réponse par appel : "ok", "5xx", "422", "429" ou "throw" ; "ok" quand la file est vide.
     script: [] as string[],
     failFor: new Set<string>(),
     // Limite de débit persistante pour ces adresses, avec ce retry-after (secondes).
     rateLimitedFor: new Set<string>(),
+    // Limite de débit passagère : un seul 429 pour le prochain appel vers ces adresses.
+    rateLimitedOnceFor: new Set<string>(),
     retryAfterSeconds: "1",
     // Durée simulée de chaque appel à Resend (ms) ; l’envoi est noté à sa fin.
     latencyMs: 0,
@@ -29,10 +32,11 @@ vi.mock("resend", () => ({
   Resend: vi.fn().mockImplementation(() => ({
     emails: {
       send: vi.fn(async (message: Record<string, unknown>, options?: { idempotencyKey?: string }) => {
+        const startedAt = Date.now();
         if (resend.latencyMs > 0) await new Promise(resolve => setTimeout(resolve, resend.latencyMs));
-        resend.calls.push({ message, options, at: Date.now() });
+        resend.calls.push({ message, options, startedAt, at: Date.now() });
         const to = (message.to as string[])[0];
-        const outcome = resend.failFor.has(to) ? "5xx" : resend.rateLimitedFor.has(to) ? "429" : resend.script.shift() ?? "ok";
+        const outcome = resend.failFor.has(to) ? "5xx" : resend.rateLimitedFor.has(to) || resend.rateLimitedOnceFor.delete(to) ? "429" : resend.script.shift() ?? "ok";
         if (outcome === "throw") throw new Error("socket hang up");
         if (outcome === "5xx") return { data: null, error: { name: "internal_server_error", statusCode: 503, message: "unavailable" } };
         if (outcome === "422") return { data: null, error: { name: "validation_error", statusCode: 422, message: "invalid recipient" } };
@@ -88,8 +92,10 @@ function appointmentRow(overrides: Record<string, unknown> = {}) {
 /**
  * In-memory jobs table. The due-list query is the one with an ORDER BY; every
  * job UPDATE (claim or status) targets the id bound first in its WHERE clause.
+ * `otherAppointments`: further appointments, read by their id; the due list
+ * of one appointment (processAppointmentFulfillmentNow) binds that id last.
  */
-function memoryDatabase(initialJobs: Job[], appointment = appointmentRow()) {
+function memoryDatabase(initialJobs: Job[], appointment = appointmentRow(), otherAppointments: Array<ReturnType<typeof appointmentRow>> = []) {
   const jobs = initialJobs.map(row => ({ ...row }));
   const latency = () => new Promise(resolve => setTimeout(resolve, database.latencyMs));
   const inserts: Array<{ jobType: string; conflict: string }> = [];
@@ -117,10 +123,14 @@ function memoryDatabase(initialJobs: Job[], appointment = appointmentRow()) {
           orderBy: () => { ordered = true; return chain; },
           limit: async (count: number) => {
             if (database.latencyMs > 0) await latency();
-            if (table === appointments) return [appointment];
+            const params = where ? dialect.sqlToQuery(where).params : [];
+            if (table === appointments) return [otherAppointments.find(row => row.id === params[0]) ?? appointment];
             if (ordered) {
+              // Statuses and due time first, then the appointment, if any.
+              const appointmentId = params[3];
               return jobs
                 .filter(row => ["queued", "retry"].includes(row.status) && row.scheduledFor.getTime() <= Date.now() && row.attempts < row.maxAttempts)
+                .filter(row => appointmentId === undefined || row.appointmentId === appointmentId)
                 .sort((a, b) => a.scheduledFor.getTime() - b.scheduledFor.getTime() || a.id - b.id)
                 .slice(0, count)
                 .map(row => ({ ...row }));
@@ -173,6 +183,7 @@ beforeEach(() => {
   resend.script.length = 0;
   resend.failFor.clear();
   resend.rateLimitedFor.clear();
+  resend.rateLimitedOnceFor.clear();
   resend.retryAfterSeconds = "1";
   resend.latencyMs = 0;
   database.latencyMs = 0;
@@ -505,5 +516,53 @@ describe("page de statut aux valeurs de production : un 429 passager garde son n
     await next;
     expect(jobs.map(row => [row.jobType, row.status, row.attempts])).toEqual([["owner", "completed", 1], ["confirmation", "completed", 1], ["invoice", "completed", 1]]);
     expect(subjects().filter(subject => subject.startsWith("Facture"))).toHaveLength(1);
+  });
+
+  it("trois pages à la fois : l’envoi refait d’une autre page après son retry-after prend le créneau ; la facture dont la tâche a été réservée juste avant la fin du budget de sa page ne part pas après la réponse, elle reste en file sans tentative ni alerte", async () => {
+    // Z1 et Z2 relancent confirmation et facture restées en file ; Y confirme
+    // son paiement sous un 429 passager de la notification au médecin
+    // (retry-after de 0,5 s). Le nouvel essai de Y prend le créneau à +2 650 ms :
+    // la facture de Z2, réservée avant la fin du budget de sa page (+3 000 ms),
+    // n’aurait son créneau qu’à +3 250 ms, après la réponse de la page.
+    resend.rateLimitedOnceFor.add("owner@example.test");
+    resend.retryAfterSeconds = "0.5";
+    const z1 = appointmentRow({ trackingId: "APTZ1", customerEmail: "z1@example.test" });
+    const z2 = appointmentRow({ id: 43, trackingId: "APTZ2", customerEmail: "z2@example.test" });
+    const y = appointmentRow({ id: 44, trackingId: "APTY", customerEmail: "y@example.test" });
+    const { jobs } = memoryDatabase([
+      job(1, "owner", { status: "completed", attempts: 1 }), job(2, "confirmation"), job(3, "invoice"),
+      job(4, "owner", { appointmentId: 43, status: "completed", attempts: 1 }), job(5, "confirmation", { appointmentId: 43 }), job(6, "invoice", { appointmentId: 43 }),
+      job(7, "owner", { appointmentId: 44 }), job(8, "confirmation", { appointmentId: 44 }), job(9, "invoice", { appointmentId: 44 }),
+    ], z1, [z2, y]);
+    const startedAt = Date.now();
+    const answeredAt = new Map<string, number>();
+
+    const pages = [z1, z2, y].map(appointment => processFulfillmentBestEffort(appointment.id, paymentStatusPageFulfillment.timeoutMs)
+      .then(() => { answeredAt.set(appointment.trackingId, Date.now()); }));
+    // Long after the answers: what was still waiting has had time to leave.
+    await vi.advanceTimersByTimeAsync(10_000);
+    await Promise.all(pages);
+
+    const sends = resend.calls.map(call => ({
+      trackingId: [z1, z2, y].find(appointment => JSON.stringify(call.message).includes(appointment.trackingId))!.trackingId,
+      subject: String(call.message.subject).split(" ")[0],
+      startedAt: call.startedAt - startedAt,
+    }));
+    expect(sends.map(send => `${send.trackingId} ${send.subject}`)).toEqual(["APTZ1 Confirmation", "APTZ2 Confirmation", "APTY Nouvelle", "APTZ1 Facture", "APTY Nouvelle"]);
+    // No email starts once the page of its appointment has answered.
+    expect(sends.filter(send => send.startedAt >= answeredAt.get(send.trackingId)! - startedAt)).toEqual([]);
+    // Still a pause between two sends of the instance, the new try of Y included.
+    for (let index = 1; index < sends.length; index += 1) expect(sends[index].startedAt - sends[index - 1].startedAt).toBeGreaterThanOrEqual(PACING_DELAY_MS);
+    // Z2's invoice gave its slot up: due, as it was, for the next processing, without a counted attempt nor an alert.
+    expect(jobs.find(row => row.id === 6)).toMatchObject({ status: "queued", attempts: 0, startedAt: null });
+    expect(jobs.some(row => row.status === "running")).toBe(false);
+    expect(subjects().some(subject => subject.startsWith("Échec d’envoi"))).toBe(false);
+
+    // The next processing (webhook, scheduled run) sends it, once.
+    const next = processDueAppointmentFulfillmentJobs();
+    await vi.advanceTimersByTimeAsync(5_000);
+    await next;
+    expect(jobs.find(row => row.id === 6)).toMatchObject({ status: "completed", attempts: 1 });
+    expect(resend.calls.filter(call => (call.message.to as string[])[0] === "z2@example.test" && String(call.message.subject).startsWith("Facture"))).toHaveLength(1);
   });
 });

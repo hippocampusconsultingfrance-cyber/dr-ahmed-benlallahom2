@@ -124,6 +124,17 @@ describe("attentes d’un envoi fait sous une échéance (ABUS-03)", () => {
     }, () => now, { firstPauseDeadlineAt: 3_000 });
   });
 
+  it("le premier envoi, sans pause, part avant la fin du budget, jamais à l’instant même où la requête répond (ABUS-03)", async () => {
+    let now = 2_999;
+    await runWithProcessingDeadline(1_000, async () => {
+      expect(startFitsDeadline()).toBe(true);
+      now = 3_000;
+      expect(startFitsDeadline()).toBe(false);
+      expect(deadlineCutShort()).toBe(true);
+    }, () => now, { firstPauseDeadlineAt: 3_000 });
+    expect(startFitsDeadline()).toBe(true);
+  });
+
   it("même la première pause ne dépasse pas la fin du budget ; hors échéance, rien n’est refusé", async () => {
     await runWithProcessingDeadline(1_000, async () => {
       expect(waitFitsDeadline(3_001)).toBe(false);

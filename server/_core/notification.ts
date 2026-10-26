@@ -1,5 +1,6 @@
 import { TRPCError } from "@trpc/server";
 import { Resend } from "resend";
+import { startFitsDeadline } from "../processingDeadline";
 import { reportResendQuotaError, resendDeliveryFailureCode, sendWithRateLimitRetry } from "./resendDelivery";
 
 export type NotificationPayload = {
@@ -126,5 +127,9 @@ export async function notifyOwner(
       console.warn("[Notification] Owner email delivery failed.");
       if (attempt >= attempts) return false;
     }
+    // Sent right after a payment (refund alert of the post-payment queue):
+    // not asked again once the immediate budget is spent, the request it
+    // serves having answered (ABUS-03); its job goes back to the queue.
+    if (!startFitsDeadline()) return false;
   }
 }

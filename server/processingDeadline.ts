@@ -85,15 +85,17 @@ export function pauseWithinDeadline(waitMs: number): Promise<void> {
 }
 
 /**
- * Whether the step that follows a pause may still start now, before the end
- * allowed to that pause (waitFitsDeadline): the end of the whole budget after
- * the first one, the deadline itself after the later ones; always true
- * outside a deadline. A step given up here is recorded like a refused pause
- * (deadlineCutShort).
+ * Whether the step that follows a pause may still start now, strictly before
+ * the end allowed to that pause (waitFitsDeadline): the end of the whole
+ * budget after the first one, the deadline itself after the later ones. The
+ * first step, before any pause, until the end of the whole budget. Always
+ * true outside a deadline. The budget's end is when the request it serves
+ * answers: a step starting at that very moment would start after the answer.
+ * A step given up here is recorded like a refused pause (deadlineCutShort).
  */
 export function startFitsDeadline(): boolean {
   const context = deadlineStorage.getStore();
-  if (!context || context.now() <= (context.lastPauseEndAt ?? context.firstPauseDeadlineAt)) return true;
+  if (!context || context.now() < (context.lastPauseEndAt ?? context.firstPauseDeadlineAt)) return true;
   context.pauseRefused = true;
   return false;
 }
