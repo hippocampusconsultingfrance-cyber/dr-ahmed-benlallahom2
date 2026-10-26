@@ -602,6 +602,36 @@ describe("missions employeurs : classement, certifications et accord du candidat
     expect(await aclsInMission()).toEqual([{ name: "ACLS", origins: ["declared", "extracted"], expiresAt: "2023-05", status: "expired" }]);
   });
 
+  it("garde après une analyse dégradée les langues lues dans le CV, comme ses certifications (IA-02)", async () => {
+    const candidate = seedCandidate({ specialty: "Cardiologie", target_countries: '["Suisse"]', languages: '["Français"]' });
+    const id = candidate.id as number;
+    const briefId = seedBrief({ specialty_needed: "Cardiologie", country: "Suisse", required_languages: "Français, Anglais" }).id as number;
+    const languagesInMission = async () => (await admin().admin.clientBriefs.candidates({ briefId })).candidates[0]!.match.languages;
+    const rows = () => memory.rows(cvCandidateLanguages).map(row => [row.language, row.source]);
+    const normalized = () => memory.rows(cvApplications).find(row => row.id === id)!.normalized_languages;
+    await saveCvAnalysis(id, cvAnalysis({ specialties: ["Cardiologie"], normalizedLanguages: [
+      { language: "Français", proficiency: "native", evidence: "Français (langue maternelle)", ...verified },
+      { language: "Anglais", proficiency: "fluent", evidence: "Anglais (courant)", ...verified },
+    ] }));
+    const read = normalized();
+    expect(rows()).toEqual([["Français", "extracted"], ["Anglais", "extracted"]]);
+    expect(await languagesInMission()).toEqual([{ name: "Français", origins: ["declared", "extracted"] }, { name: "Anglais", origins: ["extracted"] }]);
+
+    // The AI unavailable, the fallback did not read the CV: the languages read there stay, for the mission and the filters.
+    const fallback = buildManualReviewFallback({ firstName: "Carl", lastName: "Cardio", specialty: "Cardiologie", targetCountries: ["Suisse"], languages: ["Français"], extractedText: "Français (langue maternelle), Anglais (courant)" });
+    await saveCvAnalysis(id, fallback.result, fallback);
+    expect(rows()).toEqual([["Français", "extracted"], ["Anglais", "extracted"]]);
+    expect(normalized()).toBe(read);
+    expect(await languagesInMission()).toEqual([{ name: "Français", origins: ["declared", "extracted"] }, { name: "Anglais", origins: ["extracted"] }]);
+    expect((await admin().admin.recruitment.list({ language: "anglais" })).items.map(item => item.id)).toEqual([id]);
+
+    // The AI back, the CV read again replaces that reading as usual.
+    await saveCvAnalysis(id, cvAnalysis({ specialties: ["Cardiologie"], normalizedLanguages: [] }));
+    expect(rows()).toEqual([]);
+    expect(normalized()).toBe("[]");
+    expect(await languagesInMission()).toEqual([{ name: "Français", origins: ["declared"] }]);
+  });
+
   it("ne confirme pas une certification dont le dossier ne garde que la date lue dans le CV, sans la déclarer (IA-02)", async () => {
     vi.useFakeTimers({ now: new Date("2026-10-26T10:00:00.000Z"), toFake: ["Date"] });
     // The candidate no longer declares ACLS: the expiry left by the last analysis dates nothing.

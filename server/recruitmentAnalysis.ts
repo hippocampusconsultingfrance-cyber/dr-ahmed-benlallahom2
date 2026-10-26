@@ -1870,8 +1870,9 @@ export async function saveCvAnalysis(
     ? { certifications: [], languages: [], experiences: [], skills: [] }
     : verifiedRecruitmentFacts(analysis);
   // The AI was unavailable (IA-02): this analysis did not read the CV and says
-  // nothing of the certifications read there. Their rows stay, with the CV's
-  // dates, so that one the CV says has expired is not left merely « déclarée »,
+  // nothing of the certifications and languages read there. Their rows stay,
+  // with the CV's dates, so that a certification the CV says has expired is
+  // not left merely « déclarée » and a language keeps its reading in the CV,
   // and so do the facts the filters read, when the previous analysis was
   // under this prompt. A CV that hides text is still not trusted (IA-01).
   const aiUnavailable = generation?.model === MANUAL_REVIEW_FALLBACK_MODEL;
@@ -1880,7 +1881,7 @@ export async function saveCvAnalysis(
   const [previousAnalysis] = cvNotRead
     ? await db.select({ analysisPromptVersion: cvApplications.analysisPromptVersion }).from(cvApplications).where(eq(cvApplications.id, applicationId)).limit(1)
     : [];
-  const keptNormalizedCertifications = previousAnalysis?.analysisPromptVersion === RECRUITMENT_ANALYSIS_PROMPT_VERSION;
+  const keptNormalizedFacts = previousAnalysis?.analysisPromptVersion === RECRUITMENT_ANALYSIS_PROMPT_VERSION;
   // Certifications an admin confirmed in the CV survive a new analysis, and
   // are not read again. A confirmed renewal or declared certification is no
   // reading of the CV (IA-02): the row read there is stored with the CV's
@@ -1948,8 +1949,10 @@ export async function saveCvAnalysis(
             }
           : undefined,
       }),
-      ...(keptNormalizedCertifications ? {} : { normalizedCertifications: JSON.stringify(verifiedFacts.certifications) }),
-      normalizedLanguages: JSON.stringify(verifiedFacts.languages),
+      ...(keptNormalizedFacts ? {} : {
+        normalizedCertifications: JSON.stringify(verifiedFacts.certifications),
+        normalizedLanguages: JSON.stringify(verifiedFacts.languages),
+      }),
       normalizedExperiences: JSON.stringify(verifiedFacts.experiences),
       aiMatchReasoning: analysis.reasoning,
       aiAnalyzedAt: new Date(),
@@ -1968,9 +1971,11 @@ export async function saveCvAnalysis(
         isNull(cvCandidateCertifications.confirmedAt),
         aiUnavailable ? ne(cvCandidateCertifications.source, "cv_expiry") : undefined
       ));
-  const deleteLanguages = db
-    .delete(cvCandidateLanguages)
-    .where(eq(cvCandidateLanguages.applicationId, applicationId));
+  const deleteLanguages = cvNotRead
+    ? db.select({ id: cvApplications.id }).from(cvApplications).where(sql`FALSE`)
+    : db
+      .delete(cvCandidateLanguages)
+      .where(eq(cvCandidateLanguages.applicationId, applicationId));
   const deleteExperiences = db
     .delete(cvCandidateExperiences)
     .where(eq(cvCandidateExperiences.applicationId, applicationId));
