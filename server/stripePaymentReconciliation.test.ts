@@ -100,6 +100,9 @@ vi.mock("./invoiceNumbering", () => ({
 const { createApp } = await import("./_core/index");
 const { appRouter } = await import("./routers");
 const { refundAppointmentPayment } = await import("./appointmentAdminActions");
+const { paymentStatusPageFulfillment } = await import("./appointmentPublicStatus");
+const { APPOINTMENT_FULFILLMENT_STALE_AFTER_MS } = await import("./appointmentFulfillment");
+const PAGE_FULFILLMENT_TIMEOUT_MS = paymentStatusPageFulfillment.timeoutMs;
 const signer = new Stripe(process.env.STRIPE_SECRET_KEY!);
 
 let baseUrl = "";
@@ -128,6 +131,7 @@ beforeEach(() => {
   state.stripe.refunds.length = 0;
   state.stripe.expireCalls.length = 0;
   state.stripe.payWhileClosing = null;
+  paymentStatusPageFulfillment.timeoutMs = PAGE_FULFILLMENT_TIMEOUT_MS;
 });
 
 function seedAppointment(overrides: Record<string, unknown> = {}) {
@@ -207,7 +211,7 @@ function expectPostPaymentEmailsSentOnce() {
 }
 
 describe("EXPL-01 — un paiement reçu est confirmé même sans webhook", () => {
-  it("confirme depuis la page de retour le paiement que Stripe dit reçu, une seule fois, et laisse les envois au webhook tardif", async () => {
+  it("confirme depuis la page de retour le paiement que Stripe dit reçu, une seule fois, puis ignore le webhook tardif", async () => {
     const seeded = seedAppointment();
     stripeSession();
 
@@ -216,33 +220,56 @@ describe("EXPL-01 — un paiement reçu est confirmé même sans webhook", () =>
       appointment: { appointmentDate: (seeded.appointmentDate as Date).toISOString(), durationMinutes: 30, amountEur: 100 },
     });
     expect(appointmentRow()).toMatchObject({ paymentStatus: "completed", appointmentStatus: "confirmed", stripePaymentIntentId: PAYMENT_INTENT, holdExpiresAt: null, slotKey: seeded.slotKey });
-    // La page répond dès la confirmation en base : les envois sont en file, rien n’est encore parti.
-    expect(jobStates()).toEqual([["owner", "queued"], ["confirmation", "queued"], ["invoice", "queued"]]);
-    expect(emails.sendConfirmationEmail).not.toHaveBeenCalled();
+    // Sans webhook, les envois sont partis avant la réponse de la page.
+    expectPostPaymentEmailsSentOnce();
 
-    // Nouvelle vérification de la page, puis le webhook qui arrive enfin et envoie.
+    // Nouvelle vérification de la page, puis le webhook qui arrive enfin.
     await expect(publicStatus()).resolves.toMatchObject({ state: "confirmed" });
     expect(await postEvent("checkout.session.completed", stripeSession())).toEqual({ status: 200, body: { received: true, duplicate: true } });
     expectPostPaymentEmailsSentOnce();
     expect(owner.notifyOwner).not.toHaveBeenCalled();
   });
 
-  it("répond à la page sans attendre un service d’envoi lent, et la tâche planifiée envoie sans webhook", async () => {
+  it("répond à la page dans un délai borné quand le service d’envoi ne répond plus, et la tâche planifiée envoie le reste sans webhook", async () => {
     seedAppointment();
     stripeSession();
-    // Resend qui ne répond plus : l’envoi ne finirait jamais.
-    emails.sendOwnerNotificationEmail.mockImplementation(() => new Promise(() => undefined));
+    paymentStatusPageFulfillment.timeoutMs = 1_000;
+    // Resend qui ne répond plus : la notification au médecin ne finirait jamais.
+    emails.sendOwnerNotificationEmail.mockImplementationOnce(() => new Promise(() => undefined));
 
     const startedAt = Date.now();
     await expect(publicStatus()).resolves.toMatchObject({ state: "confirmed" });
-    expect(Date.now() - startedAt).toBeLessThan(1_000);
-    expect(emails.sendOwnerNotificationEmail).not.toHaveBeenCalled();
-    expect(jobStates()).toEqual([["owner", "queued"], ["confirmation", "queued"], ["invoice", "queued"]]);
+    expect(Date.now() - startedAt).toBeLessThan(paymentStatusPageFulfillment.timeoutMs + 500);
+    expect(jobStates()).toEqual([["owner", "running"], ["confirmation", "queued"], ["invoice", "queued"]]);
 
     // Aucun webhook : la tâche planifiée appointment-fulfillment fait partir les envois en file.
-    emails.sendOwnerNotificationEmail.mockResolvedValue(undefined);
     expect((await runFulfillment()).status).toBe(200);
-    expectPostPaymentEmailsSentOnce();
+    expect(jobStates()).toEqual([["owner", "running"], ["confirmation", "completed"], ["invoice", "completed"]]);
+    expect(emails.sendConfirmationEmail).toHaveBeenCalledTimes(1);
+    expect(emails.sendInvoiceEmail).toHaveBeenCalledTimes(1);
+  });
+
+  it("prévient le médecin avant de répondre à la page même sans webhook, et laisse au webhook tardif les envois qui traînent", async () => {
+    seedAppointment();
+    stripeSession();
+    paymentStatusPageFulfillment.timeoutMs = 1_000;
+    // La notification au médecin part ; la confirmation au patient, elle, traîne.
+    emails.sendConfirmationEmail.mockImplementationOnce(() => new Promise(() => undefined));
+
+    await expect(publicStatus()).resolves.toMatchObject({ state: "confirmed" });
+    expect(emails.sendOwnerNotificationEmail).toHaveBeenCalledTimes(1);
+    expect(jobStates()).toEqual([["owner", "completed"], ["confirmation", "running"], ["invoice", "queued"]]);
+
+    // Le webhook tardif envoie ce qui attend encore, sans renvoyer la notification.
+    expect(await postEvent("checkout.session.completed", stripeSession())).toEqual({ status: 200, body: { received: true, duplicate: true } });
+    expect(jobStates()).toEqual([["owner", "completed"], ["confirmation", "running"], ["invoice", "completed"]]);
+    // L’envoi interrompu est repris par la tâche planifiée une fois tenu pour arrêté.
+    db().rows(appointmentFulfillmentJobs).forEach(job => { if (job.status === "running") job.startedAt = new Date(Date.now() - APPOINTMENT_FULFILLMENT_STALE_AFTER_MS - 1000); });
+    expect((await runFulfillment()).status).toBe(200);
+    expect(jobStates()).toEqual([["owner", "completed"], ["confirmation", "completed"], ["invoice", "completed"]]);
+    expect(emails.sendOwnerNotificationEmail).toHaveBeenCalledTimes(1);
+    expect(emails.sendConfirmationEmail).toHaveBeenCalledTimes(2);
+    expect(emails.sendInvoiceEmail).toHaveBeenCalledTimes(1);
   });
 
   it("ne confirme qu’une fois quand le webhook (et sa relivraison) croise les vérifications de la page", async () => {

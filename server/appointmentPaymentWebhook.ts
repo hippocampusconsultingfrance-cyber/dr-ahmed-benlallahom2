@@ -177,25 +177,22 @@ async function acknowledgeUnconfirmablePayment(input: {
   return { httpStatus: 200, body: { received: true, confirmed: false, manualReviewRequired: true }, outcome: "unconfirmable" };
 }
 
-async function fulfill(appointmentId: number, timeoutMs: number | null) {
+async function fulfill(appointmentId: number, timeoutMs: number) {
   // Persisted fulfillment is idempotent. Re-enqueueing on a Stripe retry
   // protects a payment whose previous acknowledgement failed after the DB update.
   await enqueueAppointmentFulfillment(appointmentId);
-  if (timeoutMs !== null) await processFulfillmentBestEffort(appointmentId, timeoutMs);
+  await processFulfillmentBestEffort(appointmentId, timeoutMs);
 }
 
 /**
  * Handles a signed `checkout.session.completed` event. Database and queue
  * errors propagate so the caller answers 500 and Stripe retries the delivery.
- * `queueOnly`: the emails are only queued, not sent before answering (the
- * payment status page answers once the database is confirmed; the webhook or
- * the scheduled job sends them, see getPublicPaymentState).
  */
 export async function handleCheckoutSessionCompleted(
   session: CheckoutSessionPayload,
-  options: { fulfillmentTimeoutMs?: number; queueOnly?: boolean } = {},
+  options: { fulfillmentTimeoutMs?: number } = {},
 ): Promise<CheckoutCompletionResult> {
-  const timeoutMs = options.queueOnly ? null : options.fulfillmentTimeoutMs ?? IMMEDIATE_FULFILLMENT_TIMEOUT_MS;
+  const timeoutMs = options.fulfillmentTimeoutMs ?? IMMEDIATE_FULFILLMENT_TIMEOUT_MS;
   const trackingId = typeof session.metadata?.trackingId === "string" ? session.metadata.trackingId : "";
   const sessionId = typeof session.id === "string" ? session.id : "";
   if (!trackingId || !sessionId) {

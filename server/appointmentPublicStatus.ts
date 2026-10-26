@@ -28,6 +28,14 @@ export type PublicPaymentStatus =
 
 type Database = NonNullable<Awaited<ReturnType<typeof getDb>>>;
 
+/**
+ * How long the page waits for the post-payment emails it starts (EXPL-01):
+ * the owner notification, sent first, goes out well within it even when the
+ * webhook never comes; the emails still left are sent by the webhook or the
+ * scheduled job. Tests shorten it.
+ */
+export const paymentStatusPageFulfillment = { timeoutMs: 3_000 };
+
 async function readAppointment(db: Database, trackingId: string) {
   const [appointment] = await db.select({
     trackingId: appointments.trackingId,
@@ -88,12 +96,11 @@ export async function getPublicPaymentState(
     // Stripe has just said this session is paid: confirm the slot now instead
     // of waiting for the webhook (EXPL-01). Same conditional update as the
     // webhook, so whichever comes first confirms, once, and the confirmation
-    // and invoice go through the same idempotent queue. The page answers as
-    // soon as the database is confirmed: the emails are only queued (stored
-    // before answering, so a function stopped after the response loses none)
-    // and sent by the webhook when it arrives, or else by the scheduled job.
+    // and invoice go through the same idempotent queue, stored before the
+    // emails are tried. The page waits for them a few seconds only, not the
+    // webhook's 15: whatever is left goes on with the webhook or the scheduled job.
     try {
-      const completion = await handleCheckoutSessionCompleted(session, { queueOnly: true });
+      const completion = await handleCheckoutSessionCompleted(session, { fulfillmentTimeoutMs: paymentStatusPageFulfillment.timeoutMs });
       if (completion.outcome === "unconfirmable") return { state: "attention" };
     } catch (error) {
       console.error("Confirmation from the payment status page failed; left to the webhook", error instanceof Error ? error.name : "UnknownError");
