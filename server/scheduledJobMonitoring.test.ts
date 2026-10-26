@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => {
     sendDueAppointmentReminders: vi.fn(),
     runSecurityPostureReview: vi.fn(),
     runRecruitmentProcessingWorker: vi.fn(),
+    runPersonalDataRetention: vi.fn(),
     authenticateRequest: vi.fn(),
   };
 });
@@ -32,6 +33,7 @@ vi.mock("./scheduledJobs", async importOriginal => ({
   runSecurityPostureReview: mocks.runSecurityPostureReview,
 }));
 vi.mock("./recruitmentProcessingWorker", () => ({ runRecruitmentProcessingWorker: mocks.runRecruitmentProcessingWorker }));
+vi.mock("./personalDataRetention", () => ({ runPersonalDataRetention: mocks.runPersonalDataRetention }));
 vi.mock("./_core/sdk", () => ({ sdk: { authenticateRequest: mocks.authenticateRequest } }));
 
 const { createApp } = await import("./_core/index");
@@ -69,6 +71,7 @@ beforeEach(() => {
   mocks.sendDueAppointmentReminders.mockReset();
   mocks.runSecurityPostureReview.mockReset();
   mocks.runRecruitmentProcessingWorker.mockReset();
+  mocks.runPersonalDataRetention.mockReset();
   mocks.authenticateRequest.mockReset();
   pings.length = 0;
   vi.spyOn(console, "error").mockImplementation(() => undefined);
@@ -128,6 +131,17 @@ describe("surveillance externe des tâches planifiées (EXPL-03)", () => {
     mocks.runSecurityPostureReview.mockResolvedValueOnce({ available: false, highSeverityEvents24h: 0 });
     expect(await call("/api/scheduled/security-posture", cron)).toMatchObject({ status: 503, body: { error: "security_database_unavailable" } });
     expect(pings.map(ping => ping.url)).toEqual([`${POSTURE_PING}/fail`]);
+    expect(mocks.runPersonalDataRetention).not.toHaveBeenCalled();
+  });
+
+  it("la revue de sécurité quotidienne applique ensuite les durées de conservation (RGPD-09), et signale leur échec", async () => {
+    mocks.runSecurityPostureReview.mockResolvedValue({ available: true, highSeverityEvents24h: 0 });
+    mocks.runPersonalDataRetention.mockResolvedValueOnce({ securityEvents: 12, contactMessages: 1, complete: true });
+    expect(await call("/api/scheduled/security-posture", cron)).toMatchObject({ status: 200, body: { ok: true, highSeverityEvents24h: 0, retention: { securityEvents: 12, contactMessages: 1, complete: true } } });
+    mocks.runPersonalDataRetention.mockRejectedValueOnce(new Error("Database connection failed"));
+    expect(await call("/api/scheduled/security-posture", cron)).toMatchObject({ status: 500, body: { error: "scheduled_job_failed" } });
+    expect(mocks.runPersonalDataRetention).toHaveBeenCalledTimes(2);
+    expect(pings.map(ping => ping.url)).toEqual([POSTURE_PING, `${POSTURE_PING}/fail`]);
   });
 
   it("le traitement des candidatures signale son succès ou son échec", async () => {
