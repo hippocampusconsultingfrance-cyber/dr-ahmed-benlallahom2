@@ -1,8 +1,11 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { CONSULTATION_CHECKOUT_PRODUCT_NAME, consultationCheckoutProductData, createPublicTrackingId } from "./routers";
 import { medicalQuestionTrackingId } from "./medicalQuestionsRouter";
 
 const SAMPLE_SIZE = 2000;
+
+// A failed assertion must not leave Math.random spied on for the next cases.
+afterEach(() => vi.restoreAllMocks());
 
 describe("numéros de suivi publics imprévisibles", () => {
   it("génère des numéros contact et RGPD au format historique, dans la colonne varchar(20)", () => {
@@ -16,14 +19,12 @@ describe("numéros de suivi publics imprévisibles", () => {
       expect(new Set(ids).size).toBe(SAMPLE_SIZE);
     }
     expect(random).not.toHaveBeenCalled();
-    random.mockRestore();
   });
 
   it("génère des numéros de question santé QMED dans la colonne varchar(32)", () => {
     const random = vi.spyOn(Math, "random");
     const ids = Array.from({ length: SAMPLE_SIZE }, () => medicalQuestionTrackingId());
     expect(random).not.toHaveBeenCalled();
-    random.mockRestore();
     for (const id of ids) {
       expect(id).toMatch(/^QMED-[0-9A-Z]{8}-[0-9A-Z]{5}$/);
       expect(id.length).toBeLessThanOrEqual(32);

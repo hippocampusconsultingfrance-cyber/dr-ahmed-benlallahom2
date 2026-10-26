@@ -68,9 +68,11 @@ describe("question santé : consentements avant l’envoi", () => {
     const [health, publication, urgency] = consents();
     expect(consents()).toHaveLength(3);
     expect(textOf(health!.props.children)).toContain("qui peut contenir des informations sur ma santé");
-    expect(health!.props.required).not.toBe(false);
-    expect(urgency!.props.required).not.toBe(false);
-    expect(publication!.props.required).toBe(false);
+    // The boxes as rendered: only the two required ones are announced as required.
+    const markup = (consent: Element) => renderToStaticMarkup(createElement(consent.type as never, consent.props));
+    expect(markup(health!)).toContain('aria-required="true"');
+    expect(markup(urgency!)).toContain('aria-required="true"');
+    expect(markup(publication!)).not.toContain("aria-required");
   });
 
   it("n’envoie rien sans consentement aux données de santé, sans l’avertissement d’urgence ou sans anti-robot", () => {

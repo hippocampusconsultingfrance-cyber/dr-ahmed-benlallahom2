@@ -17,8 +17,13 @@ const { default: RecruitmentPage } = await import("./RecruitmentPage");
 const { default: VvipOffshorePage } = await import("./VvipOffshorePage");
 
 const languages = ["fr", "en", "de", "zh"] as const;
-/** The human-review statement: decisions are human, never automatic. */
-const humanReview = { fr: /revue humaine|automatiquement/, en: /human review|automatically/i, de: /menschlich|automatis/i, zh: /人工|自动/ } as const;
+/** The human-review statement: decisions are left to a person, or none is made automatically. */
+const humanReview = {
+  fr: /revue humaine|aucune décision[^.;]* automatiquement/,
+  en: /human review|no [^.;]*decision[^.;]* automatically/i,
+  de: /menschlichen? Prüfung|keine [^.;]*entscheidung[^.;]* automatisiert/i,
+  zh: /人工审核|不会自动作出/,
+} as const;
 
 function render(page: () => unknown, language: (typeof languages)[number]) {
   view.language = language;

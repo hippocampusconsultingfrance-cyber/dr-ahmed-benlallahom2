@@ -26,6 +26,8 @@ let baseUrl = "";
 let close: () => Promise<void> = async () => undefined;
 
 beforeAll(async () => {
+  // Outside production the configuration is not enforced: with the database up, the probe answers 200.
+  vi.stubEnv("NODE_ENV", "test");
   vi.stubEnv("CLERK_PUBLISHABLE_KEY", "");
   vi.stubEnv("NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY", "pk_test_browser_key_shared_with_the_server");
   const { createApp } = await import("./index");
@@ -41,9 +43,9 @@ afterAll(async () => {
 describe("GET /api/health dans createApp", () => {
   it("répond avant clerkMiddleware, quand une configuration Clerk fait échouer les autres routes", async () => {
     const health = await fetch(`${baseUrl}/api/health`);
-    expect([200, 503]).toContain(health.status);
+    expect(health.status).toBe(200);
     expect(health.headers.get("content-type")).toContain("application/json");
-    expect(await health.json()).toMatchObject({ checks: { database: { status: "ok" } } });
+    expect(await health.json()).toMatchObject({ status: "ok", checks: { database: { status: "ok" }, configuration: { status: "ok" } } });
 
     const webhook = await fetch(`${baseUrl}/api/stripe/webhook`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
     expect(webhook.status).toBe(500);
