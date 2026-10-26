@@ -24,6 +24,10 @@ function auditTitle(action: string, metadata: Record<string, unknown>) {
   if (action === "email") {
     return metadata.template === "additional_information" ? "Demande de complément envoyée" : "Proposition d’échange envoyée";
   }
+  // IA-02, RGPD-03.
+  if (metadata.event === "certification_confirmed") return `Certification confirmée : ${metadata.certification}`;
+  if (metadata.event === "certification_unconfirmed") return `Confirmation retirée : ${metadata.certification}`;
+  if (metadata.event === "mission_consent") return metadata.consentDate ? "Accord du candidat noté pour une mission" : "Accord du candidat retiré pour une mission";
   const labels: Record<string, string> = {
     created: "Candidature créée",
     status_update: "Statut ou suivi mis à jour",

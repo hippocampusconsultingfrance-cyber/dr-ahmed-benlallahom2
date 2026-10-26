@@ -1,13 +1,44 @@
 import { useMemo, useState } from "react";
-import { BriefcaseBusiness, CheckCircle2, ChevronRight, Download, Loader2, UsersRound } from "lucide-react";
+import { BriefcaseBusiness, CheckCircle2, ChevronRight, ClipboardList, Download, Loader2, UsersRound } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { trpc } from "@/lib/trpc";
 import { RECRUITMENT_EXPORT_MAX_CANDIDATES } from "@shared/recruitmentExportLimits";
+import Candidate360Dialog from "./Candidate360Dialog";
 import { getPositiveMatchBreakdown } from "./matchBreakdown";
 import PublicContentSkeleton from "./PublicContentSkeleton";
 import { downloadRecruitmentCsv } from "./recruitmentCsvDownload";
+import { useCvDownload } from "./useCvDownload";
 import { useLanguage } from "@/contexts/LanguageContext";
+
+// Ranking filters (ADM-04) and the candidate's agreement for the mission
+// (RGPD-03): the administration is in French only.
+const missionCopy = {
+  minimumMatch: "Compatibilité minimale",
+  anyMatch: "Toutes",
+  matchAtLeast: (score: number) => `${score} et plus`,
+  shortlistFilter: "Présélection",
+  shortlistAll: "Tous les candidats",
+  shortlistOnly: "Déjà présélectionnés",
+  shortlistNot: "Pas encore présélectionnés",
+  ranking: (ranked: number, eligible: number) => `Classement calculé sur les ${ranked} dossiers ouverts les plus récents (sur ${eligible}).`,
+  noCandidateForFilters: "Aucun candidat ne correspond à ces filtres.",
+  cv: "CV",
+  profile360: "Fiche 360°",
+  consentReceived: (date: string) => `Accord du candidat reçu le ${date} pour cette mission.`,
+  consentMissing: "Accord du candidat pour cette mission non noté : son profil ne sera pas exporté.",
+  consentDate: "Date de l’accord",
+  recordConsent: "Accord du candidat reçu",
+  withdrawConsent: "Retirer l’accord",
+  consentSaved: "Accord du candidat noté",
+  consentWithdrawn: "Accord du candidat retiré",
+  consented: (consented: number, shortlisted: number) => `${consented} sur ${shortlisted} avec l’accord du candidat : seuls ceux-là sont exportés.`,
+  noConsent: "Aucun accord de candidat noté : notez l’accord de chaque candidat présélectionné avant d’exporter.",
+  excluded: (count: number) => `${count} candidat(s) exclu(s) faute d’accord.`,
+};
+
+/** Today in Paris, as the YYYY-MM-DD value of a date input. */
+const todayInParis = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Paris", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
 
 const briefCopy = {
   fr: { title: "Briefs Employeurs", missionNeeds: "besoin(s) de mission reçu(s)", statuses: { new: "Nouveau brief", reviewing: "Qualification en cours", shortlist_sent: "Shortlist envoyée", contract_signed: "Mission confirmée", closed: "Clôturée" }, statusUpdated: "Statut du brief mis à jour", candidateAdded: "Candidat ajouté à la shortlist", exportDone: "profil(s) de shortlist exporté(s). L’export est journalisé.", loading: "Chargement des briefs employeurs", loadError: "Erreur de chargement", timelineUnknown: "Calendrier à préciser", viewProfiles: "Voir les profils", qualify: "Qualifier", noBrief: "Aucun brief Employeur à traiter.", shortlistAssisted: "Shortlist assistée", selectBrief: "Sélectionnez un brief pour consulter les correspondances basées exclusivement sur la spécialité, la mobilité et les certifications déclarées.", calculating: "Calcul des correspondances candidats", humanReview: "Les scores sont une aide à la revue humaine, pas une décision automatisée.", export: "Exporter la shortlist", exportLimit: `${RECRUITMENT_EXPORT_MAX_CANDIDATES} candidats au maximum par export : retirez des candidats de la shortlist pour l’exporter.`, availabilityUnknown: "Disponibilité à confirmer", noMatch: "Aucune correspondance professionnelle explicite détectée.", scoreDetail: "Détail du score de compatibilité", shortlisted: "Shortlisté", shortlist: "Shortlister", noCandidate: "Aucun candidat disponible pour le moment.", page: "Page", of: "sur", profiles: "profil(s) à examiner", previous: "Précédent", next: "Suivant", details: "Détails du brief", contact: "Contact", email: "Email", phone: "Téléphone", environment: "Environnement", requirements: "Certifications / exigences", languagesRequired: "Langues requises", minimumExperience: "Expérience minimale", availabilityNeeded: "Disponibilité souhaitée", description: "Description du poste", employerNotes: "Notes de l’employeur", receivedOn: "Reçu le", acknowledgedOn: "Qualifié le", shortlistSentOn: "Shortlist envoyée le", notProvided: "non précisé", years: "an(s)", confirmMission: "Mission confirmée", closeMission: "Clôturer", closeConfirm: "Clôturer cette mission ? Elle ne sera plus comptée parmi les missions actives.", reopen: "Rouvrir", removeFromShortlist: "Retirer de la shortlist", removed: "Retiré", candidateRemoved: "Candidat retiré de la shortlist", shareReminder: "Avant de transmettre la shortlist à l’établissement, informez chaque candidat et obtenez son accord pour ce destinataire et ce pays. L’export ne contient pas le score IA." },
@@ -22,8 +53,13 @@ export default function EmployerBriefsTab() {
   const utils = trpc.useUtils();
   const [selectedBriefId, setSelectedBriefId] = useState<number | null>(null);
   const [matchPage, setMatchPage] = useState(0);
+  const [minimumMatch, setMinimumMatch] = useState(0);
+  const [shortlistFilter, setShortlistFilter] = useState<"all" | "shortlisted" | "not_shortlisted">("all");
+  const [candidate360Id, setCandidate360Id] = useState<number | null>(null);
+  const [consentDates, setConsentDates] = useState<Record<number, string>>({});
   const { data: briefs, isLoading, error } = trpc.admin.clientBriefs.list.useQuery();
-  const matchesInput = useMemo(() => ({ briefId: selectedBriefId ?? 1, page: matchPage, limit: 25 }), [selectedBriefId, matchPage]);
+  const matchesInput = useMemo(() => ({ briefId: selectedBriefId ?? 1, page: matchPage, limit: 25, minimumMatch, shortlist: shortlistFilter }), [selectedBriefId, matchPage, minimumMatch, shortlistFilter]);
+  const downloadCv = useCvDownload();
   const matches = trpc.admin.clientBriefs.candidates.useQuery(
     matchesInput,
     { enabled: selectedBriefId !== null },
@@ -42,10 +78,17 @@ export default function EmployerBriefsTab() {
     },
     onError: error => toast.error(error.message),
   });
+  const setCandidateConsent = trpc.admin.clientBriefs.setCandidateConsent.useMutation({
+    onSuccess: (_result, variables) => {
+      toast.success(variables.consentDate ? missionCopy.consentSaved : missionCopy.consentWithdrawn);
+      void utils.admin.clientBriefs.candidates.invalidate();
+    },
+    onError: consentError => toast.error(consentError.message),
+  });
   const exportShortlist = trpc.admin.recruitment.exportCsv.useMutation({
     onSuccess: result => {
       downloadRecruitmentCsv(result);
-      toast.success(`${result.count} ${copy.exportDone}`);
+      toast.success(`${result.count} ${copy.exportDone}${result.excludedWithoutConsent ? ` ${missionCopy.excluded(result.excludedWithoutConsent)}` : ""}`);
     },
     onError: exportError => toast.error(exportError.message),
     // The shortlist may have changed elsewhere (a candidate removed, refused or
@@ -53,10 +96,12 @@ export default function EmployerBriefsTab() {
     onSettled: () => utils.admin.clientBriefs.candidates.invalidate(),
   });
   const activeBrief = matches.data?.brief ?? null;
-  // Never offer an empty shortlist export: the server refuses it (REC-01).
+  // Never offer an empty shortlist export: the server refuses it (REC-01),
+  // as it refuses one where no candidate agreed to be presented (RGPD-03).
   const shortlistedCount = matches.data?.shortlistedCount ?? 0;
+  const consentedCount = matches.data?.consentedCount ?? 0;
   // Nor one the server would refuse as too large: the file always matches the count.
-  const shortlistTooLarge = shortlistedCount > RECRUITMENT_EXPORT_MAX_CANDIDATES;
+  const shortlistTooLarge = consentedCount > RECRUITMENT_EXPORT_MAX_CANDIDATES;
   const selectedBrief = briefs?.find(brief => brief.id === selectedBriefId) ?? null;
   const locale = language === "zh" ? "zh-CN" : language === "de" ? "de-DE" : language === "en" ? "en-GB" : "fr-FR";
   const formatDate = (value: Date | string | null | undefined) => value ? new Date(value).toLocaleString(locale, { timeZone: "Europe/Paris", dateStyle: "medium", timeStyle: "short" }) : null;
@@ -122,7 +167,12 @@ export default function EmployerBriefsTab() {
             </dl>
           </section>}
         {matches.data && activeBrief && <>
-          <div className="mb-5 flex flex-col gap-3 border-b border-border pb-4 sm:flex-row sm:items-start sm:justify-between"><div><p className="text-sm text-primary">{activeBrief.briefId}</p><h2 className="text-xl font-semibold text-foreground">{activeBrief.specialtyNeeded} — {activeBrief.country}</h2><p className="mt-1 text-sm text-muted-foreground">{copy.humanReview}</p><p className="mt-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-200">{copy.shareReminder}</p></div><div className="flex shrink-0 flex-col items-start gap-1.5 sm:items-end"><Button size="sm" variant="outline" disabled={exportShortlist.isPending || shortlistedCount === 0 || shortlistTooLarge} aria-describedby={shortlistTooLarge ? "shortlist-export-limit" : undefined} onClick={() => exportShortlist.mutate({ type: "shortlist", briefId: activeBrief.id })}>{exportShortlist.isPending ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Download className="mr-1.5 h-3.5 w-3.5" />}{copy.export} ({shortlistedCount})</Button>{shortlistTooLarge && <p id="shortlist-export-limit" className="max-w-64 text-xs text-amber-700 dark:text-amber-300 sm:text-right">{copy.exportLimit}</p>}</div></div>
+          <div className="mb-5 flex flex-col gap-3 border-b border-border pb-4 sm:flex-row sm:items-start sm:justify-between"><div><p className="text-sm text-primary">{activeBrief.briefId}</p><h2 className="text-xl font-semibold text-foreground">{activeBrief.specialtyNeeded} — {activeBrief.country}</h2><p className="mt-1 text-sm text-muted-foreground">{copy.humanReview}</p><p className="mt-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-200">{copy.shareReminder}</p></div><div className="flex shrink-0 flex-col items-start gap-1.5 sm:items-end"><Button size="sm" variant="outline" disabled={exportShortlist.isPending || shortlistedCount === 0 || consentedCount === 0 || shortlistTooLarge} aria-describedby={shortlistTooLarge ? "shortlist-export-limit" : shortlistedCount > 0 ? "shortlist-export-consent" : undefined} onClick={() => exportShortlist.mutate({ type: "shortlist", briefId: activeBrief.id })}>{exportShortlist.isPending ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Download className="mr-1.5 h-3.5 w-3.5" />}{copy.export} ({shortlistedCount})</Button>{shortlistedCount > 0 && <p id="shortlist-export-consent" className={`max-w-64 text-xs sm:text-right ${consentedCount === 0 ? "text-amber-700 dark:text-amber-300" : "text-muted-foreground"}`}>{consentedCount === 0 ? missionCopy.noConsent : missionCopy.consented(consentedCount, shortlistedCount)}</p>}{shortlistTooLarge && <p id="shortlist-export-limit" className="max-w-64 text-xs text-amber-700 dark:text-amber-300 sm:text-right">{copy.exportLimit}</p>}</div></div>
+          <div className="mb-4 grid gap-3 sm:grid-cols-2">
+            <label className="space-y-1 text-sm text-muted-foreground"><span>{missionCopy.minimumMatch}</span><select value={minimumMatch} onChange={event => { setMinimumMatch(Number(event.target.value)); setMatchPage(0); }} className="h-10 w-full rounded-md border border-border bg-background px-3 text-foreground"><option value={0}>{missionCopy.anyMatch}</option>{[25, 50, 75].map(score => <option key={score} value={score}>{missionCopy.matchAtLeast(score)}</option>)}</select></label>
+            <label className="space-y-1 text-sm text-muted-foreground"><span>{missionCopy.shortlistFilter}</span><select value={shortlistFilter} onChange={event => { setShortlistFilter(event.target.value as typeof shortlistFilter); setMatchPage(0); }} className="h-10 w-full rounded-md border border-border bg-background px-3 text-foreground"><option value="all">{missionCopy.shortlistAll}</option><option value="shortlisted">{missionCopy.shortlistOnly}</option><option value="not_shortlisted">{missionCopy.shortlistNot}</option></select></label>
+            {matches.data.ranking.ranked < matches.data.ranking.eligible && <p className="text-xs text-amber-700 dark:text-amber-300 sm:col-span-2">{missionCopy.ranking(matches.data.ranking.ranked, matches.data.ranking.eligible)}</p>}
+          </div>
           <div className="space-y-3">
             {matches.data.candidates.map(candidate => (
               <article key={candidate.id} className="rounded-lg border border-border bg-background p-4">
@@ -132,13 +182,21 @@ export default function EmployerBriefsTab() {
                     ? <div className="flex shrink-0 flex-col items-start gap-2 sm:items-end"><span className="inline-flex items-center rounded-full bg-emerald-500/10 px-2 py-1 text-xs font-medium text-emerald-700 dark:text-emerald-300"><CheckCircle2 className="mr-1 h-3.5 w-3.5" />{copy.shortlisted}</span><Button size="sm" variant="outline" disabled={associate.isPending} onClick={() => associate.mutate({ briefId: activeBrief.id, applicationId: candidate.id, status: "declined" })}>{copy.removeFromShortlist}</Button></div>
                     : <div className="flex shrink-0 flex-col items-start gap-2 sm:items-end">{candidate.association?.status === "declined" && <span className="text-xs text-muted-foreground">{copy.removed}</span>}<Button size="sm" disabled={associate.isPending} onClick={() => associate.mutate({ briefId: activeBrief.id, applicationId: candidate.id, matchScore: candidate.match.score, status: "shortlisted" })}>{copy.shortlist}<ChevronRight className="ml-1 h-3.5 w-3.5" /></Button></div>}
                 </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button size="sm" variant="outline" disabled={downloadCv.isPending} aria-label={`${missionCopy.cv} de ${candidate.firstName} ${candidate.lastName}`} onClick={() => downloadCv.mutate({ id: candidate.id })}><Download className="mr-1.5 h-3.5 w-3.5" />{missionCopy.cv}</Button>
+                  <Button size="sm" variant="outline" aria-label={`${missionCopy.profile360} de ${candidate.firstName} ${candidate.lastName}`} onClick={() => setCandidate360Id(candidate.id)}><ClipboardList className="mr-1.5 h-3.5 w-3.5" />{missionCopy.profile360}</Button>
+                </div>
+                {candidate.association?.status === "shortlisted" && (candidate.association.candidateConsentAt
+                  ? <div className="mt-3 flex flex-col gap-2 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-800 dark:text-emerald-200 sm:flex-row sm:items-center sm:justify-between"><p>{missionCopy.consentReceived(new Date(candidate.association.candidateConsentAt).toLocaleDateString("fr-FR", { timeZone: "Europe/Paris" }))}</p><Button size="sm" variant="outline" disabled={setCandidateConsent.isPending} onClick={() => setCandidateConsent.mutate({ briefId: activeBrief.id, applicationId: candidate.id, consentDate: null })}>{missionCopy.withdrawConsent}</Button></div>
+                  : <div className="mt-3 flex flex-col gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-200 sm:flex-row sm:items-end sm:justify-between"><p>{missionCopy.consentMissing}</p><div className="flex flex-wrap items-end gap-2"><label className="space-y-1"><span className="block">{missionCopy.consentDate}</span><input type="date" value={consentDates[candidate.id] ?? todayInParis()} max={todayInParis()} onChange={event => setConsentDates(current => ({ ...current, [candidate.id]: event.target.value }))} className="h-9 rounded-md border border-border bg-background px-2 text-sm text-foreground" /></label><Button size="sm" disabled={setCandidateConsent.isPending || !(consentDates[candidate.id] ?? todayInParis())} onClick={() => setCandidateConsent.mutate({ briefId: activeBrief.id, applicationId: candidate.id, consentDate: consentDates[candidate.id] ?? todayInParis() })}>{missionCopy.recordConsent}</Button></div></div>)}
               </article>
             ))}
-            {matches.data.candidates.length === 0 && <p className="py-10 text-center text-sm text-muted-foreground">{copy.noCandidate}</p>}
+            {matches.data.candidates.length === 0 && <p className="py-10 text-center text-sm text-muted-foreground">{minimumMatch > 0 || shortlistFilter !== "all" ? missionCopy.noCandidateForFilters : copy.noCandidate}</p>}
           </div>
           {matches.data.pagination.totalPages > 1 && <div className="mt-5 flex flex-col gap-3 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between"><p className="text-sm text-muted-foreground">{copy.page} {matches.data.pagination.page + 1} {copy.of} {matches.data.pagination.totalPages} · {matches.data.pagination.total} {copy.profiles}</p><div className="flex gap-2"><Button size="sm" variant="outline" disabled={matches.data.pagination.page === 0 || matches.isFetching} onClick={() => setMatchPage(current => Math.max(0, current - 1))}>{copy.previous}</Button><Button size="sm" variant="outline" disabled={matches.data.pagination.page + 1 >= matches.data.pagination.totalPages || matches.isFetching} onClick={() => setMatchPage(current => current + 1)}>{copy.next}</Button></div></div>}
         </>}
       </section>
+      <Candidate360Dialog applicationId={candidate360Id} onOpenChange={open => { if (!open) setCandidate360Id(null); }} />
     </div>
   );
 }

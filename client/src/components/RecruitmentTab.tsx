@@ -8,6 +8,9 @@ import { adminListCount, adminPageOffsets, ADMIN_PAGE_SIZE, mergeAdminPages, use
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import Candidate360Dialog from "./Candidate360Dialog";
+import CertificationReview from "./CertificationReview";
+import { useCvDownload } from "./useCvDownload";
+import { recruitmentFactLabel, recruitmentFactNameContains } from "@shared/recruitmentFactOrigins";
 import { AI_ANALYSIS_UNAVAILABLE_LABEL, isAiAnalysisUnavailable, SCORE_UNAVAILABLE_EXPLANATION, SCORE_UNAVAILABLE_HEADING, scoredApplicationsFirst } from "./recruitmentScoreGroups";
 import { contradictionEvidenceLabel, CV_READING_LABELS, CV_REVIEW_REMINDER, cvReadingTextForDisplay, fieldEvidenceStatusLabel, fieldEvidenceStatusTone } from "./recruitmentEvidenceLabels";
 import {
@@ -188,17 +191,7 @@ export default function RecruitmentTab() {
     onError: mutationError => toast.error(mutationError.message),
   });
 
-  const downloadCv = trpc.admin.recruitment.getDownloadUrl.useMutation({
-    onSuccess: ({ url, fileName }) => {
-      const link = document.createElement("a");
-      link.href = url;
-      link.target = "_blank";
-      link.rel = "noopener noreferrer";
-      link.download = fileName;
-      link.click();
-    },
-    onError: mutationError => toast.error(mutationError.message),
-  });
+  const downloadCv = useCvDownload();
 
   const reanalyze = trpc.admin.recruitment.reanalyze.useMutation({
     onSuccess: result => {
@@ -407,6 +400,8 @@ export default function RecruitmentTab() {
             const hasVerifiedAnalysis = application.analysisPromptVersion === VERIFIED_ANALYSIS_VERSION;
             const verifiedScore = hasVerifiedAnalysis ? application.aiScore : null;
             const expanded = expandedId === application.id;
+            // The certification filter says where each matching certification comes from (IA-02).
+            const searchedCertifications = filters.certification ? (application.certificationFacts ?? []).filter(fact => recruitmentFactNameContains(fact.name, filters.certification!)) : [];
             return (
               <Fragment key={application.id}>
               {index === listedApplications.firstUnscored ? (
@@ -425,6 +420,7 @@ export default function RecruitmentTab() {
                         <p className="text-sm text-muted-foreground">{application.specialty} · {application.trackingId}</p>
                         <p className="mt-1 text-sm text-muted-foreground">{countries.join(", ") || "Pays non précisés"}</p>
                         {application.diplomaCountry ? <p className="mt-1 text-sm text-muted-foreground">Diplôme obtenu : {application.diplomaCountry}</p> : null}
+                        {searchedCertifications.length > 0 ? <p className="mt-1 text-sm text-muted-foreground">Certification recherchée : {searchedCertifications.map(recruitmentFactLabel).join(" ; ")}</p> : null}
                       </div>
                     </div>
                   </button>
@@ -456,7 +452,7 @@ export default function RecruitmentTab() {
                       <p><strong className="text-foreground">Expérience déclarée :</strong> {application.yearsExperience ?? "—"} ans</p>
                       <p><strong className="text-foreground">Disponibilité :</strong> {application.availability || "—"}</p>
                       <p><strong className="text-foreground">Mobilité :</strong> {application.mobility || "—"}</p>
-                      <p><strong className="text-foreground">Certifications :</strong> {application.certifications || "—"}</p>
+                      <p><strong className="text-foreground">Certifications déclarées :</strong> {application.certifications || "—"}</p>
                     </div>
                     <div className="space-y-1 text-muted-foreground">
                       <p><strong className="text-foreground">Fichier :</strong> {application.cvOriginalName} ({formatBytes(application.cvSizeBytes)})</p>
@@ -469,6 +465,11 @@ export default function RecruitmentTab() {
                       {application.ocrModelVersion && <p><strong className="text-foreground">OCR :</strong> {application.ocrModelVersion}{application.ocrConfidence !== null ? ` · confiance ${application.ocrConfidence}%` : ""}</p>}
                       {application.analysisLastError && <p className="text-destructive" title={application.analysisLastError}><strong>Dernière erreur :</strong> {recruitmentAnalysisErrorLabel(application.analysisLastError)}</p>}
                       {application.message && <p className="pt-2"><strong className="text-foreground">Message :</strong> {application.message}</p>}
+                    </div>
+
+                    <div className="rounded-xl border border-border bg-background/60 p-4 md:col-span-2" aria-label={`Certifications de ${application.firstName} ${application.lastName}`}>
+                      <h4 className="mb-2 font-semibold text-foreground">Certifications et origine</h4>
+                      <CertificationReview applicationId={application.id} certifications={application.certificationFacts ?? []} />
                     </div>
 
                     <div className="rounded-xl border border-border bg-background/60 p-4 md:col-span-2" aria-label={`Traçabilité de la candidature ${application.trackingId}`}>

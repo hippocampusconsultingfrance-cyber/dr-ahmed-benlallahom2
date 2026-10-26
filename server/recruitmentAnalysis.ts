@@ -1,8 +1,9 @@
-import { eq, sql } from "drizzle-orm";
+import { and, eq, isNotNull, isNull, sql } from "drizzle-orm";
 import { generateText, Output } from "ai";
 import { z } from "zod";
 import { cvApplications, cvCandidateCertifications, cvCandidateExperiences, cvCandidateLanguages } from "../drizzle/schema";
 import { getDb } from "./db";
+import { sameRecruitmentFact } from "./clientBriefMatching";
 import { assertPdfDecompressionWithinLimits, DOCUMENT_DECOMPRESSION_LIMITS, inspectDocxArchive, truncateExtractedText } from "./documentDecompressionLimits";
 import { PdfReaderUnavailableError, readPdfIsolated } from "./pdfExtractionSandbox";
 import { CV_ANALYSIS_STEP_MINIMUM_MS, ProcessingDeadlineError, stepTimeoutMs } from "./processingDeadline";
@@ -1580,8 +1581,19 @@ export async function saveCvAnalysis(
 ): Promise<void> {
   const db = await getDb();
   if (!db) throw new Error("Base de données indisponible.");
-  const verifiedFacts = verifiedRecruitmentFacts(analysis);
-  const verifiedCertifications = verifiedFacts.certifications;
+  // A contradiction between the form and the CV makes what was read in the CV
+  // doubtful: no structured fact is stored, so none reaches the filters or a
+  // mission's matching (IA-02). Evidence merely missing does not count.
+  const verifiedFacts = analysis.contradictions.length > 0
+    ? { certifications: [], languages: [], experiences: [], skills: [] }
+    : verifiedRecruitmentFacts(analysis);
+  // Certifications an admin confirmed survive a new analysis, and are not read again.
+  const confirmedCertifications = await db
+    .select({ name: cvCandidateCertifications.name })
+    .from(cvCandidateCertifications)
+    .where(and(eq(cvCandidateCertifications.applicationId, applicationId), isNotNull(cvCandidateCertifications.confirmedAt)));
+  const verifiedCertifications = verifiedFacts.certifications.filter(certification =>
+    !confirmedCertifications.some(confirmed => sameRecruitmentFact(confirmed.name, certification.name)));
   const verifiedLanguages = verifiedFacts.languages;
   const verifiedExperiences = verifiedFacts.experiences;
   const updateAnalysis = db
@@ -1634,7 +1646,7 @@ export async function saveCvAnalysis(
     .where(eq(cvApplications.id, applicationId));
   const deleteCertifications = db
     .delete(cvCandidateCertifications)
-    .where(eq(cvCandidateCertifications.applicationId, applicationId));
+    .where(and(eq(cvCandidateCertifications.applicationId, applicationId), isNull(cvCandidateCertifications.confirmedAt)));
   const deleteLanguages = db
     .delete(cvCandidateLanguages)
     .where(eq(cvCandidateLanguages.applicationId, applicationId));

@@ -16,6 +16,8 @@ type ExportOptions = {
 const state = vi.hoisted(() => ({
   language: "fr",
   shortlistedCount: 0,
+  // Candidates of the shortlist who agreed to be presented (RGPD-03); all of them unless a test says otherwise.
+  consentedCount: null as number | null,
   exportPending: false,
   exportOptions: null as null | ExportOptions,
   invalidateCandidates: vi.fn(),
@@ -30,17 +32,22 @@ const idleMutation = { mutate: vi.fn(), isPending: false };
 vi.mock("@/contexts/LanguageContext", () => ({ useLanguage: () => ({ language: state.language }) }));
 vi.mock("sonner", () => ({ toast: { error: state.toastError, success: state.toastSuccess } }));
 vi.mock("./recruitmentCsvDownload", () => ({ downloadRecruitmentCsv: (result: unknown) => state.downloads.push(result) }));
+vi.mock("./Candidate360Dialog", () => ({ default: () => null }));
 vi.mock("@/lib/trpc", () => ({
   trpc: {
     useUtils: () => ({ admin: { clientBriefs: { list: { invalidate: vi.fn() }, candidates: { invalidate: state.invalidateCandidates } } } }),
     admin: {
       clientBriefs: {
         list: { useQuery: () => ({ data: [brief], isLoading: false, error: null }) },
-        candidates: { useQuery: () => ({ data: { brief, candidates: [], shortlistedCount: state.shortlistedCount, pagination: { page: 0, limit: 25, total: 0, totalPages: 0 } }, isLoading: false, isFetching: false }) },
+        candidates: { useQuery: () => ({ data: { brief, candidates: [], shortlistedCount: state.shortlistedCount, consentedCount: state.consentedCount ?? state.shortlistedCount, ranking: { eligible: 0, ranked: 0 }, pagination: { page: 0, limit: 25, total: 0, totalPages: 0 } }, isLoading: false, isFetching: false }) },
         updateStatus: { useMutation: () => idleMutation },
         associateCandidate: { useMutation: () => idleMutation },
+        setCandidateConsent: { useMutation: () => idleMutation },
       },
-      recruitment: { exportCsv: { useMutation: (options: ExportOptions) => { state.exportOptions = options; return { mutate: vi.fn(), isPending: state.exportPending }; } } },
+      recruitment: {
+        exportCsv: { useMutation: (options: ExportOptions) => { state.exportOptions = options; return { mutate: vi.fn(), isPending: state.exportPending }; } },
+        getDownloadUrl: { useMutation: () => idleMutation },
+      },
     },
   },
 }));
@@ -70,6 +77,7 @@ describe("export de la shortlist d’une mission (REC-01)", () => {
   beforeEach(() => {
     state.language = "fr";
     state.shortlistedCount = 0;
+    state.consentedCount = null;
     state.exportPending = false;
     state.exportOptions = null;
     state.invalidateCandidates.mockClear();
