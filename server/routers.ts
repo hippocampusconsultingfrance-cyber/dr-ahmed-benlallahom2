@@ -1529,7 +1529,15 @@ export const appRouter = router({
         .input(z.object({ trackingId: z.string().min(1).max(20) }))
         .mutation(async ({ input }) => {
           const { regenerateAppointmentInvoice } = await import("./appointmentFulfillment");
-          const invoice = await regenerateAppointmentInvoice(input.trackingId);
+          let invoice: Awaited<ReturnType<typeof regenerateAppointmentInvoice>>;
+          try {
+            invoice = await regenerateAppointmentInvoice(input.trackingId);
+          } catch (error) {
+            // The copy stored at its issue could not be checked or read (storage
+            // outage, EXPL-02): the invoice is not rebuilt in its place.
+            console.error("[AppointmentFulfillment] Invoice download failed", error instanceof Error ? error.name : "UnknownError");
+            throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "La facture n’a pas pu être préparée pour l’instant : réessayez dans un instant." });
+          }
           if (!invoice) throw new TRPCError({ code: "NOT_FOUND", message: "Aucune facture n’a encore été émise pour ce rendez-vous." });
           return { invoiceNumber: invoice.invoiceNumber, filename: `Facture-${invoice.invoiceNumber}.pdf`, contentBase64: invoice.buffer.toString("base64") };
         }),

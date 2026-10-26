@@ -906,10 +906,11 @@ export async function listAppointmentDeliveriesToHandle(limit = 20, now = new Da
  * appointment, the copy stored at its issue, identical to the PDF emailed to
  * the patient even after the address was corrected; when none was stored
  * yet, built from its recorded number and dates and the appointment's current
- * data, then stored once (generateInvoicePDF). On a booking reduced to its
- * accounting record (RGPD-12), rebuilt without the identity, the stored copy
- * neither read nor written, as the GDPR procedure states. Never allocates a
- * number: null when no invoice was issued yet.
+ * data, then stored once (generateInvoicePDF). Throws while the stored copy
+ * cannot be checked or read (storage outage): never rebuilt in its place. On
+ * a booking reduced to its accounting record (RGPD-12), rebuilt without the
+ * identity, the stored copy neither read nor written, as the GDPR procedure
+ * states. Never allocates a number: null when no invoice was issued yet.
  */
 export async function regenerateAppointmentInvoice(trackingId: string): Promise<{ invoiceNumber: string; buffer: Buffer } | null> {
   const db = await getDb();

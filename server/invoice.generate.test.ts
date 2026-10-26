@@ -67,6 +67,19 @@ describe("génération de facture PDF", () => {
     }
   });
 
+  it("ne reconstruit pas une facture dont la copie archivée n’a pas pu être vérifiée : stockage indisponible, elle n’est rendue qu’au nouvel essai (EXPL-02)", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    // Vercel Blob cannot say whether the invoice was stored at its issue (head() fails).
+    storagePutOnce.mockRejectedValueOnce(Object.assign(new Error("storage_check_failed"), { code: "storage_service_unavailable" }));
+    await expect(generateInvoicePDF({ ...nightInvoice, customerEmail: "adresse.corrigee@example.test" }, resolveInvoiceSeller({}))).rejects.toThrow("storage_check_failed");
+
+    // None stored yet, and its upload fails: the invoice just built is the one issued.
+    storagePutOnce.mockRejectedValueOnce(Object.assign(new Error("storage_upload_failed"), { code: "storage_service_unavailable" }));
+    const unstored = await generateInvoicePDF(nightInvoice, resolveInvoiceSeller({}));
+    expect(unstored.buffer.subarray(0, 5).toString()).toBe("%PDF-");
+    expect(unstored.url).toBe("");
+  });
+
   it("produit un PDF A4 stockable sous son numéro de facture", async () => {
     const invoice = await generateInvoicePDF(nightInvoice, resolveInvoiceSeller({}));
 

@@ -22,12 +22,14 @@ vi.mock("./adminMfa", async importOriginal => ({ ...await importOriginal<typeof 
 vi.mock("./_core/notification", () => ({ notifyOwner: vi.fn(async () => true) }));
 // Private Vercel Blob store held in memory, behind the real storage module;
 // its objects are read through signed URLs (fetch below). `unreadable`: reads fail.
-const blobStore = vi.hoisted(() => ({ objects: new Map<string, Buffer>(), uploads: [] as string[], reads: [] as string[], unreadable: false }));
+// `unavailable`: the service does not answer whether an object is stored.
+const blobStore = vi.hoisted(() => ({ objects: new Map<string, Buffer>(), uploads: [] as string[], reads: [] as string[], unreadable: false, unavailable: false }));
 vi.mock("@vercel/blob", async importOriginal => {
-  const { BlobNotFoundError } = await importOriginal<typeof import("@vercel/blob")>();
+  const { BlobNotFoundError, BlobServiceNotAvailable } = await importOriginal<typeof import("@vercel/blob")>();
   return {
     BlobNotFoundError,
     head: vi.fn(async (pathname: string) => {
+      if (blobStore.unavailable) throw new BlobServiceNotAvailable();
       if (!blobStore.objects.has(pathname)) throw new BlobNotFoundError();
       return { pathname, url: `https://blob.test/${pathname}` };
     }),
@@ -149,6 +151,7 @@ beforeEach(() => {
   blobStore.uploads = [];
   blobStore.reads = [];
   blobStore.unreadable = false;
+  blobStore.unavailable = false;
   vi.stubEnv("BLOB_READ_WRITE_TOKEN", "blob-test-token");
   vi.stubGlobal("fetch", vi.fn(async (url: string) => {
     const pathname = decodeURIComponent(new URL(url).pathname.slice(1));
@@ -414,6 +417,38 @@ describe("EXPL-02 — « Télécharger la facture »", () => {
 
     expect(state.sent).toEqual([]);
     expect(job(paid.id, "invoice")).toMatchObject({ status: "retry", attempts: 1 });
+    expect(blobStore.uploads).toHaveLength(1);
+  });
+
+  it("stockage indisponible après correction de l’adresse : ni l’email ni le téléchargement ne reconstruisent la facture avec la nouvelle adresse ; au retour du stockage, ils donnent la facture émise", async () => {
+    const paid = seedAppointment("APTINVFIX006");
+    seedJob(paid.id, "owner", { status: "completed", attempts: 1 });
+    seedJob(paid.id, "confirmation", { status: "completed", attempts: 1 });
+    seedJob(paid.id, "invoice");
+    seedInvoice(paid.id, 56);
+    state.refused.add("invoice");
+    await processAppointmentFulfillmentNow(paid.id as number);
+    const issued = blobStore.objects.get("invoices/FAC-2026-000056-APTINVFIX006.pdf")!;
+    await admin().appointments.updateCustomerEmail({ trackingId: "APTINVFIX006", customerEmail: "patient.corrige@example.test" });
+    state.refused.clear();
+    // Vercel Blob does not answer whether the invoice is stored (BlobServiceNotAvailable).
+    blobStore.unavailable = true;
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    await expect(admin().appointments.invoicePdf({ trackingId: "APTINVFIX006" })).rejects.toMatchObject({ code: "INTERNAL_SERVER_ERROR", message: expect.stringContaining("réessayez dans un instant") });
+    await admin().appointments.retryFulfillment({ trackingId: "APTINVFIX006" });
+    expect(state.sent).toEqual([]);
+    expect(job(paid.id, "invoice")).toMatchObject({ status: "retry", attempts: 1 });
+    expect(blobStore.uploads).toHaveLength(1);
+
+    blobStore.unavailable = false;
+    await admin().appointments.retryFulfillment({ trackingId: "APTINVFIX006" });
+    const emailed = state.sent.find(email => email.kind === "invoice")!;
+    expect(emailed).toMatchObject({ to: "patient.corrige@example.test", invoiceNumber: "FAC-2026-000056" });
+    expect(emailed.pdf!.equals(issued)).toBe(true);
+    const download = Buffer.from((await admin().appointments.invoicePdf({ trackingId: "APTINVFIX006" })).contentBase64, "base64");
+    expect(download.equals(issued)).toBe(true);
+    expect((await billedTo(download))[1]).toBe("aptinvfix006@example.test");
     expect(blobStore.uploads).toHaveLength(1);
   });
 

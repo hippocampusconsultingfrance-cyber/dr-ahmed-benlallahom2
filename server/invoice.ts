@@ -433,7 +433,14 @@ export async function generateInvoicePDF(
     // stored (EXPL-02).
     stored = await storagePutOnce(invoiceKey, buffer, "application/pdf");
   } catch (storageError) {
-    // If storage fails, still return the buffer
+    // The store could not say whether this invoice was stored at its issue
+    // (outage, rate limit): its stored copy, issued with the details of that
+    // time, may differ from the one just built from the current data (EXPL-02,
+    // an address corrected since). Nothing is built in its place: the caller
+    // fails and tries again (the job's next attempt, a new download).
+    if (storageError instanceof Error && storageError.message === "storage_check_failed") throw storageError;
+    // None was stored yet (or no store is configured): the invoice just built
+    // is the one issued; it is stored at its next build.
     console.error("Failed to upload invoice to private storage:", storageError instanceof Error ? storageError.name : "UnknownError");
     return { buffer, key: invoiceKey, url: "" };
   }
