@@ -10,14 +10,47 @@ type NeonClient = NeonQueryFunction<false, false>;
  */
 export const LANGUAGE_COLUMN_TABLES = ["appointments", "candidate_accounts", "cv_applications"] as const;
 
+type RuntimeColumn = { table: string; column: string; definition: string };
+
+const LANGUAGE_COLUMNS: readonly RuntimeColumn[] = LANGUAGE_COLUMN_TABLES.map(table => ({ table, column: "language", definition: "varchar(10) DEFAULT 'fr' NOT NULL" }));
+
+/**
+ * Colonnes des missions employeurs (0003) : la date à laquelle l’admin a
+ * confirmé une certification (IA-02) et celle de l’accord du candidat pour une
+ * mission (RGPD-03). Ajoutées par le même mécanisme que « language ».
+ */
+export const MISSION_COLUMNS: readonly RuntimeColumn[] = [
+  { table: "cv_candidate_certifications", column: "confirmed_at", definition: "timestamp" },
+  { table: "client_brief_candidates", column: "candidate_consent_at", definition: "timestamp" },
+];
+
+/**
+ * Colonnes que l’application ajoute elle-même tant que leur migration n’est
+ * pas appliquée. Une seule par table : la vérification renvoie les tables
+ * dont la colonne manque.
+ */
+export const RUNTIME_COLUMNS: readonly RuntimeColumn[] = [...LANGUAGE_COLUMNS, ...MISSION_COLUMNS];
+
+const addColumn = ({ table, column, definition }: RuntimeColumn) =>
+  sql`ALTER TABLE ${sql.identifier(table)} ADD COLUMN IF NOT EXISTS ${sql.identifier(column)} ${sql.raw(definition)}`;
+
 /**
  * DDL idempotente, identique à drizzle/pg/0002_language_columns.sql : le
  * déploiement fonctionne avant que le propriétaire applique la migration.
  * Ajouter une colonne avec une valeur par défaut constante ne réécrit pas la
  * table (PostgreSQL 11+) : les lignes existantes lisent 'fr'.
  */
-export const LANGUAGE_COLUMN_DDL = LANGUAGE_COLUMN_TABLES.map(table =>
-  sql`ALTER TABLE ${sql.identifier(table)} ADD COLUMN IF NOT EXISTS "language" varchar(10) DEFAULT 'fr' NOT NULL`);
+export const LANGUAGE_COLUMN_DDL = LANGUAGE_COLUMNS.map(addColumn);
+
+/**
+ * Identique à drizzle/pg/0003_mission_shortlist_columns.sql : colonnes
+ * nullables sans valeur par défaut, les lignes existantes lisent NULL (pas de
+ * certification confirmée, pas d’accord noté).
+ */
+export const MISSION_COLUMN_DDL = MISSION_COLUMNS.map(addColumn);
+
+// Same order as RUNTIME_COLUMNS.
+const RUNTIME_COLUMN_DDL = [...LANGUAGE_COLUMN_DDL, ...MISSION_COLUMN_DDL];
 
 /**
  * Attente maximale du verrou exclusif de l’ALTER TABLE. Tant qu’il attend
@@ -55,13 +88,14 @@ export function postgresErrorCode(error: unknown): string | null {
 }
 
 /**
- * Tables présentes sans colonne « language » ; une table absente relève des
- * migrations. Lecture du catalogue seule : to_regclass ne verrouille pas la
- * table, donc la vérification répond même quand un ALTER attend son verrou.
+ * Tables présentes sans leur colonne (RUNTIME_COLUMNS) ; une table absente
+ * relève des migrations. Lecture du catalogue seule : to_regclass ne verrouille
+ * pas la table, donc la vérification répond même quand un ALTER attend son verrou.
  */
 async function tablesMissingLanguageColumn(db: Executor): Promise<Set<string>> {
-  const names = sql.join(LANGUAGE_COLUMN_TABLES.map(name => sql`${name}`), sql`, `);
-  const result = await db.execute(sql`SELECT name FROM unnest(ARRAY[${names}]::text[]) AS name WHERE to_regclass(name) IS NOT NULL AND NOT EXISTS (SELECT 1 FROM pg_attribute WHERE attrelid = to_regclass(name) AND attname = 'language' AND NOT attisdropped)`);
+  const names = sql.join(RUNTIME_COLUMNS.map(({ table }) => sql`${table}`), sql`, `);
+  const columns = sql.join(RUNTIME_COLUMNS.map(({ column }) => sql`${column}`), sql`, `);
+  const result = await db.execute(sql`SELECT name FROM unnest(ARRAY[${names}]::text[], ARRAY[${columns}]::text[]) AS expected(name, attribute) WHERE to_regclass(name) IS NOT NULL AND NOT EXISTS (SELECT 1 FROM pg_attribute WHERE attrelid = to_regclass(name) AND attname = attribute AND NOT attisdropped)`);
   const rows = (result as { rows?: Array<{ name?: unknown }> }).rows ?? [];
   return new Set(rows.map(row => String(row.name)));
 }
@@ -72,23 +106,24 @@ let languageColumnsReady: Promise<void> | null = null;
  * Mémoïsé par instance ; un échec est réessayé au prochain appel. Même modèle
  * que la table des factures (server/invoiceNumbering.ts) : lit d’abord ce qui
  * existe et n’exécute que la DDL manquante, donc aucune DDL n’est envoyée quand
- * les colonnes sont là (cas normal, ou 0002 appliquée par le propriétaire). Un
- * ajout concurrent par une autre instance compte comme une réussite dès que la
- * colonne existe. Chaque table manquante est tentée même si une autre échoue
- * (verrou pris sur cette seule table) : les colonnes ajoutées le restent, et
- * une erreur n’est relancée qu’à la fin : un verrou non obtenu (55P03) s’il y en
- * a un, car le délai avant le nouvel essai en dépend (server/db.ts), sinon la
- * première.
+ * les colonnes sont là (cas normal, ou 0002 et 0003 appliquées par le
+ * propriétaire). Couvre RUNTIME_COLUMNS, « language » comme les colonnes des
+ * missions. Un ajout concurrent par une autre instance compte comme une
+ * réussite dès que la colonne existe. Chaque table manquante est tentée même
+ * si une autre échoue (verrou pris sur cette seule table) : les colonnes
+ * ajoutées le restent, et une erreur n’est relancée qu’à la fin : un verrou
+ * non obtenu (55P03) s’il y en a un, car le délai avant le nouvel essai en
+ * dépend (server/db.ts), sinon la première.
  */
 export function ensureLanguageColumns(db: Executor): Promise<void> {
   languageColumnsReady ??= (async () => {
     const missing = await tablesMissingLanguageColumn(db);
     const failures: unknown[] = [];
-    for (let index = 0; index < LANGUAGE_COLUMN_TABLES.length; index += 1) {
-      const table = LANGUAGE_COLUMN_TABLES[index]!;
+    for (let index = 0; index < RUNTIME_COLUMNS.length; index += 1) {
+      const { table } = RUNTIME_COLUMNS[index]!;
       if (!missing.has(table)) continue;
       try {
-        await db.execute(withLockTimeout(LANGUAGE_COLUMN_DDL[index]!));
+        await db.execute(withLockTimeout(RUNTIME_COLUMN_DDL[index]!));
       } catch (error) {
         const addedConcurrently = CONCURRENT_CREATION_CODES.has(postgresErrorCode(error) ?? "")
           && !(await tablesMissingLanguageColumn(db)).has(table);
@@ -109,19 +144,21 @@ export function resetLanguageColumnsMemo() {
 }
 
 /**
- * Une requête ne lit ou n’écrit « language » que si elle nomme l’une de ces
- * tables et la colonne : Drizzle liste toutes les colonnes d’un select ou d’un
+ * Une requête ne lit ou n’écrit l’une de ces colonnes que si elle nomme sa
+ * table et la colonne : Drizzle liste toutes les colonnes d’un select ou d’un
  * insert complet, et les INSERT bruts du code nomment language. Les créneaux
  * réservés (appointment_date seule) ou une suppression n’en dépendent pas.
  */
-const LANGUAGE_TABLE_PATTERN = new RegExp(`\\b(?:${LANGUAGE_COLUMN_TABLES.join("|")})\\b`);
-const LANGUAGE_COLUMN_PATTERN = /\blanguage\b/;
+const RUNTIME_COLUMN_PATTERNS = RUNTIME_COLUMNS.map(({ table, column }) => [new RegExp(`\\b${table}\\b`), new RegExp(`\\b${column}\\b`)] as const);
+const namesRuntimeColumn = (text: string) => RUNTIME_COLUMN_PATTERNS.some(([table, column]) => table.test(text) && column.test(text));
 
 /**
- * Client Neon pour Drizzle : une requête qui nomme « language » et
- * appointments, cv_applications ou candidate_accounts attend d’abord
- * `beforeLanguageQuery` (vérification des colonnes) ; toute autre requête part
- * aussitôt. Drizzle envoie une requête par `client.query` et un `db.batch` par
+ * Client Neon pour Drizzle : une requête qui nomme l’une de ces colonnes et sa
+ * table (« language » et appointments, cv_applications ou candidate_accounts ;
+ * confirmed_at et cv_candidate_certifications ; candidate_consent_at et
+ * client_brief_candidates) attend d’abord `beforeLanguageQuery` (vérification
+ * des colonnes) ; toute autre requête part aussitôt. Drizzle envoie une
+ * requête par `client.query` et un `db.batch` par
  * `client.transaction`, avec les requêtes déjà construites, pas encore
  * envoyées : un NeonQueryPromise ne part qu’à son premier `then`.
  */
@@ -130,7 +167,7 @@ export function waitForLanguageColumns(client: NeonClient, beforeLanguageQuery: 
   const deferred = new WeakMap<object, object>();
   const query = ((text: string, params?: unknown[], options?: Parameters<NeonClient["query"]>[2]) => {
     const pending = client.query(text, params, options);
-    if (!LANGUAGE_TABLE_PATTERN.test(text) || !LANGUAGE_COLUMN_PATTERN.test(text)) return pending;
+    if (!namesRuntimeColumn(text)) return pending;
     const run = () => beforeLanguageQuery().then(() => pending);
     const waiting = {
       then: (onFulfilled?: (value: unknown) => unknown, onRejected?: (reason: unknown) => unknown) => run().then(onFulfilled, onRejected),

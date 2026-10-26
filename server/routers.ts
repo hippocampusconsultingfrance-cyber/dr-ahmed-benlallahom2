@@ -24,7 +24,8 @@ import {
   type RecruitmentEmailTemplate,
 } from "./_core/notifications";
 import { logRecruitmentAction, matchesRecruitmentProfile, parseRecruitmentJsonArray } from "./recruitmentAudit";
-import { computeBriefCandidateMatch } from "./clientBriefMatching";
+import { CERTIFICATION_NAME_MAX_LENGTH, certificationFacts, computeBriefCandidateMatch, declaredCertificationNames, languageFacts, sameRecruitmentFact, type CertificationRow, type LanguageRow } from "./clientBriefMatching";
+import { recruitmentFactLabel, type RecruitmentFact } from "../shared/recruitmentFactOrigins";
 import { candidatePortalRouter } from "./candidatePortalRouter";
 import { enforcePersistentRateLimit, hashSecurityValue, logSecurityEvent, requestIpHash } from "./candidateSecurity";
 import { countPublicFormDailyVolume, enforcePublicEmailIpRateLimit, PUBLIC_EMAIL_IP_RATE_LIMITS, publicFormRateLimitSubject, releasePublicEmailIpRateLimit, type PublicFormRateLimitScope } from "./publicFormRateLimit";
@@ -206,15 +207,68 @@ function csvCell(value: unknown): string {
   return `"${protectedText.replace(/"/g, '""')}"`;
 }
 
+type AdminDb = NonNullable<Awaited<ReturnType<typeof getDb>>>;
+
 /**
  * A mission's shortlist: the candidates shortlisted for it whose application
- * is still open. Its export carries them and nobody else (REC-01).
+ * is still open, with the date each one agreed to be presented for it, entered
+ * by the admin (RGPD-03). Its export carries the candidates who agreed, and
+ * nobody else (REC-01).
  */
-async function openShortlistedApplicationIds(db: NonNullable<Awaited<ReturnType<typeof getDb>>>, briefId: number): Promise<number[]> {
-  const associations = await db.select({ applicationId: clientBriefCandidates.applicationId }).from(clientBriefCandidates).where(and(eq(clientBriefCandidates.briefId, briefId), eq(clientBriefCandidates.status, "shortlisted")));
+async function openShortlist(db: AdminDb, briefId: number): Promise<Array<{ applicationId: number; candidateConsentAt: Date | null }>> {
+  const associations = await db.select({ applicationId: clientBriefCandidates.applicationId, candidateConsentAt: clientBriefCandidates.candidateConsentAt }).from(clientBriefCandidates).where(and(eq(clientBriefCandidates.briefId, briefId), eq(clientBriefCandidates.status, "shortlisted")));
   if (!associations.length) return [];
   const open = await db.select({ id: cvApplications.id }).from(cvApplications).where(and(sql`${cvApplications.status} NOT IN ('rejected', 'archived')`, inArray(cvApplications.id, associations.map(association => association.applicationId))));
-  return open.map(application => application.id);
+  return open.map(application => ({
+    applicationId: application.id,
+    candidateConsentAt: associations.find(association => association.applicationId === application.id && association.candidateConsentAt)?.candidateConsentAt ?? null,
+  }));
+}
+
+function groupByApplication<T extends { applicationId: number }>(rows: T[]) {
+  const groups = new Map<number, T[]>();
+  for (const row of rows) groups.set(row.applicationId, [...(groups.get(row.applicationId) ?? []), row]);
+  return groups;
+}
+
+/**
+ * Certifications of these applications with their origins (IA-02): the
+ * declared text and the cv_candidate_certifications rows, one query whatever
+ * the number of applications.
+ */
+async function certificationFactsByApplication(db: AdminDb, applications: Array<{ id: number; certifications: string | null }>) {
+  const rows = applications.length
+    ? groupByApplication(await db.select({ applicationId: cvCandidateCertifications.applicationId, name: cvCandidateCertifications.name, source: cvCandidateCertifications.source, confirmedAt: cvCandidateCertifications.confirmedAt, expiresAt: cvCandidateCertifications.expiresAt })
+      .from(cvCandidateCertifications)
+      .where(inArray(cvCandidateCertifications.applicationId, applications.map(application => application.id))))
+    : new Map<number, CertificationRow[]>();
+  return new Map(applications.map(application => [application.id, certificationFacts(application.certifications, rows.get(application.id) ?? [])]));
+}
+
+/** Languages of these applications with their origins (declared, read in the CV), one query. */
+async function languageFactsByApplication(db: AdminDb, applications: Array<{ id: number; languages: string | null }>) {
+  const rows = applications.length
+    ? groupByApplication(await db.select({ applicationId: cvCandidateLanguages.applicationId, language: cvCandidateLanguages.language, source: cvCandidateLanguages.source })
+      .from(cvCandidateLanguages)
+      .where(inArray(cvCandidateLanguages.applicationId, applications.map(application => application.id))))
+    : new Map<number, LanguageRow[]>();
+  return new Map(applications.map(application => [application.id, languageFacts(application.languages, rows.get(application.id) ?? [])]));
+}
+
+/**
+ * Bound of a mission's ranking (ADM-04): the compatibility of every open
+ * application is computed before sorting and paging, in three queries (the
+ * applications, their certifications, their languages). Beyond this many open
+ * applications, only the most recent ones are ranked, with the candidates
+ * already associated with the mission, and the screen says so.
+ * About 2 KB a row, a few MB per request at most.
+ */
+export const MISSION_MATCHING_MAX_CANDIDATES = 2_000;
+
+/** Date typed by the admin (YYYY-MM-DD, Paris), stored at noon UTC: the same day in Paris. */
+function parseAdminDate(value: string) {
+  const date = new Date(`${value}T12:00:00.000Z`);
+  return Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== value ? null : date;
 }
 
 const PARIS_DAY_INDEX: Record<string, number> = {
@@ -1544,6 +1598,8 @@ export const appRouter = router({
                 .where(inArray(recruitmentEmailEvents.applicationId, applicationIds))
                 .orderBy(desc(recruitmentEmailEvents.occurredAt))
             : [];
+          // With their origins, shown by the certification filter and the confirmation buttons (IA-02).
+          const certificationsByApplication = await certificationFactsByApplication(db, rawItems);
           const driveExportByApplicationId = new Map(driveExportJobs.map(job => [job.applicationId, job]));
           const emailEventsByApplicationId = new Map<number, typeof emailEvents>();
           for (const event of emailEvents) {
@@ -1560,6 +1616,7 @@ export const appRouter = router({
               candidatePortalInvitation: resolveCandidatePortalInvitationDelivery(emailEventsByApplicationId.get(item.id) || []),
               driveExport: driveExportByApplicationId.get(item.id) || null,
               emailDelivery: resolveCvConfirmationDelivery(emailEventsByApplicationId.get(item.id) || []),
+              certificationFacts: certificationsByApplication.get(item.id) ?? [],
             }));
           const countResult = profile ? [{ count: matchedItems.length }] : await db.select({ count: sql<number>`COUNT(*)` }).from(cvApplications).where(whereClause);
           return { items, total: Number(countResult[0]?.count ?? 0) };
@@ -1583,7 +1640,7 @@ export const appRouter = router({
             if (input?.mobility) conditions.push(sql`(LOWER(COALESCE(${cvApplications.mobility}, '')) LIKE LOWER(${`%${input.mobility}%`}) OR LOWER(COALESCE(${cvApplications.targetCountries}, '')) LIKE LOWER(${`%${input.mobility}%`}))`);
             if (input?.certification) conditions.push(sql`(LOWER(COALESCE(${cvApplications.certifications}, '')) LIKE LOWER(${`%${input.certification}%`}) OR (${cvApplications.analysisPromptVersion} = ${RECRUITMENT_ANALYSIS_PROMPT_VERSION} AND LOWER(COALESCE(${cvApplications.normalizedCertifications}, '')) LIKE LOWER(${`%${input.certification}%`})))`);
             if (input?.minimumScore) conditions.push(scoreAtLeastOrUnavailable(input.minimumScore));
-            return db.select({
+            const candidates = await db.select({
               id: cvApplications.id,
               firstName: cvApplications.firstName,
               lastName: cvApplications.lastName,
@@ -1599,6 +1656,9 @@ export const appRouter = router({
               marketingConsent: cvApplications.marketingConsent,
               createdAt: cvApplications.createdAt,
             }).from(cvApplications).where(and(...conditions)).orderBy(verifiedScoreFirst, desc(cvApplications.createdAt)).limit(input?.limit || 200);
+            // With their origins: the certification filter also matches what the AI read in the CV (IA-02).
+            const certificationsByApplication = await certificationFactsByApplication(db, candidates);
+            return candidates.map(candidate => ({ ...candidate, certificationFacts: certificationsByApplication.get(candidate.id) ?? [] }));
           }),
       }),
 
@@ -1900,7 +1960,37 @@ export const appRouter = router({
             }).from(recruitmentCampaignRecipients).leftJoin(recruitmentCampaigns, eq(recruitmentCampaignRecipients.campaignId, recruitmentCampaigns.id)).where(eq(recruitmentCampaignRecipients.applicationId, input.id)).orderBy(desc(recruitmentCampaignRecipients.createdAt)).limit(100),
             db.select().from(recruitmentFollowUpTasks).where(eq(recruitmentFollowUpTasks.applicationId, input.id)).orderBy(recruitmentFollowUpTasks.status, recruitmentFollowUpTasks.dueAt).limit(50),
           ]);
-          return { candidate, audits, campaignRecipients, followUps };
+          const certifications = (await certificationFactsByApplication(db, [candidate])).get(candidate.id) ?? [];
+          return { candidate, audits, campaignRecipients, followUps, certifications };
+        }),
+        // IA-02: an admin confirms a certification after checking it, or
+        // withdraws the confirmation. Only a confirmed certification, declared
+        // or read in the CV, earns points in a mission's matching.
+        // The name is the one shown, as long as the declared term (the form
+        // takes 1,000 characters); a row keeps its first 180.
+        confirmCertification: adminProcedure.input(z.object({ id: z.number().int().positive(), name: z.string().trim().min(1).max(1000), confirmed: z.boolean() })).mutation(async ({ input, ctx }) => {
+          const db = await getDb();
+          if (!db) throw new Error("Database connection failed");
+          const [application] = await db.select({ id: cvApplications.id, certifications: cvApplications.certifications }).from(cvApplications).where(eq(cvApplications.id, input.id)).limit(1);
+          if (!application) throw new TRPCError({ code: "NOT_FOUND", message: "Candidature introuvable." });
+          const rows = (await db.select({ id: cvCandidateCertifications.id, name: cvCandidateCertifications.name, confirmedAt: cvCandidateCertifications.confirmedAt })
+            .from(cvCandidateCertifications)
+            .where(eq(cvCandidateCertifications.applicationId, application.id)))
+            .filter(row => sameRecruitmentFact(row.name, input.name));
+          const declared = declaredCertificationNames(application.certifications).find(name => sameRecruitmentFact(name, input.name));
+          if (!rows.length && !declared) throw new TRPCError({ code: "NOT_FOUND", message: "Cette certification ne figure pas dans le dossier." });
+          // Rows whose confirmation changes: nothing is logged when none does.
+          const changed = rows.filter(row => (row.confirmedAt === null) === input.confirmed);
+          if (changed.length) {
+            await db.update(cvCandidateCertifications).set({ confirmedAt: input.confirmed ? new Date() : null }).where(inArray(cvCandidateCertifications.id, changed.map(row => row.id)));
+          } else if (input.confirmed && !rows.length) {
+            // A certification declared in the form only: its confirmation gets a row of its own.
+            await db.insert(cvCandidateCertifications).values({ applicationId: application.id, name: declared!.slice(0, CERTIFICATION_NAME_MAX_LENGTH), source: "declared", confirmedAt: new Date() });
+          } else {
+            return { success: true, changed: false };
+          }
+          await logRecruitmentAction({ applicationId: application.id, adminOpenId: ctx.user.openId, action: "status_update", metadata: { event: input.confirmed ? "certification_confirmed" : "certification_unconfirmed", certification: rows[0]?.name ?? declared } });
+          return { success: true, changed: true };
         }),
         markResponse: adminProcedure.input(z.object({ id: z.number().int().positive(), note: z.string().trim().max(1000).optional() })).mutation(async ({ input, ctx }) => {
           const db = await getDb();
@@ -1973,13 +2063,21 @@ export const appRouter = router({
         const db = await getDb();
         if (!db) throw new Error("Database connection failed");
         let candidateIds = input.candidateIds;
+        let consentByApplication = new Map<number, Date>();
+        let excludedWithoutConsent = 0;
         if (input.type === "shortlist") {
           if (!input.briefId) throw new TRPCError({ code: "BAD_REQUEST", message: "Une mission est requise pour exporter une shortlist." });
           // Ids sent by the client never widen or replace a mission's shortlist.
-          candidateIds = await openShortlistedApplicationIds(db, input.briefId);
-          if (!candidateIds.length) throw new TRPCError({ code: "BAD_REQUEST", message: "Aucun candidat présélectionné pour cette mission." });
+          const shortlist = await openShortlist(db, input.briefId);
+          if (!shortlist.length) throw new TRPCError({ code: "BAD_REQUEST", message: "Aucun candidat présélectionné pour cette mission." });
+          // A profile leaves for an employer only with the candidate's agreement for this mission (RGPD-03).
+          const consented = shortlist.filter((candidate): candidate is { applicationId: number; candidateConsentAt: Date } => candidate.candidateConsentAt !== null);
+          excludedWithoutConsent = shortlist.length - consented.length;
+          if (!consented.length) throw new TRPCError({ code: "BAD_REQUEST", message: `Aucun des ${shortlist.length} candidat(s) de la shortlist n’a d’accord noté pour cette mission. Obtenez l’accord de chaque candidat et notez-en la date (« Accord du candidat reçu ») avant d’exporter.` });
+          consentByApplication = new Map(consented.map(candidate => [candidate.applicationId, candidate.candidateConsentAt]));
+          candidateIds = consented.map(candidate => candidate.applicationId);
           // Refused rather than cut short: the file must match the count on the button.
-          if (candidateIds.length > RECRUITMENT_EXPORT_MAX_CANDIDATES) throw new TRPCError({ code: "BAD_REQUEST", message: `La shortlist compte ${candidateIds.length} candidats ; ${RECRUITMENT_EXPORT_MAX_CANDIDATES} au maximum par export. Retirez des candidats de la shortlist avant de l’exporter.` });
+          if (candidateIds.length > RECRUITMENT_EXPORT_MAX_CANDIDATES) throw new TRPCError({ code: "BAD_REQUEST", message: `La shortlist compte ${candidateIds.length} candidats avec accord ; ${RECRUITMENT_EXPORT_MAX_CANDIDATES} au maximum par export. Retirez des candidats de la shortlist avant de l’exporter.` });
         }
         // An empty selection is refused, never read as "every candidate" (REC-01).
         if (!candidateIds.length) throw new TRPCError({ code: "BAD_REQUEST", message: "Sélectionnez au moins un candidat à exporter." });
@@ -1993,11 +2091,21 @@ export const appRouter = router({
         // A shortlist is meant for a client employer: it never carries the AI
         // score, an internal reading aid that must not become a third party's
         // selection criterion (LEGAL-22). The internal pool export keeps it.
-        const includeAiScore = input.type === "pool";
-        const header = ["Prénom", "Nom", "Email", "Téléphone", "Spécialité", "Pays ciblés", "Langues", "Expérience (ans)", "Disponibilité", "Mobilité", "Certifications", ...(includeAiScore ? ["Score IA"] : []), "Statut"];
-        const csv = [header.map(csvCell).join(";"), ...rows.map(row => [row.firstName, row.lastName, row.email, row.phone, row.specialty, row.targetCountries, row.languages, row.yearsExperience, row.availability, row.mobility, row.certifications, ...(includeAiScore ? [row.aiScore] : []), row.status].map(csvCell).join(";"))].join("\n");
+        let csv: string;
+        if (input.type === "shortlist") {
+          // Each certification and language says where it comes from (IA-02),
+          // and each candidate the date of their agreement (RGPD-03).
+          const [certificationsByApplication, languagesByApplication] = await Promise.all([certificationFactsByApplication(db, rows), languageFactsByApplication(db, rows)]);
+          const facts = (list: RecruitmentFact[] | undefined) => (list ?? []).map(recruitmentFactLabel).join(" ; ");
+          const header = ["Prénom", "Nom", "Email", "Téléphone", "Spécialité", "Pays ciblés", "Langues (origine)", "Expérience (ans)", "Disponibilité", "Mobilité", "Certifications (origine)", "Accord du candidat", "Statut"];
+          csv = [header.map(csvCell).join(";"), ...rows.map(row => [row.firstName, row.lastName, row.email, row.phone, row.specialty, row.targetCountries, facts(languagesByApplication.get(row.id)), row.yearsExperience, row.availability, row.mobility, facts(certificationsByApplication.get(row.id)), consentByApplication.get(row.id)?.toLocaleDateString("fr-FR", { timeZone: "Europe/Paris" }), row.status].map(csvCell).join(";"))].join("\n");
+        } else {
+          const header = ["Prénom", "Nom", "Email", "Téléphone", "Spécialité", "Pays ciblés", "Langues", "Expérience (ans)", "Disponibilité", "Mobilité", "Certifications", "Score IA", "Statut"];
+          csv = [header.map(csvCell).join(";"), ...rows.map(row => [row.firstName, row.lastName, row.email, row.phone, row.specialty, row.targetCountries, row.languages, row.yearsExperience, row.availability, row.mobility, row.certifications, row.aiScore, row.status].map(csvCell).join(";"))].join("\n");
+        }
         await Promise.all(rows.map(row => logRecruitmentAction({ applicationId: row.id, adminOpenId: ctx.user.openId, action: "export", metadata: { type: input.type, briefId: input.briefId || null } })));
-        return { filename: `${input.type}-${new Date().toISOString().slice(0, 10)}.csv`, csv, count: rows.length };
+        // excludedWithoutConsent: shortlisted candidates left out for lack of agreement (RGPD-03).
+        return { filename: `${input.type}-${new Date().toISOString().slice(0, 10)}.csv`, csv, count: rows.length, excludedWithoutConsent };
       }),
 
       profiles: router({
@@ -2230,15 +2338,19 @@ export const appRouter = router({
           briefId: z.number().int().positive(),
           page: z.number().int().min(0).max(10_000).default(0),
           limit: z.number().int().min(10).max(50).default(25),
+          // ADM-04 filters, applied after ranking and before paging.
+          minimumMatch: z.number().int().min(0).max(100).optional(),
+          shortlist: z.enum(["all", "shortlisted", "not_shortlisted"]).default("all"),
         }))
         .query(async ({ input }) => {
           const db = await getDb();
-          if (!db) return { brief: null, candidates: [], shortlistedCount: 0, pagination: { page: input.page, limit: input.limit, total: 0, totalPages: 0 } };
+          if (!db) return { brief: null, candidates: [], shortlistedCount: 0, consentedCount: 0, ranking: { eligible: 0, ranked: 0 }, pagination: { page: input.page, limit: input.limit, total: 0, totalPages: 0 } };
           const [brief] = await db.select().from(clientBriefs).where(eq(clientBriefs.id, input.briefId)).limit(1);
           if (!brief) throw new TRPCError({ code: "NOT_FOUND", message: "Brief employeur introuvable" });
           const candidateConditions = [sql`${cvApplications.status} NOT IN ('rejected', 'archived')`];
           const [countResult] = await db.select({ total: sql<number>`COUNT(*)` }).from(cvApplications).where(and(...candidateConditions));
-          const applications = await db.select({
+          // Every open application is ranked, not one page of the AI score order (ADM-04).
+          const candidateColumns = {
             id: cvApplications.id,
             trackingId: cvApplications.trackingId,
             firstName: cvApplications.firstName,
@@ -2246,59 +2358,70 @@ export const appRouter = router({
             specialty: cvApplications.specialty,
             targetCountries: cvApplications.targetCountries,
             certifications: cvApplications.certifications,
-            normalizedCertifications: sql<string | null>`CASE WHEN ${cvApplications.analysisPromptVersion} = ${RECRUITMENT_ANALYSIS_PROMPT_VERSION} THEN ${cvApplications.normalizedCertifications} ELSE NULL END`,
             languages: cvApplications.languages,
-            normalizedLanguages: sql<string | null>`CASE WHEN ${cvApplications.analysisPromptVersion} = ${RECRUITMENT_ANALYSIS_PROMPT_VERSION} THEN ${cvApplications.normalizedLanguages} ELSE NULL END`,
             yearsExperience: cvApplications.yearsExperience,
             availability: cvApplications.availability,
             mobility: cvApplications.mobility,
             aiScore: verifiedRecruitmentScore,
             status: cvApplications.status,
-          }).from(cvApplications)
-            .where(and(...candidateConditions))
-            .orderBy(verifiedScoreFirst, desc(cvApplications.createdAt), desc(cvApplications.id))
-            .limit(input.limit)
-            .offset(input.page * input.limit);
-          const applicationIds = applications.map(application => application.id);
-          const [certificationRows, languageRows, associations] = applicationIds.length > 0
-            ? await Promise.all([
-              db.select({ applicationId: cvCandidateCertifications.applicationId, name: cvCandidateCertifications.name })
-                .from(cvCandidateCertifications)
-                .where(inArray(cvCandidateCertifications.applicationId, applicationIds)),
-              db.select({ applicationId: cvCandidateLanguages.applicationId, language: cvCandidateLanguages.language })
-                .from(cvCandidateLanguages)
-                .where(inArray(cvCandidateLanguages.applicationId, applicationIds)),
-              db.select().from(clientBriefCandidates).where(and(eq(clientBriefCandidates.briefId, brief.id), inArray(clientBriefCandidates.applicationId, applicationIds))),
-            ])
-            : [[], [], []] as const;
-          const certificationsByApplication = new Map<number, string[]>();
-          for (const certification of certificationRows) {
-            certificationsByApplication.set(certification.applicationId, [
-              ...(certificationsByApplication.get(certification.applicationId) || []),
-              certification.name,
-            ]);
-          }
-          const languagesByApplication = new Map<number, string[]>();
-          for (const language of languageRows) {
-            languagesByApplication.set(language.applicationId, [
-              ...(languagesByApplication.get(language.applicationId) || []),
-              language.language,
-            ]);
-          }
+          };
+          const [recentApplications, associations] = await Promise.all([
+            db.select(candidateColumns).from(cvApplications)
+              .where(and(...candidateConditions))
+              .orderBy(desc(cvApplications.createdAt), desc(cvApplications.id))
+              .limit(MISSION_MATCHING_MAX_CANDIDATES),
+            db.select().from(clientBriefCandidates).where(eq(clientBriefCandidates.briefId, brief.id)),
+          ]);
+          // Beyond the bound, the mission's own candidates are ranked too, however
+          // old: a shortlisted one stays on screen, to note their agreement or
+          // remove them from the shortlist.
+          const recentIds = new Set(recentApplications.map(application => application.id));
+          const associatedOutsideBound = recentApplications.length < MISSION_MATCHING_MAX_CANDIDATES
+            ? []
+            : associations.map(association => association.applicationId).filter(id => !recentIds.has(id));
+          const applications = associatedOutsideBound.length
+            ? [...recentApplications, ...await db.select(candidateColumns).from(cvApplications).where(and(...candidateConditions, inArray(cvApplications.id, associatedOutsideBound)))]
+            : recentApplications;
+          const [certificationsByApplication, languagesByApplication] = await Promise.all([
+            certificationFactsByApplication(db, applications),
+            languageFactsByApplication(db, applications),
+          ]);
           const associationByApplication = new Map(associations.map(association => [association.applicationId, association]));
-          const candidates = applications.map(application => ({
+          const ranked = applications.map(application => ({
             ...application,
             match: computeBriefCandidateMatch(brief, {
               ...application,
-              certificationNames: certificationsByApplication.get(application.id) || [],
-              languageNames: languagesByApplication.get(application.id) || [],
+              certificationFacts: certificationsByApplication.get(application.id) ?? [],
+              languageFacts: languagesByApplication.get(application.id) ?? [],
             }),
             association: associationByApplication.get(application.id) ?? null,
-          }));
-          const total = Number(countResult?.total || 0);
-          // What the shortlist export would carry, across every page (REC-01).
-          const shortlistedCount = (await openShortlistedApplicationIds(db, brief.id)).length;
-          return { brief, candidates, shortlistedCount, pagination: { page: input.page, limit: input.limit, total, totalPages: Math.ceil(total / input.limit) } };
+          }))
+            // Best compatibility first, then the verified AI score with the
+            // dossiers without one after every scored one, then the newest.
+            .sort((left, right) => right.match.score - left.match.score
+              || Number(left.aiScore === null) - Number(right.aiScore === null)
+              || (right.aiScore ?? 0) - (left.aiScore ?? 0)
+              || right.id - left.id)
+            .filter(candidate => candidate.match.score >= (input.minimumMatch ?? 0))
+            .filter(candidate => input.shortlist === "all" || (candidate.association?.status === "shortlisted") === (input.shortlist === "shortlisted"));
+          const total = ranked.length;
+          const totalPages = Math.ceil(total / input.limit);
+          // A candidate leaving the filtered list (removed from the shortlist, a
+          // confirmation withdrawn) can empty the page asked for: the last page
+          // is returned instead, and pagination.page says which.
+          const page = Math.min(input.page, Math.max(0, totalPages - 1));
+          const candidates = ranked.slice(page * input.limit, (page + 1) * input.limit);
+          // What the shortlist export would carry, across every page (REC-01):
+          // only the candidates who agreed to be presented (RGPD-03).
+          const shortlist = await openShortlist(db, brief.id);
+          return {
+            brief,
+            candidates,
+            shortlistedCount: shortlist.length,
+            consentedCount: shortlist.filter(candidate => candidate.candidateConsentAt).length,
+            ranking: { eligible: Number(countResult?.total || 0), ranked: applications.length },
+            pagination: { page, limit: input.limit, total, totalPages },
+          };
         }),
       associateCandidate: adminProcedure
         .input(z.object({
@@ -2331,6 +2454,32 @@ export const appRouter = router({
             });
           }
           return { success: true };
+        }),
+      // Date the candidate agreed to be presented for this mission (RGPD-03),
+      // by email or phone; null withdraws it. The shortlist export carries
+      // only the candidates who have one.
+      setCandidateConsent: adminProcedure
+        .input(z.object({
+          briefId: z.number().int().positive(),
+          applicationId: z.number().int().positive(),
+          consentDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable(),
+        }))
+        .mutation(async ({ input, ctx }) => {
+          const db = await getDb();
+          if (!db) throw new Error("Database connection failed");
+          const consentAt = input.consentDate === null ? null : parseAdminDate(input.consentDate);
+          if (input.consentDate !== null && !consentAt) throw new TRPCError({ code: "BAD_REQUEST", message: "Date de l’accord invalide." });
+          const today = getParisParts(new Date());
+          if (input.consentDate !== null && input.consentDate > `${today.year}-${pad(today.month)}-${pad(today.day)}`) {
+            throw new TRPCError({ code: "BAD_REQUEST", message: "La date de l’accord du candidat ne peut pas être dans le futur." });
+          }
+          const [association] = await db.select({ id: clientBriefCandidates.id }).from(clientBriefCandidates)
+            .where(and(eq(clientBriefCandidates.briefId, input.briefId), eq(clientBriefCandidates.applicationId, input.applicationId)))
+            .limit(1);
+          if (!association) throw new TRPCError({ code: "NOT_FOUND", message: "Ce candidat n’est pas associé à cette mission : présélectionnez-le d’abord." });
+          await db.update(clientBriefCandidates).set({ candidateConsentAt: consentAt, updatedAt: new Date() }).where(eq(clientBriefCandidates.id, association.id));
+          await logRecruitmentAction({ applicationId: input.applicationId, adminOpenId: ctx.user.openId, action: "status_update", metadata: { event: "mission_consent", briefId: input.briefId, consentDate: input.consentDate } });
+          return { success: true, candidateConsentAt: consentAt };
         }),
     }),
 

@@ -1,9 +1,10 @@
-import { CalendarClock, ClipboardList, FileText, Mail, MessageSquare, UserRound } from "lucide-react";
+import { BadgeCheck, CalendarClock, ClipboardList, FileText, Mail, MessageSquare, UserRound } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { buildCandidateTimeline, type CandidateTimelineEvent } from "./candidate360Timeline";
+import CertificationReview from "./CertificationReview";
 import PublicContentSkeleton from "./PublicContentSkeleton";
 
 type Candidate360DialogProps = {
@@ -58,6 +59,11 @@ export default function Candidate360Dialog({ applicationId, onOpenChange }: Cand
               <section className="rounded-xl border border-border p-4"><div className="flex items-center gap-2"><MessageSquare className="h-4 w-4 text-primary" /><h3 className="font-semibold text-foreground">Note interne</h3></div><p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-muted-foreground">{detail.candidate.adminNotes || "Aucune note interne pour ce dossier."}</p></section>
               <section className="rounded-xl border border-border p-4"><div className="flex items-center gap-2"><FileText className="h-4 w-4 text-primary" /><h3 className="font-semibold text-foreground">Pièces demandées</h3></div>{requestedDocuments.length ? <ul className="mt-3 space-y-2 text-sm text-muted-foreground">{requestedDocuments.map(event => <li key={event.id} className="rounded-lg bg-muted/40 p-2">{event.detail?.replace("Pièces ou informations demandées : ", "")}</li>)}</ul> : <p className="mt-3 text-sm text-muted-foreground">Aucune demande libre de complément archivée pour ce dossier.</p>}</section>
             </div>
+
+            <section className="rounded-xl border border-border p-4">
+              <div className="mb-3 flex items-center gap-2"><BadgeCheck className="h-4 w-4 text-primary" /><h3 className="font-semibold text-foreground">Certifications</h3></div>
+              <CertificationReview applicationId={detail.candidate.id} certifications={detail.certifications} />
+            </section>
 
             <section className="rounded-xl border border-border p-4">
               <div className="flex items-center gap-2"><CalendarClock className="h-4 w-4 text-primary" /><h3 className="font-semibold text-foreground">Relances manuelles suggérées</h3></div>

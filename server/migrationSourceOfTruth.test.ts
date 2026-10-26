@@ -99,6 +99,20 @@ describe("source de vérité des migrations Drizzle (M32)", () => {
     for (const statement of LANGUAGE_COLUMN_DDL) expect(body).toContain(normalize(dialect.sqlToQuery(statement).sql));
   });
 
+  it("0003 ajoute confirmed_at et candidate_consent_at de façon idempotente, avec le même DDL que l'application (IA-02, RGPD-03)", async () => {
+    const migration = read("drizzle/pg/0003_mission_shortlist_columns.sql");
+    const normalize = (text: string) => text.replace(/--[^\n]*\n/g, "").replace(/\s+/g, " ").replace(/ ?statement-breakpoint ?/g, "").replace(/;/g, "").trim();
+    expect(migration).not.toMatch(/ADD COLUMN "/);
+    const { MISSION_COLUMN_DDL } = await import("./languageColumns");
+    const { PgDialect } = await import("drizzle-orm/pg-core");
+    const dialect = new PgDialect();
+    const body = normalize(migration);
+    expect(MISSION_COLUMN_DDL).toHaveLength(2);
+    for (const statement of MISSION_COLUMN_DDL) expect(body).toContain(normalize(dialect.sqlToQuery(statement).sql));
+    const journal = JSON.parse(read("drizzle/pg/meta/_journal.json")) as { entries: { idx: number; tag: string }[] };
+    expect(journal.entries.at(-1)).toMatchObject({ idx: 3, tag: "0003_mission_shortlist_columns" });
+  });
+
   it("la baseline crée les 36 tables du schéma", () => {
     const baseline = read("drizzle/pg/0000_baseline.sql");
     const created = [...baseline.matchAll(/CREATE TABLE "([a-z_]+)"/g)].map(match => match[1]);

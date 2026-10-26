@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { candidateAccounts, cvApplications, cvGoogleDriveExportJobs, recruitmentEmailEvents, recruitmentMatchProfiles } from "../drizzle/schema";
+import { candidateAccounts, cvApplications, cvCandidateCertifications, cvGoogleDriveExportJobs, recruitmentEmailEvents, recruitmentMatchProfiles } from "../drizzle/schema";
 import { RECRUITMENT_ANALYSIS_PROMPT_VERSION } from "./recruitmentAnalysis";
 import { createMemoryPg, type MemoryPg } from "./testing/memoryPgProxy";
 import type { TrpcContext } from "./_core/context";
@@ -35,7 +35,7 @@ function seedCandidate(lastName: string, extra: Record<string, unknown>) {
 
 describe("INTL-02 — un seuil de score n’écarte plus les dossiers sans score", () => {
   beforeEach(() => {
-    memory = createMemoryPg([cvApplications, recruitmentMatchProfiles, candidateAccounts, cvGoogleDriveExportJobs, recruitmentEmailEvents]);
+    memory = createMemoryPg([cvApplications, cvCandidateCertifications, recruitmentMatchProfiles, candidateAccounts, cvGoogleDriveExportJobs, recruitmentEmailEvents]);
     state.memory = memory;
     seedCandidate("Scored", { ai_score: 85, analysis_prompt_version: RECRUITMENT_ANALYSIS_PROMPT_VERSION, analysis_status: "completed" });
     seedCandidate("Below", { ai_score: 40, analysis_prompt_version: RECRUITMENT_ANALYSIS_PROMPT_VERSION, analysis_status: "completed" });
@@ -71,7 +71,7 @@ describe("INTL-02 — un seuil de score n’écarte plus les dossiers sans score
 
 describe("INTL-02 — les dossiers notés passent avant les dossiers sans score, même quand la liste est coupée", () => {
   beforeEach(() => {
-    memory = createMemoryPg([cvApplications, recruitmentMatchProfiles, candidateAccounts, cvGoogleDriveExportJobs, recruitmentEmailEvents]);
+    memory = createMemoryPg([cvApplications, cvCandidateCertifications, recruitmentMatchProfiles, candidateAccounts, cvGoogleDriveExportJobs, recruitmentEmailEvents]);
     state.memory = memory;
     // The scored dossiers are the oldest: sorted by date alone, the unscored ones would fill the first rows.
     seedCandidate("High", { ai_score: 92, analysis_prompt_version: RECRUITMENT_ANALYSIS_PROMPT_VERSION, createdAt: "2026-01-01 08:00:00" });

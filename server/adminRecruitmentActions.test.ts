@@ -28,6 +28,8 @@ import { appRouter, driveRetryOutcome, reanalysisOutcome } from "./routers";
 import { buildClientBriefOwnerNotification } from "./clientBriefNotification";
 
 let memory: MemoryPg;
+// The candidate agreed to be presented for the mission (RGPD-03).
+const consentAt = "2026-10-20 12:00:00.000";
 
 function admin() {
   const ctx: TrpcContext = {
@@ -122,7 +124,7 @@ describe("actions d’administration du recrutement", () => {
     const shortlisted = seedCandidate(1, { ai_score: 91, analysis_prompt_version: RECRUITMENT_ANALYSIS_PROMPT_VERSION });
     seedCandidate(2, { ai_score: 40, analysis_prompt_version: RECRUITMENT_ANALYSIS_PROMPT_VERSION });
     const [brief] = memory.seed(clientBriefs, [{ brief_id: "BRIEF-EXPORT-1", organization_name: "Clinique", contact_name: "RH", email: "rh@test.local", target_environment: "Hôpital", specialty_needed: "Anesthésie", country: "Suisse" }]);
-    memory.seed(clientBriefCandidates, [{ brief_id: brief!.id, application_id: shortlisted.id, association_status: "shortlisted" }]);
+    memory.seed(clientBriefCandidates, [{ brief_id: brief!.id, application_id: shortlisted.id, association_status: "shortlisted", candidate_consent_at: consentAt }]);
     const shortlist = await admin().admin.recruitment.exportCsv({ type: "shortlist", briefId: brief!.id as number });
     const [shortlistHeader, ...shortlistRows] = shortlist.csv.split("\n");
     expect(shortlist.count).toBe(1);
@@ -148,11 +150,12 @@ describe("actions d’administration du recrutement", () => {
     seedCandidate(5);
     const [brief, other, empty] = memory.seed(clientBriefs, ["BRIEF-REC01-A", "BRIEF-REC01-B", "BRIEF-REC01-C"].map(briefId => ({ brief_id: briefId, organization_name: "Clinique", contact_name: "RH", email: "rh@test.local", target_environment: "Hôpital", specialty_needed: "Anesthésie", country: "Suisse" })));
     const briefId = brief!.id as number;
+    // Every one of them agreed to be presented (RGPD-03): only the mission and the status filter here.
     memory.seed(clientBriefCandidates, [
-      { brief_id: briefId, application_id: shortlisted.id, association_status: "shortlisted" },
-      { brief_id: briefId, application_id: suggested.id, association_status: "suggested" },
-      { brief_id: briefId, application_id: rejected.id, association_status: "shortlisted" },
-      { brief_id: other!.id, application_id: otherMission.id, association_status: "shortlisted" },
+      { brief_id: briefId, application_id: shortlisted.id, association_status: "shortlisted", candidate_consent_at: consentAt },
+      { brief_id: briefId, application_id: suggested.id, association_status: "suggested", candidate_consent_at: consentAt },
+      { brief_id: briefId, application_id: rejected.id, association_status: "shortlisted", candidate_consent_at: consentAt },
+      { brief_id: other!.id, application_id: otherMission.id, association_status: "shortlisted", candidate_consent_at: consentAt },
     ]);
     const exportedEmails = (csv: string) => csv.split("\n").slice(1).map(row => row.split(";")[2]);
 
@@ -181,7 +184,7 @@ describe("actions d’administration du recrutement", () => {
     const [brief] = memory.seed(clientBriefs, [{ brief_id: "BRIEF-REC01-MAX", organization_name: "Clinique", contact_name: "RH", email: "rh@test.local", target_environment: "Hôpital", specialty_needed: "Anesthésie", country: "Suisse" }]);
     const briefId = brief!.id as number;
     const candidates = Array.from({ length: 201 }, (_, index) => seedCandidate(index + 1));
-    memory.seed(clientBriefCandidates, candidates.slice(0, 200).map(candidate => ({ brief_id: briefId, application_id: candidate.id, association_status: "shortlisted" })));
+    memory.seed(clientBriefCandidates, candidates.slice(0, 200).map(candidate => ({ brief_id: briefId, application_id: candidate.id, association_status: "shortlisted", candidate_consent_at: consentAt })));
     const exportedRows = (csv: string) => csv.split("\n").length - 1;
 
     // Exactly at the limit: every shortlisted candidate is in the file.
@@ -191,10 +194,10 @@ describe("actions d’administration du recrutement", () => {
     await expect(admin().admin.clientBriefs.candidates({ briefId })).resolves.toMatchObject({ shortlistedCount: 200 });
 
     // One more: the export is refused with the limit rather than cut to 200.
-    memory.seed(clientBriefCandidates, [{ brief_id: briefId, application_id: candidates[200]!.id, association_status: "shortlisted" }]);
-    await expect(admin().admin.clientBriefs.candidates({ briefId })).resolves.toMatchObject({ shortlistedCount: 201 });
+    memory.seed(clientBriefCandidates, [{ brief_id: briefId, application_id: candidates[200]!.id, association_status: "shortlisted", candidate_consent_at: consentAt }]);
+    await expect(admin().admin.clientBriefs.candidates({ briefId })).resolves.toMatchObject({ shortlistedCount: 201, consentedCount: 201 });
     const auditRowsBefore = memory.rows(recruitmentAuditLogs).length;
-    await expect(admin().admin.recruitment.exportCsv({ type: "shortlist", briefId })).rejects.toThrow("La shortlist compte 201 candidats ; 200 au maximum par export. Retirez des candidats de la shortlist avant de l’exporter.");
+    await expect(admin().admin.recruitment.exportCsv({ type: "shortlist", briefId })).rejects.toThrow("La shortlist compte 201 candidats avec accord ; 200 au maximum par export. Retirez des candidats de la shortlist avant de l’exporter.");
     expect(memory.rows(recruitmentAuditLogs)).toHaveLength(auditRowsBefore);
   });
 
