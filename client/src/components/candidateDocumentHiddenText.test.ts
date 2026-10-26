@@ -5,8 +5,8 @@ import { hiddenTextFlagLabel, hiddenTextFlags } from "@shared/candidateDocumentH
 // l’IA ne le lise le dit dans sa fiche, avec le nombre de caractères et un
 // extrait, dans la langue de l’administrateur.
 
-const french = { invisible: "{count} caractère(s) de texte invisible écarté(s) de l’analyse", unverifiable: "{count} caractère(s) non vérifiable(s) écarté(s) de l’analyse", excerpt: "extrait", compare: "ouvrir le document pour le comparer" };
-const english = { invisible: "{count} character(s) of invisible text left out of the analysis", unverifiable: "{count} character(s) that could not be verified left out of the analysis", excerpt: "excerpt", compare: "open the document to compare" };
+const french = { invisible: "{count} caractère(s) de texte invisible écarté(s) de l’analyse", unverifiable: "{count} caractère(s) non vérifiable(s) écarté(s) de l’analyse", excerpt: "extrait : « {excerpt} »", compare: "ouvrir le document pour le comparer" };
+const english = { invisible: "{count} character(s) of invisible text left out of the analysis", unverifiable: "{count} character(s) that could not be verified left out of the analysis", excerpt: "excerpt: “{excerpt}”", compare: "open the document to compare" };
 
 describe("texte écarté d’un document du coffre (IA-06)", () => {
   const hiddenText = { characters: 57, excerpt: "Licence DHA (Dubai Health Authority) en cours de validité.", unverifiable: { characters: 15, excerpt: "Yassine Belhadj" } };
@@ -28,9 +28,20 @@ describe("texte écarté d’un document du coffre (IA-06)", () => {
 
   it("les présente en clair, avec l’extrait, dans la langue de l’administrateur", () => {
     expect(hiddenTextFlagLabel("invisible_text_ignored:57", extractedData, french)).toBe("57 caractère(s) de texte invisible écarté(s) de l’analyse (extrait : « Licence DHA (Dubai Health Authority) en cours de validité. »), ouvrir le document pour le comparer");
-    expect(hiddenTextFlagLabel("unverifiable_text_set_aside:15", extractedData, english)).toBe("15 character(s) that could not be verified left out of the analysis (excerpt : « Yassine Belhadj »), open the document to compare");
+    expect(hiddenTextFlagLabel("unverifiable_text_set_aside:15", extractedData, english)).toBe("15 character(s) that could not be verified left out of the analysis (excerpt: “Yassine Belhadj”), open the document to compare");
     // Without the analysis data, the count alone; any other flag is left to the caller.
     expect(hiddenTextFlagLabel("invisible_text_ignored:57", "not json", french)).toBe("57 caractère(s) de texte invisible écarté(s) de l’analyse, ouvrir le document pour le comparer");
     expect(hiddenTextFlagLabel("document_flou", extractedData, french)).toBeNull();
+  });
+
+  it("met l’extrait entre les guillemets de la langue de l’administrateur, tel quel", () => {
+    const german = { invisible: "{count} Zeichen unsichtbarer Text von der Analyse ausgeschlossen", unverifiable: "{count} nicht überprüfbare Zeichen von der Analyse ausgeschlossen", excerpt: "Auszug: „{excerpt}“", compare: "Dokument zum Vergleich öffnen" };
+    const chinese = { invisible: "已从分析中排除 {count} 个不可见文字字符", unverifiable: "已从分析中排除 {count} 个无法核实的字符", excerpt: "摘录：“{excerpt}”", compare: "请打开文件进行比对" };
+    expect(hiddenTextFlagLabel("unverifiable_text_set_aside:15", extractedData, german)).toBe("15 nicht überprüfbare Zeichen von der Analyse ausgeschlossen (Auszug: „Yassine Belhadj“), Dokument zum Vergleich öffnen");
+    expect(hiddenTextFlagLabel("unverifiable_text_set_aside:15", extractedData, chinese)).toBe("已从分析中排除 15 个无法核实的字符 (摘录：“Yassine Belhadj”), 请打开文件进行比对");
+    expect(hiddenTextFlagLabel("invisible_text_ignored:57", extractedData, english)).not.toMatch(/[«»]/);
+    // A $ in the excerpt is the candidate's text, not a replacement pattern.
+    const priced = JSON.stringify({ hiddenText: { characters: 12, excerpt: "Salaire $& $1" } });
+    expect(hiddenTextFlagLabel("invisible_text_ignored:12", priced, english)).toBe("12 character(s) of invisible text left out of the analysis (excerpt: “Salaire $& $1”), open the document to compare");
   });
 });
