@@ -115,7 +115,9 @@ export async function processFulfillmentBestEffort(
   try {
     const outcome = await Promise.race([work, timeout]);
     if (outcome.timedOut) {
-      console.warn("[AppointmentFulfillment] Immediate processing still running after timeout; scheduled job will recover it if needed");
+      // No job starts past the budget: one already started may still finish its
+      // send; the others stay due, untried, for the next processing.
+      console.warn("[AppointmentFulfillment] Immediate processing budget spent; emails not sent yet stay queued for the next processing (webhook, payment status page, scheduled run or « Renvoyer »)");
     }
     return outcome;
   } finally {

@@ -854,12 +854,14 @@ export async function listAppointmentDeliveriesToHandle(limit = 20, now = new Da
     });
   }
   const page = <T>(items: T[]) => ({ total: items.length, items: items.slice(0, limit) });
-  const withJobTypes = (group: Map<number, FulfillmentJobType[]>) => page(Array.from(group.entries()).map(([appointmentId, jobTypes]) => ({ ...byId.get(appointmentId)!.appointment, jobTypes })));
+  // Appointments oldest first; each one's emails in processing order (notification, confirmation, invoice…).
+  const inJobOrder = (jobTypes: FulfillmentJobType[]) => [...jobTypes].sort((a, b) => JOB_ORDER.indexOf(a) - JOB_ORDER.indexOf(b));
+  const withJobTypes = (group: Map<number, FulfillmentJobType[]>) => page(Array.from(group.entries()).map(([appointmentId, jobTypes]) => ({ ...byId.get(appointmentId)!.appointment, jobTypes: inJobOrder(jobTypes) })));
   return {
     failed: withJobTypes(failed),
     refused: withJobTypes(refused),
-    retrying: page(Array.from(retrying.entries()).map(([appointmentId, delivery]) => ({ ...byId.get(appointmentId)!.appointment, ...delivery }))),
-    waiting: page(Array.from(waiting.entries()).map(([appointmentId, delivery]) => ({ ...byId.get(appointmentId)!.appointment, ...delivery }))),
+    retrying: page(Array.from(retrying.entries()).map(([appointmentId, delivery]) => ({ ...byId.get(appointmentId)!.appointment, ...delivery, jobTypes: inJobOrder(delivery.jobTypes) }))),
+    waiting: page(Array.from(waiting.entries()).map(([appointmentId, delivery]) => ({ ...byId.get(appointmentId)!.appointment, ...delivery, jobTypes: inJobOrder(delivery.jobTypes) }))),
   };
 }
 

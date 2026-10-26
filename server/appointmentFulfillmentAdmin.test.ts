@@ -511,7 +511,17 @@ describe("EXPL-02 — encart « À traiter »", () => {
     expect([attention.failedDeliveries.total, attention.refusedDeliveries.total, attention.retryingDeliveries.total]).toEqual([0, 0, 0]);
     expect((await admin().appointments.list({ search: "APTTODO00013" })).items[0]?.deliveries.map(delivery => [delivery.state, delivery.attempts])).toEqual([["sent", 1], ["pending", 0], ["pending", 0]]);
 
+    // Updated in another order than they are sent: still listed as the doctor reads them.
+    const scrambled = seedAppointment("APTTODO00016");
+    const updatedAt = (minutes: number) => ({ scheduled_for: dueSince, updated_at: new Date(Date.now() - minutes * 60_000) });
+    seedJob(scrambled.id, "invoice", updatedAt(9));
+    seedJob(scrambled.id, "owner", updatedAt(8));
+    seedJob(scrambled.id, "confirmation", updatedAt(7));
+    expect((await admin().attention()).waitingDeliveries.items.find(item => item.trackingId === "APTTODO00016")?.jobTypes).toEqual(["owner", "confirmation", "invoice"]);
+
     // « Renvoyer » sends them right away; the panel empties.
+    await admin().appointments.retryFulfillment({ trackingId: "APTTODO00016" });
+    state.sent = [];
     await admin().appointments.retryFulfillment({ trackingId: "APTTODO00013" });
     expect(state.sent.map(email => email.kind)).toEqual(["confirmation", "invoice"]);
     await expect(admin().attention()).resolves.toMatchObject({ waitingDeliveries: { total: 0, items: [] } });
