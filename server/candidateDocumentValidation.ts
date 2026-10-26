@@ -34,14 +34,28 @@ export type CandidateDocumentValidation = {
   warnings: string[];
 };
 
+/** Longest stored file name, in characters. */
+const FILE_NAME_MAX_LENGTH = 180;
+
+/**
+ * A file name cut to `maxLength` characters from the end of its base name: its
+ * extension stays, so a long name is still read as the type it declares
+ * instead of being refused as another one (vault, /api/recruitment/apply).
+ */
+export function shortenFileName(name: string, maxLength = FILE_NAME_MAX_LENGTH): string {
+  if (name.length <= maxLength) return name;
+  const dot = name.lastIndexOf(".");
+  const extension = dot > 0 && name.length - dot <= 10 ? name.slice(dot) : "";
+  return `${name.slice(0, maxLength - extension.length).replace(/[. ]+$/, "")}${extension}`;
+}
+
 export function safeCandidateDocumentName(value: string): string {
-  const safe = value
+  const safe = shortenFileName(value
     .normalize("NFKC")
     .replace(/[\\/\0]/g, "_")
     .replace(/[^a-zA-Z0-9._ -]/g, "_")
     .replace(/\.{2,}/g, ".")
-    .trim()
-    .slice(0, 180);
+    .trim());
   return safe || "document";
 }
 

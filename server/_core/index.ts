@@ -24,7 +24,7 @@ import { and, desc, eq, isNotNull, isNull, sql } from "drizzle-orm";
 import { RECRUITMENT_CV_FORMAT_MESSAGE, recruitmentCvValidationMessage, validateCvFile } from "../recruitmentFileValidation";
 import { getDb } from "../db";
 import { candidateDocumentAuditLogs, candidateDocumentProcessingJobs, candidateDocuments, cvApplications, cvProcessingJobs, recruitmentCampaignRecipients, recruitmentEmailEvents } from "../../drizzle/schema";
-import { CANDIDATE_DOCUMENT_MAX_BYTES, CANDIDATE_DOCUMENT_TOO_LARGE_MESSAGE, candidateDocumentMimeTypes, candidateDocumentValidationMessage, safeCandidateDocumentName, validateCandidateDocument } from "../candidateDocumentValidation";
+import { CANDIDATE_DOCUMENT_MAX_BYTES, CANDIDATE_DOCUMENT_TOO_LARGE_MESSAGE, candidateDocumentMimeTypes, candidateDocumentValidationMessage, safeCandidateDocumentName, shortenFileName, validateCandidateDocument } from "../candidateDocumentValidation";
 import { createCandidateInvitationToken } from "../candidateAuth";
 import { SITE_LANGUAGES } from "../emailLanguage";
 import { CANDIDATE_UPLOADABLE_DOCUMENT_CATEGORIES, candidateDocumentAllowsAiAnalysis } from "../../shared/candidateDocumentCategories";
@@ -151,7 +151,7 @@ function parseListField(value: unknown): string[] {
 }
 
 function safeFileName(value: string): string {
-  return value.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 180) || "cv";
+  return shortenFileName(value.replace(/[^a-zA-Z0-9._-]/g, "_")) || "cv";
 }
 
 export async function createApp() {

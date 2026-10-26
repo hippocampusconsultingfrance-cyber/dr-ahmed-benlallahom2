@@ -180,6 +180,21 @@ describe("LEGAL-12 — catégories sensibles et analyse IA des documents candida
   });
 });
 
+describe("nom de fichier très long déposé dans le coffre", () => {
+  it("raccourcit le nom en gardant son extension : le document est accepté, pas refusé comme d’un autre type", async () => {
+    const name = `${"Attestation_de_travail_CHU_service_anesthesie_".repeat(5)}signee.pdf`;
+    expect(name.length).toBeGreaterThan(180);
+
+    const result = await uploadDocument(baseUrl, sessionToken, { category: "diploma", buffer: validPdfBuffer(), name });
+
+    expect(result.status, JSON.stringify(result.body)).toBe(201);
+    const stored = String(db().rows(candidateDocuments)[0]!.originalName);
+    expect(stored).toHaveLength(180);
+    expect(stored.endsWith(".pdf")).toBe(true);
+    expect(name.startsWith(stored.slice(0, -".pdf".length))).toBe(true);
+  });
+});
+
 describe("REC-02 — PDF réels et PDF piégés déposés dans le coffre", () => {
   it("accepte un PDF LibreOffice et un PDF à flux d’objets", async () => {
     for (const buffer of [libreOfficeCvPdf(), packPdfIntoObjectStream(libreOfficeCvPdf())]) {

@@ -89,6 +89,14 @@ describe("POST /api/recruitment/apply — réception du CV (multer) et validatio
     expect(state.databaseRequests).toBe(0);
   });
 
+  it("conduit jusqu'à l'enregistrement un CV au nom de plus de 180 caractères, sans le refuser comme d'un autre type", async () => {
+    const name = `${"Curriculum_Vitae_Amina_Haddad_anesthesie_reanimation_".repeat(4)}2026.pdf`;
+    expect(name.length).toBeGreaterThan(180);
+    const result = await apply({ cvs: [{ buffer: validPdfBuffer(), name }] });
+    expect(result).toEqual({ status: 503, body: { error: "Le service de candidature est temporairement indisponible.", code: "recruitment_service_unavailable" } });
+    expect(state.databaseRequests).toBe(1);
+  });
+
   it("exige le CV", async () => {
     const result = await apply({ cvs: [] });
     expect(result).toEqual({ status: 400, body: { error: "Le CV est requis.", code: "recruitment_cv_required" } });
