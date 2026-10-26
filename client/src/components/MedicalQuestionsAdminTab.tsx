@@ -86,7 +86,7 @@ export default function MedicalQuestionsAdminTab() {
       void utils.medicalQuestions.admin.list.invalidate();
       // DATA-02: an attempt stopped before its recording, too old to be tried again safely.
       if (result.unconfirmedSentAt) {
-        toast.warning(`Un envoi du ${new Date(result.unconfirmedSentAt).toLocaleString("fr-FR", { timeZone: "Europe/Paris" })} s’est interrompu avant d’être enregistré : la personne a peut-être déjà reçu la réponse. Il est enregistré à cette date, sans nouvel email ; « Renvoyer la réponse » permet un nouvel envoi volontaire.`, { duration: 12_000 });
+        toast.warning(`Un envoi du ${new Date(result.unconfirmedSentAt).toLocaleString("fr-FR", { timeZone: "Europe/Paris" })} s’est interrompu avant d’être enregistré : la personne a peut-être déjà reçu la réponse. Il est enregistré à cette date avec le texte de cet envoi, sans nouvel email : une modification faite depuis n’a été ni envoyée ni conservée. « Renvoyer la réponse » permet un nouvel envoi volontaire.`, { duration: 12_000 });
         return;
       }
       toast.success(result.resent ? "Réponse renvoyée par email." : result.published ? "Réponse envoyée et version anonymisée publiée." : "Réponse envoyée par email.");

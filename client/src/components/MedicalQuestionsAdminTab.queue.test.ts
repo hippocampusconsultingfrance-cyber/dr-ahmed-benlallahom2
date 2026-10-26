@@ -156,7 +156,7 @@ describe("ADM-01 — file des questions santé", () => {
     render();
     state.sendOptions.onSuccess!({ success: true, published: false, resent: false, unconfirmedSentAt: new Date(Date.UTC(2026, 9, 20, 8, 30)) } as never);
     expect(state.invalidated).toEqual(["get", "list"]);
-    expect(state.toasts.at(-1)).toEqual(["warning", "Un envoi du 20/10/2026 10:30:00 s’est interrompu avant d’être enregistré : la personne a peut-être déjà reçu la réponse. Il est enregistré à cette date, sans nouvel email ; « Renvoyer la réponse » permet un nouvel envoi volontaire."]);
+    expect(state.toasts.at(-1)).toEqual(["warning", "Un envoi du 20/10/2026 10:30:00 s’est interrompu avant d’être enregistré : la personne a peut-être déjà reçu la réponse. Il est enregistré à cette date avec le texte de cet envoi, sans nouvel email : une modification faite depuis n’a été ni envoyée ni conservée. « Renvoyer la réponse » permet un nouvel envoi volontaire."]);
     state.sendOptions.onSuccess!({ success: true, published: false, resent: false, unconfirmedSentAt: null } as never);
     expect(state.toasts.at(-1)).toEqual(["success", "Réponse envoyée par email."]);
   });

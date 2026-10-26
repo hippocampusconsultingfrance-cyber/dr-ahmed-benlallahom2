@@ -285,14 +285,27 @@ export const medicalQuestionsRouter = router({
       try {
         await sendMedicalQuestionResponseEmail({ email: question.email, firstName: question.firstName, trackingId: question.trackingId, response: input.adminResponse }, { idempotencyKey });
       } catch {
-        await auditQuestion({ questionId: input.id, actorOpenId: ctx.user.openId, action: "response_send_failed", metadata: { attempt } }).catch(() => undefined);
+        // Nothing left: the question is put back as it was read, so the answer
+        // on record stays the one the person received (after a resend, or an
+        // earlier attempt still unconfirmed), unless another attempt wrote since.
+        await db.batch([
+          db.update(medicalQuestions).set(input.resend
+            ? { adminResponse: question.adminResponse, respondedByOpenId: question.respondedByOpenId }
+            : { adminResponse: question.adminResponse, publicQuestion: question.publicQuestion, publicResponse: question.publicResponse, status: question.status, respondedByOpenId: question.respondedByOpenId })
+            .where(and(
+              eq(medicalQuestions.id, input.id),
+              eq(medicalQuestions.adminResponse, input.adminResponse),
+              question.responseSentAt ? eq(medicalQuestions.responseSentAt, question.responseSentAt) : isNull(medicalQuestions.responseSentAt),
+            )),
+          db.insert(medicalQuestionAuditLogs).values({ medicalQuestionId: input.id, actorOpenId: ctx.user.openId, action: "response_send_failed", metadata: JSON.stringify({ attempt }) }),
+        ]).catch(() => undefined);
         throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "L’email n’a pas pu être envoyé. La réponse n’a pas été publiée." });
       }
       try {
         await recordSending(new Date(), input.adminResponse, input.resend ? "response_resent" : input.publish ? "response_sent_and_published" : "response_sent", { published, attempt });
       } catch (error) {
         console.error("[MedicalQuestions] Response email sent but its recording failed", { questionId: input.id, error: error instanceof Error ? error.name : "UnknownError" });
-        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "L’email est parti, mais son enregistrement a échoué. Relancez le même envoi : il sera enregistré sans second email." });
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "L’email est parti, mais son enregistrement a échoué. Relancez le même envoi, sans modifier le texte : il sera enregistré sans second email." });
       }
       return { success: true, published, resent: input.resend, unconfirmedSentAt: null };
     }),

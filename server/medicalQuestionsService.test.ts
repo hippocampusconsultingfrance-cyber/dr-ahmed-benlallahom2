@@ -149,12 +149,49 @@ describe("service gratuit de questions santé", () => {
     const id = memory.rows(medicalQuestions)[0]!.id as number;
     state.responseFails = true;
     await expect(admin.sendValidatedResponse({ id, adminResponse: "Information générale relue par le médecin, sans urgence.", publish: false })).rejects.toThrow("L’email n’a pas pu être envoyé");
+    // Nothing left: the question is as it was before the attempt.
+    expect(memory.rows(medicalQuestions)[0]).toMatchObject({ status: "submitted", admin_response: null, response_sent_at: null });
     state.responseFails = false;
     vi.setSystemTime(new Date("2026-10-22T08:00:00Z"));
     await expect(admin.sendValidatedResponse({ id, adminResponse: "Information générale relue par le médecin, sans urgence.", publish: false })).resolves.toMatchObject({ unconfirmedSentAt: null });
     expect(state.responses).toHaveLength(1);
     expect(memory.rows(medicalQuestions)[0]).toMatchObject({ status: "answered", response_sent_at: "2026-10-22 08:00:00.000" });
     expect(memory.rows(medicalQuestionAuditLogs).map(row => row.action)).toEqual(["submitted", "acknowledgement_sent", "response_send_started", "response_send_failed", "response_send_started", "response_sent"]);
+  });
+
+  it("un envoi refusé avec un texte modifié laisse enregistrée la réponse que la personne a reçue (DATA-02)", async () => {
+    vi.useFakeTimers({ now: new Date("2026-10-20T08:00:00Z"), toFake: ["Date"] });
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const admin = caller(true).medicalQuestions.admin;
+    const answer = "Information générale : suivez les consignes de jeûne données par l’équipe d’anesthésie.";
+    const edited = `${answer} Texte modifié, jamais parti.`;
+    await caller().medicalQuestions.submit({ ...QUESTION, publicationConsent: false });
+    await caller().medicalQuestions.submit({ ...QUESTION, email: "paul@test.local", firstName: "Paul", publicationConsent: false });
+    const [resent, interrupted] = memory.rows(medicalQuestions);
+
+    // A deliberate resend with an edited text, refused by the email service.
+    await admin.sendValidatedResponse({ id: resent!.id as number, adminResponse: answer, publish: false });
+    vi.setSystemTime(new Date("2026-10-21T08:00:00Z"));
+    state.responseFails = true;
+    await expect(admin.sendValidatedResponse({ id: resent!.id as number, adminResponse: edited, publish: false, resend: true })).rejects.toThrow("L’email n’a pas pu être envoyé");
+    expect(resent).toMatchObject({ status: "answered", admin_response: answer, response_sent_at: "2026-10-20 08:00:00.000" });
+
+    // An email left without being recorded; the retry with an edited text is
+    // refused (same key, other content), and Resend's memory of the key passes.
+    state.responseFails = false;
+    memory.failNext(/^update "medical_questions" set .*"response_sent_at" = /);
+    await expect(admin.sendValidatedResponse({ id: interrupted!.id as number, adminResponse: answer, publish: false })).rejects.toThrow("enregistrement a échoué");
+    vi.setSystemTime(new Date("2026-10-21T11:00:00Z"));
+    state.responseFails = true;
+    await expect(admin.sendValidatedResponse({ id: interrupted!.id as number, adminResponse: edited, publish: false })).rejects.toThrow("L’email n’a pas pu être envoyé");
+    expect(interrupted).toMatchObject({ status: "drafting", admin_response: answer, response_sent_at: null });
+    state.responseFails = false;
+    vi.setSystemTime(new Date("2026-10-23T08:00:00Z"));
+    await expect(admin.sendValidatedResponse({ id: interrupted!.id as number, adminResponse: edited, publish: false })).resolves.toMatchObject({ unconfirmedSentAt: new Date("2026-10-21T08:00:00Z") });
+    // Recorded with the text that left, on the day it left; only two emails ever went out.
+    expect(interrupted).toMatchObject({ status: "answered", admin_response: answer, response_sent_at: "2026-10-21 08:00:00.000" });
+    expect(state.responses.map(response => response.input.response)).toEqual([answer, answer]);
+    error.mockRestore();
   });
 
   it("met à jour la publication d’une question consentie sans renvoyer d’email", async () => {
