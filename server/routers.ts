@@ -1277,8 +1277,9 @@ export const appRouter = router({
             requeued: queue.requeued,
             processed: processing.processed,
             copied: processing.results.filter(result => result.completed === true).length,
-            // A skipped copy (CV awaiting its security check, claim lost) is not a failure.
-            failedAgain: processing.results.filter(result => result.completed === false).length,
+            // A skipped copy (CV awaiting its security check, claim lost) is not a
+            // failure, nor one waiting for the Drive reconnection (reconnectRequired).
+            failedAgain: processing.results.filter(result => result.completed === false && result.reconnectRequired !== true).length,
             reconnectRequired: processing.reconnectRequired,
             notConnected: processing.waitingForAuthorization && !processing.reconnectRequired,
           };

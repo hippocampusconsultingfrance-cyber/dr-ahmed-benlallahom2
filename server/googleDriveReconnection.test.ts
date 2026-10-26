@@ -1,3 +1,4 @@
+import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cvApplications, cvGoogleDriveExportJobs, googleDriveConnections, recruitmentAuditLogs } from "../drizzle/schema";
 import { createMemoryPg, type MemoryPg } from "./testing/memoryPgProxy";
@@ -103,8 +104,10 @@ describe("Google Drive déconnecté (REC-09)", () => {
     state.tokenRevoked = true;
 
     // The audit's reproduction: five cron passes while the access is revoked.
+    // The first refusal stops the batch: the next copies stay queued, unclaimed.
     const first = await processDueCvGoogleDriveExports(3);
-    expect(first.results).toEqual(Array.from({ length: 3 }, () => expect.objectContaining({ completed: false, reconnectRequired: true, error: "google_drive_token_invalid_grant" })));
+    expect(first).toMatchObject({ processed: 1, waitingForAuthorization: true, reconnectRequired: true });
+    expect(first.results).toEqual([expect.objectContaining({ completed: false, reconnectRequired: true, error: "google_drive_token_invalid_grant" })]);
     for (let pass = 0; pass < 4; pass += 1) {
       expect(await processDueCvGoogleDriveExports(3)).toMatchObject({ processed: 0, waitingForAuthorization: true, reconnectRequired: true });
     }
@@ -113,11 +116,12 @@ describe("Google Drive déconnecté (REC-09)", () => {
       expect(copyOf(id).status).not.toBe("failed");
       expect(copyOf(id).attempts).toBe(0);
     }
-    expect(copies.slice(0, 3).map(id => copyOf(id))).toEqual(Array.from({ length: 3 }, () => expect.objectContaining({ status: "retry", last_error: "google_drive_token_invalid_grant" })));
+    expect(copyOf(copies[0]!)).toMatchObject({ status: "retry", last_error: "google_drive_token_invalid_grant" });
+    expect(copies.slice(1).map(id => copyOf(id).status)).toEqual(Array.from({ length: 5 }, () => "queued"));
     expect(connection().last_error).toBe("google_drive_token_invalid_grant");
     expect(await googleDriveExportStatus()).toMatchObject({ connected: true, lastError: "google_drive_token_invalid_grant", failedExports: 0 });
-    // Three refusals, then nothing more is sent to Google until the reconnection.
-    expect(state.tokenRequests).toBe(3);
+    // One refusal, then nothing more is sent to Google until the reconnection.
+    expect(state.tokenRequests).toBe(1);
     expect(state.notifications).toHaveLength(1);
     expect(state.notifications[0]!.title).toContain("Google Drive à reconnecter");
     expect(state.notifications[0]!.content).toContain("Reconnexion Google Drive requise");
@@ -165,6 +169,43 @@ describe("Google Drive déconnecté (REC-09)", () => {
     expect(memory.rows(recruitmentAuditLogs).filter(row => String(row.metadata).includes('"batch":true'))).toHaveLength(4);
 
     expect(await admin().admin.recruitment.driveExport.retryAllFailed()).toMatchObject({ requeued: 0, processed: 0 });
+  });
+
+  it("« Relancer toutes les copies échouées » qui découvre le refus de Google : une seule requête, « connexion à renouveler », aucun échec compté", async () => {
+    seedConnection();
+    const failed = Array.from({ length: 4 }, (_, index) => seedCopy(index + 1, { status: "failed", attempts: 5, last_error: "google_drive_upload_500_Backend Error" }));
+    state.tokenRevoked = true;
+
+    const result = await admin().admin.recruitment.driveExport.retryAllFailed();
+    expect(result).toEqual({ success: true, requeued: 4, processed: 1, copied: 0, failedAgain: 0, reconnectRequired: true, notConnected: false });
+    expect(state.tokenRequests).toBe(1);
+    // All four wait for the reconnection, none spent an attempt.
+    expect(failed.map(id => copyOf(id))).toEqual(failed.map(() => expect.objectContaining({ attempts: 0, status: expect.stringMatching(/^(queued|retry)$/) })));
+    expect(connection().last_error).toBe("google_drive_token_invalid_grant");
+    expect(state.notifications).toHaveLength(1);
+  });
+
+  it("une reconnexion enregistrée pendant une copie : le refus de l’ancien jeton ne marque pas la nouvelle connexion", async () => {
+    seedConnection();
+    const id = seedCopy(1);
+    state.tokenRevoked = true;
+    const fetchGoogle = vi.mocked(globalThis.fetch).getMockImplementation()!;
+    vi.mocked(globalThis.fetch).mockImplementation(async (input, init) => {
+      // The owner reconnects Drive while Google is refusing the old token.
+      if (new URL(String(input)).hostname === "oauth2.googleapis.com") await saveGoogleDriveConnection({ authorizedByOpenId: "user_owner", refreshToken: "new-refresh-token" });
+      return fetchGoogle(input, init);
+    });
+
+    expect(await processDueCvGoogleDriveExports(3)).toMatchObject({ processed: 1, reconnectRequired: true });
+    expect(connection().last_error).toBeNull();
+    expect(state.notifications).toEqual([]);
+    // The copy waits a few minutes without spending its attempt, then the cron uses the new token.
+    expect(copyOf(id)).toMatchObject({ status: "retry", attempts: 0 });
+    vi.mocked(globalThis.fetch).mockImplementation(fetchGoogle);
+    state.tokenRevoked = false;
+    await memory.db.update(cvGoogleDriveExportJobs).set({ scheduledFor: new Date(Date.now() - 1_000) }).where(eq(cvGoogleDriveExportJobs.applicationId, id));
+    await processDueCvGoogleDriveExports(3);
+    expect(copyOf(id)).toMatchObject({ status: "completed", drive_file_id: expect.stringMatching(/^file-/) });
   });
 
   it("connexion à renouveler : la relance groupée ou unitaire remet en file sans appeler Google et le dit", async () => {

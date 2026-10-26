@@ -283,11 +283,17 @@ async function notifyOwnerOfGoogleDriveReconnection() {
  * Notes a Drive failure on the connection. A revoked token marks it « à
  * renouveler » until the next connection or successful copy: the first
  * refusal alone alerts the owner, and no other error overwrites that mark.
+ * Only on the authorization the failing call used: a reconnection saved
+ * meanwhile (new refresh token) is not marked by the old token's refusal.
  */
-async function recordGoogleDriveConnectionError(db: NonNullable<Awaited<ReturnType<typeof getDb>>>, connectionId: number, message: string) {
+async function recordGoogleDriveConnectionError(
+  db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
+  connection: { id: number; refreshTokenCiphertext: string },
+  message: string,
+) {
   const notMarkedYet = or(isNull(googleDriveConnections.lastError), ne(googleDriveConnections.lastError, TOKEN_REVOKED_ERROR));
   const updated = await db.update(googleDriveConnections).set({ lastError: message, updatedAt: new Date() })
-    .where(and(eq(googleDriveConnections.id, connectionId), notMarkedYet));
+    .where(and(eq(googleDriveConnections.id, connection.id), eq(googleDriveConnections.refreshTokenCiphertext, connection.refreshTokenCiphertext), notMarkedYet));
   if (isGoogleDriveReconnectionError(message) && googleDriveMutationRowCount(updated) === 1) await notifyOwnerOfGoogleDriveReconnection();
 }
 
@@ -331,7 +337,7 @@ export async function deleteCvCopiesFromGoogleDrive(input: { trackingId: string;
     return { status: deleted > 0 ? "deleted" : "none", deleted, error: null };
   } catch (error) {
     const message = error instanceof Error ? error.message.slice(0, 500) : "google_drive_delete_unknown";
-    await recordGoogleDriveConnectionError(db, connection.id, message).catch(() => undefined);
+    await recordGoogleDriveConnectionError(db, connection, message).catch(() => undefined);
     return { status: "failed", deleted, error: message };
   }
 }
@@ -679,7 +685,7 @@ async function processGoogleDriveExportJob(jobId: number) {
         updatedAt: now,
       }).where(currentGoogleDriveClaim(job));
       if (googleDriveMutationRowCount(waiting) !== 1) return { skipped: true, reason: "claim_lost" as const };
-      await recordGoogleDriveConnectionError(db, connection.id, message);
+      await recordGoogleDriveConnectionError(db, connection, message);
       return { completed: false, applicationId: job.applicationId, retry: true, reconnectRequired: true, error: message };
     }
     const finalFailure = job.attempts >= job.maxAttempts;
@@ -692,7 +698,7 @@ async function processGoogleDriveExportJob(jobId: number) {
       updatedAt: now,
     }).where(currentGoogleDriveClaim(job));
     if (googleDriveMutationRowCount(updated) !== 1) return { skipped: true, reason: "claim_lost" as const };
-    await recordGoogleDriveConnectionError(db, connection.id, message);
+    await recordGoogleDriveConnectionError(db, connection, message);
     return { completed: false, applicationId: job.applicationId, retry: !finalFailure, error: message };
   }
 }
@@ -733,7 +739,11 @@ export async function processDueCvGoogleDriveExports(limit = BATCH_SIZE, applica
       lt(cvGoogleDriveExportJobs.attempts, cvGoogleDriveExportJobs.maxAttempts),
     ));
     if (googleDriveMutationRowCount(claimed) !== 1) continue;
-    results.push(await processGoogleDriveExportJob(candidate.id));
+    const result = await processGoogleDriveExportJob(candidate.id);
+    results.push(result);
+    // Google has just revoked the authorization: the next copies would be
+    // refused too, so they stay queued, unclaimed, until the reconnection (REC-09).
+    if ("reconnectRequired" in result && result.reconnectRequired) return { processed: results.length, waitingForAuthorization: true, reconnectRequired: true, results };
   }
   return { processed: results.length, waitingForAuthorization: false, reconnectRequired: false, results };
 }
