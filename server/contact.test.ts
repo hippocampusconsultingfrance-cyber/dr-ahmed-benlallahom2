@@ -318,3 +318,23 @@ describe("contrôle anti-robot des formulaires contact et RGPD", () => {
     expect(notifyOwner).not.toHaveBeenCalled();
   });
 });
+
+describe("numéros de suivi des formulaires contact et RGPD", () => {
+  it("donne à chaque envoi un numéro imprévisible au format historique, sans Math.random() ni horodatage", async () => {
+    const caller = appRouter.createCaller(createPublicContext());
+    const random = vi.spyOn(Math, "random");
+    try {
+      const contacts = await Promise.all(Array.from({ length: 20 }, () => caller.contact.submit({ name: "Jean Dupont", email: "jean@example.com", message: "Bonjour.", gdprConsent: 1 })));
+      const requests = await Promise.all(Array.from({ length: 20 }, () => caller.gdpr.submit({ name: "Jane Smith", email: "jane@example.com", requestType: "access" })));
+
+      // Twenty submissions in the same millisecond: a timestamp would repeat.
+      expect(new Set(contacts.map(result => result.trackingId)).size).toBe(20);
+      expect(new Set(requests.map(result => result.trackingId)).size).toBe(20);
+      for (const { trackingId } of contacts) expect(trackingId).toMatch(/^C[0-9A-Z]{12}$/);
+      for (const { trackingId } of requests) expect(trackingId).toMatch(/^G[0-9A-Z]{12}$/);
+      expect(random).not.toHaveBeenCalled();
+    } finally {
+      random.mockRestore();
+    }
+  });
+});

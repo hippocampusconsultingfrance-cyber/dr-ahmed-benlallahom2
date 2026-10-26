@@ -381,4 +381,25 @@ describe("Google Drive déconnecté (REC-09)", () => {
     expect(await admin().admin.recruitment.driveExport.retry({ id })).toMatchObject({ outcome: "reconnect_required" });
     expect(state.notifications).toHaveLength(1);
   });
+
+  it("une copie relancée pour un dossier ne fait partir que lui, et chaque étape date la tâche", async () => {
+    seedConnection();
+    const waiting = seedCopy(1);
+    const requested = seedCopy(2, { updated_at: new Date("2026-10-01T08:00:00.000Z") });
+    let whileUploading: Record<string, unknown> | null = null;
+    const fetchGoogle = vi.mocked(globalThis.fetch).getMockImplementation()!;
+    vi.mocked(globalThis.fetch).mockImplementation(async (input, init) => {
+      if (new URL(String(input)).pathname.startsWith("/upload/drive/v3/files")) whileUploading = { ...copyOf(requested) };
+      return fetchGoogle(input, init);
+    });
+
+    expect(await processDueCvGoogleDriveExports(3, [requested])).toMatchObject({ processed: 1 });
+
+    expect(state.uploads).toEqual(["CVDRIVE00000002"]);
+    expect(copyOf(waiting)).toMatchObject({ status: "queued", attempts: 0 });
+    // Claimed: running, dated from the start of this run.
+    expect(whileUploading).toMatchObject({ status: "running", attempts: 1 });
+    expect(whileUploading!.updated_at).toBe(whileUploading!.started_at);
+    expect(copyOf(requested)).toMatchObject({ status: "completed", updated_at: copyOf(requested).finished_at });
+  });
 });
