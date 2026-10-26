@@ -256,10 +256,29 @@ describe("missions employeurs : classement, certifications et accord du candidat
     ]);
   });
 
+  it("refuse une date d’accord antérieure à la candidature ou à la création de la mission, le jour même accepté (RGPD-03)", async () => {
+    const candidate = seedCandidate({ createdAt: "2026-10-15 08:00:00.000" });
+    const latecomer = seedCandidate({ createdAt: "2026-10-21 09:00:00.000" });
+    // Created at 00:30 on 19 October in Paris.
+    const brief = seedBrief({ created_at: "2026-10-18 22:30:00.000" });
+    const briefId = brief.id as number;
+    for (const applicant of [candidate, latecomer]) await admin().admin.clientBriefs.associateCandidate({ briefId, applicationId: applicant.id as number, status: "shortlisted" });
+    const consent = (applicationId: unknown, consentDate: string) => admin().admin.clientBriefs.setCandidateConsent({ briefId, applicationId: applicationId as number, consentDate });
+
+    await expect(consent(candidate.id, "1900-01-01")).rejects.toThrow("La date de l’accord du candidat ne peut pas précéder la création de la mission, le 19/10/2026.");
+    await expect(consent(candidate.id, "2026-10-18")).rejects.toThrow("La date de l’accord du candidat ne peut pas précéder la création de la mission, le 19/10/2026.");
+    await expect(consent(latecomer.id, "2026-10-20")).rejects.toThrow("La date de l’accord du candidat ne peut pas précéder sa candidature, reçue le 21/10/2026.");
+    // The same day is accepted.
+    await consent(candidate.id, "2026-10-19");
+    await consent(latecomer.id, "2026-10-21");
+    expect(memory.rows(clientBriefCandidates).map(row => row.candidate_consent_at)).toEqual(["2026-10-19 12:00:00.000", "2026-10-21 12:00:00.000"]);
+    expect(memory.rows(recruitmentAuditLogs).map(row => JSON.parse(String(row.metadata)).consentDate)).toEqual(["2026-10-19", "2026-10-21"]);
+  });
+
   it("note puis retire la date de l’accord du candidat pour une mission (RGPD-03)", async () => {
-    const candidate = seedCandidate();
+    const candidate = seedCandidate({ createdAt: "2026-10-01 08:00:00.000" });
     const outsider = seedCandidate();
-    const brief = seedBrief();
+    const brief = seedBrief({ created_at: "2026-10-02 08:00:00.000" });
     const briefId = brief.id as number;
     await admin().admin.clientBriefs.associateCandidate({ briefId, applicationId: candidate.id as number, status: "shortlisted" });
 
@@ -286,12 +305,15 @@ describe("missions employeurs : classement, certifications et accord du candidat
     ]);
   });
 
-  it("n’exporte que les présélectionnés ayant donné leur accord, avec l’origine de leurs certifications et langues, et dit combien sont exclus (RGPD-03, IA-02)", async () => {
-    const agreed = seedCandidate({ languages: '["Anglais"]', certifications: "BLS" });
+  it("n’exporte que les présélectionnés ayant donné leur accord, en clair, avec l’origine de leurs certifications et langues, et dit combien sont exclus (RGPD-03, IA-02)", async () => {
+    const agreed = seedCandidate({ languages: '["Anglais"]', certifications: "BLS", target_countries: '["Émirats arabes unis","Qatar"]', years_experience: 8, availability: "Immédiate", mobility: "Golfe", status: "reviewing" });
     const waiting = seedCandidate();
     const brief = seedBrief();
     const briefId = brief.id as number;
-    memory.seed(cvCandidateCertifications, [{ application_id: agreed.id, name: "Licence DHA", source: "extracted" }]);
+    memory.seed(cvCandidateCertifications, [
+      { application_id: agreed.id, name: "Licence DHA", source: "extracted", expires_at: "2099-05" },
+      { application_id: agreed.id, name: "ACLS", source: "extracted", expires_at: "2023-05" },
+    ]);
     memory.seed(cvCandidateLanguages, [{ application_id: agreed.id, language: "Arabe", source: "extracted" }]);
     memory.seed(clientBriefCandidates, [
       { brief_id: briefId, application_id: agreed.id, association_status: "shortlisted", candidate_consent_at: "2026-10-20 12:00:00.000" },
@@ -302,11 +324,14 @@ describe("missions employeurs : classement, certifications et accord du candidat
     expect(exported).toMatchObject({ count: 1, excludedWithoutConsent: 1 });
     const [header, ...rows] = exported.csv.split("\n");
     expect(header).toBe(["Prénom", "Nom", "Email", "Téléphone", "Spécialité", "Pays ciblés", "Langues (origine)", "Expérience (ans)", "Disponibilité", "Mobilité", "Certifications (origine)", "Accord du candidat", "Statut"].map(cell => `"${cell}"`).join(";"));
-    expect(rows).toHaveLength(1);
-    expect(rows[0]).toContain('"m1@test.local"');
-    expect(rows[0]).toContain('"Anglais (déclarée par le candidat) ; Arabe (extraite du CV par l’IA)"');
-    expect(rows[0]).toContain('"BLS (déclarée par le candidat) ; Licence DHA (extraite du CV par l’IA)"');
-    expect(rows[0]).toContain('"20/10/2026"');
+    // Every cell reads as written for the employer: the countries listed, each
+    // certification's expiry, the status in words, no JSON nor internal code.
+    expect(rows).toEqual([[
+      "Prénom1", "Nom", "m1@test.local", "", "Pédiatrie", "Émirats arabes unis ; Qatar",
+      "Anglais (déclarée par le candidat) ; Arabe (extraite du CV par l’IA)", "8", "Immédiate", "Golfe",
+      "BLS (déclarée par le candidat) ; Licence DHA (extraite du CV par l’IA), expire le 2099-05 ; ACLS (extraite du CV par l’IA), expirée le 2023-05",
+      "20/10/2026", "En revue",
+    ].map(cell => `"${cell}"`).join(";")]);
     expect(exported.csv).not.toContain("m2@test.local");
     expect(memory.rows(recruitmentAuditLogs).filter(row => row.action === "export").map(row => row.application_id)).toEqual([agreed.id]);
 

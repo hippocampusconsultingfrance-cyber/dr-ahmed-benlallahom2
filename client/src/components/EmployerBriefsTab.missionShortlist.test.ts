@@ -230,6 +230,20 @@ describe("écran d’une mission employeur", () => {
     expect(html).toContain(`<p class="mt-2 text-xs text-muted-foreground">${reasons}</p>`);
   });
 
+  it("ne propose pas une date d’accord antérieure à la candidature ou à la création de la mission (RGPD-03)", () => {
+    const dateInput = () => renderToStaticMarkup(render()).match(/<input[^>]*type="date"[^>]*>/)?.[0];
+    // The mission was created at 00:30 on 19 October in Paris, after the application.
+    const shortlistedOn = (createdAt: string) => missionData({
+      brief: { ...brief, createdAt: new Date("2026-10-18T22:30:00.000Z") },
+      candidates: [{ ...candidate(11, "Amal", "Haddad", { status: "shortlisted", candidateConsentAt: null }), createdAt: new Date(createdAt) }],
+    });
+    state.data = shortlistedOn("2026-10-15T08:00:00.000Z");
+    expect(dateInput()).toContain('min="2026-10-19"');
+    state.data = shortlistedOn("2026-10-21T09:00:00.000Z");
+    expect(dateInput()).toContain('min="2026-10-21"');
+    expect(dateInput()).toContain('max="2026-10-26"');
+  });
+
   it("n’offre l’export qu’avec au moins un accord, et dit combien de candidats en sont exclus (RGPD-03)", async () => {
     const exportButton = (html: string) => [...html.matchAll(/<button([^>]*)>(.*?)<\/button>/gs)].find(match => match[2]!.includes("Exporter la shortlist"))!;
     let html = renderToStaticMarkup(render());

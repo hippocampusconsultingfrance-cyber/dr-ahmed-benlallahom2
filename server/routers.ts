@@ -24,7 +24,7 @@ import {
   type RecruitmentEmailTemplate,
 } from "./_core/notifications";
 import { logRecruitmentAction, matchesRecruitmentProfile, parseRecruitmentJsonArray } from "./recruitmentAudit";
-import { CERTIFICATION_NAME_MAX_LENGTH, certificationFacts, computeBriefCandidateMatch, declaredCertificationNames, languageFacts, sameRecruitmentFact, type CertificationRow, type LanguageRow } from "./clientBriefMatching";
+import { CERTIFICATION_NAME_MAX_LENGTH, certificationFacts, computeBriefCandidateMatch, declaredCertificationNames, languageFacts, sameRecruitmentFact, type CertificationFact, type CertificationRow, type LanguageRow } from "./clientBriefMatching";
 import { certificationDateIsCurrent, recruitmentFactLabel, type RecruitmentFact } from "../shared/recruitmentFactOrigins";
 import { candidatePortalRouter } from "./candidatePortalRouter";
 import { enforcePersistentRateLimit, hashSecurityValue, logSecurityEvent, releasePersistentRateLimitAttempt, requestIpHash } from "./candidateSecurity";
@@ -282,6 +282,26 @@ function csvCell(value: unknown): string {
   const protectedText = /^[=+\-@]/.test(text) ? `'${text}` : text;
   return `"${protectedText.replace(/"/g, '""')}"`;
 }
+
+/** A list stored as JSON (target countries) as a CSV cell reads it: « Émirats arabes unis ; Qatar ». Free text stays as typed. */
+function csvListCell(value: string | null) {
+  return value?.trim().startsWith("[") ? parseRecruitmentJsonArray(value).join(" ; ") : value;
+}
+
+/** An application's status as the admin Candidatures tab names it, for a file sent to an employer. */
+const CV_APPLICATION_STATUS_LABELS: Record<(typeof CV_APPLICATION_STATUSES)[number], string> = {
+  new: "Nouvelle",
+  reviewing: "En revue",
+  shortlisted: "Présélectionnée",
+  placed: "Positionnée",
+  rejected: "Refusée",
+  archived: "Archivée",
+};
+
+/** « ACLS (extraite du CV par l’IA), expirée le 2023-05 »: whether a certification is still valid. */
+const certificationExportLabel = (fact: CertificationFact) => fact.expiresAt
+  ? `${recruitmentFactLabel(fact)}, ${certificationDateIsCurrent(fact.expiresAt) ? "expire le" : "expirée le"} ${fact.expiresAt}`
+  : recruitmentFactLabel(fact);
 
 type AdminDb = NonNullable<Awaited<ReturnType<typeof getDb>>>;
 
@@ -2230,9 +2250,11 @@ export const appRouter = router({
           // Each certification and language says where it comes from (IA-02),
           // and each candidate the date of their agreement (RGPD-03).
           const [certificationsByApplication, languagesByApplication] = await Promise.all([certificationFactsByApplication(db, rows), languageFactsByApplication(db, rows)]);
-          const facts = (list: RecruitmentFact[] | undefined) => (list ?? []).map(recruitmentFactLabel).join(" ; ");
+          // The employer reads every cell as written: the countries listed, a
+          // certification's expiry, the application's status in words.
+          const facts = <T extends RecruitmentFact>(list: T[] | undefined, label: (fact: T) => string = recruitmentFactLabel) => (list ?? []).map(label).join(" ; ");
           const header = ["Prénom", "Nom", "Email", "Téléphone", "Spécialité", "Pays ciblés", "Langues (origine)", "Expérience (ans)", "Disponibilité", "Mobilité", "Certifications (origine)", "Accord du candidat", "Statut"];
-          csv = [header.map(csvCell).join(";"), ...rows.map(row => [row.firstName, row.lastName, row.email, row.phone, row.specialty, row.targetCountries, facts(languagesByApplication.get(row.id)), row.yearsExperience, row.availability, row.mobility, facts(certificationsByApplication.get(row.id)), consentByApplication.get(row.id)?.toLocaleDateString("fr-FR", { timeZone: "Europe/Paris" }), row.status].map(csvCell).join(";"))].join("\n");
+          csv = [header.map(csvCell).join(";"), ...rows.map(row => [row.firstName, row.lastName, row.email, row.phone, row.specialty, csvListCell(row.targetCountries), facts(languagesByApplication.get(row.id)), row.yearsExperience, row.availability, row.mobility, facts(certificationsByApplication.get(row.id), certificationExportLabel), consentByApplication.get(row.id)?.toLocaleDateString("fr-FR", { timeZone: "Europe/Paris" }), CV_APPLICATION_STATUS_LABELS[row.status] ?? row.status].map(csvCell).join(";"))].join("\n");
         } else {
           const header = ["Prénom", "Nom", "Email", "Téléphone", "Spécialité", "Pays ciblés", "Langues", "Expérience (ans)", "Disponibilité", "Mobilité", "Certifications", "Score IA", "Statut"];
           csv = [header.map(csvCell).join(";"), ...rows.map(row => [row.firstName, row.lastName, row.email, row.phone, row.specialty, row.targetCountries, row.languages, row.yearsExperience, row.availability, row.mobility, row.certifications, row.aiScore, row.status].map(csvCell).join(";"))].join("\n");
@@ -2498,6 +2520,8 @@ export const appRouter = router({
             mobility: cvApplications.mobility,
             aiScore: verifiedRecruitmentScore,
             status: cvApplications.status,
+            // The earliest date the candidate's agreement can bear (RGPD-03).
+            createdAt: cvApplications.createdAt,
           };
           const [recentApplications, associations] = await Promise.all([
             db.select(candidateColumns).from(cvApplications)
@@ -2611,6 +2635,21 @@ export const appRouter = router({
             .where(and(eq(clientBriefCandidates.briefId, input.briefId), eq(clientBriefCandidates.applicationId, input.applicationId)))
             .limit(1);
           if (!association) throw new TRPCError({ code: "NOT_FOUND", message: "Ce candidat n’est pas associé à cette mission : présélectionnez-le d’abord." });
+          if (input.consentDate !== null) {
+            // Nor before the application or the mission: the candidate agreed
+            // to be presented for a mission they had applied for, once it
+            // existed. The same day is accepted (days in Paris).
+            const [[application], [brief]] = await Promise.all([
+              db.select({ createdAt: cvApplications.createdAt }).from(cvApplications).where(eq(cvApplications.id, input.applicationId)).limit(1),
+              db.select({ createdAt: clientBriefs.createdAt }).from(clientBriefs).where(eq(clientBriefs.id, input.briefId)).limit(1),
+            ]);
+            const applicationDay = application ? parisDateKey(application.createdAt) : "";
+            const briefDay = brief ? parisDateKey(brief.createdAt) : "";
+            const earliest = briefDay > applicationDay ? { day: briefDay, event: "la création de la mission, le" } : { day: applicationDay, event: "sa candidature, reçue le" };
+            if (input.consentDate < earliest.day) {
+              throw new TRPCError({ code: "BAD_REQUEST", message: `La date de l’accord du candidat ne peut pas précéder ${earliest.event} ${earliest.day.split("-").reverse().join("/")}.` });
+            }
+          }
           await db.update(clientBriefCandidates).set({ candidateConsentAt: consentAt, updatedAt: new Date() }).where(eq(clientBriefCandidates.id, association.id));
           await logRecruitmentAction({ applicationId: input.applicationId, adminOpenId: ctx.user.openId, action: "status_update", metadata: { event: "mission_consent", briefId: input.briefId, consentDate: input.consentDate } });
           return { success: true, candidateConsentAt: consentAt };
