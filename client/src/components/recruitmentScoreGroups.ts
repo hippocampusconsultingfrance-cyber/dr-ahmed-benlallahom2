@@ -1,7 +1,7 @@
+import { MANUAL_REVIEW_FALLBACK_MODEL } from "@shared/recruitmentAiAnalysis";
+
 /** Score chip of a dossier the AI provider refused to analyse (billing): no score was ever computed (REC-08). */
 export const AI_ANALYSIS_UNAVAILABLE_LABEL = "Analyse IA indisponible";
-/** Model recorded by the server for that manual-review result (server/recruitmentAnalysis.ts). */
-const MANUAL_REVIEW_FALLBACK_MODEL = "local/manual-review-fallback";
 
 /** True for a dossier saved without AI analysis, including those saved before the « degraded » status. */
 export function isAiAnalysisUnavailable(application: { analysisStatus?: string | null; analysisModel?: string | null }) {

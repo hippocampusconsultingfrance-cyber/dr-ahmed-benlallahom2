@@ -3,6 +3,7 @@ import {
   driveBatchRetryToast,
   driveRetryToast,
   reanalysisToast,
+  reanalyzeFailedToast,
   recruitmentDriveExportLabel,
   recruitmentDriveExportErrorLabel,
   recruitmentCandidatePortalLabel,
@@ -47,6 +48,20 @@ describe("retours des reprises après une panne de prestataire (REC-08, REC-09)"
     expect(notice.tone).toBe("warning");
     expect(notice.message).toContain("compte du fournisseur à vérifier");
     expect(notice.message).toContain("Mettre à jour / reprendre l’IA");
+  });
+
+  it("« Mettre à jour / reprendre l’IA » quand le crédit manque toujours : avertissement, pas « analyse traitée »", () => {
+    const notice = reanalyzeFailedToast({ queued: 1, processed: 1, aiUnavailable: true });
+    expect(notice).toEqual(reanalysisToast({ outcome: "ai_unavailable", error: "ai_gateway_billing_unavailable" }));
+    expect(notice.tone).toBe("warning");
+    expect(notice.message).toContain("compte du fournisseur à vérifier");
+  });
+
+  it("« Mettre à jour / reprendre l’IA » : traitées tout de suite, encore en file, ou rien à reprendre", () => {
+    expect(reanalyzeFailedToast({ queued: 10, processed: 1, aiUnavailable: false })).toEqual({ tone: "success", message: "1 analyse traitée immédiatement · 9 encore en file" });
+    expect(reanalyzeFailedToast({ queued: 1, processed: 1 })).toEqual({ tone: "success", message: "1 analyse traitée immédiatement" });
+    expect(reanalyzeFailedToast({ queued: 3, processed: 0 })).toEqual({ tone: "info", message: "3 analyses remises en file : elles seront traitées au prochain passage." });
+    expect(reanalyzeFailedToast({ queued: 0, processed: 0 })).toEqual({ tone: "success", message: "Aucune analyse à mettre à jour ou à reprendre" });
   });
 
   it("copie Drive quand la connexion est à renouveler : renvoie vers le bouton de reconnexion", () => {

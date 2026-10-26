@@ -2024,17 +2024,22 @@ export const appRouter = router({
             .limit(input?.limit ?? 10);
 
           const { enqueueCvAnalysis, processDueCvAnalysisJobs } = await import("./recruitmentProcessing");
+          let processing: { processed: number; results: Array<Record<string, unknown>> } = { processed: 0, results: [] };
+          let queued = 0;
+          let aiUnavailable = false;
           for (const application of resumableApplications) {
             await enqueueCvAnalysis(application.id);
             await logRecruitmentAction({ applicationId: application.id, adminOpenId: ctx.user.openId, action: "reanalyze", metadata: { queued: true, batch: true } });
+            queued += 1;
+            // One analysis inline at most (an AI call can take ~35 s): the rest is
+            // queued for the cron, so the admin request stays under the 60 s limit.
+            if (processing.processed === 0) processing = await processDueCvAnalysisJobs(1, [application.id]);
+            // The AI provider still refuses for billing: the other dossiers keep
+            // their state (each would be refused too) until the credit is restored (REC-08).
+            aiUnavailable = processing.results.some(result => result.aiUnavailable === true);
+            if (aiUnavailable) break;
           }
-          const applicationIds = resumableApplications.map(application => application.id);
-          // One analysis inline at most (an AI call can take ~35 s): the rest is
-          // queued for the cron, so the admin request stays under the 60 s limit.
-          const processing = applicationIds.length > 0
-            ? await processDueCvAnalysisJobs(1, applicationIds)
-            : { processed: 0, results: [] };
-          return { success: true, queued: resumableApplications.length, processed: processing.processed };
+          return { success: true, queued, processed: processing.processed, aiUnavailable };
         }),
 
       sendTemplateEmail: adminProcedure

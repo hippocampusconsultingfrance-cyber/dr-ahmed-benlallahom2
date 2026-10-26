@@ -16,6 +16,9 @@ import {
   RECRUITMENT_SPECIALIST_TITLE_TERMS,
   RECRUITMENT_SPECIALTY_EQUIVALENTS,
 } from "../shared/recruitmentSpecialtyEquivalents";
+import { MANUAL_REVIEW_FALLBACK_MODEL } from "../shared/recruitmentAiAnalysis";
+
+export { MANUAL_REVIEW_FALLBACK_MODEL } from "../shared/recruitmentAiAnalysis";
 
 export const RECRUITMENT_ANALYSIS_PRIMARY_MODEL = "openai/gpt-6-astra";
 export const RECRUITMENT_ANALYSIS_FALLBACK_MODEL = "google/gemini-3.8-flash";
@@ -1397,8 +1400,6 @@ export function normalizeRecruitmentAnalysis(
   };
 }
 
-/** Model recorded for the manual-review result saved when the AI Gateway refuses for billing. */
-export const MANUAL_REVIEW_FALLBACK_MODEL = "local/manual-review-fallback";
 /** analysis_last_error of a dossier left without AI analysis for that reason (REC-08). */
 export const AI_ANALYSIS_BILLING_UNAVAILABLE_ERROR = "ai_gateway_billing_unavailable";
 

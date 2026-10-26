@@ -1,6 +1,7 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
+import { MANUAL_REVIEW_FALLBACK_MODEL } from "@shared/recruitmentAiAnalysis";
 
 // REC-08 et REC-09 dans l’onglet Candidatures : un dossier que l’IA n’a pas
 // pu analyser (facturation) est étiqueté comme tel, et les copies Drive en
@@ -61,7 +62,7 @@ function scoreChipOf(html: string, trackingId: string) {
 
 describe("REC-08 — dossier sans analyse IA (facturation du fournisseur)", () => {
   it("étiquette « Analyse IA indisponible », y compris un dossier enregistré avant le statut dédié ; les autres étiquettes ne changent pas", () => {
-    const fallback = { aiSummary: "Le texte du CV a été extrait avec succès. L’analyse IA complète est temporairement indisponible.", analysisModel: "local/manual-review-fallback", analysisPromptVersion: "recruitment-v7-verified-score" };
+    const fallback = { aiSummary: "Le texte du CV a été extrait avec succès. L’analyse IA complète est temporairement indisponible.", analysisModel: MANUAL_REVIEW_FALLBACK_MODEL, analysisPromptVersion: "recruitment-v7-verified-score" };
     view.items = [
       dossier(1, "Degraded", { ...fallback, analysisStatus: "degraded", analysisLastError: "ai_gateway_billing_unavailable" }),
       dossier(2, "Legacy", { ...fallback, analysisStatus: "needs_review" }),

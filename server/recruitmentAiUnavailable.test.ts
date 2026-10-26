@@ -151,7 +151,7 @@ describe("analyse IA refusée pour facturation (REC-08)", () => {
 
     state.aiAvailable = true;
     const resumed = await admin().admin.recruitment.reanalyzeFailed({ limit: 10 });
-    expect(resumed).toEqual({ success: true, queued: 2, processed: 1 });
+    expect(resumed).toEqual({ success: true, queued: 2, processed: 1, aiUnavailable: false });
     // One analysis inline, the other queued for the cron.
     expect(dossier(degraded)).toMatchObject({ analysis_model: "openai/gpt-6-astra", analysis_last_error: null });
     expect(dossier(degraded).analysis_status).not.toBe("degraded");
@@ -162,6 +162,25 @@ describe("analyse IA refusée pour facturation (REC-08)", () => {
     expect(jobsOf(reviewed)).toHaveLength(1);
     expect(state.aiCalls).toBe(2);
     expect(state.notifications).toEqual([]);
+  });
+
+  it("« Mettre à jour / reprendre l’IA » quand le crédit manque toujours : le dit, et laisse les autres dossiers tels quels", async () => {
+    const completedJob = { job_status: "completed", attempts: 1 };
+    const fallback = { analysis_model: MANUAL_REVIEW_FALLBACK_MODEL, analysis_prompt_version: RECRUITMENT_ANALYSIS_PROMPT_VERSION, ai_summary: "Analyse IA complète temporairement indisponible." };
+    const degraded = seedDossier(1, { ...fallback, analysis_status: "degraded", analysis_last_error: "ai_gateway_billing_unavailable", updatedAt: new Date(Date.now() - 3 * 60_000) }, completedJob);
+    const legacy = seedDossier(2, { ...fallback, analysis_status: "needs_review", updatedAt: new Date(Date.now() - 2 * 60_000) }, completedJob);
+    // Analysed under an older prompt: resumable, and its analysis must not be replaced by the fallback.
+    const outdated = seedDossier(3, { analysis_status: "completed", analysis_model: "openai/gpt-5", analysis_prompt_version: "recruitment-v6", ai_summary: "Ancienne synthèse.", ai_score: 74, updatedAt: new Date(Date.now() - 60_000) }, completedJob);
+
+    const result = await admin().admin.recruitment.reanalyzeFailed({ limit: 10 });
+    expect(result).toEqual({ success: true, queued: 1, processed: 1, aiUnavailable: true });
+    // One refused call; the next dossiers are not queued for the cron to be refused in turn.
+    expect(state.aiCalls).toBe(1);
+    expect(dossier(degraded)).toMatchObject({ analysis_status: "degraded", analysis_last_error: "ai_gateway_billing_unavailable" });
+    expect(dossier(legacy)).toMatchObject({ analysis_status: "needs_review", analysis_model: MANUAL_REVIEW_FALLBACK_MODEL });
+    expect(dossier(outdated)).toMatchObject({ analysis_status: "completed", ai_summary: "Ancienne synthèse.", ai_score: 74 });
+    expect(jobsOf(legacy)).toEqual([expect.objectContaining({ job_status: "completed" })]);
+    expect(jobsOf(outdated)).toEqual([expect.objectContaining({ job_status: "completed" })]);
   });
 
   it("« Relancer l’analyse » d’un dossier quand le crédit manque toujours répond « IA indisponible », pas « analyse actualisée »", async () => {

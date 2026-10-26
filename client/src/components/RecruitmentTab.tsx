@@ -13,6 +13,7 @@ import {
   recruitmentDriveExportErrorLabel,
   recruitmentAnalysisErrorLabel,
   reanalysisToast,
+  reanalyzeFailedToast,
   driveRetryToast,
   driveBatchRetryToast,
   googleDriveConnectionState,
@@ -202,11 +203,8 @@ export default function RecruitmentTab() {
   });
 
   const reanalyzeFailed = trpc.admin.recruitment.reanalyzeFailed.useMutation({
-    onSuccess: ({ queued, processed }) => {
-      const remaining = Math.max(0, queued - processed);
-      toast.success(processed > 0
-        ? `${processed} analyse${processed > 1 ? "s" : ""} traitée${processed > 1 ? "s" : ""} immédiatement${remaining > 0 ? ` · ${remaining} encore en file` : ""}`
-        : "Aucune analyse à mettre à jour ou à reprendre");
+    onSuccess: result => {
+      showAdminToast(reanalyzeFailedToast(result));
       utils.admin.recruitment.list.invalidate();
     },
     onError: mutationError => toast.error(mutationError.message),

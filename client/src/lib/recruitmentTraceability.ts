@@ -98,6 +98,15 @@ export function reanalysisToast(result: { outcome?: string; error?: string | nul
   }
 }
 
+/** Toast after « Mettre à jour / reprendre l’IA »: a warning, not a success, while the AI provider still refuses (REC-08). */
+export function reanalyzeFailedToast(result: { queued: number; processed: number; aiUnavailable?: boolean }): AdminToast {
+  if (result.aiUnavailable) return reanalysisToast({ outcome: "ai_unavailable", error: "ai_gateway_billing_unavailable" });
+  const remaining = Math.max(0, result.queued - result.processed);
+  if (result.processed > 0) return { tone: "success", message: `${result.processed} analyse${result.processed > 1 ? "s" : ""} traitée${result.processed > 1 ? "s" : ""} immédiatement${remaining > 0 ? ` · ${remaining} encore en file` : ""}` };
+  if (result.queued > 0) return { tone: "info", message: `${result.queued} analyse${result.queued > 1 ? "s" : ""} remise${result.queued > 1 ? "s" : ""} en file : elle${result.queued > 1 ? "s seront traitées" : " sera traitée"} au prochain passage.` };
+  return { tone: "success", message: "Aucune analyse à mettre à jour ou à reprendre" };
+}
+
 /** Toast after « Relancer la copie » Google Drive (ADM-DRIVE-01). */
 export function driveRetryToast(result: { outcome?: string; error?: string | null }): AdminToast {
   switch (result.outcome) {
