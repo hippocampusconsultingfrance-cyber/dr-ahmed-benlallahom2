@@ -767,11 +767,12 @@ const physicianTitleTerms = titleTerms(RECRUITMENT_PHYSICIAN_TITLE_TERMS, true);
 
 /**
  * Where a physician's word names someone other than the holder of the title (normalized): "Doctor of …"
- * (a degree: Doctor of Nursing Practice), "physician liaison", « assistant(e) du médecin »,
- * « Notarzt-Einsatz » / « Notarzt-Dienst » (on call with the emergency physician), 无国界医生 (Doctors
- * Without Borders), 协助麻醉医师 "assisting the anaesthetist".
+ * (a degree: Doctor of Nursing Practice), "physician liaison", « assistant(e) du médecin (anesthésiste) »,
+ * « assistante de l’anesthésiste », "assistant to the anaesthetist", « Notarzt-Einsatz » /
+ * « Notarzt-Dienst » (on call with the emergency physician), 无国界医生 (Doctors Without Borders),
+ * 协助麻醉医师 "assisting the anaesthetist".
  */
-const OTHER_PHYSICIAN_PHRASES = /(?<![^ ])(?:doctor of|physician liaison|assistante? du medecin|notarzt einsatz|notarzt dienst)(?![^ ])|无国界医生|無國界醫生|(?:协助|協助)[^ ]*?(?:医师|醫師|医生|醫生)/g;
+const OTHER_PHYSICIAN_PHRASES = /(?<![^ ])(?:doctor of|physician liaison|assistante? (?:du|des|de la|de l) (?:medecins? )?[^ ]+|assistant to (?:the |an? )?[^ ]+|notarzt einsatz|notarzt dienst)(?![^ ])|无国界医生|無國界醫生|(?:协助|協助)[^ ]*?(?:医师|醫師|医生|醫生)/g;
 
 /** A physician's title: « Facharzt », « استشاري », « 医师 »… */
 function namesPhysician(text: string) {
@@ -783,12 +784,12 @@ function namesPhysician(text: string) {
  * A nursing or allied health profession, declared or cited: « Intensive Care Nurse », « Emergency Medical
  * Technician », « 麻醉护士 »… Not when the title also names a physician (« Facharzt für Psychiatrie,
  * Diplom-Psychologe »), outside the nursing or allied health words themselves (« Physician Assistant »,
- * 医师助理).
+ * 医师助理), the longest first: "nurse" is taken out of a « Nurse Anaesthetist » only with "anaesthetist".
  */
 function namesParamedicalProfession(value: string, terms = paramedicalTitleTerms) {
   const text = normalizeSpecialtyText(value);
   if (paramedicalSpecialties.has(text)) return true;
-  const used = terms.filter(({ isIn }) => isIn(text));
+  const used = terms.filter(({ isIn }) => isIn(text)).sort((left, right) => right.term.length - left.term.length);
   return used.length > 0 && !namesPhysician(used.reduce((rest, { term }) => rest.split(term).join(" "), text));
 }
 

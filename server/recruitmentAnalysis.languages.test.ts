@@ -351,6 +351,39 @@ describe("INTL-02 — un titre infirmier, technicien ou secouriste n’est pas u
     expect(analyse("chinois", { title: "麻醉科医师兼护理部顾问", specialty: "麻醉学", skill: "区域麻醉" }, "Anesthésie-réanimation").scoreBreakdown.specialtyMatch).toBe(30);
   });
 
+  it("garde ses points à un médecin nommé par sa seule spécialité à côté d’un mot infirmier, pas à un infirmier anesthésiste", () => {
+    const points = (language: CvLanguage, title: string, specialty: string, declared: string) => analyse(language, { title, specialty, skill: "enseignement clinique" }, declared).scoreBreakdown.specialtyMatch;
+    // The specialist's name is a physician's word, in US and GB English, French and German.
+    expect(english("Consultant Anaesthetist and Nurse Educator", "Anaesthesia and Intensive Care", "Anesthésie-réanimation")).toBe(30);
+    expect(english("Consultant Paediatrician, Nurse Trainer", "Paediatrics", "Pédiatrie")).toBe(30);
+    expect(english("Anesthesiologist and Nurse Educator", "Anesthesiology", "Anesthésie-réanimation")).toBe(30);
+    expect(english("Cardiologist and Nurse Educator", "Cardiology", "Cardiologie")).toBe(30);
+    expect(english("Consultant Radiologist and Radiographer Trainer", "Radiology", "Radiologie et imagerie médicale")).toBe(30);
+    expect(points("français", "Anesthésiste-réanimateur, formateur des infirmiers", "Anesthésie-réanimation", "Anesthésie-réanimation")).toBe(30);
+    expect(points("français", "Psychiatre, ancien infirmier", "Psychiatrie", "Psychiatrie")).toBe(30);
+    expect(points("allemand", "Kinderarzt, Praxisanleiter für Pflegefachkräfte", "Kinder- und Jugendmedizin", "Pédiatrie")).toBe(30);
+    expect(points("allemand", "Anästhesist und Praxisanleiter Intensivpflege", "Anästhesiologie", "Anesthésie-réanimation")).toBe(30);
+    // A title that holds a specialist's name stays a nursing or allied health one.
+    for (const [language, title, specialty] of [
+      ["anglais britannique", "Nurse Anaesthetist", "Anaesthesia"],
+      ["anglais britannique", "Certified Registered Nurse Anesthetist (CRNA)", "Anesthesia"],
+      ["anglais britannique", "Anesthesiologist Assistant", "Anesthesiology"],
+      ["anglais britannique", "Theatre Nurse, assistant to the anaesthetist", "Anaesthesia"],
+      ["français", "Infirmier anesthésiste diplômé d’État (IADE)", "Anesthésie"],
+      ["français", "Infirmier(ère) anesthésiste", "Anesthésie"],
+      ["français", "Infirmière, assistante de l’anesthésiste", "Anesthésie"],
+    ] as const) {
+      expect(points(language, title, specialty, "Anesthésie-réanimation"), title).toBe(0);
+    }
+    expect(english("Radiologist Assistant", "Radiology", "Radiologie et imagerie médicale")).toBe(0);
+    expect(english("Radiographer", "Radiology", "Radiologie et imagerie médicale")).toBe(0);
+    expect(points("français", "Technicien radiologue", "Radiologie", "Radiologie et imagerie médicale")).toBe(0);
+    expect(english("Physiotherapist", "Physiotherapy", "Médecine physique et de réadaptation (MPR)")).toBe(0);
+    expect(english("Psychiatric Nurse", "Psychiatry", "Psychiatrie")).toBe(0);
+    // A nurse anaesthetist who declared that profession keeps the points.
+    expect(english("Nurse Anaesthetist", "Nurse anaesthetist (IADE)", "Infirmier(ère) anesthésiste (IADE)")).toBe(30);
+  });
+
   it("ne prend pour un médecin ni « Physician Assistant », ni « Doctor of Nursing Practice », ni une infirmière de médecine d’urgence", () => {
     expect(english("Emergency Medicine Physician Assistant", "Emergency medicine", "Médecine d’urgence")).toBe(0);
     expect(english("Doctor of Nursing Practice, Nurse Anesthetist", "Anesthesia", "Anesthésie-réanimation")).toBe(0);
