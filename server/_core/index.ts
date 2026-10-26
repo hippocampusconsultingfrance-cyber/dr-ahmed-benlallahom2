@@ -11,6 +11,7 @@ import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { clerkMiddleware } from "@clerk/express";
 import { assertCriticalProductionEnvironment, clerkPublishableKey } from "./env";
 import { registerHealthRoute } from "./health";
+import { contentSecurityPolicyHeaders, registerCspReportRoute } from "./contentSecurityPolicy";
 import { requireVercelCron } from "./cronAuth";
 import { runMonitoredScheduledJob } from "./scheduledJobMonitor";
 import { secureReference } from "./secureReference";
@@ -160,28 +161,14 @@ export async function createApp() {
   app.set("trust proxy", 1);
   const server = createServer(app);
 
-  // Browser-side defense in depth. Origins are restricted to the application and
-  // the third parties genuinely required for checkout and bot protection.
+  // Browser-side defense in depth (same values as vercel.json, see contentSecurityPolicy.ts).
+  const cspHeaders = Object.entries(contentSecurityPolicyHeaders());
   app.use((_req, res, next) => {
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
     res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=(self)");
     res.setHeader("Strict-Transport-Security", "max-age=63072000; includeSubDomains; preload");
-    res.setHeader("Content-Security-Policy", [
-      "default-src 'self'",
-      "base-uri 'self'",
-      "object-src 'none'",
-      "frame-ancestors 'self'",
-      "form-action 'self'",
-      "script-src 'self' 'unsafe-inline' https://js.stripe.com https://challenges.cloudflare.com https://clerk.drahmedbenlallahom.com https://*.clerk.accounts.dev https://*.clerk.com",
-      "style-src 'self' 'unsafe-inline'",
-      "font-src 'self' data:",
-      "img-src 'self' data: blob: https:",
-      "connect-src 'self' ws: wss: https://api.stripe.com https://challenges.cloudflare.com https://clerk.drahmedbenlallahom.com https://*.clerk.accounts.dev https://*.clerk.com",
-      "frame-src https://js.stripe.com https://hooks.stripe.com https://challenges.cloudflare.com https://clerk.drahmedbenlallahom.com https://*.clerk.accounts.dev https://*.clerk.com",
-      "worker-src 'self' blob:",
-      "upgrade-insecure-requests",
-    ].join("; "));
+    for (const [name, value] of cspHeaders) res.setHeader(name, value);
     next();
   });
 
@@ -189,6 +176,8 @@ export async function createApp() {
   // cron secret). Mounted before clerkMiddleware so that it still answers when
   // a Clerk misconfiguration makes every other /api route fail.
   registerHealthRoute(app);
+  // Reports of the report-only CSP (SECU-02), before clerkMiddleware for the same reason.
+  registerCspReportRoute(app);
 
   app.use(clerkMiddleware({
     publishableKey: clerkPublishableKey(),
