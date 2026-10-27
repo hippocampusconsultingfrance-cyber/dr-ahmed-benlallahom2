@@ -1,3 +1,5 @@
+import { existsSync } from "node:fs";
+import { resolve } from "node:path";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -7,7 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // thérapeutique là où apparaissent les visuels médicaux et les photos.
 // L’illustration de la réservation est vérifiée dans BookingPage.render.test.ts.
 
-const view = vi.hoisted(() => ({ language: "fr" as "fr" | "en" }));
+const view = vi.hoisted(() => ({ language: "fr" as "fr" | "en", slug: "" }));
 vi.mock("@/contexts/LanguageContext", async () => {
   const { contentFr } = await import("@/data/content-fr");
   const { contentEn } = await import("@/data/content-en");
@@ -17,13 +19,18 @@ vi.mock("@/contexts/ThemeContext", () => ({ useTheme: () => ({ theme: "dark", to
 vi.mock("@/components/LanguageMenu", () => ({ default: () => null }));
 vi.mock("wouter", async () => {
   const { createElement } = await import("react");
-  return { useLocation: () => ["/", vi.fn()], Link: ({ href, children, ...rest }: { href: string; children: unknown }) => createElement("a", { href, ...rest }, children as never) };
+  return {
+    useLocation: () => [view.slug ? `/venture/${view.slug}` : "/", vi.fn()],
+    useParams: () => ({ slug: view.slug }),
+    Link: ({ href, children, ...rest }: { href: string; children: unknown }) => createElement("a", { href, ...rest }, children as never),
+  };
 });
 
 const { default: AboutSection } = await import("./components/AboutSection");
 const { default: Footer } = await import("./components/Footer");
 const { default: Navigation } = await import("./components/Navigation");
 const { default: ServicesSection } = await import("./components/ServicesSection");
+const { default: VenturePage } = await import("./pages/VenturePage");
 const { venturesFr } = await import("./data/ventures-fr");
 const { venturesEn } = await import("./data/ventures-en");
 
@@ -32,7 +39,7 @@ const html = (component: () => unknown) => renderToStaticMarkup(createElement(co
 const images = (markup: string) => [...markup.matchAll(/<img\b[^>]*>/g)].map(match => match[0]);
 const imageWith = (markup: string, src: string) => images(markup).find(tag => tag.includes(`src="${src}"`));
 
-beforeEach(() => { view.language = "fr"; });
+beforeEach(() => { view.language = "fr"; view.slug = ""; });
 afterEach(() => { vi.unstubAllGlobals(); });
 
 describe("illustrations et photos publiques", () => {
@@ -63,13 +70,34 @@ describe("illustrations et photos publiques", () => {
     const assets = [
       "/assets/logos/appel-medical-tunisie.webp", "/assets/logos/hippocampus-consulting.webp", "/assets/logos/laska-corporate.webp", "/assets/logos/octopus-talent.webp",
       "/assets/team/ahmed-ben-lallahom.webp", "/assets/team/amine-hachicha.webp", "/assets/team/ines-dhaouadi.webp", "/assets/team/lotfi-ben-lallahom.webp",
-      "/assets/team/monia-ben-lallahom.webp", "/assets/team/omar-ben-lallahom.webp", "/assets/team/sonia-siala.webp", "photo-wafa-clean_fe6f20ad.png", "/assets/team/youssef-ben-lallahom.webp",
+      "/assets/team/monia-ben-lallahom.webp", "/assets/team/omar-ben-lallahom.webp", "/assets/team/sonia-siala.webp", "/assets/team/youssef-ben-lallahom.webp",
     ];
     for (const ventures of [venturesFr, venturesEn]) {
       const data = JSON.stringify(ventures);
       for (const asset of assets) expect(data, asset).toContain(asset);
       expect(data).not.toMatch(PROHIBITED_CLAIMS);
     }
+  });
+
+  it.each(["fr", "en"] as const)("n’affiche sur les fiches des projets que des images du site, une silhouette à la place d’une photo manquante (%s, CODE-05)", language => {
+    view.language = language;
+    for (const venture of language === "fr" ? venturesFr : venturesEn) {
+      view.slug = venture.slug;
+      const markup = html(VenturePage);
+      expect(markup, venture.slug).toContain(venture.company);
+      expect(markup, venture.slug).not.toContain("/manus-storage/");
+      // Every image the page asks for is a file of client/public, so none falls back after a 404.
+      for (const tag of images(markup)) {
+        const src = /src="([^"]+)"/.exec(tag)?.[1] ?? "";
+        expect(existsSync(resolve(import.meta.dirname, "../public", src.replace(/^\//, ""))), `${venture.slug}: ${src}`).toBe(true);
+      }
+    }
+    // Wafa Dahmeni's photo is still to be supplied: her card shows the silhouette, no image.
+    view.slug = "sawa4you";
+    const card = /<h3[^>]*>Wafa Dahmeni<\/h3>/.exec(html(VenturePage));
+    expect(card).not.toBeNull();
+    const before = html(VenturePage).slice(0, card!.index);
+    expect(before.slice(before.lastIndexOf('class="group relative'))).not.toContain("<img");
   });
 
   it.each(["fr", "en"] as const)("ne propose pas les actualités désactivées dans la navigation (%s)", language => {
