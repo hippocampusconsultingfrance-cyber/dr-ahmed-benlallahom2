@@ -491,6 +491,20 @@ Les corrections de code peuvent être faites **par lots testés**, comme pour la
 - **Référencement et vitesse mobile** : SEOP-01 (texte présent dans les pages dès leur envoi par le serveur, sans attendre JavaScript, par étapes).
 - **Découpage des gros fichiers** : CODE-07, selon le plan de CODE-25.
 
+**Avancement au 27 octobre — lot 5 corrigé, sauf CODE-07** (en cours). Un passage de vérification de bout en bout sur la réplique a été fait (site public et navigateur, base de données et écritures en plusieurs étapes, CI et tests rejoués comme la CI, avec des erreurs volontairement injectées) :
+
+| ID | État | Reste à faire |
+|---|---|---|
+| CODE-05 | ✅ SDK Manus, routes `POST /api/scheduled/*`, axios, jose, fichiers jamais importés et une trentaine de dépendances retirés ; wouter 3.13 sans patch ; knip en CI contre le code mort | Décider du blog (gardé tel quel) ; supprimer dans Vercel les variables que plus rien ne lit (`OAUTH_SERVER_URL`, `VITE_APP_ID`, `VITE_OAUTH_PORTAL_URL`, `VITE_FRONTEND_FORGE_*`) ; désactiver les tâches Heartbeat Manus si elles existent |
+| CODE-06 | ✅ plus aucun chemin de fichier source dans les pages publiques : JavaScript −13 % (−21 Kio compressés) ; contrôle dans le script de budget | — |
+| CODE-02 | ⏳ tests qui lisaient le texte du code remplacés par des tests qui appellent les procédures et les routes ou rendent les écrans ; reformater le code ne casse plus que 14 tests au lieu de 63 | Finitions en cours : tests des consentements obligatoires (inscription candidat, questions santé) et des derniers tests qui lisent du code |
+| CODE-14 | ⏳ CI : budgets de poids, démarrage réel du serveur construit, synchronisation schéma/migrations, knip, délais et annulation ; chaque contrôle échoue quand il le doit | Vérifier que Vercel est en Node 22.x, puis ajouter `engines` ; finitions en cours (budget de toutes les pages et du CSS, contrôle de la CI elle-même) |
+| DATA-01, DATA-11 | ✅ migration `0004` : une association par mission et candidat, une candidature par envoi, documents du coffre rattachés à leur compte, statuts de rendez-vous contrôlés ; refus de la base traduits en messages clairs | Lancer les 5 contrôles en lecture seule, puis appliquer `0004` (procédure dans `drizzle/MIGRATION_SOURCE_OF_TRUTH.md`) |
+| DATA-02, DATA-04, DATA-05 | ✅ campagne jamais renvoyée en double, désinscriptions Resend appliquées avec leur évènement, réponses aux questions santé, rappels, documents du coffre et CV orphelins repris par les tâches existantes | — |
+| SECU-02 | ⏳ politique stricte sans `'unsafe-inline'` en observation (Report-Only), rapports reçus sur `/api/csp-report` ; la politique appliquée ne change pas | Observer les rapports en HTTPS (production ou préproduction) avec Clerk, Stripe et Turnstile, puis basculer (procédure dans `README.md`) |
+| SEOP-01 | ⏳ étape 1 : `<noscript>` avec titre, description et liens principaux sur chaque page pré-rendue ; préchargement du code des pages essayé puis retiré (aucun gain mesuré, premier affichage retardé) | Inscrire le site dans Google Search Console et Bing (étape 2) ; pré-rendu complet plus tard (étape 3) |
+| CODE-07 | ⏳ possible maintenant que plus aucun test ne lit `routers.ts`, `AdminDashboard.tsx` ni `BookingPage.tsx` | Découpage en cours |
+
 ### À faire de votre côté
 - **Comptes et secrets, tout de suite** :
   - double authentification (clé d'accès « passkey » enregistrée sur votre téléphone ou ordinateur, ou clé de sécurité physique) sur la boîte Gmail, puis sur Vercel, GitHub, Stripe, Neon et Resend (EXPL-10) ;
