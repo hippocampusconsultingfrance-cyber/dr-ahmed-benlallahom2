@@ -95,21 +95,24 @@ ALTER TABLE appointments VALIDATE CONSTRAINT appointments_appointment_status_che
 DO $$
 DECLARE
   repeated integer;
+  repeated_copies integer;
   references_list text;
 BEGIN
   IF to_regclass('cv_applications_submission_unique') IS NULL THEN
     LOCK TABLE cv_applications IN SHARE ROW EXCLUSIVE MODE;
-    SELECT count(*), string_agg(tracking_ids, '; ' ORDER BY tracking_ids)
-    INTO repeated, references_list
+    -- One group per application received more than once, all its copies
+    -- counted (a group of 3 is 1 group and 3 copies).
+    SELECT count(*), sum(copy_count), string_agg(tracking_ids, '; ' ORDER BY tracking_ids)
+    INTO repeated, repeated_copies, references_list
     FROM (
-      SELECT string_agg(tracking_id, ', ' ORDER BY id) AS tracking_ids
+      SELECT count(*) AS copy_count, string_agg(tracking_id, ', ' ORDER BY id) AS tracking_ids
       FROM cv_applications
       WHERE file_checksum IS NOT NULL
       GROUP BY lower(email), lower(specialty), file_checksum, md5(target_countries)
       HAVING count(*) > 1
     ) AS repeated_sendings;
     IF repeated > 0 THEN
-      RAISE WARNING 'cv_applications_submission_unique NOT created: % application(s) received more than once (same address, specialty, target countries and CV): %', repeated, left(references_list, 2000)
+      RAISE WARNING 'cv_applications_submission_unique NOT created: % group(s) of identical applications (same address, specialty, target countries and CV), % copies in all: %', repeated, repeated_copies, left(references_list, 2000)
         USING HINT = 'Nothing was deleted. Decide which copies to keep, then run this migration again.';
     ELSE
       CREATE UNIQUE INDEX cv_applications_submission_unique ON cv_applications USING btree (lower(email), lower(specialty), file_checksum, md5(target_countries)) WHERE file_checksum IS NOT NULL;

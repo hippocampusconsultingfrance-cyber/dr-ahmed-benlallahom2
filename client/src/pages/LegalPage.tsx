@@ -34,10 +34,9 @@ function LegalPageFr() {
   const tabParam = params.get("tab") as "legal" | "privacy" | "terms" | null;
   const [activeTab, setActiveTab] = useState<"legal" | "privacy" | "terms">(tabParam || "legal");
 
+  // The tab the address names, or the legal notice when it names none (back from ?tab=privacy to /legal).
   useEffect(() => {
-    if (tabParam) {
-      setActiveTab(tabParam);
-    }
+    setActiveTab(tabParam || "legal");
   }, [tabParam]);
 
   return (
@@ -331,10 +330,9 @@ function LegalPageEn() {
   const tabParam = params.get("tab") as "legal" | "privacy" | "terms" | null;
   const [activeTab, setActiveTab] = useState<"legal" | "privacy" | "terms">(tabParam || "legal");
 
+  // The tab the address names, or the legal notice when it names none (back from ?tab=privacy to /legal).
   useEffect(() => {
-    if (tabParam) {
-      setActiveTab(tabParam);
-    }
+    setActiveTab(tabParam || "legal");
   }, [tabParam]);
 
   return (
@@ -629,10 +627,9 @@ function LegalPageDe() {
   const tabParam = params.get("tab") as "legal" | "privacy" | "terms" | null;
   const [activeTab, setActiveTab] = useState<"legal" | "privacy" | "terms">(tabParam || "legal");
 
+  // The tab the address names, or the legal notice when it names none (back from ?tab=privacy to /legal).
   useEffect(() => {
-    if (tabParam) {
-      setActiveTab(tabParam);
-    }
+    setActiveTab(tabParam || "legal");
   }, [tabParam]);
 
   return (
@@ -900,10 +897,9 @@ function LegalPageZh() {
   const tabParam = params.get("tab") as "legal" | "privacy" | "terms" | null;
   const [activeTab, setActiveTab] = useState<"legal" | "privacy" | "terms">(tabParam || "legal");
 
+  // The tab the address names, or the legal notice when it names none (back from ?tab=privacy to /legal).
   useEffect(() => {
-    if (tabParam) {
-      setActiveTab(tabParam);
-    }
+    setActiveTab(tabParam || "legal");
   }, [tabParam]);
 
   return (

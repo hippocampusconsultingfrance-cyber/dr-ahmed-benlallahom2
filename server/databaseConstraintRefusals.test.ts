@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import type { TrpcContext } from "./_core/context";
-import { DATABASE_DUPLICATE_MESSAGE, DATABASE_REFERENCE_MESSAGE, formatTrpcErrorShape, PublicErrorReason, publicProcedure, router } from "./_core/trpc";
+import { DATABASE_DUPLICATE_MESSAGE, DATABASE_REFERENCE_MESSAGE, DATABASE_VALUE_MESSAGE, formatTrpcErrorShape, PublicErrorReason, publicProcedure, router } from "./_core/trpc";
 
 // DATA-01 — a write a database constraint refuses, and that the procedure did
 // not handle itself, reaches the caller as a refusal with a stable reason
@@ -56,6 +56,19 @@ describe("refus des contraintes de la base (DATA-01)", () => {
     vi.spyOn(console, "warn").mockImplementation(() => undefined);
     expect(await refusal(caller.write({ code: "23503", constraint: "candidate_documents_candidate_id_fk" })))
       .toMatchObject({ code: "BAD_REQUEST", message: DATABASE_REFERENCE_MESSAGE, reason: "related_record_invalid" });
+  });
+
+  it("une valeur refusée par un CHECK (23514) devient une demande refusée avec un motif stable, sans SQL ni valeurs", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const result = await refusal(caller.write({ code: "23514", constraint: "appointments_appointment_status_check" }));
+    expect(result).toMatchObject({ code: "BAD_REQUEST", message: DATABASE_VALUE_MESSAGE, reason: "value_not_allowed" });
+    expect(warn).toHaveBeenCalledWith("[tRPC] Database constraint refusal 23514", "appointments_appointment_status_check");
+    expect(JSON.stringify(warn.mock.calls)).not.toContain("example.test");
+    // Not an internal error: no reference logged, the client gets the message and the reason.
+    const shape = formatTrpcErrorShape({ message: result.message, code: -32600, data: { code: result.code } }, result.error);
+    expect(shape).toEqual({ message: DATABASE_VALUE_MESSAGE, code: -32600, data: { code: "BAD_REQUEST", reason: "value_not_allowed" } });
+    expect(error).not.toHaveBeenCalled();
   });
 
   it("laisse les autres erreurs et les refus voulus tels quels", async () => {

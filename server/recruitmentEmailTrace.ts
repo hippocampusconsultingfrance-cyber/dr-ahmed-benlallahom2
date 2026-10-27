@@ -257,7 +257,10 @@ export async function sendTrackedCvApplicationConfirmationEmail(
   try {
     const db = await getDb();
     if (db) {
-      await db.insert(recruitmentEmailEvents).values(buildCvConfirmationEmailEvent(input, delivery));
+      // The same key gives Resend's same id, so the same send:<id> trace: an
+      // answer « already received » (DATA-11) finds it recorded, no error.
+      await db.insert(recruitmentEmailEvents).values(buildCvConfirmationEmailEvent(input, delivery))
+        .onConflictDoNothing({ target: recruitmentEmailEvents.providerEventId });
     }
   } catch (error) {
     const errorName = error instanceof Error ? error.name : "UnknownError";

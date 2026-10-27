@@ -63,7 +63,9 @@ export default function EmployerBriefsTab() {
   const [candidate360Id, setCandidate360Id] = useState<number | null>(null);
   const [consentDates, setConsentDates] = useState<Record<number, string>>({});
   const { data: briefs, isLoading, error } = trpc.admin.clientBriefs.list.useQuery();
-  const matchesInput = useMemo(() => ({ briefId: selectedBriefId ?? 1, page: matchPage, limit: 25, minimumMatch, shortlist: shortlistFilter }), [selectedBriefId, matchPage, minimumMatch, shortlistFilter]);
+  // With no mission selected, an id no mission has, never read (the query is
+  // off): no candidates of a mission seen earlier under the empty state.
+  const matchesInput = useMemo(() => ({ briefId: selectedBriefId ?? 0, page: matchPage, limit: 25, minimumMatch, shortlist: shortlistFilter }), [selectedBriefId, matchPage, minimumMatch, shortlistFilter]);
   const downloadCv = useCvDownload();
   const matches = trpc.admin.clientBriefs.candidates.useQuery(
     matchesInput,
@@ -82,13 +84,18 @@ export default function EmployerBriefsTab() {
       if (selectedBriefId) utils.admin.clientBriefs.candidates.invalidate(matchesInput);
     },
     // A mission or an application gone meanwhile (DATA-01, an erasure): said
-    // in the admin's language, and the list is read again without it.
-    onError: associationError => {
+    // in the admin's language. A mission gone leaves the screen, for the
+    // empty state rather than its candidates and buttons refused at every
+    // click, and the list is read again without it; an application gone, the
+    // mission's candidates are read again without it.
+    onError: (associationError, variables) => {
       const reason = associationError.data?.reason;
       toast.error(isMissionAssociationRefusalReason(reason) ? copy.associationRefusals[reason] : associationError.message);
-      if (isMissionAssociationRefusalReason(reason)) {
-        void utils.admin.clientBriefs.candidates.invalidate();
+      if (reason === "association_brief_not_found") {
+        setSelectedBriefId(current => current === variables.briefId ? null : current);
         void utils.admin.clientBriefs.list.invalidate();
+      } else if (reason === "association_application_not_found") {
+        void utils.admin.clientBriefs.candidates.invalidate({ briefId: variables.briefId });
       }
     },
   });
@@ -119,7 +126,10 @@ export default function EmployerBriefsTab() {
     // erased): refresh its count after every attempt, refused or not (REC-01).
     onSettled: () => utils.admin.clientBriefs.candidates.invalidate(),
   });
-  const activeBrief = matches.data?.brief ?? null;
+  // Never the candidates React Query keeps once the mission is gone (its
+  // query answers NOT_FOUND): their buttons would only be refused.
+  const missionGone = matches.error?.data?.code === "NOT_FOUND";
+  const activeBrief = missionGone ? null : matches.data?.brief ?? null;
   // Never offer an empty shortlist export: the server refuses it (REC-01),
   // as it refuses one where no candidate agreed to be presented (RGPD-03).
   const shortlistedCount = matches.data?.shortlistedCount ?? 0;

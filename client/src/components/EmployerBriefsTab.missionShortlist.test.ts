@@ -34,6 +34,8 @@ const state = vi.hoisted(() => ({
   consentMutate: vi.fn(),
   cvMutate: vi.fn(),
   invalidateCandidates: vi.fn(),
+  invalidateList: vi.fn(),
+  briefs: [] as Array<Record<string, unknown>>,
   toasts: [] as Array<[string, string]>,
 }));
 
@@ -44,10 +46,10 @@ vi.mock("./recruitmentCsvDownload", () => ({ downloadRecruitmentCsv: vi.fn() }))
 vi.mock("./Candidate360Dialog", () => ({ default: function Candidate360Dialog() { return null; } }));
 vi.mock("@/lib/trpc", () => ({
   trpc: {
-    useUtils: () => ({ admin: { clientBriefs: { list: { invalidate: vi.fn() }, candidates: { invalidate: state.invalidateCandidates } } } }),
+    useUtils: () => ({ admin: { clientBriefs: { list: { invalidate: state.invalidateList }, candidates: { invalidate: state.invalidateCandidates } } } }),
     admin: {
       clientBriefs: {
-        list: { useQuery: () => ({ data: [], isLoading: false, error: null }) },
+        list: { useQuery: () => ({ data: state.briefs, isLoading: false, error: null }) },
         candidates: { useQuery: (input: Record<string, unknown>) => { state.inputs.push(input); return { data: state.data, isLoading: false, isFetching: false }; } },
         updateStatus: { useMutation: idle },
         associateCandidate: { useMutation: (options: MutationOptions) => { state.associateOptions = options; return idle(); } },
@@ -113,6 +115,8 @@ beforeEach(() => {
   state.consentMutate.mockClear();
   state.cvMutate.mockClear();
   state.invalidateCandidates.mockClear();
+  state.invalidateList.mockClear();
+  state.briefs = [];
   state.toasts = [];
 });
 afterEach(() => vi.useRealTimers());
@@ -160,9 +164,11 @@ describe("écran d’une mission employeur", () => {
   });
 
   it("demande au serveur une compatibilité minimale et l’état de présélection, depuis la première page (ADM-04)", () => {
+    state.briefs = [brief];
+    control(render(), "Voir les profils")();
     const html = renderToStaticMarkup(render());
     expect(html).toContain("Classement calculé sur 2000 des 2500 dossiers ouverts : les plus récents et ceux déjà associés à cette mission.");
-    expect(state.inputs.at(-1)).toMatchObject({ briefId: 1, page: 0, minimumMatch: 0, shortlist: "all" });
+    expect(state.inputs.at(-1)).toMatchObject({ briefId: 7, page: 0, minimumMatch: 0, shortlist: "all" });
 
     control(render(), "50 et plus", "onChange")({ target: { value: "50" } });
     render();
@@ -300,17 +306,21 @@ describe("écran d’une mission employeur", () => {
     ["en", "This mission no longer exists.", "This application no longer exists: it may have been erased."],
     ["de", "Diese Mission existiert nicht mehr.", "Diese Bewerbung existiert nicht mehr: Sie wurde möglicherweise gelöscht."],
     ["zh", "该任务已不存在。", "该申请已不存在：可能已被删除。"],
-  ] as const)("dit dans la langue de l’admin qu’une mission ou une candidature n’existe plus, et relit la liste (%s, DATA-01)", async (language, briefGone, applicationGone) => {
+  ] as const)("dit dans la langue de l’admin qu’une mission ou une candidature n’existe plus, et relit les candidats ou la liste (%s, DATA-01)", async (language, briefGone, applicationGone) => {
     state.language = language;
     render();
     const refusal = (reason: string | undefined, message = "Message du serveur en français.") => state.associateOptions!.onError?.({ message, data: { code: "NOT_FOUND", reason } }, { briefId: 7, applicationId: 11, status: "shortlisted" } as never);
-    await refusal("association_brief_not_found");
+    // An application gone: the mission's candidates are read again.
     await refusal("association_application_not_found");
-    expect(state.invalidateCandidates).toHaveBeenCalledTimes(2);
+    expect(state.invalidateCandidates.mock.calls).toEqual([[{ briefId: 7 }]]);
+    // The mission gone: the list is read again without it.
+    await refusal("association_brief_not_found");
+    expect(state.invalidateList).toHaveBeenCalledTimes(1);
     // Any other failure keeps the server's message.
     await refusal(undefined, "Une erreur interne est survenue. Veuillez réessayer dans quelques instants. (réf. 1a2b3c4d)");
-    expect(state.toasts).toEqual([["error", briefGone], ["error", applicationGone], ["error", "Une erreur interne est survenue. Veuillez réessayer dans quelques instants. (réf. 1a2b3c4d)"]]);
-    expect(state.invalidateCandidates).toHaveBeenCalledTimes(2);
+    expect(state.toasts).toEqual([["error", applicationGone], ["error", briefGone], ["error", "Une erreur interne est survenue. Veuillez réessayer dans quelques instants. (réf. 1a2b3c4d)"]]);
+    expect(state.invalidateCandidates).toHaveBeenCalledTimes(1);
+    expect(state.invalidateList).toHaveBeenCalledTimes(1);
   });
 
   it.each([

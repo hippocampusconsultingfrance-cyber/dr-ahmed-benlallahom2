@@ -46,6 +46,33 @@ describe("vérification Turnstile côté serveur, dans tous les environnements",
     }
   });
 
+  it("n’accepte un jeton d’une préproduction *.vercel.app que pour l’hôte exact déclaré dans TURNSTILE_EXTRA_HOSTNAMES (SECU-02)", async () => {
+    const preview = "dr-ahmed-git-lot5-hippocampus.vercel.app";
+    // Unset by default: a preview's token is refused, like any other host.
+    cloudflareAnswers({ success: true, hostname: preview });
+    await expect(verifyCandidateTurnstile({ token: "token-from-the-preview" })).rejects.toThrow("candidate_turnstile_invalid");
+
+    vi.stubEnv("TURNSTILE_EXTRA_HOSTNAMES", ` ${preview.toUpperCase()} , staging.drahmedbenlallahom.com,`);
+    for (const hostname of [preview, "staging.drahmedbenlallahom.com", "drahmedbenlallahom.com"]) {
+      cloudflareAnswers({ success: true, hostname });
+      await expect(verifyCandidateTurnstile({ token: "token-from-the-widget" })).resolves.toBeUndefined();
+    }
+    // Another preview of the same Vercel account is still refused.
+    cloudflareAnswers({ success: true, hostname: "another-project.vercel.app" });
+    await expect(verifyCandidateTurnstile({ token: "token-from-another-preview" })).rejects.toThrow("candidate_turnstile_invalid");
+
+    // Never a pattern: a wildcard, or anything but a plain host name, accepts nothing.
+    vi.stubEnv("TURNSTILE_EXTRA_HOSTNAMES", "*.vercel.app,.vercel.app,vercel.app*,https://other.vercel.app,other.vercel.app:443");
+    for (const hostname of ["another-project.vercel.app", "other.vercel.app", "vercel.app"]) {
+      cloudflareAnswers({ success: true, hostname });
+      await expect(verifyCandidateTurnstile({ token: "token-from-a-preview" })).rejects.toThrow("candidate_turnstile_invalid");
+    }
+    // A token Cloudflare refuses stays refused on the declared host.
+    vi.stubEnv("TURNSTILE_EXTRA_HOSTNAMES", preview);
+    cloudflareAnswers({ success: false, hostname: preview, "error-codes": ["invalid-input-response"] });
+    await expect(verifyCandidateTurnstile({ token: "forged-token" })).rejects.toThrow("candidate_turnstile_invalid");
+  });
+
   it("refuse sans interroger Cloudflare un envoi sans jeton ou un serveur sans secret", async () => {
     const siteverify = cloudflareAnswers({ success: true, hostname: "drahmedbenlallahom.com" });
 

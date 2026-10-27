@@ -2075,7 +2075,10 @@ export const appRouter = router({
               else failed += 1;
             }
             const statuses = await db.select({ deliveryStatus: recruitmentCampaignRecipients.deliveryStatus }).from(recruitmentCampaignRecipients).where(eq(recruitmentCampaignRecipients.campaignId, campaign.id));
-            const served = statuses.filter(row => ["sent", "delivered", "delayed"].includes(row.deliveryStatus)).length;
+            // A recipient left « queued » is no failure: its email went out
+            // under its own key, accepted with both recordings refused
+            // (DATA-05), or is going out in another send. It is never retried.
+            const served = statuses.filter(row => ["sent", "delivered", "delayed", "queued"].includes(row.deliveryStatus)).length;
             await db.update(recruitmentCampaigns).set({ status: served === statuses.length ? "sent" : served > 0 ? "partially_sent" : "failed" }).where(eq(recruitmentCampaigns.id, campaign.id));
             return { campaignId: campaign.id, attempted: failedRecipients.length, sent, failed, skipped };
           }),
