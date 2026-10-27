@@ -28,7 +28,6 @@ describe("retours honnêtes dans l’administration du recrutement", () => {
     expect(driveRetryToast({ outcome: "completed" }).tone).toBe("success");
   });
 
-
   it("Missions : panneau de détail, retrait de la shortlist et clôture (ADM-BRIEF-01/02)", () => {
     for (const field of ["selectedBrief.contactName", "mailto:${selectedBrief.email}", "selectedBrief.phone", "selectedBrief.requiredCertifications", "selectedBrief.notes", "formatDate(selectedBrief.createdAt)"]) {
       expect(briefsTab).toContain(field);

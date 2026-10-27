@@ -16,6 +16,8 @@ const state = vi.hoisted(() => ({
   aiAvailable: false,
   // An AI failure other than billing (timeout, provider error): the job is retried.
   aiFailure: null as string | null,
+  // The model the AI Gateway says it answered with (the primary one unless it fell back).
+  servedModel: "openai/gpt-6-astra",
   aiCalls: 0,
   notifications: [] as Array<{ title: string; content: string }>,
 }));
@@ -53,7 +55,7 @@ vi.mock("ai", async importOriginal => ({
         reasoning: "Lecture du CV.",
       },
       usage: { inputTokens: 100, outputTokens: 50 },
-      finalStep: { model: { modelId: "openai/gpt-6-astra" } },
+      finalStep: { model: { modelId: state.servedModel } },
       response: { id: "generation-test" },
     };
   }),
@@ -64,7 +66,7 @@ vi.mock("./recruitmentAnalysis", async importOriginal => ({
 }));
 
 const { processDueCvAnalysisJobs } = await import("./recruitmentProcessing");
-const { MANUAL_REVIEW_FALLBACK_MODEL, RECRUITMENT_ANALYSIS_PROMPT_VERSION } = await import("./recruitmentAnalysis");
+const { MANUAL_REVIEW_FALLBACK_MODEL, RECRUITMENT_ANALYSIS_FALLBACK_MODEL, RECRUITMENT_ANALYSIS_PRIMARY_MODEL, RECRUITMENT_ANALYSIS_PROMPT_VERSION } = await import("./recruitmentAnalysis");
 const { appRouter } = await import("./routers");
 
 let memory: MemoryPg;
@@ -97,6 +99,7 @@ beforeEach(() => {
   state.memory = memory;
   state.aiAvailable = false;
   state.aiFailure = null;
+  state.servedModel = "openai/gpt-6-astra";
   state.aiCalls = 0;
   state.notifications = [];
   vi.stubGlobal("fetch", vi.fn(async () => new Response(pdf)));
@@ -270,6 +273,9 @@ describe("traçabilité reproductible des analyses CV", () => {
 
   it("enregistre avec le résultat le modèle effectivement utilisé et la version du prompt", async () => {
     state.aiAvailable = true;
+    // The AI Gateway fell back from the configured model to its fallback.
+    state.servedModel = RECRUITMENT_ANALYSIS_FALLBACK_MODEL;
+    expect(RECRUITMENT_ANALYSIS_FALLBACK_MODEL).not.toBe(RECRUITMENT_ANALYSIS_PRIMARY_MODEL);
     const id = seedDossier(1);
 
     await processDueCvAnalysisJobs(5);
@@ -277,7 +283,7 @@ describe("traçabilité reproductible des analyses CV", () => {
     expect(dossier(id)).toMatchObject({
       extracted_text: CV_TEXT,
       extraction_method: "pdf_text",
-      analysis_model: "openai/gpt-6-astra",
+      analysis_model: RECRUITMENT_ANALYSIS_FALLBACK_MODEL,
       analysis_prompt_version: RECRUITMENT_ANALYSIS_PROMPT_VERSION,
     });
     expect(jobsOf(id)).toEqual([expect.objectContaining({ job_status: "completed" })]);

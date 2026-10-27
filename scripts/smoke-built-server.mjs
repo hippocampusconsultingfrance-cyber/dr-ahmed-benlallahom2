@@ -2,6 +2,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import http from "node:http";
 import net from "node:net";
+import { devNull } from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -15,12 +16,23 @@ import { pathToFileURL } from "node:url";
  * syntaxe ; ici, un import manquant, une exception au chargement ou une route
  * démontée font échouer la CI.
  *
- * Aucun service externe : chaque variable de production requise reçoit une
- * valeur factice, même si le shell ou .env en donne une vraie, et la base vise
- * https://localhost/sql (pilote neon-http), qui refuse la connexion. Sans base,
- * /api/health répond donc 503 (database « error ») : on exige le rapport
- * complet, une configuration « ok » et un code cohérent (200 seulement si tout
- * est « ok »), puis une requête tRPC anonyme, qui traverse clerkMiddleware.
+ * Aucun service réel, même lancé depuis un poste qui a les variables de la
+ * production : chaque variable requise (dont les clés Stripe, Resend, Clerk,
+ * Blob et Turnstile) reçoit une valeur factice, même si le shell en donne une
+ * vraie ; celles qui mèneraient à un service réel sans être requises
+ * (REAL_SERVICE_PREFIXES : moniteurs HEALTHCHECK_URL_* que la tâche planifiée
+ * en échec appellerait, Google Drive, IA, autres clés et hôtes d'API de Clerk,
+ * Resend et Blob, proxy) arrivent vides ; le .env du dépôt n'est pas lu
+ * (dotenv/config lit un fichier vide). Un garde chargé avant le bundle refuse
+ * en outre toute connexion du fil principal du serveur vers une autre machine,
+ * sans requête DNS, et le test échoue s'il en a refusé une ; il n'atteint pas
+ * les workers (lecture des PDF, server/pdfExtractionSandbox.ts), qu'aucune
+ * route appelée ici ne démarre (la tâche planifiée échoue sur la base avant de
+ * lire un CV). La base vise https://localhost/sql (pilote
+ * neon-http), qui refuse la connexion. Sans base, /api/health répond 503
+ * (database « error ») : on exige le rapport complet, une configuration « ok »
+ * et un code cohérent (200 seulement si tout est « ok »), puis une requête tRPC
+ * anonyme, qui traverse clerkMiddleware.
  *
  * Le bundle garde en import("…") à la demande des paquets (stripe, pdf-parse,
  * mammoth…) : un paquet absent n'y échoue qu'à la première requête qui le
@@ -30,7 +42,8 @@ import { pathToFileURL } from "node:url";
  * planifiée avec le CRON_SECRET factice (403 sans lui ; avec lui, la tâche va
  * jusqu'à la base injoignable : 500 dont la trace, sous la même référence,
  * n'est pas une erreur de module), calcul public du prix d'une réservation
- * (200). Aucune sortie du serveur ne doit montrer d'erreur de module.
+ * (200). Aucune sortie du serveur ne doit montrer d'erreur de module ni de
+ * connexion refusée par le garde.
  */
 
 /** PRODUCTION_REQUIRED_ENVIRONMENT_VARIABLES (server/_core/env.ts), toutes factices. */
@@ -54,8 +67,72 @@ export const SMOKE_ENVIRONMENT = Object.freeze({
   RESEND_WEBHOOK_SECRET: "whsec_smoke",
 });
 
+/**
+ * Variables qu'un shell ou un .env de production fournirait et par lesquelles le
+ * serveur construit, ou un SDK qu'il charge, joindrait un service réel :
+ * l'enfant les reçoit vides (les valeurs factices de SMOKE_ENVIRONMENT passent
+ * ensuite par-dessus).
+ */
+const REAL_SERVICE_PREFIXES = Object.freeze([
+  "HEALTHCHECK_URL_", // moniteurs des tâches planifiées : une tâche en échec y envoie /fail
+  "GOOGLE_DRIVE_", // export des CV vers Google Drive
+  "AI_GATEWAY_", // analyse IA des CV
+  "VERCEL_OIDC_", // jeton de l'AI Gateway et de Vercel Blob
+  "BLOB_", // Vercel Blob : BLOB_STORE_ID, avec ce jeton
+  "VERCEL_BLOB_", // Vercel Blob : hôte d'API
+  "NEXT_PUBLIC_VERCEL_BLOB_",
+  "BUILT_IN_FORGE_", // ancien proxy Manus : LLM et /manus-storage
+  "CLERK_", // CLERK_API_URL, CLERK_MACHINE_SECRET_KEY…
+  "RESEND_", // RESEND_BASE_URL : les e-mails, dont les alertes au propriétaire
+  "DOTENV_", // un autre fichier, son coffre .env.vault, ou l'écrasement des valeurs factices
+  // Avec HTTP(S)_PROXY, un proxy local relaierait vers l'extérieur ce que le garde laisse passer.
+  "NODE_USE_ENV_PROXY",
+  "GLOBAL_AGENT_",
+]);
+const PROXY_VARIABLE = /^(?:https?|all)_proxy$/i;
+
+/** Environnement du serveur démarré : celui du shell, sans accès à un service réel. */
+export function smokeChildEnvironment(target, port, environment = process.env) {
+  const realServices = Object.keys(environment).filter(name => PROXY_VARIABLE.test(name) || REAL_SERVICE_PREFIXES.some(prefix => name.startsWith(prefix)));
+  return {
+    ...environment,
+    // Vides plutôt qu'absentes : dotenv ne remplace pas une variable déjà définie.
+    ...Object.fromEntries(realServices.map(name => [name, ""])),
+    ...SMOKE_ENVIRONMENT,
+    // dotenv/config lit ce fichier vide au lieu du .env du dépôt.
+    DOTENV_CONFIG_PATH: devNull,
+    VERCEL: target.vercel ? "1" : "",
+    PORT: String(port),
+  };
+}
+
+/**
+ * Chargé avant le bundle (--import) : une connexion vers une autre machine
+ * échoue aussitôt comme une connexion refusée, sans requête DNS, et s'écrit sur
+ * la sortie du serveur, que le contrôle noOutboundConnections relit. Seul le fil
+ * principal est gardé : un worker a son propre module net, sans ce correctif.
+ */
+function guardNetwork(net) {
+  const connect = net.Socket.prototype.connect;
+  const local = host => !host || /^(?:localhost|127(?:\.\d+){3}|::1|::ffff:127(?:\.\d+){3})$/i.test(host);
+  net.Socket.prototype.connect = function (...args) {
+    const first = Array.isArray(args[0]) ? args[0][0] : args[0];
+    const options = first !== null && typeof first === "object" ? first : { port: first, host: typeof args[1] === "string" ? args[1] : undefined };
+    // Un fichier de socket local, lu comme net le lit (https passe `path: null` pour une connexion TCP).
+    const ipc = Boolean(options.path) || (typeof first === "string" && !/^\d+$/.test(first));
+    if (ipc || local(options.host)) return connect.apply(this, args);
+    const target = `${options.host}:${options.port}`;
+    process.stderr.write(`[smoke] connexion sortante refusée vers ${target}\n`);
+    const error = Object.assign(new Error(`connect ECONNREFUSED ${target} (test de fumée : réseau limité à cette machine)`), { code: "ECONNREFUSED", syscall: "connect" });
+    process.nextTick(() => this.destroy(error));
+    return this;
+  };
+}
+const NETWORK_GUARD = `data:text/javascript,${encodeURIComponent(`import net from "node:net";\n(${guardNetwork})(net);\n`)}`;
+const OUTBOUND_CONNECTION = /\[smoke\] connexion sortante refusée vers \S+/;
+
 /** Contrôles des routes qui chargent les modules à la demande, communs aux deux bundles. */
-const ROUTE_CHECKS = ["lazyPackages", "booking", "stripeWebhook", "resendWebhook", "scheduledJob", "noModuleErrors"];
+const ROUTE_CHECKS = ["lazyPackages", "booking", "stripeWebhook", "resendWebhook", "scheduledJob", "noModuleErrors", "noOutboundConnections"];
 
 export const BUILT_SERVERS = Object.freeze([
   { name: "fonction Vercel (api/index.js)", entry: "api/index.js", vercel: true, checks: ["health", "api", ...ROUTE_CHECKS] },
@@ -216,6 +293,11 @@ const CHECKS = {
     if (line) throw new Error(`erreur de module dans la sortie du serveur : ${line.slice(0, 300)}`);
     return "aucune erreur de module";
   },
+  async noOutboundConnections(_base, { output }) {
+    const refused = OUTBOUND_CONNECTION.exec(output());
+    if (refused) throw new Error(`le serveur a tenté de joindre une autre machine : ${refused[0]}`);
+    return "aucune connexion hors de cette machine";
+  },
 };
 
 function lastLines(text, count = 40) {
@@ -242,9 +324,8 @@ async function stop(child, closed) {
  */
 export async function smokeBuiltServer(target, { root = process.cwd(), startTimeoutMs = 30_000 } = {}) {
   const entry = path.resolve(root, target.entry);
-  const args = target.vercel ? ["--input-type=module", "--eval", VERCEL_HOST, pathToFileURL(entry).href] : [entry];
-  // VERCEL vide plutôt qu'absente : dotenv ne la remplace pas par celle d'un .env.
-  const env = { ...process.env, ...SMOKE_ENVIRONMENT, VERCEL: target.vercel ? "1" : "", PORT: String(await freePort()) };
+  const args = ["--import", NETWORK_GUARD, ...target.vercel ? ["--input-type=module", "--eval", VERCEL_HOST, pathToFileURL(entry).href] : [entry]];
+  const env = smokeChildEnvironment(target, await freePort());
   const child = spawn(process.execPath, args, { cwd: root, env, stdio: ["ignore", "pipe", "pipe"] });
   const closed = new Promise(resolve => child.once("close", resolve));
   let output = "";
