@@ -81,21 +81,29 @@ describe.skipIf(!executablePath)("coffre du candidat dans un navigateur", () => 
     [412, "fr"],
     [360, "en"],
     [1440, "fr"],
-  ])("à %i px (%s), un nom de fichier long reste dans sa carte, tronqué, sans défilement horizontal", async (width, language) => {
+  ])("à %i px (%s), un nom de fichier long reste dans sa carte, tronqué avant son extension, entier en info-bulle, sans défilement horizontal", async (width, language) => {
     const page = await openPortal(width, language);
     const layout = await page.evaluate((name) => {
       const line = Array.from(document.querySelectorAll("p")).find((paragraph) => paragraph.textContent?.startsWith(name))!;
+      const [baseName, extension] = Array.from(line.querySelectorAll("[title] > span"));
       return {
         pageWidth: document.documentElement.scrollWidth,
         lineRight: line.getBoundingClientRect().right,
         cardRight: line.closest("[data-slot='card']")?.getBoundingClientRect().right ?? Number.POSITIVE_INFINITY,
-        truncated: line.scrollWidth > line.clientWidth,
+        title: line.querySelector("[title]")?.getAttribute("title"),
+        truncated: baseName.scrollWidth > baseName.clientWidth,
+        extension: extension.textContent,
+        extensionRight: extension.getBoundingClientRect().right,
       };
     }, LONG_NAME);
     // On a phone, a page wider than the screen also widens the window (innerWidth): measured against the screen's width.
     expect(layout.pageWidth).toBeLessThanOrEqual(width);
     expect(layout.lineRight).toBeLessThanOrEqual(Math.min(width, layout.cardRight));
     expect(layout.truncated).toBe(true);
+    // The extension and the size stay readable right after the cut name; the whole name is in the title.
+    expect(layout.extension).toBe(".pdf · 1 KB");
+    expect(layout.extensionRight).toBeLessThanOrEqual(Math.min(width, layout.cardRight));
+    expect(layout.title).toBe(LONG_NAME);
     await page.context().close();
   }, 60_000);
 
