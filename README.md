@@ -48,6 +48,7 @@ client/            SPA React (pages, composants, données statiques, public/)
 server/            API Express/tRPC, webhooks, tâches planifiées, sécurité
 server/_core/      démarrage Express, auth, emails, en-têtes, hébergement statique
 server/routes/     routes Express hors tRPC (webhooks Stripe et Resend, brief employeur, candidature, coffre candidat, tâches planifiées)
+server/routers/    procédures tRPC, un fichier par domaine (admin/ pour l'administration), assemblées dans server/routers.ts
 shared/            types et constantes partagés client/serveur
 drizzle/           schéma et migrations SQL (source de vérité : drizzle/MIGRATION_SOURCE_OF_TRUTH.md)
 scripts/           pré-rendu SEO, régression visuelle, budgets de performance, contrôles de la CI
