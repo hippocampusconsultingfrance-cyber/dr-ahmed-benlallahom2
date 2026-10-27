@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { createElement } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Formulaire de contact monté par React dans un DOM, avec le vrai widget
@@ -22,6 +22,7 @@ const { default: ContactSection } = await import("./ContactSection");
 const { LanguageProvider } = await import("@/contexts/LanguageContext");
 const { getContactFormCopy, getTurnstileWidgetCopy } = await import("@/lib/publicFormCopy");
 const { contentFr } = await import("@/data/content-fr");
+const { TURNSTILE_DEFER_ROOT_MARGIN } = await import("./TurnstileWidget");
 
 const copy = getContactFormCopy("fr");
 const form = contentFr.contact.form;
@@ -57,6 +58,7 @@ afterEach(() => {
   localStorage.clear();
   delete window.turnstile;
   vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
 
@@ -77,6 +79,24 @@ describe("formulaire de contact et vérification anti-robot (navigateur simulé)
     fireEvent.submit(field("contact-name").form!);
     expect(await screen.findByText(getTurnstileWidgetCopy("fr").loadError)).toBeTruthy();
     expect(view.submit).not.toHaveBeenCalled();
+  });
+
+  it("charge le défi à l’approche du formulaire, 400 px avant qu’il n’entre dans l’écran, sans attendre le focus (PERF-04)", async () => {
+    const observers: Array<{ callback: IntersectionObserverCallback; options?: IntersectionObserverInit }> = [];
+    vi.stubGlobal("IntersectionObserver", class {
+      constructor(callback: IntersectionObserverCallback, options?: IntersectionObserverInit) { observers.push({ callback, options }); }
+      observe() {}
+      disconnect() {}
+    });
+    mount();
+    expect(observers.map(observer => observer.options?.rootMargin)).toEqual([TURNSTILE_DEFER_ROOT_MARGIN]);
+    expect(TURNSTILE_DEFER_ROOT_MARGIN).toBe("400px 0px");
+    const scroll = (isIntersecting: boolean) => act(() => observers[0]!.callback([{ isIntersecting } as IntersectionObserverEntry], {} as IntersectionObserver));
+
+    scroll(false);
+    expect(challenges).toHaveLength(0);
+    scroll(true);
+    await waitFor(() => expect(challenges).toHaveLength(1));
   });
 
   it("envoie le message avec le jeton du défi réussi, et se bloque de nouveau quand le jeton expire", async () => {
