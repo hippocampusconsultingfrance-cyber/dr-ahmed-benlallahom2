@@ -12,7 +12,8 @@ type Step = { name: string; keys: Record<string, string>; run: string };
  * The steps of one job, read from the block layout of ci.yml (no YAML library
  * among the dependencies): `- ` opens a step at the steps' indentation, each
  * `key: value` below it is one of its keys, and a `run: |` block keeps every
- * more indented line that follows.
+ * more indented line that follows. A line this layout does not explain fails
+ * the test rather than being skipped.
  */
 function jobSteps(workflow: string, job: string): Step[] {
   const lines = workflow.split("\n");
@@ -31,6 +32,8 @@ function jobSteps(workflow: string, job: string): Step[] {
     }
     block = null;
     if (line.trim().startsWith("#")) continue;
+    // Another key of the job after its steps.
+    if (line.trim() && line.search(/\S/) <= 4) break;
     const entry = /^ {6}(- | {2})([\w-]+):\s?(.*)$/.exec(line);
     if (!entry) {
       if (line.trim() && !/^ {8,}\S/.test(line)) throw new Error(`ci.yml: unexpected line in ${job}: ${line}`);

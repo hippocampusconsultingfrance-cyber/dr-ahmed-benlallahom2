@@ -202,9 +202,11 @@ const CHECKS = {
     if (status === 200) return "/api/scheduled/recruitment-processing 200";
     const failure = status === 500 ? parseJson(body, "/api/scheduled/recruitment-processing") : undefined;
     if (failure?.error !== "scheduled_job_failed" || typeof failure.reference !== "string") throw new Error(`/api/scheduled/recruitment-processing : HTTP ${status} ${body.slice(0, 200)}`);
-    // La base est injoignable : la tâche échoue, mais sa trace doit être celle de la base.
-    await new Promise(resolve => setTimeout(resolve, 100));
-    const trace = output().split("\n").find(line => line.includes(`ref=${failure.reference}`));
+    // La base est injoignable : la tâche échoue, mais pas sur un module manquant. Sa trace,
+    // écrite avant la réponse, peut arriver un peu après elle par la sortie du serveur.
+    const traceOf = () => output().split("\n").find(line => line.includes(`ref=${failure.reference}`));
+    for (let wait = 0; !traceOf() && wait < 20; wait++) await new Promise(resolve => setTimeout(resolve, 100));
+    const trace = traceOf();
     if (!trace) throw new Error(`/api/scheduled/recruitment-processing : aucune trace pour la référence ${failure.reference}`);
     if (MODULE_ERROR.test(trace)) throw new Error(`/api/scheduled/recruitment-processing : erreur de module ${trace.slice(0, 300)}`);
     return "/api/scheduled/recruitment-processing 500 (base injoignable, modules chargés)";
