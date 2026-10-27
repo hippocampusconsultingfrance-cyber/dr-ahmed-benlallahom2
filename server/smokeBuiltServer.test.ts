@@ -1,10 +1,14 @@
+import { spawn } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import http from "node:http";
-import { tmpdir } from "node:os";
+import type { AddressInfo } from "node:net";
+import { createRequire } from "node:module";
+import { devNull, tmpdir } from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { pathToFileURL } from "node:url";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { getMissingCriticalProductionEnvironment } from "./_core/env";
-import { BUILT_SERVERS, SMOKE_ENVIRONMENT, smokeBuiltServer } from "../scripts/smoke-built-server.mjs";
+import { BUILT_SERVERS, SMOKE_ENVIRONMENT, smokeBuiltServer, smokeChildEnvironment } from "../scripts/smoke-built-server.mjs";
 
 /**
  * scripts/smoke-built-server.mjs, lancé par la CI après `pnpm build` (CODE-14),
@@ -21,6 +25,7 @@ function fixture(files: Record<string, string>) {
   return directory;
 }
 afterEach(() => {
+  vi.unstubAllEnvs();
   for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true });
 });
 
@@ -54,13 +59,17 @@ server.listen(port, () => console.log(\`Server running on http://localhost:\${po
 `;
 }
 
+// Like the real bundle, the test servers read the .env of their directory.
+const DOTENV_CONFIG = pathToFileURL(createRequire(import.meta.url).resolve("dotenv/config")).href;
+
 // The routes that load modules on demand, answered like the real server without a database.
 function routesServer(options: { stripeStatus?: number; cronTrace?: string; resendLog?: string; source?: string } = {}) {
   return `
+import ${JSON.stringify(DOTENV_CONFIG)};
 import { createServer } from "node:http";
 ${options.source ?? ""}
 const json = (res, status, body) => res.writeHead(status, { "Content-Type": "application/json" }).end(JSON.stringify(body));
-const server = createServer((req, res) => {
+const server = createServer(async (req, res) => {
   const route = req.url.split("?")[0];
   if (route === "/api/health") return json(res, 200, { status: "ok", checks: { database: { status: "ok", latencyMs: 3 }, configuration: { status: "ok" } } });
   if (route === "/api/trpc/auth.me") return json(res, 200, { result: { data: { json: null } } });
@@ -75,16 +84,51 @@ const server = createServer((req, res) => {
   }
   if (route === "/api/scheduled/recruitment-processing") {
     if (req.headers.authorization !== "Bearer ${SMOKE_ENVIRONMENT.CRON_SECRET}") return json(res, 403, { error: "cron-only" });
+    // The failed run pings its monitor, as runMonitoredScheduledJob does.
+    const monitor = process.env.HEALTHCHECK_URL_RECRUITMENT_PROCESSING;
+    if (monitor) await fetch(\`\${monitor}/fail\`).catch(() => undefined);
     console.error(${JSON.stringify(`[RecruitmentProcessing] Vercel cron error ref=abcd1234 ${options.cronTrace ?? "Error: Failed query: select 1"}`)});
     return json(res, 500, { error: "scheduled_job_failed", reference: "abcd1234" });
   }
   json(res, 404, { error: "not_found" });
 });
-const port = Number(process.env.PORT);
-server.listen(port, () => console.log(\`Server running on http://localhost:\${port}/\`));
+server.listen(Number(process.env.PORT), () => console.log(\`Server running on http://localhost:\${server.address().port}/\`));
 `;
 }
 const routesTarget = { name: "serveur de test", entry: "server.mjs", vercel: false, checks: BUILT_SERVERS[1]!.checks.filter(check => check !== "spa") };
+
+/** A local monitor recording the paths it is pinged on, standing for healthchecks.io. */
+async function recordingMonitor() {
+  const pings: string[] = [];
+  const server = http.createServer((req, res) => { pings.push(req.url ?? ""); res.end("OK"); });
+  await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+  return { url: `http://127.0.0.1:${(server.address() as AddressInfo).port}/check-uuid`, pings, close: () => new Promise(resolve => server.close(resolve)) };
+}
+
+/**
+ * Starts a test server outside the smoke test, as a developer would, and runs its
+ * scheduled job once. Only `environment` is given, never this shell's variables.
+ */
+async function runScheduledJobDirectly(root: string, environment: Record<string, string>) {
+  const child = spawn(process.execPath, ["server.mjs"], { cwd: root, env: { PATH: process.env.PATH ?? "", PORT: "0", ...environment }, stdio: ["ignore", "pipe", "ignore"] });
+  const exited = new Promise(resolve => child.once("exit", resolve));
+  try {
+    const port = await new Promise<number>((resolve, reject) => {
+      let output = "";
+      child.stdout.setEncoding("utf8").on("data", (chunk: string) => {
+        output += chunk;
+        const listening = /localhost:(\d+)\//.exec(output);
+        if (listening) resolve(Number(listening[1]));
+      });
+      child.once("exit", code => reject(new Error(`test server exited (${code})`)));
+    });
+    const response = await fetch(`http://127.0.0.1:${port}/api/scheduled/recruitment-processing`, { headers: { authorization: `Bearer ${SMOKE_ENVIRONMENT.CRON_SECRET}` } });
+    return response.status;
+  } finally {
+    child.kill();
+    await exited;
+  }
+}
 
 function connects(port: number) {
   return new Promise<boolean>(resolve => {
@@ -103,7 +147,7 @@ describe("test de fumée du serveur construit (CODE-14)", { timeout: 20_000 }, (
   it("démarre les deux bundles que produit pnpm build", () => {
     const scripts = JSON.parse(readFileSync(path.join(process.cwd(), "package.json"), "utf8")).scripts;
     expect(BUILT_SERVERS.map(target => target.entry)).toEqual(["api/index.js", "dist/index.js"]);
-    const routeChecks = ["lazyPackages", "booking", "stripeWebhook", "resendWebhook", "scheduledJob", "noModuleErrors"];
+    const routeChecks = ["lazyPackages", "booking", "stripeWebhook", "resendWebhook", "scheduledJob", "noModuleErrors", "noOutboundConnections"];
     for (const target of BUILT_SERVERS) expect(target.checks, target.name).toEqual(expect.arrayContaining(["health", "api", ...routeChecks]));
     expect(scripts.build).toContain("--outfile=api/index.js");
     expect(scripts.start).toContain("node dist/index.js");
@@ -158,7 +202,100 @@ describe("test de fumée du serveur construit (CODE-14)", { timeout: 20_000 }, (
       "/api/webhooks/resend 400 (signature absente refusée)",
       "/api/scheduled/recruitment-processing 500 (base injoignable, modules chargés)",
       "aucune erreur de module",
+      "aucune connexion hors de cette machine",
     ]);
+  });
+
+  it("ne donne au serveur aucune adresse ni aucun accès d'un service réel que le shell fournirait", () => {
+    const shell = {
+      PATH: "/usr/bin",
+      NODE_ENV: "development",
+      HEALTHCHECK_URL_RECRUITMENT_PROCESSING: "https://hc-ping.com/real-check",
+      HEALTHCHECK_URL_REMINDER: "https://uptime.betterstack.com/api/v1/heartbeat/real",
+      GOOGLE_DRIVE_CLIENT_ID: "real.apps.googleusercontent.com",
+      GOOGLE_DRIVE_CLIENT_SECRET: "real-drive-secret",
+      AI_GATEWAY_API_KEY: "real-gateway-key",
+      VERCEL_OIDC_TOKEN: "real.oidc.token",
+      BLOB_STORE_ID: "store_real",
+      VERCEL_BLOB_API_URL: "https://blob.real.example",
+      BUILT_IN_FORGE_API_KEY: "real-forge-key",
+      CLERK_SECRET_KEY: "sk_live_real",
+      CLERK_API_URL: "https://api.clerk.com",
+      CLERK_MACHINE_SECRET_KEY: "ak_real",
+      RESEND_API_KEY: "re_real",
+      RESEND_BASE_URL: "https://api.resend.com",
+      STRIPE_SECRET_KEY: "sk_live_real",
+      DOTENV_CONFIG_PATH: "/home/owner/production.env",
+      DOTENV_CONFIG_OVERRIDE: "true",
+      DOTENV_KEY: "dotenv://:key_real@dotenvx.com/vault/.env.vault?environment=production",
+      HTTPS_PROXY: "http://127.0.0.1:3128",
+      https_proxy: "http://127.0.0.1:3128",
+      NODE_USE_ENV_PROXY: "1",
+    };
+    const environment = smokeChildEnvironment(BUILT_SERVERS[1]!, 4321, shell);
+    expect(environment).toEqual({
+      ...SMOKE_ENVIRONMENT,
+      PATH: "/usr/bin",
+      HEALTHCHECK_URL_RECRUITMENT_PROCESSING: "",
+      HEALTHCHECK_URL_REMINDER: "",
+      GOOGLE_DRIVE_CLIENT_ID: "",
+      GOOGLE_DRIVE_CLIENT_SECRET: "",
+      AI_GATEWAY_API_KEY: "",
+      VERCEL_OIDC_TOKEN: "",
+      BLOB_STORE_ID: "",
+      VERCEL_BLOB_API_URL: "",
+      BUILT_IN_FORGE_API_KEY: "",
+      CLERK_API_URL: "",
+      CLERK_MACHINE_SECRET_KEY: "",
+      RESEND_BASE_URL: "",
+      // The .env of the repository is not read.
+      DOTENV_CONFIG_PATH: devNull,
+      DOTENV_CONFIG_OVERRIDE: "",
+      DOTENV_KEY: "",
+      HTTPS_PROXY: "",
+      https_proxy: "",
+      NODE_USE_ENV_PROXY: "",
+      VERCEL: "",
+      PORT: "4321",
+    });
+  });
+
+  it("ne signale aucun échec au vrai moniteur de la tâche planifiée, que son adresse vienne du shell ou du .env du dépôt", async () => {
+    const monitor = await recordingMonitor();
+    try {
+      // Started by hand, the test server pings the monitor of its failed run, from either source.
+      const fromShell = fixture({ "server.mjs": routesServer() });
+      expect(await runScheduledJobDirectly(fromShell, { HEALTHCHECK_URL_RECRUITMENT_PROCESSING: monitor.url })).toBe(500);
+      const fromDotenv = fixture({ "server.mjs": routesServer(), ".env": `HEALTHCHECK_URL_RECRUITMENT_PROCESSING=${monitor.url}\n` });
+      expect(await runScheduledJobDirectly(fromDotenv, {})).toBe(500);
+      expect(monitor.pings).toEqual(["/check-uuid/fail", "/check-uuid/fail"]);
+      monitor.pings.length = 0;
+
+      // Through the smoke test, the same job fails without a word to the monitor.
+      vi.stubEnv("HEALTHCHECK_URL_RECRUITMENT_PROCESSING", monitor.url);
+      await expect(smokeBuiltServer(routesTarget, { root: fromShell })).resolves.toMatchObject({ results: expect.arrayContaining(["/api/scheduled/recruitment-processing 500 (base injoignable, modules chargés)"]) });
+      vi.unstubAllEnvs();
+      await expect(smokeBuiltServer(routesTarget, { root: fromDotenv })).resolves.toMatchObject({ results: expect.arrayContaining(["/api/scheduled/recruitment-processing 500 (base injoignable, modules chargés)"]) });
+      expect(monitor.pings).toEqual([]);
+    } finally {
+      await monitor.close();
+    }
+  });
+
+  it("refuse, sans requête DNS, toute connexion du serveur vers une autre machine, et échoue", async () => {
+    const root = fixture({
+      "server.mjs": routesServer({
+        source: [
+          'await fetch("https://monitor.smoke.invalid/ping").catch(error => console.error("fetch:", error.cause?.code));',
+          'const https = await import("node:https");',
+          'https.get("https://api.smoke.invalid/v1/charges").on("error", error => console.error("https:", error.code));',
+        ].join("\n"),
+      }),
+    });
+    const failure = smokeBuiltServer(routesTarget, { root });
+    await expect(failure).rejects.toThrow(/le serveur a tenté de joindre une autre machine : \[smoke\] connexion sortante refusée vers monitor\.smoke\.invalid:443/);
+    // Refused at once by the guard (ECONNREFUSED), not after a name lookup (ENOTFOUND, EAI_AGAIN).
+    await expect(failure).rejects.toThrow(/fetch: ECONNREFUSED[\s\S]*connexion sortante refusée vers api\.smoke\.invalid:443[\s\S]*https: ECONNREFUSED/);
   });
 
   it("échoue sur un paquet importé à la demande introuvable, même dans une branche que les requêtes n'atteignent pas", async () => {
