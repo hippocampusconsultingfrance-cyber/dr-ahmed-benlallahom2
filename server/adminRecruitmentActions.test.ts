@@ -158,8 +158,31 @@ describe("actions d’administration du recrutement", () => {
     error.mockRestore();
     expect(result).toMatchObject({ total: 1, sent: 1, failed: 0 });
     expect(memory.rows(recruitmentCampaignRecipients)[0]).toMatchObject({ delivery_status: "queued", provider_email_id: null, error: null });
+    expect(memory.rows(recruitmentCampaigns)[0]).toMatchObject({ status: "sent" });
     await expect(admin().admin.recruitment.campaigns.retryFailed({ campaignId: result.campaignId, confirmed: true })).resolves.toMatchObject({ attempted: 0, sent: 0 });
     expect(state.sentTo).toEqual(["c1@test.local"]);
+    // A retry with nothing to send leaves the campaign sent, not « failed ».
+    expect(memory.rows(recruitmentCampaigns)[0]).toMatchObject({ status: "sent" });
+  });
+
+  it("une relance compte comme envoyé le destinataire resté « queued » après l’acceptation de son email (DATA-05)", async () => {
+    const accepted = seedCandidate(1);
+    const failing = seedCandidate(2);
+    state.failFor = new Set(["c2@test.local"]);
+    // c1's email is accepted, then both its recordings are refused; Resend refuses c2's.
+    memory.failNext(/^update "recruitment_campaign_recipients" set "delivery_status" = \$1, "provider_email_id"/, 2);
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const result = await admin().admin.recruitment.campaigns.send({ title: "Offre test", subject: "Offre Suisse", body: "Une mission à Genève, répondez par email.", language: "fr", mode: "selected", selectedIds: [accepted.id as number, failing.id as number], confirmed: true });
+    error.mockRestore();
+    expect(result).toMatchObject({ total: 2, sent: 1, failed: 1 });
+    expect(memory.rows(recruitmentCampaigns)[0]).toMatchObject({ status: "partially_sent" });
+
+    state.failFor.clear();
+    await expect(admin().admin.recruitment.campaigns.retryFailed({ campaignId: result.campaignId, confirmed: true })).resolves.toMatchObject({ attempted: 1, sent: 1, failed: 0 });
+    expect(state.sentTo).toEqual(["c1@test.local", "c2@test.local"]);
+    expect(Object.fromEntries(memory.rows(recruitmentCampaignRecipients).map(row => [row.recipient_email, row.delivery_status]))).toEqual({ "c1@test.local": "queued", "c2@test.local": "sent" });
+    // Every email went out: the campaign is sent.
+    expect(memory.rows(recruitmentCampaigns)[0]).toMatchObject({ status: "sent" });
   });
 
   it("rapporte l’issue réelle d’une relance d’analyse ou de copie Drive (ADM-REC-02, ADM-DRIVE-01)", () => {
