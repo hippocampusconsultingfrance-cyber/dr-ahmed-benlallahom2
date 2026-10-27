@@ -137,6 +137,14 @@ describe.skipIf(!executablePath)("pages publiques dans un navigateur", () => {
     requestAnimationFrame(tick);
   });
 
+  /**
+   * Fin des transitions d'apparition (.fade-in-up, .parallax-subtle) : une section pas encore révélée
+   * est décalée ou réduite (scale 0,97) et ne s'arrête à sa place qu'une fois la transition finie.
+   */
+  const revealSettled = () => Promise.all(document.getAnimations()
+    .filter((animation) => animation instanceof CSSTransition && ((animation.effect as KeyframeEffect | null)?.target as Element | null)?.matches(".fade-in-up, .parallax-subtle"))
+    .map((animation) => animation.finished)).then(() => undefined);
+
   it("garde l'en-tête en haut de l'écran après un défilement de 1 500 px (PUB-01)", async () => {
     for (const width of [1440, 390]) {
       for (const route of ["/", "/faq", "/employers", "/venture/pratique-clinique"]) {
@@ -235,12 +243,17 @@ describe.skipIf(!executablePath)("pages publiques dans un navigateur", () => {
         }
         await page.waitForFunction(() => window.scrollY > 0);
         await page.evaluate(scrollSettled);
+        // Arrivée à l'écran, la section se révèle : sa place est celle d'après la transition.
+        await page.waitForFunction((sectionId) => [...document.querySelectorAll(".fade-in-up, .parallax-subtle")]
+          .filter((node) => node.contains(document.getElementById(sectionId)))
+          .every((node) => node.classList.contains("visible")), id);
+        await page.evaluate(revealSettled);
         const landed = await page.evaluate((sectionId) => ({
           section: document.getElementById(sectionId)!.getBoundingClientRect().top,
           heading: document.querySelector(`#${sectionId} h2`)!.getBoundingClientRect().top,
           header: document.querySelector("header.site-nav")!.getBoundingClientRect().bottom,
         }), id);
-        expect(landed.section, `${id} par ${trigger} à ${width} px`).toBeLessThanOrEqual(1);
+        expect(Math.abs(landed.section), `${id} par ${trigger} à ${width} px`).toBeLessThanOrEqual(1);
         expect(landed.heading, `${id} par ${trigger} à ${width} px`).toBeGreaterThanOrEqual(landed.header);
         await page.context().close();
       }
