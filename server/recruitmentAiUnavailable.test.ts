@@ -217,6 +217,21 @@ describe("analyse IA refusée pour facturation (REC-08)", () => {
     expect(rows()).toEqual([["ACLS", "2023-05", false], ["Licence DHA", null, false]]);
   });
 
+  it("garde après une analyse dégradée les langues lues dans le CV, pour les filtres aussi sous le prompt actuel (IA-02)", async () => {
+    const current = seedDossier(1, { analysis_status: "completed", analysis_model: "openai/gpt-6-astra", analysis_prompt_version: RECRUITMENT_ANALYSIS_PROMPT_VERSION, languages: '["Français"]', normalized_languages: '[{"language":"Anglais","proficiency":"fluent"}]' }, { job_status: "completed", attempts: 1 });
+    const outdated = seedDossier(2, { analysis_status: "completed", analysis_model: "openai/gpt-5", analysis_prompt_version: "recruitment-v6", languages: '["Français"]', normalized_languages: '[{"language":"Anglais","proficiency":"fluent"}]' }, { job_status: "completed", attempts: 1 });
+    memory.seed(cvCandidateLanguages, [
+      { application_id: current, language: "Anglais", proficiency: "fluent", source: "extracted" },
+      { application_id: outdated, language: "Anglais", proficiency: "fluent", source: "extracted" },
+    ]);
+    for (const id of [current, outdated]) await expect(admin().admin.recruitment.reanalyze({ id })).resolves.toMatchObject({ outcome: "ai_unavailable" });
+    // The CV was not read again: the languages read there stay, and so do
+    // those the filters read under the current prompt (not an older one's).
+    expect(memory.rows(cvCandidateLanguages).map(row => [row.application_id, row.language, row.source])).toEqual([[current, "Anglais", "extracted"], [outdated, "Anglais", "extracted"]]);
+    expect(dossier(current)).toMatchObject({ analysis_status: "degraded", analysis_prompt_version: RECRUITMENT_ANALYSIS_PROMPT_VERSION, normalized_languages: '[{"language":"Anglais","proficiency":"fluent"}]' });
+    expect(dossier(outdated)).toMatchObject({ analysis_status: "degraded", analysis_prompt_version: RECRUITMENT_ANALYSIS_PROMPT_VERSION, normalized_languages: "[]" });
+  });
+
   it("« Relancer l’analyse » d’un dossier quand le crédit manque toujours répond « IA indisponible », pas « analyse actualisée »", async () => {
     const id = seedDossier(1, {}, { job_status: "completed", attempts: 1 });
     const result = await admin().admin.recruitment.reanalyze({ id });

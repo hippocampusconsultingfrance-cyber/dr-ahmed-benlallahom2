@@ -9,8 +9,13 @@ type BriefForMatching = {
   availabilityNeeded?: string | null;
 };
 
-/** A certification with its origins (IA-02) and, when the CV gives one, its expiry. */
-export type CertificationFact = RecruitmentFact & { expiresAt: string | null };
+/**
+ * A certification with its origins (IA-02) and, when the CV gives one, its
+ * expiry: unverified (« selon le CV, à vérifier ») when only an analysis that
+ * retained no facts gives it, since none of the certification's origins then
+ * says it was read in the CV.
+ */
+export type CertificationFact = RecruitmentFact & { expiresAt: string | null; expiryUnverified?: boolean };
 
 /**
  * Why a certification retained for a mission scores or not (IA-02): confirmed
@@ -39,9 +44,11 @@ type CandidateForMatching = {
 
 /**
  * cv_candidate_certifications row: read in the CV by the AI, declared and then
- * confirmed, or a renewal an admin confirmed, with its new expiry (IA-02).
+ * confirmed, a renewal an admin confirmed, with its new expiry, or the expiry
+ * the CV gives a declared certification when its analysis retained no facts
+ * (IA-02).
  */
-export type CertificationRow = { name: string; source: "declared" | "extracted" | "renewed"; confirmedAt: Date | string | null; expiresAt: string | null };
+export type CertificationRow = { name: string; source: "declared" | "extracted" | "renewed" | "cv_expiry"; confirmedAt: Date | string | null; expiresAt: string | null };
 /** cv_candidate_languages row, read in the CV by the AI. */
 export type LanguageRow = { language: string; source: "declared" | "extracted" };
 
@@ -80,7 +87,7 @@ function parseTerms(value: string | null | undefined) {
  * The latest of these expiries: none (current) when one of them has no date,
  * an unreadable one counting as expired.
  */
-function latestCertificationExpiry(expiries: Array<string | null>) {
+export function latestCertificationExpiry(expiries: Array<string | null>) {
   if (expiries.some(expiresAt => !expiresAt)) return null;
   const time = (expiresAt: string) => certificationExpiry(expiresAt)?.getTime() ?? -Infinity;
   return (expiries as string[]).reduce((latest, expiresAt) => time(expiresAt) > time(latest) ? expiresAt : latest);
@@ -115,7 +122,10 @@ function addFact<T extends RecruitmentFact>(facts: T[], name: string, origin: Re
  * The candidate's certifications, one per name (IA-02): declared in the form,
  * read in the CV by the AI, confirmed by an admin (a row with confirmed_at).
  * Free-text declared certifications have no machine-readable expiry. A
- * renewal row adds no origin but the admin's confirmation.
+ * renewal row adds no origin but the admin's confirmation. An expiry the CV
+ * gives while its analysis retained no facts adds none either, nor a
+ * certification: it only dates one known otherwise, a date said unverified
+ * since no origin says where it comes from.
  */
 export function certificationFacts(declared: string | null | undefined, rows: CertificationRow[]): CertificationFact[] {
   const facts: CertificationFact[] = [];
@@ -123,10 +133,15 @@ export function certificationFacts(declared: string | null | undefined, rows: Ce
   for (const name of declaredCertificationNames(declared)) addFact(facts, name, "declared", create);
   const rowsByFact = new Map<CertificationFact, CertificationRow[]>();
   for (const row of rows) {
+    if (row.source === "cv_expiry") continue;
     const fact = addFact(facts, row.name, row.source === "renewed" ? "confirmed" : row.source, create);
     if (!fact) continue;
     if (row.confirmedAt) addFact(facts, row.name, "confirmed", create);
     rowsByFact.set(fact, [...(rowsByFact.get(fact) ?? []), row]);
+  }
+  for (const row of rows) {
+    const fact = row.source === "cv_expiry" ? facts.find(item => sameRecruitmentFact(item.name, row.name)) : undefined;
+    if (fact) rowsByFact.set(fact, [...(rowsByFact.get(fact) ?? []), row]);
   }
   // A certification renewed in the CV has a row per date: it is current while
   // its latest one is. Once one is confirmed, only the confirmed rows count,
@@ -138,7 +153,9 @@ export function certificationFacts(declared: string | null | undefined, rows: Ce
     const datedRows = factRows.filter(row => row.source !== "declared");
     if (!datedRows.length) return;
     const confirmedRows = datedRows.filter(row => row.confirmedAt);
-    fact.expiresAt = latestCertificationExpiry((confirmedRows.length ? confirmedRows : datedRows).map(row => row.expiresAt));
+    const datingRows = confirmedRows.length ? confirmedRows : datedRows;
+    fact.expiresAt = latestCertificationExpiry(datingRows.map(row => row.expiresAt));
+    if (fact.expiresAt && datingRows.every(row => row.source === "cv_expiry")) fact.expiryUnverified = true;
   });
   return facts;
 }

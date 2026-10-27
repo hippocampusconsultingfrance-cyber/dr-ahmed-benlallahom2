@@ -29,6 +29,8 @@ const trapped = {
     { name: "Licence DHA", origins: ["extracted"], expiresAt: null },
     { name: "Licence MOH", origins: ["extracted"], expiresAt: "2019-03" },
     { name: "ACLS", origins: ["declared", "extracted"], expiresAt: "2031-06-30" },
+    // The expiry a CV whose analysis retained no facts gives the declared PALS.
+    { name: "PALS", origins: ["declared"], expiresAt: "2020-03", expiryUnverified: true },
   ],
 };
 
@@ -99,6 +101,17 @@ describe("IA-02 — vivier filtré par certification", () => {
     expect(renderToStaticMarkup(render())).toContain(expired);
     searchCertification("acls");
     expect(renderToStaticMarkup(render())).toContain(current);
+  });
+
+  it.each([
+    ["fr", "Certification recherchée:</strong> PALS (déclarée par le candidat), expirée en mars 2020 selon le CV, à vérifier</p>"],
+    ["en", "Searched certification:</strong> PALS (declared by the candidate), expired in March 2020 according to the CV, to be checked</p>"],
+    ["de", "Gesuchte Zertifizierung:</strong> PALS (vom Kandidaten angegeben), abgelaufen im März 2020 laut Lebenslauf, zu prüfen</p>"],
+    ["zh", "所查认证:</strong> PALS (候选人自行申报), 已于 2020年3月 过期（据简历，待核实）</p>"],
+  ] as const)("dit d’une date que seul un CV dont l’analyse n’a retenu aucun fait la donne, à vérifier (%s)", (language, expected) => {
+    view.language = language;
+    searchCertification("pals");
+    expect(renderToStaticMarkup(render())).toContain(expected);
   });
 
   it.each([

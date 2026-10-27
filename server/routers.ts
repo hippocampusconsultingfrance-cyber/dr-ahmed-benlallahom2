@@ -37,7 +37,7 @@ import { googleDriveExportStatus } from "./googleDriveExport";
 import { buildCandidatePortalInvitationEmailEvent, candidatePortalAccountMatchesApplication, resolveCandidatePortalActivationDelivery, resolveCandidatePortalInvitationDelivery, resolveCvConfirmationDelivery, retryCvConfirmationEmail } from "./recruitmentEmailTrace";
 import { AI_ANALYSIS_BILLING_UNAVAILABLE_ERROR, MANUAL_REVIEW_FALLBACK_MODEL, RECRUITMENT_ANALYSIS_PROMPT_VERSION } from "./recruitmentAnalysis";
 import { medicalQuestionsRouter } from "./medicalQuestionsRouter";
-import { adminSearchCondition, adminSearchInput } from "./adminSearch";
+import { adminFilterContains, adminSearchCondition, adminSearchInput } from "./adminSearch";
 import { postgresErrorCode } from "./languageColumns";
 import { AdminMfaRateLimitError, issueAdminMfaChallenge, revokeCurrentAdminMfaSession, verifyAdminMfaChallenge } from "./adminMfa";
 import {
@@ -365,17 +365,17 @@ async function languageFactsByApplication(db: AdminDb, applications: Array<{ id:
 
 /**
  * Applications holding a certification an admin confirmed whose name contains
- * this term, case aside (IA-02). The certification filters find a confirmed
- * certification even once a new analysis stored no facts (a contradiction,
- * hidden text) and left normalized_certifications empty. They are wider than
- * a mission's matching: accents count, and a certification that has expired,
+ * this term, case and accents aside (IA-02). The certification filters find a
+ * confirmed certification even once a new analysis stored no facts (a
+ * contradiction, hidden text) and left normalized_certifications empty. They
+ * are wider than a mission's matching: a certification that has expired,
  * confirmed or read in the CV with its date, is found too, as the declared
  * text finds one. The lists then give its expiry beside its origins.
  */
 async function applicationsWithConfirmedCertification(db: AdminDb, term: string) {
   const rows = await db.select({ applicationId: cvCandidateCertifications.applicationId })
     .from(cvCandidateCertifications)
-    .where(and(isNotNull(cvCandidateCertifications.confirmedAt), sql`LOWER(${cvCandidateCertifications.name}) LIKE LOWER(${`%${term}%`})`));
+    .where(and(isNotNull(cvCandidateCertifications.confirmedAt), adminFilterContains(cvCandidateCertifications.name, term)));
   return Array.from(new Set(rows.map(row => row.applicationId)));
 }
 
@@ -1691,10 +1691,11 @@ export const appRouter = router({
           const search = adminSearchCondition(input.search, [cvApplications.firstName, cvApplications.lastName, cvApplications.email, cvApplications.trackingId], { firstName: cvApplications.firstName, lastName: cvApplications.lastName });
           if (search) conditions.push(search);
           if (input.specialty) conditions.push(sql`LOWER(${cvApplications.specialty}) LIKE LOWER(${`%${input.specialty}%`})`);
-          // Country, language and certification, case aside, like the pool's certification filter: « dha » finds « Licence DHA ».
-          if (input.country) conditions.push(sql`LOWER(COALESCE(${cvApplications.targetCountries}, '')) LIKE LOWER(${`%${input.country}%`})`);
-          if (input.language) conditions.push(sql`((${cvApplications.analysisPromptVersion} = ${RECRUITMENT_ANALYSIS_PROMPT_VERSION} AND LOWER(COALESCE(${cvApplications.normalizedLanguages}, '')) LIKE LOWER(${`%${input.language}%`})) OR LOWER(COALESCE(${cvApplications.languages}, '')) LIKE LOWER(${`%${input.language}%`}))`);
-          if (input.certification) conditions.push(await certificationFilterCondition(db, input.certification, sql`((${cvApplications.analysisPromptVersion} = ${RECRUITMENT_ANALYSIS_PROMPT_VERSION} AND LOWER(COALESCE(${cvApplications.normalizedCertifications}, '')) LIKE LOWER(${`%${input.certification}%`})) OR LOWER(COALESCE(${cvApplications.certifications}, '')) LIKE LOWER(${`%${input.certification}%`}))`));
+          // Country, language and certification, case and accents aside, like the pool and a campaign's
+          // filtered audience: « dha » finds « Licence DHA », « emirats » « Émirats arabes unis ».
+          if (input.country) conditions.push(adminFilterContains(cvApplications.targetCountries, input.country));
+          if (input.language) conditions.push(sql`((${cvApplications.analysisPromptVersion} = ${RECRUITMENT_ANALYSIS_PROMPT_VERSION} AND ${adminFilterContains(cvApplications.normalizedLanguages, input.language)}) OR ${adminFilterContains(cvApplications.languages, input.language)})`);
+          if (input.certification) conditions.push(await certificationFilterCondition(db, input.certification, sql`((${cvApplications.analysisPromptVersion} = ${RECRUITMENT_ANALYSIS_PROMPT_VERSION} AND ${adminFilterContains(cvApplications.normalizedCertifications, input.certification)}) OR ${adminFilterContains(cvApplications.certifications, input.certification)})`));
 
           let profile: typeof recruitmentMatchProfiles.$inferSelect | null = null;
           if (input.profileId) {
@@ -1704,7 +1705,7 @@ export const appRouter = router({
             if (!selectedProfile) throw new TRPCError({ code: "NOT_FOUND", message: "Profil de matching introuvable" });
             profile = selectedProfile;
             if (selectedProfile.specialty) conditions.push(sql`LOWER(${cvApplications.specialty}) LIKE LOWER(${`%${selectedProfile.specialty}%`})`);
-            if (selectedProfile.targetCountry) conditions.push(sql`LOWER(COALESCE(${cvApplications.targetCountries}, '')) LIKE LOWER(${`%${selectedProfile.targetCountry}%`})`);
+            if (selectedProfile.targetCountry) conditions.push(adminFilterContains(cvApplications.targetCountries, selectedProfile.targetCountry));
           }
           const minimumScore = Math.max(input.minimumScore ?? 0, profile?.minimumScore ?? 0);
           if (minimumScore > 0) conditions.push(scoreAtLeastOrUnavailable(minimumScore));
@@ -1889,10 +1890,11 @@ export const appRouter = router({
               sql`${cvApplications.status} NOT IN ('rejected', 'archived')`,
             ];
             if (input?.specialty) conditions.push(sql`LOWER(${cvApplications.specialty}) LIKE LOWER(${`%${input.specialty}%`})`);
-            if (input?.country) conditions.push(sql`LOWER(COALESCE(${cvApplications.targetCountries}, '')) LIKE LOWER(${`%${input.country}%`})`);
+            if (input?.country) conditions.push(adminFilterContains(cvApplications.targetCountries, input.country));
             if (input?.availability) conditions.push(sql`LOWER(COALESCE(${cvApplications.availability}, '')) LIKE LOWER(${`%${input.availability}%`})`);
-            if (input?.mobility) conditions.push(sql`(LOWER(COALESCE(${cvApplications.mobility}, '')) LIKE LOWER(${`%${input.mobility}%`}) OR LOWER(COALESCE(${cvApplications.targetCountries}, '')) LIKE LOWER(${`%${input.mobility}%`}))`);
-            if (input?.certification) conditions.push(await certificationFilterCondition(db, input.certification, sql`(LOWER(COALESCE(${cvApplications.certifications}, '')) LIKE LOWER(${`%${input.certification}%`}) OR (${cvApplications.analysisPromptVersion} = ${RECRUITMENT_ANALYSIS_PROMPT_VERSION} AND LOWER(COALESCE(${cvApplications.normalizedCertifications}, '')) LIKE LOWER(${`%${input.certification}%`})))`));
+            // Mobility reads the target countries too, accents aside as under « Pays ciblé ».
+            if (input?.mobility) conditions.push(sql`(${adminFilterContains(cvApplications.mobility, input.mobility)} OR ${adminFilterContains(cvApplications.targetCountries, input.mobility)})`);
+            if (input?.certification) conditions.push(await certificationFilterCondition(db, input.certification, sql`(${adminFilterContains(cvApplications.certifications, input.certification)} OR (${cvApplications.analysisPromptVersion} = ${RECRUITMENT_ANALYSIS_PROMPT_VERSION} AND ${adminFilterContains(cvApplications.normalizedCertifications, input.certification)}))`));
             if (input?.minimumScore) conditions.push(scoreAtLeastOrUnavailable(input.minimumScore));
             const candidates = await db.select({
               id: cvApplications.id,
@@ -1935,7 +1937,7 @@ export const appRouter = router({
             }
             if (input.mode === "filtered") {
               if (input.specialty) conditions.push(sql`LOWER(${cvApplications.specialty}) LIKE LOWER(${`%${input.specialty}%`})`);
-              if (input.country) conditions.push(sql`LOWER(COALESCE(${cvApplications.targetCountries}, '')) LIKE LOWER(${`%${input.country}%`})`);
+              if (input.country) conditions.push(adminFilterContains(cvApplications.targetCountries, input.country));
               if (input.minimumScore !== undefined) {
                 conditions.push(sql`${cvApplications.aiScore} >= ${input.minimumScore}`);
                 conditions.push(eq(cvApplications.analysisPromptVersion, RECRUITMENT_ANALYSIS_PROMPT_VERSION));
@@ -1997,7 +1999,7 @@ export const appRouter = router({
             }
             if (input.mode === "filtered") {
               if (input.specialty) conditions.push(sql`LOWER(${cvApplications.specialty}) LIKE LOWER(${`%${input.specialty}%`})`);
-              if (input.country) conditions.push(sql`LOWER(COALESCE(${cvApplications.targetCountries}, '')) LIKE LOWER(${`%${input.country}%`})`);
+              if (input.country) conditions.push(adminFilterContains(cvApplications.targetCountries, input.country));
               if (input.minimumScore !== undefined) {
                 conditions.push(sql`${cvApplications.aiScore} >= ${input.minimumScore}`);
                 conditions.push(eq(cvApplications.analysisPromptVersion, RECRUITMENT_ANALYSIS_PROMPT_VERSION));
@@ -2255,15 +2257,20 @@ export const appRouter = router({
             .where(eq(cvCandidateCertifications.applicationId, application.id)))
             .filter(row => sameRecruitmentFact(row.name, input.name));
           const declared = declaredCertificationNames(application.certifications).find(name => sameRecruitmentFact(name, input.name));
-          if (!rows.length && !declared) throw new TRPCError({ code: "NOT_FOUND", message: "Cette certification ne figure pas dans le dossier." });
+          // The expiry the CV gives a declared certification while its
+          // analysis retained no facts is no reading to confirm: it only dates
+          // the certification, and stays unconfirmed until the next analysis.
+          const expiryRows = rows.filter(row => row.source === "cv_expiry");
+          const factRows = rows.filter(row => row.source !== "cv_expiry");
+          if (!factRows.length && !declared) throw new TRPCError({ code: "NOT_FOUND", message: "Cette certification ne figure pas dans le dossier." });
           // Expired, as the mission and the 360° sheet show it (the CV's date,
           // or the confirmed one): only a confirmed renewal makes it count again.
-          const expiresAt = certificationFacts(null, rows)[0]?.expiresAt;
+          const expiresAt = certificationFacts(application.certifications, rows).find(fact => sameRecruitmentFact(fact.name, input.name))?.expiresAt;
           if (input.confirmed && !renewal && !certificationDateIsCurrent(expiresAt)) {
             throw missionRefusal("BAD_REQUEST", "renewal_required", "Cette certification a expiré : confirmez son renouvellement, avec la nouvelle date d’expiration lue sur le justificatif, ou cochez qu’il n’en porte pas.");
           }
-          const renewalRows = rows.filter(row => row.source === "renewed");
-          const readRows = rows.filter(row => row.source !== "renewed");
+          const renewalRows = factRows.filter(row => row.source === "renewed");
+          const readRows = factRows.filter(row => row.source !== "renewed");
           // Rows whose confirmation changes, a renewal new or redated, a
           // declared certification's first confirmation, a renewal withdrawn:
           // nothing is logged when nothing changes.
@@ -2285,7 +2292,7 @@ export const appRouter = router({
           const renewalChanged = renewal !== undefined && (!renewalRows.length || renewalRows.some(row => row.expiresAt !== renewal.expiresAt));
           // A certification declared in the form only: its confirmation gets a
           // row of its own, unless its renewal's row holds it.
-          const declaredConfirmation = input.confirmed && !rows.length && !renewal;
+          const declaredConfirmation = input.confirmed && !factRows.length && !renewal;
           const renewalWithdrawn = !input.confirmed && renewalRows.length > 0;
           if (!changed.length && !renewalChanged && !declaredConfirmation && !renewalWithdrawn) return { success: true, changed: false };
           if (updated.length) await db.update(cvCandidateCertifications).set({ confirmedAt: input.confirmed ? new Date() : null }).where(inArray(cvCandidateCertifications.id, updated.map(row => row.id)));
@@ -2293,16 +2300,16 @@ export const appRouter = router({
           if (declaredConfirmation) await db.insert(cvCandidateCertifications).values({ applicationId: application.id, name: declared!.slice(0, CERTIFICATION_NAME_MAX_LENGTH), source: "declared", confirmedAt: new Date() });
           if (renewal && renewalChanged) {
             if (renewalRows.length) await db.update(cvCandidateCertifications).set({ expiresAt: renewal.expiresAt }).where(inArray(cvCandidateCertifications.id, renewalRows.map(row => row.id)));
-            else await db.insert(cvCandidateCertifications).values({ applicationId: application.id, name: (rows[0]?.name ?? declared!).slice(0, CERTIFICATION_NAME_MAX_LENGTH), source: "renewed", confirmedAt: new Date(), expiresAt: renewal.expiresAt });
+            else await db.insert(cvCandidateCertifications).values({ applicationId: application.id, name: (factRows[0]?.name ?? declared!).slice(0, CERTIFICATION_NAME_MAX_LENGTH), source: "renewed", confirmedAt: new Date(), expiresAt: renewal.expiresAt });
           }
           if (renewalWithdrawn) await db.delete(cvCandidateCertifications).where(inArray(cvCandidateCertifications.id, renewalRows.map(row => row.id)));
-          const certification = rows[0]?.name ?? declared;
+          const certification = factRows[0]?.name ?? declared;
           await logRecruitmentAction({
             applicationId: application.id,
             adminOpenId: ctx.user.openId,
             action: "status_update",
             metadata: renewal
-              ? { event: "certification_renewed", certification, expiresAt: renewal.expiresAt, previousExpiresAt: Array.from(new Set((renewalRows.length ? renewalRows : readRows).map(row => row.expiresAt))) }
+              ? { event: "certification_renewed", certification, expiresAt: renewal.expiresAt, previousExpiresAt: Array.from(new Set((renewalRows.length ? renewalRows : [...readRows, ...expiryRows]).map(row => row.expiresAt))) }
               : { event: input.confirmed ? "certification_confirmed" : "certification_unconfirmed", certification, ...(dropped.length ? { notRetainedByAnalysis: true } : {}) },
           });
           return { success: true, changed: true, ...(dropped.length ? { notRetainedByAnalysis: true } : {}) };

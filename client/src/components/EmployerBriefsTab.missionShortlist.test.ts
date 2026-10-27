@@ -152,6 +152,11 @@ describe("écran d’une mission employeur", () => {
 
     control(render(), "CV de Amal Haddad")();
     expect(state.cvMutate).toHaveBeenCalledWith({ id: 11 });
+
+    // Opened from this screen, translated, the sheet words its certifications in the admin's language (IA-02).
+    expect(dialogOf().props.certificationLanguage).toBe("fr");
+    state.language = "zh";
+    expect(dialogOf().props.certificationLanguage).toBe("zh");
   });
 
   it("demande au serveur une compatibilité minimale et l’état de présélection, depuis la première page (ADM-04)", () => {
@@ -248,6 +253,17 @@ describe("écran d’une mission employeur", () => {
     expect(html).toContain(toTheDay);
     expect(html).toContain(year);
     expect(html).not.toContain("2023-05-31");
+  });
+
+  it.each([
+    ["fr", "certification hors validité : ACLS (déclarée par le candidat), expirée en mai 2023 selon le CV, à vérifier — "],
+    ["en", "certification no longer valid: ACLS (declared by the candidate), expired in May 2023 according to the CV, to be checked — "],
+    ["de", "nicht mehr gültiges Zertifikat: ACLS (vom Kandidaten angegeben), abgelaufen im Mai 2023 laut Lebenslauf, zu prüfen — "],
+    ["zh", "已失效的证书：ACLS (候选人自行申报), 已于 2023年5月 过期（据简历，待核实）——"],
+  ] as const)("dit d’une date d’expiration que seul un CV dont l’analyse n’a retenu aucun fait la donne, à vérifier (%s, IA-02)", (language, expired) => {
+    state.language = language;
+    state.data = missionData({ candidates: [candidate(11, "Amal", "Haddad", null, { certifications: [{ name: "ACLS", origins: ["declared"], expiresAt: "2023-05", expiryUnverified: true, status: "expired" }] })] });
+    expect(renderToStaticMarkup(render())).toContain(expired);
   });
 
   it.each([
