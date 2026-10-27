@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { candidateAccounts } from "../drizzle/schema";
 import type { InMemoryDrizzle } from "./testSupport/inMemoryDrizzle";
 import { CandidateClient, TEST_PEPPER, accountByEmail, freshCandidateDb } from "./testSupport/candidatePortal";
 
@@ -125,5 +126,30 @@ describe("candidatePortal.register et resendVerification — email d’activatio
 
     await client("203.0.113.51").api.resendVerification({ email: "attente6@test.local", turnstileToken: TURNSTILE });
     expect(state.sent.at(-1)?.to).toEqual(["attente6@test.local"]);
+  });
+});
+
+describe("candidatePortal.register — consentements obligatoires", () => {
+  it.each([
+    ["termsAccepted", false],
+    ["termsAccepted", undefined],
+    ["documentConsent", false],
+    ["documentConsent", undefined],
+  ] as const)("refuse l’inscription quand %s vaut %s, sans créer d’espace ni envoyer d’email", async (field, value) => {
+    vi.mocked(verifyCandidateTurnstile).mockClear();
+    await expect(client("198.51.100.81").api.register({ ...registration("sans.accord@test.local"), [field]: value } as never)).rejects.toMatchObject({ code: "BAD_REQUEST" });
+
+    expect((state.db as InMemoryDrizzle).rows(candidateAccounts)).toEqual([]);
+    expect(verifyCandidateTurnstile).not.toHaveBeenCalled();
+    expect(state.sent).toEqual([]);
+  });
+
+  it("crée l’espace et date les deux consentements quand les conditions et le traitement des documents sont acceptés", async () => {
+    await client("198.51.100.82").api.register(registration("accord@test.local"));
+
+    const account = accountByEmail(state.db as InMemoryDrizzle, "accord@test.local");
+    expect(account?.termsAcceptedAt).toBeInstanceOf(Date);
+    expect(account?.documentConsentAt).toBeInstanceOf(Date);
+    expect(state.sent.map(email => email.to[0])).toEqual(["accord@test.local"]);
   });
 });

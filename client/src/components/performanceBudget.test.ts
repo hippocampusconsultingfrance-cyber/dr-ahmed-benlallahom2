@@ -36,6 +36,47 @@ describe("budget de performance", () => {
     }
   });
 
+  it("mesure chaque page chargée à la demande quel que soit son nom, les dépendances partagées et la feuille de style (CODE-14)", () => {
+    const script = path.join(process.cwd(), "scripts/check-performance-budgets.mjs");
+    const build = mkdtempSync(path.join(tmpdir(), "performance-budget-"));
+    const assets = path.join(build, "dist/public/static");
+    mkdirSync(assets, { recursive: true });
+    const check = () => spawnSync(process.execPath, [script], { cwd: build, encoding: "utf8" });
+    const incompressible = (kib: number) => randomBytes(kib * 1024);
+    // Laid out like Vite's output: the entry lazy-loads its pages, the admin root lazy-loads the dashboard.
+    const write = (file: string, content: string | Buffer) => writeFileSync(path.join(assets, file), content);
+    const lazyPage = (padding: Buffer) => Buffer.concat([Buffer.from('import { t } from "./documentCategories-Mn34Op56.js";\n'), padding]);
+    try {
+      write("index-Ab12Cd34.js", 'const pages = [() => import("./Home-Ij90Kl12.js"), () => import("./NewOffshorePage-Qr78St90.js"), () => import("./AdminRoot-Uv12Wx34.js")];');
+      write("AdminRoot-Uv12Wx34.js", 'export const AdminRoot = () => import("./AdminDashboard-Ef56Gh78.js");');
+      write("AdminDashboard-Ef56Gh78.js", incompressible(70));
+      write("Home-Ij90Kl12.js", 'export const Home = () => jsx("h1", { children: "Bienvenue" });');
+      write("NewOffshorePage-Qr78St90.js", lazyPage(incompressible(20)));
+      write("documentCategories-Mn34Op56.js", incompressible(10));
+      write("index-Yz56Ab78.css", incompressible(20));
+      const withinBudgets = check();
+      expect(withinBudgets.stderr).toBe("");
+      expect(withinBudgets.status).toBe(0);
+      expect(withinBudgets.stdout).toMatch(/Route lazy.+NewOffshorePage-Qr78St90\.js/);
+      expect(withinBudgets.stdout).toMatch(/Partagé.+documentCategories-Mn34Op56\.js/);
+      expect(withinBudgets.stdout).toMatch(/CSS total.+index-Yz56Ab78\.css.+20\.0/);
+
+      // A page named in no list, a shared dependency and the style sheets each over their budget.
+      write("NewOffshorePage-Qr78St90.js", lazyPage(incompressible(36)));
+      write("documentCategories-Mn34Op56.js", incompressible(31));
+      write("print-Cd90Ef12.css", incompressible(11));
+      const overBudgets = check();
+      expect(overBudgets.status).not.toBe(0);
+      expect(overBudgets.stderr).toMatch(/Route NewOffshorePage-Qr78St90\.js: 3\d\.\d KiB > 30\.0 KiB/);
+      expect(overBudgets.stderr).toMatch(/Partagé documentCategories-Mn34Op56\.js: 3\d\.\d KiB > 30\.0 KiB/);
+      expect(overBudgets.stderr).toMatch(/CSS total \(index-Yz56Ab78\.css, print-Cd90Ef12\.css\): 31\.\d KiB > 30\.0 KiB/);
+      // The dashboard, lazy-loaded too, keeps its own 80 KiB budget.
+      expect(overBudgets.stderr).not.toContain("AdminDashboard");
+    } finally {
+      rmSync(build, { recursive: true, force: true });
+    }
+  });
+
   it("refuse un build dont un fichier JavaScript garde les repères data-loc de l’éditeur Manus (CODE-06)", () => {
     const script = path.join(process.cwd(), "scripts/check-performance-budgets.mjs");
     // A small production build, laid out like Vite's output, measured from its own directory.

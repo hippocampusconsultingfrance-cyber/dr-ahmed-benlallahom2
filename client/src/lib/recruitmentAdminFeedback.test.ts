@@ -2,9 +2,9 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { driveRetryToast, googleDriveConnectionState, reanalysisToast, recruitmentAnalysisErrorLabel } from "./recruitmentTraceability";
 
-const mailingTab = readFileSync(new URL("../components/MailingTab.tsx", import.meta.url), "utf8");
 const briefsTab = readFileSync(new URL("../components/EmployerBriefsTab.tsx", import.meta.url), "utf8");
 
+// Les retours de l’onglet Mailing sont vérifiés sur l’onglet monté (components/MailingTab.dom.test.ts).
 describe("retours honnêtes dans l’administration du recrutement", () => {
   it("« Relancer l’analyse » n’affiche un succès que si l’analyse a abouti (ADM-REC-02)", () => {
     expect(reanalysisToast({ outcome: "completed" }).tone).toBe("success");
@@ -28,16 +28,6 @@ describe("retours honnêtes dans l’administration du recrutement", () => {
     expect(driveRetryToast({ outcome: "completed" }).tone).toBe("success");
   });
 
-  it("Mailing : avertissement en cas d’échec et relance des seuls échecs (ADM-MAIL-02)", () => {
-    expect(mailingTab).toContain("if (failed === 0) toast.success(");
-    expect(mailingTab).toContain("toast.warning(");
-    expect(mailingTab).toContain("campaigns.retryFailed.useMutation");
-    for (const language of ["fr", "en", "de", "zh"]) {
-      const line = mailingTab.split("\n").find(entry => entry.startsWith(`  ${language}: { title:`));
-      expect(line, language).toContain("retryFailed:");
-      expect(line, language).toContain("campaignPartial:");
-    }
-  });
 
   it("Missions : panneau de détail, retrait de la shortlist et clôture (ADM-BRIEF-01/02)", () => {
     for (const field of ["selectedBrief.contactName", "mailto:${selectedBrief.email}", "selectedBrief.phone", "selectedBrief.requiredCertifications", "selectedBrief.notes", "formatDate(selectedBrief.createdAt)"]) {

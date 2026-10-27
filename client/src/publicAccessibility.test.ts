@@ -3,7 +3,6 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { contrastRatio, type Oklch } from "./lib/contrast";
 import { getMainContentTarget } from "./components/SkipToContent";
-import { footerLandmarkCopy } from "./components/Footer";
 
 const read = (file: string) => readFileSync(resolve(import.meta.dirname, file), "utf8");
 const css = read("index.css");
@@ -14,6 +13,7 @@ const oklch = (token: string): Oklch => {
   return [Number(match[1]), Number(match[2]), Number(match[3])];
 };
 
+// /testimonials et le pied de page sont montés dans un DOM : pages/TestimonialsPage.dom.test.ts, components/Footer.dom.test.ts.
 describe("repères et structure (PUB-A11Y-01 / PUB-A11Y-02)", () => {
   it("/booking expose un repère principal atteignable par le lien d'évitement", () => {
     // The booking page renders this landmark: BookingPage.render.test.ts.
@@ -22,22 +22,6 @@ describe("repères et structure (PUB-A11Y-01 / PUB-A11Y-02)", () => {
     expect(getMainContentTarget(root)).toBe(target);
     expect(target.id).toBe("main-content");
     expect(target.tabIndex).toBe(-1);
-  });
-
-  it("/testimonials a une navigation, un <main> et un pied de page, et une date lisible", () => {
-    const page = read("pages/TestimonialsPage.tsx");
-    expect(page).toContain("<Navigation />");
-    expect(page).toContain('<main id="main-content" tabIndex={-1}');
-    expect(page).toContain("<Footer />");
-    expect(page).not.toContain("text-gray-500");
-  });
-
-  it("le pied de page a des repères nommés et des titres h2", () => {
-    const footer = read("components/Footer.tsx");
-    expect(footer).toContain("aria-label={footerLandmarkCopy.sections[landmarkLanguage]}");
-    expect(footer).toContain("aria-label={footerLandmarkCopy.legal[landmarkLanguage]}");
-    expect(footer).not.toContain("<h4");
-    for (const labels of Object.values(footerLandmarkCopy)) expect(Object.keys(labels)).toEqual(["fr", "en", "de", "zh"]);
   });
 });
 

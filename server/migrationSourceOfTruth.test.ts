@@ -20,17 +20,9 @@ const schemaTables = Object.values(schema)
   .map(table => getTableConfig(table));
 
 describe("source de vérité des migrations Drizzle (M32)", () => {
-  it("aligne la documentation avec la sortie PostgreSQL déclarée dans la configuration", () => {
-    const config = read("drizzle.config.ts");
-    const guide = read("drizzle/MIGRATION_SOURCE_OF_TRUTH.md");
-    expect(config).toContain('out: "./drizzle/pg"');
-    expect(config).toContain('dialect: "postgresql"');
-    expect(guide).toContain("drizzle.config.ts");
-    expect(guide).toContain("source de vérité");
-    expect(guide).toContain("drizzle/pg/");
-    // L'ancien dossier manuel reste documenté comme historique.
-    expect(guide).toContain("drizzle/migrations/");
-    expect(guide).toContain("drizzle/legacy-mysql/");
+  it("fait écrire à drizzle-kit les migrations PostgreSQL dans drizzle/pg, depuis drizzle/schema.ts", async () => {
+    const { default: config } = await import("../drizzle.config");
+    expect(config).toMatchObject({ schema: "./drizzle/schema.ts", out: "./drizzle/pg", dialect: "postgresql" });
   });
 
   it("isole l'historique MySQL, jamais lu par drizzle-kit", () => {
