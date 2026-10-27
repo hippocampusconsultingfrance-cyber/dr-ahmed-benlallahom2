@@ -48,6 +48,7 @@ describe("vérification Turnstile côté serveur, dans tous les environnements",
 
   it("n’accepte un jeton d’une préproduction *.vercel.app que pour l’hôte exact déclaré dans TURNSTILE_EXTRA_HOSTNAMES (SECU-02)", async () => {
     const preview = "dr-ahmed-git-lot5-hippocampus.vercel.app";
+    vi.stubEnv("VERCEL_ENV", "preview");
     // Unset by default: a preview's token is refused, like any other host.
     cloudflareAnswers({ success: true, hostname: preview });
     await expect(verifyCandidateTurnstile({ token: "token-from-the-preview" })).rejects.toThrow("candidate_turnstile_invalid");
@@ -71,6 +72,34 @@ describe("vérification Turnstile côté serveur, dans tous les environnements",
     vi.stubEnv("TURNSTILE_EXTRA_HOSTNAMES", preview);
     cloudflareAnswers({ success: false, hostname: preview, "error-codes": ["invalid-input-response"] });
     await expect(verifyCandidateTurnstile({ token: "forged-token" })).rejects.toThrow("candidate_turnstile_invalid");
+  });
+
+  it("ignore TURNSTILE_EXTRA_HOSTNAMES en production Vercel, et le dit une seule fois dans les journaux (SECU-02)", async () => {
+    // A fresh module: the warning is logged once per server.
+    vi.resetModules();
+    const { verifyCandidateTurnstile: verify } = await import("./candidateTurnstile");
+    const preview = "dr-ahmed-git-lot5-hippocampus.vercel.app";
+    vi.stubEnv("TURNSTILE_EXTRA_HOSTNAMES", preview);
+    vi.stubEnv("VERCEL_ENV", "production");
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+
+    // Set there by mistake, it accepts no other host; the site's own tokens still pass.
+    for (const token of ["first-token-from-the-preview", "second-token-from-the-preview"]) {
+      cloudflareAnswers({ success: true, hostname: preview });
+      await expect(verify({ token })).rejects.toThrow("candidate_turnstile_invalid");
+    }
+    cloudflareAnswers({ success: true, hostname: "drahmedbenlallahom.com" });
+    await expect(verify({ token: "token-from-the-site" })).resolves.toBeUndefined();
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0]![0]).toContain("TURNSTILE_EXTRA_HOSTNAMES is ignored in production");
+    // The hosts themselves are not written in the logs.
+    expect(JSON.stringify(warn.mock.calls)).not.toContain(preview);
+    warn.mockRestore();
+
+    // On Vercel's Preview environment, the same variable accepts its host.
+    vi.stubEnv("VERCEL_ENV", "preview");
+    cloudflareAnswers({ success: true, hostname: preview });
+    await expect(verify({ token: "token-from-the-preview" })).resolves.toBeUndefined();
   });
 
   it("refuse sans interroger Cloudflare un envoi sans jeton ou un serveur sans secret", async () => {

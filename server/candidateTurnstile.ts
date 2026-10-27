@@ -11,21 +11,36 @@ const TRUSTED_HOSTS = new Set([
   "127.0.0.1",
 ]);
 
+let extraHostsIgnoredInProductionLogged = false;
+
 /**
  * Hosts accepted besides the site's own (SECU-02), to try the forms of a
  * preproduction to the end: TURNSTILE_EXTRA_HOSTNAMES, exact names separated
  * by commas, set only on Vercel's Preview environment to the preview's host.
  * Empty by default. Never a pattern: an entry that is not a plain host name
  * (`*`, scheme, port, path) is ignored, so no other *.vercel.app passes.
+ * Ignored in Vercel's production (VERCEL_ENV=production), where no form is
+ * tried on another host: set there by mistake, the logs say it once.
  */
 function extraTrustedHosts(): Set<string> {
-  return new Set((process.env.TURNSTILE_EXTRA_HOSTNAMES ?? "").split(",")
+  const configured = process.env.TURNSTILE_EXTRA_HOSTNAMES ?? "";
+  if (process.env.VERCEL_ENV === "production") {
+    if (configured.trim() && !extraHostsIgnoredInProductionLogged) {
+      extraHostsIgnoredInProductionLogged = true;
+      console.warn("[Turnstile] TURNSTILE_EXTRA_HOSTNAMES is ignored in production; remove it from Vercel's Production environment");
+    }
+    return new Set();
+  }
+  return new Set(configured.split(",")
     .map(host => host.trim().toLowerCase())
     .filter(host => /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)*$/.test(host)));
 }
 
 function isTrustedHost(hostname: string): boolean {
-  return TRUSTED_HOSTS.has(hostname) || extraTrustedHosts().has(hostname);
+  // Read at every check, the site's own host included, so that a production
+  // where the variable is set says it at its first protected form.
+  const extraHosts = extraTrustedHosts();
+  return TRUSTED_HOSTS.has(hostname) || extraHosts.has(hostname);
 }
 
 /**
