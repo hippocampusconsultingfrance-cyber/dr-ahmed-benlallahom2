@@ -162,7 +162,9 @@ describe("DOCX : texte que sa place peut couper (IA-01)", () => {
       expect(result.hidden.length).toBeGreaterThan(FAKE_ONE.length / 2);
     });
 
-    const cramped = (twips: number) => FAKE.map(line => paragraph(line, `<w:spacing w:before="0" w:after="0" w:line="${twips}" w:lineRule="exact"/>`)).join("");
+    const exactSpacing = (twips: number) => `<w:spacing w:before="0" w:after="0" w:line="${twips}" w:lineRule="exact"/>`;
+    // Under an empty line: the first claim has room above it, each of the next ones runs into the one above.
+    const cramped = (twips: number) => paragraph("") + FAKE.map(line => paragraph(line, exactSpacing(twips))).join("");
 
     it.each([["6 pt", 120], ["5,6 pt", 112]])("interligne exact de %s pour un texte de 11 pt : les lignes se chevauchent, le texte est écarté sans être compté caché", async (_, twips) => {
       const result = await check(cramped(twips));
@@ -174,6 +176,34 @@ describe("DOCX : texte que sa place peut couper (IA-01)", () => {
       const result = await check(cramped(100));
       expectSetAside(result);
       expect(result.hidden.length).toBeGreaterThan(FAKE_ONE.length / 2);
+    });
+
+    // A cell, the row above it and what lies before its table are above its first line: the lines still run into one another.
+    const rowCells = (twips: number) => paragraph("") + table(9000, FAKE.map((line): [string, string] => ["", paragraph(line, exactSpacing(twips))]), '<w:tblCellMar><w:top w:w="0" w:type="dxa"/><w:bottom w:w="0" w:type="dxa"/></w:tblCellMar>');
+    const tiny = table(9000, [[exact(20), `<w:p><w:pPr>${NO_SPACING}<w:rPr><w:sz w:val="2"/></w:rPr></w:pPr></w:p>`]]);
+    const betweenTables = (twips: number) => paragraph("") + FAKE.map(line => paragraph(line, exactSpacing(twips)) + tiny).join("");
+
+    it.each([
+      ["chacune dans sa ligne de tableau, interligne exact de 4,5 pt", rowCells(90)],
+      ["chacune dans sa ligne de tableau, interligne exact de 6 pt", rowCells(120)],
+      ["séparées par un petit tableau d’une ligne exacte de 1 pt, interligne exact de 4,5 pt", betweenTables(90)],
+      ["séparées par un petit tableau d’une ligne exacte de 1 pt, interligne exact de 6 pt", betweenTables(120)],
+    ])("affirmations %s : chaque ligne court sur celle du dessus, rien n’est lu", async (_, body) => {
+      const result = await check(body);
+      expectSetAside(result);
+      expect(result.reasons).toEqual(["layout"]);
+    });
+
+    // Each claim, of ordinary spacing, followed by a line of 30 pt letters in an exact spacing of 12 pt, which LibreOffice draws over it.
+    const cover = `<w:p><w:pPr>${exactSpacing(240)}</w:pPr><w:r><w:rPr><w:sz w:val="60"/></w:rPr><w:t>MMMMMMMMMMMMMMMMMMMMMMMMMMM</w:t></w:r></w:p>`;
+    it.each([
+      ["dans le corps du document", paragraph("") + FAKE.map(line => paragraph(line) + cover).join("")],
+      ["dans une ligne de tableau, la ligne écrasée dans la suivante", paragraph("") + table(9000, FAKE.flatMap((line): Array<[string, string]> => [["", paragraph(line)], ["", cover]]))],
+      ["avant un tableau dont la première ligne est écrasée", paragraph("") + FAKE.map(line => paragraph(line) + table(9000, [["", cover]])).join("")],
+    ])("affirmations recouvertes par une ligne écrasée en dessous, %s : écartées avec elle, sans être comptées cachées", async (_, body) => {
+      const result = await check(body);
+      expectSetAside(result);
+      expect(result).toMatchObject({ hidden: "", reasons: ["layout"] });
     });
   });
 
@@ -192,10 +222,11 @@ describe("DOCX : texte que sa place peut couper (IA-01)", () => {
       await read(body, ["Claire EXEMPLE"], true);
     });
 
-    it("nom de 28 pt en interligne exact de 13 pt juste sous une ligne de texte : dessiné sur elle, il est écarté sans être compté caché", async () => {
+    it("nom de 28 pt en interligne exact de 13 pt juste sous une ligne de texte : dessiné sur elle, il est écarté avec elle sans être compté caché", async () => {
       const result = await check(paragraph("Claire EXEMPLE", '<w:spacing w:before="0" w:after="240" w:line="260" w:lineRule="exact"/>', '<w:sz w:val="56"/>'));
-      for (const line of HONEST) expect(result.text).toContain(line);
-      expect(result).toMatchObject({ hidden: "", unverifiable: "Claire EXEMPLE", reasons: ["layout"] });
+      for (const line of HONEST.slice(0, -1)) expect(result.text).toContain(line);
+      expect(result.text).not.toContain(HONEST.at(-1));
+      expect(result).toMatchObject({ hidden: "", unverifiable: `${HONEST.at(-1)} Claire EXEMPLE`, reasons: ["layout"] });
     });
 
     it("lignes de hauteur exacte suffisantes pour une ligne de 11 pt, libellés et valeurs, et un saut de ligne dans une ligne de 1,2 cm", async () => {
@@ -236,13 +267,14 @@ describe("DOCX : texte que sa place peut couper (IA-01)", () => {
       ].join(""), ["nfirmière diplômée d'État", "Formation : Diplôme d'État infirmier (2022).", "Compétences : soins post-opératoires.", "اللغات: العربية، الفرنسية.", "Langues : Français (langue maternelle), Anglais (B2)."]);
     });
 
-    it("comme avant : lettrines piégées à interligne exact de 5 pt et tableau flottant placé hors de la page restent lus", async () => {
-      const dropCaps = FAKE.slice(0, 2).map(line => paragraph(line, '<w:keepNext/><w:framePr w:dropCap="drop" w:lines="3" w:wrap="around" w:vAnchor="text" w:hAnchor="text"/><w:spacing w:after="0" w:line="100" w:lineRule="exact"/>')).join("");
-      const floating = table(6000, FAKE.slice(2).map(line => ["", paragraph(line)]), '<w:tblpPr w:leftFromText="0" w:rightFromText="0" w:horzAnchor="page" w:vertAnchor="text" w:tblpX="40000" w:tblpY="1"/>');
-      const result = await check(dropCaps + paragraph("Disponibilité : immédiate.") + floating);
-      for (const line of FAKE) expect(result.text).toContain(line.slice(0, 30));
+    it("tableau flottant placé sur la page (w:tblpPr)", async () => {
+      const floating = table(6000, [["", paragraph("Disponibilité : immédiate.")]], '<w:tblpPr w:leftFromText="180" w:rightFromText="180" w:horzAnchor="page" w:vertAnchor="text" w:tblpX="1500" w:tblpY="1"/>');
+      await read(floating, ["Disponibilité : immédiate."]);
     });
   });
+
+  // Not handled yet, as before: a drop cap's letter set in an exact spacing of 5 pt, a floating table (w:tblpPr) placed off the page.
+  it.todo("lettrines piégées à interligne exact de 5 pt et tableau flottant placé hors de la page : leurs affirmations sont écartées");
 
   describe("budget de travail de la mise en page", () => {
     // Rows of exact height that hold their line, then more: each one laid out costs its letters.
@@ -266,6 +298,13 @@ describe("DOCX : texte que sa place peut couper (IA-01)", () => {
       const full = await check(body);
       expect(full).toMatchObject({ hidden: "", unverifiable: "", reasons: [] });
       expect(full.text).toContain("Ligne 39 : Infirmière, Clinique Exemple.");
+    });
+
+    it("au-delà du budget, une ligne écrasée qui n’est plus mise en page écarte aussi la ligne qu’elle peut recouvrir", async () => {
+      const cover = `<w:p><w:pPr><w:spacing w:before="0" w:after="0" w:line="240" w:lineRule="exact"/></w:pPr><w:r><w:rPr><w:sz w:val="60"/></w:rPr><w:t>MMMMMMMMMMMMMMMMMMMMMMMMMMM</w:t></w:r></w:p>`;
+      const result = await check(paragraph("") + FAKE.map(line => paragraph(line) + cover).join(""), { limits: { ...DOCUMENT_DECOMPRESSION_LIMITS, docxLayoutWorkUnits: 0 } });
+      expectSetAside(result);
+      expect(result).toMatchObject({ hidden: "", reasons: ["layout_unfinished"] });
     });
 
     // Measured alone on the development machine (bundled code, loaded machine): 30 000 linked VML boxes about 1.1 s,
@@ -302,5 +341,38 @@ describe("DOCX : texte que sa place peut couper (IA-01)", () => {
       expect(ms).toBeLessThan(8_000);
       expect(result.unverifiableText.length + result.invisibleText.length).toBeGreaterThan(0);
     }, 120_000);
+
+    // Each took 10 s to 80 s before (a minute and more for the malformed part), about 0.1 s to 1.3 s now.
+    it("deux lignes écrasées de 40 000 passages chacune, la seconde sur la première : contrôlées en quelques secondes au plus", () => {
+      // Spaces of no width (a paragraph style closes them up), so that all of them stay on their line.
+      const closedUp = '<w:style w:type="paragraph" w:styleId="Serre"><w:rPr><w:spacing w:val="-80"/></w:rPr></w:style>';
+      const spaces = '<w:r><w:t xml:space="preserve"> </w:t></w:r>'.repeat(40_000);
+      const body = `<w:p><w:pPr><w:pStyle w:val="Serre"/><w:spacing w:before="0" w:after="0" w:line="100" w:lineRule="exact"/></w:pPr>${spaces}<w:r><w:t>a</w:t></w:r><w:r><w:br/></w:r>${spaces}</w:p>`;
+      expect(timed(docx(honestLines() + body, closedUp)).ms).toBeLessThan(4_000);
+    }, 60_000);
+
+    it("tableaux de lignes exactes imbriqués sur 2 000 et 20 000 niveaux : contrôlés en quelques secondes au plus, sans épuiser la pile", () => {
+      const row = '<w:tbl><w:tr><w:trPr><w:trHeight w:val="300" w:hRule="exact"/></w:trPr><w:tc>';
+      const deep = timed(docx(row.repeat(2_000) + "<w:p></w:p>".repeat(80_000) + "<w:p/></w:tc></w:tr></w:tbl>".repeat(2_000)));
+      expect(deep.ms).toBeLessThan(4_000);
+      const cramped = '<w:p><w:pPr><w:spacing w:line="90" w:lineRule="exact"/></w:pPr><w:r><w:t>z</w:t></w:r></w:p>';
+      const nested = timed(docx(`${row}<w:p><w:r><w:t>a</w:t></w:r></w:p>`.repeat(20_000) + cramped + "<w:p/></w:tc><w:tc><w:p><w:r><w:t>y</w:t></w:r></w:p></w:tc></w:tr></w:tbl>".repeat(20_000)));
+      expect(nested.ms).toBeLessThan(6_000);
+      expect(nested.result.invisibleText.length).toBeGreaterThan(0);
+    }, 120_000);
+
+    it("9 000 taquets d’un paragraphe ou 3 000 de son style, et des centaines de milliers de tabulations : contrôlés en quelques secondes au plus", () => {
+      const stops = (count: number) => `<w:tabs>${Array.from({ length: count }, (_, index) => `<w:tab w:val="left" w:pos="${index + 1}"/>`).join("")}</w:tabs>`;
+      const own = timed(docx(`<w:p><w:pPr>${stops(9_000)}<w:spacing w:line="240" w:lineRule="exact"/></w:pPr><w:r>${"<w:tab/>".repeat(400_000)}<w:t>x</w:t></w:r></w:p>`));
+      expect(own.ms).toBeLessThan(4_000);
+      const style = `<w:style w:type="paragraph" w:styleId="Taquets"><w:pPr>${stops(3_000)}</w:pPr></w:style>`;
+      const styled = timed(docx('<w:p><w:pPr><w:pStyle w:val="Taquets"/></w:pPr><w:r><w:t>x</w:t></w:r></w:p>'.repeat(40_000), style));
+      expect(styled.ms).toBeLessThan(4_000);
+    }, 60_000);
+
+    it("partie mal formée, de « < » sans « > » et de commentaires jamais fermés : lue en une passe", () => {
+      const malformed = timed(docx(honestLines() + "<".repeat(50_000) + "<!--x>".repeat(50_000) + `<w:p><w:r><w:t>${"<!--x".repeat(50_000)}</w:t></w:r></w:p>`));
+      expect(malformed.ms).toBeLessThan(2_000);
+    }, 60_000);
   });
 });

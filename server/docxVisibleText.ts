@@ -43,13 +43,18 @@ import { DOCUMENT_DECOMPRESSION_LIMITS, inspectDocxArchive } from "./documentDec
  * set aside as unverifiable (its visibility cannot be established), never
  * counted as hidden. In an exact line spacing, lines closer than 0.7 times
  * their size run into the line above (LibreOffice draws them over it, Word
- * cuts their top): set aside, hidden under half their size, but a drop cap's
- * letter, and the first line of a paragraph over a line of ordinary spacing,
- * only hidden under 0.4 times its size; a line with nothing above it to run
- * into is read down to 0.4 times its size. A table its indent (w:tblInd)
- * places off the page hides its text.
+ * cuts their top), in their paragraph, or the last line of text above them:
+ * in their cell or the body, in the row above, before their table, at the
+ * bottom of a table above them. They are set aside, hidden under half their
+ * size, but a drop cap's letter, and the first line of a paragraph over a
+ * line of ordinary spacing, only hidden under 0.4 times its size; the line
+ * they run into, whatever its spacing, is set aside with them. Only a line
+ * with no text above it, in the part or its text box, is read down to 0.4
+ * times its size.
+ * A table its indent (w:tblInd) places off the page hides its text.
  * Past a count of layout work (docxLayoutWorkUnits), what is left to lay out
- * is set aside. Text the indents of its paragraph (w:ind, its style's or the
+ * is set aside, and the line a line of an exact spacing left so may run
+ * into. Text the indents of its paragraph (w:ind, its style's or the
  * document's) place, where it starts, beyond an edge of the page of its
  * section (w:pgSz, w:pgMar, w:cols; A4 with margins of 2.5 cm when not given)
  * is hidden. Hidden text (w:vanish, w:specVanish), its line breaks and
@@ -168,10 +173,42 @@ const DRAWING_COLOURS = new Set(["a:srgbClr", "a:schemeClr", "a:sysClr", "a:prst
 /** `namespaces`: the namespace each prefix is bound to there (mc:Choice Requires names prefixes). */
 type XmlTag = { readonly name: string; readonly attributes: Map<string, string>; readonly namespaces: Map<string, string>; readonly closing: boolean; readonly selfClosing: boolean; readonly start: number; readonly end: number };
 
+/**
+ * A text without its comments, its character data as text, as
+ * /<!\[CDATA\[([\s\S]*?)\]\]>|<!--[\s\S]*?-->/g replaces them, in one pass:
+ * once one is left open to the end, none after it closes either.
+ */
+function withoutComments(text: string) {
+  let result = "";
+  let copied = 0;
+  let dataCloses = true;
+  let commentsClose = true;
+  for (let at = text.indexOf("<!"); at !== -1; ) {
+    let end = -1;
+    let data = "";
+    if (dataCloses && text.startsWith("<![CDATA[", at)) {
+      const close = text.indexOf("]]>", at + 9);
+      if (close === -1) dataCloses = false;
+      else [end, data] = [close + 3, text.slice(at + 9, close)];
+    } else if (commentsClose && text.startsWith("<!--", at)) {
+      const close = text.indexOf("-->", at + 4);
+      if (close === -1) commentsClose = false;
+      else end = close + 3;
+    }
+    if (end === -1) {
+      at = text.indexOf("<!", at + 1);
+      continue;
+    }
+    result += text.slice(copied, at) + data;
+    copied = end;
+    at = text.indexOf("<!", end);
+  }
+  return copied ? result + text.slice(copied) : text;
+}
+
 function decodeXml(text: string) {
   if (!text.includes("&") && !text.includes("<")) return text;
-  return text
-    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>|<!--[\s\S]*?-->/g, (_, data: string | undefined) => data ?? "")
+  return withoutComments(text)
     .replace(/&(#x[0-9a-f]+|#\d+|amp|lt|gt|quot|apos);/gi, (_, entity: string) => {
       const named: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: "\"", apos: "'" };
       if (entity[0] !== "#") return named[entity.toLowerCase()]!;
@@ -251,6 +288,7 @@ function skipSpaces(xml: string, at: number) {
 const QUOTE = 0x22;
 const APOSTROPHE = 0x27;
 const SLASH = 0x2f;
+const LESS = 0x3c;
 const EQUALS = 0x3d;
 const GREATER = 0x3e;
 
@@ -258,7 +296,9 @@ const GREATER = 0x3e;
  * Reads the tags of an XML part as this expression finds them, without its
  * cost of strings and matches on a part of millions of tags:
  * <!--[\s\S]*?-->|<!\[CDATA\[[\s\S]*?\]\]>|<[?!][^>]*>|<(\/?)([^\s/>]+)((?:\s+[^\s=/>]+\s*=\s*(?:"[^"]*"|'[^']*'))*)\s*(\/?)>
- * (comments, character data and declarations are skipped).
+ * (comments, character data and declarations are skipped), but that a name
+ * ends at a « < », which no XML name holds: only a malformed part reads
+ * otherwise, and its brackets are each read once, not up to the part's end.
  */
 function readXmlTags(xml: string): XmlTags {
   // As many as the part has opening brackets, at most.
@@ -286,14 +326,22 @@ function readXmlTags(xml: string): XmlTags {
   const canonicalIds = new Map<string, number>();
   const open = [0];
   const length = xml.length;
+  // Once a comment or character data is left open to the end of the part, none after it closes either.
+  let commentsClose = true;
+  let dataCloses = true;
   let at = xml.indexOf("<");
   while (at !== -1) {
     const second = xml.charCodeAt(at + 1);
     if (second === 0x21 || second === 0x3f) {
       // <!-- … -->, <![CDATA[ … ]]>, else <? … > or <! … >.
       let close = -1;
-      if (xml.startsWith("<!--", at)) close = xml.indexOf("-->", at + 4);
-      else if (xml.startsWith("<![CDATA[", at)) close = xml.indexOf("]]>", at + 9);
+      if (xml.startsWith("<!--", at)) {
+        if (commentsClose) close = xml.indexOf("-->", at + 4);
+        commentsClose = close !== -1;
+      } else if (xml.startsWith("<![CDATA[", at)) {
+        if (dataCloses) close = xml.indexOf("]]>", at + 9);
+        dataCloses = close !== -1;
+      }
       if (close !== -1) close += 3;
       else {
         close = xml.indexOf(">", at + 2);
@@ -309,7 +357,7 @@ function readXmlTags(xml: string): XmlTags {
     let hash = 0;
     for (; index < length; index += 1) {
       const code = xml.charCodeAt(index);
-      if (code === SLASH || code === GREATER || SPACES[code] === 1) break;
+      if (code === SLASH || code === GREATER || code === LESS || SPACES[code] === 1) break;
       hash = (Math.imul(hash, 31) + code) | 0;
     }
     const nameEnd = index;
@@ -321,7 +369,7 @@ function readXmlTags(xml: string): XmlTags {
       const attributeName = cursor;
       for (; cursor < length; cursor += 1) {
         const code = xml.charCodeAt(cursor);
-        if (code === EQUALS || code === SLASH || code === GREATER || SPACES[code] === 1) break;
+        if (code === EQUALS || code === SLASH || code === GREATER || code === LESS || SPACES[code] === 1) break;
       }
       if (cursor === attributeName) break;
       cursor = skipSpaces(xml, cursor);
@@ -1009,14 +1057,8 @@ function codePoints(text: string) {
   return count;
 }
 
-/** Whether a line this far down its paragraph (and lowered), of this size, leaves one of the places that show it: it shows less than MIN_LINE_SHARE of its letters. */
-function outOfPlace(places: ParagraphLayout["places"], model: number, top: number, lowered: number, size: number) {
-  for (let index = 0; index < places.length; index += 1) {
-    const place = places[index]!;
-    if (place.top[model]! + top + lowered + MIN_LINE_SHARE * size > place.room[model]!) return true;
-  }
-  return false;
-}
+/** Whether a line this far down its paragraph (and lowered), of this size, leaves one of the places that show it (`slack`: ParagraphLayout): it shows less than MIN_LINE_SHARE of its letters. */
+const outOfPlace = (slack: Pair, model: number, top: number, lowered: number, size: number) => top + lowered + MIN_LINE_SHARE * size > slack[model]!;
 
 /** The size of most of a run's letters: its complex script size (w:szCs) when it is marked so or holds only such scripts, else w:sz. */
 const fontSize = (effective: RunLayer, text: string) =>
@@ -1106,21 +1148,23 @@ function applyParagraphProperty(layer: ParagraphLayer, tag: XmlTag) {
   }
 }
 
-/** A paragraph's layer once resolved; `line`: its exact or least line height in points, or its multiple of single spacing; `tabs`: its tab stops, in order. */
-type ParagraphFormat = { start: number; end: number; firstLine: number; align?: string; bidi: boolean; line: { rule: "exact" | "atLeast" | "auto"; value: number }; before: number; after: number; contextual: boolean; tabs: Array<[number, string]> };
+/** A paragraph's layer once resolved; `line`: its exact or least line height in points, or its multiple of single spacing. */
+type ParagraphFormat = { start: number; end: number; firstLine: number; align?: string; bidi: boolean; line: { rule: "exact" | "atLeast" | "auto"; value: number }; before: number; after: number; contextual: boolean };
 
-/** `layers`: the document's defaults, the paragraph's styles from the base, its own; each one's tab stops add to, or clear, those below. */
+/** `layers`: the document's defaults, the paragraph's styles from the base, its own. */
 function paragraphFormat(layers: ParagraphLayer[]): ParagraphFormat {
   const layer: ParagraphLayer = Object.assign({}, ...layers);
   const rule: ParagraphFormat["line"]["rule"] = layer.lineRule === "exact" || layer.lineRule === "atLeast" ? layer.lineRule : "auto";
   const value = layer.line === undefined ? undefined : rule === "auto" ? Number(layer.line) / 240 : measurePt(layer.line, 20);
   const line: ParagraphFormat["line"] = value !== undefined && Number.isFinite(value) ? { rule, value: Math.abs(value) } : { rule: "auto", value: 1 };
+  return { start: layer.start ?? 0, end: layer.end ?? 0, firstLine: layer.firstLine ?? 0, align: layer.align, bidi: layer.bidi ?? false, line, before: layer.before ?? 0, after: layer.after ?? 0, contextual: layer.contextual ?? false };
+}
+
+/** The tab stops of these layers (as paragraphFormat), each one's adding to, or clearing, those below; in order, but bar tabs, which stop no text. */
+function tabStops(layers: ParagraphLayer[]) {
   const tabs = new Map<number, string>();
   for (const { tabs: stops } of layers) for (const [position, kind] of stops ?? []) if (kind === "clear") tabs.delete(position); else tabs.set(position, kind);
-  return {
-    start: layer.start ?? 0, end: layer.end ?? 0, firstLine: layer.firstLine ?? 0, align: layer.align, bidi: layer.bidi ?? false, line, before: layer.before ?? 0, after: layer.after ?? 0,
-    contextual: layer.contextual ?? false, tabs: Array.from(tabs).sort((left, right) => left[0] - right[0]),
-  };
+  return Array.from(tabs).filter(([, kind]) => kind !== "bar").sort((left, right) => left[0] - right[0]);
 }
 
 /** The lowest a line of text of this size can be in a paragraph: its exact spacing, else what its spacing gives single spacing at its lowest. */
@@ -1375,21 +1419,22 @@ type Segment = {
 type Line = { index: number; top: number; x: number; size: number; objects: number };
 
 /**
- * A paragraph whose place may hide its text: its format; each frame of fixed
- * size holding it (its row cell, text box, frame) with the height it shows and
- * how far below its top the paragraph starts; the width its lines take theirs
- * from; for a paragraph of the body, how far from the page's left edge its
- * column starts (wherever it can, at most then at least), and the page's
- * width; whether its lines, in an exact spacing, may run into one another, the
- * free space above its first line (infinite when no text lies above it) and
- * whether the line above is in an exact spacing too; its lines in both
- * layouts; the right or centred tab stop that aligns the text after it on its
+ * A paragraph whose place may hide its text: its format; how far down from
+ * its top its lines may go before leaving one of the frames of fixed size
+ * holding it (its row cell, text box, frame; infinite when none), in both
+ * layouts; the width its lines take theirs from; for a paragraph of the body,
+ * how far from the page's left edge its column starts (wherever it can, at
+ * most then at least), and the page's width; whether its lines, in an exact
+ * spacing, may run into one another, the free space above its first line
+ * (infinite when no text lies above it) and whether the line above is in an
+ * exact spacing too; its lines in both layouts; its tab stops once a tab is
+ * met; the right or centred tab stop that aligns the text after it on its
  * line of the first layout, and how wide that text is so far; the visible
  * segments of its last two lines, which a cramped line below may still cover.
  */
 type ParagraphLayout = {
   format: ParagraphFormat;
-  places: Array<{ room: Pair; top: Pair }>;
+  slack: Pair;
   width: Pair;
   edge?: Pair;
   tight: boolean;
@@ -1397,11 +1442,18 @@ type ParagraphLayout = {
   tightAbove: boolean;
   lines: [Line, Line];
   pageWidth: number;
+  stops?: Array<[number, string]>;
   tab?: { position: number; kind: string; line: number; width: number };
   pending: Array<{ line: number; segments: Segment[] }>;
 };
 
-/** The last line of text of a container (body, cell, text box…): whether its paragraph is in an exact spacing, its visible segments, the free space below it since. */
+/**
+ * The last line of text above what a container (body, cell, text box…) holds
+ * next: in it, else, for a cell, in the row above or before its table (the
+ * lowest of those of the row's cells); whether its paragraph is in an exact
+ * spacing, its visible segments, the free space below it since, at its
+ * lowest. null: no text lies above, in the part or the text box.
+ */
 type LastLine = { tight: boolean; segments: Segment[]; gap: number } | null;
 
 type Frame = BandSizes & {
@@ -1427,8 +1479,9 @@ type Frame = BandSizes & {
   flow?: { advance: number; tabbed: boolean };
   inked?: boolean;
   closed?: boolean;
-  /** Paragraphs: their lines when their place may hide them (layoutOf; null: it cannot). */
+  /** Paragraphs: their lines when their place may hide them (layoutOf; null: it cannot); else their visible segments, which a cramped line below may still cover. */
   layout?: ParagraphLayout | null;
+  shown?: Segment[];
   /**
    * Containers of paragraphs (body, cell, text box…): how far their content fills them in both layouts (from a cell's top margin),
    * the last paragraph in them, for the space between it and the next, and their last line of text.
@@ -1436,8 +1489,9 @@ type Frame = BandSizes & {
   content?: { filled: Pair; above?: Spacing; last: LastLine };
   /** Cells of a row of exact height, text boxes of a fixed size, paragraphs in a frame of exact height: the height they show, in both layouts. */
   room?: Pair;
-  /** Containers: whether they, or one holding them, show a fixed height: their paragraphs are laid out. */
+  /** Containers: whether they, or one holding them, show a fixed height: their paragraphs are laid out; once read, how far down their content may go before leaving one (`slack`). */
   fixed?: boolean;
+  limit?: Pair;
   /** Text boxes (their anchor, inline drawing or VML shape), frames, cells once measured: the width of their text, in both layouts (infinite: lines do not wrap). */
   width?: Pair;
   /** Paragraphs: a drop cap (w:framePr w:dropCap), its letter set in a spacing smaller than its size. */
@@ -1452,6 +1506,10 @@ type Frame = BandSizes & {
   gridColumn?: number;
   /** Tables: the height of their rows read so far, in both layouts; their grid (w:gridCol), indent (w:tblInd), width (w:tblW), alignment, whether fixed (w:tblLayout) or floating (w:tblpPr). */
   rowsHeight?: Pair;
+  /** Tables: the last line of text above the row being read (LastLine). Rows: that of each of their cells, and how far it fills them, at its lowest. Cells: the segments of the one above their row. */
+  lineAbove?: LastLine;
+  cellLines?: Array<{ last: LastLine; filled: number; own: boolean }>;
+  inherited?: Segment[];
   grid?: number[];
   indent?: number;
   tableWidth?: number;
@@ -1587,6 +1645,36 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
     return sections[section]?.page ?? { width: DEFAULT_PAGE.width, widestMargin: DEFAULT_PAGE.margin, narrowestMargin: DEFAULT_PAGE.margin, columnShift: 0, narrowestColumn: column, widestColumn: column };
   };
   const stack: Frame[] = [];
+  /** The frames of the stack placed off the page, off it with some margins only, cells or text boxes, text boxes, deleted or moved away: counted as they come and go, not looked for at each run. */
+  const held = { offPage: 0, unplaced: 0, nested: 0, textBoxes: 0, deleted: 0 };
+  const hold = (frame: Frame, change: number) => {
+    if (frame.offPage) held.offPage += change;
+    if (frame.unplaced) held.unplaced += change;
+    if (frame.name === "w:tc" || frame.name === "w:txbxContent") held.nested += change;
+    if (frame.name === "w:txbxContent") held.textBoxes += change;
+    if (frame.name === "w:del" || frame.name === "w:moveFrom") held.deleted += change;
+  };
+  /** Where the containers of paragraphs (body, cell, text box…) and the tables of the stack are in it, in order. */
+  const containers: number[] = [];
+  const tableIndices: number[] = [];
+  /** How many of these indices of the stack are below `at`. */
+  const countBelow = (indices: number[], at: number) => {
+    let low = 0;
+    for (let high = indices.length; low < high; ) {
+      const middle = (low + high) >> 1;
+      if (indices[middle]! < at) low = middle + 1;
+      else high = middle;
+    }
+    return low;
+  };
+  /** The innermost container of the stack, or the one holding it (`outer` 1). */
+  const innermost = (outer = 0) => stack[containers[containers.length - 1 - outer] ?? -1];
+  /** Places a frame of the stack off the page, or off it with some margins only. */
+  const placeOff = (frame: Frame, placing: Pick<Frame, "offPage" | "unplaced">) => {
+    hold(frame, -1);
+    Object.assign(frame, placing);
+    hold(frame, 1);
+  };
   const cuts: Array<[number, number]> = [];
   const found: Passages = { invisible: [], unverifiable: [] };
   let textStart: number | null = null;
@@ -1617,17 +1705,15 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
   let unread = 0;
   /** The table cell a paragraph is in, unless in a text box: the text box's text is not the table's. */
   const enclosingCell = () => {
-    for (let index = stack.length - 1; index >= 0; index -= 1) {
-      if (stack[index]!.name === "w:txbxContent") return undefined;
-      if (stack[index]!.name === "w:tc") return stack[index];
+    for (let index = containers.length - 1; index >= 0; index -= 1) {
+      const frame = stack[containers[index]!]!;
+      if (frame.name === "w:txbxContent") return undefined;
+      if (frame.name === "w:tc") return frame;
     }
     return undefined;
   };
   /** Where the container of paragraphs (body, cell, text box…) holding the frame at `at` is in the stack; -1 when none. */
-  const containerIndex = (at: number) => {
-    for (let index = at - 1; index >= 0; index -= 1) if (stack[index]!.content) return index;
-    return -1;
-  };
+  const containerIndex = (at: number) => containers[countBelow(containers, at) - 1] ?? -1;
   /** The shading of a paragraph: its own, else its style's, else the table style's for its cell, else the document's default. */
   const paragraphPaint = (frame: Frame, fromTable = true) =>
     frame.paint !== undefined ? frame.paint : lastSet([styles.paragraphShading, fromTable ? frame.cell?.formats?.paragraphShading : undefined, ...styleChain(styles, frame.style, "paragraph").map(style => style.paragraphShading)]);
@@ -1696,7 +1782,7 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
     // A drop cap's letter only needs a line of text; other lines of an exact spacing are laid out (layText).
     const spacing = paragraph ? formatOf(paragraph).line : undefined;
     const cramped = paragraph?.dropCap === true && spacing?.rule === "exact" && spacing.value < MIN_FONT_SIZE_PT;
-    if (effective["w:vanish"] || effective["w:specVanish"] || effective["w:webHidden"] || tinyText || squeezed || shifted || cramped || stack.some(frame => frame.offPage)) return "invisible";
+    if (effective["w:vanish"] || effective["w:specVanish"] || effective["w:webHidden"] || tinyText || squeezed || shifted || cramped || held.offPage > 0) return "invisible";
     // Word draws text in the automatic colour black or white, whichever shows on its background.
     const colour = effective.colour ?? "auto";
     if (colour === "auto") return "visible";
@@ -1709,7 +1795,7 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
     // On a colour of its own (shading, highlight, filled text box), it is not seen; on the page, it may lie on a picture:
     // in a text box without fill, in a paragraph a drawing holds, neighbours or covers, or on a picture as page colour.
     if (layer?.some(under => !isNearWhite(under))) return "invisible";
-    const onDrawing = fromPage || pagePicture || pictures.fromPage || stack.some(frame => frame.name === "w:txbxContent") || nearDrawing(paragraph);
+    const onDrawing = fromPage || pagePicture || pictures.fromPage || held.textBoxes > 0 || nearDrawing(paragraph);
     return onDrawing ? "unverifiable" : "invisible";
   };
   /** What mammoth reads of a mc:AlternateContent, its fallback, is seen only where the choice Word draws shows the same text. */
@@ -1740,68 +1826,160 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
     const paragraph = nearest("w:p");
     if (!paragraph?.page) return false;
     const advance = widestAdvance(effective);
-    const nested = stack.some(item => item.name === "w:tc" || item.name === "w:txbxContent");
+    const nested = held.nested > 0;
     return offPage(formatOf(paragraph), paragraph.page, passage.place, advance, codePoints(passage.text) * advance, nested);
   };
   /** The width of the text of the container at `index`, in both layouts: a cell's (from its width or its table's grid, less its side margins), a text box's, a column's. */
   const widthOf = (index: number, across: PageAcross): Pair => {
-    const frame = stack[index];
-    if (frame?.width) return frame.width;
-    if (frame?.name !== "w:tc") return frame?.name === "w:txbxContent" ? [across.narrowestColumn, Number.POSITIVE_INFINITY] : [across.narrowestColumn, across.widestColumn];
-    let tableAt = index - 1;
-    while (tableAt >= 0 && stack[tableAt]!.name !== "w:tbl") tableAt -= 1;
-    const table = stack[tableAt];
-    const outer = widthOf(containerIndex(Math.max(0, tableAt)), across);
-    const grid = table?.grid ?? [];
-    const column = frame.gridColumn ?? 0;
-    const span = frame.span ?? 1;
-    const fromGrid = column + span <= grid.length ? grid.slice(column, column + span).reduce((sum, width) => sum + width, 0) : undefined;
-    const known = frame.preferredWidth ?? fromGrid;
-    // Without a width, it gets its share of the table's; an autofit table may widen it up to the whole of it.
-    const most = (known ?? outer[MOST] / (table?.rows?.[frame.row ?? 0] || 1)) - (frame.cellSides ?? table?.cellSides ?? DEFAULT_CELL_SIDES_PT);
-    const least = table?.fixedLayout && known !== undefined ? Math.max(known, fromGrid ?? 0) : Math.max(known ?? 0, outer[LEAST]);
-    frame.width = [Math.max(0, most), least];
-    return frame.width;
+    // The cells of unknown width holding the text, out to one of known width or to what holds their tables; then each from the outermost.
+    const cells: Array<{ cell: Frame; table?: Frame }> = [];
+    let width: Pair;
+    for (let at = index; ; ) {
+      const frame = stack[at];
+      if (frame?.width) {
+        width = frame.width;
+        break;
+      }
+      if (frame?.name !== "w:tc") {
+        width = frame?.name === "w:txbxContent" ? [across.narrowestColumn, Number.POSITIVE_INFINITY] : [across.narrowestColumn, across.widestColumn];
+        break;
+      }
+      const tableAt = tableIndices[countBelow(tableIndices, at) - 1] ?? -1;
+      cells.push({ cell: frame, table: stack[tableAt] });
+      at = containerIndex(Math.max(0, tableAt));
+    }
+    for (const { cell, table } of cells.reverse()) {
+      const outer = width;
+      const grid = table?.grid ?? [];
+      const column = cell.gridColumn ?? 0;
+      const span = cell.span ?? 1;
+      const fromGrid = column + span <= grid.length ? grid.slice(column, column + span).reduce((sum, width) => sum + width, 0) : undefined;
+      const known = cell.preferredWidth ?? fromGrid;
+      // Without a width, it gets its share of the table's; an autofit table may widen it up to the whole of it.
+      const most = (known ?? outer[MOST] / (table?.rows?.[cell.row ?? 0] || 1)) - (cell.cellSides ?? table?.cellSides ?? DEFAULT_CELL_SIDES_PT);
+      const least = table?.fixedLayout && known !== undefined ? Math.max(known, fromGrid ?? 0) : Math.max(known ?? 0, outer[LEAST]);
+      width = cell.width = [Math.max(0, most), least];
+    }
+    return width;
+  };
+  /** The last line of text above a table starting here (LastLine): that of its container, beyond the space below the paragraph above. */
+  const lineAboveTable = (): LastLine => {
+    const content = innermost()?.content;
+    return content?.last ? { ...content.last, gap: content.last.gap + (content.above?.after ?? 0) } : null;
+  };
+  /**
+   * The last line of text a row of this height leaves above the next one: of
+   * each of its cells, the last line, the free space below it to the row's
+   * bottom; the narrowest space, in an exact spacing only when all are, and
+   * the segments of all, gathered without copying each one more than a few
+   * times, however deep its tables are nested (counted as layout work). A
+   * cell without text keeps the line above the row (`above`); in a row with
+   * text, a line seen through such cells is not followed further down.
+   */
+  const rowBottom = (cells: NonNullable<Frame["cellLines"]>, height: number, above: LastLine): LastLine => {
+    if (!cells.length) return above && { ...above, gap: above.gap + height };
+    let line: LastLine = null;
+    const own: Segment[][] = [];
+    for (const cell of cells) {
+      if (!cell.last) continue;
+      const gap = cell.last.gap + Math.max(0, height - cell.filled);
+      line = line ? { tight: line.tight && cell.last.tight, segments: line.segments, gap: Math.min(line.gap, gap) } : { tight: cell.last.tight, segments: cell.last.segments, gap };
+      if (cell.own) own.push(cell.last.segments);
+    }
+    if (!line || !own.length) return line;
+    // The longest list of segments takes the others' (they are not kept elsewhere once their cells are read).
+    const longest = own.reduce((found, segments) => (segments.length > found.length ? segments : found));
+    for (const segments of own) {
+      if (segments === longest) continue;
+      budget.units -= segments.length;
+      for (const segment of segments) longest.push(segment);
+    }
+    line.segments = longest;
+    return line;
+  };
+  /** Where the container holding the frame at `at` is in the stack (-1 when none), and the height of the rows of the tables in between, in both layouts. */
+  const containerOf = (at: number) => {
+    const index = containerIndex(at);
+    let rows: Pair = [0, 0];
+    const last = countBelow(tableIndices, at);
+    for (let table = countBelow(tableIndices, index + 1); table < last; table += 1) {
+      const height = stack[tableIndices[table]!]!.rowsHeight ?? [0, 0];
+      rows = [rows[MOST] + height[MOST], rows[LEAST] + height[LEAST]];
+      budget.units -= 1;
+    }
+    budget.units -= 1;
+    return { index, rows };
+  };
+  /**
+   * How far down from the top of the content of the container at `index` its
+   * text may go before leaving it, when it shows a fixed height, or one of
+   * the cells and text boxes of fixed size holding it, through the rows of
+   * their tables and what fills them above it, in both layouts (infinite when
+   * none does). Read once: what holds a container does not change while it is.
+   */
+  const limitOf = (index: number): Pair => {
+    // The containers not read yet, out to one read or one whose height does not hold its text; then each from the outermost.
+    const inner: Array<{ frame: Frame; holder: NonNullable<Frame["content"]>; rows: Pair }> = [];
+    let limit: Pair;
+    for (let at = index; ; ) {
+      const frame = stack[at]!;
+      if (frame.limit) {
+        limit = frame.limit;
+        break;
+      }
+      const outer = frame.fixed && frame.name !== "w:txbxContent" ? containerOf(at) : undefined;
+      const holder = outer && stack[outer.index]?.content;
+      if (!outer || !holder) {
+        limit = frame.limit = frame.room ?? UNBOUNDED;
+        break;
+      }
+      inner.push({ frame, holder, rows: outer.rows });
+      at = outer.index;
+    }
+    for (const { frame, holder, rows } of inner.reverse()) {
+      const upper = limit;
+      const own = frame.room ?? UNBOUNDED;
+      const above = holder.above?.after ?? 0;
+      const room = (model: number) => Math.min(own[model]!, upper[model]! - holder.filled[model]! - above - rows[model]!);
+      limit = frame.limit = [room(MOST), room(LEAST)];
+    }
+    return limit;
   };
   /**
    * The layout of the paragraph at `at` when its place may hide its text (in
    * a row, text box or frame of fixed size, in an exact line spacing, with a
    * right indent past the page's edge); null otherwise. Each frame of fixed
    * size holding it is found with how far its content fills it above the
-   * paragraph, through the rows of the tables holding it.
+   * paragraph, through the rows of the tables holding it (limitOf).
    */
   const layoutOf = (at: number): ParagraphLayout | null => {
     const paragraph = stack[at]!;
     if (paragraph.layout !== undefined) return paragraph.layout;
     const format = formatOf(paragraph);
-    const places: ParagraphLayout["places"] = paragraph.room ? [{ room: paragraph.room, top: [format.before, format.before] }] : [];
-    const home = containerIndex(at);
+    const { index: home, rows } = containerOf(at);
     const container = stack[home];
-    let top: Pair = [0, 0];
-    let index = at - 1;
-    for (; index >= 0; index -= 1) {
-      const frame = stack[index]!;
-      if (frame.content) {
-        const above = index === home ? spaceAbove(paragraph, frame.content.above) : frame.content.above?.after ?? 0;
-        top = [top[MOST] + frame.content.filled[MOST] + above, top[LEAST] + frame.content.filled[LEAST] + above];
-        if (frame.room) places.push({ room: frame.room, top });
-        if (!frame.fixed || frame.name === "w:txbxContent") break;
-      } else if (frame.rowsHeight) {
-        top = [top[MOST] + frame.rowsHeight[MOST], top[LEAST] + frame.rowsHeight[LEAST]];
-      }
+    const own = paragraph.room ? [paragraph.room[MOST] - format.before, paragraph.room[LEAST] - format.before] : UNBOUNDED;
+    let slack: Pair = [own[MOST]!, own[LEAST]!];
+    if (container?.content) {
+      const limit = limitOf(home);
+      const above = spaceAbove(paragraph, container.content.above);
+      const room = (model: number) => Math.min(own[model]!, limit[model]! - container.content!.filled[model]! - above - rows[model]!);
+      slack = [room(MOST), room(LEAST)];
     }
-    budget.units -= at - index;
+    budget.units -= 1;
     const across = paragraph.page ?? pageAt(0);
-    const width = paragraph.width ?? widthOf(home, across);
     // In a cell, a text box or a frame, a paragraph may lie anywhere across the page.
     const edge: Pair | undefined = paragraph.room || paragraph.width || container?.name !== "w:body" ? undefined : [across.widestMargin + across.columnShift, across.narrowestMargin];
     const tight = format.line.rule === "exact" && !paragraph.dropCap;
+    const placed = slack[MOST] !== Number.POSITIVE_INFINITY || slack[LEAST] !== Number.POSITIVE_INFINITY;
+    // The width of its lines, but of a paragraph of a cell or a text box that nothing constrains.
+    const width = edge || placed || tight ? paragraph.width ?? widthOf(home, across) : UNBOUNDED;
     const pastEdge = edge !== undefined && (edge[MOST] + width[MOST] - format.end > across.width || edge[LEAST] + width[LEAST] - format.end > across.width);
-    if (!places.length && !tight && !pastEdge) return (paragraph.layout = null);
+    if (!placed && !tight && !pastEdge) return (paragraph.layout = null);
     const last = container?.content?.last;
     const line = (): Line => ({ index: 0, top: 0, x: 0, size: 0, objects: 0 });
     paragraph.layout = {
-      format, places, width, edge: pastEdge ? edge : undefined, pageWidth: across.width, tight,
+      format, slack, width, edge: pastEdge ? edge : undefined, pageWidth: across.width, tight,
       gapAbove: last ? last.gap + spaceAbove(paragraph, container?.content?.above) : Number.POSITIVE_INFINITY, tightAbove: last?.tight ?? false, lines: [line(), line()], pending: [],
     };
     return paragraph.layout;
@@ -1838,8 +2016,27 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
     const stop = tab.position - lineStart(layout, line);
     return Math.max(line.x, /^(right|end)$/i.test(tab.kind) ? stop : stop + tab.width / 2);
   };
+  /** The tab stops of each chain of paragraph styles (with the document's defaults), merged once. */
+  const styleStops = new WeakMap<StyleDefinition[], Array<[number, string]>>();
+  /** A paragraph's tab stops (tabStops): its style's, and its own; counted as layout work. */
+  const stopsOf = (paragraph: Frame) => {
+    const chain = styleChain(styles, paragraph.style, "paragraph");
+    let inherited = styleStops.get(chain);
+    if (!inherited) {
+      const layers = [styles.paragraph, ...chain.map(style => style.paragraph)];
+      styleStops.set(chain, (inherited = tabStops(layers)));
+      budget.units -= layers.reduce((sum, layer) => sum + (layer.tabs?.length ?? 0), 0);
+    }
+    const own = paragraph.paragraph?.tabs;
+    if (!own?.length) return inherited;
+    budget.units -= inherited.length + own.length;
+    return tabStops([{ tabs: inherited }, { tabs: own }]);
+  };
   /** Moves a paragraph's lines on to its next tab stop (a stop of its own, the start of a hanging indent, else the next default one); a right or centred stop aligns the text after it at the stop, in the first layout. */
-  const tabOn = (layout: ParagraphLayout) => {
+  const tabOn = (layout: ParagraphLayout, paragraph: Frame) => {
+    budget.units -= 1;
+    // Past the budget, the text is no longer laid out (layText).
+    const stops = budget.units > 0 ? (layout.stops ??= stopsOf(paragraph)) : [];
     for (const model of [MOST, LEAST]) {
       const line = layout.lines[model]!;
       if (model === MOST) {
@@ -1848,7 +2045,14 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
       }
       const start = lineStart(layout, line);
       const column = start + line.x;
-      let stop = layout.format.tabs.find(([position, kind]) => position > column + 0.01 && kind !== "bar");
+      // The first stop past the text, in the stops in order.
+      let low = 0;
+      for (let high = stops.length; low < high; ) {
+        const middle = (low + high) >> 1;
+        if (stops[middle]![0] > column + 0.01) high = middle;
+        else low = middle + 1;
+      }
+      let stop = stops[low];
       if (line.index === 0 && layout.format.firstLine < 0 && layout.format.start > column + 0.01 && (!stop || layout.format.start < stop[0])) stop = [layout.format.start, "left"];
       const [position, kind] = stop ?? [(Math.floor(column / tabStop + 1e-6) + 1) * tabStop, "left"];
       // The least room keeps the text where it is: the stop may place it back to there.
@@ -1867,15 +2071,22 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
       line.size = Math.max(line.size, size);
     }
   };
-  /** A segment a line laid later over it covers: set aside if it was read. */
-  const toUnverifiable = (segment: Segment) => {
-    if (segment.judgement.verdict !== "visible") return;
-    segment.judgement = OUT_OF_PLACE;
-    const settled = segment.settled;
-    if (!settled) return;
-    cuts.push([segment.start, segment.end]);
-    if (settled.drawn) for (let index = settled.drawn.from; index < settled.drawn.to; index += 1) settled.drawn.verdicts[index] = graver(settled.drawn.verdicts[index]!, OUT_OF_PLACE);
-    if (settled.recorded) record(OUT_OF_PLACE, segment.text, settled.paragraph);
+  /**
+   * The segments of a line that a line laid later over it covers, or may
+   * cover (`judgement`: why): set aside those that were read, once; none of
+   * them is visible after, wherever else they are kept.
+   */
+  const setAside = (segments: Segment[] | undefined, judgement: Judgement) => {
+    for (const segment of segments ?? []) {
+      if (segment.judgement.verdict !== "visible") continue;
+      segment.judgement = judgement;
+      const settled = segment.settled;
+      if (!settled) continue;
+      cuts.push([segment.start, segment.end]);
+      if (settled.drawn) for (let index = settled.drawn.from; index < settled.drawn.to; index += 1) settled.drawn.verdicts[index] = graver(settled.drawn.verdicts[index]!, judgement);
+      if (settled.recorded) record(judgement, segment.text, settled.paragraph);
+    }
+    if (segments) segments.length = 0;
   };
   /**
    * Lays a passage of a run on its paragraph's lines, in both layouts
@@ -1889,7 +2100,14 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
   const layText = (layout: ParagraphLayout, text: string, effective: RunLayer, container: Frame | undefined, deleted: boolean) => {
     const judgements: Judgement[] = new Array<Judgement>(text.length).fill(VISIBLE);
     const lines: number[] = new Array<number>(text.length).fill(layout.lines[MOST].index);
-    if (budget.units <= 0) return { judgements: judgements.fill(UNLAID), lines };
+    if (budget.units <= 0) {
+      // Not laid out, a line of an exact spacing may still run into the lines above it.
+      if (layout.tight) {
+        setAside(container?.content?.last?.segments, UNLAID);
+        for (const entry of layout.pending) setAside(entry.segments, UNLAID);
+      }
+      return { judgements: judgements.fill(UNLAID), lines };
+    }
     budget.units -= text.length;
     const { format } = layout;
     const size = fontSize(effective, text);
@@ -1927,7 +2145,7 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
           if (model === MOST && layout.tab?.line === line.index) layout.tab.width += step;
           if (deleted) continue;
           const across = layout.edge && layout.edge[model]! + lineStart(layout, line);
-          out[model] = outOfPlace(layout.places, model, line.top, lowered, line.size)
+          out[model] = outOfPlace(layout.slack, model, line.top, lowered, line.size)
             || (across !== undefined && (model === MOST ? across + lineEnd(layout, line) > layout.pageWidth : across + from >= layout.pageWidth));
           if (layout.tight) {
             // A line of an exact spacing smaller than its letters runs into the line above it, unless there is room enough between them.
@@ -1952,19 +2170,13 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
         }
       }
     }
-    // The line above in the same paragraph, or the last line of text above it in its container when in an exact spacing too.
-    for (const line of Array.from(covered)) {
-      if (line < 0) {
-        if (container?.content?.last?.tight) container.content.last.segments.forEach(toUnverifiable);
-        continue;
-      }
-      for (const entry of layout.pending) if (entry.line === line) entry.segments.forEach(toUnverifiable);
-    }
+    // The line above in the same paragraph, or the last line of text above it (LastLine), whatever its spacing.
+    for (const line of Array.from(covered)) setAside(line < 0 ? container?.content?.last?.segments : layout.pending.find(entry => entry.line === line)?.segments, OUT_OF_PLACE);
     if (covered.size) for (let index = 0; index < text.length; index += 1) if (judgements[index] === VISIBLE && covered.has(lines[index]!)) judgements[index] = OUT_OF_PLACE;
     return { judgements, lines };
   };
-  /** A passage cut where its judgement or its line changes; the visible parts of an exact spacing kept for the lines below. Whole when its XML cannot be cut apart. */
-  const segmentsOf = (raw: string, start: number, text: string, layout: ParagraphLayout | null, judged?: { judgements: Judgement[]; lines: number[] }): Segment[] => {
+  /** A passage cut where its judgement or its line changes; its visible parts kept for the lines below (of its last lines when laid out). Whole when its XML cannot be cut apart. */
+  const segmentsOf = (raw: string, start: number, text: string, paragraph: Frame | undefined, layout: ParagraphLayout | null, judged?: { judgements: Judgement[]; lines: number[] }): Segment[] => {
     const groups: Array<{ from: number; to: number; judgement: Judgement; line: number }> = [];
     for (let index = 0; index < text.length && judged; index += 1) {
       const group = groups.at(-1);
@@ -1977,12 +2189,16 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
       : [{ from: 0, to: text.length, judgement: groups.map(group => group.judgement).reduce(graver, VISIBLE), line: groups.at(-1)?.line ?? 0, start, end: start + raw.length }];
     return parts.map(part => {
       const segment: Segment = { from: part.from, to: part.to, start: part.start, end: part.end, text: text.slice(part.from, part.to), judgement: part.judgement };
-      if (layout?.tight && part.judgement === VISIBLE) {
+      if (part.judgement !== VISIBLE) return segment;
+      if (layout) {
         // Only the last two lines may still be run into.
         while (layout.pending.length && layout.pending[0]!.line < part.line - 1) layout.pending.shift();
         let entry = layout.pending.find(item => item.line === part.line);
         if (!entry) layout.pending.push((entry = { line: part.line, segments: [] }));
         entry.segments.push(segment);
+      } else if (paragraph) {
+        // Its lines are not laid out: any of them may be its last.
+        (paragraph.shown ??= []).push(segment);
       }
       return segment;
     });
@@ -2021,27 +2237,30 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
     if (recorded) record(judgement, segment.text, paragraph);
   };
   /** Whether a table's indent (w:tblInd) places it off the page: wherever its section's margins put it (hidden), or with some of them (unverifiable). */
-  const placeTable = (table: Frame, at: number) => {
+  const placeTable = (table: Frame) => {
     table.placed = true;
     if (table.floating || (table.align !== undefined && !/^(left|start)$/i.test(table.align))) return;
     const indent = table.indent ?? 0;
     const width = table.tableWidth ?? (table.grid?.length ? table.grid.reduce((sum, column) => sum + column, 0) : undefined);
     const across = table.page ?? pageAt(0);
-    if (stack.slice(0, at).some(item => item.name === "w:tc" || item.name === "w:txbxContent")) {
+    if (held.nested > 0) {
       // In a cell or a text box, which may lie anywhere on the page.
-      if (indent >= across.width || (width !== undefined && indent + width <= -across.width)) table.offPage = true;
+      if (indent >= across.width || (width !== undefined && indent + width <= -across.width)) placeOff(table, { offPage: true });
       return;
     }
     const most = across.widestMargin + across.columnShift + indent;
     const least = across.narrowestMargin + indent;
-    if (least >= across.width || (width !== undefined && most + width <= 0)) table.offPage = true;
-    else if (most >= across.width || (width !== undefined && least + width <= 0)) table.unplaced = true;
+    if (least >= across.width || (width !== undefined && most + width <= 0)) placeOff(table, { offPage: true });
+    else if (most >= across.width || (width !== undefined && least + width <= 0)) placeOff(table, { unplaced: true });
   };
   visitXmlTags(tags, inParagraphs((tag, paragraph) => {
     if (tag.closing) {
       // A paragraph without text still fills its container, at the size of its mark.
       if (tag.name === "w:p" && stack.at(-1)?.flow && stack.at(-1)!.layout === undefined) layoutOf(stack.length - 1);
       const frame = stack.pop();
+      if (frame) hold(frame, -1);
+      if (frame?.content) containers.pop();
+      if (frame?.name === "w:tbl") tableIndices.pop();
       if (frame?.name === "mc:AlternateContent") alternates -= 1;
       if (frame?.name === "mc:Choice" || frame?.name === "w:drawing") unread -= 1;
       if ((frame?.name === "w:t" || frame?.name === "w:delText") && textStart !== null) {
@@ -2063,12 +2282,12 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
           }
           if (layout) judged = layText(layout, text, effective, stack[containerIndex(at)], deleted);
         }
-        if (frame.name === "w:t" && run?.texts) run.texts.push({ text, place: frame.place ?? { before: 0, tabbed: true }, segments: segmentsOf(raw, textStart, text, layout, judged) });
+        if (frame.name === "w:t" && run?.texts) run.texts.push({ text, place: frame.place ?? { before: 0, tabbed: true }, segments: segmentsOf(raw, textStart, text, holder, layout, judged) });
         textStart = null;
       } else if (frame?.name === "w:r" && frame.texts?.length) {
         const effective = runFormat(frame);
         const seen = visibility(frame.texts.map(passage => passage.text).join(""), effective);
-        const judgement = graver({ verdict: seen, reason: seen === "unverifiable" ? "drawing" : undefined }, stack.some(item => item.unplaced) ? OUT_OF_PLACE : VISIBLE);
+        const judgement = graver({ verdict: seen, reason: seen === "unverifiable" ? "drawing" : undefined }, held.unplaced > 0 ? OUT_OF_PLACE : VISIBLE);
         // Each passage of the run in its place: its indents may take it off the page, its row, text box or line spacing part of it.
         const place = runPlace();
         for (const passage of frame.texts) {
@@ -2108,7 +2327,8 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
               content.filled = [content.filled[MOST] + height(MOST), content.filled[LEAST] + height(LEAST)];
             }
             const lastLine = layout?.lines[MOST].index;
-            if (frame.inked) content.last = { tight: layout?.tight ?? false, segments: layout?.pending.find(entry => entry.line === lastLine)?.segments ?? [], gap: 0 };
+            const segments = layout ? layout.pending.find(entry => entry.line === lastLine)?.segments : frame.shown;
+            if (frame.inked) content.last = { tight: layout?.tight ?? false, segments: segments ?? [], gap: 0 };
             else if (content.last) content.last.gap += above + lineFloor(format, markSize);
             content.above = { style: styleOf(frame), after: format.after, contextual: format.contextual };
           }
@@ -2120,22 +2340,27 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
           row.gridColumn = (row.gridColumn ?? 0) + (frame.span ?? 1);
           const filled = frame.merged ? [0, 0] : frame.content?.filled ?? [0, 0];
           row.tallest = [Math.max(row.tallest?.[MOST] ?? 0, filled[MOST]!), Math.max(row.tallest?.[LEAST] ?? 0, filled[LEAST]!)];
+          const last = frame.content?.last ?? null;
+          (row.cellLines ??= []).push({ last, filled: frame.content?.filled[LEAST] ?? 0, own: last !== null && last.segments !== frame.inherited });
         }
       } else if (frame?.name === "w:tr") {
         const table = stack.at(-1)?.name === "w:tbl" ? stack.at(-1) : undefined;
         const tallest = frame.tallest ?? [0, 0];
         const rule = frame.height;
         const height: Pair = rule?.rule === "exact" ? [rule.value, rule.value] : [Math.max(rule?.value ?? 0, tallest[MOST]), Math.max(rule?.value ?? 0, tallest[LEAST])];
-        if (table) table.rowsHeight = [(table.rowsHeight?.[MOST] ?? 0) + height[MOST], (table.rowsHeight?.[LEAST] ?? 0) + height[LEAST]];
+        if (table) {
+          table.rowsHeight = [(table.rowsHeight?.[MOST] ?? 0) + height[MOST], (table.rowsHeight?.[LEAST] ?? 0) + height[LEAST]];
+          table.lineAbove = rowBottom(frame.cellLines ?? [], height[LEAST], table.lineAbove ?? null);
+        }
       } else if (frame?.name === "w:tbl") {
-        // The table fills its container below the paragraph above it; what follows starts afresh below it.
-        const content = stack.findLast(item => item.content)?.content;
+        // The table fills its container below the paragraph above it; what follows starts below its last row.
+        const content = innermost()?.content;
         if (content) {
           const height = frame.rowsHeight ?? [0, 0];
           const after = content.above?.after ?? 0;
           content.filled = [content.filled[MOST] + after + height[MOST], content.filled[LEAST] + after + height[LEAST]];
           content.above = undefined;
-          content.last = null;
+          content.last = frame.lineAbove ?? null;
         }
       } else if (frame?.colour) {
         paintShape(frame.colour);
@@ -2152,12 +2377,11 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
     const frame: Frame = tag.name === "w:p"
       ? { name: tag.name, passages: { invisible: [], unverifiable: [] }, key: paragraph ?? undefined, ordinal: paragraphCount++, cell: enclosingCell(), paragraph: {}, mark: {}, page: pageAt(tag.start), flow: { advance: 0, tabbed: false } }
       : tag.name === "w:r" ? { name: tag.name, layer: {}, texts: [] }
-      : tag.name === "w:tbl" ? { name: tag.name, rows: tables.get(tag.start) ?? [], page: pageAt(tag.start) }
+      : tag.name === "w:tbl" ? { name: tag.name, rows: tables.get(tag.start) ?? [], page: pageAt(tag.start), lineAbove: lineAboveTable() }
       : { name: tag.name };
     if (tag.name === "w:tr") {
-      const tableAt = stack.findLastIndex(item => item.name === "w:tbl");
-      const table = stack[tableAt];
-      if (table && !table.placed) placeTable(table, tableAt);
+      const table = nearest("w:tbl");
+      if (table && !table.placed) placeTable(table);
       frame.row = next(table);
       frame.gridColumn = 0;
     }
@@ -2170,15 +2394,19 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
       if (table) frame.formats = cellFormats(styles, table, frame.row!, frame.column!);
       // A row of exact height shows no more of its cells (w:trHeight exact; omitted, its height is 0), below their top margin.
       frame.cellTop = table?.cellTop ?? lastSet(styleChain(styles, table?.style, "table").map(style => style.cellTop)) ?? 0;
-      frame.content = { filled: [frame.cellTop, frame.cellTop], last: null };
+      // The line above the row is above its first line, beyond its top margin.
+      const above = table?.lineAbove ?? null;
+      frame.inherited = above?.segments;
+      frame.content = { filled: [frame.cellTop, frame.cellTop], last: above && { ...above, gap: above.gap + frame.cellTop } };
       if (row?.height?.rule === "exact") frame.room = [row.height.value, row.height.value];
-      frame.fixed = Boolean(frame.room) || Boolean(stack.findLast(item => item.content)?.fixed);
+      frame.fixed = Boolean(frame.room) || Boolean(innermost()?.fixed);
     }
     if (tag.name === "w:top" && parent?.name === "w:tblCellMar" && grandParent?.name === "w:tblPr" && stack.at(-3)?.name === "w:tbl") stack.at(-3)!.cellTop = cellMargin(tag);
     if (tag.name === "w:top" && parent?.name === "w:tcMar" && grandParent?.name === "w:tcPr" && stack.at(-3)?.name === "w:tc") {
       const cell = stack.at(-3)!;
       const change = cellMargin(tag) - (cell.cellTop ?? 0);
       if (cell.content) cell.content.filled = [cell.content.filled[MOST] + change, cell.content.filled[LEAST] + change];
+      if (cell.content?.last) cell.content.last.gap += change;
       cell.cellTop = cellMargin(tag);
     }
     // The side margins of the cells, given by the table or by a cell, the other side as Word's when not given.
@@ -2197,7 +2425,7 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
       // A cell merged with the rows below takes their height too; text run top to bottom fills its height along its lines.
       if (tag.name === "w:vMerge" || (tag.name === "w:textDirection" && !ACROSS.test(tag.attributes.get("w:val") ?? "lrTb"))) {
         grandParent.room = undefined;
-        grandParent.fixed = Boolean(stack.findLast(item => item.content && item !== grandParent)?.fixed);
+        grandParent.fixed = Boolean(innermost(innermost() === grandParent ? 1 : 0)?.fixed);
         if (tag.name === "w:vMerge") grandParent.merged = true;
       }
     }
@@ -2295,7 +2523,7 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
     if (tag.name === "wp:extent" && parent?.box) Object.assign(parent.box, { width: Number(tag.attributes.get("cx")) / EMU_PER_PT || 0, height: Number(tag.attributes.get("cy")) / EMU_PER_PT || 0 });
     if (tag.name === "wp:posOffset" && !tag.selfClosing && grandParent?.box && !grandParent.box.simple && (parent?.name === "wp:positionH" || parent?.name === "wp:positionV")) offsetStart = tag.end;
     // The shape follows its position and size.
-    if (tag.name === "a:graphic" && parent?.box) parent.offPage = isOffPage(parent.box, page);
+    if (tag.name === "a:graphic" && parent?.box) placeOff(parent, { offPage: isOffPage(parent.box, page) });
     if (tag.name === "mc:Choice" && parent?.name === "mc:AlternateContent" && !parent.drawn && drawnByWord(tag)) {
       frame.chosen = true;
       parent.drawn = { text: "", verdicts: [], cursor: 0 };
@@ -2345,10 +2573,10 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
       const holder = stack[at];
       const flow = holder?.flow;
       const layout = flow && tag.name !== "w:t" && tag.name !== "w:delText" ? layoutOf(at) : null;
-      const deleted = layout ? stack.some(item => item.name === "w:del" || item.name === "w:moveFrom") : false;
+      const deleted = layout ? held.deleted > 0 : false;
       if (layout && (tag.name === "w:br" || tag.name === "w:cr")) for (const model of deleted ? [MOST] : [MOST, LEAST]) newLine(layout, model, fontSize(runFormat(parent), ""));
       if (flow && (tag.name === "w:tab" || tag.name === "w:ptab")) flow.tabbed = true;
-      if (layout && tag.name === "w:tab" && !deleted) tabOn(layout);
+      if (layout && tag.name === "w:tab" && !deleted) tabOn(layout, holder!);
       if (flow && tag.name === "w:sym") {
         flow.advance += widestAdvance(runFormat(parent));
         if (layout && !deleted) placeObject(layout, LAYOUTS[MOST]!.widths.sign * fontSize(runFormat(parent), ""), 0, fontSize(runFormat(parent), ""));
@@ -2361,6 +2589,9 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
     }
     if (!tag.selfClosing) {
       stack.push(frame);
+      hold(frame, 1);
+      if (frame.content) containers.push(stack.length - 1);
+      if (frame.name === "w:tbl") tableIndices.push(stack.length - 1);
       if (tag.name === "mc:AlternateContent") alternates += 1;
       if (tag.name === "mc:Choice" || tag.name === "w:drawing") unread += 1;
     }

@@ -56,11 +56,13 @@ export const DOCUMENT_DECOMPRESSION_LIMITS = {
   /**
    * DOCX visibility check: work of laying out the text whose place may hide
    * it (in a row, text box or frame of fixed size, an exact line spacing, past
-   * the page's edge), in characters and paragraphs laid out, counted rather
-   * than timed so that a file always gives the same text. Past it, such text
-   * is set aside as unverifiable. A CV lays out under 2,000; 1,000,000 take
-   * about 0.25 s on the development machine, where a document part of 20 MB
-   * is read in at most 2 s.
+   * the page's edge), in characters, paragraphs, tabs and tab stops laid
+   * out, counted rather than timed so that a file always gives the same text.
+   * Past it, such text is set aside as unverifiable. A CV lays out under
+   * 2,000; 1,000,000 take about 0.25 s on the development machine. The rest
+   * of the check is not counted: there, on a loaded machine, a document part
+   * of 20 MB of rows, nested tables, linked text boxes or plain text took 1
+   * to 2.5 s.
    */
   docxLayoutWorkUnits: 1_000_000,
   /** Characters of extracted text kept for the analysis and the database. */
