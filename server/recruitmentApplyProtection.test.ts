@@ -56,7 +56,7 @@ function inMemoryDbWithApplicationInsert() {
   });
 }
 
-async function apply(input: { email: string; firstName?: string; specialty?: string; cv?: Buffer; ip: string }) {
+async function apply(input: { email: string; firstName?: string; specialty?: string; cv?: Buffer; ip: string; gdprConsent?: string | null }) {
   const form = new FormData();
   form.set("firstName", input.firstName ?? "Camille");
   form.set("lastName", "Martin");
@@ -65,7 +65,8 @@ async function apply(input: { email: string; firstName?: string; specialty?: str
   form.set("diplomaCountry", "France");
   form.set("targetCountries", JSON.stringify(["Canada", "Suisse"]));
   form.set("languages", JSON.stringify(["Français"]));
-  form.set("gdprConsent", "1");
+  // null leaves the box unticked: the browser then sends no field at all.
+  if (input.gdprConsent !== null) form.set("gdprConsent", input.gdprConsent ?? "1");
   form.set("turnstileToken", "turnstile-token-accepted-by-the-mock");
   form.set("cv", new Blob([new Uint8Array(input.cv ?? cv)], { type: "application/pdf" }), "cv.pdf");
   const response = await fetch(`${baseUrl}/api/recruitment/apply`, { method: "POST", body: form, headers: { "x-forwarded-for": input.ip } });
@@ -222,6 +223,33 @@ describe("/api/recruitment/apply — confirmation vers une adresse non vérifié
     }
   });
 
+});
+
+describe("/api/recruitment/apply — consentement RGPD obligatoire", () => {
+  it.each([null, "0", "", "true", "on"])("refuse la candidature quand le consentement vaut %s, sans déposer le CV ni écrire ni envoyer", async gdprConsent => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const execute = vi.spyOn(db(), "execute");
+    const uploadsBefore = vi.mocked(storagePut).mock.calls.length;
+    try {
+      const refused = await apply({ email: "sans.accord@test.local", ip: "198.51.100.71", gdprConsent });
+      expect(refused).toEqual({ status: 400, body: { error: "Les informations de candidature sont invalides.", code: "recruitment_application_invalid" } });
+      expect(vi.mocked(storagePut).mock.calls.length).toBe(uploadsBefore);
+      expect(execute).not.toHaveBeenCalled();
+      expect(state.sent).toEqual([]);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("enregistre la candidature quand le consentement est donné", async () => {
+    const execute = vi.spyOn(db(), "execute");
+    const uploadsBefore = vi.mocked(storagePut).mock.calls.length;
+    const accepted = await apply({ email: "accord@test.local", ip: "198.51.100.72", gdprConsent: "1" });
+    expect(accepted.status).toBe(201);
+    expect(vi.mocked(storagePut).mock.calls.length).toBe(uploadsBefore + 1);
+    expect(execute).toHaveBeenCalledTimes(1);
+    expect(state.sent.map(email => email.to[0])).toEqual(["accord@test.local"]);
+  });
 });
 
 describe("formulaire de candidature standard — spécialité libre (INTL-03)", () => {

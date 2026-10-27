@@ -139,3 +139,31 @@ describe("medicalQuestions.submit — emails vers une adresse non vérifiée (MA
     expect(state.sent).toHaveLength(7);
   });
 });
+
+describe("medicalQuestions.submit — consentements obligatoires", () => {
+  // Health data: without both boxes ticked nothing is checked, recorded or sent.
+  it.each([
+    ["privacyConsent", false],
+    ["privacyConsent", undefined],
+    ["urgencyAcknowledged", false],
+    ["urgencyAcknowledged", undefined],
+  ] as const)("refuse la question quand %s vaut %s, sans rien enregistrer ni envoyer", async (field, value) => {
+    vi.mocked(verifyCandidateTurnstile).mockClear();
+    const refusal = await failure(caller("198.51.100.81").submit({ ...question("sans.accord@test.local"), [field]: value } as never));
+
+    expect(refusal.code).toBe("BAD_REQUEST");
+    const db = state.db as InMemoryDrizzle;
+    expect(db.rows(medicalQuestions)).toEqual([]);
+    expect(db.rows(medicalQuestionAuditLogs)).toEqual([]);
+    expect(verifyCandidateTurnstile).not.toHaveBeenCalled();
+    expect(state.sent).toEqual([]);
+  });
+
+  it("enregistre la question quand la confidentialité et l’urgence sont acceptées, la publication restant facultative", async () => {
+    const result = await caller("198.51.100.82").submit(question("accord@test.local"));
+
+    expect(result.acknowledgementSent).toBe(true);
+    expect((state.db as InMemoryDrizzle).rows(medicalQuestions)).toMatchObject([{ email: "accord@test.local", privacyConsent: 1, urgencyAcknowledged: 1, publicationConsent: 0 }]);
+    expect(state.sent.map(email => email.to[0])).toEqual(["accord@test.local"]);
+  });
+});
