@@ -55,6 +55,8 @@ const EXTRACTION_WARNING_LABELS: ReadonlyArray<readonly [RegExp, string]> = [
   [/^pdf_visibility_check_unfinished$/, "contrôle de visibilité non terminé (document long ou lourd) : le texte non contrôlé est écarté"],
   [/^pdf_text_unmatched$/, "texte que l’outil n’a pas pu rattacher à son dessin"],
   [/^docx_white_text_near_drawing$/, "texte blanc ou peu contrasté sur un fond incertain : zone de texte, image ou forme proche, style de tableau"],
+  [/^docx_text_may_be_cut$/, "texte que sa ligne de tableau, sa zone de texte, son cadre ou son interligne de taille fixe, ou le bord de la page, peuvent couper : il n’a pas pu être vérifié"],
+  [/^docx_layout_check_unfinished$/, "contrôle de mise en page non terminé (document long ou lourd) : le texte non contrôlé d’une ligne, d’une zone de texte ou d’un interligne de taille fixe est écarté"],
   [/^pdf_visibility_check_unavailable$/, "texte lu sans contrôle de visibilité (lecteur isolé indisponible)"],
   [/^pdf_text_page_(\d+)_insufficient_text$/, "page $1 : texte insuffisant"],
   [/^vision_ocr_fallback$/, "pages relues par la lecture visuelle, le texte du PDF étant trop court une fois le texte écarté retiré"],

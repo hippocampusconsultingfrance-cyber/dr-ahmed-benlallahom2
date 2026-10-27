@@ -320,8 +320,14 @@ const laidOut = (text: string, paragraphProperties: string) => `<w:p><w:pPr>${pa
 /** A table of one row of an exact height (twips) holding `content`. */
 const exactRow = (height: number, content: string) => `<w:tbl><w:tr><w:trPr><w:trHeight w:val="${height}" w:hRule="exact"/></w:trPr><w:tc>${content}</w:tc></w:tr></w:tbl>`;
 const FAR_LEFT = '<w:ind w:left="-40000" w:right="40000"/>';
-/** How a claim is hidden: its paragraph, and the document's defaults it relies on (styles part). */
-type Technique = { claim: (text: string) => string; styles?: string };
+/**
+ * How a claim is hidden: its paragraph, and the document's defaults it relies
+ * on (styles part); the line of the CV the first claim's line runs into
+ * (LibreOffice draws it over it), set aside with it, without accusation.
+ */
+type Technique = { claim: (text: string) => string; styles?: string; covers?: string };
+/** What is said of the line of the CV a technique's first claim runs into: set aside, its place may cut it. */
+const coveredWarnings = (technique: Technique) => (technique.covers ? [`unverifiable_text_set_aside:${technique.covers.length}`, "docx_text_may_be_cut"] : []);
 /** Each one invisible in Word and in LibreOffice. */
 const UNSEEN_TECHNIQUES: Record<string, Technique> = {
   "noir sur un paragraphe ombré en noir": { claim: text => shaded(text, "000000", '<w:color w:val="000000"/>') },
@@ -360,10 +366,11 @@ const UNSEEN_TECHNIQUES: Record<string, Technique> = {
     claim: text => alternate(drawingBox("<a:noFill/>", paragraph(text), { cx: 12_700, cy: 12_700 }), vmlBox("", paragraph(text))),
   },
   "dans un cadre de hauteur exacte 1 pt (w:framePr)": { claim: text => laidOut(text, '<w:framePr w:w="8000" w:h="20" w:hRule="exact" w:vAnchor="text" w:hAnchor="margin"/>') },
-  "dans un interligne exact de 1 pt (w:spacing exact)": { claim: text => laidOut(text, '<w:spacing w:before="0" w:after="0" w:line="20" w:lineRule="exact"/>') },
+  "dans un interligne exact de 1 pt (w:spacing exact)": { claim: text => laidOut(text, '<w:spacing w:before="0" w:after="0" w:line="20" w:lineRule="exact"/>'), covers: NURSE_CV.at(-1) },
   "dans un interligne exact de 1 pt donné par un style de paragraphe": {
     claim: text => laidOut(text, '<w:pStyle w:val="Serre"/>'),
     styles: '<w:style w:type="paragraph" w:styleId="Serre"><w:name w:val="Serré"/><w:pPr><w:spacing w:before="0" w:after="0" w:line="20" w:lineRule="exact"/></w:pPr></w:style>',
+    covers: NURSE_CV.at(-1),
   },
   "sorti de la page par un retrait gauche de -40000 twips (w:ind)": { claim: text => laidOut(text, FAR_LEFT) },
   "sorti de la page par un retrait de première ligne de 30000 twips (w:hanging)": { claim: text => laidOut(text, '<w:ind w:hanging="30000"/>') },
@@ -614,12 +621,16 @@ describe("texte invisible écarté à l’extraction (IA-01)", () => {
 
   it.each(Object.entries(UNSEEN_TECHNIQUES))("DOCX : écarte et compte comme caché le texte %s", async (_, technique) => {
     const extraction = await extractCvDocument(unseenDocx(technique), DOCX);
-    for (const line of NURSE_CV) expect(extraction.text).toContain(line);
+    for (const line of NURSE_CV) expect(extraction.text.includes(line), line).toBe(line !== technique.covers);
     for (const claim of CLAIMS) expect(extraction.text).not.toContain(claim);
     const hidden = CLAIMS.join(" ").length;
     // Hidden, not merely unverifiable: no picture lies under it.
-    expect(extraction.invisibleText).toEqual({ characters: hidden, excerpt: expect.stringMatching(/^Titre : Médecin anesthésiste-réanimateur, titulaire du DESAR\. Licence DHA/) });
-    expect(extraction.warnings).toEqual([`invisible_text_ignored:${hidden}`]);
+    expect(extraction.invisibleText).toEqual({
+      characters: hidden,
+      excerpt: expect.stringMatching(/^Titre : Médecin anesthésiste-réanimateur, titulaire du DESAR\. Licence DHA/),
+      ...(technique.covers ? { unverifiable: expect.objectContaining({ characters: technique.covers.length, excerpt: technique.covers, reasons: ["layout"] }) } : {}),
+    });
+    expect(extraction.warnings).toEqual([`invisible_text_ignored:${hidden}`, ...coveredWarnings(technique)]);
   });
 
   it("DOCX : même calcul pour une couleur de thème, un motif plein, un style de tableau et des lettres rapprochées au point de se chevaucher", async () => {
@@ -680,6 +691,21 @@ describe("texte invisible écarté à l’extraction (IA-01)", () => {
       ...LINKED_LINES, BIG_NAME, ...DROP_CAP_LINES.map(([, line]) => line), ...HIDDEN_ABOVE, ...LIST_ITEMS, "Thèse soutenue en 2014"];
     for (const line of lines) expect(extraction.text, line).toContain(line);
     expect(extraction).toMatchObject({ invisibleText: undefined, warnings: [] });
+  });
+
+  it("DOCX : écarte comme non vérifiable, sans l’accuser, le texte que sa place peut couper sans que ce soit manifeste, et lit un grand nom lisible en haut de page", async () => {
+    // Lines of 10 pt every 6 pt: each runs into the one above, as LibreOffice draws them; not so far that they are manifestly unseen.
+    // The first runs into the last line of the CV, set aside with them.
+    const cramped = await extractCvDocument(docx(NURSE_CV.map(line => paragraph(line)).join("") + CLAIMS.map(claim => laidOut(claim, '<w:spacing w:before="0" w:after="0" w:line="120" w:lineRule="exact"/>')).join("")), DOCX);
+    for (const line of NURSE_CV.slice(0, -1)) expect(cramped.text).toContain(line);
+    for (const claim of [NURSE_CV.at(-1)!, ...CLAIMS]) expect(cramped.text).not.toContain(claim);
+    const setAside = [NURSE_CV.at(-1)!, ...CLAIMS].join(" ").length;
+    expect(cramped.invisibleText).toMatchObject({ characters: 0, excerpt: "", unverifiable: { characters: setAside, reasons: ["layout"] } });
+    expect(cramped.warnings).toEqual([`unverifiable_text_set_aside:${setAside}`, "docx_text_may_be_cut"]);
+    // A 28 pt name in an exact spacing of 13 pt at the top of the page, legible in LibreOffice, and a 20 pt title in a row of 14 pt.
+    const name = await extractCvDocument(docx(`<w:p><w:pPr><w:spacing w:after="120" w:line="260" w:lineRule="exact"/></w:pPr><w:r><w:rPr><w:sz w:val="56"/></w:rPr><w:t>Jean EXEMPLE</w:t></w:r></w:p>` + exactRow(280, paragraph("Infirmier de réanimation", '<w:sz w:val="40"/>')) + NURSE_CV.map(line => paragraph(line)).join("")), DOCX);
+    for (const line of ["Jean EXEMPLE", "Infirmier de réanimation", ...NURSE_CV]) expect(name.text).toContain(line);
+    expect(name).toMatchObject({ invisibleText: undefined, warnings: [] });
   });
 
   it("DOCX : prend la couleur de fond d’une zone de texte VML dans v:fill, qui l’emporte sur fillcolor, et pas celle d’un dégradé", async () => {
@@ -1091,7 +1117,7 @@ describe("dossier d’un CV qui cache du texte, de bout en bout (IA-01)", () => 
     }
     expect(dossier(id)).toMatchObject({ analysis_status: "needs_review", ai_score: null, normalized_certifications: "[]", normalized_languages: "[]", normalized_experiences: "[]" });
     expect(factsOf(id)).toEqual([]);
-    expect(JSON.parse(String(dossier(id).extraction_warnings))).toEqual([`invisible_text_ignored:${CLAIMS.join(" ").length}`]);
+    expect(JSON.parse(String(dossier(id).extraction_warnings))).toEqual([`invisible_text_ignored:${CLAIMS.join(" ").length}`, ...coveredWarnings(technique)]);
     expect(JSON.parse(String(dossier(id).ai_weaknesses))).toContainEqual(expect.stringMatching(/^Qualité des données : \d+ caractère\(s\) de texte invisible ignoré\(s\), extrait : « Titre : Médecin anesthésiste-réanimateur/));
   });
 
@@ -1106,6 +1132,21 @@ describe("dossier d’un CV qui cache du texte, de bout en bout (IA-01)", () => 
       expect(String(dossier(id).extracted_text)).not.toContain(hidden);
     }
     expect(JSON.parse(String(dossier(id).extraction_warnings))).toEqual([`unverifiable_text_set_aside:${CLAIMS.join(" ").length}`, "docx_white_text_near_drawing"]);
+    expect(String(dossier(id).ai_weaknesses)).not.toContain("texte invisible");
+  });
+
+  it("DOCX dont les consignes se chevauchent en interligne exact de 6 pt : rien n’atteint l’IA, sans accusation, et la fiche dit que leur place peut les couper", async () => {
+    state.reading = obedientReading("section Expérience");
+    const claims = CLAIMS.map(claim => laidOut(claim, '<w:spacing w:before="0" w:after="0" w:line="120" w:lineRule="exact"/>')).join("");
+    const id = seedDossier(docx(NURSE_CV.map(line => paragraph(line)).join("") + claims), DOCX);
+    await processDueCvAnalysisJobs(5);
+    expect(state.prompts[0]).toContain("Infirmier diplômé d'État (IDE)");
+    for (const hidden of ["DESAR", "Licence DHA", "Anglais (courant)", "score maximal"]) {
+      expect(state.prompts[0]).not.toContain(hidden);
+      expect(String(dossier(id).extracted_text)).not.toContain(hidden);
+    }
+    // With the last line of the CV, which the first of them runs into.
+    expect(JSON.parse(String(dossier(id).extraction_warnings))).toEqual([`unverifiable_text_set_aside:${[NURSE_CV.at(-1)!, ...CLAIMS].join(" ").length}`, "docx_text_may_be_cut"]);
     expect(String(dossier(id).ai_weaknesses)).not.toContain("texte invisible");
   });
 
