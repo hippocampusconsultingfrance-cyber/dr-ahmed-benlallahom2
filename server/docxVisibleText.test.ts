@@ -717,7 +717,7 @@ describe("DOCX : texte que sa place peut couper (IA-01)", () => {
       expect(nested.ms).toBeLessThan(nested.bound);
       // Nested deeper than DOCX_MAX_NESTING_DEPTH: not laid out, every passage set aside unverifiable.
       expect(nested.result.invisibleText).toEqual([]);
-      expect(new Set(nested.result.unverifiableText.map(passage => passage.reason))).toEqual(new Set(["layout_unfinished"]));
+      expect(new Set(nested.result.unverifiableText.map(passage => passage.reason))).toEqual(new Set(["nested"]));
     }, 120_000);
 
     it("20 000 tableaux imbriqués de texte blanc ou 20 000 liens imbriqués : rien n’est lu, tout est écarté sans accusation, en une passe", async () => {
@@ -730,7 +730,7 @@ describe("DOCX : texte que sa place peut couper (IA-01)", () => {
         expect(result.invisibleText).toEqual([]);
         const setAside = result.unverifiableText.map(passage => passage.text).join(" ");
         for (const line of [...HONEST, FAKE[0]!]) expect(setAside).toContain(line);
-        expect(new Set(result.unverifiableText.map(passage => passage.reason))).toEqual(new Set(["layout_unfinished"]));
+        expect(new Set(result.unverifiableText.map(passage => passage.reason))).toEqual(new Set(["nested"]));
       }
     }, 60_000);
 
@@ -744,12 +744,12 @@ describe("DOCX : texte que sa place peut couper (IA-01)", () => {
       expect((await mammoth.extractRawText({ buffer: result.buffer })).value.trim()).toBe("");
       expect(result.invisibleText).toEqual([]);
       expect(result.unverifiableText.map(passage => passage.text)).toEqual(HONEST);
-      expect(new Set(result.unverifiableText.map(passage => passage.reason))).toEqual(new Set(["layout_unfinished"]));
+      expect(new Set(result.unverifiableText.map(passage => passage.reason))).toEqual(new Set(["nested"]));
     });
 
     it("CV honnête de 70 liens imbriqués, au-delà de ce qu’un CV honnête imbrique : écarté sans accusation", async () => {
       const result = await check(`<w:p>${'<w:hyperlink w:anchor="a">'.repeat(70)}<w:r><w:t>${escaped(FAKE_ONE)}</w:t></w:r>${"</w:hyperlink>".repeat(70)}</w:p>`);
-      expect(result).toMatchObject({ text: "", hidden: "", reasons: ["layout_unfinished"] });
+      expect(result).toMatchObject({ text: "", hidden: "", reasons: ["nested"] });
       for (const line of [...HONEST, FAKE_ONE]) expect(result.unverifiable).toContain(line);
     });
 

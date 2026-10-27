@@ -60,8 +60,9 @@ export function parseCandidateDocumentAnalysis(content: unknown): CandidateDocum
 
 /**
  * A document whose text, once the text that could not be shown visible is
- * left out (IA-01), is too short to analyse: another attempt reads the same
- * text. `hiddenText` says what was left out, for the admin.
+ * left out (IA-01), is too short to analyse, read without the vision: another
+ * attempt reads the same text. `hiddenText` says what was left out, for the
+ * admin.
  */
 export class CandidateDocumentTextSetAsideError extends Error {
   constructor(readonly hiddenText: InvisibleTextSummary) {
@@ -83,7 +84,9 @@ export async function analyzeCandidateDocument(input: { buffer: Buffer; mimeType
     const extraction = await extractCvDocument(input.buffer, input.mimeType);
     hiddenText = extraction.invisibleText;
     const text = extraction.text.trim();
-    if (text.length < 20) throw hiddenText ? new CandidateDocumentTextSetAsideError(hiddenText) : new Error("candidate_document_text_unavailable");
+    // A text the vision transcribed (a scan whose OCR layer is set aside) may come out otherwise next time: tried again.
+    const readAgainAlike = extraction.method !== "pdf_vision" && extraction.ocrModelVersion === null;
+    if (text.length < 20) throw hiddenText && readAgainAlike ? new CandidateDocumentTextSetAsideError(hiddenText) : new Error("candidate_document_text_unavailable");
     messages = [{ role: "user", content: `${prompt(input.declaredCategory)}\n\nContenu à examiner :\n${text.slice(0, 30000)}` }];
   }
   const providers = input.attempt >= 3

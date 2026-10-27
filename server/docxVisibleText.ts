@@ -1790,9 +1790,10 @@ const SEVERITY: Record<Visibility, number> = { visible: 0, unverifiable: 1, invi
  * on a picture or a shape (`drawing`), text its row, text box, frame, line
  * spacing, a shape in front or the page's edge may cut or hide (`layout`),
  * text of such places left unlaid once the layout work allowed is spent
- * (`layout_unfinished`).
+ * (`layout_unfinished`), all the text of a document that it, or a part read
+ * with it, nests too deep to be read (`nested`, DOCX_MAX_NESTING_DEPTH).
  */
-export type DocxUnverifiableReason = "drawing" | "layout" | "layout_unfinished";
+export type DocxUnverifiableReason = "drawing" | "layout" | "layout_unfinished" | "nested";
 /** A verdict, and why when unverifiable. */
 type Judgement = { verdict: Visibility; reason?: DocxUnverifiableReason };
 const VISIBLE: Judgement = { verdict: "visible" };
@@ -3492,7 +3493,7 @@ function deepPassages(xml: string, tags: XmlTags) {
   for (let index = 0; index < tags.count; index += 1) {
     if (tags.names[tags.name[index]!] === "w:t" && tags.kind[index] === OPENING && index + 1 < tags.count) {
       const text = decodeXml(xml.slice(tags.end[index], tags.start[index + 1]));
-      if (text.trim()) unverifiableText.push({ text, reason: "layout_unfinished" });
+      if (text.trim()) unverifiableText.push({ text, reason: "nested" });
     }
   }
   return unverifiableText;

@@ -525,6 +525,21 @@ describe("texte invisible écarté à l’extraction (IA-01)", () => {
     expect(analysis.flags).toEqual([]);
   }, PDF_TEST_TIMEOUT_MS);
 
+  it("diplôme scanné du coffre que la vision lit vide une fois : l’échec se retente, et la tentative suivante l’analyse", async () => {
+    vi.mocked(invokeLLM).mockClear();
+    state.ocrText = "";
+    const failure = await analyzeCandidateDocument({ buffer: await scannedPdfWithOcrLayer(), mimeType: "application/pdf", declaredCategory: "Diplôme", attempt: 1 }).catch((error: unknown) => error);
+    // Not the text set aside for good: the job is tried again (processDueCandidateDocumentAnalysisJobs).
+    expect(failure).toBeInstanceOf(Error);
+    expect(failure).not.toBeInstanceOf(CandidateDocumentTextSetAsideError);
+    expect((failure as Error).message).toBe("candidate_document_text_unavailable");
+    expect(invokeLLM).not.toHaveBeenCalled();
+    state.ocrText = SCANNED_LINES.join("\n");
+    const { analysis } = await analyzeCandidateDocument({ buffer: await scannedPdfWithOcrLayer(), mimeType: "application/pdf", declaredCategory: "Diplôme", attempt: 2 });
+    expect(analysis.flags).toEqual([]);
+    expect(JSON.stringify(vi.mocked(invokeLLM).mock.calls[0]![0].messages)).toContain(SCANNED_LINES[0]);
+  }, PDF_TEST_TIMEOUT_MS);
+
   it("PDF numérique suivi d’une page scannée avec sa couche OCR : la vision relit cette page seule, et le CV se lit en entier", async () => {
     state.ocrText = ATTESTATION_LINES.join("\n");
     vi.mocked(readPdfIsolated).mockClear();
@@ -979,7 +994,7 @@ describe("texte invisible écarté à l’extraction (IA-01)", () => {
     const buffer = docx(NURSE_CV.map(line => paragraph(line)).join(""), "", [{ name: "word/footnotes.xml", content: notes }]);
     const failure = await analyzeCandidateDocument({ buffer, mimeType: DOCX, declaredCategory: "Diplôme", attempt: 1 }).catch((error: unknown) => error);
     expect(failure).toBeInstanceOf(CandidateDocumentTextSetAsideError);
-    expect((failure as InstanceType<typeof CandidateDocumentTextSetAsideError>).hiddenText).toMatchObject({ characters: 0, unverifiable: { reasons: ["layout_unfinished"], excerpt: expect.stringContaining("Jean Exemple") } });
+    expect((failure as InstanceType<typeof CandidateDocumentTextSetAsideError>).hiddenText).toMatchObject({ characters: 0, unverifiable: { reasons: ["nested"], excerpt: expect.stringContaining("Jean Exemple") } });
     expect(invokeLLM).not.toHaveBeenCalled();
   });
 

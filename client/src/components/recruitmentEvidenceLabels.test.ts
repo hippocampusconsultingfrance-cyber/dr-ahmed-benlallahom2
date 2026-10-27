@@ -69,6 +69,8 @@ describe("libellés des preuves IA d’un CV (IA-01)", () => {
     // DOCX text whose place may cut it, or a shape in front of it hide it, and the layout check stopped on a long or heavy document.
     expect(extractionWarningLabel("docx_text_may_be_cut")).toBe("texte que sa ligne de tableau, sa zone de texte, son cadre, son interligne, une forme posée devant lui ou le bord de la page peuvent couper ou cacher : il n’a pas pu être vérifié");
     expect(extractionWarningLabel("docx_layout_check_unfinished")).toMatch(/^contrôle de mise en page non terminé \(document long ou lourd\) : le texte non contrôlé .* est écarté$/);
+    // A document nested too deep is set aside whole.
+    expect(extractionWarningLabel("docx_nested_too_deep")).toMatch(/^document imbriqué trop profondément pour être lu .* : tout son texte est écarté$/);
     expect(extractionWarningLabel("pdf_text_page_3_insufficient_text")).toBe("page 3 : texte insuffisant");
     // Pages read by the vision, and what it noted on them.
     expect(extractionWarningLabel("vision_ocr_pages:2,3")).toBe("page(s) 2,3 relue(s) par la lecture visuelle (scan sous sa couche de texte)");

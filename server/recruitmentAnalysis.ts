@@ -265,7 +265,7 @@ export type CvExtractionResult = {
   invisibleText?: InvisibleTextSummary;
 };
 
-/** Why text was set aside without being counted as hidden: see pdfVisibleText, and docxVisibleText for `drawing`, `layout` and `layout_unfinished`. */
+/** Why text was set aside without being counted as hidden: see pdfVisibleText, and docxVisibleText for `drawing`, `layout`, `layout_unfinished` and `nested`. */
 export type UnverifiableTextReason = PdfUnverifiableReason | DocxUnverifiableReason;
 
 export type InvisibleTextSummary = {
@@ -339,6 +339,7 @@ const UNVERIFIABLE_REASONS: Record<UnverifiableTextReason, { warning: string; la
   drawing: { warning: "docx_white_text_near_drawing", label: "texte blanc ou peu contrasté sur un fond incertain : zone de texte, image ou forme proche, style de tableau" },
   layout: { warning: "docx_text_may_be_cut", label: "texte que sa ligne de tableau, sa zone de texte, son cadre, son interligne, une forme posée devant lui ou le bord de la page peuvent couper ou cacher" },
   layout_unfinished: { warning: "docx_layout_check_unfinished", label: "contrôle de mise en page non terminé (document long ou lourd)" },
+  nested: { warning: "docx_nested_too_deep", label: "document imbriqué trop profondément pour être lu, tout son texte écarté" },
 };
 
 /**
