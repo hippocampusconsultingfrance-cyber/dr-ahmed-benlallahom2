@@ -61,6 +61,21 @@ describe("recruitment matching profiles", () => {
     expect(matchesRecruitmentProfile({ ...candidate, profile: profile(null, ["fran"]) })).toBe(false);
   });
 
+  it("retrouve une langue requise sous un autre de ses noms, celui que le formulaire enregistre (IA-02)", () => {
+    // The public form records « French » and « Arabic », even from its French page.
+    const candidate = { score: 70, specialty: "Anesthésie-réanimation", targetCountries: ["Émirats arabes unis"], languages: ["French", "Arabic"], extractedSkills: [] };
+    const profile = (requiredLanguages: string[]) => ({ targetCountry: null, specialty: null, minimumScore: 0, requiredLanguages: JSON.stringify(requiredLanguages), requiredSkills: null });
+    for (const required of [["Français"], ["francais"], ["arabe"], ["Arabisch"], ["阿拉伯语"], ["العربية"], ["Français", "Arabe"], ["Français et arabe"]]) {
+      expect(matchesRecruitmentProfile({ ...candidate, profile: profile(required) }), required.join(", ")).toBe(true);
+    }
+    // A language the dossier lacks, under any name, or only part of a name: still refused.
+    for (const required of [["Anglais"], ["English"], ["Français", "Anglais"], ["Anglais et arabe"], ["fran"]]) {
+      expect(matchesRecruitmentProfile({ ...candidate, profile: profile(required) }), required.join(", ")).toBe(false);
+    }
+    // A language the table does not know is compared by its letters.
+    expect(matchesRecruitmentProfile({ ...candidate, languages: ["Wolof"], profile: profile(["wolof"]) })).toBe(true);
+  });
+
   it("handles malformed JSON safely", () => {
     expect(parseRecruitmentJsonArray("not-json")).toEqual([]);
     expect(parseRecruitmentJsonArray(JSON.stringify(["France", 1, null]))).toEqual(["France"]);

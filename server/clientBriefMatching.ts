@@ -1,4 +1,5 @@
 import { certificationDateIsCurrent, certificationExpiry, type RecruitmentFact, type RecruitmentFactOrigin } from "../shared/recruitmentFactOrigins";
+import { holdsRecruitmentLanguages, recruitmentLanguageCodes, sameRecruitmentLanguage } from "../shared/recruitmentLanguages";
 
 type BriefForMatching = {
   specialtyNeeded: string;
@@ -109,10 +110,25 @@ export const declaredCertificationNames = (declared: string | null | undefined) 
 /** The certifications an analysis retained among its facts (normalized_certifications), by name. */
 export const analysedCertificationNames = (normalized: string | null | undefined) => parseTerms(normalized);
 
+/** The languages an analysis retained among its facts (normalized_languages), by name. */
+export const analysedLanguageNames = (normalized: string | null | undefined) => parseTerms(normalized);
+
+/**
+ * Two names of one language (IA-02): the same letters, or the same languages
+ * of the shared table (« French » declared in the form, « Français » read in
+ * the CV), not one of the two languages a name gives with another (« Anglais
+ * et arabe » and « Arabe » stay two facts).
+ */
+function sameLanguageFact(left: string, right: string) {
+  if (sameRecruitmentFact(left, right)) return true;
+  const [leftCodes, rightCodes] = [recruitmentLanguageCodes(left), recruitmentLanguageCodes(right)];
+  return leftCodes.length > 0 && leftCodes.length === rightCodes.length && leftCodes.every(code => rightCodes.includes(code));
+}
+
 /** Adds an origin to the fact of that name, created on its first mention. */
-function addFact<T extends RecruitmentFact>(facts: T[], name: string, origin: RecruitmentFactOrigin, create: (name: string) => T) {
+function addFact<T extends RecruitmentFact>(facts: T[], name: string, origin: RecruitmentFactOrigin, create: (name: string) => T, same: (left: string, right: string) => boolean = sameRecruitmentFact) {
   if (!normalise(name)) return null;
-  let fact = facts.find(item => sameRecruitmentFact(item.name, name));
+  let fact = facts.find(item => same(item.name, name));
   if (!fact) facts.push(fact = create(name.trim()));
   if (!fact.origins.includes(origin)) fact.origins.push(origin);
   return fact;
@@ -160,12 +176,15 @@ export function certificationFacts(declared: string | null | undefined, rows: Ce
   return facts;
 }
 
-/** The candidate's languages, one per name: declared in the form, or read in the CV by the AI. */
+/**
+ * The candidate's languages, one per language whatever its name: declared in
+ * the form, or read in the CV by the AI, under the name first given.
+ */
 export function languageFacts(declared: string | null | undefined, rows: LanguageRow[]): RecruitmentFact[] {
   const facts: RecruitmentFact[] = [];
   const create = (name: string): RecruitmentFact => ({ name, origins: [] });
-  for (const name of parseTerms(declared)) addFact(facts, name, "declared", create);
-  for (const row of rows) addFact(facts, row.language, row.source, create);
+  for (const name of parseTerms(declared)) addFact(facts, name, "declared", create, sameLanguageFact);
+  for (const row of rows) addFact(facts, row.language, row.source, create, sameLanguageFact);
   return facts;
 }
 
@@ -235,11 +254,16 @@ export function computeBriefCandidateMatch(brief: BriefForMatching, candidate: C
     breakdown.certifications = Math.round((matchedCertifications.length / requiredCertifications.length) * 20);
   }
 
+  // A required language is met by the same letters, or by any of its names
+  // (IA-02): « Arabe » asked, « Arabic » declared in the form.
   const requiredLanguages = parseTerms(brief.requiredLanguages);
+  const candidateLanguages = candidate.languageFacts || [];
   const matchedLanguages: string[] = [];
   const languages: RecruitmentFact[] = [];
   for (const required of requiredLanguages) {
-    const facts = factsMatching(required, candidate.languageFacts || []);
+    const written = factsMatching(required, candidateLanguages);
+    const named = holdsRecruitmentLanguages(candidateLanguages.map(fact => fact.name), required);
+    const facts = candidateLanguages.filter(fact => written.includes(fact) || (named && sameRecruitmentLanguage(fact.name, required)));
     if (facts.length === 0) continue;
     matchedLanguages.push(required);
     addUnique(languages, facts);

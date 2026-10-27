@@ -1,6 +1,7 @@
 import { getDb } from "./db";
 import { recruitmentAuditLogs } from "../drizzle/schema";
 import { foldAdminSearchText } from "../shared/adminSearchFolding";
+import { holdsRecruitmentLanguages } from "../shared/recruitmentLanguages";
 
 export type RecruitmentAuditAction =
   | "download"
@@ -57,10 +58,19 @@ export const RECRUITMENT_PROFILE_SCAN_LIMIT = 10_000;
  */
 const foldProfileText = (text: string) => foldAdminSearchText(text).toLowerCase();
 
+/**
+ * A required language the dossier has: the same name, folded, or other names
+ * of the same languages (IA-02), the form recording « French » or « Arabic »
+ * where the admin types « Français » or « arabe ».
+ */
+const hasLanguage = (languages: string[], required: string) =>
+  languages.some(language => foldProfileText(language) === foldProfileText(required)) || holdsRecruitmentLanguages(languages, required);
+
 export function matchesRecruitmentProfile(input: {
   score: number | null;
   specialty: string;
   targetCountries: string[];
+  /** Declared in the form and, when its analysis is of the current version, read in the CV (normalized_languages). */
   languages: string[];
   extractedSkills: string[];
   profile: {
@@ -77,11 +87,10 @@ export function matchesRecruitmentProfile(input: {
   if (profile.specialty && !input.specialty.toLowerCase().includes(profile.specialty.toLowerCase())) return false;
   if (profile.targetCountry && !input.targetCountries.some(country => foldProfileText(country).includes(foldProfileText(profile.targetCountry!)))) return false;
 
-  const languages = new Set(input.languages.map(foldProfileText));
   const skills = new Set(input.extractedSkills.map(value => value.toLowerCase()));
   const requiredLanguages = parseRecruitmentJsonArray(profile.requiredLanguages);
   const requiredSkills = parseRecruitmentJsonArray(profile.requiredSkills);
-  if (requiredLanguages.some(value => !languages.has(foldProfileText(value)))) return false;
+  if (requiredLanguages.some(value => !hasLanguage(input.languages, value))) return false;
   if (requiredSkills.some(value => !Array.from(skills).some(skill => skill.includes(value.toLowerCase())))) return false;
   return true;
 }

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { candidateAccounts, cvApplications, cvCandidateCertifications, cvGoogleDriveExportJobs, recruitmentEmailEvents, recruitmentMatchProfiles } from "../drizzle/schema";
 import { createMemoryPg, type MemoryPg } from "./testing/memoryPgProxy";
 import type { TrpcContext } from "./_core/context";
+import { RECRUITMENT_ANALYSIS_PROMPT_VERSION } from "./recruitmentAnalysis";
 
 // Candidatures filtrées par un profil de matching : les langues et compétences
 // du profil sont vérifiées sur tous les dossiers retenus par les autres filtres,
@@ -118,5 +119,39 @@ describe("Candidatures — profil de matching et filtres de la liste (IA-02)", (
       expect(lastNames(result.items)).toEqual(["Golfe"]);
       expect(result.total).toBe(1);
     }
+  });
+
+  it("garde les dossiers dont le formulaire a enregistré les langues en anglais, et ceux dont le CV les donne, comme le filtre « Langue » (IA-02)", async () => {
+    const dossier = (lastName: string, index: number, extra: Record<string, unknown> = {}) => ({
+      tracking_id: `CVLANG${index}`, first_name: "Dr", last_name: lastName, email: `lang${index}@test.local`, specialty: "Anesthésie-réanimation",
+      target_countries: JSON.stringify(["Émirats arabes unis"]), languages: "[]",
+      cv_file_key: `recruitment/cv/lang${index}.pdf`, cv_original_name: "cv.pdf", cv_mime_type: "application/pdf", cv_size_bytes: 1000, ...extra,
+    });
+    const readInCv = JSON.stringify([{ language: "Français", proficiency: "native", evidence: "Langues : français", sourceLocation: "page 1", confidence: 90, evidenceVerified: true }]);
+    memory.seed(cvApplications, [
+      // From its French page as from its English one, the form records « French », « Arabic ».
+      dossier("Formfr", 0, { languages: JSON.stringify(["French", "Arabic"]), language: "fr" }),
+      dossier("Formen", 1, { languages: JSON.stringify(["French", "Arabic"]), language: "en" }),
+      dossier("Anglophone", 2, { languages: JSON.stringify(["English"]) }),
+      // Nothing declared: French read in the CV by an analysis of the current version, then of an older one.
+      dossier("LuDansLeCv", 3, { normalized_languages: readInCv, analysis_prompt_version: RECRUITMENT_ANALYSIS_PROMPT_VERSION }),
+      dossier("AncienneAnalyse", 4, { normalized_languages: readInCv, analysis_prompt_version: "ancienne-version" }),
+    ]);
+    const profiled = async (requiredLanguages: string[]) => {
+      const [profile] = memory.seed(recruitmentMatchProfiles, [{ name: requiredLanguages.join(" + "), minimum_score: 0, required_languages: JSON.stringify(requiredLanguages), active: 1 }]);
+      const result = await caller().admin.recruitment.list({ profileId: profile!.id as number });
+      expect(result.total).toBe(result.items.length);
+      return lastNames(result.items).sort();
+    };
+    const filtered = async (language: string) => lastNames((await caller().admin.recruitment.list({ language })).items).sort();
+
+    for (const required of [["Français"], ["francais"], ["French"], ["Französisch"]]) expect(await profiled(required)).toEqual(["Formen", "Formfr", "LuDansLeCv"]);
+    for (const required of [["arabe"], ["Français", "Arabe"], ["العربية"]]) expect(await profiled(required)).toEqual(["Formen", "Formfr"]);
+    expect(await profiled(["Anglais"])).toEqual(["Anglophone"]);
+    expect(await profiled(["Français", "Anglais"])).toEqual([]);
+    // The Langue filter finds the same dossiers, whatever the name typed.
+    for (const language of ["Français", "francais", "法语"]) expect(await filtered(language)).toEqual(["Formen", "Formfr", "LuDansLeCv"]);
+    for (const language of ["arabe", "Arabisch", "阿拉伯语"]) expect(await filtered(language)).toEqual(["Formen", "Formfr"]);
+    expect(await filtered("anglais")).toEqual(["Anglophone"]);
   });
 });

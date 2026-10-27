@@ -9,6 +9,7 @@ import { certificationFacts, languageFacts, type CertificationRow, type Language
 import { RECRUITMENT_ANALYSIS_PROMPT_VERSION } from "../../recruitmentAnalysis";
 import { adminFilterContains } from "../../adminSearch";
 import type { CertificationRenewalRefusalReason, MissionAssociationRefusalReason, MissionConsentRefusalReason } from "../../../shared/recruitmentMissionRefusalReasons";
+import { recruitmentLanguageNames } from "../../../shared/recruitmentLanguages";
 
 /**
  * Refus d’un accord de candidat pour une mission (RGPD-03), d’une association
@@ -104,3 +105,18 @@ export async function certificationFilterCondition(db: AdminDb, term: string, te
   const confirmedIds = await applicationsWithConfirmedCertification(db, term);
   return confirmedIds.length ? or(textCondition, inArray(cvApplications.id, confirmedIds))! : textCondition;
 }
+
+/**
+ * The language filter of the Candidatures (IA-02): the term typed or, when it
+ * names a language of the shared table, any of that language's names
+ * (« arabe » finds « Arabic », which the form records even from its French
+ * page), in the declared languages or in those an analysis of the current
+ * version read in the CV, case and accents aside.
+ */
+export function languageFilterCondition(term: string) {
+  return or(...Array.from(new Set([term, ...recruitmentLanguageNames(term)]), name =>
+    sql`((${cvApplications.analysisPromptVersion} = ${RECRUITMENT_ANALYSIS_PROMPT_VERSION} AND ${adminFilterContains(cvApplications.normalizedLanguages, name)}) OR ${adminFilterContains(cvApplications.languages, name)})`))!;
+}
+
+/** The languages an analysis of the current version retained (normalized_languages), none for an older one. */
+export const verifiedNormalizedLanguages = sql<string | null>`CASE WHEN ${cvApplications.analysisPromptVersion} = ${RECRUITMENT_ANALYSIS_PROMPT_VERSION} THEN ${cvApplications.normalizedLanguages} ELSE NULL END`;
