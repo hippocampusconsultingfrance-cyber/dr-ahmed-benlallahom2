@@ -69,7 +69,7 @@ const { extractCvDocument, INVISIBLE_TEXT_REVIEW_MODEL, visibilityRequiresReview
 const { processDueCvAnalysisJobs } = await import("./recruitmentProcessing");
 const { PdfReaderUnavailableError, readPdfIsolated } = await import("./pdfExtractionSandbox");
 const { ProcessingDeadlineError, runWithProcessingDeadline } = await import("./processingDeadline");
-const { analyzeCandidateDocument } = await import("./candidateDocumentAnalysis");
+const { analyzeCandidateDocument, CandidateDocumentTextSetAsideError } = await import("./candidateDocumentAnalysis");
 const { invokeLLM } = await import("./_core/llm");
 
 const DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
@@ -525,6 +525,21 @@ describe("texte invisible écarté à l’extraction (IA-01)", () => {
     expect(analysis.flags).toEqual([]);
   }, PDF_TEST_TIMEOUT_MS);
 
+  it("diplôme scanné du coffre que la vision lit vide une fois : l’échec se retente, et la tentative suivante l’analyse", async () => {
+    vi.mocked(invokeLLM).mockClear();
+    state.ocrText = "";
+    const failure = await analyzeCandidateDocument({ buffer: await scannedPdfWithOcrLayer(), mimeType: "application/pdf", declaredCategory: "Diplôme", attempt: 1 }).catch((error: unknown) => error);
+    // Not the text set aside for good: the job is tried again (processDueCandidateDocumentAnalysisJobs).
+    expect(failure).toBeInstanceOf(Error);
+    expect(failure).not.toBeInstanceOf(CandidateDocumentTextSetAsideError);
+    expect((failure as Error).message).toBe("candidate_document_text_unavailable");
+    expect(invokeLLM).not.toHaveBeenCalled();
+    state.ocrText = SCANNED_LINES.join("\n");
+    const { analysis } = await analyzeCandidateDocument({ buffer: await scannedPdfWithOcrLayer(), mimeType: "application/pdf", declaredCategory: "Diplôme", attempt: 2 });
+    expect(analysis.flags).toEqual([]);
+    expect(JSON.stringify(vi.mocked(invokeLLM).mock.calls[0]![0].messages)).toContain(SCANNED_LINES[0]);
+  }, PDF_TEST_TIMEOUT_MS);
+
   it("PDF numérique suivi d’une page scannée avec sa couche OCR : la vision relit cette page seule, et le CV se lit en entier", async () => {
     state.ocrText = ATTESTATION_LINES.join("\n");
     vi.mocked(readPdfIsolated).mockClear();
@@ -972,6 +987,16 @@ describe("texte invisible écarté à l’extraction (IA-01)", () => {
     expect(JSON.stringify(vi.mocked(invokeLLM).mock.calls[0]![0].messages)).not.toContain("ECMO");
     expect(analysis.flags).toEqual([`unverifiable_text_set_aside:${DOCX_HIDDEN.textBox.length}`]);
   }, PDF_TEST_TIMEOUT_MS);
+
+  it("document du coffre dont les notes sont imbriquées sur 20 000 niveaux : rien n’atteint l’IA, et l’échec dit le texte écarté, sans qu’une autre tentative puisse lire autre chose", async () => {
+    vi.mocked(invokeLLM).mockClear();
+    const notes = `<w:footnotes xmlns:w="${W_NAMESPACE}"><w:footnote w:id="1">${"<w:tbl><w:tr><w:tc>".repeat(20_000)}<w:p/>${"</w:tc></w:tr></w:tbl>".repeat(20_000)}</w:footnote></w:footnotes>`;
+    const buffer = docx(NURSE_CV.map(line => paragraph(line)).join(""), "", [{ name: "word/footnotes.xml", content: notes }]);
+    const failure = await analyzeCandidateDocument({ buffer, mimeType: DOCX, declaredCategory: "Diplôme", attempt: 1 }).catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(CandidateDocumentTextSetAsideError);
+    expect((failure as InstanceType<typeof CandidateDocumentTextSetAsideError>).hiddenText).toMatchObject({ characters: 0, unverifiable: { reasons: ["nested"], excerpt: expect.stringContaining("Jean Exemple") } });
+    expect(invokeLLM).not.toHaveBeenCalled();
+  });
 
   describe("quand le contrôle de visibilité ne va pas au bout", () => {
     const twoPages = { total: 2, pages: [{ num: 1, text: PHYSICIAN_CV.join("\n") }, { num: 2, text: "" }] };

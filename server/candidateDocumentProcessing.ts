@@ -1,7 +1,8 @@
 import { and, asc, eq, inArray, isNull, lt, lte, ne } from "drizzle-orm";
 import { candidateDocumentAuditLogs, candidateDocumentProcessingJobs, candidateDocuments } from "../drizzle/schema";
 import { getDb } from "./db";
-import { analyzeCandidateDocument } from "./candidateDocumentAnalysis";
+import { analyzeCandidateDocument, CandidateDocumentTextSetAsideError } from "./candidateDocumentAnalysis";
+import { hiddenTextFlags } from "../shared/candidateDocumentHiddenText";
 import { storageGetSignedUrl } from "./storage";
 import { decryptCandidateDocument } from "./candidateDocumentEncryption";
 import { CANDIDATE_HUMAN_REVIEW_ONLY_FLAG, CANDIDATE_HUMAN_REVIEW_ONLY_SUMMARY, candidateDocumentAllowsAiAnalysis } from "../shared/candidateDocumentCategories";
@@ -80,11 +81,14 @@ function retryTime(attempt: number) {
 
 function humanReviewFallback(error: unknown) {
   const reason = error instanceof Error ? error.message : "analyse_indisponible";
+  // The text left out of a document that has too little left to analyse is said, as when the AI reads one (IA-01).
+  const hiddenText = error instanceof CandidateDocumentTextSetAsideError ? error.hiddenText : undefined;
+  const flags = ["ai_analysis_unavailable", reason, ...hiddenTextFlags(hiddenText)];
   return {
     aiSummary: "Analyse automatique indisponible : le document est conservé et transmis à une revue humaine. Aucune décision automatique n’a été prise.",
-    aiExtractedData: JSON.stringify({ documentKind: "À confirmer par revue humaine", summary: "Aucune extraction fiable n’a été conservée.", issuingOrganization: null, issueDate: null, expiryDate: null, confidence: 0, flags: ["ai_analysis_unavailable", reason], missingInformation: ["Revue humaine requise"] }),
+    aiExtractedData: JSON.stringify({ documentKind: "À confirmer par revue humaine", summary: "Aucune extraction fiable n’a été conservée.", issuingOrganization: null, issueDate: null, expiryDate: null, confidence: 0, flags, missingInformation: ["Revue humaine requise"], ...(hiddenText ? { hiddenText } : {}) }),
     aiConfidence: 0,
-    aiFlags: JSON.stringify(["ai_analysis_unavailable", reason]),
+    aiFlags: JSON.stringify(flags),
   };
 }
 
@@ -133,7 +137,8 @@ export async function processDueCandidateDocumentAnalysisJobs(limit = 1) {
       completed += 1;
     } catch (error) {
       const message = error instanceof Error ? error.message : "candidate_document_analysis_failed";
-      if (attempts < job.maxAttempts) {
+      // Another attempt would read the same text: only what may fail once (download, AI) is tried again.
+      if (attempts < job.maxAttempts && !(error instanceof CandidateDocumentTextSetAsideError)) {
         await db.update(candidateDocumentProcessingJobs).set({ status: "retry", scheduledFor: retryTime(attempts), lastError: message }).where(eq(candidateDocumentProcessingJobs.id, job.id));
         await db.update(candidateDocuments).set({ status: "uploaded", analysisStatus: "queued", analysisAttempts: attempts, analysisLastError: message }).where(eq(candidateDocuments.id, document.id));
         retried += 1;
