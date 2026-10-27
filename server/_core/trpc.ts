@@ -6,14 +6,16 @@ import type { TrpcContext } from "./context";
 import { isAdminMfaVerified } from "../adminMfa";
 import { CHECK_VIOLATION, FOREIGN_KEY_VIOLATION, postgresConstraintName, UNIQUE_VIOLATION } from "../databaseConstraints";
 import { postgresErrorCode } from "../languageColumns";
+import type { DatabaseRefusalReason } from "@shared/databaseRefusalReasons";
 
 export const GENERIC_INTERNAL_ERROR_MESSAGE = "Une erreur interne est survenue. Veuillez réessayer dans quelques instants.";
 
 // Generic server messages, in French like GENERIC_INTERNAL_ERROR_MESSAGE, for
 // refusals no procedure answers itself (reasons duplicate_record,
-// related_record_invalid and value_not_allowed): a public page in another
-// language shows its own generic message for a reason it does not know, the
-// admin shows this one.
+// related_record_invalid and value_not_allowed, shared/databaseRefusalReasons.ts):
+// a public page in another language shows its own generic message for a
+// reason it does not know, the mission screen its translation, the rest of
+// the admin this one.
 export const DATABASE_DUPLICATE_MESSAGE = "Cet enregistrement existe déjà : rechargez la page pour voir son état actuel.";
 export const DATABASE_REFERENCE_MESSAGE = "Cette opération vise un élément qui n’existe plus, ou qui est encore utilisé ailleurs : rechargez la page, puis réessayez.";
 export const DATABASE_VALUE_MESSAGE = "Cette valeur n’est pas acceptée pour cet enregistrement : rien n’a été modifié. Rechargez la page, puis réessayez.";
@@ -82,10 +84,10 @@ export function databaseConstraintRefusal(error: TRPCError): TRPCError | null {
   if (code !== UNIQUE_VIOLATION && code !== FOREIGN_KEY_VIOLATION && code !== CHECK_VIOLATION) return null;
   // The constraint's name only: the error's detail holds the row's values.
   console.warn(`[tRPC] Database constraint refusal ${code}`, postgresConstraintName(error.cause) ?? "");
-  if (code === UNIQUE_VIOLATION) return new TRPCError({ code: "CONFLICT", message: DATABASE_DUPLICATE_MESSAGE, cause: new PublicErrorReason("duplicate_record") });
+  if (code === UNIQUE_VIOLATION) return new TRPCError({ code: "CONFLICT", message: DATABASE_DUPLICATE_MESSAGE, cause: new PublicErrorReason("duplicate_record" satisfies DatabaseRefusalReason) });
   return code === FOREIGN_KEY_VIOLATION
-    ? new TRPCError({ code: "BAD_REQUEST", message: DATABASE_REFERENCE_MESSAGE, cause: new PublicErrorReason("related_record_invalid") })
-    : new TRPCError({ code: "BAD_REQUEST", message: DATABASE_VALUE_MESSAGE, cause: new PublicErrorReason("value_not_allowed") });
+    ? new TRPCError({ code: "BAD_REQUEST", message: DATABASE_REFERENCE_MESSAGE, cause: new PublicErrorReason("related_record_invalid" satisfies DatabaseRefusalReason) })
+    : new TRPCError({ code: "BAD_REQUEST", message: DATABASE_VALUE_MESSAGE, cause: new PublicErrorReason("value_not_allowed" satisfies DatabaseRefusalReason) });
 }
 
 const t = initTRPC.context<TrpcContext>().create({
