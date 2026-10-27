@@ -1621,7 +1621,7 @@ const UNBOUNDED: Pair = [Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY];
  * distance between default tab stops. `budget`: the layout work left
  * (docxLayoutWorkUnits).
  */
-function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: boolean, pageShown: boolean, tabStop: number, budget: { units: number }) {
+function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: boolean, pageShown: boolean, tabStop: number, budget: { units: number }, tags = readXmlTags(xml)) {
   // One reading of the part for all that the main one needs to know ahead.
   const largest = largestPage();
   const rowCells = tableRows();
@@ -1629,7 +1629,6 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
   const boxes = textBoxes(xml);
   const sectionPage = sectionPages();
   const reach = drawingReachSurvey(xml);
-  const tags = readXmlTags(xml);
   visitXmlTags(tags, largest.visit, rowCells.visit, shapeFills.visit, boxes.visit, sectionPage.visit, reach.visit);
   const page = largest.done();
   const tables = rowCells.done();
@@ -2665,6 +2664,48 @@ function storedZip(parts: Map<string, Buffer>) {
  * (inspectDocxArchive) and the layout work (docxLayoutWorkUnits). An unchanged
  * file is returned as is.
  */
+/**
+ * Elements nested deeper than this in the document part are not laid out. An
+ * honest CV nests a few tables, or a text box in a table, some thirty levels
+ * at most; some lookups of the layout check cost the nesting depth for every
+ * run, so tens of thousands of nested tables or links would hold the check
+ * for tens of seconds.
+ */
+export const DOCX_MAX_NESTING_DEPTH = 256;
+
+/** The deepest nesting of elements in an XML part. */
+function nestingDepth(tags: XmlTags) {
+  let depth = 0;
+  let deepest = 0;
+  for (let index = 0; index < tags.count; index += 1) {
+    if (tags.kind[index] === OPENING) deepest = Math.max(deepest, (depth += 1));
+    else if (tags.kind[index] === CLOSING) depth = Math.max(0, depth - 1);
+  }
+  return deepest;
+}
+
+/**
+ * A part nested too deep to be laid out (DOCX_MAX_NESTING_DEPTH): its body is
+ * emptied and each passage (w:t) set aside, unverifiable, without accusing
+ * anyone of hiding it.
+ */
+function setAsideDeepPart(xml: string, tags: XmlTags) {
+  const unverifiableText: Array<{ text: string; reason: DocxUnverifiableReason }> = [];
+  let bodyStart = -1;
+  let bodyEnd = -1;
+  for (let index = 0; index < tags.count; index += 1) {
+    const name = tags.names[tags.name[index]!];
+    if (name === "w:body" && tags.kind[index] === OPENING && bodyStart === -1) bodyStart = tags.end[index]!;
+    if (name === "w:body" && tags.kind[index] === CLOSING) bodyEnd = tags.start[index]!;
+    if (name === "w:t" && tags.kind[index] === OPENING && index + 1 < tags.count) {
+      const text = decodeXml(xml.slice(tags.end[index], tags.start[index + 1]));
+      if (text.trim()) unverifiableText.push({ text, reason: "layout_unfinished" });
+    }
+  }
+  const emptied = bodyStart !== -1 && bodyEnd > bodyStart ? xml.slice(0, bodyStart) + xml.slice(bodyEnd) : xml;
+  return { xml: emptied, unverifiableText };
+}
+
 export function withoutInvisibleDocxText(buffer: Buffer, limits = DOCUMENT_DECOMPRESSION_LIMITS): {
   buffer: Buffer;
   invisibleText: string[];
@@ -2675,6 +2716,12 @@ export function withoutInvisibleDocxText(buffer: Buffer, limits = DOCUMENT_DECOM
   const mainDocument = relatedPart(parts, "_rels/.rels", OFFICE_DOCUMENT_RELATIONSHIP, "") ?? "word/document.xml";
   const xml = parts.get(mainDocument)?.toString("utf8");
   if (!xml) return { buffer, invisibleText: [], unverifiableText: [] };
+  const tags = readXmlTags(xml);
+  if (nestingDepth(tags) > DOCX_MAX_NESTING_DEPTH) {
+    const deep = setAsideDeepPart(xml, tags);
+    parts.set(mainDocument, Buffer.from(deep.xml, "utf8"));
+    return { buffer: storedZip(parts), invisibleText: [], unverifiableText: deep.unverifiableText };
+  }
   const folder = mainDocument.includes("/") ? mainDocument.slice(0, mainDocument.lastIndexOf("/")) : "";
   const relationships = `${folder ? `${folder}/` : ""}_rels/${mainDocument.slice(folder ? folder.length + 1 : 0)}.rels`;
   const stylesPart = relatedPart(parts, relationships, STYLES_RELATIONSHIP, folder) ?? "word/styles.xml";
@@ -2689,7 +2736,7 @@ export function withoutInvisibleDocxText(buffer: Buffer, limits = DOCUMENT_DECOM
     return margin.fromPage || margin.reaches.length > 0;
   });
   const budget = { units: limits.docxLayoutWorkUnits };
-  const visible = cutInvisibleRuns(xml, readStyles(parts.get(stylesPart)?.toString("utf8"), theme), theme, onEveryPage, showsPageColour(settings), defaultTabStop(settings), budget);
+  const visible = cutInvisibleRuns(xml, readStyles(parts.get(stylesPart)?.toString("utf8"), theme), theme, onEveryPage, showsPageColour(settings), defaultTabStop(settings), budget, tags);
   if (!visible.cut) return { buffer, invisibleText: [], unverifiableText: [] };
   parts.set(mainDocument, Buffer.from(visible.xml, "utf8"));
   return { buffer: storedZip(parts), invisibleText: visible.invisibleText, unverifiableText: visible.unverifiableText };

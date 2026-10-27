@@ -358,8 +358,31 @@ describe("DOCX : texte que sa place peut couper (IA-01)", () => {
       const cramped = '<w:p><w:pPr><w:spacing w:line="90" w:lineRule="exact"/></w:pPr><w:r><w:t>z</w:t></w:r></w:p>';
       const nested = timed(docx(`${row}<w:p><w:r><w:t>a</w:t></w:r></w:p>`.repeat(20_000) + cramped + "<w:p/></w:tc><w:tc><w:p><w:r><w:t>y</w:t></w:r></w:p></w:tc></w:tr></w:tbl>".repeat(20_000)));
       expect(nested.ms).toBeLessThan(6_000);
-      expect(nested.result.invisibleText.length).toBeGreaterThan(0);
+      // Nested deeper than DOCX_MAX_NESTING_DEPTH: not laid out, every passage set aside unverifiable.
+      expect(nested.result.invisibleText).toEqual([]);
+      expect(new Set(nested.result.unverifiableText.map(passage => passage.reason))).toEqual(new Set(["layout_unfinished"]));
     }, 120_000);
+
+    it("20 000 tableaux imbriqués de texte blanc ou 20 000 liens imbriqués : rien n’est lu, tout est écarté sans accusation, en une passe", async () => {
+      const claims = FAKE.map(claim => paragraph(claim, "", '<w:color w:val="FFFFFF"/>')).join("");
+      const tables = timed(docx(honestLines() + "<w:tbl><w:tr><w:tc>".repeat(20_000) + claims + "</w:tc></w:tr></w:tbl>".repeat(20_000)));
+      const links = timed(docx(honestLines() + `<w:p>${'<w:hyperlink w:anchor="a">'.repeat(20_000)}<w:r><w:t>${escaped(FAKE_ONE)}</w:t></w:r>${"</w:hyperlink>".repeat(20_000)}</w:p>`));
+      for (const { result, ms } of [tables, links]) {
+        expect(ms).toBeLessThan(2_000);
+        expect((await mammoth.extractRawText({ buffer: result.buffer })).value.trim()).toBe("");
+        expect(result.invisibleText).toEqual([]);
+        const setAside = result.unverifiableText.map(passage => passage.text).join(" ");
+        for (const line of [...HONEST, FAKE[0]!]) expect(setAside).toContain(line);
+        expect(new Set(result.unverifiableText.map(passage => passage.reason))).toEqual(new Set(["layout_unfinished"]));
+      }
+    }, 60_000);
+
+    it("CV honnête de tableaux imbriqués sur dix niveaux : mis en page et lu en entier, rien n’est écarté", async () => {
+      const nested = "<w:tbl><w:tr><w:tc>".repeat(10) + honestLines() + "</w:tc></w:tr></w:tbl>".repeat(10);
+      const result = await check(nested, { atTop: true });
+      for (const line of HONEST) expect(result.text).toContain(line);
+      expect(result.hidden + result.unverifiable).toBe("");
+    });
 
     it("9 000 taquets d’un paragraphe ou 3 000 de son style, et des centaines de milliers de tabulations : contrôlés en quelques secondes au plus", () => {
       const stops = (count: number) => `<w:tabs>${Array.from({ length: count }, (_, index) => `<w:tab w:val="left" w:pos="${index + 1}"/>`).join("")}</w:tabs>`;
