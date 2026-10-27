@@ -9,12 +9,15 @@ import { DOCX_FONT_ALIASES, DOCX_FONT_CHARACTERS, DOCX_FONT_METRICS, DOCX_FONT_W
  * (w:w, w:spacing), raised or lowered out of their line (w:position
  * beyond twice their size), in a text box placed off the page or that Word
  * does not draw (wp:docPr hidden, VML visibility:hidden, which LibreOffice
- * draws), of letters Word does not fill nor outline (w14:textFill noFill, or
- * all but transparent), or without
- * contrast with what lies under them: as the PDF check, less than 32/255 apart
- * on each channel from the first colour under it, the colour of the text being
- * w:color, or its theme colour, tinted or shaded, as Word draws it (the one
- * colour of its w14:textFill when set), and the
+ * draws), of letters Word does not fill nor outline (w14:textFill noFill), or
+ * without contrast with what lies under them: as the PDF check, less than
+ * 32/255 apart on each channel from the first colour under it, the colour of
+ * the text being w:color, or its theme colour, tinted or shaded, as Word draws
+ * it; when Word 2010's fill (w14:textFill) or outline (w14:textOutline) sets
+ * them, each of their colours (every stop of a gradient), its lightness
+ * changed (lumMod, lumOff), as transparent as it says (w14:alpha), the
+ * letters seen where the fill or the outline is (a colour Word changes
+ * otherwise, tint or saturation, is unknown: unverifiable); and the
  * first colour under it the highlight, the shading of the run, its paragraph,
  * table cell or table (set on them, by their style, the document's defaults or
  * the table style's formats for the cell's place), the fill of its text box,
@@ -69,7 +72,9 @@ import { DOCX_FONT_ALIASES, DOCX_FONT_CHARACTERS, DOCX_FONT_METRICS, DOCX_FONT_W
  * document's) place, where it starts, beyond an edge of the page of its
  * section (w:pgSz, w:pgMar, w:cols; A4 with margins of 2.5 cm when not given)
  * is hidden, and the body's text a column break (w:br column) moves to a
- * column its section's columns place off the page. Hidden text (w:vanish,
+ * column its section's columns place off the page (a hidden break moves
+ * nothing; after one deleted, or a page break before a hidden paragraph, which
+ * Word may not apply, it is set aside). Hidden text (w:vanish,
  * w:specVanish), its line breaks and
  * paragraph marks take no room; deleted text (w:del) only when it takes the
  * most, as LibreOffice shows it. Rows of height at least, text boxes that grow
@@ -79,9 +84,11 @@ import { DOCX_FONT_ALIASES, DOCX_FONT_CHARACTERS, DOCX_FONT_METRICS, DOCX_FONT_W
  * wps:bodyPr vert, layout-flow:vertical) goes down the height of its box or of
  * its row of exact height, its lines one after the other across its width.
  * A shape in front of the text that does not wrap it (wp:wrapNone, VML
- * position:absolute), of a fill that hides what lies under it, as wide as the
- * text of its page and placed from its paragraph, may cover the paragraphs of
- * the body it reaches, at their least heights: their text is set aside.
+ * position:absolute), of a fill that hides what lies under it (VML fills a
+ * shape that says nothing of it in white, but a picture), as wide as the text
+ * of its page and placed from its paragraph, may cover the paragraphs and
+ * tables of the body it reaches, at their least heights: all their text is
+ * set aside.
  *
  * Of a mc:AlternateContent, mammoth reads mc:Fallback, but Word draws the
  * mc:Choice it understands (a DrawingML text box, w14…): a passage of the
@@ -165,9 +172,10 @@ const MAX_ADVANCE_IN_SIZES = 1;
  * their text, about as wide as in the widest common fonts: capitals 0.68,
  * figures 0.56, other letters 0.5, punctuation 0.4, other signs 0.8, spaces
  * 0.3, Chinese, Japanese or Korean ones 1, all 0.6 in a typewriter font;
- * words kept whole on their line, over passages and runs, but after a hyphen
- * or a dash; the insets of text boxes and the side margins of cells; deleted
- * text shown, as LibreOffice shows it), and the least (lines of 0.9 times
+ * words kept whole on their line, over passages and runs, with those no-break
+ * spaces join (U+00A0, U+202F…), but after a hyphen or a dash; the insets of
+ * text boxes and the side margins of cells; deleted text shown, as
+ * LibreOffice shows it), and the least (lines of 0.9 times
  * their size, characters a fifth as wide, wide ones 0.9, lines broken
  * anywhere, no inset nor margin, deleted text not shown).
  */
@@ -535,28 +543,43 @@ type RunLayer = Partial<Record<"w:vanish" | "w:specVanish" | "w:webHidden" | "w:
   /** The font of its characters of Basic Latin (w:rFonts w:ascii) and of other Latin ones (w:hAnsi), or of its theme. */
   font: string;
   otherFont: string;
-  /** Bold, italic, in capitals (w:b, w:i, w:caps or w:smallCaps) by one of the layers: Word may switch them off again, the wider letters are taken. */
+  /**
+   * Bold, italic, in capitals (w:b, w:i, w:caps or w:smallCaps) by one of the layers: Word may switch them off again, the wider
+   * letters are taken (bold, capitals; upright or italic, whichever is wider, measuredAdvance).
+   */
   bold: true;
   italic: true;
   capitals: true;
   /**
    * Word 2010's fill of the letters (w14:textFill), which Word draws instead
-   * of w:color and LibreOffice ignores: "none" when they are not filled (or
-   * all but transparent), RRGGBB when one colour, "other" otherwise; and
-   * whether an outline (w14:textOutline) draws them.
+   * of w:color and LibreOffice ignores, and their outline (w14:textOutline).
    */
-  fill: string;
-  outline: boolean;
+  fill: TextPaint;
+  outline: TextPaint;
 }>;
+
+/**
+ * A colour of Word 2010's text effects (w14:srgbClr, w14:schemeClr): undefined
+ * when unknown (another scheme colour, a change Word makes to it that is not
+ * followed: tint, saturation…); its lightness changes (w14:lumMod, w14:lumOff),
+ * its transparency (w14:alpha), from 0 to 1.
+ */
+type TextColour = { hex: string | undefined; scale: number; offset: number; transparency: number };
+/** What Word 2010 paints letters or their outline with: nothing (w14:noFill), or the colour of a solid fill, or each stop of a gradient. */
+type TextPaint = "none" | TextColour[];
 
 const hexColour = (value: string | undefined) => (value !== undefined && /^[0-9a-f]{6}$/i.test(value) ? value.toUpperCase() : undefined);
 const channels = (hex: string) => [0, 2, 4].map(index => Number.parseInt(hex.slice(index, index + 2), 16));
 const toHex = (values: number[]) => values.map(value => Math.round(Math.min(255, Math.max(0, value))).toString(16).padStart(2, "0")).join("").toUpperCase();
 
-/** Two colours told apart: 32/255 or more apart on a channel, as the PDF contrast check (bright yellow on white is, E0E0E0 is not). */
-const distinct = (left: string, right: string) => {
+/**
+ * Two colours told apart: 32/255 or more apart on a channel, as the PDF
+ * contrast check (bright yellow on white is, E0E0E0 is not); the first drawn
+ * over the second this opaque, as Word draws letters partly transparent.
+ */
+const distinct = (left: string, right: string, opacity = 1) => {
   const under = channels(right);
-  return channels(left).some((value, index) => Math.abs(value - under[index]!) >= MIN_CHANNEL_GAP);
+  return channels(left).some((value, index) => Math.abs(value - under[index]!) * opacity >= MIN_CHANNEL_GAP);
 };
 /** A colour each channel of which is within 32/255 of white (FEFEFE looks white too). */
 const isNearWhite = (hex: string) => !distinct(hex, "FFFFFF");
@@ -1150,7 +1173,11 @@ function characterKind(character: string): CharacterKind {
 }
 
 /** Where Word may break a line within a word: after a hyphen, a dash, a soft hyphen or a zero-width space. */
-const BREAK_AFTER = new Set(["-", "­", "​", "‐", "‒", "–", "—", "―"]);
+const BREAK_AFTER = new Set(["-", "\u00ad", "\u200b", "\u2010", "\u2012", "\u2013", "\u2014", "\u2015"]);
+/** Spaces Word breaks no line at (no-break, narrow no-break, figure, zero-width no-break): as wide as spaces, they join the words around them. */
+const NO_BREAK_SPACES = new Set([0xa0, 0x202f, 0x2007, 0xfeff]);
+/** Whether a line may break at a character (its first UTF-16 unit): a space but those. */
+const breaksLine = (code: number) => SPACES[code] === 1 && !NO_BREAK_SPACES.has(code);
 /**
  * Text up to this share wider than its line, its advances added, still fits on
  * it in the most room: the kerning LibreOffice applies, and Word when the
@@ -1163,10 +1190,29 @@ const MEASURED_CHARACTERS = new Map(Array.from(DOCX_FONT_CHARACTERS, (character,
 /** The widths of each style of each font measured, in sizes of their text, read once from their digits. */
 const fontWidths = new Map<string, number[]>();
 
-/** The font measured (DOCX_FONT_METRICS) that a run sets its characters of Basic Latin in (`ascii`), or its other Latin ones, as Word names it. */
+/**
+ * The font measured (DOCX_FONT_METRICS) that a run sets its characters of Basic Latin in (`ascii`), or its other Latin ones, as Word
+ * names it; none for a run of complex script (w:cs, w:rtl), which Word sets in another font (w:rFonts w:cs).
+ */
 function measuredFont(effective: RunLayer, ascii: boolean) {
+  if (effective["w:cs"] || effective["w:rtl"]) return undefined;
   const name = ascii ? effective.font ?? effective.otherFont : effective.otherFont ?? effective.font;
   return name === undefined ? undefined : DOCX_FONT_ALIASES[name.trim().toLowerCase()];
+}
+
+/** The widths of a style of a font measured, in sizes of their text; of an italic style, the wider of its letters and of the upright style's, Word possibly drawing them upright. */
+function styleWidths(font: string, style: "regular" | "italic" | "bold" | "boldItalic"): number[] {
+  const key = `${font}:${style}`;
+  let widths = fontWidths.get(key);
+  if (!widths) {
+    const digits = DOCX_FONT_METRICS[font]![style];
+    const value = (at: number) => DOCX_FONT_WIDTH_DIGITS.indexOf(digits[at]!);
+    const own = Array.from({ length: digits.length / 2 }, (_, at) => (value(2 * at) * DOCX_FONT_WIDTH_DIGITS.length + value(2 * at + 1)) / 1000);
+    const upright = style === "italic" ? styleWidths(font, "regular") : style === "boldItalic" ? styleWidths(font, "bold") : undefined;
+    widths = upright ? own.map((width, at) => (width > 0 && upright[at]! > 0 ? Math.max(width, upright[at]!) : width)) : own;
+    fontWidths.set(key, widths);
+  }
+  return widths;
 }
 
 /** The advance of a character in its run's font, in its style, when measured, in sizes of its text (in capitals when the run is). */
@@ -1175,15 +1221,7 @@ function measuredAdvance(effective: RunLayer, character: string) {
   const index = MEASURED_CHARACTERS.get(shown);
   const font = index === undefined ? undefined : measuredFont(effective, shown.charCodeAt(0) < 128);
   if (font === undefined) return undefined;
-  const style = effective.bold ? (effective.italic ? "boldItalic" : "bold") : effective.italic ? "italic" : "regular";
-  const key = `${font}:${style}`;
-  let widths = fontWidths.get(key);
-  if (!widths) {
-    const digits = DOCX_FONT_METRICS[font]![style];
-    const value = (at: number) => DOCX_FONT_WIDTH_DIGITS.indexOf(digits[at]!);
-    widths = Array.from({ length: digits.length / 2 }, (_, at) => (value(2 * at) * DOCX_FONT_WIDTH_DIGITS.length + value(2 * at + 1)) / 1000);
-    fontWidths.set(key, widths);
-  }
+  const widths = styleWidths(font, effective.bold ? (effective.italic ? "boldItalic" : "bold") : effective.italic ? "italic" : "regular");
   return widths[index!]! > 0 ? widths[index!] : undefined;
 }
 
@@ -1251,29 +1289,40 @@ function applyRunProperty(layer: RunLayer, tag: XmlTag, theme: Theme) {
  * to the tag's parent.
  */
 function applyTextEffect(layer: RunLayer, path: string[], tag: XmlTag, theme: Theme) {
-  const [effect, fill, colour] = path;
-  if (effect === "w14:textOutline") {
-    if (fill === undefined && /^w14:(noFill|solidFill|gradFill)$/.test(tag.name)) layer.outline = tag.name !== "w14:noFill";
-  } else if (effect !== "w14:textFill") {
+  const [effect, fill, ...below] = path;
+  const key = effect === "w14:textFill" ? "fill" : effect === "w14:textOutline" ? "outline" : undefined;
+  if (!key) return;
+  if (fill === undefined) {
+    // No fill, one colour, or a gradient, whose colours follow.
+    if (tag.name === "w14:noFill") layer[key] = "none";
+    else if (tag.name === "w14:solidFill" || tag.name === "w14:gradFill") layer[key] = [];
     return;
-  } else if (fill === undefined) {
-    if (/^w14:(noFill|solidFill|gradFill)$/.test(tag.name)) layer.fill = tag.name === "w14:noFill" ? "none" : "other";
-  } else if (fill === "w14:solidFill" && colour === undefined) {
+  }
+  const paint = layer[key];
+  // The colour of a solid fill, or of a stop of a gradient (w14:gsLst, w14:gs), and its changes.
+  const depth = fill === "w14:solidFill" ? 0 : fill === "w14:gradFill" && below[0] === "w14:gsLst" && below[1] === "w14:gs" ? 2 : -1;
+  if (!Array.isArray(paint) || depth === -1) return;
+  if (below.length === depth && (tag.name === "w14:srgbClr" || tag.name === "w14:schemeClr")) {
     const value = tag.attributes.get("w14:val") ?? "";
-    layer.fill = (tag.name === "w14:srgbClr" ? hexColour(value) : tag.name === "w14:schemeClr" && DRAWING_SCHEME[value] ? theme(DRAWING_SCHEME[value]) : undefined) ?? "other";
-  } else if (fill === "w14:solidFill" && layer.fill !== "none") {
-    // Transparency in thousandths of a percent: letters all but transparent are not seen; another change of their colour makes it unknown.
-    layer.fill = tag.name === "w14:alpha" ? (Number(tag.attributes.get("w14:val")) >= 90_000 ? "none" : layer.fill) : "other";
+    paint.push({ hex: tag.name === "w14:srgbClr" ? hexColour(value) : DRAWING_SCHEME[value] ? theme(DRAWING_SCHEME[value]) : undefined, scale: 1, offset: 0, transparency: 0 });
+  } else if (below.length === depth + 1 && paint.length) {
+    // Lighter and darker theme colours change the lightness, transparency (in thousandths of a percent) the opacity; another change makes the colour unknown.
+    const colour = paint.at(-1)!;
+    const amount = Number(tag.attributes.get("w14:val")) / 100_000;
+    if (tag.name === "w14:lumMod" && Number.isFinite(amount)) colour.scale = amount;
+    else if (tag.name === "w14:lumOff" && Number.isFinite(amount)) colour.offset = amount;
+    else if (tag.name === "w14:alpha" && Number.isFinite(amount)) colour.transparency = Math.min(1, Math.max(0, amount));
+    else colour.hex = undefined;
   }
 }
 
 /**
  * How far back (1: the tag's parent) lies the w:rPr holding a Word 2010 text
- * effect's tag, with its effect, fill and colour in between, of the names of
- * the elements open; or -1.
+ * effect's tag, with its effect, fill, a gradient's stops and colour in
+ * between, of the names of the elements open; or -1.
  */
 function effectHolder(nameBack: (back: number) => string | undefined) {
-  for (let back = 1; back <= 4; back += 1) {
+  for (let back = 1; back <= 6; back += 1) {
     const name = nameBack(back);
     if (name === "w:rPr") return back;
     if (!name?.startsWith("w14:")) return -1;
@@ -1609,24 +1658,43 @@ function tableRows(): Survey<Map<number, number[]>> {
   return { visit, done: () => tables };
 }
 
-/** The attributes of the v:fill of each VML shape, by where the shape's tag starts: it may follow the text box. */
-function vmlFills(): Survey<Map<number, Map<string, string>>> {
+/** A VML shape type (v:shapetype): its attributes and those of its v:fill, which its shapes take unless they set their own. */
+type VmlType = { attributes: Map<string, string>; fill?: Map<string, string> };
+
+/**
+ * The attributes of the v:fill of each VML shape, by where the shape's tag
+ * starts: it may follow the text box; the shapes that draw a picture
+ * (v:imagedata); each shape type, by its id.
+ */
+function vmlFills(): Survey<{ fills: Map<number, Map<string, string>>; pictures: Set<number>; types: Map<string, VmlType> }> {
   const fills = new Map<number, Map<string, string>>();
+  const pictures = new Set<number>();
+  const types = new Map<string, VmlType>();
   const names: string[] = [];
   const starts: number[] = [];
+  let type: VmlType | undefined;
   const visit = (tag: XmlTag) => {
     if (tag.closing) {
-      names.pop();
+      if (names.pop() === "v:shapetype") type = undefined;
       starts.pop();
       return;
     }
-    if (tag.name === "v:fill" && VML_SHAPES.has(names.at(-1) ?? "")) fills.set(starts.at(-1)!, tag.attributes);
+    const parent = names.at(-1) ?? "";
+    if (tag.name === "v:fill" && VML_SHAPES.has(parent)) fills.set(starts.at(-1)!, tag.attributes);
+    if (tag.name === "v:imagedata" && VML_SHAPES.has(parent)) pictures.add(starts.at(-1)!);
+    if (tag.name === "v:fill" && parent === "v:shapetype" && type) type.fill = tag.attributes;
+    if (tag.name === "v:shapetype") {
+      const id = tag.attributes.get("id");
+      const known: VmlType = { attributes: tag.attributes };
+      if (id && !types.has(id)) types.set(id, known);
+      if (!tag.selfClosing) type = known;
+    }
     if (!tag.selfClosing) {
       names.push(tag.name);
       starts.push(tag.start);
     }
   };
-  return { visit, done: () => fills };
+  return { visit, done: () => ({ fills, pictures, types }) };
 }
 
 /** A range of colours widened to those a paint holds. */
@@ -1641,9 +1709,9 @@ function widened(range: ColourRange | null, paint: Paint | undefined): ColourRan
   return widest;
 }
 
-/** Whether a colour of the range shows a text of this colour: one is 32/255 or more from it on a channel (distinct). */
-const rangeShows = (range: ColourRange | null, colour: string) =>
-  range !== null && channels(colour).some((value, index) => range.high[index]! - value >= MIN_CHANNEL_GAP || value - range.low[index]! >= MIN_CHANNEL_GAP);
+/** Whether a colour of the range shows a text of this colour, drawn this opaque: one is 32/255 or more from it on a channel (distinct). */
+const rangeShows = (range: ColourRange | null, colour: string, opacity = 1) =>
+  range !== null && channels(colour).some((value, index) => (range.high[index]! - value) * opacity >= MIN_CHANNEL_GAP || (value - range.low[index]!) * opacity >= MIN_CHANNEL_GAP);
 
 const NO_STYLE: ResolvedStyle = { run: {}, paragraph: {}, conditions: new Map(), colours: null };
 
@@ -1720,8 +1788,9 @@ const SEVERITY: Record<Visibility, number> = { visible: 0, unverifiable: 1, invi
 /**
  * Why DOCX text was set aside as unverifiable: white or pale text that may lie
  * on a picture or a shape (`drawing`), text its row, text box, frame, line
- * spacing or the page's edge may cut (`layout`), text of such places left
- * unlaid once the layout work allowed is spent (`layout_unfinished`).
+ * spacing, a shape in front or the page's edge may cut or hide (`layout`),
+ * text of such places left unlaid once the layout work allowed is spent
+ * (`layout_unfinished`).
  */
 export type DocxUnverifiableReason = "drawing" | "layout" | "layout_unfinished";
 /** A verdict, and why when unverifiable. */
@@ -1820,7 +1889,10 @@ type Frame = BandSizes & {
   flow?: { advance: number; tabbed: boolean };
   inked?: boolean;
   closed?: boolean;
-  /** Paragraphs: their lines when their place may hide them (layoutOf; null: it cannot); else their visible segments, which a cramped line below may still cover. */
+  /**
+   * Paragraphs: their lines when their place may hide them (layoutOf; null: it cannot); else their visible segments, which a cramped
+   * line below may still cover. Paragraphs and tables of the body: all their visible segments, which a shape in front may cover.
+   */
   layout?: ParagraphLayout | null;
   shown?: Segment[];
   /**
@@ -1881,6 +1953,14 @@ type Frame = BandSizes & {
   offPage?: boolean;
   unplaced?: boolean;
   hidden?: boolean;
+  /**
+   * Paragraphs of the body: in a column of their section placed off the page (hidden), or off it with some margins only, or only
+   * once the breaks before them that Word may not apply are applied or not (unverifiable): kept apart from where their frame places them.
+   */
+  columnOff?: boolean;
+  columnUnplaced?: boolean;
+  /** Paragraphs: a page break before them (w:pageBreakBefore), applied once their mark's formatting is read. */
+  breakBefore?: boolean;
   /** DrawingML anchors: where they place their shape, in points. */
   box?: Box;
   /** DrawingML fills, and their colours being read: the shape they fill; the colour's lightness changes (lumMod, lumOff), its opacity. */
@@ -1912,8 +1992,8 @@ type Frame = BandSizes & {
 };
 /** Fills at least this opaque hide what lies under them. */
 const OPAQUE_FILL = 0.9;
-/** How many paragraphs of the body above it a shape in front may be found to cover, placed above its anchor (coverFrom). */
-const MAX_RECENT_PARAGRAPHS = 64;
+/** How many paragraphs and tables of the body above it a shape in front may be found to cover, placed above its anchor (coverFrom). */
+const MAX_RECENT_BLOCKS = 64;
 type Passages = { invisible: string[]; unverifiable: Array<{ text: string; reason: DocxUnverifiableReason }> };
 /** A paragraph's style, and the space it leaves below it (dropped next to its style when contextual). In points. */
 type Spacing = { style: string | undefined; after: number; contextual: boolean };
@@ -1997,7 +2077,7 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
   const page = largest.done();
   const tables = rowCells.done();
   const mergedRooms = merges.done();
-  const fills = shapeFills.done();
+  const { fills, pictures: vmlPictures, types: vmlTypes } = shapeFills.done();
   const { shapes: drawingBoxes, chains: linkedHeights } = boxes.done(page);
   const sections = sectionPage.done();
   const pictures = reach.done();
@@ -2009,20 +2089,35 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
     while (section < sections.length - 1 && sections[section]!.end < position) section += 1;
     return sections[section]?.page ?? defaultPage;
   };
-  /** The column breaks (w:br column) read so far in the body, since the start of its section or the last page break, on that page. */
-  let columnBreaks = { page: defaultPage, count: 0 };
+  /**
+   * The column breaks (w:br column) read so far in the body, since the start of its section or the last page break, on that page:
+   * those Word applies (`count`), and those it may apply too (`shown`: deleted, as LibreOffice shows them; before a hidden paragraph).
+   */
+  let columnBreaks = { page: defaultPage, count: 0, shown: 0 };
   /** Where the text after so many column breaks lies across its page: in a column off it with all margins (hidden), or with some (unverifiable). */
   const columnPlace = (across: PageAcross, breaks: number) => {
     const start = across.columnStart(breaks);
     const offPage = across.narrowestMargin + start >= across.width;
     return { offPage, unplaced: !offPage && across.widestMargin + start >= across.width };
   };
-  /** Moves the body's text that follows to the next column (`breaks` 1), or back to the first (0, a page break). */
-  const breakColumn = (paragraph: Frame | undefined, breaks: number) => {
+  /** Where the body's text lies after the column breaks read: hidden in a column off the page whichever breaks apply, unverifiable when only some place it there. */
+  const columnFlags = (): Pick<Frame, "columnOff" | "columnUnplaced"> => {
+    const applied = columnPlace(columnBreaks.page, columnBreaks.count);
+    const shown = columnBreaks.shown === columnBreaks.count ? applied : columnPlace(columnBreaks.page, columnBreaks.shown);
+    const columnOff = applied.offPage && shown.offPage;
+    return { columnOff, columnUnplaced: !columnOff && (applied.offPage || applied.unplaced || shown.offPage || shown.unplaced) };
+  };
+  /**
+   * Moves the body's text that follows to the next column (`breaks` 1), or back to the first (0, a page break); only as it may be
+   * shown (`uncertain`: a break deleted, before a hidden paragraph), Word possibly not applying it.
+   */
+  const breakColumn = (paragraph: Frame | undefined, breaks: number, uncertain: boolean) => {
     if (!paragraph?.body || !paragraph.page) return;
-    if (columnBreaks.page !== paragraph.page) columnBreaks = { page: paragraph.page, count: 0 };
-    columnBreaks.count = breaks === 0 ? 0 : columnBreaks.count + breaks;
-    placeOff(paragraph, columnPlace(paragraph.page, columnBreaks.count));
+    if (columnBreaks.page !== paragraph.page) columnBreaks = { page: paragraph.page, count: 0, shown: 0 };
+    const after = (count: number) => (breaks === 0 ? 0 : count + breaks);
+    if (!uncertain) columnBreaks.count = after(columnBreaks.count);
+    columnBreaks.shown = after(columnBreaks.shown);
+    placeOff(paragraph, columnFlags());
   };
   const stack: Frame[] = [];
   /**
@@ -2031,8 +2126,8 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
    */
   const held = { offPage: 0, unplaced: 0, covered: 0, nested: 0, textBoxes: 0, deleted: 0 };
   const hold = (frame: Frame, change: number) => {
-    if (frame.offPage || frame.hidden) held.offPage += change;
-    if (frame.unplaced) held.unplaced += change;
+    if (frame.offPage || frame.hidden || frame.columnOff) held.offPage += change;
+    if (frame.unplaced || frame.columnUnplaced) held.unplaced += change;
     if (frame.covered) held.covered += change;
     if (frame.name === "w:tc" || frame.name === "w:txbxContent") held.nested += change;
     if (frame.name === "w:txbxContent") held.textBoxes += change;
@@ -2053,8 +2148,8 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
   };
   /** The innermost container of the stack, or the one holding it (`outer` 1). */
   const innermost = (outer = 0) => stack[containers[containers.length - 1 - outer] ?? -1];
-  /** Places a frame of the stack off the page, or off it with some margins only, or under a shape in front. */
-  const placeOff = (frame: Frame, placing: Pick<Frame, "offPage" | "unplaced" | "hidden" | "covered">) => {
+  /** Places a frame of the stack off the page, or off it with some margins only, or in such a column, or under a shape in front. */
+  const placeOff = (frame: Frame, placing: Pick<Frame, "offPage" | "unplaced" | "hidden" | "covered" | "columnOff" | "columnUnplaced">) => {
     hold(frame, -1);
     Object.assign(frame, placing);
     hold(frame, 1);
@@ -2064,16 +2159,24 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
    * lowest lines, one per paragraph, and spacing; their rows at their
    * lowest): where the next starts, its page breaks aside. Down to where a
    * shape in front of the text may cover the body (coverUntil); the last
-   * paragraphs read (MAX_RECENT_PARAGRAPHS), for a shape placed above its
-   * anchor.
+   * paragraphs and tables read (MAX_RECENT_BLOCKS), and where they end, for a
+   * shape placed above its anchor; the table of the body being read, whose
+   * cells' visible segments it gathers (but those of its text boxes, which
+   * may be drawn over such a shape).
    */
   let bodyDown = 0;
   let coverUntil = Number.NEGATIVE_INFINITY;
-  const recentParagraphs: Array<{ paragraph: Frame; end: number }> = [];
-  /** Sets aside what a paragraph read so far shows: it may lie under a shape in front of it. */
-  const coverParagraph = (paragraph: Frame) => {
-    setAside(paragraph.shown, OUT_OF_PLACE);
-    for (const entry of paragraph.layout?.pending ?? []) setAside(entry.segments, OUT_OF_PLACE);
+  const recentBlocks: Array<{ block: Frame; end: number }> = [];
+  let bodyTable: Frame | undefined;
+  /** Keeps a paragraph or a table of the body once read, and where it ends, among the last ones (recentBlocks). */
+  const remember = (block: Frame) => {
+    recentBlocks.push({ block, end: bodyDown });
+    if (recentBlocks.length > MAX_RECENT_BLOCKS) recentBlocks.shift();
+  };
+  /** Sets aside what a paragraph or a table of the body read so far shows: it may lie under a shape in front of it. */
+  const coverBlock = (block: Frame) => {
+    setAside(block.shown, OUT_OF_PLACE);
+    for (const entry of block.layout?.pending ?? []) setAside(entry.segments, OUT_OF_PLACE);
   };
   /**
    * A shape in front of the text without wrapping it, of a fill that hides
@@ -2096,11 +2199,11 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
     // Its anchor and what follows, down to its bottom.
     if (to > paragraph.bodyTop) {
       coverUntil = Math.max(coverUntil, to);
-      coverParagraph(paragraph);
+      coverBlock(paragraph);
       if (!paragraph.covered) placeOff(paragraph, { covered: true });
     }
-    // Above its anchor, the paragraphs it may reach up to.
-    for (let index = recentParagraphs.length - 1; index >= 0 && recentParagraphs[index]!.end > from; index -= 1) coverParagraph(recentParagraphs[index]!.paragraph);
+    // Above its anchor, the paragraphs and tables it may reach up to.
+    for (let index = recentBlocks.length - 1; index >= 0 && recentBlocks[index]!.end > from; index -= 1) coverBlock(recentBlocks[index]!.block);
   };
   const cuts: Array<[number, number]> = [];
   const found: Passages = { invisible: [], unverifiable: [] };
@@ -2209,28 +2312,41 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
     // A drop cap's letter only needs a line of text; other lines of an exact spacing are laid out (layText).
     const spacing = paragraph ? formatOf(paragraph).line : undefined;
     const cramped = paragraph?.dropCap === true && spacing?.rule === "exact" && spacing.value < MIN_FONT_SIZE_PT;
-    // Letters Word does not fill (w14:textFill), nor outline, are not drawn.
-    const unfilled = effective.fill === "none" && !effective.outline;
-    if (effective["w:vanish"] || effective["w:specVanish"] || effective["w:webHidden"] || tinyText || squeezed || shifted || cramped || unfilled || held.offPage > 0) return "invisible";
-    // Word draws text in the automatic colour black or white, whichever shows on its background; in the one colour of its text fill when set.
-    const colour = hexColour(effective.fill) ?? effective.colour ?? "auto";
-    if (colour === "auto") return "visible";
-    const shows = (under: string) => distinct(colour, under);
+    if (effective["w:vanish"] || effective["w:specVanish"] || effective["w:webHidden"] || tinyText || squeezed || shifted || cramped || held.offPage > 0) return "invisible";
     const layer = layerUnder(effective);
-    if ((layer ?? [pageColour]).some(shows)) return "visible";
-    // In a cell the table style alone colours, by an assumed look, a format for another place in the table might show it.
-    const styledCell = paragraph?.cell !== undefined && paragraph.cell.paint === undefined && !effective.highlight && !effective.shading && !paragraphPaint(paragraph, false);
-    if (styledCell && rangeShows(tableFormats?.colours ?? null, colour)) return "unverifiable";
-    // On a colour of its own (shading, highlight, filled text box), it is not seen; on the page, it may lie on a picture:
-    // in a text box without fill, in a paragraph a drawing holds, neighbours or covers, or on a picture as page colour.
-    if (layer?.some(under => !isNearWhite(under))) return "invisible";
-    const onDrawing = fromPage || pagePicture || pictures.fromPage || held.textBoxes > 0 || nearDrawing(paragraph);
-    return onDrawing ? "unverifiable" : "invisible";
+    /** Whether letters of this colour, drawn this opaque, are seen where they lie. */
+    const judge = (colour: string, opacity: number): Visibility => {
+      if (opacity * 255 < MIN_CHANNEL_GAP) return "invisible";
+      if ((layer ?? [pageColour]).some(under => distinct(colour, under, opacity))) return "visible";
+      // In a cell the table style alone colours, by an assumed look, a format for another place in the table might show it.
+      const styledCell = paragraph?.cell !== undefined && paragraph.cell.paint === undefined && !effective.highlight && !effective.shading && !paragraphPaint(paragraph, false);
+      if (styledCell && rangeShows(tableFormats?.colours ?? null, colour, opacity)) return "unverifiable";
+      // On a colour of its own (shading, highlight, filled text box), it is not seen; on the page, it may lie on a picture:
+      // in a text box without fill, in a paragraph a drawing holds, neighbours or covers, or on a picture as page colour.
+      if (layer?.some(under => !isNearWhite(under))) return "invisible";
+      const onDrawing = fromPage || pagePicture || pictures.fromPage || held.textBoxes > 0 || nearDrawing(paragraph);
+      return onDrawing ? "unverifiable" : "invisible";
+    };
+    /** Letters a Word 2010 fill or outline paints: hidden by nothing, seen as each of its colours is when they all agree, unverifiable otherwise or when one is unknown. */
+    const painted = (paint: TextPaint): Visibility => {
+      if (paint === "none") return "invisible";
+      const verdicts = paint.map(({ hex, scale, offset, transparency }) =>
+        hex === undefined ? "unverifiable" : judge(scale === 1 && offset === 0 ? hex : withLightness(hex, lightness => lightness * scale + offset), 1 - transparency));
+      return verdicts.length && verdicts.every(verdict => verdict === verdicts[0]) ? verdicts[0]! : "unverifiable";
+    };
+    // Word draws text in the automatic colour black or white, whichever shows on its background; in its text fill when set, which
+    // w:color then no longer colours; with its outline. The letters are seen where either is.
+    const colour = effective.colour ?? "auto";
+    const filled = effective.fill !== undefined ? painted(effective.fill) : colour === "auto" ? "visible" : judge(colour, 1);
+    const outlined = effective.outline !== undefined ? painted(effective.outline) : "invisible";
+    return SEVERITY[outlined] < SEVERITY[filled] ? outlined : filled;
   };
+  /** Where the innermost mc:AlternateContent open is in the stack; -1 when none. */
+  const openAlternate = () => (alternates ? stack.findLastIndex(item => item.name === "mc:AlternateContent") : -1);
   /** What mammoth reads of a mc:AlternateContent, its fallback, is seen only where the choice Word draws shows the same text. */
   const asDrawn = (text: string, seen: Judgement): { judgement: Judgement; drawn?: { verdicts: Judgement[]; from: number; to: number } } => {
     if (!alternates) return { judgement: seen };
-    const alternate = stack.findLastIndex(item => item.name === "mc:AlternateContent");
+    const alternate = openAlternate();
     const drawn = stack[alternate]?.drawn;
     const branch = stack[alternate + 1];
     const letters = text.replace(/\s+/g, "");
@@ -2614,13 +2730,13 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
     let last: { unit: number; x: number; line: number; continued: boolean; ends: boolean } | undefined;
     let unit = 0;
     for (let index = 0; index < characters.length; ) {
-      const space = SPACES[characters[index]!.charCodeAt(0)] === 1;
+      const space = breaksLine(characters[index]!.charCodeAt(0));
       let end = index;
       let width = 0;
-      // Spaces, or a word up to where Word may break its line: after a hyphen or a dash, around an ideograph.
+      // Spaces, or a word up to where Word may break its line: after a hyphen or a dash, around an ideograph; joined by no-break spaces.
       for (; end < characters.length; ) {
         const character = characters[end]!;
-        if ((SPACES[character.charCodeAt(0)] === 1) !== space || (!space && end > index && WIDE_CHARACTER.test(character))) break;
+        if (breaksLine(character.charCodeAt(0)) !== space || (!space && end > index && WIDE_CHARACTER.test(character))) break;
         width += advance(MOST, character);
         end += 1;
         if (!space && (BREAK_AFTER.has(character) || WIDE_CHARACTER.test(character))) break;
@@ -2710,10 +2826,13 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
         if (!entry) layout.pending.push((entry = { line: part.line, segments: [] }));
         entry.segments.push(segment);
         if (layout.word && judged && part.to > judged.wordFrom) layout.word.segments.push(segment);
+        // In the body, a shape in front may cover any of them.
+        if (paragraph?.body) (paragraph.shown ??= []).push(segment);
       } else if (paragraph) {
         // Its lines are not laid out: any of them may be its last.
         (paragraph.shown ??= []).push(segment);
       }
+      if (bodyTable && held.textBoxes === 0) (bodyTable.shown ??= []).push(segment);
       return segment;
     });
   };
@@ -2729,12 +2848,6 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
     if (judgement.verdict === "invisible") passages.invisible.push(text);
     else passages.unverifiable.push({ text, reason: judgement.reason ?? "drawing" });
   };
-  /** Settles a segment once its run is read: cut out and recorded unless visible. */
-  /**
-   * Where the run being read lies: in the copy mammoth reads of what Word draws from mc:Choice, which takes its place from the
-   * choice (its own, its VML box's insets, does not count); whether its text is counted (mammoth reads text boxes from
-   * mc:Fallback and VML only: what mc:Choice repeats, or a DrawingML text box holds, is not); its paragraph.
-   */
   /** A shape once read (DrawingML anchor, VML shape): in front of the text without wrapping it, whose fill hides it, Word drawing it, it may cover the paragraphs of the body it reaches. */
   const coverByShape = (shape: Frame) => {
     const { front, box } = shape;
@@ -2742,18 +2855,24 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
   };
   /** Whether Word draws what is read here: not in a mc:Fallback whose mc:Choice it draws, nor in a mc:Choice it does not draw. */
   const drawnHere = () => {
-    const alternate = alternates ? stack.findLastIndex(item => item.name === "mc:AlternateContent") : -1;
+    const alternate = openAlternate();
     const branch = stack[alternate + 1];
     return alternate === -1 || !branch || (branch.name === "mc:Choice" ? branch.chosen === true : stack[alternate]!.drawn === undefined);
   };
+  /**
+   * Where the run being read lies: in the copy mammoth reads of what Word draws from mc:Choice, which takes its place from the
+   * choice (its own, its VML box's insets, does not count); whether its text is counted (mammoth reads text boxes from
+   * mc:Fallback and VML only: what mc:Choice repeats, or a DrawingML text box holds, is not); its paragraph.
+   */
   const runPlace = () => {
-    const alternate = alternates ? stack.findLastIndex(item => item.name === "mc:AlternateContent") : -1;
+    const alternate = openAlternate();
     return {
       copy: alternate !== -1 && stack[alternate]!.drawn !== undefined && stack[alternate + 1]?.name === "mc:Fallback",
       recorded: unread === 0,
       paragraph: nearest("w:p"),
     };
   };
+  /** Settles a segment once its run is read: cut out and recorded unless visible. */
   const settle = (segment: Segment, seen: Judgement, { copy, recorded, paragraph }: ReturnType<typeof runPlace>) => {
     const { judgement, drawn } = asDrawn(segment.text, copy ? seen : graver(seen, segment.judgement));
     segment.judgement = judgement;
@@ -2883,10 +3002,12 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
             content.above = { style: styleOf(frame), after: format.after, contextual: format.contextual };
           }
         }
-        if (frame.body) {
-          recentParagraphs.push({ paragraph: frame, end: bodyDown });
-          if (recentParagraphs.length > MAX_RECENT_PARAGRAPHS) recentParagraphs.shift();
-        }
+        if (frame.body) remember(frame);
+      } else if (frame?.name === "w:pPr" && stack.at(-1)?.breakBefore) {
+        // A page break before a paragraph whose mark is hidden: Word may not show the paragraph, nor its break.
+        const paragraphFrame = stack.at(-1)!;
+        const mark = Object.assign({}, styles.defaults, resolveStyle(styles, paragraphFrame.style, "paragraph").run, paragraphFrame.mark);
+        breakColumn(paragraphFrame, 0, hides(mark));
       } else if (frame?.name === "w:tc") {
         // A row is as tall as its tallest cell, but a cell merged with others; its next cell starts after this one's columns.
         const row = stack.at(-1)?.name === "w:tr" ? stack.at(-1) : undefined;
@@ -2917,6 +3038,10 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
           content.last = frame.lineAbove ?? null;
           if (frame.bodyTop !== undefined) bodyDown += after + height[LEAST];
         }
+        if (frame === bodyTable) {
+          bodyTable = undefined;
+          remember(frame);
+        }
       } else if (frame?.name === "wps:wsp" && frame.opaque && stack.at(-1)?.name === "a:graphicData") {
         // A shape of its own (not in a group) whose fill hides what lies under it.
         const anchor = stack.findLast(item => item.name === "wp:anchor");
@@ -2943,8 +3068,8 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
     if (tag.name === "w:p" && innermost()?.name === "w:body") {
       // In the body, after a column break, in the column it moved the text to: a new section, a new page starts again from the first.
       frame.body = true;
-      if (columnBreaks.page !== frame.page) columnBreaks = { page: frame.page!, count: 0 };
-      else if (columnBreaks.count > 0) Object.assign(frame, columnPlace(columnBreaks.page, columnBreaks.count));
+      if (columnBreaks.page !== frame.page) columnBreaks = { page: frame.page!, count: 0, shown: 0 };
+      else if (columnBreaks.count > 0 || columnBreaks.shown > 0) Object.assign(frame, columnFlags());
     }
     if ((tag.name === "w:p" || tag.name === "w:tbl") && innermost()?.name === "w:body") {
       // Where it starts down the body, at the least: a shape in front of the text may cover it (coverFrom). Not on the stack yet: counted when it is.
@@ -3110,20 +3235,26 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
     if ((VML_SHAPES.has(tag.name) || tag.name === "v:group") && /(^|;)\s*visibility\s*:\s*hidden/i.test(tag.attributes.get("style") ?? "")) frame.hidden = true;
     if (tag.name === "wp:docPr" && (parent?.name === "wp:anchor" || parent?.name === "wp:inline") && /^(1|true|on)$/i.test(tag.attributes.get("hidden") ?? "")) placeOff(parent, { hidden: true });
     if (VML_SHAPES.has(tag.name)) {
-      const fill = fills.get(tag.start);
+      // What the shape does not set, its type (v:shapetype) does; one named but missing leaves its fill unknown.
+      const typeName = tag.attributes.get("type")?.trim().replace(/^#/, "");
+      const type = typeName ? vmlTypes.get(typeName) : undefined;
+      const fill = fills.get(tag.start) ?? type?.fill;
+      const attribute = (name: string) => tag.attributes.get(name) ?? type?.attributes.get(name);
       // As in VML, the colour of v:fill wins over the shape's fillcolor.
-      const colour = (fill?.get("color") ?? tag.attributes.get("fillcolor"))?.trim();
-      const filled = !/^(f|false)$/i.test(tag.attributes.get("filled") ?? "") && !/^(f|false)$/i.test(fill?.get("on") ?? "");
+      const colour = (fill?.get("color") ?? attribute("fillcolor"))?.trim();
+      const filled = !/^(f|false)$/i.test(attribute("filled") ?? "") && !/^(f|false)$/i.test(fill?.get("on") ?? "");
       // A fill that is not one colour (gradient, pattern, picture): what lies under may show, as under a DrawingML gradient.
       const solid = /^(solid)?$/i.test(fill?.get("type")?.trim() ?? "");
-      const known = colour === undefined || !filled || !solid ? undefined : vmlColour(colour);
+      // VML fills a shape in white unless it says otherwise; a picture (v:imagedata) is drawn instead, what lies under may show.
+      const unset = colour === undefined && !vmlPictures.has(tag.start) && (!typeName || type !== undefined) ? "FFFFFF" : undefined;
+      const known = !filled || !solid ? undefined : colour === undefined ? unset : vmlColour(colour);
       // A fill partly transparent (v:fill opacity) shows the page through it; a transparent one, the page.
       const opacity = vmlOpacity(fill?.get("opacity"));
       frame.paint = known ? [opacity < 1 ? blend(pageColour, known, opacity) : known] : null;
       if (frame.front) frame.front.opaque = known !== undefined && opacity >= OPAQUE_FILL;
+      frame.offPage = vmlShapeIsOffPage(tag.attributes.get("style"), page);
       // Without content (nor w10:wrap), it is read whole here.
       if (frame.front && tag.selfClosing) coverByShape(frame);
-      frame.offPage = vmlShapeIsOffPage(tag.attributes.get("style"), page);
     }
     // DrawingML shapes (Word's text boxes in mc:Choice): their fill, else their style's (fill style 1 is solid), placed by their anchor.
     if (parent?.name === "wps:spPr" && grandParent?.name === "wps:wsp" && DRAWING_FILLS.has(tag.name)) {
@@ -3216,8 +3347,11 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
       else applyRunProperty(grandParent.layer!, tag, theme);
     }
     // In the body, a column break moves the text after it to the next column, a page break back to the first, on the next page.
-    if (tag.name === "w:br" && parent?.name === "w:r" && /^(column|page)$/.test(tag.attributes.get("w:type") ?? "")) breakColumn(nearest("w:p"), tag.attributes.get("w:type") === "page" ? 0 : 1);
-    if (tag.name === "w:pageBreakBefore" && parent?.name === "w:pPr" && grandParent?.name === "w:p" && !/^(0|false|off)$/i.test(tag.attributes.get("w:val") ?? "")) breakColumn(grandParent, 0);
+    // Hidden, it moves nothing; deleted, Word may not apply it (as it shows the document's changes, or not), LibreOffice shows it.
+    if (tag.name === "w:br" && parent?.name === "w:r" && /^(column|page)$/.test(tag.attributes.get("w:type") ?? "") && !hides(runFormat(parent))) {
+      breakColumn(nearest("w:p"), tag.attributes.get("w:type") === "page" ? 0 : 1, held.deleted > 0);
+    }
+    if (tag.name === "w:pageBreakBefore" && parent?.name === "w:pPr" && grandParent?.name === "w:p") grandParent.breakBefore = !/^(0|false|off)$/i.test(tag.attributes.get("w:val") ?? "");
     // A Word 2010 text effect, its fill and its colour, in the formatting of a run or of a paragraph's mark.
     const effectAt = tag.name.startsWith("w14:") ? effectHolder(back => stack.at(-back)?.name) : -1;
     if (effectAt > 0) {
@@ -3256,6 +3390,7 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
       hold(frame, 1);
       if (frame.content) containers.push(stack.length - 1);
       if (frame.name === "w:tbl") tableIndices.push(stack.length - 1);
+      if (frame.name === "w:tbl" && frame.bodyTop !== undefined) bodyTable ??= frame;
       if (tag.name === "mc:AlternateContent") alternates += 1;
       if (tag.name === "mc:Choice" || tag.name === "w:drawing") unread += 1;
     }

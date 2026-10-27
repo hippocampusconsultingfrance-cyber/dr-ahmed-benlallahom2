@@ -342,6 +342,19 @@ describe("DOCX : texte que sa place peut couper (IA-01)", () => {
       for (const word of result.unverifiable.trim().split(/[\s-]+/)) expect(words, word).toContain(word);
     });
 
+    it.each([["insécables (U+00A0)", "\u00a0"], ["fines insécables (U+202F)", "\u202f"]])("mots joints par des espaces %s au bout d’une ligne exacte qu’ils dépassent : ils passent ensemble sous la ligne, aucun n’en est lu", async (_, space) => {
+      const claim = ["Médecin", "anesthésiste", "DESAR", "Licence", "DHA", "10", "ans"].join(space);
+      const result = await check(table(6000, [[exact(300), paragraph(`Infirmier 2 ans ${claim}`)]]));
+      expect(result.text).toContain("Infirmier 2 ans");
+      expect(result.text).not.toContain("Médecin");
+      // What is read and set aside has its spaces as spaces.
+      expect(result).toMatchObject({ hidden: "", unverifiable: claim.replace(/\s/g, " "), reasons: ["layout"] });
+      // Joined to a word that fits, a no-break space keeps the line read.
+      const fits = await check(table(6000, [[exact(300), paragraph("Langues\u00a0: Français.")]]));
+      expect(fits).toMatchObject({ hidden: "", unverifiable: "" });
+      expect(fits.text).toContain("Langues : Français.");
+    });
+
     it("mot écrit en deux passages au bout d’une ligne qu’il dépasse : il passe entier sous la ligne, aucune moitié n’en est lue", async () => {
       const properties = '<w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/><w:sz w:val="21"/>';
       const split = runs("", ["Diplôme d'État infirmier (2022), Institut de Tu", properties], ["nis", properties]);
@@ -385,8 +398,22 @@ describe("DOCX : texte que sa place peut couper (IA-01)", () => {
       ["sans remplissage (w14:noFill)", `<w14:textFill ${W14}><w14:noFill/></w14:textFill>`],
       ["remplies de blanc, leur couleur noire", `<w:color w:val="000000"/><w14:textFill ${W14}><w14:solidFill><w14:srgbClr w14:val="FFFFFF"/></w14:solidFill></w14:textFill>`],
       ["remplies d’un noir transparent", `<w14:textFill ${W14}><w14:solidFill><w14:srgbClr w14:val="000000"><w14:alpha w14:val="100000"/></w14:srgbClr></w14:solidFill></w14:textFill>`],
+      ["remplies d’un noir transparent à 89 %, gris de 227 sur la page", `<w14:textFill ${W14}><w14:solidFill><w14:srgbClr w14:val="000000"><w14:alpha w14:val="89000"/></w14:srgbClr></w14:solidFill></w14:textFill>`],
+      ["remplies d’un blanc à la luminosité inchangée (lumMod 100 %)", `<w:color w:val="000000"/><w14:textFill ${W14}><w14:solidFill><w14:srgbClr w14:val="FFFFFF"><w14:lumMod w14:val="100000"/></w14:srgbClr></w14:solidFill></w14:textFill>`],
+      ["d’un dégradé blanc à chaque arrêt", `<w:color w:val="000000"/><w14:textFill ${W14}><w14:gradFill><w14:gsLst><w14:gs w14:pos="0"><w14:srgbClr w14:val="FFFFFF"/></w14:gs><w14:gs w14:pos="100000"><w14:srgbClr w14:val="FFFFFF"><w14:lumMod w14:val="100000"/></w14:srgbClr></w14:gs></w14:gsLst><w14:lin w14:ang="0" w14:scaled="0"/></w14:gradFill></w14:textFill>`],
+      ["sans remplissage, d’un contour blanc", `<w14:textOutline ${W14} w14:w="9525"><w14:solidFill><w14:srgbClr w14:val="FFFFFF"/></w14:solidFill></w14:textOutline><w14:textFill ${W14}><w14:noFill/></w14:textFill>`],
     ])("lettres que Word remplit de rien, %s, LibreOffice de leur couleur : comptées cachées", async (_, properties) => {
       hiddenAll(await check(claims("", properties)));
+    });
+
+    it.each([
+      ["d’un blanc dont Word change la saturation (w14:satMod), que l’outil ne suit pas", `<w14:solidFill><w14:srgbClr w14:val="FFFFFF"><w14:satMod w14:val="120000"/></w14:srgbClr></w14:solidFill>`],
+      ["d’une couleur du thème que le document n’a pas", `<w14:solidFill><w14:schemeClr w14:val="bg1"><w14:lumMod w14:val="100000"/></w14:schemeClr></w14:solidFill>`],
+      ["d’un dégradé du blanc au bleu foncé", `<w14:gradFill><w14:gsLst><w14:gs w14:pos="0"><w14:srgbClr w14:val="FFFFFF"/></w14:gs><w14:gs w14:pos="100000"><w14:srgbClr w14:val="1F3864"/></w14:gs></w14:gsLst></w14:gradFill>`],
+    ])("lettres remplies %s, leur couleur noire : écartées sans être comptées cachées", async (_, fill) => {
+      const result = await check(claims("", `<w:color w:val="000000"/><w14:textFill ${W14}>${fill}</w14:textFill>`));
+      expectSetAside(result);
+      expect(result).toMatchObject({ hidden: "", reasons: ["drawing"] });
     });
 
     it("style de caractère qui ne remplit pas ses lettres : comptées cachées", async () => {
@@ -394,10 +421,15 @@ describe("DOCX : texte que sa place peut couper (IA-01)", () => {
       hiddenAll(await check(claims("", '<w:rStyle w:val="Vide"/>'), { styles }));
     });
 
-    it("lettres sans remplissage tracées d’un contour (w14:textOutline), ou remplies de noir quand leur couleur est blanche : lues", async () => {
-      const outlined = `<w:sz w:val="48"/><w14:textOutline ${W14} w14:w="9525"><w14:solidFill><w14:srgbClr w14:val="1F3864"/></w14:solidFill></w14:textOutline><w14:textFill ${W14}><w14:noFill/></w14:textFill>`;
+    it("lettres sans remplissage, ou blanches, tracées d’un contour bleu foncé (w14:textOutline), remplies de noir quand leur couleur est blanche, d’un blanc assombri de moitié ou d’un dégradé de bleus : lues", async () => {
+      const outline = `<w14:textOutline ${W14} w14:w="9525"><w14:solidFill><w14:srgbClr w14:val="1F3864"/></w14:solidFill></w14:textOutline>`;
+      const outlined = `<w:sz w:val="48"/>${outline}<w14:textFill ${W14}><w14:noFill/></w14:textFill>`;
+      const whiteOutlined = `<w:sz w:val="48"/><w:color w:val="FFFFFF"/>${outline}<w14:textFill ${W14}><w14:solidFill><w14:srgbClr w14:val="FFFFFF"/></w14:solidFill></w14:textFill>`;
       const black = `<w:color w:val="FFFFFF"/><w14:textFill ${W14}><w14:solidFill><w14:srgbClr w14:val="000000"/></w14:solidFill></w14:textFill>`;
-      await read(paragraph("Claire EXEMPLE", "", outlined) + paragraph("Disponibilité : immédiate.", "", black), ["Claire EXEMPLE", "Disponibilité : immédiate."]);
+      const darker = `<w14:textFill ${W14}><w14:solidFill><w14:srgbClr w14:val="FFFFFF"><w14:lumMod w14:val="50000"/></w14:srgbClr></w14:solidFill></w14:textFill>`;
+      const blues = `<w14:textFill ${W14}><w14:gradFill><w14:gsLst><w14:gs w14:pos="0"><w14:srgbClr w14:val="4472C4"/></w14:gs><w14:gs w14:pos="100000"><w14:srgbClr w14:val="4472C4"><w14:lumMod w14:val="50000"/></w14:srgbClr></w14:gs></w14:gsLst></w14:gradFill></w14:textFill>`;
+      const lines: Array<[string, string]> = [["Claire EXEMPLE", outlined], ["INFIRMIÈRE", whiteOutlined], ["Disponibilité : immédiate.", black], ["Permis B.", darker], ["Mobilité : Golfe.", blues]];
+      await read(lines.map(([text, properties]) => paragraph(text, "", properties)).join(""), lines.map(([text]) => text));
     });
 
     it("cellule fusionnée sur une ligne exacte de 15 pt et une de 1 pt : sa première ligne est lue, les affirmations sous les deux sont comptées cachées", async () => {
@@ -446,6 +478,29 @@ describe("DOCX : texte que sa place peut couper (IA-01)", () => {
       expect(back.text).toContain("Permis B.");
     });
 
+    it("après le saut vers la colonne hors de la page, un saut de page masqué ne ramène rien : comptées cachées ; supprimé, ou avant un paragraphe masqué, Word peut ne pas l’appliquer : écartées sans être comptées cachées", async () => {
+      const hiddenBreak = '<w:p><w:r><w:rPr><w:vanish/></w:rPr><w:br w:type="page"/></w:r></w:p>';
+      hiddenAll(await check(columnBreak + hiddenBreak + claims() + section(OFF_PAGE_COLUMN)));
+      const deletedBreak = '<w:p><w:del w:id="1" w:author="A" w:date="2024-01-01T00:00:00Z"><w:r><w:br w:type="page"/></w:r></w:del></w:p>';
+      const hiddenParagraph = '<w:p><w:pPr><w:pageBreakBefore/><w:rPr><w:vanish/></w:rPr></w:pPr></w:p>';
+      for (const uncertain of [deletedBreak, hiddenParagraph]) {
+        const result = await check(columnBreak + uncertain + claims() + section(OFF_PAGE_COLUMN));
+        expectSetAside(result);
+        expect(result).toMatchObject({ hidden: "", reasons: ["layout"] });
+      }
+      // Before a paragraph that shows, the page break brings the text back to the first column.
+      const shown = await check(columnBreak + paragraph("Note.") + paragraph("Permis B.", "<w:pageBreakBefore/>") + section(OFF_PAGE_COLUMN));
+      expect(shown).toMatchObject({ hidden: "Note.", unverifiable: "" });
+      expect(shown.text).toContain("Permis B.");
+    });
+
+    it("cadre placé hors de la page dont le texte suit un saut de colonne ou de page : comptées cachées, le saut ne le ramène pas dans la page", async () => {
+      const frame = '<w:framePr w:w="6000" w:wrap="around" w:vAnchor="text" w:hAnchor="page" w:x="-20000" w:y="1"/>';
+      for (const type of ["column", "page"]) {
+        hiddenAll(await check(FAKE.map(line => `<w:p><w:pPr>${NO_SPACING}${frame}</w:pPr><w:r><w:br w:type="${type}"/></w:r><w:r><w:t>${escaped(line)}</w:t></w:r></w:p>`).join("")));
+      }
+    });
+
     it("deux colonnes égales, ou de largeurs données dans la page, et un saut de colonne : les deux colonnes sont lues", async () => {
       await read(columnBreak + paragraph("Permis B.") + section('<w:cols w:num="2" w:space="708"/>'), ["Permis B."]);
       await read(columnBreak + paragraph("Permis B.") + section('<w:cols w:num="2" w:space="0" w:equalWidth="0"><w:col w:w="4000" w:space="500"/><w:col w:w="4500"/></w:cols>'), ["Permis B."]);
@@ -475,10 +530,46 @@ describe("DOCX : texte que sa place peut couper (IA-01)", () => {
       }
     });
 
+    // A VML shape alone in front of the text, without w10:wrap, of the page's text width and 126 pt high.
+    const vmlFront = (shape: string, attributes: string, content = "") =>
+      inRun(`<w:pict><v:${shape} style="position:absolute;margin-left:0;margin-top:0;width:472pt;height:126pt;z-index:5" ${attributes}>${content}</v:${shape}></w:pict>`);
+    const PICTURE_TYPE = '<v:shapetype id="_x0000_t75" coordsize="21600,21600" o:spt="75" o:preferrelative="t" path="m@4@5l@4@11@9@11@9@5xe" filled="f" stroked="f"/>';
+
+    it("rectangle VML posé devant le texte sans couleur de remplissage, que VML remplit de blanc, ou d’un type qui ne dit rien de son remplissage : écarté sans être compté caché", async () => {
+      const textBoxType = '<v:shapetype id="_x0000_t202" coordsize="21600,21600" o:spt="202" path="m,l,21600r21600,l21600,xe"/>';
+      for (const shape of [vmlFront("rect", 'stroked="f"'), inRun(`<w:pict>${textBoxType}<v:shape type="#_x0000_t202" style="position:absolute;margin-left:0;margin-top:0;width:472pt;height:126pt;z-index:5" stroked="f"/></w:pict>`)]) {
+        const result = await check(shape + claims());
+        expectSetAside(result);
+        expect(result).toMatchObject({ hidden: "", reasons: ["layout"] });
+      }
+    });
+
+    it("rectangle VML devant le texte sans remplissage (filled=\"f\"), image VML, rectangle blanc placé hors de la page : tout est lu", async () => {
+      const picture = `<w:pict>${PICTURE_TYPE}<v:shape type="#_x0000_t75" style="position:absolute;margin-left:0;margin-top:0;width:472pt;height:126pt;z-index:5"><v:imagedata o:title=""/></v:shape></w:pict>`;
+      await read([
+        vmlFront("rect", 'filled="f" stroked="f"') + paragraph("Disponibilité : immédiate."),
+        inRun(picture) + paragraph("Langues : Français."),
+        vmlFront("shape", 'stroked="f"', '<v:imagedata o:title=""/>') + paragraph("Mobilité : Golfe."),
+        inRun('<w:pict><v:rect style="position:absolute;margin-left:0;margin-top:-3000pt;width:472pt;height:126pt;z-index:5" fillcolor="white" stroked="f"/></w:pict>') + paragraph("Permis B."),
+      ].join(""), ["Disponibilité : immédiate.", "Langues : Français.", "Mobilité : Golfe.", "Permis B."]);
+    });
+
     it("rectangle blanc remonté sur les paragraphes au-dessus de son ancre : ils sont écartés, ceux qu’il n’atteint pas sont lus", async () => {
       const result = await check(paragraph("").repeat(20) + claims() + rectangle({ top: -60, height: 60 }));
       expectSetAside(result);
       expect(result.hidden).toBe("");
+    });
+
+    it("rectangle blanc remonté sur un paragraphe de six lignes à interligne exact, ou sur un tableau : toutes leurs lignes sont écartées, pas seulement les dernières", async () => {
+      const exactLines = paragraph(FAKE_ONE, '<w:spacing w:line="280" w:lineRule="exact"/>');
+      const rows = table(9000, FAKE.map((line): [string, string] => ["", paragraph(line)]));
+      for (const [body, top] of [[exactLines, -120], [rows, -60]] as const) {
+        const result = await check(paragraph("").repeat(20) + body + rectangle({ top, height: -top }));
+        expectSetAside(result);
+        expect(result).toMatchObject({ hidden: "", reasons: ["layout"] });
+      }
+      // A table out of its reach is read.
+      await read(table(9000, [["", paragraph("Permis B.")]]) + paragraph("").repeat(20) + rectangle({ top: -60, height: 60 }), ["Permis B."]);
     });
 
     it("rectangle derrière le texte, transparent, étroit, d’un trait de 2 pt, ou trop court pour atteindre le texte loin dessous : tout est lu", async () => {
