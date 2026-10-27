@@ -243,6 +243,13 @@ describe("nom de fichier très long déposé dans le coffre", () => {
     expect(stored.endsWith(".pdf")).toBe(true);
     expect(name.startsWith(stored.slice(0, -".pdf".length))).toBe(true);
   });
+
+  it("lit le nom envoyé en UTF-8 par le navigateur : une lettre accentuée devient un seul « _ », pas deux", async () => {
+    const result = await uploadDocument(baseUrl, sessionToken, { category: "diploma", buffer: validPdfBuffer(), name: "Diplôme d’État.pdf" });
+
+    expect(result.status, JSON.stringify(result.body)).toBe(201);
+    expect(db().rows(candidateDocuments)[0]!.originalName).toBe("Dipl_me d__tat.pdf");
+  });
 });
 
 describe("REC-02 — PDF réels et PDF piégés déposés dans le coffre", () => {

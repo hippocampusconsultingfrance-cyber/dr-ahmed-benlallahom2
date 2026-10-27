@@ -13,6 +13,9 @@ import { safeErrorName, safeFileName } from "./routeHelpers";
 
 const candidateDocumentUpload = multer({
   storage: multer.memoryStorage(),
+  // Browsers send the file name in UTF-8: read as latin1, each accented
+  // letter of « Diplôme » became two characters, then two "_" once stored.
+  defParamCharset: "utf8",
   limits: { fileSize: CANDIDATE_DOCUMENT_MAX_BYTES, files: 1, fields: 8 },
   fileFilter: (_req, file, callback) => {
     if (!candidateDocumentMimeTypes.has(file.mimetype)) {
