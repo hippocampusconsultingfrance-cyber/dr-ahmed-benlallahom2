@@ -118,14 +118,17 @@ describe("mission ou candidature disparue pendant que l’écran est ouvert (nav
     await waitFor(() => expect(server.toasts).toEqual([["error", "Cette mission n’existe plus."]]));
     expect(server.associate).toHaveBeenCalledWith(expect.objectContaining({ briefId: 7, applicationId: 11, status: "shortlisted" }));
     expect(await screen.findByText(EMPTY_STATE)).toBeTruthy();
+    // Said in the panel too, as when its candidates answer NOT_FOUND.
+    expect(screen.getByRole("status").textContent).toBe(MISSION_GONE);
     await waitFor(() => expect(screen.queryByText("Hôpital du Golfe")).toBeNull());
     expect(screen.queryByText("Amal Haddad")).toBeNull();
     // Nor those of the mission seen before.
     expect(screen.queryByText("Jean Martin")).toBeNull();
     expect(shortlistButtons()).toHaveLength(0);
-    // Still there, the other mission opens as before.
+    // Still there, the other mission opens as before, without the message.
     await openMission("Clinique du Nord");
     expect(await screen.findByText("Jean Martin")).toBeTruthy();
+    expect(screen.queryByText(MISSION_GONE)).toBeNull();
     expect(shortlistButtons()).toHaveLength(1);
   });
 

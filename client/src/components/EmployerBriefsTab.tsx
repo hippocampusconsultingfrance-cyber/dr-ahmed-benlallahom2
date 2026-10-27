@@ -96,6 +96,9 @@ export default function EmployerBriefsTab() {
       toast.error(isMissionAssociationRefusalReason(reason) ? copy.associationRefusals[reason] : associationError.message);
       if (reason === "association_brief_not_found") {
         setSelectedBriefId(current => current === variables.briefId ? null : current);
+        // Said in the panel too, as when its candidates answer NOT_FOUND: not
+        // for a mission left while the request was running.
+        if (selectedBriefId === variables.briefId) setMissionGoneNotice(true);
         void utils.admin.clientBriefs.list.invalidate();
       } else if (reason === "association_application_not_found") {
         void utils.admin.clientBriefs.candidates.invalidate({ briefId: variables.briefId });
