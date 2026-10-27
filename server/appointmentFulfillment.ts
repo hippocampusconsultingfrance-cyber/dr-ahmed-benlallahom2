@@ -12,9 +12,9 @@ import {
   sendRefundConfirmationEmail,
 } from "./_core/notifications";
 import { notifyOwner } from "./_core/notification";
-import { runWithSendSlot } from "./_core/resendDelivery";
+import { alertSendSlot, runWithSendSlot } from "./_core/resendDelivery";
 import { emailLanguageFor } from "./emailLanguage";
-import { generateInvoicePDF, renderInvoicePDF, type InvoiceData } from "./invoice";
+import { archiveInvoicePDF, generateInvoicePDF, renderInvoicePDF, type InvoiceData } from "./invoice";
 import { allocateAppointmentInvoice, findAppointmentInvoices, type AppointmentInvoiceRecord } from "./invoiceNumbering";
 import { deadlineCutShort, ProcessingDeadlineError, runWithProcessingDeadline, startFitsDeadline } from "./processingDeadline";
 import { hasErasedPatientData } from "./personalDataRetention";
@@ -58,6 +58,8 @@ let lastJobTurn: Promise<void> = Promise.resolve();
 let lastSendAt: number | null = null;
 /** Slot of the last send that queued; the next one waits for it. */
 let lastSendSlot: Promise<void> = Promise.resolve();
+/** Sends waiting for their slot. */
+let sendsWaiting = 0;
 
 /**
  * Waits for this job's turn, then for the pause after the start of the
@@ -101,6 +103,7 @@ async function waitForSendSlot(mayStart: () => boolean): Promise<boolean> {
   const previousSlot = lastSendSlot;
   let release!: () => void;
   lastSendSlot = new Promise<void>(resolve => { release = resolve; });
+  sendsWaiting += 1;
   try {
     await previousSlot;
     const delayMs = appointmentFulfillmentPacing.delayMs;
@@ -112,9 +115,24 @@ async function waitForSendSlot(mayStart: () => boolean): Promise<boolean> {
     lastSendAt = Date.now();
     return true;
   } finally {
+    sendsWaiting -= 1;
     release();
   }
 }
+
+/**
+ * Longest wait for a send slot asked now: the pause after the last send, then
+ * one pause for each send already waiting for its slot, as each one waits at
+ * most one pause after the one before (alertSendSlot).
+ */
+function longestSendSlotWaitMs() {
+  const delayMs = appointmentFulfillmentPacing.delayMs;
+  const afterLastSend = lastSendAt === null ? 0 : Math.max(0, Math.min(lastSendAt + delayMs - Date.now(), delayMs));
+  return afterLastSend + sendsWaiting * delayMs;
+}
+
+/** The send slot of this instance, for the new tries of a job's emails and its owner alerts (runWithSendSlot). */
+const SEND_SLOT = { wait: waitForSendSlot, longestWaitMs: longestSendSlotWaitMs };
 
 /**
  * The send slot of a job's email (ABUS-03). Sent right after a payment, the
@@ -517,18 +535,23 @@ async function runJob(id: number) {
     } else if (job.attempts === 1 || terminal) {
       // Alert at the first failure (the next automatic attempt may only come
       // with the next scheduled run), at a refusal, for which no new attempt
-      // is promised, and when retries are exhausted.
+      // is promised, and when retries are exhausted. It takes its send slot,
+      // a pause after the email that failed (ABUS-03).
       const recorded = isRefundNoticeJob(jobType) ? "Le remboursement est bien enregistré" : "Le paiement est bien enregistré";
+      // The invoice storage, not the email service, is named when it kept the invoice from going out.
+      const storage = failedOnInvoiceStorage(message);
+      const cause = storage ? " : sa copie archivée dans le stockage des factures (Vercel Blob) n’a pas pu être vérifiée ou lue, et elle n’est pas refaite à sa place ; vérifiez dans Vercel que le stockage Blob est actif" : "";
+      await alertSendSlot();
       await notifyOwner({
         title: `Échec d’envoi après ${isRefundNoticeJob(jobType) ? "remboursement" : "paiement"} (${appointment.trackingId})`,
         content: refused
           ? `L’envoi ${JOB_LABELS[jobType]} du rendez-vous ${appointment.trackingId} a été refusé par le service d’envoi (adresse email du patient refusée ou invalide, ou contenu de l’email refusé). ${recorded}. Ce refus n’est pas passager : vérifiez l’adresse du patient et contactez-le directement. Le site ne le renverra pas de lui-même : corrigez l’adresse sur le rendez-vous (onglet Réservations, « Corriger l’email du patient »), puis « Renvoyer » l’envoie à la nouvelle adresse. ${patientContact(appointment)}`
           : terminal
-            ? `L’envoi ${JOB_LABELS[jobType]} du rendez-vous ${appointment.trackingId} a échoué ${job.attempts} fois. ${recorded} ; un envoi manuel au patient est nécessaire. ${patientContact(appointment)}`
-            : `L’envoi ${JOB_LABELS[jobType]} du rendez-vous ${appointment.trackingId} vient d’échouer (tentative ${job.attempts} sur ${job.maxAttempts}). ${recorded}. Un nouvel essai automatique aura lieu lors de la prochaine exécution planifiée ; en attendant, vous pouvez contacter le patient. ${patientContact(appointment)}`,
+            ? `L’envoi ${JOB_LABELS[jobType]} du rendez-vous ${appointment.trackingId} a échoué ${job.attempts} fois${cause}. ${recorded} ; un envoi manuel au patient est nécessaire. ${patientContact(appointment)}`
+            : `L’envoi ${JOB_LABELS[jobType]} du rendez-vous ${appointment.trackingId} vient d’échouer (tentative ${job.attempts} sur ${job.maxAttempts})${cause}. ${recorded}. Un nouvel essai automatique aura lieu lors de la prochaine exécution planifiée ; en attendant, vous pouvez contacter le patient. ${patientContact(appointment)}`,
       }, {
         // One key per wording: a refusal may follow a first failure of the same job.
-        idempotencyKey: `appointment-${jobType}-failure-${appointment.trackingId}-${refused ? "refused" : terminal ? "final" : "first"}`,
+        idempotencyKey: `appointment-${jobType}-failure-${appointment.trackingId}-${refused ? "refused" : terminal ? "final" : "first"}${storage ? "-storage" : ""}`,
       }).catch(() => false);
     }
     return { completed: false, retry: !terminal };
@@ -575,8 +598,8 @@ export async function processDueAppointmentFulfillmentJobs(limit = MAX_BATCH, op
       endTurn(claimed);
     }
     if (!claimed) continue;
-    // A send made again within the job (retry-after, short backoff) takes its slot as well.
-    const run = () => runWithSendSlot(waitForSendSlot, () => runJob(job.id));
+    // A send made again within the job (retry-after, short backoff) and its owner alerts take their slot as well.
+    const run = () => runWithSendSlot(SEND_SLOT, () => runJob(job.id));
     try {
       results.push(await (deadlineAt === undefined
         ? run()
@@ -689,6 +712,15 @@ export type AppointmentDelivery = {
   failureCause: "invoice_storage" | null;
 };
 
+/**
+ * A job that did not go out because of the invoice storage (Vercel Blob), not
+ * the email service: the copy stored at the invoice's issue could not be
+ * checked or read, and the invoice is not rebuilt in its place (EXPL-02).
+ */
+function failedOnInvoiceStorage(lastError: string | null | undefined) {
+  return Boolean(lastError?.startsWith("storage_"));
+}
+
 /** Same rule as recoverStaleAppointmentFulfillmentJobs: no worker runs that long. */
 function isInterruptedJob(job: Pick<FulfillmentJob, "status" | "startedAt">, now: Date) {
   return job.status === "running" && job.startedAt !== null && job.startedAt.getTime() <= now.getTime() - APPOINTMENT_FULFILLMENT_STALE_AFTER_MS;
@@ -707,7 +739,7 @@ function deliveryOf(job: FulfillmentJob, now: Date): AppointmentDelivery {
     notSentReason: state !== "not_sent" ? null
       : job.lastError === "appointment_already_past_confirmation_skipped" ? "appointment_past"
       : job.lastError === PATIENT_DATA_ERASED ? "patient_data_erased" : "not_paid",
-    failureCause: (state === "retrying" || state === "failed") && job.lastError?.startsWith("storage_") ? "invoice_storage" : null,
+    failureCause: (state === "retrying" || state === "failed") && failedOnInvoiceStorage(job.lastError) ? "invoice_storage" : null,
   };
 }
 
@@ -844,6 +876,9 @@ export async function closeErasedPatientFulfillment(appointmentIds: number[], no
  * one may only come with the next scheduled run, days before the attempts run
  * out. « waiting »: not attempted yet, due for APPOINTMENT_FULFILLMENT_WAITING_AFTER_MS
  * (see there). Refunded appointments too, for the notices of their refund (RES-06).
+ * `storageJobTypes`: the jobs of the group that the invoice storage, not the
+ * email service, kept from going out; another job of the same appointment, or
+ * of another group, is not said to be held by it.
  */
 export async function listAppointmentDeliveriesToHandle(limit = 20, now = new Date()) {
   const db = await getDb();
@@ -878,8 +913,13 @@ export async function listAppointmentDeliveriesToHandle(limit = 20, now = new Da
   const retrying = new Map<number, { jobTypes: FulfillmentJobType[]; nextAttemptAt: Date | null }>();
   // Earliest moment a job still waiting for its first attempt was due.
   const waiting = new Map<number, { jobTypes: FulfillmentJobType[]; dueSince: Date }>();
+  // Jobs of the failed and retrying groups the invoice storage kept from going out.
+  const failedOnStorage = new Map<number, FulfillmentJobType[]>();
+  const retryingOnStorage = new Map<number, FulfillmentJobType[]>();
   for (const job of jobs) {
     const jobType = job.jobType as FulfillmentJobType;
+    const onStorage = job.status === "failed" ? failedOnStorage : job.status === "retry" ? retryingOnStorage : null;
+    if (onStorage && failedOnInvoiceStorage(job.lastError)) onStorage.set(job.appointmentId, [...(onStorage.get(job.appointmentId) ?? []), jobType]);
     if (job.status === "failed") {
       const group = isRefusedJob(job) ? refused : failed;
       group.set(job.appointmentId, [...(group.get(job.appointmentId) ?? []), jobType]);
@@ -903,11 +943,11 @@ export async function listAppointmentDeliveriesToHandle(limit = 20, now = new Da
   const page = <T>(items: T[]) => ({ total: items.length, items: items.slice(0, limit) });
   // Appointments oldest first; each one's emails in processing order (notification, confirmation, invoice…).
   const inJobOrder = (jobTypes: FulfillmentJobType[]) => [...jobTypes].sort((a, b) => JOB_ORDER.indexOf(a) - JOB_ORDER.indexOf(b));
-  const withJobTypes = (group: Map<number, FulfillmentJobType[]>) => page(Array.from(group.entries()).map(([appointmentId, jobTypes]) => ({ ...byId.get(appointmentId)!.appointment, jobTypes: inJobOrder(jobTypes) })));
+  const withJobTypes = (group: Map<number, FulfillmentJobType[]>, onStorage = new Map<number, FulfillmentJobType[]>()) => page(Array.from(group.entries()).map(([appointmentId, jobTypes]) => ({ ...byId.get(appointmentId)!.appointment, jobTypes: inJobOrder(jobTypes), storageJobTypes: inJobOrder(onStorage.get(appointmentId) ?? []) })));
   return {
-    failed: withJobTypes(failed),
+    failed: withJobTypes(failed, failedOnStorage),
     refused: withJobTypes(refused),
-    retrying: page(Array.from(retrying.entries()).map(([appointmentId, delivery]) => ({ ...byId.get(appointmentId)!.appointment, ...delivery, jobTypes: inJobOrder(delivery.jobTypes) }))),
+    retrying: page(Array.from(retrying.entries()).map(([appointmentId, delivery]) => ({ ...byId.get(appointmentId)!.appointment, ...delivery, jobTypes: inJobOrder(delivery.jobTypes), storageJobTypes: inJobOrder(retryingOnStorage.get(appointmentId) ?? []) }))),
     waiting: page(Array.from(waiting.entries()).map(([appointmentId, delivery]) => ({ ...byId.get(appointmentId)!.appointment, ...delivery, jobTypes: inJobOrder(delivery.jobTypes) }))),
   };
 }
@@ -933,4 +973,19 @@ export async function regenerateAppointmentInvoice(trackingId: string): Promise<
   const data = appointmentInvoiceData(appointment, invoiceRecord);
   if (hasErasedPatientData(appointment)) return { invoiceNumber: invoiceRecord.invoiceNumber, buffer: await renderInvoicePDF(data) };
   return { invoiceNumber: invoiceRecord.invoiceNumber, buffer: (await generateInvoicePDF(data)).buffer };
+}
+
+/**
+ * Before the patient's details of an appointment change (address corrected
+ * from the dashboard, EXPL-02), the invoice already issued for it is stored
+ * as it was issued, from the details it carries now: one issued during a
+ * storage outage was emailed without a stored copy, and its first build after
+ * the change would otherwise store the new details under the same number. A
+ * copy already stored is kept. Throws while the store cannot say whether one
+ * is there or cannot take it (archiveInvoicePDF): the details must not change
+ * yet. Nothing to do when no invoice was issued.
+ */
+export async function archiveIssuedAppointmentInvoice(appointment: Appointment): Promise<void> {
+  const invoiceRecord = (await findAppointmentInvoices([appointment.id])).get(appointment.id);
+  if (invoiceRecord) await archiveInvoicePDF(appointmentInvoiceData(appointment, invoiceRecord));
 }

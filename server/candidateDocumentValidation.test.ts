@@ -10,6 +10,20 @@ describe("validation des documents candidats", () => {
     expect(safeCandidateDocumentName("../../passeport client.pdf")).not.toContain("\\");
   });
 
+  it("raccourcit un nom de plus de 180 caractères par la fin de son nom de base, extension gardée", () => {
+    const buffer = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(300, 1)]);
+    for (const [name, extension] of [[`${"x".repeat(181)}.png`, ".png"], [`${"diplome ".repeat(30)}.png`, ".png"], [`${"y".repeat(200)}.jpeg`, ".jpeg"]] as const) {
+      const safe = safeCandidateDocumentName(name);
+      expect(safe.length, name).toBeLessThanOrEqual(180);
+      expect(safe.endsWith(extension), safe).toBe(true);
+      expect(safe).not.toMatch(/[. ]\.\w+$/);
+    }
+    expect(validateCandidateDocument({ buffer, mimeType: "image/png", originalName: `${"x".repeat(250)}.png`, size: buffer.length }).mimeType).toBe("image/png");
+    // A name without an extension, or with an overlong one, is only cut.
+    expect(safeCandidateDocumentName("z".repeat(300))).toBe("z".repeat(180));
+    expect(safeCandidateDocumentName(`a.${"b".repeat(300)}`)).toHaveLength(180);
+  });
+
   it("accepte une image PNG de signature valide", () => {
     const buffer = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(300, 1)]);
     const result = validateCandidateDocument({ buffer, mimeType: "image/png", originalName: "diplome.png", size: buffer.length });

@@ -23,8 +23,9 @@ vi.mock("./_core/notification", () => ({ notifyOwner: vi.fn(async () => true) })
 // Private Vercel Blob store held in memory, behind the real storage module;
 // its objects are read through signed URLs (fetch below). `unreadable`: reads fail.
 // `unavailable`: the service does not answer whether an object is stored;
+// `unwritable`: it answers, but does not take a new object;
 // `suspended`: the store is suspended.
-const blobStore = vi.hoisted(() => ({ objects: new Map<string, Buffer>(), uploads: [] as string[], reads: [] as string[], unreadable: false, unavailable: false, suspended: false }));
+const blobStore = vi.hoisted(() => ({ objects: new Map<string, Buffer>(), uploads: [] as string[], reads: [] as string[], unreadable: false, unavailable: false, unwritable: false, suspended: false }));
 vi.mock("@vercel/blob", async importOriginal => {
   const { BlobNotFoundError, BlobServiceNotAvailable, BlobStoreSuspendedError } = await importOriginal<typeof import("@vercel/blob")>();
   return {
@@ -36,6 +37,7 @@ vi.mock("@vercel/blob", async importOriginal => {
       return { pathname, url: `https://blob.test/${pathname}` };
     }),
     put: vi.fn(async (pathname: string, body: Buffer, options: { allowOverwrite?: boolean }) => {
+      if (blobStore.unwritable) throw new BlobServiceNotAvailable();
       if (blobStore.objects.has(pathname) && options.allowOverwrite === false) throw new Error("Vercel Blob: This blob already exists");
       blobStore.objects.set(pathname, body);
       blobStore.uploads.push(pathname);
@@ -80,6 +82,7 @@ import { appRouter } from "./routers";
 import { allocateAppointmentInvoice, APPOINTMENT_INVOICE_SCHEMA_OBJECTS } from "./invoiceNumbering";
 import { APPOINTMENT_FULFILLMENT_MAX_ATTEMPTS, enqueueAppointmentFulfillment, processAppointmentFulfillmentNow } from "./appointmentFulfillment";
 import { anonymisedAppointmentFields } from "./personalDataRetention";
+import { notifyOwner } from "./_core/notification";
 
 const dialect = new PgDialect();
 let memory: MemoryPg;
@@ -160,6 +163,7 @@ beforeEach(() => {
   blobStore.reads = [];
   blobStore.unreadable = false;
   blobStore.unavailable = false;
+  blobStore.unwritable = false;
   blobStore.suspended = false;
   vi.stubEnv("BLOB_READ_WRITE_TOKEN", "blob-test-token");
   vi.stubGlobal("fetch", vi.fn(async (url: string) => {
@@ -448,8 +452,11 @@ describe("EXPL-02 — « Télécharger la facture »", () => {
     const retried = await admin().appointments.retryFulfillment({ trackingId: "APTINVFIX006" });
     expect(state.sent).toEqual([]);
     expect(job(paid.id, "invoice")).toMatchObject({ status: "retry", attempts: 1 });
-    // The storage, not the email service, kept it from going out.
+    // The storage, not the email service, kept it from going out: the card and the owner alert say so.
     expect(retried.deliveries.find(delivery => delivery.jobType === "invoice")).toMatchObject({ state: "retrying", failureCause: "invoice_storage" });
+    expect(vi.mocked(notifyOwner)).toHaveBeenLastCalledWith(expect.objectContaining({
+      content: expect.stringContaining("vient d’échouer (tentative 1 sur 7) : sa copie archivée dans le stockage des factures (Vercel Blob) n’a pas pu être vérifiée ou lue, et elle n’est pas refaite à sa place"),
+    }), { idempotencyKey: "appointment-invoice-failure-APTINVFIX006-first-storage" });
     expect(blobStore.uploads).toHaveLength(1);
 
     blobStore.unavailable = false;
@@ -500,6 +507,66 @@ describe("EXPL-02 — « Télécharger la facture »", () => {
     expect(blobStore.uploads).toEqual(["invoices/FAC-2026-000057-APTINVFIX007.pdf"]);
   });
 
+  it("facture envoyée sans archive (panne de Vercel Blob au paiement) : l’adresse n’est corrigée qu’une fois la facture archivée telle que le patient l’a reçue ; tant que le stockage ne répond pas, rien ne change", async () => {
+    const paid = seedAppointment("APTINVFIX009");
+    seedJob(paid.id, "owner", { status: "completed", attempts: 1 });
+    seedJob(paid.id, "confirmation");
+    seedJob(paid.id, "invoice");
+    vi.mocked(allocateAppointmentInvoice).mockImplementationOnce(async ({ appointmentId }) => {
+      seedInvoice(appointmentId, 59);
+      return { invoiceNumber: "FAC-2026-000059", issuedAt: new Date("2026-10-12T08:00:00Z"), paidAt: new Date("2026-10-12T07:59:00Z"), issuedNow: true };
+    });
+    state.refused.add("confirmation");
+    blobStore.unavailable = true;
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    await processAppointmentFulfillmentNow(paid.id as number);
+    const received = state.sent.find(email => email.kind === "invoice")!;
+    expect(received).toMatchObject({ to: "aptinvfix009@example.test", invoiceNumber: "FAC-2026-000059" });
+    expect(blobStore.uploads).toEqual([]);
+    const corrections = () => memory.rows(securityEvents).filter(event => event.category === "admin_appointment_email_corrected");
+    const correct = () => admin().appointments.updateCustomerEmail({ trackingId: "APTINVFIX009", customerEmail: "patient.corrige@example.test" });
+
+    // Vercel Blob does not say whether a copy is stored, then says none is but takes none, then is suspended.
+    await expect(correct()).rejects.toMatchObject({ code: "SERVICE_UNAVAILABLE", message: expect.stringContaining("le stockage des factures (Vercel Blob) ne répond pas pour l’instant. Réessayez quand le stockage répond.") });
+    blobStore.unavailable = false;
+    blobStore.unwritable = true;
+    await expect(correct()).rejects.toMatchObject({ code: "SERVICE_UNAVAILABLE", message: expect.stringContaining("Réessayez quand le stockage répond.") });
+    blobStore.unwritable = false;
+    blobStore.suspended = true;
+    await expect(correct()).rejects.toMatchObject({ code: "SERVICE_UNAVAILABLE", message: expect.stringContaining("refuse l’accès (store suspendu ou introuvable") });
+    expect(memory.rows(appointments).find(row => row.id === paid.id)).toMatchObject({ customer_email: "aptinvfix009@example.test" });
+    expect(corrections()).toEqual([]);
+    expect(blobStore.uploads).toEqual([]);
+
+    // Back: the invoice the patient received is stored first, with the address it was issued to.
+    blobStore.suspended = false;
+    await expect(correct()).resolves.toEqual({ success: true, unchanged: false });
+    expect(memory.rows(appointments).find(row => row.id === paid.id)).toMatchObject({ customer_email: "patient.corrige@example.test" });
+    expect(corrections()).toHaveLength(1);
+    expect(blobStore.uploads).toEqual(["invoices/FAC-2026-000059-APTINVFIX009.pdf"]);
+    expect(blobStore.objects.get("invoices/FAC-2026-000059-APTINVFIX009.pdf")!.equals(received.pdf!)).toBe(true);
+    const download = Buffer.from((await admin().appointments.invoicePdf({ trackingId: "APTINVFIX009" })).contentBase64, "base64");
+    expect(download.equals(received.pdf!)).toBe(true);
+    expect((await billedTo(download))[1]).toBe("aptinvfix009@example.test");
+  });
+
+  it("sans facture émise, ou avec sa copie déjà archivée, la correction ne réécrit rien dans le stockage", async () => {
+    const unpaidInvoice = seedAppointment("APTINVFIX010");
+    seedJob(unpaidInvoice.id, "confirmation", { status: "failed", attempts: 1, last_error: "provider_rejected:confirmation_email_refused" });
+    const archived = seedAppointment("APTINVFIX011");
+    seedJob(archived.id, "confirmation", { status: "failed", attempts: 1, last_error: "provider_rejected:confirmation_email_refused" });
+    seedInvoice(archived.id, 61);
+    await admin().appointments.invoicePdf({ trackingId: "APTINVFIX011" });
+    const stored = blobStore.objects.get("invoices/FAC-2026-000061-APTINVFIX011.pdf")!;
+    blobStore.unwritable = true;
+
+    await expect(admin().appointments.updateCustomerEmail({ trackingId: "APTINVFIX010", customerEmail: "a.corrige@example.test" })).resolves.toEqual({ success: true, unchanged: false });
+    await expect(admin().appointments.updateCustomerEmail({ trackingId: "APTINVFIX011", customerEmail: "b.corrige@example.test" })).resolves.toEqual({ success: true, unchanged: false });
+
+    expect(blobStore.uploads).toEqual(["invoices/FAC-2026-000061-APTINVFIX011.pdf"]);
+    expect(blobStore.objects.get("invoices/FAC-2026-000061-APTINVFIX011.pdf")).toBe(stored);
+  });
+
   it("rendez-vous effacé (RGPD) : le téléchargement reconstruit la facture sans l’identité, sans lire ni remplacer la copie archivée", async () => {
     const paid = seedAppointment("APTINVFIX005");
     seedInvoice(paid.id, 55);
@@ -544,7 +611,7 @@ describe("EXPL-02 — encart « À traiter »", () => {
 
     expect(attention.failedDeliveries).toEqual({
       total: 1,
-      items: [{ trackingId: "APTTODO00001", customerName: "Alice Martin", appointmentDate: expect.any(Date), jobTypes: ["confirmation", "invoice"] }],
+      items: [{ trackingId: "APTTODO00001", customerName: "Alice Martin", appointmentDate: expect.any(Date), jobTypes: ["confirmation", "invoice"], storageJobTypes: [] }],
     });
     expect(attention.retryingDeliveries).toEqual({ total: 0, items: [] });
     expect(attention.unconfirmedPayments).toEqual({
@@ -567,17 +634,42 @@ describe("EXPL-02 — encart « À traiter »", () => {
     seedJob(refunded.id, "confirmation", { status: "retry", attempts: 1 });
     const queued = seedAppointment("APTTODO00011");
     seedJob(queued.id, "confirmation");
+    // Kept from going out by the invoice storage (Vercel Blob), not the email service.
+    const storage = seedAppointment("APTTODO00013", { customer_name: "Emma Petit" });
+    seedJob(storage.id, "invoice", { status: "retry", attempts: 1, last_error: "storage_check_failed", scheduled_for: new Date("2026-10-27T06:20:00Z") });
 
     const attention = await admin().attention();
 
     expect(attention.failedDeliveries).toEqual({ total: 0, items: [] });
     expect(attention.retryingDeliveries).toEqual({
-      total: 2,
+      total: 3,
       items: [
-        { trackingId: "APTTODO00007", customerName: "Chloé Durand", appointmentDate: expect.any(Date), jobTypes: ["confirmation", "invoice"], nextAttemptAt: new Date("2026-10-26T18:00:00Z") },
-        { trackingId: "APTTODO00008", customerName: "David Roux", appointmentDate: expect.any(Date), jobTypes: ["confirmation"], nextAttemptAt: null },
+        { trackingId: "APTTODO00007", customerName: "Chloé Durand", appointmentDate: expect.any(Date), jobTypes: ["confirmation", "invoice"], nextAttemptAt: new Date("2026-10-26T18:00:00Z"), storageJobTypes: [] },
+        { trackingId: "APTTODO00008", customerName: "David Roux", appointmentDate: expect.any(Date), jobTypes: ["confirmation"], nextAttemptAt: null, storageJobTypes: [] },
+        { trackingId: "APTTODO00013", customerName: "Emma Petit", appointmentDate: expect.any(Date), jobTypes: ["invoice"], nextAttemptAt: new Date("2026-10-27T06:20:00Z"), storageJobTypes: ["invoice"] },
       ],
     });
+  });
+
+  it("ne dit retenu par le stockage des factures que l’envoi qu’il a retenu, pas un autre envoi du rendez-vous (EXPL-02)", async () => {
+    // Confirmation out of attempts on the email service, invoice waiting for the storage:
+    // a job cut by the immediate budget does not count its attempt, so they may fall in different groups.
+    const split = seedAppointment("APTTODO00017", { customer_name: "Hugo Morel" });
+    seedJob(split.id, "owner", { status: "completed", attempts: 1 });
+    seedJob(split.id, "confirmation", { status: "failed", attempts: 7, max_attempts: 7, last_error: "resend_send_failed: 500" });
+    seedJob(split.id, "invoice", { status: "retry", attempts: 6, max_attempts: 7, last_error: "storage_check_failed", scheduled_for: new Date("2026-10-27T06:20:00Z") });
+    // Both waiting for a new attempt, one on the email service, the other on the storage.
+    const together = seedAppointment("APTTODO00018", { customer_name: "Inès Faure" });
+    seedJob(together.id, "confirmation", { status: "retry", attempts: 1, max_attempts: 7, last_error: "resend_send_failed: 500", scheduled_for: new Date("2026-10-27T06:20:00Z") });
+    seedJob(together.id, "invoice", { status: "retry", attempts: 1, max_attempts: 7, last_error: "storage_upload_failed", scheduled_for: new Date("2026-10-27T06:20:00Z") });
+
+    const attention = await admin().attention();
+
+    expect(attention.failedDeliveries.items).toEqual([expect.objectContaining({ trackingId: "APTTODO00017", jobTypes: ["confirmation"], storageJobTypes: [] })]);
+    expect(attention.retryingDeliveries.items).toEqual([
+      expect.objectContaining({ trackingId: "APTTODO00017", jobTypes: ["invoice"], storageJobTypes: ["invoice"] }),
+      expect.objectContaining({ trackingId: "APTTODO00018", jobTypes: ["confirmation", "invoice"], storageJobTypes: ["invoice"] }),
+    ]);
   });
 
   it("compte tous les échecs des rendez-vous payés, même derrière de nombreux échecs de rendez-vous remboursés", async () => {

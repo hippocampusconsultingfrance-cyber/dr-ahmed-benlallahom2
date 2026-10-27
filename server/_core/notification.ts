@@ -1,7 +1,7 @@
 import { TRPCError } from "@trpc/server";
 import { Resend } from "resend";
 import { startFitsDeadline } from "../processingDeadline";
-import { reportResendQuotaError, resendDeliveryFailureCode, sendWithRateLimitRetry } from "./resendDelivery";
+import { alertSendSlot, reportResendQuotaError, resendDeliveryFailureCode, sendSlotBeforeNewTry, sendWithRateLimitRetry } from "./resendDelivery";
 
 export type NotificationPayload = {
   title: string;
@@ -95,7 +95,9 @@ export function buildOwnerNotificationEmail(payload: NotificationPayload) {
  * With an idempotency key, an uncertain answer (network error, timeout, 5xx:
  * Resend may have taken the email) is asked again once at once under that
  * key (REC-09): Resend keeps a key only 24 hours, and the caller's own retry,
- * minutes or a daily pass later, may come once it is forgotten.
+ * minutes or a daily pass later, may come once it is forgotten. Sent from a
+ * processing that spaces its sends (the post-payment jobs), that new try
+ * waits for its send slot (ABUS-03).
  * `stopAtDeadline`: for an alert queued as a post-payment job (refund_owner),
  * not asked again once the immediate budget of the processing it runs in is
  * spent, the request it serves having answered (ABUS-03): its job goes back to
@@ -132,6 +134,12 @@ export async function notifyOwner(
       console.warn("[Notification] Owner email delivery failed.");
       if (attempt >= attempts) return false;
     }
-    if (stopAtDeadline && !startFitsDeadline()) return false;
+    // The new try takes the send slot of the processing it runs in, if any
+    // (ABUS-03), rather than reach Resend right after the first one.
+    if (stopAtDeadline) {
+      if (!(await sendSlotBeforeNewTry(startFitsDeadline))) return false;
+    } else {
+      await alertSendSlot();
+    }
   }
 }

@@ -5,11 +5,24 @@ import PublicContentSkeleton from "@/components/PublicContentSkeleton";
 import { DELIVERY_JOB_LABELS, PATIENT_JOBS, type AppointmentDeliveryJob } from "./AppointmentDeliveries";
 
 const parisTime = (date: string | Date) => new Date(date).toLocaleString("fr-FR", { timeZone: "Europe/Paris" });
-const jobLabels = (jobTypes: string[]) => jobTypes.map(jobType => DELIVERY_JOB_LABELS[jobType as AppointmentDeliveryJob] ?? jobType).join(", ");
+/**
+ * « Confirmation, Facture (stockage Vercel Blob indisponible) »: the invoice
+ * storage is named on the label of the very job it kept from going out, not
+ * after the list, where it would read as the cause of every job (EXPL-02).
+ */
+const jobLabels = (jobTypes: string[], storageJobTypes: string[] = []) => jobTypes.map(jobType => {
+  const label = DELIVERY_JOB_LABELS[jobType as AppointmentDeliveryJob] ?? jobType;
+  return storageJobTypes.includes(jobType) ? `${label} (stockage Vercel Blob indisponible)` : label;
+}).join(", ");
+
+/** « Confirmation, Facture », the storage named on the job it held (see jobLabels). */
+export function failedDetail(item: { jobTypes: string[]; storageJobTypes?: string[] }): string {
+  return jobLabels(item.jobTypes, item.storageJobTypes);
+}
 
 /** « Facture · nouvel essai automatique au plus tôt le … », or interrupted, waiting for the next scheduled run. */
-export function retryingDetail(item: { jobTypes: string[]; nextAttemptAt: string | Date | null }): string {
-  return `${jobLabels(item.jobTypes)} · ${item.nextAttemptAt ? `nouvel essai automatique au plus tôt le ${parisTime(item.nextAttemptAt)}` : "envoi interrompu, nouvel essai à la prochaine exécution planifiée"}`;
+export function retryingDetail(item: { jobTypes: string[]; nextAttemptAt: string | Date | null; storageJobTypes?: string[] }): string {
+  return `${jobLabels(item.jobTypes, item.storageJobTypes)} · ${item.nextAttemptAt ? `nouvel essai automatique au plus tôt le ${parisTime(item.nextAttemptAt)}` : "envoi interrompu, nouvel essai à la prochaine exécution planifiée"}`;
 }
 
 /**
@@ -108,7 +121,7 @@ export default function AdminAttentionPanel({ onOpenAppointments }: { onOpenAppo
             title="Envois au patient ou au médecin en échec"
             description="Le patient n’a pas reçu sa confirmation, sa facture ou l’email de son remboursement, ou vous n’avez pas reçu la notification ou l’alerte de remboursement. Sur le rendez-vous : « Renvoyer », ou « Télécharger la facture » pour l’envoyer vous-même."
             total={failed.total}
-            items={failed.items.map(item => ({ ...item, detail: jobLabels(item.jobTypes) }))}
+            items={failed.items.map(item => ({ ...item, detail: failedDetail(item) }))}
           />
         )}
         {refused.total > 0 && (

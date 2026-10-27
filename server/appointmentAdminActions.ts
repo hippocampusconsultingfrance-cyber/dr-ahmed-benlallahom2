@@ -4,10 +4,11 @@ import { and, eq } from "drizzle-orm";
 import { appointments } from "../drizzle/schema";
 import { getDb } from "./db";
 import { mutationRowCount } from "./dbMutation";
-import { closeUnsentAppointmentFulfillment, hasRefusedPatientEmail, sendAppointmentRefundEmail } from "./appointmentFulfillment";
+import { archiveIssuedAppointmentInvoice, closeUnsentAppointmentFulfillment, hasRefusedPatientEmail, sendAppointmentRefundEmail } from "./appointmentFulfillment";
 import { sendRefundConfirmationEmail, type RefundEmailContext } from "./_core/notifications";
 import { emailLanguageFor } from "./emailLanguage";
 import { hasErasedPatientData } from "./personalDataRetention";
+import { isLastingStorageError } from "./storage";
 import { BOOKING_PATIENT_REFUND_DEADLINE_HOURS } from "../shared/bookingPolicy";
 
 /** A patient may obtain a full refund up to this many hours before the consultation. */
@@ -276,9 +277,11 @@ export async function refundUnconfirmedCheckoutSession(stripe: Stripe, input: { 
  * sends again, as the card offers it: each post-payment or refund email reads
  * the address from the booking at every attempt, so « Renvoyer » then writes
  * to the new one. The invoice already issued keeps its details (its stored
- * copy). The address is already validated by the caller. Never on a booking
- * reduced to its accounting record (erasure or retention, RGPD-12): its
- * emptied address stays empty, even under a concurrent erasure.
+ * copy): stored first, with the address it was issued to, when its issue left
+ * no copy (storage outage); while the store does not answer, the address is
+ * not corrected. The address is already validated by the caller. Never on a
+ * booking reduced to its accounting record (erasure or retention, RGPD-12):
+ * its emptied address stays empty, even under a concurrent erasure.
  */
 export async function updateAppointmentCustomerEmailByAdmin(input: { trackingId: string; customerEmail: string }, now = new Date()) {
   const db = await database();
@@ -289,6 +292,20 @@ export async function updateAppointmentCustomerEmailByAdmin(input: { trackingId:
   if (appointment.customerEmail === input.customerEmail) return { success: true as const, unchanged: true };
   if (!(await hasRefusedPatientEmail(appointment))) {
     throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Aucun email au patient n’a été refusé par le service d’envoi sur ce rendez-vous : son adresse ne se corrige qu’après un tel refus." });
+  }
+  try {
+    await archiveIssuedAppointmentInvoice(appointment);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    if (!message.startsWith("storage_")) throw error;
+    const code = (error as { code?: unknown }).code;
+    console.error("[Admin] Issued invoice not archived; the patient's address is not corrected", { message, code });
+    throw new TRPCError({
+      code: "SERVICE_UNAVAILABLE",
+      message: `L’adresse n’est pas corrigée : la facture déjà émise doit d’abord être archivée telle qu’émise, avec l’adresse d’origine, et le stockage des factures (Vercel Blob) ${isLastingStorageError(code)
+        ? "refuse l’accès (store suspendu ou introuvable, jeton BLOB_READ_WRITE_TOKEN absent ou invalide). Vérifiez-le dans Vercel, puis réessayez."
+        : "ne répond pas pour l’instant. Réessayez quand le stockage répond."}`,
+    });
   }
   const result = await db.update(appointments).set({ customerEmail: input.customerEmail, updatedAt: now })
     .where(and(eq(appointments.id, appointment.id), eq(appointments.customerEmail, appointment.customerEmail)));

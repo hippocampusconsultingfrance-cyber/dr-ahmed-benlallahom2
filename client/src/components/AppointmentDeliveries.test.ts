@@ -435,6 +435,47 @@ describe("EXPL-02 — encart « À traiter » du tableau de bord", () => {
     expect(html).toContain("Confirmation, Facture · en attente depuis le 26/10/2026 11:02:00");
   });
 
+  it("nomme le stockage des factures quand c’est lui qui a retenu la facture, sur le rendez-vous et dans « À traiter » (EXPL-02)", () => {
+    const storageFailure = { ...delivery("invoice", "retrying", 1, 7), failureCause: "invoice_storage" as const };
+    const card = renderToStaticMarkup(createElement(AppointmentDeliveries, { trackingId: "APTUISTORE01", paymentStatus: "completed", invoiceNumber: "FAC-2026-000015", deliveries: [delivery("confirmation", "sent"), storageFailure] }));
+    expect(card).toContain("Facture : en échec, nouvel essai prévu (1/7) · stockage des factures (Vercel Blob) indisponible");
+    expect(card).toContain("Confirmation : envoyée<");
+    // A failure of the email service names no cause on the card.
+    expect(deliveryLabel(delivery("invoice", "retrying", 1, 7))).toBe("Facture : en échec, nouvel essai prévu (1/7)");
+
+    state.attention = {
+      isLoading: false,
+      error: null,
+      data: {
+        failedDeliveries: {
+          total: 2,
+          items: [
+            { trackingId: "APTTODOUI008", customerName: "Hugo Morel", appointmentDate: "2026-10-30T09:00:00.000Z", jobTypes: ["confirmation", "invoice"], storageJobTypes: ["invoice"] },
+            // Its invoice, held by the storage, is in the other group: the confirmation names no storage.
+            { trackingId: "APTTODOUI011", customerName: "Karim Haddad", appointmentDate: "2026-10-30T09:00:00.000Z", jobTypes: ["confirmation"], storageJobTypes: [] },
+          ],
+        },
+        refusedDeliveries: { total: 0, items: [] },
+        retryingDeliveries: {
+          total: 2,
+          items: [
+            { trackingId: "APTTODOUI011", customerName: "Karim Haddad", appointmentDate: "2026-10-30T09:00:00.000Z", jobTypes: ["invoice"], nextAttemptAt: "2026-10-27T06:20:00.000Z", storageJobTypes: ["invoice"] },
+            { trackingId: "APTTODOUI010", customerName: "Jules Blanc", appointmentDate: "2026-10-30T09:00:00.000Z", jobTypes: ["confirmation"], nextAttemptAt: "2026-10-27T06:20:00.000Z", storageJobTypes: [] },
+          ],
+        },
+        waitingDeliveries: { total: 0, items: [] },
+        unconfirmedPayments: { total: 0, items: [] },
+      },
+    };
+    const html = renderToStaticMarkup(createElement(AdminAttentionPanel, { onOpenAppointments: vi.fn() }));
+    // Named on the invoice alone, not after the list as if the confirmation had been held too.
+    expect(html).toContain(">Confirmation, Facture (stockage Vercel Blob indisponible)<");
+    expect(html).toContain(">Confirmation<");
+    expect(html).toContain(">Facture (stockage Vercel Blob indisponible) · nouvel essai automatique au plus tôt le 27/10/2026 07:20:00<");
+    expect(html).toContain(">Confirmation · nouvel essai automatique au plus tôt le 27/10/2026 07:20:00<");
+    expect(html.match(/stockage Vercel Blob indisponible/g)).toHaveLength(2);
+  });
+
   it("dit qu’il n’y a rien à traiter, ou que l’encart n’a pas pu être chargé", () => {
     state.attention = { isLoading: false, error: null, data: { failedDeliveries: { total: 0, items: [] }, refusedDeliveries: { total: 0, items: [] }, retryingDeliveries: { total: 0, items: [] }, waitingDeliveries: { total: 0, items: [] }, unconfirmedPayments: { total: 0, items: [] } } };
     expect(renderToStaticMarkup(createElement(AdminAttentionPanel, { onOpenAppointments: vi.fn() }))).toContain("Rien à traiter : aucun envoi après paiement en échec ou en attente, aucun paiement à régulariser.");

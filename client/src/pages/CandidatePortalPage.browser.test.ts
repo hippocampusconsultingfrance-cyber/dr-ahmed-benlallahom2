@@ -27,12 +27,15 @@ const executablePath = findChromium();
 const root = path.resolve(import.meta.dirname, "../../..");
 
 const LONG_NAME = "attestation-de-travail-chu-de-lyon-service-anesthesie-reanimation-2015-2024-signee-et-tamponnee.pdf";
+/** An « Autre document » label of the 160 characters the form allows, without a space. */
+const LONG_OTHER_LABEL = "Attestation_de_reussite_au_concours_de_praticien_attache_associe_session_2024_CHU_de_Lyon_service_anesthesie_reanimation_et_medecine_perioperatoire_signee".padEnd(160, "x");
 type Procedure = () => unknown;
 const procedures: Record<string, Procedure> = {
   "candidatePortal.me": () => ({ id: 7, email: "vera@test.local", firstName: "Vera", lastName: "Exemple", emailVerifiedAt: new Date(Date.UTC(2026, 8, 1)), linkedApplicationId: null, documentConsentAt: new Date(Date.UTC(2026, 8, 1)) }),
   "candidatePortal.documents": () => [
     { id: 1, category: "employment_evidence", categoryOtherLabel: null, originalName: LONG_NAME, mimeType: "application/pdf", sizeBytes: 1_200, status: "uploaded", reviewedAt: null, createdAt: new Date(Date.UTC(2026, 9, 1)) },
     { id: 2, category: "diploma", categoryOtherLabel: null, originalName: "diplome.pdf", mimeType: "application/pdf", sizeBytes: 80_000, status: "reviewed", reviewedAt: new Date(Date.UTC(2026, 9, 2)), createdAt: new Date(Date.UTC(2026, 9, 1)) },
+    { id: 3, category: "other", categoryOtherLabel: LONG_OTHER_LABEL, originalName: "attestation.pdf", mimeType: "application/pdf", sizeBytes: 9_000, status: "uploaded", reviewedAt: null, createdAt: new Date(Date.UTC(2026, 9, 3)) },
   ],
   "candidatePortal.sessions": () => [],
 };
@@ -93,6 +96,30 @@ describe.skipIf(!executablePath)("coffre du candidat dans un navigateur", () => 
     expect(layout.pageWidth).toBeLessThanOrEqual(width);
     expect(layout.lineRight).toBeLessThanOrEqual(Math.min(width, layout.cardRight));
     expect(layout.truncated).toBe(true);
+    await page.context().close();
+  }, 60_000);
+
+  it.each([
+    [412, "fr"],
+    [360, "en"],
+    [1440, "fr"],
+  ])("à %i px (%s), un libellé « Autre document » de 160 caractères sans espace passe à la ligne dans sa carte, sans défilement horizontal", async (width, language) => {
+    const page = await openPortal(width, language);
+    const layout = await page.evaluate((label) => {
+      const line = Array.from(document.querySelectorAll("p")).find((paragraph) => paragraph.textContent?.endsWith(label))!;
+      return {
+        pageWidth: document.documentElement.scrollWidth,
+        lineRight: line.getBoundingClientRect().right,
+        cardRight: line.closest("[data-slot='card']")?.getBoundingClientRect().right ?? Number.POSITIVE_INFINITY,
+        wrapped: line.getBoundingClientRect().height > parseFloat(getComputedStyle(line).lineHeight) * 1.5,
+        cut: line.scrollWidth > line.clientWidth,
+      };
+    }, LONG_OTHER_LABEL);
+    expect(layout.pageWidth).toBeLessThanOrEqual(width);
+    expect(layout.lineRight).toBeLessThanOrEqual(Math.min(width, layout.cardRight));
+    // Read in full: on several lines, not cut.
+    expect(layout.cut).toBe(false);
+    if (width < 768) expect(layout.wrapped).toBe(true);
     await page.context().close();
   }, 60_000);
 });

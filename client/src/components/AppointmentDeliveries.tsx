@@ -85,10 +85,17 @@ const NOT_SENT_REASONS: Record<AppointmentDeliveryNotSentReason, string> = {
   patient_data_erased: "données du patient effacées (RGPD)",
 };
 
+/**
+ * Why a failed email did not go out when the email service is not the cause
+ * (EXPL-02): the invoice storage, whose stored copy could not be checked or read.
+ */
+const INVOICE_STORAGE_CAUSE = "stockage des factures (Vercel Blob) indisponible";
+
 /** « Facture : en échec (6/6) », « Confirmation : envoyée », « Email de remboursement : envoyé »… */
 export function deliveryLabel(delivery: AppointmentDeliveryView): string {
   const attempts = delivery.state === "failed" || delivery.state === "retrying" ? ` (${delivery.attempts}/${delivery.maxAttempts})` : "";
-  return `${DELIVERY_JOB_LABELS[delivery.jobType]} : ${stateLabel(delivery)}${attempts}`;
+  const cause = delivery.failureCause === "invoice_storage" ? ` · ${INVOICE_STORAGE_CAUSE}` : "";
+  return `${DELIVERY_JOB_LABELS[delivery.jobType]} : ${stateLabel(delivery)}${attempts}${cause}`;
 }
 
 /** States of a job « Renvoyer » sends again: it did not go out, and is not being sent. */

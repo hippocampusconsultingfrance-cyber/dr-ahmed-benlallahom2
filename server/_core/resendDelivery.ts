@@ -1,5 +1,5 @@
 import { AsyncLocalStorage } from "node:async_hooks";
-import { pauseWithinDeadline, startFitsDeadline, waitFitsDeadline } from "../processingDeadline";
+import { pauseWithinDeadline, startFitsDeadline, startFitsDeadlineAfter, waitFitsDeadline } from "../processingDeadline";
 
 /**
  * How the app reads a Resend refusal (ABUS-03), shared by the emails of
@@ -74,22 +74,35 @@ export function resendRetryAfterMs(headers: Record<string, string> | null | unde
 }
 
 /**
- * Wait for the send slot of the processing the current send runs in (see
- * runWithSendSlot): false, the slot left to the next send, when `mayStart`
- * says the send no longer starts.
+ * The send slot of the processing the current send runs in (see
+ * runWithSendSlot). `wait` waits for it: false, the slot left to the next
+ * send, when `mayStart` says the send no longer starts. `longestWaitMs`: the
+ * longest that wait may last if it starts now.
  */
-type WaitForSendSlot = (mayStart: () => boolean) => Promise<boolean>;
-const sendSlotStorage = new AsyncLocalStorage<WaitForSendSlot>();
+type SendSlot = { wait: (mayStart: () => boolean) => Promise<boolean>; longestWaitMs: () => number };
+const sendSlotStorage = new AsyncLocalStorage<SendSlot>();
 
 /**
  * Runs `run` with the send slot its new tries take (ABUS-03): the processing
  * that spaces its sends (the post-payment emails, appointmentFulfillment.ts)
  * takes a slot before a first send; a send made again after a pause (Resend's
- * retry-after, a short backoff) waits for `waitForSendSlot` as well, so it
- * does not leave right after a send of another processing of the instance.
+ * retry-after, a short backoff) or at once (an owner alert asked again)
+ * waits for `sendSlot` as well, so it does not leave right after a send of
+ * the instance.
  */
-export function runWithSendSlot<T>(waitForSendSlot: WaitForSendSlot, run: () => Promise<T>): Promise<T> {
-  return sendSlotStorage.run(waitForSendSlot, run);
+export function runWithSendSlot<T>(sendSlot: SendSlot, run: () => Promise<T>): Promise<T> {
+  return sendSlotStorage.run(sendSlot, run);
+}
+
+/**
+ * The send slot of the processing a new try runs in, if any (runWithSendSlot):
+ * false, the try given up and the slot left to the next send, when `mayStart`
+ * says it no longer starts, before the wait or at the slot.
+ */
+export async function sendSlotBeforeNewTry(mayStart: () => boolean): Promise<boolean> {
+  if (!mayStart()) return false;
+  const sendSlot = sendSlotStorage.getStore();
+  return !sendSlot || sendSlot.wait(mayStart);
 }
 
 /**
@@ -101,9 +114,24 @@ export function runWithSendSlot<T>(waitForSendSlot: WaitForSendSlot, run: () => 
  */
 export async function pauseBeforeNewTry(waitMs: number): Promise<boolean> {
   await pauseWithinDeadline(waitMs);
-  const waitForSendSlot = sendSlotStorage.getStore();
-  if (!waitForSendSlot) return true;
-  return waitForSendSlot(startFitsDeadline);
+  const sendSlot = sendSlotStorage.getStore();
+  if (!sendSlot) return true;
+  return sendSlot.wait(startFitsDeadline);
+}
+
+/**
+ * The send slot of an owner alert sent whatever the time from the processing
+ * it runs in, if any (ABUS-03): the failure alert of a post-payment email and
+ * notifyOwner's new try under its key would otherwise reach Resend a few
+ * milliseconds after the send before them. Within an immediate processing,
+ * taken only when the alert still surely starts before the end of the budget:
+ * otherwise it leaves at once, as without a slot, rather than later after the
+ * answer.
+ */
+export async function alertSendSlot(): Promise<void> {
+  const sendSlot = sendSlotStorage.getStore();
+  if (!sendSlot || !startFitsDeadlineAfter(sendSlot.longestWaitMs())) return;
+  await sendSlot.wait(() => true);
 }
 
 /**

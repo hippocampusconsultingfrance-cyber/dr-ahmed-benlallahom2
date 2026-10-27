@@ -102,6 +102,16 @@ export function startFitsDeadline(): boolean {
 }
 
 /**
+ * Whether a step that first waits `waitMs` would still start in time, as
+ * startFitsDeadline would then say; always true outside a deadline. Nothing
+ * is recorded: the caller does not give its step up, only that wait.
+ */
+export function startFitsDeadlineAfter(waitMs: number): boolean {
+  const context = deadlineStorage.getStore();
+  return !context || context.now() + waitMs < (context.lastPauseEndAt ?? context.firstPauseDeadlineAt);
+}
+
+/**
  * Whether this processing gave up a pause for its deadline: its work stopped
  * short of its own retries because time ran out, not because it failed.
  */
