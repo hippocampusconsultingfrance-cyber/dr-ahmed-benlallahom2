@@ -88,6 +88,10 @@ const highSeverityFailure = () => logSecurityEvent({ actorKind: "candidate", act
 
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ["Date"] });
+  // A fixed hour, far from midnight in UTC and in Paris: the alert key carries
+  // the UTC date and the cases move the clock a few minutes on, which near
+  // midnight would hand the last attempt the next day's key.
+  vi.setSystemTime(new Date("2026-10-26T10:00:00.000Z"));
   state.db = createInMemoryDrizzle();
   state.resend = "ok";
   state.once = [];

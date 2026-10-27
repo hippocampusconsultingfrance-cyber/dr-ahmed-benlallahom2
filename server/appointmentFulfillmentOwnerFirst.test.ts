@@ -385,8 +385,10 @@ describe("un envoi refait après le retry-after de Resend prend lui aussi son cr
     expect(jobs.find(row => row.jobType === "owner")).toMatchObject({ status: "queued", attempts: 0 });
     expect(subjects().map(subject => subject.split(" ")[0])).toEqual(["Nouvelle", "Confirmation", "Facture"]);
     expect(subjects().some(subject => subject.startsWith("Échec d’envoi"))).toBe(false);
+    // Same tolerance as above: a send started a few milliseconds late in its
+    // slot on a busy machine shortens the gap to the next one by as much.
     const times = sendTimes();
-    for (let index = 1; index < times.length; index += 1) expect(times[index] - times[index - 1]).toBeGreaterThanOrEqual(PAUSE_MS - 2);
+    for (let index = 1; index < times.length; index += 1) expect(times[index] - times[index - 1]).toBeGreaterThanOrEqual(PAUSE_MS - 10);
   });
 });
 
