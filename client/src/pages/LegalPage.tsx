@@ -4,9 +4,9 @@ import { useLanguage } from "@/contexts/LanguageContext";
 // Adresse de contact publique unique du site (PUB-CONTACT-01), aussi utilisée par la facture et le JSON-LD.
 import { siteConfig } from "@/data/site-config";
 import { ArrowLeft } from "lucide-react";
-import { Link, useSearch } from "wouter";
+import { Link, useSearchParams } from "wouter";
 import { SEOHead } from "@/components/SEOHead";
-import { useState, useEffect } from "react";
+import { useEffect } from "react";
 import Breadcrumb from "@/components/Breadcrumb";
 // Source unique de l’identité légale, partagée avec la facture PDF.
 import { HIPPOCAMPUS_LEGAL } from "@shared/legalIdentity";
@@ -29,15 +29,7 @@ export default function LegalPage() {
 }
 
 function LegalPageFr() {
-  const search = useSearch();
-  const params = new URLSearchParams(search);
-  const tabParam = params.get("tab") as "legal" | "privacy" | "terms" | null;
-  const [activeTab, setActiveTab] = useState<"legal" | "privacy" | "terms">(tabParam || "legal");
-
-  // The tab the address names, or the legal notice when it names none (back from ?tab=privacy to /legal).
-  useEffect(() => {
-    setActiveTab(tabParam || "legal");
-  }, [tabParam]);
+  const [activeTab, setActiveTab] = useLegalTab();
 
   return (
     <div className="min-h-screen bg-background">
@@ -325,15 +317,7 @@ function LegalPageFr() {
 }
 
 function LegalPageEn() {
-  const search = useSearch();
-  const params = new URLSearchParams(search);
-  const tabParam = params.get("tab") as "legal" | "privacy" | "terms" | null;
-  const [activeTab, setActiveTab] = useState<"legal" | "privacy" | "terms">(tabParam || "legal");
-
-  // The tab the address names, or the legal notice when it names none (back from ?tab=privacy to /legal).
-  useEffect(() => {
-    setActiveTab(tabParam || "legal");
-  }, [tabParam]);
+  const [activeTab, setActiveTab] = useLegalTab();
 
   return (
     <div className="min-h-screen bg-background">
@@ -622,15 +606,7 @@ function LegalPageEn() {
 }
 
 function LegalPageDe() {
-  const search = useSearch();
-  const params = new URLSearchParams(search);
-  const tabParam = params.get("tab") as "legal" | "privacy" | "terms" | null;
-  const [activeTab, setActiveTab] = useState<"legal" | "privacy" | "terms">(tabParam || "legal");
-
-  // The tab the address names, or the legal notice when it names none (back from ?tab=privacy to /legal).
-  useEffect(() => {
-    setActiveTab(tabParam || "legal");
-  }, [tabParam]);
+  const [activeTab, setActiveTab] = useLegalTab();
 
   return (
     <div className="min-h-screen bg-background">
@@ -892,15 +868,7 @@ function LegalPageDe() {
 }
 
 function LegalPageZh() {
-  const search = useSearch();
-  const params = new URLSearchParams(search);
-  const tabParam = params.get("tab") as "legal" | "privacy" | "terms" | null;
-  const [activeTab, setActiveTab] = useState<"legal" | "privacy" | "terms">(tabParam || "legal");
-
-  // The tab the address names, or the legal notice when it names none (back from ?tab=privacy to /legal).
-  useEffect(() => {
-    setActiveTab(tabParam || "legal");
-  }, [tabParam]);
+  const [activeTab, setActiveTab] = useLegalTab();
 
   return (
     <div className="min-h-screen bg-background">
@@ -1204,6 +1172,31 @@ export function PrivacyReferenceVersionNotice({ language }: { language: keyof ty
       </p>
     </aside>
   );
+}
+
+const LEGAL_TABS = ["legal", "privacy", "terms"] as const;
+type LegalTab = (typeof LEGAL_TABS)[number];
+
+/**
+ * L’onglet que nomme l’adresse (?tab=), les informations légales quand elle
+ * n’en nomme pas ou en nomme un qui n’existe pas (?tab=foo, retour arrière de
+ * ?tab=privacy vers /legal). Un onglet choisi à la main s’inscrit dans
+ * l’adresse, sans nouvelle entrée d’historique : un lien de la page vers un
+ * autre onglet (« Politique de confidentialité » du pied de page) l’ouvre
+ * donc toujours, même après le choix d’un autre onglet. Les autres paramètres
+ * (?lang=) restent.
+ */
+function useLegalTab(): [LegalTab, (tab: LegalTab) => void] {
+  const [params, setParams] = useSearchParams();
+  const named = params.get("tab");
+  const activeTab = LEGAL_TABS.find(tab => tab === named) ?? "legal";
+  const selectTab = (tab: LegalTab) => setParams(current => {
+    const next = new URLSearchParams(current);
+    if (tab === "legal") next.delete("tab");
+    else next.set("tab", tab);
+    return next;
+  }, { replace: true });
+  return [activeTab, selectTab];
 }
 
 /** Fait défiler jusqu'à l'ancre de l'URL (ex. /legal?tab=privacy#cookies depuis le bandeau cookies). */
