@@ -3,6 +3,7 @@ import { postgresErrorCode } from "./languageColumns";
 /** PostgreSQL codes of a write refused by a constraint (DATA-01). */
 export const UNIQUE_VIOLATION = "23505";
 export const FOREIGN_KEY_VIOLATION = "23503";
+export const CHECK_VIOLATION = "23514";
 
 /** Constraints of drizzle/pg/0004 whose refusals the code answers itself (names as in drizzle/schema.ts). */
 export const CV_APPLICATION_SUBMISSION_UNIQUE_INDEX = "cv_applications_submission_unique";
