@@ -47,6 +47,7 @@ pnpm dev                  # http://localhost:3000 (Express + Vite en mode middle
 client/            SPA React (pages, composants, données statiques, public/)
 server/            API Express/tRPC, webhooks, tâches planifiées, sécurité
 server/_core/      démarrage Express, auth, emails, en-têtes, hébergement statique
+server/routes/     routes Express hors tRPC (webhooks Stripe et Resend, brief employeur, candidature, coffre candidat, tâches planifiées)
 shared/            types et constantes partagés client/serveur
 drizzle/           schéma et migrations SQL (source de vérité : drizzle/MIGRATION_SOURCE_OF_TRUTH.md)
 scripts/           pré-rendu SEO, régression visuelle, budgets de performance, contrôles de la CI
