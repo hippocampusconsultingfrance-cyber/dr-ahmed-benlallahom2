@@ -98,28 +98,51 @@ function characterMap(font, cmap) {
 /** Two digits of this alphabet write a width from 0 to 4095. */
 const DIGITS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-_";
 
-/** The advance of each character in a style of a font, in thousandths of its size, rounded up (0 when it lacks it), two digits each. */
-function widths(style) {
+/** The advance of each character in a style of a font, in thousandths of its size, rounded up (0 when it lacks it). */
+function advancesOf(style) {
   return Array.from(CHARACTERS, character => {
     const glyph = style.glyphOf(character.codePointAt(0));
-    const width = glyph ? Math.ceil(style.advance(glyph) * 1000 / style.unitsPerEm) : 0;
-    if (width >= DIGITS.length ** 2) throw new Error(`${character}: ${width}`);
+    return glyph ? Math.ceil(style.advance(glyph) * 1000 / style.unitsPerEm) : 0;
+  });
+}
+
+/** Advances written two digits each. */
+function digitsOf(advances) {
+  return advances.map((width, at) => {
+    if (width >= DIGITS.length ** 2) throw new Error(`${CHARACTERS[at]}: ${width}`);
     return DIGITS[Math.floor(width / DIGITS.length)] + DIGITS[width % DIGITS.length];
   }).join("");
 }
 
-const fontFile = (family, style) => execFileSync("fc-match", ["-f", "%{file}", `${family}:style=${style}`], { encoding: "utf8" });
-const STYLES = { regular: "Regular", italic: "Italic", bold: "Bold", boldItalic: "Bold Italic" };
+/** Each style measured, the names fontconfig may give it, and the style of the same weight whose widths stand for it when the family lacks it. */
+const STYLES = {
+  regular: { style: "Regular", names: ["Regular", "Book", "Roman", "Normal"] },
+  italic: { style: "Italic", names: ["Italic", "Oblique"], fallback: "regular" },
+  bold: { style: "Bold", names: ["Bold"] },
+  boldItalic: { style: "Bold Italic", names: ["Bold Italic", "Bold Oblique"], fallback: "bold" },
+};
+
+/** The file of a style of a family when fontconfig has it; undefined when it only has another one, the nearest it gives instead (DejaVu Sans Book for Bold Oblique). */
+function fontFile(family, { style, names }) {
+  const [path, families, styles] = execFileSync("fc-match", ["-f", "%{file}\\n%{family}\\n%{style}", `${family}:style=${style}`], { encoding: "utf8" }).split("\n");
+  const among = (list, wanted) => list.split(",").some(name => wanted.includes(name.trim()));
+  if (!among(families, [family])) throw new Error(`${family} ${style}: fc-match gives ${path} (${families})`);
+  return among(styles, names) ? path : undefined;
+}
+
 const metrics = {};
 const aliases = {};
 for (const { key, family, names } of FONTS) {
-  const styles = Object.fromEntries(Object.entries(STYLES).map(([name, style]) => {
+  const found = Object.fromEntries(Object.entries(STYLES).flatMap(([name, style]) => {
     const path = fontFile(family, style);
-    if (!path.includes(family.replace(/ /g, ""))) throw new Error(`${family} ${style}: fc-match gives ${path}`);
-    return [name, readFont(path)];
+    return path ? [[name, readFont(path)]] : [];
   }));
-  const line = Math.ceil(Math.max(...Object.values(styles).map(style => style.line / style.unitsPerEm)) * 1000);
-  metrics[key] = { line, ...Object.fromEntries(Object.entries(styles).map(([name, style]) => [name, widths(style)])) };
+  if (!found.regular || !found.bold) throw new Error(`${family}: no Regular or Bold`);
+  const line = Math.ceil(Math.max(...Object.values(found).map(style => style.line / style.unitsPerEm)) * 1000);
+  const advances = Object.fromEntries(Object.entries(found).map(([name, style]) => [name, advancesOf(style)]));
+  // A style the family lacks is drawn by slanting the upright one of its weight, of the same advances.
+  for (const [name, { fallback }] of Object.entries(STYLES)) advances[name] ??= advances[fallback];
+  metrics[key] = { line, ...Object.fromEntries(Object.keys(STYLES).map(name => [name, digitsOf(advances[name])])) };
   for (const name of names) aliases[name] = key;
 }
 
