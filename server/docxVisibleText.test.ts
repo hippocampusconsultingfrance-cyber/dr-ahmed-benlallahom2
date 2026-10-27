@@ -107,6 +107,16 @@ describe("DOCX : texte que sa place peut couper (IA-01)", () => {
       expect(result.hidden.length).toBeGreaterThan(FAKE_ONE.length / 2);
     });
 
+    it("deux zones de texte DrawingML d’une ligne, sans lien entre elles : la seconde ne compte pas sur la hauteur de la première", async () => {
+      // 20 pt high: a line of 11 pt within its insets, and a second one in the two boxes' height together.
+      const box = (text: string) => alternate(drawingBox(paragraph(text), 914_400, 254_000), vmlBox(paragraph(text), 20, 72));
+      const result = await check(box("Disponible") + box(`Golfe. ${FAKE_ONE}`));
+      expect(result.text).toContain("Disponible Golfe.");
+      // The second line of the second box, the claims' first word, has no room.
+      expect(result.text).not.toContain("Titre");
+      expectSetAside(result);
+    });
+
     it("zone de texte VML d’une ligne de haut et 72 pt de large : la suite du paragraphe est écartée", async () => {
       const result = await check(inRun(vmlBox(paragraph(`Disponible. ${FAKE_ONE}`), 15, 72)));
       // Its point may not fit within Word's insets: set aside with the rest, without being counted as hidden.
@@ -277,6 +287,61 @@ describe("DOCX : texte que sa place peut couper (IA-01)", () => {
     });
   });
 
+  describe("zones de texte à la taille de leur ligne, comme les exportent les éditeurs de CV en ligne : lues dans leur police", () => {
+    const LINES: Array<[string, number, boolean]> = [
+      ["Claire EXEMPLE", 24, true], ["INFIRMIÈRE DIPLÔMÉE D'ÉTAT", 12, true], ["EXPÉRIENCE", 13, true],
+      ["2022-09 à 2024-09 : Infirmière, Clinique Exemple (Tunisie)", 10.5, false], ["Diplôme d'État infirmier (2022), Institut de Tunis", 10.5, false],
+      ["CERTIFICATIONS", 13, true], ["Français (langue maternelle), Anglais (B2)", 10.5, false],
+    ];
+    // Each line's width in its font, in points, measured with FreeType on Carlito (Calibri's metrics) and Liberation Sans (Arial's),
+    // kerning applied, as such an editor sizes its boxes.
+    const WIDTHS: Record<string, number[]> = {
+      Calibri: [154.35, 149.96, 65.67, 246.23, 205.21, 86.89, 176.12],
+      Arial: [188.06, 179.74, 83.8, 272.17, 220.85, 108.09, 196.09],
+    };
+    const line = (text: string, size: number, bold: boolean, font: string) =>
+      `<w:p><w:pPr>${NO_SPACING}</w:pPr><w:r><w:rPr><w:rFonts w:ascii="${font}" w:hAnsi="${font}"/>${bold ? "<w:b/>" : ""}<w:sz w:val="${size * 2}"/></w:rPr><w:t xml:space="preserve">${escaped(text)}</w:t></w:r></w:p>`;
+    /** A text box placed from the page, of this size in points, without insets nor fill, that does not grow with its text: Word's and its VML copy. */
+    const box = (content: string, top: number, width: number, height: number) => alternate(
+      `<w:drawing><wp:anchor distT="0" distB="0" distL="0" distR="0" simplePos="0" relativeHeight="3" behindDoc="0" locked="0" layoutInCell="1" allowOverlap="1"><wp:simplePos x="0" y="0"/><wp:positionH relativeFrom="page"><wp:posOffset>762000</wp:posOffset></wp:positionH><wp:positionV relativeFrom="page"><wp:posOffset>${Math.round(top * 12_700)}</wp:posOffset></wp:positionV>` +
+      `<wp:extent cx="${Math.round(width * 12_700)}" cy="${Math.round(height * 12_700)}"/><wp:wrapNone/><wp:docPr id="2" name="Texte"/><a:graphic><a:graphicData uri="http://schemas.microsoft.com/office/word/2010/wordprocessingShape"><wps:wsp><wps:cNvSpPr txBox="1"/><wps:spPr><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/></wps:spPr>` +
+      `<wps:txbx><w:txbxContent>${content}</w:txbxContent></wps:txbx><wps:bodyPr rot="0" vert="horz" wrap="square" lIns="0" tIns="0" rIns="0" bIns="0" anchor="t"><a:noAutofit/></wps:bodyPr></wps:wsp></a:graphicData></a:graphic></wp:anchor></w:drawing>`,
+      `<w:pict><v:shape style="position:absolute;margin-left:60pt;margin-top:${top}pt;width:${width}pt;height:${height}pt;mso-position-horizontal-relative:page;mso-position-vertical-relative:page" filled="f" stroked="f"><v:textbox inset="0,0,0,0"><w:txbxContent>${content}</w:txbxContent></v:textbox></v:shape></w:pict>`);
+    const page = (font: string, factor: number, lines = LINES) =>
+      lines.map(([text, size, bold]) => box(line(text, size, bold, font), 50 + LINES.findIndex(item => item[0] === text) * 30, WIDTHS[font]![LINES.findIndex(item => item[0] === text)]! * factor, size * 1.2)).join("");
+
+    it.each([["Calibri", 1], ["Calibri", 1.1], ["Arial", 1], ["Arial", 1.25]])("en %s, chaque ligne dans une boîte de %s fois sa largeur, d’une ligne de haut : tout est lu", async (font, factor) => {
+      const result = await check(page(String(font), Number(factor)));
+      for (const [text] of LINES) expect(result.text).toContain(text);
+      expect(result).toMatchObject({ hidden: "", unverifiable: "", reasons: [] });
+    });
+
+    it("dans des boîtes de 70 % de leur largeur, la fin de chaque ligne renvoyée sous la boîte est écartée, par mots entiers, sans être comptée cachée", async () => {
+      const sentences = LINES.filter(([text]) => text.includes(" "));
+      const result = await check(page("Calibri", 0.7, sentences));
+      expect(result).toMatchObject({ hidden: "", reasons: ["layout"] });
+      for (const [text] of sentences) expect(result.unverifiable).toContain(text.split(" ").at(-1));
+      // Lines break between words, or after a hyphen.
+      const words = new Set(sentences.flatMap(([text]) => text.split(/[\s-]+/)));
+      for (const word of result.unverifiable.trim().split(/[\s-]+/)) expect(words, word).toContain(word);
+    });
+
+    it("mot écrit en deux passages au bout d’une ligne qu’il dépasse : il passe entier sous la ligne, aucune moitié n’en est lue", async () => {
+      const properties = '<w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/><w:sz w:val="21"/>';
+      const split = runs("", ["Diplôme d'État infirmier (2022), Institut de Tu", properties], ["nis", properties]);
+      const result = await check(box(split, 50, 200, 12.6));
+      expect(result.text).toContain("Diplôme d'État infirmier (2022), Institut de");
+      expect(result.text).not.toContain("de Tu");
+      expect(result).toMatchObject({ hidden: "", unverifiable: "Tunis", reasons: ["layout"] });
+    });
+
+    it("dix lignes de 10,5 pt dans une boîte de 1,15 fois leur taille chacune : en Arial elles tiennent ; en Calibri, plus haut, la dernière, que Word et LibreOffice coupent, est écartée", async () => {
+      const lines = (font: string) => box(Array.from({ length: 10 }, (_, index) => line(`Ligne ${index + 1} : soins post-opératoires.`, 10.5, false, font)).join(""), 50, 300, 10 * 1.15 * 10.5);
+      expect(await check(lines("Arial"))).toMatchObject({ hidden: "", unverifiable: "" });
+      expect(await check(lines("Calibri"))).toMatchObject({ hidden: "", unverifiable: "Ligne 10 : soins post-opératoires.", reasons: ["layout"] });
+    });
+  });
+
   // Not handled yet, as before: a drop cap's letter set in an exact spacing of 5 pt, a floating table (w:tblpPr) placed off the page.
   it.todo("lettrines piégées à interligne exact de 5 pt et tableau flottant placé hors de la page : leurs affirmations sont écartées");
 
@@ -370,6 +435,14 @@ describe("DOCX : texte que sa place peut couper (IA-01)", () => {
       const body = (spaces: string) => `<w:p><w:pPr><w:pStyle w:val="Serre"/><w:spacing w:before="0" w:after="0" w:line="100" w:lineRule="exact"/></w:pPr>${spaces}<w:r><w:t>a</w:t></w:r><w:r><w:br/></w:r>${spaces}</w:p>`;
       const crushed = timedGrowth(scale => docx(honestLines() + body('<w:r><w:t xml:space="preserve"> </w:t></w:r>'.repeat(scaled(40_000, scale))), closedUp));
       expect(crushed.ms).toBeLessThan(crushed.bound);
+    }, 60_000);
+
+    it("40 000 mots écrits chacun en deux passages, et un mot de 40 000 passages, dans une ligne exacte : contrôlés en quelques secondes au plus", () => {
+      const row = (runs: string) => table(9000, [[exact(300), `<w:p><w:pPr>${NO_SPACING}</w:pPr>${runs}</w:p>`]]);
+      const words = timedGrowth(scale => docx(row('<w:r><w:t>Infirm</w:t></w:r><w:r><w:t xml:space="preserve">ière </w:t></w:r>'.repeat(scaled(40_000, scale)))));
+      expect(words.ms).toBeLessThan(words.bound);
+      const word = timedGrowth(scale => docx(row("<w:r><w:t>a</w:t></w:r>".repeat(scaled(40_000, scale)))));
+      expect(word.ms).toBeLessThan(word.bound);
     }, 60_000);
 
     it("tableaux de lignes exactes imbriqués sur 2 000 et 20 000 niveaux : contrôlés en quelques secondes au plus, sans épuiser la pile", () => {

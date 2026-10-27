@@ -1,5 +1,6 @@
 import { crc32 } from "node:zlib";
 import { DOCUMENT_DECOMPRESSION_LIMITS, inspectDocxArchive } from "./documentDecompressionLimits";
+import { DOCX_FONT_ALIASES, DOCX_FONT_CHARACTERS, DOCX_FONT_METRICS, DOCX_FONT_WIDTH_DIGITS } from "./docxFontMetrics";
 
 /**
  * DOCX text Word does not show (IA-01): runs marked hidden (w:vanish,
@@ -30,7 +31,8 @@ import { DOCUMENT_DECOMPRESSION_LIMITS, inspectDocxArchive } from "./documentDec
  * insets, with the boxes its text flows on into up to one placed off the
  * page; a frame of exact height, w:framePr; an exact line spacing; a right
  * indent past the page's right edge), the text is laid out twice (LAYOUTS):
- * taking the most room it may take, and the least. Its lines wrap at the
+ * taking the most room it may take (in its font when measured), and the
+ * least. Its lines wrap at the
  * width of their cell, text box, frame or column less their indents, tab
  * stops move them along (the text a right or centred stop aligns stays on its
  * line, even past its edge, as Word and LibreOffice keep it there), and the
@@ -136,14 +138,17 @@ const MIN_LINE_HEIGHT_IN_SIZES = 0.9;
 const MAX_ADVANCE_IN_SIZES = 1;
 /**
  * The two layouts of text whose place may hide it: taking the most room it
- * may take (lines of 1.15 times their size; characters, in sizes of their
- * text, about as wide as in the widest common fonts: capitals 0.68, figures
- * 0.56, other letters 0.5, punctuation 0.4, other signs 0.8, spaces 0.3,
- * Chinese, Japanese or Korean ones 1, all 0.6 in a typewriter font; words
- * kept whole on their line; the insets of text boxes and the side margins of
- * cells; deleted text shown, as LibreOffice shows it), and the least (lines of
- * 0.9 times their size, characters a fifth as wide, wide ones 0.9, lines
- * broken anywhere, no inset nor margin, deleted text not shown).
+ * may take (characters as wide as in their font, bold or italic, when it is
+ * one of the fonts measured, DOCX_FONT_METRICS, and lines as tall as it sets
+ * them; otherwise lines of 1.15 times their size and characters, in sizes of
+ * their text, about as wide as in the widest common fonts: capitals 0.68,
+ * figures 0.56, other letters 0.5, punctuation 0.4, other signs 0.8, spaces
+ * 0.3, Chinese, Japanese or Korean ones 1, all 0.6 in a typewriter font;
+ * words kept whole on their line, over passages and runs, but after a hyphen
+ * or a dash; the insets of text boxes and the side margins of cells; deleted
+ * text shown, as LibreOffice shows it), and the least (lines of 0.9 times
+ * their size, characters a fifth as wide, wide ones 0.9, lines broken
+ * anywhere, no inset nor margin, deleted text not shown).
  */
 const LAYOUTS: ReadonlyArray<{ lineHeight: number; widths: Record<CharacterKind, number>; typewriter: number }> = [
   { lineHeight: 1.15, widths: { capital: 0.68, figure: 0.56, letter: 0.5, punctuation: 0.4, sign: 0.8, space: 0.3, wide: 1 }, typewriter: 0.6 },
@@ -506,6 +511,13 @@ type RunLayer = Partial<Record<"w:vanish" | "w:specVanish" | "w:webHidden" | "w:
   position: number;
   /** A typewriter font (w:rFonts), all of whose characters are as wide. */
   typewriter: boolean;
+  /** The font of its characters of Basic Latin (w:rFonts w:ascii) and of other Latin ones (w:hAnsi), or of its theme. */
+  font: string;
+  otherFont: string;
+  /** Bold, italic, in capitals (w:b, w:i, w:caps or w:smallCaps) by one of the layers: Word may switch them off again, the wider letters are taken. */
+  bold: true;
+  italic: true;
+  capitals: true;
 }>;
 
 const hexColour = (value: string | undefined) => (value !== undefined && /^[0-9a-f]{6}$/i.test(value) ? value.toUpperCase() : undefined);
@@ -535,8 +547,8 @@ function withLightness(hex: string, change: (lightness: number) => number) {
   return toHex(sextants[Math.min(5, Math.floor(hue))]!.map(value => (value + changed - chroma / 2) * 255));
 }
 
-/** The colour of a theme colour name (w:themeColor…), as the settings map it to the theme's colour scheme. */
-type Theme = (name: string) => string | undefined;
+/** The colour of a theme colour name (w:themeColor…), as the settings map it to the theme's colour scheme; the theme's fonts for Latin text, of headings and body. */
+type Theme = ((name: string) => string | undefined) & { fonts?: { major?: string; minor?: string } };
 
 /** Theme colour names, and the colour of the theme's scheme each one is. */
 const THEME_SLOTS: Record<string, string> = {
@@ -550,6 +562,7 @@ const SYSTEM_COLOURS: Record<string, string> = { window: "FFFFFF", windowText: "
 /** The colour scheme of the theme part, as the settings part maps it (w:clrSchemeMapping). */
 function readTheme(themeXml: string | undefined, settingsXml: string | undefined): Theme {
   const scheme = new Map<string, string>();
+  const fonts: NonNullable<Theme["fonts"]> = {};
   const path: string[] = [];
   visitXmlTags(themeXml ?? "", tag => {
     if (tag.closing) {
@@ -562,6 +575,9 @@ function readTheme(themeXml: string | undefined, settingsXml: string | undefined
       const hex = hexColour(value);
       if (hex) scheme.set(slot, hex);
     }
+    if (tag.name === "a:latin" && path.at(-2) === "a:fontScheme" && (path.at(-1) === "a:majorFont" || path.at(-1) === "a:minorFont")) {
+      fonts[path.at(-1) === "a:majorFont" ? "major" : "minor"] ??= tag.attributes.get("typeface");
+    }
     if (!tag.selfClosing) path.push(tag.name);
   });
   const mapping = new Map<string, string>();
@@ -572,7 +588,7 @@ function readTheme(themeXml: string | undefined, settingsXml: string | undefined
       if (value) mapping.set(name, value);
     }
   });
-  return name => scheme.get(THEME_SLOTS[mapping.get(name) ?? THEME_MAPPING[name]?.[1] ?? name] ?? "");
+  return Object.assign((name: string) => scheme.get(THEME_SLOTS[mapping.get(name) ?? THEME_MAPPING[name]?.[1] ?? name] ?? ""), { fonts });
 }
 
 /** Whether Word shows the page colour (w:background) in its page view: only when the settings say so, as LibreOffice. */
@@ -859,8 +875,9 @@ function textBoxes(xml: string) {
       if (!/^(horz)?$/.test(tag.attributes.get("vert") ?? "")) shape.free = true;
       shape.unwrapped = tag.attributes.get("wrap") === "none";
       shape.insets = { left: inset("lIns", DEFAULT_INSETS.left), top: inset("tIns", DEFAULT_INSETS.top), right: inset("rIns", DEFAULT_INSETS.right), bottom: inset("bIns", DEFAULT_INSETS.bottom) };
-    } else if (tag.name === "wps:txbx" || tag.name === "wps:linkedTxbx") {
-      const id = tag.attributes.get("id") ?? "0";
+    } else if ((tag.name === "wps:txbx" || tag.name === "wps:linkedTxbx") && tag.attributes.has("id")) {
+      // Only boxes of one id are linked: Word writes none on a box that is not.
+      const id = tag.attributes.get("id")!;
       const chain = chains.get(id) ?? { boxes: [] };
       const order = tag.name === "wps:txbx" ? 0 : Number(tag.attributes.get("seq")) || chain.boxes.length;
       chain.boxes.push({ order, holder: holders.at(-1), shape });
@@ -1051,6 +1068,50 @@ function characterKind(character: string): CharacterKind {
   return CHARACTER_KINDS.find(([pattern]) => pattern.test(character))?.[1] ?? "letter";
 }
 
+/** Where Word may break a line within a word: after a hyphen, a dash, a soft hyphen or a zero-width space. */
+const BREAK_AFTER = new Set(["-", "­", "​", "‐", "‒", "–", "—", "―"]);
+/**
+ * Text up to this share wider than its line, its advances added, still fits on
+ * it in the most room: the kerning LibreOffice applies, and Word when the
+ * document asks for it (w:kern, in its recent default style), tightens a line
+ * of capitals by 1 to 2 %; and the rounding of their layouts.
+ */
+const FIT_MARGIN = 0.02;
+/** Where each character measured (DOCX_FONT_CHARACTERS) is in the widths of a font. */
+const MEASURED_CHARACTERS = new Map(Array.from(DOCX_FONT_CHARACTERS, (character, index) => [character, index] as const));
+/** The widths of each style of each font measured, in sizes of their text, read once from their digits. */
+const fontWidths = new Map<string, number[]>();
+
+/** The font measured (DOCX_FONT_METRICS) that a run sets its characters of Basic Latin in (`ascii`), or its other Latin ones, as Word names it. */
+function measuredFont(effective: RunLayer, ascii: boolean) {
+  const name = ascii ? effective.font ?? effective.otherFont : effective.otherFont ?? effective.font;
+  return name === undefined ? undefined : DOCX_FONT_ALIASES[name.trim().toLowerCase()];
+}
+
+/** The advance of a character in its run's font, in its style, when measured, in sizes of its text (in capitals when the run is). */
+function measuredAdvance(effective: RunLayer, character: string) {
+  const shown = effective.capitals && character.toUpperCase().length === character.length ? character.toUpperCase() : character;
+  const index = MEASURED_CHARACTERS.get(shown);
+  const font = index === undefined ? undefined : measuredFont(effective, shown.charCodeAt(0) < 128);
+  if (font === undefined) return undefined;
+  const style = effective.bold ? (effective.italic ? "boldItalic" : "bold") : effective.italic ? "italic" : "regular";
+  const key = `${font}:${style}`;
+  let widths = fontWidths.get(key);
+  if (!widths) {
+    const digits = DOCX_FONT_METRICS[font]![style];
+    const value = (at: number) => DOCX_FONT_WIDTH_DIGITS.indexOf(digits[at]!);
+    widths = Array.from({ length: digits.length / 2 }, (_, at) => (value(2 * at) * DOCX_FONT_WIDTH_DIGITS.length + value(2 * at + 1)) / 1000);
+    fontWidths.set(key, widths);
+  }
+  return widths[index!]! > 0 ? widths[index!] : undefined;
+}
+
+/** The height of a line of single spacing of a run's font when measured, in sizes of its text; 0 otherwise. */
+const fontLine = (effective: RunLayer) => {
+  const font = measuredFont(effective, true) ?? measuredFont(effective, false);
+  return font === undefined ? 0 : DOCX_FONT_METRICS[font]!.line / 1000;
+};
+
 /** How many characters (code points) a text holds. */
 function codePoints(text: string) {
   let count = text.length;
@@ -1087,8 +1148,19 @@ function applyRunProperty(layer: RunLayer, tag: XmlTag, theme: Theme) {
     const length = measurePt(value, tag.name === "w:spacing" ? 20 : 2);
     if (length !== undefined) layer[tag.name === "w:spacing" ? "spacing" : "position"] = length;
   } else if (tag.name === "w:rFonts") {
-    const font = tag.attributes.get("w:ascii") ?? tag.attributes.get("w:hAnsi");
+    // A theme font (w:asciiTheme…) wins over the font named.
+    const named = (kind: string) => {
+      const themed = tag.attributes.get(`w:${kind}Theme`);
+      return themed ? theme.fonts?.[/^major/i.test(themed) ? "major" : "minor"] : tag.attributes.get(`w:${kind}`);
+    };
+    const ascii = named("ascii");
+    const other = named("hAnsi");
+    if (ascii !== undefined) layer.font = ascii;
+    if (other !== undefined) layer.otherFont = other;
+    const font = ascii ?? other;
     if (font !== undefined) layer.typewriter = /courier|mono|consolas|lucida console|typewriter/i.test(font);
+  } else if ((tag.name === "w:b" || tag.name === "w:i" || tag.name === "w:caps" || tag.name === "w:smallCaps") && !/^(false|0|off)$/i.test(value ?? "")) {
+    layer[tag.name === "w:b" ? "bold" : tag.name === "w:i" ? "italic" : "capitals"] = true;
   }
 }
 
@@ -1172,10 +1244,15 @@ function tabStops(layers: ParagraphLayer[]) {
 const lineFloor = ({ line }: ParagraphFormat, size: number) =>
   line.rule === "exact" ? line.value : line.rule === "atLeast" ? Math.max(line.value, MIN_LINE_HEIGHT_IN_SIZES * size) : MIN_LINE_HEIGHT_IN_SIZES * size * line.value;
 
-/** The height of a line of text of this size in one of LAYOUTS, a picture on it (`objects`) at least as tall, but in an exact spacing. */
-const lineHeight = ({ line }: ParagraphFormat, size: number, layout: number, objects = 0) =>
-  line.rule === "exact" ? line.value
-    : Math.max(objects, line.rule === "atLeast" ? Math.max(line.value, LAYOUTS[layout]!.lineHeight * size) : LAYOUTS[layout]!.lineHeight * size * line.value);
+/**
+ * The height of a line of text of this size in one of LAYOUTS, a picture on it
+ * (`objects`) at least as tall, but in an exact spacing; in the most room, of
+ * single spacing that of its fonts when measured (`factor`, fontLine).
+ */
+const lineHeight = ({ line }: ParagraphFormat, size: number, layout: number, objects = 0, factor = 0) => {
+  const single = (layout === MOST && factor > 0 ? factor : LAYOUTS[layout]!.lineHeight) * size;
+  return line.rule === "exact" ? line.value : Math.max(objects, line.rule === "atLeast" ? Math.max(line.value, single) : single * line.value);
+};
 
 /** Where a passage starts in its paragraph, for its indents: the widest the paragraph's text before it can be; after a tab, its place is unknown. In points. */
 type TextPlace = { before: number; tabbed: boolean };
@@ -1485,8 +1562,13 @@ type Segment = {
   settled?: { recorded: boolean; paragraph?: Frame; drawn?: { verdicts: Judgement[]; from: number; to: number } };
 };
 
-/** A line of a paragraph in one of LAYOUTS: its index, the top of it, how far along it the text has gone, the largest size of its text, the tallest picture on it. In points. */
-type Line = { index: number; top: number; x: number; size: number; objects: number };
+/**
+ * A line of a paragraph in one of LAYOUTS: its index, the top of it, how far
+ * along it the text has gone, the largest size of its text, the tallest
+ * picture on it (in points), the tallest single spacing of the fonts measured
+ * on it (fontLine, in sizes; 0 when none).
+ */
+type Line = { index: number; top: number; x: number; size: number; objects: number; factor: number };
 
 /**
  * A paragraph whose place may hide its text: its format; how far down from
@@ -1500,7 +1582,11 @@ type Line = { index: number; top: number; x: number; size: number; objects: numb
  * exact spacing too; its lines in both layouts; its tab stops once a tab is
  * met; the right or centred tab stop that aligns the text after it on its
  * line of the first layout, and how wide that text is so far; the visible
- * segments of its last two lines, which a cramped line below may still cover.
+ * segments of its last two lines, which a cramped line below may still cover;
+ * the word its last passage ended in, which the next one may go on (`word`:
+ * where it starts on its line of the first layout, how wide it is so far, the
+ * largest size and spacing of its letters, its visible segments), to go whole
+ * to the next line.
  */
 type ParagraphLayout = {
   format: ParagraphFormat;
@@ -1515,6 +1601,7 @@ type ParagraphLayout = {
   stops?: Array<[number, string]>;
   tab?: { position: number; kind: string; line: number; width: number };
   pending: Array<{ line: number; segments: Segment[] }>;
+  word?: { x: number; width: number; size: number; factor: number; segments: Segment[] };
 };
 
 /**
@@ -2043,7 +2130,7 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
     const pastEdge = edge !== undefined && (edge[MOST] + width[MOST] - format.end > across.width || edge[LEAST] + width[LEAST] - format.end > across.width);
     if (!placed && !tight && !pastEdge) return (paragraph.layout = null);
     const last = container?.content?.last;
-    const line = (): Line => ({ index: 0, top: 0, x: 0, size: 0, objects: 0 });
+    const line = (): Line => ({ index: 0, top: 0, x: 0, size: 0, objects: 0, factor: 0 });
     paragraph.layout = {
       format, slack, width, edge: pastEdge ? edge : undefined, pageWidth: across.width, tight,
       gapAbove: last ? last.gap + spaceAbove(paragraph, container?.content?.above) : Number.POSITIVE_INFINITY, tightAbove: last?.tight ?? false, lines: [line(), line()], pending: [],
@@ -2056,11 +2143,23 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
     const width = layout.width[model]! - layout.format.start - layout.format.end - (line.index === 0 ? layout.format.firstLine : 0);
     return width > 0 ? width : layout.width[model]!;
   };
-  /** Starts the next line of a paragraph in a layout; `size`: the size of the text that ends the line, for an empty one. */
-  const newLine = (layout: ParagraphLayout, model: number, size = 0) => {
+  /** Starts the next line of a paragraph in a layout; `size`, `factor`: the size and spacing (fontLine) of the text that ends the line, for an empty one. No word goes on from one line to the next. */
+  const newLine = (layout: ParagraphLayout, model: number, size = 0, factor = 0) => {
     const line = layout.lines[model];
-    line.top += lineHeight(layout.format, Math.max(line.size, size), model, line.objects);
-    Object.assign(line, { index: line.index + 1, x: 0, size: 0, objects: 0 });
+    line.top += lineHeight(layout.format, Math.max(line.size, size), model, line.objects, Math.max(line.factor, factor));
+    Object.assign(line, { index: line.index + 1, x: 0, size: 0, objects: 0, factor: 0 });
+    if (model === MOST) layout.word = undefined;
+  };
+  /** Moves the visible segments of a word to the line of the first layout it now lies on, for the lines below that may run into it. */
+  const moveSegments = (layout: ParagraphLayout, segments: Segment[], from: number, to: number) => {
+    const moved = new Set(segments);
+    const before = layout.pending.find(entry => entry.line === from);
+    budget.units -= (before?.segments.length ?? 0) + segments.length;
+    if (before) before.segments = before.segments.filter(segment => !moved.has(segment));
+    if (!segments.length) return;
+    let entry = layout.pending.find(item => item.line === to);
+    if (!entry) layout.pending.push((entry = { line: to, segments: [] }));
+    entry.segments.push(...segments);
   };
   /**
    * How far a line of the first layout may run before the next character goes
@@ -2069,7 +2168,7 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
    * keep on its line even past its edge.
    */
   const lineReach = (layout: ParagraphLayout, line: Line, model: number, added: number) => {
-    const width = lineWidth(layout, line, model);
+    const width = lineWidth(layout, line, model) * (model === MOST ? 1 + FIT_MARGIN : 1);
     const tab = layout.tab;
     if (model !== MOST || !tab || tab.line !== line.index) return width;
     const stop = tab.position - lineStart(layout, line);
@@ -2124,6 +2223,7 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
   /** Moves a paragraph's lines on to its next tab stop (a stop of its own, the start of a hanging indent, else the next default one); a right or centred stop aligns the text after it at the stop, in the first layout. */
   const tabOn = (layout: ParagraphLayout, paragraph: Frame) => {
     budget.units -= 1;
+    layout.word = undefined;
     // Past the budget, the text is no longer laid out (layText).
     const stops = budget.units > 0 ? (layout.stops ??= stopsOf(paragraph)) : [];
     for (const model of [MOST, LEAST]) {
@@ -2152,6 +2252,7 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
   };
   /** Puts something of this width on a paragraph's lines (an inline picture, of this height; a symbol). */
   const placeObject = (layout: ParagraphLayout, width: number, height: number, size: number) => {
+    layout.word = undefined;
     for (const model of [MOST, LEAST]) {
       const line = layout.lines[model]!;
       if (line.x > 0 && line.x + width > lineWidth(layout, line, model)) newLine(layout, model);
@@ -2195,31 +2296,70 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
         setAside(container?.content?.last?.segments, UNLAID);
         for (const entry of layout.pending) setAside(entry.segments, UNLAID);
       }
-      return { judgements: judgements.fill(UNLAID), lines };
+      layout.word = undefined;
+      return { judgements: judgements.fill(UNLAID), lines, wordFrom: text.length };
     }
     budget.units -= text.length;
     const { format } = layout;
     const size = fontSize(effective, text);
     const scale = (effective.scale ?? 100) / 100;
     const lowered = Math.max(0, -(effective.position ?? 0));
+    const factor = fontLine(effective);
     const models = deleted ? [MOST] : [MOST, LEAST];
+    // In the most room, a character measured in its run's font is as wide as it is there; others as in the widest common fonts.
     const advance = (model: number, character: string) => {
-      const kind = characterKind(character);
-      const share = effective.typewriter && kind !== "wide" ? LAYOUTS[model]!.typewriter : LAYOUTS[model]!.widths[kind];
+      const measured = model === MOST ? measuredAdvance(effective, character) : undefined;
+      const kind = measured === undefined ? characterKind(character) : "letter";
+      const share = measured ?? (effective.typewriter && kind !== "wide" ? LAYOUTS[model]!.typewriter : LAYOUTS[model]!.widths[kind]);
       return Math.max(0, share * size * scale + (effective.spacing ?? 0));
+    };
+    /** Whether text at `from` on a line of a layout leaves its place, and how far it runs into the line above (1: into its bottom, 2: into its letters). */
+    const placing = (model: number, line: Line, from: number) => {
+      const across = layout.edge && layout.edge[model]! + lineStart(layout, line);
+      const out = outOfPlace(layout.slack, model, line.top, lowered, line.size)
+        || (across !== undefined && (model === MOST ? across + lineEnd(layout, line) > layout.pageWidth : across + from >= layout.pageWidth));
+      let overlap = 0;
+      if (layout.tight) {
+        // A line of an exact spacing smaller than its letters runs into the line above it, unless there is room enough between them.
+        const room = format.line.value + (line.index === 0 ? layout.gapAbove : 0);
+        overlap = room < MIN_EXACT_LINE_SHARE * size ? 2 : room < LEGIBLE_EXACT_LINE_SHARE * size ? 1 : 0;
+        // Its first line drawn over a line of ordinary spacing, in a spacing not far smaller than its letters: LibreOffice shows it
+        // over that line, Word cuts its top; not manifestly unseen.
+        if (line.index === 0 && !layout.tightAbove && format.line.value >= MIN_ALONE_EXACT_LINE_SHARE * size) overlap = Math.min(overlap, 1);
+      }
+      return { out, overlap };
     };
     const characters = Array.from(text);
     /** Lines of the paragraph in the first layout (-1: the last one of the container above it) that a line below runs into. */
     const covered = new Set<number>();
+    /** The last word of the passage: where it starts (unit, place on its line of the first layout), whether it goes on with the word before it, whether a line may break after it. */
+    let last: { unit: number; x: number; line: number; continued: boolean; ends: boolean } | undefined;
     let unit = 0;
     for (let index = 0; index < characters.length; ) {
       const space = SPACES[characters[index]!.charCodeAt(0)] === 1;
       let end = index;
       let width = 0;
-      for (; end < characters.length && (SPACES[characters[end]!.charCodeAt(0)] === 1) === space; end += 1) width += advance(MOST, characters[end]!);
-      // In the most room, a word goes whole to the next line when it does not fit on this one.
+      // Spaces, or a word up to where Word may break its line: after a hyphen or a dash, around an ideograph.
+      for (; end < characters.length; ) {
+        const character = characters[end]!;
+        if ((SPACES[character.charCodeAt(0)] === 1) !== space || (!space && end > index && WIDE_CHARACTER.test(character))) break;
+        width += advance(MOST, character);
+        end += 1;
+        if (!space && (BREAK_AFTER.has(character) || WIDE_CHARACTER.test(character))) break;
+      }
+      // In the most room, a word goes whole to the next line when it does not fit on this one, with its part in the passages before.
       const first = layout.lines[MOST];
-      if (!space && first.x > 0 && first.x + width > lineReach(layout, first, MOST, width)) newLine(layout, MOST, size);
+      const word = !space && index === 0 ? layout.word : undefined;
+      if (word && word.x > 0 && first.x + width > lineReach(layout, first, MOST, width)) {
+        const before = first.index;
+        newLine(layout, MOST, size, factor);
+        Object.assign(first, { x: word.width, size: word.size, factor: word.factor });
+        const placed = placing(MOST, first, 0);
+        if (placed.out || placed.overlap > 0) setAside(word.segments, OUT_OF_PLACE);
+        else moveSegments(layout, word.segments, before, first.index);
+        layout.word = { ...word, x: 0 };
+      } else if (!space && first.x > 0 && first.x + width > lineReach(layout, first, MOST, width)) newLine(layout, MOST, size, factor);
+      last = { unit, x: first.x, line: first.index, continued: word !== undefined, ends: space || BREAK_AFTER.has(characters[end - 1]!) || WIDE_CHARACTER.test(characters[end - 1]!) };
       for (; index < end; index += 1) {
         const character = characters[index]!;
         const out = [false, false];
@@ -2227,23 +2367,14 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
         for (const model of models) {
           const line = layout.lines[model]!;
           const step = advance(model, character);
-          if (!space && line.x > 0 && line.x + step > lineReach(layout, line, model, step)) newLine(layout, model, size);
+          if (!space && line.x > 0 && line.x + step > lineReach(layout, line, model, step)) newLine(layout, model, size, factor);
           const from = line.x;
           line.x += step;
           line.size = Math.max(line.size, size);
+          line.factor = Math.max(line.factor, factor);
           if (model === MOST && layout.tab?.line === line.index) layout.tab.width += step;
           if (deleted) continue;
-          const across = layout.edge && layout.edge[model]! + lineStart(layout, line);
-          out[model] = outOfPlace(layout.slack, model, line.top, lowered, line.size)
-            || (across !== undefined && (model === MOST ? across + lineEnd(layout, line) > layout.pageWidth : across + from >= layout.pageWidth));
-          if (layout.tight) {
-            // A line of an exact spacing smaller than its letters runs into the line above it, unless there is room enough between them.
-            const room = format.line.value + (line.index === 0 ? layout.gapAbove : 0);
-            overlap[model] = room < MIN_EXACT_LINE_SHARE * size ? 2 : room < LEGIBLE_EXACT_LINE_SHARE * size ? 1 : 0;
-            // Its first line drawn over a line of ordinary spacing, in a spacing not far smaller than its letters: LibreOffice shows it
-            // over that line, Word cuts its top; not manifestly unseen.
-            if (line.index === 0 && !layout.tightAbove && format.line.value >= MIN_ALONE_EXACT_LINE_SHARE * size) overlap[model] = Math.min(overlap[model]!, 1);
-          }
+          ({ out: out[model], overlap: overlap[model] } = placing(model, line, from));
         }
         let judgement = VISIBLE;
         if (!deleted) {
@@ -2262,14 +2393,29 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
     // The line above in the same paragraph, or the last line of text above it (LastLine), whatever its spacing.
     for (const line of Array.from(covered)) setAside(line < 0 ? container?.content?.last?.segments : layout.pending.find(entry => entry.line === line)?.segments, OUT_OF_PLACE);
     if (covered.size) for (let index = 0; index < text.length; index += 1) if (judgements[index] === VISIBLE && covered.has(lines[index]!)) judgements[index] = OUT_OF_PLACE;
-    return { judgements, lines };
+    // A word the passage ends in may go on in the next one: kept, to go with it to the next line. Broken over two lines here, it starts the last one.
+    let wordFrom = text.length;
+    if (last && !last.ends) {
+      const first = layout.lines[MOST];
+      const word = last.continued ? layout.word : undefined;
+      const broken = first.index !== last.line;
+      const x = broken ? 0 : word?.x ?? last.x;
+      layout.word = { x, width: first.x - x, size: Math.max(word?.size ?? 0, size), factor: Math.max(word?.factor ?? 0, factor), segments: broken ? [] : word?.segments ?? [] };
+      if (!broken) wordFrom = word ? 0 : last.unit;
+    } else if (last) layout.word = undefined;
+    return { judgements, lines, wordFrom };
   };
-  /** A passage cut where its judgement or its line changes; its visible parts kept for the lines below (of its last lines when laid out). Whole when its XML cannot be cut apart. */
-  const segmentsOf = (raw: string, start: number, text: string, paragraph: Frame | undefined, layout: ParagraphLayout | null, judged?: { judgements: Judgement[]; lines: number[] }): Segment[] => {
+  /**
+   * A passage cut where its judgement or its line changes, and where the word
+   * it ends in, which the next passage may go on, starts (`wordFrom`); its
+   * visible parts kept for the lines below (of its last lines when laid out),
+   * and with that word. Whole when its XML cannot be cut apart.
+   */
+  const segmentsOf = (raw: string, start: number, text: string, paragraph: Frame | undefined, layout: ParagraphLayout | null, judged?: { judgements: Judgement[]; lines: number[]; wordFrom: number }): Segment[] => {
     const groups: Array<{ from: number; to: number; judgement: Judgement; line: number }> = [];
     for (let index = 0; index < text.length && judged; index += 1) {
       const group = groups.at(-1);
-      if (group && group.judgement === judged.judgements[index] && group.line === judged.lines[index]) group.to = index + 1;
+      if (group && group.judgement === judged.judgements[index] && group.line === judged.lines[index] && index !== judged.wordFrom) group.to = index + 1;
       else groups.push({ from: index, to: index + 1, judgement: judged.judgements[index]!, line: judged.lines[index]! });
     }
     const offsets = groups.length > 1 ? textOffsets(raw, text.length) : undefined;
@@ -2285,6 +2431,7 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
         let entry = layout.pending.find(item => item.line === part.line);
         if (!entry) layout.pending.push((entry = { line: part.line, segments: [] }));
         entry.segments.push(segment);
+        if (layout.word && judged && part.to > judged.wordFrom) layout.word.segments.push(segment);
       } else if (paragraph) {
         // Its lines are not laid out: any of them may be its last.
         (paragraph.shown ??= []).push(segment);
@@ -2412,7 +2559,10 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
             if (layout) content.filled = [content.filled[MOST] + layout.lines[MOST].top, content.filled[LEAST] + layout.lines[LEAST].top];
           } else {
             if (layout) {
-              const height = (model: number) => above + layout.lines[model]!.top + lineHeight(format, layout.lines[model]!.size || markSize, model, layout.lines[model]!.objects);
+              const height = (model: number) => {
+                const line = layout.lines[model]!;
+                return above + line.top + lineHeight(format, line.size || markSize, model, line.objects, line.size ? line.factor : fontLine(mark));
+              };
               content.filled = [content.filled[MOST] + height(MOST), content.filled[LEAST] + height(LEAST)];
             }
             const lastLine = layout?.lines[MOST].index;
