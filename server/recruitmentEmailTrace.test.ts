@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import { buildCandidatePortalActivationEmailEvent, buildCandidatePortalInvitationEmailEvent, buildCvConfirmationEmailEvent, buildFailedConfirmationRetryCandidateQuery, canRetryCvConfirmation, candidatePortalAccountMatchesApplication, cvConfirmationRetryOutcome, resolveCandidatePortalActivationDelivery, resolveCandidatePortalInvitationDelivery, resolveCvConfirmationDelivery, retryDueFailedCvConfirmationEmails } from "./recruitmentEmailTrace";
+import { buildCandidatePortalActivationEmailEvent, buildCandidatePortalInvitationEmailEvent, buildCvConfirmationEmailEvent, buildFailedConfirmationRetryCandidateQuery, canRetryCvConfirmation, candidatePortalAccountMatchesApplication, cvConfirmationRetryOutcome, resolveCandidatePortalActivationDelivery, resolveCandidatePortalInvitationDelivery, resolveCvConfirmationDelivery, retryDueFailedCvConfirmationEmails, sendTrackedCvApplicationConfirmationEmail } from "./recruitmentEmailTrace";
 import { drizzle } from "drizzle-orm/neon-http";
+import { recruitmentEmailEvents } from "../drizzle/schema";
+import { createMemoryPg } from "./testing/memoryPgProxy";
 
 const retryMocks = vi.hoisted(() => ({ getDb: vi.fn(), sendEmail: vi.fn() }));
 
@@ -285,6 +287,32 @@ describe("traçabilité de l'email de confirmation de candidature", () => {
     expect((await retryDueFailedCvConfirmationEmails(1, now)).processed).toBe(1);
     expect(cursorWrites.at(-1)).toBe(2);
     expect(retryMocks.sendEmail).toHaveBeenCalledTimes(3);
+    vi.restoreAllMocks();
+    retryMocks.getDb.mockReset();
+    retryMocks.sendEmail.mockReset();
+  });
+
+  it("trouve déjà enregistrée la trace d’un accusé renvoyé sous la même clé, sans journal d’erreur (DATA-11)", async () => {
+    const memory = createMemoryPg([recruitmentEmailEvents]);
+    retryMocks.getDb.mockResolvedValue(memory.db);
+    // Same key, same email: Resend answers the same id each time.
+    retryMocks.sendEmail.mockResolvedValue({ status: "sent", providerEmailId: "email_same", failureCode: null });
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const confirmation = { applicationId: 42, candidateEmail: "candidate@example.com", candidateFirstName: "Amal", trackingId: "CV-TRACE-42", language: "fr" };
+
+    // The application, then two answers « already received » for copies sent at the same time.
+    for (let answer = 0; answer < 3; answer += 1) {
+      await expect(sendTrackedCvApplicationConfirmationEmail(confirmation)).resolves.toEqual({ status: "sent", providerEmailId: "email_same", failureCode: null });
+    }
+
+    expect(retryMocks.sendEmail.mock.calls.map(call => call[4])).toEqual(Array(3).fill("cv-application-confirmation-CV-TRACE-42-attempt-1"));
+    expect(memory.rows(recruitmentEmailEvents)).toEqual([expect.objectContaining({ provider_event_id: "send:email_same", application_id: 42, event_type: "email.sent" })]);
+    expect(error).not.toHaveBeenCalled();
+    // Any other failure of the trace is still logged, without failing the answer.
+    memory.failNext(/^insert into "recruitment_email_events"/);
+    retryMocks.sendEmail.mockResolvedValue({ status: "sent", providerEmailId: "email_other", failureCode: null });
+    await expect(sendTrackedCvApplicationConfirmationEmail({ ...confirmation, deliveryAttempt: 2 })).resolves.toMatchObject({ status: "sent" });
+    expect(error).toHaveBeenCalledWith("Recruitment confirmation trace error:", "Error");
     vi.restoreAllMocks();
     retryMocks.getDb.mockReset();
     retryMocks.sendEmail.mockReset();
