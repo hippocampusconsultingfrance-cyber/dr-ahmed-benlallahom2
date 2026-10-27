@@ -78,4 +78,19 @@ describe("POST /api/stripe/webhook — corps brut et signature Stripe", () => {
     expect(await postWebhook(other, signature)).toEqual({ status: 200, body: { received: true } });
     expect(state.completedSessions).toEqual([]);
   });
+
+  it("répond 500, que Stripe réessaie, et non « signature invalide », quand le SDK Stripe ne peut pas être configuré", async () => {
+    const signature = stripe.webhooks.generateTestHeaderString({ payload, secret: WEBHOOK_SECRET });
+    const secretKey = process.env.STRIPE_SECRET_KEY;
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    delete process.env.STRIPE_SECRET_KEY;
+    try {
+      expect(await postWebhook(payload, signature)).toEqual({ status: 500, body: { error: "Webhook unavailable" } });
+      expect(error).toHaveBeenCalledWith("Stripe webhook unavailable", expect.stringMatching(/apiKey/));
+    } finally {
+      process.env.STRIPE_SECRET_KEY = secretKey;
+      error.mockRestore();
+    }
+    expect(state.completedSessions).toEqual([]);
+  });
 });

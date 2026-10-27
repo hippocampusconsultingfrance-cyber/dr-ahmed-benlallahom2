@@ -2,6 +2,7 @@ import "dotenv/config";
 import { RECRUITMENT_CV_ACCEPTED_EXTENSIONS, RECRUITMENT_CV_ACCEPTED_MIME_TYPES, RECRUITMENT_CV_MAX_BYTES } from "../../shared/recruitmentCvLimits";
 import express from "express";
 import multer from "multer";
+import type Stripe from "stripe";
 import { Webhook } from "svix";
 import { z } from "zod";
 import { createServer } from "http";
@@ -189,11 +190,20 @@ export async function createApp() {
     const sig = req.headers["stripe-signature"] as string;
     const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET || "";
     
+    // A Stripe SDK that cannot be loaded or configured is our failure, not an
+    // invalid signature: 500, which Stripe retries and the smoke test of the
+    // built server tells apart from the 400 of a refused signature (CODE-14).
+    let stripe: Stripe;
+    try {
+      const { default: StripeSdk } = await import("stripe");
+      stripe = new StripeSdk(process.env.STRIPE_SECRET_KEY || "");
+    } catch (error) {
+      console.error("Stripe webhook unavailable", internalErrorSummary(error));
+      return res.status(500).json({ error: "Webhook unavailable" });
+    }
+
     let event;
     try {
-      const Stripe = (await import("stripe")).default;
-      const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "");
-
       event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
     } catch (error) {
       console.error("Stripe webhook signature validation failed", safeErrorName(error));
