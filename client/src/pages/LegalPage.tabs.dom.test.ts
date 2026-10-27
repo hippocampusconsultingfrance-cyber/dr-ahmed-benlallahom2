@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
-import { act, createElement } from "react";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { createElement } from "react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { navigate } from "wouter/use-browser-location";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 

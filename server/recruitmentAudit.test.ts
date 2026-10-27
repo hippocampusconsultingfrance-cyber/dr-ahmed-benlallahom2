@@ -45,6 +45,22 @@ describe("recruitment matching profiles", () => {
     expect(matchesRecruitmentProfile({ ...candidate, languages: ["Arabe"] })).toBe(false);
   });
 
+  it("compare le pays cible et les langues requises comme les filtres de la liste, accents, casse et écritures à part (IA-02)", () => {
+    const candidate = { score: 70, specialty: "Anesthésie-réanimation", targetCountries: ["Émirats arabes unis"], languages: ["Français", "العَرَبِيَّة"], extractedSkills: [] };
+    const profile = (targetCountry: string | null, requiredLanguages: string[]) => ({ targetCountry, specialty: null, minimumScore: 0, requiredLanguages: JSON.stringify(requiredLanguages), requiredSkills: null });
+    for (const country of ["emirats", "Emirats arabes unis", "ÉMIRATS", "e\u0301mirats"]) {
+      expect(matchesRecruitmentProfile({ ...candidate, profile: profile(country, []) })).toBe(true);
+    }
+    // Arabic typed without its harakat, as the admin search finds it.
+    for (const language of ["francais", "FRANCAIS", "Français", "العربية"]) {
+      expect(matchesRecruitmentProfile({ ...candidate, profile: profile(null, [language]) })).toBe(true);
+    }
+    // Another country, a language the dossier lacks or only part of its name: still refused.
+    expect(matchesRecruitmentProfile({ ...candidate, profile: profile("Qatar", []) })).toBe(false);
+    expect(matchesRecruitmentProfile({ ...candidate, profile: profile(null, ["francais", "anglais"]) })).toBe(false);
+    expect(matchesRecruitmentProfile({ ...candidate, profile: profile(null, ["fran"]) })).toBe(false);
+  });
+
   it("handles malformed JSON safely", () => {
     expect(parseRecruitmentJsonArray("not-json")).toEqual([]);
     expect(parseRecruitmentJsonArray(JSON.stringify(["France", 1, null]))).toEqual(["France"]);

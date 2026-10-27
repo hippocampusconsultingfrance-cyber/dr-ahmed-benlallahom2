@@ -599,11 +599,13 @@ type CampaignDb = NonNullable<Awaited<ReturnType<typeof getDb>>>;
 
 /**
  * Sends one campaign email and records the outcome; returns true when the
- * provider accepted it. Only a send the provider did not accept is « failed »
- * (and offered again by retryFailed). Once accepted, the email counts as sent
- * whatever happens to its bookkeeping, written in one batch (DATA-05): a
- * failure there is logged, never turned into a retryable failure, and the
- * per-recipient key keeps any later attempt from delivering it twice.
+ * provider accepted it. Whatever stops it before that acceptance, the
+ * recording of the unsubscribe token as much as the provider, leaves it
+ * « failed » (and offered again by retryFailed, under the same key). Once
+ * accepted, the email counts as sent whatever happens to its bookkeeping,
+ * written in one batch (DATA-05): a failure there is logged, never turned
+ * into a retryable failure, and the per-recipient key keeps any later attempt
+ * from delivering it twice.
  */
 async function deliverCampaignRecipient(
   db: CampaignDb,
@@ -613,11 +615,18 @@ async function deliverCampaignRecipient(
   adminOpenId: string,
 ) {
   const unsubscribeToken = candidate.marketingUnsubscribeToken || randomUUID().replace(/-/g, "");
-  if (!candidate.marketingUnsubscribeToken) {
-    await db.update(cvApplications).set({ marketingUnsubscribeToken: unsubscribeToken }).where(eq(cvApplications.id, candidate.id));
-  }
   let email: { id?: string };
   try {
+    // Recorded before the send, so that the email's unsubscribe link works.
+    // Refused, nothing is sent: a stable reason, never the query with its
+    // parameters (the token among them), is kept for the admin.
+    if (!candidate.marketingUnsubscribeToken) {
+      await db.update(cvApplications).set({ marketingUnsubscribeToken: unsubscribeToken }).where(eq(cvApplications.id, candidate.id))
+        .catch(tokenError => {
+          console.error("[RecruitmentCampaign] Unsubscribe token not recorded; email not sent", { campaignId: campaign.id, recipientId, error: tokenError instanceof Error ? tokenError.name : "UnknownError" });
+          throw new Error("unsubscribe_token_not_recorded");
+        });
+    }
     email = await sendRecruitmentCampaignEmail({
       candidateEmail: candidate.email,
       candidateFirstName: candidate.firstName,
@@ -2075,9 +2084,11 @@ export const appRouter = router({
               else failed += 1;
             }
             const statuses = await db.select({ deliveryStatus: recruitmentCampaignRecipients.deliveryStatus }).from(recruitmentCampaignRecipients).where(eq(recruitmentCampaignRecipients.campaignId, campaign.id));
-            // A recipient left « queued » is no failure: its email went out
-            // under its own key, accepted with both recordings refused
-            // (DATA-05), or is going out in another send. It is never retried.
+            // A recipient left « queued » is no failure, and is never retried:
+            // its email went out under its own key, accepted with both
+            // recordings refused (DATA-05), or is going out in another send.
+            // One stopped before the provider accepted it, its unsubscribe
+            // token not recorded included, is left « failed », offered again.
             const served = statuses.filter(row => ["sent", "delivered", "delayed", "queued"].includes(row.deliveryStatus)).length;
             await db.update(recruitmentCampaigns).set({ status: served === statuses.length ? "sent" : served > 0 ? "partially_sent" : "failed" }).where(eq(recruitmentCampaigns.id, campaign.id));
             return { campaignId: campaign.id, attempted: failedRecipients.length, sent, failed, skipped };

@@ -9,7 +9,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 type MutationOptions = { onSuccess?: (result: unknown, variables: never) => unknown; onError?: (error: unknown, variables: never) => unknown };
 
 // The component's useState/useMemo, kept between two renders like React does:
-// a click updates the state, the next render() returns the new tree.
+// a click updates the state, the next render() returns the new tree. Its
+// effect is not run: it only closes a mission gone, which no test here reads
+// (EmployerBriefsTab.dom.test.ts does, mounted in a DOM).
 const hooks = vi.hoisted(() => ({ values: [] as unknown[], index: 0 }));
 vi.mock("react", async importOriginal => {
   const actual = await importOriginal<typeof import("react")>();
@@ -21,6 +23,7 @@ vi.mock("react", async importOriginal => {
       return [hooks.values[slot], (next: unknown) => { hooks.values[slot] = typeof next === "function" ? (next as (value: unknown) => unknown)(hooks.values[slot]) : next; }];
     },
     useMemo: (factory: () => unknown) => factory(),
+    useEffect: () => undefined,
   };
 });
 
