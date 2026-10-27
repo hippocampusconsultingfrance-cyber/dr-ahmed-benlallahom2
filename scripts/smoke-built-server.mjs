@@ -1,4 +1,5 @@
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
+import { readFile } from "node:fs/promises";
 import http from "node:http";
 import net from "node:net";
 import path from "node:path";
@@ -20,6 +21,16 @@ import { pathToFileURL } from "node:url";
  * /api/health répond donc 503 (database « error ») : on exige le rapport
  * complet, une configuration « ok » et un code cohérent (200 seulement si tout
  * est « ok »), puis une requête tRPC anonyme, qui traverse clerkMiddleware.
+ *
+ * Le bundle garde en import("…") à la demande des paquets (stripe, pdf-parse,
+ * mammoth…) : un paquet absent n'y échoue qu'à la première requête qui le
+ * charge. Chacun doit donc se résoudre depuis le bundle, et les routes
+ * principales sont appelées : webhook Stripe mal signé (400 attendu, et non le
+ * 500 d'un SDK introuvable), webhook Resend sans signature (400), tâche
+ * planifiée avec le CRON_SECRET factice (403 sans lui ; avec lui, la tâche va
+ * jusqu'à la base injoignable : 500 dont la trace, sous la même référence,
+ * n'est pas une erreur de module), calcul public du prix d'une réservation
+ * (200). Aucune sortie du serveur ne doit montrer d'erreur de module.
  */
 
 /** PRODUCTION_REQUIRED_ENVIRONMENT_VARIABLES (server/_core/env.ts), toutes factices. */
@@ -43,9 +54,12 @@ export const SMOKE_ENVIRONMENT = Object.freeze({
   RESEND_WEBHOOK_SECRET: "whsec_smoke",
 });
 
+/** Contrôles des routes qui chargent les modules à la demande, communs aux deux bundles. */
+const ROUTE_CHECKS = ["lazyPackages", "booking", "stripeWebhook", "resendWebhook", "scheduledJob", "noModuleErrors"];
+
 export const BUILT_SERVERS = Object.freeze([
-  { name: "fonction Vercel (api/index.js)", entry: "api/index.js", vercel: true, checks: ["health", "api"] },
-  { name: "serveur Node (dist/index.js, pnpm start)", entry: "dist/index.js", vercel: false, checks: ["health", "api", "spa"] },
+  { name: "fonction Vercel (api/index.js)", entry: "api/index.js", vercel: true, checks: ["health", "api", ...ROUTE_CHECKS] },
+  { name: "serveur Node (dist/index.js, pnpm start)", entry: "dist/index.js", vercel: false, checks: ["health", "api", "spa", ...ROUTE_CHECKS] },
 ]);
 
 // Sur Vercel, api/index.js exporte le gestionnaire sans écouter de port : cet
@@ -70,18 +84,38 @@ function freePort() {
   });
 }
 
-function get(url) {
+function request(url, { method = "GET", headers = {}, body } = {}) {
   return new Promise((resolve, reject) => {
-    const request = http.get(url, { timeout: REQUEST_TIMEOUT_MS }, response => {
-      let body = "";
+    const outgoing = http.request(url, { method, headers, timeout: REQUEST_TIMEOUT_MS }, response => {
+      let text = "";
       response.setEncoding("utf8");
-      response.on("data", chunk => { body += chunk; });
-      response.on("end", () => resolve({ status: response.statusCode, headers: response.headers, body }));
+      response.on("data", chunk => { text += chunk; });
+      response.on("end", () => resolve({ status: response.statusCode, headers: response.headers, body: text }));
       response.on("error", reject);
     });
-    request.on("timeout", () => request.destroy(new Error(`${url} : pas de réponse en ${REQUEST_TIMEOUT_MS / 1000} s`)));
-    request.on("error", reject);
+    outgoing.on("timeout", () => outgoing.destroy(new Error(`${new URL(url).pathname} : pas de réponse en ${REQUEST_TIMEOUT_MS / 1000} s`)));
+    outgoing.on("error", reject);
+    outgoing.end(body);
   });
+}
+
+const get = url => request(url);
+
+/** Ce que Node écrit quand un import ne trouve pas son paquet ou son fichier. */
+const MODULE_ERROR = /ERR_MODULE_NOT_FOUND|Cannot find (?:package|module) '/;
+
+/** Paquets que le bundle n'importe qu'à la demande : import("x") dont x n'est pas un chemin. */
+export function lazyPackageImports(bundleSource) {
+  const specifiers = Array.from(bundleSource.matchAll(/\bimport\(\s*["']([^"'.\/][^"']*)["']\s*\)/g), match => match[1]);
+  return [...new Set(specifiers.filter(specifier => !specifier.startsWith("node:")))].sort();
+}
+
+/** Les paquets de `specifiers` que Node ne résout pas depuis le dossier du bundle, comme le ferait son import(). */
+function unresolvedPackages(entry, specifiers) {
+  const script = `for (const specifier of ${JSON.stringify(specifiers)}) { try { import.meta.resolve(specifier); } catch { console.log(specifier); } }`;
+  const resolution = spawnSync(process.execPath, ["--input-type=module", "--eval", script], { cwd: path.dirname(entry), encoding: "utf8" });
+  if (resolution.status !== 0) throw new Error(`résolution des paquets impossible : ${resolution.stderr.slice(0, 200)}`);
+  return resolution.stdout.split("\n").filter(Boolean);
 }
 
 const CONNECTION_ERRORS = new Set(["ECONNREFUSED", "ECONNRESET"]);
@@ -130,6 +164,55 @@ const CHECKS = {
       throw new Error(`/ : HTTP ${status} ${headers["content-type"]} sans <div id="root">`);
     }
     return `/ ${status} (page de l'application)`;
+  },
+  async lazyPackages(_base, { entry }) {
+    const specifiers = lazyPackageImports(await readFile(entry, "utf8"));
+    const missing = unresolvedPackages(entry, specifiers);
+    if (missing.length) throw new Error(`paquet(s) importé(s) à la demande introuvable(s) depuis ${path.basename(entry)} : ${missing.join(", ")}`);
+    return `${specifiers.length} paquet(s) importé(s) à la demande résolu(s)`;
+  },
+  async booking(base) {
+    const input = encodeURIComponent(JSON.stringify({ json: { appointmentDate: "2026-03-10T09:00:00.000Z" } }));
+    const { status, body } = await getWithRetries(`${base}/api/trpc/appointments.calculatePrice?input=${input}`);
+    const price = status === 200 ? parseJson(body, "appointments.calculatePrice")?.result?.data?.json : undefined;
+    if (typeof price?.basePrice !== "number" || typeof price?.finalPrice !== "number") throw new Error(`/api/trpc/appointments.calculatePrice : HTTP ${status} ${body.slice(0, 200)}`);
+    return `/api/trpc/appointments.calculatePrice ${status} (prix ${price.finalPrice})`;
+  },
+  async stripeWebhook(base) {
+    const timestamp = Math.floor(Date.now() / 1000);
+    const { status, body } = await request(`${base}/api/stripe/webhook`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "stripe-signature": `t=${timestamp},v1=${"0".repeat(64)}` },
+      body: JSON.stringify({ id: "evt_smoke", object: "event", type: "checkout.session.completed", data: { object: {} } }),
+    });
+    // 400 : le SDK Stripe s'est chargé et a refusé la signature ; 500 : il n'a pas pu se charger.
+    if (status !== 400 || parseJson(body, "/api/stripe/webhook")?.error !== "Invalid webhook") throw new Error(`/api/stripe/webhook (signature invalide) : HTTP ${status} ${body.slice(0, 200)}`);
+    return "/api/stripe/webhook 400 (signature refusée)";
+  },
+  async resendWebhook(base) {
+    const { status, body } = await request(`${base}/api/webhooks/resend`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+    if (status !== 400) throw new Error(`/api/webhooks/resend (sans signature) : HTTP ${status} ${body.slice(0, 200)}`);
+    return "/api/webhooks/resend 400 (signature absente refusée)";
+  },
+  async scheduledJob(base, { output }) {
+    const route = `${base}/api/scheduled/recruitment-processing`;
+    const anonymous = await request(route);
+    if (anonymous.status !== 403) throw new Error(`/api/scheduled/recruitment-processing sans CRON_SECRET : HTTP ${anonymous.status} (attendu 403)`);
+    const { status, body } = await request(route, { headers: { authorization: `Bearer ${SMOKE_ENVIRONMENT.CRON_SECRET}` } });
+    if (status === 200) return "/api/scheduled/recruitment-processing 200";
+    const failure = status === 500 ? parseJson(body, "/api/scheduled/recruitment-processing") : undefined;
+    if (failure?.error !== "scheduled_job_failed" || typeof failure.reference !== "string") throw new Error(`/api/scheduled/recruitment-processing : HTTP ${status} ${body.slice(0, 200)}`);
+    // La base est injoignable : la tâche échoue, mais sa trace doit être celle de la base.
+    await new Promise(resolve => setTimeout(resolve, 100));
+    const trace = output().split("\n").find(line => line.includes(`ref=${failure.reference}`));
+    if (!trace) throw new Error(`/api/scheduled/recruitment-processing : aucune trace pour la référence ${failure.reference}`);
+    if (MODULE_ERROR.test(trace)) throw new Error(`/api/scheduled/recruitment-processing : erreur de module ${trace.slice(0, 300)}`);
+    return "/api/scheduled/recruitment-processing 500 (base injoignable, modules chargés)";
+  },
+  async noModuleErrors(_base, { output }) {
+    const line = output().split("\n").find(text => MODULE_ERROR.test(text));
+    if (line) throw new Error(`erreur de module dans la sortie du serveur : ${line.slice(0, 300)}`);
+    return "aucune erreur de module";
   },
 };
 
@@ -181,7 +264,7 @@ export async function smokeBuiltServer(target, { root = process.cwd(), startTime
     });
     const base = `http://127.0.0.1:${port}`;
     const results = [];
-    for (const check of target.checks) results.push(await CHECKS[check](base));
+    for (const check of target.checks) results.push(await CHECKS[check](base, { entry, output: () => output }));
     return { port, results };
   } catch (error) {
     await stop(child, closed);
