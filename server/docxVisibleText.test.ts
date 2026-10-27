@@ -50,6 +50,22 @@ const drawingBox = (content: string, cx: number, cy: number) =>
   `<wps:txbx><w:txbxContent>${content}</w:txbxContent></wps:txbx><wps:bodyPr rot="0" vert="horz" wrap="square" lIns="91440" tIns="45720" rIns="91440" bIns="45720" anchor="t"><a:noAutofit/></wps:bodyPr></wps:wsp></a:graphicData></a:graphic></wp:anchor></w:drawing>`;
 const inRun = (content: string) => `<w:p><w:r>${content}</w:r></w:p>`;
 const alternate = (choice: string, fallback: string) => inRun(`<mc:AlternateContent><mc:Choice Requires="wps">${choice}</mc:Choice><mc:Fallback>${fallback}</mc:Fallback></mc:AlternateContent>`);
+/**
+ * A rectangle without text placed from its paragraph and the column, that does not wrap the text, in front of it or behind it:
+ * Word's and its VML copy; its size and its place down in points, its DrawingML fill.
+ */
+const rectangle = ({ behind = false, fill = '<a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill>', width = 472, height = 126, top = 0 } = {}) => alternate(
+  `<w:drawing><wp:anchor distT="0" distB="0" distL="0" distR="0" simplePos="0" relativeHeight="5" behindDoc="${behind ? 1 : 0}" locked="0" layoutInCell="1" allowOverlap="1"><wp:simplePos x="0" y="0"/><wp:positionH relativeFrom="column"><wp:posOffset>0</wp:posOffset></wp:positionH><wp:positionV relativeFrom="paragraph"><wp:posOffset>${Math.round(top * 12_700)}</wp:posOffset></wp:positionV>` +
+  `<wp:extent cx="${width * 12_700}" cy="${height * 12_700}"/><wp:wrapNone/><wp:docPr id="5" name="Rectangle 5"/><a:graphic><a:graphicData uri="http://schemas.microsoft.com/office/word/2010/wordprocessingShape"><wps:wsp><wps:cNvSpPr/><wps:spPr><a:prstGeom prst="rect"><a:avLst/></a:prstGeom>${fill}</wps:spPr><wps:bodyPr/></wps:wsp></a:graphicData></a:graphic></wp:anchor></w:drawing>`,
+  `<w:pict><v:rect style="position:absolute;margin-left:0;margin-top:${top}pt;width:${width}pt;height:${height}pt;z-index:${behind ? -5 : 5}" fillcolor="white" stroked="f"/></w:pict>`);
+/** A table of fixed layout of one column whose cell, merged down its rows (w:vMerge), holds `content`: the properties of each row. */
+const mergedTable = (rows: string[], content: string) =>
+  `<w:tbl><w:tblPr><w:tblW w:w="9000" w:type="dxa"/><w:tblLayout w:type="fixed"/></w:tblPr><w:tblGrid><w:gridCol w:w="9000"/></w:tblGrid>` +
+  rows.map((row, index) => `<w:tr><w:trPr>${row}</w:trPr><w:tc><w:tcPr><w:tcW w:w="9000" w:type="dxa"/><w:vMerge${index ? "" : ' w:val="restart"'}/></w:tcPr>${index ? "<w:p/>" : content}</w:tc></w:tr>`).join("") + "</w:tbl>";
+/** A row of a table of fixed layout and of two cells, the second of `width` twips holding `content` in text run from bottom to top. */
+const turnedCell = (row: string, width: number, content: string) =>
+  `<w:tbl><w:tblPr><w:tblW w:w="9000" w:type="dxa"/><w:tblLayout w:type="fixed"/></w:tblPr><w:tblGrid><w:gridCol w:w="${9000 - width}"/><w:gridCol w:w="${width}"/></w:tblGrid>` +
+  `<w:tr><w:trPr>${row}</w:trPr><w:tc><w:tcPr><w:tcW w:w="${9000 - width}" w:type="dxa"/></w:tcPr><w:p/></w:tc><w:tc><w:tcPr><w:tcW w:w="${width}" w:type="dxa"/><w:textDirection w:val="btLr"/></w:tcPr>${content}</w:tc></w:tr></w:tbl>`;
 
 const HONEST = ["Claire Exemple", "Infirmière diplômée d'État", "Expérience : 2022-09 à 2024-09 : Infirmière, Clinique Exemple (Tunisie)."];
 const FAKE = [
@@ -342,6 +358,161 @@ describe("DOCX : texte que sa place peut couper (IA-01)", () => {
     });
   });
 
+  describe("ce que Word seul ne dessine pas, et les places que la mise en page ôte au texte : rien des affirmations n’est lu, les mises en page honnêtes voisines le sont", () => {
+    const W14 = 'xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml"';
+    const claims = (properties = "", runProperties = "") => FAKE.map(line => paragraph(line, properties, runProperties)).join("");
+    const read = async (body: string, lines: string[], styles?: string) => {
+      const result = await check(body, { styles });
+      for (const line of [...HONEST, ...lines]) expect(result.text, line).toContain(line);
+      expect(result).toMatchObject({ hidden: "", unverifiable: "", reasons: [] });
+    };
+    const hiddenAll = (result: Awaited<ReturnType<typeof check>>) => {
+      expectSetAside(result);
+      expect(letters(result.hidden)).toBeGreaterThanOrEqual(letters(FAKE_ONE));
+    };
+
+    it("zone de texte que Word ne dessine pas (wp:docPr hidden, VML visibility:hidden), que LibreOffice dessine : ses affirmations sont comptées cachées", async () => {
+      const inner = claims();
+      hiddenAll(await check(alternate(drawingBox(inner, 5_400_000, 2_540_000).replace('<wp:docPr id="1"', '<wp:docPr id="1" hidden="1"'), vmlBox(inner, 200))));
+      hiddenAll(await check(inRun(vmlBox(inner, 200, 425, "tb1", "", "margin-left:0;margin-top:0;visibility:hidden"))));
+    });
+
+    it("la même zone de texte dessinée : lue", async () => {
+      await read(alternate(drawingBox(claims(), 5_400_000, 2_540_000), vmlBox(claims(), 200)), FAKE);
+    });
+
+    it.each([
+      ["sans remplissage (w14:noFill)", `<w14:textFill ${W14}><w14:noFill/></w14:textFill>`],
+      ["remplies de blanc, leur couleur noire", `<w:color w:val="000000"/><w14:textFill ${W14}><w14:solidFill><w14:srgbClr w14:val="FFFFFF"/></w14:solidFill></w14:textFill>`],
+      ["remplies d’un noir transparent", `<w14:textFill ${W14}><w14:solidFill><w14:srgbClr w14:val="000000"><w14:alpha w14:val="100000"/></w14:srgbClr></w14:solidFill></w14:textFill>`],
+    ])("lettres que Word remplit de rien, %s, LibreOffice de leur couleur : comptées cachées", async (_, properties) => {
+      hiddenAll(await check(claims("", properties)));
+    });
+
+    it("style de caractère qui ne remplit pas ses lettres : comptées cachées", async () => {
+      const styles = `<w:style w:type="character" w:styleId="Vide"><w:rPr><w14:textFill ${W14}><w14:noFill/></w14:textFill></w:rPr></w:style>`;
+      hiddenAll(await check(claims("", '<w:rStyle w:val="Vide"/>'), { styles }));
+    });
+
+    it("lettres sans remplissage tracées d’un contour (w14:textOutline), ou remplies de noir quand leur couleur est blanche : lues", async () => {
+      const outlined = `<w:sz w:val="48"/><w14:textOutline ${W14} w14:w="9525"><w14:solidFill><w14:srgbClr w14:val="1F3864"/></w14:solidFill></w14:textOutline><w14:textFill ${W14}><w14:noFill/></w14:textFill>`;
+      const black = `<w:color w:val="FFFFFF"/><w14:textFill ${W14}><w14:solidFill><w14:srgbClr w14:val="000000"/></w14:solidFill></w14:textFill>`;
+      await read(paragraph("Claire EXEMPLE", "", outlined) + paragraph("Disponibilité : immédiate.", "", black), ["Claire EXEMPLE", "Disponibilité : immédiate."]);
+    });
+
+    it("cellule fusionnée sur une ligne exacte de 15 pt et une de 1 pt : sa première ligne est lue, les affirmations sous les deux sont comptées cachées", async () => {
+      const result = await check(mergedTable([exact(300), exact(20)], paragraph("Disponibilité : immédiate.") + claims()));
+      expect(result.text).toContain("Disponibilité : immédiate.");
+      hiddenAll(result);
+    });
+
+    it("cellule fusionnée sur une ligne exacte et une ligne qui grandit avec son texte, ou sur des lignes exactes assez hautes : lue", async () => {
+      const content = paragraph("Disponibilité : immédiate.") + paragraph("Permis B.");
+      await read(mergedTable([exact(300), ""], content) + mergedTable([exact(300), exact(400)], content), ["Disponibilité : immédiate.", "Permis B."]);
+    });
+
+    it("texte de bas en haut dans une cellule de 30 pt de large d’une ligne exacte de 15 pt : ses lignes de 15 pt de long, côte à côte, n’y tiennent pas ; écarté", async () => {
+      expectSetAside(await check(turnedCell(exact(300), 600, paragraph("Disponible") + claims())));
+    });
+
+    it("libellé de bas en haut dans une cellule d’une ligne exacte de 5 cm, ou d’une ligne qui grandit : lu", async () => {
+      await read(turnedCell(exact(2835), 600, paragraph("PROFIL")) + turnedCell("", 600, paragraph("EXPÉRIENCE")), ["PROFIL", "EXPÉRIENCE"]);
+    });
+
+    // Word's text box (wps:bodyPr vert) and its VML copy (v:textbox layout-flow), of this width and height in points.
+    const turnedBox = (content: string, width: number, height: number) => alternate(
+      drawingBox(content, width * 12_700, height * 12_700).replace('vert="horz"', 'vert="vert"'),
+      vmlBox(content, height, width, "tb1", "layout-flow:vertical"));
+
+    it("zone de texte de 20 pt de côté dont le texte court de haut en bas, DrawingML ou VML : écarté", async () => {
+      expectSetAside(await check(turnedBox(paragraph("Disponible") + claims(), 20, 20)));
+      expectSetAside(await check(inRun(vmlBox(paragraph("Disponible") + claims(), 20, 20, "tb1", "layout-flow:vertical"))));
+    });
+
+    it("libellé de haut en bas dans une zone de 30 pt de large et 150 de haut : lu", async () => {
+      await read(turnedBox(paragraph("PROFIL"), 30, 150), ["PROFIL"]);
+    });
+
+    // A section ending at its last paragraph, of these columns (w:cols), on the page of the document.
+    const section = (columns: string) =>
+      `<w:p><w:pPr><w:sectPr><w:type w:val="continuous"/><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:left="1417" w:right="1417" w:top="1417" w:bottom="1417"/>${columns}</w:sectPr></w:pPr></w:p>`;
+    const columnBreak = '<w:p><w:r><w:br w:type="column"/></w:r></w:p>';
+    const OFF_PAGE_COLUMN = '<w:cols w:num="2" w:space="0" w:equalWidth="0"><w:col w:w="9000" w:space="20000"/><w:col w:w="4000"/></w:cols>';
+
+    it("saut de colonne vers une seconde colonne que l’espace après la première place hors de la page : comptées cachées ; après un saut de page, le texte revient dans la première", async () => {
+      hiddenAll(await check(columnBreak + claims() + section(OFF_PAGE_COLUMN)));
+      const back = await check(columnBreak + paragraph("Note.") + '<w:p><w:r><w:br w:type="page"/></w:r></w:p>' + paragraph("Permis B.") + section(OFF_PAGE_COLUMN));
+      expect(back).toMatchObject({ hidden: "Note.", unverifiable: "" });
+      expect(back.text).toContain("Permis B.");
+    });
+
+    it("deux colonnes égales, ou de largeurs données dans la page, et un saut de colonne : les deux colonnes sont lues", async () => {
+      await read(columnBreak + paragraph("Permis B.") + section('<w:cols w:num="2" w:space="708"/>'), ["Permis B."]);
+      await read(columnBreak + paragraph("Permis B.") + section('<w:cols w:num="2" w:space="0" w:equalWidth="0"><w:col w:w="4000" w:space="500"/><w:col w:w="4500"/></w:cols>'), ["Permis B."]);
+    });
+
+    // A table of two columns of these widths (twips), the second holding `content`, of fixed layout or fitted to its text.
+    const twoColumns = (first: number, second: number, fixed: boolean, content: string) =>
+      `<w:tbl><w:tblPr><w:tblW w:w="${first + second}" w:type="dxa"/>${fixed ? '<w:tblLayout w:type="fixed"/>' : ""}</w:tblPr><w:tblGrid><w:gridCol w:w="${first}"/><w:gridCol w:w="${second}"/></w:tblGrid>` +
+      `<w:tr><w:tc><w:tcPr><w:tcW w:w="${first}" w:type="dxa"/></w:tcPr>${paragraph("Profil")}</w:tc><w:tc><w:tcPr><w:tcW w:w="${second}" w:type="dxa"/></w:tcPr>${content}</w:tc></w:tr></w:tbl>`;
+
+    it("seconde colonne d’un tableau qui commence au-delà du bord droit de la page : comptée cachée dans un tableau fixe, écartée dans un tableau ajusté au texte", async () => {
+      hiddenAll(await check(twoColumns(11500, 4000, true, claims())));
+      const fitted = await check(twoColumns(11500, 4000, false, claims()));
+      expectSetAside(fitted);
+      expect(fitted).toMatchObject({ hidden: "", reasons: ["layout"] });
+    });
+
+    it("tableau de deux colonnes dans la largeur de la page : lu", async () => {
+      await read(twoColumns(4500, 4500, true, paragraph("Permis B.")), ["Profil", "Permis B."]);
+    });
+
+    it("rectangle blanc posé devant le texte qui le suit, DrawingML ou VML seul : écarté sans être compté caché, ce qui est au-dessus est lu", async () => {
+      for (const shape of [rectangle(), inRun('<w:pict><v:rect style="position:absolute;margin-left:0;margin-top:0;width:472pt;height:126pt;z-index:5" fillcolor="white" stroked="f"/></w:pict>')]) {
+        const result = await check(shape + claims());
+        expectSetAside(result);
+        expect(result).toMatchObject({ hidden: "", reasons: ["layout"] });
+      }
+    });
+
+    it("rectangle blanc remonté sur les paragraphes au-dessus de son ancre : ils sont écartés, ceux qu’il n’atteint pas sont lus", async () => {
+      const result = await check(paragraph("").repeat(20) + claims() + rectangle({ top: -60, height: 60 }));
+      expectSetAside(result);
+      expect(result.hidden).toBe("");
+    });
+
+    it("rectangle derrière le texte, transparent, étroit, d’un trait de 2 pt, ou trop court pour atteindre le texte loin dessous : tout est lu", async () => {
+      const below = paragraph("").repeat(3) + paragraph("Permis B.");
+      await read([
+        rectangle({ behind: true }) + paragraph("Disponibilité : immédiate."),
+        rectangle({ fill: '<a:solidFill><a:srgbClr val="FFFFFF"><a:alpha val="0"/></a:srgbClr></a:solidFill>' }) + paragraph("Langues : Français."),
+        rectangle({ width: 100 }) + paragraph("Mobilité : Golfe."),
+        rectangle({ height: 2 }) + paragraph("Certifications : AFGSU niveau 2 (2023)."),
+        rectangle({ height: 20 }) + below,
+      ].join(""), ["Disponibilité : immédiate.", "Langues : Français.", "Mobilité : Golfe.", "Certifications : AFGSU niveau 2 (2023).", "Permis B."]);
+    });
+
+    it("cadre placé à 1 000 pt à gauche de la page (w:framePr w:x) : comptées cachées ; cadre placé dans la page, lu", async () => {
+      const frame = (x: number) => `<w:framePr w:w="6000" w:wrap="around" w:vAnchor="text" w:hAnchor="page" w:x="${x}" w:y="1"/>`;
+      hiddenAll(await check(claims(frame(-20000))));
+      await read(paragraph("Permis B.", frame(1500)), ["Permis B."]);
+    });
+
+    // A VML group of 100 pt square whose text box, in its coordinates (1000 a side), is this many units high.
+    const grouped = (content: string, height: number) => inRun(`<w:pict><v:group style="position:absolute;margin-left:0;margin-top:0;width:100pt;height:100pt" coordorigin="0,0" coordsize="1000,1000"><v:shape type="#_x0000_t202" style="position:absolute;left:0;top:0;width:1000;height:${height}" filled="f" stroked="f"><v:textbox><w:txbxContent>${content}</w:txbxContent></v:textbox></v:shape></v:group></w:pict>`);
+
+    it("zone de texte d’un groupe VML, de 1 pt de haut à l’échelle du groupe : comptées cachées ; de toute sa hauteur, lue", async () => {
+      hiddenAll(await check(grouped(claims(), 10)));
+      await read(grouped(paragraph("Permis B."), 1000), ["Permis B."]);
+    });
+
+    it("interligne simple multiplié par 10/240 : les lignes se recouvrent toutes, comptées cachées ; multiplié par 0,5, lu", async () => {
+      const result = await check(paragraph("") + paragraph("Disponible.", '<w:spacing w:line="10" w:lineRule="auto"/>') + claims('<w:spacing w:line="10" w:lineRule="auto"/>'));
+      hiddenAll(result);
+      await read(paragraph("Permis B.", '<w:spacing w:line="120" w:lineRule="auto"/>') + paragraph("Disponibilité : immédiate."), ["Permis B.", "Disponibilité : immédiate."]);
+    });
+  });
+
   // Not handled yet, as before: a drop cap's letter set in an exact spacing of 5 pt, a floating table (w:tblpPr) placed off the page.
   it.todo("lettrines piégées à interligne exact de 5 pt et tableau flottant placé hors de la page : leurs affirmations sont écartées");
 
@@ -543,6 +714,16 @@ describe("DOCX : texte que sa place peut couper (IA-01)", () => {
       });
       expect(cells.ms).toBeLessThan(cells.bound);
       expect(cells.result).toMatchObject({ invisibleText: [], unverifiableText: [] });
+    }, 120_000);
+
+    it("8 000 rectangles devant le texte remontés sur les paragraphes au-dessus, une cellule fusionnée sur 20 000 lignes exactes, 20 000 cellules de texte vertical : contrôlés en quelques secondes au plus", () => {
+      const fronts = timedGrowth(scale => docx(honestLines() + (rectangle({ top: -60, height: 60 }) + paragraph("x")).repeat(scaled(8_000, scale))));
+      expect(fronts.ms).toBeLessThan(fronts.bound);
+      expect(fronts.result.unverifiableText.length).toBeGreaterThan(0);
+      const merged = timedGrowth(scale => docx(mergedTable(Array.from({ length: scaled(20_000, scale) }, () => exact(20)), paragraph("Disponibilité : immédiate."))));
+      expect(merged.ms).toBeLessThan(merged.bound);
+      const turned = timedGrowth(scale => docx(turnedCell(exact(300), 600, paragraph("x")).repeat(scaled(20_000, scale))));
+      expect(turned.ms).toBeLessThan(turned.bound);
     }, 120_000);
 
     it("styles fondés l’un sur l’autre en boucle, ou sur un style absent : résolus sans boucler, le texte blanc qu’ils donnent reste caché", async () => {

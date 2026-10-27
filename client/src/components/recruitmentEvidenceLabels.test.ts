@@ -66,8 +66,8 @@ describe("libellés des preuves IA d’un CV (IA-01)", () => {
     expect(extractionWarningLabel("text_layer_reread:4527")).not.toMatch(/écarté/);
     expect(extractionWarningLabel("pdf_font_not_drawable")).toBe("police non incorporée au PDF que l’outil ne sait pas dessiner : son texte n’a pas pu être vérifié");
     expect(extractionWarningLabel("pdf_visibility_check_unfinished")).toBe("contrôle de visibilité non terminé (document long ou lourd) : le texte non contrôlé est écarté");
-    // DOCX text whose place may cut it, and the layout check stopped on a long or heavy document.
-    expect(extractionWarningLabel("docx_text_may_be_cut")).toBe("texte que sa ligne de tableau, sa zone de texte, son cadre ou son interligne de taille fixe, ou le bord de la page, peuvent couper : il n’a pas pu être vérifié");
+    // DOCX text whose place may cut it, or a shape in front of it hide it, and the layout check stopped on a long or heavy document.
+    expect(extractionWarningLabel("docx_text_may_be_cut")).toBe("texte que sa ligne de tableau, sa zone de texte, son cadre, son interligne, une forme posée devant lui ou le bord de la page peuvent couper ou cacher : il n’a pas pu être vérifié");
     expect(extractionWarningLabel("docx_layout_check_unfinished")).toMatch(/^contrôle de mise en page non terminé \(document long ou lourd\) : le texte non contrôlé .* est écarté$/);
     expect(extractionWarningLabel("pdf_text_page_3_insufficient_text")).toBe("page 3 : texte insuffisant");
     // Pages read by the vision, and what it noted on them.

@@ -337,7 +337,7 @@ const UNVERIFIABLE_REASONS: Record<UnverifiableTextReason, { warning: string; la
   unfinished: { warning: "pdf_visibility_check_unfinished", label: "contrôle de visibilité non terminé (document long ou lourd)" },
   unmatched: { warning: "pdf_text_unmatched", label: "texte que l’outil n’a pas pu rattacher à son dessin" },
   drawing: { warning: "docx_white_text_near_drawing", label: "texte blanc ou peu contrasté sur un fond incertain : zone de texte, image ou forme proche, style de tableau" },
-  layout: { warning: "docx_text_may_be_cut", label: "texte que sa ligne de tableau, sa zone de texte, son cadre ou son interligne de taille fixe, ou le bord de la page, peuvent couper" },
+  layout: { warning: "docx_text_may_be_cut", label: "texte que sa ligne de tableau, sa zone de texte, son cadre, son interligne, une forme posée devant lui ou le bord de la page peuvent couper ou cacher" },
   layout_unfinished: { warning: "docx_layout_check_unfinished", label: "contrôle de mise en page non terminé (document long ou lourd)" },
 };
 
