@@ -1,22 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { createServer } from "vite";
-import { describe, expect, it, vi } from "vitest";
-import { listen } from "../../server/testSupport/candidateUploadApp";
-
-// La vraie application Express (createApp), sans base ni Clerk, et sans
-// serveur démarré à l'import (VERCEL=1).
-vi.hoisted(() => {
-  process.env.VERCEL = "1";
-});
-vi.mock("../../server/db", () => ({ getDb: async () => null }));
-vi.mock("@clerk/express", () => ({
-  clerkMiddleware: () => (_req: unknown, _res: unknown, next: () => void) => next(),
-  getAuth: () => ({ userId: null }),
-  clerkClient: { users: { getUser: vi.fn() } },
-}));
-
-const { createApp } = await import("../../server/_core/index");
+import { describe, expect, it } from "vitest";
 
 const root = resolve(import.meta.dirname, "../..");
 const read = (file: string) => readFileSync(resolve(root, file), "utf8");
@@ -34,25 +19,7 @@ describe("polices auto-hébergées (PUB-COOKIE-02 / PERF-05)", () => {
     expect(csp).not.toMatch(/fonts\.googleapis\.com|fonts\.gstatic\.com/);
     expect(csp).toContain("font-src 'self' data:;");
     expect(read("server/_core/contentSecurityPolicy.ts")).not.toMatch(/fonts\.googleapis\.com|fonts\.gstatic\.com/);
-  });
-
-  it("ne mène à Google Fonts dans aucune réponse du serveur Express", async () => {
-    const { server, baseUrl } = await listen((await createApp()) as never);
-    try {
-      // La sonde de disponibilité, montée avant Clerk, puis une route de server/routes, derrière lui.
-      const responses = [
-        await fetch(`${baseUrl}/api/health`),
-        await fetch(`${baseUrl}/api/client-briefs`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }),
-      ];
-      expect(responses.map(response => response.status)).toEqual([503, 400]);
-      for (const response of responses) {
-        expect(response.headers.get("content-security-policy")).toContain("font-src 'self' data:;");
-        expect(Array.from(response.headers.entries()).join("\n")).not.toMatch(/fonts\.googleapis\.com|fonts\.gstatic\.com/);
-        expect(await response.text()).not.toMatch(/fonts\.googleapis\.com|fonts\.gstatic\.com/);
-      }
-    } finally {
-      await new Promise(resolve => server.close(resolve));
-    }
+    // Les réponses du serveur Express : server/routes/selfHostedFonts.test.ts.
   });
 
   it("sert DM Sans et Playfair Display depuis le build, sous-ensemble latin uniquement", () => {
