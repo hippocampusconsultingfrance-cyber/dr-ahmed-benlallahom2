@@ -105,7 +105,7 @@ const get = url => request(url);
 const MODULE_ERROR = /ERR_MODULE_NOT_FOUND|Cannot find (?:package|module) '/;
 
 /** Paquets que le bundle n'importe qu'à la demande : import("x") dont x n'est pas un chemin. */
-export function lazyPackageImports(bundleSource) {
+function lazyPackageImports(bundleSource) {
   const specifiers = Array.from(bundleSource.matchAll(/\bimport\(\s*["']([^"'.\/][^"']*)["']\s*\)/g), match => match[1]);
   return [...new Set(specifiers.filter(specifier => !specifier.startsWith("node:")))].sort();
 }
