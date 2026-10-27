@@ -7,6 +7,7 @@ import {
   candidateDocumentAllowsAiAnalysis,
 } from "../shared/candidateDocumentCategories";
 import { canRequestCandidateDocumentReanalysis } from "../shared/candidateDocumentReanalysis";
+import { hiddenTextFlagLabel } from "../shared/candidateDocumentHiddenText";
 import { CANDIDATE_DOCUMENT_MAX_BYTES, CANDIDATE_DOCUMENT_TOO_LARGE_MESSAGE } from "../shared/candidateDocumentLimits";
 import { candidatePortalCopy } from "../client/src/pages/CandidatePortalPage";
 import { createInMemoryDrizzle, type InMemoryDrizzle } from "./testSupport/inMemoryDrizzle";
@@ -35,7 +36,8 @@ vi.mock("./storage", () => ({
   storageGetSignedUrl: vi.fn(async (key: string) => { state.storageReads.push(key); return `https://blob.test/${key}`; }),
   storageDelete: vi.fn(async (keys: string[]) => { keys.forEach(key => state.blobs.delete(key)); return keys.length; }),
 }));
-vi.mock("./candidateDocumentAnalysis", () => ({
+vi.mock("./candidateDocumentAnalysis", async importOriginal => ({
+  ...await importOriginal<typeof import("./candidateDocumentAnalysis")>(),
   analyzeCandidateDocument: vi.fn(async (input: { declaredCategory: string }) => {
     state.analyses.push(input.declaredCategory);
     return { model: "test-model", analysis: { documentKind: "Diplôme", summary: "Synthèse de test", issuingOrganization: null, issueDate: null, expiryDate: null, confidence: 80, flags: [], missingInformation: [] } };
@@ -55,6 +57,7 @@ globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) =>
   return realFetch(input as RequestInfo, init);
 }) as typeof fetch;
 const { enqueueCandidateDocumentAnalysis, processDueCandidateDocumentAnalysisJobs } = await import("./candidateDocumentProcessing");
+const { analyzeCandidateDocument, CandidateDocumentTextSetAsideError } = await import("./candidateDocumentAnalysis");
 const { runCandidateDocumentProcessingWorker } = await import("./scheduledJobs");
 
 const sessionToken = "candidate-session-token-for-upload-tests";
@@ -205,6 +208,25 @@ describe("LEGAL-12 — catégories sensibles et analyse IA des documents candida
     }
     expect(db().rows(candidateDocumentProcessingJobs).every(job => job.status === "completed" && job.lastError === "human_review_only")).toBe(true);
     expect(db().rows(candidateDocumentAuditLogs).filter(log => String(log.metadata).includes("human_review_only"))).toHaveLength(4);
+  });
+
+  it("document dont tout le texte est écarté comme non vérifiable (IA-01) : revue humaine dès la première tentative, la raison gardée dans la fiche", async () => {
+    const result = await uploadDocument(baseUrl, sessionToken, { category: "diploma", buffer: validPdfBuffer(), name: "diplome.pdf" });
+    expect(result.status).toBe(201);
+    const excerpt = "Diplôme d’État infirmier, Institut de Tunis (2022)";
+    const hiddenText = { characters: 0, excerpt: "", unverifiable: { characters: 412, excerpt, reasons: ["layout_unfinished" as const], share: 1 } };
+    vi.mocked(analyzeCandidateDocument).mockRejectedValueOnce(new CandidateDocumentTextSetAsideError(hiddenText));
+
+    await expect(processDueCandidateDocumentAnalysisJobs(5)).resolves.toMatchObject({ processed: 1, retried: 0, needsReview: 1 });
+
+    const [document] = db().rows(candidateDocuments);
+    expect(document).toMatchObject({ analysisStatus: "needs_review", status: "needs_review", analysisAttempts: 1, analysisLastError: "candidate_document_text_set_aside" });
+    const flags = JSON.parse(String(document!.aiFlags)) as string[];
+    expect(flags).toEqual(["ai_analysis_unavailable", "candidate_document_text_set_aside", "unverifiable_text_set_aside:412"]);
+    // The admin's card says what was left out, with its excerpt.
+    const wording = { invisible: "{count} invisible", unverifiable: "{count} non vérifiable(s)", excerpt: "extrait : {excerpt}", compare: "à comparer" };
+    expect(hiddenTextFlagLabel(flags[2]!, String(document!.aiExtractedData), wording)).toBe(`412 non vérifiable(s) (extrait : ${excerpt}), à comparer`);
+    expect(db().rows(candidateDocumentProcessingJobs)).toMatchObject([{ status: "completed", attempts: 1, lastError: "candidate_document_text_set_aside" }]);
   });
 });
 

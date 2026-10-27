@@ -14,14 +14,18 @@ import { buildZip } from "./testing/zipFixture";
 
 const W_NAMESPACE = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 
-function docx(body: string, styles = "") {
+/** `parts`: other parts of the document (word/footnotes.xml…), linked to it by the relationship they name, or in place of its own. */
+function docx(body: string, styles = "", parts: Array<{ name: string; relationship?: string; content: string }> = []) {
+  const links = parts.filter(part => part.relationship).map((part, index) =>
+    `<Relationship Id="rId${index + 2}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/${part.relationship}" Target="${part.name.slice("word/".length)}"/>`).join("");
+  const replaced = new Set(parts.map(part => part.name));
   return buildZip([
     { name: "[Content_Types].xml", content: '<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/></Types>' },
     { name: "_rels/.rels", content: '<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>' },
-    { name: "word/_rels/document.xml.rels", content: '<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>' },
+    { name: "word/_rels/document.xml.rels", content: `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>${links}</Relationships>` },
     { name: "word/document.xml", content: `<?xml version="1.0" encoding="UTF-8"?><w:document xmlns:w="${W_NAMESPACE}" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:wps="http://schemas.microsoft.com/office/word/2010/wordprocessingShape" xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"><w:body>${body}<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:left="1417" w:right="1417" w:top="1417" w:bottom="1417"/></w:sectPr></w:body></w:document>` },
     { name: "word/styles.xml", content: `<?xml version="1.0" encoding="UTF-8"?><w:styles xmlns:w="${W_NAMESPACE}"><w:docDefaults><w:rPrDefault><w:rPr><w:sz w:val="22"/></w:rPr></w:rPrDefault></w:docDefaults>${styles}</w:styles>` },
-  ]);
+  ].filter(part => !replaced.has(part.name)).concat(parts.map(({ name, content }) => ({ name, content }))));
 }
 
 const escaped = (text: string) => text.replace(/&/g, "&amp;").replace(/</g, "&lt;");
@@ -394,6 +398,87 @@ describe("DOCX : texte que sa place peut couper (IA-01)", () => {
         expect(new Set(result.unverifiableText.map(passage => passage.reason))).toEqual(new Set(["layout_unfinished"]));
       }
     }, 60_000);
+
+    it.each([
+      ["les notes de bas de page", { name: "word/footnotes.xml", relationship: "footnotes", content: `<w:footnotes xmlns:w="${W_NAMESPACE}"><w:footnote w:id="1">${"<w:tbl><w:tr><w:tc>".repeat(20_000)}<w:p/>${"</w:tc></w:tr></w:tbl>".repeat(20_000)}</w:footnote></w:footnotes>` }],
+      ["les styles", { name: "word/styles.xml", content: `<w:styles xmlns:w="${W_NAMESPACE}"><w:style w:type="paragraph" w:styleId="Profond"><w:pPr>${"<w:rPr>".repeat(20_000)}${"</w:rPr>".repeat(20_000)}</w:pPr></w:style></w:styles>` }],
+      ["un en-tête", { name: "word/header1.xml", relationship: "header", content: `<w:hdr xmlns:w="${W_NAMESPACE}">${"<w:tbl><w:tr><w:tc>".repeat(20_000)}<w:p/>${"</w:tc></w:tr></w:tbl>".repeat(20_000)}</w:hdr>` }],
+    ])("20 000 niveaux imbriqués dans %s : mammoth lit le document sans épuiser sa pile, tout le texte est écarté sans accusation", async (_, part) => {
+      const buffer = docx(honestLines(), "", [part]);
+      const result = withoutInvisibleDocxText(buffer);
+      expect((await mammoth.extractRawText({ buffer: result.buffer })).value.trim()).toBe("");
+      expect(result.invisibleText).toEqual([]);
+      expect(result.unverifiableText.map(passage => passage.text)).toEqual(HONEST);
+      expect(new Set(result.unverifiableText.map(passage => passage.reason))).toEqual(new Set(["layout_unfinished"]));
+    });
+
+    it("CV honnête de 70 liens imbriqués, au-delà de ce qu’un CV honnête imbrique : écarté sans accusation", async () => {
+      const result = await check(`<w:p>${'<w:hyperlink w:anchor="a">'.repeat(70)}<w:r><w:t>${escaped(FAKE_ONE)}</w:t></w:r>${"</w:hyperlink>".repeat(70)}</w:p>`);
+      expect(result).toMatchObject({ text: "", hidden: "", reasons: ["layout_unfinished"] });
+      for (const line of [...HONEST, FAKE_ONE]) expect(result.unverifiable).toContain(line);
+    });
+
+    // Numbering of a list (w:numStyleLink) through a numbering style, to another list, and so on, or to a style that does not exist.
+    const numbering = (links: number, paragraphs: number, missing = false) => {
+      const styles = Array.from({ length: links }, (_, index) => `<w:style w:type="numbering" w:styleId="N${index}"><w:pPr><w:numPr><w:numId w:val="${index + 2}"/></w:numPr></w:pPr></w:style>`).join("");
+      const lists = Array.from({ length: links }, (_, index) => `<w:abstractNum w:abstractNumId="${index}"><w:numStyleLink w:val="${missing ? "Absent" : `N${index}`}"/></w:abstractNum>`).join("") +
+        `<w:abstractNum w:abstractNumId="${links}"><w:lvl w:ilvl="0"><w:numFmt w:val="bullet"/></w:lvl></w:abstractNum>` +
+        Array.from({ length: links + 1 }, (_, index) => `<w:num w:numId="${index + 1}"><w:abstractNumId w:val="${index}"/></w:num>`).join("");
+      const items = Array.from({ length: paragraphs }, (_, index) => `<w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr></w:pPr><w:r><w:t>item ${index}</w:t></w:r></w:p>`).join("");
+      return docx(honestLines() + items, styles, [{ name: "word/numbering.xml", relationship: "numbering", content: `<w:numbering xmlns:w="${W_NAMESPACE}">${lists}</w:numbering>` }]);
+    };
+
+    it("liste dont la numérotation renvoie à un style absent : mammoth la lit sans échouer, tout est lu", async () => {
+      const text = (await mammoth.extractRawText({ buffer: withoutInvisibleDocxText(numbering(1, 2, true)).buffer })).value;
+      for (const line of [...HONEST, "item 0", "item 1"]) expect(text).toContain(line);
+    });
+
+    it("4 000 numérotations liées l’une à l’autre et 10 000 paragraphes de liste : mammoth lit le texte en une passe", async () => {
+      const read = async (scale: number) => {
+        const result = withoutInvisibleDocxText(numbering(scaled(4_000, scale), scaled(10_000, scale)));
+        const started = performance.now();
+        const text = (await mammoth.extractRawText({ buffer: result.buffer })).value;
+        return { text, ms: performance.now() - started };
+      };
+      const before = (await read(1 / GROWTH)).ms;
+      const large = await read(1);
+      const after = (await read(1 / GROWTH)).ms;
+      expect(large.ms).toBeLessThan(3 * GROWTH * Math.max(before, after, FLOOR_MS));
+      expect(large.text).toContain("item 9999");
+    }, 60_000);
+
+    // A chain of styles each based on the one before (w:basedOn), the first one setting what the last one shows.
+    const styleChain = (count: number, type: string, prefix: string, first: string) => Array.from({ length: count }, (_, index) =>
+      `<w:style w:type="${type}" w:styleId="${prefix}${index}">${index ? `<w:basedOn w:val="${prefix}${index - 1}"/><w:rPr><w:sz w:val="22"/></w:rPr>` : first}</w:style>`).join("");
+
+    it("chaîne de 20 000 styles de paragraphe et 50 000 paragraphes, chaîne de 20 000 styles de tableau et 2 500 lignes : chaque style résolu une fois, contrôlés en quelques secondes au plus", () => {
+      // The paragraphs' white text comes from the first style of their chain: hidden on the page.
+      const white = timedGrowth(scale => {
+        const last = scaled(20_000, scale) - 1;
+        const body = Array.from({ length: scaled(50_000, scale) }, (_, index) => `<w:p><w:pPr><w:pStyle w:val="S${last}"/></w:pPr><w:r><w:t>w${index}</w:t></w:r></w:p>`).join("");
+        return docx(body, styleChain(last + 1, "paragraph", "S", '<w:rPr><w:color w:val="FFFFFF"/></w:rPr>'));
+      });
+      expect(white.ms).toBeLessThan(white.bound);
+      expect(white.result.invisibleText.join(" ")).toContain("w49999");
+      // In cells the first table style of their chain paints black, the same white text shows.
+      const cells = timedGrowth(scale => {
+        const paragraphs = scaled(20_000, scale) - 1;
+        const tables = scaled(20_000, scale) - 1;
+        const rows = Array.from({ length: scaled(2_500, scale) }, (_, index) => `<w:tr><w:tc><w:p><w:pPr><w:pStyle w:val="S${paragraphs}"/></w:pPr>${`<w:r><w:t>v${index} </w:t></w:r>`.repeat(20)}</w:p></w:tc></w:tr>`).join("");
+        const styles = styleChain(paragraphs + 1, "paragraph", "S", '<w:rPr><w:color w:val="FFFFFF"/></w:rPr>') + styleChain(tables + 1, "table", "T", '<w:tcPr><w:shd w:val="clear" w:color="auto" w:fill="000000"/></w:tcPr>');
+        return docx(`<w:tbl><w:tblPr><w:tblStyle w:val="T${tables}"/><w:tblLook w:val="04A0"/></w:tblPr><w:tblGrid><w:gridCol w:w="9000"/></w:tblGrid>${rows}</w:tbl>`, styles);
+      });
+      expect(cells.ms).toBeLessThan(cells.bound);
+      expect(cells.result).toMatchObject({ invisibleText: [], unverifiableText: [] });
+    }, 120_000);
+
+    it("styles fondés l’un sur l’autre en boucle, ou sur un style absent : résolus sans boucler, le texte blanc qu’ils donnent reste caché", async () => {
+      const styles = '<w:style w:type="paragraph" w:styleId="A"><w:basedOn w:val="B"/></w:style><w:style w:type="paragraph" w:styleId="B"><w:basedOn w:val="A"/><w:rPr><w:color w:val="FFFFFF"/></w:rPr></w:style>' +
+        '<w:style w:type="paragraph" w:styleId="C"><w:basedOn w:val="Absent"/><w:rPr><w:color w:val="FFFFFF"/></w:rPr></w:style>';
+      const result = await check(paragraph(FAKE[0]!, '<w:pStyle w:val="A"/>') + paragraph(FAKE[1]!, '<w:pStyle w:val="B"/>') + paragraph(FAKE[2]!, '<w:pStyle w:val="C"/>'), { styles });
+      for (const line of HONEST) expect(result.text).toContain(line);
+      expect(result.hidden).toBe(FAKE.slice(0, 3).join(" "));
+    });
 
     it("CV honnête de tableaux imbriqués sur dix niveaux : mis en page et lu en entier, rien n’est écarté", async () => {
       const nested = "<w:tbl><w:tr><w:tc>".repeat(10) + honestLines() + "</w:tc></w:tr></w:tbl>".repeat(10);

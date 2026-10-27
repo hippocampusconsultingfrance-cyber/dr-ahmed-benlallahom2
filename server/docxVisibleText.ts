@@ -95,9 +95,10 @@ const NAMESPACES: Record<string, string> = {
   "http://schemas.openxmlformats.org/package/2006/relationships": "relationships",
 };
 const OFFICE_DOCUMENT_RELATIONSHIP = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument";
-const STYLES_RELATIONSHIP = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles";
-const THEME_RELATIONSHIP = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme";
-const SETTINGS_RELATIONSHIP = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings";
+/** The type of a part's relationship (styles, theme…) is this followed by its name. */
+const RELATIONSHIPS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/";
+/** Headers and footers: what lies behind their text lies on every page. */
+const HEADER_OR_FOOTER = /(^|\/)(header|footer)\d*\.xml$/i;
 /** Smallest text read, in points, as the PDF check (w:sz 8 half-points). */
 const MIN_FONT_SIZE_PT = 4;
 /** Narrowest advance of a character, in points, as the PDF check: squeezed more, letters run into one another. */
@@ -1216,8 +1217,19 @@ type Formats = { run: RunLayer; paragraphShading?: Paint; cellShading?: Paint };
 type BandSizes = { rowBandSize?: number; columnBandSize?: number };
 /** `cellTop`: table styles, the top margin of their cells (w:tblCellMar), in points. */
 type StyleDefinition = Formats & BandSizes & { basedOn?: string; tableShading?: Paint; conditions: Map<string, Formats>; paragraph: ParagraphLayer; cellTop?: number };
-/** `defaults`, `paragraphShading`, `paragraph`: the document's defaults (w:docDefaults). */
-type Styles = { byId: Map<string, StyleDefinition>; defaultIds: Map<string, string>; defaults: RunLayer; paragraphShading?: Paint; paragraph: ParagraphLayer; chains: Map<string, StyleDefinition[]> };
+/** The lowest and highest value of each channel (red, green, blue) of a set of colours. */
+type ColourRange = { low: number[]; high: number[] };
+/**
+ * A style and the ones it is based on, merged as Word applies them, the base
+ * first (resolveStyle): what each sets, its conditional formats (each merged
+ * across the chain), every colour its formats paint under a cell's text (for
+ * a table that does not say which of them it shows), its own definition and
+ * its base's merge, from which its tab stops are merged when a paragraph
+ * needs them (styleTabs).
+ */
+type ResolvedStyle = Omit<StyleDefinition, "basedOn"> & { colours: ColourRange | null; definition?: StyleDefinition; base?: ResolvedStyle; tabs?: Array<[number, string]> };
+/** `defaults`, `paragraphShading`, `paragraph`: the document's defaults (w:docDefaults). `resolved`: each style once merged with its bases. */
+type Styles = { byId: Map<string, StyleDefinition>; defaultIds: Map<string, string>; defaults: RunLayer; paragraphShading?: Paint; paragraph: ParagraphLayer; resolved: Map<string, ResolvedStyle> };
 
 const BAND_SIZES: Record<string, keyof BandSizes> = { "w:tblStyleRowBandSize": "rowBandSize", "w:tblStyleColBandSize": "columnBandSize" };
 const bandSize = (tag: XmlTag) => Math.max(1, Number.parseInt(tag.attributes.get("w:val") ?? "", 10) || 1);
@@ -1225,7 +1237,7 @@ const bandSize = (tag: XmlTag) => Math.max(1, Number.parseInt(tag.attributes.get
 const cellMargin = (tag: XmlTag) => (/^(dxa)?$/i.test(tag.attributes.get("w:type") ?? "") ? Math.max(0, measurePt(tag.attributes.get("w:w"), 20) ?? 0) : 0);
 
 function readStyles(xml: string | undefined, theme: Theme): Styles {
-  const styles: Styles = { byId: new Map(), defaultIds: new Map(), defaults: {}, paragraph: {}, chains: new Map() };
+  const styles: Styles = { byId: new Map(), defaultIds: new Map(), defaults: {}, paragraph: {}, resolved: new Map() };
   const path: string[] = [];
   let current: StyleDefinition | null = null;
   let condition: Formats | null = null;
@@ -1356,24 +1368,82 @@ function vmlFills(): Survey<Map<number, Map<string, string>>> {
   return { visit, done: () => fills };
 }
 
-/** A style and the ones it is based on, the base first; the type's default style when none is named. */
-function styleChain(styles: Styles, id: string | undefined, type: string) {
-  // Read for each run and paragraph: kept once found.
-  const key = `${type}:${id ?? ""}`;
-  const known = styles.chains.get(key);
+/** A range of colours widened to those a paint holds. */
+function widened(range: ColourRange | null, paint: Paint | undefined): ColourRange | null {
+  let widest = range;
+  for (const colour of paint ?? []) {
+    const values = channels(colour);
+    widest = widest
+      ? { low: widest.low.map((value, index) => Math.min(value, values[index]!)), high: widest.high.map((value, index) => Math.max(value, values[index]!)) }
+      : { low: values, high: values };
+  }
+  return widest;
+}
+
+/** Whether a colour of the range shows a text of this colour: one is 32/255 or more from it on a channel (distinct). */
+const rangeShows = (range: ColourRange | null, colour: string) =>
+  range !== null && channels(colour).some((value, index) => range.high[index]! - value >= MIN_CHANNEL_GAP || value - range.low[index]! >= MIN_CHANNEL_GAP);
+
+const NO_STYLE: ResolvedStyle = { run: {}, paragraph: {}, conditions: new Map(), colours: null };
+
+/** What a style sets over its base's merge: each value it sets wins over the base's, as Word applies a style over the one it is based on. */
+function mergeStyle(base: ResolvedStyle, style: StyleDefinition): ResolvedStyle {
+  const over = <T>(own: T | undefined, below: T | undefined) => (own !== undefined ? own : below);
+  const conditions = new Map(base.conditions);
+  for (const [type, formats] of Array.from(style.conditions)) {
+    const below = base.conditions.get(type);
+    conditions.set(type, below
+      ? { run: { ...below.run, ...formats.run }, paragraphShading: over(formats.paragraphShading, below.paragraphShading), cellShading: over(formats.cellShading, below.cellShading) }
+      : formats);
+  }
+  const colours = [style, ...Array.from(style.conditions.values())].reduce((range, formats) => widened(widened(range, formats.paragraphShading), formats.cellShading), base.colours);
+  return {
+    run: Object.keys(style.run).length ? { ...base.run, ...style.run } : base.run,
+    paragraph: Object.keys(style.paragraph).length ? { ...base.paragraph, ...style.paragraph } : base.paragraph,
+    paragraphShading: over(style.paragraphShading, base.paragraphShading),
+    cellShading: over(style.cellShading, base.cellShading),
+    tableShading: over(style.tableShading, base.tableShading),
+    cellTop: over(style.cellTop, base.cellTop),
+    rowBandSize: over(style.rowBandSize, base.rowBandSize),
+    columnBandSize: over(style.columnBandSize, base.columnBandSize),
+    conditions, colours, definition: style, base,
+  };
+}
+
+/**
+ * A style merged with the ones it is based on (the type's default style when
+ * none is named), each style of the document merged once, from its base's
+ * merge: read for each run, paragraph and cell, a chain of thousands of styles
+ * costs its length once, not once for each of them. A base missing, or met
+ * again (a loop), ends the chain.
+ */
+function resolveStyle(styles: Styles, id: string | undefined, type: string): ResolvedStyle {
+  const start = id ?? styles.defaultIds.get(type);
+  if (start === undefined) return NO_STYLE;
+  const known = styles.resolved.get(start);
   if (known) return known;
-  const chain: StyleDefinition[] = [];
-  const seen = new Set<string>();
-  for (let current = id ?? styles.defaultIds.get(type); current && !seen.has(current); ) {
-    seen.add(current);
+  // The styles not merged yet, from this one down to its first merged base.
+  const path: StyleDefinition[] = [];
+  const onPath = new Set<string>();
+  let base = NO_STYLE;
+  for (let current: string | undefined = start; current !== undefined && !onPath.has(current); ) {
+    const merged = styles.resolved.get(current);
+    if (merged) {
+      base = merged;
+      break;
+    }
     const style = styles.byId.get(current);
     if (!style) break;
-    chain.push(style);
+    onPath.add(current);
+    path.push(style);
     current = style.basedOn;
   }
-  chain.reverse();
-  styles.chains.set(key, chain);
-  return chain;
+  const ids = Array.from(onPath);
+  for (let index = path.length - 1; index >= 0; index -= 1) {
+    base = mergeStyle(base, path[index]!);
+    styles.resolved.set(ids[index]!, base);
+  }
+  return styles.resolved.get(start) ?? NO_STYLE;
 }
 
 /**
@@ -1381,7 +1451,7 @@ function styleChain(styles: Styles, id: string | undefined, type: string) {
  * in a table without w:tblLook, whose look is assumed, every colour its
  * formats may paint in a cell.
  */
-type CellFormats = { runs: RunLayer[]; paragraphShading?: Paint; cellShading?: Paint; colours: string[] };
+type CellFormats = { runs: RunLayer[]; paragraphShading?: Paint; cellShading?: Paint; colours: ColourRange | null };
 
 type Visibility = "visible" | "invisible" | "unverifiable";
 const SEVERITY: Record<Visibility, number> = { visible: 0, unverifiable: 1, invisible: 2 };
@@ -1577,23 +1647,20 @@ function textOffsets(raw: string, length: number) {
 }
 
 /** A cell's formats when its table has no style (nor the document a default one). */
-const NO_CELL_FORMATS: CellFormats = { runs: [], paragraphShading: undefined, cellShading: undefined, colours: [] };
+const NO_CELL_FORMATS: CellFormats = { runs: [], paragraphShading: undefined, cellShading: undefined, colours: null };
 
 function cellFormats(styles: Styles, table: Frame, row: number, column: number): CellFormats {
-  const chain = styleChain(styles, table.style, "table");
-  if (!chain.length) return NO_CELL_FORMATS;
-  const bands = {
-    rowBandSize: table.rowBandSize ?? lastSet(chain.map(style => style.rowBandSize)) ?? 1,
-    columnBandSize: table.columnBandSize ?? lastSet(chain.map(style => style.columnBandSize)) ?? 1,
-  };
+  const style = resolveStyle(styles, table.style, "table");
+  if (style === NO_STYLE) return NO_CELL_FORMATS;
+  const bands = { rowBandSize: table.rowBandSize ?? style.rowBandSize ?? 1, columnBandSize: table.columnBandSize ?? style.columnBandSize ?? 1 };
   const conditions = cellConditions(table.look ?? tableLook(null), table.rows ?? [], row, column, bands);
-  const formats: Formats[] = [...chain, ...conditions.flatMap(condition => chain.flatMap(style => style.conditions.get(condition) ?? []))];
-  const anywhere = table.look ? [] : [...chain, ...chain.flatMap(style => Array.from(style.conditions.values()))];
+  // The style's own formats, then each conditional format, each merged across the styles of its chain.
+  const formats: Formats[] = [style, ...conditions.flatMap(condition => style.conditions.get(condition) ?? [])];
   return {
     runs: formats.map(format => format.run),
     paragraphShading: lastSet(formats.map(format => format.paragraphShading)),
     cellShading: lastSet(formats.map(format => format.cellShading)),
-    colours: anywhere.flatMap(format => [...(format.paragraphShading ?? []), ...(format.cellShading ?? [])]),
+    colours: table.look ? null : style.colours,
   };
 }
 
@@ -1715,7 +1782,7 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
   const containerIndex = (at: number) => containers[countBelow(containers, at) - 1] ?? -1;
   /** The shading of a paragraph: its own, else its style's, else the table style's for its cell, else the document's default. */
   const paragraphPaint = (frame: Frame, fromTable = true) =>
-    frame.paint !== undefined ? frame.paint : lastSet([styles.paragraphShading, fromTable ? frame.cell?.formats?.paragraphShading : undefined, ...styleChain(styles, frame.style, "paragraph").map(style => style.paragraphShading)]);
+    frame.paint !== undefined ? frame.paint : lastSet([styles.paragraphShading, fromTable ? frame.cell?.formats?.paragraphShading : undefined, resolveStyle(styles, frame.style, "paragraph").paragraphShading]);
   /** The colours right under the text: highlight, shading of the run, of its paragraph, cell or table, fill of its text box; null for the page. */
   const layerUnder = (effective: RunLayer): Paint => {
     if (effective.highlight) return [effective.highlight];
@@ -1726,7 +1793,7 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
       if (VML_SHAPES.has(frame.name) || frame.name === "wps:wsp") return frame.paint ?? null;
       const paint = frame.name === "w:p" ? paragraphPaint(frame)
         : frame.name === "w:tc" ? (frame.paint !== undefined ? frame.paint : frame.formats?.cellShading)
-        : frame.name === "w:tbl" ? (frame.paint !== undefined ? frame.paint : lastSet(styleChain(styles, frame.style, "table").map(style => style.tableShading)))
+        : frame.name === "w:tbl" ? (frame.paint !== undefined ? frame.paint : resolveStyle(styles, frame.style, "table").tableShading)
         : undefined;
       if (paint) return paint;
     }
@@ -1742,8 +1809,8 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
     if (!base) {
       base = Object.assign({}, styles.defaults,
         ...(paragraph?.cell?.formats?.runs ?? []),
-        ...styleChain(styles, paragraph?.style, "paragraph").map(style => style.run),
-        ...styleChain(styles, run.style, "character").map(style => style.run)) as RunLayer;
+        resolveStyle(styles, paragraph?.style, "paragraph").run,
+        resolveStyle(styles, run.style, "character").run) as RunLayer;
       if (key !== undefined) styleFormats.set(key, base);
     }
     run.effective = Object.assign({}, base, run.layer);
@@ -1751,7 +1818,7 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
   };
   /** A paragraph's indents, alignment, direction, spacing and tab stops: the document's defaults, its style's, its own (read once its w:pPr is). */
   const formatOf = (paragraph: Frame) => {
-    paragraph.format ??= paragraphFormat([styles.paragraph, ...styleChain(styles, paragraph.style, "paragraph").map(style => style.paragraph), paragraph.paragraph ?? {}]);
+    paragraph.format ??= paragraphFormat([styles.paragraph, resolveStyle(styles, paragraph.style, "paragraph").paragraph, paragraph.paragraph ?? {}]);
     return paragraph.format;
   };
   const styleOf = (paragraph: Frame) => paragraph.style ?? styles.defaultIds.get("paragraph");
@@ -1790,7 +1857,7 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
     if ((layer ?? [pageColour]).some(shows)) return "visible";
     // In a cell the table style alone colours, by an assumed look, a format for another place in the table might show it.
     const styledCell = paragraph?.cell !== undefined && paragraph.cell.paint === undefined && !effective.highlight && !effective.shading && !paragraphPaint(paragraph, false);
-    if (styledCell && tableFormats?.colours.some(shows)) return "unverifiable";
+    if (styledCell && rangeShows(tableFormats?.colours ?? null, colour)) return "unverifiable";
     // On a colour of its own (shading, highlight, filled text box), it is not seen; on the page, it may lie on a picture:
     // in a text box without fill, in a paragraph a drawing holds, neighbours or covers, or on a picture as page colour.
     if (layer?.some(under => !isNearWhite(under))) return "invisible";
@@ -2015,17 +2082,40 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
     const stop = tab.position - lineStart(layout, line);
     return Math.max(line.x, /^(right|end)$/i.test(tab.kind) ? stop : stop + tab.width / 2);
   };
-  /** The tab stops of each chain of paragraph styles (with the document's defaults), merged once. */
-  const styleStops = new WeakMap<StyleDefinition[], Array<[number, string]>>();
+  /** The document's default tab stops (tabStops), merged once. */
+  let defaultStops: Array<[number, string]> | undefined;
+  /**
+   * The tab stops of a paragraph style and its bases, with the document's
+   * defaults: merged once for each style, from its base's, and counted as
+   * layout work; none once the work allowed is spent (its text is then no
+   * longer laid out).
+   */
+  const styleTabs = (resolved: ResolvedStyle) => {
+    if (!defaultStops) {
+      budget.units -= styles.paragraph.tabs?.length ?? 0;
+      defaultStops = tabStops([styles.paragraph]);
+    }
+    const pending: ResolvedStyle[] = [];
+    let below = defaultStops;
+    for (let style: ResolvedStyle | undefined = resolved; style?.definition; style = style.base) {
+      if (style.tabs) {
+        below = style.tabs;
+        break;
+      }
+      pending.push(style);
+    }
+    for (let index = pending.length - 1; index >= 0; index -= 1) {
+      if (budget.units <= 0) return [];
+      const own = pending[index]!.definition!.paragraph.tabs;
+      budget.units -= 1 + (own?.length ? below.length + own.length : 0);
+      below = own?.length ? tabStops([{ tabs: below }, { tabs: own }]) : below;
+      pending[index]!.tabs = below;
+    }
+    return below;
+  };
   /** A paragraph's tab stops (tabStops): its style's, and its own; counted as layout work. */
   const stopsOf = (paragraph: Frame) => {
-    const chain = styleChain(styles, paragraph.style, "paragraph");
-    let inherited = styleStops.get(chain);
-    if (!inherited) {
-      const layers = [styles.paragraph, ...chain.map(style => style.paragraph)];
-      styleStops.set(chain, (inherited = tabStops(layers)));
-      budget.units -= layers.reduce((sum, layer) => sum + (layer.tabs?.length ?? 0), 0);
-    }
+    const inherited = styleTabs(resolveStyle(styles, paragraph.style, "paragraph"));
     const own = paragraph.paragraph?.tabs;
     if (!own?.length) return inherited;
     budget.units -= inherited.length + own.length;
@@ -2312,7 +2402,7 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
         const content = stack[containerIndex(stack.length)]?.content;
         if (content) {
           const format = formatOf(frame);
-          const styleMark = markFormats.get(frame.style ?? "") ?? markFormats.set(frame.style ?? "", Object.assign({}, styles.defaults, ...styleChain(styles, frame.style, "paragraph").map(style => style.run))).get(frame.style ?? "")!;
+          const styleMark = markFormats.get(frame.style ?? "") ?? markFormats.set(frame.style ?? "", Object.assign({}, styles.defaults, resolveStyle(styles, frame.style, "paragraph").run)).get(frame.style ?? "")!;
           const mark: RunLayer = frame.mark && Object.keys(frame.mark).length ? Object.assign({}, styleMark, frame.mark) : styleMark;
           const markSize = fontSize(mark, "");
           const layout = frame.layout;
@@ -2392,7 +2482,7 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
       frame.gridColumn = row?.gridColumn ?? 0;
       if (table) frame.formats = cellFormats(styles, table, frame.row!, frame.column!);
       // A row of exact height shows no more of its cells (w:trHeight exact; omitted, its height is 0), below their top margin.
-      frame.cellTop = table?.cellTop ?? lastSet(styleChain(styles, table?.style, "table").map(style => style.cellTop)) ?? 0;
+      frame.cellTop = table?.cellTop ?? resolveStyle(styles, table?.style, "table").cellTop ?? 0;
       // The line above the row is above its first line, beyond its top margin.
       const above = table?.lineAbove ?? null;
       frame.inherited = above?.segments;
@@ -2658,20 +2748,15 @@ function storedZip(parts: Map<string, Buffer>) {
 }
 
 /**
- * The DOCX to hand to mammoth, without its invisible text nor the text whose
- * visibility cannot be established (its background, its place); the text of
- * each, and why the latter was set aside. Also bounds the decompression
- * (inspectDocxArchive) and the layout work (docxLayoutWorkUnits). An unchanged
- * file is returned as is.
+ * Elements nested deeper than this in a part mammoth reads (the document, its
+ * styles, numbering, notes, comments, relationships and content types), or in
+ * a header or a footer, are not read. An honest CV nests a few tables, or a
+ * text box in a table, some twenty levels at most; mammoth reads each level
+ * within a call for the one holding it, so that some thousands of them
+ * exhaust its stack, and some lookups of the layout check cost the nesting
+ * depth for every run.
  */
-/**
- * Elements nested deeper than this in the document part are not laid out. An
- * honest CV nests a few tables, or a text box in a table, some thirty levels
- * at most; some lookups of the layout check cost the nesting depth for every
- * run, so tens of thousands of nested tables or links would hold the check
- * for tens of seconds.
- */
-export const DOCX_MAX_NESTING_DEPTH = 256;
+export const DOCX_MAX_NESTING_DEPTH = 64;
 
 /** The deepest nesting of elements in an XML part. */
 function nestingDepth(tags: XmlTags) {
@@ -2684,28 +2769,39 @@ function nestingDepth(tags: XmlTags) {
   return deepest;
 }
 
+/** What mammoth reads of a document set aside whole: nothing. */
+const EMPTY_DOCUMENT = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body/></w:document>';
+
 /**
- * A part nested too deep to be laid out (DOCX_MAX_NESTING_DEPTH): its body is
- * emptied and each passage (w:t) set aside, unverifiable, without accusing
- * anyone of hiding it.
+ * The passages (w:t) of a document set aside whole, unverifiable, without
+ * accusing anyone of hiding them: it, or a part read with it, is nested too
+ * deep to be read (DOCX_MAX_NESTING_DEPTH).
  */
-function setAsideDeepPart(xml: string, tags: XmlTags) {
+function deepPassages(xml: string, tags: XmlTags) {
   const unverifiableText: Array<{ text: string; reason: DocxUnverifiableReason }> = [];
-  let bodyStart = -1;
-  let bodyEnd = -1;
   for (let index = 0; index < tags.count; index += 1) {
-    const name = tags.names[tags.name[index]!];
-    if (name === "w:body" && tags.kind[index] === OPENING && bodyStart === -1) bodyStart = tags.end[index]!;
-    if (name === "w:body" && tags.kind[index] === CLOSING) bodyEnd = tags.start[index]!;
-    if (name === "w:t" && tags.kind[index] === OPENING && index + 1 < tags.count) {
+    if (tags.names[tags.name[index]!] === "w:t" && tags.kind[index] === OPENING && index + 1 < tags.count) {
       const text = decodeXml(xml.slice(tags.end[index], tags.start[index + 1]));
       if (text.trim()) unverifiableText.push({ text, reason: "layout_unfinished" });
     }
   }
-  const emptied = bodyStart !== -1 && bodyEnd > bodyStart ? xml.slice(0, bodyStart) + xml.slice(bodyEnd) : xml;
-  return { xml: emptied, unverifiableText };
+  return unverifiableText;
 }
 
+/** The relationships part of a part (word/document.xml: word/_rels/document.xml.rels). */
+function relationshipsOf(part: string) {
+  const folder = part.includes("/") ? part.slice(0, part.lastIndexOf("/")) : "";
+  return `${folder ? `${folder}/` : ""}_rels/${part.slice(folder ? folder.length + 1 : 0)}.rels`;
+}
+
+/**
+ * The DOCX to hand to mammoth, without its invisible text nor the text whose
+ * visibility cannot be established (its background, its place); the text of
+ * each, and why the latter was set aside. Also bounds the decompression
+ * (inspectDocxArchive), the nesting of the parts read (DOCX_MAX_NESTING_DEPTH)
+ * and the layout work (docxLayoutWorkUnits). An unchanged file is returned as
+ * is.
+ */
 export function withoutInvisibleDocxText(buffer: Buffer, limits = DOCUMENT_DECOMPRESSION_LIMITS): {
   buffer: Buffer;
   invisibleText: string[];
@@ -2717,27 +2813,38 @@ export function withoutInvisibleDocxText(buffer: Buffer, limits = DOCUMENT_DECOM
   const xml = parts.get(mainDocument)?.toString("utf8");
   if (!xml) return { buffer, invisibleText: [], unverifiableText: [] };
   const tags = readXmlTags(xml);
-  if (nestingDepth(tags) > DOCX_MAX_NESTING_DEPTH) {
-    const deep = setAsideDeepPart(xml, tags);
-    parts.set(mainDocument, Buffer.from(deep.xml, "utf8"));
-    return { buffer: storedZip(parts), invisibleText: [], unverifiableText: deep.unverifiableText };
-  }
   const folder = mainDocument.includes("/") ? mainDocument.slice(0, mainDocument.lastIndexOf("/")) : "";
-  const relationships = `${folder ? `${folder}/` : ""}_rels/${mainDocument.slice(folder ? folder.length + 1 : 0)}.rels`;
-  const stylesPart = relatedPart(parts, relationships, STYLES_RELATIONSHIP, folder) ?? "word/styles.xml";
-  const themePart = relatedPart(parts, relationships, THEME_RELATIONSHIP, folder) ?? "word/theme/theme1.xml";
-  const settingsPart = relatedPart(parts, relationships, SETTINGS_RELATIONSHIP, folder) ?? "word/settings.xml";
-  const settings = parts.get(settingsPart)?.toString("utf8");
+  const relationships = relationshipsOf(mainDocument);
+  // Each part as mammoth finds it: by the document's relationship, else at its usual place.
+  const related = (type: string) => relatedPart(parts, relationships, `${RELATIONSHIPS}${type}`, folder) ?? `word/${type}.xml`;
+  const stylesPart = related("styles");
+  const numberingPart = related("numbering");
+  const notes = [related("footnotes"), related("endnotes"), related("comments")];
+  const read = ["[Content_Types].xml", "_rels/.rels", relationships, stylesPart, numberingPart, ...notes, ...notes.map(relationshipsOf), ...Array.from(parts.keys()).filter(name => HEADER_OR_FOOTER.test(name))];
+  const tooDeep = read.filter(name => parts.has(name) && nestingDepth(readXmlTags(parts.get(name)!.toString("utf8"))) > DOCX_MAX_NESTING_DEPTH);
+  if (tooDeep.length || nestingDepth(tags) > DOCX_MAX_NESTING_DEPTH) {
+    // mammoth reads a part it is not given as empty, and the document at its usual place.
+    for (const name of tooDeep) parts.delete(name);
+    parts.delete(mainDocument);
+    parts.set("word/document.xml", Buffer.from(EMPTY_DOCUMENT, "utf8"));
+    return { buffer: storedZip(parts), invisibleText: [], unverifiableText: deepPassages(xml, tags) };
+  }
+  const themePart = relatedPart(parts, relationships, `${RELATIONSHIPS}theme`, folder) ?? "word/theme/theme1.xml";
+  const settings = parts.get(related("settings"))?.toString("utf8");
   const theme = readTheme(parts.get(themePart)?.toString("utf8"), settings);
   // A picture behind the text in a header or a footer lies on every page, wherever the text falls.
   const onEveryPage = Array.from(parts.keys()).some(name => {
-    if (!/(^|\/)(header|footer)\d*\.xml$/i.test(name)) return false;
+    if (!HEADER_OR_FOOTER.test(name)) return false;
     const margin = drawingReach(parts.get(name)!.toString("utf8"));
     return margin.fromPage || margin.reaches.length > 0;
   });
+  // mammoth follows a list's numbering style (w:numStyleLink) for each of its paragraphs, link after link, and fails on one
+  // that names no style: the text it reads does not depend on numbering, so it is given none then.
+  const linkedNumbering = parts.get(numberingPart)?.includes("numStyleLink") ?? false;
+  if (linkedNumbering) parts.delete(numberingPart);
   const budget = { units: limits.docxLayoutWorkUnits };
   const visible = cutInvisibleRuns(xml, readStyles(parts.get(stylesPart)?.toString("utf8"), theme), theme, onEveryPage, showsPageColour(settings), defaultTabStop(settings), budget, tags);
-  if (!visible.cut) return { buffer, invisibleText: [], unverifiableText: [] };
+  if (!visible.cut && !linkedNumbering) return { buffer, invisibleText: [], unverifiableText: [] };
   parts.set(mainDocument, Buffer.from(visible.xml, "utf8"));
   return { buffer: storedZip(parts), invisibleText: visible.invisibleText, unverifiableText: visible.unverifiableText };
 }
