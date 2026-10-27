@@ -112,24 +112,101 @@ function expectPostBuildChecks(workflow: string) {
   for (const step of [smoke, migrations, knip]) expect(step.keys.if, step.name).toBe(AFTER_BUILD);
 }
 
+/**
+ * The lines of a step's command holding a pipe that runs without pipefail: such a
+ * pipe (`pnpm check | tee check.log`) fails only when its last command does. Only
+ * the step's own `shell: bash` or a `set -o pipefail` before the pipe counts.
+ */
+function pipesWithoutPipefail(step: Step) {
+  let pipefail = step.keys.shell?.trim() === "bash";
+  return step.run.split("\n").filter(line => {
+    if (/^set\s+-[a-z]*o\s+pipefail\b/.test(line)) pipefail = true;
+    return !pipefail && /(?:^|[^|])\|(?!\|)/.test(line);
+  });
+}
+
 /** No step of the quality job may pass whatever its command does. */
 function expectNoNeutralizedStep(workflow: string) {
   const steps = jobSteps(workflow, "quality");
   expect(steps.length).toBeGreaterThanOrEqual(10);
   const quality = workflow.slice(workflow.indexOf("\n  quality:\n"), workflow.indexOf("\n  dependency-audit:\n"));
   expect(quality).not.toMatch(/^ {4}continue-on-error:/m);
-  // GitHub runs `bash -e {0}` by default; another shell (`bash {0}`, set in a step or
-  // in `defaults:`) would let a failed command go on to the next one unnoticed.
-  expect(workflow).not.toMatch(/^\s*shell:/m);
+  // Without `shell:`, GitHub runs `bash -e {0}`, and `shell: bash` adds pipefail; any
+  // other shell (`bash {0}`, `sh`…, set in a step or in `defaults:`) would let a failed
+  // command go on to the next one unnoticed.
+  expect(workflow).not.toMatch(/^ *shell:(?! *bash *$)/m);
   for (const step of steps) {
-    expect(step.keys.shell, step.name).toBeUndefined();
+    expect(step.keys.shell?.trim() ?? "bash", step.name).toBe("bash");
     expect(step.keys["continue-on-error"] ?? "false", step.name).toBe("false");
     expect(step.run, step.name).not.toMatch(/\|\|\s*(?:true\b|:|echo\b|exit\b)/);
     expect(step.run, step.name).not.toMatch(/\bexit\s+0\b/);
     expect(step.run, step.name).not.toMatch(/\bset\s+\+e\b/);
-    expect(step.keys.if?.trim() ?? "", step.name).not.toMatch(/^(?:false|0|\$\{\{\s*(?:false|0)\s*\}\})$/);
+    expect(pipesWithoutPipefail(step), step.name).toEqual([]);
+    // GitHub reads a quoted condition (`'false'`, `"${{ false }}"`) as the same expression.
+    const condition = (step.keys.if?.trim() ?? "").replace(/^(['"])(.*)\1$/, "$2").trim();
+    expect(condition, step.name).not.toMatch(/^(?:false|0|\$\{\{\s*(?:false|0)\s*\}\})$/);
   }
 }
+
+/**
+ * A small workflow laid out like ci.yml, on which the parser's own test changes
+ * one line at a time: both checks above pass on it as it is.
+ */
+const FIXTURE_WORKFLOW = `name: Fixture
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CI_DUMMY_KEY: dummy
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Verify TypeScript
+        run: pnpm check
+      - name: Run test suite
+        run: pnpm test:ci
+      - name: Verify production build
+        id: build
+        run: pnpm build
+      # A comment between two steps.
+      - name: Check performance budgets
+        run: node scripts/check-performance-budgets.mjs
+      - name: Start the built server
+        if: ${AFTER_BUILD}
+        run: node scripts/smoke-built-server.mjs
+      - name: Verify migrations match the schema
+        if: ${AFTER_BUILD}
+        run: |
+          node scripts/check-migrations-in-sync.mjs
+          git diff --exit-code -- drizzle/pg
+          untracked="$(git status --porcelain --untracked-files=all -- drizzle/pg)"
+          if [ -n "$untracked" ]; then echo "$untracked"; exit 1; fi
+      - name: Find unused files and dependencies
+        if: ${AFTER_BUILD}
+        run: pnpm knip
+
+  dependency-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Audit production dependencies
+        run: pnpm audit --prod --audit-level=high
+`;
 
 describe("intégration continue GitHub", () => {
   it("contrôle le typage et les tests à chaque changement de la branche principale", async () => {
@@ -154,19 +231,20 @@ describe("intégration continue GitHub", () => {
     expectPostBuildChecks(await read(".github/workflows/ci.yml"));
   });
 
-  it("ne neutralise aucune étape du job quality (|| true, || echo, continue-on-error, exit 0 forcé, shell sans -e, étape désactivée)", async () => {
+  it("ne neutralise aucune étape du job quality (|| true, || echo, continue-on-error, exit 0 forcé, shell sans -e, pipe sans pipefail, étape désactivée)", async () => {
     expectNoNeutralizedStep(await read(".github/workflows/ci.yml"));
   });
 
-  it("lit chaque forme de bloc YAML d'une étape, et refuse une ligne qu'il ne sait pas lire", async () => {
-    const workflow = await read(".github/workflows/ci.yml");
+  it("lit chaque forme de bloc YAML d'une étape, et refuse une ligne qu'il ne sait pas lire", () => {
     const changed = (from: string, to: string) => {
-      expect(workflow).toContain(from);
-      return workflow.replace(from, to);
+      expect(FIXTURE_WORKFLOW).toContain(from);
+      return FIXTURE_WORKFLOW.replace(from, to);
     };
+    const check = "        run: pnpm check\n";
     const tests = "        run: pnpm test:ci\n";
     const smoke = "        run: node scripts/smoke-built-server.mjs\n";
-    expect(() => expectNoNeutralizedStep(workflow)).not.toThrow();
+    expect(() => expectPostBuildChecks(FIXTURE_WORKFLOW)).not.toThrow();
+    expect(() => expectNoNeutralizedStep(FIXTURE_WORKFLOW)).not.toThrow();
     // A literal or folded block, whatever its chomping or indentation indicator, is read as
     // the command it holds, and refused when that command is silenced.
     for (const header of ["|", "|-", "|+", "|2", ">", ">-", ">+"]) {
@@ -183,7 +261,18 @@ describe("intégration continue GitHub", () => {
     expect(() => expectNoNeutralizedStep(changed(`        if: ${AFTER_BUILD}\n${smoke}`, `        if: >-\n          \${{ false }}\n${smoke}`))).toThrow(/^Start the built server: /);
     // A shell without -e, for one step or for the whole job.
     expect(() => expectNoNeutralizedStep(changed(tests, `${tests}        shell: bash {0}\n`))).toThrow(/shell:/);
-    expect(() => expectNoNeutralizedStep(changed("    timeout-minutes: 20\n", "    timeout-minutes: 20\n    defaults:\n      run:\n        shell: bash {0}\n"))).toThrow(/shell:/);
+    expect(() => expectNoNeutralizedStep(changed("  quality:\n", "  quality:\n    defaults:\n      run:\n        shell: bash {0}\n"))).toThrow(/shell:/);
+    // A pipe reports only its last command, unless the step sets pipefail before it.
+    const piped = "        run: pnpm check | tee check-output.log\n";
+    expect(() => expectNoNeutralizedStep(changed(check, piped))).toThrow(/^Verify TypeScript: /);
+    expect(() => expectNoNeutralizedStep(changed(check, "        run: |\n          pnpm check | tee check-output.log\n          set -o pipefail\n"))).toThrow(/^Verify TypeScript: /);
+    expect(() => expectNoNeutralizedStep(changed(check, `${piped}        shell: sh\n`))).toThrow(/shell:/);
+    expect(() => expectNoNeutralizedStep(changed(check, `${piped}        shell: bash\n`))).not.toThrow();
+    expect(() => expectNoNeutralizedStep(changed(check, "        run: |\n          set -eo pipefail\n          pnpm check | tee check-output.log\n"))).not.toThrow();
+    // A condition GitHub evaluates to false, quoted or not.
+    for (const condition of ["false", "'false'", "'0'", "${{ false }}", '"${{ false }}"']) {
+      expect(() => expectNoNeutralizedStep(changed(tests, `        if: ${condition}\n${tests}`)), condition).toThrow(/^Run test suite: /);
+    }
   });
 
   it("borne la durée de chaque job et annule la vérification dépassée d'une pull request", async () => {

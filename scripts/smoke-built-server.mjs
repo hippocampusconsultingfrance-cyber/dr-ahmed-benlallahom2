@@ -24,8 +24,11 @@ import { pathToFileURL } from "node:url";
  * en échec appellerait, Google Drive, IA, autres clés et hôtes d'API de Clerk,
  * Resend et Blob, proxy) arrivent vides ; le .env du dépôt n'est pas lu
  * (dotenv/config lit un fichier vide). Un garde chargé avant le bundle refuse
- * en outre toute connexion vers une autre machine, sans requête DNS, et le test
- * échoue s'il en a refusé une. La base vise https://localhost/sql (pilote
+ * en outre toute connexion du fil principal du serveur vers une autre machine,
+ * sans requête DNS, et le test échoue s'il en a refusé une ; il n'atteint pas
+ * les workers (lecture des PDF, server/pdfExtractionSandbox.ts), qu'aucune
+ * route appelée ici ne démarre (la tâche planifiée échoue sur la base avant de
+ * lire un CV). La base vise https://localhost/sql (pilote
  * neon-http), qui refuse la connexion. Sans base, /api/health répond 503
  * (database « error ») : on exige le rapport complet, une configuration « ok »
  * et un code cohérent (200 seulement si tout est « ok »), puis une requête tRPC
@@ -106,7 +109,8 @@ export function smokeChildEnvironment(target, port, environment = process.env) {
 /**
  * Chargé avant le bundle (--import) : une connexion vers une autre machine
  * échoue aussitôt comme une connexion refusée, sans requête DNS, et s'écrit sur
- * la sortie du serveur, que le contrôle noOutboundConnections relit.
+ * la sortie du serveur, que le contrôle noOutboundConnections relit. Seul le fil
+ * principal est gardé : un worker a son propre module net, sans ce correctif.
  */
 function guardNetwork(net) {
   const connect = net.Socket.prototype.connect;
