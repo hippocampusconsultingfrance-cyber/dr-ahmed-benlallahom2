@@ -185,6 +185,39 @@ describe("actions d’administration du recrutement", () => {
     expect(memory.rows(recruitmentCampaigns)[0]).toMatchObject({ status: "sent" });
   });
 
+  it("un destinataire dont le jeton de désinscription ne s’enregistre pas reste « failed », sans email, et une relance l’envoie sous sa clé (DATA-05)", async () => {
+    const blocked = seedCandidate(1);
+    const served = seedCandidate(2);
+    const unsubscribeTokenWrite = /^update "cv_applications" set "marketing_unsubscribe_token"/;
+    // c1's token is refused before anything is sent, at the send then at the first retry.
+    memory.failNext(unsubscribeTokenWrite);
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const result = await admin().admin.recruitment.campaigns.send({ title: "Offre test", subject: "Offre Suisse", body: "Une mission à Genève, répondez par email.", language: "fr", mode: "selected", selectedIds: [blocked.id as number, served.id as number], confirmed: true });
+    expect(result).toMatchObject({ total: 2, sent: 1, failed: 1 });
+    expect(state.sentTo).toEqual(["c2@test.local"]);
+    const recipient = memory.rows(recruitmentCampaignRecipients).find(row => row.recipient_email === "c1@test.local")!;
+    // A stable reason, not the query and its parameters.
+    expect(recipient).toMatchObject({ delivery_status: "failed", error: "unsubscribe_token_not_recorded", provider_email_id: null });
+    expect(memory.rows(recruitmentCampaigns)[0]).toMatchObject({ status: "partially_sent" });
+
+    // Refused again at the retry: « failed » again, never left « queued » and counted as served.
+    memory.failNext(unsubscribeTokenWrite);
+    await expect(admin().admin.recruitment.campaigns.retryFailed({ campaignId: result.campaignId, confirmed: true })).resolves.toMatchObject({ attempted: 1, sent: 0, failed: 1 });
+    error.mockRestore();
+    expect(state.sentTo).toEqual(["c2@test.local"]);
+    expect(recipient).toMatchObject({ delivery_status: "failed", error: "unsubscribe_token_not_recorded" });
+    expect(memory.rows(recruitmentCampaigns)[0]).toMatchObject({ status: "partially_sent" });
+
+    // The token recorded at last, the email goes out under the recipient's own key.
+    state.keys = [];
+    await expect(admin().admin.recruitment.campaigns.retryFailed({ campaignId: result.campaignId, confirmed: true })).resolves.toMatchObject({ attempted: 1, sent: 1, failed: 0 });
+    expect(state.sentTo).toEqual(["c2@test.local", "c1@test.local"]);
+    expect(state.keys).toEqual([`campaign-${result.campaignId}-recipient-${recipient.id}`]);
+    expect(recipient).toMatchObject({ delivery_status: "sent", error: null });
+    expect(memory.rows(cvApplications).find(row => row.id === blocked.id)!.marketing_unsubscribe_token).toMatch(/^[0-9a-f]{32}$/);
+    expect(memory.rows(recruitmentCampaigns)[0]).toMatchObject({ status: "sent" });
+  });
+
   it("rapporte l’issue réelle d’une relance d’analyse ou de copie Drive (ADM-REC-02, ADM-DRIVE-01)", () => {
     expect(reanalysisOutcome({ alreadyRunning: false }, { processed: 1, results: [{ completed: true, needsReview: false }] })).toEqual({ outcome: "completed", error: null });
     expect(reanalysisOutcome({ alreadyRunning: false }, { processed: 1, results: [{ completed: false, retry: true, error: "Failed after 2 attempts. GatewayInternalServerError" }] })).toEqual({ outcome: "retry_scheduled", error: "Failed after 2 attempts. GatewayInternalServerError" });
