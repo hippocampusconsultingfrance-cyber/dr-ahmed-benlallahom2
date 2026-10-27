@@ -12,6 +12,23 @@ const TRUSTED_HOSTS = new Set([
 ]);
 
 /**
+ * Hosts accepted besides the site's own (SECU-02), to try the forms of a
+ * preproduction to the end: TURNSTILE_EXTRA_HOSTNAMES, exact names separated
+ * by commas, set only on Vercel's Preview environment to the preview's host.
+ * Empty by default. Never a pattern: an entry that is not a plain host name
+ * (`*`, scheme, port, path) is ignored, so no other *.vercel.app passes.
+ */
+function extraTrustedHosts(): Set<string> {
+  return new Set((process.env.TURNSTILE_EXTRA_HOSTNAMES ?? "").split(",")
+    .map(host => host.trim().toLowerCase())
+    .filter(host => /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)*$/.test(host)));
+}
+
+function isTrustedHost(hostname: string): boolean {
+  return TRUSTED_HOSTS.has(hostname) || extraTrustedHosts().has(hostname);
+}
+
+/**
  * Siteverify error codes for which the token itself was not judged: an
  * internal error at Cloudflare, or a request our server got wrong (secret
  * missing, or invalid after a rotation; malformed request).
@@ -32,7 +49,7 @@ export async function verifyCandidateTurnstile(input: { token?: string; remoteIp
   if (!response.ok) throw new Error("candidate_turnstile_unavailable");
   const result = await response.json() as TurnstileResponse;
   if (!result.success && result["error-codes"]?.some(code => UNJUDGED_TOKEN_ERROR_CODES.has(code))) throw new Error("candidate_turnstile_unavailable");
-  if (!result.success || (result.hostname && !TRUSTED_HOSTS.has(result.hostname))) {
+  if (!result.success || (result.hostname && !isTrustedHost(result.hostname))) {
     throw new Error("candidate_turnstile_invalid");
   }
 }

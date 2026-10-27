@@ -218,6 +218,16 @@ describe("contact et RGPD — anti-robot indisponible chez Cloudflare (ABUS-01)"
     await expect(submit("contact", "visiteur@test.local", "198.51.100.91")).resolves.toEqual({ status: 200, error: null });
     expect(state.stored).toEqual(["contact_messages"]);
   });
+
+  it("sur une préproduction Vercel, l’envoi passe une fois son hôte déclaré dans TURNSTILE_EXTRA_HOSTNAMES (SECU-02)", async () => {
+    await realTurnstileCheck(async () => Response.json({ success: true, hostname: "dr-ahmed-git-main-equipe.vercel.app" }));
+
+    await expect(submit("contact", "testeur@test.local", "198.51.100.94")).resolves.toMatchObject({ status: 400, error: { data: { reason: "security_check_failed" } } });
+    vi.stubEnv("TURNSTILE_EXTRA_HOSTNAMES", "dr-ahmed-git-main-equipe.vercel.app");
+    await expect(submit("contact", "testeur@test.local", "198.51.100.94")).resolves.toEqual({ status: 200, error: null });
+    await expect(submit("gdpr", "testeur@test.local", "198.51.100.94")).resolves.toEqual({ status: 200, error: null });
+    expect(state.stored).toEqual(["contact_messages", "gdpr_requests"]);
+  });
 });
 
 describe("contact et RGPD — limite IP + email comptée après l’anti-robot (ABUS-01)", () => {
