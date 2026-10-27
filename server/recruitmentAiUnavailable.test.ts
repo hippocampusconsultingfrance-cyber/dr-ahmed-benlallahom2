@@ -14,6 +14,8 @@ const CV_TEXT = "[PAGE 1]\nDr Zoé Kowalska, anesthésiste-réanimatrice. Expér
 const state = vi.hoisted(() => ({
   memory: null as null | { db: unknown },
   aiAvailable: false,
+  // An AI failure other than billing (timeout, provider error): the job is retried.
+  aiFailure: null as string | null,
   aiCalls: 0,
   notifications: [] as Array<{ title: string; content: string }>,
 }));
@@ -40,6 +42,7 @@ vi.mock("ai", async importOriginal => ({
   ...await importOriginal<typeof import("ai")>(),
   generateText: vi.fn(async () => {
     state.aiCalls += 1;
+    if (state.aiFailure) throw new Error(state.aiFailure);
     if (!state.aiAvailable) throw new Error(BILLING_REFUSAL);
     return {
       output: {
@@ -93,6 +96,7 @@ beforeEach(() => {
   memory = createMemoryPg([cvApplications, cvProcessingJobs, cvCandidateCertifications, cvCandidateLanguages, cvCandidateExperiences, candidateSecurityRateLimits, recruitmentAuditLogs]);
   state.memory = memory;
   state.aiAvailable = false;
+  state.aiFailure = null;
   state.aiCalls = 0;
   state.notifications = [];
   vi.stubGlobal("fetch", vi.fn(async () => new Response(pdf)));
@@ -100,6 +104,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 describe("analyse IA refusée pour facturation (REC-08)", () => {
@@ -247,5 +252,34 @@ describe("analyse IA refusée pour facturation (REC-08)", () => {
 
     expect(run.results.map(result => result.applicationId)).toEqual([requested]);
     expect(jobsOf(waiting)).toEqual([expect.objectContaining({ job_status: "queued", attempts: 0 })]);
+  });
+});
+
+describe("traçabilité reproductible des analyses CV", () => {
+  it("garde le texte extrait et sa méthode dès l’extraction, même quand l’analyse échoue ensuite", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    state.aiFailure = "Gateway timeout";
+    const id = seedDossier(1);
+
+    await processDueCvAnalysisJobs(5);
+
+    expect(jobsOf(id)).toEqual([expect.objectContaining({ job_status: "retry", attempts: 1 })]);
+    expect(dossier(id)).toMatchObject({ extracted_text: CV_TEXT, extraction_method: "pdf_text" });
+  });
+
+  it("enregistre avec le résultat le modèle effectivement utilisé et la version du prompt", async () => {
+    state.aiAvailable = true;
+    const id = seedDossier(1);
+
+    await processDueCvAnalysisJobs(5);
+
+    expect(dossier(id)).toMatchObject({
+      extracted_text: CV_TEXT,
+      extraction_method: "pdf_text",
+      analysis_model: "openai/gpt-6-astra",
+      analysis_prompt_version: RECRUITMENT_ANALYSIS_PROMPT_VERSION,
+    });
+    expect(jobsOf(id)).toEqual([expect.objectContaining({ job_status: "completed" })]);
   });
 });
