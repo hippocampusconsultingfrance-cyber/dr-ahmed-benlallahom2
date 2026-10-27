@@ -307,38 +307,55 @@ describe("DOCX : texte que sa place peut couper (IA-01)", () => {
       expect(result).toMatchObject({ hidden: "", reasons: ["layout_unfinished"] });
     });
 
-    // Measured alone on the development machine (bundled code, loaded machine): 30 000 linked VML boxes about 1.1 s,
-    // 20 000 rows about 0.45 s, a document part of 19 MB about 1 to 2.3 s depending on what it holds (11.6 s to 12.8 s
-    // before). The bounds leave room for a suite run in parallel while catching work that grows faster than the file.
     const timed = (buffer: Buffer) => {
       const started = performance.now();
       const result = withoutInvisibleDocxText(buffer);
       return { result, ms: performance.now() - started };
     };
+    // How long a check takes depends on the machine and on the suite running beside it: a document part of 19 MB
+    // took about 3 s alone on the development machine and 13 s on CI. What holds everywhere is how the check grows
+    // with the document. Built at an eighth of its size, measured just before and just after, the document checked
+    // in work proportional to its size takes about 8 times as long at full size; the work these tests caught grew
+    // with the square of the document, 64 times and more. The floor keeps a very short small check from
+    // turning a pause of the machine into a failure.
+    const GROWTH = 8;
+    const FLOOR_MS = 100;
+    const timedGrowth = (build: (scale: number) => Buffer) => {
+      const small = build(1 / GROWTH);
+      const large = build(1);
+      const before = timed(small).ms;
+      const measured = timed(large);
+      const after = timed(small).ms;
+      return { ...measured, bound: 3 * GROWTH * Math.max(before, after, FLOOR_MS) };
+    };
+    const scaled = (count: number, scale: number) => Math.round(count * scale);
 
     it("30 000 zones de texte VML liées et 20 000 lignes exactes : contrôlées en quelques secondes au plus", () => {
-      const chain = Array.from({ length: 30_000 }, (_, index) =>
+      const chain = (count: number) => Array.from({ length: count }, (_, index) =>
         inRun(`<w:pict><v:shape id="s${index}" style="position:absolute;width:10pt;height:10pt"><v:textbox style="mso-next-textbox:#s${index + 1}"><w:txbxContent><w:p><w:r><w:t>x</w:t></w:r></w:p></w:txbxContent></v:textbox></v:shape></w:pict>`)).join("");
-      const boxes = timed(docx(honestLines() + chain));
-      expect(boxes.ms).toBeLessThan(6_000);
-      const lines = Array.from({ length: 20_000 }, (_, index) => `<w:tbl><w:tr><w:trPr>${exact(20)}</w:trPr><w:tc><w:p><w:r><w:t>r${index}</w:t></w:r></w:p></w:tc></w:tr></w:tbl>`).join("");
-      const tight = timed(docx(honestLines() + lines));
-      expect(tight.ms).toBeLessThan(4_000);
+      const boxes = timedGrowth(scale => docx(honestLines() + chain(scaled(30_000, scale))));
+      expect(boxes.ms).toBeLessThan(boxes.bound);
+      const lines = (count: number) => Array.from({ length: count }, (_, index) => `<w:tbl><w:tr><w:trPr>${exact(20)}</w:trPr><w:tc><w:p><w:r><w:t>r${index}</w:t></w:r></w:p></w:tc></w:tr></w:tbl>`).join("");
+      const tight = timedGrowth(scale => docx(honestLines() + lines(scaled(20_000, scale))));
+      expect(tight.ms).toBeLessThan(tight.bound);
       // Rows of 1 pt hide their text, wherever the budget stops.
       expect(tight.result.invisibleText.join("").length + tight.result.unverifiableText.reduce((sum, passage) => sum + passage.text.length, 0)).toBeGreaterThan(20_000 * 2);
     }, 60_000);
 
     it("partie de document de près de 20 Mo, de lignes exactes et de tableaux imbriqués : contrôlée en quelques secondes au plus", () => {
       const unit = (index: number) => `<w:tbl><w:tr><w:trPr>${exact(300)}</w:trPr><w:tc><w:tbl><w:tr><w:tc><w:p><w:r><w:t>a${index}</w:t></w:r></w:p></w:tc></w:tr><w:tr><w:tc><w:p><w:r><w:t>b</w:t></w:r></w:p></w:tc></w:tr></w:tbl><w:p/></w:tc></w:tr></w:tbl>`;
-      const parts: string[] = [];
-      let size = 0;
-      for (let index = 0; size < 19 * 1024 * 1024; index += 1) {
-        const piece = unit(index);
-        parts.push(piece);
-        size += piece.length;
-      }
-      const { result, ms } = timed(docx(honestLines() + parts.join("")));
-      expect(ms).toBeLessThan(8_000);
+      const part = (bytes: number) => {
+        const parts: string[] = [];
+        let size = 0;
+        for (let index = 0; size < bytes; index += 1) {
+          const piece = unit(index);
+          parts.push(piece);
+          size += piece.length;
+        }
+        return parts.join("");
+      };
+      const { result, ms, bound } = timedGrowth(scale => docx(honestLines() + part(19 * 1024 * 1024 * scale)));
+      expect(ms).toBeLessThan(bound);
       expect(result.unverifiableText.length + result.invisibleText.length).toBeGreaterThan(0);
     }, 120_000);
 
@@ -346,18 +363,19 @@ describe("DOCX : texte que sa place peut couper (IA-01)", () => {
     it("deux lignes écrasées de 40 000 passages chacune, la seconde sur la première : contrôlées en quelques secondes au plus", () => {
       // Spaces of no width (a paragraph style closes them up), so that all of them stay on their line.
       const closedUp = '<w:style w:type="paragraph" w:styleId="Serre"><w:rPr><w:spacing w:val="-80"/></w:rPr></w:style>';
-      const spaces = '<w:r><w:t xml:space="preserve"> </w:t></w:r>'.repeat(40_000);
-      const body = `<w:p><w:pPr><w:pStyle w:val="Serre"/><w:spacing w:before="0" w:after="0" w:line="100" w:lineRule="exact"/></w:pPr>${spaces}<w:r><w:t>a</w:t></w:r><w:r><w:br/></w:r>${spaces}</w:p>`;
-      expect(timed(docx(honestLines() + body, closedUp)).ms).toBeLessThan(4_000);
+      const body = (spaces: string) => `<w:p><w:pPr><w:pStyle w:val="Serre"/><w:spacing w:before="0" w:after="0" w:line="100" w:lineRule="exact"/></w:pPr>${spaces}<w:r><w:t>a</w:t></w:r><w:r><w:br/></w:r>${spaces}</w:p>`;
+      const crushed = timedGrowth(scale => docx(honestLines() + body('<w:r><w:t xml:space="preserve"> </w:t></w:r>'.repeat(scaled(40_000, scale))), closedUp));
+      expect(crushed.ms).toBeLessThan(crushed.bound);
     }, 60_000);
 
     it("tableaux de lignes exactes imbriqués sur 2 000 et 20 000 niveaux : contrôlés en quelques secondes au plus, sans épuiser la pile", () => {
       const row = '<w:tbl><w:tr><w:trPr><w:trHeight w:val="300" w:hRule="exact"/></w:trPr><w:tc>';
-      const deep = timed(docx(row.repeat(2_000) + "<w:p></w:p>".repeat(80_000) + "<w:p/></w:tc></w:tr></w:tbl>".repeat(2_000)));
-      expect(deep.ms).toBeLessThan(4_000);
+      const deep = timedGrowth(scale => docx(row.repeat(scaled(2_000, scale)) + "<w:p></w:p>".repeat(scaled(80_000, scale)) + "<w:p/></w:tc></w:tr></w:tbl>".repeat(scaled(2_000, scale))));
+      expect(deep.ms).toBeLessThan(deep.bound);
       const cramped = '<w:p><w:pPr><w:spacing w:line="90" w:lineRule="exact"/></w:pPr><w:r><w:t>z</w:t></w:r></w:p>';
-      const nested = timed(docx(`${row}<w:p><w:r><w:t>a</w:t></w:r></w:p>`.repeat(20_000) + cramped + "<w:p/></w:tc><w:tc><w:p><w:r><w:t>y</w:t></w:r></w:p></w:tc></w:tr></w:tbl>".repeat(20_000)));
-      expect(nested.ms).toBeLessThan(6_000);
+      const levels = (count: number) => `${row}<w:p><w:r><w:t>a</w:t></w:r></w:p>`.repeat(count) + cramped + "<w:p/></w:tc><w:tc><w:p><w:r><w:t>y</w:t></w:r></w:p></w:tc></w:tr></w:tbl>".repeat(count);
+      const nested = timedGrowth(scale => docx(levels(scaled(20_000, scale))));
+      expect(nested.ms).toBeLessThan(nested.bound);
       // Nested deeper than DOCX_MAX_NESTING_DEPTH: not laid out, every passage set aside unverifiable.
       expect(nested.result.invisibleText).toEqual([]);
       expect(new Set(nested.result.unverifiableText.map(passage => passage.reason))).toEqual(new Set(["layout_unfinished"]));
@@ -365,10 +383,10 @@ describe("DOCX : texte que sa place peut couper (IA-01)", () => {
 
     it("20 000 tableaux imbriqués de texte blanc ou 20 000 liens imbriqués : rien n’est lu, tout est écarté sans accusation, en une passe", async () => {
       const claims = FAKE.map(claim => paragraph(claim, "", '<w:color w:val="FFFFFF"/>')).join("");
-      const tables = timed(docx(honestLines() + "<w:tbl><w:tr><w:tc>".repeat(20_000) + claims + "</w:tc></w:tr></w:tbl>".repeat(20_000)));
-      const links = timed(docx(honestLines() + `<w:p>${'<w:hyperlink w:anchor="a">'.repeat(20_000)}<w:r><w:t>${escaped(FAKE_ONE)}</w:t></w:r>${"</w:hyperlink>".repeat(20_000)}</w:p>`));
-      for (const { result, ms } of [tables, links]) {
-        expect(ms).toBeLessThan(2_000);
+      const tables = timedGrowth(scale => docx(honestLines() + "<w:tbl><w:tr><w:tc>".repeat(scaled(20_000, scale)) + claims + "</w:tc></w:tr></w:tbl>".repeat(scaled(20_000, scale))));
+      const links = timedGrowth(scale => docx(honestLines() + `<w:p>${'<w:hyperlink w:anchor="a">'.repeat(scaled(20_000, scale))}<w:r><w:t>${escaped(FAKE_ONE)}</w:t></w:r>${"</w:hyperlink>".repeat(scaled(20_000, scale))}</w:p>`));
+      for (const { result, ms, bound } of [tables, links]) {
+        expect(ms).toBeLessThan(bound);
         expect((await mammoth.extractRawText({ buffer: result.buffer })).value.trim()).toBe("");
         expect(result.invisibleText).toEqual([]);
         const setAside = result.unverifiableText.map(passage => passage.text).join(" ");
@@ -386,16 +404,17 @@ describe("DOCX : texte que sa place peut couper (IA-01)", () => {
 
     it("9 000 taquets d’un paragraphe ou 3 000 de son style, et des centaines de milliers de tabulations : contrôlés en quelques secondes au plus", () => {
       const stops = (count: number) => `<w:tabs>${Array.from({ length: count }, (_, index) => `<w:tab w:val="left" w:pos="${index + 1}"/>`).join("")}</w:tabs>`;
-      const own = timed(docx(`<w:p><w:pPr>${stops(9_000)}<w:spacing w:line="240" w:lineRule="exact"/></w:pPr><w:r>${"<w:tab/>".repeat(400_000)}<w:t>x</w:t></w:r></w:p>`));
-      expect(own.ms).toBeLessThan(4_000);
-      const style = `<w:style w:type="paragraph" w:styleId="Taquets"><w:pPr>${stops(3_000)}</w:pPr></w:style>`;
-      const styled = timed(docx('<w:p><w:pPr><w:pStyle w:val="Taquets"/></w:pPr><w:r><w:t>x</w:t></w:r></w:p>'.repeat(40_000), style));
-      expect(styled.ms).toBeLessThan(4_000);
+      // Stops and tabs, or stops and paragraphs, grow together: the work that held the server grew with their product.
+      const own = timedGrowth(scale => docx(`<w:p><w:pPr>${stops(scaled(9_000, scale))}<w:spacing w:line="240" w:lineRule="exact"/></w:pPr><w:r>${"<w:tab/>".repeat(scaled(400_000, scale))}<w:t>x</w:t></w:r></w:p>`));
+      expect(own.ms).toBeLessThan(own.bound);
+      const style = (count: number) => `<w:style w:type="paragraph" w:styleId="Taquets"><w:pPr>${stops(count)}</w:pPr></w:style>`;
+      const styled = timedGrowth(scale => docx('<w:p><w:pPr><w:pStyle w:val="Taquets"/></w:pPr><w:r><w:t>x</w:t></w:r></w:p>'.repeat(scaled(40_000, scale)), style(scaled(3_000, scale))));
+      expect(styled.ms).toBeLessThan(styled.bound);
     }, 60_000);
 
     it("partie mal formée, de « < » sans « > » et de commentaires jamais fermés : lue en une passe", () => {
-      const malformed = timed(docx(honestLines() + "<".repeat(50_000) + "<!--x>".repeat(50_000) + `<w:p><w:r><w:t>${"<!--x".repeat(50_000)}</w:t></w:r></w:p>`));
-      expect(malformed.ms).toBeLessThan(2_000);
+      const malformed = timedGrowth(scale => docx(honestLines() + "<".repeat(scaled(50_000, scale)) + "<!--x>".repeat(scaled(50_000, scale)) + `<w:p><w:r><w:t>${"<!--x".repeat(scaled(50_000, scale))}</w:t></w:r></w:p>`));
+      expect(malformed.ms).toBeLessThan(malformed.bound);
     }, 60_000);
   });
 });
