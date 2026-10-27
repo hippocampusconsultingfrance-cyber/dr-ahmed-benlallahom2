@@ -1,3 +1,4 @@
+import { inspect } from "node:util";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { clientBriefCandidates, clientBriefs, cvApplications, cvCandidateCertifications, cvCandidateLanguages, recruitmentAuditLogs, recruitmentCampaignRecipients, recruitmentCampaigns, recruitmentFollowUpTasks } from "../drizzle/schema";
 import { RECRUITMENT_ANALYSIS_PROMPT_VERSION } from "./recruitmentAnalysis";
@@ -203,6 +204,14 @@ describe("actions d’administration du recrutement", () => {
     // Refused again at the retry: « failed » again, never left « queued » and counted as served.
     memory.failNext(unsubscribeTokenWrite);
     await expect(admin().admin.recruitment.campaigns.retryFailed({ campaignId: result.campaignId, confirmed: true })).resolves.toMatchObject({ attempted: 1, sent: 0, failed: 1 });
+    // Logged at each refusal, by the error's name only: neither the query nor
+    // the tokens it carried (inspected, so that an Error object counts too).
+    const refusedTokens = memory.statements.filter(statement => unsubscribeTokenWrite.test(statement.sql) && statement.params[1] === blocked.id).map(statement => String(statement.params[0]));
+    expect(refusedTokens).toHaveLength(2);
+    expect(error).toHaveBeenCalledWith(expect.stringContaining("Unsubscribe token not recorded"), expect.objectContaining({ error: "Error" }));
+    const logged = inspect(error.mock.calls, { depth: null });
+    expect(logged).not.toContain("Failed query");
+    for (const token of refusedTokens) expect(logged).not.toContain(token);
     error.mockRestore();
     expect(state.sentTo).toEqual(["c2@test.local"]);
     expect(recipient).toMatchObject({ delivery_status: "failed", error: "unsubscribe_token_not_recorded" });
