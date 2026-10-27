@@ -341,6 +341,13 @@ describe("envois après paiement — propriétaire d’abord, essais courts, ale
 
 describe("un envoi refait après le retry-after de Resend prend lui aussi son créneau d’envoi (ABUS-03)", () => {
   const PAUSE_MS = 300;
+  // The slots are kept a pause apart; each call to Resend follows its slot once
+  // the event loop gets to it, later when the other processing is building an
+  // invoice PDF. A call started late in its slot shortens the gap to the next
+  // one by as much: a busy CI machine took 6 to 7 ms, the margin leaves room for
+  // a PDF being built while staying far from the 50 ms a send without its slot
+  // would leave.
+  const LATE_START_MS = 50;
   const sendTimes = () => resend.calls.map(call => call.at);
 
   beforeEach(async () => {
@@ -363,10 +370,8 @@ describe("un envoi refait après le retry-after de Resend prend lui aussi son cr
 
     expect(subjects().map(subject => subject.split(" ")[0])).toEqual(["Nouvelle", "Confirmation", "Nouvelle", "Facture"]);
     expect(jobs.map(row => [row.jobType, row.status, row.attempts])).toEqual([["owner", "completed", 1], ["confirmation", "completed", 1], ["invoice", "completed", 1]]);
-    // Slots are kept a pause apart; a send that a busy machine starts a few
-    // milliseconds late in its slot shortens the gap to the next one by as much.
     const times = sendTimes();
-    for (let index = 1; index < times.length; index += 1) expect(times[index] - times[index - 1]).toBeGreaterThanOrEqual(PAUSE_MS - 10);
+    for (let index = 1; index < times.length; index += 1) expect(times[index] - times[index - 1]).toBeGreaterThanOrEqual(PAUSE_MS - LATE_START_MS);
   });
 
   it("sous le budget d’un traitement immédiat, un nouvel essai dont le créneau tombe après ce budget ne part pas : la notification reste en file, sans tentative comptée ni alerte", async () => {
@@ -386,7 +391,7 @@ describe("un envoi refait après le retry-after de Resend prend lui aussi son cr
     expect(subjects().map(subject => subject.split(" ")[0])).toEqual(["Nouvelle", "Confirmation", "Facture"]);
     expect(subjects().some(subject => subject.startsWith("Échec d’envoi"))).toBe(false);
     const times = sendTimes();
-    for (let index = 1; index < times.length; index += 1) expect(times[index] - times[index - 1]).toBeGreaterThanOrEqual(PAUSE_MS - 2);
+    for (let index = 1; index < times.length; index += 1) expect(times[index] - times[index - 1]).toBeGreaterThanOrEqual(PAUSE_MS - LATE_START_MS);
   });
 });
 
