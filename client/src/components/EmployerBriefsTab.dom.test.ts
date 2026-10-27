@@ -1,15 +1,17 @@
 // @vitest-environment happy-dom
 import { createElement } from "react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { focusManager, QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // DATA-01 — écran d’une mission monté par React dans un DOM, ses lectures et
 // l’association passant par React Query comme dans l’application : une
 // mission supprimée pendant que l’écran est ouvert quitte l’écran (état vide,
 // plus de bouton « Shortlister » refusé à chaque clic), même quand React Query
-// garde les candidats lus avant le 404 ; une candidature effacée fait relire
-// les candidats de la mission.
+// garde les candidats lus avant le 404 ; supprimée ailleurs et vue à la
+// relecture de ses candidats (retour sur l’onglet), elle quitte l’écran tout
+// de suite, sans nouvel essai, avec un message, et la liste est relue sans
+// elle ; une candidature effacée fait relire les candidats de la mission.
 
 type Brief = { id: number; briefId: string; organizationName: string; specialtyNeeded: string; country: string; targetEnvironment: string; status: string; timeline: null; createdAt: string };
 const server = vi.hoisted(() => ({
@@ -71,6 +73,7 @@ const { default: EmployerBriefsTab } = await import("./EmployerBriefsTab");
 
 const brief = (id: number, organizationName: string): Brief => ({ id, briefId: `BRIEF-${id}`, organizationName, specialtyNeeded: "Anesthésie-réanimation", country: "Émirats arabes unis", targetEnvironment: "Hôpital", status: "reviewing", timeline: null, createdAt: "2026-10-01T10:00:00.000Z" });
 const EMPTY_STATE = "Shortlist assistée";
+const MISSION_GONE = "Cette mission n’existe plus : elle a été supprimée entre-temps.";
 
 function mount(client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })) {
   render(createElement(QueryClientProvider, { client }, createElement(EmployerBriefsTab)));
@@ -90,7 +93,10 @@ beforeEach(() => {
   server.candidateReads = [];
   server.toasts = [];
 });
-afterEach(() => cleanup());
+afterEach(() => {
+  cleanup();
+  focusManager.setFocused(undefined);
+});
 
 describe("mission ou candidature disparue pendant que l’écran est ouvert (navigateur simulé, DATA-01)", () => {
   it("ferme la mission supprimée et affiche l’état vide, sans ses candidats ni ses boutons « Shortlister »", async () => {
@@ -123,19 +129,55 @@ describe("mission ou candidature disparue pendant que l’écran est ouvert (nav
     expect(shortlistButtons()).toHaveLength(1);
   });
 
-  it("ne garde pas les candidats d’une mission dont la relecture répond NOT_FOUND", async () => {
-    const client = mount();
+  it("ferme la mission dont la relecture répond NOT_FOUND, sans nouvel essai, avec un message et la liste relue sans elle", async () => {
+    // React Query's default: 3 new tries, here without their wait.
+    const client = mount(new QueryClient({ defaultOptions: { queries: { retryDelay: 0 }, mutations: { retry: false } } }));
     await openMission("Hôpital du Golfe");
     await screen.findByText("Amal Haddad");
+    expect(screen.getByRole("region", { name: "Détails du brief BRIEF-7" })).toBeTruthy();
+    const readsBefore = server.candidateReads.length;
 
     // Deleted while the screen is open, seen at the next reading of its
     // candidates (React Query keeps the data read before the error).
     server.briefs = server.briefs.filter(entry => entry.id !== 7);
     await client.invalidateQueries({ queryKey: ["clientBriefs.candidates"] });
 
-    await waitFor(() => expect(screen.queryByText("Amal Haddad")).toBeNull());
+    expect(await screen.findByText(MISSION_GONE)).toBeTruthy();
+    expect(screen.getByText(EMPTY_STATE)).toBeTruthy();
+    expect(screen.queryByText("Amal Haddad")).toBeNull();
+    expect(screen.queryByRole("region", { name: "Détails du brief BRIEF-7" })).toBeNull();
     expect(shortlistButtons()).toHaveLength(0);
+    // The list is read again without it.
+    await waitFor(() => expect(screen.queryByText("Hôpital du Golfe")).toBeNull());
+    // One reading, never tried again.
+    await new Promise(resolve => setTimeout(resolve, 20));
+    expect(server.candidateReads.slice(readsBefore)).toEqual([7]);
     expect(server.associate).not.toHaveBeenCalled();
+    expect(server.toasts).toEqual([]);
+
+    // Another mission opens as before, without the message.
+    await openMission("Clinique du Nord");
+    expect(await screen.findByText("Jean Martin")).toBeTruthy();
+    expect(screen.queryByText(MISSION_GONE)).toBeNull();
+    expect(shortlistButtons()).toHaveLength(1);
+  });
+
+  it("ferme la mission supprimée pendant que l’admin était sur un autre onglet, à son retour", async () => {
+    mount(new QueryClient({ defaultOptions: { queries: { retryDelay: 0 }, mutations: { retry: false } } }));
+    await openMission("Hôpital du Golfe");
+    await screen.findByText("Amal Haddad");
+
+    // Away on another tab while the mission is deleted, then back.
+    act(() => focusManager.setFocused(false));
+    server.briefs = server.briefs.filter(entry => entry.id !== 7);
+    act(() => focusManager.setFocused(true));
+
+    expect(await screen.findByText(MISSION_GONE)).toBeTruthy();
+    expect(screen.getByText(EMPTY_STATE)).toBeTruthy();
+    expect(screen.queryByText("Amal Haddad")).toBeNull();
+    expect(shortlistButtons()).toHaveLength(0);
+    await waitFor(() => expect(screen.queryByText("Hôpital du Golfe")).toBeNull());
+    expect(screen.getByText("Clinique du Nord")).toBeTruthy();
   });
 
   it("relit les candidats de la mission après une candidature effacée, et garde la mission à l’écran", async () => {
