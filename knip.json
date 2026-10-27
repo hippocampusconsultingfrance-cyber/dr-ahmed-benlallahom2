@@ -4,7 +4,8 @@
     "server/_core/vite.ts",
     "scripts/*.{mjs,ts}",
     "client/src/pages/BlogPage.tsx",
-    "client/src/pages/BlogPostPage.tsx"
+    "client/src/pages/BlogPostPage.tsx",
+    "client/src/components/BlogTab.tsx"
   ],
   "project": [
     "client/src/**/*.{ts,tsx,css}",

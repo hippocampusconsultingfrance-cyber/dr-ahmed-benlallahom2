@@ -35,7 +35,8 @@ vi.mock("@/lib/trpc", () => {
   };
 });
 
-const { AppointmentsTab, ContactsTab } = await import("./AdminDashboard");
+const { default: AppointmentsTab } = await import("@/components/AppointmentsTab");
+const { default: ContactsTab } = await import("@/components/ContactsTab");
 const { default: AdminSearchField } = await import("@/components/AdminSearchField");
 const { default: AdminLoadMore } = await import("@/components/AdminLoadMore");
 const { ADMIN_SEARCH_DELAY_MS } = await import("@/components/adminSearch");
