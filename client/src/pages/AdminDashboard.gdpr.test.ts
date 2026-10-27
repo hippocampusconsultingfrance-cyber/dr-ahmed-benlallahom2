@@ -72,7 +72,8 @@ vi.mock("@/lib/trpc", () => {
   };
 });
 
-const { ContactsTab, GdprTab } = await import("./AdminDashboard");
+const { default: ContactsTab } = await import("@/components/ContactsTab");
+const { default: GdprTab } = await import("@/components/GdprTab");
 const { default: PersonalDataSearchPanel, PersonalDataResult, revealPersonalDataSearch } = await import("@/components/PersonalDataSearchPanel");
 const { formatGdprRequestDate, gdprRequestDeadline, isGdprRequestOverdue } = await import("@/components/gdprRequestAdmin");
 

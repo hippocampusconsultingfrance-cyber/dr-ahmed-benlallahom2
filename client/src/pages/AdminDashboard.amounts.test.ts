@@ -45,7 +45,8 @@ vi.mock("@/lib/trpc", () => {
   };
 });
 
-const { AppointmentsTab, OverviewTab } = await import("./AdminDashboard");
+const { default: AppointmentsTab } = await import("@/components/AppointmentsTab");
+const { default: OverviewTab } = await import("@/components/OverviewTab");
 const { PersonalDataResult } = await import("@/components/PersonalDataSearchPanel");
 
 /** Regular spaces, as read on screen (Intl puts no-break spaces around the thousands and before €). */

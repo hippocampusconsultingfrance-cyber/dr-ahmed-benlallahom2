@@ -39,7 +39,7 @@ vi.mock("@/lib/trpc", () => {
   };
 });
 
-const { AppointmentsTab } = await import("./AdminDashboard");
+const { default: AppointmentsTab } = await import("@/components/AppointmentsTab");
 const { default: AppointmentDeliveries } = await import("@/components/AppointmentDeliveries");
 const { PATIENT_DATA_ERASED_REASON_PROMPT, PATIENT_DATA_ERASED_REFUND_NOTICE } = await import("./appointmentAdminActions");
 

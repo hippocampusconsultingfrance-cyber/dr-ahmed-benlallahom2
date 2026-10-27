@@ -34,7 +34,7 @@ vi.mock("@/lib/trpc", () => {
   };
 });
 
-const { AppointmentsTab } = await import("./AdminDashboard");
+const { default: AppointmentsTab } = await import("@/components/AppointmentsTab");
 
 function appointment(overrides: Record<string, unknown> = {}) {
   return {

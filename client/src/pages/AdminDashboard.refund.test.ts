@@ -38,7 +38,7 @@ vi.mock("@/lib/trpc", () => {
   };
 });
 
-const { AppointmentsTab } = await import("./AdminDashboard");
+const { default: AppointmentsTab } = await import("@/components/AppointmentsTab");
 
 /** Regular spaces, as read on screen (Intl puts a no-break space before €). */
 const shown = (toasts: Array<[string, string]>) => toasts.map(([kind, message]) => [kind, message.replace(/\s/g, " ")]);

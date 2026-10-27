@@ -37,7 +37,11 @@ vi.mock("@/lib/trpc", () => ({
   },
 }));
 
-const { default: AdminDashboard, OverviewTab, AppointmentsTab, ContactsTab, GdprTab } = await import("./AdminDashboard");
+const { default: AdminDashboard } = await import("./AdminDashboard");
+const { default: OverviewTab } = await import("@/components/OverviewTab");
+const { default: AppointmentsTab } = await import("@/components/AppointmentsTab");
+const { default: ContactsTab } = await import("@/components/ContactsTab");
+const { default: GdprTab } = await import("@/components/GdprTab");
 const { default: AdminConfigurationBanner } = await import("@/components/AdminConfigurationBanner");
 const { default: MedicalQuestionsAdminTab } = await import("@/components/MedicalQuestionsAdminTab");
 const { default: RecruitmentTab } = await import("@/components/RecruitmentTab");

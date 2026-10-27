@@ -48,7 +48,10 @@ vi.mock("@/lib/trpc", () => {
   return { trpc: node([]) };
 });
 
-const { default: AdminDashboard, AppointmentsTab, ContactsTab, GdprTab } = await import("./AdminDashboard");
+const { default: AdminDashboard } = await import("./AdminDashboard");
+const { default: AppointmentsTab } = await import("@/components/AppointmentsTab");
+const { default: ContactsTab } = await import("@/components/ContactsTab");
+const { default: GdprTab } = await import("@/components/GdprTab");
 
 type Element = { type: unknown; props: Record<string, unknown> };
 const textOf = (node: unknown): string => {
@@ -60,7 +63,7 @@ const textOf = (node: unknown): string => {
 };
 const html = (component: () => unknown) => renderToStaticMarkup(createElement(component as never)).replace(/&#x27;/g, "'").replace(/&amp;/g, "&");
 
-/** A tab of the dashboard that is not exported, as the dashboard mounts it. */
+/** The tab the dashboard mounts under this label, found by its component's name. */
 function tabComponent(label: string, name: string) {
   const tree = () => renderStateful(AdminDashboard) as ReactElement;
   const nav = elementsOf(tree()).find(element => element.props["aria-label"] === "Navigation des sections d’administration")!;
