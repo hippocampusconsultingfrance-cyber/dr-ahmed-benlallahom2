@@ -20,7 +20,10 @@ let extraHostsIgnoredInProductionLogged = false;
  * Empty by default. Never a pattern: an entry that is not a plain host name
  * (`*`, scheme, port, path) is ignored, so no other *.vercel.app passes.
  * Ignored in Vercel's production (VERCEL_ENV=production), where no form is
- * tried on another host: set there by mistake, the logs say it once.
+ * tried on another host: set there by mistake, the logs say it once. Without
+ * VERCEL_ENV (a server run outside Vercel, or Vercel's system variables not
+ * exposed), nothing tells production apart: the variable is honoured, so it
+ * must stay empty there.
  */
 function extraTrustedHosts(): Set<string> {
   const configured = process.env.TURNSTILE_EXTRA_HOSTNAMES ?? "";

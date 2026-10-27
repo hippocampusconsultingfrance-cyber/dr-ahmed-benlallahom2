@@ -221,12 +221,28 @@ describe("contact et RGPD — anti-robot indisponible chez Cloudflare (ABUS-01)"
 
   it("sur une préproduction Vercel, l’envoi passe une fois son hôte déclaré dans TURNSTILE_EXTRA_HOSTNAMES (SECU-02)", async () => {
     await realTurnstileCheck(async () => Response.json({ success: true, hostname: "dr-ahmed-git-main-equipe.vercel.app" }));
+    // Whatever the machine running the tests has in VERCEL_ENV.
+    vi.stubEnv("VERCEL_ENV", "preview");
 
     await expect(submit("contact", "testeur@test.local", "198.51.100.94")).resolves.toMatchObject({ status: 400, error: { data: { reason: "security_check_failed" } } });
     vi.stubEnv("TURNSTILE_EXTRA_HOSTNAMES", "dr-ahmed-git-main-equipe.vercel.app");
     await expect(submit("contact", "testeur@test.local", "198.51.100.94")).resolves.toEqual({ status: 200, error: null });
     await expect(submit("gdpr", "testeur@test.local", "198.51.100.94")).resolves.toEqual({ status: 200, error: null });
     expect(state.stored).toEqual(["contact_messages", "gdpr_requests"]);
+  });
+
+  it("en production Vercel, le même hôte déclaré par erreur dans TURNSTILE_EXTRA_HOSTNAMES reste refusé (SECU-02)", async () => {
+    await realTurnstileCheck(async () => Response.json({ success: true, hostname: "dr-ahmed-git-main-equipe.vercel.app" }));
+    vi.stubEnv("VERCEL_ENV", "production");
+    vi.stubEnv("TURNSTILE_EXTRA_HOSTNAMES", "dr-ahmed-git-main-equipe.vercel.app");
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+
+    await expect(submit("contact", "testeur@test.local", "198.51.100.95")).resolves.toMatchObject({ status: 400, error: { message: PUBLIC_FORM_SECURITY_CHECK_FAILED_MESSAGE, data: { reason: "security_check_failed" } } });
+    await expect(submit("gdpr", "testeur@test.local", "198.51.100.95")).resolves.toMatchObject({ status: 400, error: { message: PUBLIC_FORM_SECURITY_CHECK_FAILED_MESSAGE, data: { reason: "security_check_failed" } } });
+    warn.mockRestore();
+    expect(state.stored).toEqual([]);
+    expect(notifyOwner).not.toHaveBeenCalled();
+    expect(blockedCategories()).toEqual(["public_contact_submit_turnstile", "public_gdpr_submit_turnstile"]);
   });
 });
 
