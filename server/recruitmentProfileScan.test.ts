@@ -7,6 +7,8 @@ import type { TrpcContext } from "./_core/context";
 // du profil sont vérifiées sur tous les dossiers retenus par les autres filtres,
 // pas seulement sur les 1 000 premiers, et le total est exact. La borne de
 // sécurité (abaissée ici à 1 100 dossiers) est signalée quand elle est atteinte.
+// Le pays cible et les langues du profil se comparent comme les filtres de la
+// liste, accents et casse à part.
 
 const state = vi.hoisted(() => ({ memory: null as null | { db: unknown } }));
 
@@ -91,5 +93,30 @@ describe("Candidatures — profil de matching au-delà des 1 000 premiers dossie
     const narrowed = await caller().admin.recruitment.list({ profileId, search: "candidat1" });
     expect(narrowed).not.toHaveProperty("profileScanLimit");
     expect(narrowed.total).toBe(11);
+  });
+});
+
+describe("Candidatures — profil de matching et filtres de la liste (IA-02)", () => {
+  it("garde les dossiers que les filtres de la liste trouvent, accents et casse à part (IA-02)", async () => {
+    const dossiers = [
+      { lastName: "Golfe", countries: ["Émirats arabes unis"], languages: ["Français", "Anglais"] },
+      { lastName: "Doha", countries: ["Qatar"], languages: ["Français"] },
+      { lastName: "Dubai", countries: ["Émirats arabes unis"], languages: ["Anglais"] },
+    ];
+    memory.seed(cvApplications, dossiers.map(({ lastName, countries, languages }, index) => ({
+      tracking_id: `CVFOLD${index}`, first_name: "Dr", last_name: lastName, email: `fold${index}@test.local`, specialty: "Anesthésie-réanimation",
+      target_countries: JSON.stringify(countries), languages: JSON.stringify(languages),
+      cv_file_key: `recruitment/cv/fold${index}.pdf`, cv_original_name: "cv.pdf", cv_mime_type: "application/pdf", cv_size_bytes: 1000,
+    })));
+    const [gulf] = memory.seed(recruitmentMatchProfiles, [{ name: "Golfe francophone", minimum_score: 0, target_country: "emirats", required_languages: JSON.stringify(["FRANCAIS"]), active: 1 }]);
+    const [written] = memory.seed(recruitmentMatchProfiles, [{ name: "Émirats", minimum_score: 0, target_country: "Emirats arabes unis", required_languages: JSON.stringify(["francais"]), active: 1 }]);
+
+    // The dossier the Pays cible and Langue filters find, the profile keeps too.
+    expect(lastNames((await caller().admin.recruitment.list({ country: "emirats", language: "FRANCAIS" })).items)).toEqual(["Golfe"]);
+    for (const profile of [gulf, written]) {
+      const result = await caller().admin.recruitment.list({ profileId: profile!.id as number });
+      expect(lastNames(result.items)).toEqual(["Golfe"]);
+      expect(result.total).toBe(1);
+    }
   });
 });

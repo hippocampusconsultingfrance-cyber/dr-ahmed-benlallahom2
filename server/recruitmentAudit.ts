@@ -1,5 +1,6 @@
 import { getDb } from "./db";
 import { recruitmentAuditLogs } from "../drizzle/schema";
+import { foldAdminSearchText } from "../shared/adminSearchFolding";
 
 export type RecruitmentAuditAction =
   | "download"
@@ -48,6 +49,14 @@ export function parseRecruitmentJsonArray(value: string | null | undefined): str
  */
 export const RECRUITMENT_PROFILE_SCAN_LIMIT = 10_000;
 
+/**
+ * A country or a language as the profile compares them: folded like the
+ * filters of the list and the admin search (adminFilterContains), accents,
+ * case and ways of writing aside, so that the dossiers its SQL filter kept
+ * (« emirats » finds « Émirats arabes unis ») are not dropped here.
+ */
+const foldProfileText = (text: string) => foldAdminSearchText(text).toLowerCase();
+
 export function matchesRecruitmentProfile(input: {
   score: number | null;
   specialty: string;
@@ -66,13 +75,13 @@ export function matchesRecruitmentProfile(input: {
   // INTL-02: without a verified score the dossier stays in the profile, listed apart to be read.
   if (input.score !== null && input.score < profile.minimumScore) return false;
   if (profile.specialty && !input.specialty.toLowerCase().includes(profile.specialty.toLowerCase())) return false;
-  if (profile.targetCountry && !input.targetCountries.some(country => country.toLowerCase().includes(profile.targetCountry!.toLowerCase()))) return false;
+  if (profile.targetCountry && !input.targetCountries.some(country => foldProfileText(country).includes(foldProfileText(profile.targetCountry!)))) return false;
 
-  const languages = new Set(input.languages.map(value => value.toLowerCase()));
+  const languages = new Set(input.languages.map(foldProfileText));
   const skills = new Set(input.extractedSkills.map(value => value.toLowerCase()));
   const requiredLanguages = parseRecruitmentJsonArray(profile.requiredLanguages);
   const requiredSkills = parseRecruitmentJsonArray(profile.requiredSkills);
-  if (requiredLanguages.some(value => !languages.has(value.toLowerCase()))) return false;
+  if (requiredLanguages.some(value => !languages.has(foldProfileText(value)))) return false;
   if (requiredSkills.some(value => !Array.from(skills).some(skill => skill.includes(value.toLowerCase())))) return false;
   return true;
 }
