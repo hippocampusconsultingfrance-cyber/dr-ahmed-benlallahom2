@@ -87,7 +87,7 @@ describe.skipIf(!executablePath)("coffre du candidat dans un navigateur", () => 
     const page = await openPortal(width, language);
     const layout = await page.evaluate((name) => {
       const line = Array.from(document.querySelectorAll("p")).find((paragraph) => paragraph.textContent?.startsWith(name))!;
-      const [baseName, extension] = Array.from(line.querySelectorAll("[title] > span"));
+      const [baseName, extension] = Array.from(line.querySelectorAll("[title] > [aria-hidden='true']"));
       return {
         pageWidth: document.documentElement.scrollWidth,
         lineRight: line.getBoundingClientRect().right,
@@ -117,7 +117,7 @@ describe.skipIf(!executablePath)("coffre du candidat dans un navigateur", () => 
     const page = await openPortal(width, language);
     const layout = await page.evaluate((name) => {
       const label = Array.from(document.querySelectorAll("[title]")).find((element) => element.getAttribute("title") === name)!;
-      const [baseName, extension] = Array.from(label.querySelectorAll(":scope > span"));
+      const [baseName, extension] = Array.from(label.querySelectorAll("[aria-hidden='true']"));
       return {
         cut: baseName.scrollWidth > baseName.clientWidth,
         shown: `${baseName.textContent}${extension.textContent}`,

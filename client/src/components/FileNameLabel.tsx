@@ -16,12 +16,14 @@ export function fileNameExtension(name: string) {
  * ellipsis, the extension stays visible right after it, then `suffix` (the
  * size, say); the whole name is in the title. It fills the width of its box
  * and is never sized by the name (inline-size containment), whatever box or
- * grid holds it.
+ * grid holds it. Screen readers get the whole name in one piece, not the two
+ * boxes the browser would read with a space between them.
  */
 export default function FileNameLabel({ name, suffix = "", className = "" }: { name: string; suffix?: string; className?: string }) {
   const extension = fileNameExtension(name);
   return <span title={name} className={`flex w-full min-w-0 contain-inline-size ${className}`}>
-    <span className="truncate">{extension ? name.slice(0, -extension.length) : name}</span>
-    {(extension || suffix) && <span className="shrink-0 whitespace-pre">{extension}{suffix}</span>}
+    <span aria-hidden="true" className="truncate">{extension ? name.slice(0, -extension.length) : name}</span>
+    {(extension || suffix) && <span aria-hidden="true" className="shrink-0 whitespace-pre">{extension}{suffix}</span>}
+    <span className="sr-only">{name}{suffix}</span>
   </span>;
 }

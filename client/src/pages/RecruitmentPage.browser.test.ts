@@ -75,7 +75,23 @@ describe.skipIf(!executablePath)("nom du CV choisi dans les formulaires de candi
     return { page, shown };
   }
 
+  /** The name Chromium gives the CV field, from its label: what a screen reader announces. */
+  async function accessibleName(page: Awaited<ReturnType<typeof chooseCv>>["page"], selector: string) {
+    const cdp = await page.context().newCDPSession(page);
+    const { root: document } = await cdp.send("DOM.getDocument", { depth: 0 });
+    const { nodeId } = await cdp.send("DOM.querySelector", { nodeId: document.nodeId, selector });
+    const { nodes } = await cdp.send("Accessibility.getPartialAXTree", { nodeId, fetchRelatives: false });
+    return nodes[0]?.name?.value as string | undefined;
+  }
+
   for (const form of FORMS) {
+    it(`${form.route} : le champ CV est annoncé avec le nom exact du fichier choisi, sans espace avant l’extension`, async () => {
+      const { page } = await chooseCv(form, 412, "fr", REAL_NAME);
+      // Read in one piece, as the file is named (the VVIP label also holds the field's title and hint).
+      expect(` ${await accessibleName(page, form.input)} `).toContain(` ${REAL_NAME} `);
+      await page.context().close();
+    }, 60_000);
+
     it.each([
       [412, "fr", REAL_NAME.length, REAL_NAME],
       [412, "en", LONG_NAME.length, LONG_NAME],
@@ -89,14 +105,14 @@ describe.skipIf(!executablePath)("nom du CV choisi dans les formulaires de candi
       const layout = await page.evaluate(({ input, consent }) => {
         const label = document.querySelector(`label[for='${input.slice(1)}']`)!;
         const nameBox = label.querySelector("[title]")!;
-        const [baseName, extension] = Array.from(nameBox.querySelectorAll("span"));
+        const [baseName, extension] = Array.from(nameBox.querySelectorAll("[aria-hidden='true']"));
         const box = label.closest("div")!.getBoundingClientRect();
         const rightOf = (selector: string) => document.querySelector(selector)!.getBoundingClientRect().right;
         return {
           pageWidth: document.documentElement.scrollWidth,
           nameRight: nameBox.getBoundingClientRect().right,
           boxRight: box.right,
-          shownText: nameBox.textContent,
+          shownText: `${baseName.textContent}${extension.textContent}`,
           baseNameWidth: baseName.getBoundingClientRect().width,
           cut: baseName.scrollWidth > baseName.clientWidth,
           extensionText: extension.textContent,
