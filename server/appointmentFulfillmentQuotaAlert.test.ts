@@ -86,14 +86,18 @@ afterEach(() => {
 describe("ABUS-03 — l’alerte « quota Resend épuisé » levée pendant les envois après paiement", () => {
   it("part dans le créneau d’envoi du traitement, une pause après l’alerte refusée faute de quota", async () => {
     seedRefusedConfirmation("APTQUOTA0001");
+    const start = Date.now();
 
     await processDueAppointmentFulfillmentJobs();
 
     const [confirmation, refusedAlert, securityAlert] = resend.calls;
     expect(resend.calls.map(call => call.subject)).toEqual([confirmation.subject, "Échec d’envoi après paiement (APTQUOTA0001)", SECURITY_ALERT]);
-    expect(refusedAlert.at - confirmation.at).toBeGreaterThanOrEqual(PAUSE_MS - 5);
-    // Before, a few milliseconds after the refused alert: three requests to Resend in one pause.
-    expect(securityAlert.at - refusedAlert.at).toBeGreaterThanOrEqual(PAUSE_MS - 5);
+    // Each send takes its slot a pause after the one before and reaches Resend at that slot or later. A
+    // call that starts late in its slot (the confirmation, built on a busy machine) shortens the gap to the
+    // next call by as much, so the slots are counted from the start of the run: one pause, then two.
+    expect(refusedAlert.at - start).toBeGreaterThanOrEqual(PAUSE_MS - 5);
+    // Before, a few milliseconds after the refused alert, about one pause in: three requests to Resend in one pause.
+    expect(securityAlert.at - start).toBeGreaterThanOrEqual(2 * PAUSE_MS - 5);
     expect(quotaEvents()).toHaveLength(1);
   }, 10_000);
 
