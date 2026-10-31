@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
-import { chromium, type Browser } from "playwright-core";
+import { chromium, type Browser, type Locator } from "playwright-core";
+import { PNG } from "pngjs";
 import { createServer, type ViteDevServer } from "vite";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { COOKIE_CONSENT_STORAGE_KEY, createCookieConsent } from "@/components/cookieConsentState";
@@ -75,6 +76,26 @@ describe.skipIf(!executablePath)("nom du CV choisi dans les formulaires de candi
     return { page, shown };
   }
 
+  /**
+   * Blank, in CSS pixels, between the last painted pixel of an element and its right edge: for the
+   * cut base name, the room left after its ellipsis, before the extension. Read from the pixels,
+   * since the ellipsis is in no DOM box.
+   */
+  async function blankAfterInk(element: Locator) {
+    const image = PNG.sync.read(await element.screenshot());
+    const scale = image.width / (await element.boundingBox())!.width;
+    const colour = (x: number, y: number) => image.data.readUInt32BE((y * image.width + x) * 4);
+    // The background is the most frequent colour; ink is any pixel clearly away from it.
+    const counts = new Map<number, number>();
+    for (let y = 0; y < image.height; y++) for (let x = 0; x < image.width; x++) counts.set(colour(x, y), (counts.get(colour(x, y)) ?? 0) + 1);
+    const background = [...counts].sort((a, b) => b[1] - a[1])[0][0];
+    const distance = (x: number, y: number) => [24, 16, 8].reduce((sum, shift) => sum + Math.abs(((colour(x, y) >>> shift) & 255) - ((background >>> shift) & 255)), 0);
+    for (let x = image.width - 1; x >= 0; x--) {
+      for (let y = 0; y < image.height; y++) if (distance(x, y) > 96) return (image.width - 1 - x) / scale;
+    }
+    return image.width / scale;
+  }
+
   /** The name Chromium gives the CV field, from its label: what a screen reader announces. */
   async function accessibleName(page: Awaited<ReturnType<typeof chooseCv>>["page"], selector: string) {
     const cdp = await page.context().newCDPSession(page);
@@ -89,6 +110,23 @@ describe.skipIf(!executablePath)("nom du CV choisi dans les formulaires de candi
       const { page } = await chooseCv(form, 412, "fr", REAL_NAME);
       // Read in one piece, as the file is named (the VVIP label also holds the field's title and hint).
       expect(` ${await accessibleName(page, form.input)} `).toContain(` ${REAL_NAME} `);
+      await page.context().close();
+    }, 60_000);
+
+    it.each([
+      [360, "fr"],
+      [375, "en"],
+      [390, "fr"],
+      [412, "en"],
+    ] as const)(`${form.route} à %i px (%s) : le nom coupé finit par ses points de suspension juste avant l’extension, sans blanc lu comme une espace`, async (width, language) => {
+      const { page, shown } = await chooseCv(form, width, language, LONG_NAME);
+      const baseName = shown.locator("[aria-hidden='true']").first();
+      expect(await baseName.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(true);
+      // Between two letters there are 1 to 3 pixels; the browser alone left up to a letter (about 10).
+      expect(await blankAfterInk(baseName)).toBeLessThanOrEqual(4);
+      // The extension starts where the base name's box ends.
+      const [baseRight, extensionLeft] = await shown.evaluate((label) => Array.from(label.querySelectorAll("[aria-hidden='true']")).map((part, index) => part.getBoundingClientRect()[index ? "left" : "right"]));
+      expect(Math.abs(extensionLeft - baseRight)).toBeLessThan(0.5);
       await page.context().close();
     }, 60_000);
 
