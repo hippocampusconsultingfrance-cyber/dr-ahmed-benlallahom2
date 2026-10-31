@@ -52,12 +52,25 @@ describe("taille du CV choisi dans le formulaire standard", () => {
     expect(hintFor("fr", 300)).toMatch(/^1 Ko · /);
   });
 
+  it("donne un fichier vide, refusé, pour 0 Ko et non 1 Ko", () => {
+    expect(hintFor("fr", 0)).toBe("0 Ko · CV (PDF ou DOCX — 4 Mo maximum)");
+    expect(hintFor("en", 0)).toMatch(/^0 KB · /);
+  });
+
   it("passe en Mo au-delà de 1 024 Ko, avec la virgule décimale en français et le point en anglais", () => {
     expect(hintFor("fr", 1_572_864)).toBe("1,5 Mo · CV (PDF ou DOCX — 4 Mo maximum)");
     expect(hintFor("en", 1_572_864)).toBe("1.5 MB · CV (PDF or DOCX — 4 MB maximum)");
     expect(hintFor("en", 250_000)).toMatch(/^244 KB · /);
-    // Two decimals at most: a CV just above the 4 MB limit does not read as « 4 Mo ».
-    expect(hintFor("fr", 4 * 1024 * 1024 + 41_944)).toMatch(/^4,04 Mo · /);
+    expect(hintFor("fr", 3 * 1024 * 1024 + 41_944)).toMatch(/^3,04 Mo · /);
+  });
+
+  it("arrondit au-dessus un CV refusé pour quelques octets de trop, qui ne se lit jamais « 4 Mo »", () => {
+    const limit = 4 * 1024 * 1024;
+    expect(hintFor("fr", limit)).toMatch(/^4 Mo · /);
+    expect(hintFor("fr", limit + 1)).toMatch(/^4,01 Mo · /);
+    expect(hintFor("fr", limit + 5_000)).toMatch(/^4,01 Mo · /);
+    expect(hintFor("en", limit + 1)).toMatch(/^4\.01 MB · /);
+    expect(hintFor("fr", limit + 10_486)).toMatch(/^4,02 Mo · /);
   });
 
   it("garde les unités KB et MB en allemand et en chinois, avec leur écriture des nombres", () => {

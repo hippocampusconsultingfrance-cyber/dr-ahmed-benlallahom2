@@ -526,8 +526,8 @@ describe.skipIf(!executablePath)("pages publiques dans un navigateur", () => {
     await standard.setInputFiles("#recruitment-cv", tooLarge);
     expect(await alerts(standard)).toContain("Please attach a PDF or DOCX CV up to 4 MB (the legacy Word .doc format is not accepted).");
     expect(await standard.getAttribute("#recruitment-cv", "aria-invalid")).toBe("true");
-    // The size of the chosen file comes with the limit, which stays visible.
-    expect(await standard.textContent("#recruitment-cv-hint")).toBe("4\u00a0MB · CV (PDF or DOCX — 4 MB maximum)");
+    // The size of the chosen file comes with the limit, which stays visible; one byte over it reads over it.
+    expect(await standard.textContent("#recruitment-cv-hint")).toBe("4.01\u00a0MB · CV (PDF or DOCX — 4 MB maximum)");
     await standard.setInputFiles("#recruitment-cv", accepted);
     expect(await alerts(standard)).not.toContain("Please attach a PDF or DOCX CV up to 4 MB (the legacy Word .doc format is not accepted).");
     expect(await standard.getAttribute("#recruitment-cv", "aria-invalid")).toBe("false");

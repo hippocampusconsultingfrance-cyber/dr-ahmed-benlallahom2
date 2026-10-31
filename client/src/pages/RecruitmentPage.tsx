@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import { isAcceptedRecruitmentCvFile, RECRUITMENT_CV_ACCEPT_ATTRIBUTE } from "@shared/recruitmentCvLimits";
+import { isAcceptedRecruitmentCvFile, RECRUITMENT_CV_ACCEPT_ATTRIBUTE, RECRUITMENT_CV_MAX_BYTES } from "@shared/recruitmentCvLimits";
 import { CheckCircle2, Clock3, FileUp, Globe2, Loader2, Search, ShieldCheck, UserCheck, UsersRound, X } from "lucide-react";
 import { Link } from "wouter";
 import { SEOHead } from "@/components/SEOHead";
@@ -155,14 +155,17 @@ export function standardInvalidFields(form: FormState, file: Pick<File, "name" |
 
 /**
  * Size of the chosen CV in the page's language: « 120 Ko » or « 1,5 Mo » in French, « 120 KB » or
- * « 1.5 MB » in English, not « 0.00 MB »; two decimals at most, so that a CV just above the limit
- * does not read as « 4 Mo ».
+ * « 1.5 MB » in English, not « 0.00 MB »; two decimals at most. A CV over the limit is rounded up,
+ * so that one refused for a few bytes too many reads « 4,01 Mo », not the limit itself; an empty
+ * one, refused too, reads « 0 Ko ».
  */
 function cvSizeLabel(bytes: number, language: Language) {
   const t = copy[language];
-  const kilobytes = Math.max(1, Math.round(bytes / 1024));
+  const kilobytes = bytes > 0 ? Math.max(1, Math.round(bytes / 1024)) : 0;
   if (kilobytes < 1024) return `${kilobytes.toLocaleString(language)}\u00a0${t.kilobytes}`;
-  return `${(bytes / (1024 * 1024)).toLocaleString(language, { maximumFractionDigits: 2 })}\u00a0${t.megabytes}`;
+  const megabytes = bytes / (1024 * 1024);
+  const shown = bytes > RECRUITMENT_CV_MAX_BYTES ? Math.ceil(megabytes * 100) / 100 : megabytes;
+  return `${shown.toLocaleString(language, { maximumFractionDigits: 2 })}\u00a0${t.megabytes}`;
 }
 
 /**
