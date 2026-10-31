@@ -8,7 +8,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 /**
  * Admin > Candidatures dans un vrai navigateur (EXPL-02) : sur un téléphone, la ligne « Fichier : »
  * d'une candidature dépliée passe à la ligne au lieu d'élargir toute la page quand le nom du CV
- * stocké est long et sans espace. Le client est servi par Vite, Clerk est remplacé par un
+ * stocké est long et sans espace, comme les autres champs saisis par le candidat (message,
+ * certifications, disponibilité, mobilité). Le client est servi par Vite, Clerk est remplacé par un
  * administrateur déjà connecté et chaque procédure tRPC répond par des données fictives. Ne tourne
  * que si un Chromium est disponible, comme BookingPage.browser.test.ts :
  *   CHROMIUM=/chemin/vers/chrome pnpm vitest run client/src/components/RecruitmentTab.browser.test.ts
@@ -78,11 +79,11 @@ describe.skipIf(!executablePath)("Candidatures de l’admin dans un navigateur",
     await server?.close();
   });
 
-  async function openApplication(width: number): Promise<Page> {
+  async function openApplication(width: number, entered: Partial<typeof application> = {}): Promise<Page> {
     const procedures: Record<string, Procedure> = {
       "auth.me": () => ({ id: 1, openId: "user_owner", name: "Dr Test", email: "owner@test.local", role: "admin", mfaVerified: true }),
       "adminSecurity.status": () => ({ verified: true }),
-      "admin.recruitment.list": () => ({ items: [application], total: 1 }),
+      "admin.recruitment.list": () => ({ items: [{ ...application, ...entered }], total: 1 }),
       "admin.recruitment.profiles.list": () => [],
       "admin.recruitment.driveExport.status": () => ({ connected: true, lastError: null, failedExports: 0 }),
     };
@@ -133,6 +134,32 @@ describe.skipIf(!executablePath)("Candidatures de l’admin dans un navigateur",
     expect(layout.lineText).toContain("(240 Ko)");
     expect(layout.lineRight).toBeLessThanOrEqual(layout.cardRight + 0.5);
     expect(layout.cardRight).toBeLessThanOrEqual(width);
+    await page.context().close();
+  }, 60_000);
+
+  it("à 360 px, un lien sans espace dans le message et les autres champs saisis passent à la ligne, sans défilement horizontal", async () => {
+    const link = "https://www.linkedin.com/in/helene_berenice_lefevre_anesthesie_reanimation_0123456789abcdef";
+    const page = await openApplication(360, {
+      message: `Mon profil: ${link}`,
+      certifications: "ACLS_PALS_ATLS_DIU_Echographie_Reanimation_2025_renouvellement_en_cours",
+      availability: "Immediatement_apres_preavis_de_trois_mois_negociable",
+      mobility: "France_Suisse_Belgique_Luxembourg_Monaco_Emirats_Arabes_Unis",
+    });
+    const layout = await page.evaluate((labels) => {
+      const lines = Array.from(document.querySelectorAll("p")).filter((element) => labels.some((label) => element.textContent?.startsWith(label)));
+      const card = lines[0].closest("article")!;
+      return {
+        pageWidth: document.documentElement.scrollWidth,
+        found: lines.length,
+        widestRight: Math.max(...lines.map((line) => line.getBoundingClientRect().right)),
+        cardRight: card.getBoundingClientRect().right,
+        messageText: lines.find((line) => line.textContent?.startsWith("Message :"))?.textContent,
+      };
+    }, ["Message :", "Certifications déclarées :", "Disponibilité :", "Mobilité :"]);
+    expect(layout.pageWidth).toBeLessThanOrEqual(360);
+    expect(layout.found).toBe(4);
+    expect(layout.messageText).toContain(link);
+    expect(layout.widestRight).toBeLessThanOrEqual(layout.cardRight + 0.5);
     await page.context().close();
   }, 60_000);
 });

@@ -473,7 +473,7 @@ export default function RecruitmentTab() {
 
                 {expanded && (
                   <div className="mt-4 grid gap-4 border-t border-border pt-4 text-sm md:grid-cols-2">
-                    <div className="min-w-0 space-y-1 text-muted-foreground">
+                    <div className="min-w-0 space-y-1 wrap-anywhere text-muted-foreground">
                       <p><strong className="text-foreground">Email :</strong> {application.email}</p>
                       <p><strong className="text-foreground">Téléphone :</strong> {application.phone || "—"}</p>
                       <p><strong className="text-foreground">Langues déclarées :</strong> {languages.join(", ") || "—"}</p>
@@ -482,8 +482,8 @@ export default function RecruitmentTab() {
                       <p><strong className="text-foreground">Mobilité :</strong> {application.mobility || "—"}</p>
                       <p><strong className="text-foreground">Certifications déclarées :</strong> {application.certifications || "—"}</p>
                     </div>
-                    <div className="min-w-0 space-y-1 text-muted-foreground">
-                      <p className="wrap-anywhere"><strong className="text-foreground">Fichier :</strong> {application.cvOriginalName} ({formatBytes(application.cvSizeBytes)})</p>
+                    <div className="min-w-0 space-y-1 wrap-anywhere text-muted-foreground">
+                      <p><strong className="text-foreground">Fichier :</strong> {application.cvOriginalName} ({formatBytes(application.cvSizeBytes)})</p>
                       <p><strong className="text-foreground">Contrôle du fichier :</strong> {application.fileValidationStatus === "accepted" ? "validé" : application.fileValidationStatus || "en attente"}{application.fileSecurityScanVersion ? ` · ${application.fileSecurityScanVersion}` : ""}</p>
                       <p><strong className="text-foreground">Reçu le :</strong> {new Date(application.createdAt).toLocaleString("fr-FR", { timeZone: "Europe/Paris" })}</p>
                       <p><strong className="text-foreground">Conservation jusqu’au :</strong> {application.retentionUntil ? new Date(application.retentionUntil).toLocaleDateString("fr-FR", { timeZone: "Europe/Paris" }) : "—"}</p>
