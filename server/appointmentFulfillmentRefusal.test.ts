@@ -156,7 +156,7 @@ describe("EXPL-02 — un refus du service d’envoi termine l’envoi tout de su
     expect(alert.content).toContain("corrigez l’adresse sur le rendez-vous (onglet Réservations, « Corriger l’email du patient »), puis « Renvoyer » l’envoie à la nouvelle adresse");
     expect(alert.content).not.toContain("nouvel essai automatique");
     expect(alert.content).not.toMatch(/tentative \d sur/);
-    expect(alert.key).toBe("appointment-confirmation-failure-APTREFUSE001-refused");
+    expect(alert.key).toBe(patientEmailIdempotencyKey("appointment-confirmation-failure-APTREFUSE001-refused", "aptrefuse001@example.test"));
 
     // The next scheduled runs, days later, try nothing more.
     vi.useFakeTimers({ toFake: ["Date"] });
@@ -210,7 +210,7 @@ describe("EXPL-02 — un refus du service d’envoi termine l’envoi tout de su
     expect(attention.retryingDeliveries.items).toEqual([expect.objectContaining({ trackingId: "APTREFUSE004", jobTypes: ["owner", "confirmation"] })]);
     expect(alerts()).toHaveLength(1);
     expect(alerts()[0].content).toContain("tentative 1 sur 7");
-    expect(alerts()[0].key).toBe("appointment-confirmation-failure-APTREFUSE004-first");
+    expect(alerts()[0].key).toBe(patientEmailIdempotencyKey("appointment-confirmation-failure-APTREFUSE004-first", "aptrefuse004@example.test"));
 
     // Configuration corrected: the next scheduled run sends both, with no « Renvoyer ».
     resend.configuration = null;
@@ -356,6 +356,35 @@ describe("EXPL-02 — adresse du patient corrigée depuis la fiche du rendez-vou
     await expect(admin().attention()).resolves.toMatchObject({ refusedDeliveries: { total: 0 } });
   });
 
+  it("une nouvelle adresse refusée à son tour est dite au médecin sous une autre clé, que Resend ne refuse pas comme réutilisée ; la même adresse refusée de nouveau garde la sienne", async () => {
+    const { id } = seedAppointment("APTFIXMAIL05");
+    seedJob(id, "owner", { status: "completed", attempts: 1 });
+    seedJob(id, "confirmation");
+    resend.rejected.add("aptfixmail05@example.test");
+    resend.rejected.add("toujours.refusee@example.test");
+    await processAppointmentFulfillmentNow(id);
+
+    await admin().appointments.updateCustomerEmail({ trackingId: "APTFIXMAIL05", customerEmail: "toujours.refusee@example.test" });
+    await admin().appointments.retryFulfillment({ trackingId: "APTFIXMAIL05" });
+    // Not corrected again: « Renvoyer » meets the same refusal.
+    await admin().appointments.retryFulfillment({ trackingId: "APTFIXMAIL05" });
+
+    expect(emailsTo("toujours.refusee@example.test")).toHaveLength(2);
+    expect(job(id, "confirmation")).toMatchObject({ status: "failed" });
+    const sent = alerts();
+    expect(sent.map(alert => alert.content.includes("toujours.refusee@example.test"))).toEqual([false, true, true]);
+    // Resend answers 409 for 24 h to a key reused with another content: each key here keeps one content.
+    const contentByKey = new Map<string | undefined, Set<string>>();
+    for (const alert of sent) contentByKey.set(alert.key, (contentByKey.get(alert.key) ?? new Set()).add(alert.content));
+    expect([...contentByKey.values()].map(contents => contents.size)).toEqual([1, 1]);
+    // One alert per refused address: the second refusal of the new one is a replay of its first.
+    expect(sent.map(alert => alert.key)).toEqual([
+      patientEmailIdempotencyKey("appointment-confirmation-failure-APTFIXMAIL05-refused", "aptfixmail05@example.test"),
+      patientEmailIdempotencyKey("appointment-confirmation-failure-APTFIXMAIL05-refused", "toujours.refusee@example.test"),
+      patientEmailIdempotencyKey("appointment-confirmation-failure-APTFIXMAIL05-refused", "toujours.refusee@example.test"),
+    ]);
+  });
+
   it("vaut aussi pour l’email d’un remboursement refusé", async () => {
     const { id } = seedAppointment("APTFIXMAIL02");
     resend.rejected.add("aptfixmail02@example.test");
@@ -457,10 +486,10 @@ describe("ABUS-03 — l’alerte « Échec d’envoi » que Resend ne prend pas 
     await processDueAppointmentFulfillmentJobs();
     expect(alertJob()).toMatchObject({ status: "completed", attempts: 2, last_error: null });
     expect(alerts().map(alert => alert.key)).toEqual([
-      "appointment-confirmation-failure-APTALERT0001-first",
-      "appointment-confirmation-failure-APTALERT0001-first",
-      "appointment-confirmation-failure-APTALERT0001-final",
-      "appointment-confirmation-failure-APTALERT0001-final",
+      patientEmailIdempotencyKey("appointment-confirmation-failure-APTALERT0001-first", "aptalert0001@example.test"),
+      patientEmailIdempotencyKey("appointment-confirmation-failure-APTALERT0001-first", "aptalert0001@example.test"),
+      patientEmailIdempotencyKey("appointment-confirmation-failure-APTALERT0001-final", "aptalert0001@example.test"),
+      patientEmailIdempotencyKey("appointment-confirmation-failure-APTALERT0001-final", "aptalert0001@example.test"),
     ]);
     expect(alerts().at(-1)!.content).toContain("a échoué 7 fois");
 
@@ -471,7 +500,7 @@ describe("ABUS-03 — l’alerte « Échec d’envoi » que Resend ne prend pas 
     expect(alertJob()).toMatchObject({ status: "queued", attempts: 0, last_error: null });
     await processDueAppointmentFulfillmentJobs();
     expect(alertJob()).toMatchObject({ status: "completed", attempts: 1 });
-    expect(alerts().at(-1)!.key).toBe("appointment-confirmation-failure-APTALERT0001-first");
+    expect(alerts().at(-1)!.key).toBe(patientEmailIdempotencyKey("appointment-confirmation-failure-APTALERT0001-first", "aptalert0001@example.test"));
     expect(alerts()).toHaveLength(6);
   });
 });

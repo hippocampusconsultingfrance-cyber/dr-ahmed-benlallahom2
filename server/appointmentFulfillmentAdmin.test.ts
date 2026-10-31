@@ -80,7 +80,7 @@ vi.mock("./_core/notifications", async importOriginal => {
 
 import { appRouter } from "./routers";
 import { allocateAppointmentInvoice, APPOINTMENT_INVOICE_SCHEMA_OBJECTS } from "./invoiceNumbering";
-import { APPOINTMENT_FULFILLMENT_MAX_ATTEMPTS, enqueueAppointmentFulfillment, processAppointmentFulfillmentNow } from "./appointmentFulfillment";
+import { APPOINTMENT_FULFILLMENT_MAX_ATTEMPTS, enqueueAppointmentFulfillment, patientEmailIdempotencyKey, processAppointmentFulfillmentNow } from "./appointmentFulfillment";
 import { anonymisedAppointmentFields } from "./personalDataRetention";
 import { notifyOwner } from "./_core/notification";
 
@@ -456,7 +456,7 @@ describe("EXPL-02 — « Télécharger la facture »", () => {
     expect(retried.deliveries.find(delivery => delivery.jobType === "invoice")).toMatchObject({ state: "retrying", failureCause: "invoice_storage" });
     expect(vi.mocked(notifyOwner)).toHaveBeenLastCalledWith(expect.objectContaining({
       content: expect.stringContaining("vient d’échouer (tentative 1 sur 7) : sa copie archivée dans le stockage des factures (Vercel Blob) n’a pas pu être vérifiée ou lue, et elle n’est pas refaite à sa place"),
-    }), { idempotencyKey: "appointment-invoice-failure-APTINVFIX006-first-storage", stopAtDeadline: true });
+    }), { idempotencyKey: patientEmailIdempotencyKey("appointment-invoice-failure-APTINVFIX006-first-storage", "patient.corrige@example.test"), stopAtDeadline: true });
     expect(blobStore.uploads).toHaveLength(1);
 
     blobStore.unavailable = false;

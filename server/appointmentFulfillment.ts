@@ -474,7 +474,10 @@ type PatientEmailFailure = Pick<FulfillmentJob, "attempts" | "maxAttempts" | "la
  * (the next automatic attempt may only come with the next scheduled run), at
  * a refusal, for which no new attempt is promised, and when retries are
  * exhausted. One key per wording: a refusal may follow a first failure of the
- * same job.
+ * same job. And per address, which the alert quotes: once it is corrected
+ * (« Corriger l’email du patient »), a new failure is told under a new key,
+ * which Resend would otherwise refuse for 24 h as reused with another content
+ * (409); the same address refused again keeps its key, and a single alert.
  */
 function failureAlertOf(jobType: PatientJobType, appointment: Appointment, failure: PatientEmailFailure) {
   const { refused, terminal, attempts, maxAttempts } = failure;
@@ -491,7 +494,7 @@ function failureAlertOf(jobType: PatientJobType, appointment: Appointment, failu
           ? `L’envoi ${JOB_LABELS[jobType]} du rendez-vous ${appointment.trackingId} a échoué ${attempts} fois${cause}. ${recorded} ; un envoi manuel au patient est nécessaire. ${patientContact(appointment)}`
           : `L’envoi ${JOB_LABELS[jobType]} du rendez-vous ${appointment.trackingId} vient d’échouer (tentative ${attempts} sur ${maxAttempts})${cause}. ${recorded}. Un nouvel essai automatique aura lieu lors de la prochaine exécution planifiée ; en attendant, vous pouvez contacter le patient. ${patientContact(appointment)}`,
     },
-    idempotencyKey: `appointment-${jobType}-failure-${appointment.trackingId}-${refused ? "refused" : terminal ? "final" : "first"}${storage ? "-storage" : ""}`,
+    idempotencyKey: patientEmailIdempotencyKey(`appointment-${jobType}-failure-${appointment.trackingId}-${refused ? "refused" : terminal ? "final" : "first"}${storage ? "-storage" : ""}`, appointment.customerEmail),
   };
 }
 
