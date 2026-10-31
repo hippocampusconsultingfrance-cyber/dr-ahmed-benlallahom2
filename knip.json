@@ -15,7 +15,7 @@
     "scripts/**/*.{mjs,ts}"
   ],
   "ignoreDependencies": ["@fontsource-variable/dm-sans", "@fontsource/playfair-display"],
-  "ignoreBinaries": ["fc-match"],
+  "ignoreBinaries": ["fc-match", "fc-scan"],
   "rules": {
     "exports": "off",
     "types": "off",

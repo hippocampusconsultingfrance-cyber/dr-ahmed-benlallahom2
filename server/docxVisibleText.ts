@@ -1,6 +1,6 @@
 import { crc32 } from "node:zlib";
 import { DOCUMENT_DECOMPRESSION_LIMITS, inspectDocxArchive } from "./documentDecompressionLimits";
-import { DOCX_FONT_ALIASES, DOCX_FONT_CHARACTERS, DOCX_FONT_METRICS, DOCX_FONT_WIDTH_DIGITS } from "./docxFontMetrics";
+import { DOCX_FONT_ALIASES, DOCX_FONT_AS_BASE, DOCX_FONT_AS_UPRIGHT, DOCX_FONT_CHARACTERS, DOCX_FONT_METRICS, DOCX_FONT_WIDTH_DIGITS, DOCX_NARROWEST_FONT } from "./docxFontMetrics";
 
 /**
  * DOCX text Word does not show (IA-01): runs marked hidden (w:vanish,
@@ -39,7 +39,8 @@ import { DOCX_FONT_ALIASES, DOCX_FONT_CHARACTERS, DOCX_FONT_METRICS, DOCX_FONT_W
  * page; a frame of exact height, w:framePr; an exact line spacing, or a
  * multiple of single spacing under 89/240; a right indent past the page's
  * right edge), the text is laid out twice (LAYOUTS):
- * taking the most room it may take (in its font when measured), and the
+ * taking the most room it may take (in its font when measured; in a font
+ * named but not measured, the room the narrowest of those leaves it), and the
  * least. Its lines wrap at the
  * width of their cell, text box, frame or column less their indents, tab
  * stops move them along (the text a right or centred stop aligns stays on its
@@ -51,9 +52,12 @@ import { DOCX_FONT_ALIASES, DOCX_FONT_CHARACTERS, DOCX_FONT_METRICS, DOCX_FONT_W
  * line needs 60 % of its size to be read, on the page. Text that does not fit
  * even when it takes the least room is hidden; text that only fits then is
  * set aside as unverifiable (its visibility cannot be established), never
- * counted as hidden. In an exact line spacing, lines closer than 0.7 times
- * their size run into the line above (LibreOffice draws them over it, Word
- * cuts their top), in their paragraph, or the last line of text above them:
+ * counted as hidden. A word is read or set aside whole, over runs and lines:
+ * what is left of a word partly hidden or set aside is set aside with it, so
+ * the text read stops where Word may break a line (a space, after a hyphen
+ * or a dash, around an ideograph). In an exact line spacing, lines closer
+ * than 0.7 times their size run into the line above (LibreOffice draws them
+ * over it, Word cuts their top), in their paragraph, or the last line of text above them:
  * in their cell or the body, in the row above, before their table, at the
  * bottom of a table above them. They are set aside, hidden under half their
  * size, but a drop cap's letter, and the first line of a paragraph over a
@@ -168,8 +172,12 @@ const MAX_ADVANCE_IN_SIZES = 1;
  * The two layouts of text whose place may hide it: taking the most room it
  * may take (characters as wide as in their font, bold or italic, when it is
  * one of the fonts measured, DOCX_FONT_METRICS, and lines as tall as it sets
- * them; otherwise lines of 1.15 times their size and characters, in sizes of
- * their text, about as wide as in the widest common fonts: capitals 0.68,
+ * them; in a font named but not measured, but a typewriter one, which may be
+ * as narrow as any of them, as in the narrowest of them, character by
+ * character, and lines as low, DOCX_NARROWEST_FONT, so that an honest CV in
+ * such a font is read whole; otherwise, and for the characters not measured,
+ * lines of 1.15 times their size and characters, in sizes of their text,
+ * about as wide as in the widest common fonts: capitals 0.68,
  * figures 0.56, other letters 0.5, punctuation 0.4, other signs 0.8, spaces
  * 0.3, Chinese, Japanese or Korean ones 1, all 0.6 in a typewriter font;
  * words kept whole on their line, over passages and runs, with those no-break
@@ -1187,29 +1195,40 @@ const breaksLine = (code: number) => SPACES[code] === 1 && !NO_BREAK_SPACES.has(
 const FIT_MARGIN = 0.02;
 /** Where each character measured (DOCX_FONT_CHARACTERS) is in the widths of a font. */
 const MEASURED_CHARACTERS = new Map(Array.from(DOCX_FONT_CHARACTERS, (character, index) => [character, index] as const));
+/** Of each character measured, where its base letter is (the first character of its canonical decomposition), for DOCX_FONT_AS_BASE. */
+const MEASURED_BASES = Array.from(DOCX_FONT_CHARACTERS, character => MEASURED_CHARACTERS.get(character.normalize("NFD")[0]!) ?? 0);
 /** The widths of each style of each font measured, in sizes of their text, read once from their digits. */
 const fontWidths = new Map<string, number[]>();
 
 /**
  * The font measured (DOCX_FONT_METRICS) that a run sets its characters of Basic Latin in (`ascii`), or its other Latin ones, as Word
- * names it; none for a run of complex script (w:cs, w:rtl), which Word sets in another font (w:rFonts w:cs).
+ * names it, DOCX_NARROWEST_FONT for a font named but not measured; none for a typewriter font not measured, as wide as those measured
+ * (LAYOUTS), for a run of complex script (w:cs, w:rtl), which Word sets in another font (w:rFonts w:cs), nor when no font is named.
  */
 function measuredFont(effective: RunLayer, ascii: boolean) {
   if (effective["w:cs"] || effective["w:rtl"]) return undefined;
-  const name = ascii ? effective.font ?? effective.otherFont : effective.otherFont ?? effective.font;
-  return name === undefined ? undefined : DOCX_FONT_ALIASES[name.trim().toLowerCase()];
+  const name = (ascii ? effective.font ?? effective.otherFont : effective.otherFont ?? effective.font)?.trim().toLowerCase();
+  if (!name) return undefined;
+  return DOCX_FONT_ALIASES[name] ?? (effective.typewriter ? undefined : DOCX_NARROWEST_FONT);
 }
 
-/** The widths of a style of a font measured, in sizes of their text; of an italic style, the wider of its letters and of the upright style's, Word possibly drawing them upright. */
+/**
+ * The widths of a style of a font measured, in sizes of their text: of a slanted style (italic), the wider of its own and of its
+ * upright style's (DOCX_FONT_METRICS), those of its upright one when left out; of DOCX_NARROWEST_FONT, the narrower.
+ */
 function styleWidths(font: string, style: "regular" | "italic" | "bold" | "boldItalic"): number[] {
   const key = `${font}:${style}`;
   let widths = fontWidths.get(key);
   if (!widths) {
     const digits = DOCX_FONT_METRICS[font]![style];
-    const value = (at: number) => DOCX_FONT_WIDTH_DIGITS.indexOf(digits[at]!);
-    const own = Array.from({ length: digits.length / 2 }, (_, at) => (value(2 * at) * DOCX_FONT_WIDTH_DIGITS.length + value(2 * at + 1)) / 1000);
     const upright = style === "italic" ? styleWidths(font, "regular") : style === "boldItalic" ? styleWidths(font, "bold") : undefined;
-    widths = upright ? own.map((width, at) => (width > 0 && upright[at]! > 0 ? Math.max(width, upright[at]!) : width)) : own;
+    if (digits === undefined) return upright!;
+    const value = (at: number) => DOCX_FONT_WIDTH_DIGITS.indexOf(digits[at]!);
+    widths = [];
+    for (let at = 0; at < digits.length; at += digits[at] === DOCX_FONT_AS_BASE ? 1 : 2) {
+      if (digits[at] === DOCX_FONT_AS_UPRIGHT) for (let count = value(at + 1); count >= 0; count -= 1) widths.push(upright![widths.length]!);
+      else widths.push(digits[at] === DOCX_FONT_AS_BASE ? widths[MEASURED_BASES[widths.length]!]! : (value(at) * DOCX_FONT_WIDTH_DIGITS.length + value(at + 1)) / 1000);
+    }
     fontWidths.set(key, widths);
   }
   return widths;
@@ -1225,7 +1244,7 @@ function measuredAdvance(effective: RunLayer, character: string) {
   return widths[index!]! > 0 ? widths[index!] : undefined;
 }
 
-/** The height of a line of single spacing of a run's font when measured, in sizes of its text; 0 otherwise. */
+/** The height of a line of single spacing of a run's font when measured, in sizes of its text; 0 otherwise, or when only its advances are (DOCX_FONT_METRICS). */
 const fontLine = (effective: RunLayer) => {
   const font = measuredFont(effective, true) ?? measuredFont(effective, false);
   return font === undefined ? 0 : DOCX_FONT_METRICS[font]!.line / 1000;
@@ -1804,7 +1823,8 @@ const graver = (left: Judgement, right: Judgement) => (SEVERITY[right.verdict] >
  * A part of a passage (w:t) laid out alike: its UTF-16 units, where it lies in
  * the XML, its judgement; once its run is read (`settled`), whether its text
  * was recorded, in which paragraph, and the letters of the mc:Choice it drew,
- * so that a line laid later over it can still set it aside.
+ * so that a line laid later over it can still set it aside; the word it is
+ * part of when the word goes on over passages or lines (`word`).
  */
 type Segment = {
   from: number;
@@ -1814,7 +1834,11 @@ type Segment = {
   text: string;
   judgement: Judgement;
   settled?: { recorded: boolean; paragraph?: Frame; drawn?: { verdicts: Judgement[]; from: number; to: number } };
+  word?: WordParts;
 };
+
+/** A word over passages or lines, read or set aside whole: its visible segments, and how they are all set aside once one of its parts is not read (`cut`). */
+type WordParts = { segments: Segment[]; cut?: Judgement };
 
 /**
  * A line of a paragraph in one of LAYOUTS: its index, the top of it, how far
@@ -1839,8 +1863,8 @@ type Line = { index: number; top: number; x: number; size: number; objects: numb
  * segments of its last two lines, which a cramped line below may still cover;
  * the word its last passage ended in, which the next one may go on (`word`:
  * where it starts on its line of the first layout, how wide it is so far, the
- * largest size and spacing of its letters, its visible segments), to go whole
- * to the next line.
+ * largest size and spacing of its letters, its parts), to go whole to the
+ * next line, or to be set aside whole.
  */
 type ParagraphLayout = {
   format: ParagraphFormat;
@@ -1855,7 +1879,7 @@ type ParagraphLayout = {
   stops?: Array<[number, string]>;
   tab?: { position: number; kind: string; line: number; width: number };
   pending: Array<{ line: number; segments: Segment[] }>;
-  word?: { x: number; width: number; size: number; factor: number; segments: Segment[] };
+  word?: { x: number; width: number; size: number; factor: number; parts: WordParts };
 };
 
 /**
@@ -2656,20 +2680,29 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
   };
   /**
    * The segments of a line that a line laid later over it covers, or may
-   * cover (`judgement`: why): set aside those that were read, once; none of
-   * them is visible after, wherever else they are kept.
+   * cover (`judgement`: why): set aside those that were read, once, with the
+   * other parts of their word (cutWord); none of them is visible after,
+   * wherever else they are kept.
    */
   const setAside = (segments: Segment[] | undefined, judgement: Judgement) => {
     for (const segment of segments ?? []) {
       if (segment.judgement.verdict !== "visible") continue;
       segment.judgement = judgement;
       const settled = segment.settled;
-      if (!settled) continue;
-      cuts.push([segment.start, segment.end]);
-      if (settled.drawn) for (let index = settled.drawn.from; index < settled.drawn.to; index += 1) settled.drawn.verdicts[index] = graver(settled.drawn.verdicts[index]!, judgement);
-      if (settled.recorded) record(judgement, segment.text, settled.paragraph);
+      if (settled) {
+        cuts.push([segment.start, segment.end]);
+        if (settled.drawn) for (let index = settled.drawn.from; index < settled.drawn.to; index += 1) settled.drawn.verdicts[index] = graver(settled.drawn.verdicts[index]!, judgement);
+        if (settled.recorded) record(judgement, segment.text, settled.paragraph);
+      }
+      if (segment.word) cutWord(segment.word, judgement);
     }
     if (segments) segments.length = 0;
+  };
+  /** Sets aside a word over passages or lines once one of its parts is not read: its visible parts, and those still to come (`cut`). */
+  const cutWord = (word: WordParts | undefined, judgement: Judgement) => {
+    if (!word || word.cut) return;
+    word.cut = judgement.verdict === "invisible" ? OUT_OF_PLACE : judgement;
+    setAside(word.segments, word.cut);
   };
   /**
    * Lays a passage of a run on its paragraph's lines, in both layouts
@@ -2677,20 +2710,27 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
    * hidden when even the least room takes it out of its row, text box, frame
    * or page, or runs its line into the letters of the one above;
    * unverifiable when only the most room does, or when its line runs into the
-   * one above, which is then set aside too. With its line in the first
-   * layout, for the lines below that may run into it.
+   * one above, which is then set aside too; a word judged whole, with its
+   * part in the passages before. With its line in the first layout, for the
+   * lines below that may run into it, and the words whose parts here go with
+   * others (`joined`: their units and parts, WordParts): broken over lines, or
+   * going on from the passages before.
    */
   const layText = (layout: ParagraphLayout, text: string, effective: RunLayer, container: Frame | undefined, deleted: boolean) => {
     const judgements: Judgement[] = new Array<Judgement>(text.length).fill(VISIBLE);
     const lines: number[] = new Array<number>(text.length).fill(layout.lines[MOST].index);
+    const joined: Array<{ from: number; to: number; parts: WordParts }> = [];
+    /** The word the passage goes on, from the passages before. */
+    const before = text.length > 0 && !breaksLine(text.charCodeAt(0)) ? layout.word : undefined;
     if (budget.units <= 0) {
       // Not laid out, a line of an exact spacing may still run into the lines above it.
       if (layout.tight) {
         setAside(container?.content?.last?.segments, UNLAID);
         for (const entry of layout.pending) setAside(entry.segments, UNLAID);
       }
+      cutWord(before?.parts, UNLAID);
       layout.word = undefined;
-      return { judgements: judgements.fill(UNLAID), lines, wordFrom: text.length };
+      return { judgements: judgements.fill(UNLAID), lines, wordFrom: text.length, joined };
     }
     budget.units -= text.length;
     const { format } = layout;
@@ -2729,6 +2769,8 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
     const covered = new Set<number>();
     /** The last word of the passage: where it starts (unit, place on its line of the first layout), whether it goes on with the word before it, whether a line may break after it. */
     let last: { unit: number; x: number; line: number; continued: boolean; ends: boolean } | undefined;
+    /** The words of the passage: their units, the line of the first layout they start on here, whether they go on with the word before. */
+    const words: Array<{ from: number; to: number; line: number; continued: boolean }> = [];
     let unit = 0;
     for (let index = 0; index < characters.length; ) {
       const space = breaksLine(characters[index]!.charCodeAt(0));
@@ -2746,15 +2788,16 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
       const first = layout.lines[MOST];
       const word = !space && index === 0 ? layout.word : undefined;
       if (word && word.x > 0 && first.x + width > lineReach(layout, first, MOST, width)) {
-        const before = first.index;
+        const from = first.index;
         newLine(layout, MOST, size, factor);
         Object.assign(first, { x: word.width, size: word.size, factor: word.factor });
         const placed = placing(MOST, first, 0);
-        if (placed.out || placed.overlap > 0) setAside(word.segments, OUT_OF_PLACE);
-        else moveSegments(layout, word.segments, before, first.index);
+        if (placed.out || placed.overlap > 0) cutWord(word.parts, OUT_OF_PLACE);
+        else moveSegments(layout, word.parts.segments, from, first.index);
         layout.word = { ...word, x: 0 };
       } else if (!space && first.x > 0 && first.x + width > lineReach(layout, first, MOST, width)) newLine(layout, MOST, size, factor);
       last = { unit, x: first.x, line: first.index, continued: word !== undefined, ends: space || BREAK_AFTER.has(characters[end - 1]!) || WIDE_CHARACTER.test(characters[end - 1]!) };
+      if (!space) words.push({ from: unit, to: unit, line: first.index, continued: word !== undefined });
       for (; index < end; index += 1) {
         const character = characters[index]!;
         const out = [false, false];
@@ -2784,39 +2827,59 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
           lines[unit] = layout.lines[MOST].index;
         }
       }
+      if (!space) words.at(-1)!.to = unit;
     }
     // The line above in the same paragraph, or the last line of text above it (LastLine), whatever its spacing.
     for (const line of Array.from(covered)) setAside(line < 0 ? container?.content?.last?.segments : layout.pending.find(entry => entry.line === line)?.segments, OUT_OF_PLACE);
     if (covered.size) for (let index = 0; index < text.length; index += 1) if (judgements[index] === VISIBLE && covered.has(lines[index]!)) judgements[index] = OUT_OF_PLACE;
-    // A word the passage ends in may go on in the next one: kept, to go with it to the next line. Broken over two lines here, it starts the last one.
+    // A word is read or set aside whole, never cut where Word may not break its line: what is left of one partly hidden or set aside,
+    // here or in the passages before, is set aside with it (unverifiable, not counted as hidden). Going on from the passages before, or
+    // broken over lines here (longer than its line), its parts go with one another, whichever line is covered later.
+    let cut: Judgement | undefined;
+    for (const word of words) {
+      cut = word.continued ? before?.parts.cut : undefined;
+      for (let index = word.from; index < word.to && !cut; index += 1) if (judgements[index]!.verdict !== "visible") cut = judgements[index]!.verdict === "invisible" ? OUT_OF_PLACE : judgements[index];
+      if (cut) {
+        for (let index = word.from; index < word.to; index += 1) if (judgements[index] === VISIBLE) judgements[index] = cut;
+        if (word.continued) cutWord(before?.parts, cut);
+      } else if (word.continued || lines[word.to - 1] !== word.line) joined.push({ from: word.from, to: word.to, parts: (word.continued && before?.parts) || { segments: [] } });
+    }
+    // A word the passage ends in may go on in the next one: kept, to go with it to the next line, or be set aside with it. Broken over
+    // two lines here, it starts the last one.
     let wordFrom = text.length;
     if (last && !last.ends) {
       const first = layout.lines[MOST];
       const word = last.continued ? layout.word : undefined;
-      const broken = first.index !== last.line;
-      const x = broken ? 0 : word?.x ?? last.x;
-      layout.word = { x, width: first.x - x, size: Math.max(word?.size ?? 0, size), factor: Math.max(word?.factor ?? 0, factor), segments: broken ? [] : word?.segments ?? [] };
-      if (!broken) wordFrom = word ? 0 : last.unit;
+      const x = first.index !== last.line ? 0 : word?.x ?? last.x;
+      const parts = joined.at(-1)?.to === text.length ? joined.at(-1)!.parts : (last.continued && before?.parts) || { segments: [] };
+      layout.word = { x, width: first.x - x, size: Math.max(word?.size ?? 0, size), factor: Math.max(word?.factor ?? 0, factor), parts };
+      parts.cut ??= cut;
+      wordFrom = word ? 0 : last.unit;
     } else if (last) layout.word = undefined;
-    return { judgements, lines, wordFrom };
+    return { judgements, lines, wordFrom, joined };
   };
   /**
    * A passage cut where its judgement or its line changes, and where the word
    * it ends in, which the next passage may go on, starts (`wordFrom`); its
    * visible parts kept for the lines below (of its last lines when laid out),
-   * and with that word. Whole when its XML cannot be cut apart.
+   * and with that word, or a word whose parts go with others (joined), to be
+   * set aside with it; cut too where such a word starts and ends.
+   * Whole when its XML cannot be cut apart.
    */
-  const segmentsOf = (raw: string, start: number, text: string, paragraph: Frame | undefined, layout: ParagraphLayout | null, judged?: { judgements: Judgement[]; lines: number[]; wordFrom: number }): Segment[] => {
+  const segmentsOf = (raw: string, start: number, text: string, paragraph: Frame | undefined, layout: ParagraphLayout | null, judged?: ReturnType<typeof layText>): Segment[] => {
     const groups: Array<{ from: number; to: number; judgement: Judgement; line: number }> = [];
+    const bounds = judged && new Set([judged.wordFrom, ...judged.joined.flatMap(word => [word.from, word.to])]);
     for (let index = 0; index < text.length && judged; index += 1) {
       const group = groups.at(-1);
-      if (group && group.judgement === judged.judgements[index] && group.line === judged.lines[index] && index !== judged.wordFrom) group.to = index + 1;
+      if (group && group.judgement === judged.judgements[index] && group.line === judged.lines[index] && !bounds!.has(index)) group.to = index + 1;
       else groups.push({ from: index, to: index + 1, judgement: judged.judgements[index]!, line: judged.lines[index]! });
     }
     const offsets = groups.length > 1 ? textOffsets(raw, text.length) : undefined;
     const parts = offsets
       ? groups.map(group => ({ ...group, start: start + offsets.starts[group.from]!, end: start + offsets.ends[group.to - 1]! }))
       : [{ from: 0, to: text.length, judgement: groups.map(group => group.judgement).reduce(graver, VISIBLE), line: groups.at(-1)?.line ?? 0, start, end: start + raw.length }];
+    /** The first word of judged.joined not before the part. */
+    let span = 0;
     return parts.map(part => {
       const segment: Segment = { from: part.from, to: part.to, start: part.start, end: part.end, text: text.slice(part.from, part.to), judgement: part.judgement };
       if (part.judgement !== VISIBLE) return segment;
@@ -2826,7 +2889,13 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
         let entry = layout.pending.find(item => item.line === part.line);
         if (!entry) layout.pending.push((entry = { line: part.line, segments: [] }));
         entry.segments.push(segment);
-        if (layout.word && judged && part.to > judged.wordFrom) layout.word.segments.push(segment);
+        // Of the word the passage ends in, which the next may go on, or of a word joined to others: kept with its other parts.
+        while (judged && span < judged.joined.length && judged.joined[span]!.to <= part.from) span += 1;
+        const word = judged && part.to > judged.wordFrom ? layout.word?.parts : judged && part.from >= (judged.joined[span]?.from ?? text.length) ? judged.joined[span]!.parts : undefined;
+        if (word) {
+          word.segments.push(segment);
+          segment.word = word;
+        }
         // In the body, a shape in front may cover any of them.
         if (paragraph?.body) (paragraph.shown ??= []).push(segment);
       } else if (paragraph) {
