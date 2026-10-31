@@ -108,14 +108,18 @@ export async function certificationFilterCondition(db: AdminDb, term: string, te
 
 /**
  * The language filter of the Candidatures (IA-02): the term typed or, when it
- * names a language of the shared table, any of that language's names
+ * names languages of the shared table, each of them under any of its names
  * (« arabe » finds « Arabic », which the form records even from its French
  * page), in the declared languages or in those an analysis of the current
- * version read in the CV, case and accents aside.
+ * version read in the CV, case and accents aside. A term that names several
+ * (« anglais, arabe ») keeps the dossiers that have them all, as a matching
+ * profile or a mission requires them all.
  */
 export function languageFilterCondition(term: string) {
-  return or(...Array.from(new Set([term, ...recruitmentLanguageNames(term)]), name =>
-    sql`((${cvApplications.analysisPromptVersion} = ${RECRUITMENT_ANALYSIS_PROMPT_VERSION} AND ${adminFilterContains(cvApplications.normalizedLanguages, name)}) OR ${adminFilterContains(cvApplications.languages, name)})`))!;
+  const mentions = (name: string) =>
+    sql`((${cvApplications.analysisPromptVersion} = ${RECRUITMENT_ANALYSIS_PROMPT_VERSION} AND ${adminFilterContains(cvApplications.normalizedLanguages, name)}) OR ${adminFilterContains(cvApplications.languages, name)})`;
+  const languages = recruitmentLanguageNames(term);
+  return languages.length ? or(mentions(term), and(...languages.map(names => or(...names.map(mentions))!))!)! : mentions(term);
 }
 
 /** The languages an analysis of the current version retained (normalized_languages), none for an older one. */

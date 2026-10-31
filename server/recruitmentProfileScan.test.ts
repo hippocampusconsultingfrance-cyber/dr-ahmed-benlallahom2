@@ -154,4 +154,38 @@ describe("Candidatures — profil de matching et filtres de la liste (IA-02)", (
     for (const language of ["arabe", "Arabisch", "阿拉伯语"]) expect(await filtered(language)).toEqual(["Formen", "Formfr"]);
     expect(await filtered("anglais")).toEqual(["Anglophone"]);
   });
+
+  it("garde, pour un filtre « Langue » qui nomme plusieurs langues, les dossiers qui les ont toutes, comme un profil (IA-02)", async () => {
+    memory.seed(cvApplications, [["Bilingue", ["English", "Arabic"]], ["Arabophone", ["Arabic"]], ["Anglophone", ["English"]], ["Francophone", ["French"]]].map(([lastName, languages], index) => ({
+      tracking_id: `CVBOTH${index}`, first_name: "Dr", last_name: lastName as string, email: `both${index}@test.local`, specialty: "Anesthésie-réanimation",
+      target_countries: JSON.stringify(["France"]), languages: JSON.stringify(languages),
+      cv_file_key: `recruitment/cv/both${index}.pdf`, cv_original_name: "cv.pdf", cv_mime_type: "application/pdf", cv_size_bytes: 1000,
+    })));
+    const filtered = async (language: string) => lastNames((await caller().admin.recruitment.list({ language })).items).sort();
+    const [profile] = memory.seed(recruitmentMatchProfiles, [{ name: "Anglais et arabe", minimum_score: 0, required_languages: JSON.stringify(["anglais, arabe"]), active: 1 }]);
+
+    for (const language of ["anglais, arabe", "Anglais et arabe", "English Arabic"]) expect(await filtered(language), language).toEqual(["Bilingue"]);
+    expect(lastNames((await caller().admin.recruitment.list({ profileId: profile!.id as number })).items)).toEqual(["Bilingue"]);
+    expect(await filtered("arabe")).toEqual(["Arabophone", "Bilingue"]);
+  });
+
+  it("ne lit les langues tirées du CV, et leurs citations, que pour un profil qui exige des langues (IA-02)", async () => {
+    seedCandidates(0, 3, 3);
+    const [byCountry, byLanguage] = memory.seed(recruitmentMatchProfiles, [
+      { name: "France", minimum_score: 0, target_country: "France", active: 1 },
+      { name: "Arabophone", minimum_score: 0, required_languages: JSON.stringify(["arabe"]), active: 1 },
+    ]);
+    // The scan reads the few columns a profile needs, up to the bound plus one.
+    const scanOf = async (profileId: number) => {
+      const before = memory.statements.length;
+      expect((await caller().admin.recruitment.list({ profileId })).total).toBe(3);
+      return memory.statements.slice(before).filter(statement => statement.params.includes(1_101)).map(statement => statement.sql);
+    };
+
+    const [countryScan] = await scanOf(byCountry!.id as number);
+    expect(countryScan).toBeDefined();
+    expect(countryScan).not.toContain("normalized_languages");
+    expect(countryScan).not.toContain("ai_extracted_skills");
+    expect((await scanOf(byLanguage!.id as number))[0]).toContain("normalized_languages");
+  });
 });

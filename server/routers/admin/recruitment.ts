@@ -212,8 +212,9 @@ export const adminRecruitmentRouter = router({
             specialty: cvApplications.specialty,
             targetCountries: cvApplications.targetCountries,
             languages: cvApplications.languages,
-            // The languages read in the CV too, as the Langue filter reads them (IA-02).
-            normalizedLanguages: verifiedNormalizedLanguages,
+            // The languages read in the CV too, as the Langue filter reads them (IA-02), only for a
+            // profile that requires some: this JSON carries the CV's quotes.
+            normalizedLanguages: parseRecruitmentJsonArray(matchProfile.requiredLanguages).length ? verifiedNormalizedLanguages : sql<string | null>`NULL`,
             // The AI's skills, the largest of these columns, only for a profile that requires some.
             aiExtractedSkills: parseRecruitmentJsonArray(matchProfile.requiredSkills).length ? cvApplications.aiExtractedSkills : sql<string | null>`NULL`,
           })
