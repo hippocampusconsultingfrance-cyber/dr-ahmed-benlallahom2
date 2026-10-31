@@ -7,6 +7,10 @@ export function safeErrorName(error: unknown) {
   return error instanceof Error ? error.name : "UnknownError";
 }
 
+/**
+ * Read in compatibility form (NFKC) first, as the vault does (safeCandidateDocumentName): a
+ * name typed on macOS comes decomposed (NFD), and « Diplôme » then gave « Diplo_me ».
+ */
 export function safeFileName(value: string): string {
-  return shortenFileName(value.replace(/[^a-zA-Z0-9._-]/g, "_")) || "cv";
+  return shortenFileName(value.normalize("NFKC").replace(/[^a-zA-Z0-9._-]/g, "_")) || "cv";
 }
