@@ -24,11 +24,26 @@ function blockScalarValue({ lines, folded }: BlockScalar) {
 }
 
 /**
+ * A one-line value as YAML reads it, so as GitHub runs it: a quoted one loses its quotes and
+ * any comment after them, `''` becomes `'` in single quotes, and double quotes decode the
+ * escapes JSON shares (`\"`, `\\`, `\n`…). A quoted value it cannot read, such as one
+ * carried on to the next line, fails the test.
+ */
+function yamlValue(value: string) {
+  if (!/^['"]/.test(value)) return value;
+  const single = /^'((?:[^']|'')*)'(?:\s+#.*)?\s*$/.exec(value);
+  if (single) return single[1]!.replaceAll("''", "'");
+  const double = /^("(?:[^"\\]|\\["\\/bfnrt]|\\u[\da-fA-F]{4})*")(?:\s+#.*)?\s*$/.exec(value);
+  if (double) return JSON.parse(double[1]!) as string;
+  throw new Error(`ci.yml: unreadable quoted value: ${value}`);
+}
+
+/**
  * The steps of one job, read from the block layout of ci.yml (no YAML library
  * among the dependencies): `- ` opens a step at the steps' indentation, each
- * `key: value` below it is one of its keys, and a block scalar (`run: |`,
- * `run: >-`, `if: |+`…) keeps every more indented line that follows. Only
- * `with:` and `env:` may hold more indented lines of their own. A line this
+ * `key: value` below it is one of its keys (read without its YAML quotes), and a
+ * block scalar (`run: |`, `run: >-`, `if: |+`…) keeps every more indented line
+ * that follows. Only `with:` and `env:` may hold more indented lines of their own. A line this
  * layout does not explain, such as a value carried on to a more indented line,
  * fails the test rather than being skipped.
  */
@@ -64,7 +79,7 @@ function jobSteps(workflow: string, job: string): Step[] {
     if (marker === "- ") steps.push({ name: "", keys: {}, run: "" });
     const step = steps.at(-1)!;
     mapping = value === "" && (key === "with" || key === "env");
-    step.keys[key] = value;
+    step.keys[key] = yamlValue(value);
     if (BLOCK_SCALAR.test(value)) {
       block = { step, key, folded: value.startsWith(">"), lines: [] };
       blocks.push(block);
@@ -129,6 +144,7 @@ function pipesWithoutPipefail(step: Step) {
  * A command without the text of its quoted strings and comments, so that a `;` or a `|`
  * in an argument is not taken for an operator. What `$(…)` and backquotes run is kept,
  * even within double quotes, and a `\` at the end of a line joins it to the next one.
+ * A character escaped by `\` is a letter of its word: `\ #` starts no comment.
  */
 function unquoted(command: string) {
   let text = "";
@@ -137,7 +153,7 @@ function unquoted(command: string) {
   for (let index = 0; index < command.length; index++) {
     const char = command[index]!;
     if (char === "\\") {
-      if (command[index + 1] === "\n") text += " ";
+      text += command[index + 1] === "\n" ? " " : "_";
       index++;
     } else if (char === '"' || char === "`") {
       if (open.at(-1) === char) open.pop();
@@ -169,19 +185,24 @@ type Silencer = { what: string; pattern: RegExp };
 /**
  * What lets a step pass under `bash -e` though one of its commands fails: bash does not
  * stop on a command tested by `||`, `&&`, `!`, `if`, `while` or `until`, nor wait for one
- * sent to the background. Only a test (`[ … ]`, `[[ … ]]`, `test`) may be a condition,
- * and an `&&` list only the step's last command, whose status is the step's. A command
- * given as quoted text (`eval`, `bash -c`) is refused, since quoted text is not read.
+ * sent to the background (`&`, `coproc`), nor look at what `$(…)` returns outside a plain
+ * assignment (`echo "$(…)"`, `export X="$(…)"`); and -e does not reach inside `$(…)`, so an
+ * assignment's holds one command. Only a test (`[ … ]`, `[[ … ]]`, `test`) may be a
+ * condition, alone before its `then` or `do`, and an `&&` list only the step's last command,
+ * whose status is the step's. A command given as quoted text (`eval`, `trap`, `bash -c`) is
+ * refused, since quoted text is not read, and so is knip told to exit 0 whatever it finds.
  */
 const STEP_SILENCERS: readonly Silencer[] = [
   { what: "||", pattern: /\|\|/ },
   { what: "exit 0", pattern: /\bexit\s+0\b/ },
-  { what: "set +e", pattern: /\bset\s+(?:[-+][a-z]*\s+)*\+[a-z]*(?:e|o\s+(?:errexit|pipefail)\b)/ },
-  { what: "a command as a condition", pattern: /(?:^|[;&|({]|\b(?:then|do|else)\b)\s*(?:if|elif|while|until)\s+(?!(?:!\s+)?(?:\[\[?\s|test\s))/m },
+  { what: "set +e or shopt -u errexit", pattern: /\bset\b[^;&|\n]*\s\+[a-z]*(?:e|o\s+(?:errexit|pipefail)\b)|\bshopt\b[^;&|\n]*\b(?:errexit|pipefail)\b/ },
+  { what: "a command as a condition", pattern: /(?:^|[;&|({]|\b(?:then|do|else)\b)\s*(?:if|elif|while|until)\s+(?:(?!(?:!\s+)?(?:\[\[?\s|test\s))|[^;\n]*[;\n]\s*(?!(?:then|do)\b)\S)/m },
   { what: "!", pattern: /(?:^|[;&|({]|\b(?:then|do|else|if|elif|while|until)\b)\s*!\s+(?!\[\[?\s|test\s)/m },
-  { what: "&", pattern: /(?<![&|<>])&(?![&>])/ },
+  { what: "& or coproc", pattern: /(?<![&|<>])&(?![&>])|\bcoproc\b/ },
   { what: "&& before another command", pattern: /&&.*[;\n]/s },
-  { what: "eval or sh -c", pattern: /\b(?:eval|(?:ba|da|z)?sh\s+(?:-\S+\s+)*-[a-z]*c)\b/ },
+  { what: "$(…) outside an assignment", pattern: /^(?![ \t]*[A-Za-z_]\w*="?(?:\$\((?:[^$`();&|\n]|\$(?!\())*\)|`[^$`();&|\n]*`)"?[ \t]*$).*(?:\$\((?!\()|`)/m },
+  { what: "eval, trap or sh -c", pattern: /\b(?:eval|trap|(?:ba|da|z)?sh\s+(?:[^\s;&|]+\s+)*?-[a-z]*c[a-z]*)\b/ },
+  { what: "knip --no-exit-code or --max-issues", pattern: /\bknip\b[^;&|\n]*\s--(?:no-exit-code|max-issues)\b/ },
 ];
 
 /**
@@ -210,9 +231,9 @@ function silencersIn(command: string, where: string, silencers: readonly Silence
   return silencers.filter(({ pattern }) => pattern.test(text)).map(({ what }) => what);
 }
 
-/** The package.json scripts a command runs, as `pnpm <script>` or `pnpm run <script>`, then those they run in turn. */
+/** The package.json scripts a command runs, as `pnpm <script>`, `pnpm run <script>`, `yarn <script>` or `npm run <script>`, then those they run in turn. */
 function scriptsRun(command: string, scripts: Record<string, string>, found = new Map<string, string>()) {
-  for (const [, name] of unquoted(command).matchAll(/\bpnpm(?:\s+-\S+)*\s+(?:run\s+(?:-\S+\s+)*)?([^\s;&|()<>]+)/g)) {
+  for (const [, name] of unquoted(command).matchAll(/\b(?:(?:pnpm|yarn)(?:\s+-\S+)*\s+(?:run\s+(?:-\S+\s+)*)?|npm(?:\s+-\S+)*\s+run(?:-script)?\s+(?:-\S+\s+)*)([^\s;&|()<>]+)/g)) {
     if (!name || !Object.hasOwn(scripts, name) || found.has(name)) continue;
     found.set(name, scripts[name]!);
     scriptsRun(scripts[name]!, scripts, found);
@@ -235,8 +256,8 @@ function expectNoNeutralizedStep(workflow: string, packageJson: string, exceptio
     expect(step.keys["continue-on-error"] ?? "false", step.name).toBe("false");
     expect(silencersIn(step.run, `step "${step.name}"`, STEP_SILENCERS, exceptions), step.name).toEqual([]);
     expect(pipesWithoutPipefail(step), step.name).toEqual([]);
-    // GitHub reads a quoted condition (`'false'`, `"${{ false }}"`) as the same expression.
-    const condition = (step.keys.if?.trim() ?? "").replace(/^(['"])(.*)\1$/, "$2").trim();
+    // A quoted condition (`'false'`, `"${{ false }}"`) is read without its YAML quotes, as GitHub reads it.
+    const condition = step.keys.if?.trim() ?? "";
     expect(condition, step.name).not.toMatch(/^(?:false|0|\$\{\{\s*(?:false|0)\s*\}\})$/);
   }
   const scripts = (JSON.parse(packageJson) as { scripts?: Record<string, string> }).scripts ?? {};
@@ -385,6 +406,15 @@ describe("intégration continue GitHub", () => {
     for (const condition of ["false", "'false'", "'0'", "${{ false }}", '"${{ false }}"']) {
       expect(() => expectNoNeutralizedStep(changed(tests, `        if: ${condition}\n${tests}`), fixturePackageJson()), condition).toThrow(/^Run test suite: /);
     }
+    // A quoted command is the one GitHub runs once YAML has read its quotes, and is refused when silenced.
+    const quoted = (value: string) => jobSteps(changed(tests, `        run: ${value}\n`), "quality").find(step => step.name === "Run test suite")?.run;
+    expect(quoted("'echo ''ok'' && pnpm test:ci' # a comment")).toBe("echo 'ok' && pnpm test:ci\n");
+    expect(quoted('"echo \\"ok\\" \\\\ && pnpm test:ci"')).toBe('echo "ok" \\ && pnpm test:ci\n');
+    expect(() => quoted("'pnpm test:ci")).toThrow(/unreadable quoted value: 'pnpm test:ci$/);
+    expect(() => quoted('"pnpm test:ci\\x20"')).toThrow(/unreadable quoted value/);
+    for (const value of ["'pnpm test:ci || true'", '"pnpm test:ci || true"', '"if pnpm test:ci; then :; fi"']) {
+      expect(() => expectNoNeutralizedStep(changed(tests, `        run: ${value}\n`), fixturePackageJson()), value).toThrow(/^Run test suite: /);
+    }
   });
 
   it("refuse ce qui laisse passer une commande en échec dans une étape (bash -e) ou un script package.json (sh -c), hors du texte entre guillemets (CODE-14)", () => {
@@ -395,26 +425,47 @@ describe("intégration continue GitHub", () => {
       ["pnpm check || :", ["||"]],
       ["pnpm check || exit 0", ["||", "exit 0"]],
       ["pnpm check\nexit 0", ["exit 0"]],
-      ["set +o errexit\npnpm knip", ["set +e"]],
-      ["set -x +e\npnpm check", ["set +e"]],
-      ["set -eu +o pipefail\npnpm check | tee check.log", ["set +e"]],
+      ["set +o errexit\npnpm knip", ["set +e or shopt -u errexit"]],
+      ["set -x +e\npnpm check", ["set +e or shopt -u errexit"]],
+      ["set -eu +o pipefail\npnpm check | tee check.log", ["set +e or shopt -u errexit"]],
+      ["set -o pipefail +e\npnpm check", ["set +e or shopt -u errexit"]],
+      ["set -euo pipefail +o errexit\npnpm check", ["set +e or shopt -u errexit"]],
+      ["shopt -uo errexit\npnpm check", ["set +e or shopt -u errexit"]],
+      ["shopt -u -o pipefail\npnpm check | tee check.log", ["set +e or shopt -u errexit"]],
       ["if pnpm check; then :; fi", ["a command as a condition"]],
       ["until pnpm check; do break; done", ["a command as a condition"]],
+      ["if [ -d . ]; pnpm check; then :; fi", ["a command as a condition"]],
+      ["while [ -d . ]\n  pnpm check\ndo break; done", ["a command as a condition"]],
       ["! pnpm check", ["!"]],
-      ["pnpm check &", ["&"]],
+      ["pnpm check &", ["& or coproc"]],
+      ["coproc pnpm check", ["& or coproc"]],
       ["pnpm check && echo typed\npnpm test:ci", ["&& before another command"]],
-      ["bash -c 'pnpm check || true'", ["eval or sh -c"]],
-      ['eval "pnpm check; exit 0"', ["eval or sh -c"]],
+      ['echo "$(pnpm test:ci)"', ["$(…) outside an assignment"]],
+      ['export OUT="$(pnpm test:ci)"', ["$(…) outside an assignment"]],
+      ["echo `pnpm check`", ["$(…) outside an assignment"]],
+      ['typed="$(pnpm check; true)"', ["$(…) outside an assignment"]],
+      ['OUT="$(pnpm test:ci)" echo done', ["$(…) outside an assignment"]],
+      ["bash -c 'pnpm check || true'", ["eval, trap or sh -c"]],
+      ["bash -ce 'pnpm test:ci || true'", ["eval, trap or sh -c"]],
+      ["bash -o pipefail -c 'pnpm test:ci || true'", ["eval, trap or sh -c"]],
+      ['eval "pnpm check; exit 0"', ["eval, trap or sh -c"]],
+      ["trap 'exit 0' EXIT\npnpm test:ci", ["eval, trap or sh -c"]],
+      ["pnpm knip --no-exit-code", ["knip --no-exit-code or --max-issues"]],
+      ["pnpm knip --max-issues=50", ["knip --no-exit-code or --max-issues"]],
       // What `$(…)` runs is read, even within double quotes, and a line carried on by `\` is the same command.
-      ['typed="$(pnpm check || true)"', ["||"]],
+      ['typed="$(pnpm check || true)"', ["||", "$(…) outside an assignment"]],
       ["pnpm check \\\n  || true", ["||"]],
       ["pnpm check && \\\n  pnpm test:ci", []],
-      // Neither quoted text, a comment, a redirection, a test as condition nor a last `&&` list.
+      // An escaped character belongs to its word: bash runs `pnpm knip ' #' || true`.
+      ["pnpm knip \\ # || true", ["||"]],
+      // Neither quoted text, a comment, a redirection, a test as condition, a last `&&` list
+      // nor a plain assignment, whose status is that of its `$(…)`.
       ['echo "|| true; exit 0 &" && pnpm check', []],
       ["# not || true\npnpm check 2>&1 | tee check.log", []],
       ['if [ -n "$untracked" ]; then echo "$untracked"; exit 1; fi', []],
       ["if ! [ -f dist/index.js ]; then exit 1; fi\npnpm check && pnpm test:ci", []],
       ["set -eo pipefail\nset +x\npnpm check", []],
+      ['untracked="$(git status --porcelain -- "$dir" drizzle/pg)"\ntyped=`pnpm check`', []],
     ];
     for (const [command, found] of steps) expect(inStep(command), command).toEqual(found);
     // A script keeps only its last command's status, and that of a pipe's last command.
@@ -423,6 +474,8 @@ describe("intégration continue GitHub", () => {
       ["knip; exit 0", ["exit 0", "; or a second line"]],
       ["knip\necho done", ["; or a second line"]],
       ["knip | tee knip.log", ["|"]],
+      ["echo $(knip)", ["$(…) outside an assignment"]],
+      ["knip --no-exit-code", ["knip --no-exit-code or --max-issues"]],
       ["tsc --noEmit && vitest run", []],
       [FIXTURE_SCRIPTS.build!, []],
     ];
@@ -439,10 +492,13 @@ describe("intégration continue GitHub", () => {
     const runs = jobSteps(FIXTURE_WORKFLOW, "quality").map(step => step.run).join("\n");
     expect([...scriptsRun(runs, FIXTURE_SCRIPTS).keys()]).toEqual(["check", "test:ci", "build", "knip"]);
     expect([...scriptsRun("pnpm check", { check: "pnpm run typecheck", typecheck: "pnpm check && tsc --noEmit", lint: "eslint ." }).keys()]).toEqual(["check", "typecheck"]);
+    expect([...scriptsRun("npm run --silent check && yarn knip", FIXTURE_SCRIPTS).keys()]).toEqual(["check", "knip"]);
     expect(verify(FIXTURE_WORKFLOW)).not.toThrow();
     // knip exits 0 whatever it finds, in the script the step runs or in one that script runs.
     expect(verify(FIXTURE_WORKFLOW, { knip: "knip || true" })).toThrow(/^script "knip": /);
+    expect(verify(changed(knip, "        run: 'pnpm knip'\n"), { knip: "knip || true" })).toThrow(/^script "knip": /);
     expect(verify(FIXTURE_WORKFLOW, { knip: "pnpm run knip:files", "knip:files": "knip; exit 0" })).toThrow(/^script "knip:files": /);
+    expect(verify(FIXTURE_WORKFLOW, { check: "npm run typecheck", typecheck: "tsc --noEmit || true" })).toThrow(/^script "typecheck": /);
     // A script no step runs is not read.
     expect(verify(FIXTURE_WORKFLOW, { dev: "tsx watch server/index.ts || true" })).not.toThrow();
     expect(verify(changed(knip, "        run: |\n          set +o errexit\n          pnpm knip\n"))).toThrow(/^Find unused files and dependencies: /);
