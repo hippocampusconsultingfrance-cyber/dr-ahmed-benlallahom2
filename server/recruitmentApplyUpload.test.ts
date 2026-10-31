@@ -25,8 +25,14 @@ vi.mock("@clerk/express", () => ({
   getAuth: () => ({ userId: null }),
   clerkClient: { users: { getUser: vi.fn() } },
 }));
+// The real check, watched for the file name the route keeps.
+vi.mock("./recruitmentFileValidation", async importOriginal => {
+  const original = await importOriginal<typeof import("./recruitmentFileValidation")>();
+  return { ...original, validateCvFile: vi.fn(original.validateCvFile) };
+});
 
 const { createApp } = await import("./_core/index");
+const { validateCvFile } = await import("./recruitmentFileValidation");
 
 let baseUrl = "";
 let close: () => Promise<void> = async () => undefined;
@@ -95,6 +101,13 @@ describe("POST /api/recruitment/apply — réception du CV (multer) et validatio
     const result = await apply({ cvs: [{ buffer: validPdfBuffer(), name }] });
     expect(result).toEqual({ status: 503, body: { error: "Le service de candidature est temporairement indisponible.", code: "recruitment_service_unavailable" } });
     expect(state.databaseRequests).toBe(1);
+  });
+
+  it("lit le nom du CV envoyé en UTF-8 par le navigateur : une lettre accentuée devient un seul « _ », pas deux", async () => {
+    vi.mocked(validateCvFile).mockClear();
+    const result = await apply({ cvs: [{ buffer: validPdfBuffer(), name: "Diplôme d’État.pdf" }] });
+    expect(result.status).toBe(503);
+    expect(vi.mocked(validateCvFile).mock.calls.map(([file]) => file.originalName)).toEqual(["Dipl_me_d__tat.pdf"]);
   });
 
   it("exige le CV", async () => {

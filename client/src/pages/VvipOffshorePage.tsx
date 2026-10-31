@@ -12,6 +12,7 @@ import { recruitmentServiceFailureMessage, recruitmentSubmissionErrorMessage } f
 import { fieldsToCorrectMessage, reportFieldsToCorrect, type FieldToCorrect } from "@/lib/formFieldsToCorrect";
 import { getTurnstileWidgetCopy } from "@/lib/publicFormCopy";
 import { TurnstileWidget } from "@/components/TurnstileWidget";
+import FileNameLabel from "@/components/FileNameLabel";
 
 export const vvipOffshoreCopy = {
   fr: {
@@ -719,9 +720,11 @@ export default function VvipOffshorePage() {
                       >
                         <span className="block text-sm font-medium text-foreground">{t.cv} *</span>
                         <FileUp className="mt-3 h-8 w-8 text-primary transition-transform group-hover:scale-110" aria-hidden="true" />
-                        <span className="mt-3 text-sm font-medium text-foreground">
-                          {file ? file.name : t.chooseFile}
-                        </span>
+                        {file ? (
+                          <FileNameLabel name={file.name} className="mt-3 justify-center text-sm font-medium text-foreground" />
+                        ) : (
+                          <span className="mt-3 text-sm font-medium text-foreground">{t.chooseFile}</span>
+                        )}
                         <span id="vvip-cv-hint" className="mt-1 text-xs text-muted-foreground">{t.fileHint}</span>
                       </label>
                     </div>

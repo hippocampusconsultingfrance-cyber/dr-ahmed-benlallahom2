@@ -35,6 +35,9 @@ const RECRUITMENT_ALLOWED_MIME_TYPES = new Set<string>(RECRUITMENT_CV_ACCEPTED_M
 
 const recruitmentUpload = multer({
   storage: multer.memoryStorage(),
+  // Browsers send the file name in UTF-8: read as latin1, each accented
+  // letter of « Diplôme » became two characters, then two "_" once stored.
+  defParamCharset: "utf8",
   limits: { fileSize: RECRUITMENT_MAX_FILE_SIZE, files: 1, fields: 20 },
   fileFilter: (_req, file, callback) => {
     const extension = file.originalname.toLowerCase().split(".").pop() ?? "";

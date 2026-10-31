@@ -1,7 +1,7 @@
 import { TRPCError } from "@trpc/server";
 import { Resend } from "resend";
 import { startFitsDeadline } from "../processingDeadline";
-import { alertSendSlot, reportResendQuotaError, resendDeliveryFailureCode, sendSlotBeforeNewTry, sendWithRateLimitRetry } from "./resendDelivery";
+import { reportResendQuotaError, resendDeliveryFailureCode, sendSlotBeforeNewTry, sendWithRateLimitRetry } from "./resendDelivery";
 
 export type NotificationPayload = {
   title: string;
@@ -98,11 +98,12 @@ export function buildOwnerNotificationEmail(payload: NotificationPayload) {
  * minutes or a daily pass later, may come once it is forgotten. Sent from a
  * processing that spaces its sends (the post-payment jobs), that new try
  * waits for its send slot (ABUS-03).
- * `stopAtDeadline`: for an alert queued as a post-payment job (refund_owner),
- * not asked again once the immediate budget of the processing it runs in is
- * spent, the request it serves having answered (ABUS-03): its job goes back to
- * the queue. Without it (the other alerts, queued nowhere), it is asked again
- * whatever the time, rather than lost.
+ * `stopAtDeadline`: for an alert queued as a post-payment job (refund_owner,
+ * and the failure alert of a post-payment email, queued when it does not go
+ * out), not asked again once the immediate budget of the processing it runs
+ * in is spent, the request it serves having answered (ABUS-03): its job goes
+ * to the queue. Without it (the other alerts, queued nowhere), it is asked
+ * again whatever the time, rather than lost.
  */
 export async function notifyOwner(
   payload: NotificationPayload,
@@ -135,11 +136,8 @@ export async function notifyOwner(
       if (attempt >= attempts) return false;
     }
     // The new try takes the send slot of the processing it runs in, if any
-    // (ABUS-03), rather than reach Resend right after the first one.
-    if (stopAtDeadline) {
-      if (!(await sendSlotBeforeNewTry(startFitsDeadline))) return false;
-    } else {
-      await alertSendSlot();
-    }
+    // (ABUS-03), rather than reach Resend right after the first one; an alert
+    // queued nowhere waits for it whatever the time.
+    if (!(await sendSlotBeforeNewTry(stopAtDeadline ? startFitsDeadline : () => true))) return false;
   }
 }

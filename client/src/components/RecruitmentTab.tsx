@@ -481,7 +481,7 @@ export default function RecruitmentTab() {
                       <p><strong className="text-foreground">Certifications déclarées :</strong> {application.certifications || "—"}</p>
                     </div>
                     <div className="space-y-1 text-muted-foreground">
-                      <p><strong className="text-foreground">Fichier :</strong> {application.cvOriginalName} ({formatBytes(application.cvSizeBytes)})</p>
+                      <p className="break-words [overflow-wrap:anywhere]"><strong className="text-foreground">Fichier :</strong> {application.cvOriginalName} ({formatBytes(application.cvSizeBytes)})</p>
                       <p><strong className="text-foreground">Contrôle du fichier :</strong> {application.fileValidationStatus === "accepted" ? "validé" : application.fileValidationStatus || "en attente"}{application.fileSecurityScanVersion ? ` · ${application.fileSecurityScanVersion}` : ""}</p>
                       <p><strong className="text-foreground">Reçu le :</strong> {new Date(application.createdAt).toLocaleString("fr-FR", { timeZone: "Europe/Paris" })}</p>
                       <p><strong className="text-foreground">Conservation jusqu’au :</strong> {application.retentionUntil ? new Date(application.retentionUntil).toLocaleDateString("fr-FR", { timeZone: "Europe/Paris" }) : "—"}</p>

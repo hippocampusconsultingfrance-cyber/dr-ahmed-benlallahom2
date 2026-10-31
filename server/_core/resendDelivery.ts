@@ -86,9 +86,9 @@ const sendSlotStorage = new AsyncLocalStorage<SendSlot>();
  * Runs `run` with the send slot its new tries take (ABUS-03): the processing
  * that spaces its sends (the post-payment emails, appointmentFulfillment.ts)
  * takes a slot before a first send; a send made again after a pause (Resend's
- * retry-after, a short backoff) or at once (an owner alert asked again)
- * waits for `sendSlot` as well, so it does not leave right after a send of
- * the instance.
+ * retry-after, a short backoff) or at once (an owner alert asked again), and
+ * an owner failure alert (alertSendSlot), wait for `sendSlot` as well, so they
+ * do not leave right after a send of the instance.
  */
 export function runWithSendSlot<T>(sendSlot: SendSlot, run: () => Promise<T>): Promise<T> {
   return sendSlotStorage.run(sendSlot, run);
@@ -120,18 +120,18 @@ export async function pauseBeforeNewTry(waitMs: number): Promise<boolean> {
 }
 
 /**
- * The send slot of an owner alert sent whatever the time from the processing
- * it runs in, if any (ABUS-03): the failure alert of a post-payment email and
- * notifyOwner's new try under its key would otherwise reach Resend a few
- * milliseconds after the send before them. Within an immediate processing,
- * taken only when the alert still surely starts before the end of the budget:
- * otherwise it leaves at once, as without a slot, rather than later after the
- * answer.
+ * The send slot of the owner's failure alert of a post-payment email, from the
+ * processing it runs in, if any (ABUS-03): the alert reaches Resend a pause
+ * after the email that failed, not a few milliseconds after it. Within an
+ * immediate processing, false at once when that slot may come after the end
+ * of the budget: the alert leaves neither without its slot nor after the page
+ * or the webhook has answered, and its caller queues it for a later
+ * processing instead (runJob in appointmentFulfillment.ts).
  */
-export async function alertSendSlot(): Promise<void> {
+export async function alertSendSlot(): Promise<boolean> {
   const sendSlot = sendSlotStorage.getStore();
-  if (!sendSlot || !startFitsDeadlineAfter(sendSlot.longestWaitMs())) return;
-  await sendSlot.wait(() => true);
+  if (!sendSlot) return true;
+  return startFitsDeadlineAfter(sendSlot.longestWaitMs()) && sendSlot.wait(startFitsDeadline);
 }
 
 /**
