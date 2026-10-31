@@ -1,7 +1,7 @@
 import { getDb } from "./db";
 import { recruitmentAuditLogs } from "../drizzle/schema";
 import { foldAdminSearchText } from "../shared/adminSearchFolding";
-import { holdsRecruitmentLanguages } from "../shared/recruitmentLanguages";
+import { meetsRequiredLanguage, recruitmentLanguageRequirements } from "../shared/recruitmentLanguages";
 
 export type RecruitmentAuditAction =
   | "download"
@@ -51,7 +51,7 @@ export function parseRecruitmentJsonArray(value: string | null | undefined): str
 export const RECRUITMENT_PROFILE_SCAN_LIMIT = 10_000;
 
 /**
- * A country or a language as the profile compares them: folded like the
+ * A country as the profile compares it: folded like the
  * filters of the list and the admin search (adminFilterContains), accents,
  * case and ways of writing aside, so that the dossiers its SQL filter kept
  * (« emirats » finds « Émirats arabes unis ») are not dropped here.
@@ -79,14 +79,14 @@ export function matchesRecruitmentProfile(input: {
   if (profile.specialty && !input.specialty.toLowerCase().includes(profile.specialty.toLowerCase())) return false;
   if (profile.targetCountry && !input.targetCountries.some(country => foldProfileText(country).includes(foldProfileText(profile.targetCountry!)))) return false;
 
-  const languages = new Set(input.languages.map(foldProfileText));
   const skills = new Set(input.extractedSkills.map(value => value.toLowerCase()));
-  const requiredLanguages = parseRecruitmentJsonArray(profile.requiredLanguages);
+  const requiredLanguages = parseRecruitmentJsonArray(profile.requiredLanguages).flatMap(recruitmentLanguageRequirements);
   const requiredSkills = parseRecruitmentJsonArray(profile.requiredSkills);
-  // A required language the dossier has: the same name, folded, or other names
-  // of the same languages (IA-02), the form recording « French » or « Arabic »
-  // where the admin types « Français » or « arabe ».
-  if (requiredLanguages.some(value => !languages.has(foldProfileText(value)) && !holdsRecruitmentLanguages(input.languages, value))) return false;
+  // Each required language the dossier has under any of its names (IA-02),
+  // the form recording « French » or « Arabic » where the admin types
+  // « Français » or « arabe », compared as a mission and the Langue filter
+  // compare them (shared/recruitmentLanguages.ts).
+  if (requiredLanguages.some(required => !meetsRequiredLanguage(input.languages, required))) return false;
   if (requiredSkills.some(value => !Array.from(skills).some(skill => skill.includes(value.toLowerCase())))) return false;
   return true;
 }

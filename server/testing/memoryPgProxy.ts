@@ -2,8 +2,9 @@
  * TEST-ONLY in-memory PostgreSQL stand-in for behavioural unit tests.
  *
  * It plugs into drizzle's `pg-proxy` driver and executes the small SQL subset
- * drizzle generates for the queries of this code base (single-table SELECT /
- * INSERT / UPDATE / DELETE with AND/OR/IN/IS NULL predicates, lower(), translate(),
+ * drizzle generates for the queries of this code base (single-table SELECT
+ * [DISTINCT] / INSERT / UPDATE / DELETE with AND/OR/IN/IS NULL predicates, IN
+ * (SELECT one column FROM a table [WHERE …]) without correlation, lower(), translate(),
  * replace(), normalize(), the || concatenation, LIKE / ILIKE with the backslash
  * escape, ORDER BY, LIMIT,
  * RETURNING, ON CONFLICT DO NOTHING / DO UPDATE [WHERE]). Anything else throws, so a
@@ -87,6 +88,7 @@ type Expr =
   | { type: "binary"; op: string; left: Expr; right: Expr }
   | { type: "isNull"; expr: Expr; negated: boolean }
   | { type: "in"; expr: Expr; list: Expr[]; negated: boolean }
+  | { type: "inSelect"; expr: Expr; select: Expr; rows: () => Row[]; where: Expr | null; negated: boolean }
   | { type: "like"; expr: Expr; pattern: Expr; negated: boolean; caseInsensitive: boolean }
   | { type: "and" | "or"; items: Expr[] }
   | { type: "not"; expr: Expr }
@@ -101,7 +103,8 @@ type Expr =
 
 class Parser {
   private position = 0;
-  constructor(private readonly tokens: Token[], private readonly sqlText: string) {}
+  /** `tableRows`: the rows of a table, read by an IN (SELECT …) when it is evaluated. */
+  constructor(private readonly tokens: Token[], private readonly sqlText: string, private readonly tableRows: (table: string) => Row[] = () => []) {}
 
   peek(offset = 0) { return this.tokens[this.position + offset]; }
   done() { return this.position >= this.tokens.length || this.peek()?.text === ";"; }
@@ -163,6 +166,14 @@ class Parser {
     const negated = this.acceptWord("not");
     if (this.acceptWord("in")) {
       this.expectPunct("(");
+      if (this.acceptWord("select")) {
+        const select = this.expression();
+        this.expectWord("from");
+        const table = this.ident();
+        const where = this.acceptWord("where") ? this.expression() : null;
+        this.expectPunct(")");
+        return { type: "inSelect", expr: left, select, rows: () => this.tableRows(table), where, negated };
+      }
       const list: Expr[] = [];
       if (!this.acceptPunct(")")) {
         do list.push(this.additive()); while (this.acceptPunct(","));
@@ -372,6 +383,12 @@ function evaluate(expr: Expr, row: Row, params: unknown[], now: string): Value {
       const found = expr.list.some(item => compare(value, evaluate(item, row, params, now)) === 0);
       return expr.negated ? !found : found;
     }
+    case "inSelect": {
+      const value = evaluate(expr.expr, row, params, now);
+      if (value === null) return null;
+      const found = expr.rows().some(selected => (!expr.where || evaluate(expr.where, selected, params, now) === true) && compare(value, evaluate(expr.select, selected, params, now)) === 0);
+      return expr.negated ? !found : found;
+    }
     case "like": {
       const value = evaluate(expr.expr, row, params, now);
       const pattern = evaluate(expr.pattern, row, params, now);
@@ -490,12 +507,13 @@ export function createMemoryPg(tables: PgTable[], options: { now?: () => Date; m
     }
     const now = pgTimestamp(clock());
     const tokens = tokenize(sqlText);
-    const parser = new Parser(tokens, sqlText);
+    const parser = new Parser(tokens, sqlText, table => { tableMeta(table); return data.get(table)!; });
     const first = tokens[0]?.text;
 
     if (first === "create" || first === "alter" || first === "comment" || first === "do") return { rows: [] as Value[][], rowCount: 0 };
 
     if (parser.acceptWord("select")) {
+      const distinct = parser.acceptWord("distinct");
       const selections: Array<{ count: true } | { expr: Expr }> = [];
       do {
         if (parser.isWord("count")) {
@@ -545,8 +563,13 @@ export function createMemoryPg(tables: PgTable[], options: { now?: () => Date; m
       if (selections.some(selection => "count" in selection)) {
         return { rows: [selections.map(selection => "count" in selection ? rows.length : null)], rowCount: 1 };
       }
-      const page = rows.slice(offset, offset + limit);
-      return { rows: page.map(row => selections.map(selection => evaluate((selection as { expr: Expr }).expr, row, params, now))), rowCount: page.length };
+      const project = (row: Row) => selections.map(selection => evaluate((selection as { expr: Expr }).expr, row, params, now));
+      // DISTINCT before the page: each combination of the values selected once.
+      const seen = new Set<string>();
+      const page = distinct
+        ? rows.map(project).filter(values => !seen.has(JSON.stringify(values)) && Boolean(seen.add(JSON.stringify(values)))).slice(offset, offset + limit)
+        : rows.slice(offset, offset + limit).map(project);
+      return { rows: page, rowCount: page.length };
     }
 
     if (parser.acceptWord("insert", "into")) {

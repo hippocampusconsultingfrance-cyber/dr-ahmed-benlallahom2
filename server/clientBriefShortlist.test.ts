@@ -277,6 +277,8 @@ describe("missions employeurs : classement, certifications et accord du candidat
   it("filtre les candidatures par certification, langue et pays sans tenir compte des majuscules, comme le vivier (IA-02)", async () => {
     const declared = seedCandidate({ certifications: "Licence DHA", languages: '["Anglais"]', target_countries: '["Qatar"]' });
     const analysed = seedCandidate({ normalized_certifications: '[{"name":"Licence DHA"}]', normalized_languages: '[{"language":"Anglais"}]', target_countries: '["Émirats arabes unis","Qatar"]', ...scored(70) });
+    // The analysis stores each language it reads as a row too, in the same batch.
+    memory.seed(cvCandidateLanguages, [{ application_id: analysed.id, language: "Anglais", source: "extracted" }]);
     seedCandidate({ certifications: "BLS", languages: '["Arabe"]', target_countries: '["Suisse"]' });
     const idsOf = async (filters: { certification?: string; language?: string; country?: string }) => (await admin().admin.recruitment.list(filters)).items.map(item => item.id).sort();
     for (const certification of ["DHA", "dha", "licence dha"]) expect(await idsOf({ certification })).toEqual([declared.id, analysed.id]);
@@ -302,6 +304,7 @@ describe("missions employeurs : classement, certifications et accord du candidat
     const gulf = seedCandidate({ marketing_consent: 1, target_countries: '["Émirats arabes unis"]', mobility: "Péninsule arabique", languages: '["Français"]', certifications: "Échographie FAST" });
     const analysed = seedCandidate({ marketing_consent: 1, target_countries: '["Suisse"]', normalized_languages: '[{"language":"Español"}]', normalized_certifications: "[]", ...scored(70) });
     memory.seed(cvCandidateCertifications, [{ application_id: analysed.id, name: "Réanimation néonatale", source: "declared", confirmed_at: "2026-10-20 09:00:00.000" }]);
+    memory.seed(cvCandidateLanguages, [{ application_id: analysed.id, language: "Español", source: "extracted" }]);
     seedCandidate({ marketing_consent: 1, target_countries: '["Canada"]', languages: '["Anglais"]', certifications: "BLS" });
     const listed = async (filters: { country?: string; certification?: string; language?: string }) => (await admin().admin.recruitment.list(filters)).items.map(item => item.id).sort();
     const pooled = async (filters: { country?: string; mobility?: string; certification?: string }) => (await admin().admin.recruitment.pool.list(filters)).map(item => item.id).sort();

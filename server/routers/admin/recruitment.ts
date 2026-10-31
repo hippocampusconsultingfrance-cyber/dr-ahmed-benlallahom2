@@ -179,7 +179,7 @@ export const adminRecruitmentRouter = router({
       // filtered audience: « dha » finds « Licence DHA », « emirats » « Émirats arabes unis ».
       if (input.country) conditions.push(adminFilterContains(cvApplications.targetCountries, input.country));
       // A language by any of its names (IA-02): « arabe » finds « Arabic » too.
-      if (input.language) conditions.push(languageFilterCondition(input.language));
+      if (input.language) conditions.push(await languageFilterCondition(db, input.language));
       if (input.certification) conditions.push(await certificationFilterCondition(db, input.certification, sql`((${cvApplications.analysisPromptVersion} = ${RECRUITMENT_ANALYSIS_PROMPT_VERSION} AND ${adminFilterContains(cvApplications.normalizedCertifications, input.certification)}) OR ${adminFilterContains(cvApplications.certifications, input.certification)})`));
 
       let profile: typeof recruitmentMatchProfiles.$inferSelect | null = null;

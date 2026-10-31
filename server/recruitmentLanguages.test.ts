@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { holdsRecruitmentLanguages, recruitmentLanguageCodes, recruitmentLanguageNames, RECRUITMENT_LANGUAGES, sameRecruitmentLanguage } from "../shared/recruitmentLanguages";
+import { givesRequiredLanguage, meetsRequiredLanguage, recruitmentLanguageCodes, recruitmentLanguageRequirements, RECRUITMENT_LANGUAGES } from "../shared/recruitmentLanguages";
 import { professionalLanguageOptions } from "../client/src/pages/RecruitmentPage";
 
 // Each text the table compares is folded through the admin search's folding: counted here.
@@ -45,41 +45,74 @@ describe("langues du recrutement comparées par code (IA-02)", () => {
     // Nor a name that starts another word: « polished » is not Polish, nor « Germany » German.
     expect(recruitmentLanguageCodes("English (polished)")).toEqual(["en"]);
     for (const text of ["Germany", "Russell", "Arabesque", "Deutschland", "Grecoromain"]) expect(recruitmentLanguageCodes(text), text).toEqual([]);
-    expect(holdsRecruitmentLanguages(["English - polished"], "Polonais")).toBe(false);
+    const [polish] = recruitmentLanguageRequirements("Polonais");
+    expect(meetsRequiredLanguage(["English - polished"], polish!)).toBe(false);
   });
 
-  it("dit si deux noms désignent la même langue, et si des langues tiennent toutes celles qu’une exigence cite", () => {
-    expect(sameRecruitmentLanguage("Arabic", "arabe")).toBe(true);
-    expect(sameRecruitmentLanguage("French", "Anglais")).toBe(false);
-    expect(sameRecruitmentLanguage("Wolof", "Wolof")).toBe(false);
-    expect(holdsRecruitmentLanguages(["French", "Arabic"], "Français")).toBe(true);
-    expect(holdsRecruitmentLanguages(["English", "العربية"], "Anglais et arabe")).toBe(true);
-    expect(holdsRecruitmentLanguages(["Arabic"], "Anglais et arabe")).toBe(false);
-    expect(holdsRecruitmentLanguages(["Wolof"], "Wolof")).toBe(false);
+  it("ne lit que les flexions d’une langue, pas un pays ni une ville qui commence comme elle, ni un hôtel (IA-02)", () => {
+    // The feminine and plural forms of the French names, turque included.
+    for (const [text, code] of [["turque", "tr"], ["Turques", "tr"], ["Turcs", "tr"], ["grecque", "el"], ["langue grecque", "el"], ["Hébreux", "he"], ["coréenne", "ko"], ["Allemande", "de"]] as const) {
+      expect(recruitmentLanguageCodes(text), text).toEqual([code]);
+    }
+    // Countries and cities, an English word ending as a French name does, a hotel group.
+    for (const text of ["Grèce", "expérience en Grèce", "Turquie", "turquoise", "Germane", "Germany", "Deutschland", "Polska", "Mandarin Oriental", "Mandarin Oriental, Dubaï"]) {
+      expect(recruitmentLanguageCodes(text), text).toEqual([]);
+    }
+    // A country named after a language, the language named next to it still found.
+    for (const text of ["Émirats arabes unis", "Vereinigte Arabische Emirate", "الإمارات العربية المتحدة", "المملكة العربية السعودية"]) {
+      expect(recruitmentLanguageCodes(text), text).toEqual([]);
+    }
+    expect(recruitmentLanguageCodes("Arabe (Émirats arabes unis)")).toEqual(["ar"]);
+    expect(recruitmentLanguageCodes("اللغة العربية")).toEqual(["ar"]);
+    expect(recruitmentLanguageCodes("Mandarin")).toEqual(["zh"]);
+    const [greek] = recruitmentLanguageRequirements("Grec");
+    expect(meetsRequiredLanguage(["expérience en Grèce"], greek!)).toBe(false);
+    expect(meetsRequiredLanguage(["Grecque"], greek!)).toBe(true);
   });
 
-  it("donne tous les noms de chaque langue qu’un filtre nomme, sans doublon, aucun pour un terme qui n’en nomme pas", () => {
-    const [names, ...others] = recruitmentLanguageNames("arabe");
-    expect(others).toEqual([]);
-    expect(names).toEqual(expect.arrayContaining(["Arabe", "Arabic", "Arabisch", "阿拉伯语", "العربية"]));
-    expect(new Set(names).size).toBe(names!.length);
-    expect(recruitmentLanguageNames("Hindi")).toEqual([["Hindi", "印地语", "हिन्दी", "印地語"]]);
-    // One list per language a term names, in the order of the table.
-    const [english, arabic] = recruitmentLanguageNames("anglais, arabe");
-    expect(english).toEqual(expect.arrayContaining(["Anglais", "English", "Englisch", "英语"]));
-    expect(arabic).toEqual(expect.arrayContaining(["Arabe", "Arabic", "العربية"]));
-    expect(recruitmentLanguageNames("angl")).toEqual([]);
+  it("sépare les langues d’une exigence, sauf entre parenthèses, chacune avec ses codes (IA-02)", () => {
+    const texts = (required: string) => recruitmentLanguageRequirements(required).map(requirement => requirement.text);
+    for (const required of ["Anglais/Arabe", "anglais et arabe", "Anglais, Arabe", "Anglais; Arabe", "Anglais + Arabe", "Anglais & Arabe", "English and Arabic", "Englisch und Arabisch", "英语和阿拉伯语", "英语、阿拉伯语"]) {
+      expect(recruitmentLanguageRequirements(required).map(requirement => requirement.codes), required).toEqual([["en"], ["ar"]]);
+    }
+    expect(texts("Anglais (C1/C2), arabe")).toEqual(["Anglais (C1/C2)", "arabe"]);
+    // Several languages without a separator: one requirement, all of them required.
+    expect(recruitmentLanguageRequirements("anglais arabe")).toEqual([{ text: "anglais arabe", codes: ["en", "ar"] }]);
+    expect(recruitmentLanguageRequirements("Wolof")).toEqual([{ text: "Wolof", codes: [] }]);
+    expect(recruitmentLanguageRequirements(" , / ")).toEqual([]);
+  });
+
+  it("dit si les langues d’un candidat tiennent une exigence : par code, ou par les mots entiers d’une langue hors table", () => {
+    const [french] = recruitmentLanguageRequirements("Français");
+    const [both] = recruitmentLanguageRequirements("anglais arabe");
+    const [wolof] = recruitmentLanguageRequirements("Wolof");
+    const [partial] = recruitmentLanguageRequirements("fran");
+    expect(meetsRequiredLanguage(["French", "Arabic"], french!)).toBe(true);
+    expect(meetsRequiredLanguage(["English", "العربية"], both!)).toBe(true);
+    expect(meetsRequiredLanguage(["Arabic"], both!)).toBe(false);
+    expect(meetsRequiredLanguage(["Wolof (courant)"], wolof!)).toBe(true);
+    expect(meetsRequiredLanguage(["Wolofs"], wolof!)).toBe(false);
+    expect(meetsRequiredLanguage(["Français"], partial!)).toBe(false);
+    // The names that give it: those of one of its languages, not another.
+    expect(["Arabic", "English (polished)", "Germany", "Arabisch"].filter(name => givesRequiredLanguage(name, both!))).toEqual(["Arabic", "English (polished)", "Arabisch"]);
+    const [polish, german] = recruitmentLanguageRequirements("Polish, German");
+    expect(givesRequiredLanguage("English (polished)", polish!)).toBe(false);
+    expect(givesRequiredLanguage("Germany", german!)).toBe(false);
+    expect(givesRequiredLanguage("Deutsch", german!)).toBe(true);
   });
 
   it("ne replie et ne cherche chaque texte qu’une fois, avec le même résultat ensuite (IA-02)", () => {
     const texts = ["Anglais (B2)", "Arabe littéraire", "Wolof courant"];
     const first = texts.map(recruitmentLanguageCodes);
+    const [arabic] = recruitmentLanguageRequirements("Arabe littéraire");
+    const [wolof] = recruitmentLanguageRequirements("Wolof courant");
     folding.texts = [];
     // A mission ranks up to 2 000 candidates, a profile checks up to 10 000 dossiers, under the same few names.
     for (let round = 0; round < 2_000; round++) {
       expect(texts.map(recruitmentLanguageCodes)).toEqual(first);
-      expect(sameRecruitmentLanguage("Arabe littéraire", "Anglais (B2)")).toBe(false);
-      expect(holdsRecruitmentLanguages(["Anglais (B2)", "Arabe littéraire"], "Arabe littéraire")).toBe(true);
+      expect(givesRequiredLanguage("Anglais (B2)", arabic!)).toBe(false);
+      expect(meetsRequiredLanguage(["Anglais (B2)", "Arabe littéraire"], arabic!)).toBe(true);
+      expect(meetsRequiredLanguage(["Anglais (B2)", "Wolof courant"], wolof!)).toBe(true);
     }
     expect(folding.texts).toEqual([]);
     expect(first).toEqual([["en"], ["ar"], []]);
