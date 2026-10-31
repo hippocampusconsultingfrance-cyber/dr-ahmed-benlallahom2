@@ -2,7 +2,7 @@ import type Stripe from "stripe";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PgDialect } from "drizzle-orm/pg-core";
 import { appointmentFulfillmentJobs, appointmentInvoices, appointments, securityEvents } from "../drizzle/schema";
-import { createMemoryPg, type MemoryPg } from "./testing/memoryPgProxy";
+import { createMemoryPg, pgTimestamp, type MemoryPg } from "./testing/memoryPgProxy";
 import type { TrpcContext } from "./_core/context";
 
 // EXPL-02 et RES-06 — un email refusé par le service d’envoi (adresse du
@@ -418,5 +418,60 @@ describe("EXPL-02 — adresse du patient corrigée depuis la fiche du rendez-vou
     seedJob(refused, "confirmation", refusal);
     await expect(admin().appointments.updateCustomerEmail({ trackingId: "APTFIXMAIL10", customerEmail: "autre@example.test" })).resolves.toEqual({ success: true, unchanged: false });
     expect(corrections()).toHaveLength(1);
+  });
+});
+
+describe("ABUS-03 — l’alerte « Échec d’envoi » que Resend ne prend pas attend en file, sans être perdue", () => {
+  it("le passage suivant l’envoie, écrite d’après l’email tel qu’il est alors ; un nouvel échec la laisse attendre si elle attend déjà, la remet en file si elle est partie", async () => {
+    const { id } = seedAppointment("APTALERT0001");
+    seedJob(id, "owner", { status: "completed", attempts: 1 });
+    seedJob(id, "confirmation");
+    resend.down.add("aptalert0001@example.test");
+    const alertJob = () => job(id, "confirmation_failure_alert");
+
+    // Premier échec de la confirmation ; Resend ne prend pas l’alerte au médecin non plus.
+    owner.notifyOwner.mockResolvedValueOnce(false);
+    await processAppointmentFulfillmentNow(id);
+    expect(job(id, "confirmation")).toMatchObject({ status: "retry", attempts: 1 });
+    expect(alertJob()).toMatchObject({ status: "queued", attempts: 0 });
+    // Ni un envoi du rendez-vous ni une ligne de « À traiter » : ceux-ci montrent la confirmation elle-même.
+    expect((await deliveriesOf("APTALERT0001")).map(delivery => delivery.jobType)).toEqual(["owner", "confirmation"]);
+    expect((await admin().attention()).retryingDeliveries.items).toEqual([expect.objectContaining({ trackingId: "APTALERT0001", jobTypes: ["confirmation"] })]);
+
+    // Le passage suivant la tente : toujours pas prise, elle attend son propre nouvel essai.
+    owner.notifyOwner.mockResolvedValueOnce(false);
+    await processDueAppointmentFulfillmentJobs();
+    expect(alertJob()).toMatchObject({ status: "retry", attempts: 1 });
+
+    // Entre-temps, la confirmation échoue pour de bon : l’alerte qui attend reste telle quelle.
+    const alertDueAt = alertJob().scheduled_for;
+    Object.assign(job(id, "confirmation"), { attempts: 6, scheduled_for: pgTimestamp(new Date(Date.now() - 1000)) });
+    owner.notifyOwner.mockResolvedValueOnce(false);
+    await processDueAppointmentFulfillmentJobs();
+    expect(job(id, "confirmation")).toMatchObject({ status: "failed", attempts: 7 });
+    expect(alertJob()).toMatchObject({ status: "retry", attempts: 1, scheduled_for: alertDueAt });
+
+    // À son heure, elle part une seule fois, d’après l’échec définitif.
+    alertJob().scheduled_for = pgTimestamp(new Date(Date.now() - 1000));
+    await processDueAppointmentFulfillmentJobs();
+    await processDueAppointmentFulfillmentJobs();
+    expect(alertJob()).toMatchObject({ status: "completed", attempts: 2, last_error: null });
+    expect(alerts().map(alert => alert.key)).toEqual([
+      "appointment-confirmation-failure-APTALERT0001-first",
+      "appointment-confirmation-failure-APTALERT0001-first",
+      "appointment-confirmation-failure-APTALERT0001-final",
+      "appointment-confirmation-failure-APTALERT0001-final",
+    ]);
+    expect(alerts().at(-1)!.content).toContain("a échoué 7 fois");
+
+    // « Renvoyer » pendant la panne : nouvel échec, alerte de nouveau pas prise, remise en file.
+    owner.notifyOwner.mockResolvedValueOnce(false);
+    const retry = await admin().appointments.retryFulfillment({ trackingId: "APTALERT0001" });
+    expect(retry.requeuedJobTypes).toEqual(["confirmation"]);
+    expect(alertJob()).toMatchObject({ status: "queued", attempts: 0, last_error: null });
+    await processDueAppointmentFulfillmentJobs();
+    expect(alertJob()).toMatchObject({ status: "completed", attempts: 1 });
+    expect(alerts().at(-1)!.key).toBe("appointment-confirmation-failure-APTALERT0001-first");
+    expect(alerts()).toHaveLength(6);
   });
 });

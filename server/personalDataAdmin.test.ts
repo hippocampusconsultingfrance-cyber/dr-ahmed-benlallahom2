@@ -323,6 +323,9 @@ describe("RGPD-12 — effacer / anonymiser une personne", () => {
       job(jeanne.past.id, "confirmation", "failed", { attempts: 7, last_error: "confirmation_email_failed" }),
       // The owner's own notification has nothing to do with the patient's address.
       job(jeanne.past.id, "owner", "failed", { attempts: 7, last_error: "owner_notification_failed" }),
+      // The owner's alert that the confirmation did not go out, queued when it could not leave at once (ABUS-03),
+      // then given up: it gives the patient's details, and is neither a delivery of the card nor one of « À traiter ».
+      job(jeanne.past.id, "confirmation_failure_alert", "failed", { attempts: 7, last_error: "owner_failure_alert_failed" }),
       // Upcoming booking left to the administrator, and another person's booking: untouched.
       job(jeanne.upcoming.id, "invoice", "retry"),
       job(paul.past.id, "invoice", "retry"),
@@ -336,6 +339,7 @@ describe("RGPD-12 — effacer / anonymiser une personne", () => {
     const jobOf = (appointmentId: unknown, jobType: string) => memory.rows(appointmentFulfillmentJobs).find(row => row.appointment_id === appointmentId && row.job_type === jobType)!;
     expect(jobOf(jeanne.past.id, "invoice")).toMatchObject({ status: "completed", last_error: "patient_data_erased" });
     expect(jobOf(jeanne.past.id, "confirmation")).toMatchObject({ status: "completed", last_error: "patient_data_erased" });
+    expect(jobOf(jeanne.past.id, "confirmation_failure_alert")).toMatchObject({ status: "completed", last_error: "patient_data_erased" });
     expect(jobOf(jeanne.past.id, "owner")).toMatchObject({ status: "failed" });
     expect(jobOf(jeanne.upcoming.id, "invoice")).toMatchObject({ status: "retry" });
     expect(jobOf(paul.past.id, "invoice")).toMatchObject({ status: "retry" });

@@ -456,7 +456,7 @@ describe("EXPL-02 — « Télécharger la facture »", () => {
     expect(retried.deliveries.find(delivery => delivery.jobType === "invoice")).toMatchObject({ state: "retrying", failureCause: "invoice_storage" });
     expect(vi.mocked(notifyOwner)).toHaveBeenLastCalledWith(expect.objectContaining({
       content: expect.stringContaining("vient d’échouer (tentative 1 sur 7) : sa copie archivée dans le stockage des factures (Vercel Blob) n’a pas pu être vérifiée ou lue, et elle n’est pas refaite à sa place"),
-    }), { idempotencyKey: "appointment-invoice-failure-APTINVFIX006-first-storage" });
+    }), { idempotencyKey: "appointment-invoice-failure-APTINVFIX006-first-storage", stopAtDeadline: true });
     expect(blobStore.uploads).toHaveLength(1);
 
     blobStore.unavailable = false;

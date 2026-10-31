@@ -6,7 +6,7 @@
  * INSERT / UPDATE / DELETE with AND/OR/IN/IS NULL predicates, lower(), translate(),
  * replace(), normalize(), the || concatenation, LIKE / ILIKE with the backslash
  * escape, ORDER BY, LIMIT,
- * RETURNING, ON CONFLICT DO NOTHING / DO UPDATE). Anything else throws, so a
+ * RETURNING, ON CONFLICT DO NOTHING / DO UPDATE [WHERE]). Anything else throws, so a
  * test never passes on a silently ignored statement. DDL statements sent with
  * `db.execute` (CREATE ... IF NOT EXISTS, ALTER ... IF NOT EXISTS) are recorded
  * and treated as no-ops. `db.batch` runs its statements in order and, like
@@ -568,7 +568,7 @@ export function createMemoryPg(tables: PgTable[], options: { now?: () => Date; m
         parser.expectPunct(")");
         tuples.push(values);
       } while (parser.acceptPunct(","));
-      let onConflict: null | { action: "nothing" } | { action: "update"; target: string[]; set: Array<[string, Expr]> } = null;
+      let onConflict: null | { action: "nothing" } | { action: "update"; target: string[]; set: Array<[string, Expr]>; where: Expr | null } = null;
       if (parser.acceptWord("on", "conflict")) {
         const target: string[] = [];
         if (parser.acceptPunct("(")) {
@@ -589,7 +589,8 @@ export function createMemoryPg(tables: PgTable[], options: { now?: () => Date; m
             if (parser.next().text !== "=") throw new Error(`memoryPgProxy: expected = in ${sqlText}`);
             set.push([column, parser.additive()]);
           } while (parser.acceptPunct(","));
-          onConflict = { action: "update", target, set };
+          // DO UPDATE ... WHERE: a conflicting row that does not match is left as it is.
+          onConflict = { action: "update", target, set, where: parser.acceptWord("where") ? parser.expression() : null };
         }
       }
       const affected: Row[] = [];
@@ -607,6 +608,7 @@ export function createMemoryPg(tables: PgTable[], options: { now?: () => Date; m
         if (existing) {
           if (!onConflict) throw new Error(`memoryPgProxy: duplicate key in ${table}`);
           if (onConflict.action === "nothing") continue;
+          if (onConflict.where && evaluate(onConflict.where, existing, params, now) !== true) continue;
           for (const [column, expr] of onConflict.set) existing[column] = evaluate(expr, existing, params, now);
           affected.push(existing);
           continue;

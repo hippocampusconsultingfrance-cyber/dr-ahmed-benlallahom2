@@ -19,6 +19,8 @@ const resend = vi.hoisted(() => {
     // Réponse par appel : "ok", "5xx", "422", "429" ou "throw" ; "ok" quand la file est vide.
     script: [] as string[],
     failFor: new Set<string>(),
+    // Adresses refusées par Resend (422).
+    refusedFor: new Set<string>(),
     // Limite de débit persistante pour ces adresses, avec ce retry-after (secondes).
     rateLimitedFor: new Set<string>(),
     // Limite de débit passagère : un seul 429 pour le prochain appel vers ces adresses.
@@ -36,7 +38,7 @@ vi.mock("resend", () => ({
         if (resend.latencyMs > 0) await new Promise(resolve => setTimeout(resolve, resend.latencyMs));
         resend.calls.push({ message, options, startedAt, at: Date.now() });
         const to = (message.to as string[])[0];
-        const outcome = resend.failFor.has(to) ? "5xx" : resend.rateLimitedFor.has(to) || resend.rateLimitedOnceFor.delete(to) ? "429" : resend.script.shift() ?? "ok";
+        const outcome = resend.failFor.has(to) ? "5xx" : resend.refusedFor.has(to) ? "422" : resend.rateLimitedFor.has(to) || resend.rateLimitedOnceFor.delete(to) ? "429" : resend.script.shift() ?? "ok";
         if (outcome === "throw") throw new Error("socket hang up");
         if (outcome === "5xx") return { data: null, error: { name: "internal_server_error", statusCode: 503, message: "unavailable" } };
         if (outcome === "422") return { data: null, error: { name: "validation_error", statusCode: 422, message: "invalid recipient" } };
@@ -66,7 +68,7 @@ import { processFulfillmentBestEffort } from "./appointmentPaymentWebhook";
 import { paymentStatusPageFulfillment } from "./appointmentPublicStatus";
 import { drainInBatches } from "./scheduledJobs";
 
-type Job = { id: number; appointmentId: number; jobType: string; status: string; attempts: number; maxAttempts: number; scheduledFor: Date; createdAt?: Date };
+type Job = { id: number; appointmentId: number; jobType: string; status: string; attempts: number; maxAttempts: number; scheduledFor: Date; createdAt?: Date; lastError?: string | null };
 
 function appointmentRow(overrides: Record<string, unknown> = {}) {
   return {
@@ -91,7 +93,8 @@ function appointmentRow(overrides: Record<string, unknown> = {}) {
 
 /**
  * In-memory jobs table. The due-list query is the one with an ORDER BY; every
- * job UPDATE (claim or status) targets the id bound first in its WHERE clause.
+ * job UPDATE (claim or status) targets the id bound first in its WHERE clause;
+ * an INSERT adds a job of a type its appointment does not have yet.
  * `otherAppointments`: further appointments, read by their id; the due list
  * of one appointment (processAppointmentFulfillmentNow) binds that id last.
  */
@@ -135,7 +138,9 @@ function memoryDatabase(initialJobs: Job[], appointment = appointmentRow(), othe
                 .slice(0, count)
                 .map(row => ({ ...row }));
             }
-            const id = where ? dialect.sqlToQuery(where).params[0] : undefined;
+            // A job read by its appointment and type (the email a refund or failure alert is about), or by its id.
+            const [id, jobType] = params;
+            if (typeof jobType === "string") return jobs.filter(row => row.appointmentId === id && row.jobType === jobType).map(row => ({ ...row }));
             return jobs.filter(row => row.id === id).map(row => ({ ...row }));
           },
         };
@@ -182,6 +187,7 @@ beforeEach(() => {
   resend.calls.length = 0;
   resend.script.length = 0;
   resend.failFor.clear();
+  resend.refusedFor.clear();
   resend.rateLimitedFor.clear();
   resend.rateLimitedOnceFor.clear();
   resend.retryAfterSeconds = "1";
@@ -572,22 +578,39 @@ describe("page de statut aux valeurs de production : un 429 passager garde son n
     expect(resend.calls.filter(call => (call.message.to as string[])[0] === "z2@example.test" && String(call.message.subject).startsWith("Facture"))).toHaveLength(1);
   });
 
-  it("l’alerte « Échec d’envoi » d’une confirmation refusée, dont la réponse incertaine arrive après le budget de la page, est redemandée sous la même clé : rien ne la remet en file", async () => {
+  it.each([
+    ["une réponse incertaine (5xx)", "5xx"],
+    ["sa limite de débit (429)", "429"],
+  ])("l’alerte « Échec d’envoi » d’une confirmation refusée, à laquelle Resend oppose %s après le budget de la page, n’est pas redemandée après la réponse : elle attend en file, et le passage suivant l’envoie une seule fois, sous la même clé", async (_answer, outcome) => {
     // Resend à 1,6 s : le refus de la confirmation revient vers +1,9 s, la
-    // réponse 5xx de l’alerte après la fin du budget (+3 s).
+    // réponse à l’alerte après la fin du budget (+3 s).
     resend.latencyMs = 1_600;
-    resend.script.push("422", "5xx");
+    resend.script.push("422", outcome);
     const { jobs } = memoryDatabase([job(1, "owner", { status: "completed", attempts: 1 }), job(2, "confirmation")]);
     const startedAt = Date.now();
+    let answeredAt = Number.POSITIVE_INFINITY;
+    const alerts = () => resend.calls.filter(call => String(call.message.subject).startsWith("Échec d’envoi après paiement"));
 
-    const page = processFulfillmentBestEffort(42, paymentStatusPageFulfillment.timeoutMs);
+    const page = processFulfillmentBestEffort(42, paymentStatusPageFulfillment.timeoutMs).then(() => { answeredAt = Date.now(); });
     await vi.advanceTimersByTimeAsync(10_000);
     await page;
 
     expect(jobs.find(row => row.jobType === "confirmation")).toMatchObject({ status: "failed" });
-    const alerts = resend.calls.filter(call => String(call.message.subject).startsWith("Échec d’envoi après paiement"));
-    expect(alerts[0].at - startedAt).toBeGreaterThan(paymentStatusPageFulfillment.timeoutMs);
-    expect(alerts.map(call => call.options?.idempotencyKey)).toEqual(["appointment-confirmation-failure-APTOWNER0001-refused", "appointment-confirmation-failure-APTOWNER0001-refused"]);
+    expect(alerts()).toHaveLength(1);
+    expect(alerts()[0].startedAt).toBeLessThan(answeredAt);
+    expect(alerts()[0].at - startedAt).toBeGreaterThan(paymentStatusPageFulfillment.timeoutMs);
+    // Ni perdue ni redemandée après la réponse : en file, due, sans tentative comptée.
+    expect(jobs.find(row => row.jobType === "confirmation_failure_alert")).toMatchObject({ status: "queued", attempts: 0 });
+
+    // Le passage suivant (tâche planifiée, webhook, page) l’envoie sous la même clé ; le suivant, plus rien.
+    for (let run = 0; run < 2; run += 1) {
+      const next = processDueAppointmentFulfillmentJobs();
+      await vi.advanceTimersByTimeAsync(10_000);
+      await next;
+    }
+    expect(alerts().map(call => call.options?.idempotencyKey)).toEqual(["appointment-confirmation-failure-APTOWNER0001-refused", "appointment-confirmation-failure-APTOWNER0001-refused"]);
+    expect(alerts()[1].message.text).toBe(alerts()[0].message.text);
+    expect(jobs.find(row => row.jobType === "confirmation_failure_alert")).toMatchObject({ status: "completed", attempts: 1 });
   });
 
   it("l’alerte de remboursement au médecin, dont la réponse incertaine arrive après le budget de la page, n’est pas redemandée après la réponse : son job retourne en file et le passage suivant l’envoie sous la même clé", async () => {
@@ -653,12 +676,21 @@ describe("alertes au médecin envoyées depuis un job : dans le créneau d’env
     expect(jobs.map(row => [row.jobType, row.status])).toEqual([["owner", "completed"], ["confirmation", "failed"], ["invoice", "completed"]]);
   });
 
-  it("sous le budget de la page, une alerte dont le créneau tomberait après la réponse part tout de suite, avant elle, au lieu d’attendre", async () => {
+  // Passages suivants (tâche planifiée, webhook, page) : le premier envoie ce qui attend, le second ne trouve plus rien.
+  async function runTwice() {
+    for (let run = 0; run < 2; run += 1) {
+      const next = processDueAppointmentFulfillmentJobs();
+      await vi.advanceTimersByTimeAsync(10_000);
+      await next;
+    }
+  }
+
+  it("sous le budget de la page, une alerte dont le créneau tomberait après la réponse ne part ni sans ce créneau ni après la réponse : elle attend en file, et le passage suivant l’envoie une seule fois, une pause après l’envoi précédent", async () => {
     // Un 429 passager (retry-after de 1 s) sur la notification au médecin
     // repousse la confirmation vers la fin du budget de la page (3 s) : son
     // refus revient alors qu’une pause après elle tomberait après la réponse.
     resend.script.push("429", "ok", "422");
-    memoryDatabase([job(1, "owner"), job(2, "confirmation"), job(3, "invoice")]);
+    const { jobs } = memoryDatabase([job(1, "owner"), job(2, "confirmation"), job(3, "invoice")]);
     const startedAt = Date.now();
     let answeredAt = Number.POSITIVE_INFINITY;
 
@@ -666,11 +698,39 @@ describe("alertes au médecin envoyées depuis un job : dans le créneau d’env
     await vi.advanceTimersByTimeAsync(10_000);
     await page;
 
+    expect(timeline(startedAt).map(send => send.subject)).toEqual(["Nouvelle", "Nouvelle", "Confirmation"]);
+    expect(timeline(startedAt).filter(send => send.startedAt >= answeredAt)).toEqual([]);
+    expect(jobs.map(row => [row.jobType, row.status, row.attempts])).toEqual([["owner", "completed", 1], ["confirmation", "failed", 1], ["invoice", "queued", 0], ["confirmation_failure_alert", "queued", 0]]);
+
+    await runTwice();
     const sends = timeline(startedAt);
-    const alert = sends.find(send => send.subject === "Échec")!;
-    const confirmation = sends.find(send => send.subject === "Confirmation")!;
-    expect(alert.startedAt).toBeLessThan(answeredAt);
-    expect(alert.startedAt - confirmation.startedAt).toBeLessThan(PACING_DELAY_MS);
+    expect(sends.map(send => send.subject)).toEqual(["Nouvelle", "Nouvelle", "Confirmation", "Facture", "Échec"]);
+    for (let index = 1; index < sends.length; index += 1) expect(sends[index].startedAt - sends[index - 1].startedAt).toBeGreaterThanOrEqual(PACING_DELAY_MS);
+    expect(resend.calls.at(-1)?.options?.idempotencyKey).toBe("appointment-confirmation-failure-APTOWNER0001-refused");
+    expect(String(resend.calls.at(-1)?.message.text)).toContain("a été refusé par le service d’envoi");
+    expect(jobs.find(row => row.jobType === "confirmation_failure_alert")).toMatchObject({ status: "completed", attempts: 1 });
+  });
+
+  it("un refus lent qui revient après la réponse de la page : l’alerte ne part pas après elle ; elle attend en file, et le passage suivant l’envoie une seule fois", async () => {
+    // Resend à 2,9 s : le refus de la confirmation, partie vers +0,2 s, revient après la réponse de la page (+3 s).
+    resend.latencyMs = 2_900;
+    resend.script.push("422");
+    const { jobs } = memoryDatabase([job(1, "owner", { status: "completed", attempts: 1 }), job(2, "confirmation")]);
+    const startedAt = Date.now();
+    let answeredAt = Number.POSITIVE_INFINITY;
+
+    const page = processFulfillmentBestEffort(42, paymentStatusPageFulfillment.timeoutMs).then(() => { answeredAt = Date.now() - startedAt; });
+    await vi.advanceTimersByTimeAsync(10_000);
+    await page;
+
+    expect(resend.calls[0].at - startedAt).toBeGreaterThan(answeredAt);
+    expect(timeline(startedAt).map(send => send.subject)).toEqual(["Confirmation"]);
+    expect(jobs.map(row => [row.jobType, row.status, row.attempts])).toEqual([["owner", "completed", 1], ["confirmation", "failed", 1], ["confirmation_failure_alert", "queued", 0]]);
+
+    await runTwice();
+    expect(timeline(startedAt).map(send => send.subject)).toEqual(["Confirmation", "Échec"]);
+    expect(resend.calls[1].options?.idempotencyKey).toBe("appointment-confirmation-failure-APTOWNER0001-refused");
+    expect(jobs.find(row => row.jobType === "confirmation_failure_alert")).toMatchObject({ status: "completed", attempts: 1 });
   });
 
   it("le nouvel essai d’une alerte sous sa clé, après une réponse incertaine, attend lui aussi une pause après le premier", async () => {
@@ -691,5 +751,35 @@ describe("alertes au médecin envoyées depuis un job : dans le créneau d’env
     const sends = timeline(startedAt);
     expect(sends.map(send => send.subject)).toEqual(["Remboursement", "Remboursement", "Confirmation", "Échec", "Échec"]);
     for (const index of [1, 3, 4]) expect(sends[index].startedAt - sends[index - 1].startedAt).toBeGreaterThanOrEqual(PACING_DELAY_MS);
+  });
+});
+
+describe("alerte « Échec d’envoi » remise en file (ABUS-03) : écrite à son passage depuis l’email tel qu’il est alors", () => {
+  it.each([
+    ["dont l’email est parti depuis (nouvel essai, « Renvoyer »)", { status: "completed", attempts: 1 }, appointmentRow(), "failure_alert_outdated"],
+    ["d’un rendez-vous dont les données du patient ont été effacées (RGPD-12)", { status: "failed", attempts: 1, lastError: "provider_rejected:confirmation_email_failed" }, appointmentRow({ customerName: "Anonymisé", customerEmail: "", customerPhone: "" }), "patient_data_erased"],
+  ])("l’alerte en file %s est close sans partir", async (_case, confirmation, appointment, lastError) => {
+    const { jobs } = memoryDatabase([job(2, "confirmation", confirmation), job(4, "confirmation_failure_alert")], appointment);
+
+    await processDueAppointmentFulfillmentJobs();
+
+    expect(resend.calls).toHaveLength(0);
+    expect(jobs.find(row => row.id === 4)).toMatchObject({ status: "completed", lastError });
+  });
+
+  it("l’alerte en file d’un email en cours d’envoi attend son issue : rendue à la file sans tentative comptée, puis envoyée par le passage suivant, l’email ayant de nouveau échoué", async () => {
+    const { jobs } = memoryDatabase([job(2, "confirmation", { status: "running", attempts: 2, lastError: "confirmation_email_failed" }), job(4, "confirmation_failure_alert")]);
+
+    await processDueAppointmentFulfillmentJobs();
+    expect(resend.calls).toHaveLength(0);
+    expect(jobs.find(row => row.id === 4)).toMatchObject({ status: "queued", attempts: 0, startedAt: null });
+
+    // Ce nouvel essai a échoué à son tour : l’email attend le suivant.
+    Object.assign(jobs.find(row => row.id === 2)!, { status: "retry", scheduledFor: new Date(Date.now() + 60 * 60_000) });
+    await processDueAppointmentFulfillmentJobs();
+    expect(subjects()).toEqual(["Échec d’envoi après paiement (APTOWNER0001)"]);
+    expect(resend.calls[0].options?.idempotencyKey).toBe("appointment-confirmation-failure-APTOWNER0001-first");
+    expect(String(resend.calls[0].message.text)).toContain("vient d’échouer (tentative 1 sur 3)");
+    expect(jobs.find(row => row.id === 4)).toMatchObject({ status: "completed", attempts: 1 });
   });
 });

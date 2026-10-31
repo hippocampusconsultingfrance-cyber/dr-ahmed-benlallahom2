@@ -767,8 +767,11 @@ describe("RES-06 — remboursements et contestations faits dans Stripe", () => {
     seedJob("confirmation");
     seedJob("refund");
     seedJob("refund_owner");
+    // The owner's alerts that the confirmation and the refund email did not go out, queued (ABUS-03).
+    seedJob("confirmation_failure_alert");
+    seedJob("refund_failure_alert");
 
-    await expect(closeUnsentAppointmentFulfillment(id)).resolves.toBe(1);
+    await expect(closeUnsentAppointmentFulfillment(id)).resolves.toBe(2);
 
     const deliveries = (await getAppointmentDeliveries([id])).get(id)!;
     expect(deliveries.map(({ jobType, state }) => ({ jobType, state }))).toEqual([
@@ -776,6 +779,8 @@ describe("RES-06 — remboursements et contestations faits dans Stripe", () => {
       { jobType: "refund", state: "retrying" },
       { jobType: "refund_owner", state: "retrying" },
     ]);
+    // The payment's alert is closed with its email; the refund's waits for its new try.
+    expect(jobStates().slice(3)).toEqual([["confirmation_failure_alert", "completed"], ["refund_failure_alert", "retry"]]);
   });
 
   it("garde le statut d’une consultation déjà faite remboursée dans Stripe et le signale au médecin", async () => {
@@ -856,12 +861,15 @@ describe("RES-06 — remboursements et contestations faits dans Stripe", () => {
     // Le remboursement est enregistré et Stripe a sa réponse ; les deux envois restent à faire.
     expect(await postEvent("charge.refunded", charge())).toEqual({ status: 200, body: { received: true, refunded: true } });
     expect(appointmentRow()).toMatchObject({ paymentStatus: "refunded", appointmentStatus: "cancelled", slotKey: null });
-    expect(jobStates()).toEqual([["refund", "retry"], ["refund_owner", "retry"]]);
+    // L’alerte d’échec de l’email au patient, qui n’a pas pu partir, attend en file (ABUS-03).
+    expect(jobStates()).toEqual([["refund", "retry"], ["refund_owner", "retry"], ["refund_failure_alert", "queued"]]);
     const toHandle = await listAppointmentDeliveriesToHandle();
     expect(toHandle.retrying.items).toEqual([expect.objectContaining({ trackingId: TRACKING_ID, jobTypes: ["refund", "refund_owner"] })]);
-    // Relivraison de Stripe : rien de plus n’est tenté avant l’heure du nouvel essai.
+    // Relivraison de Stripe : rien de plus n’est tenté avant l’heure du nouvel essai ; seule
+    // l’alerte en file, due, est retentée et, Resend toujours en panne, attend le sien.
     expect(await postEvent("charge.refunded", charge())).toEqual({ status: 200, body: { received: true, duplicate: true } });
     expect(emails.sendRefundConfirmationEmail).toHaveBeenCalledTimes(1);
+    expect(jobStates()).toEqual([["refund", "retry"], ["refund_owner", "retry"], ["refund_failure_alert", "retry"]]);
     // Alerte écrite avant l’email au patient : sa propre clé, que le texte suivant ne réemploie pas (Resend refuserait un autre contenu).
     const firstAlert = owner.notifyOwner.mock.calls.find(([payload]) => payload.title.startsWith("Remboursement constaté chez Stripe"));
     expect(firstAlert?.[0].content).toContain("n’est pas encore parti");
@@ -872,7 +880,7 @@ describe("RES-06 — remboursements et contestations faits dans Stripe", () => {
     owner.notifyOwner.mockClear();
     owner.notifyOwner.mockResolvedValue(true);
     expect(await retryAppointmentFulfillment(TRACKING_ID)).toMatchObject({ outcome: "retried", requeued: 2 });
-    expect(jobStates()).toEqual([["refund", "completed"], ["refund_owner", "completed"]]);
+    expect(jobStates()).toEqual([["refund", "completed"], ["refund_owner", "completed"], ["refund_failure_alert", "retry"]]);
     expect(emails.sendRefundConfirmationEmail).toHaveBeenLastCalledWith("patient@example.test", "Patient Test", TRACKING_ID, expect.any(Date), "100.00", { context: "refund", idempotencyKey: REFUND_EMAIL_KEY, language: "fr" });
     expect(owner.notifyOwner).toHaveBeenCalledTimes(1);
     const [alert, options] = owner.notifyOwner.mock.calls[0];
@@ -881,6 +889,11 @@ describe("RES-06 — remboursements et contestations faits dans Stripe", () => {
     expect(alert.content).toContain("Le patient a été prévenu");
     expect(options).toEqual({ idempotencyKey: `appointment-stripe-refund-${TRACKING_ID}-cancelled-notified`, stopAtDeadline: true });
     expect((await listAppointmentDeliveriesToHandle()).retrying.total).toBe(0);
+    // À l’heure de son nouvel essai, l’alerte d’échec, sans objet depuis que l’email est parti, est close sans être envoyée.
+    db().rows(appointmentFulfillmentJobs).forEach(job => { job.scheduledFor = new Date(Date.now() - 1000); });
+    expect((await runFulfillment()).status).toBe(200);
+    expect(jobStates()).toEqual([["refund", "completed"], ["refund_owner", "completed"], ["refund_failure_alert", "completed"]]);
+    expect(owner.notifyOwner).toHaveBeenCalledTimes(1);
   });
 
   it("dit au médecin quand l’email de remboursement n’est pas encore parti, et le renvoie à la tâche planifiée", async () => {
