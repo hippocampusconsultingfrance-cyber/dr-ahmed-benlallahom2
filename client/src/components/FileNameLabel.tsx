@@ -60,7 +60,10 @@ export default function FileNameLabel({ name, suffix = "", className = "" }: { n
   useLayoutEffect(() => {
     const label = labelRef.current;
     const base = baseRef.current;
-    if (!followed || !label || !base || typeof ResizeObserver === "undefined") return;
+    if (!label || !base) return;
+    // The box narrowed for the previous name no longer holds, even for a name with nothing after it.
+    base.style.maxWidth = "";
+    if (!followed || typeof ResizeObserver === "undefined") return;
     let active = true;
     const fit = () => {
       if (active) fitToEllipsis(base);

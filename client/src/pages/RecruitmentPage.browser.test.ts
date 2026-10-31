@@ -130,6 +130,22 @@ describe.skipIf(!executablePath)("nom du CV choisi dans les formulaires de candi
       await page.context().close();
     }, 60_000);
 
+    it(`${form.route} : un nom sans extension choisi après un nom coupé prend toute la largeur de son cadre`, async () => {
+      const { page, shown } = await chooseCv(form, 360, "fr", LONG_NAME);
+      // A file the form refuses, but whose name is shown all the same.
+      const withoutExtension = LONG_NAME.slice(0, -".pdf".length);
+      await page.locator(form.input).setInputFiles({ name: withoutExtension, mimeType: "application/octet-stream", buffer: Buffer.from("%PDF-1.4\n%%EOF\n") });
+      await expect.poll(() => shown.getAttribute("title")).toBe(withoutExtension);
+      const { baseWidth, labelWidth, cut } = await shown.evaluate((label) => {
+        const baseName = label.querySelector("[aria-hidden='true']")!;
+        return { baseWidth: baseName.getBoundingClientRect().width, labelWidth: label.getBoundingClientRect().width, cut: baseName.scrollWidth > baseName.clientWidth };
+      });
+      expect(cut).toBe(true);
+      // Not the narrower box fitted to the previous name's ellipsis.
+      expect(Math.abs(labelWidth - baseWidth)).toBeLessThan(0.5);
+      await page.context().close();
+    }, 60_000);
+
     it.each([
       [412, "fr", REAL_NAME.length, REAL_NAME],
       [412, "en", LONG_NAME.length, LONG_NAME],
