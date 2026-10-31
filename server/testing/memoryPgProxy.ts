@@ -441,7 +441,7 @@ export function createMemoryPg(tables: PgTable[], options: { now?: () => Date; m
   const data = new Map<string, Row[]>();
   const sequences = new Map<string, number>();
   const statements: Array<{ sql: string; params: unknown[] }> = [];
-  const failures: Array<{ pattern: RegExp; remaining: number }> = [];
+  const failures: Array<{ pattern: RegExp; remaining: number; code?: string }> = [];
 
   for (const table of tables) {
     const config = getTableConfig(table);
@@ -503,7 +503,7 @@ export function createMemoryPg(tables: PgTable[], options: { now?: () => Date; m
     if (failure) {
       failure.remaining -= 1;
       if (failure.remaining === 0) failures.splice(failures.indexOf(failure), 1);
-      throw new Error(`Failed query: ${sqlText}`);
+      throw Object.assign(new Error(`Failed query: ${sqlText}`), failure.code ? { code: failure.code } : {});
     }
     const now = pgTimestamp(clock());
     const tokens = tokenize(sqlText);
@@ -710,9 +710,13 @@ export function createMemoryPg(tables: PgTable[], options: { now?: () => Date; m
   return {
     db,
     statements,
-    /** The next `times` statements whose SQL matches `pattern` fail ("Failed query: …"), as a trigger refusing them would. */
-    failNext(pattern: RegExp, times = 1) {
-      failures.push({ pattern, remaining: times });
+    /**
+     * The next `times` statements whose SQL matches `pattern` fail ("Failed
+     * query: …"), as a trigger refusing them would, with this SQLSTATE when
+     * given (23514 for a CHECK).
+     */
+    failNext(pattern: RegExp, times = 1, code?: string) {
+      failures.push({ pattern, remaining: times, code });
     },
     rows(table: PgTable | string) {
       const name = typeof table === "string" ? table : getTableConfig(table).name;

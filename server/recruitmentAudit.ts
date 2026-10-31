@@ -13,21 +13,31 @@ export type RecruitmentAuditAction =
   | "export"
   | "unsubscribe";
 
-/** Persist a minimal, non-sensitive audit record for a recruitment action. */
-export async function logRecruitmentAction(input: {
+type RecruitmentAuditRecord = {
   applicationId?: number | null;
   adminOpenId: string;
   action: RecruitmentAuditAction;
   metadata?: Record<string, unknown>;
-}): Promise<void> {
+};
+
+/**
+ * The insert of these audit records, not yet sent: for a db.batch that writes
+ * them with the change they record, both or neither (DATA-01).
+ */
+export function recruitmentAuditInsert(db: NonNullable<Awaited<ReturnType<typeof getDb>>>, records: RecruitmentAuditRecord[]) {
+  return db.insert(recruitmentAuditLogs).values(records.map(record => ({
+    applicationId: record.applicationId ?? null,
+    adminOpenId: record.adminOpenId,
+    action: record.action,
+    metadata: record.metadata ? JSON.stringify(record.metadata) : null,
+  })));
+}
+
+/** Persist a minimal, non-sensitive audit record for a recruitment action. */
+export async function logRecruitmentAction(input: RecruitmentAuditRecord): Promise<void> {
   const db = await getDb();
   if (!db) throw new Error("Database connection failed");
-  await db.insert(recruitmentAuditLogs).values({
-    applicationId: input.applicationId ?? null,
-    adminOpenId: input.adminOpenId,
-    action: input.action,
-    metadata: input.metadata ? JSON.stringify(input.metadata) : null,
-  });
+  await recruitmentAuditInsert(db, [input]);
 }
 
 export function parseRecruitmentJsonArray(value: string | null | undefined): string[] {

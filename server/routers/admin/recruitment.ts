@@ -18,7 +18,7 @@ import { storageGetSignedUrl } from "../../storage";
 import { canAdminDownloadCv, CV_DOWNLOAD_UNAVAILABLE_MESSAGE } from "../../recruitmentDownloadPolicy";
 import { eq, and, or, sql, desc, inArray, isNull, ne } from "drizzle-orm";
 import { sendRecruitmentTemplateEmail, type RecruitmentEmailLanguage, type RecruitmentEmailTemplate } from "../../_core/notifications";
-import { logRecruitmentAction, matchesRecruitmentProfile, parseRecruitmentJsonArray, RECRUITMENT_PROFILE_SCAN_LIMIT } from "../../recruitmentAudit";
+import { logRecruitmentAction, matchesRecruitmentProfile, parseRecruitmentJsonArray, RECRUITMENT_PROFILE_SCAN_LIMIT, recruitmentAuditInsert } from "../../recruitmentAudit";
 import { analysedLanguageNames } from "../../clientBriefMatching";
 import { certificationFactLabel, recruitmentFactLabel, type RecruitmentFact } from "../../../shared/recruitmentFactOrigins";
 import { recruitmentApplicationStatusLabel } from "../../../shared/recruitmentApplicationStatuses";
@@ -456,7 +456,9 @@ export const adminRecruitmentRouter = router({
       const header = ["Prénom", "Nom", "Email", "Téléphone", "Spécialité", "Pays ciblés", "Langues", "Expérience (ans)", "Disponibilité", "Mobilité", "Certifications", "Score IA", "Statut"];
       csv = [header.map(csvCell).join(";"), ...rows.map(row => [row.firstName, row.lastName, row.email, row.phone, row.specialty, row.targetCountries, row.languages, row.yearsExperience, row.availability, row.mobility, row.certifications, row.aiScore, row.status].map(csvCell).join(";"))].join("\n");
     }
-    await Promise.all(rows.map(row => logRecruitmentAction({ applicationId: row.id, adminOpenId: ctx.user.openId, action: "export", metadata: { type: input.type, briefId: input.briefId || null } })));
+    // One audit line per candidate, in one statement: all of them or, when
+    // the database refuses one, none and no file (DATA-01).
+    await recruitmentAuditInsert(db, rows.map(row => ({ applicationId: row.id, adminOpenId: ctx.user.openId, action: "export" as const, metadata: { type: input.type, briefId: input.briefId || null } })));
     // excludedWithoutConsent: shortlisted candidates left out for lack of agreement (RGPD-03).
     return { filename: `${input.type}-${new Date().toISOString().slice(0, 10)}.csv`, csv, count: rows.length, excludedWithoutConsent };
   }),
