@@ -613,7 +613,8 @@ async function runJob(id: number) {
     } else {
       // The owner's failure alert of a patient email, queued when it could not
       // leave right after that failure (ABUS-03): written from the email's job
-      // as it stands, under the key it had then.
+      // and the appointment as they stand now; its key follows the address the
+      // appointment now holds, which it quotes (failureAlertOf).
       const patientJobType = alertedPatientJob(jobType)!;
       const [patientJob] = await db.select().from(appointmentFulfillmentJobs)
         .where(and(eq(appointmentFulfillmentJobs.appointmentId, appointment.id), eq(appointmentFulfillmentJobs.jobType, patientJobType))).limit(1);
@@ -667,8 +668,8 @@ async function runJob(id: number) {
       // a pause after the email that failed (ABUS-03). When that slot may come
       // after the end of the immediate budget, or Resend does not take it, it
       // is queued as a job of its own, sent by the next processing under the
-      // same key: never without its slot nor after the page or the webhook has
-      // answered, and not lost.
+      // same key while the address is unchanged: never without its slot nor
+      // after the page or the webhook has answered, and not lost.
       const alert = failureAlertOf(jobType, appointment, { attempts: job.attempts, maxAttempts: job.maxAttempts, lastError, refused, terminal });
       const delivered = (await alertSendSlot()) && (await notifyOwner(alert.payload, { idempotencyKey: alert.idempotencyKey, stopAtDeadline: true }).catch(() => false));
       if (!delivered) {
