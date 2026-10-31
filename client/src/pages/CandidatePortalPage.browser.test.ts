@@ -27,6 +27,8 @@ const executablePath = findChromium();
 const root = path.resolve(import.meta.dirname, "../../..");
 
 const LONG_NAME = "attestation-de-travail-chu-de-lyon-service-anesthesie-reanimation-2015-2024-signee-et-tamponnee.pdf";
+/** A name that fits in its card on a tablet or a computer: shown in full there, never cut. */
+const MEDIUM_NAME = "Diplome_docteur_medecine_2019.pdf";
 /** An « Autre document » label of the 160 characters the form allows, without a space. */
 const LONG_OTHER_LABEL = "Attestation_de_reussite_au_concours_de_praticien_attache_associe_session_2024_CHU_de_Lyon_service_anesthesie_reanimation_et_medecine_perioperatoire_signee".padEnd(160, "x");
 type Procedure = () => unknown;
@@ -34,7 +36,7 @@ const procedures: Record<string, Procedure> = {
   "candidatePortal.me": () => ({ id: 7, email: "vera@test.local", firstName: "Vera", lastName: "Exemple", emailVerifiedAt: new Date(Date.UTC(2026, 8, 1)), linkedApplicationId: null, documentConsentAt: new Date(Date.UTC(2026, 8, 1)) }),
   "candidatePortal.documents": () => [
     { id: 1, category: "employment_evidence", categoryOtherLabel: null, originalName: LONG_NAME, mimeType: "application/pdf", sizeBytes: 1_200, status: "uploaded", reviewedAt: null, createdAt: new Date(Date.UTC(2026, 9, 1)) },
-    { id: 2, category: "diploma", categoryOtherLabel: null, originalName: "diplome.pdf", mimeType: "application/pdf", sizeBytes: 80_000, status: "reviewed", reviewedAt: new Date(Date.UTC(2026, 9, 2)), createdAt: new Date(Date.UTC(2026, 9, 1)) },
+    { id: 2, category: "diploma", categoryOtherLabel: null, originalName: MEDIUM_NAME, mimeType: "application/pdf", sizeBytes: 80_000, status: "reviewed", reviewedAt: new Date(Date.UTC(2026, 9, 2)), createdAt: new Date(Date.UTC(2026, 9, 1)) },
     { id: 3, category: "other", categoryOtherLabel: LONG_OTHER_LABEL, originalName: "attestation.pdf", mimeType: "application/pdf", sizeBytes: 9_000, status: "uploaded", reviewedAt: null, createdAt: new Date(Date.UTC(2026, 9, 3)) },
   ],
   "candidatePortal.sessions": () => [],
@@ -104,6 +106,28 @@ describe.skipIf(!executablePath)("coffre du candidat dans un navigateur", () => 
     expect(layout.extension).toBe(".pdf · 1 KB");
     expect(layout.extensionRight).toBeLessThanOrEqual(Math.min(width, layout.cardRight));
     expect(layout.title).toBe(LONG_NAME);
+    await page.context().close();
+  }, 60_000);
+
+  it.each([
+    [412, "fr"],
+    [1024, "fr"],
+    [1440, "en"],
+  ])("à %i px (%s), un nom de fichier qui tient dans sa carte s’affiche en entier, sans coupe", async (width, language) => {
+    const page = await openPortal(width, language);
+    const layout = await page.evaluate((name) => {
+      const label = Array.from(document.querySelectorAll("[title]")).find((element) => element.getAttribute("title") === name)!;
+      const [baseName, extension] = Array.from(label.querySelectorAll(":scope > span"));
+      return {
+        cut: baseName.scrollWidth > baseName.clientWidth,
+        shown: `${baseName.textContent}${extension.textContent}`,
+        extensionRight: extension.getBoundingClientRect().right,
+        cardRight: label.closest("[data-slot='card']")?.getBoundingClientRect().right ?? Number.POSITIVE_INFINITY,
+      };
+    }, MEDIUM_NAME);
+    expect(layout.cut).toBe(false);
+    expect(layout.shown).toBe(`${MEDIUM_NAME} · 78 KB`);
+    expect(layout.extensionRight).toBeLessThanOrEqual(layout.cardRight);
     await page.context().close();
   }, 60_000);
 
