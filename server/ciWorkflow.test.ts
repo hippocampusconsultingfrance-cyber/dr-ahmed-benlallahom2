@@ -203,6 +203,13 @@ const STEP_SILENCERS: readonly Silencer[] = [
   { what: "$(…) outside an assignment", pattern: /^(?![ \t]*[A-Za-z_]\w*="?(?:\$\((?:[^$`();&|\n]|\$(?!\())*\)|`[^$`();&|\n]*`)"?[ \t]*$).*(?:\$\((?!\()|`)/m },
   { what: "eval, trap or sh -c", pattern: /\b(?:eval|trap|(?:ba|da|z)?sh\s+(?:[^\s;&|]+\s+)*?-[a-z]*c[a-z]*)\b/ },
   { what: "knip --no-exit-code or --max-issues", pattern: /\bknip\b[^;&|\n]*\s--(?:no-exit-code|max-issues)\b/ },
+  // Options that leave a check running but looking at less: tests set aside or none
+  // required, another knip or TypeScript configuration, the help or version printed
+  // instead of a check.
+  { what: "vitest --exclude or --passWithNoTests", pattern: /\bvitest\b[^;&|\n]*\s--(?:exclude|passWithNoTests|pass-with-no-tests)\b/ },
+  { what: "knip -c, --config or --include", pattern: /\bknip\b[^;&|\n]*\s(?:-c|--config|--include)(?=[\s=]|$)/m },
+  { what: "tsc -p to another configuration", pattern: /\btsc\b[^;&|\n]*\s(?:-p|--project)(?:\s+|=)(?!\s)(?!(?:\.\/?|(?:\.\/)?tsconfig\.json)(?=[\s;&|]|$))/m },
+  { what: "--help or --version", pattern: /\b(?:tsc|vitest|knip)\b[^;&|\n]*\s(?:--help|-h|--version)(?=[\s;&|]|$)/m },
 ];
 
 /**
@@ -215,21 +222,93 @@ const SCRIPT_SILENCERS: readonly Silencer[] = [
   { what: "|", pattern: /(?:^|[^|])\|(?!\|)/ },
 ];
 
-type NamedException = { where: string; line: string; reason: string };
+/** `allows`: the one check this line is left out of; without it, every check. */
+type NamedException = { where: string; line: string; reason: string; allows?: string };
 
 /**
  * The lines the checks below leave out, each named by its step (`step "Verify TypeScript"`)
- * or script (`script "knip"`) and its exact text, with why a failure on that line still
- * fails the job. None today.
+ * or script (`script "knip"`) and its exact text, with why that is no failure going
+ * unnoticed. A line changed in any way is checked again.
  */
-const NAMED_EXCEPTIONS: readonly NamedException[] = [];
+const NAMED_EXCEPTIONS: readonly NamedException[] = [
+  {
+    where: 'script "test:ci"',
+    line: "vitest run --exclude server/googleDriveOAuthCredentials.test.ts --exclude server/googleDriveExport.test.ts",
+    allows: "vitest --exclude or --passWithNoTests",
+    reason: "googleDriveOAuthCredentials.test.ts calls Google's real OAuth endpoint, which the CI must not reach; googleDriveExport.test.ts has been set aside since 6139269 (CODE-11 brings it back). Any other file left out changes the line.",
+  },
+];
 
 /** What in a command lets it pass though one of its commands fails, outside the lines named for it with a reason. */
 function silencersIn(command: string, where: string, silencers: readonly Silencer[], exceptions: readonly NamedException[]) {
-  const named = new Set(exceptions.filter(exception => exception.where === where && exception.reason.trim()).map(exception => exception.line));
-  const text = unquoted(command.split("\n").map(line => (named.has(line.trim()) ? "" : line)).join("\n")).trim();
-  return silencers.filter(({ pattern }) => pattern.test(text)).map(({ what }) => what);
+  const named = exceptions.filter(exception => exception.where === where && exception.reason.trim());
+  return silencers.filter(({ what, pattern }) => {
+    const left = new Set(named.filter(exception => (exception.allows ?? what) === what).map(exception => exception.line));
+    return pattern.test(unquoted(command.split("\n").map(line => (left.has(line.trim()) ? "" : line)).join("\n")).trim());
+  }).map(({ what }) => what);
 }
+
+/**
+ * The simple commands of a step or a script, as the shell runs them: split at each
+ * operator and line, without comments, quoted text (read as '' or ""), the keywords
+ * before a command (`then`, `!`…) nor repeated spaces.
+ */
+function simpleCommands(command: string) {
+  return unquoted(command)
+    .split(/\|\||&&|[;&|\n(){}]/)
+    .map(part => part.trim().replace(/^(?:(?:then|do|else|if|elif|while|until|time|!)\s+)+/, "").replace(/\s+/g, " "))
+    .filter(Boolean);
+}
+
+/**
+ * The commands the quality job must run, each a simple command of one of its steps,
+ * whole: not an argument (`echo pnpm check`), a comment (`true # pnpm check`) nor
+ * given other arguments (`pnpm check --help`, passed on to the script).
+ */
+const REQUIRED_STEP_COMMANDS = [
+  "pnpm install --frozen-lockfile",
+  "pnpm check",
+  "pnpm test:ci",
+  "pnpm build",
+  "node scripts/check-performance-budgets.mjs",
+  "node scripts/smoke-built-server.mjs",
+  "node scripts/check-migrations-in-sync.mjs",
+  "git diff --exit-code -- drizzle/pg",
+  "pnpm knip",
+];
+
+/**
+ * The tool each package.json script those steps run must start a simple command
+ * with, after its variables (`NODE_ENV=production vite build`); its arguments are
+ * read by the silencers above. What `node -e '…'` or a script in a file of its own
+ * (`node scripts/check-performance-budgets.mjs`) runs cannot be read here: such a
+ * script is neither covered nor refused, only the steps that run it.
+ */
+const REQUIRED_SCRIPT_COMMANDS: Readonly<Record<string, readonly string[]>> = {
+  check: ["tsc --noEmit"],
+  "test:ci": ["vitest run"],
+  build: ["vite build"],
+  knip: ["knip"],
+};
+
+/** Whether a simple command starts with this one, after its variable assignments, and then ends or goes on with an argument. */
+const startsWithCommand = (simple: string, command: string) =>
+  `${simple.replace(/^(?:[A-Za-z_]\w*=\S*\s+)*/, "")} `.startsWith(`${command} `);
+
+/** Whether this script runs the command, itself or through a script it runs (`"check": "pnpm run typecheck"`). */
+function scriptRunsCommand(name: string, command: string, scripts: Record<string, string>, seen = new Set<string>()): boolean {
+  if (seen.has(name) || !Object.hasOwn(scripts, name)) return false;
+  seen.add(name);
+  return simpleCommands(scripts[name]!).some(simple => startsWithCommand(simple, command)
+    || [...scriptsRun(simple, scripts).keys()].some(other => scriptRunsCommand(other, command, scripts, seen)));
+}
+
+/**
+ * The conditions a quality step may run under besides none: after the build, so that each
+ * check reports even when another fails. Any other one (`${{ !true }}`, `failure()`,
+ * `github.event_name == 'never'`) could skip a check without failing the job.
+ */
+const STEP_CONDITIONS: readonly string[] = [AFTER_BUILD];
 
 /** The package.json scripts a command runs, as `pnpm <script>`, `pnpm run <script>`, `yarn <script>` or `npm run <script>`, then those they run in turn. */
 function scriptsRun(command: string, scripts: Record<string, string>, found = new Map<string, string>()) {
@@ -251,18 +330,27 @@ function expectNoNeutralizedStep(workflow: string, packageJson: string, exceptio
   // other shell (`bash {0}`, `sh`…, set in a step or in `defaults:`) would let a failed
   // command go on to the next one unnoticed.
   expect(workflow).not.toMatch(/^ *shell:(?! *bash *$)/m);
+  // Nor a condition on the whole job, nor code loaded into each node process (--require, --import).
+  expect(quality).not.toMatch(/^ {4}if:/m);
+  expect(workflow).not.toMatch(/\bNODE_OPTIONS\b/);
   for (const step of steps) {
     expect(step.keys.shell?.trim() ?? "bash", step.name).toBe("bash");
     expect(step.keys["continue-on-error"] ?? "false", step.name).toBe("false");
     expect(silencersIn(step.run, `step "${step.name}"`, STEP_SILENCERS, exceptions), step.name).toEqual([]);
     expect(pipesWithoutPipefail(step), step.name).toEqual([]);
+    // GitHub replaces an expression before the shell reads the command: `pnpm check ${{ '||' }} true`.
+    expect(step.run, step.name).not.toContain("${{");
     // A quoted condition (`'false'`, `"${{ false }}"`) is read without its YAML quotes, as GitHub reads it.
-    const condition = step.keys.if?.trim() ?? "";
-    expect(condition, step.name).not.toMatch(/^(?:false|0|\$\{\{\s*(?:false|0)\s*\}\})$/);
+    const condition = step.keys.if?.trim();
+    if (condition !== undefined) expect(STEP_CONDITIONS, step.name).toContain(condition);
   }
+  const commands = steps.flatMap(step => simpleCommands(step.run));
+  for (const command of REQUIRED_STEP_COMMANDS) expect(commands, command).toContain(command);
   const scripts = (JSON.parse(packageJson) as { scripts?: Record<string, string> }).scripts ?? {};
   for (const [name, script] of scriptsRun(steps.map(step => step.run).join("\n"), scripts)) {
     expect(silencersIn(script, `script "${name}"`, SCRIPT_SILENCERS, exceptions), `script "${name}"`).toEqual([]);
+    expect(script, `script "${name}"`).not.toMatch(/\bNODE_OPTIONS\b/);
+    for (const command of REQUIRED_SCRIPT_COMMANDS[name] ?? []) expect(scriptRunsCommand(name, command, scripts), `script "${name}": ${command}`).toBe(true);
   }
 }
 
@@ -332,7 +420,7 @@ const FIXTURE_SCRIPTS: Record<string, string> = {
   build: `vite build && esbuild server/index.ts --bundle --banner:js="import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);" --outfile=api/index.js`,
   check: "tsc --noEmit",
   knip: "knip",
-  "test:ci": "vitest run --exclude server/slow.test.ts",
+  "test:ci": "vitest run",
 };
 
 /** The fixture workflow with one of its lines changed. */
@@ -452,6 +540,16 @@ describe("intégration continue GitHub", () => {
       ["trap 'exit 0' EXIT\npnpm test:ci", ["eval, trap or sh -c"]],
       ["pnpm knip --no-exit-code", ["knip --no-exit-code or --max-issues"]],
       ["pnpm knip --max-issues=50", ["knip --no-exit-code or --max-issues"]],
+      // A check that runs, but on less: tests set aside or none required, another configuration, its help.
+      ["pnpm exec vitest run --exclude '**'", ["vitest --exclude or --passWithNoTests"]],
+      ["npx vitest run --passWithNoTests", ["vitest --exclude or --passWithNoTests"]],
+      ["pnpm knip -c knip.empty.json", ["knip -c, --config or --include"]],
+      ["pnpm knip --config=knip.empty.json", ["knip -c, --config or --include"]],
+      ["pnpm knip --include files", ["knip -c, --config or --include"]],
+      ["pnpm exec tsc --noEmit -p tsconfig.empty.json", ["tsc -p to another configuration"]],
+      ["pnpm exec tsc --project=tsconfig.empty.json", ["tsc -p to another configuration"]],
+      ["pnpm exec tsc --noEmit --help", ["--help or --version"]],
+      ["pnpm exec vitest -h", ["--help or --version"]],
       // What `$(…)` runs is read, even within double quotes, and a line carried on by `\` is the same command.
       ['typed="$(pnpm check || true)"', ["||", "$(…) outside an assignment"]],
       ["pnpm check \\\n  || true", ["||"]],
@@ -466,6 +564,10 @@ describe("intégration continue GitHub", () => {
       ["if ! [ -f dist/index.js ]; then exit 1; fi\npnpm check && pnpm test:ci", []],
       ["set -eo pipefail\nset +x\npnpm check", []],
       ['untracked="$(git status --porcelain -- "$dir" drizzle/pg)"\ntyped=`pnpm check`', []],
+      // The project's own configuration, an option named like a refused one, an argument that is no option.
+      ["pnpm exec tsc --noEmit -p tsconfig.json\npnpm exec tsc -p .", []],
+      ["pnpm knip --reporter compact --no-progress\npnpm exec vitest run --reporter=dot", []],
+      ["echo --exclude && pnpm check", []],
     ];
     for (const [command, found] of steps) expect(inStep(command), command).toEqual(found);
     // A script keeps only its last command's status, and that of a pipe's last command.
@@ -476,6 +578,7 @@ describe("intégration continue GitHub", () => {
       ["knip | tee knip.log", ["|"]],
       ["echo $(knip)", ["$(…) outside an assignment"]],
       ["knip --no-exit-code", ["knip --no-exit-code or --max-issues"]],
+      ["vitest run --exclude server/x.test.ts", ["vitest --exclude or --passWithNoTests"]],
       ["tsc --noEmit && vitest run", []],
       [FIXTURE_SCRIPTS.build!, []],
     ];
@@ -511,6 +614,53 @@ describe("intégration continue GitHub", () => {
     expect(verify(named, {}, [{ ...exception, reason: " " }])).toThrow(/^Verify TypeScript: /);
     expect(verify(named, {}, [{ ...exception, where: 'step "Run test suite"' }])).toThrow(/^Verify TypeScript: /);
     expect(verify(FIXTURE_WORKFLOW, { knip: "knip || exit 1" }, [{ where: 'script "knip"', line: "knip || exit 1", reason: "exits 1 itself" }])).not.toThrow();
+  });
+
+  it("refuse une expression ${{ }} dans un run, un if: autre que celui d'après le build, une commande requise lue comme texte, NODE_OPTIONS et une option qui affaiblit un contrôle (CODE-14)", () => {
+    const check = "        run: pnpm check\n";
+    const tests = "        run: pnpm test:ci\n";
+    const verify = (workflow: string, scripts: Record<string, string> = {}, exceptions?: readonly NamedException[]) => () =>
+      expectNoNeutralizedStep(workflow, fixturePackageJson(scripts), exceptions);
+    // GitHub replaces the expression before bash reads the command: `pnpm check || true`.
+    expect(verify(changed(check, "        run: pnpm check ${{ '||' }} true\n"))).toThrow(/^Verify TypeScript: /);
+    // A condition other than the one after the build can skip the step without failing the job.
+    for (const condition of ["${{ !true }}", "failure()", "github.event_name == 'never'", "always() && false", `"${AFTER_BUILD} && false"`]) {
+      expect(verify(changed(tests, `        if: ${condition}\n${tests}`)), condition).toThrow(/^Run test suite: /);
+    }
+    expect(verify(changed(tests, `        if: ${AFTER_BUILD}\n${tests}`))).not.toThrow();
+    expect(verify(changed("    timeout-minutes: 20\n", "    timeout-minutes: 20\n    if: github.event_name == 'never'\n"))).toThrow();
+    // A required command that only appears as text, a comment or with other arguments is never run.
+    for (const run of ["echo pnpm check", "true # pnpm check", "pnpm check --help", "'echo pnpm check'", "|\n          printf '%s' pnpm check"]) {
+      expect(verify(changed(check, `        run: ${run}\n`)), run).toThrow(/^pnpm check: /);
+    }
+    expect(verify(changed("          git diff --exit-code -- drizzle/pg\n", "          echo git diff --exit-code -- drizzle/pg\n"))).toThrow(/^git diff --exit-code -- drizzle\/pg: /);
+    // Followed by a comment, or one of several commands, it is run.
+    expect(verify(changed(check, "        run: |\n          pnpm check # the whole project\n          echo \"typed; || done\"\n"))).not.toThrow();
+    // Nor a script that only names its tool, or runs another one.
+    for (const scripts of [{ check: "echo tsc --noEmit" }, { check: "true # tsc --noEmit" }, { check: "tsc" }, { "test:ci": "node scripts/run-tests.mjs" }, { knip: "echo knip" }]) {
+      const [name] = Object.keys(scripts);
+      expect(verify(FIXTURE_WORKFLOW, scripts), name).toThrow(new RegExp(`^script "${name}": `));
+    }
+    expect(verify(FIXTURE_WORKFLOW, { build: "NODE_ENV=production vite build && esbuild server/index.ts --outfile=api/index.js" })).not.toThrow();
+    // Through another script, the tool itself still has to run.
+    expect(verify(FIXTURE_WORKFLOW, { check: "pnpm run typecheck", typecheck: "tsc --noEmit" })).not.toThrow();
+    expect(verify(FIXTURE_WORKFLOW, { check: "pnpm run typecheck", typecheck: "echo tsc --noEmit" })).toThrow(/^script "check": /);
+    // NODE_OPTIONS loads code into every node process: in the job's or a step's env, a command, or a script.
+    expect(verify(changed("      CI_DUMMY_KEY: dummy\n", "      CI_DUMMY_KEY: dummy\n      NODE_OPTIONS: --require ./ci-hook.cjs\n"))).toThrow(/NODE_OPTIONS/);
+    expect(verify(changed(tests, "        run: NODE_OPTIONS=--import=./ci-hook.mjs pnpm test:ci\n"))).toThrow(/NODE_OPTIONS/);
+    expect(verify(FIXTURE_WORKFLOW, { "test:ci": "NODE_OPTIONS='--require ./ci-hook.cjs' vitest run" })).toThrow(/^script "test:ci": /);
+    // An option that makes a check look at less.
+    for (const scripts of [{ "test:ci": "vitest run --exclude '**' --passWithNoTests" }, { knip: "knip -c knip.empty.json" }, { knip: "knip --include files" }, { check: "tsc --noEmit -p tsconfig.empty.json" }]) {
+      const [name] = Object.keys(scripts);
+      expect(verify(FIXTURE_WORKFLOW, scripts), name).toThrow(new RegExp(`^script "${name}": `));
+    }
+    // The exclusions of test:ci pass on their exact line, named with its reason, and for that check only.
+    const real = { "test:ci": NAMED_EXCEPTIONS[0]!.line };
+    expect(verify(FIXTURE_WORKFLOW, real)).not.toThrow();
+    expect(verify(FIXTURE_WORKFLOW, real, [])).toThrow(/^script "test:ci": /);
+    expect(verify(FIXTURE_WORKFLOW, real, [{ ...NAMED_EXCEPTIONS[0]!, allows: "||" }])).toThrow(/^script "test:ci": /);
+    expect(verify(FIXTURE_WORKFLOW, { "test:ci": `${real["test:ci"]} --passWithNoTests` })).toThrow(/^script "test:ci": /);
+    expect(verify(FIXTURE_WORKFLOW, { "test:ci": `${real["test:ci"]} || true` })).toThrow(/^script "test:ci": /);
   });
 
   it("borne la durée de chaque job et annule la vérification dépassée d'une pull request", async () => {
