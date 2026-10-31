@@ -1,0 +1,895 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { clientBriefCandidates, clientBriefs, cvApplications, cvCandidateCertifications, cvCandidateExperiences, cvCandidateLanguages, cvGoogleDriveExportJobs, candidateAccounts, recruitmentAuditLogs, recruitmentCampaignRecipients, recruitmentCampaigns, recruitmentEmailEvents, recruitmentFollowUpTasks } from "../drizzle/schema";
+import { buildInvisibleTextReview, buildManualReviewFallback, RECRUITMENT_ANALYSIS_PROMPT_VERSION, saveCvAnalysis, type RecruitmentAnalysisResult } from "./recruitmentAnalysis";
+import { createMemoryPg, type MemoryPg } from "./testing/memoryPgProxy";
+import type { TRPCError } from "@trpc/server";
+import type { TrpcContext } from "./_core/context";
+import { formatTrpcErrorShape } from "./_core/trpc";
+
+const state = vi.hoisted(() => ({ memory: null as null | { db: unknown } }));
+
+vi.mock("./db", () => ({
+  getDb: async () => {
+    if (!state.memory) return null;
+    // drizzle's pg-proxy has no batch (a CV analysis is saved in one): run the statements in order, like neon-http does atomically.
+    const db = state.memory.db as { batch?: unknown };
+    db.batch ??= async (queries: Array<PromiseLike<unknown>>) => { const results = []; for (const query of queries) results.push(await query); return results; };
+    return db;
+  },
+}));
+vi.mock("./adminMfa", async importOriginal => ({
+  ...await importOriginal<typeof import("./adminMfa")>(),
+  isAdminMfaVerified: vi.fn(async () => true),
+}));
+
+import { appRouter, MISSION_MATCHING_MAX_CANDIDATES } from "./routers";
+
+let memory: MemoryPg;
+
+function admin() {
+  const ctx: TrpcContext = {
+    user: { openId: "user_owner", role: "admin" } as TrpcContext["user"],
+    mfaVerified: true,
+    req: { protocol: "https", headers: {} } as TrpcContext["req"],
+    res: { clearCookie: vi.fn(), cookie: vi.fn() } as unknown as TrpcContext["res"],
+  };
+  return appRouter.createCaller(ctx);
+}
+
+let seeded = 0;
+function seedCandidate(extra: Record<string, unknown> = {}) {
+  seeded += 1;
+  return memory.seed(cvApplications, [{
+    tracking_id: `CVMISSION${String(seeded).padStart(5, "0")}`, first_name: `Prénom${seeded}`, last_name: "Nom", email: `m${seeded}@test.local`, specialty: "Pédiatrie", target_countries: "[]",
+    cv_file_key: `recruitment/cv/m${seeded}.pdf`, cv_original_name: "cv.pdf", cv_mime_type: "application/pdf", cv_size_bytes: 1000, ...extra,
+  }])[0]!;
+}
+const scored = (score: number) => ({ ai_score: score, analysis_prompt_version: RECRUITMENT_ANALYSIS_PROMPT_VERSION });
+
+const verified = { sourceLocation: "page 1", confidence: 90, evidenceVerified: true };
+/** An analysis of the CV that reads the DHA licence, with its proof. */
+function cvAnalysis(overrides: Partial<RecruitmentAnalysisResult> = {}): RecruitmentAnalysisResult {
+  return {
+    summary: "Lecture automatisée.", professionalTitle: "Anesthésiste-réanimatrice", specialties: ["Anesthésie-réanimation"], skills: [], languages: [], normalizedLanguages: [],
+    certifications: [{ name: "Licence DHA", issuingBody: "Dubai Health Authority", country: "Émirats arabes unis", expiresAt: null, evidence: "Licence DHA", ...verified }],
+    countriesOfInterest: [], yearsExperience: 8, normalizedExperiences: [], relevanceScore: 80, strengths: [], gaps: [], dataQualityWarnings: [], requiredFollowUps: [],
+    fieldEvidence: [], contradictions: [], confidence: 85, evidenceCoverage: 90,
+    scoreBreakdown: { specialtyMatch: 30, experienceEvidence: 20, skillsEvidence: 10, languageReadiness: 10, credentialReadiness: 10 },
+    reasoning: "Score déterministe.",
+    ...overrides,
+  };
+}
+
+function seedBrief(extra: Record<string, unknown> = {}) {
+  return memory.seed(clientBriefs, [{ brief_id: `BRIEF-M${seeded}`, organization_name: "Hôpital du Golfe", contact_name: "RH", email: "rh@test.local", target_environment: "Hôpital", specialty_needed: "Anesthésie-réanimation", country: "Émirats arabes unis", ...extra }])[0]!;
+}
+
+describe("missions employeurs : classement, certifications et accord du candidat", () => {
+  const missionTables = [cvApplications, cvCandidateCertifications, cvCandidateLanguages, cvCandidateExperiences, clientBriefs, clientBriefCandidates, recruitmentAuditLogs, recruitmentCampaigns, recruitmentCampaignRecipients, recruitmentFollowUpTasks, candidateAccounts, cvGoogleDriveExportJobs, recruitmentEmailEvents];
+  beforeEach(() => {
+    memory = createMemoryPg(missionTables);
+    state.memory = memory;
+    seeded = 0;
+  });
+  afterEach(() => vi.useRealTimers());
+
+  it("calcule la compatibilité de tous les candidats avant de trier puis de paginer, les dossiers sans score IA après les autres (ADM-04)", async () => {
+    // 40 well-scored paediatricians, created first, then four anaesthetists the AI scored low or not at all.
+    for (let index = 0; index < 40; index += 1) seedCandidate(scored(95));
+    const unscored = seedCandidate({ specialty: "Anesthésie-réanimation", target_countries: '["Émirats arabes unis"]' });
+    const low = seedCandidate({ specialty: "Anesthésie-réanimation", target_countries: '["Émirats arabes unis"]', ...scored(20) });
+    const lower = seedCandidate({ specialty: "Anesthésie-réanimation", target_countries: '["Émirats arabes unis"]', ...scored(10) });
+    const specialtyOnly = seedCandidate({ specialty: "Anesthésie-réanimation", ...scored(30) });
+    seedCandidate({ specialty: "Anesthésie-réanimation", status: "rejected" });
+    const brief = seedBrief();
+    const statementsBefore = memory.statements.length;
+
+    const first = await admin().admin.clientBriefs.candidates({ briefId: brief.id as number, limit: 10 });
+    expect(first.candidates.slice(0, 4).map(candidate => [candidate.id, candidate.match.score])).toEqual([[low.id, 50], [lower.id, 50], [unscored.id, 50], [specialtyOnly.id, 35]]);
+    expect(first.pagination).toEqual({ page: 0, limit: 10, total: 44, totalPages: 5 });
+    expect(first.ranking).toEqual({ eligible: 44, ranked: 44 });
+    // Ties after compatibility: AI score, the newest dossier first.
+    expect(first.candidates.slice(4).map(candidate => candidate.id)).toEqual([40, 39, 38, 37, 36, 35]);
+    // Three grouped reads whatever the number of candidates: no query per candidate.
+    const statements = memory.statements.slice(statementsBefore);
+    expect(statements.filter(statement => /from "cv_candidate_certifications"/.test(statement.sql))).toHaveLength(1);
+    expect(statements.filter(statement => /from "cv_candidate_languages"/.test(statement.sql))).toHaveLength(1);
+    expect(statements.filter(statement => /from "cv_applications"/.test(statement.sql)).length).toBeLessThanOrEqual(3);
+
+    const second = await admin().admin.clientBriefs.candidates({ briefId: brief.id as number, limit: 10, page: 1 });
+    expect(second.candidates.map(candidate => candidate.id)).toEqual([34, 33, 32, 31, 30, 29, 28, 27, 26, 25]);
+
+    // Minimum compatibility, then the shortlist filters, both before paging.
+    const atLeast40 = await admin().admin.clientBriefs.candidates({ briefId: brief.id as number, minimumMatch: 40 });
+    expect(atLeast40.candidates.map(candidate => candidate.id)).toEqual([low.id, lower.id, unscored.id]);
+    expect(atLeast40.pagination.total).toBe(3);
+    await admin().admin.clientBriefs.associateCandidate({ briefId: brief.id as number, applicationId: lower.id as number, status: "shortlisted" });
+    await admin().admin.clientBriefs.associateCandidate({ briefId: brief.id as number, applicationId: 3, status: "declined" });
+    const shortlisted = await admin().admin.clientBriefs.candidates({ briefId: brief.id as number, shortlist: "shortlisted" });
+    expect(shortlisted.candidates.map(candidate => candidate.id)).toEqual([lower.id]);
+    expect(shortlisted.candidates[0]!.association).toMatchObject({ status: "shortlisted", candidateConsentAt: null });
+    const notYet = await admin().admin.clientBriefs.candidates({ briefId: brief.id as number, minimumMatch: 40, shortlist: "not_shortlisted" });
+    expect(notYet.candidates.map(candidate => candidate.id)).toEqual([low.id, unscored.id]);
+  });
+
+  it(`ne classe que les ${MISSION_MATCHING_MAX_CANDIDATES} dossiers ouverts les plus récents, et le dit, mais toujours les candidats de la mission`, async () => {
+    for (let index = 0; index <= MISSION_MATCHING_MAX_CANDIDATES + 1; index += 1) seedCandidate();
+    const brief = seedBrief();
+    const briefId = brief.id as number;
+    const result = await admin().admin.clientBriefs.candidates({ briefId });
+    expect(result.ranking).toEqual({ eligible: MISSION_MATCHING_MAX_CANDIDATES + 2, ranked: MISSION_MATCHING_MAX_CANDIDATES });
+    expect(result.pagination.total).toBe(MISSION_MATCHING_MAX_CANDIDATES);
+    expect(result.candidates[0]!.id).toBe(MISSION_MATCHING_MAX_CANDIDATES + 2);
+
+    // The oldest dossier, beyond the bound, was shortlisted: it stays on screen,
+    // to note the candidate's agreement or remove them from the shortlist.
+    await admin().admin.clientBriefs.associateCandidate({ briefId, applicationId: 1, status: "shortlisted" });
+    const shortlisted = await admin().admin.clientBriefs.candidates({ briefId, shortlist: "shortlisted" });
+    expect(shortlisted.candidates.map(candidate => candidate.id)).toEqual([1]);
+    expect(shortlisted).toMatchObject({ shortlistedCount: 1, ranking: { eligible: MISSION_MATCHING_MAX_CANDIDATES + 2, ranked: MISSION_MATCHING_MAX_CANDIDATES + 1 } });
+    expect((await admin().admin.clientBriefs.candidates({ briefId })).pagination.total).toBe(MISSION_MATCHING_MAX_CANDIDATES + 1);
+  });
+
+  it("renvoie la dernière page quand celle demandée s’est vidée, par exemple après un retrait de la shortlist (ADM-04)", async () => {
+    for (let index = 0; index < 11; index += 1) seedCandidate();
+    const brief = seedBrief();
+    const briefId = brief.id as number;
+    for (let id = 1; id <= 11; id += 1) await admin().admin.clientBriefs.associateCandidate({ briefId, applicationId: id, status: "shortlisted" });
+    const secondPage = await admin().admin.clientBriefs.candidates({ briefId, shortlist: "shortlisted", limit: 10, page: 1 });
+    expect(secondPage.candidates.map(candidate => candidate.id)).toEqual([1]);
+    expect(secondPage.pagination).toEqual({ page: 1, limit: 10, total: 11, totalPages: 2 });
+
+    // The admin removes the only candidate of page 2 from the shortlist.
+    await admin().admin.clientBriefs.associateCandidate({ briefId, applicationId: 1, status: "declined" });
+    const after = await admin().admin.clientBriefs.candidates({ briefId, shortlist: "shortlisted", limit: 10, page: 1 });
+    expect(after.pagination).toEqual({ page: 0, limit: 10, total: 10, totalPages: 1 });
+    expect(after.candidates).toHaveLength(10);
+
+    // Nobody left: page 0, empty.
+    const none = await admin().admin.clientBriefs.candidates({ briefId, minimumMatch: 100, page: 3 });
+    expect(none.pagination).toEqual({ page: 0, limit: 25, total: 0, totalPages: 0 });
+    expect(none.candidates).toEqual([]);
+  });
+
+  it("refuse d’associer une mission ou une candidature qui n’existe pas, sans rien écrire (DATA-01)", async () => {
+    const candidate = seedCandidate();
+    const brief = seedBrief();
+    await expect(admin().admin.clientBriefs.associateCandidate({ briefId: 4242, applicationId: 4242, status: "shortlisted" }))
+      .rejects.toMatchObject({ code: "NOT_FOUND", message: "Cette mission n’existe plus.", cause: { reason: "association_brief_not_found" } });
+    await expect(admin().admin.clientBriefs.associateCandidate({ briefId: brief.id as number, applicationId: 999, status: "shortlisted" }))
+      .rejects.toMatchObject({ code: "NOT_FOUND", cause: { reason: "association_application_not_found" } });
+    await expect(admin().admin.clientBriefs.associateCandidate({ briefId: 4242, applicationId: candidate.id as number, status: "shortlisted" }))
+      .rejects.toMatchObject({ cause: { reason: "association_brief_not_found" } });
+    expect(memory.rows(clientBriefCandidates)).toEqual([]);
+  });
+
+  it("garde une seule association par mission et candidat, même pour six appels simultanés, que la décision suivante retire de la shortlist (DATA-01)", async () => {
+    const candidate = seedCandidate();
+    const brief = seedBrief();
+    const pair = { briefId: brief.id as number, applicationId: candidate.id as number };
+    const results = await Promise.all(Array.from({ length: 6 }, () => admin().admin.clientBriefs.associateCandidate({ ...pair, status: "shortlisted", matchScore: 80, notes: "Profil solide" })));
+    expect(results).toEqual(Array.from({ length: 6 }, () => ({ success: true })));
+    expect(memory.rows(clientBriefCandidates)).toEqual([expect.objectContaining({ brief_id: pair.briefId, application_id: pair.applicationId, association_status: "shortlisted" })]);
+
+    // Removed from the shortlist: the one row changes, its score and note kept,
+    // and nothing is left to export.
+    await admin().admin.clientBriefs.associateCandidate({ ...pair, status: "declined" });
+    expect(memory.rows(clientBriefCandidates)).toEqual([expect.objectContaining({ association_status: "declined", match_score: 80, notes: "Profil solide" })]);
+    expect((await admin().admin.clientBriefs.candidates({ briefId: pair.briefId })).shortlistedCount).toBe(0);
+  });
+
+  it("associe encore un candidat à une mission tant que 0004 n’est pas appliquée, sur la copie modifiée en dernier (DATA-01)", async () => {
+    // A database 0004 has not reached: the upsert has no index (42P10).
+    memory = createMemoryPg(missionTables, { missingIndexes: ["client_brief_candidates_pair_unique"] });
+    state.memory = memory;
+    const candidate = seedCandidate();
+    const brief = seedBrief();
+    const pair = { briefId: brief.id as number, applicationId: candidate.id as number };
+    await expect(admin().admin.clientBriefs.associateCandidate({ ...pair, status: "shortlisted", matchScore: 80, notes: "Profil solide" })).resolves.toEqual({ success: true });
+    await admin().admin.clientBriefs.associateCandidate({ ...pair, status: "reviewing" });
+    expect(memory.rows(clientBriefCandidates)).toEqual([expect.objectContaining({ association_status: "reviewing", match_score: 80, notes: "Profil solide" })]);
+
+    // A copy left by an earlier race, updated since: the decision goes to it.
+    const [copy] = memory.seed(clientBriefCandidates, [{ brief_id: pair.briefId, application_id: pair.applicationId, association_status: "shortlisted", updated_at: new Date(Date.now() + 60_000) }]);
+    await admin().admin.clientBriefs.associateCandidate({ ...pair, status: "declined" });
+    expect(memory.rows(clientBriefCandidates).map(row => [row.id, row.association_status])).toEqual([[1, "reviewing"], [copy!.id, "declined"]]);
+  });
+
+  it("une licence lue seulement dans le CV reste « à confirmer » jusqu’à ce que l’admin la confirme, déclarée ou extraite (IA-02)", async () => {
+    // The latest analysis read the licence in the CV: its facts and its row.
+    const hidden = seedCandidate({ specialty: "Anesthésie-réanimation", target_countries: '["Émirats arabes unis"]', certifications: "BLS", normalized_certifications: '[{"name":"Licence DHA","issuingBody":"Dubai Health Authority"}]', ...scored(80) });
+    memory.seed(cvCandidateCertifications, [{ application_id: hidden.id, name: "Licence DHA", issuing_body: "Dubai Health Authority", source: "extracted" }]);
+    const brief = seedBrief({ required_certifications: "Licence DHA, BLS" });
+    const briefId = brief.id as number;
+    const matchOf = async () => (await admin().admin.clientBriefs.candidates({ briefId })).candidates[0]!.match;
+
+    expect(await matchOf()).toMatchObject({
+      score: 50,
+      breakdown: { certifications: 0 },
+      certificationsToConfirm: ["Licence DHA", "BLS"],
+      certifications: [
+        { name: "Licence DHA", origins: ["extracted"], status: "to_confirm" },
+        { name: "BLS", origins: ["declared"], status: "to_confirm" },
+      ],
+    });
+
+    // The admin checks the licence on the authority's register and confirms it.
+    await admin().admin.recruitment.candidate.confirmCertification({ id: hidden.id as number, name: "licence dha", confirmed: true });
+    expect(memory.rows(cvCandidateCertifications)[0]!.confirmed_at).not.toBeNull();
+    expect(await matchOf()).toMatchObject({ score: 60, matchedCertifications: ["Licence DHA"], certificationsToConfirm: ["BLS"] });
+
+    // A certification declared in the form only gets its own confirmed row.
+    await admin().admin.recruitment.candidate.confirmCertification({ id: hidden.id as number, name: "BLS", confirmed: true });
+    expect(memory.rows(cvCandidateCertifications).map(row => [row.name, row.source, row.confirmed_at !== null])).toEqual([["Licence DHA", "extracted", true], ["BLS", "declared", true]]);
+    expect(await matchOf()).toMatchObject({ score: 70, certifications: [
+      { name: "Licence DHA", origins: ["extracted", "confirmed"], status: "matched" },
+      { name: "BLS", origins: ["declared", "confirmed"], status: "matched" },
+    ] });
+
+    // Withdrawn: the points go again. The analysis still retains the licence:
+    // « à confirmer » in the mission, found by the filters, case aside.
+    await expect(admin().admin.recruitment.candidate.confirmCertification({ id: hidden.id as number, name: "Licence DHA", confirmed: false })).resolves.toEqual({ success: true, changed: true });
+    expect(await matchOf()).toMatchObject({ score: 60, certificationsToConfirm: ["Licence DHA"] });
+    expect((await admin().admin.recruitment.list({ certification: "dha" })).items.map(item => item.id)).toEqual([hidden.id]);
+    await expect(admin().admin.recruitment.candidate.confirmCertification({ id: hidden.id as number, name: "Licence MOH", confirmed: true })).rejects.toThrow("Cette certification ne figure pas dans le dossier.");
+
+    // The certification filter (and the admin sheet, from the same facts) show each origin too.
+    const filtered = await admin().admin.recruitment.list({ certification: "BLS" });
+    expect(filtered.items.map(item => item.certificationFacts)).toEqual([[
+      { name: "BLS", origins: ["declared", "confirmed"], expiresAt: null },
+      { name: "Licence DHA", origins: ["extracted"], expiresAt: null },
+    ]]);
+    expect(memory.rows(recruitmentAuditLogs).map(row => JSON.parse(String(row.metadata)).event)).toEqual(["certification_confirmed", "certification_confirmed", "certification_unconfirmed"]);
+
+    // Nothing changes, nothing is logged: confirmed twice, or withdrawn when not confirmed.
+    await expect(admin().admin.recruitment.candidate.confirmCertification({ id: hidden.id as number, name: "BLS", confirmed: true })).resolves.toEqual({ success: true, changed: false });
+    await expect(admin().admin.recruitment.candidate.confirmCertification({ id: hidden.id as number, name: "Licence DHA", confirmed: false })).resolves.toEqual({ success: true, changed: false });
+    expect(memory.rows(recruitmentAuditLogs)).toHaveLength(3);
+  });
+
+  it("confirme une certification déclarée plus longue qu’une ligne enregistrée (180 caractères) (IA-02)", async () => {
+    const longName = `Diplôme ${"universitaire ".repeat(20)}`.trim();
+    const candidate = seedCandidate({ certifications: `${longName}; BLS` });
+    await expect(admin().admin.recruitment.candidate.confirmCertification({ id: candidate.id as number, name: longName, confirmed: true })).resolves.toEqual({ success: true, changed: true });
+    expect(memory.rows(cvCandidateCertifications).map(row => row.name)).toEqual([longName.slice(0, 180)]);
+    const { items } = await admin().admin.recruitment.list({});
+    expect(items.find(item => item.id === candidate.id)!.certificationFacts).toEqual([
+      { name: longName, origins: ["declared", "confirmed"], expiresAt: null },
+      { name: "BLS", origins: ["declared"], expiresAt: null },
+    ]);
+    // The same name again: already confirmed.
+    await expect(admin().admin.recruitment.candidate.confirmCertification({ id: candidate.id as number, name: longName, confirmed: true })).resolves.toEqual({ success: true, changed: false });
+    await expect(admin().admin.recruitment.candidate.confirmCertification({ id: candidate.id as number, name: longName, confirmed: false })).resolves.toEqual({ success: true, changed: true });
+    expect(memory.rows(cvCandidateCertifications)[0]!.confirmed_at).toBeNull();
+  });
+
+  it("le vivier filtré par certification renvoie l’origine de chaque certification (IA-02)", async () => {
+    const trapped = seedCandidate({ marketing_consent: 1, certifications: "BLS", normalized_certifications: '[{"name":"Licence DHA"}]', analysis_prompt_version: RECRUITMENT_ANALYSIS_PROMPT_VERSION });
+    memory.seed(cvCandidateCertifications, [{ application_id: trapped.id, name: "Licence DHA", source: "extracted" }]);
+    seedCandidate({ marketing_consent: 1, certifications: "ACLS" });
+    const pool = await admin().admin.recruitment.pool.list({ certification: "DHA" });
+    expect(pool.map(candidate => [candidate.id, candidate.certificationFacts])).toEqual([[trapped.id, [
+      { name: "BLS", origins: ["declared"], expiresAt: null },
+      { name: "Licence DHA", origins: ["extracted"], expiresAt: null },
+    ]]]);
+  });
+
+  it("filtre les candidatures par certification, langue et pays sans tenir compte des majuscules, comme le vivier (IA-02)", async () => {
+    const declared = seedCandidate({ certifications: "Licence DHA", languages: '["Anglais"]', target_countries: '["Qatar"]' });
+    const analysed = seedCandidate({ normalized_certifications: '[{"name":"Licence DHA"}]', normalized_languages: '[{"language":"Anglais"}]', target_countries: '["Émirats arabes unis","Qatar"]', ...scored(70) });
+    seedCandidate({ certifications: "BLS", languages: '["Arabe"]', target_countries: '["Suisse"]' });
+    const idsOf = async (filters: { certification?: string; language?: string; country?: string }) => (await admin().admin.recruitment.list(filters)).items.map(item => item.id).sort();
+    for (const certification of ["DHA", "dha", "licence dha"]) expect(await idsOf({ certification })).toEqual([declared.id, analysed.id]);
+    for (const language of ["Anglais", "anglais", "ANGLAIS"]) expect(await idsOf({ language })).toEqual([declared.id, analysed.id]);
+    for (const country of ["Qatar", "qatar"]) expect(await idsOf({ country })).toEqual([declared.id, analysed.id]);
+    expect((await admin().admin.recruitment.list({ certification: "dha" })).total).toBe(2);
+  });
+
+  it("filtre le vivier et l’audience « filtrée » d’une campagne par pays sans tenir compte des majuscules, comme les candidatures", async () => {
+    const geneva = seedCandidate({ marketing_consent: 1, target_countries: '["Suisse"]' });
+    const gulf = seedCandidate({ marketing_consent: 1, target_countries: '["Émirats arabes unis","Qatar"]' });
+    seedCandidate({ marketing_consent: 1 });
+    seedCandidate({ marketing_consent: 1, target_countries: '["Canada"]' });
+    const listed = async (country: string) => (await admin().admin.recruitment.list({ country })).items.map(item => item.id).sort();
+    const pooled = async (country: string) => (await admin().admin.recruitment.pool.list({ country })).map(item => item.id).sort();
+    const audience = async (country: string) => (await admin().admin.recruitment.campaigns.previewAudience({ mode: "filtered", country })).map(item => item.id).sort();
+    for (const [country, expected] of [["Suisse", [geneva.id]], ["suisse", [geneva.id]], ["SUISSE", [geneva.id]], ["émirats arabes unis", [gulf.id]], ["qatar", [gulf.id]]] as const) {
+      expect([await listed(country), await pooled(country), await audience(country)]).toEqual([expected, expected, expected]);
+    }
+  });
+
+  it("filtre par pays, certification et langue sans tenir compte des accents, dans les candidatures, le vivier et l’audience « filtrée » d’une campagne (IA-02)", async () => {
+    const gulf = seedCandidate({ marketing_consent: 1, target_countries: '["Émirats arabes unis"]', mobility: "Péninsule arabique", languages: '["Français"]', certifications: "Échographie FAST" });
+    const analysed = seedCandidate({ marketing_consent: 1, target_countries: '["Suisse"]', normalized_languages: '[{"language":"Español"}]', normalized_certifications: "[]", ...scored(70) });
+    memory.seed(cvCandidateCertifications, [{ application_id: analysed.id, name: "Réanimation néonatale", source: "declared", confirmed_at: "2026-10-20 09:00:00.000" }]);
+    seedCandidate({ marketing_consent: 1, target_countries: '["Canada"]', languages: '["Anglais"]', certifications: "BLS" });
+    const listed = async (filters: { country?: string; certification?: string; language?: string }) => (await admin().admin.recruitment.list(filters)).items.map(item => item.id).sort();
+    const pooled = async (filters: { country?: string; mobility?: string; certification?: string }) => (await admin().admin.recruitment.pool.list(filters)).map(item => item.id).sort();
+    const audience = async (country: string) => (await admin().admin.recruitment.campaigns.previewAudience({ mode: "filtered", country })).map(item => item.id).sort();
+
+    for (const country of ["emirats", "EMIRATS", "Émirats"]) {
+      expect([await listed({ country }), await pooled({ country }), await audience(country)]).toEqual([[gulf.id], [gulf.id], [gulf.id]]);
+    }
+    // The pool's « Mobilité » reads the mobility and the target countries alike.
+    for (const mobility of ["emirats", "peninsule"]) expect(await pooled({ mobility })).toEqual([gulf.id]);
+    expect(await pooled({ mobility: "%" })).toEqual([]);
+    for (const certification of ["echographie", "ÉCHOGRAPHIE"]) expect([await listed({ certification }), await pooled({ certification })]).toEqual([[gulf.id], [gulf.id]]);
+    // A certification an admin confirmed, found by its name.
+    expect([await listed({ certification: "reanimation neonatale" }), await pooled({ certification: "reanimation neonatale" })]).toEqual([[analysed.id], [analysed.id]]);
+    expect(await listed({ language: "francais" })).toEqual([gulf.id]);
+    expect(await listed({ language: "espanol" })).toEqual([analysed.id]);
+    // % and _ are the characters typed, not wildcards.
+    expect(await listed({ country: "%" })).toEqual([]);
+    expect(await audience("_")).toEqual([]);
+  });
+
+  it("compte dans une mission, et trouve dans le filtre « Langue », les langues que le formulaire enregistre en anglais, sous leurs autres noms (IA-02)", async () => {
+    // From its French page as from its English one, the form records « French », « Arabic ».
+    const fromForm = seedCandidate({ specialty: "Anesthésie-réanimation", target_countries: '["Émirats arabes unis"]', languages: '["French","Arabic"]' });
+    // Arabic declared, English and Arabic read in the CV by an analysis of the current version.
+    const bilingual = seedCandidate({ specialty: "Anesthésie-réanimation", target_countries: '["Émirats arabes unis"]', languages: '["Arabic"]', normalized_languages: '[{"language":"English"},{"language":"العربية"}]', ...scored(70) });
+    memory.seed(cvCandidateLanguages, [{ application_id: bilingual.id, language: "English", source: "extracted" }, { application_id: bilingual.id, language: "العربية", source: "extracted" }]);
+    const briefId = seedBrief({ required_languages: "Anglais, Arabe" }).id as number;
+
+    const { candidates } = await admin().admin.clientBriefs.candidates({ briefId });
+    const match = (id: unknown) => candidates.find(candidate => candidate.id === id)!.match;
+    expect(match(fromForm.id)).toMatchObject({ score: 58, matchedLanguages: ["Arabe"], breakdown: { languages: 8 }, languages: [{ name: "Arabic", origins: ["declared"] }] });
+    expect(match(bilingual.id)).toMatchObject({
+      score: 65,
+      matchedLanguages: ["Anglais", "Arabe"],
+      breakdown: { languages: 15 },
+      languages: [{ name: "English", origins: ["extracted"] }, { name: "Arabic", origins: ["declared", "extracted"] }],
+    });
+    expect(candidates.map(candidate => candidate.id)).toEqual([bilingual.id, fromForm.id]);
+
+    // The Langue filter of the Candidatures, typed in French, German, Chinese or Arabic.
+    const listed = async (language: string) => (await admin().admin.recruitment.list({ language })).items.map(item => item.id).sort();
+    for (const language of ["arabe", "Arabisch", "阿拉伯语", "العربية", "Arabic"]) expect(await listed(language)).toEqual([fromForm.id, bilingual.id]);
+    for (const language of ["Français", "francais", "法语"]) expect(await listed(language)).toEqual([fromForm.id]);
+    expect(await listed("Anglais")).toEqual([bilingual.id]);
+    expect(await listed("Allemand")).toEqual([]);
+  });
+
+  it("les filtres « certification » trouvent une certification confirmée que la mission compte, même après une analyse qui n’a enregistré aucun fait (IA-02)", async () => {
+    // A new analysis found a contradiction (or hidden text): it stored no
+    // facts, but kept the licence the admin had confirmed.
+    const confirmed = seedCandidate({ specialty: "Anesthésie-réanimation", target_countries: '["Émirats arabes unis"]', marketing_consent: 1, normalized_certifications: "[]", ...scored(70) });
+    const unrelated = seedCandidate({ marketing_consent: 1, normalized_certifications: "[]", ...scored(70) });
+    memory.seed(cvCandidateCertifications, [
+      { application_id: confirmed.id, name: "Licence DHA", issuing_body: "Dubai Health Authority", source: "extracted", confirmed_at: "2026-10-20 09:00:00.000" },
+      { application_id: unrelated.id, name: "BLS", source: "declared", confirmed_at: "2026-10-20 09:00:00.000" },
+    ]);
+    const brief = seedBrief({ required_certifications: "Licence DHA" });
+    const [first] = (await admin().admin.clientBriefs.candidates({ briefId: brief.id as number })).candidates;
+    expect(first).toMatchObject({ id: confirmed.id, match: { breakdown: { certifications: 20 }, certifications: [{ name: "Licence DHA", status: "matched" }] } });
+
+    // The Candidatures list and the pool say the same, with the origins.
+    const listed = await admin().admin.recruitment.list({ certification: "DHA" });
+    expect(listed.items.map(item => [item.id, item.certificationFacts])).toEqual([[confirmed.id, [{ name: "Licence DHA", origins: ["extracted", "confirmed"], expiresAt: null }]]]);
+    expect(listed.total).toBe(1);
+    expect((await admin().admin.recruitment.pool.list({ certification: "dha" })).map(candidate => candidate.id)).toEqual([confirmed.id]);
+    // Withdrawn, it no longer counts anywhere: the latest analysis did not
+    // retain it, so the row read in the CV goes with the confirmation. The
+    // mission, the 360° sheet and the filters agree it is no longer there.
+    await expect(admin().admin.recruitment.candidate.confirmCertification({ id: confirmed.id as number, name: "Licence DHA", confirmed: false })).resolves.toEqual({ success: true, changed: true, notRetainedByAnalysis: true });
+    expect(memory.rows(cvCandidateCertifications).map(row => [row.application_id, row.name])).toEqual([[unrelated.id, "BLS"]]);
+    expect((await admin().admin.recruitment.list({ certification: "DHA" })).items).toEqual([]);
+    expect(await admin().admin.recruitment.pool.list({ certification: "DHA" })).toEqual([]);
+    const withdrawn = (await admin().admin.clientBriefs.candidates({ briefId: brief.id as number })).candidates.find(candidate => candidate.id === confirmed.id);
+    expect(withdrawn!.match).toMatchObject({ breakdown: { certifications: 0 }, certifications: [], certificationsToConfirm: [] });
+    // The admin sheet reads the same facts as the 360° one.
+    expect((await admin().admin.recruitment.list({})).items.find(item => item.id === confirmed.id)!.certificationFacts).toEqual([]);
+    expect(memory.rows(recruitmentAuditLogs).map(row => JSON.parse(String(row.metadata)))).toEqual([{ event: "certification_unconfirmed", certification: "Licence DHA", notRetainedByAnalysis: true }]);
+  });
+
+  it("garde « à confirmer » une licence lue par une analyse sous une ancienne version du prompt quand l’admin retire sa confirmation (IA-02)", async () => {
+    // Analysed under an earlier prompt: the licence was read in the CV, but
+    // the filters no longer read that analysis until the dossier is analysed again.
+    const outdated = seedCandidate({ specialty: "Anesthésie-réanimation", target_countries: '["Émirats arabes unis"]', normalized_certifications: '[{"name":"Licence DHA"}]', ai_score: 70, analysis_prompt_version: "recruitment-analysis-v1" });
+    const id = outdated.id as number;
+    memory.seed(cvCandidateCertifications, [{ application_id: id, name: "Licence DHA", source: "extracted", confirmed_at: "2026-10-20 09:00:00.000" }]);
+    const briefId = seedBrief({ required_certifications: "Licence DHA" }).id as number;
+
+    // Withdrawn right after a confirmation clicked by mistake: the row read in the CV stays, to confirm again.
+    await expect(admin().admin.recruitment.candidate.confirmCertification({ id, name: "Licence DHA", confirmed: false })).resolves.toEqual({ success: true, changed: true });
+    expect(memory.rows(cvCandidateCertifications).map(row => [row.name, row.source, row.confirmed_at])).toEqual([["Licence DHA", "extracted", null]]);
+    expect((await admin().admin.clientBriefs.candidates({ briefId })).candidates.find(item => item.id === id)!.match.certifications).toMatchObject([{ name: "Licence DHA", origins: ["extracted"], status: "to_confirm" }]);
+    expect(memory.rows(recruitmentAuditLogs).map(row => JSON.parse(String(row.metadata)))).toEqual([{ event: "certification_unconfirmed", certification: "Licence DHA" }]);
+    await expect(admin().admin.recruitment.candidate.confirmCertification({ id, name: "Licence DHA", confirmed: true })).resolves.toEqual({ success: true, changed: true });
+    expect(memory.rows(cvCandidateCertifications).map(row => [row.source, row.confirmed_at !== null])).toEqual([["extracted", true]]);
+  });
+
+  it("retire partout une licence extraite et confirmée qu’une nouvelle analyse avec contradiction ne retient plus, quand l’admin retire sa confirmation (IA-02)", async () => {
+    const candidate = seedCandidate({ specialty: "Anesthésie-réanimation", target_countries: '["Émirats arabes unis"]', marketing_consent: 1 });
+    const id = candidate.id as number;
+    const briefId = seedBrief({ required_certifications: "Licence DHA" }).id as number;
+    const missionCertifications = async () => (await admin().admin.clientBriefs.candidates({ briefId })).candidates.find(item => item.id === id)!.match.certifications;
+    // The Candidatures list, then the pool, filtered by certification; the facts of the admin sheet, as the 360° one reads them.
+    const filtersFind = async () => [(await admin().admin.recruitment.list({ certification: "DHA" })).items.map(item => item.id), (await admin().admin.recruitment.pool.list({ certification: "DHA" })).map(item => item.id)];
+    const sheetFacts = async () => (await admin().admin.recruitment.list({})).items[0]!.certificationFacts;
+
+    await saveCvAnalysis(id, cvAnalysis());
+    await admin().admin.recruitment.candidate.confirmCertification({ id, name: "Licence DHA", confirmed: true });
+    // A new analysis finds a contradiction: no fact stored, the confirmed licence kept and counted.
+    await saveCvAnalysis(id, cvAnalysis({ contradictions: [{ field: "specialty", declaredValue: "Anesthésie-réanimation", documentValue: "Pédiatrie", evidence: "Pédiatre", ...verified }], relevanceScore: null }));
+    expect(await missionCertifications()).toMatchObject([{ name: "Licence DHA", origins: ["extracted", "confirmed"], status: "matched" }]);
+    expect(await filtersFind()).toEqual([[id], [id]]);
+
+    // Withdrawn: nothing vouches for the licence any more. The mission, the
+    // sheet and the filters no longer show it, instead of « à confirmer » on
+    // one side and nothing on the other.
+    await expect(admin().admin.recruitment.candidate.confirmCertification({ id, name: "Licence DHA", confirmed: false })).resolves.toEqual({ success: true, changed: true, notRetainedByAnalysis: true });
+    expect(memory.rows(cvCandidateCertifications)).toEqual([]);
+    expect(await missionCertifications()).toEqual([]);
+    expect(await sheetFacts()).toEqual([]);
+    expect(await filtersFind()).toEqual([[], []]);
+
+    // A later analysis that reads it again without doubt brings it back, to confirm.
+    await saveCvAnalysis(id, cvAnalysis());
+    expect(await missionCertifications()).toMatchObject([{ name: "Licence DHA", origins: ["extracted"], status: "to_confirm" }]);
+    expect(await sheetFacts()).toEqual([{ name: "Licence DHA", origins: ["extracted"], expiresAt: null }]);
+    expect(await filtersFind()).toEqual([[id], [id]]);
+  });
+
+  it("dit qu’une certification a expiré, et la compte une fois son renouvellement confirmé, avec ou sans nouvelle date, journalisé (IA-02)", async () => {
+    vi.useFakeTimers({ now: new Date("2026-10-26T10:00:00.000Z"), toFake: ["Date"] });
+    // « PALS, ACLS » declared without a date; the AI read ACLS until 2023-05 in the CV.
+    const candidate = seedCandidate({ specialty: "Cardiologie", certifications: "PALS, ACLS", normalized_certifications: '[{"name":"ACLS","expiresAt":"2023-05"}]', analysis_prompt_version: RECRUITMENT_ANALYSIS_PROMPT_VERSION });
+    memory.seed(cvCandidateCertifications, [{ application_id: candidate.id, name: "ACLS", source: "extracted", expires_at: "2023-05" }]);
+    const brief = seedBrief({ specialty_needed: "Cardiologie", country: "Suisse", required_certifications: "ACLS" });
+    memory.seed(clientBriefCandidates, [{ brief_id: brief.id, application_id: candidate.id, association_status: "shortlisted", candidate_consent_at: "2026-10-20 12:00:00.000" }]);
+    const id = candidate.id as number;
+    const matchOf = async () => (await admin().admin.clientBriefs.candidates({ briefId: brief.id as number })).candidates[0]!.match;
+    const confirm = (renewal?: { expiresAt: string | null }) => admin().admin.recruitment.candidate.confirmCertification({ id, name: "ACLS", confirmed: true, renewal });
+    const rows = () => memory.rows(cvCandidateCertifications).map(row => [row.name, row.source, row.expires_at, row.confirmed_at !== null]);
+    // The certifications cell of the file sent to the employer.
+    const exportedCertifications = async () => {
+      const [, row] = (await admin().admin.recruitment.exportCsv({ type: "shortlist", briefId: brief.id as number })).csv.split("\n");
+      return row!.split('";"')[10];
+    };
+
+    expect(await matchOf()).toMatchObject({ score: 35, certificationsToConfirm: [], certifications: [{ name: "ACLS", origins: ["declared", "extracted"], expiresAt: "2023-05", status: "expired" }] });
+    // Confirmed as it is, it would still score nothing: refused, its renewal asked for.
+    await expect(confirm()).rejects.toMatchObject({ message: "Cette certification a expiré : confirmez son renouvellement, avec la nouvelle date d’expiration lue sur le justificatif, ou cochez qu’il n’en porte pas.", cause: { reason: "renewal_required" } });
+
+    // Each refusal carries a stable reason next to its French message, and the day it names.
+    await expect(confirm({ expiresAt: "2025-01-31" })).rejects.toMatchObject({ message: "La nouvelle date d’expiration est déjà passée : la certification resterait expirée.", cause: { reason: "renewal_date_past" } });
+    await expect(confirm({ expiresAt: "2027-02-30" })).rejects.toMatchObject({ message: "Nouvelle date d’expiration invalide.", cause: { reason: "renewal_date_invalid" } });
+    // Nor more than 15 years ahead: a typing error would count it for good.
+    for (const expiresAt of ["9999-12-31", "2041-10-27"]) {
+      await expect(confirm({ expiresAt })).rejects.toMatchObject({ message: "La nouvelle date d’expiration est à plus de 15 ans : vérifiez-la sur le justificatif (le 26/10/2041 au plus tard).", cause: { reason: "renewal_date_too_far", date: "2041-10-26" } });
+    }
+    expect(rows()).toEqual([["ACLS", "extracted", "2023-05", false]]);
+    expect(await matchOf()).toMatchObject({ score: 35, certifications: [{ origins: ["declared", "extracted"], expiresAt: "2023-05", status: "expired" }] });
+    await expect(confirm({ expiresAt: "2031-06-30" })).resolves.toEqual({ success: true, changed: true });
+    // The renewal has a row of its own, confirmed with the certification: the row read in the CV keeps its date.
+    expect(rows()).toEqual([["ACLS", "extracted", "2023-05", true], ["ACLS", "renewed", "2031-06-30", true]]);
+    expect(await matchOf()).toMatchObject({ score: 55, breakdown: { certifications: 20 }, certifications: [{ origins: ["declared", "extracted", "confirmed"], expiresAt: "2031-06-30", status: "matched" }] });
+    expect(await exportedCertifications()).toBe("PALS (déclarée par le candidat) ; ACLS (déclarée par le candidat, extraite du CV par l’IA, confirmée par l’admin), expire le 30/06/2031");
+    // The same renewal again changes nothing; one without a date does.
+    await expect(confirm({ expiresAt: "2031-06-30" })).resolves.toEqual({ success: true, changed: false });
+    await expect(confirm({ expiresAt: null })).resolves.toEqual({ success: true, changed: true });
+    expect(rows()).toEqual([["ACLS", "extracted", "2023-05", true], ["ACLS", "renewed", null, true]]);
+    expect(await matchOf()).toMatchObject({ score: 55, certifications: [{ expiresAt: null, status: "matched" }] });
+
+    // The certificate is rejected after all: the confirmation goes, the
+    // renewal with it, and the admin sheet (the same facts as the 360° one),
+    // the mission and the employer's file give the date read in the CV again,
+    // as read by the AI. Expired again, it is confirmed only with a renewal.
+    await expect(admin().admin.recruitment.candidate.confirmCertification({ id, name: "ACLS", confirmed: false })).resolves.toEqual({ success: true, changed: true });
+    expect(rows()).toEqual([["ACLS", "extracted", "2023-05", false]]);
+    await expect(confirm()).rejects.toMatchObject({ cause: { reason: "renewal_required" } });
+    expect((await admin().admin.recruitment.list({})).items[0]!.certificationFacts).toEqual([
+      { name: "PALS", origins: ["declared"], expiresAt: null },
+      { name: "ACLS", origins: ["declared", "extracted"], expiresAt: "2023-05" },
+    ]);
+    expect(await matchOf()).toMatchObject({ score: 35, certifications: [{ origins: ["declared", "extracted"], expiresAt: "2023-05", status: "expired" }] });
+    expect(await exportedCertifications()).toBe("PALS (déclarée par le candidat) ; ACLS (déclarée par le candidat, extraite du CV par l’IA), expirée en mai 2023");
+
+    // A refused confirmation logs nothing.
+    expect(memory.rows(recruitmentAuditLogs).filter(row => row.action !== "export").map(row => JSON.parse(String(row.metadata)))).toEqual([
+      { event: "certification_renewed", certification: "ACLS", expiresAt: "2031-06-30", previousExpiresAt: ["2023-05"] },
+      { event: "certification_renewed", certification: "ACLS", expiresAt: null, previousExpiresAt: ["2031-06-30"] },
+      { event: "certification_unconfirmed", certification: "ACLS" },
+    ]);
+  });
+
+  it("enregistre avec sa date une certification déclarée que le CV dit expirée, et ne la compte qu’une fois son renouvellement confirmé (IA-02)", async () => {
+    vi.useFakeTimers({ now: new Date("2026-10-26T10:00:00.000Z"), toFake: ["Date"] });
+    // Dossier 1008 of the end-to-end check: « ACLS, BLS » declared; the CV
+    // reads « Certification ACLS expiration 2023-05 ». Its rival also lacks
+    // ACLS, but is available right away.
+    const carl = seedCandidate({ first_name: "Carl", last_name: "Cardio", specialty: "Cardiologie", target_countries: '["Suisse"]', years_experience: 10, certifications: "ACLS, BLS" });
+    const rival = seedCandidate({ specialty: "Cardiologie", target_countries: '["Suisse"]', years_experience: 10, availability: "Immédiate" });
+    const id = carl.id as number;
+    const briefId = seedBrief({ specialty_needed: "Cardiologie", country: "Suisse", required_certifications: "ACLS", minimum_years_experience: 5, availability_needed: "Immédiate" }).id as number;
+    const cv = cvAnalysis({ specialties: ["Cardiologie"], certifications: [
+      { name: "Licence DHA", issuingBody: "Dubai Health Authority", country: null, expiresAt: null, evidence: "Licence DHA", ...verified },
+      { name: "ACLS", issuingBody: null, country: null, expiresAt: "2023-05", evidence: "Certification ACLS expiration 2023-05", ...verified },
+      { name: "BLS", issuingBody: null, country: null, expiresAt: "2024-03-31", evidence: "Certification BLS expiration 2024-03-31", ...verified },
+      { name: "PALS", issuingBody: null, country: null, expiresAt: "2031-06-30", evidence: "Certification PALS expiration 2031-06-30", ...verified },
+    ] });
+    const ranking = async () => (await admin().admin.clientBriefs.candidates({ briefId })).candidates.map(candidate => [candidate.id, candidate.match.score]);
+    const aclsInMission = async () => (await admin().admin.clientBriefs.candidates({ briefId })).candidates.find(candidate => candidate.id === id)!.match.certifications;
+    // The admin sheet reads the same facts as the 360° one.
+    const sheet = async () => (await admin().admin.recruitment.list({})).items.find(item => item.id === id)!.certificationFacts;
+    const rows = () => memory.rows(cvCandidateCertifications).map(row => [row.name, row.source, row.expires_at, row.confirmed_at !== null]);
+    const confirm = (renewal?: { expiresAt: string | null }) => admin().admin.recruitment.candidate.confirmCertification({ id, name: "ACLS", confirmed: true, renewal });
+
+    await saveCvAnalysis(id, cv);
+    // Every certification read in the CV is stored with its date, the expired ones too.
+    expect(rows()).toEqual([["Licence DHA", "extracted", null, false], ["ACLS", "extracted", "2023-05", false], ["BLS", "extracted", "2024-03-31", false], ["PALS", "extracted", "2031-06-30", false]]);
+    expect(JSON.parse(String(memory.rows(cvApplications).find(row => row.id === id)!.normalized_certifications)).map((item: { name: string; expiresAt: string | null }) => [item.name, item.expiresAt])).toEqual([["Licence DHA", null], ["ACLS", "2023-05"], ["BLS", "2024-03-31"], ["PALS", "2031-06-30"]]);
+    // The mission and the 360° sheet say « expirée » with the CV's date, not merely « déclarée ».
+    expect(await aclsInMission()).toEqual([{ name: "ACLS", origins: ["declared", "extracted"], expiresAt: "2023-05", status: "expired" }]);
+    expect(await sheet()).toEqual([
+      { name: "ACLS", origins: ["declared", "extracted"], expiresAt: "2023-05" },
+      { name: "BLS", origins: ["declared", "extracted"], expiresAt: "2024-03-31" },
+      { name: "Licence DHA", origins: ["extracted"], expiresAt: null },
+      { name: "PALS", origins: ["extracted"], expiresAt: "2031-06-30" },
+    ]);
+    expect(await ranking()).toEqual([[rival.id, 65], [id, 60]]);
+
+    // A mere « Confirmer » no longer counts it: refused, its renewal asked for, nothing changed or logged.
+    await expect(confirm()).rejects.toMatchObject({ code: "BAD_REQUEST", cause: { reason: "renewal_required" } });
+    expect(rows()[1]).toEqual(["ACLS", "extracted", "2023-05", false]);
+    expect(await ranking()).toEqual([[rival.id, 65], [id, 60]]);
+    expect(memory.rows(recruitmentAuditLogs)).toEqual([]);
+
+    // The renewed certificate, checked by the admin: it counts, until 30/06/2027.
+    await expect(confirm({ expiresAt: "2027-06-30" })).resolves.toEqual({ success: true, changed: true });
+    expect(await ranking()).toEqual([[id, 80], [rival.id, 65]]);
+    expect(await aclsInMission()).toEqual([{ name: "ACLS", origins: ["declared", "extracted", "confirmed"], expiresAt: "2027-06-30", status: "matched" }]);
+
+    // A new analysis of the same CV keeps the confirmed rows: the CV's date, and the renewal that counts.
+    await saveCvAnalysis(id, cv);
+    expect(rows().filter(row => row[0] === "ACLS")).toEqual([["ACLS", "extracted", "2023-05", true], ["ACLS", "renewed", "2027-06-30", true]]);
+    expect(await ranking()).toEqual([[id, 80], [rival.id, 65]]);
+
+    // The renewal withdrawn, the CV's date is back: expired, confirmed only with a renewal.
+    await expect(admin().admin.recruitment.candidate.confirmCertification({ id, name: "ACLS", confirmed: false })).resolves.toEqual({ success: true, changed: true });
+    expect(await aclsInMission()).toEqual([{ name: "ACLS", origins: ["declared", "extracted"], expiresAt: "2023-05", status: "expired" }]);
+    await expect(confirm()).rejects.toMatchObject({ cause: { reason: "renewal_required" } });
+    expect(await ranking()).toEqual([[rival.id, 65], [id, 60]]);
+    expect(memory.rows(recruitmentAuditLogs).map(row => JSON.parse(String(row.metadata)).event)).toEqual(["certification_renewed", "certification_unconfirmed"]);
+  });
+
+  it("lit la date expirée du CV à côté d’un renouvellement confirmé, qu’un retrait du renouvellement laisse expirée et non simplement déclarée (IA-02)", async () => {
+    vi.useFakeTimers({ now: new Date("2026-10-26T10:00:00.000Z"), toFake: ["Date"] });
+    const candidate = seedCandidate({ specialty: "Cardiologie", target_countries: '["Suisse"]', certifications: "ACLS" });
+    const id = candidate.id as number;
+    const briefId = seedBrief({ specialty_needed: "Cardiologie", country: "Suisse", required_certifications: "ACLS" }).id as number;
+    const acls = async () => (await admin().admin.clientBriefs.candidates({ briefId })).candidates[0]!.match.certifications;
+    // Declared only, renewed until 30/06/2027 on the certificate the admin checked.
+    await admin().admin.recruitment.candidate.confirmCertification({ id, name: "ACLS", confirmed: true, renewal: { expiresAt: "2027-06-30" } });
+    // The CV, analysed since, gives 2023-05: read and stored next to the renewal, which still counts.
+    await saveCvAnalysis(id, cvAnalysis({ specialties: ["Cardiologie"], certifications: [{ name: "ACLS", issuingBody: null, country: null, expiresAt: "2023-05", evidence: "Certification ACLS expiration 2023-05", ...verified }] }));
+    expect(memory.rows(cvCandidateCertifications).map(row => [row.source, row.expires_at, row.confirmed_at !== null])).toEqual([["renewed", "2027-06-30", true], ["extracted", "2023-05", false]]);
+    expect(await acls()).toEqual([{ name: "ACLS", origins: ["declared", "confirmed", "extracted"], expiresAt: "2027-06-30", status: "matched" }]);
+    // The renewal withdrawn: expired as the CV says, never « à confirmer » for a mere confirmation to count.
+    await admin().admin.recruitment.candidate.confirmCertification({ id, name: "ACLS", confirmed: false });
+    expect(await acls()).toEqual([{ name: "ACLS", origins: ["declared", "extracted"], expiresAt: "2023-05", status: "expired" }]);
+    await expect(admin().admin.recruitment.candidate.confirmCertification({ id, name: "ACLS", confirmed: true })).rejects.toMatchObject({ cause: { reason: "renewal_required" } });
+  });
+
+  it("lit la date expirée du CV d’une certification déclarée déjà confirmée : la confirmation ne la compte plus, seul son renouvellement (IA-02)", async () => {
+    vi.useFakeTimers({ now: new Date("2026-10-26T10:00:00.000Z"), toFake: ["Date"] });
+    const candidate = seedCandidate({ specialty: "Cardiologie", target_countries: '["Suisse"]', certifications: "ACLS" });
+    const id = candidate.id as number;
+    const briefId = seedBrief({ specialty_needed: "Cardiologie", country: "Suisse", required_certifications: "ACLS" }).id as number;
+    const match = async () => (await admin().admin.clientBriefs.candidates({ briefId })).candidates[0]!.match;
+    const rows = () => memory.rows(cvCandidateCertifications).map(row => [row.source, row.expires_at, row.confirmed_at !== null]);
+    const confirm = (renewal?: { expiresAt: string | null }) => admin().admin.recruitment.candidate.confirmCertification({ id, name: "ACLS", confirmed: true, renewal });
+    // Confirmed on the form's word while the analysis was queued (or before this fix, as dossier 1008): it counts.
+    await expect(confirm()).resolves.toEqual({ success: true, changed: true });
+    expect(rows()).toEqual([["declared", null, true]]);
+    expect(await match()).toMatchObject({ score: 70, certifications: [{ name: "ACLS", expiresAt: null, status: "matched" }] });
+
+    // The CV, read since, says it expired in May 2023: stored next to the confirmation, its date prevails.
+    await saveCvAnalysis(id, cvAnalysis({ specialties: ["Cardiologie"], certifications: [{ name: "ACLS", issuingBody: null, country: null, expiresAt: "2023-05", evidence: "Certification ACLS expiration 2023-05", ...verified }] }));
+    expect(rows()).toEqual([["declared", null, true], ["extracted", "2023-05", false]]);
+    expect(await match()).toMatchObject({ score: 50, breakdown: { certifications: 0 }, certifications: [{ name: "ACLS", origins: ["declared", "confirmed", "extracted"], expiresAt: "2023-05", status: "expired" }] });
+    expect((await admin().admin.recruitment.list({})).items[0]!.certificationFacts).toEqual([{ name: "ACLS", origins: ["declared", "confirmed", "extracted"], expiresAt: "2023-05" }]);
+    // A mere confirmation is refused, its renewal asked for.
+    await expect(confirm()).rejects.toMatchObject({ cause: { reason: "renewal_required" } });
+
+    // Renewed until 30/06/2027 on the certificate: it counts again.
+    await expect(confirm({ expiresAt: "2027-06-30" })).resolves.toEqual({ success: true, changed: true });
+    expect(await match()).toMatchObject({ score: 70, certifications: [{ expiresAt: "2027-06-30", status: "matched" }] });
+    // Withdrawn: expired as the CV says.
+    await expect(admin().admin.recruitment.candidate.confirmCertification({ id, name: "ACLS", confirmed: false })).resolves.toEqual({ success: true, changed: true });
+    expect(await match()).toMatchObject({ score: 50, certifications: [{ origins: ["declared", "extracted"], expiresAt: "2023-05", status: "expired" }] });
+    await expect(confirm()).rejects.toMatchObject({ cause: { reason: "renewal_required" } });
+  });
+
+  it("garde la date expirée lue dans le CV après une analyse dégradée, qui ne l’a pas relu : la simple confirmation reste refusée (IA-02)", async () => {
+    vi.useFakeTimers({ now: new Date("2026-10-26T10:00:00.000Z"), toFake: ["Date"] });
+    const candidate = seedCandidate({ specialty: "Cardiologie", target_countries: '["Suisse"]', certifications: "ACLS" });
+    const id = candidate.id as number;
+    const briefId = seedBrief({ specialty_needed: "Cardiologie", country: "Suisse", required_certifications: "ACLS" }).id as number;
+    const match = async () => (await admin().admin.clientBriefs.candidates({ briefId })).candidates[0]!.match;
+    const normalized = () => memory.rows(cvApplications).find(row => row.id === id)!.normalized_certifications;
+    await saveCvAnalysis(id, cvAnalysis({ specialties: ["Cardiologie"], certifications: [{ name: "ACLS", issuingBody: null, country: null, expiresAt: "2023-05", evidence: "Certification ACLS expiration 2023-05", ...verified }] }));
+    const read = normalized();
+
+    // The AI unavailable, the fallback is saved: it did not read the CV, and says nothing of what was read there.
+    const fallback = buildManualReviewFallback({ firstName: "Carl", lastName: "Cardio", specialty: "Cardiologie", targetCountries: ["Suisse"], languages: [], extractedText: "Certification ACLS expiration 2023-05" });
+    await saveCvAnalysis(id, fallback.result, fallback);
+    expect(memory.rows(cvCandidateCertifications).map(row => [row.name, row.source, row.expires_at, row.confirmed_at])).toEqual([["ACLS", "extracted", "2023-05", null]]);
+    expect(normalized()).toBe(read);
+    expect(await match()).toMatchObject({ score: 50, certifications: [{ name: "ACLS", origins: ["declared", "extracted"], expiresAt: "2023-05", status: "expired" }] });
+    expect((await admin().admin.recruitment.list({ certification: "acls" })).total).toBe(1);
+    await expect(admin().admin.recruitment.candidate.confirmCertification({ id, name: "ACLS", confirmed: true })).rejects.toMatchObject({ cause: { reason: "renewal_required" } });
+
+    // The AI back, the CV read again replaces that reading as usual.
+    await saveCvAnalysis(id, cvAnalysis({ specialties: ["Cardiologie"], certifications: [] }));
+    expect(memory.rows(cvCandidateCertifications)).toEqual([]);
+    expect(normalized()).toBe("[]");
+  });
+
+  it("garde la date expirée que le CV donne à une certification déclarée quand l’analyse relève une contradiction et ne retient aucun fait (IA-02)", async () => {
+    vi.useFakeTimers({ now: new Date("2026-10-26T10:00:00.000Z"), toFake: ["Date"] });
+    // Dossier 1010 of the end-to-end check: « ACLS » declared; the CV reads
+    // « Certification ACLS expiration 2023-05 », but the analysis finds a
+    // contradiction with the declared specialty, so it retains no fact.
+    const hana = seedCandidate({ first_name: "Hana", specialty: "Cardiologie", target_countries: '["Suisse"]', years_experience: 10, certifications: "ACLS" });
+    const rival = seedCandidate({ specialty: "Cardiologie", target_countries: '["Suisse"]', years_experience: 10, availability: "Immédiate" });
+    const id = hana.id as number;
+    const briefId = seedBrief({ specialty_needed: "Cardiologie", country: "Suisse", required_certifications: "ACLS", minimum_years_experience: 5, availability_needed: "Immédiate" }).id as number;
+    const contradicted = cvAnalysis({ specialties: ["Cardiologie"], relevanceScore: null, certifications: [
+      { name: "Licence DHA", issuingBody: "Dubai Health Authority", country: null, expiresAt: null, evidence: "Licence DHA", ...verified },
+      { name: "ACLS", issuingBody: null, country: null, expiresAt: "2023-05", evidence: "Certification ACLS expiration 2023-05", ...verified },
+      { name: "BLS", issuingBody: null, country: null, expiresAt: "2024-03-31", evidence: "Certification BLS expiration 2024-03-31", ...verified },
+    ], contradictions: [{ field: "specialty", declaredValue: "Cardiologie", documentValue: "Infirmier", evidence: "Infirmier diplômé d’État (IDE)", ...verified }] });
+    const ranking = async () => (await admin().admin.clientBriefs.candidates({ briefId })).candidates.map(candidate => [candidate.id, candidate.match.score]);
+    const aclsInMission = async () => (await admin().admin.clientBriefs.candidates({ briefId })).candidates.find(candidate => candidate.id === id)!.match.certifications;
+    // The admin sheet reads the same facts as the 360° one.
+    const sheet = async () => (await admin().admin.recruitment.list({})).items.find(item => item.id === id)!.certificationFacts;
+    const rows = () => memory.rows(cvCandidateCertifications).map(row => [row.name, row.source, row.expires_at, row.confirmed_at !== null]);
+    const confirm = (renewal?: { expiresAt: string | null }) => admin().admin.recruitment.candidate.confirmCertification({ id, name: "ACLS", confirmed: true, renewal });
+
+    await saveCvAnalysis(id, contradicted);
+    // No fact stored, but the expiry the CV gives the declared ACLS, to check;
+    // nothing of the licence or of BLS, which the candidate did not declare.
+    expect(rows()).toEqual([["ACLS", "cv_expiry", "2023-05", false]]);
+    expect(memory.rows(cvApplications).find(row => row.id === id)!.normalized_certifications).toBe("[]");
+    // The mission and the 360° sheet say « expirée » with that date: declared, neither read as a fact nor confirmed.
+    expect(await aclsInMission()).toEqual([{ name: "ACLS", origins: ["declared"], expiresAt: "2023-05", expiryUnverified: true, status: "expired" }]);
+    expect(await sheet()).toEqual([{ name: "ACLS", origins: ["declared"], expiresAt: "2023-05", expiryUnverified: true }]);
+    expect(await ranking()).toEqual([[rival.id, 65], [id, 60]]);
+    // The filters find the declared certification, not one only that CV gives.
+    expect((await admin().admin.recruitment.list({ certification: "acls" })).items.map(item => [item.id, item.certificationFacts])).toEqual([[id, [{ name: "ACLS", origins: ["declared"], expiresAt: "2023-05", expiryUnverified: true }]]]);
+    expect((await admin().admin.recruitment.list({ certification: "DHA" })).items).toEqual([]);
+
+    // A mere « Confirmer » no longer counts it (dossier 1010 went from 75, 14th, to 95, 1st): refused, nothing changed or logged.
+    await expect(confirm()).rejects.toMatchObject({ code: "BAD_REQUEST", cause: { reason: "renewal_required" } });
+    expect(rows()).toEqual([["ACLS", "cv_expiry", "2023-05", false]]);
+    expect(await ranking()).toEqual([[rival.id, 65], [id, 60]]);
+    expect(memory.rows(recruitmentAuditLogs)).toEqual([]);
+
+    // The renewed certificate, checked by the admin: it counts, until 30/06/2027.
+    await expect(confirm({ expiresAt: "2027-06-30" })).resolves.toEqual({ success: true, changed: true });
+    expect(rows()).toEqual([["ACLS", "cv_expiry", "2023-05", false], ["ACLS", "renewed", "2027-06-30", true]]);
+    expect(await aclsInMission()).toEqual([{ name: "ACLS", origins: ["declared", "confirmed"], expiresAt: "2027-06-30", status: "matched" }]);
+    expect(await ranking()).toEqual([[id, 80], [rival.id, 65]]);
+    // The same analysis again: the CV's expiry is stored anew, the renewal still counts.
+    await saveCvAnalysis(id, contradicted);
+    expect(rows()).toEqual([["ACLS", "renewed", "2027-06-30", true], ["ACLS", "cv_expiry", "2023-05", false]]);
+    expect(await ranking()).toEqual([[id, 80], [rival.id, 65]]);
+
+    // The renewal withdrawn: expired again as the CV says, never merely « déclarée ».
+    await expect(admin().admin.recruitment.candidate.confirmCertification({ id, name: "ACLS", confirmed: false })).resolves.toEqual({ success: true, changed: true });
+    expect(rows()).toEqual([["ACLS", "cv_expiry", "2023-05", false]]);
+    expect(await sheet()).toEqual([{ name: "ACLS", origins: ["declared"], expiresAt: "2023-05", expiryUnverified: true }]);
+    await expect(confirm()).rejects.toMatchObject({ cause: { reason: "renewal_required" } });
+    expect(memory.rows(recruitmentAuditLogs).map(row => JSON.parse(String(row.metadata)))).toEqual([
+      { event: "certification_renewed", certification: "ACLS", expiresAt: "2027-06-30", previousExpiresAt: ["2023-05"] },
+      { event: "certification_unconfirmed", certification: "ACLS" },
+    ]);
+
+    // The AI unavailable, even for a CV whose visibility could not be checked, the fallback does not erase that expiry.
+    const fallback = buildManualReviewFallback({ firstName: "Hana", lastName: "Nom", specialty: "Cardiologie", targetCountries: ["Suisse"], languages: [], extractedText: "Certification ACLS expiration 2023-05", visibilityUnchecked: true });
+    await saveCvAnalysis(id, fallback.result, fallback);
+    expect(rows()).toEqual([["ACLS", "cv_expiry", "2023-05", false]]);
+    await expect(confirm()).rejects.toMatchObject({ cause: { reason: "renewal_required" } });
+    // Nor does the review of a CV left with too little visible text, which no AI reads.
+    const review = buildInvisibleTextReview({ firstName: "Hana", lastName: "Nom", specialty: "Cardiologie", targetCountries: ["Suisse"], languages: [], extractedText: "ACLS", visibilityUnchecked: true });
+    await saveCvAnalysis(id, review.result, review);
+    expect(rows()).toEqual([["ACLS", "cv_expiry", "2023-05", false]]);
+    await expect(confirm()).rejects.toMatchObject({ cause: { reason: "renewal_required" } });
+
+    // An analysis without doubt reads ACLS as a fact, with the same date.
+    await saveCvAnalysis(id, cvAnalysis({ specialties: ["Cardiologie"], certifications: contradicted.certifications }));
+    expect(rows().filter(row => row[0] === "ACLS")).toEqual([["ACLS", "extracted", "2023-05", false]]);
+    expect(await aclsInMission()).toEqual([{ name: "ACLS", origins: ["declared", "extracted"], expiresAt: "2023-05", status: "expired" }]);
+  });
+
+  it("ne garde de date lue dans le CV d’une analyse sans faits que si sa dernière lecture est passée : une certification renouvelée ou sans date dans le CV ne devient pas expirée (IA-02)", async () => {
+    vi.useFakeTimers({ now: new Date("2026-10-26T10:00:00.000Z"), toFake: ["Date"] });
+    const id = seedCandidate({ specialty: "Cardiologie", target_countries: '["Suisse"]', certifications: "ACLS, BLS, PALS" }).id as number;
+    const briefId = seedBrief({ specialty_needed: "Cardiologie", country: "Suisse", required_certifications: "ACLS" }).id as number;
+    const reading = (name: string, expiresAt: string | null, evidence: string) => ({ name, issuingBody: null, country: null, expiresAt, evidence, ...verified });
+    // The CV shows ACLS renewed until 2027, BLS once undated, PALS twice expired;
+    // the analysis finds a contradiction and retains no fact.
+    await saveCvAnalysis(id, cvAnalysis({ specialties: ["Cardiologie"], relevanceScore: null, certifications: [
+      reading("ACLS", "2021-05", "ACLS expiration 2021-05"), reading("ACLS", "2027-05", "ACLS renouvelée expiration 2027-05"),
+      reading("BLS", "2022-01", "BLS expiration 2022-01"), reading("BLS", null, "BLS"),
+      reading("PALS", "2019-01", "PALS expiration 2019-01"), reading("PALS", "2020-03", "PALS expiration 2020-03"),
+    ], contradictions: [{ field: "specialty", declaredValue: "Cardiologie", documentValue: "Infirmier", evidence: "Infirmier diplômé d’État (IDE)", ...verified }] }));
+
+    // Only PALS has expired by its latest reading, with that date alone.
+    expect(memory.rows(cvCandidateCertifications).map(row => [row.name, row.source, row.expires_at])).toEqual([["PALS", "cv_expiry", "2020-03"]]);
+    expect((await admin().admin.recruitment.list({})).items[0]!.certificationFacts).toEqual([
+      { name: "ACLS", origins: ["declared"], expiresAt: null },
+      { name: "BLS", origins: ["declared"], expiresAt: null },
+      { name: "PALS", origins: ["declared"], expiresAt: "2020-03", expiryUnverified: true },
+    ]);
+    // ACLS, valid by the CV, is confirmed as it is and counts in the mission.
+    await expect(admin().admin.recruitment.candidate.confirmCertification({ id, name: "ACLS", confirmed: true })).resolves.toEqual({ success: true, changed: true });
+    expect((await admin().admin.clientBriefs.candidates({ briefId })).candidates[0]!.match).toMatchObject({ matchedCertifications: ["ACLS"], certifications: [{ name: "ACLS", origins: ["declared", "confirmed"], expiresAt: null, status: "matched" }] });
+  });
+
+  it("dit dans la fiche, la mission et le fichier envoyé à l’employeur que la date d’une certification déclarée vient d’un CV dont l’analyse n’a retenu aucun fait, à vérifier (IA-02)", async () => {
+    vi.useFakeTimers({ now: new Date("2026-10-26T10:00:00.000Z"), toFake: ["Date"] });
+    const id = seedCandidate({ specialty: "Cardiologie", target_countries: '["Suisse"]', certifications: "ACLS" }).id as number;
+    memory.seed(cvCandidateCertifications, [{ application_id: id, name: "ACLS", source: "cv_expiry", expires_at: "2023-05", evidence: "Certification ACLS expiration 2023-05" }]);
+    const briefId = seedBrief({ specialty_needed: "Cardiologie", country: "Suisse", required_certifications: "ACLS" }).id as number;
+    memory.seed(clientBriefCandidates, [{ brief_id: briefId, application_id: id, association_status: "shortlisted", candidate_consent_at: "2026-10-20 12:00:00.000" }]);
+    const exportedCertifications = async () => (await admin().admin.recruitment.exportCsv({ type: "shortlist", briefId })).csv.split("\n")[1]!.split('";"')[10];
+
+    // The applications list reads the same facts as the 360° sheet.
+    expect((await admin().admin.recruitment.list({})).items[0]!.certificationFacts).toEqual([{ name: "ACLS", origins: ["declared"], expiresAt: "2023-05", expiryUnverified: true }]);
+    expect((await admin().admin.clientBriefs.candidates({ briefId })).candidates[0]!.match.certifications).toEqual([{ name: "ACLS", origins: ["declared"], expiresAt: "2023-05", expiryUnverified: true, status: "expired" }]);
+    expect(await exportedCertifications()).toBe("ACLS (déclarée par le candidat), expirée en mai 2023 selon le CV, à vérifier");
+
+    // The renewal the admin confirmed on the certificate gives the date, which is no longer the CV's.
+    await admin().admin.recruitment.candidate.confirmCertification({ id, name: "ACLS", confirmed: true, renewal: { expiresAt: "2027-06-30" } });
+    expect(await exportedCertifications()).toBe("ACLS (déclarée par le candidat, confirmée par l’admin), expire le 30/06/2027");
+  });
+
+  it("garde après une analyse dégradée les langues lues dans le CV, comme ses certifications (IA-02)", async () => {
+    const candidate = seedCandidate({ specialty: "Cardiologie", target_countries: '["Suisse"]', languages: '["Français"]' });
+    const id = candidate.id as number;
+    const briefId = seedBrief({ specialty_needed: "Cardiologie", country: "Suisse", required_languages: "Français, Anglais" }).id as number;
+    const languagesInMission = async () => (await admin().admin.clientBriefs.candidates({ briefId })).candidates[0]!.match.languages;
+    const rows = () => memory.rows(cvCandidateLanguages).map(row => [row.language, row.source]);
+    const normalized = () => memory.rows(cvApplications).find(row => row.id === id)!.normalized_languages;
+    await saveCvAnalysis(id, cvAnalysis({ specialties: ["Cardiologie"], normalizedLanguages: [
+      { language: "Français", proficiency: "native", evidence: "Français (langue maternelle)", ...verified },
+      { language: "Anglais", proficiency: "fluent", evidence: "Anglais (courant)", ...verified },
+    ] }));
+    const read = normalized();
+    expect(rows()).toEqual([["Français", "extracted"], ["Anglais", "extracted"]]);
+    expect(await languagesInMission()).toEqual([{ name: "Français", origins: ["declared", "extracted"] }, { name: "Anglais", origins: ["extracted"] }]);
+
+    // The AI unavailable, the fallback did not read the CV: the languages read there stay, for the mission and the filters.
+    const fallback = buildManualReviewFallback({ firstName: "Carl", lastName: "Cardio", specialty: "Cardiologie", targetCountries: ["Suisse"], languages: ["Français"], extractedText: "Français (langue maternelle), Anglais (courant)" });
+    await saveCvAnalysis(id, fallback.result, fallback);
+    expect(rows()).toEqual([["Français", "extracted"], ["Anglais", "extracted"]]);
+    expect(normalized()).toBe(read);
+    expect(await languagesInMission()).toEqual([{ name: "Français", origins: ["declared", "extracted"] }, { name: "Anglais", origins: ["extracted"] }]);
+    expect((await admin().admin.recruitment.list({ language: "anglais" })).items.map(item => item.id)).toEqual([id]);
+
+    // The AI back, the CV read again replaces that reading as usual.
+    await saveCvAnalysis(id, cvAnalysis({ specialties: ["Cardiologie"], normalizedLanguages: [] }));
+    expect(rows()).toEqual([]);
+    expect(normalized()).toBe("[]");
+    expect(await languagesInMission()).toEqual([{ name: "Français", origins: ["declared"] }]);
+  });
+
+  it("ne confirme pas une certification dont le dossier ne garde que la date lue dans le CV, sans la déclarer (IA-02)", async () => {
+    vi.useFakeTimers({ now: new Date("2026-10-26T10:00:00.000Z"), toFake: ["Date"] });
+    // The candidate no longer declares ACLS: the expiry left by the last analysis dates nothing.
+    const id = seedCandidate({ certifications: "BLS" }).id as number;
+    memory.seed(cvCandidateCertifications, [{ application_id: id, name: "ACLS", source: "cv_expiry", expires_at: "2023-05" }]);
+    expect((await admin().admin.recruitment.list({})).items[0]!.certificationFacts).toEqual([{ name: "BLS", origins: ["declared"], expiresAt: null }]);
+    await expect(admin().admin.recruitment.candidate.confirmCertification({ id, name: "ACLS", confirmed: true, renewal: { expiresAt: "2027-06-30" } })).rejects.toMatchObject({ code: "NOT_FOUND" });
+    expect(memory.rows(cvCandidateCertifications).map(row => row.source)).toEqual(["cv_expiry"]);
+  });
+
+  it("confirme le renouvellement d’une certification seulement déclarée dans sa propre ligne, retirée avec la confirmation (IA-02)", async () => {
+    vi.useFakeTimers({ now: new Date("2026-10-26T10:00:00.000Z"), toFake: ["Date"] });
+    const candidate = seedCandidate({ certifications: "BLS" });
+    const id = candidate.id as number;
+    // 15 years ahead at most, that day included.
+    await expect(admin().admin.recruitment.candidate.confirmCertification({ id, name: "bls", confirmed: true, renewal: { expiresAt: "2041-10-26" } })).resolves.toEqual({ success: true, changed: true });
+    expect(memory.rows(cvCandidateCertifications).map(row => [row.name, row.source, row.expires_at, row.confirmed_at !== null])).toEqual([["BLS", "renewed", "2041-10-26", true]]);
+    const factsOf = async () => (await admin().admin.recruitment.list({})).items[0]!.certificationFacts;
+    expect(await factsOf()).toEqual([{ name: "BLS", origins: ["declared", "confirmed"], expiresAt: "2041-10-26" }]);
+    // Already confirmed by its renewal.
+    await expect(admin().admin.recruitment.candidate.confirmCertification({ id, name: "BLS", confirmed: true })).resolves.toEqual({ success: true, changed: false });
+    await expect(admin().admin.recruitment.candidate.confirmCertification({ id, name: "BLS", confirmed: false })).resolves.toEqual({ success: true, changed: true });
+    expect(memory.rows(cvCandidateCertifications)).toEqual([]);
+    expect(await factsOf()).toEqual([{ name: "BLS", origins: ["declared"], expiresAt: null }]);
+  });
+
+  it("refuse une date d’accord antérieure à la candidature ou à la création de la mission, le jour même accepté (RGPD-03)", async () => {
+    const candidate = seedCandidate({ createdAt: "2026-10-15 08:00:00.000" });
+    const latecomer = seedCandidate({ createdAt: "2026-10-21 09:00:00.000" });
+    // Created at 00:30 on 19 October in Paris.
+    const brief = seedBrief({ created_at: "2026-10-18 22:30:00.000" });
+    const briefId = brief.id as number;
+    for (const applicant of [candidate, latecomer]) await admin().admin.clientBriefs.associateCandidate({ briefId, applicationId: applicant.id as number, status: "shortlisted" });
+    const consent = (applicationId: unknown, consentDate: string) => admin().admin.clientBriefs.setCandidateConsent({ briefId, applicationId: applicationId as number, consentDate });
+
+    // Each refusal carries a stable reason the mission screen words in the admin's language.
+    // With the day it names (Paris), for the screen to date it whatever mission it shows by then.
+    await expect(consent(candidate.id, "1900-01-01")).rejects.toMatchObject({ message: "La date de l’accord du candidat ne peut pas précéder la création de la mission, le 19/10/2026.", cause: { reason: "consent_before_mission", date: "2026-10-19" } });
+    await expect(consent(candidate.id, "2026-10-18")).rejects.toMatchObject({ message: "La date de l’accord du candidat ne peut pas précéder la création de la mission, le 19/10/2026.", cause: { reason: "consent_before_mission", date: "2026-10-19" } });
+    await expect(consent(latecomer.id, "2026-10-20")).rejects.toMatchObject({ message: "La date de l’accord du candidat ne peut pas précéder sa candidature, reçue le 21/10/2026.", cause: { reason: "consent_before_application", date: "2026-10-21" } });
+    // What the browser receives, through the router's error formatter: the reason and the day in data.
+    const refused = await consent(candidate.id, "2026-10-18").catch((error: TRPCError) => error);
+    expect(formatTrpcErrorShape({ message: refused.message, data: { code: refused.code } }, refused).data).toEqual({ code: "BAD_REQUEST", reason: "consent_before_mission", date: "2026-10-19" });
+    // The same day is accepted.
+    await consent(candidate.id, "2026-10-19");
+    await consent(latecomer.id, "2026-10-21");
+    expect(memory.rows(clientBriefCandidates).map(row => row.candidate_consent_at)).toEqual(["2026-10-19 12:00:00.000", "2026-10-21 12:00:00.000"]);
+    expect(memory.rows(recruitmentAuditLogs).map(row => JSON.parse(String(row.metadata)).consentDate)).toEqual(["2026-10-19", "2026-10-21"]);
+  });
+
+  it("note puis retire la date de l’accord du candidat pour une mission (RGPD-03)", async () => {
+    const candidate = seedCandidate({ createdAt: "2026-10-01 08:00:00.000" });
+    const outsider = seedCandidate();
+    const brief = seedBrief({ created_at: "2026-10-02 08:00:00.000" });
+    const briefId = brief.id as number;
+    await admin().admin.clientBriefs.associateCandidate({ briefId, applicationId: candidate.id as number, status: "shortlisted" });
+
+    await admin().admin.clientBriefs.setCandidateConsent({ briefId, applicationId: candidate.id as number, consentDate: "2026-10-20" });
+    expect(memory.rows(clientBriefCandidates)[0]!.candidate_consent_at).toBe("2026-10-20 12:00:00.000");
+    const listed = await admin().admin.clientBriefs.candidates({ briefId, shortlist: "shortlisted" });
+    expect(listed).toMatchObject({ shortlistedCount: 1, consentedCount: 1 });
+    expect(listed.candidates[0]!.association!.candidateConsentAt).toEqual(new Date("2026-10-20T12:00:00.000Z"));
+
+    // Shortlisting again keeps the agreement.
+    await admin().admin.clientBriefs.associateCandidate({ briefId, applicationId: candidate.id as number, status: "shortlisted" });
+    expect(memory.rows(clientBriefCandidates)[0]!.candidate_consent_at).toBe("2026-10-20 12:00:00.000");
+
+    await expect(admin().admin.clientBriefs.setCandidateConsent({ briefId, applicationId: candidate.id as number, consentDate: "2999-01-01" })).rejects.toMatchObject({ message: "La date de l’accord du candidat ne peut pas être dans le futur.", cause: { reason: "consent_date_future" } });
+    await expect(admin().admin.clientBriefs.setCandidateConsent({ briefId, applicationId: candidate.id as number, consentDate: "2026-02-30" })).rejects.toMatchObject({ message: "Date de l’accord invalide.", cause: { reason: "consent_date_invalid" } });
+    await expect(admin().admin.clientBriefs.setCandidateConsent({ briefId, applicationId: outsider.id as number, consentDate: "2026-10-20" })).rejects.toMatchObject({ code: "NOT_FOUND", message: "Ce candidat n’est pas associé à cette mission : présélectionnez-le d’abord.", cause: { reason: "consent_not_associated" } });
+
+    await admin().admin.clientBriefs.setCandidateConsent({ briefId, applicationId: candidate.id as number, consentDate: null });
+    expect(memory.rows(clientBriefCandidates)[0]!.candidate_consent_at).toBeNull();
+    await expect(admin().admin.clientBriefs.candidates({ briefId })).resolves.toMatchObject({ shortlistedCount: 1, consentedCount: 0 });
+    expect(memory.rows(recruitmentAuditLogs).map(row => JSON.parse(String(row.metadata)))).toEqual([
+      { event: "mission_consent", briefId, consentDate: "2026-10-20" },
+      { event: "mission_consent", briefId, consentDate: null },
+    ]);
+  });
+
+  it("n’exporte que les présélectionnés ayant donné leur accord, en clair, avec l’origine de leurs certifications et langues, et dit combien sont exclus (RGPD-03, IA-02)", async () => {
+    const agreed = seedCandidate({ languages: '["Anglais"]', certifications: "BLS", target_countries: '["Émirats arabes unis","Qatar"]', years_experience: 8, availability: "Immédiate", mobility: "Golfe", status: "reviewing" });
+    const waiting = seedCandidate();
+    const brief = seedBrief();
+    const briefId = brief.id as number;
+    memory.seed(cvCandidateCertifications, [
+      { application_id: agreed.id, name: "Licence DHA", source: "extracted", expires_at: "2099-05" },
+      { application_id: agreed.id, name: "ACLS", source: "extracted", expires_at: "2023-05" },
+    ]);
+    memory.seed(cvCandidateLanguages, [{ application_id: agreed.id, language: "Arabe", source: "extracted" }]);
+    memory.seed(clientBriefCandidates, [
+      { brief_id: briefId, application_id: agreed.id, association_status: "shortlisted", candidate_consent_at: "2026-10-20 12:00:00.000" },
+      { brief_id: briefId, application_id: waiting.id, association_status: "shortlisted" },
+    ]);
+
+    const exported = await admin().admin.recruitment.exportCsv({ type: "shortlist", briefId });
+    expect(exported).toMatchObject({ count: 1, excludedWithoutConsent: 1 });
+    const [header, ...rows] = exported.csv.split("\n");
+    expect(header).toBe(["Prénom", "Nom", "Email", "Téléphone", "Spécialité", "Pays ciblés", "Langues (origine)", "Expérience (ans)", "Disponibilité", "Mobilité", "Certifications (origine)", "Accord du candidat", "Statut"].map(cell => `"${cell}"`).join(";"));
+    // Every cell reads as written for the employer: the countries listed, each
+    // certification's expiry, the status in words, no JSON nor internal code.
+    expect(rows).toEqual([[
+      "Prénom1", "Nom", "m1@test.local", "", "Pédiatrie", "Émirats arabes unis ; Qatar",
+      "Anglais (déclarée par le candidat) ; Arabe (extraite du CV par l’IA)", "8", "Immédiate", "Golfe",
+      "BLS (déclarée par le candidat) ; Licence DHA (extraite du CV par l’IA), expire en mai 2099 ; ACLS (extraite du CV par l’IA), expirée en mai 2023",
+      "20/10/2026", "En revue",
+    ].map(cell => `"${cell}"`).join(";")]);
+    expect(exported.csv).not.toContain("m2@test.local");
+    expect(memory.rows(recruitmentAuditLogs).filter(row => row.action === "export").map(row => row.application_id)).toEqual([agreed.id]);
+
+    // Nobody agreed: refused with what to do, and nothing is logged as exported.
+    memory.rows(clientBriefCandidates)[0]!.candidate_consent_at = null;
+    await expect(admin().admin.recruitment.exportCsv({ type: "shortlist", briefId })).rejects.toThrow("Aucun des 2 candidat(s) de la shortlist n’a d’accord noté pour cette mission. Obtenez l’accord de chaque candidat et notez-en la date (« Accord du candidat reçu ») avant d’exporter.");
+    expect(memory.rows(recruitmentAuditLogs).filter(row => row.action === "export")).toHaveLength(1);
+  });
+});

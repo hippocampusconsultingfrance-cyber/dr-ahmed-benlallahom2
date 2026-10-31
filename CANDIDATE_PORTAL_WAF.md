@@ -15,7 +15,7 @@ Dans **Security → WAF → Custom rules**, créer la règle suivante :
 
 Créer ensuite une règle de **Rate limiting** : 20 requêtes sur 10 minutes par IP vers `/api/candidate/*`, action `Managed Challenge`, durée de mitigation 10 minutes.
 
-Ne pas appliquer cette règle aux appels Heartbeat `/api/scheduled/*`, qui sont authentifiés séparément et nécessaires au traitement documentaire.
+Ne pas appliquer cette règle aux appels Vercel Cron `/api/scheduled/*`, qui sont authentifiés séparément par `CRON_SECRET` et nécessaires au traitement documentaire.
 
 > La protection Turnstile côté formulaire et la limitation persistante côté serveur restent actives même si la règle WAF est temporairement désactivée.
 

@@ -258,7 +258,7 @@ export const venturesFr: VentureDetail[] = [
         name: "Wafa Dahmeni",
         role: "CEO",
         linkedin: "https://www.linkedin.com/in/wafadahmeni/",
-        photo: "/manus-storage/photo-wafa-clean_fe6f20ad.png",
+        // Photo à fournir : l’ancienne, hébergée chez Manus, n’existe plus (CODE-05).
       },
       {
         name: "Amine Hachicha",

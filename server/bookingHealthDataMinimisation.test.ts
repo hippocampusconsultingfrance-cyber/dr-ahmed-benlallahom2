@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { appointmentFulfillmentJobs, appointments } from "../drizzle/schema";
 
@@ -24,7 +23,7 @@ vi.mock("resend", () => ({
 }));
 const database = vi.hoisted(() => ({ getDb: vi.fn() }));
 vi.mock("./db", () => ({ getDb: database.getDb }));
-vi.mock("./storage.js", () => ({ storagePut: vi.fn(async (key: string) => ({ key, url: "https://storage.test/invoice.pdf" })) }));
+vi.mock("./storage.js", () => ({ storagePutOnce: vi.fn(async (key: string) => ({ key, url: "https://storage.test/invoice.pdf", uploaded: true })) }));
 vi.mock("./invoiceNumbering", () => ({
   allocateAppointmentInvoice: vi.fn(async () => ({
     invoiceNumber: "FAC-2026-000001",
@@ -162,8 +161,6 @@ describe("minimisation des données de santé à la réservation", () => {
       expect(bookingContent[language].form.details).toBeTruthy();
       expect(bookingContent[language].form.detailsWarning.length).toBeGreaterThan(20);
     }
-    const source = readFileSync(new URL("../client/src/pages/BookingPage.tsx", import.meta.url), "utf8");
-    expect(source).toContain('aria-describedby="booking-details-warning"');
-    expect(source).toContain("maxLength={BOOKING_REQUEST_SUBJECT_MAX_LENGTH}");
+    // The field is bound to its warning and length limit on the page: BookingPage.render.test.ts.
   });
 });

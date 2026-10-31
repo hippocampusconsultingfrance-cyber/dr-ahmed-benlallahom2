@@ -184,6 +184,8 @@ export function renderRouteSeoHead(url: string): string {
   });
 }
 
+const FALLBACK_DESCRIPTION = "Anesthésiste-réanimateur, entrepreneur en santé et consultant médical basé en France.";
+
 /**
  * <head> de la page de repli SPA servie par Vercel pour toute URL sans
  * fichier pré-rendu (espaces candidat/admin, confirmation de réservation,
@@ -192,8 +194,58 @@ export function renderRouteSeoHead(url: string): string {
 export function renderFallbackSeoHead(): string {
   return renderHead({
     title: SITE_NAME,
-    description: "Anesthésiste-réanimateur, entrepreneur en santé et consultant médical basé en France.",
+    description: FALLBACK_DESCRIPTION,
     noIndex: true,
   });
+}
+
+/** Liens principaux du contenu sans JavaScript, en français comme tout le HTML pré-rendu. */
+const NOSCRIPT_LINKS: readonly { href: string; label: string }[] = [
+  { href: "/", label: "Accueil" },
+  { href: "/booking", label: "Réserver une consultation" },
+  { href: "/questions-anesthesie", label: "Questions santé" },
+  { href: "/recruitment", label: "Recrutement" },
+  { href: "/employers", label: "Employeurs" },
+  { href: "/faq", label: "Questions fréquentes" },
+  { href: "/legal", label: "Mentions légales" },
+  { href: "/gdpr", label: "Protection des données" },
+];
+
+function renderNoscript(input: { title: string; description: string; pathname?: string }): string {
+  const links = NOSCRIPT_LINKS.map(link => {
+    const current = link.href === input.pathname ? ' aria-current="page"' : "";
+    return `        <li><a href="${link.href}"${current}>${escapeHtml(link.label)}</a></li>`;
+  });
+  return [
+    "<noscript>",
+    '  <main class="noscript-page">',
+    `    <h1>${escapeHtml(input.title)}</h1>`,
+    `    <p>${escapeHtml(input.description)}</p>`,
+    "    <p>Activez JavaScript dans votre navigateur pour afficher cette page en entier.</p>",
+    // Seule phrase en anglais : un visiteur anglophone sans JavaScript sait comment voir la page.
+    '    <p lang="en">Enable JavaScript in your browser to view this page in full.</p>',
+    '    <nav aria-label="Liens principaux">',
+    "      <ul>",
+    ...links,
+    "      </ul>",
+    "    </nav>",
+    "  </main>",
+    "</noscript>",
+  ].join("\n    ");
+}
+
+/**
+ * Contenu d'une page pré-rendue pour les visiteurs et les robots sans JavaScript
+ * (SEOP-01) : titre, description et liens principaux de la route. Placé hors de
+ * #root, il n'est affiché que si JavaScript est désactivé : React ne le voit pas.
+ */
+export function renderRouteNoscript(url: string): string {
+  const seo = getRouteSeo(url);
+  return renderNoscript({ title: seo.title, description: seo.description, pathname: normalizePathname(url) });
+}
+
+/** Contenu sans JavaScript de la page de repli SPA, générique comme son <head>. */
+export function renderFallbackNoscript(): string {
+  return renderNoscript({ title: SITE_NAME, description: FALLBACK_DESCRIPTION });
 }
 

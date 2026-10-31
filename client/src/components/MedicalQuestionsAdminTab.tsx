@@ -1,14 +1,61 @@
-import { useEffect, useState } from "react";
-import { Clock3, Mail, Phone, ShieldCheck, Sparkles, Send, Save } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Archive, Clock3, Mail, Phone, ShieldCheck, Sparkles, Send, Save, Trash2 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import PublicContentSkeleton from "@/components/PublicContentSkeleton";
+import AdminLoadMore from "@/components/AdminLoadMore";
+import AdminSearchField from "@/components/AdminSearchField";
+import { adminListCount, adminPageOffsets, ADMIN_PAGE_SIZE, mergeAdminPages, useAdminPageCount } from "@/components/adminPagination";
+import { adminSearchStatus, useAdminSearch } from "@/components/adminSearch";
 import { toast } from "sonner";
 
 const MIN_PRIVATE_RESPONSE_LENGTH = 20;
 
+type MedicalQuestionStatus = "submitted" | "drafting" | "answered" | "published" | "rejected";
+
+/**
+ * ADM-01: the tab opens on the questions to answer (new and drafts), oldest
+ * first, so that none waits out of sight behind the newer ones.
+ */
+export const MEDICAL_QUESTION_QUEUES = {
+  todo: { label: "À traiter", statuses: ["submitted", "drafting"], order: "oldest", empty: "Aucune question à traiter." },
+  answered: { label: "Répondues", statuses: ["answered", "published"], order: "newest", empty: "Aucune question répondue." },
+  rejected: { label: "Classées sans suite", statuses: ["rejected"], order: "newest", empty: "Aucune question classée sans suite." },
+  all: { label: "Toutes", statuses: undefined, order: "newest", empty: "Aucune question reçue." },
+} as const satisfies Record<string, { label: string; statuses: readonly MedicalQuestionStatus[] | undefined; order: "oldest" | "newest"; empty: string }>;
+
+type MedicalQuestionQueue = keyof typeof MEDICAL_QUESTION_QUEUES;
+
+const STATUS_LABELS: Record<MedicalQuestionStatus, string> = {
+  submitted: "Nouvelle",
+  drafting: "Brouillon",
+  answered: "Répondue",
+  published: "Publiée",
+  rejected: "Classée sans suite",
+};
+
+/**
+ * ADM-01: below the two-column layout (Tailwind lg, 64rem), the detail sits
+ * under the whole list and its « Charger plus ». Touching a question brings
+ * the detail on screen and moves the focus there, so that a screen reader
+ * reads it next. Side by side on a desktop, the detail is already next to the
+ * list: neither the page nor the focus moves.
+ */
+export function revealQuestionDetail(detail: Pick<HTMLElement, "focus" | "scrollIntoView"> | null, view: Pick<Window, "matchMedia"> = window) {
+  if (!detail || view.matchMedia("(min-width: 64rem)").matches) return;
+  detail.focus({ preventScroll: true });
+  detail.scrollIntoView({ block: "start" });
+}
+
 export default function MedicalQuestionsAdminTab() {
-  const { data, isLoading, error } = trpc.medicalQuestions.admin.list.useQuery({ limit: 50 });
+  const [queue, setQueue] = useState<MedicalQuestionQueue>("todo");
+  // ADM-02: patient name, email or the QMED-… reference of the notification email, searched by the server.
+  const { text: searchText, search, setText: setSearchText, clear: clearSearch } = useAdminSearch();
+  const { pageCount, loadMore } = useAdminPageCount(JSON.stringify({ queue, search }));
+  const { statuses, order } = MEDICAL_QUESTION_QUEUES[queue];
+  const pages = trpc.useQueries(t => adminPageOffsets(pageCount).map(offset => t.medicalQuestions.admin.list({ statuses: statuses ? [...statuses] : undefined, order, search, limit: ADMIN_PAGE_SIZE, offset })));
+  const { items, total, isLoading, isLoadingMore, error, loadMoreError, retryLoadMore } = mergeAdminPages(pages);
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const detailRef = useRef<HTMLDivElement>(null);
   const [adminResponse, setAdminResponse] = useState("");
   const [publicQuestion, setPublicQuestion] = useState("");
   const [publicResponse, setPublicResponse] = useState("");
@@ -37,6 +84,11 @@ export default function MedicalQuestionsAdminTab() {
     onSuccess: result => {
       void utils.medicalQuestions.admin.get.invalidate();
       void utils.medicalQuestions.admin.list.invalidate();
+      // DATA-02: an attempt stopped before its recording, too old to be tried again safely.
+      if (result.unconfirmedSentAt) {
+        toast.warning(`Un envoi du ${new Date(result.unconfirmedSentAt).toLocaleString("fr-FR", { timeZone: "Europe/Paris" })} s’est interrompu avant d’être enregistré : la personne a peut-être déjà reçu la réponse. Il est enregistré à cette date avec le texte de cet envoi, sans nouvel email : une modification faite depuis n’a été ni envoyée ni conservée. « Renvoyer la réponse » permet un nouvel envoi volontaire.`, { duration: 12_000 });
+        return;
+      }
       toast.success(result.resent ? "Réponse renvoyée par email." : result.published ? "Réponse envoyée et version anonymisée publiée." : "Réponse envoyée par email.");
     },
     onError: mutationError => toast.error(mutationError.message),
@@ -55,6 +107,23 @@ export default function MedicalQuestionsAdminTab() {
       void utils.medicalQuestions.admin.get.invalidate();
       void utils.medicalQuestions.admin.list.invalidate();
       toast.success("La question a été retirée de la bibliothèque publique. Le dossier privé et son journal sont conservés.");
+    },
+    onError: mutationError => toast.error(mutationError.message),
+  });
+  const reject = trpc.medicalQuestions.admin.reject.useMutation({
+    onSuccess: () => {
+      void utils.medicalQuestions.admin.get.invalidate();
+      void utils.medicalQuestions.admin.list.invalidate();
+      toast.success("Question classée sans suite. Le dossier privé et son journal sont conservés ; enregistrer un brouillon la remet à traiter.");
+    },
+    onError: mutationError => toast.error(mutationError.message),
+  });
+  // RGPD-12: erasure request or withdrawn consent; the security journal keeps a trace that names no one.
+  const remove = trpc.medicalQuestions.admin.delete.useMutation({
+    onSuccess: () => {
+      setSelectedId(null);
+      void utils.medicalQuestions.admin.list.invalidate();
+      toast.success("Question supprimée définitivement, avec sa version publique et son journal.");
     },
     onError: mutationError => toast.error(mutationError.message),
   });
@@ -116,9 +185,6 @@ export default function MedicalQuestionsAdminTab() {
     updatePublication.mutate({ id: selected.data.id, publicQuestion, publicResponse });
   }
 
-  if (isLoading) return <PublicContentSkeleton cards={3} label="Chargement des questions médicales" />;
-  if (error) return <p className="text-destructive">{error.message}</p>;
-
   return (
     <section className="grid gap-6 lg:grid-cols-[minmax(0,.9fr)_minmax(0,1.1fr)]">
       <div className="min-w-0">
@@ -127,30 +193,62 @@ export default function MedicalQuestionsAdminTab() {
         <p className="mt-3 text-sm leading-6 text-muted-foreground">
           Les coordonnées et la question originale restent privées. Aucun envoi ni publication n’est possible sans validation médicale.
         </p>
-        <div className="mt-6 space-y-3">
-          {data?.map(question => (
+        <div className="mt-5 flex flex-wrap gap-2" role="group" aria-label="Questions affichées">
+          {(Object.keys(MEDICAL_QUESTION_QUEUES) as MedicalQuestionQueue[]).map(key => (
             <button
               type="button"
-              key={question.id}
-              onClick={() => setSelectedId(question.id)}
-              className={`min-w-0 w-full rounded-2xl border p-4 text-left transition-colors ${selectedId === question.id ? "border-primary bg-primary/10" : "border-border bg-card hover:border-primary/40"}`}
+              key={key}
+              onClick={() => setQueue(key)}
+              aria-pressed={queue === key}
+              className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${queue === key ? "bg-primary text-primary-foreground" : "border border-border bg-card text-muted-foreground hover:text-foreground"}`}
             >
-              <div className="flex items-center justify-between gap-3">
-                <span className="min-w-0 truncate font-semibold text-foreground">{question.firstName} {question.lastName}</span>
-                <span className="rounded-full border border-border px-2 py-1 text-xs text-muted-foreground">{question.status}</span>
-              </div>
-              <p className="mt-2 line-clamp-2 break-words text-sm text-muted-foreground [overflow-wrap:anywhere]">{question.question}</p>
-              <p className="mt-3 flex items-center gap-1.5 text-xs text-muted-foreground">
-                <Clock3 className="h-3.5 w-3.5" />
-                {new Date(question.createdAt).toLocaleString("fr-FR")}
-              </p>
+              {MEDICAL_QUESTION_QUEUES[key].label}
             </button>
           ))}
-          {!data?.length && <p className="rounded-2xl border border-border p-5 text-muted-foreground">Aucune question en attente.</p>}
         </div>
+        <AdminSearchField id="medical-questions-search" label="Rechercher une question" placeholder="Nom, prénom, email ou référence QMED-…" value={searchText} onChange={setSearchText} onClear={clearSearch} status={adminSearchStatus(search, { isLoading, error, shown: items.length, total }, "question(s)")} className="mt-4" />
+        {/* Queues and search stay on screen (and keep the focus) while the list loads or fails. */}
+        {isLoading ? (
+          <div className="mt-4"><PublicContentSkeleton cards={3} label="Chargement des questions médicales" /></div>
+        ) : error ? (
+          <p className="mt-4 text-destructive">{error.message}</p>
+        ) : (
+          <>
+            <p className="mt-3 break-words text-sm text-muted-foreground [overflow-wrap:anywhere]">
+              {adminListCount(items.length, total, "question(s)")}{search ? ` pour « ${search} »` : ""}{queue === "todo" ? " · de la plus ancienne à la plus récente" : ""}
+            </p>
+            <div className="mt-4 space-y-3">
+              {items.map(question => (
+                <button
+                  type="button"
+                  key={question.id}
+                  onClick={() => {
+                    setSelectedId(question.id);
+                    revealQuestionDetail(detailRef.current);
+                  }}
+                  className={`min-w-0 w-full rounded-2xl border p-4 text-left transition-colors ${selectedId === question.id ? "border-primary bg-primary/10" : "border-border bg-card hover:border-primary/40"}`}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="min-w-0 truncate font-semibold text-foreground">{question.firstName} {question.lastName}</span>
+                    <span className="rounded-full border border-border px-2 py-1 text-xs text-muted-foreground">{STATUS_LABELS[question.status] ?? question.status}</span>
+                  </div>
+                  <p className="mt-1 font-mono text-xs text-muted-foreground">{question.trackingId}</p>
+                  <p className="mt-2 line-clamp-2 break-words text-sm text-muted-foreground [overflow-wrap:anywhere]">{question.question}</p>
+                  <p className="mt-3 flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <Clock3 className="h-3.5 w-3.5" />
+                    {new Date(question.createdAt).toLocaleString("fr-FR")}
+                  </p>
+                </button>
+              ))}
+              {items.length === 0 && <p className="rounded-2xl border border-border p-5 break-words text-muted-foreground [overflow-wrap:anywhere]">{search ? `Aucune question ne correspond à « ${search} » dans cette liste.` : MEDICAL_QUESTION_QUEUES[queue].empty}</p>}
+            </div>
+            <AdminLoadMore shown={items.length} total={total} loading={isLoadingMore} onLoadMore={loadMore} error={loadMoreError} onRetry={retryLoadMore} />
+          </>
+        )}
       </div>
 
-      <div className="min-w-0 rounded-3xl border border-border bg-card/50 p-6">
+      {/* scroll-mt: room for the sticky admin header (two rows below sm). */}
+      <div ref={detailRef} tabIndex={-1} role="region" aria-label="Question sélectionnée" className="min-w-0 scroll-mt-28 rounded-3xl border border-border bg-card/50 p-6 sm:scroll-mt-20">
         {selected.isLoading ? (
           <PublicContentSkeleton cards={1} label="Chargement de la demande" />
         ) : selected.error ? (
@@ -168,6 +266,7 @@ export default function MedicalQuestionsAdminTab() {
               <span className="text-xs font-semibold uppercase tracking-wider">Données privées — administration uniquement</span>
             </div>
             <h3 className="mt-4 font-display text-2xl">{selected.data.firstName} {selected.data.lastName}</h3>
+            <p className="mt-1 text-sm text-muted-foreground">Référence <span className="font-mono text-foreground">{selected.data.trackingId}</span> · {STATUS_LABELS[selected.data.status] ?? selected.data.status}</p>
             <div className="mt-3 grid gap-2 text-sm text-muted-foreground">
               <span className="flex items-center gap-2"><Mail className="h-4 w-4" />{selected.data.email}</span>
               <span className="flex items-center gap-2"><Phone className="h-4 w-4" />{selected.data.phone}</span>
@@ -273,6 +372,34 @@ export default function MedicalQuestionsAdminTab() {
                     {unpublish.isPending ? "Retrait…" : "Retirer de la bibliothèque publique"}
                   </button>
                 )}
+                {!alreadySent && selected.data.status !== "rejected" && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (window.confirm(`Classer sans suite la question ${selected.data!.trackingId} ? Aucun email n’est envoyé ; la question quitte la liste « À traiter », le dossier privé et son journal sont conservés.`)) {
+                        reject.mutate({ id: selected.data!.id });
+                      }
+                    }}
+                    disabled={reject.isPending}
+                    className="inline-flex items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    <Archive className="h-4 w-4" />
+                    {reject.isPending ? "Classement…" : "Classer sans suite"}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (window.confirm(`Supprimer définitivement la question ${selected.data!.trackingId} ? Les coordonnées, la question, la réponse, la version publique éventuelle et le journal de la question seront effacés. Action irréversible.`)) {
+                      remove.mutate({ id: selected.data!.id });
+                    }
+                  }}
+                  disabled={remove.isPending}
+                  className="inline-flex items-center gap-2 rounded-lg border border-destructive/60 px-4 py-2 text-sm font-medium text-destructive transition-colors hover:bg-destructive/10 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  {remove.isPending ? "Suppression…" : "Supprimer"}
+                </button>
               </div>
             </div>
           </div>

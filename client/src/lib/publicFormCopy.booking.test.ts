@@ -7,7 +7,8 @@ describe("catalogue partagé de réservation", () => {
       const copy = getBookingFormCopy(language);
       expect(copy.submit).toBeTruthy();
       expect(copy.availabilityError).toBeTruthy();
-      expect(copy.invalidDate).toBeTruthy();
+      expect(copy.noAvailability).toBeTruthy();
+      expect(copy.selectDate).toBeTruthy();
     }
 
     expect(getBookingFormCopy("it")).toEqual(getBookingFormCopy("fr"));

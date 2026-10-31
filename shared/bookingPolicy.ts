@@ -41,9 +41,54 @@ export function getBookingWindowIssue(appointmentStart: Date, now: number = Date
   return null;
 }
 
+/**
+ * Stable reasons for a refused booking, sent with the tRPC error as
+ * `data.reason` so the booking page shows its own translated message instead
+ * of the French text written by the server (EN-06): the schedule refusals,
+ * then the anti-abuse limits (attempts per hour, bookings awaiting payment),
+ * the payment service being unavailable, a name without any visible letter
+ * or digit, and the anti-robot check asked only when unpaid holds pile up
+ * (ABUS-02): the page then shows the check and the patient pays as usual,
+ * unless the check service itself is down (the patient retries later).
+ */
+export const BOOKING_REFUSAL_REASONS = [
+  "slot_taken",
+  "too_soon",
+  "too_far",
+  "outside_schedule",
+  "no_availability",
+  "date_blocked",
+  "rate_limited",
+  "too_many_holds",
+  "payment_unavailable",
+  "invalid_name",
+  "security_check_required",
+  "security_check_unavailable",
+] as const;
+export type BookingRefusalReason = (typeof BOOKING_REFUSAL_REASONS)[number];
+
+export function isBookingRefusalReason(value: unknown): value is BookingRefusalReason {
+  return typeof value === "string" && (BOOKING_REFUSAL_REASONS as readonly string[]).includes(value);
+}
+
 export const BOOKING_TOO_SOON_MESSAGE = `Ce créneau n’est plus réservable : les consultations se réservent au moins ${BOOKING_MIN_LEAD_TIME_HOURS} heures à l’avance. Veuillez choisir un créneau plus tardif.`;
 export const BOOKING_TOO_FAR_MESSAGE = `Les consultations se réservent au plus ${BOOKING_HORIZON_DAYS} jours à l’avance. Veuillez choisir une date plus proche.`;
 export const BOOKING_INVALID_PHONE_MESSAGE = "Saisissez un numéro de téléphone valide (8 à 15 chiffres, indicatif international accepté, ex. +33 6 12 34 56 78).";
+export const BOOKING_INVALID_NAME_MESSAGE = "Saisissez votre nom complet : il doit comporter au moins une lettre ou un chiffre.";
+
+const VISIBLE_LETTER_OR_DIGIT = new RegExp("(?!\\p{Default_Ignorable_Code_Point})[\\p{L}\\p{N}]", "u");
+
+/**
+ * A name the invoice can print: at least one letter or digit, of any script,
+ * once trimmed. Spaces, invisible characters (ZWJ, ZWSP, bidi marks, Hangul
+ * fillers, which Unicode counts as letters), blank braille (U+2800) or emoji
+ * alone are refused. Read in compatibility form (NFKC), as the invoice prints
+ * it: enclosed or squared letters (Ⓙⓔⓐⓝ, 🄹🄾🄷🄽) are symbols that stand for
+ * letters, while Hangul fillers stay fillers (U+1160).
+ */
+export function hasVisibleNameCharacter(value: string): boolean {
+  return VISIBLE_LETTER_OR_DIGIT.test(value.trim().normalize("NFKC"));
+}
 
 /**
  * Plausible international phone number: optional leading "+", digits with

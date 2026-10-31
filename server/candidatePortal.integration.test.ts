@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   createCandidateToken,
   hashCandidatePassword,
@@ -15,7 +15,7 @@ function validPdfBuffer() {
 }
 
 describe("parcours candidat — protections intégrées non destructives", () => {
-  it("vérifie un mot de passe, isole les jetons d’activation et accepte le contrôle anti-bot en environnement de test", async () => {
+  it("vérifie un mot de passe, isole les jetons d’activation et accepte un contrôle anti-bot validé par Cloudflare", async () => {
     const password = "Mot-de-passe-long-et-unique-2026";
     const passwordHash = await hashCandidatePassword(password);
     const token = createCandidateToken();
@@ -26,10 +26,12 @@ describe("parcours candidat — protections intégrées non destructives", () =>
 
     const originalFetch = global.fetch;
     global.fetch = async () => new Response(JSON.stringify({ success: true, hostname: "drahmedbenlallahom.com" }), { status: 200 });
+    vi.stubEnv("TURNSTILE_SECRET_KEY", "1x0000000000000000000000000000000AA");
     try {
       await expect(verifyCandidateTurnstile({ token: "test-turnstile-token-valide" })).resolves.toBeUndefined();
     } finally {
       global.fetch = originalFetch;
+      vi.unstubAllEnvs();
     }
   });
 
@@ -43,7 +45,7 @@ describe("parcours candidat — protections intégrées non destructives", () =>
     });
     const encrypted = encryptCandidateDocument(source);
 
-    expect(validation.securityScanVersion).toBe("candidate-document-safety-v1");
+    expect(validation.securityScanVersion).toBe("candidate-document-safety-v2");
     expect(encrypted.encrypted.equals(source)).toBe(false);
     expect(decryptCandidateDocument(encrypted.encrypted, encrypted.iv, encrypted.authTag)).toEqual(source);
   });

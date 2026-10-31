@@ -37,6 +37,25 @@ describe("emails du service de questions médicales", () => {
     expect(options).toEqual({ idempotencyKey: "medical-question-response/1/first" });
   });
 
+  it("ne recopie pas dans la réponse le texte d’un prénom piégé, et garde la réponse validée (MAIL-01)", async () => {
+    vi.stubEnv("RESEND_API_KEY", "re_test_key");
+    const trapNames = ["Votre colis est bloqué, payez sur https://colis-phish.example/fr", "Offre speciale sur www.promo-1.example"];
+    for (const [index, firstName] of trapNames.entries()) {
+      await sendMedicalQuestionResponseEmail({ email: "victime@test.local", firstName, trackingId: `QMED-TRAPTRAP-0001${index}`, response: "Voici une information générale relue." });
+    }
+    await sendMedicalQuestionResponseEmail({ email: "patient@example.invalid", firstName: "Zoë", trackingId: "QMED-ABCDEFGH-12349", response: "Voici une information générale relue." });
+    const [first, second, real] = resendMocks.send.mock.calls.map(([payload]) => payload);
+    for (const [index, payload] of [first, second].entries()) {
+      expect(payload.html).toContain("<p>Bonjour,</p>");
+      expect(payload.text.startsWith("Bonjour,\n\n")).toBe(true);
+      expect(payload.text).toContain("Voici une information générale relue.");
+      expect(payload.text).toContain(`Référence confidentielle : QMED-TRAPTRAP-0001${index}`);
+      expect(`${payload.html}${payload.text}`).not.toMatch(/phish|promo-1|colis|Offre|https?:\/\/(?!drahmedbenlallahom\.com\/)/);
+    }
+    expect(real.html).toContain("<p>Bonjour Zoë,</p>");
+    expect(real.text.startsWith("Bonjour Zoë,\n\n")).toBe(true);
+  });
+
   it("Reply-To et expéditeur réglables par CONSULTATION_REPLY_TO / CONSULTATION_FROM_EMAIL (valeurs invalides ignorées)", () => {
     expect(resolveMedicalQuestionContact({})).toEqual({ from: "Hippocampus Consulting <recrutement@drahmedbenlallahom.com>", replyTo: siteConfig.email });
     expect(resolveMedicalQuestionContact({ CONSULTATION_REPLY_TO: "cabinet@example.test", CONSULTATION_FROM_EMAIL: "Dr Ben Lallahom <consultation@example.test>" })).toEqual({ from: "Dr Ben Lallahom <consultation@example.test>", replyTo: "cabinet@example.test" });
@@ -59,6 +78,25 @@ describe("emails du service de questions médicales", () => {
     expect(resendMocks.send.mock.calls[1][0].text).toContain("réponse sous 10 jours ouvrés");
     await sendMedicalQuestionAcknowledgementEmail({ email: "patient@example.invalid", firstName: "Jane", trackingId: "QMED-ABCDEFGH-12347", language: "en" });
     expect(resendMocks.send.mock.calls[2][0].subject).toBe("Your question has been received — QMED-ABCDEFGH-12347");
+  });
+
+  it("ne recopie pas dans l’accusé le texte d’un prénom piégé, en français comme en anglais (MAIL-01)", async () => {
+    vi.stubEnv("RESEND_API_KEY", "re_test_key");
+    const trapName = "Votre colis est bloqué, payez sur https://colis-phish.example/fr";
+    await sendMedicalQuestionAcknowledgementEmail({ email: "victime@test.local", firstName: trapName, trackingId: "QMED-TRAPTRAP-00001", language: "fr" });
+    await sendMedicalQuestionAcknowledgementEmail({ email: "victime@test.local", firstName: "Offre speciale sur www.promo-1.example", trackingId: "QMED-TRAPTRAP-00002", language: "en" });
+    const [french, english] = resendMocks.send.mock.calls.map(([payload]) => payload);
+    expect(french.text.startsWith("Bonjour,\n\n")).toBe(true);
+    expect(french.html).toContain("<p>Bonjour,</p>");
+    expect(french.text).toContain("Référence : QMED-TRAPTRAP-00001");
+    expect(english.text.startsWith("Hello,\n\n")).toBe(true);
+    expect(english.text).toContain("Reference: QMED-TRAPTRAP-00002");
+    for (const payload of [french, english]) {
+      expect(`${payload.html}${payload.text}`).not.toMatch(/phish|promo-1|colis|Offre/);
+    }
+
+    await sendMedicalQuestionAcknowledgementEmail({ email: "patient@example.invalid", firstName: "Marie-Hélène", trackingId: "QMED-ABCDEFGH-12348", language: "fr" });
+    expect(resendMocks.send.mock.calls[2][0].text.startsWith("Bonjour Marie-Hélène,\n\n")).toBe(true);
   });
 
   it("alerte le propriétaire sans nom, email ni contenu de santé", () => {

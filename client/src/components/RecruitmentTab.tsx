@@ -1,17 +1,29 @@
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { BrainCircuit, ClipboardList, Download, FileSearch, Loader2, Mail, RefreshCw, Sparkles, Trash2, UserRound, UserRoundPlus } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import PublicContentSkeleton from "@/components/PublicContentSkeleton";
+import AdminLoadMore from "@/components/AdminLoadMore";
+import AdminSearchField from "@/components/AdminSearchField";
+import { adminListCount, adminPageOffsets, ADMIN_PAGE_SIZE, mergeAdminPages, updateAdminPageItem, useAdminPageCount } from "@/components/adminPagination";
+import { adminSearchStatus, useAdminSearch } from "@/components/adminSearch";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import Candidate360Dialog from "./Candidate360Dialog";
+import CertificationReview from "./CertificationReview";
+import { useCvDownload } from "./useCvDownload";
+import { certificationFactLabel, recruitmentFactNameContains } from "@shared/recruitmentFactOrigins";
+import { RECRUITMENT_APPLICATION_STATUS_OPTIONS, type RecruitmentApplicationStatus } from "@shared/recruitmentApplicationStatuses";
+import { AI_ANALYSIS_UNAVAILABLE_LABEL, isAiAnalysisUnavailable, SCORE_UNAVAILABLE_EXPLANATION, SCORE_UNAVAILABLE_HEADING, scoredApplicationsFirst } from "./recruitmentScoreGroups";
+import { contradictionEvidenceLabel, CV_READING_LABELS, CV_REVIEW_REMINDER, cvReadingTextForDisplay, extractionWarningLabel, fieldEvidenceStatusLabel, fieldEvidenceStatusTone } from "./recruitmentEvidenceLabels";
 import {
   recruitmentDriveExportLabel,
   recruitmentDriveExportErrorLabel,
   recruitmentAnalysisErrorLabel,
   reanalysisToast,
+  reanalyzeFailedToast,
   driveRetryToast,
+  driveBatchRetryToast,
   googleDriveConnectionState,
   type AdminToast,
   recruitmentDriveExportTone,
@@ -21,16 +33,10 @@ import {
   recruitmentEmailDeliveryTone,
 } from "@/lib/recruitmentTraceability";
 
-const statusOptions = [
-  { value: "new", label: "Nouvelle" },
-  { value: "reviewing", label: "En revue" },
-  { value: "shortlisted", label: "Présélectionnée" },
-  { value: "placed", label: "Positionnée" },
-  { value: "rejected", label: "Refusée" },
-  { value: "archived", label: "Archivée" },
-] as const;
+// Shared with the shortlist file sent to an employer, which names the status in the same words.
+const statusOptions = RECRUITMENT_APPLICATION_STATUS_OPTIONS;
 
-type Status = (typeof statusOptions)[number]["value"];
+type Status = RecruitmentApplicationStatus;
 type RecruitmentEmailTemplate = "profile_interest" | "additional_information";
 const VERIFIED_ANALYSIS_VERSION = "recruitment-v7-verified-score";
 
@@ -98,6 +104,7 @@ function analysisStatusLabel(status: string | null | undefined) {
     analyzing: "Analyse IA en cours",
     completed: "Analyse terminée",
     needs_review: "Revue humaine requise",
+    degraded: "Revue manuelle · IA à reprendre",
     failed: "Analyse à relancer",
   };
   return labels[status || ""] || "Analyse en attente";
@@ -105,7 +112,7 @@ function analysisStatusLabel(status: string | null | undefined) {
 
 function analysisStatusTone(status: string | null | undefined) {
   if (status === "completed") return "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300";
-  if (status === "needs_review") return "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300";
+  if (status === "needs_review" || status === "degraded") return "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300";
   if (status === "failed") return "border-destructive/30 bg-destructive/10 text-destructive";
   return "border-primary/25 bg-primary/10 text-primary";
 }
@@ -139,6 +146,8 @@ export default function RecruitmentTab() {
   const [certificationFilter, setCertificationFilter] = useState("");
   const [minimumScore, setMinimumScore] = useState("");
   const [selectedProfileId, setSelectedProfileId] = useState("");
+  // ADM-02: first name, last name, email or reference, searched by the server.
+  const { text: searchText, search, setText: setSearchText, clear: clearSearch } = useAdminSearch();
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [candidate360Id, setCandidate360Id] = useState<number | null>(null);
   const [profileName, setProfileName] = useState("");
@@ -154,7 +163,7 @@ export default function RecruitmentTab() {
   const profilesQuery = trpc.admin.recruitment.profiles.list.useQuery();
   const driveExportStatus = trpc.admin.recruitment.driveExport.status.useQuery();
 
-  const { data, isLoading, error, refetch } = trpc.admin.recruitment.list.useQuery({
+  const filters = {
     status: statusFilter || undefined,
     country: countryFilter.trim() || undefined,
     specialty: specialtyFilter.trim() || undefined,
@@ -162,27 +171,44 @@ export default function RecruitmentTab() {
     certification: certificationFilter.trim() || undefined,
     minimumScore: minimumScore ? Number(minimumScore) : undefined,
     profileId: selectedProfileId ? Number(selectedProfileId) : undefined,
-  });
+    search,
+  };
+  // ADM-01: 50 dossiers, then « Charger plus » (offset + 50), back to the first page when a filter or the search changes.
+  const { pageCount, loadMore } = useAdminPageCount(JSON.stringify(filters));
+  const pages = trpc.useQueries(t => adminPageOffsets(pageCount).map(offset => t.admin.recruitment.list({ ...filters, limit: ADMIN_PAGE_SIZE, offset })));
+  const { items: applications, total, isLoading, isLoadingMore, error, loadMoreError, retryLoadMore } = mergeAdminPages(pages);
+  // Set by the server when a matching profile could only be checked on the first dossiers of the list.
+  const profileScanLimit = pages[0]?.data?.profileScanLimit;
+  // With a score threshold, the dossiers without a verified score are listed apart, not dropped (INTL-02).
+  const scoreThreshold = Math.max(Number(minimumScore) || 0, profilesQuery.data?.find(profile => String(profile.id) === selectedProfileId)?.minimumScore ?? 0);
+  const listedApplications = scoreThreshold > 0
+    ? scoredApplicationsFirst(applications, item => item.analysisPromptVersion === VERIFIED_ANALYSIS_VERSION ? item.aiScore : null)
+    : { items: applications, firstUnscored: -1 };
 
   const updateStatus = trpc.admin.recruitment.updateStatus.useMutation({
-    onSuccess: () => {
+    onSuccess: async (_result, input) => {
       toast.success("Candidature mise à jour");
-      utils.admin.recruitment.list.invalidate();
+      // ADM-01: with a status filter, the dossier may leave the list and shift the following pages,
+      // which are all reloaded. Without one, nothing moves (the order and the other filters do not
+      // depend on the status): the dossier is updated in the pages already loaded.
+      if (filters.status) {
+        void utils.admin.recruitment.list.invalidate();
+        return;
+      }
+      const changes = { status: input.status, ...(input.adminNotes !== undefined ? { adminNotes: input.adminNotes || null } : {}) };
+      for (const offset of adminPageOffsets(pageCount)) {
+        const page = { ...filters, limit: ADMIN_PAGE_SIZE, offset };
+        // A page still loading for the first time is left to its fetch. A refetch of a loaded page started
+        // before the update (on window focus…) would bring the old status back over it: it is cancelled.
+        if (!utils.admin.recruitment.list.getData(page)) continue;
+        await utils.admin.recruitment.list.cancel(page);
+        utils.admin.recruitment.list.setData(page, loaded => updateAdminPageItem(loaded, input.id, changes));
+      }
     },
     onError: mutationError => toast.error(mutationError.message),
   });
 
-  const downloadCv = trpc.admin.recruitment.getDownloadUrl.useMutation({
-    onSuccess: ({ url, fileName }) => {
-      const link = document.createElement("a");
-      link.href = url;
-      link.target = "_blank";
-      link.rel = "noopener noreferrer";
-      link.download = fileName;
-      link.click();
-    },
-    onError: mutationError => toast.error(mutationError.message),
-  });
+  const downloadCv = useCvDownload();
 
   const reanalyze = trpc.admin.recruitment.reanalyze.useMutation({
     onSuccess: result => {
@@ -193,11 +219,8 @@ export default function RecruitmentTab() {
   });
 
   const reanalyzeFailed = trpc.admin.recruitment.reanalyzeFailed.useMutation({
-    onSuccess: ({ queued, processed }) => {
-      const remaining = Math.max(0, queued - processed);
-      toast.success(processed > 0
-        ? `${processed} analyse${processed > 1 ? "s" : ""} traitée${processed > 1 ? "s" : ""} immédiatement${remaining > 0 ? ` · ${remaining} encore en file` : ""}`
-        : "Aucune analyse à mettre à jour ou à reprendre");
+    onSuccess: result => {
+      showAdminToast(reanalyzeFailedToast(result));
       utils.admin.recruitment.list.invalidate();
     },
     onError: mutationError => toast.error(mutationError.message),
@@ -206,6 +229,15 @@ export default function RecruitmentTab() {
   const retryDriveExport = trpc.admin.recruitment.driveExport.retry.useMutation({
     onSuccess: result => {
       showAdminToast(driveRetryToast(result));
+      utils.admin.recruitment.list.invalidate();
+      driveExportStatus.refetch();
+    },
+    onError: mutationError => toast.error(mutationError.message),
+  });
+
+  const retryAllDriveExports = trpc.admin.recruitment.driveExport.retryAllFailed.useMutation({
+    onSuccess: result => {
+      showAdminToast(driveBatchRetryToast(result));
       utils.admin.recruitment.list.invalidate();
       driveExportStatus.refetch();
     },
@@ -250,9 +282,11 @@ export default function RecruitmentTab() {
     onError: mutationError => toast.error(mutationError.message),
   });
 
-  const openEmailComposer = (id: number, candidateName: string, template: RecruitmentEmailTemplate) => {
+  // Langue d’envoi présélectionnée d’après la langue du formulaire de candidature :
+  // français pour « fr », anglais sinon, comme les emails automatiques (EN-02).
+  const openEmailComposer = (id: number, candidateName: string, template: RecruitmentEmailTemplate, applicationLanguage?: string | null) => {
     setEmailComposer({ id, candidateName, template });
-    setEmailLanguage("fr");
+    setEmailLanguage(!applicationLanguage || applicationLanguage === "fr" ? "fr" : "en");
     setCustomRequest("");
   };
 
@@ -269,10 +303,6 @@ export default function RecruitmentTab() {
     },
     onError: mutationError => toast.error(mutationError.message),
   });
-
-  if (error) {
-    return <div className="py-8 text-center text-red-400">Erreur de chargement : {error.message}</div>;
-  }
 
   return (
     <section className="space-y-6" aria-labelledby="recruitment-heading">
@@ -294,11 +324,17 @@ export default function RecruitmentTab() {
           >
             {googleDriveConnectionState(driveExportStatus.data).label}
           </a>
+          {driveExportStatus.data?.failedExports ? (
+            <Button variant="outline" onClick={() => retryAllDriveExports.mutate()} disabled={retryAllDriveExports.isPending}>
+              <RefreshCw className={`mr-2 h-4 w-4 ${retryAllDriveExports.isPending ? "animate-spin" : ""}`} />
+              Relancer toutes les copies échouées ({driveExportStatus.data.failedExports})
+            </Button>
+          ) : null}
           <Button variant="outline" onClick={() => reanalyzeFailed.mutate({ limit: 10 })} disabled={reanalyzeFailed.isPending}>
             <BrainCircuit className={`mr-2 h-4 w-4 ${reanalyzeFailed.isPending ? "animate-pulse" : ""}`} />
             Mettre à jour / reprendre l’IA
           </Button>
-          <Button variant="outline" onClick={() => refetch()} disabled={isLoading}>
+          <Button variant="outline" onClick={() => void utils.admin.recruitment.list.invalidate()} disabled={isLoading}>
             <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
             Actualiser
           </Button>
@@ -306,6 +342,7 @@ export default function RecruitmentTab() {
       </div>
 
       <div className="grid gap-3 rounded-xl border border-border bg-card/60 p-4 md:grid-cols-3">
+        <AdminSearchField id="recruitment-search" label="Recherche" placeholder="Nom, prénom, email ou référence CV…" value={searchText} onChange={setSearchText} onClear={clearSearch} status={adminSearchStatus(search, { isLoading, error, shown: applications.length, total }, "candidature(s)")} className="md:col-span-3" />
         <label className="space-y-1 text-sm text-muted-foreground">
           <span>Statut</span>
           <select value={statusFilter} onChange={event => setStatusFilter(event.target.value as Status | "")} className="h-10 w-full rounded-md border border-border bg-background px-3 text-foreground">
@@ -357,16 +394,31 @@ export default function RecruitmentTab() {
           <Button disabled={!profileName.trim() || createProfile.isPending} onClick={() => createProfile.mutate({ name: profileName.trim(), targetCountry: profileCountry.trim() || undefined, specialty: profileSpecialty.trim() || undefined, minimumScore: Number(profileScore) || 0, requiredLanguages: profileLanguages.split(",").map(value => value.trim()).filter(Boolean), requiredSkills: profileSkills.split(",").map(value => value.trim()).filter(Boolean) })}>
             {createProfile.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null} Enregistrer
           </Button>
-          <input value={profileLanguages} onChange={event => setProfileLanguages(event.target.value)} placeholder="Langues requises, séparées par virgule" className="h-10 rounded-md border border-border bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground md:col-span-3" />
+          <input value={profileLanguages} onChange={event => setProfileLanguages(event.target.value)} placeholder="Langues requises, séparées par virgule" aria-describedby="recruitment-profile-languages-help" className="h-10 rounded-md border border-border bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground md:col-span-3" />
           <input value={profileSkills} onChange={event => setProfileSkills(event.target.value)} placeholder="Compétences requises, séparées par virgule" className="h-10 rounded-md border border-border bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground md:col-span-3" />
+          {/* IA-02: the form records the languages in English, the CV gives them in its own language. */}
+          <p id="recruitment-profile-languages-help" className="text-xs text-muted-foreground md:col-span-6">Langues : ex. français, anglais, arabe. Chaque langue est aussi retrouvée sous ses autres noms (<span lang="en">French</span>, <span lang="de">Englisch</span>, <span lang="zh">阿拉伯语</span>…), comme dans le filtre Langue.</p>
         </div>
       </div>
 
-      {isLoading ? (
+      {error ? (
+        // Below the filters, so that a search can still be changed or cleared.
+        <div className="py-8 text-center text-red-400">Erreur de chargement : {error.message}</div>
+      ) : isLoading ? (
         <PublicContentSkeleton label="Chargement des candidatures" />
-      ) : data?.items.length ? (
+      ) : (
         <div className="space-y-3">
-          {data.items.map(application => {
+        {/* Above the list and the empty state alike: when no dossier within the limit
+            matches the profile, the ones that might are beyond it. */}
+        {profileScanLimit ? (
+          <p className="text-sm font-medium text-amber-700 dark:text-amber-300">
+            Profil appliqué aux {profileScanLimit.toLocaleString("fr-FR")} premières candidatures de la liste seulement : ajoutez un filtre (statut, spécialité, pays) pour qu’il porte sur toutes.
+          </p>
+        ) : null}
+        {applications.length ? (
+        <div className="space-y-3">
+          <p className="break-words text-sm text-muted-foreground [overflow-wrap:anywhere]">{adminListCount(applications.length, total, "candidature(s)")}{search ? ` pour « ${search} »` : ""}</p>
+          {listedApplications.items.map((application, index) => {
             const countries = parseJsonList(application.targetCountries);
             const languages = parseJsonList(application.languages);
             const strengths = parseJsonList(application.aiStrengths);
@@ -376,8 +428,17 @@ export default function RecruitmentTab() {
             const hasVerifiedAnalysis = application.analysisPromptVersion === VERIFIED_ANALYSIS_VERSION;
             const verifiedScore = hasVerifiedAnalysis ? application.aiScore : null;
             const expanded = expandedId === application.id;
+            // The certification filter says where each matching certification comes from, and its expiry (IA-02).
+            const searchedCertifications = filters.certification ? (application.certificationFacts ?? []).filter(fact => recruitmentFactNameContains(fact.name, filters.certification!)) : [];
             return (
-              <article key={application.id} className="rounded-xl border border-border bg-card p-4 shadow-sm">
+              <Fragment key={application.id}>
+              {index === listedApplications.firstUnscored ? (
+                <div className="border-t border-border pt-4">
+                  <h3 className="font-semibold text-foreground">{SCORE_UNAVAILABLE_HEADING}</h3>
+                  <p className="text-xs text-muted-foreground">{SCORE_UNAVAILABLE_EXPLANATION}</p>
+                </div>
+              ) : null}
+              <article className="rounded-xl border border-border bg-card p-4 shadow-sm">
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                   <button type="button" onClick={() => setExpandedId(expanded ? null : application.id)} className="min-w-0 text-left">
                     <div className="flex items-start gap-3">
@@ -387,12 +448,13 @@ export default function RecruitmentTab() {
                         <p className="text-sm text-muted-foreground">{application.specialty} · {application.trackingId}</p>
                         <p className="mt-1 text-sm text-muted-foreground">{countries.join(", ") || "Pays non précisés"}</p>
                         {application.diplomaCountry ? <p className="mt-1 text-sm text-muted-foreground">Diplôme obtenu : {application.diplomaCountry}</p> : null}
+                        {searchedCertifications.length > 0 ? <p className="mt-1 text-sm text-muted-foreground">Certification recherchée : {searchedCertifications.map(certificationFactLabel).join(" ; ")}</p> : null}
                       </div>
                     </div>
                   </button>
                   <div className="flex flex-wrap items-center gap-2">
                     <span className={`rounded-full border px-2.5 py-1 text-xs font-medium ${scoreTone(verifiedScore)}`}>
-                      {verifiedScore === null ? (application.aiSummary ? "Score à recalculer" : "IA en attente") : `Score IA ${verifiedScore}/100`}
+                      {verifiedScore === null ? (isAiAnalysisUnavailable(application) ? AI_ANALYSIS_UNAVAILABLE_LABEL : application.aiSummary ? (hasVerifiedAnalysis ? SCORE_UNAVAILABLE_HEADING : "Score à recalculer") : "IA en attente") : `Score IA ${verifiedScore}/100`}
                     </span>
                     <span className={`rounded-full border px-2.5 py-1 text-xs font-medium ${analysisStatusTone(application.analysisStatus)}`}>
                       {analysisStatusLabel(application.analysisStatus)}
@@ -418,10 +480,10 @@ export default function RecruitmentTab() {
                       <p><strong className="text-foreground">Expérience déclarée :</strong> {application.yearsExperience ?? "—"} ans</p>
                       <p><strong className="text-foreground">Disponibilité :</strong> {application.availability || "—"}</p>
                       <p><strong className="text-foreground">Mobilité :</strong> {application.mobility || "—"}</p>
-                      <p><strong className="text-foreground">Certifications :</strong> {application.certifications || "—"}</p>
+                      <p><strong className="text-foreground">Certifications déclarées :</strong> {application.certifications || "—"}</p>
                     </div>
                     <div className="space-y-1 text-muted-foreground">
-                      <p><strong className="text-foreground">Fichier :</strong> {application.cvOriginalName} ({formatBytes(application.cvSizeBytes)})</p>
+                      <p className="break-words [overflow-wrap:anywhere]"><strong className="text-foreground">Fichier :</strong> {application.cvOriginalName} ({formatBytes(application.cvSizeBytes)})</p>
                       <p><strong className="text-foreground">Contrôle du fichier :</strong> {application.fileValidationStatus === "accepted" ? "validé" : application.fileValidationStatus || "en attente"}{application.fileSecurityScanVersion ? ` · ${application.fileSecurityScanVersion}` : ""}</p>
                       <p><strong className="text-foreground">Reçu le :</strong> {new Date(application.createdAt).toLocaleString("fr-FR", { timeZone: "Europe/Paris" })}</p>
                       <p><strong className="text-foreground">Conservation jusqu’au :</strong> {application.retentionUntil ? new Date(application.retentionUntil).toLocaleDateString("fr-FR", { timeZone: "Europe/Paris" }) : "—"}</p>
@@ -431,6 +493,11 @@ export default function RecruitmentTab() {
                       {application.ocrModelVersion && <p><strong className="text-foreground">OCR :</strong> {application.ocrModelVersion}{application.ocrConfidence !== null ? ` · confiance ${application.ocrConfidence}%` : ""}</p>}
                       {application.analysisLastError && <p className="text-destructive" title={application.analysisLastError}><strong>Dernière erreur :</strong> {recruitmentAnalysisErrorLabel(application.analysisLastError)}</p>}
                       {application.message && <p className="pt-2"><strong className="text-foreground">Message :</strong> {application.message}</p>}
+                    </div>
+
+                    <div className="rounded-xl border border-border bg-background/60 p-4 md:col-span-2" aria-label={`Certifications de ${application.firstName} ${application.lastName}`}>
+                      <h4 className="mb-2 font-semibold text-foreground">Certifications et origine</h4>
+                      <CertificationReview applicationId={application.id} certifications={application.certificationFacts ?? []} />
                     </div>
 
                     <div className="rounded-xl border border-border bg-background/60 p-4 md:col-span-2" aria-label={`Traçabilité de la candidature ${application.trackingId}`}>
@@ -498,6 +565,7 @@ export default function RecruitmentTab() {
                           <div>
                             <h4 className="font-semibold text-foreground">Lecture intelligente du CV</h4>
                             <p className="text-xs text-muted-foreground">Aide à la revue humaine · aucune décision automatique</p>
+                            <p className="mt-1 text-xs font-medium text-amber-700 dark:text-amber-300">{CV_REVIEW_REMINDER}</p>
                           </div>
                         </div>
                         <div className="flex flex-wrap gap-2">
@@ -509,10 +577,10 @@ export default function RecruitmentTab() {
                             {sendPortalInvitation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <UserRoundPlus className="mr-2 h-4 w-4" />}
                             {application.candidatePortalActive ? "Espace candidat actif" : application.candidatePortalInvitation?.eventType ? "Renvoyer l’invitation" : "Inviter à créer l’espace"}
                           </Button>
-                          <Button size="sm" variant="outline" onClick={() => openEmailComposer(application.id, `${application.firstName} ${application.lastName}`, "profile_interest")} disabled={sendTemplateEmail.isPending || eraseApplication.isPending || reanalyze.isPending}>
+                          <Button size="sm" variant="outline" onClick={() => openEmailComposer(application.id, `${application.firstName} ${application.lastName}`, "profile_interest", application.language)} disabled={sendTemplateEmail.isPending || eraseApplication.isPending || reanalyze.isPending}>
                             <Mail className="mr-2 h-4 w-4" /> Proposer un échange
                           </Button>
-                          <Button size="sm" variant="outline" onClick={() => openEmailComposer(application.id, `${application.firstName} ${application.lastName}`, "additional_information")} disabled={sendTemplateEmail.isPending || eraseApplication.isPending || reanalyze.isPending}>
+                          <Button size="sm" variant="outline" onClick={() => openEmailComposer(application.id, `${application.firstName} ${application.lastName}`, "additional_information", application.language)} disabled={sendTemplateEmail.isPending || eraseApplication.isPending || reanalyze.isPending}>
                             <Mail className="mr-2 h-4 w-4" /> Demander un complément
                           </Button>
                           <Button size="sm" variant="outline" className="text-destructive hover:text-destructive" onClick={() => { if (window.confirm(ERASURE_CONFIRMATION)) eraseApplication.mutate({ id: application.id }); }} disabled={eraseApplication.isPending || reanalyze.isPending}>
@@ -524,17 +592,17 @@ export default function RecruitmentTab() {
 
                       {application.aiSummary ? (
                         <div className="mt-4 space-y-4">
-                          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Synthèse des preuves vérifiées</p>
-                          <p className="leading-6 text-foreground/90">{application.aiSummary}</p>
+                          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{CV_READING_LABELS.summary}</p>
+                          <p className="leading-6 text-foreground/90">{cvReadingTextForDisplay(application.aiSummary)}</p>
                           <div className="grid gap-3 md:grid-cols-2">
                             <div>
-                              <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Profil vérifié dans le CV</p>
+                              <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{CV_READING_LABELS.profile}</p>
                               <p className="text-foreground">{extracted.professionalTitle || "Titre non identifié"}</p>
                               <p className="text-muted-foreground">{extracted.specialties?.join(", ") || "Spécialités non identifiées"}</p>
                             </div>
                             <div>
-                              <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Compétences vérifiées</p>
-                              <p className="text-foreground">{extracted.verifiedSkills?.join(", ") || "Aucune compétence vérifiée dans le CV"}</p>
+                              <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{CV_READING_LABELS.skills}</p>
+                              <p className="text-foreground">{extracted.verifiedSkills?.join(", ") || CV_READING_LABELS.noSkills}</p>
                             </div>
                           </div>
                           {(typeof extracted.confidence === "number" || typeof extracted.evidenceCoverage === "number") && (
@@ -551,7 +619,7 @@ export default function RecruitmentTab() {
                                 <p>Expérience <strong className="text-foreground">{extracted.scoreBreakdown.experienceEvidence ?? 0}/25</strong></p>
                                 <p>Compétences <strong className="text-foreground">{extracted.scoreBreakdown.skillsEvidence ?? 0}/20</strong></p>
                                 <p>Langues <strong className="text-foreground">{extracted.scoreBreakdown.languageReadiness ?? 0}/15</strong></p>
-                                <p>Certifications vérifiées <strong className="text-foreground">{extracted.scoreBreakdown.credentialReadiness ?? 0}/10</strong></p>
+                                <p>{CV_READING_LABELS.credentials} <strong className="text-foreground">{extracted.scoreBreakdown.credentialReadiness ?? 0}/10</strong></p>
                               </div>
                             </div>
                           )}
@@ -564,10 +632,8 @@ export default function RecruitmentTab() {
                                     <p className="font-medium text-foreground">{item.value || "Information extraite"}</p>
                                     <p className="mt-1 text-muted-foreground">« {item.evidence || "Preuve non fournie"} »</p>
                                     <p className="mt-1 text-muted-foreground">Source : {item.sourceLocation || "non localisée"} · confiance {typeof item.confidence === "number" ? `${item.confidence}%` : "—"}</p>
-                                    <p className={`mt-1 font-medium ${item.evidenceVerified ? "text-emerald-700 dark:text-emerald-300" : "text-amber-700 dark:text-amber-300"}`}>
-                                      {item.sourceLocation === "formulaire de candidature"
-                                        ? "Donnée déclarée, non vérifiée dans le CV"
-                                        : item.evidenceVerified ? "Citation vérifiée dans le texte" : "Citation à vérifier manuellement"}
+                                    <p className={`mt-1 font-medium ${fieldEvidenceStatusTone(item)}`}>
+                                      {fieldEvidenceStatusLabel(item)}
                                     </p>
                                   </div>
                                 ))}
@@ -581,7 +647,7 @@ export default function RecruitmentTab() {
                                 {extracted.contradictions.map((item, index) => (
                                   <li key={`${item.field}-${index}`}>
                                     <strong>{item.field || "Champ"} :</strong> formulaire « {item.declaredValue || "—"} » / CV « {item.documentValue || "—"} » — {item.sourceLocation || "source non localisée"}
-                                    <span className="ml-1 font-medium">({item.evidenceVerified ? "citation vérifiée" : "citation à vérifier"})</span>
+                                    <span className="ml-1 font-medium">({contradictionEvidenceLabel(item.evidenceVerified)})</span>
                                   </li>
                                 ))}
                               </ul>
@@ -589,16 +655,16 @@ export default function RecruitmentTab() {
                           )}
                           <div className="grid gap-3 md:grid-cols-2">
                             <div>
-                              <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Éléments professionnels vérifiés</p>
-                              <ul className="list-disc space-y-1 pl-5 text-muted-foreground">{strengths.length ? strengths.map(item => <li key={item}>{item}</li>) : <li>Non renseigné</li>}</ul>
+                              <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{CV_READING_LABELS.strengths}</p>
+                              <ul className="list-disc space-y-1 pl-5 text-muted-foreground">{strengths.length ? strengths.map(item => <li key={item}>{cvReadingTextForDisplay(item)}</li>) : <li>Non renseigné</li>}</ul>
                             </div>
                             <div>
                               <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Points à vérifier</p>
                               <ul className="list-disc space-y-1 pl-5 text-muted-foreground">{weaknesses.length ? weaknesses.map(item => <li key={item}>{item}</li>) : <li>Non renseigné</li>}</ul>
                             </div>
                           </div>
-                          {application.aiMatchReasoning && <p className="border-t border-primary/10 pt-3 text-xs leading-5 text-muted-foreground"><strong className="text-foreground">{verifiedScore === null ? "Conclusion de l’analyse :" : "Justification du score :"}</strong> {application.aiMatchReasoning}</p>}
-                          {extractionWarnings.length > 0 && <p className="border-t border-primary/10 pt-3 text-xs leading-5 text-amber-700 dark:text-amber-300"><strong>Qualité d’extraction :</strong> {extractionWarnings.join(" · ")}</p>}
+                          {application.aiMatchReasoning && <p className="border-t border-primary/10 pt-3 text-xs leading-5 text-muted-foreground"><strong className="text-foreground">{verifiedScore === null ? "Conclusion de l’analyse :" : "Justification du score :"}</strong> {cvReadingTextForDisplay(application.aiMatchReasoning)}</p>}
+                          {extractionWarnings.length > 0 && <p className="border-t border-primary/10 pt-3 text-xs leading-5 text-amber-700 dark:text-amber-300"><strong>Qualité d’extraction :</strong> {extractionWarnings.map(extractionWarningLabel).join(" · ")}</p>}
                           {application.aiAnalyzedAt && <p className="text-[11px] text-muted-foreground">Analysé le {new Date(application.aiAnalyzedAt).toLocaleString("fr-FR", { timeZone: "Europe/Paris" })}</p>}
                         </div>
                       ) : (
@@ -613,13 +679,17 @@ export default function RecruitmentTab() {
                   </div>
                 )}
               </article>
+              </Fragment>
             );
           })}
+          <AdminLoadMore shown={applications.length} total={total} loading={isLoadingMore} onLoadMore={loadMore} error={loadMoreError} onRetry={retryLoadMore} />
         </div>
       ) : (
-        <div className="rounded-xl border border-dashed border-border py-16 text-center text-muted-foreground">
+        <div className="rounded-xl border border-dashed border-border px-4 py-16 text-center text-muted-foreground break-words [overflow-wrap:anywhere]">
           <FileSearch className="mx-auto mb-3 h-8 w-8" />
-          Aucune candidature ne correspond aux filtres.
+          {search ? `Aucune candidature ne correspond à « ${search} » avec ces filtres.` : "Aucune candidature ne correspond aux filtres."}
+        </div>
+        )}
         </div>
       )}
 

@@ -3,7 +3,7 @@ import type { Express, Request, Response } from "express";
 import { createContext } from "./_core/context";
 import { notifyOwner } from "./_core/notification";
 import { logSecurityEvent, requestIpHash } from "./candidateSecurity";
-import { buildGoogleDriveAuthorizationUrl, createGoogleDriveOAuthState, exchangeGoogleDriveAuthorizationCode, googleDriveExportStatus, saveGoogleDriveConnection, verifyGoogleDriveOAuthState } from "./googleDriveExport";
+import { buildGoogleDriveAuthorizationUrl, createGoogleDriveOAuthState, exchangeGoogleDriveAuthorizationCode, googleDriveExportStatus, requeueGoogleDriveExportsAfterReconnection, saveGoogleDriveConnection, verifyGoogleDriveOAuthState } from "./googleDriveExport";
 
 const STATE_COOKIE = "__Host-google_drive_oauth_state";
 
@@ -42,7 +42,7 @@ async function authorizeGoogleDriveOAuthRequest(req: Request, res: Response, ste
   return { allowed: true, openId: context.user.openId };
 }
 
-async function recordGoogleDriveConnection(input: { openId: string; req: Request; reconnection: boolean; grantedScopes?: string }) {
+async function recordGoogleDriveConnection(input: { openId: string; req: Request; reconnection: boolean; grantedScopes?: string; requeuedExports: number }) {
   const at = new Date();
   try {
     await logSecurityEvent({
@@ -62,6 +62,7 @@ async function recordGoogleDriveConnection(input: { openId: string; req: Request
     content: [
       `Le compte Google Drive utilisé pour copier les CV vient d’être ${input.reconnection ? "remplacé" : "connecté"} depuis l’administration (${at.toISOString()}).`,
       "L’opération a été réalisée par une session administrateur ayant validé la double authentification.",
+      ...(input.requeuedExports > 0 ? [`${input.requeuedExports} copie(s) de CV arrêtée(s) par un refus du jeton Google ont été remise(s) en file ; elles seront copiées au prochain passage du traitement.`] : []),
       "Si vous n’êtes pas à l’origine de cette action, révoquez l’accès de l’application dans votre compte Google et reconnectez le Drive du cabinet depuis l’onglet Candidatures.",
     ].join("\n\n"),
   }).catch(() => false);
@@ -95,7 +96,12 @@ export function registerGoogleDriveOAuthRoutes(app: Express) {
       const tokens = await exchangeGoogleDriveAuthorizationCode(code);
       const reconnection = await googleDriveExportStatus().then(status => status.connected).catch(() => false);
       await saveGoogleDriveConnection({ authorizedByOpenId: authorization.openId, refreshToken: tokens.refresh_token!, grantedScopes: tokens.scope });
-      await recordGoogleDriveConnection({ openId: authorization.openId, req, reconnection, grantedScopes: tokens.scope });
+      // The copies stopped by a refused token start again with the new one (REC-09).
+      const { requeued: requeuedExports } = await requeueGoogleDriveExportsAfterReconnection().catch(() => {
+        console.error("[GoogleDrive] Unable to requeue the copies stopped by a token error");
+        return { requeued: 0 };
+      });
+      await recordGoogleDriveConnection({ openId: authorization.openId, req, reconnection, grantedScopes: tokens.scope, requeuedExports });
       return res.redirect(302, "/admin?googleDrive=connected");
     } catch (error) {
       console.error("[GoogleDrive] OAuth callback failed", error);

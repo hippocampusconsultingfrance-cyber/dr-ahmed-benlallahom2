@@ -1,5 +1,6 @@
+import { inspect } from "node:util";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { clientBriefCandidates, clientBriefs, cvApplications, recruitmentAuditLogs, recruitmentCampaignRecipients, recruitmentCampaigns, recruitmentFollowUpTasks } from "../drizzle/schema";
+import { clientBriefCandidates, clientBriefs, cvApplications, cvCandidateCertifications, cvCandidateLanguages, recruitmentAuditLogs, recruitmentCampaignRecipients, recruitmentCampaigns, recruitmentFollowUpTasks } from "../drizzle/schema";
 import { RECRUITMENT_ANALYSIS_PROMPT_VERSION } from "./recruitmentAnalysis";
 import { createMemoryPg, type MemoryPg } from "./testing/memoryPgProxy";
 import type { TrpcContext } from "./_core/context";
@@ -7,6 +8,7 @@ import type { TrpcContext } from "./_core/context";
 const state = vi.hoisted(() => ({
   memory: null as null | { db: unknown },
   sentTo: [] as string[],
+  keys: [] as Array<string | undefined>,
   failFor: new Set<string>(),
 }));
 
@@ -17,7 +19,8 @@ vi.mock("./adminMfa", async importOriginal => ({
 }));
 vi.mock("./_core/notifications", async importOriginal => ({
   ...await importOriginal<typeof import("./_core/notifications")>(),
-  sendRecruitmentCampaignEmail: vi.fn(async (input: { candidateEmail: string }) => {
+  sendRecruitmentCampaignEmail: vi.fn(async (input: { candidateEmail: string; idempotencyKey?: string }) => {
+    state.keys.push(input.idempotencyKey);
     if (state.failFor.has(input.candidateEmail)) throw new Error("resend_unavailable");
     state.sentTo.push(input.candidateEmail);
     return { id: `email-${state.sentTo.length}` };
@@ -28,6 +31,8 @@ import { appRouter, driveRetryOutcome, reanalysisOutcome } from "./routers";
 import { buildClientBriefOwnerNotification } from "./clientBriefNotification";
 
 let memory: MemoryPg;
+// The candidate agreed to be presented for the mission (RGPD-03).
+const consentAt = "2026-10-20 12:00:00.000";
 
 function admin() {
   const ctx: TrpcContext = {
@@ -48,9 +53,10 @@ function seedCandidate(index: number, extra: Record<string, unknown> = {}) {
 
 describe("actions d’administration du recrutement", () => {
   beforeEach(() => {
-    memory = createMemoryPg([cvApplications, recruitmentAuditLogs, clientBriefs, clientBriefCandidates, recruitmentCampaigns, recruitmentCampaignRecipients, recruitmentFollowUpTasks]);
+    memory = createMemoryPg([cvApplications, cvCandidateCertifications, cvCandidateLanguages, recruitmentAuditLogs, clientBriefs, clientBriefCandidates, recruitmentCampaigns, recruitmentCampaignRecipients, recruitmentFollowUpTasks]);
     state.memory = memory;
     state.sentTo = [];
+    state.keys = [];
     state.failFor.clear();
   });
 
@@ -108,6 +114,119 @@ describe("actions d’administration du recrutement", () => {
     expect(state.sentTo).toEqual([]);
   });
 
+  it("un email accepté par Resend reste envoyé quand son enregistrement échoue, et aucune relance ne le renvoie (DATA-05)", async () => {
+    const accepted = seedCandidate(1);
+    const failing = seedCandidate(2);
+    state.failFor = new Set(["c2@test.local"]);
+    // The follow-up tasks of c1 are refused after Resend accepted its email.
+    memory.failNext(/^insert into "recruitment_follow_up_tasks"/);
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const result = await admin().admin.recruitment.campaigns.send({ title: "Offre test", subject: "Offre Suisse", body: "Une mission à Genève, répondez par email.", language: "fr", mode: "selected", selectedIds: [accepted.id as number, failing.id as number], confirmed: true });
+    error.mockRestore();
+    expect(result).toMatchObject({ total: 2, sent: 1, failed: 1 });
+    const recipients = memory.rows(recruitmentCampaignRecipients);
+    const [acceptedRecipient, failedRecipient] = recipients;
+    // Never « failed » once accepted, nor any internal SQL message kept for the admin; the
+    // provider's id is kept, for its bounce or complaint events.
+    expect(acceptedRecipient).toMatchObject({ recipient_email: "c1@test.local", delivery_status: "sent", provider_email_id: "email-1", error: null });
+    expect(failedRecipient).toMatchObject({ recipient_email: "c2@test.local", delivery_status: "failed", error: "resend_unavailable" });
+    // The rest of the bookkeeping is written together or not at all.
+    expect(memory.rows(recruitmentFollowUpTasks)).toEqual([]);
+    expect(memory.rows(recruitmentAuditLogs).filter(row => row.action === "email")).toEqual([]);
+    expect(memory.rows(cvApplications).find(row => row.id === accepted.id)!.last_contacted_at).toBeNull();
+    // One key per recipient.
+    expect(state.keys).toEqual([`campaign-${result.campaignId}-recipient-${acceptedRecipient!.id}`, `campaign-${result.campaignId}-recipient-${failedRecipient!.id}`]);
+
+    // The retry sends only the email Resend refused, under the same key; c1 gets nothing more.
+    state.failFor.clear();
+    state.keys = [];
+    await expect(admin().admin.recruitment.campaigns.retryFailed({ campaignId: result.campaignId, confirmed: true })).resolves.toMatchObject({ attempted: 1, sent: 1, failed: 0 });
+    expect(state.sentTo).toEqual(["c1@test.local", "c2@test.local"]);
+    expect(state.keys).toEqual([`campaign-${result.campaignId}-recipient-${failedRecipient!.id}`]);
+    expect(failedRecipient).toMatchObject({ delivery_status: "sent", provider_email_id: "email-2", error: null });
+    expect(memory.rows(recruitmentCampaigns)[0]).toMatchObject({ status: "sent" });
+    expect(memory.rows(recruitmentFollowUpTasks).map(row => row.application_id)).toEqual([failing.id, failing.id]);
+    expect(memory.rows(recruitmentAuditLogs).filter(row => row.action === "email").map(row => row.application_id)).toEqual([failing.id]);
+    await expect(admin().admin.recruitment.campaigns.retryFailed({ campaignId: result.campaignId, confirmed: true })).resolves.toMatchObject({ attempted: 0, sent: 0 });
+  });
+
+  it("un email accepté dont même le destinataire ne s’enregistre pas reste « queued », jamais renvoyé (DATA-05)", async () => {
+    const candidate = seedCandidate(1);
+    // The batch, then the recipient alone, are refused after Resend accepted the email.
+    memory.failNext(/^update "recruitment_campaign_recipients" set "delivery_status" = \$1, "provider_email_id"/, 2);
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const result = await admin().admin.recruitment.campaigns.send({ title: "Offre test", subject: "Offre Suisse", body: "Une mission à Genève, répondez par email.", language: "fr", mode: "selected", selectedIds: [candidate.id as number], confirmed: true });
+    error.mockRestore();
+    expect(result).toMatchObject({ total: 1, sent: 1, failed: 0 });
+    expect(memory.rows(recruitmentCampaignRecipients)[0]).toMatchObject({ delivery_status: "queued", provider_email_id: null, error: null });
+    expect(memory.rows(recruitmentCampaigns)[0]).toMatchObject({ status: "sent" });
+    await expect(admin().admin.recruitment.campaigns.retryFailed({ campaignId: result.campaignId, confirmed: true })).resolves.toMatchObject({ attempted: 0, sent: 0 });
+    expect(state.sentTo).toEqual(["c1@test.local"]);
+    // A retry with nothing to send leaves the campaign sent, not « failed ».
+    expect(memory.rows(recruitmentCampaigns)[0]).toMatchObject({ status: "sent" });
+  });
+
+  it("une relance compte comme envoyé le destinataire resté « queued » après l’acceptation de son email (DATA-05)", async () => {
+    const accepted = seedCandidate(1);
+    const failing = seedCandidate(2);
+    state.failFor = new Set(["c2@test.local"]);
+    // c1's email is accepted, then both its recordings are refused; Resend refuses c2's.
+    memory.failNext(/^update "recruitment_campaign_recipients" set "delivery_status" = \$1, "provider_email_id"/, 2);
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const result = await admin().admin.recruitment.campaigns.send({ title: "Offre test", subject: "Offre Suisse", body: "Une mission à Genève, répondez par email.", language: "fr", mode: "selected", selectedIds: [accepted.id as number, failing.id as number], confirmed: true });
+    error.mockRestore();
+    expect(result).toMatchObject({ total: 2, sent: 1, failed: 1 });
+    expect(memory.rows(recruitmentCampaigns)[0]).toMatchObject({ status: "partially_sent" });
+
+    state.failFor.clear();
+    await expect(admin().admin.recruitment.campaigns.retryFailed({ campaignId: result.campaignId, confirmed: true })).resolves.toMatchObject({ attempted: 1, sent: 1, failed: 0 });
+    expect(state.sentTo).toEqual(["c1@test.local", "c2@test.local"]);
+    expect(Object.fromEntries(memory.rows(recruitmentCampaignRecipients).map(row => [row.recipient_email, row.delivery_status]))).toEqual({ "c1@test.local": "queued", "c2@test.local": "sent" });
+    // Every email went out: the campaign is sent.
+    expect(memory.rows(recruitmentCampaigns)[0]).toMatchObject({ status: "sent" });
+  });
+
+  it("un destinataire dont le jeton de désinscription ne s’enregistre pas reste « failed », sans email, et une relance l’envoie sous sa clé (DATA-05)", async () => {
+    const blocked = seedCandidate(1);
+    const served = seedCandidate(2);
+    const unsubscribeTokenWrite = /^update "cv_applications" set "marketing_unsubscribe_token"/;
+    // c1's token is refused before anything is sent, at the send then at the first retry.
+    memory.failNext(unsubscribeTokenWrite);
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const result = await admin().admin.recruitment.campaigns.send({ title: "Offre test", subject: "Offre Suisse", body: "Une mission à Genève, répondez par email.", language: "fr", mode: "selected", selectedIds: [blocked.id as number, served.id as number], confirmed: true });
+    expect(result).toMatchObject({ total: 2, sent: 1, failed: 1 });
+    expect(state.sentTo).toEqual(["c2@test.local"]);
+    const recipient = memory.rows(recruitmentCampaignRecipients).find(row => row.recipient_email === "c1@test.local")!;
+    // A stable reason, not the query and its parameters.
+    expect(recipient).toMatchObject({ delivery_status: "failed", error: "unsubscribe_token_not_recorded", provider_email_id: null });
+    expect(memory.rows(recruitmentCampaigns)[0]).toMatchObject({ status: "partially_sent" });
+
+    // Refused again at the retry: « failed » again, never left « queued » and counted as served.
+    memory.failNext(unsubscribeTokenWrite);
+    await expect(admin().admin.recruitment.campaigns.retryFailed({ campaignId: result.campaignId, confirmed: true })).resolves.toMatchObject({ attempted: 1, sent: 0, failed: 1 });
+    // Logged at each refusal, by the error's name only: neither the query nor
+    // the tokens it carried (inspected, so that an Error object counts too).
+    const refusedTokens = memory.statements.filter(statement => unsubscribeTokenWrite.test(statement.sql) && statement.params[1] === blocked.id).map(statement => String(statement.params[0]));
+    expect(refusedTokens).toHaveLength(2);
+    expect(error).toHaveBeenCalledWith(expect.stringContaining("Unsubscribe token not recorded"), expect.objectContaining({ error: "Error" }));
+    const logged = inspect(error.mock.calls, { depth: null });
+    expect(logged).not.toContain("Failed query");
+    for (const token of refusedTokens) expect(logged).not.toContain(token);
+    error.mockRestore();
+    expect(state.sentTo).toEqual(["c2@test.local"]);
+    expect(recipient).toMatchObject({ delivery_status: "failed", error: "unsubscribe_token_not_recorded" });
+    expect(memory.rows(recruitmentCampaigns)[0]).toMatchObject({ status: "partially_sent" });
+
+    // The token recorded at last, the email goes out under the recipient's own key.
+    state.keys = [];
+    await expect(admin().admin.recruitment.campaigns.retryFailed({ campaignId: result.campaignId, confirmed: true })).resolves.toMatchObject({ attempted: 1, sent: 1, failed: 0 });
+    expect(state.sentTo).toEqual(["c2@test.local", "c1@test.local"]);
+    expect(state.keys).toEqual([`campaign-${result.campaignId}-recipient-${recipient.id}`]);
+    expect(recipient).toMatchObject({ delivery_status: "sent", error: null });
+    expect(memory.rows(cvApplications).find(row => row.id === blocked.id)!.marketing_unsubscribe_token).toMatch(/^[0-9a-f]{32}$/);
+    expect(memory.rows(recruitmentCampaigns)[0]).toMatchObject({ status: "sent" });
+  });
+
   it("rapporte l’issue réelle d’une relance d’analyse ou de copie Drive (ADM-REC-02, ADM-DRIVE-01)", () => {
     expect(reanalysisOutcome({ alreadyRunning: false }, { processed: 1, results: [{ completed: true, needsReview: false }] })).toEqual({ outcome: "completed", error: null });
     expect(reanalysisOutcome({ alreadyRunning: false }, { processed: 1, results: [{ completed: false, retry: true, error: "Failed after 2 attempts. GatewayInternalServerError" }] })).toEqual({ outcome: "retry_scheduled", error: "Failed after 2 attempts. GatewayInternalServerError" });
@@ -122,7 +241,7 @@ describe("actions d’administration du recrutement", () => {
     const shortlisted = seedCandidate(1, { ai_score: 91, analysis_prompt_version: RECRUITMENT_ANALYSIS_PROMPT_VERSION });
     seedCandidate(2, { ai_score: 40, analysis_prompt_version: RECRUITMENT_ANALYSIS_PROMPT_VERSION });
     const [brief] = memory.seed(clientBriefs, [{ brief_id: "BRIEF-EXPORT-1", organization_name: "Clinique", contact_name: "RH", email: "rh@test.local", target_environment: "Hôpital", specialty_needed: "Anesthésie", country: "Suisse" }]);
-    memory.seed(clientBriefCandidates, [{ brief_id: brief!.id, application_id: shortlisted.id, association_status: "shortlisted" }]);
+    memory.seed(clientBriefCandidates, [{ brief_id: brief!.id, application_id: shortlisted.id, association_status: "shortlisted", candidate_consent_at: consentAt }]);
     const shortlist = await admin().admin.recruitment.exportCsv({ type: "shortlist", briefId: brief!.id as number });
     const [shortlistHeader, ...shortlistRows] = shortlist.csv.split("\n");
     expect(shortlist.count).toBe(1);
@@ -132,6 +251,85 @@ describe("actions d’administration du recrutement", () => {
     const pool = await admin().admin.recruitment.exportCsv({ type: "pool", candidateIds: [shortlisted.id as number] });
     expect(pool.csv.split("\n")[0]).toContain("Score IA");
     expect(pool.csv).toContain("\"91\"");
+  });
+
+  it("refuse un export du vivier dont plus aucun candidat sélectionné n’est exportable, au lieu d’un fichier vide (REC-01)", async () => {
+    const refused = seedCandidate(1, { status: "rejected" });
+    await expect(admin().admin.recruitment.exportCsv({ type: "pool", candidateIds: [refused.id as number] }))
+      .rejects.toThrow("Aucun des candidats sélectionnés ne peut plus être exporté (refusé, archivé ou désinscrit).");
+  });
+
+  it("une shortlist n’exporte que les présélectionnés de sa mission, et une shortlist vide est refusée (REC-01)", async () => {
+    const shortlisted = seedCandidate(1);
+    const suggested = seedCandidate(2);
+    const otherMission = seedCandidate(3);
+    const rejected = seedCandidate(4, { status: "rejected" });
+    seedCandidate(5);
+    const [brief, other, empty] = memory.seed(clientBriefs, ["BRIEF-REC01-A", "BRIEF-REC01-B", "BRIEF-REC01-C"].map(briefId => ({ brief_id: briefId, organization_name: "Clinique", contact_name: "RH", email: "rh@test.local", target_environment: "Hôpital", specialty_needed: "Anesthésie", country: "Suisse" })));
+    const briefId = brief!.id as number;
+    // Every one of them agreed to be presented (RGPD-03): only the mission and the status filter here.
+    memory.seed(clientBriefCandidates, [
+      { brief_id: briefId, application_id: shortlisted.id, association_status: "shortlisted", candidate_consent_at: consentAt },
+      { brief_id: briefId, application_id: suggested.id, association_status: "suggested", candidate_consent_at: consentAt },
+      { brief_id: briefId, application_id: rejected.id, association_status: "shortlisted", candidate_consent_at: consentAt },
+      { brief_id: other!.id, application_id: otherMission.id, association_status: "shortlisted", candidate_consent_at: consentAt },
+    ]);
+    const exportedEmails = (csv: string) => csv.split("\n").slice(1).map(row => row.split(";")[2]);
+
+    const shortlist = await admin().admin.recruitment.exportCsv({ type: "shortlist", briefId });
+    expect(shortlist).toMatchObject({ count: 1 });
+    expect(exportedEmails(shortlist.csv)).toEqual(["\"c1@test.local\""]);
+    await expect(admin().admin.clientBriefs.candidates({ briefId })).resolves.toMatchObject({ shortlistedCount: 1 });
+
+    // Ids sent by the client for a shortlist are ignored, never added.
+    const forged = await admin().admin.recruitment.exportCsv({ type: "shortlist", briefId, candidateIds: [suggested.id as number, otherMission.id as number, rejected.id as number] });
+    expect(exportedEmails(forged.csv)).toEqual(["\"c1@test.local\""]);
+
+    // A mission nobody is shortlisted for exports nothing, whatever ids come with it.
+    await expect(admin().admin.recruitment.exportCsv({ type: "shortlist", briefId: empty!.id as number })).rejects.toThrow("Aucun candidat présélectionné pour cette mission.");
+    await expect(admin().admin.recruitment.exportCsv({ type: "shortlist", briefId: empty!.id as number, candidateIds: [shortlisted.id as number, suggested.id as number] })).rejects.toThrow("Aucun candidat présélectionné pour cette mission.");
+    await expect(admin().admin.clientBriefs.candidates({ briefId: empty!.id as number })).resolves.toMatchObject({ shortlistedCount: 0 });
+
+    // Removing the last shortlisted candidate empties the shortlist again.
+    await admin().admin.clientBriefs.associateCandidate({ briefId, applicationId: shortlisted.id as number, status: "declined" });
+    await expect(admin().admin.recruitment.exportCsv({ type: "shortlist", briefId })).rejects.toThrow("Aucun candidat présélectionné pour cette mission.");
+    await expect(admin().admin.clientBriefs.candidates({ briefId })).resolves.toMatchObject({ shortlistedCount: 0 });
+    expect(memory.rows(recruitmentAuditLogs).filter(row => row.action === "export").map(row => row.application_id)).toEqual([shortlisted.id, shortlisted.id]);
+  });
+
+  it("une shortlist au-delà de la limite par export est refusée, jamais tronquée (REC-01)", async () => {
+    const [brief] = memory.seed(clientBriefs, [{ brief_id: "BRIEF-REC01-MAX", organization_name: "Clinique", contact_name: "RH", email: "rh@test.local", target_environment: "Hôpital", specialty_needed: "Anesthésie", country: "Suisse" }]);
+    const briefId = brief!.id as number;
+    const candidates = Array.from({ length: 201 }, (_, index) => seedCandidate(index + 1));
+    memory.seed(clientBriefCandidates, candidates.slice(0, 200).map(candidate => ({ brief_id: briefId, application_id: candidate.id, association_status: "shortlisted", candidate_consent_at: consentAt })));
+    const exportedRows = (csv: string) => csv.split("\n").length - 1;
+
+    // Exactly at the limit: every shortlisted candidate is in the file.
+    const full = await admin().admin.recruitment.exportCsv({ type: "shortlist", briefId });
+    expect(full.count).toBe(200);
+    expect(exportedRows(full.csv)).toBe(200);
+    await expect(admin().admin.clientBriefs.candidates({ briefId })).resolves.toMatchObject({ shortlistedCount: 200 });
+
+    // One more: the export is refused with the limit rather than cut to 200.
+    memory.seed(clientBriefCandidates, [{ brief_id: briefId, application_id: candidates[200]!.id, association_status: "shortlisted", candidate_consent_at: consentAt }]);
+    await expect(admin().admin.clientBriefs.candidates({ briefId })).resolves.toMatchObject({ shortlistedCount: 201, consentedCount: 201 });
+    const auditRowsBefore = memory.rows(recruitmentAuditLogs).length;
+    await expect(admin().admin.recruitment.exportCsv({ type: "shortlist", briefId })).rejects.toThrow("La shortlist compte 201 candidats avec accord ; 200 au maximum par export. Retirez des candidats de la shortlist avant de l’exporter.");
+    expect(memory.rows(recruitmentAuditLogs)).toHaveLength(auditRowsBefore);
+  });
+
+  it("un export du vivier sans sélection est refusé au lieu d’exporter tout le vivier (REC-01)", async () => {
+    const selected = seedCandidate(1);
+    seedCandidate(2);
+    const withoutConsent = seedCandidate(3, { marketing_consent: 0 });
+    await expect(admin().admin.recruitment.exportCsv({ type: "pool" })).rejects.toThrow("Sélectionnez au moins un candidat à exporter.");
+    await expect(admin().admin.recruitment.exportCsv({ type: "pool", candidateIds: [] })).rejects.toThrow("Sélectionnez au moins un candidat à exporter.");
+    // A selected id does not bypass the pool's consent filter.
+    const pool = await admin().admin.recruitment.exportCsv({ type: "pool", candidateIds: [selected.id as number, withoutConsent.id as number] });
+    expect(pool.count).toBe(1);
+    expect(pool.csv).toContain("c1@test.local");
+    expect(pool.csv).not.toContain("c2@test.local");
+    expect(pool.csv).not.toContain("c3@test.local");
   });
 
   it("l’email propriétaire d’un brief contient tout pour qualifier et rappeler (ADM-BRIEF-01)", () => {

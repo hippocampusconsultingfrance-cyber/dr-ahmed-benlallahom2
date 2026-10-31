@@ -4,20 +4,22 @@ import { getDb } from "./db";
 import { and, desc, eq, exists, isNotNull, like, lt, or } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { createCandidateInvitationToken } from "./candidateAuth";
+import { emailLanguageFor } from "./emailLanguage";
 import {
   sendCvApplicationConfirmationEmail,
   type CvApplicationConfirmationDelivery,
+  type ResendDeliveryFailureCode,
 } from "./_core/notifications";
 
 export type TrackedCvConfirmationInput = {
   applicationId: number;
   candidateEmail: string;
-  candidateName: string;
+  candidateFirstName: string;
   trackingId: string;
-  specialty: string;
-  targetCountries: string;
   candidatePortalInviteUrl?: string;
   deliveryAttempt?: number;
+  /** Language of the application form: French email for "fr", English otherwise (EN-02). */
+  language?: string;
 };
 
 export type CvConfirmationTraceEvent = {
@@ -37,14 +39,14 @@ type CvConfirmationAttemptPayload = {
 type CandidatePortalInvitationAttemptPayload = {
   kind: "candidate_portal_invitation";
   outcome?: "sent" | "failed" | "unknown";
-  failureCode?: "provider_rejected" | "delivery_exception";
+  failureCode?: ResendDeliveryFailureCode;
   attempt?: number;
 };
 
 type CandidatePortalActivationAttemptPayload = {
   kind: "candidate_portal_activation";
   outcome?: "sent" | "failed" | "unknown";
-  failureCode?: "provider_rejected" | "delivery_exception";
+  failureCode?: ResendDeliveryFailureCode;
   attempt?: number;
 };
 
@@ -54,12 +56,12 @@ const CONFIRMATION_PAYLOAD_PATTERN = '%"kind":"application_confirmation"%';
 const RETRY_SCAN_PAGE_SIZE = 100;
 const RETRY_CURSOR_EVENT_ID = "internal:cv_confirmation_retry_cursor:v1";
 
-function trackedEmailEventType(delivery: { status: "sent" | "failed"; failureCode: "provider_rejected" | "delivery_exception" | null }) {
+function trackedEmailEventType(delivery: { status: "sent" | "failed"; failureCode: ResendDeliveryFailureCode | null }) {
   if (delivery.status === "sent") return "email.sent";
   return delivery.failureCode === "delivery_exception" ? "email.delivery_unknown" : "email.failed";
 }
 
-function trackedEmailOutcome(delivery: { status: "sent" | "failed"; failureCode: "provider_rejected" | "delivery_exception" | null }) {
+function trackedEmailOutcome(delivery: { status: "sent" | "failed"; failureCode: ResendDeliveryFailureCode | null }) {
   if (delivery.status === "sent") return "sent" as const;
   return delivery.failureCode === "delivery_exception" ? "unknown" as const : "failed" as const;
 }
@@ -150,7 +152,7 @@ export function candidatePortalAccountMatchesApplication(
 
 export function buildCandidatePortalInvitationEmailEvent(
   input: { applicationId: number; candidateEmail: string; trackingId: string; deliveryAttempt?: number },
-  delivery: { status: "sent" | "failed"; providerEmailId: string | null; failureCode: "provider_rejected" | "delivery_exception" | null },
+  delivery: { status: "sent" | "failed"; providerEmailId: string | null; failureCode: ResendDeliveryFailureCode | null },
   options: { now?: Date; localEventId?: string } = {},
 ) {
   return {
@@ -175,7 +177,7 @@ export function buildCandidatePortalInvitationEmailEvent(
 
 export function buildCandidatePortalActivationEmailEvent(
   input: { applicationId: number; candidateEmail: string; trackingId: string },
-  delivery: { status: "sent" | "failed"; providerEmailId: string | null; failureCode: "provider_rejected" | "delivery_exception" | null },
+  delivery: { status: "sent" | "failed"; providerEmailId: string | null; failureCode: ResendDeliveryFailureCode | null },
   options: { now?: Date; localEventId?: string } = {},
 ) {
   return {
@@ -245,18 +247,20 @@ export async function sendTrackedCvApplicationConfirmationEmail(
 ): Promise<CvApplicationConfirmationDelivery> {
   const delivery = await sendCvApplicationConfirmationEmail(
     input.candidateEmail,
-    input.candidateName,
+    input.candidateFirstName,
     input.trackingId,
-    input.specialty,
-    input.targetCountries,
     input.candidatePortalInviteUrl,
     `cv-application-confirmation-${input.trackingId}-attempt-${input.deliveryAttempt || 1}`,
+    emailLanguageFor(input.language),
   );
 
   try {
     const db = await getDb();
     if (db) {
-      await db.insert(recruitmentEmailEvents).values(buildCvConfirmationEmailEvent(input, delivery));
+      // The same key gives Resend's same id, so the same send:<id> trace: an
+      // answer « already received » (DATA-11) finds it recorded, no error.
+      await db.insert(recruitmentEmailEvents).values(buildCvConfirmationEmailEvent(input, delivery))
+        .onConflictDoNothing({ target: recruitmentEmailEvents.providerEventId });
     }
   } catch (error) {
     const errorName = error instanceof Error ? error.name : "UnknownError";
@@ -347,11 +351,9 @@ export async function retryCvConfirmationEmail(
   const [application] = await db.select({
     id: cvApplications.id,
     firstName: cvApplications.firstName,
-    lastName: cvApplications.lastName,
     email: cvApplications.email,
     trackingId: cvApplications.trackingId,
-    specialty: cvApplications.specialty,
-    targetCountries: cvApplications.targetCountries,
+    language: cvApplications.language,
   }).from(cvApplications).where(eq(cvApplications.id, applicationId)).limit(1);
   if (!application) return { outcome: "not_found" as const, attempted: false };
 
@@ -373,25 +375,17 @@ export async function retryCvConfirmationEmail(
     return { outcome: "not_due" as const, attempted: false, current };
   }
 
-  let targetCountries = "Non précisé";
-  try {
-    const parsed = JSON.parse(application.targetCountries);
-    if (Array.isArray(parsed)) targetCountries = parsed.filter(value => typeof value === "string").join(", ") || targetCountries;
-  } catch {
-    // Keep a neutral fallback; malformed legacy metadata must not block delivery.
-  }
   const publicOrigin = process.env.PUBLIC_APP_ORIGIN?.trim() || "https://drahmedbenlallahom.com";
   const delivery = await sendTrackedCvApplicationConfirmationEmail({
     applicationId: application.id,
     candidateEmail: application.email,
-    candidateName: `${application.firstName} ${application.lastName}`,
+    candidateFirstName: application.firstName,
     trackingId: application.trackingId,
-    specialty: application.specialty,
-    targetCountries,
     candidatePortalInviteUrl: `${publicOrigin}/candidate/access?invite=${encodeURIComponent(createCandidateInvitationToken(application.id))}`,
     // Reuse attempt 1 for an untracked submission so Resend can deduplicate a
     // previous, unrecorded request during its idempotency window.
     deliveryAttempt: current.eventType === "email.failed" ? current.attempts + 1 : 1,
+    language: application.language,
   });
   return { outcome: cvConfirmationRetryOutcome(delivery), attempted: true, delivery };
 }

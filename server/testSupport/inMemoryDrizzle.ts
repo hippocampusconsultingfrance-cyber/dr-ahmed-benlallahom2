@@ -3,7 +3,8 @@
  * candidate portal tests. It renders drizzle conditions and SQL fragments with
  * the real PgDialect, then evaluates the resulting SQL expression on in-memory
  * rows. It supports the query shapes used by the candidate code paths:
- * select/from/innerJoin/leftJoin/where/orderBy/limit, insert/values/returning,
+ * select/from/innerJoin/leftJoin/where/orderBy/limit (and a COUNT(*) alone),
+ * insert/values/returning,
  * onConflictDoUpdate/onConflictDoNothing, update/set/where/returning and
  * delete/where. Each statement executes atomically (like a single SQL
  * statement), and every `await` yields, so read-modify-write races in the
@@ -189,16 +190,33 @@ class ExpressionParser {
   }
 
   private additive(): unknown {
-    let left = this.primary();
+    let left = this.multiplicative();
     while (this.isOp("+") || this.isOp("-")) {
       const operator = this.peek().value;
       this.position += 1;
-      const right = this.primary();
+      const right = this.multiplicative();
       if (left === null || left === undefined || right === null || right === undefined) { left = null; continue; }
       if (left instanceof Date && isInterval(right)) {
         left = new Date(left.getTime() + (operator === "+" ? right.intervalMs : -right.intervalMs));
       } else {
         left = operator === "+" ? Number(left) + Number(right) : Number(left) - Number(right);
+      }
+    }
+    return left;
+  }
+
+  /** `n * INTERVAL '1 minute'` (a duration column in minutes) and plain products. */
+  private multiplicative(): unknown {
+    let left = this.primary();
+    while (this.isOp("*")) {
+      this.position += 1;
+      const right = this.primary();
+      if (left === null || left === undefined || right === null || right === undefined) { left = null; continue; }
+      if (isInterval(left) || isInterval(right)) {
+        const [interval, factor] = isInterval(right) ? [right, left] : [left as Interval, right];
+        left = { intervalMs: interval.intervalMs * Number(factor) };
+      } else {
+        left = Number(left) * Number(right);
       }
     }
     return left;
@@ -253,6 +271,9 @@ class ExpressionParser {
         this.position += 1;
         return this.resolveColumn("excluded", column.value);
       }
+      // Unquoted column name written in a raw SQL fragment (`appointment_date < ${end}`).
+      this.position += 1;
+      return this.cast(this.resolveColumn(null, token.value));
     }
     if (token.kind === "ident") {
       this.position += 1;
@@ -496,8 +517,14 @@ class SelectQuery extends Thenable<Row[]> {
       contexts = next;
     }
     contexts = contexts.filter(context => this.db.evaluate(this.condition, context) === true);
+    // Count-only selection (select({ count: sql`COUNT(*)` })): one row, as SQL returns it.
+    const fields = Object.entries(this.selection ?? {});
+    if (fields.length > 0 && fields.every(([, field]) => is(field, SQL) && /^count\(\*\)$/i.test(dialect.sqlToQuery(field).sql.trim()))) {
+      return [Object.fromEntries(fields.map(([key]) => [key, contexts.length]))];
+    }
     for (const fragment of [...this.order].reverse()) {
-      const rendered = dialect.sqlToQuery(fragment).sql;
+      // A bare column (orderBy(table.column)) sorts ascending.
+      const rendered = is(fragment, Column) ? "" : dialect.sqlToQuery(fragment).sql;
       const descending = /\sdesc$/i.test(rendered);
       const expression = is(fragment, Column) ? sql`${fragment}` : sql.raw(rendered.replace(/\s(asc|desc)$/i, ""));
       contexts = [...contexts].sort((a, b) => {

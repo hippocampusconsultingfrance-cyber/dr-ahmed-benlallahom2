@@ -3,11 +3,16 @@
  *
  * It plugs into drizzle's `pg-proxy` driver and executes the small SQL subset
  * drizzle generates for the queries of this code base (single-table SELECT /
- * INSERT / UPDATE / DELETE with AND/OR/IN/IS NULL predicates, lower(), ORDER BY, LIMIT,
- * RETURNING, ON CONFLICT DO NOTHING / DO UPDATE). Anything else throws, so a
+ * INSERT / UPDATE / DELETE with AND/OR/IN/IS NULL predicates, lower(), translate(),
+ * replace(), normalize(), the || concatenation, LIKE / ILIKE with the backslash
+ * escape, ORDER BY, LIMIT,
+ * RETURNING, ON CONFLICT DO NOTHING / DO UPDATE [WHERE]). Anything else throws, so a
  * test never passes on a silently ignored statement. DDL statements sent with
  * `db.execute` (CREATE ... IF NOT EXISTS, ALTER ... IF NOT EXISTS) are recorded
- * and treated as no-ops. Never imported by production code.
+ * and treated as no-ops. `db.batch` runs its statements in order and, like
+ * neon-http's transaction, leaves nothing behind when one fails; `failNext`
+ * makes chosen statements fail, like a query refused between two steps.
+ * Never imported by production code.
  */
 import { drizzle } from "drizzle-orm/pg-proxy";
 import { getTableConfig, type PgTable } from "drizzle-orm/pg-core";
@@ -65,7 +70,7 @@ function tokenize(sqlText: string): Token[] {
     }
     const number = /^\d+(\.\d+)?/.exec(sqlText.slice(i));
     if (number) { tokens.push({ kind: "number", text: number[0] }); i += number[0].length; continue; }
-    const op = /^(<>|<=|>=|!=|::|=|<|>|\+|-|\*)/.exec(sqlText.slice(i));
+    const op = /^(<>|<=|>=|!=|::|\|\||=|<|>|\+|-|\*)/.exec(sqlText.slice(i));
     if (op) { tokens.push({ kind: "op", text: op[0] }); i += op[0].length; continue; }
     if ("(),.;".includes(char)) { tokens.push({ kind: "punct", text: char }); i += 1; continue; }
     const word = /^[A-Za-z_][A-Za-z0-9_]*/.exec(sqlText.slice(i));
@@ -87,6 +92,10 @@ type Expr =
   | { type: "not"; expr: Expr }
   | { type: "now" }
   | { type: "lower"; expr: Expr }
+  | { type: "coalesce"; items: Expr[] }
+  | { type: "translate"; expr: Expr; from: Expr; to: Expr }
+  | { type: "replace"; expr: Expr; from: Expr; to: Expr }
+  | { type: "normalize"; expr: Expr; form: "NFC" | "NFD" | "NFKC" | "NFKD" }
   | { type: "count" }
   | { type: "case"; whens: Array<[Expr, Expr]>; otherwise: Expr | null };
 
@@ -175,7 +184,7 @@ class Parser {
   }
   additive(): Expr {
     let left = this.primary();
-    while (this.peek()?.kind === "op" && ["+", "-"].includes(this.peek()!.text)) {
+    while (this.peek()?.kind === "op" && ["+", "-", "||"].includes(this.peek()!.text)) {
       const op = this.next().text;
       left = { type: "binary", op, left, right: this.primary() };
     }
@@ -216,6 +225,40 @@ class Parser {
       this.expectPunct("(");
       expr = { type: "lower", expr: this.expression() };
       this.expectPunct(")");
+    } else if (token.kind === "word" && token.text === "coalesce" && this.peek(1)?.text === "(") {
+      this.next();
+      this.expectPunct("(");
+      const items = [this.expression()];
+      while (this.acceptPunct(",")) items.push(this.expression());
+      this.expectPunct(")");
+      expr = { type: "coalesce", items };
+    } else if (token.kind === "word" && token.text === "translate" && this.peek(1)?.text === "(") {
+      this.next();
+      this.expectPunct("(");
+      const value = this.expression();
+      this.expectPunct(",");
+      const from = this.expression();
+      this.expectPunct(",");
+      expr = { type: "translate", expr: value, from, to: this.expression() };
+      this.expectPunct(")");
+    } else if (token.kind === "word" && token.text === "replace" && this.peek(1)?.text === "(") {
+      this.next();
+      this.expectPunct("(");
+      const value = this.expression();
+      this.expectPunct(",");
+      const from = this.expression();
+      this.expectPunct(",");
+      expr = { type: "replace", expr: value, from, to: this.expression() };
+      this.expectPunct(")");
+    } else if (token.kind === "word" && token.text === "normalize" && this.peek(1)?.text === "(") {
+      this.next();
+      this.expectPunct("(");
+      const value = this.expression();
+      this.expectPunct(",");
+      const form = this.next().text.toUpperCase();
+      if (form !== "NFC" && form !== "NFD" && form !== "NFKC" && form !== "NFKD") throw new Error(`memoryPgProxy: unknown normalization form ${form} in ${this.sqlText}`);
+      expr = { type: "normalize", expr: value, form };
+      this.expectPunct(")");
     } else if (token.kind === "word" && token.text === "case") {
       this.next();
       const whens: Array<[Expr, Expr]> = [];
@@ -249,6 +292,23 @@ function compare(a: Value, b: Value) {
   return String(a) < String(b) ? -1 : String(a) > String(b) ? 1 : 0;
 }
 
+/** A LIKE pattern as a regular expression: % and _ are wildcards, and a backslash makes the next character literal (PostgreSQL's default escape). */
+function likePatternSource(pattern: string) {
+  let source = "";
+  const chars = Array.from(pattern);
+  for (let index = 0; index < chars.length; index += 1) {
+    let char = chars[index]!;
+    if (char === "\\") {
+      index += 1;
+      if (index >= chars.length) throw new Error("memoryPgProxy: LIKE pattern must not end with escape character");
+      char = chars[index]!;
+    } else if (char === "%") { source += ".*"; continue; }
+    else if (char === "_") { source += "."; continue; }
+    source += char.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  }
+  return source;
+}
+
 function evaluate(expr: Expr, row: Row, params: unknown[], now: string): Value {
   switch (expr.type) {
     case "param": return normalize(params[expr.index]);
@@ -261,6 +321,39 @@ function evaluate(expr: Expr, row: Row, params: unknown[], now: string): Value {
     case "lower": {
       const value = evaluate(expr.expr, row, params, now);
       return typeof value === "string" ? value.toLowerCase() : value;
+    }
+    case "coalesce": {
+      for (const item of expr.items) {
+        const value = evaluate(item, row, params, now);
+        if (value !== null) return value;
+      }
+      return null;
+    }
+    case "translate": {
+      // PostgreSQL: each character of `from` becomes the character at the same
+      // position in `to`, or is removed when `to` is shorter.
+      const value = evaluate(expr.expr, row, params, now);
+      const from = evaluate(expr.from, row, params, now);
+      const to = evaluate(expr.to, row, params, now);
+      if (value === null || from === null || to === null) return null;
+      const source = Array.from(String(from));
+      const target = Array.from(String(to));
+      return Array.from(String(value), char => {
+        const index = source.indexOf(char);
+        return index < 0 ? char : target[index] ?? "";
+      }).join("");
+    }
+    case "replace": {
+      // PostgreSQL: every occurrence of `from` replaced by `to`.
+      const value = evaluate(expr.expr, row, params, now);
+      const from = evaluate(expr.from, row, params, now);
+      const to = evaluate(expr.to, row, params, now);
+      if (value === null || from === null || to === null) return null;
+      return String(from) === "" ? String(value) : String(value).replaceAll(String(from), String(to));
+    }
+    case "normalize": {
+      const value = evaluate(expr.expr, row, params, now);
+      return value === null ? null : String(value).normalize(expr.form);
     }
     case "count": throw new Error("memoryPgProxy: count(*) is only supported as a select expression");
     case "case": {
@@ -283,8 +376,7 @@ function evaluate(expr: Expr, row: Row, params: unknown[], now: string): Value {
       const value = evaluate(expr.expr, row, params, now);
       const pattern = evaluate(expr.pattern, row, params, now);
       if (value === null || pattern === null) return null;
-      const source = String(pattern).replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/%/g, ".*").replace(/_/g, ".");
-      const matched = new RegExp(`^${source}$`, expr.caseInsensitive ? "is" : "s").test(String(value));
+      const matched = new RegExp(`^${likePatternSource(String(pattern))}$`, expr.caseInsensitive ? "is" : "s").test(String(value));
       return expr.negated ? !matched : matched;
     }
     case "and": return expr.items.every(item => evaluate(item, row, params, now) === true);
@@ -293,6 +385,7 @@ function evaluate(expr: Expr, row: Row, params: unknown[], now: string): Value {
     case "binary": {
       const left = evaluate(expr.left, row, params, now);
       const right = evaluate(expr.right, row, params, now);
+      if (expr.op === "||") return left === null || right === null ? null : `${left}${right}`;
       if (expr.op === "+" || expr.op === "-") {
         if (left === null || right === null) return null;
         return expr.op === "+" ? Number(left) + Number(right) : Number(left) - Number(right);
@@ -321,12 +414,17 @@ type TableMeta = {
 
 export type MemoryPg = ReturnType<typeof createMemoryPg>;
 
-export function createMemoryPg(tables: PgTable[], options: { now?: () => Date } = {}) {
+/**
+ * `missingIndexes`: unique indexes of the schema left out, as on a database a
+ * migration has not reached yet (an ON CONFLICT on them is then refused, 42P10).
+ */
+export function createMemoryPg(tables: PgTable[], options: { now?: () => Date; missingIndexes?: string[] } = {}) {
   const clock = options.now ?? (() => new Date());
   const meta = new Map<string, TableMeta>();
   const data = new Map<string, Row[]>();
   const sequences = new Map<string, number>();
   const statements: Array<{ sql: string; params: unknown[] }> = [];
+  const failures: Array<{ pattern: RegExp; remaining: number }> = [];
 
   for (const table of tables) {
     const config = getTableConfig(table);
@@ -343,7 +441,10 @@ export function createMemoryPg(tables: PgTable[], options: { now?: () => Date } 
       if (column.isUnique || column.primary) uniqueSets.push([column.name]);
     }
     for (const index of config.indexes) {
-      if (index.config.unique) uniqueSets.push(index.config.columns.map(column => (column as { name: string }).name));
+      // Unique indexes on expressions or partial ones (cv_applications_submission_unique) are not emulated.
+      if (!index.config.unique || index.config.where || index.config.columns.some(column => is(column, SQL))) continue;
+      if (index.config.name && options.missingIndexes?.includes(index.config.name)) continue;
+      uniqueSets.push(index.config.columns.map(column => (column as { name: string }).name));
     }
     for (const constraint of config.uniqueConstraints) uniqueSets.push(constraint.columns.map(column => column.name));
     meta.set(config.name, { columns, defaults, serial, uniqueSets });
@@ -381,6 +482,12 @@ export function createMemoryPg(tables: PgTable[], options: { now?: () => Date } 
 
   function execute(sqlText: string, params: unknown[]) {
     statements.push({ sql: sqlText, params });
+    const failure = failures.find(candidate => candidate.pattern.test(sqlText));
+    if (failure) {
+      failure.remaining -= 1;
+      if (failure.remaining === 0) failures.splice(failures.indexOf(failure), 1);
+      throw new Error(`Failed query: ${sqlText}`);
+    }
     const now = pgTimestamp(clock());
     const tokens = tokenize(sqlText);
     const parser = new Parser(tokens, sqlText);
@@ -405,20 +512,22 @@ export function createMemoryPg(tables: PgTable[], options: { now?: () => Date } 
       tableMeta(table);
       let rows = data.get(table)!.filter(row => !where || evaluate(where, row, params, now) === true);
       if (parser.acceptWord("order", "by")) {
-        const orders: Array<{ expr: Expr; desc: boolean }> = [];
+        const orders: Array<{ expr: Expr; desc: boolean; nullsFirst: boolean }> = [];
         do {
           const expr = parser.additive();
           const desc = parser.acceptWord("desc");
           if (!desc) parser.acceptWord("asc");
-          orders.push({ expr, desc });
+          // PostgreSQL default: NULL sorts as the largest value (first in DESC, last in ASC).
+          const nullsFirst = parser.acceptWord("nulls", "first") || (!parser.acceptWord("nulls", "last") && desc);
+          orders.push({ expr, desc, nullsFirst });
         } while (parser.acceptPunct(","));
         rows = [...rows].sort((a, b) => {
           for (const order of orders) {
             const left = evaluate(order.expr, a, params, now);
             const right = evaluate(order.expr, b, params, now);
             if (left === right) continue;
-            if (left === null) return order.desc ? -1 : 1;
-            if (right === null) return order.desc ? 1 : -1;
+            if (left === null) return order.nullsFirst ? -1 : 1;
+            if (right === null) return order.nullsFirst ? 1 : -1;
             const result = compare(left, right);
             if (result !== 0) return order.desc ? -result : result;
           }
@@ -459,12 +568,16 @@ export function createMemoryPg(tables: PgTable[], options: { now?: () => Date } 
         parser.expectPunct(")");
         tuples.push(values);
       } while (parser.acceptPunct(","));
-      let onConflict: null | { action: "nothing" } | { action: "update"; target: string[]; set: Array<[string, Expr]> } = null;
+      let onConflict: null | { action: "nothing" } | { action: "update"; target: string[]; set: Array<[string, Expr]>; where: Expr | null } = null;
       if (parser.acceptWord("on", "conflict")) {
         const target: string[] = [];
         if (parser.acceptPunct("(")) {
           do target.push(parser.ident()); while (parser.acceptPunct(","));
           parser.expectPunct(")");
+          // As PostgreSQL: the target must be the columns of a unique index.
+          if (!tableMeta(table).uniqueSets.some(set => set.length === target.length && set.every(column => target.includes(column)))) {
+            throw Object.assign(new Error("there is no unique or exclusion constraint matching the ON CONFLICT specification"), { code: "42P10" });
+          }
         }
         parser.expectWord("do");
         if (parser.acceptWord("nothing")) onConflict = { action: "nothing" };
@@ -476,7 +589,8 @@ export function createMemoryPg(tables: PgTable[], options: { now?: () => Date } 
             if (parser.next().text !== "=") throw new Error(`memoryPgProxy: expected = in ${sqlText}`);
             set.push([column, parser.additive()]);
           } while (parser.acceptPunct(","));
-          onConflict = { action: "update", target, set };
+          // DO UPDATE ... WHERE: a conflicting row that does not match is left as it is.
+          onConflict = { action: "update", target, set, where: parser.acceptWord("where") ? parser.expression() : null };
         }
       }
       const affected: Row[] = [];
@@ -494,6 +608,7 @@ export function createMemoryPg(tables: PgTable[], options: { now?: () => Date } 
         if (existing) {
           if (!onConflict) throw new Error(`memoryPgProxy: duplicate key in ${table}`);
           if (onConflict.action === "nothing") continue;
+          if (onConflict.where && evaluate(onConflict.where, existing, params, now) !== true) continue;
           for (const [column, expr] of onConflict.set) existing[column] = evaluate(expr, existing, params, now);
           affected.push(existing);
           continue;
@@ -550,9 +665,32 @@ export function createMemoryPg(tables: PgTable[], options: { now?: () => Date } 
     return { rows: result.rows as any };
   });
 
+  // drizzle's pg-proxy has no batch. neon-http sends one as a transaction: when
+  // a statement fails, every row is put back as it was before the batch
+  // (sequences, as in PostgreSQL, are not).
+  (db as unknown as { batch: (queries: Array<PromiseLike<unknown>>) => Promise<unknown[]> }).batch = async queries => {
+    const saved = new Map(Array.from(data, ([table, rows]) => [table, rows.map(row => [row, { ...row }] as const)]));
+    try {
+      const results: unknown[] = [];
+      for (const query of queries) results.push(await query);
+      return results;
+    } catch (error) {
+      saved.forEach((entries, table) => {
+        const rows = data.get(table)!;
+        rows.length = 0;
+        for (const [row, values] of entries) rows.push(Object.assign(row, values));
+      });
+      throw error;
+    }
+  };
+
   return {
     db,
     statements,
+    /** The next `times` statements whose SQL matches `pattern` fail ("Failed query: …"), as a trigger refusing them would. */
+    failNext(pattern: RegExp, times = 1) {
+      failures.push({ pattern, remaining: times });
+    },
     rows(table: PgTable | string) {
       const name = typeof table === "string" ? table : getTableConfig(table).name;
       tableMeta(name);

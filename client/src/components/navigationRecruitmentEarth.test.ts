@@ -4,18 +4,11 @@ import { describe, expect, it } from "vitest";
 
 const readSource = (relativePath: string) => readFileSync(resolve(process.cwd(), relativePath), "utf8");
 
-describe("recrutement et ordre de navigation", () => {
+// L’ordre des liens de navigation est vérifié sur la barre montée (Navigation.dom.test.ts).
+describe("page de recrutement principale", () => {
   it("place une Terre décorative derrière la page de recrutement principale", () => {
     const source = readSource("client/src/pages/RecruitmentHubPage.tsx");
     expect(source).toContain("/assets/medical-hero.svg");
     expect(source).toContain('aria-hidden="true"');
-  });
-
-  it("place Contact après Recrutement et Employeurs dans les deux navigations", () => {
-    const source = readSource("client/src/components/Navigation.tsx");
-    const contactLink = 'scrollTo("contact")} className="nav-link';
-    expect(source.indexOf('href="/recruitment"')).toBeLessThan(source.indexOf(contactLink));
-    expect(source.indexOf('href="/employers"')).toBeLessThan(source.indexOf(contactLink));
-    expect(source).toContain('scrollTo("contact")} className="nav-mobile-link');
   });
 });

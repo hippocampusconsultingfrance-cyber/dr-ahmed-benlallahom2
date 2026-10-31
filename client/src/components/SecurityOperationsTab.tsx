@@ -2,7 +2,7 @@ import { ShieldAlert, ShieldCheck, TriangleAlert } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import PublicContentSkeleton from "@/components/PublicContentSkeleton";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { securityOperationsCopy } from "./securityOperationsCopy";
+import { describeSecurityEventCounts, securityOperationsCopy } from "./securityOperationsCopy";
 
 const severityStyle = {
   info: "border-cyan-400/20 bg-cyan-400/5 text-cyan-200",
@@ -35,10 +35,13 @@ export default function SecurityOperationsTab() {
     </div>
     <div className="overflow-hidden rounded-2xl border border-border bg-card/70">
       {rows.length === 0 ? <div className="flex min-h-48 flex-col items-center justify-center gap-2 p-8 text-center text-muted-foreground"><ShieldCheck className="h-8 w-8 text-emerald-300" /><p>{copy.noEvents}</p></div> : <div className="divide-y divide-border">
-        {rows.map(event => <div key={event.id} className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex min-w-0 items-start gap-3"><TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" /><div><p className="font-medium text-foreground">{copy.categories[event.category as keyof typeof copy.categories] ?? event.category.replaceAll("_", " ")}</p><p className="mt-1 text-xs text-muted-foreground">{copy.actors[event.actorKind as keyof typeof copy.actors] ?? event.actorKind} · {new Date(event.createdAt).toLocaleString(locale, { dateStyle: "medium", timeStyle: "short" })}</p></div></div>
-          <div className="flex items-center gap-2"><span className="rounded-full border border-border px-2 py-1 text-xs text-muted-foreground">{copy.outcomes[event.outcome as keyof typeof copy.outcomes] ?? event.outcome}</span><span className={`rounded-full border px-2 py-1 text-xs font-semibold ${severityStyle[event.severity]}`}>{copy.severities[event.severity as keyof typeof copy.severities] ?? event.severity}</span></div>
-        </div>)}
+        {rows.map(event => {
+          const counts = describeSecurityEventCounts(copy, event.counts);
+          return <div key={event.id} className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex min-w-0 items-start gap-3"><TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" /><div><p className="font-medium text-foreground">{copy.categories[event.category as keyof typeof copy.categories] ?? event.category.replaceAll("_", " ")}</p><p className="mt-1 text-xs text-muted-foreground">{copy.actors[event.actorKind as keyof typeof copy.actors] ?? event.actorKind} · {new Date(event.createdAt).toLocaleString(locale, { dateStyle: "medium", timeStyle: "short" })}</p>{counts && <p className="mt-1 text-xs text-muted-foreground">{counts}</p>}</div></div>
+            <div className="flex items-center gap-2"><span className="rounded-full border border-border px-2 py-1 text-xs text-muted-foreground">{copy.outcomes[event.outcome as keyof typeof copy.outcomes] ?? event.outcome}</span><span className={`rounded-full border px-2 py-1 text-xs font-semibold ${severityStyle[event.severity]}`}>{copy.severities[event.severity as keyof typeof copy.severities] ?? event.severity}</span></div>
+          </div>;
+        })}
       </div>}
     </div>
   </section>;

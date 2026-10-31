@@ -17,7 +17,8 @@ import {
 
 const dialect = new PgDialect();
 
-function fakeDatabase(options: { selects: unknown[][]; executeFailures?: unknown[] }) {
+/** `concurrentInsert`: another allocation inserted the appointment's row first (ON CONFLICT DO NOTHING inserts none). */
+function fakeDatabase(options: { selects: unknown[][]; executeFailures?: unknown[]; concurrentInsert?: boolean }) {
   const selects = [...options.selects];
   const failures = [...(options.executeFailures ?? [])];
   const executed: string[] = [];
@@ -26,6 +27,8 @@ function fakeDatabase(options: { selects: unknown[][]; executeFailures?: unknown
       const text = dialect.sqlToQuery(query).sql;
       executed.push(text);
       if (text.includes("INSERT INTO") && failures.length) throw failures.shift();
+      // RETURNING gives the inserted row.
+      if (text.includes("INSERT INTO") && !options.concurrentInsert) return { rows: [{ invoice_number: record.invoiceNumber }] };
       return { rows: [] };
     }),
     select: vi.fn(() => ({
@@ -96,25 +99,30 @@ describe("numérotation séquentielle des factures", () => {
     await expect(run({ code: "42501" }, true)).rejects.toThrow("Failed query");
   });
 
-  it("attribue le numéro une seule fois et le relit ensuite", async () => {
+  it("attribue le numéro une seule fois et le relit ensuite ; seule l’attribution dit la facture émise à l’instant (EXPL-02)", async () => {
     const { executed } = fakeDatabase({ selects: [[], [record]] });
     const first = await allocateAppointmentInvoice({ appointmentId: 7, paidAt: record.paidAt, now: record.issuedAt });
-    expect(first).toEqual(record);
+    expect(first).toEqual({ ...record, issuedNow: true });
     const inserts = executed.filter(statement => statement.includes("INSERT INTO"));
     expect(inserts).toHaveLength(1);
     expect(inserts[0]).toContain('COALESCE(MAX("invoice_sequence"), 0) + 1');
     expect(inserts[0]).toContain('ON CONFLICT ("appointment_id") DO NOTHING');
 
     const second = fakeDatabase({ selects: [[record]] });
-    await expect(allocateAppointmentInvoice({ appointmentId: 7, paidAt: new Date(), now: new Date() })).resolves.toEqual(record);
+    await expect(allocateAppointmentInvoice({ appointmentId: 7, paidAt: new Date(), now: new Date() })).resolves.toEqual({ ...record, issuedNow: false });
     expect(second.executed.filter(statement => statement.includes("INSERT INTO"))).toHaveLength(0);
   });
 
   it("réessaie quand une attribution concurrente a pris le même rang", async () => {
     const conflict = Object.assign(new Error("Failed query"), { cause: { code: "23505" } });
     const { executed } = fakeDatabase({ selects: [[], [record]], executeFailures: [conflict] });
-    await expect(allocateAppointmentInvoice({ appointmentId: 7, paidAt: record.paidAt })).resolves.toEqual(record);
+    await expect(allocateAppointmentInvoice({ appointmentId: 7, paidAt: record.paidAt })).resolves.toEqual({ ...record, issuedNow: true });
     expect(executed.filter(statement => statement.includes("INSERT INTO"))).toHaveLength(2);
+  });
+
+  it("une attribution concurrente qui a émis la facture du même rendez-vous juste avant : le numéro relu n’est pas émis par cet appel", async () => {
+    fakeDatabase({ selects: [[], [record]], concurrentInsert: true });
+    await expect(allocateAppointmentInvoice({ appointmentId: 7, paidAt: record.paidAt })).resolves.toEqual({ ...record, issuedNow: false });
   });
 
   it("propage les autres erreurs pour que le job soit réessayé", async () => {

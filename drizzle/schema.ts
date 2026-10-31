@@ -1,4 +1,5 @@
-import { index, integer as int, pgTable as mysqlTable, serial, text, timestamp, uniqueIndex, varchar } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import { check, foreignKey, index, integer as int, pgTable as mysqlTable, serial, text, timestamp, uniqueIndex, varchar } from "drizzle-orm/pg-core";
 
 // Keep the existing schema declarations readable while storing enum-like
 // values as typed PostgreSQL varchar columns. This avoids global enum-name
@@ -6,6 +7,11 @@ import { index, integer as int, pgTable as mysqlTable, serial, text, timestamp, 
 function mysqlEnum<const T extends readonly [string, ...string[]]>(name: string, values: T) {
   const length = Math.max(32, ...values.map(value => value.length));
   return varchar(name, { length }).$type<T[number]>();
+}
+
+/** CHECK keeping a mysqlEnum column within its values: the column itself stays a plain varchar (DATA-01). */
+function enumCheck(name: string, column: string, values: readonly string[]) {
+  return check(name, sql.raw(`"${column}" IN (${values.map(value => `'${value}'`).join(", ")})`));
 }
 
 /**
@@ -145,6 +151,9 @@ export type InsertTestimonial = typeof testimonials.$inferInsert;
  * Appointments/Reservations table.
  * Stores health consultation appointments with payment and status tracking.
  */
+const APPOINTMENT_PAYMENT_STATUSES = ["pending", "completed", "failed", "refunded"] as const;
+const APPOINTMENT_STATUSES = ["held", "confirmed", "cancelled", "completed", "no_show"] as const;
+
 export const appointments = mysqlTable("appointments", {
   id: serial("id").primaryKey(),
   trackingId: varchar("tracking_id", { length: 20 }).notNull().unique(), // Unique booking reference
@@ -161,8 +170,8 @@ export const appointments = mysqlTable("appointments", {
   isNightRate: int("is_night_rate").default(0).notNull(), // 1 = night rate (18h-8h), 0 = normal rate
   stripePaymentIntentId: varchar("stripe_payment_intent_id", { length: 255 }), // Stripe Payment Intent ID
   stripeSessionId: varchar("stripe_session_id", { length: 255 }), // Stripe Checkout Session ID
-  paymentStatus: mysqlEnum("payment_status", ["pending", "completed", "failed", "refunded"]).default("pending").notNull(),
-  appointmentStatus: mysqlEnum("appointment_status", ["held", "confirmed", "cancelled", "completed", "no_show"]).default("held").notNull(),
+  paymentStatus: mysqlEnum("payment_status", APPOINTMENT_PAYMENT_STATUSES).default("pending").notNull(),
+  appointmentStatus: mysqlEnum("appointment_status", APPOINTMENT_STATUSES).default("held").notNull(),
   holdExpiresAt: timestamp("hold_expires_at"), // Temporary unpaid booking lock; cleared once paid or released.
   meetLink: varchar("meet_link", { length: 500 }), // Google Meet link
   cancellationReason: text("cancellation_reason"), // Reason for cancellation if applicable
@@ -171,12 +180,17 @@ export const appointments = mysqlTable("appointments", {
   refundedAt: timestamp("refunded_at"), // Timestamp of refund
   emailSent: int("email_sent").default(0).notNull(), // 1 = confirmation email sent
   smsSent: int("sms_sent").default(0).notNull(), // 1 = SMS notification sent
-  reminderSent: int("reminder_sent").default(0).notNull(), // 1 = 24h reminder sent
+  reminderSent: int("reminder_sent").default(0).notNull(), // 1 = 24h reminder sent, 2 = reserved by the run sending it (server/scheduledJobs.ts)
+  // Language of the booking page (fr, en, de, zh): patient emails in French for
+  // "fr", in English otherwise (EN-01). Also added at runtime: server/languageColumns.ts.
+  language: varchar("language", { length: 10 }).default("fr").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 }, table => ({
   activeSlotUnique: uniqueIndex("appointments_active_slot_unique").on(table.slotKey),
   holdExpiry: index("appointments_hold_expiry_idx").on(table.appointmentStatus, table.paymentStatus, table.holdExpiresAt),
+  paymentStatusCheck: enumCheck("appointments_payment_status_check", "payment_status", APPOINTMENT_PAYMENT_STATUSES),
+  appointmentStatusCheck: enumCheck("appointments_appointment_status_check", "appointment_status", APPOINTMENT_STATUSES),
 }));
 
 export type Appointment = typeof appointments.$inferSelect;
@@ -186,9 +200,12 @@ export type InsertAppointment = typeof appointments.$inferInsert;
 export const appointmentFulfillmentJobs = mysqlTable("appointment_fulfillment_jobs", {
   id: serial("id").primaryKey(),
   appointmentId: int("appointment_id").notNull(),
-  // varchar column: "owner" (new-booking notification to the owner, sent first)
-  // needs no migration.
-  jobType: mysqlEnum("job_type", ["owner", "confirmation", "invoice"]).notNull(),
+  // varchar column: "owner" (new-booking notification to the owner, sent first),
+  // the notices of a refund recorded from Stripe ("refund" to the patient,
+  // "refund_owner" to the owner) and the owner's failure alert of a patient
+  // email queued when it could not go out at once ("…_failure_alert") need no
+  // migration.
+  jobType: mysqlEnum("job_type", ["owner", "confirmation", "invoice", "refund", "refund_owner", "confirmation_failure_alert", "invoice_failure_alert", "refund_failure_alert"]).notNull(),
   status: mysqlEnum("status", ["queued", "running", "retry", "completed", "failed"]).default("queued").notNull(),
   attempts: int("attempts").default(0).notNull(),
   maxAttempts: int("max_attempts").default(3).notNull(),
@@ -329,7 +346,9 @@ export const cvApplications = mysqlTable("cv_applications", {
   aiMatchReasoning: text("ai_match_reasoning"),
   extractedText: text("extracted_text"),
   aiAnalyzedAt: timestamp("ai_analyzed_at"),
-  analysisStatus: mysqlEnum("analysis_status", ["queued", "extracting", "analyzing", "completed", "needs_review", "failed"]).default("queued").notNull(),
+  // degraded: the AI provider refused the analysis (billing); « Mettre à jour /
+  // reprendre l’IA » analyses the CV again (REC-08). Same varchar(32) column.
+  analysisStatus: mysqlEnum("analysis_status", ["queued", "extracting", "analyzing", "completed", "needs_review", "degraded", "failed"]).default("queued").notNull(),
   analysisAttempts: int("analysis_attempts").default(0).notNull(),
   analysisLastError: text("analysis_last_error"),
   analysisModel: varchar("analysis_model", { length: 100 }),
@@ -341,9 +360,21 @@ export const cvApplications = mysqlTable("cv_applications", {
   ocrModelVersion: varchar("ocr_model_version", { length: 100 }),
   extractionWarnings: text("extraction_warnings"),
   analysisRequestedAt: timestamp("analysis_requested_at"),
+  // Language of the application form (fr, en, de, zh), not the spoken languages
+  // above: candidate emails in French for "fr", in English otherwise (EN-02).
+  language: varchar("language", { length: 10 }).default("fr").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
-});
+}, table => ({
+  // The same CV sent again by the same candidate for the same pathway and
+  // target countries is one application (DATA-11), even sent simultaneously:
+  // /api/recruitment/apply answers the losing INSERT like a repeated sending.
+  // The target countries are part of it, as in isSameRecruitmentSubmission
+  // (INTL-03), hashed to keep the key short.
+  submissionUnique: uniqueIndex("cv_applications_submission_unique")
+    .on(sql`lower(${table.email})`, sql`lower(${table.specialty})`, table.fileChecksum, sql`md5(${table.targetCountries})`)
+    .where(sql`${table.fileChecksum} IS NOT NULL`),
+}));
 
 export type CvApplication = typeof cvApplications.$inferSelect;
 export type InsertCvApplication = typeof cvApplications.$inferInsert;
@@ -357,7 +388,17 @@ export const cvCandidateCertifications = mysqlTable("cv_candidate_certifications
   country: varchar("country", { length: 100 }),
   expiresAt: varchar("expires_at", { length: 10 }),
   evidence: text("evidence"),
-  source: mysqlEnum("source", ["declared", "extracted"]).default("extracted").notNull(),
+  source: mysqlEnum("source", ["declared", "extracted", "renewed", "cv_expiry"]).default("extracted").notNull(),
+  // Set when an admin confirmed the certification after checking it (IA-02):
+  // only a confirmed one earns points in a mission's matching. A declared
+  // certification gets its own row (source "declared") once confirmed. So
+  // does a renewal the admin confirmed (source "renewed", with the new
+  // expiry): the rows read in the CV keep the date the CV gives. An analysis
+  // that retained no facts (a contradiction, hidden text) still stores the
+  // expiry the CV gives a declared certification (source "cv_expiry",
+  // « expiration selon le CV, à vérifier »): no fact, never confirmed, it
+  // only dates the declared one, which then counts once renewed.
+  confirmedAt: timestamp("confirmed_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, table => ({
   applicationIdx: index("cv_candidate_certifications_application_idx").on(table.applicationId),
@@ -536,11 +577,16 @@ export const clientBriefCandidates = mysqlTable("client_brief_candidates", {
   matchBreakdown: text("match_breakdown"),
   status: mysqlEnum("association_status", ["suggested", "reviewing", "shortlisted", "declined"]).default("suggested").notNull(),
   notes: text("notes"),
+  // Date the candidate agreed to be presented for this mission, entered by the
+  // admin (RGPD-03): the shortlist export carries only the candidates who have one.
+  candidateConsentAt: timestamp("candidate_consent_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, table => ({
   briefIdx: index("client_brief_candidates_brief_idx").on(table.briefId),
   applicationIdx: index("client_brief_candidates_application_idx").on(table.applicationId),
+  // One association per mission and candidate (DATA-01): associateCandidate upserts on it.
+  pairUnique: uniqueIndex("client_brief_candidates_pair_unique").on(table.briefId, table.applicationId),
 }));
 
 export type ClientBriefCandidate = typeof clientBriefCandidates.$inferSelect;
@@ -665,6 +711,8 @@ export const candidateAccounts = mysqlTable("candidate_accounts", {
   termsAcceptedAt: timestamp("terms_accepted_at"),
   documentConsentAt: timestamp("document_consent_at"),
   status: mysqlEnum("status", ["active", "disabled", "erased"]).default("active").notNull(),
+  // Copied at creation from the invitation's application, else the language of the access page (EN-02).
+  language: varchar("language", { length: 10 }).default("fr").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, table => ({
@@ -730,6 +778,10 @@ export const candidateDocuments = mysqlTable("candidate_documents", {
   candidateCreatedIdx: index("candidate_documents_candidate_created_idx").on(table.candidateId, table.createdAt),
   reviewQueueIdx: index("candidate_documents_review_queue_idx").on(table.status, table.analysisStatus),
   applicationIdx: index("candidate_documents_application_idx").on(table.applicationId),
+  // A document never outlives its account (DATA-01): the erasure deletes the
+  // documents first, and the database refuses to delete an account that has
+  // just received one.
+  candidateFk: foreignKey({ name: "candidate_documents_candidate_id_fk", columns: [table.candidateId], foreignColumns: [candidateAccounts.id] }).onDelete("restrict"),
 }));
 
 export type CandidateDocument = typeof candidateDocuments.$inferSelect;

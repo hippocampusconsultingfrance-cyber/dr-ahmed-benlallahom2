@@ -100,7 +100,7 @@ describe("CAND-11 — validité des invitations à l’espace candidat", () => {
     expect(verify.text).toContain("valable 30 minutes");
 
     vi.stubEnv("RESEND_API_KEY", "re_test_candidate_invitation_expiry");
-    await sendCvApplicationConfirmationEmail("a@example.test", "Amina Haddad", "CV-TEST-1", "Anesthésie", "Canada", "https://example.test/candidate/access?invite=x");
+    await sendCvApplicationConfirmationEmail("a@example.test", "Amina", "CV-TEST-1", "https://example.test/candidate/access?invite=x");
     expect(state.resendPayloads.at(-1)?.html).toContain("valable 7 jours");
     vi.unstubAllEnvs();
   });

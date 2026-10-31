@@ -1,3 +1,5 @@
+import { certificationExpiryInFrench } from "@shared/recruitmentFactOrigins";
+
 export type CandidateTimelineEvent = {
   id: string;
   date: Date;
@@ -24,6 +26,11 @@ function auditTitle(action: string, metadata: Record<string, unknown>) {
   if (action === "email") {
     return metadata.template === "additional_information" ? "Demande de complément envoyée" : "Proposition d’échange envoyée";
   }
+  // IA-02, RGPD-03.
+  if (metadata.event === "certification_confirmed") return `Certification confirmée : ${metadata.certification}`;
+  if (metadata.event === "certification_unconfirmed") return `Confirmation retirée : ${metadata.certification}${metadata.notRetainedByAnalysis ? " (non retenue par la dernière analyse du CV)" : ""}`;
+  if (metadata.event === "certification_renewed") return `Renouvellement confirmé : ${metadata.certification} (${typeof metadata.expiresAt === "string" ? `expire ${certificationExpiryInFrench(metadata.expiresAt)}` : "sans date d’expiration"})`;
+  if (metadata.event === "mission_consent") return metadata.consentDate ? "Accord du candidat noté pour une mission" : "Accord du candidat retiré pour une mission";
   const labels: Record<string, string> = {
     created: "Candidature créée",
     status_update: "Statut ou suivi mis à jour",

@@ -1,4 +1,4 @@
-import { del, issueSignedToken, list, presignUrl, put } from "@vercel/blob";
+import { BlobNotFoundError, del, head, issueSignedToken, list, presignUrl, put } from "@vercel/blob";
 
 const PRIVATE_BLOB_ACCESS = "private" as const;
 const SIGNED_URL_LIFETIME_MS = 5 * 60 * 1000;
@@ -42,6 +42,15 @@ export function classifyStorageError(error: unknown): string {
   return "storage_unknown";
 }
 
+/**
+ * Storage failures that do not pass with time (EXPL-02): the store or its
+ * token is to be fixed in Vercel (store suspended or missing, access refused,
+ * no token).
+ */
+export function isLastingStorageError(code: unknown): boolean {
+  return typeof code === "string" && ["storage_access_denied", "storage_store_not_found", "storage_store_suspended", "storage_config_missing"].includes(code);
+}
+
 export async function storagePut(
   relKey: string,
   data: Buffer | Uint8Array | string,
@@ -66,6 +75,53 @@ export async function storagePut(
   }
 
   return { key: uploaded.pathname, url: uploaded.url };
+}
+
+/**
+ * Stores an object under this exact key, once: when the key already holds an
+ * object (a document rebuilt byte for byte on a retry, such as an invoice),
+ * nothing is uploaded and the stored copy is kept. Without a random suffix
+ * and with overwriting refused, a second copy cannot be created. Throws
+ * "storage_check_failed" when the store could not say whether the key holds
+ * an object (outage, rate limit, access): a copy may be stored, so the caller
+ * must not use the document it built in its place. Throws
+ * "storage_upload_failed" when the key was free and the upload failed, or
+ * when no store is configured.
+ */
+export async function storagePutOnce(
+  relKey: string,
+  data: Buffer | Uint8Array | string,
+  contentType = "application/octet-stream",
+): Promise<{ key: string; url: string; uploaded: boolean }> {
+  const key = normalizeKey(relKey);
+  const body = typeof data === "string" || Buffer.isBuffer(data) ? data : Buffer.from(data);
+  let uploaded;
+  let checking = false;
+  try {
+    const token = getBlobToken();
+    checking = true;
+    try {
+      const stored = await head(key, { token });
+      return { key: stored.pathname, url: stored.url, uploaded: false };
+    } catch (error) {
+      if (!(error instanceof BlobNotFoundError)) throw error;
+    }
+    checking = false;
+    uploaded = await put(key, body, {
+      access: PRIVATE_BLOB_ACCESS,
+      addRandomSuffix: false,
+      allowOverwrite: false,
+      cacheControlMaxAge: 60,
+      contentType,
+      token,
+    });
+  } catch (error) {
+    const wrapped = new Error(checking ? "storage_check_failed" : "storage_upload_failed", { cause: error }) as Error & { code: string };
+    wrapped.code = classifyStorageError(error);
+    throw wrapped;
+  }
+
+  return { key: uploaded.pathname, url: uploaded.url, uploaded: true };
 }
 
 export async function storageGet(relKey: string): Promise<{ key: string; url: string }> {
@@ -93,6 +149,13 @@ export async function storageGetSignedUrl(relKey: string): Promise<string> {
   return presignedUrl;
 }
 
+/** Contents of a private object, read through a short-lived signed URL; throws when it cannot be read. */
+export async function storageGetBuffer(relKey: string): Promise<Buffer> {
+  const response = await fetch(await storageGetSignedUrl(relKey));
+  if (!response.ok) throw new Error(`storage_read_failed_${response.status}`);
+  return Buffer.from(await response.arrayBuffer());
+}
+
 /**
  * Permanently deletes private objects (GDPR erasure, retention). Vercel Blob
  * ignores pathnames that no longer exist, so a retried erasure is idempotent.
@@ -106,17 +169,22 @@ export async function storageDelete(relKeys: string[]): Promise<number> {
   return keys.length;
 }
 
-/** Lists object pathnames under a prefix (for copies of one dossier). */
-export async function storageListKeys(prefix: string, maxKeys = 500): Promise<string[]> {
+/** Lists the objects under a prefix with their upload date. */
+export async function storageListObjects(prefix: string, maxKeys = 500): Promise<Array<{ key: string; uploadedAt: Date }>> {
   const normalized = normalizeKey(prefix);
   if (!normalized.includes("/")) throw new Error("storage_list_prefix_too_broad");
   const token = getBlobToken();
-  const keys: string[] = [];
+  const objects: Array<{ key: string; uploadedAt: Date }> = [];
   let cursor: string | undefined;
   do {
-    const page = await list({ prefix: normalized, cursor, limit: Math.min(1000, maxKeys - keys.length), token });
-    keys.push(...page.blobs.map(blob => blob.pathname));
+    const page = await list({ prefix: normalized, cursor, limit: Math.min(1000, maxKeys - objects.length), token });
+    objects.push(...page.blobs.map(blob => ({ key: blob.pathname, uploadedAt: new Date(blob.uploadedAt) })));
     cursor = page.hasMore ? page.cursor : undefined;
-  } while (cursor && keys.length < maxKeys);
-  return keys;
+  } while (cursor && objects.length < maxKeys);
+  return objects;
+}
+
+/** Lists object pathnames under a prefix (for copies of one dossier). */
+export async function storageListKeys(prefix: string, maxKeys = 500): Promise<string[]> {
+  return (await storageListObjects(prefix, maxKeys)).map(object => object.key);
 }

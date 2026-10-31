@@ -1,4 +1,5 @@
 import { constants, inflateRawSync, inflateSync } from "node:zlib";
+import { containsStream, pdfScanWork, readPdfStreamDictionaries, streamDictionaryText, UNCLEAR_PDF_STRUCTURE, type PdfScanWork, type PdfStreamDictionaries } from "./pdfStreamDictionaries";
 
 /**
  * Bounds applied before and during text extraction, so a small upload cannot
@@ -22,15 +23,48 @@ export const DOCUMENT_DECOMPRESSION_LIMITS = {
   pdfMaxImagePixels: 40_000_000,
   /** An image stream is checked against its declared size when that size is at most this. */
   pdfImageProbeBytes: 64 * 1024 * 1024,
+  /** Sum of the inflated images checked that way: beyond it, an image counts like any other stream. */
+  pdfMaxProbedImageBytes: 128 * 1024 * 1024,
+  /** `stream` keywords examined in one PDF: a CV has a few hundred at most. */
+  pdfMaxStreams: 5_000,
+  /** Streams whose zlib data runs on past the next `stream` keyword (never in a real PDF): each is inflated to the end of the file. */
+  pdfMaxOverlappingStreams: 32,
+  /** Corrupt zlib streams whose output is measured by inflating them again: any further one counts for the most it could inflate to. */
+  pdfMaxMeasuredCorruptStreams: 32,
   /** Pages handed to the text extractor. */
   pdfMaxExtractedPages: 25,
   /** Isolated PDF reader: process memory growth allowed while pdf.js runs. */
   pdfReaderMaxMemoryGrowthBytes: 512 * 1024 * 1024,
   /** Isolated PDF reader: JavaScript heap of the worker. */
   pdfReaderMaxHeapMb: 256,
-  /** Isolated PDF reader: time allowed for the text of 25 pages / the rendering of 3 pages. */
+  /**
+   * Isolated PDF reader: time allowed for the text of 25 pages / the
+   * rendering of 8 pages for the vision (about 1 s each for a page scanned at
+   * 300 dpi, on the development machine).
+   */
   pdfTextTimeoutMs: 12_000,
-  pdfRenderTimeoutMs: 15_000,
+  pdfRenderTimeoutMs: 20_000,
+  /**
+   * Isolated PDF reader: drawing work of the visibility check of a file, in
+   * the units of pdfVisibleText, counted rather than timed so that a file
+   * always gives the same text. About 4 s on the development machine, within
+   * the time share of the text task: 8 pages scanned at 300 dpi, 24 at
+   * 150 dpi or 25 pages of an ordinary CV; a page drawn from 18,000 vector
+   * paths costs about 65,000.
+   */
+  pdfVisibilityWorkUnits: 600_000,
+  /**
+   * DOCX visibility check: work of laying out the text whose place may hide
+   * it (in a row, text box or frame of fixed size, an exact line spacing, past
+   * the page's edge), in characters, paragraphs, tabs and tab stops laid
+   * out, counted rather than timed so that a file always gives the same text.
+   * Past it, such text is set aside as unverifiable. A CV lays out under
+   * 2,000; 1,000,000 take about 0.25 s on the development machine. The rest
+   * of the check is not counted: there, on a loaded machine, a document part
+   * of 20 MB of rows, nested tables, linked text boxes or plain text took 1
+   * to 2.5 s.
+   */
+  docxLayoutWorkUnits: 1_000_000,
   /** Characters of extracted text kept for the analysis and the database. */
   extractedTextMaxChars: 200_000,
 } as const;
@@ -52,9 +86,10 @@ export type DocxArchiveInspection = {
  * Walks the ZIP central directory of a DOCX and inflates every entry with a
  * hard output cap: the declared sizes cannot be trusted, the real ones are
  * measured. ZIP64, encrypted entries and unknown compression methods are
- * refused (never needed by a CV produced by a word processor).
+ * refused (never needed by a CV produced by a word processor). `onEntry`
+ * receives each entry once inflated within those bounds.
  */
-export function inspectDocxArchive(buffer: Buffer, limits = DOCUMENT_DECOMPRESSION_LIMITS): DocxArchiveInspection {
+export function inspectDocxArchive(buffer: Buffer, limits = DOCUMENT_DECOMPRESSION_LIMITS, onEntry?: (name: string, content: Buffer) => void): DocxArchiveInspection {
   const invalid = () => new Error("cv_validation_docx_container_invalid");
   const searchStart = Math.max(0, buffer.length - 22 - 0xffff);
   let eocd = -1;
@@ -106,6 +141,7 @@ export function inspectDocxArchive(buffer: Buffer, limits = DOCUMENT_DECOMPRESSI
     if (uncompressedBytes > limits.docxMaxUncompressedBytes) throw new Error("cv_validation_docx_decompressed_size_exceeded");
     entryNames.push(name);
     if (/\.rels$/i.test(name)) relationships.push(content.toString("utf8"));
+    onEntry?.(name, content);
   }
   return { entryNames, uncompressedBytes, relationships };
 }
@@ -117,13 +153,58 @@ function startsWithZlibHeader(data: Buffer) {
   return data.length >= 2 && (data[0]! & 0x0f) === 8 && data[0]! >> 4 <= 7 && ((data[0]! << 8) | data[1]!) % 31 === 0;
 }
 
-/** Inflates at most `cap` bytes; null when the data is not valid zlib. Trailing bytes are ignored. */
-function inflateWithCap(data: Buffer, cap: number): Buffer | typeof INFLATE_OVERFLOW | null {
+/** Inflates at most `cap` bytes; null when the data is not valid zlib. Trailing bytes are ignored; `read` counts the input bytes used. */
+function inflateWithCap(data: Buffer, cap: number): { output: Buffer; read: number } | typeof INFLATE_OVERFLOW | null {
   try {
-    return inflateSync(data, { maxOutputLength: Math.max(1, cap), finishFlush: constants.Z_SYNC_FLUSH });
+    const result = inflateSync(data, { maxOutputLength: Math.max(1, cap), finishFlush: constants.Z_SYNC_FLUSH, info: true }) as unknown as { buffer: Buffer; engine: { bytesWritten: number } };
+    return { output: result.buffer, read: result.engine.bytesWritten };
   } catch (error) {
     return isBufferTooLarge(error) ? INFLATE_OVERFLOW : null;
   }
+}
+
+/** How many more times one PDF may repeat a costly inflation. */
+type Allowance = { count: number; max: number };
+
+/**
+ * What zlib data that inflateWithCap found corrupt inflated to before the
+ * error, at most `cap`. It counts against the caps like valid data: 4 MB of
+ * streams inflating to 40 MB each, then corrupt, took 2.4 s. Deflate
+ * expands its input 1,032 times at most, which bounds small data; larger
+ * data is measured within a factor of four by inflating it again with
+ * growing caps, for `pdfMaxMeasuredCorruptStreams` streams (an error costs
+ * more than the inflation of a small stream), then given that bound too.
+ */
+function inflatedBeforeError(data: Buffer, cap: number, measures: Allowance) {
+  const most = Math.min(cap, data.length * 1_032);
+  if (most <= 4_096 || ++measures.count > measures.max) return most;
+  for (let probe = 4_096; probe < most; probe *= 4) {
+    if (inflateWithCap(data, probe) !== INFLATE_OVERFLOW) return probe;
+  }
+  return most;
+}
+
+/** Inflation of a stream's data: its output, `corruptBytes` when the data turned out corrupt (see inflatedBeforeError), or an overflow of the cap. */
+type StreamInflation = { output: Buffer; read: number } | { corruptBytes: number } | typeof INFLATE_OVERFLOW;
+
+function inflateOrMeasure(data: Buffer, cap: number, measures: Allowance): StreamInflation {
+  return inflateWithCap(data, cap) ?? { corruptBytes: inflatedBeforeError(data, cap, measures) };
+}
+
+/**
+ * Inflates the zlib data of a stream, at most `cap` bytes. The data of a
+ * real stream ends before the next `stream` keyword (its own `endstream` at
+ * the latest), so it is first inflated up to there (`window`): each stream is
+ * then read once. Only zlib data still running at that point, which may
+ * cover the next streams, is inflated again from the whole rest of the file
+ * (`data`), at most `pdfMaxOverlappingStreams` times: 2,000 such streams
+ * chained through empty zlib blocks took 5 s on 4 MB.
+ */
+function inflateStreamData(window: Buffer, data: Buffer, cap: number, overlaps: Allowance, measures: Allowance): StreamInflation {
+  const read = inflateOrMeasure(window, cap, measures);
+  if (read === INFLATE_OVERFLOW || "corruptBytes" in read || read.read < window.length || window.length === data.length) return read;
+  if (++overlaps.count > overlaps.max) throw new Error("cv_validation_pdf_stream_count_exceeded");
+  return inflateOrMeasure(data, cap, measures);
 }
 
 /** Plain integer value of a dictionary key; null when absent or indirect (`7 0 R`). */
@@ -132,56 +213,469 @@ function directInteger(dictionary: string, key: string) {
   return match && !match[2] ? Number(match[1]) : null;
 }
 
+/** What ends a name (`/A/B`, `/A B`): white-space as \s reads it in a latin1 string, the PDF delimiters and NUL. */
+const ENDS_PDF_NAME = new Uint8Array(256);
+for (const char of "\t\n\v\f\r \xa0<>[]()%{}\0") ENDS_PDF_NAME[char.charCodeAt(0)] = 1;
+
+/** Value of a hexadecimal digit, -1 for any other character. */
+function hexValue(code: number) {
+  if (code >= 0x30 && code <= 0x39) return code - 0x30;
+  const lower = code | 0x20;
+  return lower >= 0x61 && lower <= 0x66 ? lower - 0x57 : -1;
+}
+
+/**
+ * PDF names may spell any character as #xx (`/J#61vaScript` is /JavaScript,
+ * `/#4A#53` is /JS): they are decoded before any keyword is searched. One
+ * pass over the text, without a regular expression per name: 4 MB of `/#41`
+ * took 0.7 s.
+ */
+export function decodePdfNames(text: string) {
+  if (!text.includes("#")) return text;
+  const parts: string[] = [];
+  let copied = 0;
+  let inName = false;
+  for (let index = 0; index < text.length; index += 1) {
+    const code = text.charCodeAt(index);
+    if (code === 0x2f) inName = true;
+    else if (code < 256 && ENDS_PDF_NAME[code]) inName = false;
+    else if (code === 0x23 && inName) {
+      const high = hexValue(text.charCodeAt(index + 1));
+      const low = high === -1 ? -1 : hexValue(text.charCodeAt(index + 2));
+      if (low === -1) continue;
+      if (index > copied) parts.push(text.slice(copied, index));
+      parts.push(String.fromCharCode(high * 16 + low));
+      index += 2;
+      copied = index + 1;
+    }
+  }
+  parts.push(text.slice(copied));
+  return parts.join("");
+}
+
+/** pdf.js reads an object stream from its /N and /First entries, whatever its /Type says. */
+function isObjectStreamDictionary(names: string) {
+  return /\/Type\s*\/ObjStm\b/.test(names) || (/\/First\b/.test(names) && /\/N\b/.test(names));
+}
+
+const PDF_NAME_END = "(?=[\\0\\t\\n\\f\\r /<>\\[\\]()%{}]|$)";
+const PDF_SPACE = "[\\0\\t\\n\\f\\r ]*";
+/** pdf.js reads /F as /Filter and /DP as /DecodeParms. */
+const FILTER_KEY = new RegExp(`/(?:Filter|F)${PDF_NAME_END}`);
+const DECODE_PARMS_KEY = new RegExp(`/(?:DecodeParms|DP)${PDF_NAME_END}`);
+const FLATE_NAME = `/(?:FlateDecode|Fl)${PDF_NAME_END}`;
+const FLATE_ONLY_VALUE = new RegExp(`^${PDF_SPACE}(?:${FLATE_NAME}|\\[${PDF_SPACE}(?:${FLATE_NAME}${PDF_SPACE})+\\])`);
+
+/** Flate, alone or chained, without /DecodeParms. */
+function isFlateOnly(names: string) {
+  if (DECODE_PARMS_KEY.test(names)) return false;
+  // One key at a time, not matchAll: a dictionary of 4 MB of "/F/Fl" holds 800,000 keys.
+  const filterKey = new RegExp(FILTER_KEY.source, "g");
+  let keys = 0;
+  for (let key = filterKey.exec(names); key; key = filterKey.exec(names)) {
+    if (!FLATE_ONLY_VALUE.test(names.slice(filterKey.lastIndex))) return false;
+    keys += 1;
+  }
+  return keys > 0;
+}
+
+type PlainValue =
+  | { kind: "name"; name: string }
+  | { kind: "integer" }
+  | { kind: "reference" }
+  | { kind: "names" }
+  | { kind: "integers"; entries: Map<string, number> };
+
+/** A token of a plain dictionary, followed by white-space or a delimiter. */
+const PLAIN_TOKEN = /[\0\t\n\f\r ]*(\/[A-Za-z0-9]+|\d+|<<|>>|\[|\]|R)(?=[\0\t\n\f\r /<>[\]]|$)/;
+const INTEGER = /^\d+$/;
+
+/**
+ * Top-level entries of a dictionary written plainly, the way producers write
+ * an object stream's: names of letters and digits, integers, references,
+ * arrays of names and dictionaries of integers. Null for anything else
+ * (strings, #xx escapes, comments, a key given twice, a value where a key is
+ * expected…), which pdf.js might read another way than this check.
+ */
+function plainDictionaryEntries(text: string): Map<string, PlainValue> | null {
+  const tokens: string[] = [];
+  const token = new RegExp(PLAIN_TOKEN.source, "y");
+  while (token.lastIndex < text.length) {
+    const match = token.exec(text);
+    if (!match) return null;
+    tokens.push(match[1]!);
+  }
+  let index = 0;
+  const entriesUntilEnd = <T>(value: () => T | null) => {
+    const entries = new Map<string, T>();
+    for (let key = tokens[index++]; key !== ">>"; key = tokens[index++]) {
+      if (!key?.startsWith("/") || entries.has(key)) return null;
+      const read = value();
+      if (read === null) return null;
+      entries.set(key, read);
+    }
+    return entries;
+  };
+  const value = (): PlainValue | null => {
+    const first = tokens[index++];
+    if (first === undefined) return null;
+    if (first.startsWith("/")) return { kind: "name", name: first };
+    if (INTEGER.test(first)) {
+      if (!INTEGER.test(tokens[index] ?? "") || tokens[index + 1] !== "R") return { kind: "integer" };
+      index += 2;
+      return { kind: "reference" };
+    }
+    if (first === "[") {
+      for (let item = tokens[index++]; item !== "]"; item = tokens[index++]) if (!item?.startsWith("/")) return null;
+      return { kind: "names" };
+    }
+    if (first !== "<<") return null;
+    const entries = entriesUntilEnd(() => {
+      const integer = tokens[index++];
+      return integer !== undefined && INTEGER.test(integer) ? Number(integer) : null;
+    });
+    return entries && { kind: "integers", entries };
+  };
+  if (tokens[index++] !== "<<") return null;
+  const entries = entriesUntilEnd(value);
+  return entries && index === tokens.length ? entries : null;
+}
+
+/** Parameters of the PNG predictor pdf.js applies after Flate (PredictorStream). */
+type PngPredictor = { pixelBytes: number; rowBytes: number };
+
+/**
+ * Predictor of a Flate object stream that carries /DecodeParms, read from a
+ * plain dictionary with one /Filter /FlateDecode and one /DecodeParms
+ * dictionary, with pdf.js's defaults: null for none (/Predictor 1),
+ * undefined when it cannot be decoded here (TIFF predictor, arrays,
+ * indirect values…).
+ */
+function flatePredictor(dictionary: string): PngPredictor | null | undefined {
+  const entries = plainDictionaryEntries(dictionary);
+  if (!entries) return undefined;
+  // pdf.js reads /F before /Filter and /DP before /DecodeParms: a dictionary with both is not decoded here.
+  const filterKeys = ["/F", "/Filter"].filter(key => entries.has(key));
+  const parmsKeys = ["/DP", "/DecodeParms"].filter(key => entries.has(key));
+  if (filterKeys.length !== 1 || parmsKeys.length !== 1) return undefined;
+  const filter = entries.get(filterKeys[0]!)!;
+  const parms = entries.get(parmsKeys[0]!)!;
+  if (filter.kind !== "name" || (filter.name !== "/FlateDecode" && filter.name !== "/Fl") || parms.kind !== "integers") return undefined;
+  const parameter = (key: string, fallback: number) => parms.entries.get(key) || fallback;
+  const predictor = parameter("/Predictor", 1);
+  if (predictor <= 1) return null;
+  if (predictor < 10 || predictor > 15) return undefined;
+  const colors = parameter("/Colors", 1);
+  const bits = (parms.entries.has("/BPC") ? parms.entries.get("/BPC") : parms.entries.get("/BitsPerComponent")) || 8;
+  const columns = parameter("/Columns", 1);
+  // Beyond 32-bit integers, pdf.js's row size wraps around.
+  if (colors * bits > 1 << 20 || columns * colors * bits > 1 << 30) return undefined;
+  return { pixelBytes: (colors * bits + 7) >> 3, rowBytes: (columns * colors * bits + 7) >> 3 };
+}
+
+/**
+ * PNG prediction undone row by row as pdf.js does it (readBlockPng): each
+ * row starts with its type (0 none, 1 sub, 2 up, 3 average, 4 Paeth). pdf.js
+ * completes a short last row with zeros, white-space that is left out here,
+ * so that a huge /Columns allocates nothing. Null for another row type,
+ * which pdf.js cannot read either.
+ */
+function undoPngPredictor(data: Buffer, { pixelBytes, rowBytes }: PngPredictor): Buffer | null {
+  const output = Buffer.alloc(data.length);
+  let end = 0;
+  for (let at = 0, length = 0; at + 1 < data.length; at += rowBytes + 1, length += rowBytes) {
+    const type = data[at]!;
+    if (type > 4) return null;
+    const rawLength = Math.min(rowBytes, data.length - at - 1);
+    for (let index = 0; index < rawLength; index += 1) {
+      const left = index >= pixelBytes ? output[length + index - pixelBytes]! : 0;
+      const up = length > 0 ? output[length - rowBytes + index]! : 0;
+      const upLeft = length > 0 && index >= pixelBytes ? output[length - rowBytes + index - pixelBytes]! : 0;
+      let predicted = 0;
+      if (type === 1) predicted = left;
+      else if (type === 2) predicted = up;
+      else if (type === 3) predicted = (left + up) >> 1;
+      else if (type === 4) {
+        const estimate = left + up - upLeft;
+        const toLeft = Math.abs(estimate - left);
+        const toUp = Math.abs(estimate - up);
+        const toUpLeft = Math.abs(estimate - upLeft);
+        predicted = toLeft <= toUp && toLeft <= toUpLeft ? left : toUp <= toUpLeft ? up : upLeft;
+      }
+      output[length + index] = (predicted + data[at + 1 + index]!) & 0xff;
+    }
+    end = length + rawLength;
+  }
+  return output.subarray(0, end);
+}
+
+/** Decoded object stream: it starts with the "object number, offset" pairs. */
+const OBJECT_STREAM_HEADER = /^\s*\d+\s+\d+\s/;
+
+/**
+ * Content of an object stream searched by the checks; null when it cannot be
+ * read here. Without any filter (ISO 32000 allows it), pdf.js reads the bytes
+ * as they are (`raw`). Flate is decoded, with its PNG predictor if
+ * /DecodeParms has one.
+ */
+function readableObjectStream(dictionary: string, names: string, inflated: Buffer | null, raw: string, work: PdfScanWork) {
+  if (!FILTER_KEY.test(names)) return raw;
+  const predictor = DECODE_PARMS_KEY.test(names) ? flatePredictor(dictionary) : isFlateOnly(names) ? null : undefined;
+  if (!inflated || predictor === undefined) return null;
+  const decoded = predictor ? undoPngPredictor(inflated, predictor) : inflated;
+  if (!decoded) return null;
+  const content = decoded.toString("latin1");
+  if (!OBJECT_STREAM_HEADER.test(content.slice(0, 64)) || containsStream(content, work)) return null;
+  return content;
+}
+
+/**
+ * First CR or LF at or after `from`, -1 when there is none. `from` only
+ * grows: each character is read at most once per kind of end of line, so a
+ * file without any end of line, or with LF only, stays linear.
+ */
+function lineEndFinder(source: string) {
+  let cr = -2;
+  let lf = -2;
+  return (from: number) => {
+    if (cr !== -1 && cr < from) cr = source.indexOf("\r", from);
+    if (lf !== -1 && lf < from) lf = source.indexOf("\n", from);
+    return cr === -1 ? lf : lf === -1 ? cr : Math.min(cr, lf);
+  };
+}
+
+/**
+ * Whether a value pdf.js may read (PdfStreamDictionaries.values) reaches into
+ * [start, end). The ranges asked about follow one another through the file:
+ * each value is looked at once.
+ */
+function valueReachFinder(values: PdfStreamDictionaries["values"]) {
+  let next = 0;
+  let furthest = -1;
+  return (start: number, end: number) => {
+    for (; next < values.length && values[next]!.start < end; next += 1) furthest = Math.max(furthest, values[next]!.end);
+    return furthest > start;
+  };
+}
+
+/**
+ * What the PDF safety checks read, in file order (REC-02): the raw bytes
+ * outside stream data, and the content of each object stream with its plain
+ * /First (where its objects start), `unreadable` when that content could not
+ * be read here.
+ */
+export type PdfSearchedPart =
+  | { kind: "bytes"; text: string }
+  | { kind: "objects"; text: string; first: number | null }
+  | { kind: "unreadable" };
+
 /**
  * Fast static bound on the zlib data of a PDF, before storage. It does not
  * trust the dictionaries: every `stream` keyword followed by an end of line
  * (CR, LF or CRLF, as pdf.js accepts) whose data starts with a zlib header is
  * inflated, whatever its /Filter says (indirect, #xx-escaped, chained), and
  * the inflated output is inflated again while it is itself zlib data. All of
- * it counts against one shared cap. A stream declared as an image with plain
+ * it counts against one shared cap, data that turns out corrupt included. A
+ * stream declared as an image with plain
  * /Width and /Height is checked against that declared size instead (a real
- * image never inflates beyond 8 bytes per pixel); with indirect or missing
- * dimensions it counts like any other stream. What this cannot see (LZW,
+ * image never inflates beyond 8 bytes per pixel), up to a total of
+ * `pdfMaxProbedImageBytes`; past that total, or with indirect or missing
+ * dimensions, it counts like any other stream. What this cannot see (LZW,
  * ASCIIHex or ASCII85 first, very large declared images) is bounded where
  * pdf.js decodes it: in the isolated reader.
+ *
+ * What the safety checks search is returned too (REC-02, `parts`): the raw
+ * bytes, without the data of the streams pdf.js reads (compressed fonts and
+ * images hold any bytes, "/JS" among them: a LibreOffice CV was refused for
+ * it), and the content of each object stream (PDF 1.5+, where pdf-lib,
+ * Acrobat "optimised" or Word put the page and action dictionaries), inflated
+ * or as written without filter. Stream data that an object or a trailer
+ * pdf.js may read reaches into stays in the bytes. `unreadable` marks an
+ * object stream whose content could not be read here, or a stream whose
+ * dictionary reads two ways (see pdfStreamDictionaries.ts). The work stays
+ * linear in the size of the file, and the number of streams is capped. The
+ * keywords are found with indexOf, never a regular expression:
+ * /stream[^\r\n]*\n/ took minutes on 4 MB of "stream stream…" without an end
+ * of line.
  */
-export function assertPdfDecompressionWithinLimits(buffer: Buffer, limits: Pick<DocumentDecompressionLimits, "pdfMaxInflatedBytes" | "pdfMaxImagePixels" | "pdfImageProbeBytes"> = DOCUMENT_DECOMPRESSION_LIMITS) {
+export function assertPdfDecompressionWithinLimits(buffer: Buffer, limits: Pick<DocumentDecompressionLimits, "pdfMaxInflatedBytes" | "pdfMaxImagePixels" | "pdfImageProbeBytes" | "pdfMaxProbedImageBytes" | "pdfMaxStreams" | "pdfMaxOverlappingStreams" | "pdfMaxMeasuredCorruptStreams"> = DOCUMENT_DECOMPRESSION_LIMITS) {
   const source = buffer.toString("latin1");
-  const streamKeyword = /stream[^\r\n]*(?:\r\n|\r|\n)/g;
+  const nextLineEnd = lineEndFinder(source);
   const exceeded = () => new Error("cv_validation_pdf_decompressed_size_exceeded");
+  const work = pdfScanWork(source);
+  const dictionaries = readPdfStreamDictionaries(source, work);
   let inflatedBytes = 0;
-  let match: RegExpExecArray | null;
-  while ((match = streamKeyword.exec(source))) {
-    const dataStart = match.index + match[0].length;
-    // Scan the stream data too: a wrong /Length or an "endstream" inside the
-    // data must not hide a stream from the check.
-    streamKeyword.lastIndex = dataStart;
-    if (source.slice(Math.max(0, match.index - 3), match.index) === "end") continue;
+  let probedImageBytes = 0;
+  let streams = 0;
+  const overlaps = { count: 0, max: limits.pdfMaxOverlappingStreams };
+  const measures = { count: 0, max: limits.pdfMaxMeasuredCorruptStreams };
+  const parts: PdfSearchedPart[] = [];
+  // Start of the raw bytes not yet in `parts`.
+  let searchedFrom = 0;
+  const reachedByValue = valueReachFinder(dictionaries.values);
+  for (let at = source.indexOf("stream"); at !== -1;) {
+    const lineEnd = nextLineEnd(at + 6);
+    // No end of line left: no keyword further on starts stream data either.
+    if (lineEnd === -1) break;
+    const dataStart = lineEnd + (source.startsWith("\r\n", lineEnd) ? 2 : 1);
+    // Every keyword of the line shares this data ("endstream endobj 5 0 obj <<…>>stream").
+    // The search then goes on in the stream data: a wrong /Length or an
+    // "endstream" inside the data must not hide a stream from the check.
+    const keywords: number[] = [];
+    for (; at !== -1 && at < dataStart; at = source.indexOf("stream", at + 6)) {
+      if (source.slice(Math.max(0, at - 3), at) !== "end") keywords.push(at);
+    }
+    if (keywords.length === 0) continue;
+    if (++streams > limits.pdfMaxStreams) throw new Error("cv_validation_pdf_stream_count_exceeded");
     const data = buffer.subarray(dataStart);
-    if (!startsWithZlibHeader(data)) continue;
-    const objectStart = source.lastIndexOf(" obj", match.index);
-    const dictionary = source.slice(Math.max(objectStart, match.index - 4_096, 0), match.index);
-    if (/\/Subtype\s*\/Image\b/.test(dictionary)) {
-      const width = directInteger(dictionary, "Width");
-      const height = directInteger(dictionary, "Height");
+    // Up to the next "stream" keyword, `at` (see inflateStreamData).
+    const window = at === -1 ? data : buffer.subarray(dataStart, at + 6);
+    const dictionary = streamDictionaryText(source, keywords, dictionaries, work);
+    const unclear = dictionary === UNCLEAR_PDF_STRUCTURE;
+    const names = typeof dictionary === "string" ? decodePdfNames(dictionary) : "";
+    const dataEnd = at === -1 ? source.length : at;
+    if (typeof dictionary === "string") {
+      parts.push({ kind: "bytes", text: source.slice(searchedFrom, dataStart) });
+      searchedFrom = reachedByValue(dataStart, dataEnd) ? dataStart : dataEnd;
+    }
+    // A dictionary that reads two ways may be an object stream's.
+    const objectStream = unclear || isObjectStreamDictionary(names);
+    const pushObjectStream = (inflated: Buffer | null) => {
+      const content = typeof dictionary === "string" ? readableObjectStream(dictionary, names, inflated, source.slice(dataStart, dataEnd), work) : null;
+      parts.push(content === null ? { kind: "unreadable" } : { kind: "objects", text: content, first: directInteger(names, "First") });
+    };
+    if (!startsWithZlibHeader(data)) {
+      if (objectStream) pushObjectStream(null);
+      continue;
+    }
+    if (!objectStream && /\/Subtype\s*\/Image\b/.test(names)) {
+      const width = directInteger(names, "Width");
+      const height = directInteger(names, "Height");
       if (width !== null && height !== null) {
         if (width * height > limits.pdfMaxImagePixels) throw new Error("cv_validation_pdf_image_too_large");
         const declaredBytes = width * height * 8 + 65_536;
-        if (declaredBytes <= limits.pdfImageProbeBytes && inflateWithCap(data, declaredBytes) === INFLATE_OVERFLOW) throw exceeded();
-        continue;
+        if (declaredBytes > limits.pdfImageProbeBytes) continue;
+        // The probes share one budget: 67 images of 62 KB, each inflating to its declared 64 MB, took 5 s.
+        if (declaredBytes <= limits.pdfMaxProbedImageBytes - probedImageBytes) {
+          const probe = inflateStreamData(window, data, declaredBytes, overlaps, measures);
+          if (probe === INFLATE_OVERFLOW) throw exceeded();
+          probedImageBytes += "corruptBytes" in probe ? probe.corruptBytes : probe.output.length;
+          continue;
+        }
       }
     }
     let layer: Buffer = data;
+    let decoded = false;
     while (startsWithZlibHeader(layer)) {
-      const inflated = inflateWithCap(layer, limits.pdfMaxInflatedBytes - inflatedBytes);
+      const cap = limits.pdfMaxInflatedBytes - inflatedBytes;
+      // The first layer is read from the file, the next ones from memory.
+      const inflated = decoded ? inflateOrMeasure(layer, cap, measures) : inflateStreamData(window, data, cap, overlaps, measures);
       if (inflated === INFLATE_OVERFLOW) throw exceeded();
-      if (!inflated) break;
-      inflatedBytes += inflated.length;
+      if ("corruptBytes" in inflated) {
+        inflatedBytes += inflated.corruptBytes;
+        break;
+      }
+      inflatedBytes += inflated.output.length;
       if (inflatedBytes > limits.pdfMaxInflatedBytes) throw exceeded();
-      layer = inflated;
+      layer = inflated.output;
+      decoded = true;
     }
+    if (objectStream) pushObjectStream(decoded ? layer : null);
   }
-  return { inflatedBytes };
+  parts.push({ kind: "bytes", text: source.slice(searchedFrom) });
+  return { inflatedBytes, parts };
+}
+
+/** An XFA form (/XFA) carries its own scripts, which Acrobat runs. */
+const PDF_ACTIVE_CONTENT = /\/(?:JavaScript|JS|Launch|EmbeddedFiles?|RichMedia|ImportData|SubmitForm|XFA)\b/;
+const PAGE_DICTIONARY = /\/Type\s*\/Page\b/;
+const PAGE_DICTIONARIES = new RegExp(PAGE_DICTIONARY.source, "g");
+/** An object header ("12 0 obj", group 1 the object number), its end (group 2) or a page dictionary. */
+const OBJECT_BOUND_OR_PAGE = new RegExp(`(?<![0-9])([0-9]+)[\\0\\t\\n\\f\\r ]+[0-9]+[\\0\\t\\n\\f\\r ]*obj${PDF_NAME_END}|(endobj)|${PAGE_DICTIONARY.source}`);
+/** Objects of object streams told apart by their header, per file: past that, the pages of an object stream are counted one by one. */
+const MAX_INDEXED_PACKED_OBJECTS = 100_000;
+/** "number offset" pair of an object stream header. */
+const OBJECT_STREAM_PAIR = /[\0\t\n\f\r ]*([0-9]+)[\0\t\n\f\r ]+([0-9]+)/;
+
+/** Number and text of each object of an object stream, from its "number offset" pairs before /First; null when they do not read plainly. */
+function packedObjects({ text, first }: { text: string; first: number | null }, budget: { objects: number }) {
+  if (first === null || first > text.length) return null;
+  const header = text.slice(0, first);
+  const pair = new RegExp(OBJECT_STREAM_PAIR.source, "y");
+  const objects: Array<{ number: number; offset: number }> = [];
+  let read = 0;
+  for (let match = pair.exec(header); match; match = pair.exec(header)) {
+    if (--budget.objects < 0) return null;
+    objects.push({ number: Number(match[1]), offset: first + Number(match[2]) });
+    read = pair.lastIndex;
+  }
+  if (!/^[\0\t\n\f\r ]*$/.test(header.slice(read))) return null;
+  objects.sort((left, right) => left.offset - right.offset);
+  return objects.map((object, index) => ({ number: object.number, text: text.slice(object.offset, objects[index + 1]?.offset ?? text.length) }));
+}
+
+/**
+ * Pages of a PDF: its distinct page objects, an object number counting once
+ * when at least one of its definitions is a page (an incremental save writes
+ * the pages it changes again, after the first ones: 14 rotated pages are not
+ * 28). Which definition pdf.js reads depends on the xref, not on the order
+ * in the file: 6 page numbers defined again as annotations after %%EOF,
+ * without an xref, which pdf.js ignores, made a 30-page PDF count 24. A page
+ * dictionary outside any object (before its header or after its `endobj`),
+ * or in an object stream whose header does not read plainly, counts on its
+ * own. `decoded` holds each part's text with #xx names decoded.
+ */
+function countPageObjects(parts: PdfSearchedPart[], decoded: string[]) {
+  // Object numbers with at least one definition that is a page.
+  const pages = new Set<number>();
+  let unnumbered = 0;
+  const budget = { objects: MAX_INDEXED_PACKED_OBJECTS };
+  parts.forEach((part, index) => {
+    if (part.kind === "bytes") {
+      const found = new RegExp(OBJECT_BOUND_OR_PAGE.source, "g");
+      let object: number | null = null;
+      for (let match = found.exec(decoded[index]!); match; match = found.exec(decoded[index]!)) {
+        if (match[1] !== undefined) object = Number(match[1]);
+        else if (match[2] !== undefined) object = null;
+        else if (object === null) unnumbered += 1;
+        else pages.add(object);
+      }
+    } else if (part.kind === "objects") {
+      const objects = packedObjects(part, budget);
+      if (objects) objects.forEach(object => { if (PAGE_DICTIONARY.test(decodePdfNames(object.text))) pages.add(object.number); });
+      else unnumbered += decoded[index]!.match(PAGE_DICTIONARIES)?.length ?? 0;
+    }
+  });
+  return unnumbered + pages.size;
+}
+
+export type PdfStructureInspection = {
+  encrypted: boolean;
+  /** JavaScript, launch, embedded file, rich media, form submission/import action, or XFA form. */
+  activeContent: boolean;
+  /** Object streams whose content could not be searched (a filter other than Flate, a predictor other than PNG, corrupt data, a stream inside), and streams whose dictionary reads two ways. */
+  unreadableObjectStreams: number;
+  pageCount: number;
+};
+
+/**
+ * What the CV and vault PDF checks look at (REC-02): the structure of the
+ * file and the content of its object streams (`parts`, read inside the
+ * bounded loop above), with #xx name escapes decoded; never the binary data
+ * of the other streams. An /OpenAction alone is not active content
+ * (LibreOffice writes one to open the first page); a JavaScript one is found
+ * by /JS.
+ */
+export function inspectPdfStructure(buffer: Buffer, limits: Pick<DocumentDecompressionLimits, "pdfMaxInflatedBytes" | "pdfMaxImagePixels" | "pdfImageProbeBytes" | "pdfMaxProbedImageBytes" | "pdfMaxStreams" | "pdfMaxOverlappingStreams" | "pdfMaxMeasuredCorruptStreams"> = DOCUMENT_DECOMPRESSION_LIMITS): PdfStructureInspection {
+  const { parts } = assertPdfDecompressionWithinLimits(buffer, limits);
+  const decoded = parts.map(part => part.kind === "unreadable" ? "" : decodePdfNames(part.text));
+  const text = decoded.join("\n");
+  return {
+    encrypted: /\/Encrypt\b/.test(text),
+    activeContent: PDF_ACTIVE_CONTENT.test(text),
+    unreadableObjectStreams: parts.filter(part => part.kind === "unreadable").length,
+    pageCount: countPageObjects(parts, decoded),
+  };
 }
 
 /** Keeps the stored and analysed text bounded. */

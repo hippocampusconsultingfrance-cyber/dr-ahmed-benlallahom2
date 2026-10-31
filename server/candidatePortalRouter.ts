@@ -30,13 +30,25 @@ import {
   buildCandidatePortalAccessIdempotencyKey,
   candidatePortalAccessEmailFailureCode,
   sendCandidatePortalAccessEmail,
+  type ResendDeliveryFailureCode,
 } from "./_core/notifications";
-import { publicProcedure, router } from "./_core/trpc";
+import { PublicErrorReason, publicProcedure, router } from "./_core/trpc";
 import { candidateRequestIp, verifyCandidateTurnstile } from "./candidateTurnstile";
 import { clearPersistentRateLimit, enforcePersistentRateLimit, hashSecurityValue, isCompromisedPassword, logSecurityEvent, recordPersistentRateLimitAttempt, requestIpHash } from "./candidateSecurity";
 import { buildCandidatePortalActivationEmailEvent } from "./recruitmentEmailTrace";
+import { enforcePublicEmailIpRateLimit } from "./publicFormRateLimit";
+import { emailLanguageFor, SITE_LANGUAGES } from "./emailLanguage";
+import type { CandidateAccessReason } from "../shared/candidateAccessReasons";
 
 type CandidateSession = typeof candidateAccounts.$inferSelect;
+
+/** A refusal whose stable reason lets the page show its own translation (EN-06); the French message is kept. */
+function candidateRefusal(code: TRPCError["code"], message: string, reason: CandidateAccessReason) {
+  return new TRPCError({ code, message, cause: new PublicErrorReason(reason) });
+}
+
+/** Language shown by the access page; optional for older clients (EN-02). */
+const pageLanguageInput = z.enum(SITE_LANGUAGES).optional();
 
 const MINUTE_MS = 60 * 1000;
 
@@ -60,7 +72,7 @@ function portalOrigin(): string {
 }
 
 function databaseOrThrow(db: Awaited<ReturnType<typeof getDb>>) {
-  if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Le service candidat est temporairement indisponible." });
+  if (!db) throw candidateRefusal("INTERNAL_SERVER_ERROR", "Le service candidat est temporairement indisponible.", "candidate_service_unavailable");
   return db;
 }
 
@@ -70,10 +82,7 @@ async function candidateDatabaseOperation<T>(operation: () => Promise<T>): Promi
   } catch (error) {
     if (error instanceof TRPCError) throw error;
     console.error("candidate_database_operation_failed", error);
-    throw new TRPCError({
-      code: "INTERNAL_SERVER_ERROR",
-      message: "Le service candidat est temporairement indisponible. Veuillez réessayer dans quelques instants.",
-    });
+    throw candidateRefusal("INTERNAL_SERVER_ERROR", "Le service candidat est temporairement indisponible. Veuillez réessayer dans quelques instants.", "candidate_service_unavailable");
   }
 }
 
@@ -154,7 +163,7 @@ async function logCandidateEmailDelivery(input: {
   outcome: "allowed" | "failed";
   ipHash: string | null;
   providerMessageId?: string;
-  failureCode?: "provider_rejected" | "delivery_exception";
+  failureCode?: ResendDeliveryFailureCode;
 }) {
   const deliveryUncertain = input.failureCode === "delivery_exception";
   await logSecurityEvent({
@@ -176,7 +185,7 @@ async function recordCandidateActivationDelivery(
   db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
   application: { id: number; trackingId: string } | null | undefined,
   candidateEmail: string,
-  delivery: { status: "sent" | "failed"; providerEmailId: string | null; failureCode: "provider_rejected" | "delivery_exception" | null },
+  delivery: { status: "sent" | "failed"; providerEmailId: string | null; failureCode: ResendDeliveryFailureCode | null },
 ) {
   if (!application) return;
   await db.insert(recruitmentEmailEvents).values(buildCandidatePortalActivationEmailEvent({
@@ -190,17 +199,20 @@ async function recordCandidateActivationDelivery(
 
 async function assertAcceptableNewPassword(password: string) {
   const passwordError = validateCandidatePassword(password);
-  if (passwordError) throw new TRPCError({ code: "BAD_REQUEST", message: "Choisissez un mot de passe d’au moins 15 caractères." });
+  if (passwordError) throw candidateRefusal("BAD_REQUEST", "Choisissez un mot de passe d’au moins 15 caractères.", "candidate_password_too_short");
   try {
-    if (await isCompromisedPassword(password)) throw new TRPCError({ code: "BAD_REQUEST", message: "Ce mot de passe a déjà été compromis. Choisissez-en un autre, long et unique." });
+    if (await isCompromisedPassword(password)) throw candidateRefusal("BAD_REQUEST", "Ce mot de passe a déjà été compromis. Choisissez-en un autre, long et unique.", "candidate_password_compromised");
   } catch (error) {
     if (error instanceof TRPCError) throw error;
-    throw new TRPCError({ code: "SERVICE_UNAVAILABLE", message: "Le contrôle de sécurité du mot de passe est temporairement indisponible." });
+    throw candidateRefusal("SERVICE_UNAVAILABLE", "Le contrôle de sécurité du mot de passe est temporairement indisponible.", "candidate_password_check_unavailable");
   }
 }
 
 const activationLinkInput = z.object({ email: z.string().email().max(320), token: z.string().min(20).max(200) });
 const invalidActivationLinkMessage = "Ce lien d’activation est invalide ou expiré. Demandez un nouveau lien depuis l’espace candidat.";
+const invalidActivationLink = () => candidateRefusal("BAD_REQUEST", invalidActivationLinkMessage, "candidate_activation_link_invalid");
+const tooManyRequests = (message: string) => candidateRefusal("TOO_MANY_REQUESTS", message, "candidate_rate_limited");
+const securityCheckRequired = (message: string) => candidateRefusal("BAD_REQUEST", message, "candidate_security_check_required");
 
 /** Looks up the unverified, active account that an emailed activation link designates. */
 async function findPendingActivation(db: NonNullable<Awaited<ReturnType<typeof getDb>>>, input: { email: string; token: string }) {
@@ -228,6 +240,7 @@ export const candidatePortalRouter = router({
       termsAccepted: z.boolean().refine(value => value, "L’acceptation des conditions est requise."),
       documentConsent: z.boolean().refine(value => value, "Le consentement au traitement documentaire est requis."),
       invitationToken: z.string().min(24).max(600).optional(),
+      language: pageLanguageInput,
     }).merge(turnstileInput))
     .mutation(async ({ input, ctx }) => {
       const startedAt = Date.now();
@@ -237,13 +250,13 @@ export const candidatePortalRouter = router({
         await enforcePersistentRateLimit({ action: "candidate_register", subject: `${email}:${ipHash ?? "unknown"}`, maxAttempts: 5, windowMs: 60 * 60 * 1000, blockMs: 60 * 60 * 1000 });
       } catch {
         await logSecurityEvent({ actorKind: "anonymous", actorReference: hashSecurityValue(email), category: "candidate_register_rate_limited", outcome: "blocked", severity: "warning", ipHash });
-        throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "Trop de tentatives. Veuillez réessayer plus tard." });
+        throw tooManyRequests("Trop de tentatives. Veuillez réessayer plus tard.");
       }
       try {
         await verifyCandidateTurnstile({ token: input.turnstileToken, remoteIp: candidateRequestIp(ctx.req.headers) });
       } catch {
         await logSecurityEvent({ actorKind: "anonymous", actorReference: hashSecurityValue(email), category: "candidate_register_turnstile", outcome: "blocked", severity: "warning", ipHash });
-        throw new TRPCError({ code: "BAD_REQUEST", message: "La vérification anti-bot doit être renouvelée avant de créer votre accès." });
+        throw securityCheckRequired("La vérification anti-bot doit être renouvelée avant de créer votre accès.");
       }
       const db = databaseOrThrow(await getDb());
       const now = new Date();
@@ -251,15 +264,28 @@ export const candidatePortalRouter = router({
       const verificationTokenHash = hashCandidateToken(verificationToken, "verification");
       const verificationExpiresAt = new Date(now.getTime() + CANDIDATE_TOKEN_MAX_AGE_MS);
       const invitationCheck = input.invitationToken ? inspectCandidateInvitationToken(input.invitationToken) : null;
-      if (input.invitationToken && !invitationCheck) throw new TRPCError({ code: "BAD_REQUEST", message: "Cette invitation est invalide ou expirée. Demandez un nouveau lien à notre équipe." });
+      if (input.invitationToken && !invitationCheck) throw candidateRefusal("BAD_REQUEST", "Cette invitation est invalide ou expirée. Demandez un nouveau lien à notre équipe.", "candidate_invitation_invalid");
       // An authentic but expired invitation falls back to the normal sign-up (CAND-11):
       // the account is still linked to the application of the same email below.
       const invitation = invitationCheck && !invitationCheck.expired ? invitationCheck : null;
       const invitedApplication = invitation
-        ? (await candidateDatabaseOperation(() => db.select({ id: cvApplications.id, email: cvApplications.email, trackingId: cvApplications.trackingId }).from(cvApplications).where(eq(cvApplications.id, invitation.applicationId)).limit(1)))[0]
+        ? (await candidateDatabaseOperation(() => db.select({ id: cvApplications.id, email: cvApplications.email, trackingId: cvApplications.trackingId, language: cvApplications.language }).from(cvApplications).where(eq(cvApplications.id, invitation.applicationId)).limit(1)))[0]
         : null;
       if (invitation && (!invitedApplication || normalizeCandidateEmail(invitedApplication.email) !== email)) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "Cette invitation ne correspond pas à cette adresse email." });
+        throw candidateRefusal("BAD_REQUEST", "Cette invitation ne correspond pas à cette adresse email.", "candidate_invitation_email_mismatch");
+      }
+      // EN-02: the account keeps the language of the invitation's application,
+      // else the language of the access page. The activation email is written in
+      // the language the candidate is reading, when the page sends it.
+      const accountLanguage = invitedApplication?.language ?? input.language ?? "fr";
+      const activationEmailLanguage = emailLanguageFor(input.language ?? accountLanguage);
+      // MAIL-01: the per-IP cap counts only a registration that passed the
+      // anti-bot and invitation checks, whether or not an email follows (SEC-05).
+      try {
+        await enforcePublicEmailIpRateLimit("candidateRegister", ipHash);
+      } catch {
+        await logSecurityEvent({ actorKind: "anonymous", actorReference: hashSecurityValue(email), category: "candidate_register_rate_limited", outcome: "blocked", severity: "warning", ipHash });
+        throw tooManyRequests("Trop de tentatives. Veuillez réessayer plus tard.");
       }
       const matchingApplication = invitedApplication ?? (await candidateDatabaseOperation(() => db.select({ id: cvApplications.id, trackingId: cvApplications.trackingId }).from(cvApplications).where(sql`lower(${cvApplications.email}) = ${email}`).limit(1)))[0] ?? null;
       const matchingApplicationId = matchingApplication?.id ?? null;
@@ -291,6 +317,7 @@ export const candidatePortalRouter = router({
             linkedApplicationId: matchingApplicationId ?? pending.linkedApplicationId,
             termsAcceptedAt: now,
             documentConsentAt: now,
+            language: accountLanguage,
             updatedAt: now,
           }).where(and(
             eq(candidateAccounts.id, pending.id),
@@ -313,6 +340,7 @@ export const candidatePortalRouter = router({
           linkedApplicationId: matchingApplicationId,
           termsAcceptedAt: now,
           documentConsentAt: now,
+          language: accountLanguage,
         }).onConflictDoNothing({ target: candidateAccounts.email }).returning({ id: candidateAccounts.id }));
         candidateId = result[0] ? Number(result[0].id) : null;
       }
@@ -326,13 +354,14 @@ export const candidatePortalRouter = router({
             kind: "verify",
             actionUrl: verifyUrl,
             applicationReference: matchingApplication?.trackingId,
+            language: activationEmailLanguage,
             idempotencyKey: buildCandidatePortalAccessIdempotencyKey("verify", verificationTokenHash),
           });
           await recordCandidateActivationDelivery(db, matchingApplication, email, { status: "sent", providerEmailId: delivery.id, failureCode: null });
           await logCandidateEmailDelivery({ candidateId, category: "candidate_verification_delivery", outcome: "allowed", ipHash, providerMessageId: delivery.id });
         } catch (error) {
           const failureCode = candidatePortalAccessEmailFailureCode(error);
-          if (failureCode === "provider_rejected") {
+          if (failureCode !== "delivery_exception") {
             await candidateDatabaseOperation(() => db.update(candidateAccounts).set({
               verificationTokenHash: previousVerificationState?.tokenHash ?? null,
               verificationExpiresAt: previousVerificationState?.expiresAt ?? null,
@@ -350,7 +379,7 @@ export const candidatePortalRouter = router({
     }),
 
   resendVerification: publicProcedure
-    .input(z.object({ email: z.string().email().max(320) }).merge(turnstileInput))
+    .input(z.object({ email: z.string().email().max(320), language: pageLanguageInput }).merge(turnstileInput))
     .mutation(async ({ input, ctx }) => {
       const startedAt = Date.now();
       const email = normalizeCandidateEmail(input.email);
@@ -359,13 +388,20 @@ export const candidatePortalRouter = router({
         await enforcePersistentRateLimit({ action: "candidate_verification_resend", subject: `${email}:${ipHash ?? "unknown"}`, maxAttempts: 4, windowMs: 60 * 60 * 1000, blockMs: 60 * 60 * 1000 });
       } catch {
         await logSecurityEvent({ actorKind: "anonymous", actorReference: hashSecurityValue(email), category: "candidate_verification_resend_rate_limited", outcome: "blocked", severity: "warning", ipHash });
-        throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "Trop de demandes. Veuillez réessayer plus tard." });
+        throw tooManyRequests("Trop de demandes. Veuillez réessayer plus tard.");
       }
       try {
         await verifyCandidateTurnstile({ token: input.turnstileToken, remoteIp: candidateRequestIp(ctx.req.headers) });
       } catch {
         await logSecurityEvent({ actorKind: "anonymous", actorReference: hashSecurityValue(email), category: "candidate_verification_resend_turnstile", outcome: "blocked", severity: "warning", ipHash });
-        throw new TRPCError({ code: "BAD_REQUEST", message: "La vérification anti-bot doit être renouvelée avant de demander un lien." });
+        throw securityCheckRequired("La vérification anti-bot doit être renouvelée avant de demander un lien.");
+      }
+      // MAIL-01: counted once the anti-bot check passed, whatever the account (SEC-05).
+      try {
+        await enforcePublicEmailIpRateLimit("candidateVerificationResend", ipHash);
+      } catch {
+        await logSecurityEvent({ actorKind: "anonymous", actorReference: hashSecurityValue(email), category: "candidate_verification_resend_rate_limited", outcome: "blocked", severity: "warning", ipHash });
+        throw tooManyRequests("Trop de demandes. Veuillez réessayer plus tard.");
       }
       const db = databaseOrThrow(await getDb());
       const candidate = (await db.select().from(candidateAccounts).where(and(eq(candidateAccounts.email, email), eq(candidateAccounts.status, "active"))).limit(1))[0];
@@ -385,13 +421,15 @@ export const candidatePortalRouter = router({
             kind: "verify",
             actionUrl: verifyUrl,
             applicationReference: application?.trackingId,
+            // The language the candidate is reading, else the account's (EN-02).
+            language: emailLanguageFor(input.language ?? candidate.language),
             idempotencyKey: buildCandidatePortalAccessIdempotencyKey("verify", tokenHash),
           });
           await recordCandidateActivationDelivery(db, application, email, { status: "sent", providerEmailId: delivery.id, failureCode: null });
           await logSecurityEvent({ actorKind: "candidate", actorReference: String(candidate.id), category: "candidate_verification_resent", outcome: "allowed", ipHash });
         } catch (error) {
           const failureCode = candidatePortalAccessEmailFailureCode(error);
-          if (failureCode === "provider_rejected") {
+          if (failureCode !== "delivery_exception") {
             await db.update(candidateAccounts).set({
               verificationTokenHash: candidate.verificationTokenHash,
               verificationExpiresAt: candidate.verificationExpiresAt,
@@ -423,10 +461,10 @@ export const candidatePortalRouter = router({
     .input(z.object({ token: z.string().min(24).max(600) }))
     .query(async ({ input }) => {
       const invitation = inspectCandidateInvitationToken(input.token);
-      if (!invitation) throw new TRPCError({ code: "BAD_REQUEST", message: "Cette invitation est invalide ou expirée." });
+      if (!invitation) throw candidateRefusal("BAD_REQUEST", "Cette invitation est invalide ou expirée.", "candidate_invitation_invalid");
       const db = databaseOrThrow(await getDb());
       const application = (await db.select({ email: cvApplications.email, firstName: cvApplications.firstName, lastName: cvApplications.lastName }).from(cvApplications).where(eq(cvApplications.id, invitation.applicationId)).limit(1))[0];
-      if (!application) throw new TRPCError({ code: "NOT_FOUND", message: "Cette candidature n’est plus disponible." });
+      if (!application) throw candidateRefusal("NOT_FOUND", "Cette candidature n’est plus disponible.", "candidate_invitation_invalid");
       return { ...application, expired: invitation.expired };
     }),
 
@@ -436,7 +474,7 @@ export const candidatePortalRouter = router({
     .query(async ({ input }) => {
       const db = databaseOrThrow(await getDb());
       const candidate = await candidateDatabaseOperation(() => findPendingActivation(db, input));
-      if (!candidate) throw new TRPCError({ code: "BAD_REQUEST", message: invalidActivationLinkMessage });
+      if (!candidate) throw invalidActivationLink();
       return { email: candidate.email, firstName: candidate.firstName ?? "", lastName: candidate.lastName ?? "" };
     }),
 
@@ -455,7 +493,7 @@ export const candidatePortalRouter = router({
       const db = databaseOrThrow(await getDb());
       const ipHash = requestIpHash(ctx.req.headers);
       const pending = await candidateDatabaseOperation(() => findPendingActivation(db, input));
-      if (!pending) throw new TRPCError({ code: "BAD_REQUEST", message: invalidActivationLinkMessage });
+      if (!pending) throw invalidActivationLink();
       // Validate the new password before consuming the link, so a refused password does not burn it.
       await assertAcceptableNewPassword(input.password);
       const passwordHash = await hashCandidatePassword(input.password);
@@ -479,7 +517,7 @@ export const candidatePortalRouter = router({
         eq(candidateAccounts.status, "active"),
         isNull(candidateAccounts.emailVerifiedAt),
       )).returning({ id: candidateAccounts.id }));
-      if (!activated[0]) throw new TRPCError({ code: "BAD_REQUEST", message: invalidActivationLinkMessage });
+      if (!activated[0]) throw invalidActivationLink();
       await candidateDatabaseOperation(() => db.update(candidateSessions).set({ revokedAt: now }).where(and(eq(candidateSessions.candidateId, pending.id), isNull(candidateSessions.revokedAt))));
       await createCandidateSession(pending.id, ctx.req, ctx.res);
       await logCandidateAudit({ candidateId: pending.id, action: "login", metadata: { method: "email_verification" } });
@@ -513,14 +551,14 @@ export const candidatePortalRouter = router({
       emailState = networkState.blocked || pairState?.blocked ? null : await recordPersistentRateLimitAttempt({ ...CANDIDATE_LOGIN_POLICY.email, subject: email });
     } catch (error) {
       console.error("candidate_login_throttle_unavailable", error instanceof Error ? error.name : "UnknownError");
-      throw new TRPCError({ code: "SERVICE_UNAVAILABLE", message: "La connexion est temporairement indisponible. Veuillez réessayer dans quelques instants." });
+      throw candidateRefusal("SERVICE_UNAVAILABLE", "La connexion est temporairement indisponible. Veuillez réessayer dans quelques instants.", "candidate_service_unavailable");
     }
     if (networkState.blocked || pairState?.blocked) {
       await logSecurityEvent({ actorKind: "anonymous", actorReference: hashSecurityValue(email), category: "candidate_login_rate_limited", outcome: "blocked", severity: "warning", ipHash, metadata: { scope: networkState.blocked ? "network" : "email_network" } });
-      throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "Trop de tentatives de connexion depuis cet appareil. Patientez 15 minutes ou réinitialisez votre mot de passe." });
+      throw candidateRefusal("TOO_MANY_REQUESTS", "Trop de tentatives de connexion depuis cet appareil. Patientez 15 minutes ou réinitialisez votre mot de passe.", "candidate_login_rate_limited");
     }
     if (emailState?.blocked) {
-      const challengeError = new TRPCError({ code: "PRECONDITION_FAILED", message: "Pour votre sécurité, effectuez la vérification anti-bot avant de vous connecter." });
+      const challengeError = candidateRefusal("PRECONDITION_FAILED", "Pour votre sécurité, effectuez la vérification anti-bot avant de vous connecter.", "candidate_login_challenge_required");
       if (emailState.newlyBlocked) {
         // Many attempts on one email from several networks: alert once per block.
         await logSecurityEvent({ actorKind: "anonymous", actorReference: hashSecurityValue(email), category: "candidate_login_challenge_enabled", outcome: "alert", severity: "high", ipHash });
@@ -534,7 +572,7 @@ export const candidatePortalRouter = router({
       }
     }
     const candidate = (await db.select().from(candidateAccounts).where(eq(candidateAccounts.email, email)).limit(1))[0];
-    const genericError = new TRPCError({ code: "UNAUTHORIZED", message: "Email ou mot de passe incorrect." });
+    const genericError = candidateRefusal("UNAUTHORIZED", "Email ou mot de passe incorrect.", "candidate_credentials_invalid");
     const usable = Boolean(candidate && candidate.status === "active" && candidate.emailVerifiedAt);
     // One scrypt derivation in every case: unknown, pending and disabled accounts take as long as a wrong password.
     const valid = await verifyCandidatePasswordInConstantTime(input.password, usable ? candidate!.passwordHash : null);
@@ -571,7 +609,7 @@ export const candidatePortalRouter = router({
     return { success: true };
   }),
 
-  requestPasswordReset: publicProcedure.input(z.object({ email: z.string().email().max(320), turnstileToken: z.string().min(20).max(4096) })).mutation(async ({ input, ctx }) => {
+  requestPasswordReset: publicProcedure.input(z.object({ email: z.string().email().max(320), turnstileToken: z.string().min(20).max(4096), language: pageLanguageInput })).mutation(async ({ input, ctx }) => {
     const startedAt = Date.now();
     const email = normalizeCandidateEmail(input.email);
     const ipHash = requestIpHash(ctx.req.headers);
@@ -579,13 +617,13 @@ export const candidatePortalRouter = router({
       await enforcePersistentRateLimit({ action: "candidate_password_reset", subject: `${email}:${ipHash ?? "unknown"}`, maxAttempts: 4, windowMs: 60 * 60 * 1000, blockMs: 60 * 60 * 1000 });
     } catch {
       await logSecurityEvent({ actorKind: "anonymous", actorReference: hashSecurityValue(email), category: "candidate_password_reset_rate_limited", outcome: "blocked", severity: "warning", ipHash });
-      throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "Trop de demandes. Veuillez réessayer plus tard." });
+      throw tooManyRequests("Trop de demandes. Veuillez réessayer plus tard.");
     }
     try {
       await verifyCandidateTurnstile({ token: input.turnstileToken, remoteIp: candidateRequestIp(ctx.req.headers) });
     } catch {
       await logSecurityEvent({ actorKind: "anonymous", actorReference: hashSecurityValue(email), category: "candidate_password_reset_turnstile", outcome: "blocked", severity: "warning", ipHash });
-      throw new TRPCError({ code: "BAD_REQUEST", message: "La vérification anti-bot doit être renouvelée avant de demander un lien." });
+      throw securityCheckRequired("La vérification anti-bot doit être renouvelée avant de demander un lien.");
     }
     const db = databaseOrThrow(await getDb());
     const candidate = (await db.select().from(candidateAccounts).where(and(eq(candidateAccounts.email, email), eq(candidateAccounts.status, "active"))).limit(1))[0];
@@ -603,12 +641,14 @@ export const candidatePortalRouter = router({
           firstName: candidate.firstName ?? "",
           kind: "reset",
           actionUrl: resetUrl,
+          // The language the candidate is reading, else the account's (EN-02).
+          language: emailLanguageFor(input.language ?? candidate.language),
           idempotencyKey: buildCandidatePortalAccessIdempotencyKey("reset", tokenHash),
         });
         await logCandidateEmailDelivery({ candidateId: candidate.id, category: "candidate_password_reset_delivery", outcome: "allowed", ipHash, providerMessageId: delivery.id });
       } catch (error) {
         const failureCode = candidatePortalAccessEmailFailureCode(error);
-        if (failureCode === "provider_rejected") {
+        if (failureCode !== "delivery_exception") {
           await db.update(candidateAccounts).set({
             passwordResetTokenHash: candidate.passwordResetTokenHash,
             passwordResetExpiresAt: candidate.passwordResetExpiresAt,
@@ -633,7 +673,7 @@ export const candidatePortalRouter = router({
       gt(candidateAccounts.passwordResetExpiresAt, new Date()),
       eq(candidateAccounts.status, "active"),
     )).limit(1))[0];
-    if (!candidate) throw new TRPCError({ code: "BAD_REQUEST", message: "Ce lien de réinitialisation est invalide ou expiré." });
+    if (!candidate) throw candidateRefusal("BAD_REQUEST", "Ce lien de réinitialisation est invalide ou expiré.", "candidate_reset_link_invalid");
     await db.update(candidateAccounts).set({
       passwordHash: await hashCandidatePassword(input.password),
       passwordResetTokenHash: null,

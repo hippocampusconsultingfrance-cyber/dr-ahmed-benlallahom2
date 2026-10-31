@@ -7,11 +7,14 @@ import {
   candidateDocumentAllowsAiAnalysis,
 } from "../shared/candidateDocumentCategories";
 import { canRequestCandidateDocumentReanalysis } from "../shared/candidateDocumentReanalysis";
+import { hiddenTextFlagLabel } from "../shared/candidateDocumentHiddenText";
 import { CANDIDATE_DOCUMENT_MAX_BYTES, CANDIDATE_DOCUMENT_TOO_LARGE_MESSAGE } from "../shared/candidateDocumentLimits";
 import { candidatePortalCopy } from "../client/src/pages/CandidatePortalPage";
 import { createInMemoryDrizzle, type InMemoryDrizzle } from "./testSupport/inMemoryDrizzle";
 import { TEST_PEPPER } from "./testSupport/candidatePortal";
 import { listen, seedVerifiedCandidate, uploadDocument, validPdfBuffer } from "./testSupport/candidateUploadApp";
+import { libreOfficeCvPdf, packPdfIntoObjectStream } from "./testing/pdfFixture";
+import { candidateDocumentRefusalMessage } from "../client/src/lib/candidateDocumentUploadErrors";
 
 const state = vi.hoisted(() => {
   process.env.VERCEL = "1";
@@ -31,8 +34,10 @@ vi.mock("@clerk/express", () => ({
 vi.mock("./storage", () => ({
   storagePut: vi.fn(async (key: string, data: Buffer) => { state.stored.push(key); state.blobs.set(key, Buffer.from(data)); return { key, url: `https://blob.test/${key}` }; }),
   storageGetSignedUrl: vi.fn(async (key: string) => { state.storageReads.push(key); return `https://blob.test/${key}`; }),
+  storageDelete: vi.fn(async (keys: string[]) => { keys.forEach(key => state.blobs.delete(key)); return keys.length; }),
 }));
-vi.mock("./candidateDocumentAnalysis", () => ({
+vi.mock("./candidateDocumentAnalysis", async importOriginal => ({
+  ...await importOriginal<typeof import("./candidateDocumentAnalysis")>(),
   analyzeCandidateDocument: vi.fn(async (input: { declaredCategory: string }) => {
     state.analyses.push(input.declaredCategory);
     return { model: "test-model", analysis: { documentKind: "Diplôme", summary: "Synthèse de test", issuingOrganization: null, issueDate: null, expiryDate: null, confidence: 80, flags: [], missingInformation: [] } };
@@ -52,6 +57,8 @@ globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) =>
   return realFetch(input as RequestInfo, init);
 }) as typeof fetch;
 const { enqueueCandidateDocumentAnalysis, processDueCandidateDocumentAnalysisJobs } = await import("./candidateDocumentProcessing");
+const { analyzeCandidateDocument, CandidateDocumentTextSetAsideError } = await import("./candidateDocumentAnalysis");
+const { runCandidateDocumentProcessingWorker } = await import("./scheduledJobs");
 
 const sessionToken = "candidate-session-token-for-upload-tests";
 let baseUrl = "";
@@ -116,6 +123,32 @@ describe("LEGAL-12 — catégories sensibles et analyse IA des documents candida
     expect(db().rows(candidateDocumentProcessingJobs)).toHaveLength(1);
   });
 
+  it("un diplôme enregistré sans sa tâche d’analyse (dépôt interrompu) la reçoit du traitement planifié, puis est analysé (DATA-02)", async () => {
+    // The document is stored, then its analysis job is refused.
+    const insert = db().insert.bind(db());
+    const refusal = vi.spyOn(db(), "insert").mockImplementation((table => table === candidateDocumentProcessingJobs
+      ? { values: () => Promise.reject(new Error("Failed query: insert into \"candidate_document_processing_jobs\"")) }
+      : insert(table)) as typeof insert);
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const result = await uploadDocument(baseUrl, sessionToken, { category: "diploma", buffer: validPdfBuffer(), name: "diplome.pdf" });
+    refusal.mockRestore();
+    error.mockRestore();
+    expect(result.status).toBe(500);
+    const [document] = db().rows(candidateDocuments);
+    expect(document).toMatchObject({ category: "diploma", analysisStatus: "queued" });
+    expect(db().rows(candidateDocumentProcessingJobs)).toHaveLength(0);
+
+    // Left to the upload a little longer, in case it is still running; then the run gives the job.
+    const worker = () => runCandidateDocumentProcessingWorker({ batchSize: 1, maxBatches: 6, budgetMs: 20_000 });
+    await expect(worker()).resolves.toMatchObject({ jobsRecreated: 0, processed: 0 });
+    document.createdAt = new Date(Date.now() - 20 * 60_000);
+    await expect(worker()).resolves.toMatchObject({ jobsRecreated: 1, processed: 1, completed: 1 });
+    expect(state.analyses).toEqual(["diploma"]);
+    expect(document).toMatchObject({ analysisStatus: "completed", status: "needs_review" });
+    expect(db().rows(candidateDocumentAuditLogs).map(log => log.action)).toEqual(["analysis_requested", "analysis_completed"]);
+    await expect(worker()).resolves.toMatchObject({ jobsRecreated: 0, processed: 0 });
+  });
+
   it("refuse au-delà de 4 Mo avec un message clair et accepte un fichier à la limite (OPS-09 / CAND-06)", async () => {
     expect(CANDIDATE_DOCUMENT_MAX_BYTES).toBe(4 * 1024 * 1024);
     const tooLarge = await uploadDocument(baseUrl, sessionToken, { category: "diploma", buffer: validPdfBuffer(CANDIDATE_DOCUMENT_MAX_BYTES + 1) });
@@ -175,5 +208,92 @@ describe("LEGAL-12 — catégories sensibles et analyse IA des documents candida
     }
     expect(db().rows(candidateDocumentProcessingJobs).every(job => job.status === "completed" && job.lastError === "human_review_only")).toBe(true);
     expect(db().rows(candidateDocumentAuditLogs).filter(log => String(log.metadata).includes("human_review_only"))).toHaveLength(4);
+  });
+
+  it("document dont tout le texte est écarté comme non vérifiable (IA-01) : revue humaine dès la première tentative, la raison gardée dans la fiche", async () => {
+    const result = await uploadDocument(baseUrl, sessionToken, { category: "diploma", buffer: validPdfBuffer(), name: "diplome.pdf" });
+    expect(result.status).toBe(201);
+    const excerpt = "Diplôme d’État infirmier, Institut de Tunis (2022)";
+    const hiddenText = { characters: 0, excerpt: "", unverifiable: { characters: 412, excerpt, reasons: ["layout_unfinished" as const], share: 1 } };
+    vi.mocked(analyzeCandidateDocument).mockRejectedValueOnce(new CandidateDocumentTextSetAsideError(hiddenText));
+
+    await expect(processDueCandidateDocumentAnalysisJobs(5)).resolves.toMatchObject({ processed: 1, retried: 0, needsReview: 1 });
+
+    const [document] = db().rows(candidateDocuments);
+    expect(document).toMatchObject({ analysisStatus: "needs_review", status: "needs_review", analysisAttempts: 1, analysisLastError: "candidate_document_text_set_aside" });
+    const flags = JSON.parse(String(document!.aiFlags)) as string[];
+    expect(flags).toEqual(["ai_analysis_unavailable", "candidate_document_text_set_aside", "unverifiable_text_set_aside:412"]);
+    // The admin's card says what was left out, with its excerpt.
+    const wording = { invisible: "{count} invisible", unverifiable: "{count} non vérifiable(s)", excerpt: "extrait : {excerpt}", compare: "à comparer" };
+    expect(hiddenTextFlagLabel(flags[2]!, String(document!.aiExtractedData), wording)).toBe(`412 non vérifiable(s) (extrait : ${excerpt}), à comparer`);
+    expect(db().rows(candidateDocumentProcessingJobs)).toMatchObject([{ status: "completed", attempts: 1, lastError: "candidate_document_text_set_aside" }]);
+  });
+});
+
+describe("nom de fichier très long déposé dans le coffre", () => {
+  it("raccourcit le nom en gardant son extension : le document est accepté, pas refusé comme d’un autre type", async () => {
+    const name = `${"Attestation_de_travail_CHU_service_anesthesie_".repeat(5)}signee.pdf`;
+    expect(name.length).toBeGreaterThan(180);
+
+    const result = await uploadDocument(baseUrl, sessionToken, { category: "diploma", buffer: validPdfBuffer(), name });
+
+    expect(result.status, JSON.stringify(result.body)).toBe(201);
+    const stored = String(db().rows(candidateDocuments)[0]!.originalName);
+    expect(stored).toHaveLength(180);
+    expect(stored.endsWith(".pdf")).toBe(true);
+    expect(name.startsWith(stored.slice(0, -".pdf".length))).toBe(true);
+  });
+
+  it("lit le nom envoyé en UTF-8 par le navigateur : une lettre accentuée devient un seul « _ », pas deux", async () => {
+    const result = await uploadDocument(baseUrl, sessionToken, { category: "diploma", buffer: validPdfBuffer(), name: "Diplôme d’État.pdf" });
+
+    expect(result.status, JSON.stringify(result.body)).toBe(201);
+    expect(db().rows(candidateDocuments)[0]!.originalName).toBe("Dipl_me d__tat.pdf");
+  });
+});
+
+describe("REC-02 — PDF réels et PDF piégés déposés dans le coffre", () => {
+  it("accepte un PDF LibreOffice et un PDF à flux d’objets", async () => {
+    for (const buffer of [libreOfficeCvPdf(), packPdfIntoObjectStream(libreOfficeCvPdf())]) {
+      const result = await uploadDocument(baseUrl, sessionToken, { category: "diploma", buffer, name: "diplome.pdf" });
+      expect(result.status, JSON.stringify(result.body)).toBe(201);
+    }
+    expect(db().rows(candidateDocuments)).toHaveLength(2);
+  });
+
+  it("refuse un JavaScript caché dans un flux d’objets avec le motif et la marche à suivre, sans rien stocker", async () => {
+    const trapped = packPdfIntoObjectStream(libreOfficeCvPdf(), {
+      edit: source => source.replace("/OpenAction[1 0 R /XYZ null null 0]", "/OpenAction <</S/JavaScript/JS(app.alert\\(1\\))>>"),
+    });
+    const result = await uploadDocument(baseUrl, sessionToken, { category: "diploma", buffer: trapped, name: "diplome.pdf" });
+    expect(result.status).toBe(400);
+    expect(result.body.code).toBe("candidate_document_pdf_active_content");
+    expect(result.body.error).not.toBe("Le document est refusé par le contrôle de sécurité.");
+    expect(result.body.error).toContain("imprimez-le en PDF depuis votre navigateur");
+    expect(candidateDocumentRefusalMessage(result.body, "fr")).toBe(result.body.error);
+    expect(candidateDocumentRefusalMessage(result.body, "en")).toContain("print it to PDF from your browser");
+    expect(state.stored).toHaveLength(0);
+    expect(db().rows(candidateDocuments)).toHaveLength(0);
+  });
+});
+
+describe("DATA-01 — document envoyé pendant l’effacement du compte", () => {
+  it("ne garde ni le document ni son fichier chiffré quand la clé étrangère refuse un compte effacé pendant l’envoi", async () => {
+    const memory = db();
+    const insert = memory.insert.bind(memory);
+    const refusal = Object.assign(new Error("Failed query: insert into \"candidate_documents\" (…)"), {
+      cause: Object.assign(new Error('insert or update on table "candidate_documents" violates foreign key constraint "candidate_documents_candidate_id_fk"'), { code: "23503", constraint: "candidate_documents_candidate_id_fk" }),
+    });
+    memory.insert = ((table: Parameters<typeof insert>[0]) => table === candidateDocuments
+      ? { values: () => ({ returning: () => Promise.reject(refusal) }) }
+      : insert(table)) as typeof memory.insert;
+
+    const result = await uploadDocument(baseUrl, sessionToken, { category: "diploma", buffer: validPdfBuffer(), name: "diplome.pdf" });
+
+    expect(result).toEqual({ status: 401, body: { error: "Votre session a expiré. Veuillez vous reconnecter." } });
+    expect(state.stored).toHaveLength(1);
+    expect(state.blobs.size).toBe(0);
+    expect(db().rows(candidateDocumentProcessingJobs)).toHaveLength(0);
+    expect(db().rows(candidateDocumentAuditLogs)).toHaveLength(0);
   });
 });

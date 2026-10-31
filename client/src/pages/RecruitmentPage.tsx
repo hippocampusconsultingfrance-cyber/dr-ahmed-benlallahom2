@@ -7,9 +7,14 @@ import Navigation from "@/components/Navigation";
 import Footer from "@/components/Footer";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { resolveCountryForSubmission } from "@/lib/countrySubmission";
+import { recruitmentServiceFailureMessage, recruitmentSubmissionErrorMessage } from "@/lib/recruitmentSubmissionErrors";
+import { fieldsToCorrectMessage, reportFieldsToCorrect, type FieldToCorrect } from "@/lib/formFieldsToCorrect";
+import { getTurnstileWidgetCopy } from "@/lib/publicFormCopy";
 import { TurnstileWidget } from "@/components/TurnstileWidget";
+import FileNameLabel from "@/components/FileNameLabel";
+import { filterRecruitmentSpecialties, recruitmentSpecialtyLabel } from "./recruitmentSpecialties";
 
-const countryOptions = [
+export const countryOptions = [
   { value: "France", labels: { fr: "France", en: "France", de: "Frankreich", zh: "法国" } },
   { value: "Allemagne", labels: { fr: "Allemagne", en: "Germany", de: "Deutschland", zh: "德国" } },
   { value: "Suisse", labels: { fr: "Suisse", en: "Switzerland", de: "Schweiz", zh: "瑞士" } },
@@ -30,8 +35,11 @@ const countryOptions = [
   { value: "Autre pays / Mobilité mondiale", labels: { fr: "Autre pays / Mobilité mondiale", en: "Other country / Global mobility", de: "Anderes Land / Globale Mobilität", zh: "其他国家/全球流动" } },
 ] as const;
 const OTHER_TARGET_COUNTRY = "Autre pays / Mobilité mondiale";
+/** The specialty is sent as typed: /api/recruitment/apply accepts up to 160 characters (cv_applications.specialty). */
+export const RECRUITMENT_CUSTOM_SPECIALTY_MAX_LENGTH = 160;
 
-const professionalLanguageOptions = [
+/** Recorded under their English name whatever the page's language (value), which the admin screens compare with any other name of the language (IA-02). */
+export const professionalLanguageOptions = [
   { value: "Arabic", labels: { fr: "Arabe", en: "Arabic", de: "Arabisch", zh: "阿拉伯语" } },
   { value: "French", labels: { fr: "Français", en: "French", de: "Französisch", zh: "法语" } },
   { value: "English", labels: { fr: "Anglais", en: "English", de: "Englisch", zh: "英语" } },
@@ -43,101 +51,8 @@ const professionalLanguageOptions = [
 ] as const;
 
 const otherLanguageLabel = { fr: "Autre langue (à préciser)", en: "Other language (please specify)", de: "Andere Sprache (bitte angeben)", zh: "其他语言（请注明）" } as const;
-
-const specialtyCategories = [
-  {
-    category: { fr: "Médecine générale & Urgences", en: "General Practice & Emergency", de: "Allgemeinmedizin & Notfallmedizin", zh: "全科与急诊医学" },
-    items: [
-      "Médecine générale",
-      "Médecine d’urgence",
-      "Médecine intensive et réanimation",
-      "Gériatrie",
-      "Médecine du travail",
-      "Médecine du sport",
-      "Santé publique et médecine sociale",
-    ],
-  },
-  {
-    category: { fr: "Spécialités médicales", en: "Medical Specialties", de: "Medizinische Fachgebiete", zh: "内科专科" },
-    items: [
-      "Cardiologie",
-      "Cardiologie interventionnelle",
-      "Pneumologie",
-      "Gastro-entérologie et hépatologie",
-      "Néphrologie",
-      "Neurologie",
-      "Oncologie médicale",
-      "Hématologie",
-      "Endocrinologie, diabétologie et nutrition",
-      "Rhumatologie",
-      "Dermatologie et vénéréologie",
-      "Pédiatrie",
-      "Psychiatrie",
-      "Psychiatrie de l’enfant et de l’adolescent",
-      "Infectiologie et maladies tropicales",
-      "Médecine physique et de réadaptation (MPR)",
-    ],
-  },
-  {
-    category: { fr: "Chirurgie & Spécialités chirurgicales", en: "Surgery & Surgical Specialties", de: "Chirurgie & Chirurgische Fachgebiete", zh: "外科与手术专科" },
-    items: [
-      "Chirurgie générale",
-      "Chirurgie viscérale et digestive",
-      "Chirurgie orthopédique et traumatologie",
-      "Neurochirurgie",
-      "Chirurgie cardiovasculaire et thoracique",
-      "Chirurgie plastique, reconstructrice et esthétique",
-      "Chirurgie pédiatrique",
-      "Chirurgie maxillo-faciale",
-      "Urologie",
-      "Gynécologie et obstétrique",
-      "Ophtalmologie",
-      "Oto-rhino-laryngologie (ORL) et chirurgie cervico-faciale",
-      "Stomatologie",
-    ],
-  },
-  {
-    category: { fr: "Anesthésie, Imagerie & Laboratoire", en: "Anesthesia, Imaging & Laboratory", de: "Anästhesie, Bildgebung & Labor", zh: "麻醉、影像与检验医学" },
-    items: [
-      "Anesthésie-réanimation",
-      "Radiologie et imagerie médicale",
-      "Médecine nucléaire",
-      "Biologie médicale / Pathologie",
-      "Anatomie et cytologie pathologiques",
-      "Pharmacologie médicale",
-      "Toxicologie",
-    ],
-  },
-  {
-    category: { fr: "Soins infirmiers & Paramédical", en: "Nursing & Allied Health", de: "Pflege & Paramedizinische Berufe", zh: "护理与专职医疗" },
-    items: [
-      "Soins infirmiers généraux",
-      "Infirmier(ère) en soins généraux et spécialisés (IDE)",
-      "Infirmier(ère) anesthésiste (IADE)",
-      "Infirmier(ère) de bloc opératoire (IBODE)",
-      "Infirmier(ère) puériculteur(trice)",
-      "Infirmier(ère) en pratique avancée (IPA)",
-      "Cadre de santé / Direction des soins",
-      "Sage-femme",
-      "Masseur-kinésithérapeute / Physiothérapeute",
-      "Ergothérapeute",
-      "Orthophoniste",
-      "Orthoptiste",
-      "Psychomotricien(ne)",
-      "Manipulateur(trice) d’électroradiologie médicale (ERM)",
-      "Technicien(ne) de laboratoire médical",
-      "Préparateur(trice) en pharmacie",
-      "Pharmacien(ne)",
-      "Diététicien(ne) / Nutritionniste",
-      "Psychologue clinicien(ne)",
-      "Assistant(e) social(e) de santé",
-    ],
-  },
-  {
-    category: { fr: "Autre", en: "Other", de: "Sonstige", zh: "其他" },
-    items: ["Autre spécialité ou profession"],
-  },
-] as const;
+const otherLanguagePlaceholder = { fr: "Ex. Italien, russe…", en: "e.g. Italian, Russian…", de: "z. B. Italienisch, Russisch…", zh: "例如：意大利语、俄语…" } as const;
+const customSpecialtyPlaceholder = { fr: "Ex. Perfusionniste, audioprothésiste…", en: "e.g. Perfusionist, hearing aid specialist…", de: "z. B. Kardiotechniker, Hörakustiker…", zh: "例如：体外循环灌注师、助听器验配师…" } as const;
 
 const copy = {
   fr: {
@@ -147,19 +62,19 @@ const copy = {
     nav: "Recrutement",
     formTitle: "Déposer votre candidature",
     formIntro: "Envoyez-nous votre profil. Une candidature complète nous permet de vous orienter vers les opportunités pertinentes.",
-    firstName: "Prénom", lastName: "Nom", email: "Email", phone: "Téléphone", specialty: "Spécialité / profession", specialtySearch: "Rechercher une spécialité…", standardPathTitle: "Mobilité médicale internationale", standardPathText: "Hôpitaux, cliniques et établissements de santé en Europe, au Canada et au Moyen-Orient.", vvipPathTitle: "Missions VVIP & Offshore", vvipPathText: "Plateformes pétrolières, sites isolés, entreprises offshore et environnements critiques.", vvipPathCta: "Découvrir le parcours VVIP", specialtyCustom: "Précisez votre spécialité ou profession", countries: "Pays ciblés", otherTargetCountry: "Autre pays à préciser", languages: "Langues professionnelles", experience: "Années d’expérience", message: "Message ou projet professionnel", cv: "CV (PDF ou DOCX — 4 Mo maximum)", chooseFile: "Choisir un fichier", noFile: "Aucun fichier sélectionné", gdpr: "J’accepte que mes données soient traitées pour l’examen de ma candidature, y compris par une analyse automatisée d’aide à la présélection, conformément à la politique de confidentialité. Une revue humaine est toujours requise et aucune décision n’est prise uniquement par l’IA.", marketing: "J’accepte de recevoir occasionnellement des informations sur des opportunités professionnelles.", submit: "Envoyer ma candidature", sending: "Envoi en cours…", successTitle: "Candidature reçue", successText: "Votre profil a bien été enregistré. Conservez votre numéro de suivi :", backHome: "Retour au site", required: "Champ obligatoire", consentError: "Votre consentement RGPD est requis.", fileError: "Veuillez joindre un CV au format PDF ou DOCX de 4 Mo maximum (le format Word ancien .doc n’est pas accepté).", turnstile: "Veuillez valider la vérification de sécurité avant l’envoi.", genericError: "La candidature n’a pas pu être envoyée. Vérifiez les informations et réessayez.", privacyNote: "Ne transmettez aucune donnée de patient, dossier médical ou information clinique dans ce formulaire.", confidentiality: "Données traitées de manière confidentielle", international: "Opportunités internationales sélectionnées", humanReview: "Examen humain de chaque profil", select: "Sélectionner dans la liste", otherSpecialty: "Autre spécialité ou profession", noMatch: "Aucune spécialité ne correspond à votre recherche.",
+    firstName: "Prénom", lastName: "Nom", email: "Email", phone: "Téléphone", specialty: "Spécialité / profession", specialtySearch: "Rechercher une spécialité…", standardPathTitle: "Mobilité médicale internationale", standardPathText: "Hôpitaux, cliniques et établissements de santé en Europe, au Canada et au Moyen-Orient.", vvipPathTitle: "Missions VVIP & Offshore", vvipPathText: "Plateformes pétrolières, sites isolés, entreprises offshore et environnements critiques.", vvipPathCta: "Découvrir le parcours VVIP", specialtyCustom: "Précisez votre spécialité ou profession", countries: "Pays ciblés", otherTargetCountry: "Autre pays à préciser", languages: "Langues professionnelles", experience: "Années d’expérience", message: "Message ou projet professionnel", cv: "CV (PDF ou DOCX — 4 Mo maximum)", chooseFile: "Choisir un fichier", noFile: "Aucun fichier sélectionné", gdpr: "J’accepte que mes données soient traitées pour l’examen de ma candidature, y compris par une analyse automatisée d’aide à la présélection, conformément à la politique de confidentialité. Une revue humaine est toujours requise et aucune décision n’est prise uniquement par l’IA.", marketing: "J’accepte de recevoir occasionnellement des informations sur des opportunités professionnelles.", submit: "Envoyer ma candidature", sending: "Envoi en cours…", successTitle: "Candidature reçue", successText: "Votre profil a bien été enregistré. Conservez votre numéro de suivi :", backHome: "Retour au site", consentError: "Votre consentement RGPD est requis.", fileError: "Veuillez joindre un CV au format PDF ou DOCX de 4 Mo maximum (le format Word ancien .doc n’est pas accepté).", turnstile: "Veuillez valider la vérification de sécurité avant l’envoi.", genericError: "La candidature n’a pas pu être envoyée. Vérifiez les informations et réessayez.", privacyNote: "Ne transmettez aucune donnée de patient, dossier médical ou information clinique dans ce formulaire.", confidentiality: "Données traitées de manière confidentielle", international: "Opportunités internationales sélectionnées", humanReview: "Examen humain de chaque profil", select: "Sélectionner dans la liste", otherSpecialty: "Autre spécialité ou profession", noMatch: "Aucune spécialité ne correspond à votre recherche.", selected: "Sélectionné : {specialty}", clearSpecialtySearch: "Effacer la recherche de spécialité", cvField: "CV", consentField: "Consentement au traitement des données", gdprPolicyLink: "politique de confidentialité", newTab: "(s’ouvre dans un nouvel onglet)",
     metaTitle: "Recrutement international de professionnels de santé | Hippocampus Consulting", metaDescription: "Déposez votre CV pour être considéré pour des opportunités de recrutement médical en Europe, au Canada et au Moyen-Orient.",
   },
   en: {
-    eyebrow: "Hippocampus Consulting · Medical mobility", title: "Your expertise can cross borders.", intro: "We are building an international network of healthcare professionals for selected opportunities in Europe, Canada and the Middle East.", nav: "Recruitment", standardPathTitle: "International medical mobility", standardPathText: "Hospitals, clinics and healthcare institutions across Europe, Canada and the Middle East.", vvipPathTitle: "VVIP & Offshore missions", vvipPathText: "Oil rigs, remote sites, offshore companies and critical environments.", vvipPathCta: "Explore the VVIP pathway", formTitle: "Submit your application", formIntro: "Share your profile with us. A complete application helps us identify relevant opportunities.", firstName: "First name", lastName: "Last name", email: "Professional email", phone: "Phone", specialty: "Specialty / profession", specialtySearch: "Search a specialty…", specialtyCustom: "Specify your specialty or profession", countries: "Target countries", otherTargetCountry: "Specify the other country", languages: "Professional languages", experience: "Years of experience", message: "Message or professional project", cv: "CV (PDF or DOCX — 4 MB maximum)", chooseFile: "Choose a file", noFile: "No file selected", gdpr: "I consent to my data being processed to review my application, including automated analysis to assist pre-screening, in accordance with the privacy policy. Human review is always required and no decision is made solely by AI.", marketing: "I agree to occasionally receive information about professional opportunities.", submit: "Submit my application", sending: "Sending…", successTitle: "Application received", successText: "Your profile has been registered. Keep your tracking number:", backHome: "Back to site", required: "Required field", consentError: "GDPR consent is required.", fileError: "Please attach a PDF or DOCX CV up to 4 MB (the legacy Word .doc format is not accepted).", genericError: "Your application could not be sent. Check the information and try again.", privacyNote: "Do not submit patient data, medical records or clinical information through this form.", confidentiality: "Confidential data handling", international: "Selected international opportunities", humanReview: "Human review of every profile", select: "Select from list", otherSpecialty: "Other specialty or profession", noMatch: "No specialty matches your search.",
+    eyebrow: "Hippocampus Consulting · Medical mobility", title: "Your expertise can cross borders.", intro: "We are building an international network of healthcare professionals for selected opportunities in Europe, Canada and the Middle East.", nav: "Recruitment", standardPathTitle: "International medical mobility", standardPathText: "Hospitals, clinics and healthcare institutions across Europe, Canada and the Middle East.", vvipPathTitle: "VVIP & Offshore missions", vvipPathText: "Oil rigs, remote sites, offshore companies and critical environments.", vvipPathCta: "Explore the VVIP pathway", formTitle: "Submit your application", formIntro: "Share your profile with us. A complete application helps us identify relevant opportunities.", firstName: "First name", lastName: "Last name", email: "Professional email", phone: "Phone", specialty: "Specialty / profession", specialtySearch: "Search a specialty…", specialtyCustom: "Specify your specialty or profession", countries: "Target countries", otherTargetCountry: "Specify the other country", languages: "Professional languages", experience: "Years of experience", message: "Message or professional project", cv: "CV (PDF or DOCX — 4 MB maximum)", chooseFile: "Choose a file", noFile: "No file selected", gdpr: "I consent to my data being processed to review my application, including automated analysis to assist pre-screening, in accordance with the privacy policy. Human review is always required and no decision is made solely by AI.", marketing: "I agree to occasionally receive information about professional opportunities.", submit: "Submit my application", sending: "Sending…", successTitle: "Application received", successText: "Your profile has been registered. Keep your tracking number:", backHome: "Back to site", consentError: "GDPR consent is required.", fileError: "Please attach a PDF or DOCX CV up to 4 MB (the legacy Word .doc format is not accepted).", genericError: "Your application could not be sent. Check the information and try again.", privacyNote: "Do not submit patient data, medical records or clinical information through this form.", confidentiality: "Confidential data handling", international: "Selected international opportunities", humanReview: "Human review of every profile", select: "Select from list", otherSpecialty: "Other specialty or profession", noMatch: "No specialty matches your search.", selected: "Selected: {specialty}", clearSpecialtySearch: "Clear the specialty search", cvField: "CV", consentField: "Consent to data processing", gdprPolicyLink: "privacy policy", newTab: "(opens in a new tab)",
     metaTitle: "International healthcare recruitment | Hippocampus Consulting", metaDescription: "Submit your CV to be considered for healthcare recruitment opportunities in Europe, Canada and the Middle East.",
   },
   de: {
-    eyebrow: "Hippocampus Consulting · Medizinische Mobilität", title: "Ihre Expertise kennt keine Grenzen.", intro: "Wir bauen ein internationales Netzwerk von Gesundheitsfachkräften für ausgewählte Möglichkeiten in Europa, Kanada und dem Nahen Osten auf.", nav: "Recruiting", standardPathTitle: "Internationale medizinische Mobilität", standardPathText: "Krankenhäuser, Kliniken und Gesundheitseinrichtungen in Europa, Kanada und dem Nahen Osten.", vvipPathTitle: "VVIP- & Offshore-Missionen", vvipPathText: "Bohrinseln, abgelegene Standorte, Offshore-Unternehmen und kritische Umgebungen.", vvipPathCta: "VVIP-Pfad entdecken", formTitle: "Bewerbung einreichen", formIntro: "Teilen Sie Ihr Profil mit uns. Eine vollständige Bewerbung erleichtert die Zuordnung zu passenden Möglichkeiten.", firstName: "Vorname", lastName: "Nachname", email: "Berufliche E-Mail", phone: "Telefon", specialty: "Fachgebiet / Beruf", specialtySearch: "Fachgebiet suchen…", specialtyCustom: "Geben Sie Ihr Fachgebiet an", countries: "Zielländer", languages: "Berufssprachen", experience: "Berufserfahrung in Jahren", message: "Nachricht oder berufliches Projekt", cv: "Lebenslauf (PDF oder DOCX — maximal 4 MB)", chooseFile: "Datei auswählen", noFile: "Keine Datei ausgewählt", gdpr: "Ich stimme der Verarbeitung meiner Daten zur Prüfung meiner Bewerbung einschließlich einer automatisierten Analyse zur Unterstützung der Vorauswahl gemäß der Datenschutzerklärung zu. Eine menschliche Prüfung ist immer erforderlich; keine Entscheidung wird ausschließlich durch KI getroffen.", marketing: "Ich möchte gelegentlich Informationen zu beruflichen Möglichkeiten erhalten.", submit: "Bewerbung senden", sending: "Wird gesendet…", successTitle: "Bewerbung erhalten", successText: "Ihr Profil wurde gespeichert. Bewahren Sie Ihre Referenznummer auf:", backHome: "Zur Website", required: "Pflichtfeld", consentError: "Die RGPD-Zustimmung ist erforderlich.", fileError: "Bitte fügen Sie einen PDF- oder DOCX-Lebenslauf bis 4 MB bei (das alte Word-Format .doc wird nicht akzeptiert).", genericError: "Die Bewerbung konnte nicht gesendet werden. Bitte prüfen Sie die Angaben und versuchen Sie es erneut.", privacyNote: "Übermitteln Sie keine Patientendaten, medizinischen Akten oder klinischen Informationen über dieses Formular.", confidentiality: "Vertrauliche Datenverarbeitung", international: "Ausgewählte internationale Möglichkeiten", humanReview: "Menschliche Prüfung jedes Profils", select: "Aus der Liste wählen", otherSpecialty: "Anderes Fachgebiet", noMatch: "Keine passende Fachgebiet gefunden.",
+    eyebrow: "Hippocampus Consulting · Medizinische Mobilität", title: "Ihre Expertise kennt keine Grenzen.", intro: "Wir bauen ein internationales Netzwerk von Gesundheitsfachkräften für ausgewählte Möglichkeiten in Europa, Kanada und dem Nahen Osten auf.", nav: "Recruiting", standardPathTitle: "Internationale medizinische Mobilität", standardPathText: "Krankenhäuser, Kliniken und Gesundheitseinrichtungen in Europa, Kanada und dem Nahen Osten.", vvipPathTitle: "VVIP- & Offshore-Missionen", vvipPathText: "Bohrinseln, abgelegene Standorte, Offshore-Unternehmen und kritische Umgebungen.", vvipPathCta: "VVIP-Pfad entdecken", formTitle: "Bewerbung einreichen", formIntro: "Teilen Sie Ihr Profil mit uns. Eine vollständige Bewerbung erleichtert die Zuordnung zu passenden Möglichkeiten.", firstName: "Vorname", lastName: "Nachname", email: "Berufliche E-Mail", phone: "Telefon", specialty: "Fachgebiet / Beruf", specialtySearch: "Fachgebiet suchen…", specialtyCustom: "Geben Sie Ihr Fachgebiet an", countries: "Zielländer", languages: "Berufssprachen", experience: "Berufserfahrung in Jahren", message: "Nachricht oder berufliches Projekt", cv: "Lebenslauf (PDF oder DOCX — maximal 4 MB)", chooseFile: "Datei auswählen", noFile: "Keine Datei ausgewählt", gdpr: "Ich stimme der Verarbeitung meiner Daten zur Prüfung meiner Bewerbung einschließlich einer automatisierten Analyse zur Unterstützung der Vorauswahl gemäß der Datenschutzerklärung zu. Eine menschliche Prüfung ist immer erforderlich; keine Entscheidung wird ausschließlich durch KI getroffen.", marketing: "Ich möchte gelegentlich Informationen zu beruflichen Möglichkeiten erhalten.", submit: "Bewerbung senden", sending: "Wird gesendet…", successTitle: "Bewerbung erhalten", successText: "Ihr Profil wurde gespeichert. Bewahren Sie Ihre Referenznummer auf:", backHome: "Zur Website", consentError: "Die RGPD-Zustimmung ist erforderlich.", fileError: "Bitte fügen Sie einen PDF- oder DOCX-Lebenslauf bis 4 MB bei (das alte Word-Format .doc wird nicht akzeptiert).", genericError: "Die Bewerbung konnte nicht gesendet werden. Bitte prüfen Sie die Angaben und versuchen Sie es erneut.", privacyNote: "Übermitteln Sie keine Patientendaten, medizinischen Akten oder klinischen Informationen über dieses Formular.", confidentiality: "Vertrauliche Datenverarbeitung", international: "Ausgewählte internationale Möglichkeiten", humanReview: "Menschliche Prüfung jedes Profils", select: "Aus der Liste wählen", otherSpecialty: "Anderes Fachgebiet", noMatch: "Keine passende Fachgebiet gefunden.", selected: "Ausgewählt: {specialty}", clearSpecialtySearch: "Fachgebietssuche löschen", cvField: "Lebenslauf", consentField: "Einwilligung in die Datenverarbeitung", gdprPolicyLink: "Datenschutzerklärung", newTab: "(öffnet sich in einem neuen Tab)",
     metaTitle: "Internationales Recruiting von Gesundheitsfachkräften | Hippocampus Consulting", metaDescription: "Reichen Sie Ihren Lebenslauf für internationale Recruiting-Möglichkeiten in Europa, Kanada und dem Nahen Osten ein.",
   },
   zh: {
-    eyebrow: "Hippocampus Consulting · 国际医疗人才流动", title: "让您的专业能力走向国际。", intro: "我们正在建立医疗专业人员国际网络，匹配欧洲、加拿大和中东地区经过筛选的职业机会。", nav: "招聘", standardPathTitle: "国际医疗人才流动", standardPathText: "欧洲、加拿大和中东地区的医院、诊所及医疗机构。", vvipPathTitle: "VVIP 与离岸任务", vvipPathText: "石油平台、偏远驻地、离岸企业和高风险环境。", vvipPathCta: "了解 VVIP 任务", formTitle: "提交申请", formIntro: "请分享您的职业资料。完整的申请有助于我们识别合适的机会。", firstName: "名", lastName: "姓", email: "职业邮箱", phone: "电话", specialty: "专业 / 职业", specialtySearch: "搜索专业…", specialtyCustom: "请输入您的专业或职业", countries: "目标国家", languages: "职业语言", experience: "工作年限", message: "留言或职业项目", cv: "简历（PDF 或 DOCX，最大 4 MB）", chooseFile: "选择文件", noFile: "未选择文件", gdpr: "我同意根据隐私政策处理我的个人数据以审核申请，包括使用自动化分析辅助初步筛选。始终需要人工审核，不会仅依据人工智能作出决定。", marketing: "我同意偶尔接收职业机会相关信息。", submit: "提交申请", sending: "正在发送…", successTitle: "已收到申请", successText: "您的资料已登记。请保存您的跟踪编号：", backHome: "返回网站", required: "必填项", consentError: "需要您的隐私同意。", fileError: "请附加不超过 4 MB 的 PDF 或 DOCX 简历（不接受旧版 Word .doc 格式）。", genericError: "申请无法发送。请检查信息后重试。", privacyNote: "请勿在此表单中提交患者数据、病历或临床信息。", confidentiality: "机密数据处理", international: "精选国际机会", humanReview: "人工审核每份资料", select: "从列表中选择", otherSpecialty: "其他专业或职业", noMatch: "未找到符合条件的专业。",
+    eyebrow: "Hippocampus Consulting · 国际医疗人才流动", title: "让您的专业能力走向国际。", intro: "我们正在建立医疗专业人员国际网络，匹配欧洲、加拿大和中东地区经过筛选的职业机会。", nav: "招聘", standardPathTitle: "国际医疗人才流动", standardPathText: "欧洲、加拿大和中东地区的医院、诊所及医疗机构。", vvipPathTitle: "VVIP 与离岸任务", vvipPathText: "石油平台、偏远驻地、离岸企业和高风险环境。", vvipPathCta: "了解 VVIP 任务", formTitle: "提交申请", formIntro: "请分享您的职业资料。完整的申请有助于我们识别合适的机会。", firstName: "名", lastName: "姓", email: "职业邮箱", phone: "电话", specialty: "专业 / 职业", specialtySearch: "搜索专业…", specialtyCustom: "请输入您的专业或职业", countries: "目标国家", languages: "职业语言", experience: "工作年限", message: "留言或职业项目", cv: "简历（PDF 或 DOCX，最大 4 MB）", chooseFile: "选择文件", noFile: "未选择文件", gdpr: "我同意根据隐私政策处理我的个人数据以审核申请，包括使用自动化分析辅助初步筛选。始终需要人工审核，不会仅依据人工智能作出决定。", marketing: "我同意偶尔接收职业机会相关信息。", submit: "提交申请", sending: "正在发送…", successTitle: "已收到申请", successText: "您的资料已登记。请保存您的跟踪编号：", backHome: "返回网站", consentError: "需要您的隐私同意。", fileError: "请附加不超过 4 MB 的 PDF 或 DOCX 简历（不接受旧版 Word .doc 格式）。", genericError: "申请无法发送。请检查信息后重试。", privacyNote: "请勿在此表单中提交患者数据、病历或临床信息。", confidentiality: "机密数据处理", international: "精选国际机会", humanReview: "人工审核每份资料", select: "从列表中选择", otherSpecialty: "其他专业或职业", noMatch: "未找到符合条件的专业。", selected: "已选择：{specialty}", clearSpecialtySearch: "清除专业搜索", cvField: "简历", consentField: "数据处理同意", gdprPolicyLink: "隐私政策", newTab: "（在新标签页中打开）",
     metaTitle: "International healthcare recruitment | Hippocampus Consulting", metaDescription: "Submit your CV to be considered for healthcare recruitment opportunities in Europe, Canada and the Middle East.",
   },
 } as const;
@@ -196,10 +111,10 @@ const publicTrustCopy = {
 } as const;
 
 const diplomaCountryCopy = {
-  fr: { label: "Pays d’obtention du diplôme", search: "Rechercher un pays dans le monde…" },
-  en: { label: "Country where the diploma was obtained", search: "Search any country…" },
-  de: { label: "Land des Diplomerwerbs", search: "Land weltweit suchen…" },
-  zh: { label: "获得文凭的国家", search: "搜索世界各地的国家…" },
+  fr: { label: "Pays d’obtention du diplôme", search: "Rechercher un pays dans le monde…", clear: "Effacer la recherche de pays" },
+  en: { label: "Country where the diploma was obtained", search: "Search any country…", clear: "Clear the country search" },
+  de: { label: "Land des Diplomerwerbs", search: "Land weltweit suchen…", clear: "Ländersuche löschen" },
+  zh: { label: "获得文凭的国家", search: "搜索世界各地的国家…", clear: "清除国家搜索" },
 } as const;
 const otherTargetCountryLabel = { fr: "Autre pays à préciser", en: "Specify the other country", de: "Anderes Land bitte angeben", zh: "请注明其他国家" } as const;
 
@@ -208,7 +123,77 @@ type FormState = {
   firstName: string; lastName: string; email: string; phone: string; specialty: string; specialtyCustom: string; diplomaCountry: string; targetCountries: string[]; otherTargetCountry: string; languages: string[]; otherLanguage: string; yearsExperience: string; message: string; gdprConsent: boolean; marketingConsent: boolean; website: string;
 };
 
-const initialForm: FormState = { firstName: "", lastName: "", email: "", phone: "", specialty: "", specialtyCustom: "", diplomaCountry: "", targetCountries: [], otherTargetCountry: "", languages: [], otherLanguage: "", yearsExperience: "", message: "", gdprConsent: false, marketingConsent: false, website: "" };
+export const initialForm: FormState = { firstName: "", lastName: "", email: "", phone: "", specialty: "", specialtyCustom: "", diplomaCountry: "", targetCountries: [], otherTargetCountry: "", languages: [], otherLanguage: "", yearsExperience: "", message: "", gdprConsent: false, marketingConsent: false, website: "" };
+
+/** Fields the standard form checks before sending, in the order they appear on it. */
+const standardFields = ["firstName", "lastName", "email", "specialty", "specialtyCustom", "diplomaCountry", "targetCountries", "otherTargetCountry", "cv", "gdprConsent", "turnstile"] as const;
+type StandardField = (typeof standardFields)[number];
+/** Control focused for each of them; the anti-bot check takes no focus. */
+const standardFieldIds: Record<Exclude<StandardField, "turnstile">, string> = {
+  firstName: "recruitment-firstName", lastName: "recruitment-lastName", email: "recruitment-email", specialty: "recruitment-specialty", specialtyCustom: "recruitment-specialty-custom", diplomaCountry: "recruitment-diploma-country-search", targetCountries: "recruitment-target-country-0", otherTargetCountry: "recruitment-other-target-country", cv: "recruitment-cv", gdprConsent: "recruitment-gdpr-consent",
+};
+
+/**
+ * Fields the standard form refuses to send, in the order of the form, which the alert follows (A11Y-03).
+ * `diplomaCountry` is the country resolved for sending, empty when none was chosen.
+ */
+export function standardInvalidFields(form: FormState, file: Pick<File, "name" | "size" | "type"> | null, turnstileToken: string | null, diplomaCountry: string): Set<StandardField> {
+  const isCustomSpecialty = form.specialty === "Autre spécialité ou profession";
+  const invalid = new Set<StandardField>();
+  if (!form.firstName.trim()) invalid.add("firstName");
+  if (!form.lastName.trim()) invalid.add("lastName");
+  if (!form.email.trim() || !/^\S+@\S+\.\S+$/.test(form.email)) invalid.add("email");
+  if (!(isCustomSpecialty ? form.specialtyCustom.trim() : form.specialty)) invalid.add(isCustomSpecialty ? "specialtyCustom" : "specialty");
+  if (!diplomaCountry) invalid.add("diplomaCountry");
+  if (!form.targetCountries.length) invalid.add("targetCountries");
+  if (form.targetCountries.includes(OTHER_TARGET_COUNTRY) && !form.otherTargetCountry.trim()) invalid.add("otherTargetCountry");
+  if (!file || !isAcceptedCvFile(file)) invalid.add("cv");
+  if (!form.gdprConsent) invalid.add("gdprConsent");
+  if (!turnstileToken) invalid.add("turnstile");
+  return invalid;
+}
+
+/**
+ * What the alert says about the fields the standard form refused (A11Y-03): each one is named,
+ * except an attached CV of the wrong format or size, which gets the format hint instead of
+ * being listed as missing.
+ */
+export function standardFieldsToCorrect(invalidFields: Iterable<StandardField>, file: Pick<File, "name" | "size" | "type"> | null, language: Language): FieldToCorrect[] {
+  const t = copy[language];
+  const names: Record<StandardField, string> = { firstName: t.firstName, lastName: t.lastName, email: t.email, specialty: t.specialty, specialtyCustom: t.specialtyCustom, diplomaCountry: diplomaCountryCopy[language].label, targetCountries: t.countries, otherTargetCountry: otherTargetCountryLabel[language], cv: t.cvField, gdprConsent: t.consentField, turnstile: getTurnstileWidgetCopy(language).label };
+  return Array.from(invalidFields, field => {
+    if (field === "turnstile") return { label: names.turnstile };
+    if (field === "cv" && file) return { detail: t.fileError, focusId: standardFieldIds.cv };
+    return { label: names[field], focusId: standardFieldIds[field] };
+  });
+}
+
+/** Multipart body of a standard application; `language` is the one the form is shown in. */
+export function buildStandardApplicationFormData({ form, cv, specialty, diplomaCountry, turnstileToken, language }: { form: FormState; cv: File; specialty: string; diplomaCountry: string; turnstileToken: string; language: Language }): FormData {
+  const body = new FormData();
+  body.append("cv", cv);
+  body.append("firstName", form.firstName);
+  body.append("lastName", form.lastName);
+  body.append("email", form.email);
+  body.append("phone", form.phone);
+  body.append("specialty", specialty);
+  body.append("diplomaCountry", diplomaCountry);
+  const submittedTargetCountries = form.targetCountries.map(country => country === OTHER_TARGET_COUNTRY ? `Autre pays : ${form.otherTargetCountry.trim()}` : country);
+  body.append("targetCountries", JSON.stringify(submittedTargetCountries));
+  const submittedLanguages = form.languages.flatMap(languageValue => languageValue === "Other"
+    ? form.otherLanguage.split(",").map(item => item.trim()).filter(Boolean)
+    : [languageValue]);
+  body.append("languages", JSON.stringify(submittedLanguages));
+  body.append("yearsExperience", form.yearsExperience);
+  body.append("message", form.message);
+  body.append("gdprConsent", form.gdprConsent ? "1" : "0");
+  body.append("marketingConsent", form.marketingConsent ? "1" : "0");
+  body.append("website", form.website);
+  body.append("turnstileToken", turnstileToken);
+  body.append("language", language);
+  return body;
+}
+
 /**
  * iOS may expose a valid file chosen from Files without a reliable MIME type.
  * The server still performs signature and MIME validation before it stores the CV.
@@ -218,12 +203,45 @@ export function isAcceptedCvFile(file: Pick<File, "name" | "size" | "type"> | nu
   return isAcceptedRecruitmentCvFile(file);
 }
 
+/** Message shown when the API refuses an application: the VVIP page's mapping, translated by code. */
+export function standardSubmissionErrorMessage(payload: { error?: unknown; code?: unknown } | null | undefined, language: Language, status?: number): string {
+  return recruitmentSubmissionErrorMessage(payload, language, copy[language], status);
+}
+
+/**
+ * Sends the application and returns the server's tracking number, or the message to show. When the
+ * request never reaches the server (offline, connection closed), the browser's own text (« Failed to
+ * fetch ») is not shown: the candidate is asked to try again.
+ */
+export async function sendStandardApplication(body: FormData, language: Language, send: typeof fetch = fetch): Promise<{ trackingId: string } | { error: string }> {
+  let response: Response;
+  try {
+    response = await send("/api/recruitment/apply", { method: "POST", body });
+  } catch {
+    return { error: recruitmentServiceFailureMessage(language) };
+  }
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) return { error: standardSubmissionErrorMessage(payload, language, response.status) };
+  if (typeof payload.trackingId !== "string" || !payload.trackingId) return { error: copy[language].genericError };
+  return { trackingId: payload.trackingId };
+}
+
 const WORLDWIDE_COUNTRY_CODES = "AF,AX,AL,DZ,AS,AD,AO,AI,AQ,AG,AR,AM,AW,AU,AT,AZ,BS,BH,BD,BB,BY,BE,BZ,BJ,BM,BT,BO,BQ,BA,BW,BV,BR,IO,BN,BG,BF,BI,CV,KH,CM,CA,KY,CF,TD,CL,CN,CX,CC,CO,KM,CG,CD,CK,CR,CI,HR,CU,CW,CY,CZ,DK,DJ,DM,DO,EC,EG,SV,GQ,ER,EE,SZ,ET,FK,FO,FJ,FI,FR,GF,PF,TF,GA,GM,GE,DE,GH,GI,GR,GL,GD,GP,GU,GT,GG,GN,GW,GY,HT,HM,VA,HN,HK,HU,IS,IN,ID,IR,IQ,IE,IM,IL,IT,JM,JP,JE,JO,KZ,KE,KI,KP,KR,KW,KG,LA,LV,LB,LS,LR,LY,LI,LT,LU,MO,MG,MW,MY,MV,ML,MT,MH,MQ,MR,MU,YT,MX,FM,MD,MC,MN,ME,MS,MA,MZ,MM,NA,NR,NP,NL,NC,NZ,NI,NE,NG,NU,NF,MK,MP,NO,OM,PK,PW,PS,PA,PG,PY,PE,PH,PN,PL,PT,PR,QA,RE,RO,RU,RW,BL,SH,KN,LC,MF,PM,VC,WS,SM,ST,SA,SN,RS,SC,SL,SG,SX,SK,SI,SB,SO,ZA,GS,SS,ES,LK,SD,SR,SJ,SE,CH,SY,TW,TJ,TZ,TH,TL,TG,TK,TO,TT,TN,TR,TM,TC,TV,UG,UA,AE,GB,US,UM,UY,UZ,VU,VE,VN,VG,VI,WF,EH,YE,ZM,ZW".split(",");
 
 export function getWorldwideCountries(locale: string) {
   const supportedRegions = WORLDWIDE_COUNTRY_CODES;
   const names = new Intl.DisplayNames([locale], { type: "region" });
   return supportedRegions.filter(code => code !== "ZZ").map(code => ({ code, label: names.of(code) || code })).sort((a, b) => a.label.localeCompare(b.label, locale));
+}
+
+/**
+ * The consent text, unchanged, with its « politique de confidentialité » as a
+ * link to the policy (RGPD-03), opened in a new tab so the form keeps what was typed.
+ */
+function GdprConsentText({ text, policy, newTab }: { text: string; policy: string; newTab: string }) {
+  const index = text.indexOf(policy);
+  if (index < 0) return <>{text}</>;
+  return <>{text.slice(0, index)}<a href="/legal?tab=privacy" target="_blank" rel="noopener" className="font-medium text-primary underline underline-offset-2">{policy}<span className="sr-only"> {newTab}</span></a>{text.slice(index + policy.length)}</>;
 }
 
 function normalizeCountrySearch(value: string, locale: string) {
@@ -266,14 +284,7 @@ export default function RecruitmentPage() {
   const worldwideCountries = useMemo(() => getWorldwideCountries(lang), [lang]);
   const filteredDiplomaCountries = useMemo(() => filterWorldwideCountries(worldwideCountries, diplomaCountryQuery, lang).slice(0, 30), [worldwideCountries, diplomaCountryQuery, lang]);
 
-  const filteredSpecialtyCategories = useMemo(() => {
-    const q = specialtyQuery.trim().toLowerCase();
-    if (!q) return specialtyCategories;
-    return specialtyCategories.map(group => {
-      const filteredItems = group.items.filter(item => item.toLowerCase().includes(q) || group.category.fr.toLowerCase().includes(q));
-      return { ...group, items: filteredItems };
-    }).filter(group => group.items.length > 0);
-  }, [specialtyQuery]);
+  const filteredSpecialtyCategories = useMemo(() => filterRecruitmentSpecialties(specialtyQuery, lang), [specialtyQuery, lang]);
 
   const update = <K extends keyof FormState>(key: K, value: FormState[K]) => {
     setForm(previous => ({ ...previous, [key]: value }));
@@ -299,6 +310,25 @@ export default function RecruitmentPage() {
     update("languages", form.languages.includes(languageValue) ? form.languages.filter(item => item !== languageValue) : [...form.languages, languageValue]);
   };
 
+  /**
+   * A CV of the wrong format or size is reported as soon as it is chosen, not only when sending (A11Y-03).
+   * The alert of a refused send, or of a refused CV, then names what is still to correct, without taking
+   * focus from the file field; a server's refusal stays until a refused CV replaces it.
+   */
+  const chooseCv = (selected: File | null) => {
+    setFile(selected);
+    const refused = selected !== null && !isAcceptedCvFile(selected);
+    const remaining = new Set(invalidFields);
+    if (refused) remaining.add("cv"); else remaining.delete("cv");
+    if (turnstileToken) remaining.delete("turnstile");
+    setInvalidFields(remaining);
+    if (!refused && !invalidFields.size) return;
+    setValidationAttempted(true);
+    const toCorrect = standardFields.filter(field => remaining.has(field));
+    if (toCorrect.length) { setStatus("error"); setErrorMessage(fieldsToCorrectMessage(standardFieldsToCorrect(toCorrect, selected, lang), lang)); }
+    else { setStatus("idle"); setErrorMessage(""); }
+  };
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setErrorMessage("");
@@ -306,61 +336,29 @@ export default function RecruitmentPage() {
     const submittedDiplomaCountry = resolveCountryForSubmission(form.diplomaCountry, new FormData(event.currentTarget).get("diplomaCountry"), worldwideCountries.map(country => country.label));
     const isCustomSpecialty = form.specialty === "Autre spécialité ou profession";
     const finalSpecialty = isCustomSpecialty ? form.specialtyCustom.trim() : form.specialty;
-    const nextInvalidFields = new Set<string>();
-    if (!form.firstName.trim()) nextInvalidFields.add("firstName");
-    if (!form.lastName.trim()) nextInvalidFields.add("lastName");
-    if (!form.email.trim() || !/^\S+@\S+\.\S+$/.test(form.email)) nextInvalidFields.add("email");
-    if (!finalSpecialty) nextInvalidFields.add(isCustomSpecialty ? "specialtyCustom" : "specialty");
-    if (!submittedDiplomaCountry) nextInvalidFields.add("diplomaCountry");
-    if (!form.targetCountries.length) nextInvalidFields.add("targetCountries");
-    if (form.targetCountries.includes(OTHER_TARGET_COUNTRY) && !form.otherTargetCountry.trim()) nextInvalidFields.add("otherTargetCountry");
-    if (!file || !isAcceptedCvFile(file)) nextInvalidFields.add("cv");
-    if (!form.gdprConsent) nextInvalidFields.add("gdprConsent");
-    if (!turnstileToken) nextInvalidFields.add("turnstile");
+    const nextInvalidFields = standardInvalidFields(form, file, turnstileToken, submittedDiplomaCountry);
     if (nextInvalidFields.size) {
       setInvalidFields(nextInvalidFields);
-      setStatus("error"); setErrorMessage(`${t.required}.`); return;
+      setStatus("error"); setErrorMessage(reportFieldsToCorrect(standardFieldsToCorrect(nextInvalidFields, file, lang), lang)); return;
     }
     setInvalidFields(new Set());
     if (!file) return;
     if (!turnstileToken) return;
 
-    const body = new FormData();
-    body.append("cv", file);
-    body.append("firstName", form.firstName);
-    body.append("lastName", form.lastName);
-    body.append("email", form.email);
-    body.append("phone", form.phone);
-    body.append("specialty", finalSpecialty);
-    body.append("diplomaCountry", submittedDiplomaCountry);
-    const submittedTargetCountries = form.targetCountries.map(country => country === OTHER_TARGET_COUNTRY ? `Autre pays : ${form.otherTargetCountry.trim()}` : country);
-    body.append("targetCountries", JSON.stringify(submittedTargetCountries));
-    const submittedLanguages = form.languages.flatMap(languageValue => languageValue === "Other"
-      ? form.otherLanguage.split(",").map(item => item.trim()).filter(Boolean)
-      : [languageValue]);
-    body.append("languages", JSON.stringify(submittedLanguages));
-    body.append("yearsExperience", form.yearsExperience);
-    body.append("message", form.message);
-    body.append("gdprConsent", form.gdprConsent ? "1" : "0");
-    body.append("marketingConsent", form.marketingConsent ? "1" : "0");
-    body.append("website", form.website);
-    body.append("turnstileToken", turnstileToken);
+    const body = buildStandardApplicationFormData({ form, cv: file, specialty: finalSpecialty, diplomaCountry: submittedDiplomaCountry, turnstileToken, language: lang });
 
     setStatus("sending");
-    try {
-      const response = await fetch("/api/recruitment/apply", { method: "POST", body });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(payload.error || t.genericError);
-      if (typeof payload.trackingId !== "string" || !payload.trackingId) throw new Error(t.genericError);
-      setTrackingId(payload.trackingId);
+    const result = await sendStandardApplication(body, lang);
+    if ("trackingId" in result) {
+      setTrackingId(result.trackingId);
       setTurnstileToken(null);
       setValidationAttempted(false);
       setStatus("success");
-    } catch (submissionError) {
-      setTurnstileToken(null);
-      setTurnstileAttempt(value => value + 1);
-      setStatus("error"); setErrorMessage(submissionError instanceof Error ? submissionError.message : t.genericError);
+      return;
     }
+    setTurnstileToken(null);
+    setTurnstileAttempt(value => value + 1);
+    setStatus("error"); setErrorMessage(result.error);
   }
 
   return (
@@ -428,7 +426,7 @@ export default function RecruitmentPage() {
                             type="button"
                             onClick={() => setSpecialtyQuery("")}
                             className="site-search-clear"
-                            aria-label="Effacer la recherche de spécialité"
+                            aria-label={t.clearSpecialtySearch}
                           >
                             <X className="h-4 w-4" />
                           </button>
@@ -441,25 +439,26 @@ export default function RecruitmentPage() {
                         ) : (
                           filteredSpecialtyCategories.map(group => (
                             <optgroup key={group.category.fr} label={group.category[lang] || group.category.fr}>
-                              {group.items.map(item => <option key={item} value={item}>{item}</option>)}
+                              {group.items.map(item => <option key={item.value} value={item.value}>{item.labels[lang]}</option>)}
                             </optgroup>
                           ))
                         )}
                       </select>
                       {form.specialty && form.specialty !== "Autre spécialité ou profession" && (
-                        <p className="mt-1.5 text-xs text-primary font-medium">Sélectionné : {form.specialty}</p>
+                        <p className="mt-1.5 text-xs text-primary font-medium">{t.selected.replace("{specialty}", recruitmentSpecialtyLabel(form.specialty, lang))}</p>
                       )}
                       {form.specialty === "Autre spécialité ou profession" && (
-                        <label className="mt-3 block">
-                          <span className="sr-only">{t.specialtyCustom}</span>
+                        <label className="recruitment-field-group mt-3">
+                          <span>{t.specialtyCustom} *</span>
                           <input
                             id="recruitment-specialty-custom"
                             required
                             value={form.specialtyCustom}
+                            maxLength={RECRUITMENT_CUSTOM_SPECIALTY_MAX_LENGTH}
                             aria-invalid={isInvalid("specialtyCustom")}
                             onChange={event => update("specialtyCustom", event.target.value)}
                             className={`recruitment-field ${isInvalid("specialtyCustom") ? "form-field-invalid" : ""}`}
-                            placeholder={`${t.specialtyCustom} *`}
+                            placeholder={customSpecialtyPlaceholder[lang]}
                           />
                         </label>
                       )}
@@ -493,7 +492,7 @@ export default function RecruitmentPage() {
                         aria-controls="recruitment-diploma-country-options"
                         aria-autocomplete="list"
                       />
-                      {diplomaCountryQuery && <button type="button" onClick={() => { setDiplomaCountryQuery(""); setDiplomaCountryOpen(true); }} className="site-search-clear" aria-label="Effacer la recherche"><X className="h-4 w-4" /></button>}
+                      {diplomaCountryQuery && <button type="button" onClick={() => { setDiplomaCountryQuery(""); setDiplomaCountryOpen(true); }} className="site-search-clear" aria-label={diplomaCopy.clear}><X className="h-4 w-4" /></button>}
                     </div>
                     {form.diplomaCountry && <p className="text-xs font-medium text-primary">{diplomaCopy.label} : {form.diplomaCountry}</p>}
                     {diplomaCountryOpen && (
@@ -507,14 +506,7 @@ export default function RecruitmentPage() {
                     )}
                   </div>
 
-                  {form.specialty === "Autre spécialité ou profession" && (
-                    <label className="recruitment-field-group animate-in fade-in duration-200">
-                      <span>{t.specialtyCustom} *</span>
-                      <input id="recruitment-specialty-custom" required value={form.specialtyCustom} aria-invalid={isInvalid("specialty")} onChange={event => update("specialtyCustom", event.target.value)} placeholder="Ex. Perfusionniste, Audioprothésiste, etc." className={`recruitment-field ${isInvalid("specialty") ? "form-field-invalid" : ""}`} />
-                    </label>
-                  )}
-
-                  <fieldset className={isInvalid("targetCountries") ? "form-consent-group-invalid" : ""}><legend className="mb-3 text-sm font-medium text-foreground">{t.countries} *</legend><div className="grid gap-2 sm:grid-cols-2">{countryOptions.map(country => <label key={country.value} className="form-consent-item flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-foreground"><input type="checkbox" checked={form.targetCountries.includes(country.value)} onChange={() => toggleCountry(country.value)} className="form-consent-checkbox" />{country.labels[lang]}</label>)}</div>{form.targetCountries.includes(OTHER_TARGET_COUNTRY) && <label className="recruitment-field-group mt-4 animate-in fade-in duration-200"><span>{otherTargetCountryLabel[lang]} *</span><input id="recruitment-other-target-country" required value={form.otherTargetCountry} aria-invalid={isInvalid("otherTargetCountry")} onChange={event => update("otherTargetCountry", event.target.value)} className={`recruitment-field ${isInvalid("otherTargetCountry") ? "form-field-invalid" : ""}`} /></label>}<p className="sr-only">{selectedCountryLabels}</p></fieldset>
+                  <fieldset className={isInvalid("targetCountries") ? "form-consent-group-invalid" : ""}><legend className="mb-3 text-sm font-medium text-foreground">{t.countries} *</legend><div className="grid gap-2 sm:grid-cols-2">{countryOptions.map((country, index) => <label key={country.value} className="form-consent-item flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-foreground"><input id={`recruitment-target-country-${index}`} type="checkbox" checked={form.targetCountries.includes(country.value)} onChange={() => toggleCountry(country.value)} className="form-consent-checkbox" />{country.labels[lang]}</label>)}</div>{form.targetCountries.includes(OTHER_TARGET_COUNTRY) && <label className="recruitment-field-group mt-4 animate-in fade-in duration-200"><span>{otherTargetCountryLabel[lang]} *</span><input id="recruitment-other-target-country" required value={form.otherTargetCountry} aria-invalid={isInvalid("otherTargetCountry")} onChange={event => update("otherTargetCountry", event.target.value)} className={`recruitment-field ${isInvalid("otherTargetCountry") ? "form-field-invalid" : ""}`} /></label>}<p className="sr-only">{selectedCountryLabels}</p></fieldset>
                   
                   <fieldset>
                     <legend className="mb-3 text-sm font-medium text-foreground">{t.languages}</legend>
@@ -524,7 +516,7 @@ export default function RecruitmentPage() {
                         {option.labels[lang]}
                       </label>)}
                     </div>
-                    {form.languages.includes("Other") && <label className="recruitment-field-group mt-4 animate-in fade-in duration-200"><span>{otherLanguageLabel[lang]}</span><input id="recruitment-other-language" value={form.otherLanguage} onChange={event => update("otherLanguage", event.target.value)} placeholder="Ex. Italien, russe…" className="recruitment-field" /></label>}
+                    {form.languages.includes("Other") && <label className="recruitment-field-group mt-4 animate-in fade-in duration-200"><span>{otherLanguageLabel[lang]}</span><input id="recruitment-other-language" value={form.otherLanguage} onChange={event => update("otherLanguage", event.target.value)} placeholder={otherLanguagePlaceholder[lang]} className="recruitment-field" /></label>}
                   </fieldset>
                   
                   <label className="recruitment-field-group">
@@ -532,8 +524,8 @@ export default function RecruitmentPage() {
                     <textarea id="recruitment-message" value={form.message} onChange={event => update("message", event.target.value)} className="recruitment-field min-h-28 resize-y" maxLength={5000} />
                   </label>
                   
-                  <div className={`rounded-xl border border-dashed border-primary/40 bg-primary/5 p-4 ${isInvalid("cv") ? "form-file-invalid" : ""}`}><label htmlFor="recruitment-cv" className="flex cursor-pointer items-center gap-3 text-sm font-medium text-foreground"><FileUp className="h-5 w-5 text-primary" /><span>{file ? file.name : t.chooseFile}</span><input ref={fileInputRef} id="recruitment-cv" type="file" accept={RECRUITMENT_CV_ACCEPT_ATTRIBUTE} onChange={event => { setFile(event.target.files?.[0] || null); setInvalidFields(previous => { const next = new Set(previous); next.delete("cv"); return next; }); }} className="sr-only" required /></label><p className="mt-2 text-xs text-muted-foreground">{file ? `${(file.size / (1024 * 1024)).toFixed(2)} MB` : t.cv}</p></div>
-                  <label className={`form-consent-item flex items-start gap-3 text-sm text-muted-foreground ${isInvalid("gdprConsent") ? "form-consent-item-invalid" : ""}`}><input type="checkbox" checked={form.gdprConsent} aria-invalid={isInvalid("gdprConsent")} onChange={event => update("gdprConsent", event.target.checked)} className="form-consent-checkbox mt-1" required /><span>{t.gdpr}</span></label>
+                  <div className={`rounded-xl border border-dashed border-primary/40 bg-primary/5 p-4 focus-within:ring-2 focus-within:ring-primary ${isInvalid("cv") ? "form-file-invalid" : ""}`}><label htmlFor="recruitment-cv" className="flex cursor-pointer items-center gap-3 text-sm font-medium text-foreground"><FileUp className="h-5 w-5 shrink-0 text-primary" />{file ? <FileNameLabel name={file.name} /> : <span>{t.chooseFile}</span>}<input ref={fileInputRef} id="recruitment-cv" type="file" accept={RECRUITMENT_CV_ACCEPT_ATTRIBUTE} aria-invalid={isInvalid("cv")} aria-describedby="recruitment-cv-hint" disabled={status === "sending"} onChange={event => chooseCv(event.target.files?.[0] || null)} className="sr-only" required /></label><p id="recruitment-cv-hint" className="mt-2 text-xs text-muted-foreground">{file ? `${(file.size / (1024 * 1024)).toFixed(2)} MB · ${t.cv}` : t.cv}</p></div>
+                  <label className={`form-consent-item flex items-start gap-3 text-sm text-muted-foreground ${isInvalid("gdprConsent") ? "form-consent-item-invalid" : ""}`}><input id="recruitment-gdpr-consent" type="checkbox" checked={form.gdprConsent} aria-invalid={isInvalid("gdprConsent")} onChange={event => update("gdprConsent", event.target.checked)} className="form-consent-checkbox mt-1" required /><span><GdprConsentText text={t.gdpr} policy={t.gdprPolicyLink} newTab={t.newTab} /></span></label>
                   <label className="form-consent-item flex items-start gap-3 text-sm text-muted-foreground"><input type="checkbox" checked={form.marketingConsent} onChange={event => update("marketingConsent", event.target.checked)} className="form-consent-checkbox mt-1" /><span>{t.marketing}</span></label>
                   <div className={isInvalid("turnstile") ? "rounded-xl border border-destructive/50 p-2" : ""}><TurnstileWidget key={turnstileAttempt} onToken={setTurnstileToken} /></div>
                   <label className="absolute -left-[10000px] h-px w-px overflow-hidden" aria-hidden="true"><span>Website</span><input tabIndex={-1} autoComplete="off" value={form.website} onChange={event => update("website", event.target.value)} /></label>

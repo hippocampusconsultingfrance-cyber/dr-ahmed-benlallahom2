@@ -20,17 +20,9 @@ const schemaTables = Object.values(schema)
   .map(table => getTableConfig(table));
 
 describe("source de vérité des migrations Drizzle (M32)", () => {
-  it("aligne la documentation avec la sortie PostgreSQL déclarée dans la configuration", () => {
-    const config = read("drizzle.config.ts");
-    const guide = read("drizzle/MIGRATION_SOURCE_OF_TRUTH.md");
-    expect(config).toContain('out: "./drizzle/pg"');
-    expect(config).toContain('dialect: "postgresql"');
-    expect(guide).toContain("drizzle.config.ts");
-    expect(guide).toContain("source de vérité");
-    expect(guide).toContain("drizzle/pg/");
-    // L'ancien dossier manuel reste documenté comme historique.
-    expect(guide).toContain("drizzle/migrations/");
-    expect(guide).toContain("drizzle/legacy-mysql/");
+  it("fait écrire à drizzle-kit les migrations PostgreSQL dans drizzle/pg, depuis drizzle/schema.ts", async () => {
+    const { default: config } = await import("../drizzle.config");
+    expect(config).toMatchObject({ schema: "./drizzle/schema.ts", out: "./drizzle/pg", dialect: "postgresql" });
   });
 
   it("isole l'historique MySQL, jamais lu par drizzle-kit", () => {
@@ -86,6 +78,51 @@ describe("source de vérité des migrations Drizzle (M32)", () => {
     const dialect = new PgDialect();
     const body = normalize(migration);
     for (const statement of APPOINTMENT_INVOICE_DDL) expect(body).toContain(normalize(dialect.sqlToQuery(statement).sql));
+  });
+
+  it("0002 ajoute la colonne language de façon idempotente, avec le même DDL que l'application (EN-01, EN-02)", async () => {
+    const migration = read("drizzle/pg/0002_language_columns.sql");
+    const normalize = (text: string) => text.replace(/--[^\n]*\n/g, "").replace(/\s+/g, " ").replace(/ ?statement-breakpoint ?/g, "").replace(/;/g, "").trim();
+    expect(migration).not.toMatch(/ADD COLUMN "/);
+    const { LANGUAGE_COLUMN_DDL } = await import("./languageColumns");
+    const { PgDialect } = await import("drizzle-orm/pg-core");
+    const dialect = new PgDialect();
+    const body = normalize(migration);
+    for (const statement of LANGUAGE_COLUMN_DDL) expect(body).toContain(normalize(dialect.sqlToQuery(statement).sql));
+  });
+
+  it("0003 ajoute confirmed_at et candidate_consent_at de façon idempotente, avec le même DDL que l'application (IA-02, RGPD-03)", async () => {
+    const migration = read("drizzle/pg/0003_mission_shortlist_columns.sql");
+    const normalize = (text: string) => text.replace(/--[^\n]*\n/g, "").replace(/\s+/g, " ").replace(/ ?statement-breakpoint ?/g, "").replace(/;/g, "").trim();
+    expect(migration).not.toMatch(/ADD COLUMN "/);
+    const { MISSION_COLUMN_DDL } = await import("./languageColumns");
+    const { PgDialect } = await import("drizzle-orm/pg-core");
+    const dialect = new PgDialect();
+    const body = normalize(migration);
+    expect(MISSION_COLUMN_DDL).toHaveLength(2);
+    for (const statement of MISSION_COLUMN_DDL) expect(body).toContain(normalize(dialect.sqlToQuery(statement).sql));
+    const journal = JSON.parse(read("drizzle/pg/meta/_journal.json")) as { entries: { idx: number; tag: string }[] };
+    expect(journal.entries.find(entry => entry.idx === 3)).toMatchObject({ idx: 3, tag: "0003_mission_shortlist_columns" });
+  });
+
+  it("0004 pose chaque clé étrangère et CHECK du schéma NOT VALID puis VALIDATE, et ses index uniques sans supprimer de candidature (DATA-01, DATA-11)", () => {
+    const migration = read("drizzle/pg/0004_integrity_constraints.sql");
+    const statements = migration.split("--> statement-breakpoint");
+    const constraints = schemaTables.flatMap(table => [...table.foreignKeys.map(key => key.getName()), ...table.checks.map(check => check.name)]);
+    expect(constraints.sort()).toEqual(["appointments_appointment_status_check", "appointments_payment_status_check", "candidate_documents_candidate_id_fk"]);
+    for (const name of constraints) {
+      const added = statements.findIndex(statement => new RegExp(`ADD CONSTRAINT ${name}\\b[^;]*NOT VALID;`).test(statement));
+      const validated = statements.findIndex(statement => statement.trim().endsWith(`VALIDATE CONSTRAINT ${name};`));
+      expect(added, name).toBeGreaterThanOrEqual(0);
+      expect(validated, name).toBeGreaterThan(added);
+    }
+    for (const name of ["client_brief_candidates_pair_unique", "cv_applications_submission_unique"]) {
+      expect(migration).toContain(`IF to_regclass('${name}') IS NULL THEN`);
+      expect(migration).toContain(`CREATE UNIQUE INDEX ${name} ON`);
+    }
+    expect(migration).not.toMatch(/DELETE FROM cv_applications/i);
+    const journal = JSON.parse(read("drizzle/pg/meta/_journal.json")) as { entries: { idx: number; tag: string }[] };
+    expect(journal.entries.at(-1)).toMatchObject({ idx: 4, tag: "0004_integrity_constraints" });
   });
 
   it("la baseline crée les 36 tables du schéma", () => {

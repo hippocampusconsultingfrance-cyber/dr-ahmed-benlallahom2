@@ -15,6 +15,27 @@
       "when": 1792177809116,
       "tag": "0001_appointment_invoices",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792937705446,
+      "tag": "0002_language_columns",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1792989524778,
+      "tag": "0003_mission_shortlist_columns",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1793035571045,
+      "tag": "0004_integrity_constraints",
+      "breakpoints": true
     }
   ]
 }

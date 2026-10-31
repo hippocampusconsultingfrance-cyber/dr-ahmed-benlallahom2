@@ -144,3 +144,31 @@ describe("page de repli SPA servie par Vercel", () => {
     expect(build).toMatch(/^NODE_ENV=production vite build && tsx scripts\/prerender-route-seo\.ts && esbuild /);
   });
 });
+
+describe("contenu sans JavaScript des pages pré-rendues (SEOP-01)", () => {
+  it("donne le titre, la description et les liens principaux de la route, hors de #root", () => {
+    const { html } = pageFor("/faq");
+    const seo = getRouteSeo("/faq");
+    const noscript = html.slice(html.indexOf("<noscript>"), html.indexOf("</noscript>"));
+
+    expect(html).toContain('<div id="root"></div>');
+    expect(html.indexOf("<noscript>")).toBeGreaterThan(html.indexOf('<div id="root"></div>'));
+    expect(html.indexOf("</noscript>")).toBeLessThan(html.indexOf("</body>"));
+    expect(noscript).toContain(`<h1>${seo.title}</h1>`);
+    expect(noscript).toContain(`<p>${seo.description}</p>`);
+    expect(noscript).toContain('<nav aria-label="Liens principaux">');
+    expect(noscript).toContain('<a href="/booking">Réserver une consultation</a>');
+    expect(noscript).toContain('<a href="/faq" aria-current="page">Questions fréquentes</a>');
+  });
+
+  it("est présent dans chaque page pré-rendue et dans la page de repli, en français avec l’avis aussi en anglais", () => {
+    for (const page of buildPrerenderedPages(TEMPLATE).filter(candidate => candidate.file !== SPA_TEMPLATE_FILE)) {
+      expect(page.html.match(/<noscript>/g), page.file).toHaveLength(1);
+      expect(page.html, page.file).toMatch(/<a href="\/booking"( aria-current="page")?>Réserver une consultation<\/a>/);
+      expect(page.html, page.file).toContain("Activez JavaScript dans votre navigateur pour afficher cette page en entier.");
+      expect(page.html, page.file).toContain('<p lang="en">Enable JavaScript in your browser to view this page in full.</p>');
+    }
+    expect(pageFor("/booking").html).toContain('<a href="/booking" aria-current="page">');
+    expect(buildPrerenderedPages(TEMPLATE).find(page => page.file === SPA_FALLBACK_FILE)?.html).toContain("<h1>Dr. Ahmed Ben Lallahom</h1>");
+  });
+});

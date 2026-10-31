@@ -4,9 +4,9 @@ import { useLanguage } from "@/contexts/LanguageContext";
 // Adresse de contact publique unique du site (PUB-CONTACT-01), aussi utilisée par la facture et le JSON-LD.
 import { siteConfig } from "@/data/site-config";
 import { ArrowLeft } from "lucide-react";
-import { Link, useSearch } from "wouter";
+import { Link, useSearchParams } from "wouter";
 import { SEOHead } from "@/components/SEOHead";
-import { useState, useEffect } from "react";
+import { useEffect } from "react";
 import Breadcrumb from "@/components/Breadcrumb";
 // Source unique de l’identité légale, partagée avec la facture PDF.
 import { HIPPOCAMPUS_LEGAL } from "@shared/legalIdentity";
@@ -29,16 +29,7 @@ export default function LegalPage() {
 }
 
 function LegalPageFr() {
-  const search = useSearch();
-  const params = new URLSearchParams(search);
-  const tabParam = params.get("tab") as "legal" | "privacy" | "terms" | null;
-  const [activeTab, setActiveTab] = useState<"legal" | "privacy" | "terms">(tabParam || "legal");
-
-  useEffect(() => {
-    if (tabParam) {
-      setActiveTab(tabParam);
-    }
-  }, [tabParam]);
+  const [activeTab, setActiveTab] = useLegalTab();
 
   return (
     <div className="min-h-screen bg-background">
@@ -218,7 +209,7 @@ function LegalPageFr() {
                   </ul>
                   <p className="mt-4">Pour exercer ces droits, utilisez le formulaire dédié <Link href="/gdpr" className="text-primary underline underline-offset-2">Exercer mes droits RGPD</Link> ou écrivez-nous à <a href={`mailto:${siteConfig.email}`} className="text-primary underline-offset-2 hover:underline">{siteConfig.email}</a>.</p>
 
-                  <h3 id="cookies" className="font-semibold text-foreground mt-4 scroll-mt-28">7. Cookies et technologies de suivi</h3>
+                  <h3 id="cookies" className="font-semibold text-foreground mt-4 scroll-mt-4">7. Cookies et technologies de suivi</h3>
                   <p>Ce site utilise :</p>
                   <ul className="list-disc list-inside space-y-2 ml-2">
                     <li><strong>Traceurs essentiels (sans consentement) :</strong> mémorisation de votre choix en matière de cookies, protection anti-robot des formulaires (Cloudflare Turnstile), session de l’espace candidat et, uniquement sur l’espace d’administration, l’authentification Clerk.</li>
@@ -326,16 +317,7 @@ function LegalPageFr() {
 }
 
 function LegalPageEn() {
-  const search = useSearch();
-  const params = new URLSearchParams(search);
-  const tabParam = params.get("tab") as "legal" | "privacy" | "terms" | null;
-  const [activeTab, setActiveTab] = useState<"legal" | "privacy" | "terms">(tabParam || "legal");
-
-  useEffect(() => {
-    if (tabParam) {
-      setActiveTab(tabParam);
-    }
-  }, [tabParam]);
+  const [activeTab, setActiveTab] = useLegalTab();
 
   return (
     <div className="min-h-screen bg-background">
@@ -444,9 +426,10 @@ function LegalPageEn() {
             {activeTab === "privacy" && (
               <section className="space-y-6 animate-in fade-in duration-300">
                 <h2 className="text-2xl font-bold text-foreground">Privacy Policy</h2>
+                <PrivacyReferenceVersionNotice language="en" />
                 <div className="text-muted-foreground space-y-4">
                   <h3 className="font-semibold text-foreground">1. Collection of personal data</h3>
-                  <p>This website processes personal data through the contact form, consultation booking and payment, invoice issuance, and GDPR rights requests. Collected data includes:</p>
+                  <p>This website processes personal data through the contact forms, applications and the candidate portal, recruitment for facilities, consultation booking and payment, invoice issuance, the free question-and-answer service on anaesthesia and surgery, and the handling of GDPR requests. Collected data includes:</p>
                   <ul className="list-disc list-inside space-y-2 ml-2">
                     <li>Full name</li>
                     <li>Email address</li>
@@ -456,6 +439,9 @@ function LegalPageEn() {
                     <li>Session cookies</li>
                     <li>Requested date and time, consultation request, and booking reference</li>
                     <li>Invoice information; card data is handled directly by Stripe</li>
+                    <li>Application data: CV, specialty, country of qualification, experience, languages, certifications, mobility and assignment preferences</li>
+                    <li>Documents voluntarily uploaded to the candidate portal, protected by appropriate technical measures</li>
+                    <li>For the free question service: last name, first name, email, phone number, free-text question, consents and, where applicable, an anonymised version intended for publication</li>
                   </ul>
 
                   <h3 className="font-semibold text-foreground mt-4">2. Legal basis for processing</h3>
@@ -476,11 +462,14 @@ function LegalPageEn() {
                     <li>Preventing fraud and abuse</li>
                   </ul>
                   <p className="mt-4"><strong>No sale or commercial use:</strong> Your data is not sold or used for commercial purposes. It may be transmitted to the processors strictly required to operate the service, as described in the dedicated section below.</p>
+                  <p className="mt-4"><strong>Recruitment and AI:</strong> the automated analysis of applications is used only as an aid to reading applications and matching profiles. It produces no hiring or rejection decision without human review.</p>
+                  <p className="mt-4"><strong>Medical questions and AI:</strong> the free service provides general information only. The answer is written and validated by the doctor; AI assistance may improve the syntax of an administrator’s draft, without answering the person directly, adding new medical content, or triggering any automatic sending or publication. Contact details are not passed to this assistance.</p>
 
                   <h3 className="font-semibold text-foreground mt-4">4. Data retention</h3>
                   <p>Personal data is retained for:</p>
                   <ul className="list-disc list-inside space-y-2 ml-2">
                     <li><strong>Contact data:</strong> 3 years after your last contact or until your deletion request</li>
+                    <li><strong>Free medical questions:</strong> 3 years after the last exchange or until you exercise your right to erasure; public versions are kept only with separate consent and can be withdrawn on request</li>
                     <li><strong>Access logs:</strong> Maximum 90 days</li>
                     <li><strong>Cookies:</strong> According to your consent (up to 13 months)</li>
                   </ul>
@@ -509,7 +498,7 @@ function LegalPageEn() {
                   </ul>
                   <p className="mt-4">To exercise these rights, use the dedicated form <Link href="/gdpr" className="text-primary underline underline-offset-2">Exercise my GDPR rights</Link> or write to <a href={`mailto:${siteConfig.email}`} className="text-primary underline-offset-2 hover:underline">{siteConfig.email}</a>.</p>
 
-                  <h3 id="cookies" className="font-semibold text-foreground mt-4 scroll-mt-28">7. Cookies and tracking technologies</h3>
+                  <h3 id="cookies" className="font-semibold text-foreground mt-4 scroll-mt-4">7. Cookies and tracking technologies</h3>
                   <p>This website uses:</p>
                   <ul className="list-disc list-inside space-y-2 ml-2">
                     <li><strong>Essential trackers (no consent needed):</strong> remembering your cookie choice, bot protection of forms (Cloudflare Turnstile), the candidate area session and, on the administration area only, Clerk authentication.</li>
@@ -522,10 +511,31 @@ function LegalPageEn() {
                   <p><strong>Controller:</strong> {HIPPOCAMPUS_LEGAL.name}<br /><strong>Registered office:</strong> {HIPPOCAMPUS_LEGAL.registeredOffice}<br /><strong>Manager:</strong> {HIPPOCAMPUS_LEGAL.director}<br /><strong>Contact:</strong> <a href={`mailto:${siteConfig.email}`} className="text-primary underline-offset-2 hover:underline">{siteConfig.email}</a></p>
 
                   <h3 className="font-semibold text-foreground mt-4">9. Processors and international transfers</h3>
-                  <p>Vercel provides hosting, deployment, server functions, content delivery and Vercel Blob file storage; Neon hosts the PostgreSQL application database; Clerk provides administrator authentication; Cloudflare Turnstile protects forms against abuse; Resend sends transactional emails; Stripe processes consultation payments; and Google Drive may store controlled private CV copies after authorisation by the controller. Depending on the provider infrastructure, processing may take place outside the European Economic Area. The applicable safeguards are those provided by the providers' data processing agreements, including Standard Contractual Clauses where required. Only data necessary for booking, invoicing, recruitment, authentication, hosting, security and communications is shared, and this website does not store card data. AI-supported recruitment analysis is subject to human review and does not make automated hiring decisions.</p>
+                  <p>We use the following processors to process your data:</p>
+                  <ul className="list-disc list-inside space-y-2 ml-2">
+                    <li><strong>Vercel:</strong> Hosting, deployment, server functions, content delivery network and Vercel Blob file storage</li>
+                    <li><strong>Neon:</strong> Hosting of the PostgreSQL application database</li>
+                    <li><strong>Clerk:</strong> Secure authentication and management of administrator accounts</li>
+                    <li><strong>Cloudflare Turnstile:</strong> Abuse protection and bot verification for forms</li>
+                    <li><strong>Resend:</strong> Transactional email service (confirmations, invoices, reminders)</li>
+                    <li><strong>Stripe:</strong> Payment platform for consultation bookings</li>
+                    <li><strong>Google Drive:</strong> Where applicable, a private, logged and controlled copy of uploaded CVs, after authorisation by the controller</li>
+                  </ul>
+                  <p className="mt-4">These processors only process the categories they need: technical data for hosting and security, account data for authentication, contact details and booking references for managing appointments and communications, billing information and payment status for Stripe, and CVs and application documents for their private storage. For the free question service, any writing assistance receives only an administrator’s draft without contact details. Depending on each provider's infrastructure, processing may take place outside the European Economic Area. The applicable safeguards are those provided by their contractual commitments and data processing agreements, including Standard Contractual Clauses where required. Card data is not stored by this website.</p>
 
-                  <h3 className="font-semibold text-foreground mt-4">10. Right to lodge a complaint</h3>
-                  <p>If you believe your GDPR rights are not being respected, you have the right to lodge a complaint with the competent supervisory authority.</p>
+                  <h3 className="font-semibold text-foreground mt-4">10. Record of processing activities</h3>
+                  <p>In accordance with CNIL requirements, we maintain a record of personal data processing activities:</p>
+                  <ul className="list-disc list-inside space-y-2 ml-2">
+                    <li><strong>Processing 1 - Contact form:</strong> Collection of name, email, phone number and message. Legal basis: consent. Retention: 3 years.</li>
+                    <li><strong>Processing 2 - Consultation booking:</strong> Collection of contact and payment data. Legal basis: performance of the contract. Retention: 3 years.</li>
+                    <li><strong>Processing 3 - GDPR request:</strong> Collection of the data needed to handle access, rectification or erasure requests. Legal basis: legal obligation. Retention: 1 year.</li>
+                    <li><strong>Processing 4 - Access logs:</strong> Automatic collection of the IP address and browsing data. Legal basis: legitimate interest. Retention: 90 days.</li>
+                    <li><strong>Processing 5 - Cookies:</strong> Storage of user preferences (language, theme). Legal basis: consent. Retention: 13 months.</li>
+                    <li><strong>Processing 6 - Free medical questions:</strong> Collection of contact details, the question, consents and the answer in order to send general information by email. Legal basis: explicit consent; publication of an anonymised version relies on a separate consent. Retention: 3 years after the last exchange or until erasure.</li>
+                  </ul>
+
+                  <h3 className="font-semibold text-foreground mt-4">11. Right to lodge a complaint</h3>
+                  <p>If you believe your GDPR rights are not being respected, you have the right to lodge a complaint with the CNIL (Commission Nationale de l'Informatique et des Libertés), the French supervisory authority.</p>
                 </div>
               </section>
             )}
@@ -596,16 +606,7 @@ function LegalPageEn() {
 }
 
 function LegalPageDe() {
-  const search = useSearch();
-  const params = new URLSearchParams(search);
-  const tabParam = params.get("tab") as "legal" | "privacy" | "terms" | null;
-  const [activeTab, setActiveTab] = useState<"legal" | "privacy" | "terms">(tabParam || "legal");
-
-  useEffect(() => {
-    if (tabParam) {
-      setActiveTab(tabParam);
-    }
-  }, [tabParam]);
+  const [activeTab, setActiveTab] = useLegalTab();
 
   return (
     <div className="min-h-screen bg-background">
@@ -714,6 +715,7 @@ function LegalPageDe() {
             {activeTab === "privacy" && (
               <section className="space-y-6 animate-in fade-in duration-300">
                 <h2 className="text-2xl font-bold text-foreground">Datenschutzrichtlinie</h2>
+                <PrivacyReferenceVersionNotice language="de" />
                 <div className="text-muted-foreground space-y-4">
                   <h3 className="font-semibold text-foreground">1. Erfassung personenbezogener Daten</h3>
                   <p>Diese Website verarbeitet personenbezogene Daten über das Kontaktformular, die Buchung und Zahlung einer Konsultation, die Ausstellung von Rechnungen und die Bearbeitung von DSGVO-Anfragen. Zu den Daten gehören:</p>
@@ -779,7 +781,7 @@ function LegalPageDe() {
                   </ul>
                   <p className="mt-4">Um diese Rechte auszuüben, nutzen Sie das eigene Formular <Link href="/gdpr" className="text-primary underline underline-offset-2">Meine DSGVO-Rechte ausüben</Link> oder schreiben Sie an <a href={`mailto:${siteConfig.email}`} className="text-primary underline-offset-2 hover:underline">{siteConfig.email}</a>.</p>
 
-                  <h3 id="cookies" className="font-semibold text-foreground mt-4 scroll-mt-28">7. Cookies und Tracking-Technologien</h3>
+                  <h3 id="cookies" className="font-semibold text-foreground mt-4 scroll-mt-4">7. Cookies und Tracking-Technologien</h3>
                   <p>Diese Website verwendet:</p>
                   <ul className="list-disc list-inside space-y-2 ml-2">
                     <li><strong>Essenzielle Tracker (ohne Einwilligung):</strong> Speicherung Ihrer Cookie-Auswahl, Bot-Schutz der Formulare (Cloudflare Turnstile), Sitzung des Kandidatenbereichs und, nur im Administrationsbereich, die Clerk-Authentifizierung.</li>
@@ -866,16 +868,7 @@ function LegalPageDe() {
 }
 
 function LegalPageZh() {
-  const search = useSearch();
-  const params = new URLSearchParams(search);
-  const tabParam = params.get("tab") as "legal" | "privacy" | "terms" | null;
-  const [activeTab, setActiveTab] = useState<"legal" | "privacy" | "terms">(tabParam || "legal");
-
-  useEffect(() => {
-    if (tabParam) {
-      setActiveTab(tabParam);
-    }
-  }, [tabParam]);
+  const [activeTab, setActiveTab] = useLegalTab();
 
   return (
     <div className="min-h-screen bg-background">
@@ -984,6 +977,7 @@ function LegalPageZh() {
             {activeTab === "privacy" && (
               <section className="space-y-6 animate-in fade-in duration-300">
                 <h2 className="text-2xl font-bold text-foreground">隐私政策</h2>
+                <PrivacyReferenceVersionNotice language="zh" />
                 <div className="text-muted-foreground space-y-4">
                   <h3 className="font-semibold text-foreground">1. 个人数据收集</h3>
                   <p>本网站会在联系表格、咨询预约与付款、发票开具以及 GDPR 权利请求的范围内处理个人数据。收集的数据包括：</p>
@@ -1049,7 +1043,7 @@ function LegalPageZh() {
                   </ul>
                   <p className="mt-4">如需行使这些权利，请使用专用表格<Link href="/gdpr" className="text-primary underline underline-offset-2">行使我的 GDPR 权利</Link>，或发送邮件至 <a href={`mailto:${siteConfig.email}`} className="text-primary underline-offset-2 hover:underline">{siteConfig.email}</a>。</p>
 
-                  <h3 id="cookies" className="font-semibold text-foreground mt-4 scroll-mt-28">7. Cookie和跟踪技术</h3>
+                  <h3 id="cookies" className="font-semibold text-foreground mt-4 scroll-mt-4">7. Cookie和跟踪技术</h3>
                   <p>本网站使用：</p>
                   <ul className="list-disc list-inside space-y-2 ml-2">
                     <li><strong>必要跟踪器（无需同意）：</strong> 记住您的 Cookie 选择、表单防机器人保护（Cloudflare Turnstile）、候选人空间会话，以及仅在管理后台使用的 Clerk 身份验证。</li>
@@ -1133,6 +1127,76 @@ function LegalPageZh() {
       <Footer />
     </div>
   );
+}
+
+/**
+ * Politique de confidentialité en français, ouverte dans cette langue (?lang=, EN-03) : un lien
+ * complet, que LanguageProvider lit au chargement.
+ */
+export const FRENCH_PRIVACY_POLICY_HREF = "/legal?tab=privacy&lang=fr";
+
+/**
+ * Encadré des traductions (RGPD-01) : le texte français fait foi. L’anglais en est la
+ * traduction ; l’allemand et le chinois ne couvrent pas encore tous les traitements.
+ */
+export const privacyReferenceVersionCopy = {
+  en: {
+    title: "Reference version: French",
+    text: "The French version of this privacy policy is the reference text; this English translation is provided for information.",
+    link: "Read the French version",
+    switchNote: "(the site will be shown in French)",
+  },
+  de: {
+    title: "Referenzfassung: Französisch",
+    text: "Maßgeblich ist die französische Fassung dieser Datenschutzrichtlinie. Diese Übersetzung ist noch unvollständig: Insbesondere die Bewerbungen, der Kandidatenbereich mit seinem Dokumentenspeicher, die medizinischen Fragen und deren Speicherfristen sind nur in der französischen Fassung vollständig beschrieben.",
+    link: "Französische Fassung lesen",
+    switchNote: "(die Website wird auf Französisch angezeigt)",
+  },
+  zh: {
+    title: "参考版本：法语",
+    text: "本隐私政策以法语版本为准。本译文尚不完整：招聘申请、候选人空间及其文件库、医疗问题服务及其保存期限仅在法语版本中有完整说明。",
+    link: "阅读法语版本",
+    switchNote: "（网站将以法语显示）",
+  },
+} as const;
+
+export function PrivacyReferenceVersionNotice({ language }: { language: keyof typeof privacyReferenceVersionCopy }) {
+  const copy = privacyReferenceVersionCopy[language];
+  return (
+    <aside role="note" aria-label={copy.title} className="rounded-lg border border-primary/30 bg-primary/5 p-4 text-sm text-muted-foreground">
+      <p className="font-semibold text-foreground">{copy.title}</p>
+      <p className="mt-1">
+        {copy.text}{" "}
+        <a href={FRENCH_PRIVACY_POLICY_HREF} hrefLang="fr" className="text-primary underline underline-offset-2">{copy.link}</a>{" "}
+        {copy.switchNote}
+      </p>
+    </aside>
+  );
+}
+
+const LEGAL_TABS = ["legal", "privacy", "terms"] as const;
+type LegalTab = (typeof LEGAL_TABS)[number];
+
+/**
+ * L’onglet que nomme l’adresse (?tab=), les informations légales quand elle
+ * n’en nomme pas ou en nomme un qui n’existe pas (?tab=foo, retour arrière de
+ * ?tab=privacy vers /legal). Un onglet choisi à la main s’inscrit dans
+ * l’adresse, sans nouvelle entrée d’historique : un lien de la page vers un
+ * autre onglet (« Politique de confidentialité » du pied de page) l’ouvre
+ * donc toujours, même après le choix d’un autre onglet. Les autres paramètres
+ * (?lang=) restent.
+ */
+function useLegalTab(): [LegalTab, (tab: LegalTab) => void] {
+  const [params, setParams] = useSearchParams();
+  const named = params.get("tab");
+  const activeTab = LEGAL_TABS.find(tab => tab === named) ?? "legal";
+  const selectTab = (tab: LegalTab) => setParams(current => {
+    const next = new URLSearchParams(current);
+    if (tab === "legal") next.delete("tab");
+    else next.set("tab", tab);
+    return next;
+  }, { replace: true });
+  return [activeTab, selectTab];
 }
 
 /** Fait défiler jusqu'à l'ancre de l'URL (ex. /legal?tab=privacy#cookies depuis le bandeau cookies). */

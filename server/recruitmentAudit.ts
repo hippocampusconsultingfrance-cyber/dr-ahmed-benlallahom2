@@ -1,5 +1,7 @@
 import { getDb } from "./db";
 import { recruitmentAuditLogs } from "../drizzle/schema";
+import { foldAdminSearchText } from "../shared/adminSearchFolding";
+import { holdsRecruitmentLanguages } from "../shared/recruitmentLanguages";
 
 export type RecruitmentAuditAction =
   | "download"
@@ -40,10 +42,27 @@ export function parseRecruitmentJsonArray(value: string | null | undefined): str
   }
 }
 
+/**
+ * Most dossiers the Candidatures list checks against a matching profile (its
+ * languages and skills are checked here, not in SQL): far above the volume of
+ * the site, so in practice every dossier is checked; past it the list says
+ * that the profile was applied to the first ones only.
+ */
+export const RECRUITMENT_PROFILE_SCAN_LIMIT = 10_000;
+
+/**
+ * A country or a language as the profile compares them: folded like the
+ * filters of the list and the admin search (adminFilterContains), accents,
+ * case and ways of writing aside, so that the dossiers its SQL filter kept
+ * (« emirats » finds « Émirats arabes unis ») are not dropped here.
+ */
+const foldProfileText = (text: string) => foldAdminSearchText(text).toLowerCase();
+
 export function matchesRecruitmentProfile(input: {
   score: number | null;
   specialty: string;
   targetCountries: string[];
+  /** Declared in the form and, when its analysis is of the current version, read in the CV (normalized_languages). */
   languages: string[];
   extractedSkills: string[];
   profile: {
@@ -55,15 +74,19 @@ export function matchesRecruitmentProfile(input: {
   };
 }): boolean {
   const profile = input.profile;
-  if ((input.score ?? -1) < profile.minimumScore) return false;
+  // INTL-02: without a verified score the dossier stays in the profile, listed apart to be read.
+  if (input.score !== null && input.score < profile.minimumScore) return false;
   if (profile.specialty && !input.specialty.toLowerCase().includes(profile.specialty.toLowerCase())) return false;
-  if (profile.targetCountry && !input.targetCountries.some(country => country.toLowerCase().includes(profile.targetCountry!.toLowerCase()))) return false;
+  if (profile.targetCountry && !input.targetCountries.some(country => foldProfileText(country).includes(foldProfileText(profile.targetCountry!)))) return false;
 
-  const languages = new Set(input.languages.map(value => value.toLowerCase()));
+  const languages = new Set(input.languages.map(foldProfileText));
   const skills = new Set(input.extractedSkills.map(value => value.toLowerCase()));
   const requiredLanguages = parseRecruitmentJsonArray(profile.requiredLanguages);
   const requiredSkills = parseRecruitmentJsonArray(profile.requiredSkills);
-  if (requiredLanguages.some(value => !languages.has(value.toLowerCase()))) return false;
+  // A required language the dossier has: the same name, folded, or other names
+  // of the same languages (IA-02), the form recording « French » or « Arabic »
+  // where the admin types « Français » or « arabe ».
+  if (requiredLanguages.some(value => !languages.has(foldProfileText(value)) && !holdsRecruitmentLanguages(input.languages, value))) return false;
   if (requiredSkills.some(value => !Array.from(skills).some(skill => skill.includes(value.toLowerCase())))) return false;
   return true;
 }

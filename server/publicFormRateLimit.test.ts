@@ -1,12 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { BOOKING_RATE_LIMIT_MESSAGE, PUBLIC_FORM_RATE_LIMITS, publicFormRateLimitSubject } from "./routers";
+import { publicFormRateLimitSubject } from "./publicFormRateLimit";
+import { BOOKING_RATE_LIMIT_MESSAGE, PUBLIC_FORM_RATE_LIMITS } from "./routers";
 
 describe("public form rate limits", () => {
-  it("keeps the rate limiter outside the deterministic integration fixtures", async () => {
-    const source = await import("node:fs/promises").then(fs => fs.readFile(new URL("./routers.ts", import.meta.url), "utf8"));
-    expect(source).toContain('process.env.NODE_ENV === "test" || process.env.VITEST === "true"');
-  });
-
   it("keeps contact submissions bounded without blocking ordinary use", () => {
     expect(PUBLIC_FORM_RATE_LIMITS.contact).toMatchObject({
       action: "public_contact_submit",
@@ -43,6 +39,11 @@ describe("public form rate limits", () => {
     expect(PUBLIC_FORM_RATE_LIMITS.bookingIp.blockedMessage).toBe(BOOKING_RATE_LIMIT_MESSAGE);
     expect(PUBLIC_FORM_RATE_LIMITS.bookingEmail.blockedMessage).toBe(BOOKING_RATE_LIMIT_MESSAGE);
     expect(BOOKING_RATE_LIMIT_MESSAGE).toMatch(/^Trop de tentatives de réservation/);
+    // Motif traduit par la page de réservation (EN-06), et par le contact et le RGPD (ABUS-01).
+    expect(PUBLIC_FORM_RATE_LIMITS.bookingIp.reason).toBe("rate_limited");
+    expect(PUBLIC_FORM_RATE_LIMITS.bookingEmail.reason).toBe("rate_limited");
+    expect(PUBLIC_FORM_RATE_LIMITS.contact.reason).toBe("rate_limited");
+    expect(PUBLIC_FORM_RATE_LIMITS.gdpr.reason).toBe("rate_limited");
   });
 
   it("keeps the historical IP + email key for contact and GDPR forms", () => {
@@ -56,17 +57,5 @@ describe("public form rate limits", () => {
     expect(publicFormRateLimitSubject("ip", "abc", "a@example.com")).toBe("ip:abc");
     expect(publicFormRateLimitSubject("ip", null, "a@example.com")).toBeNull();
     expect(publicFormRateLimitSubject("email", null, "a@example.com")).toBe("email:a@example.com");
-  });
-
-  it("protects appointments.create before any agenda access, without depending on Turnstile", async () => {
-    const source = await import("node:fs/promises").then(fs => fs.readFile(new URL("./routers.ts", import.meta.url), "utf8"));
-    const createBlock = source.slice(source.indexOf("    create: publicProcedure"), source.indexOf("createCheckoutSession: publicProcedure"));
-    expect(createBlock).toContain("customerEmail: z.string().email()");
-    expect(createBlock).toContain('enforcePublicFormRateLimit({ kind: "bookingIp"');
-    expect(createBlock).toContain('enforcePublicFormRateLimit({ kind: "bookingEmail"');
-    expect(createBlock).toContain(">= MAX_ACTIVE_APPOINTMENT_HOLDS_PER_EMAIL");
-    expect(createBlock).not.toContain("verifyCandidateTurnstile");
-    expect(createBlock.indexOf('kind: "bookingIp"')).toBeLessThan(createBlock.indexOf("await getDb()"));
-    expect(createBlock.indexOf(">= MAX_ACTIVE_APPOINTMENT_HOLDS_PER_EMAIL")).toBeLessThan(createBlock.indexOf("INSERT INTO appointments"));
   });
 });

@@ -234,6 +234,33 @@ html[lang="zh"] .font-display,
   .form-consent-checkbox:focus-visible { outline: 3px solid rgb(56 189 248 / 45%); outline-offset: 3px; }
   .form-consent-item-invalid, .form-consent-group-invalid .form-consent-item { border-color: rgb(248 113 113 / 90%); background: linear-gradient(135deg, rgb(127 29 29 / 38%), rgb(69 10 10 / 52%)); }
   .form-consent-item-invalid .form-consent-checkbox, .form-consent-group-invalid .form-consent-checkbox, .form-consent-checkbox[aria-invalid="true"] { border-color: #fb7185; background: #3f111b; box-shadow: 0 0 0 3px rgb(251 113 133 / 18%); }
+
+  /*
+   * Champs « form-control » (/employers, VVIP, onglet admin Questions santé) : rendu de
+   * .recruitment-field, à garder aligné, sauf la bordure, qui atteint ici au moins 3:1 contre le
+   * fond voisin en thème clair comme sombre (WCAG 1.4.11). Dans cette couche, un utilitaire posé
+   * sur un champ ne l'emporte que sur la propriété qu'il définit : h-11 laisse jouer min-height.
+   * Les champs de /questions-anesthesie gardent leur rendu grâce à min-h-11 py-0 rounded-none et
+   * border-border. Le style d'erreur ci-dessous l'emporte par !important (A11Y-01).
+   */
+  .form-control {
+    --form-control-border: color-mix(in oklch, var(--muted-foreground) 65%, var(--border));
+    display: block;
+    width: 100%;
+    min-height: 3.2rem;
+    border: 1px solid var(--form-control-border);
+    border-radius: 0.75rem;
+    padding: 0.72rem 0.9rem;
+    background: color-mix(in oklch, var(--background) 48%, var(--card));
+    color: var(--foreground);
+    box-shadow: inset 0 1px 0 color-mix(in oklch, white 4%, transparent);
+    transition: border-color 180ms ease, box-shadow 180ms ease, background 180ms ease;
+  }
+  /* La flèche d'un select a sa propre place : une marge droite de 0,9rem ne ferait que couper la valeur choisie. */
+  select.form-control { padding-right: 0.5rem; }
+  .form-control:hover { border-color: color-mix(in oklch, var(--primary) 46%, var(--form-control-border)); }
+  .form-control:focus { border-color: var(--primary); background: color-mix(in oklch, var(--card) 84%, var(--background)); box-shadow: 0 0 0 4px color-mix(in oklch, var(--primary) 13%, transparent); }
+  .form-control::placeholder { color: var(--muted-foreground); opacity: 0.82; }
   .form-field-invalid, .recruitment-field.form-field-invalid, .form-control.form-field-invalid, .form-field-premium.form-field-invalid, [aria-invalid="true"].form-control, [aria-invalid="true"].recruitment-field { border-color: #fb7185 !important; background-color: rgb(69 10 10 / 52%) !important; box-shadow: 0 0 0 3px rgb(251 113 133 / 18%) !important; }
   .form-field-invalid:focus, [aria-invalid="true"].form-control:focus, [aria-invalid="true"].recruitment-field:focus { border-color: #fb7185 !important; outline: none; }
   .form-file-invalid { border-color: #fb7185 !important; background: linear-gradient(135deg, rgb(127 29 29 / 38%), rgb(69 10 10 / 52%)) !important; box-shadow: 0 0 0 3px rgb(251 113 133 / 14%); }
@@ -258,9 +285,16 @@ html[lang="zh"] .font-display,
   .candidate-consent-item-invalid { border-color: #fb7185; background: linear-gradient(135deg, rgb(127 29 29 / 52%), rgb(69 10 10 / 66%)); box-shadow: 0 0 0 3px rgb(251 113 133 / 14%); }
   .candidate-consent-item-invalid .candidate-consent-checkbox { border-color: #fb7185; background: #3f111b; }
 
+  /*
+   * Un ancêtre transformé devient le repère de l'en-tête fixe, qui défile alors avec la page (PUB-01).
+   * D'où « backwards » et non « both » (rien ne reste après l'animation), et, sur les pages qui ont
+   * l'en-tête, une animation posée sur ses voisins plutôt que sur le conteneur : pendant les 180 ms,
+   * par exemple quand un retour arrière restaure le défilement, l'en-tête reste en haut de l'écran.
+   */
   @media (prefers-reduced-motion: no-preference) {
-    .page-transition {
-      animation: page-transition-enter 180ms cubic-bezier(0.23, 1, 0.32, 1) both;
+    .page-transition:not(:has(> * > .site-nav)),
+    .page-transition > :has(> .site-nav) > :not(.site-nav) {
+      animation: page-transition-enter 180ms cubic-bezier(0.23, 1, 0.32, 1) backwards;
     }
   }
 
@@ -269,7 +303,8 @@ html[lang="zh"] .font-display,
     to { opacity: 1; transform: translateY(0); }
   }
 
-  html.data-saver .page-transition {
+  html.data-saver .page-transition,
+  html.data-saver .page-transition > :has(> .site-nav) > :not(.site-nav) {
     animation: none;
   }
 
@@ -429,6 +464,18 @@ html[lang="zh"] .font-display,
   }
   .parallax-subtle:not(.visible) {
     transform: scale(0.97);
+  }
+
+  /*
+   * Section pas encore révélée qui reçoit le focus clavier : affichée aussitôt, à sa place. Sinon elle
+   * reste transparente 0,7 s et son décalage, retiré après le défilement, glisse l'élément focalisé
+   * sous l'en-tête fixe (WCAG 2.4.11).
+   */
+  .fade-in-up:focus-within,
+  .parallax-subtle:focus-within {
+    opacity: 1;
+    transform: none;
+    transition: none;
   }
 
   /* Smooth hover lift for interactive cards */
@@ -779,6 +826,22 @@ html {
   scroll-behavior: smooth;
 }
 
+/*
+ * En-tête fixe (Navigation : h-18, puis md:h-20) : ce que le navigateur fait défiler pour un focus
+ * clavier (Maj+Tab), une ancre ou scrollIntoView s'arrête sous lui au lieu de finir caché dessous
+ * (WCAG 2.4.11). 1,25rem de plus que l'en-tête : pour un champ, Chromium aligne sur ce bord le
+ * curseur de saisie, pas le cadre. Le scroll-mt d'une ancre (LegalPage) s'y ajoute.
+ */
+html:has(header.site-nav) {
+  scroll-padding-top: 5.75rem;
+}
+
+@media (min-width: 768px) {
+  html:has(header.site-nav) {
+    scroll-padding-top: 6.25rem;
+  }
+}
+
 body {
   overflow-x: hidden;
 }
@@ -862,6 +925,7 @@ body {
   font-weight: 600;
 }
 
+/* Rendu repris par .form-control (@layer components), bordure à part : modifier les deux ensemble. */
 .recruitment-field {
   display: block;
   width: 100%;
@@ -884,6 +948,16 @@ body {
   outline: none;
   background: color-mix(in oklch, var(--card) 84%, var(--background));
   box-shadow: 0 0 0 4px color-mix(in oklch, var(--primary) 13%, transparent);
+}
+
+/*
+ * Un champ en erreur garde sa bordure et son ombre rouges (!important) : sans contour, celui qui a
+ * le focus, souvent placé là par l'alerte d'un envoi refusé, ressemblerait aux autres (A11Y-03, WCAG 2.4.7).
+ */
+.recruitment-field.form-field-invalid:focus-visible,
+[aria-invalid="true"].recruitment-field:focus-visible {
+  outline: 3px solid color-mix(in oklch, var(--primary) 72%, white);
+  outline-offset: 3px;
 }
 
 .recruitment-field::placeholder {
@@ -1442,8 +1516,11 @@ html.data-saver .cta-secondary:hover {
   }
 }
 
-/* Audit responsive: the desktop CTA must not override Tailwind's mobile visibility utility. */
-@media (max-width: 767px) {
+/*
+ * Audit responsive: the desktop CTA must not override Tailwind's visibility utility. Below
+ * 1024 px the header has no room for it; booking leads the burger menu instead (PUB-02).
+ */
+@media (max-width: 1023px) {
   .site-nav .nav-cta {
     display: none !important;
   }
@@ -1457,6 +1534,65 @@ html.data-saver .cta-secondary:hover {
 /* Le bandeau de consentement est prioritaire : WhatsApp réapparaît dès sa fermeture. */
 html[data-cookie-banner-open="true"] .whatsapp-contact-float {
   display: none;
+}
+
+/*
+ * Pastille « Préférences cookies » (bas gauche, 1rem du bord, 2rem de haut + bordure) : comme pour le
+ * bandeau ci-dessous, la page garde en bas la place qu'elle occupe, pour que la fin d'une page et ce qui
+ * reçoit le focus se fassent remonter au-dessus d'elle (texte de /booking/confirmation sur téléphone).
+ */
+html:has(.cookie-preferences-shortcut) {
+  scroll-padding-bottom: 3.5rem;
+}
+
+html:has(.cookie-preferences-shortcut) body {
+  padding-bottom: 3.5rem;
+}
+
+/*
+ * Bouton WhatsApp, sur la même bande en bas à droite et plus haut que la pastille (3.5rem posé à
+ * 1rem + safe-area, 1.5rem dès 640 px) : la réserve prend sa hauteur, plus 0.5rem d'écart.
+ */
+html:has(.whatsapp-contact-float) {
+  scroll-padding-bottom: calc(5rem + env(safe-area-inset-bottom));
+}
+
+html:has(.whatsapp-contact-float) body {
+  padding-bottom: calc(5rem + env(safe-area-inset-bottom));
+}
+
+@media (min-width: 640px) {
+  html:has(.whatsapp-contact-float) {
+    scroll-padding-bottom: 5.5rem;
+  }
+
+  html:has(.whatsapp-contact-float) body {
+    padding-bottom: 5.5rem;
+  }
+}
+
+/*
+ * Tant que le bandeau est ouvert, la page garde en bas un espace de sa hauteur (mesurée par
+ * CookieConsent) : sur téléphone, un bouton ou le menu de langue d'une page courte
+ * (/recruitment/unsubscribe, espace candidat) se fait remonter au-dessus au lieu de rester dessous.
+ */
+html[data-cookie-banner-open="true"] {
+  scroll-padding-bottom: var(--cookie-banner-height, 0px);
+}
+
+html[data-cookie-banner-open="true"] body {
+  padding-bottom: var(--cookie-banner-height, 0px);
+}
+
+/* Le menu mobile, qui défile lui-même sous la barre (Navigation), s'arrête aussi au-dessus du bandeau. */
+html[data-cookie-banner-open="true"] .mobile-navigation {
+  max-height: max(6rem, calc(100dvh - 4.5rem - var(--cookie-banner-height, 0px)));
+}
+
+@media (min-width: 768px) {
+  html[data-cookie-banner-open="true"] .mobile-navigation {
+    max-height: max(6rem, calc(100dvh - 5rem - var(--cookie-banner-height, 0px)));
+  }
 }
 
 @media (max-width: 767px) {
@@ -1557,6 +1693,34 @@ html[data-cookie-banner-open="true"] .whatsapp-contact-float {
     flex-direction: column;
     text-align: center;
   }
+}
+
+/* Content shown without JavaScript in the prerendered pages (scripts/prerender-route-seo.ts, SEOP-01). */
+.noscript-page {
+  max-width: 42rem;
+  margin: 0 auto;
+  padding: 2rem 1rem;
+  line-height: 1.6;
+}
+
+.noscript-page h1 {
+  font-family: var(--font-display, Georgia, serif);
+  font-size: 1.75rem;
+  line-height: 1.2;
+}
+
+.noscript-page > * + * {
+  margin-top: 1rem;
+}
+
+.noscript-page ul {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.noscript-page a {
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
 }
 
 @media (prefers-reduced-motion: no-preference) {
