@@ -172,10 +172,13 @@ const MAX_ADVANCE_IN_SIZES = 1;
  * The two layouts of text whose place may hide it: taking the most room it
  * may take (characters as wide as in their font, bold or italic, when it is
  * one of the fonts measured, DOCX_FONT_METRICS, and lines as tall as it sets
- * them; in a font named but not measured, but a typewriter one, which may be
- * as narrow as any of them, as in the narrowest of them, character by
- * character, and lines as low, DOCX_NARROWEST_FONT, so that an honest CV in
- * such a font is read whole; otherwise, and for the characters not measured,
+ * them; in a font of Office not measured, at least as wide as one measured, as
+ * in that one (Aptos, Segoe UI, Tahoma as in Calibri, Verdana as in Noto
+ * Sans), and lines of 1.15; in another font named but not measured, but a
+ * typewriter one, which may be as narrow as any of them, as in the narrowest
+ * of them, character by character, and lines as low, DOCX_NARROWEST_FONT, so
+ * that an honest CV in such a font is read whole; otherwise, and for the
+ * characters not measured,
  * lines of 1.15 times their size and characters, in sizes of their text,
  * about as wide as in the widest common fonts: capitals 0.68,
  * figures 0.56, other letters 0.5, punctuation 0.4, other signs 0.8, spaces
@@ -1202,25 +1205,31 @@ const fontWidths = new Map<string, number[]>();
 
 /**
  * The font measured (DOCX_FONT_METRICS) that a run sets its characters of Basic Latin in (`ascii`), or its other Latin ones, as Word
- * names it, DOCX_NARROWEST_FONT for a font named but not measured; none for a typewriter font not measured, as wide as those measured
- * (LAYOUTS), for a run of complex script (w:cs, w:rtl), which Word sets in another font (w:rFonts w:cs), nor when no font is named.
+ * names it, or that stands for it (DOCX_FONT_ALIASES), DOCX_NARROWEST_FONT for another font named but not measured; none for a
+ * typewriter font not measured, as wide as those measured (LAYOUTS), for a run of complex script (w:cs, w:rtl), which Word sets in
+ * another font (w:rFonts w:cs), nor when no font is named.
  */
 function measuredFont(effective: RunLayer, ascii: boolean) {
   if (effective["w:cs"] || effective["w:rtl"]) return undefined;
   const name = (ascii ? effective.font ?? effective.otherFont : effective.otherFont ?? effective.font)?.trim().toLowerCase();
   if (!name) return undefined;
-  return DOCX_FONT_ALIASES[name] ?? (effective.typewriter ? undefined : DOCX_NARROWEST_FONT);
+  // A name of Object.prototype (constructor, __proto__) is no font measured.
+  if (Object.hasOwn(DOCX_FONT_ALIASES, name)) return DOCX_FONT_ALIASES[name];
+  return effective.typewriter ? undefined : DOCX_NARROWEST_FONT;
 }
 
 /**
  * The widths of a style of a font measured, in sizes of their text: of a slanted style (italic), the wider of its own and of its
- * upright style's (DOCX_FONT_METRICS), those of its upright one when left out; of DOCX_NARROWEST_FONT, the narrower.
+ * upright style's (DOCX_FONT_METRICS), those of its upright one when left out; of DOCX_NARROWEST_FONT, the narrower; of a font
+ * standing for wider ones (`as`), those of the font it gives.
  */
 function styleWidths(font: string, style: "regular" | "italic" | "bold" | "boldItalic"): number[] {
+  const metrics = DOCX_FONT_METRICS[font]!;
+  if ("as" in metrics) return styleWidths(metrics.as, style);
   const key = `${font}:${style}`;
   let widths = fontWidths.get(key);
   if (!widths) {
-    const digits = DOCX_FONT_METRICS[font]![style];
+    const digits = metrics[style];
     const upright = style === "italic" ? styleWidths(font, "regular") : style === "boldItalic" ? styleWidths(font, "bold") : undefined;
     if (digits === undefined) return upright!;
     const value = (at: number) => DOCX_FONT_WIDTH_DIGITS.indexOf(digits[at]!);
@@ -1244,7 +1253,7 @@ function measuredAdvance(effective: RunLayer, character: string) {
   return widths[index!]! > 0 ? widths[index!] : undefined;
 }
 
-/** The height of a line of single spacing of a run's font when measured, in sizes of its text; 0 otherwise, or when only its advances are (DOCX_FONT_METRICS). */
+/** The height of a line of single spacing of a run's font when measured, in sizes of its text; 0 otherwise, or when only its advances are, or a narrower font's (DOCX_FONT_METRICS). */
 const fontLine = (effective: RunLayer) => {
   const font = measuredFont(effective, true) ?? measuredFont(effective, false);
   return font === undefined ? 0 : DOCX_FONT_METRICS[font]!.line / 1000;

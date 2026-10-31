@@ -6,23 +6,32 @@
  * for Calibri, Caladea for Cambria, Liberation Sans, Serif and Mono for Arial,
  * Times New Roman and Courier New, Gelasio for Georgia, EB Garamond for
  * Garamond, TeX Gyre Adventor for Century Gothic; DejaVu; and the free fonts
- * of Canva, Google Docs and recent Word (Montserrat, Open Sans, Lato…). A font
- * not measured (Segoe UI, Verdana, Trebuchet MS, Tahoma, Aptos: no free font
- * of their metrics on npm) is given, of each character, the narrowest advance
- * of the fonts measured (NARROWEST), the most room its text may have. The DOCX
- * visibility check lays text out with them (IA-01). Written compactly: a
- * character as wide as its base letter (É as E), or a slanted style as wide
- * as its upright one, in a sign rather than two digits.
+ * of Canva, Google Docs and recent Word (Montserrat, Open Sans, Lato…). The
+ * fonts of Office and Windows of no free font of their metrics (Aptos,
+ * Calibri Light, Segoe UI, Tahoma, Trebuchet MS, Verdana, Arial Black) are
+ * given the advances of a font measured narrower than each
+ * (AT_LEAST_AS_WIDE); any other font not measured, of each character, the
+ * narrowest advance of the fonts measured (NARROWEST), the most room its
+ * text may have. The DOCX visibility check lays text out with them (IA-01).
+ * Written compactly: a character as wide as its base letter (É as E), or a
+ * slanted style as wide as its upright one, in a sign rather than two digits.
  *
  * Run again after changing the fonts or the characters:
  *   node scripts/generate-docx-font-metrics.mjs [fonts folder]
  * The fonts are taken from the folder when it holds their family (fc-scan,
  * its subfolders too), else from those installed here (fc-match). The free
- * ones are not installed here: put in the folder, from npm (npm pack
- * @fontsource/lato@5.3.0…, then tar xzf), the WOFF files of the @fontsource
- * package of each (package/files/*-latin-{400,700}-{normal,italic}.woff and
- * their latin-ext ones; WOFF2 is not read), and TeX Gyre Adventor's OTF files
- * (package/assets of @docx-editor.dev/fonts).
+ * ones are not installed here: put in the folder, from npm (npm pack, then
+ * tar xzf; not dependencies of the app), the WOFF files of each @fontsource
+ * package (package/files/*-latin-{400,700}-{normal,italic}.woff and their
+ * latin-ext ones; WOFF2 is not read), and TeX Gyre Adventor's OTF files
+ * (package/assets). The file was written from these versions, whose widths
+ * another version may change:
+ *   @fontsource/{eb-garamond,gelasio,inter,lato,lora,merriweather,montserrat,
+ *     noto-sans,nunito,open-sans,playfair-display,poppins,raleway,roboto,
+ *     source-sans-3}@5.3.0
+ *   @docx-editor.dev/fonts@2.27.0 (TeX Gyre Adventor)
+ *   installed (Debian): fonts-crosextra-carlito 20230309, fonts-crosextra-caladea
+ *     20200211, fonts-liberation2 2.1.5, fonts-dejavu-core 2.37.
  */
 import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
@@ -60,6 +69,28 @@ const FONTS = [
   { key: "playfair-display", family: "Playfair Display", names: ["playfair display"] },
   { key: "merriweather", family: "Merriweather", names: ["merriweather"] },
   { key: "lora", family: "Lora", names: ["lora"] },
+];
+/**
+ * Fonts of Office and Windows not measured, of no free font of their metrics
+ * on npm, and the font measured whose advances stand for theirs (`as`): on
+ * each line of CV text of the test corpus, narrower than theirs by their
+ * published widths (@capsizecss/metrics 4.4.0, the average width of each;
+ * string-pixel-width 1.11.0, of each character, for Verdana, Tahoma and
+ * Trebuchet MS), by 7.5 to 8 % in the middle, 2.5 % at least (but on a line
+ * of capitals M), where NARROWEST is 20 to 30 % narrower; in bold, 13 to
+ * 19 %. Aptos, of no published widths, drawn wider than Calibri: Carlito, as
+ * for Calibri Light, which may be a little narrower (the check allows 2 %);
+ * Arial Black, Arial's. Their lines are left unknown (0): 1.15, below theirs
+ * (1.16 to 1.33 published).
+ */
+const AT_LEAST_AS_WIDE = [
+  {
+    key: "carlito-or-wider",
+    as: "carlito",
+    names: ["aptos", "aptos display", "aptos semibold", "aptos extrabold", "aptos black", "calibri light", "segoe ui", "segoe ui semibold", "segoe ui bold", "tahoma", "trebuchet ms"],
+  },
+  { key: "noto-sans-or-wider", as: "noto-sans", names: ["verdana"] },
+  { key: "liberation-sans-or-wider", as: "liberation-sans", names: ["arial black"] },
 ];
 /** Basic Latin, Latin-1 and Latin Extended-A, and the punctuation and signs a CV writes beyond them. */
 const CHARACTERS = [
@@ -251,6 +282,10 @@ const narrowest = (name, fallback) => Array.from(CHARACTERS, (_, at) => {
   const widths = floors.flatMap(({ advances }) => [advances[name][at], ...(fallback ? [advances[fallback][at]] : [])]).filter(width => width > 0);
   return widths.length ? Math.min(...widths) : 0;
 });
+for (const { key, as, names } of AT_LEAST_AS_WIDE) {
+  metrics[key] = { line: 0, as };
+  for (const name of names) aliases[name] = key;
+}
 metrics[NARROWEST] = {
   line: Math.min(...floors.map(({ line }) => line).filter(line => line > 0)),
   ...Object.fromEntries(Object.entries(STYLES).map(([name, { fallback }]) => [name, digitsOf(narrowest(name, fallback), fallback && narrowest(fallback))])),
@@ -277,10 +312,11 @@ export const DOCX_FONT_AS_UPRIGHT = ${JSON.stringify(AS_UPRIGHT)};
  * DOCX_FONT_CHARACTERS in each of its styles; in thousandths of the font size,
  * rounded up; 0 for a character the font lacks. Of a slanted style, the
  * wider of its advance and of its upright style's, Word possibly drawing it
- * upright; left out when never wider. DOCX_NARROWEST_FONT: what a font not
- * measured is given.
+ * upright; left out when never wider. Of fonts not measured but at least as
+ * wide as one that is, the advances of that one (\`as\`), and no line.
+ * DOCX_NARROWEST_FONT: what any other font not measured is given.
  */
-export const DOCX_FONT_METRICS: Record<string, { line: number; regular: string; bold: string; italic?: string; boldItalic?: string }> = {
+export const DOCX_FONT_METRICS: Record<string, { line: number; regular: string; bold: string; italic?: string; boldItalic?: string } | { line: number; as: string }> = {
 ${Object.entries(metrics).map(([key, { line, ...styles }]) => `  "${key}": {\n    line: ${line},\n${Object.entries(styles).map(([name, digits]) => `    ${name}: ${JSON.stringify(digits)},`).join("\n")}\n  },`).join("\n")}
 };
 
@@ -292,7 +328,7 @@ ${Object.entries(metrics).map(([key, { line, ...styles }]) => `  "${key}": {\n  
  */
 export const DOCX_NARROWEST_FONT = ${JSON.stringify(NARROWEST)};
 
-/** The font names a document may give (w:rFonts, theme fonts), in lower case, and the font of the same metrics measured. */
+/** The font names a document may give (w:rFonts, theme fonts), in lower case, and the font measured of the same metrics, or narrower (\`as\`). */
 export const DOCX_FONT_ALIASES: Record<string, string> = ${JSON.stringify(aliases, null, 2).replace(/\n}$/, ",\n}")};
 `;
 writeFileSync(fileURLToPath(new URL("../server/docxFontMetrics.ts", import.meta.url)), output);

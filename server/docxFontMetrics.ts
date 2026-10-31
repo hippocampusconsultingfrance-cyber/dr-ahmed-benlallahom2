@@ -19,10 +19,11 @@ export const DOCX_FONT_AS_UPRIGHT = ",";
  * DOCX_FONT_CHARACTERS in each of its styles; in thousandths of the font size,
  * rounded up; 0 for a character the font lacks. Of a slanted style, the
  * wider of its advance and of its upright style's, Word possibly drawing it
- * upright; left out when never wider. DOCX_NARROWEST_FONT: what a font not
- * measured is given.
+ * upright; left out when never wider. Of fonts not measured but at least as
+ * wide as one that is, the advances of that one (`as`), and no line.
+ * DOCX_NARROWEST_FONT: what any other font not measured is given.
  */
-export const DOCX_FONT_METRICS: Record<string, { line: number; regular: string; bold: string; italic?: string; boldItalic?: string }> = {
+export const DOCX_FONT_METRICS: Record<string, { line: number; regular: string; bold: string; italic?: string; boldItalic?: string } | { line: number; as: string }> = {
   "carlito": {
     line: 1221,
     regular: "3Z566H7p7xBBAh3T4m4m7p7p3w4p3z637x7x7x7x7x7x7x7x7x7x4C4C7p7p7p7GD_938W8M9e7f7C9t9m3y4_886bDNA6AN85AX8V7C7eA28uDw887e7L4p634p7p7p4a7W8E6d8E7o4o7N8E3c3m773cCV8E8G8E8E5T685F8E74BB6o756C4x7D4x7p3Z567p7x7p7x7p7p69D36J817p007x6B5J7p5G5F4a8c9A3z4q3t6d819zAWAa7G......By.........9n......7pAO.....858G......C5.........8E......7p8I.....8E................8v9n8e....................AH8L.........3c8y7L....77....6d488Y5s6k3u......949r8E......DZDI.................5Q7e5M.......................3p00007x7pEAEA6C7p3w3w3w3w6Z6Z6Z6Y7p7p7p000000Ap00GF006H5J5J7xB2EAEAEAEA7p7p7p9T00",
@@ -176,6 +177,18 @@ export const DOCX_FONT_METRICS: Record<string, { line: number; regular: string; 
     bold: "474256Dd9CE8AU2y4e4e8L8I3w7N3fAx9y6M8L8m8Z8S8_7L8y903w4B8I8I8I7tCPASALAmBt9m8xBoCd6373B89SFCC5C19_C2Ak9MAABuB4FuAxAR9S62Ax62CtD08C8C8z869K8Q5n8j9j574k9I4uEO9-8s9P8z7W7b6T9g8QCh8a8d825m435m8I473j8r8z8sBI3u8b6hEJ627j8I00EJ5s5-8I5t5j4Q9a8z3Y554M5w7jC9CRCm7j......Ed.........Bs......8IC1.....9vC3......C2.........8U......8I8s.....8z.................Bs9K....................Cd9j.........57D69r....00......9S7T9T5E......9-C59e......G4Du..................AA6T.......................5n0000008pDD0000003V3I3w006d6R720088005-000000C500004X7B5w5wCfHM000000008I00000000",
     boldItalic: ",5Aj,57P,C4E,6Ao,2Bq,39U,59O,3Ay,164CO64,0D3,08b,65O53,D8n,A3v,26M,35w60,05u,04a,13Z5A,2CQD1Dv,7.,N......,5....,C.,0.,0.,0.,0..,0.,0.,0.,E.,0.,0.,0.,5.,0.,0.,0.,05O,0AR,0.,2.,0.,0.,09U,09U5O,M.,0.,0.,0.,L.,F3X3K,T",
   },
+  "carlito-or-wider": {
+    line: 0,
+    as: "carlito",
+  },
+  "noto-sans-or-wider": {
+    line: 0,
+    as: "noto-sans",
+  },
+  "liberation-sans-or-wider": {
+    line: 0,
+    as: "liberation-sans",
+  },
   "narrowest": {
     line: 1150,
     regular: "313a4a7K6vAA9X2V4D4C516V354I2z4M7W507O737W6V7M6M7W7U2y3D7n6s7n5uBj8V8W879d7f7C8R9m3Y4D886bBNA69N859N8V756gA283CI817S7L424M426Y5p2N6F7q6N7q664M6p7q383B7738CA7q7W7q7q4j534M7q6sAj6k6s5v4339437n313a6c7g7n7n396G45AP4K6f7n4I6d4M4A7J4i4S2N8P761g38344r6f9zAW9w5u8W8W8W8W8W8WBy.........9n......79AD.....857q......8j.........7d......7n7b.....7q.8W.8W.8W..........879n7q.......5_............AH7q.........388E6J....77....6d.6m466k3V......8f9r7l......DFBJ.................4w7e4M.......................3V5C5C7q7WCDEA4P5p2g2g2w3T4y4t5E5E547p4d9E5EAR794-Fe2l4x3x3x7n9ZCF4cCF4c7n7p7p9TCz",
@@ -193,7 +206,7 @@ export const DOCX_FONT_METRICS: Record<string, { line: number; regular: string; 
  */
 export const DOCX_NARROWEST_FONT = "narrowest";
 
-/** The font names a document may give (w:rFonts, theme fonts), in lower case, and the font of the same metrics measured. */
+/** The font names a document may give (w:rFonts, theme fonts), in lower case, and the font measured of the same metrics, or narrower (`as`). */
 export const DOCX_FONT_ALIASES: Record<string, string> = {
   "calibri": "carlito",
   "carlito": "carlito",
@@ -233,4 +246,17 @@ export const DOCX_FONT_ALIASES: Record<string, string> = {
   "playfair display": "playfair-display",
   "merriweather": "merriweather",
   "lora": "lora",
+  "aptos": "carlito-or-wider",
+  "aptos display": "carlito-or-wider",
+  "aptos semibold": "carlito-or-wider",
+  "aptos extrabold": "carlito-or-wider",
+  "aptos black": "carlito-or-wider",
+  "calibri light": "carlito-or-wider",
+  "segoe ui": "carlito-or-wider",
+  "segoe ui semibold": "carlito-or-wider",
+  "segoe ui bold": "carlito-or-wider",
+  "tahoma": "carlito-or-wider",
+  "trebuchet ms": "carlito-or-wider",
+  "verdana": "noto-sans-or-wider",
+  "arial black": "liberation-sans-or-wider",
 };

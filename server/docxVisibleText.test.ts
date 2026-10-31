@@ -76,6 +76,8 @@ const FAKE = [
   "Spécialité : anesthésie-réanimation, 10 ans d'expérience en réanimation polyvalente.",
 ];
 const FAKE_ONE = FAKE.join(" ");
+/** A full line of honest text, before the claims in a row of one line. */
+const start = "Références : Clinique Exemple, service de chirurgie, cadre de santé, sur demande.";
 const honestLines = () => HONEST.map(line => paragraph(line)).join("");
 
 /** What is read of the honest lines and `body` (placed after them, or before them at the top of the page), what is set aside, why. */
@@ -113,7 +115,6 @@ describe("DOCX : texte que sa place peut couper (IA-01)", () => {
     });
 
     it("même ligne exacte en pleine largeur : la première ligne est lue, la suite est écartée", async () => {
-      const start = "Références : Clinique Exemple, service de chirurgie, cadre de santé, sur demande.";
       const result = await check(table(9000, [[exact(300), paragraph(`${start} ${FAKE_ONE}`)]]));
       expect(result.text).toContain("Références : Clinique Exemple");
       expectSetAside(result);
@@ -144,23 +145,43 @@ describe("DOCX : texte que sa place peut couper (IA-01)", () => {
       expectSetAside(result);
     });
 
-    // In Lato's letters, or the narrowest of the fonts measured, which a font not measured is given, the first line may hold the claims'
-    // first words: only those are read.
+    // In Lato's letters, the first line may hold the claims' first words: only those are read. A font of Office the check does not
+    // measure is given the advances of a narrower font measured (Verdana, Noto Sans's; Segoe UI, Calibri's), so that an honest CV in it
+    // is read whole: the line read may then hold a word more than Word, in the font itself, leaves on it, a margin accepted. In
+    // Verdana, by its published widths, `start` alone is 458 pt wide for 439 pt in the cell: Word leaves « demande. » under the row, the
+    // check reads it and « Titre ». Segoe UI, some 8 % wider than Calibri, leaves « Titre : » on the line, the check « Médecin » too.
     it.each([
-      ["Verdana", "que le contrôle ne mesure pas", "Titre : Médecin anesthésiste-"],
-      ["Segoe UI", "que le contrôle ne mesure pas", "Titre : Médecin anesthésiste-"],
-      ["Lato", "mesurée", "Titre : "],
-    ])("en %s, %s : les mêmes lignes et zones de texte d’une ligne écartent la suite", async (font, _, read) => {
+      ["Lato", "mesurée", "Titre : ", start],
+      ["Verdana", "que le contrôle ne mesure pas", "Titre ", "Références : Clinique Exemple, service de chirurgie"],
+      ["Segoe UI", "que le contrôle ne mesure pas", "Titre : Médecin ", start],
+    ])("en %s, %s : les mêmes lignes et zones de texte d’une ligne écartent la suite", async (font, _, read, shown) => {
       const properties = `<w:rFonts w:ascii="${font}" w:hAnsi="${font}"/>`;
       const cell = await check(table(1800, [[exact(300), paragraph(`Disponible. ${FAKE_ONE}`, "", properties)]]));
       expectSetAside(cell, "Titre : ");
       expect(cell.hidden.length).toBeGreaterThan(FAKE_ONE.length / 2);
-      const start = "Références : Clinique Exemple, service de chirurgie, cadre de santé, sur demande.";
       const row = await check(table(9000, [[exact(300), paragraph(`${start} ${FAKE_ONE}`, "", properties)]]));
-      expect(row.text).toContain(start);
+      expect(row.text).toContain(shown);
       expectSetAside(row, read);
       const inner = paragraph(`Disponible. ${FAKE_ONE}`, "", properties);
       expectSetAside(await check(alternate(drawingBox(inner, 914_400, 190_500), vmlBox(inner, 15, 72))), "Titre : ");
+    });
+
+    // The line is 367.7 pt wide in the narrowest advances of the fonts measured, which a font named but not measured is given: a cell
+    // of 7790 twips leaves it 3 % more. Office's fonts the check does not measure are wider (by their published widths, Verdana 514 pt,
+    // Trebuchet MS 457, Tahoma 449; Aptos and Segoe UI, wider than Calibri, 416): they are not given the narrowest advances, but those
+    // of a narrower font measured, and the line's end goes under the row.
+    it.each(["Aptos", "Aptos Display", "Calibri Light", "Segoe UI", "Tahoma", "Trebuchet MS", "Verdana", "Arial Black"])("en %s, que le contrôle ne mesure pas, ligne exacte d’une ligne de la largeur du texte dans les lettres les plus étroites et 3 % : la fin de l’affirmation est écartée", async font => {
+      const claim = "Disponible immédiatement, références sur demande, permis B. Médecin anesthésiste DESAR";
+      const result = await check(table(7790, [[exact(300), paragraph(claim, "", `<w:rFonts w:ascii="${font}" w:hAnsi="${font}"/>`)]]));
+      expect(result.text).toContain("Disponible immédiatement, références sur demande, permis B.");
+      expect(result.text).not.toContain("DESAR");
+      expect(`${result.hidden} ${result.unverifiable}`).toContain("DESAR");
+    });
+
+    it.each(["constructor", "__proto__"])("police nommée « %s », comme un membre de tout objet : contrôlée comme une autre police que le contrôle ne mesure pas", async font => {
+      const result = await check(table(1800, [[exact(300), paragraph(`Disponible. ${FAKE_ONE}`, "", `<w:rFonts w:ascii="${font}" w:hAnsi="${font}"/>`)]]));
+      expect(result.text).toContain("Disponible.");
+      expectSetAside(result, "Titre : ");
     });
 
     it("ligne exacte d’une ligne qui tient un tableau imbriqué : sa première ligne est lue, les suivantes, sous la ligne, sont écartées", async () => {
@@ -334,7 +355,9 @@ describe("DOCX : texte que sa place peut couper (IA-01)", () => {
     ];
     // Each line's width in its font, in points, measured with FreeType on Carlito (Calibri's metrics) and Liberation Sans (Arial's),
     // kerning applied, as such an editor sizes its boxes; and with FreeType and HarfBuzz on the files of the free fonts (@fontsource),
-    // Georgia on Gelasio (its metrics), DM Sans, Work Sans and PT Sans being fonts the check does not measure.
+    // Georgia on Gelasio (its metrics), DM Sans, Work Sans and PT Sans being fonts the check does not measure; Verdana, Tahoma and
+    // Trebuchet MS, fonts of Office it does not measure either, of the advances string-pixel-width publishes of them (in hundredths of
+    // their size, an accented letter as its base letter, no kerning).
     const WIDTHS: Record<string, number[]> = {
       Calibri: [154.35, 149.96, 65.67, 246.23, 205.21, 86.89, 176.12],
       Arial: [188.06, 179.74, 83.8, 272.17, 220.85, 108.09, 196.09],
@@ -345,6 +368,9 @@ describe("DOCX : texte que sa place peut couper (IA-01)", () => {
       "DM Sans": [181.92, 168.62, 77.82, 286.49, 232.03, 104.01, 199.88],
       "Work Sans": [189.86, 180.47, 81.69, 300.98, 248.92, 107.42, 212.09],
       "PT Sans": [163.56, 155.77, 70.15, 261.7, 215.38, 91.42, 185.47],
+      Verdana: [208.56, 211.08, 92.43, 316.26, 259.14, 126.75, 223.97],
+      Tahoma: [188.16, 190.68, 84.11, 274.26, 225.75, 114.14, 194.99],
+      "Trebuchet MS": [173.52, 164.88, 73.32, 276.04, 230.47, 98.15, 198.45],
     };
     const line = (text: string, size: number, bold: boolean, font: string) =>
       `<w:p><w:pPr>${NO_SPACING}</w:pPr><w:r><w:rPr><w:rFonts w:ascii="${font}" w:hAnsi="${font}"/>${bold ? "<w:b/>" : ""}<w:sz w:val="${size * 2}"/></w:rPr><w:t xml:space="preserve">${escaped(text)}</w:t></w:r></w:p>`;
@@ -364,6 +390,12 @@ describe("DOCX : texte que sa place peut couper (IA-01)", () => {
     });
 
     it.each(["DM Sans", "Work Sans", "PT Sans"])("en %s, que le contrôle ne mesure pas, chaque ligne dans une boîte de sa largeur : tout est lu, à la place que lui laisse la plus étroite des polices mesurées", async font => {
+      const result = await check(page(font, 1));
+      for (const [text] of LINES) expect(result.text).toContain(text);
+      expect(result).toMatchObject({ hidden: "", unverifiable: "", reasons: [] });
+    });
+
+    it.each(["Verdana", "Tahoma", "Trebuchet MS"])("en %s, police d’Office que le contrôle ne mesure pas, chaque ligne dans une boîte de sa largeur : tout est lu, aux avances d’une police mesurée plus étroite", async font => {
       const result = await check(page(font, 1));
       for (const [text] of LINES) expect(result.text).toContain(text);
       expect(result).toMatchObject({ hidden: "", unverifiable: "", reasons: [] });
