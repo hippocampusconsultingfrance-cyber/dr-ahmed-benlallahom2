@@ -151,7 +151,7 @@ describe("sélection d’une question santé", () => {
     const item = tree.find(element => element.type === "button" && textOf(element).includes("QMED-ADMIN007-00000"))!;
     expect(item.props.className).toContain("min-w-0 w-full");
     const excerpt = elementsOf(item.props.children).find(element => textOf(element).startsWith("Peut-on boire"))!;
-    expect(excerpt.props.className).toContain("[overflow-wrap:anywhere]");
+    expect(excerpt.props.className).toContain("wrap-anywhere");
     expect(tree.find(element => element.props.role === "region")!.props.className).toContain("min-w-0");
   });
 });

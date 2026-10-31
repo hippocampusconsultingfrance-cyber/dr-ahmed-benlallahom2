@@ -67,7 +67,7 @@ export default function ContactsTab() {
   return (
     <div>
       {toolbar}
-      <p className="text-sm text-muted-foreground mb-4 break-words [overflow-wrap:anywhere]">{adminListCount(items.length, total, unreadOnly ? "message(s) non lu(s)" : "message(s)")}{search ? ` pour « ${search} »` : ""}</p>
+      <p className="text-sm text-muted-foreground mb-4 wrap-anywhere">{adminListCount(items.length, total, unreadOnly ? "message(s) non lu(s)" : "message(s)")}{search ? ` pour « ${search} »` : ""}</p>
       <div className="space-y-3">
         {items.map((msg) => (
           <div key={msg.id} className={`bg-card border rounded-lg p-4 ${msg.read === 0 ? "border-primary/50" : "border-border"}`}>

@@ -120,7 +120,7 @@ export default function AppointmentsTab() {
     <div>
       {toolbar}
 
-      <p className="text-sm text-muted-foreground mb-4 break-words [overflow-wrap:anywhere]">{adminListCount(items.length, total, "réservation(s)")}{search ? ` pour « ${search} »` : ""}</p>
+      <p className="text-sm text-muted-foreground mb-4 wrap-anywhere">{adminListCount(items.length, total, "réservation(s)")}{search ? ` pour « ${search} »` : ""}</p>
 
       <section aria-labelledby="appointments-agenda-title" className="mb-6 rounded-xl border border-primary/20 bg-primary/5 p-4 sm:p-5">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
