@@ -38,7 +38,8 @@ const OTHER_TARGET_COUNTRY = "Autre pays / Mobilité mondiale";
 /** The specialty is sent as typed: /api/recruitment/apply accepts up to 160 characters (cv_applications.specialty). */
 export const RECRUITMENT_CUSTOM_SPECIALTY_MAX_LENGTH = 160;
 
-const professionalLanguageOptions = [
+/** Recorded under their English name whatever the page's language (value), which the admin screens compare with any other name of the language (IA-02). */
+export const professionalLanguageOptions = [
   { value: "Arabic", labels: { fr: "Arabe", en: "Arabic", de: "Arabisch", zh: "阿拉伯语" } },
   { value: "French", labels: { fr: "Français", en: "French", de: "Französisch", zh: "法语" } },
   { value: "English", labels: { fr: "Anglais", en: "English", de: "Englisch", zh: "英语" } },

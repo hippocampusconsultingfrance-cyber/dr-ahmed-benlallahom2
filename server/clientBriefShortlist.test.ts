@@ -323,6 +323,33 @@ describe("missions employeurs : classement, certifications et accord du candidat
     expect(await audience("_")).toEqual([]);
   });
 
+  it("compte dans une mission, et trouve dans le filtre « Langue », les langues que le formulaire enregistre en anglais, sous leurs autres noms (IA-02)", async () => {
+    // From its French page as from its English one, the form records « French », « Arabic ».
+    const fromForm = seedCandidate({ specialty: "Anesthésie-réanimation", target_countries: '["Émirats arabes unis"]', languages: '["French","Arabic"]' });
+    // Arabic declared, English and Arabic read in the CV by an analysis of the current version.
+    const bilingual = seedCandidate({ specialty: "Anesthésie-réanimation", target_countries: '["Émirats arabes unis"]', languages: '["Arabic"]', normalized_languages: '[{"language":"English"},{"language":"العربية"}]', ...scored(70) });
+    memory.seed(cvCandidateLanguages, [{ application_id: bilingual.id, language: "English", source: "extracted" }, { application_id: bilingual.id, language: "العربية", source: "extracted" }]);
+    const briefId = seedBrief({ required_languages: "Anglais, Arabe" }).id as number;
+
+    const { candidates } = await admin().admin.clientBriefs.candidates({ briefId });
+    const match = (id: unknown) => candidates.find(candidate => candidate.id === id)!.match;
+    expect(match(fromForm.id)).toMatchObject({ score: 58, matchedLanguages: ["Arabe"], breakdown: { languages: 8 }, languages: [{ name: "Arabic", origins: ["declared"] }] });
+    expect(match(bilingual.id)).toMatchObject({
+      score: 65,
+      matchedLanguages: ["Anglais", "Arabe"],
+      breakdown: { languages: 15 },
+      languages: [{ name: "English", origins: ["extracted"] }, { name: "Arabic", origins: ["declared", "extracted"] }],
+    });
+    expect(candidates.map(candidate => candidate.id)).toEqual([bilingual.id, fromForm.id]);
+
+    // The Langue filter of the Candidatures, typed in French, German, Chinese or Arabic.
+    const listed = async (language: string) => (await admin().admin.recruitment.list({ language })).items.map(item => item.id).sort();
+    for (const language of ["arabe", "Arabisch", "阿拉伯语", "العربية", "Arabic"]) expect(await listed(language)).toEqual([fromForm.id, bilingual.id]);
+    for (const language of ["Français", "francais", "法语"]) expect(await listed(language)).toEqual([fromForm.id]);
+    expect(await listed("Anglais")).toEqual([bilingual.id]);
+    expect(await listed("Allemand")).toEqual([]);
+  });
+
   it("les filtres « certification » trouvent une certification confirmée que la mission compte, même après une analyse qui n’a enregistré aucun fait (IA-02)", async () => {
     // A new analysis found a contradiction (or hidden text): it stored no
     // facts, but kept the licence the admin had confirmed.

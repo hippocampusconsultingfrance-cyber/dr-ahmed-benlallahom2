@@ -11,13 +11,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // garde les candidats lus avant le 404 ; supprimée ailleurs et vue à la
 // relecture de ses candidats (retour sur l’onglet), elle quitte l’écran tout
 // de suite, sans nouvel essai, avec un message, et la liste est relue sans
-// elle ; une candidature effacée fait relire les candidats de la mission.
+// elle ; une candidature effacée fait relire les candidats de la mission ;
+// une écriture refusée par une contrainte de la base est dite dans la langue
+// de l’administration.
 
 type Brief = { id: number; briefId: string; organizationName: string; specialtyNeeded: string; country: string; targetEnvironment: string; status: string; timeline: null; createdAt: string };
 const server = vi.hoisted(() => ({
+  language: "fr" as "fr" | "en" | "de" | "zh",
   briefs: [] as Brief[],
   candidates: new Map<number, Array<{ id: number; firstName: string; lastName: string }>>(),
   associate: vi.fn(),
+  updateStatus: vi.fn(),
   candidateReads: [] as number[],
   toasts: [] as Array<[string, string]>,
 }));
@@ -25,7 +29,7 @@ const server = vi.hoisted(() => ({
 /** A tRPC refusal as the client receives it: the message and the error's data. */
 const refusal = (code: string, reason?: string) => Object.assign(new Error(`Refus du serveur (${reason ?? code}).`), { data: { code, ...(reason ? { reason } : {}) } });
 
-vi.mock("@/contexts/LanguageContext", () => ({ useLanguage: () => ({ language: "fr" }) }));
+vi.mock("@/contexts/LanguageContext", () => ({ useLanguage: () => ({ language: server.language }) }));
 vi.mock("sonner", () => ({ toast: Object.fromEntries(["success", "error"].map(kind => [kind, (message: string) => server.toasts.push([kind, message])])) }));
 vi.mock("./Candidate360Dialog", () => ({ default: function Candidate360Dialog() { return null; } }));
 vi.mock("@/lib/trpc", async () => {
@@ -59,7 +63,7 @@ vi.mock("@/lib/trpc", async () => {
         clientBriefs: {
           list: { useQuery: () => useQuery({ queryKey: ["clientBriefs.list"], queryFn: async () => server.briefs.map(brief => ({ ...brief })) }) },
           candidates: { useQuery: (input: { briefId: number }, options: { enabled: boolean }) => useQuery({ queryKey: ["clientBriefs.candidates", input], queryFn: () => readCandidates(input), ...options }) },
-          updateStatus: { useMutation: idle },
+          updateStatus: { useMutation: (options: object) => useMutation({ mutationFn: (input: { id: number; status: string }) => server.updateStatus(input), ...options }) },
           associateCandidate: { useMutation: (options: object) => useMutation({ mutationFn: (input: { briefId: number; applicationId: number }) => server.associate(input), ...options }) },
           setCandidateConsent: { useMutation: idle },
         },
@@ -87,9 +91,11 @@ async function openMission(organizationName: string) {
 const shortlistButtons = () => screen.queryAllByRole("button", { name: "Shortlister" });
 
 beforeEach(() => {
+  server.language = "fr";
   server.briefs = [brief(1, "Clinique du Nord"), brief(7, "Hôpital du Golfe")];
   server.candidates = new Map([[1, [{ id: 13, firstName: "Jean", lastName: "Martin" }]], [7, [{ id: 11, firstName: "Amal", lastName: "Haddad" }, { id: 12, firstName: "Lina", lastName: "Saleh" }]]]);
   server.associate = vi.fn(async () => ({ success: true }));
+  server.updateStatus = vi.fn(async () => ({ success: true }));
   server.candidateReads = [];
   server.toasts = [];
 });
@@ -221,5 +227,68 @@ describe("mission ou candidature disparue pendant que l’écran est ouvert (nav
     await waitFor(() => expect(screen.queryByText("Hôpital du Golfe")).toBeNull());
     expect(screen.getByText("Jean Martin")).toBeTruthy();
     expect(screen.queryByText(EMPTY_STATE)).toBeNull();
+  });
+});
+
+describe("écriture refusée par une contrainte de la base, dans la langue de l’administration (DATA-01)", () => {
+  // The screen's own words in each language: to open a mission, to shortlist, to mark its shortlist sent.
+  const screens = {
+    fr: { view: "Voir les profils", shortlist: "Shortlister", shortlistSent: "Shortlist envoyée", refusals: {
+      duplicate_record: "Cet enregistrement existe déjà : rechargez la page pour voir son état actuel.",
+      related_record_invalid: "Cette opération vise un élément qui n’existe plus, ou qui est encore utilisé ailleurs : rechargez la page, puis réessayez.",
+      value_not_allowed: "Cette valeur n’est pas acceptée pour cet enregistrement : rien n’a été modifié. Rechargez la page, puis réessayez.",
+    } },
+    en: { view: "View profiles", shortlist: "Shortlist", shortlistSent: "Shortlist sent", refusals: {
+      duplicate_record: "This record already exists: reload the page to see its current state.",
+      related_record_invalid: "This operation concerns an item that no longer exists, or that is still used elsewhere: reload the page, then try again.",
+      value_not_allowed: "This value is not accepted for this record: nothing was changed. Reload the page, then try again.",
+    } },
+    de: { view: "Profile anzeigen", shortlist: "Auf Shortlist setzen", shortlistSent: "Shortlist gesendet", refusals: {
+      duplicate_record: "Dieser Eintrag existiert bereits: Laden Sie die Seite neu, um seinen aktuellen Stand zu sehen.",
+      related_record_invalid: "Dieser Vorgang betrifft ein Element, das nicht mehr existiert oder noch anderweitig verwendet wird: Laden Sie die Seite neu und versuchen Sie es erneut.",
+      value_not_allowed: "Dieser Wert ist für diesen Eintrag nicht zulässig: Es wurde nichts geändert. Laden Sie die Seite neu und versuchen Sie es erneut.",
+    } },
+    zh: { view: "查看候选人", shortlist: "加入名单", shortlistSent: "已发送候选名单", refusals: {
+      duplicate_record: "该记录已存在：请刷新页面查看其当前状态。",
+      related_record_invalid: "此操作涉及的项目已不存在，或仍在其他地方使用：请刷新页面后重试。",
+      value_not_allowed: "此记录不接受该值：未作任何更改。请刷新页面后重试。",
+    } },
+  } as const;
+  const reasons = ["duplicate_record", "related_record_invalid", "value_not_allowed"] as const;
+
+  it.each(Object.keys(screens) as Array<keyof typeof screens>)("traduit les trois motifs pour la présélection d’un candidat et le statut d’une mission (%s)", async language => {
+    server.language = language;
+    const words = screens[language];
+    mount();
+    const card = (await screen.findByText("Hôpital du Golfe")).closest("article")!;
+    fireEvent.click(within(card).getByRole("button", { name: words.view }));
+    await screen.findByText("Amal Haddad");
+
+    for (const reason of reasons) {
+      server.toasts = [];
+      server.associate = vi.fn(async () => { throw refusal(reason === "duplicate_record" ? "CONFLICT" : "BAD_REQUEST", reason); });
+      fireEvent.click(screen.getAllByRole("button", { name: words.shortlist })[0]!);
+      await waitFor(() => expect(server.toasts).toEqual([["error", words.refusals[reason]]]));
+      // The mission and its candidates stay on screen.
+      expect(screen.getByText("Amal Haddad")).toBeTruthy();
+    }
+
+    server.toasts = [];
+    server.updateStatus = vi.fn(async () => { throw refusal("BAD_REQUEST", "value_not_allowed"); });
+    fireEvent.click(within(card).getByRole("button", { name: words.shortlistSent }));
+    await waitFor(() => expect(server.toasts).toEqual([["error", words.refusals.value_not_allowed]]));
+    expect(server.updateStatus).toHaveBeenCalledWith({ id: 7, status: "shortlist_sent" });
+  });
+
+  it("garde le message du serveur pour un refus sans motif connu", async () => {
+    server.language = "en";
+    mount();
+    const card = (await screen.findByText("Hôpital du Golfe")).closest("article")!;
+    fireEvent.click(within(card).getByRole("button", { name: "View profiles" }));
+    await screen.findByText("Amal Haddad");
+
+    server.associate = vi.fn(async () => { throw refusal("BAD_REQUEST", "something_else"); });
+    fireEvent.click(screen.getAllByRole("button", { name: "Shortlist" })[0]!);
+    await waitFor(() => expect(server.toasts).toEqual([["error", "Refus du serveur (something_else)."]]));
   });
 });

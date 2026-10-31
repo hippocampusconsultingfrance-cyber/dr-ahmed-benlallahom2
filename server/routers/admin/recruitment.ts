@@ -19,6 +19,7 @@ import { canAdminDownloadCv, CV_DOWNLOAD_UNAVAILABLE_MESSAGE } from "../../recru
 import { eq, and, or, sql, desc, inArray, isNull, ne } from "drizzle-orm";
 import { sendRecruitmentTemplateEmail, type RecruitmentEmailLanguage, type RecruitmentEmailTemplate } from "../../_core/notifications";
 import { logRecruitmentAction, matchesRecruitmentProfile, parseRecruitmentJsonArray, RECRUITMENT_PROFILE_SCAN_LIMIT } from "../../recruitmentAudit";
+import { analysedLanguageNames } from "../../clientBriefMatching";
 import { certificationFactLabel, recruitmentFactLabel, type RecruitmentFact } from "../../../shared/recruitmentFactOrigins";
 import { recruitmentApplicationStatusLabel } from "../../../shared/recruitmentApplicationStatuses";
 import { googleDriveExportStatus } from "../../googleDriveExport";
@@ -39,6 +40,8 @@ import {
   certificationFactsByApplication,
   languageFactsByApplication,
   certificationFilterCondition,
+  languageFilterCondition,
+  verifiedNormalizedLanguages,
 } from "./recruitmentShared";
 import { adminRecruitmentPoolRouter } from "./recruitmentPool";
 import { adminRecruitmentCampaignsRouter, adminRecruitmentOfferTemplatesRouter } from "./recruitmentCampaigns";
@@ -175,7 +178,8 @@ export const adminRecruitmentRouter = router({
       // Country, language and certification, case and accents aside, like the pool and a campaign's
       // filtered audience: « dha » finds « Licence DHA », « emirats » « Émirats arabes unis ».
       if (input.country) conditions.push(adminFilterContains(cvApplications.targetCountries, input.country));
-      if (input.language) conditions.push(sql`((${cvApplications.analysisPromptVersion} = ${RECRUITMENT_ANALYSIS_PROMPT_VERSION} AND ${adminFilterContains(cvApplications.normalizedLanguages, input.language)}) OR ${adminFilterContains(cvApplications.languages, input.language)})`);
+      // A language by any of its names (IA-02): « arabe » finds « Arabic » too.
+      if (input.language) conditions.push(languageFilterCondition(input.language));
       if (input.certification) conditions.push(await certificationFilterCondition(db, input.certification, sql`((${cvApplications.analysisPromptVersion} = ${RECRUITMENT_ANALYSIS_PROMPT_VERSION} AND ${adminFilterContains(cvApplications.normalizedCertifications, input.certification)}) OR ${adminFilterContains(cvApplications.certifications, input.certification)})`));
 
       let profile: typeof recruitmentMatchProfiles.$inferSelect | null = null;
@@ -208,6 +212,9 @@ export const adminRecruitmentRouter = router({
             specialty: cvApplications.specialty,
             targetCountries: cvApplications.targetCountries,
             languages: cvApplications.languages,
+            // The languages read in the CV too, as the Langue filter reads them (IA-02), only for a
+            // profile that requires some: this JSON carries the CV's quotes.
+            normalizedLanguages: parseRecruitmentJsonArray(matchProfile.requiredLanguages).length ? verifiedNormalizedLanguages : sql<string | null>`NULL`,
             // The AI's skills, the largest of these columns, only for a profile that requires some.
             aiExtractedSkills: parseRecruitmentJsonArray(matchProfile.requiredSkills).length ? cvApplications.aiExtractedSkills : sql<string | null>`NULL`,
           })
@@ -221,7 +228,7 @@ export const adminRecruitmentRouter = router({
             score: item.aiScore,
             specialty: item.specialty,
             targetCountries: parseRecruitmentJsonArray(item.targetCountries),
-            languages: parseRecruitmentJsonArray(item.languages),
+            languages: [...parseRecruitmentJsonArray(item.languages), ...analysedLanguageNames(item.normalizedLanguages)],
             extractedSkills: (() => {
               try {
                 const parsed = item.aiExtractedSkills ? JSON.parse(item.aiExtractedSkills) : {};

@@ -129,3 +129,11 @@ describe("ADM-02 — recherche dans les candidatures", () => {
     expect(empty).toContain("Aucune candidature ne correspond aux filtres.");
   });
 });
+
+describe("IA-02 — aide des langues requises d’un profil de matching", () => {
+  it("donne les autres noms d’une langue chacun dans sa langue, pour un lecteur d’écran", () => {
+    const markup = renderToStaticMarkup(render());
+    expect(markup).toContain('aria-describedby="recruitment-profile-languages-help"');
+    expect(markup).toContain('(<span lang="en">French</span>, <span lang="de">Englisch</span>, <span lang="zh">阿拉伯语</span>…)');
+  });
+});

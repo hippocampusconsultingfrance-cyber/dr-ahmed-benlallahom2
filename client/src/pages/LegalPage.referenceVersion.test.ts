@@ -12,7 +12,7 @@ vi.mock("@/contexts/LanguageContext", () => ({ useLanguage: () => ({ language: s
 vi.mock("wouter", async () => {
   const { createElement } = await import("react");
   return {
-    useSearch: () => "tab=privacy",
+    useSearchParams: () => [new URLSearchParams("tab=privacy"), () => undefined],
     Link: ({ href, children, className }: { href: string; children?: ReactNode; className?: string }) => createElement("a", { href, className }, children),
   };
 });

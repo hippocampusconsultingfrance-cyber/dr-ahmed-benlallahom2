@@ -6,7 +6,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Onglets de /legal montés par React dans un DOM, l’adresse suivie par wouter
 // comme dans le navigateur : l’onglet nommé par ?tab=, et l’onglet par défaut
-// quand l’adresse n’en nomme plus (retour arrière de ?tab=privacy vers /legal).
+// quand l’adresse n’en nomme plus (retour arrière de ?tab=privacy vers /legal)
+// ou en nomme un qui n’existe pas (?tab=foo, PUB-01).
 
 const view = vi.hoisted(() => ({ language: "fr" as "fr" | "en" | "de" | "zh" }));
 vi.mock("@/contexts/LanguageContext", () => ({ useLanguage: () => ({ language: view.language }) }));
@@ -39,7 +40,7 @@ describe("onglets des pages légales suivant l’adresse", () => {
     await go("/legal");
     expect(selectedTab()).toBe(legal);
 
-    // A tab chosen by hand stays chosen while the address does not change.
+    // A tab chosen by hand stays chosen, written in the address (PUB-01).
     fireEvent.click(screen.getByRole("tab", { name: terms }));
     expect(selectedTab()).toBe(terms);
     await go("/legal?tab=terms");
@@ -51,5 +52,24 @@ describe("onglets des pages légales suivant l’adresse", () => {
     window.history.replaceState(null, "", "/legal?tab=terms");
     render(createElement(LegalPage));
     expect(selectedTab()).toBe("Conditions Générales");
+  });
+
+  it.each([
+    ["fr", "Informations Légales"],
+    ["en", "Legal Information"],
+    ["de", "Rechtliche Informationen"],
+    ["zh", "法律信息"],
+  ] as const)("ouvre l’onglet par défaut, avec son contenu, quand l’adresse nomme un onglet qui n’existe pas (%s, PUB-01)", async (language, legal) => {
+    view.language = language;
+    window.history.replaceState(null, "", "/legal?tab=foo");
+    render(createElement(LegalPage));
+    expect(selectedTab()).toBe(legal);
+    expect(screen.getByRole("heading", { level: 2 }).textContent).toBe(legal);
+
+    // Reached by a link of the site as well.
+    await go("/legal?tab=privacy");
+    await go("/legal?tab=TERMS");
+    expect(selectedTab()).toBe(legal);
+    expect(screen.getByRole("heading", { level: 2 }).textContent).toBe(legal);
   });
 });

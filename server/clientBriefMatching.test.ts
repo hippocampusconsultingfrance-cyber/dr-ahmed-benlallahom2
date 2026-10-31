@@ -43,6 +43,30 @@ describe("matching mission–candidat", () => {
     expect(result.reasons).toEqual([{ criterion: "specialty" }, { criterion: "mobility" }]);
   });
 
+  it("compte une langue requise déclarée sous un autre nom, celui du formulaire, et réunit ses noms en une seule langue (IA-02)", () => {
+    const mission = { specialtyNeeded: "Anesthésie-réanimation", country: "Émirats arabes unis", requiredCertifications: null, requiredLanguages: "Anglais, Arabe" };
+    const candidate = { specialty: "Anesthésie-réanimation", targetCountries: '["Émirats arabes unis"]' };
+    // The form records « French » and « Arabic », even from its French page.
+    const arabicOnly = computeBriefCandidateMatch(mission, { ...candidate, languageFacts: languageFacts('["French","Arabic"]', []) });
+    expect(arabicOnly.matchedLanguages).toEqual(["Arabe"]);
+    expect(arabicOnly.breakdown.languages).toBe(8);
+    expect(arabicOnly.languages).toEqual([{ name: "Arabic", origins: ["declared"] }]);
+
+    // Declared « Arabic », read « العربية » and « English » in the CV: one Arabic, two origins.
+    const both = computeBriefCandidateMatch(mission, { ...candidate, languageFacts: languageFacts('["Arabic"]', [{ language: "العربية", source: "extracted" }, { language: "English", source: "extracted" }]) });
+    expect(both.matchedLanguages).toEqual(["Anglais", "Arabe"]);
+    expect(both.breakdown.languages).toBe(15);
+    expect(both.languages).toEqual([{ name: "English", origins: ["extracted"] }, { name: "Arabic", origins: ["declared", "extracted"] }]);
+
+    // A language required in German or Chinese, or several in one term.
+    expect(computeBriefCandidateMatch({ ...mission, requiredLanguages: '["Englisch", "阿拉伯语"]' }, { ...candidate, languageFacts: languageFacts('["Anglais","Arabe"]', []) }).breakdown.languages).toBe(15);
+    expect(computeBriefCandidateMatch({ ...mission, requiredLanguages: "Anglais et arabe" }, { ...candidate, languageFacts: languageFacts('["English","Arabic"]', []) }).matchedLanguages).toEqual(["Anglais et arabe"]);
+    // Another language, under any name, earns nothing.
+    const none = computeBriefCandidateMatch(mission, { ...candidate, languageFacts: languageFacts('["French","Deutsch"]', []) });
+    expect(none.breakdown.languages).toBe(0);
+    expect(none.languages).toEqual([]);
+  });
+
   it("une certification déclarée par le candidat compte, elle aussi, une fois confirmée", () => {
     const declaredOnly = computeBriefCandidateMatch(brief, { ...anaesthetist, certificationFacts: certificationFacts("ACLS, ATLS", []) });
     expect(declaredOnly.breakdown.certifications).toBe(0);
