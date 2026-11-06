@@ -10,9 +10,10 @@ import type { TrpcContext } from "./_core/context";
 // EXPL-13 — un email patient accepté par Resend puis refusé par la messagerie
 // du patient (rebond, plainte, échec, adresse bloquée) est rattaché à son
 // rendez-vous par ses étiquettes : la carte et « À traiter » le disent, le
-// médecin reçoit une seule alerte avec le téléphone du patient, et
-// « Renvoyer » l’envoie de nouveau une fois l’adresse corrigée. Vraie route
-// du webhook, vraie file d’envoi et vrais emails ; seul Resend est simulé.
+// médecin reçoit une seule alerte par adresse refusée, avec le téléphone du
+// patient, et « Renvoyer » l’envoie de nouveau une fois l’adresse corrigée.
+// Vraie route du webhook, vraie file d’envoi et vrais emails ; seul Resend est
+// simulé.
 
 const WEBHOOK_SECRET = `whsec_${Buffer.from("appointment-bounce-test-secret").toString("base64")}`;
 
@@ -21,7 +22,7 @@ const state = vi.hoisted(() => {
   return {
     memory: null as null | { db: unknown },
     sent: [] as Array<{ to: string[]; subject: string; tags?: Array<{ name: string; value: string }> }>,
-    alerts: [] as Array<{ title: string; content: string }>,
+    alerts: [] as Array<{ title: string; content: string; idempotencyKey?: string }>,
   };
 });
 process.env.RESEND_WEBHOOK_SECRET = WEBHOOK_SECRET;
@@ -45,7 +46,10 @@ vi.mock("resend", () => ({
 }));
 vi.mock("./_core/notification", async importOriginal => ({
   ...await importOriginal<typeof import("./_core/notification")>(),
-  notifyOwner: vi.fn(async (payload: { title: string; content: string }) => { state.alerts.push(payload); return true; }),
+  notifyOwner: vi.fn(async (payload: { title: string; content: string }, options?: { idempotencyKey?: string }) => {
+    state.alerts.push({ ...payload, idempotencyKey: options?.idempotencyKey });
+    return true;
+  }),
 }));
 
 const { createApp } = await import("./_core/index");
@@ -121,6 +125,8 @@ function seedJob(appointmentId: unknown, jobType: string, overrides: Record<stri
 }
 
 const job = (appointmentId: unknown, jobType: string) => memory.rows(appointmentFulfillmentJobs).find(row => row.appointment_id === appointmentId && row.job_type === jobType);
+/** The owner's alerts that an address of this appointment bounced: one per address. */
+const bounceAlerts = (appointmentId: unknown) => memory.rows(appointmentFulfillmentJobs).filter(row => row.appointment_id === appointmentId && String(row.job_type).startsWith("bounce_alert:"));
 
 /** A signed delivery of Resend's webhook, as Svix sends it (and sends again after an error). */
 async function deliver(id: string, event: Record<string, unknown>) {
@@ -144,7 +150,7 @@ async function deliver(id: string, event: Record<string, unknown>) {
 const echoed = (tags: Array<{ name: string; value: string }> = []) => Object.fromEntries(tags.map(tag => [tag.name, tag.value]));
 
 describe("EXPL-13 — email patient refusé après acceptation", () => {
-  it("rebond de la confirmation livré deux fois : tâche marquée, une seule alerte avec le téléphone, carte et « À traiter », puis « Renvoyer » à l’adresse corrigée", async () => {
+  it("rebond de la confirmation livré deux fois : tâche marquée, une seule alerte avec le téléphone, carte et « À traiter », « Renvoyer » à l’adresse corrigée, puis une nouvelle alerte quand elle est refusée à son tour", async () => {
     const paid = seedAppointment("APTBOUNCE001");
     seedJob(paid.id, "owner", { status: "completed", attempts: 1 });
     seedJob(paid.id, "confirmation");
@@ -158,17 +164,17 @@ describe("EXPL-13 — email patient refusé après acceptation", () => {
     // The job keeps its status; its last error says it bounced after acceptance.
     expect(job(paid.id, "confirmation")).toMatchObject({ status: "completed", last_error: expect.stringMatching(/^bounced_after_acceptance:[0-9a-f]{16}$/) });
     // The owner's alert went out before the webhook answered, through the queue, with the patient's phone.
-    expect(job(paid.id, "confirmation_bounce_alert")).toMatchObject({ status: "completed", attempts: 1, last_error: null });
+    expect(bounceAlerts(paid.id)).toEqual([expect.objectContaining({ status: "completed", attempts: 1, last_error: null })]);
     expect(state.alerts).toHaveLength(1);
     expect(state.alerts[0]!.title).toBe("Email non reçu par le patient (APTBOUNCE001)");
-    expect(state.alerts[0]!.content).toContain("Appelez-le au +33611223344");
-    expect(state.alerts[0]!.content).toContain("« Corriger l’email du patient », puis « Renvoyer »");
+    expect(state.alerts[0]!.content).toContain("Appelez-le au +33611223344 pour vérifier son adresse et lui rappeler la date et l’heure de sa consultation");
+    expect(state.alerts[0]!.content).toContain("« Corriger l’email du patient », puis « Renvoyer » lui envoie de nouveau la confirmation et la facture");
 
     // The same event delivered again, then another report about the same email: nothing more.
     expect(await deliver("msg_bounce_1", bounce)).toEqual({ status: 200, body: { received: true, duplicate: true } });
     expect(await deliver("msg_suppressed_1", { ...bounce, type: "email.suppressed" })).toEqual({ status: 200, body: { received: true } });
     expect(state.alerts).toHaveLength(1);
-    expect(memory.rows(appointmentFulfillmentJobs).filter(row => row.job_type === "confirmation_bounce_alert")).toHaveLength(1);
+    expect(bounceAlerts(paid.id)).toHaveLength(1);
 
     // The appointment's card and « À traiter ».
     const card = (await admin().appointments.list({})).items.find(item => item.trackingId === "APTBOUNCE001")!;
@@ -191,6 +197,32 @@ describe("EXPL-13 — email patient refusé après acceptation", () => {
     expect(await deliver("msg_bounce_late", { ...bounce, data: { ...bounce.data, email_id: "email-1-late" } })).toEqual({ status: 200, body: { received: true } });
     expect(job(paid.id, "confirmation")).toMatchObject({ status: "completed", last_error: null });
     expect(state.alerts).toHaveLength(1);
+
+    // The corrected address bounces in turn: marked again, and the doctor, told « sent », is alerted again, under a new key.
+    expect(await deliver("msg_bounce_corrected", { ...bounce, data: { ...bounce.data, email_id: "email-2", to: ["jeanne@test.local"], tags: echoed(state.sent[1]!.tags) } })).toEqual({ status: 200, body: { received: true } });
+    expect(job(paid.id, "confirmation")).toMatchObject({ status: "completed", last_error: expect.stringMatching(/^bounced_after_acceptance:/) });
+    expect(bounceAlerts(paid.id)).toHaveLength(2);
+    expect(state.alerts).toHaveLength(2);
+    expect(state.alerts[1]!.content).toContain("Patient : Jeanne Martin — jeanne@test.local — +33611223344.");
+    expect(state.alerts[1]!.idempotencyKey).not.toBe(state.alerts[0]!.idempotencyKey);
+  });
+
+  it("confirmation et facture refusées à la même adresse, puis le rappel de la veille : une seule alerte", async () => {
+    const paid = seedAppointment("APTBOUNCE004");
+    seedJob(paid.id, "confirmation", { status: "completed", attempts: 1 });
+    seedJob(paid.id, "invoice", { status: "completed", attempts: 1 });
+    const bounced = (id: string, email: string) => deliver(id, { type: "email.bounced", created_at: "2026-11-06T09:00:00.000Z", data: { email_id: id, to: ["jeanne.typo@test.local"], tags: { email_kind: email, appointment_ref: "APTBOUNCE004" } } });
+
+    expect(await bounced("msg_confirmation", "appointment_confirmation")).toEqual({ status: 200, body: { received: true } });
+    expect(await bounced("msg_invoice", "appointment_invoice")).toEqual({ status: 200, body: { received: true } });
+    expect(await bounced("msg_reminder", "appointment_reminder")).toEqual({ status: 200, body: { received: true } });
+
+    expect(job(paid.id, "confirmation")).toMatchObject({ last_error: expect.stringMatching(/^bounced_after_acceptance:/) });
+    expect(job(paid.id, "invoice")).toMatchObject({ last_error: expect.stringMatching(/^bounced_after_acceptance:/) });
+    expect(bounceAlerts(paid.id)).toEqual([expect.objectContaining({ status: "completed", attempts: 1 })]);
+    expect(state.alerts.map(alert => alert.title)).toEqual(["Email non reçu par le patient (APTBOUNCE004)"]);
+    const card = (await admin().appointments.list({})).items.find(item => item.trackingId === "APTBOUNCE004")!;
+    expect(card.deliveries.map(delivery => delivery.state)).toEqual(["bounced", "bounced"]);
   });
 
   it("étiquette la facture, le rappel et l’email de remboursement ; un rappel refusé alerte le médecin, sans tâche à renvoyer", async () => {
@@ -207,18 +239,18 @@ describe("EXPL-13 — email patient refusé après acceptation", () => {
     seedJob(paid.id, "confirmation", { status: "completed", attempts: 1 });
     expect(await deliver("msg_reminder_complaint", { type: "email.complained", created_at: "2026-11-06T09:00:00.000Z", data: { email_id: "email-2", to: ["jeanne.typo@test.local"], tags: echoed(state.sent[1]!.tags) } }))
       .toEqual({ status: 200, body: { received: true } });
-    expect(job(paid.id, "reminder_bounce_alert")).toMatchObject({ status: "completed", last_error: null });
+    expect(bounceAlerts(paid.id)).toEqual([expect.objectContaining({ status: "completed", last_error: null })]);
     expect(job(paid.id, "confirmation")).toMatchObject({ last_error: null });
     expect(state.alerts).toHaveLength(1);
-    expect(state.alerts[0]!.content).toContain("L’email de rappel du rendez-vous APTBOUNCE002");
-    expect(state.alerts[0]!.content).toContain("rappelez-lui par téléphone");
+    expect(state.alerts[0]!.content).toContain("Un email du rendez-vous APTBOUNCE002");
+    expect(state.alerts[0]!.content).toContain("Appelez-le au +33611223344 pour vérifier son adresse et lui rappeler la date et l’heure de sa consultation");
 
     // Another recipient than the booking's (or an unknown reference): nothing is linked.
     expect(await deliver("msg_other_recipient", { type: "email.bounced", created_at: "2026-11-06T09:05:00.000Z", data: { email_id: "email-9", to: ["quelquun@test.local"], tags: { email_kind: "appointment_invoice", appointment_ref: "APTBOUNCE002" } } }))
       .toEqual({ status: 200, body: { received: true } });
     expect(await deliver("msg_unknown_ref", { type: "email.bounced", created_at: "2026-11-06T09:05:00.000Z", data: { email_id: "email-10", to: ["jeanne.typo@test.local"], tags: { email_kind: "appointment_invoice", appointment_ref: "APTUNKNOWN99" } } }))
       .toEqual({ status: 200, body: { received: true } });
-    expect(job(paid.id, "invoice_bounce_alert")).toBeUndefined();
+    expect(bounceAlerts(paid.id)).toHaveLength(1);
     expect(state.alerts).toHaveLength(1);
   });
 
@@ -231,13 +263,45 @@ describe("EXPL-13 — email patient refusé après acceptation", () => {
     expect(await deliver("msg_invoice_failed", { type: "email.failed", created_at: "2026-11-06T09:00:00.000Z", data: { email_id: "email-3", to: ["jeanne.typo@test.local"], tags: { email_kind: "appointment_invoice", appointment_ref: "APTBOUNCE003" } } }))
       .toEqual({ status: 200, body: { received: true } });
     expect(job(paid.id, "invoice")).toMatchObject({ status: "completed", last_error: expect.stringMatching(/^bounced_after_acceptance:/) });
-    expect(job(paid.id, "invoice_bounce_alert")).toMatchObject({ status: "retry", attempts: 1, last_error: "owner_bounce_alert_failed" });
+    expect(bounceAlerts(paid.id)).toEqual([expect.objectContaining({ status: "retry", attempts: 1, last_error: "owner_bounce_alert_failed" })]);
 
     // The patient's data is erased (RGPD-12): the email and its alert are closed, « À traiter » no longer lists them.
     await memory.db.update(appointments).set(anonymisedAppointmentFields()).where(eq(appointments.trackingId, "APTBOUNCE003"));
     expect(await closeErasedPatientFulfillment([paid.id as number])).toBe(2);
     expect(job(paid.id, "invoice")).toMatchObject({ status: "completed", last_error: "patient_data_erased" });
-    expect(job(paid.id, "invoice_bounce_alert")).toMatchObject({ status: "completed", last_error: "patient_data_erased" });
+    expect(bounceAlerts(paid.id)).toEqual([expect.objectContaining({ status: "completed", last_error: "patient_data_erased" })]);
     expect((await admin().attention()).bouncedDeliveries.total).toBe(0);
+  });
+
+  it("l’alerte restée en file n’est plus envoyée une fois l’adresse corrigée, et un remboursement ne la ferme pas", async () => {
+    const paid = seedAppointment("APTBOUNCE005");
+    seedJob(paid.id, "confirmation", { status: "completed", attempts: 1 });
+    const notifyOwner = vi.mocked((await import("./_core/notification")).notifyOwner);
+    notifyOwner.mockResolvedValueOnce(false);
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const bounce = { type: "email.bounced", created_at: "2026-11-06T09:00:00.000Z", data: { email_id: "email-5", to: ["jeanne.typo@test.local"], tags: { email_kind: "appointment_confirmation", appointment_ref: "APTBOUNCE005" } } };
+    expect(await deliver("msg_confirmation_5", bounce)).toEqual({ status: 200, body: { received: true } });
+    const [alert] = bounceAlerts(paid.id);
+    expect(alert).toMatchObject({ status: "retry", attempts: 1 });
+
+    // Refunded meanwhile: the address still bounces, the alert stays queued and says so.
+    await memory.db.update(appointments).set({ paymentStatus: "refunded", appointmentStatus: "cancelled" }).where(eq(appointments.trackingId, "APTBOUNCE005"));
+    const { closeUnsentAppointmentFulfillment } = await import("./appointmentFulfillment");
+    await closeUnsentAppointmentFulfillment(paid.id as number);
+    await memory.db.update(appointmentFulfillmentJobs).set({ scheduledFor: new Date(Date.now() - 1000) }).where(eq(appointmentFulfillmentJobs.id, alert!.id as number));
+    await processAppointmentFulfillmentNow(paid.id as number);
+    expect(bounceAlerts(paid.id)).toEqual([expect.objectContaining({ status: "completed", attempts: 2, last_error: null })]);
+    expect(state.alerts[0]!.content).toContain("pour vérifier son adresse et le prévenir de son remboursement");
+
+    // Another appointment whose address is corrected before its alert could go out: nothing is sent.
+    const other = seedAppointment("APTBOUNCE006");
+    seedJob(other.id, "confirmation", { status: "completed", attempts: 1 });
+    notifyOwner.mockResolvedValueOnce(false);
+    expect(await deliver("msg_confirmation_6", { ...bounce, data: { ...bounce.data, email_id: "email-6", tags: { email_kind: "appointment_confirmation", appointment_ref: "APTBOUNCE006" } } })).toEqual({ status: 200, body: { received: true } });
+    await admin().appointments.updateCustomerEmail({ trackingId: "APTBOUNCE006", customerEmail: "jeanne@test.local" });
+    await memory.db.update(appointmentFulfillmentJobs).set({ scheduledFor: new Date(Date.now() - 1000) }).where(eq(appointmentFulfillmentJobs.id, bounceAlerts(other.id)[0]!.id as number));
+    await processAppointmentFulfillmentNow(other.id as number);
+    expect(bounceAlerts(other.id)).toEqual([expect.objectContaining({ status: "completed", last_error: "bounce_alert_outdated" })]);
+    expect(state.alerts).toHaveLength(1);
   });
 });

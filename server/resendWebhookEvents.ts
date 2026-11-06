@@ -27,9 +27,9 @@ const UNDELIVERED_STATUSES = new Set<DeliveryStatus>(["bounced", "complained", "
  * Time the webhook gives the owner's alert of a patient email that bounced to
  * go out before it answers (EXPL-13), well under the time Resend waits for the
  * answer. Past it, the alert stays queued for the next processing: never sent
- * after the answer. Mutable for tests.
+ * after the answer.
  */
-export const resendBounceAlertBudget = { timeoutMs: 5_000 };
+const RESEND_BOUNCE_ALERT_BUDGET_MS = 5_000;
 
 export type ResendWebhookEvent = { type: string; created_at?: string; data?: Record<string, any> };
 
@@ -85,7 +85,7 @@ function eventEffects(db: Database, input: {
  * answered as a duplicate. A patient email of a booking, tagged with it, that
  * bounced after Resend accepted it (EXPL-13) is marked on its appointment and
  * its owner alert queued, in the same batch; that alert is then sent within
- * resendBounceAlertBudget.
+ * RESEND_BOUNCE_ALERT_BUDGET_MS.
  */
 export async function recordResendEmailEvent(input: { providerEventId: string; event: ResendWebhookEvent; payload: string }): Promise<{ duplicate: boolean }> {
   const db = await getDb();
@@ -176,7 +176,7 @@ export async function recordResendEmailEvent(input: { providerEventId: string; e
     // budget, before the webhook answers (never after: what is left stays
     // queued for the next processing). It never throws.
     const { processFulfillmentBestEffort } = await import("./appointmentPaymentWebhook");
-    await processFulfillmentBestEffort(bouncedAppointment.id, resendBounceAlertBudget.timeoutMs);
+    await processFulfillmentBestEffort(bouncedAppointment.id, RESEND_BOUNCE_ALERT_BUDGET_MS);
   }
   return { duplicate: false };
 }

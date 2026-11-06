@@ -230,36 +230,39 @@ function alertedPatientJob(jobType: string): PatientJobType | null {
 }
 
 /**
- * The owner's alert that a patient email Resend accepted bounced afterwards
- * (EXPL-13): bounced, complained, failed or suppressed, as Resend's webhook
- * reports it for an email tagged with its appointment
- * (appointmentEmailBounceEffects). Queued once per appointment and email: the
- * event delivered again, or a second event about the same email, queues
- * nothing more. Sent like the failure alerts, in a send slot, by the
- * processing the webhook runs within its budget or by the next one, never
- * after a webhook has answered. The reminder has no job of its own: its
- * bounce only alerts the owner. Not shown on the dashboard, which shows the
- * patient email itself.
+ * The owner's alert that the patient's address bounced an email Resend had
+ * accepted (EXPL-13): bounced, complained, failed or suppressed, as Resend's
+ * webhook reports it for an email tagged with its appointment
+ * (appointmentEmailBounceEffects). One per appointment and address, its job
+ * type naming the address by its fingerprint: the confirmation and the
+ * invoice bouncing together, the event delivered again or the reminder sent
+ * the day before to the same address queue nothing more; an address
+ * corrected since that bounces in turn gets its own. Sent like the failure
+ * alerts, in a send slot, by the processing the webhook runs within its
+ * budget or by the next one, never after a webhook has answered. Not shown on
+ * the dashboard, which shows the patient emails themselves.
  */
-const BOUNCE_ALERT_JOB_TYPES = {
-  confirmation: "confirmation_bounce_alert",
-  invoice: "invoice_bounce_alert",
-  refund: "refund_bounce_alert",
-  reminder: "reminder_bounce_alert",
-} as const satisfies Record<ResendAppointmentEmail, string>;
-type BounceAlertJobType = (typeof BOUNCE_ALERT_JOB_TYPES)[ResendAppointmentEmail];
+const BOUNCE_ALERT_JOB_PREFIX = "bounce_alert:";
+type BounceAlertJobType = `${typeof BOUNCE_ALERT_JOB_PREFIX}${string}`;
 
-/** The patient email whose bounce this job alerts the owner about, if it is a bounce alert. */
-function bouncedPatientEmail(jobType: string): ResendAppointmentEmail | null {
-  return (Object.keys(BOUNCE_ALERT_JOB_TYPES) as ResendAppointmentEmail[]).find(email => BOUNCE_ALERT_JOB_TYPES[email] === jobType) ?? null;
+function bounceAlertJobType(customerEmail: string): BounceAlertJobType {
+  return `${BOUNCE_ALERT_JOB_PREFIX}${addressFingerprint(customerEmail)}`;
+}
+
+function isBounceAlertJob(jobType: string): jobType is BounceAlertJobType {
+  return jobType.startsWith(BOUNCE_ALERT_JOB_PREFIX);
 }
 
 /**
- * The patient emails, and the owner's alerts that one did not go out or
- * bounced, which give the patient's details: closed unsent once those
- * details are erased (RGPD-12).
+ * The patient emails, and the owner's alerts that one did not go out, which
+ * give the patient's details: closed unsent once those details are erased
+ * (RGPD-12), as are the bounce alerts.
  */
-const PATIENT_DATA_JOB_TYPES = [...PATIENT_JOB_TYPES, ...Object.values(FAILURE_ALERT_JOB_TYPES), ...Object.values(BOUNCE_ALERT_JOB_TYPES)];
+const PATIENT_DATA_JOB_TYPES = [...PATIENT_JOB_TYPES, ...Object.values(FAILURE_ALERT_JOB_TYPES)];
+
+function isPatientDataJob(jobType: string) {
+  return (PATIENT_DATA_JOB_TYPES as readonly string[]).includes(jobType) || isBounceAlertJob(jobType);
+}
 
 /** Jobs the dashboard shows (deliveries, « À traiter »): every one but the failure and bounce alerts. */
 function isDeliveryJob(jobType: string): jobType is FulfillmentJobType {
@@ -269,9 +272,14 @@ function isDeliveryJob(jobType: string): jobType is FulfillmentJobType {
 /** Why a patient email was closed unsent: the booking's data was erased, no address is left (RGPD-12). */
 const PATIENT_DATA_ERASED = "patient_data_erased";
 
-/** Payment status an appointment must have for a job to be sent: paid, or refunded for the refund notices and their failure or bounce alert. */
+/** Payment status an appointment must have for a job to be sent: paid, or refunded for the refund notices and their failure alert. */
 function jobPaymentStatus(jobType: string) {
-  return isRefundNoticeJob(alertedPatientJob(jobType) ?? bouncedPatientEmail(jobType) ?? jobType) ? "refunded" : "completed";
+  return isRefundNoticeJob(alertedPatientJob(jobType) ?? jobType) ? "refunded" : "completed";
+}
+
+/** Whether a job is sent for an appointment with this payment status: a bounce alert, for a paid or refunded one. */
+function jobSentFor(jobType: string, paymentStatus: string) {
+  return isBounceAlertJob(jobType) ? paymentStatus === "completed" || paymentStatus === "refunded" : paymentStatus === jobPaymentStatus(jobType);
 }
 
 const JOB_LABELS: Record<FulfillmentJobType, string> = {
@@ -461,8 +469,8 @@ export async function hasRefusedPatientEmail(appointment: Pick<Appointment, "id"
  * (EXPL-13), made in the batch that records the webhook event (DATA-04): the
  * job of that email, once sent, keeps its status and gets
  * BOUNCED_AFTER_ACCEPTANCE; the owner's alert is queued once per appointment
- * and email (BOUNCE_ALERT_JOB_TYPES). The caller has checked that the bounce
- * is about the address the appointment holds now.
+ * and address (bounceAlertJobType). The caller has checked that the bounce is
+ * about the address the appointment holds now.
  */
 export function appointmentEmailBounceEffects(db: Database, input: { appointmentId: number; customerEmail: string; email: ResendAppointmentEmail; now?: Date }): BatchItem<"pg">[] {
   const now = input.now ?? new Date();
@@ -474,7 +482,7 @@ export function appointmentEmailBounceEffects(db: Database, input: { appointment
       .where(and(jobOf(input.email), eq(appointmentFulfillmentJobs.status, "completed"), isNull(appointmentFulfillmentJobs.lastError)))],
     db.insert(appointmentFulfillmentJobs).values({
       appointmentId: input.appointmentId,
-      jobType: BOUNCE_ALERT_JOB_TYPES[input.email],
+      jobType: bounceAlertJobType(input.customerEmail),
       status: "queued",
       attempts: 0,
       maxAttempts: APPOINTMENT_FULFILLMENT_MAX_ATTEMPTS,
@@ -579,30 +587,23 @@ function failureAlertOf(jobType: PatientJobType, appointment: Appointment, failu
   };
 }
 
-const BOUNCED_EMAIL_LABELS: Record<ResendAppointmentEmail, string> = {
-  confirmation: "de confirmation",
-  invoice: "de facture",
-  refund: "de remboursement",
-  reminder: "de rappel",
-};
-
 /**
- * The owner's alert that a patient email Resend accepted bounced afterwards
- * (EXPL-13), with the patient's phone: the doctor calls, then corrects the
- * address and « Renvoyer » sends the email again. The reminder is not sent
- * again: the patient is told by phone. One key per email and address.
+ * The owner's alert that the patient's address bounced an email Resend had
+ * accepted (EXPL-13), with the patient's phone: the doctor calls, then
+ * corrects the address and « Renvoyer » sends the emails again (the
+ * confirmation, the invoice or the refund email; the reminder is not sent
+ * again). Written from the appointment as it stands, paid or refunded, under
+ * one key per wording and address.
  */
-function bounceAlertOf(email: ResendAppointmentEmail, appointment: Appointment) {
+function bounceAlertOf(appointment: Appointment) {
   const consultation = appointment.appointmentDate.toLocaleString("fr-FR", { timeZone: "Europe/Paris", dateStyle: "full", timeStyle: "short" });
-  const next = email === "reminder"
-    ? "Le rappel n’est pas renvoyé par le site : rappelez-lui par téléphone la date et l’heure de sa consultation."
-    : `Pour lui écrire à une autre adresse : ${DEFAULT_PUBLIC_ORIGIN}/admin, onglet « Réservations », rendez-vous ${appointment.trackingId} : « Corriger l’email du patient », puis « Renvoyer » l’envoie à la nouvelle adresse.`;
+  const refunded = appointment.paymentStatus === "refunded";
   return {
     payload: {
       title: `Email non reçu par le patient (${appointment.trackingId})`,
-      content: `L’email ${BOUNCED_EMAIL_LABELS[email]} du rendez-vous ${appointment.trackingId} (consultation du ${consultation}, heure de Paris) a été accepté par le service d’envoi, puis refusé par la messagerie du patient (adresse inexistante ou boîte pleine, email signalé comme indésirable, ou adresse bloquée par le service d’envoi) : le patient ne l’a pas reçu. Appelez-le au ${appointment.customerPhone} pour vérifier son adresse. ${next} ${patientContact(appointment)}`,
+      content: `Un email du rendez-vous ${appointment.trackingId} (consultation du ${consultation}, heure de Paris) a été accepté par le service d’envoi, puis refusé par la messagerie du patient ou signalé par lui comme indésirable (adresse inexistante ou boîte pleine, plainte, ou adresse bloquée par le service d’envoi) : les emails envoyés à cette adresse ne lui parviennent pas. Appelez-le au ${appointment.customerPhone} pour vérifier son adresse${refunded ? " et le prévenir de son remboursement" : " et lui rappeler la date et l’heure de sa consultation"}. Pour lui écrire à une autre adresse : ${DEFAULT_PUBLIC_ORIGIN}/admin, onglet « Réservations », rendez-vous ${appointment.trackingId} : « Corriger l’email du patient », puis « Renvoyer » lui envoie de nouveau ${refunded ? "l’email de remboursement" : "la confirmation et la facture"} (pas le rappel). ${patientContact(appointment)}`,
     },
-    idempotencyKey: patientEmailIdempotencyKey(`appointment-${email}-bounce-${appointment.trackingId}`, appointment.customerEmail),
+    idempotencyKey: patientEmailIdempotencyKey(`appointment-bounce-${appointment.trackingId}-${refunded ? "refunded" : "paid"}`, appointment.customerEmail),
   };
 }
 
@@ -630,21 +631,20 @@ async function runJob(id: number) {
   const [job] = await db.select().from(appointmentFulfillmentJobs).where(eq(appointmentFulfillmentJobs.id, id)).limit(1);
   if (!job || job.status !== "running") return { skipped: true };
   const jobType = job.jobType as FulfillmentJobType | FailureAlertJobType | BounceAlertJobType;
-  const bouncedEmail = bouncedPatientEmail(jobType);
   const [appointment] = await db.select().from(appointments).where(eq(appointments.id, job.appointmentId)).limit(1);
   const refundNotice = isRefundNoticeJob(jobType) && appointment ? await refundNoticeOf(appointment) : null;
   // A refund closes the post-payment jobs still waiting; the patient refund
   // email only goes out for a refund recorded from Stripe or the dashboard,
   // the owner refund alert for one recorded from Stripe.
   const refundNoticeMissing = jobType === "refund" ? !refundNotice : jobType === "refund_owner" && !refundNotice?.stripeRefundOf;
-  if (!appointment || appointment.paymentStatus !== jobPaymentStatus(jobType) || refundNoticeMissing) {
+  if (!appointment || !jobSentFor(jobType, appointment.paymentStatus) || refundNoticeMissing) {
     await db.update(appointmentFulfillmentJobs).set({ status: "completed", finishedAt: new Date(), lastError: isRefundNoticeJob(jobType) ? "appointment_refund_not_recorded_or_missing" : "appointment_not_paid_or_missing" }).where(eq(appointmentFulfillmentJobs.id, id));
     return { skipped: true };
   }
   // RGPD-12: a booking reduced to its accounting record has no address left.
   // Its patient emails, and the owner's alerts about them, are closed unsent;
   // the owner's other notices still go out.
-  if ((PATIENT_DATA_JOB_TYPES as readonly string[]).includes(jobType) && hasErasedPatientData(appointment)) {
+  if (isPatientDataJob(jobType) && hasErasedPatientData(appointment)) {
     await db.update(appointmentFulfillmentJobs).set({ status: "completed", finishedAt: new Date(), lastError: PATIENT_DATA_ERASED }).where(eq(appointmentFulfillmentJobs.id, id));
     return { skipped: true };
   }
@@ -720,20 +720,16 @@ async function runJob(id: number) {
       await waitForJobSendSlot();
       // The PDF stays in French whatever the language of the email (EN-01).
       await sendInvoiceEmail(appointment.customerEmail, appointment.customerName, appointment.trackingId, finalPrice, invoice.buffer, invoiceRecord.invoiceNumber, { idempotencyKey: patientEmailIdempotencyKey(`appointment-invoice-${invoiceRecord.invoiceNumber}`, appointment.customerEmail), language });
-    } else if (bouncedEmail) {
-      // The owner's alert that a patient email bounced after Resend accepted
-      // it (EXPL-13), written from the appointment as it stands now. Once that
-      // email went out again (« Renvoyer » after the address was corrected),
-      // nothing is left to alert about.
-      if (bouncedEmail !== "reminder") {
-        const [patientJob] = await db.select({ status: appointmentFulfillmentJobs.status, lastError: appointmentFulfillmentJobs.lastError }).from(appointmentFulfillmentJobs)
-          .where(and(eq(appointmentFulfillmentJobs.appointmentId, appointment.id), eq(appointmentFulfillmentJobs.jobType, bouncedEmail))).limit(1);
-        if (!isBouncedJob(patientJob)) {
-          await db.update(appointmentFulfillmentJobs).set({ status: "completed", finishedAt: new Date(), lastError: "bounce_alert_outdated" }).where(eq(appointmentFulfillmentJobs.id, id));
-          return { skipped: true };
-        }
+    } else if (isBounceAlertJob(jobType)) {
+      // The owner's alert that the patient's address bounced an email Resend
+      // had accepted (EXPL-13). Once that address is corrected on the
+      // appointment, nothing is left to alert about: a new address that
+      // bounces in turn gets its own alert.
+      if (jobType !== bounceAlertJobType(appointment.customerEmail)) {
+        await db.update(appointmentFulfillmentJobs).set({ status: "completed", finishedAt: new Date(), lastError: "bounce_alert_outdated" }).where(eq(appointmentFulfillmentJobs.id, id));
+        return { skipped: true };
       }
-      const alert = bounceAlertOf(bouncedEmail, appointment);
+      const alert = bounceAlertOf(appointment);
       await waitForJobSendSlot();
       // Not asked again after the immediate budget: the job goes back to the queue.
       const delivered = await notifyOwner(alert.payload, { idempotencyKey: alert.idempotencyKey, stopAtDeadline: true }).catch(() => false);
@@ -1073,12 +1069,13 @@ export async function retryAppointmentFulfillment(trackingId: string): Promise<A
 /**
  * Refund of an appointment (dashboard or Stripe, EXPL-02): its post-payment
  * jobs still waiting for an attempt (queued, waiting for a retry, or
- * interrupted), the owner's alerts that one did not go out or bounced
- * included, are closed right away as not sent, as the next run would do
- * without sending anything, so the dashboard stops showing them as failed and
- * waiting for a retry. A job being sent right now is left to its worker, and
- * the notices of a refund made in Stripe (RES-06), which are meant for a
- * refunded appointment, are never closed here.
+ * interrupted), the owner's alerts that one did not go out included, are
+ * closed right away as not sent, as the next run would do without sending
+ * anything, so the dashboard stops showing them as failed and waiting for a
+ * retry. A job being sent right now is left to its worker, and the notices of
+ * a refund made in Stripe (RES-06), which are meant for a refunded
+ * appointment, are never closed here, nor the alert that the patient's
+ * address bounces (EXPL-13), which still holds.
  */
 export async function closeUnsentAppointmentFulfillment(appointmentId: number, now = new Date()) {
   const db = await getDb();
@@ -1090,11 +1087,7 @@ export async function closeUnsentAppointmentFulfillment(appointmentId: number, n
     updatedAt: now,
   }).where(and(
     eq(appointmentFulfillmentJobs.appointmentId, appointmentId),
-    inArray(appointmentFulfillmentJobs.jobType, [
-      ...APPOINTMENT_FULFILLMENT_JOB_TYPES,
-      FAILURE_ALERT_JOB_TYPES.confirmation, FAILURE_ALERT_JOB_TYPES.invoice,
-      BOUNCE_ALERT_JOB_TYPES.confirmation, BOUNCE_ALERT_JOB_TYPES.invoice, BOUNCE_ALERT_JOB_TYPES.reminder,
-    ]),
+    inArray(appointmentFulfillmentJobs.jobType, [...APPOINTMENT_FULFILLMENT_JOB_TYPES, FAILURE_ALERT_JOB_TYPES.confirmation, FAILURE_ALERT_JOB_TYPES.invoice]),
     or(
       inArray(appointmentFulfillmentJobs.status, ["queued", "retry"]),
       and(eq(appointmentFulfillmentJobs.status, "running"), lte(appointmentFulfillmentJobs.startedAt, new Date(now.getTime() - APPOINTMENT_FULFILLMENT_STALE_AFTER_MS))),
@@ -1123,7 +1116,7 @@ export async function closeErasedPatientFulfillment(appointmentIds: number[], no
     updatedAt: now,
   }).where(and(
     inArray(appointmentFulfillmentJobs.appointmentId, appointmentIds),
-    inArray(appointmentFulfillmentJobs.jobType, PATIENT_DATA_JOB_TYPES),
+    or(inArray(appointmentFulfillmentJobs.jobType, PATIENT_DATA_JOB_TYPES), like(appointmentFulfillmentJobs.jobType, `${BOUNCE_ALERT_JOB_PREFIX}%`)),
     or(
       inArray(appointmentFulfillmentJobs.status, ["queued", "retry", "failed"]),
       and(eq(appointmentFulfillmentJobs.status, "running"), lte(appointmentFulfillmentJobs.startedAt, new Date(now.getTime() - APPOINTMENT_FULFILLMENT_STALE_AFTER_MS))),

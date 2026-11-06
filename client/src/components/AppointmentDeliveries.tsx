@@ -261,7 +261,7 @@ export default function AppointmentDeliveries({ trackingId, paymentStatus, deliv
         {canCorrectPatientEmail(deliveries, paymentStatus, customerEmail) && (
           <Button size="sm" variant="outline" className={buttonClass} disabled={correctEmail.isPending}
             onClick={() => {
-              const next = window.prompt(`Adresse email du patient du rendez-vous ${trackingId}, refusée par le service d’envoi. Saisissez l’adresse corrigée ; « Renvoyer » l’utilisera${invoiceNumber ? ` (la facture ${invoiceNumber} déjà émise garde ses mentions, dont l’adresse d’origine)` : ""} :`, customerEmail ?? "")?.trim();
+              const next = window.prompt(`Adresse email du patient du rendez-vous ${trackingId}, refusée par le service d’envoi ou par la messagerie du patient. Saisissez l’adresse corrigée ; « Renvoyer » l’utilisera${invoiceNumber ? ` (la facture ${invoiceNumber} déjà émise garde ses mentions, dont l’adresse d’origine)` : ""} :`, customerEmail ?? "")?.trim();
               if (!next || next === customerEmail) return;
               correctEmail.mutate({ trackingId, customerEmail: next });
             }}>
