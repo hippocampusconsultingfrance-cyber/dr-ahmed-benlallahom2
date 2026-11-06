@@ -1,6 +1,7 @@
 import { deflateSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
-import { candidateDocumentValidationMessage, safeCandidateDocumentName, validateCandidateDocument } from "./candidateDocumentValidation";
+import { CANDIDATE_DOCUMENT_ACCEPTED_EXTENSIONS } from "../shared/candidateDocumentLimits";
+import { candidateDocumentMimeTypes, candidateDocumentValidationMessage, safeCandidateDocumentName, validateCandidateDocument } from "./candidateDocumentValidation";
 import { DOCUMENT_DECOMPRESSION_LIMITS } from "./documentDecompressionLimits";
 import { appendWithoutXref, classicPdf, IMAGE_DATA_OBJ_KEYWORDS, libreOfficeChineseCvPdf, libreOfficeCvPdf, packPdfIntoObjectStream, pathologicalPdfs, pngPredict, saveIncrementally, scannedPdf, withObjectInStreamData } from "./testing/pdfFixture";
 import { buildZip } from "./testing/zipFixture";
@@ -52,6 +53,26 @@ describe("validation des documents candidats", () => {
     const accepted = validateCandidateDocument({ buffer: docx, mimeType: DOCX, originalName: "diplome.docx", size: docx.length });
     expect(accepted.mimeType).toBe(DOCX);
     expect(accepted.notes).not.toContain("legacy_doc");
+  });
+
+  it("accepte exactement les extensions que le portail laisse choisir (REC-15)", () => {
+    // Past the type check, an empty file of 300 bytes is refused for its signature only.
+    const passesTypeCheck = (mimeType: string, extension: string) => {
+      const buffer = Buffer.alloc(300, 0);
+      try {
+        validateCandidateDocument({ buffer, mimeType, originalName: `diplome.${extension}`, size: buffer.length });
+        return true;
+      } catch (error) {
+        return (error as Error).message !== "candidate_document_type_mismatch";
+      }
+    };
+    const candidates = new Set([...CANDIDATE_DOCUMENT_ACCEPTED_EXTENSIONS, "doc", "docm", "dot", "odt", "rtf", "txt", "gif", "webp", "heic", "tif", "tiff"]);
+    const serverExtensions = [...candidates].filter(extension => [...candidateDocumentMimeTypes].some(mimeType => passesTypeCheck(mimeType, extension)));
+    expect(serverExtensions.sort()).toEqual([...CANDIDATE_DOCUMENT_ACCEPTED_EXTENSIONS].sort());
+    // And every MIME type the upload filter lets through has an extension the portal offers.
+    for (const mimeType of candidateDocumentMimeTypes) {
+      expect(CANDIDATE_DOCUMENT_ACCEPTED_EXTENSIONS.some(extension => passesTypeCheck(mimeType, extension)), mimeType).toBe(true);
+    }
   });
 });
 

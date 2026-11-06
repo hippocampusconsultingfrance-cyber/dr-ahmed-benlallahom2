@@ -19,7 +19,12 @@ export const CANDIDATE_DOCUMENT_ACCEPTED_EXTENSIONS = ["pdf", "docx", "jpg", "jp
 /** Value for the `accept` attribute of the vault's file input. */
 export const CANDIDATE_DOCUMENT_ACCEPT_ATTRIBUTE = CANDIDATE_DOCUMENT_ACCEPTED_EXTENSIONS.map(extension => `.${extension}`).join(",");
 
-/** iOS / Android pickers may give an empty or generic MIME type: the extension decides in the browser; the server checks the signature and content. */
+/**
+ * The extension decides in the browser. The server is stricter: it also
+ * requires an accepted MIME type (an empty or generic one, as some iOS /
+ * Android pickers give, is refused before the file is read), then checks the
+ * signature and content.
+ */
 export function isAcceptedCandidateDocumentName(name: string): boolean {
   const extension = name.toLowerCase().split(".").pop() ?? "";
   return name.includes(".") && (CANDIDATE_DOCUMENT_ACCEPTED_EXTENSIONS as readonly string[]).includes(extension);
