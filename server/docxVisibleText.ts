@@ -1,8 +1,38 @@
 import { crc32 } from "node:zlib";
 import { DOCUMENT_DECOMPRESSION_LIMITS, inspectDocxArchive } from "./documentDecompressionLimits";
-import { DOCX_FONT_ALIASES, DOCX_FONT_AS_BASE, DOCX_FONT_AS_UPRIGHT, DOCX_FONT_CHARACTERS, DOCX_FONT_METRICS, DOCX_FONT_WIDTH_DIGITS, DOCX_SUBSTITUTE_FONTS, DOCX_SYNTHETIC_BOLD, DOCX_WORD_FONTS } from "./docxFontMetrics";
+import { DOCX_FONT_ALIASES, DOCX_FONT_AS_BASE, DOCX_FONT_AS_BEFORE, DOCX_FONT_AS_UPRIGHT, DOCX_FONT_CHARACTERS, DOCX_FONT_METRICS, DOCX_FONT_WIDTH_DIGITS, DOCX_SUBSTITUTE_FONTS, DOCX_WORD_FONTS } from "./docxFontMetrics";
 
 /**
+ * Refusal by default. In a container that shows no more than its room (a
+ * table row of exact height, a text box or a frame of fixed size, an exact
+ * line spacing, a line its indents set against the page's edge), text is only
+ * read if all that comes before it there is of a kind whose width and height
+ * the check bounds, of this closed list:
+ * - fonts measured (DOCX_FONT_METRICS: their own advances, those of a font of
+ *   their metrics, or as published), or bounded by a rule of a source: a font
+ *   of the reader not measured as the widest measured and more (`listed`), a
+ *   name that goes on from a family's with words of weight or use as that
+ *   family at least (familyOf), a font Word does not have as each font Word
+ *   may draw it in, laid out alone (laidLayouts);
+ * - characters measured (DOCX_FONT_CHARACTERS); those a font lacks, but signs,
+ *   as wide as in the widest of the reader's text fonts (lacking); Chinese,
+ *   Japanese and Korean ones a full em; spaces and invisible controls;
+ * - fields whose result is bounded: drawn as stored (STORED_FIELDS), recomputed
+ *   as fieldWidth bounds them (RECOMPUTED_FIELDS), drawn from their code
+ *   (CODE_DRAWN_FIELDS);
+ * - objects of a size read: drawings and VML shapes in line with the text,
+ *   their extent, effects and outline; symbols (w:sym), notes' and pages'
+ *   numbers, dates Word writes;
+ * - what Word surely draws: of a mc:AlternateContent, the first mc:Choice of
+ *   namespaces it understands (WORD_NAMESPACES), else the mc:Fallback; when
+ *   it may draw either, each choice it may draw and the fallback.
+ * Anything else (a font the document embeds, a display or heavy font of no
+ * metrics, a sign a font lacks, a character of no font measured, a field of
+ * another type or whose code holds another, a length not read) leaves the
+ * text after it in that container, or that depends on it, unverifiable: set
+ * aside, never counted as hidden, given with the alert and the excerpt the
+ * analysis gives of text set aside.
+ *
  * DOCX text Word does not show (IA-01): runs marked hidden (w:vanish,
  * w:specVanish, w:webHidden), smaller than 4 pt (w:sz, or w:szCs for complex
  * script text: Arabic, Hebrew…), squeezed to less than 1 pt a character
@@ -40,16 +70,16 @@ import { DOCX_FONT_ALIASES, DOCX_FONT_AS_BASE, DOCX_FONT_AS_UPRIGHT, DOCX_FONT_C
  * (a font of the reader not measured of no bound, a field's result of a format
  * not followed, a length not read) leaves the text that depends on it
  * unverifiable, set aside. What the document says of a font (its font table's
- * w:altName, w:family, w:pitch, w:panose1, its name) only widens it: the
- * widest of what each says is taken. A font the document embeds
- * (w:embedRegular…, obfuscated with w:fontKey) is measured in its own tables
- * (cmap, hmtx, head), within a size and a count of tables; unread, or past the
- * entries of a name and the fonts read (MAX_FONT_ENTRIES, MAX_EMBEDDED_FONTS),
- * of no bound.
+ * w:altName, w:family, w:pitch, w:panose1, its name) only widens it: each
+ * font it may be is laid out. A font the document embeds (w:embedRegular…),
+ * which Word draws by its own tables (the character map it reads, GSUB, GPOS
+ * and kern), is never measured: of no bound, as a name of more entries in the
+ * font table than are read (MAX_FONT_ENTRIES).
  * The fields Word computes as it lays the pages out or opens the document
  * (PAGE, NUMPAGES, SECTIONPAGES, SECTION, DATE, TIME…: RECOMPUTED_FIELDS) take
- * the most room their result may take, whatever result is stored; a drawing in
- * line with the text its extent, what its effects add (wp:effectExtent) and
+ * the most room their result may take, whatever result is stored, those drawn
+ * from their code (MACROBUTTON, GOTOBUTTON) the width of its text; a drawing
+ * in line with the text its extent, what its effects add (wp:effectExtent) and
  * its outline, its lengths read as Word reads them (a sign, +2540000, up to a
  * 32-bit integer).
  *
@@ -61,9 +91,9 @@ import { DOCX_FONT_ALIASES, DOCX_FONT_AS_BASE, DOCX_FONT_AS_UPRIGHT, DOCX_FONT_C
  * multiple of single spacing under 89/240; a right indent past the page's
  * right edge), the text is laid out twice (LAYOUTS):
  * taking the most room it may take (in the font Word draws it in: its own
- * when measured or its widths published; for a font Word does not have, the
- * one it draws it with instead, as the document's font table describes it,
- * fontResolver), and the least. Its lines wrap at the
+ * when measured or its widths published; for a font Word does not have, each
+ * one it may draw it with instead, as the document's font table describes it,
+ * fontResolver, laidLayouts), and the least. Its lines wrap at the
  * width of their cell, text box, frame or column less their indents, tab
  * stops move them along (the text a right or centred stop aligns stays on its
  * line, even past its edge, as Word and LibreOffice keep it there), what else
@@ -121,7 +151,8 @@ import { DOCX_FONT_ALIASES, DOCX_FONT_AS_BASE, DOCX_FONT_AS_UPRIGHT, DOCX_FONT_C
  * Of a mc:AlternateContent, mammoth reads mc:Fallback, but Word draws the
  * mc:Choice it understands (a DrawingML text box, w14…): a passage of the
  * fallback is only read if the choice draws it too, and as visibly (its
- * fill, its place on the page).
+ * fill, its place on the page); of a choice Word may draw or not, if seen in
+ * both.
  *
  * Text without contrast with the page may still show on a picture or a shape,
  * as the white text of many CV templates: in a text box without fill, in a
@@ -202,15 +233,33 @@ const NUMBER_FORMATS: Record<string, { characters: string; length: (value: numbe
 };
 /**
  * Fields Word computes as it lays the pages out (PAGE, NUMPAGES,
- * SECTIONPAGES, SECTION, AUTONUM…) or each time it opens or shows the
- * document (DATE, TIME): the result the file stores is not what it draws.
- * Others it draws as stored, unless the field is marked to update
- * (w:dirty) or the document asks for all of them (w:updateFields), but those
- * whose result Word keeps as it updates them (KEPT_FIELDS).
+ * SECTIONPAGES, SECTION, AUTONUM…, LISTNUM, which it numbers anew) or each
+ * time it opens or shows the document (DATE, TIME): the result the file stores
+ * is not what it draws; of these, fieldWidth bounds some.
  */
-const RECOMPUTED_FIELDS = new Set(["PAGE", "NUMPAGES", "SECTIONPAGES", "SECTION", "DATE", "TIME", "AUTONUM", "AUTONUMLGL", "AUTONUMOUT"]);
+const RECOMPUTED_FIELDS = new Set(["PAGE", "NUMPAGES", "SECTIONPAGES", "SECTION", "DATE", "TIME", "AUTONUM", "AUTONUMLGL", "AUTONUMOUT", "LISTNUM"]);
+/**
+ * Fields Word draws as the result the file stores until they are updated (by
+ * the user, as it prints, or as the document asks: w:dirty, w:updateFields),
+ * but those whose result it keeps then too (KEPT_FIELDS): references and
+ * links, the document's and the user's information, mail merge, form text,
+ * tables of contents (Microsoft, « List of field codes in Word »). The check
+ * bounds no other field: of any other type, or of a code holding another
+ * field, what it draws is of no width known, and what it stores is set aside.
+ */
+const STORED_FIELDS = new Set([
+  "HYPERLINK", "REF", "PAGEREF", "NOTEREF", "SEQ", "TOC", "MERGEFIELD", "FORMTEXT", "DOCPROPERTY", "DOCVARIABLE", "AUTHOR", "TITLE", "SUBJECT",
+  "KEYWORDS", "COMMENTS", "LASTSAVEDBY", "FILENAME", "TEMPLATE", "CREATEDATE", "SAVEDATE", "PRINTDATE", "USERNAME", "USERINITIALS", "USERADDRESS",
+]);
 /** Fields whose result Word keeps as stored when it updates them: a hyperlink's text, which its code does not give. */
 const KEPT_FIELDS = new Set(["HYPERLINK"]);
+/**
+ * Fields of no result Word draws from their code: the text after the macro
+ * or the place they go to (MACROBUTTON NomMacro Texte, GOTOBUTTON Signet
+ * Texte), as wide as that text in the run's font (Microsoft, « Field codes:
+ * MacroButton field », « GoToButton field »).
+ */
+const CODE_DRAWN_FIELDS = new Set(["MACROBUTTON", "GOTOBUTTON"]);
 /** Of a field's switches \* (the format of its result), those that change no length: of letters' case, of formatting. */
 const FIELD_CASES = /^(MERGEFORMAT|MERGEFORMATINET|CHARFORMAT|Upper|Lower|FirstCap|Caps)$/i;
 /** Of the switches \* of a number, the formats of NUMBER_FORMATS it may be written in (roman in either case), and how many characters it adds (ArabicDash: « - 1 - », Ordinal: « 1st »). */
@@ -292,14 +341,12 @@ const MAX_ADVANCE_IN_SIZES = 1;
  * what the reader draws: a font of the reader in its own advances, those of
  * a font metrically compatible with it or its widths published, else in the
  * bound of a font of the reader not measured; a font it does not have in its
- * own when measured and in the one Word draws it with instead, a word as wide
- * as in the widest of them (fontResolver); a font the document embeds in its
- * own tables; of no font named, Times New Roman, Word's,
- * never narrower than below; for the characters not measured,
- * lines of 1.15 times their size and characters, in sizes of their text,
- * about as wide as in the widest common fonts: capitals 0.68,
- * figures 0.56, other letters 0.5, punctuation 0.4, other signs 0.8, spaces
- * 0.3, Chinese, Japanese or Korean ones 1, all 0.6 in a typewriter font;
+ * own when measured and in each one Word may draw it with instead, alone, or
+ * a word as wide as in the widest of them (fontResolver, laidLayouts); of no
+ * font named, Times New Roman, Word's, never narrower than below; of a
+ * character a font lacks, as lacking bounds it; of the characters not
+ * measured, Chinese, Japanese or Korean ones 1, spaces 0.3, the others of no
+ * bound (unmeasuredShare); lines of 1.15 times their size at least;
  * words kept whole on their line, over passages and runs, with those no-break
  * spaces join (U+00A0, U+202F…), but after a hyphen or a dash; the insets of
  * text boxes and the side margins of cells; deleted text shown, as
@@ -328,8 +375,40 @@ const DEFAULT_PAGE = { width: 595.3, margin: 70.85 };
 const ACROSS = /^(lrTb|tb|lrTbV|tbV)$/;
 /** Vertical positions Word takes from the page or its margins rather than from the anchor paragraph (DrawingML, VML). */
 const FROM_PAGE = /^(page|margin|topMargin|bottomMargin|insideMargin|outsideMargin|top-margin-area|bottom-margin-area|inner-margin-area|outer-margin-area)$/i;
-/** Namespaces of Office and of the standard: Word draws the mc:Choice that requires them (wps, w14, w15, wpg…). */
-const OFFICE_NAMESPACE = /^(http:\/\/schemas\.microsoft\.com\/office\/|http:\/\/schemas\.openxmlformats\.org\/|http:\/\/purl\.oclc\.org\/ooxml\/|urn:schemas-microsoft-com:)/;
+/**
+ * The namespaces Word for Microsoft 365 understands, of which it draws the
+ * mc:Choice that requires them (ECMA-376 Part 3, 10.2.1), as it declares them
+ * on the documents it saves and as [MS-DOCX] and [MS-ODRAWXML] lay down their
+ * elements: the standard's (transitional and strict), VML and its Office and
+ * Word extensions (v, o, w10), Word's of 2006 to 2024 (wne, w14, w15, w16se,
+ * w16cid, w16, w16cex, w16sdtdh, w16sdtfl, w16du), its shapes, groups,
+ * canvases, ink and drawings (wps, wpg, wpc, wpi, wp14), DrawingML's of 2010
+ * (a14), charts (cx, cx1 to cx8), ink (aink), 3D models (am3d) and Office's
+ * extension list (oel). Of a choice that requires any other, Word draws the
+ * mc:Fallback.
+ */
+const WORD_NAMESPACES: ReadonlySet<string> = new Set([
+  "http://schemas.openxmlformats.org/wordprocessingml/2006/main", "http://schemas.openxmlformats.org/drawingml/2006/main",
+  "http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing", "http://schemas.openxmlformats.org/drawingml/2006/picture",
+  "http://schemas.openxmlformats.org/drawingml/2006/chart", "http://schemas.openxmlformats.org/drawingml/2006/diagram",
+  "http://schemas.openxmlformats.org/officeDocument/2006/relationships", "http://schemas.openxmlformats.org/officeDocument/2006/math",
+  "http://schemas.openxmlformats.org/markup-compatibility/2006",
+  "http://purl.oclc.org/ooxml/wordprocessingml/main", "http://purl.oclc.org/ooxml/drawingml/main", "http://purl.oclc.org/ooxml/drawingml/wordprocessingDrawing",
+  "http://purl.oclc.org/ooxml/drawingml/picture", "http://purl.oclc.org/ooxml/drawingml/chart", "http://purl.oclc.org/ooxml/drawingml/diagram",
+  "http://purl.oclc.org/ooxml/officeDocument/relationships", "http://purl.oclc.org/ooxml/officeDocument/math",
+  "urn:schemas-microsoft-com:vml", "urn:schemas-microsoft-com:office:office", "urn:schemas-microsoft-com:office:word",
+  "http://schemas.microsoft.com/office/word/2006/wordml", "http://schemas.microsoft.com/office/word/2010/wordml", "http://schemas.microsoft.com/office/word/2012/wordml",
+  "http://schemas.microsoft.com/office/word/2015/wordml/symex", "http://schemas.microsoft.com/office/word/2016/wordml/cid", "http://schemas.microsoft.com/office/word/2018/wordml",
+  "http://schemas.microsoft.com/office/word/2018/wordml/cex", "http://schemas.microsoft.com/office/word/2020/wordml/sdtdatahash",
+  "http://schemas.microsoft.com/office/word/2024/wordml/sdtformatlock", "http://schemas.microsoft.com/office/word/2023/wordml/word16du",
+  "http://schemas.microsoft.com/office/word/2010/wordprocessingShape", "http://schemas.microsoft.com/office/word/2010/wordprocessingGroup",
+  "http://schemas.microsoft.com/office/word/2010/wordprocessingCanvas", "http://schemas.microsoft.com/office/word/2010/wordprocessingInk",
+  "http://schemas.microsoft.com/office/word/2010/wordprocessingDrawing", "http://schemas.microsoft.com/office/drawing/2010/main",
+  "http://schemas.microsoft.com/office/drawing/2014/chartex", "http://schemas.microsoft.com/office/drawing/2015/9/8/chartex", "http://schemas.microsoft.com/office/drawing/2015/10/21/chartex",
+  "http://schemas.microsoft.com/office/drawing/2016/5/9/chartex", "http://schemas.microsoft.com/office/drawing/2016/5/10/chartex", "http://schemas.microsoft.com/office/drawing/2016/5/11/chartex",
+  "http://schemas.microsoft.com/office/drawing/2016/5/12/chartex", "http://schemas.microsoft.com/office/drawing/2016/5/13/chartex", "http://schemas.microsoft.com/office/drawing/2016/5/14/chartex",
+  "http://schemas.microsoft.com/office/drawing/2016/ink", "http://schemas.microsoft.com/office/drawing/2017/model3d", "http://schemas.microsoft.com/office/2019/extlst",
+]);
 /** What fills a DrawingML shape: none, a colour, or what may not be one (gradient, picture, pattern, the group's). */
 const DRAWING_FILLS = new Set(["a:noFill", "a:solidFill", "a:gradFill", "a:blipFill", "a:pattFill", "a:grpFill"]);
 const DRAWING_COLOURS = new Set(["a:srgbClr", "a:schemeClr", "a:sysClr", "a:prstClr", "a:scrgbClr", "a:hslClr"]);
@@ -1480,6 +1559,7 @@ function styleWidths(font: string, style: FontStyle): number[] {
   widths = [];
   for (let at = 0; at < digits.length; at += digits[at] === DOCX_FONT_AS_BASE ? 1 : 2) {
     if (digits[at] === DOCX_FONT_AS_UPRIGHT) for (let count = value(at + 1); count >= 0; count -= 1) widths.push(upright![widths.length]!);
+    else if (digits[at] === DOCX_FONT_AS_BEFORE) for (let count = value(at + 1); count >= 0; count -= 1) widths.push(widths.at(-1)!);
     else widths.push(digits[at] === DOCX_FONT_AS_BASE ? widths[MEASURED_BASES[widths.length]!]! : (value(at) * DOCX_FONT_WIDTH_DIGITS.length + value(at + 1)) / 1000);
   }
   fontWidths.set(key, widths);
@@ -1489,11 +1569,9 @@ function styleWidths(font: string, style: FontStyle): number[] {
 /**
  * A font Word may draw characters in: the widths of each of its styles
  * (DOCX_FONT_CHARACTERS, in sizes of their text, 0 for a character it
- * lacks), the height of its line of single spacing (in sizes); of a font the
- * document embeds, the advance of any character or symbol code it maps
- * (`advanceOf`, undefined when it maps none).
+ * lacks), the height of its line of single spacing (in sizes).
  */
-type DrawnFont = { widths: (style: FontStyle) => number[]; line: number; advanceOf?: (code: number, style: FontStyle) => number | undefined };
+type DrawnFont = { widths: (style: FontStyle) => number[]; line: number };
 
 /**
  * The fonts a run's characters may be laid out in, by the name it gives: Word
@@ -1502,10 +1580,12 @@ type DrawnFont = { widths: (style: FontStyle) => number[]; line: number; advance
  * tallest line.
  */
 type LaidFont = { fonts: DrawnFont[]; widest: (style: FontStyle) => number[]; line: number };
+/** The fonts a run's characters may be laid out in, by the name it gives (fontResolver); and one font laid out alone (`alone`). */
+type FontsOf = ((name: string | undefined) => LaidFont) & { alone: (font: DrawnFont) => LaidFont };
 
 /**
  * An advance or a line height of no bound known, in sizes of the text: of a
- * font of no metrics of the reader (Wide Latin…), or embedded and not read. Each
+ * font of no metrics of the reader (Wide Latin…), or the document embeds. Each
  * character of it takes a line of its own, each line all the room left: what
  * follows it in a row, a text box or a frame of fixed size is set aside.
  */
@@ -1522,6 +1602,46 @@ function measuredFont(key: string): DrawnFont {
   let font = measuredFonts.get(key);
   if (!font) measuredFonts.set(key, (font = { widths: style => styleWidths(key, style), line: DOCX_FONT_METRICS[key]!.line / 1000 }));
   return font;
+}
+
+/** Of each character measured, whether it is a letter, a figure, punctuation or a space, rather than a sign. */
+const LETTER_LIKE = Uint8Array.from(DOCX_FONT_CHARACTERS, character => (characterKind(character) === "sign" ? 0 : 1));
+const lackingWidths = new Map<FontStyle, number[]>();
+/**
+ * The most a character measured is wide, in sizes of its text, in a font
+ * that lacks it (of a width 0), which Word draws in another: a letter, a
+ * figure, punctuation or a space as in the widest of the reader's text fonts
+ * (`listed`) or of its East Asian ones (`eastAsian`, a full em for one of an
+ * ambiguous width), whichever Word takes; a sign, which Word may draw in a
+ * symbol font of no metrics here (Segoe UI Symbol, Segoe UI Emoji…), or a
+ * character none of them holds, of no bound.
+ */
+function lacking(style: FontStyle): number[] {
+  let widths = lackingWidths.get(style);
+  if (!widths) {
+    const listed = measuredFont(DOCX_SUBSTITUTE_FONTS.listed).widths(style);
+    const eastAsian = measuredFont(DOCX_SUBSTITUTE_FONTS.eastAsian).widths(style);
+    lackingWidths.set(style, (widths = listed.map((width, at) => (LETTER_LIKE[at] ? Math.max(width, eastAsian[at]!) : 0) || UNBOUNDED_SIZES)));
+  }
+  return widths;
+}
+
+/**
+ * The most a character the check does not measure (DOCX_FONT_CHARACTERS) is
+ * wide, in sizes of its text: a space below U+0021, one of no width within a
+ * line (ZERO_WIDTH) or a format control Word draws as nothing (marks of
+ * direction and embedding, invisible operators), as LAYOUTS gives their kind;
+ * a Chinese, Japanese or Korean one a full em, as East Asian fonts draw them;
+ * any other (Arabic, Hebrew, Indic or Thai letters, combining marks, emoji,
+ * the private use area…), Word drawing it in a font the check does not
+ * measure, shaping some of them, of no bound.
+ */
+function unmeasuredShare(code: number, typewriter: boolean) {
+  if (code <= 32 || ZERO_WIDTH.has(code) || code === 0x200e || code === 0x200f || (code >= 0x202a && code <= 0x202e) || (code >= 0x2061 && code <= 0x206f)) {
+    const kind = kindOf(code);
+    return typewriter && kind !== "wide" ? LAYOUTS[MOST]!.typewriter : LAYOUTS[MOST]!.widths[kind];
+  }
+  return isWide(code) ? LAYOUTS[MOST]!.widths.wide : UNBOUNDED_SIZES;
 }
 
 /**
@@ -1545,10 +1665,8 @@ const THEME_REFERENCE = /^\+(mn|mj)-(lt|ea|cs)$/;
 const SHOWN_NAME = /^(.+?)\s*\([^()]*\)$/;
 /** How many fonts of a list of names (LibreOffice writes alternatives apart by semicolons) are looked for; past them, the list is of no width known. */
 const MAX_LISTED_FONTS = 8;
-/** How many entries of one name in the font table, and faces in one entry, are read: past them, the font is of no width known. */
+/** How many entries of one name in the font table are read: past them, the font is of no width known. */
 const MAX_FONT_ENTRIES = 8;
-/** How many fonts a document embeds (the faces of an entry) are read: past them, a font embedded is of no width known. */
-const MAX_EMBEDDED_FONTS = 32;
 /** How many fonts a run's text may be drawn in are each laid out word by word (RunFonts): past them, its characters are as wide as in the widest. */
 const MAX_CHOSEN_FONTS = 8;
 
@@ -1577,16 +1695,14 @@ function themeFont(theme: Theme, name: string) {
   return scripts?.length ? scripts.join(";") : slot === "ea" ? OFFICE_EAST_ASIAN_FONTS : "";
 }
 
-/** A font the document embeds in a style: the relationship of its part (from the font table) and the key it is obfuscated with (w:fontKey). */
-type EmbeddedFace = { style: FontStyle; id: string; key: string | undefined };
-
 /**
- * What a document's font table (w:fonts) says of a font it names: another name for it, its kind, pitch and PANOSE classification, the
- * faces the document embeds; of no width known when it lists more entries or faces than are read (MAX_FONT_ENTRIES).
+ * What a document's font table (w:fonts) says of a font it names: another name for it, its kind, pitch and PANOSE classification;
+ * of no width known when the document embeds it (w:embedRegular…), or lists more entries of its name than are read (MAX_FONT_ENTRIES).
  */
-type FontEntry = { altName?: string; family?: string; pitch?: string; panose?: string; embeds?: EmbeddedFace[]; unbounded?: boolean };
+type FontEntry = { altName?: string; family?: string; pitch?: string; panose?: string; unbounded?: boolean };
 
-const EMBEDDED_STYLES: Record<string, FontStyle> = { "w:embedRegular": "regular", "w:embedBold": "bold", "w:embedItalic": "italic", "w:embedBoldItalic": "boldItalic" };
+/** A font the document embeds, in any style (ECMA-376 Part 1, 17.8.3.3 to 17.8.3.6). */
+const EMBEDDED = /^w:embed(Regular|Bold|Italic|BoldItalic)$/;
 
 /**
  * The fonts of a document's font table (word/fontTable.xml), by their names (fontName); each entry of a name, as Word may read any; a
@@ -1614,22 +1730,58 @@ function readFontTable(xml: string | undefined) {
       else if (tag.name === "w:family") entry.family = value;
       else if (tag.name === "w:pitch") entry.pitch = value;
       else if (tag.name === "w:panose1") entry.panose = value;
-      else if (Object.hasOwn(EMBEDDED_STYLES, tag.name)) {
-        if ((entry.embeds?.length ?? 0) >= MAX_FONT_ENTRIES) entry.unbounded = true;
-        else (entry.embeds ??= []).push({ style: EMBEDDED_STYLES[tag.name]!, id: tag.attributes.get("r:id") ?? "", key: tag.attributes.get("w:fontKey") });
-      }
+      // Word draws a font the document embeds in its own glyphs, whose advances, substitutions (GSUB) and kerning (GPOS, kern) it
+      // follows by the character map it reads: never measured here, of no bound.
+      else if (EMBEDDED.test(tag.name)) entry.unbounded = true;
     }
   });
   return entries;
 }
 
 /**
+ * Words a font's name may go on with after its family's name (Yu Gothic Medium, Segoe UI Semilight Italic, Arial Nova Cond,
+ * SimSun-ExtB, Calibri-Light…): of its weight, width, style or use.
+ */
+const VARIANT_WORD = /^(thin|hairline|extra|ultra|semi|demi|light|extralight|ultralight|semilight|demilight|book|regular|normal|roman|medium|demibold|semibold|bold|condensed|cond|semicondensed|narrow|compressed|italic|oblique|ui|display|text|small|caption|subheading|heading|banner|ext[a-z])$/;
+
+/** What parts a font's name in words (familyOf): a space, an underscore, a hyphen. */
+const NAME_SEPARATOR = /[\s_-]/;
+/** The longest name DOCX_FONT_ALIASES lists: no longer part of a name is looked up (familyOf). */
+const LONGEST_ALIAS = Object.keys(DOCX_FONT_ALIASES).reduce((longest, name) => Math.max(longest, name.length), 0);
+
+/**
+ * The family a font's name not listed is a variant of (familyOf): the
+ * longest name of DOCX_FONT_ALIASES it starts with, followed by words of
+ * VARIANT_WORD only; none for a heavy or wide one (HEAVY_NAME), of no bound.
+ * Its words are read once each, from its end, and only a start of it no
+ * longer than a name listed is looked up, however long the name.
+ */
+function familyOf(name: string) {
+  if (HEAVY_NAME.test(name)) return undefined;
+  for (let end = name.length; end > 0; ) {
+    let start = end;
+    while (start > 0 && !NAME_SEPARATOR.test(name[start - 1]!)) start -= 1;
+    let cut = start;
+    while (cut > 0 && NAME_SEPARATOR.test(name[cut - 1]!)) cut -= 1;
+    // A name ending apart, or of a word with nothing before it, or not of a variant: of no family.
+    if (start === end || cut === start || !VARIANT_WORD.test(name.slice(start, end))) return undefined;
+    const rest = cut <= LONGEST_ALIAS ? name.slice(0, cut) : undefined;
+    if (rest !== undefined && Object.hasOwn(DOCX_FONT_ALIASES, rest)) return rest;
+    end = cut;
+  }
+  return undefined;
+}
+
+/**
  * The font of DOCX_FONT_METRICS a font name stands for when listed (DOCX_FONT_ALIASES: of its metrics, or the bound of a font of the
- * reader of none), or when it names a typewriter or East Asian font; of no bound, a heavy or wide one.
+ * reader of none), or a variant of a family listed (familyOf: the family's, never narrower), or when it names a typewriter or East
+ * Asian font; of no bound, a heavy or wide one.
  */
 function knownFont(name: string) {
   // A name of Object.prototype (constructor, __proto__) is no font listed.
   if (Object.hasOwn(DOCX_FONT_ALIASES, name)) return DOCX_FONT_ALIASES[name]!;
+  const family = familyOf(name);
+  if (family !== undefined) return DOCX_FONT_ALIASES[family]!;
   if (TYPEWRITER_NAME.test(name)) return DOCX_SUBSTITUTE_FONTS.typewriter;
   if (EAST_ASIAN_NAME.test(name)) return DOCX_SUBSTITUTE_FONTS.eastAsian;
   if (HEAVY_NAME.test(name)) return DOCX_SUBSTITUTE_FONTS.unbounded;
@@ -1679,9 +1831,8 @@ const SERIF_NAME = /serif/;
  * font the reader does not have in the fonts Word may draw it with
  * (substituteFonts, by each entry of its name in the font table), and in its
  * own metrics when measured (the reader may have it) or the kind its name
- * tells; a font the document embeds (w:embedRegular…) in its own advances
- * (`embedded`; of no bound when they cannot be read), Word drawing it
- * instead; Times New Roman, Word's, when none is named. A name that may be
+ * tells; a font the document embeds (w:embedRegular…) of no bound, whatever
+ * its name; Times New Roman, Word's, when none is named. A name that may be
  * read otherwise may be any of what it may be: with characters Word shows
  * nothing of, or spaces of another kind (Calibri followed by a zero-width
  * space: Calibri, or a font Word does not have), of characters NFKC writes
@@ -1692,7 +1843,7 @@ const SERIF_NAME = /serif/;
  * list of alternatives (each, as themeFont gives the fonts of a theme's
  * scripts). Each name looked for once.
  */
-function fontResolver(table: Map<string, FontEntry[]>, theme: Theme, embedded: (faces: EmbeddedFace[]) => DrawnFont): (name: string | undefined) => LaidFont {
+function fontResolver(table: Map<string, FontEntry[]>, theme: Theme): FontsOf {
   const laid = new Map<string, LaidFont>();
   const byName = new Map<string, LaidFont>();
   /** The fonts Word may draw a font it does not have with, by each entry of its name in the font table. */
@@ -1703,8 +1854,7 @@ function fontResolver(table: Map<string, FontEntry[]>, theme: Theme, embedded: (
     const entries = table.get(name);
     const known = knownFont(name);
     const fonts: DrawnFont[] = [];
-    for (const entry of entries ?? []) if (entry.unbounded) fonts.push(UNBOUNDED_FONT);
-    else if (entry.embeds?.length) fonts.push(embedded(entry.embeds));
+    if (entries?.some(entry => entry.unbounded)) fonts.push(UNBOUNDED_FONT);
     if (known) fonts.push(measuredFont(known));
     if (!known || !DOCX_WORD_FONTS.has(name)) {
       fonts.push(...substitutes(entries));
@@ -1742,7 +1892,8 @@ function fontResolver(table: Map<string, FontEntry[]>, theme: Theme, embedded: (
           let widths = styles.get(style);
           if (!widths) {
             const all = fonts.map(item => item.widths(style));
-            widths = all.length === 1 ? all[0]! : all[0]!.map((_, at) => Math.max(...all.map(item => item[at]!)));
+            const gaps = lacking(style);
+            widths = all[0]!.map((_, at) => Math.max(...all.map(item => item[at]! || gaps[at]!)));
             styles.set(style, widths);
           }
           return widths;
@@ -1759,16 +1910,17 @@ function fontResolver(table: Map<string, FontEntry[]>, theme: Theme, embedded: (
     line: Math.max(serif.line, LAYOUTS[MOST]!.lineHeight),
     widths: style => {
       let widths = unnamedWidths.get(style);
-      if (!widths) unnamedWidths.set(style, (widths = serif.widths(style).map((width, at) => Math.max(width, LAYOUTS[MOST]!.widths[characterKind(DOCX_FONT_CHARACTERS[at]!)]))));
+      if (!widths) unnamedWidths.set(style, (widths = serif.widths(style).map((width, at) => (width ? Math.max(width, LAYOUTS[MOST]!.widths[characterKind(DOCX_FONT_CHARACTERS[at]!)]) : 0))));
       return widths;
     },
   }]);
-  return name => {
+  const resolve = (name: string | undefined) => {
     if (name === undefined) return unnamed;
     let font = byName.get(name);
     if (!font) byName.set(name, (font = laidOf(candidates(name, 0))));
     return font;
   };
+  return Object.assign(resolve, { alone: (font: DrawnFont) => laidOf([font]) });
 }
 
 /** The slots of a run's fonts (RunFonts): for Basic Latin, for its other characters, East Asian; either of the last two, as wide as the wider. */
@@ -1809,9 +1961,10 @@ const UNKNOWN_LANGUAGE_HINT_SLOTS = slotsOf(true, undefined);
  * past MAX_CHOSEN_FONTS of them, of their widest only; the slot of each
  * character measured; of those either slot may draw, the wider;
  * the widest each character may be (for the numbers and dates Word writes);
- * the tallest line; whether each slot is of one font only.
+ * how wide a character a font lacks may be (lacking); the tallest line;
+ * whether each slot is of one font only.
  */
-type RunFonts = { slots: number[][][]; slotOf: Int8Array; either: number[] | undefined; widest: number[]; line: number; single: boolean };
+type RunFonts = { slots: number[][][]; slotOf: Int8Array; either: number[] | undefined; widest: number[]; lacking: number[]; line: number; single: boolean };
 
 function runFonts(style: FontStyle, ascii: LaidFont, other: LaidFont, eastAsian: LaidFont | undefined, language: string | undefined): RunFonts {
   const laid = [ascii, other, eastAsian ?? other];
@@ -1820,175 +1973,7 @@ function runFonts(style: FontStyle, ascii: LaidFont, other: LaidFont, eastAsian:
   const widestOf = laid.map(font => font.widest(style));
   const either = eastAsian ? widestOf[OTHER_SLOT]!.map((width, at) => Math.max(width, widestOf[EAST_ASIAN_SLOT]![at]!)) : undefined;
   const widest = Array.from(slotOf, (slot, at) => (slot === EITHER_SLOT ? either![at]! : widestOf[slot]![at]!));
-  return { slots, slotOf, either, widest, line: Math.max(ascii.line, other.line, eastAsian?.line ?? 0), single: slots.every(slot => slot.length === 1) };
-}
-
-/** The most bytes of a font a document embeds that are read: past them, its advances are of no bound. */
-const MAX_EMBEDDED_FONT_BYTES = 8 * 1024 * 1024;
-/** How many tables, and subtables of its character map, a font read may list. */
-const MAX_FONT_TABLES = 64;
-
-/** A font file once read: the glyph of a character code (0: none), the advance of a glyph and the height of a line of single spacing, in sizes. */
-type FontFile = { glyphOf: (code: number) => number; advance: (glyph: number) => number; line: number };
-
-/**
- * A subtable of a font's character map, as the OpenType specification lays
- * it down (cmap, formats 4 and 12): the glyph of a character code, found by
- * halves; null when it does not fit in the table.
- */
-function characterSubtable(cmap: Buffer, offset: number, format: number): ((code: number) => number) | null {
-  if (format === 12) {
-    const groups = cmap.readUInt32BE(offset + 12);
-    if (offset + 16 + groups * 12 > cmap.length) return null;
-    return code => {
-      let low = 0;
-      for (let high = groups; low < high; ) {
-        const middle = (low + high) >> 1;
-        if (cmap.readUInt32BE(offset + 16 + middle * 12 + 4) < code) low = middle + 1;
-        else high = middle;
-      }
-      const group = offset + 16 + low * 12;
-      return low < groups && code >= cmap.readUInt32BE(group) ? cmap.readUInt32BE(group + 8) + code - cmap.readUInt32BE(group) : 0;
-    };
-  }
-  const segments = cmap.readUInt16BE(offset + 6) >> 1;
-  const ends = offset + 14;
-  const starts = ends + segments * 2 + 2;
-  const deltas = starts + segments * 2;
-  const rangeOffsets = deltas + segments * 2;
-  if (rangeOffsets + segments * 2 > cmap.length) return null;
-  return code => {
-    if (code > 0xffff) return 0;
-    let low = 0;
-    for (let high = segments; low < high; ) {
-      const middle = (low + high) >> 1;
-      if (cmap.readUInt16BE(ends + middle * 2) < code) low = middle + 1;
-      else high = middle;
-    }
-    if (low >= segments || code < cmap.readUInt16BE(starts + low * 2)) return 0;
-    const delta = cmap.readInt16BE(deltas + low * 2);
-    const rangeOffset = cmap.readUInt16BE(rangeOffsets + low * 2);
-    if (!rangeOffset) return (code + delta) & 0xffff;
-    const at = rangeOffsets + low * 2 + rangeOffset + (code - cmap.readUInt16BE(starts + low * 2)) * 2;
-    const glyph = at + 2 <= cmap.length ? cmap.readUInt16BE(at) : 0;
-    return glyph ? (glyph + delta) & 0xffff : 0;
-  };
-}
-
-/**
- * Reads a font a document embeds (an .odttf part): Word obfuscates it
- * (ECMA-376 Part 1, 17.8.1), its first 32 bytes XORed with the 16 bytes of
- * its key (w:fontKey, a GUID written {…}), the last one first: its table
- * directory, deobfuscated apart, the part itself not copied; then its tables,
- * none of which may lie in those bytes: head (units per em), hhea and hmtx
- * (advances), OS/2 and hhea (the tallest line Word or LibreOffice sets), cmap
- * (a Unicode subtable, else a symbol one, its codes from F000 on). Null when
- * it is larger than MAX_EMBEDDED_FONT_BYTES or does not read as the OpenType
- * specification lays it down.
- */
-function readEmbeddedFont(data: Buffer, fontKey: string | undefined): FontFile | null {
-  if (data.length < 32 || data.length > MAX_EMBEDDED_FONT_BYTES) return null;
-  const directory = Buffer.from(data.subarray(0, 12 + MAX_FONT_TABLES * 16));
-  const key = (fontKey ?? "").replace(/[{}-]/g, "");
-  if (/^[0-9a-f]{32}$/i.test(key)) for (let index = 0; index < 32; index += 1) directory[index] = directory[index]! ^ Number.parseInt(key.slice(30 - (index % 16) * 2, 32 - (index % 16) * 2), 16);
-  try {
-    const version = directory.readUInt32BE(0);
-    // TrueType, CFF (OTTO) or Apple TrueType (true) outlines.
-    if (version !== 0x00010000 && version !== 0x4f54544f && version !== 0x74727565) return null;
-    const count = directory.readUInt16BE(4);
-    if (count > MAX_FONT_TABLES) return null;
-    const tables = new Map<string, Buffer>();
-    for (let index = 0; index < count; index += 1) {
-      const record = 12 + index * 16;
-      const offset = directory.readUInt32BE(record + 8);
-      const length = directory.readUInt32BE(record + 12);
-      if ((length > 0 && offset < 32) || offset + length > data.length) return null;
-      tables.set(directory.toString("latin1", record, record + 4), data.subarray(offset, offset + length));
-    }
-    const head = tables.get("head");
-    const hhea = tables.get("hhea");
-    const hmtx = tables.get("hmtx");
-    const cmap = tables.get("cmap");
-    const os2 = tables.get("OS/2");
-    if (!head || !hhea || !hmtx || !cmap) return null;
-    const unitsPerEm = head.readUInt16BE(18);
-    const metrics = hhea.readUInt16BE(34);
-    if (unitsPerEm < 16 || unitsPerEm > 16384 || !metrics || hmtx.length < metrics * 4) return null;
-    const lines = [hhea.readInt16BE(4) - hhea.readInt16BE(6) + hhea.readInt16BE(8)];
-    if (os2 && os2.length >= 78) lines.push(os2.readUInt16BE(74) + os2.readUInt16BE(76), os2.readInt16BE(68) - os2.readInt16BE(70) + os2.readInt16BE(72));
-    const subtables: Array<{ platform: number; encoding: number; format: number; offset: number }> = [];
-    for (let index = 0, total = Math.min(cmap.readUInt16BE(2), MAX_FONT_TABLES); index < total; index += 1) {
-      const offset = cmap.readUInt32BE(4 + index * 8 + 4);
-      if (offset + 16 <= cmap.length) subtables.push({ platform: cmap.readUInt16BE(4 + index * 8), encoding: cmap.readUInt16BE(4 + index * 8 + 2), format: cmap.readUInt16BE(offset), offset });
-    }
-    const subtable = (format: number, encodings: number[]) => {
-      const found = subtables.find(table => table.format === format && (table.platform === 0 || (table.platform === 3 && encodings.includes(table.encoding))));
-      return found ? characterSubtable(cmap, found.offset, format) : null;
-    };
-    const unicode = [subtable(12, [10]), subtable(4, [1, 10])].filter(lookup => lookup !== null);
-    const symbol = subtables.some(table => table.platform === 3 && table.encoding === 0 && table.format === 4) ? characterSubtable(cmap, subtables.find(table => table.platform === 3 && table.encoding === 0 && table.format === 4)!.offset, 4) : null;
-    if (!unicode.length && !symbol) return null;
-    return {
-      glyphOf: code => {
-        for (const lookup of unicode) {
-          const glyph = lookup(code);
-          if (glyph) return glyph;
-        }
-        return symbol ? symbol(code) || (code <= 0xff ? symbol(0xf000 + code) : 0) : 0;
-      },
-      advance: glyph => hmtx.readUInt16BE(Math.min(glyph, metrics - 1) * 4) / unitsPerEm,
-      line: Math.max(...lines) / unitsPerEm,
-    };
-  } catch {
-    return null;
-  }
-}
-
-/**
- * A font of the faces a document embeds (EmbeddedFace), each read once
- * (`read`: null when unreadable): of each style, its face, else the upright
- * one for a slanted style, the bold one for a style of no bold face read,
- * else the upright one emboldened (DOCX_SYNTHETIC_BOLD); a character it
- * lacks as wide as the bound of a font of the reader (Word drawing it in
- * another font). Of no bound when a face cannot be read.
- */
-function embeddedFont(faces: EmbeddedFace[], read: (face: EmbeddedFace) => FontFile | null): DrawnFont {
-  const files = new Map<FontStyle, FontFile>();
-  for (const face of faces) {
-    const file = read(face);
-    if (!file) return UNBOUNDED_FONT;
-    files.set(face.style, file);
-  }
-  /** The face Word draws a style in, and what it adds to each advance. */
-  const faceOf = (style: FontStyle): [FontFile, number] => {
-    const bold = style === "bold" || style === "boldItalic";
-    const own = files.get(style) ?? (style === "italic" ? files.get("regular") : style === "boldItalic" ? files.get("bold") : undefined);
-    if (own) return [own, 0];
-    const upright = files.get("regular") ?? files.get("italic");
-    if (bold && upright) return [upright, DOCX_SYNTHETIC_BOLD / 1000];
-    return [files.get("bold") ?? files.get("boldItalic") ?? files.values().next().value!, 0];
-  };
-  const listed = measuredFont(DOCX_SUBSTITUTE_FONTS.listed);
-  const widths = new Map<FontStyle, number[]>();
-  return {
-    line: Math.max(...Array.from(files.values(), file => file.line)),
-    widths: style => {
-      let found = widths.get(style);
-      if (!found) {
-        const [file, added] = faceOf(style);
-        const fallback = listed.widths(style);
-        widths.set(style, (found = Array.from(DOCX_FONT_CHARACTERS, (character, at) => {
-          const glyph = file.glyphOf(character.charCodeAt(0));
-          return glyph ? file.advance(glyph) + added : fallback[at]!;
-        })));
-      }
-      return found;
-    },
-    advanceOf: (code, style) => {
-      const [file, added] = faceOf(style);
-      return file.advance(file.glyphOf(code)) + added;
-    },
-  };
+  return { slots, slotOf, either, widest, lacking: lacking(style), line: Math.max(ascii.line, other.line, eastAsian?.line ?? 0), single: slots.every(slot => slot.length === 1) };
 }
 
 /** How many characters (code points) a text holds. */
@@ -2761,9 +2746,14 @@ type Frame = BandSizes & {
    * (layText), its paragraph and its layout, whether deleted, where it starts in the XML.
    */
   character?: { text: string; place: TextPlace; judged?: LaidText; layout: ParagraphLayout | null; holder: Frame; deleted: boolean; start: number; field: Judgement };
-  /** mc:AlternateContent: the text of the mc:Choice Word draws, without spaces, the judgement of each of its characters, and how far the fallback's text matched it. */
-  drawn?: { text: string; verdicts: Judgement[]; cursor: number };
-  /** mc:Choice: the one Word draws. */
+  /**
+   * mc:AlternateContent: the text of the mc:Choice Word draws, without spaces, the judgement of each of its characters, and how far the
+   * fallback's text matched it; whether Word may draw another branch instead (`either`: drawnByWord), and whether one of the choices
+   * read so far is one Word surely draws (`settled`: none after it is); how many choices it has.
+   */
+  drawn?: { text: string; verdicts: Judgement[]; cursor: number; either: boolean; settled?: boolean };
+  choices?: number;
+  /** mc:Choice: the one Word draws, or one it may draw. */
   chosen?: boolean;
   /** Tables: their look and the cells of each row; rows: their index; cells: their place, and what the table style sets there. */
   look?: TableLook;
@@ -2790,6 +2780,8 @@ const OPAQUE_FILL = 0.9;
 /** How many paragraphs and tables of the body above it a shape in front may be found to cover, placed above its anchor (coverFrom). */
 const MAX_RECENT_BLOCKS = 64;
 type Passages = { invisible: string[]; unverifiable: Array<{ text: string; reason: DocxUnverifiableReason }> };
+/** A passage recorded as set aside: where it lies in the part, its text, why, and the ordinal of its paragraph (-1: none). */
+type SettledPassage = { start: number; end: number; text: string; judgement: Judgement; paragraph: number };
 /** A paragraph's style, and the space it leaves below it (dropped next to its style when contextual). In points. */
 type Spacing = { style: string | undefined; after: number; contextual: boolean };
 
@@ -2848,13 +2840,32 @@ function next(frame: Frame | undefined) {
   return frame.count - 1;
 }
 
-/** Whether Word draws a mc:Choice: it understands every namespace it requires. */
-const drawnByWord = (choice: XmlTag) =>
-  (choice.attributes.get("Requires") ?? "").split(/\s+/).filter(Boolean).every(prefix => OFFICE_NAMESPACE.test(choice.namespaces.get(prefix) ?? ""));
+/** Namespaces of Office and of the standard, of which Word may understand one that WORD_NAMESPACES does not list. */
+const OFFICE_NAMESPACE = /^(http:\/\/schemas\.microsoft\.com\/office\/|http:\/\/schemas\.openxmlformats\.org\/|http:\/\/purl\.oclc\.org\/ooxml\/|urn:schemas-microsoft-com:)/;
+
+/**
+ * Whether Word draws a mc:Choice: it understands every namespace it
+ * requires (WORD_NAMESPACES), and draws it (`choice`); one is of another
+ * vocabulary, and it draws the next choice or the mc:Fallback instead
+ * (`fallback`); or it may draw either, the choice requiring nothing, or a
+ * namespace of Office or of the standard the list does not hold (`either`):
+ * it, the next choices up to one Word surely draws, and the fallback are then
+ * all laid out, the fallback's text read only where seen in each (set aside
+ * when there are several choices).
+ */
+function drawnByWord(choice: XmlTag): "choice" | "fallback" | "either" {
+  const namespaces = (choice.attributes.get("Requires") ?? "").split(/\s+/).filter(Boolean).map(prefix => choice.namespaces.get(prefix) ?? "");
+  if (!namespaces.length) return "either";
+  if (namespaces.every(namespace => WORD_NAMESPACES.has(namespace))) return "choice";
+  return namespaces.some(namespace => !WORD_NAMESPACES.has(namespace) && !OFFICE_NAMESPACE.test(namespace)) ? "fallback" : "either";
+}
 
 const INVISIBLE: Judgement = { verdict: "invisible" };
 const OUT_OF_PLACE: Judgement = { verdict: "unverifiable", reason: "layout" };
 const UNLAID: Judgement = { verdict: "unverifiable", reason: "layout_unfinished" };
+/** Of text Word draws in one branch or in another, as each shows it: hidden only where both hide it, seen only where both show it, else set aside. */
+const eitherOf = (left: Judgement, right: Judgement) =>
+  left.verdict === right.verdict ? graver(left, right) : left.verdict === "unverifiable" ? left : right.verdict === "unverifiable" ? right : OUT_OF_PLACE;
 const UNBOUNDED: Pair = [Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY];
 
 /**
@@ -2865,9 +2876,12 @@ const UNBOUNDED: Pair = [Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY];
  * distance between default tab stops. `budget`: the layout work left
  * (docxLayoutWorkUnits). `fonts`: the font each name a run gives is laid
  * out in (fontResolver). `numbering`: how the document numbers its notes and
- * pages, read with the part (numberings).
+ * pages, read with the part (numberings). `axes`, when given: the names of
+ * the runs laid out that may stand for several fonts (laidLayouts), noted as
+ * met with how many. Also returns where it cuts the part (`cuts`) and each
+ * passage it records (`settled`), to merge layouts.
  */
-function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: boolean, pageShown: boolean, tabStop: number, budget: { units: number }, fonts: (name: string | undefined) => LaidFont, numbering: Survey<Numberings>, updatesFields: boolean, tags = readXmlTags(xml)) {
+function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: boolean, pageShown: boolean, tabStop: number, budget: { units: number }, fonts: (name: string | undefined) => LaidFont, numbering: Survey<Numberings>, updatesFields: boolean, tags = readXmlTags(xml), axes?: Map<string, number>) {
   // One reading of the part for all that the main one needs to know ahead.
   const largest = largestPage();
   const rowCells = tableRows();
@@ -3017,16 +3031,19 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
     else cuts.push([start, end]);
   };
   const found: Passages = { invisible: [], unverifiable: [] };
+  const settled: SettledPassage[] = [];
   let textStart: number | null = null;
   /**
    * The fields open where the visit is (w:fldChar begin to end, w:fldSimple):
    * their code read so far (w:instrText), whether their result has begun
    * (w:fldChar separate), how Word shows the result the file stores (as set
-   * aside: recomputed, or updated, Word draws another), whether marked to
-   * update (w:dirty), the formatting of the run that begins them; where the
-   * text of a field code being read starts; the formatting of the last run.
+   * aside: recomputed, updated, drawn from the code or of a field the check
+   * does not bound, Word draws another), whether marked to update (w:dirty),
+   * the formatting of the run that begins them and of the runs of their code,
+   * whether their code holds another field (`nested`); where the text of a
+   * field code being read starts; the formatting of the last run.
    */
-  const fields: Array<{ code: string; result: boolean; shown: Judgement; dirty: boolean; simple: boolean; effective?: RunLayer }> = [];
+  const fields: Array<{ code: string; result: boolean; shown: Judgement; dirty: boolean; simple: boolean; effective?: RunLayer; formats: RunLayer[]; nested?: boolean }> = [];
   let instrStart: number | null = null;
   let lastRunFormat: RunLayer | undefined;
   let offsetStart: number | null = null;
@@ -3214,13 +3231,18 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
       return { judgement: seen, drawn: { verdicts: drawn.verdicts, from, to: drawn.verdicts.length } };
     }
     if (branch.name !== "mc:Fallback") return { judgement: seen };
+    // Of a choice Word may not draw, or of several, which it draws first, the fallback may show where the choice shows nothing.
+    const missing = drawn.either ? OUT_OF_PLACE : INVISIBLE;
+    if (drawn.either && (stack[alternate]!.choices ?? 0) > 1) return { judgement: graver(seen, OUT_OF_PLACE) };
     const at = searchBudget > 0 ? drawn.text.indexOf(letters, drawn.cursor) : drawn.text.startsWith(letters, drawn.cursor) ? drawn.cursor : -1;
     if (at === -1) {
       searchBudget -= drawn.text.length - drawn.cursor;
-      return { judgement: INVISIBLE };
+      return { judgement: graver(seen, missing) };
     }
     drawn.cursor = at + letters.length;
-    return { judgement: drawn.verdicts.slice(at, drawn.cursor).reduce(graver, seen) };
+    const fromChoice = drawn.verdicts.slice(at, drawn.cursor).reduce(graver, VISIBLE);
+    // Of a choice Word may not draw, the fallback it may draw instead, as both show the text (the choice cutting it, the fallback not: set aside).
+    return { judgement: drawn.either ? eitherOf(seen, fromChoice) : graver(seen, fromChoice) };
   };
   /** Text its paragraph's indents set beyond an edge of the page, where it starts (offPage). */
   const offIndents = (passage: { text: string; place: TextPlace }, effective: RunLayer) => {
@@ -3549,7 +3571,7 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
       const code = effective.capitals ? upperCase(characters.charCodeAt(at)) : characters.charCodeAt(at);
       const index = MEASURED_INDEX[code]!;
       const width = runFonts && index >= 0 ? runFonts.widest[index]! : 0;
-      widest = Math.max(widest, width || (effective.typewriter ? LAYOUTS[MOST]!.typewriter : LAYOUTS[MOST]!.widths[kindOf(code)]));
+      widest = Math.max(widest, width || unmeasuredShare(code, effective.typewriter === true));
     }
     return widest;
   };
@@ -3588,10 +3610,9 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
   /**
    * The width, in the most room, of what an element of a run draws on its
    * line other than text: a symbol (w:sym) in each font its font may be
-   * (fonts): of a font embedded, the advance its own tables give the code, or
-   * its missing glyph's; of a font of the reader measured, its advance of the
-   * character the code stands for (symbol fonts write theirs from F000 on);
-   * of another, its widest character (no bound for a font of none); a note's
+   * (fonts): of a font of the reader measured, its advance of the character
+   * the code stands for (symbol fonts write theirs from F000 on); of another,
+   * its widest character (no bound for a font of none, embedded too); a note's
    * number (footnotes, endnotes) and the page's, in the formats and from the
    * first numbers the document gives (numberWidth: of no width known in
    * another format, the rest of their line then set aside), and the dates
@@ -3614,9 +3635,8 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
         const ofReader = name !== undefined && DOCX_WORD_FONTS.has(fontName(name));
         width = 0;
         for (const font of fonts(name).fonts) {
-          const own = font.advanceOf && Number.isFinite(code) ? font.advanceOf(code, style) : undefined;
           const widths = font.widths(style);
-          width = Math.max(width, own ?? (ofReader && index >= 0 && widths[index]! > 0 ? widths[index]! : Math.max(...widths)));
+          width = Math.max(width, ofReader && index >= 0 && widths[index]! > 0 ? widths[index]! : Math.max(...widths));
         }
         symbolWidths.set(key, width);
       }
@@ -3667,15 +3687,48 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
     }
     return width;
   };
-  /** Whether Word draws a field's result otherwise than stored: one it computes (RECOMPUTED_FIELDS), or updates, but a result it keeps (KEPT_FIELDS). */
-  const recomputed = (code: string, dirty: boolean) => {
-    const { type } = fieldCode(code);
-    return RECOMPUTED_FIELDS.has(type) || ((dirty || updatesFields) && !KEPT_FIELDS.has(type));
+  /**
+   * The most room the text of a field Word draws from its code takes on its
+   * line (CODE_DRAWN_FIELDS): its code after its type and first argument, as
+   * wide as that text in the format of the run that begins the field or of
+   * any run of its code, the widest, in the font it is widest in (chooseFonts).
+   * Each measure laid out once, however many runs of its format the code has,
+   * each character of it costing a unit of layout work: past the work allowed,
+   * of no width known.
+   */
+  const displayWidth = (field: (typeof fields)[number]) => {
+    const text = /^\s*\S+\s+\S+\s?([\s\S]*)$/.exec(field.code)?.[1] ?? "";
+    // The size of the text in each format (fontSize) by one character of it, of a complex script when the text has no other letter.
+    const sample = OTHER_LETTER.test(text) ? "" : COMPLEX_SCRIPT.exec(text)?.[0] ?? "";
+    const measures = new Set([field.effective ?? lastRunFormat ?? styles.defaults, ...field.formats].map(effective => measureOf(effective, fontSize(effective, sample))));
+    let widest = 0;
+    for (const measure of Array.from(measures)) {
+      budget.units -= text.length;
+      if (budget.units <= 0) return Number.POSITIVE_INFINITY;
+      if (measure.several) measure.chooseFonts(text, 0, text.length);
+      let width = 0;
+      for (let at = 0; at < text.length; ) {
+        const code = text.codePointAt(at)!;
+        at += code > 0xffff ? 2 : 1;
+        width += measure.advance(MOST, code);
+      }
+      widest = Math.max(widest, width);
+    }
+    return widest;
+  };
+  /**
+   * Whether Word draws a field's result as stored: of a field it does not
+   * compute (STORED_FIELDS) and does not update, or whose result it keeps
+   * (KEPT_FIELDS); not of a code that holds another field.
+   */
+  const drawnAsStored = (field: (typeof fields)[number]) => {
+    const { type } = fieldCode(field.code);
+    return !field.nested && STORED_FIELDS.has(type) && (KEPT_FIELDS.has(type) || !(field.dirty || updatesFields));
   };
   /**
    * How Word shows the text read here of the fields open: never their code
-   * (but as the user shows field codes): hidden; their result recomputed or
-   * updated not as stored, which is set aside.
+   * (but as the user shows field codes): hidden; their result drawn other than
+   * stored, or perhaps (drawnAsStored), which is set aside.
    */
   const fieldShown = (): Judgement => {
     let judgement = VISIBLE;
@@ -3684,12 +3737,14 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
   };
   const beginResult = (field: (typeof fields)[number]) => {
     field.result = true;
-    field.shown = recomputed(field.code, field.dirty) ? OUT_OF_PLACE : VISIBLE;
+    field.shown = drawnAsStored(field) ? VISIBLE : OUT_OF_PLACE;
   };
   /**
    * A field ended: of a result Word draws otherwise than stored, what it may
-   * draw takes its width on its line (fieldWidth; another field's update, of
-   * no width known), beyond the result stored, laid out as text.
+   * draw takes its width on its line, beyond the result stored, laid out as
+   * text: a field it computes, as fieldWidth bounds it; one drawn from its
+   * code, its text (displayWidth); any other, updated, or of a code that holds
+   * another field, no width known.
    */
   const endField = (field: (typeof fields)[number]) => {
     if (!field.result) beginResult(field);
@@ -3698,7 +3753,11 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
     const holder = stack[at];
     if (!holder?.flow) return;
     const effective = field.effective ?? lastRunFormat ?? styles.defaults;
-    const width = RECOMPUTED_FIELDS.has(fieldCode(field.code).type) ? fieldWidth(field.code, effective) : Number.POSITIVE_INFINITY;
+    const { type } = fieldCode(field.code);
+    const width = field.nested ? Number.POSITIVE_INFINITY
+      : CODE_DRAWN_FIELDS.has(type) ? displayWidth(field)
+      : RECOMPUTED_FIELDS.has(type) ? fieldWidth(field.code, effective)
+      : Number.POSITIVE_INFINITY;
     if (Number.isFinite(width)) holder.flow.advance += width;
     const layout = held.deleted > 0 ? null : layoutOf(at);
     const size = fontSize(effective, "");
@@ -3708,8 +3767,9 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
    * A drawing in line with the text, once read, takes its place on its
    * paragraph's line: in the most room, its extent, what its effects add on
    * each side (wp:effectExtent, the room Word keeps for them) and its outline
-   * (a:ln); in the least, its extent less what its effects take back. Of a
-   * number not read, of no width known (placeObject).
+   * (a:ln); in the least, its extent less what its effects take back, none in
+   * a branch Word may not draw (maybeDrawn). Of a number not read, of no width
+   * known (placeObject).
    */
   const placeInline = (inline: NonNullable<Frame["inline"]>) => {
     const at = stack.findLastIndex(item => item.name === "w:p");
@@ -3719,15 +3779,15 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
     const most = width + Math.max(0, left) + Math.max(0, right) + outline;
     if (Number.isFinite(most)) holder.flow.advance += most;
     const layout = layoutOf(at);
-    if (layout) placeObject(layout, most, height + Math.max(0, top) + Math.max(0, bottom) + outline, 0, Math.max(0, width + Math.min(0, left) + Math.min(0, right)));
+    if (layout) placeObject(layout, most, height + Math.max(0, top) + Math.max(0, bottom) + outline, 0, maybeDrawn() ? 0 : Math.max(0, width + Math.min(0, left) + Math.min(0, right)));
   };
   /**
    * A VML shape in line with the text (w:pict, an OLE object's w:object)
    * Word draws takes its place on its paragraph's line likewise: its style's
    * width and height and its outline (strokeweight, 0.75 pt unless it says
    * otherwise or none, stroked false) in the most room, its width in the
-   * least. Of a length not read or negative, or of a size its points give, of
-   * no width known.
+   * least (none in a branch Word may not draw, maybeDrawn). Of a length not
+   * read or negative, or of a size its points give, of no width known.
    */
   const placeInlineVml = (tag: XmlTag, style: string) => {
     if (!drawnHere()) return;
@@ -3742,7 +3802,7 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
     const most = width + outline;
     if (Number.isFinite(most)) holder.flow.advance += most;
     const layout = layoutOf(at);
-    if (layout) placeObject(layout, most, inlineVmlLength(style, "height") + outline, 0, width);
+    if (layout) placeObject(layout, most, inlineVmlLength(style, "height") + outline, 0, maybeDrawn() ? 0 : width);
   };
   /**
    * The segments of a line that a line laid later over it covers, or may
@@ -3758,7 +3818,7 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
       if (settled) {
         cutOut(segment.start, segment.end);
         if (settled.drawn) for (let index = settled.drawn.from; index < settled.drawn.to; index += 1) settled.drawn.verdicts[index] = graver(settled.drawn.verdicts[index]!, judgement);
-        if (settled.recorded) record(judgement, segment.text, settled.paragraph);
+        if (settled.recorded) record(judgement, segment, settled.paragraph);
       }
       if (segment.word) cutWord(segment.word, judgement);
     }
@@ -3790,7 +3850,18 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
    */
   const measures = new Map<RunFonts | null, Map<string, ReturnType<typeof makeMeasure>>>();
   const lastMeasures = new WeakMap<RunLayer, ReturnType<typeof makeMeasure>>();
+  /** Notes the names of a run whose text is laid out that may stand for several fonts, but more than are laid out word by word (`axes`). */
+  const noted = new WeakSet<RunLayer>();
+  const noteAxes = (effective: RunLayer) => {
+    if (!axes || noted.has(effective) || effective["w:cs"] || effective["w:rtl"]) return;
+    noted.add(effective);
+    for (const name of [effective.font ?? effective.otherFont, effective.otherFont ?? effective.font, effective.eastAsianHint ? effective.eastAsianFont ?? OFFICE_EAST_ASIAN_FONTS : undefined]) {
+      const count = name === undefined ? 0 : fonts(name).fonts.length;
+      if (count >= 2 && count <= MAX_CHOSEN_FONTS && !axes.has(name!)) axes.set(name!, count);
+    }
+  };
   const measureOf = (effective: RunLayer, size: number) => {
+    noteAxes(effective);
     const last = lastMeasures.get(effective);
     if (last?.size === size) return last;
     const runFonts = fontsOf(effective);
@@ -3811,8 +3882,10 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
     /**
      * In the most room, a character measured is as wide as in the font of
      * its slot chosen for its word (`font`, else `choice`), or, of either
-     * slot, in the wider; others as in the widest common fonts; in capitals
-     * as their capital.
+     * slot, in the wider; one that font lacks, as Word may draw it instead
+     * (lacking); others as unmeasuredShare bounds them, of a run of complex
+     * script (w:cs, w:rtl, whose font Word takes elsewhere) all of them; in
+     * capitals as their capital.
      */
     const mostShare = (code: number, font?: number) => {
       const shown = effective.capitals ? upperCase(code) : code;
@@ -3821,14 +3894,10 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
         const index = shown <= 0xffff ? MEASURED_INDEX[shown]! : -1;
         if (index >= 0) {
           const slot = runFonts.slotOf[index]!;
-          share = slot === EITHER_SLOT ? runFonts.either![index]! : runFonts.slots[slot]![font ?? choice[slot]!]![index]!;
+          share = slot === EITHER_SLOT ? runFonts.either![index]! : runFonts.slots[slot]![font ?? choice[slot]!]![index]! || runFonts.lacking[index]!;
         }
       }
-      if (share === 0) {
-        const kind = kindOf(shown);
-        share = effective.typewriter && kind !== "wide" ? LAYOUTS[MOST]!.typewriter : LAYOUTS[MOST]!.widths[kind];
-      }
-      return share;
+      return share || unmeasuredShare(shown, effective.typewriter === true);
     };
     return {
       size,
@@ -4080,7 +4149,8 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
         entry.segments.push(segment);
         // Of the word the passage ends in, which the next may go on, or of a word joined to others: kept with its other parts.
         while (judged && span < judged.joined.length && judged.joined[span]!.to <= part.from) span += 1;
-        const word = judged && part.to > judged.wordFrom ? layout.word?.parts : judged && part.from >= (judged.joined[span]?.from ?? text.length) ? judged.joined[span]!.parts : undefined;
+        // (An empty passage, <w:t></w:t>, is of no word.)
+        const word = judged && part.to > judged.wordFrom ? layout.word?.parts : judged && span < judged.joined.length && part.from >= judged.joined[span]!.from ? judged.joined[span]!.parts : undefined;
         if (word) {
           word.segments.push(segment);
           segment.word = word;
@@ -4107,8 +4177,9 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
     shape.paint = colour ? [alpha < 1 ? blend(pageColour, colour, alpha) : colour] : null;
     shape.opaque = colour !== undefined && alpha >= OPAQUE_FILL;
   };
-  /** Records text set aside in its paragraph, or apart once the paragraph is read. */
-  const record = (judgement: Judgement, text: string, paragraph: Frame | undefined) => {
+  /** Records text set aside in its paragraph, or apart once the paragraph is read; and where it lies in the part. */
+  const record = (judgement: Judgement, { text, start, end }: Segment, paragraph: Frame | undefined) => {
+    settled.push({ start, end, text, judgement, paragraph: paragraph?.ordinal ?? -1 });
     const passages = paragraph && !paragraph.closed ? paragraph.passages! : found;
     if (judgement.verdict === "invisible") passages.invisible.push(text);
     else passages.unverifiable.push({ text, reason: judgement.reason ?? "drawing" });
@@ -4118,11 +4189,14 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
     const { front, box } = shape;
     if (front && !front.behind && front.wrapNone && front.opaque && box && !box.simple && !shape.offPage && !shape.hidden && drawnHere()) coverFrom(nearest("w:p"), { across: front.across, down: front.down, ...box });
   };
+  /** Whether what is read here is in a mc:AlternateContent of which Word may draw either branch: what it draws takes room in the most room only. */
+  const maybeDrawn = () => stack[openAlternate()]?.drawn?.either === true;
   /** Whether Word draws what is read here: not in a mc:Fallback whose mc:Choice it draws, nor in a mc:Choice it does not draw. */
   const drawnHere = () => {
     const alternate = openAlternate();
     const branch = stack[alternate + 1];
-    return alternate === -1 || !branch || (branch.name === "mc:Choice" ? branch.chosen === true : stack[alternate]!.drawn === undefined);
+    const drawn = stack[alternate]?.drawn;
+    return alternate === -1 || !branch || (branch.name === "mc:Choice" ? branch.chosen === true : drawn === undefined || drawn.either);
   };
   /**
    * Where the run being read lies: in the copy mammoth reads of what Word draws from mc:Choice, which takes its place from the
@@ -4132,7 +4206,7 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
   const runPlace = () => {
     const alternate = openAlternate();
     return {
-      copy: alternate !== -1 && stack[alternate]!.drawn !== undefined && stack[alternate + 1]?.name === "mc:Fallback",
+      copy: alternate !== -1 && stack[alternate]!.drawn?.either === false && stack[alternate + 1]?.name === "mc:Fallback",
       recorded: unread === 0,
       paragraph: nearest("w:p"),
     };
@@ -4144,7 +4218,7 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
     segment.settled = { recorded, paragraph, drawn };
     if (judgement.verdict === "visible") return;
     cutOut(segment.start, segment.end);
-    if (recorded) record(judgement, segment.text, paragraph);
+    if (recorded) record(judgement, segment, paragraph);
   };
   /** Whether a table's indent (w:tblInd) places it off the page: wherever its section's margins put it (hidden), or with some of them (unverifiable). */
   const placeTable = (table: Frame) => {
@@ -4195,7 +4269,11 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
       if (frame?.character) keepCharacter(frame, stack.at(-1), tag.end);
       if (frame?.name === "w:instrText" && instrStart !== null) {
         const field = fields.at(-1);
-        if (field && !field.result) field.code += decodeXml(xml.slice(instrStart, tag.start));
+        if (field && !field.result) {
+          field.code += decodeXml(xml.slice(instrStart, tag.start));
+          const run = stack.at(-1);
+          if (run?.name === "w:r") field.formats.push(runFormat(run));
+        }
         instrStart = null;
       }
       if (frame?.name === "w:fldSimple" && fields.at(-1)?.simple) endField(fields.pop()!);
@@ -4581,9 +4659,15 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
     if (tag.name === "wp:posOffset" && !tag.selfClosing && grandParent?.box && !grandParent.box.simple && (parent?.name === "wp:positionH" || parent?.name === "wp:positionV")) offsetStart = tag.end;
     // The shape follows its position and size.
     if (tag.name === "a:graphic" && parent?.box) placeOff(parent, { offPage: isOffPage(parent.box, page) });
-    if (tag.name === "mc:Choice" && parent?.name === "mc:AlternateContent" && !parent.drawn && drawnByWord(tag)) {
+    if (tag.name === "mc:Choice" && parent?.name === "mc:AlternateContent") parent.choices = (parent.choices ?? 0) + 1;
+    // Word draws the first choice it understands: past one it may not understand (either), the next ones may be drawn too, up to one it
+    // surely draws (settled), their shapes covering the text and their objects taking room as those of a branch Word may draw.
+    const open = tag.name === "mc:Choice" && parent?.name === "mc:AlternateContent" && (!parent.drawn || (parent.drawn.either && !parent.drawn.settled));
+    const drawnChoice = open ? drawnByWord(tag) : "fallback";
+    if (drawnChoice !== "fallback") {
       frame.chosen = true;
-      parent.drawn = { text: "", verdicts: [], cursor: 0 };
+      if (parent!.drawn) parent!.drawn.settled = drawnChoice === "choice";
+      else parent!.drawn = { text: "", verdicts: [], cursor: 0, either: drawnChoice === "either" };
     }
     // Word shows the page colour, and fill effects as the page colour (gradient, texture, picture) under all the text, when the settings say so.
     if (tag.name === "w:background" && parent?.name === "w:document" && pageShown) {
@@ -4687,13 +4771,17 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
     if (tag.name === "w:fldChar" && parent?.name === "w:r") {
       const kind = tag.attributes.get("w:fldCharType");
       const open = fields.at(-1);
-      if (kind === "begin") fields.push({ code: "", result: false, shown: VISIBLE, dirty, simple: false, effective: runFormat(parent) });
+      // A field begun in the code of another makes that code what the check does not bound.
+      if (kind === "begin" && open && !open.result) open.nested = true;
+      if (kind === "begin") fields.push({ code: "", result: false, shown: VISIBLE, dirty, simple: false, effective: runFormat(parent), formats: [] });
       else if (kind === "separate" && open && !open.simple && !open.result) beginResult(open);
       else if (kind === "end" && open && !open.simple) endField(fields.pop()!);
     }
     if (tag.name === "w:instrText" && !tag.selfClosing && parent?.name === "w:r") instrStart = tag.end;
     if (tag.name === "w:fldSimple") {
-      const field = { code: tag.attributes.get("w:instr") ?? "", result: false, shown: VISIBLE, dirty, simple: true };
+      const open = fields.at(-1);
+      if (open && !open.result) open.nested = true;
+      const field = { code: tag.attributes.get("w:instr") ?? "", result: false, shown: VISIBLE, dirty, simple: true, formats: [] };
       beginResult(field);
       if (tag.selfClosing) endField(field);
       else fields.push(field);
@@ -4720,7 +4808,108 @@ function cutInvisibleRuns(xml: string, styles: Styles, theme: Theme, fromPage: b
     if (start > from) visible += xml.slice(from, start);
     from = Math.max(from, end);
   }
-  return { xml: visible + xml.slice(from), cut: cuts.length > 0, invisibleText: found.invisible, unverifiableText: found.unverifiable };
+  return { xml: visible + xml.slice(from), cut: cuts.length > 0, invisibleText: found.invisible, unverifiableText: found.unverifiable, cuts, settled };
+}
+
+/** How many layouts of one font for each name of several fonts (laidLayouts) the check makes at most. */
+const MAX_LAYOUTS = 16;
+/**
+ * What reading a part again costs in each layout of one font (laidLayouts),
+ * in units of layout work (1,000,000 take about 0.25 s): its tags, a pass
+ * over a part of 20 MB and 2.6 million tags taking 5.4 s, some 2 µs or 8 units
+ * a tag; its bytes, a pass over 19 MB of text in 1,900 paragraphs 0.11 s, some
+ * 42 bytes a unit, counted at 16.
+ */
+const LAYOUT_UNITS_PER_TAG = 8;
+const BYTES_PER_LAYOUT_UNIT = 16;
+
+/**
+ * The text of a part judged in layouts of one font at a time: a run's text
+ * whose font may be any of several (a font Word does not have and the ones it
+ * may draw it with instead, a name read otherwise…) is laid out first as wide
+ * as in the widest of them, word by word (`first`, a bound of each); when that
+ * sets some text aside for its place, it is laid out again in each of them
+ * alone, the document being drawn in one: for each name met in that order
+ * (`axes`), crossed with the others, as long as the layouts stay within
+ * MAX_LAYOUTS and the work left, the names left over laid out word by word in
+ * each; text is read only if seen in every layout (mergedLayouts). Each layout
+ * costs the reading of the part again (LAYOUT_UNITS_PER_TAG,
+ * BYTES_PER_LAYOUT_UNIT) and the work it lays out: past the work allowed
+ * (`budget`), the first layout alone is kept.
+ */
+function laidLayouts(xml: string, tagCount: number, first: ReturnType<typeof cutInvisibleRuns>, axes: Map<string, number>, fonts: FontsOf, budget: { units: number }, pass: (resolve: (name: string | undefined) => LaidFont) => ReturnType<typeof cutInvisibleRuns>) {
+  if (!first.unverifiableText.some(passage => passage.reason === "layout")) return first;
+  // The work left must cover the reading of the part in each layout, before any is made: as many as it covers, MAX_LAYOUTS at most.
+  const reading = LAYOUT_UNITS_PER_TAG * tagCount + Math.ceil(xml.length / BYTES_PER_LAYOUT_UNIT);
+  const most = Math.min(MAX_LAYOUTS, Math.floor((budget.units - 1) / reading));
+  const crossed: Array<[string, number]> = [];
+  let count = 1;
+  for (const [name, fontCount] of Array.from(axes)) {
+    if (count * fontCount > most) continue;
+    crossed.push([name, fontCount]);
+    count *= fontCount;
+  }
+  if (!crossed.length) return first;
+  const layouts: Array<ReturnType<typeof cutInvisibleRuns>> = [];
+  for (let layout = 0; layout < count; layout += 1) {
+    budget.units -= reading;
+    // The font each crossed name is laid out in here, alone.
+    const chosen = new Map<string, LaidFont>();
+    let rest = layout;
+    for (const [name, fontCount] of crossed) {
+      chosen.set(name, fonts.alone(fonts(name).fonts[rest % fontCount]!));
+      rest = Math.floor(rest / fontCount);
+    }
+    layouts.push(pass(name => (name !== undefined && chosen.get(name)) || fonts(name)));
+    if (budget.units <= 0) return first;
+  }
+  return mergedLayouts(xml, layouts);
+}
+
+/**
+ * Layouts of one part merged: what any of them cuts out is cut out; each
+ * stretch of it any of them sets aside is recorded once, as the gravest of
+ * them judges it, in its paragraph, as cutInvisibleRuns records passages (a
+ * paragraph's hidden text as one, its other text by reason).
+ */
+function mergedLayouts(xml: string, layouts: Array<ReturnType<typeof cutInvisibleRuns>>) {
+  const cuts = layouts.flatMap(layout => layout.cuts).sort((left, right) => left[0] - right[0]);
+  const passages = layouts.flatMap(layout => layout.settled).sort((left, right) => left.start - right.start || left.end - right.end);
+  const bounds = Array.from(new Set(passages.flatMap(passage => [passage.start, passage.end]))).sort((left, right) => left - right);
+  const paragraphs = new Map<number, { invisible: string[]; unverifiable: Map<DocxUnverifiableReason, string[]> }>();
+  let next = 0;
+  const open: SettledPassage[] = [];
+  for (let index = 0; index + 1 < bounds.length; index += 1) {
+    const [from, to] = [bounds[index]!, bounds[index + 1]!];
+    while (next < passages.length && passages[next]!.start <= from) open.push(passages[next++]!);
+    for (let at = open.length - 1; at >= 0; at -= 1) if (open[at]!.end <= from) open.splice(at, 1);
+    if (!open.length) continue;
+    const gravest = open.reduce((found, passage) => (SEVERITY[passage.judgement.verdict] > SEVERITY[found.judgement.verdict] ? passage : found));
+    // A character drawn by an element (a no-break hyphen) is its passage's text; a stretch of a w:t, its text.
+    const text = xml[gravest.start] === "<" ? gravest.text : decodeXml(xml.slice(from, to));
+    let paragraph = paragraphs.get(gravest.paragraph);
+    if (!paragraph) paragraphs.set(gravest.paragraph, (paragraph = { invisible: [], unverifiable: new Map() }));
+    if (gravest.judgement.verdict === "invisible") paragraph.invisible.push(text);
+    else {
+      const reason = gravest.judgement.reason ?? "drawing";
+      const texts = paragraph.unverifiable.get(reason);
+      if (texts) texts.push(text);
+      else paragraph.unverifiable.set(reason, [text]);
+    }
+  }
+  const invisibleText: string[] = [];
+  const unverifiableText: Array<{ text: string; reason: DocxUnverifiableReason }> = [];
+  for (const { invisible, unverifiable } of Array.from(paragraphs.values())) {
+    if (invisible.length) invisibleText.push(invisible.join(""));
+    for (const [reason, texts] of Array.from(unverifiable)) unverifiableText.push({ text: texts.join(""), reason });
+  }
+  let visible = "";
+  let from = 0;
+  for (const [start, end] of cuts) {
+    if (start > from) visible += xml.slice(from, start);
+    from = Math.max(from, end);
+  }
+  return { xml: visible + xml.slice(from), cut: cuts.length > 0, invisibleText, unverifiableText, cuts, settled: passages };
 }
 
 /** The first existing target of a relationship of that type, resolved as mammoth resolves it. */
@@ -4731,19 +4920,6 @@ function relatedPart(parts: Map<string, Buffer>, relationshipsPath: string, type
     const target = tag.attributes.get("Target") ?? "";
     const path = (target.startsWith("/") || !basePath ? target : `${basePath}/${target}`).replace(/^\//, "");
     if (parts.has(path)) found = path;
-  });
-  return found;
-}
-
-/** The existing target of the relationship of each id, resolved as relatedPart resolves it: the relationships read once. */
-function relatedTargets(parts: Map<string, Buffer>, relationshipsPath: string, basePath: string) {
-  const found = new Map<string, string>();
-  visitXmlTags(parts.get(relationshipsPath)?.toString("utf8") ?? "", tag => {
-    const id = tag.attributes.get("Id");
-    if (tag.closing || tag.name !== "relationships:Relationship" || id === undefined || found.has(id)) return;
-    const target = tag.attributes.get("Target") ?? "";
-    const path = (target.startsWith("/") || !basePath ? target : `${basePath}/${target}`).replace(/^\//, "");
-    if (parts.has(path)) found.set(id, path);
   });
   return found;
 }
@@ -4884,29 +5060,14 @@ export function withoutInvisibleDocxText(buffer: Buffer, limits = DOCUMENT_DECOM
   const linkedNumbering = parts.get(numberingPart)?.includes("numStyleLink") ?? false;
   if (linkedNumbering) parts.delete(numberingPart);
   const budget = { units: limits.docxLayoutWorkUnits };
-  // The fonts the document embeds: each part found by the font table's relationships (read once), read once with each key; each set
-  // of faces one font, past MAX_EMBEDDED_FONTS of no width known.
-  const fontTablePart = related("fontTable");
-  const fontParts = relatedTargets(parts, relationshipsOf(fontTablePart), fontTablePart.includes("/") ? fontTablePart.slice(0, fontTablePart.lastIndexOf("/")) : "");
-  const fontFiles = new Map<string, FontFile | null>();
-  const readFace = (face: EmbeddedFace) => {
-    const part = fontParts.get(face.id);
-    if (part === undefined) return null;
-    const id = `${part}\n${face.key ?? ""}`;
-    if (!fontFiles.has(id)) fontFiles.set(id, readEmbeddedFont(parts.get(part)!, face.key));
-    return fontFiles.get(id)!;
-  };
-  const embeddedFonts = new Map<string, DrawnFont>();
-  const embedded = (faces: EmbeddedFace[]) => {
-    const id = faces.map(face => `${face.style}\n${fontParts.get(face.id) ?? ""}\n${face.key ?? ""}`).join("\n");
-    let font = embeddedFonts.get(id);
-    if (!font) embeddedFonts.set(id, (font = embeddedFonts.size < MAX_EMBEDDED_FONTS ? embeddedFont(faces, readFace) : UNBOUNDED_FONT));
-    return font;
-  };
-  const fonts = fontResolver(readFontTable(parts.get(fontTablePart)?.toString("utf8")), theme, embedded);
+  const fonts = fontResolver(readFontTable(parts.get(related("fontTable"))?.toString("utf8")), theme);
   // A page holds a character at least of the text flowing over the pages: of the document, of its notes.
   const pages = [mainDocument, related("footnotes"), related("endnotes")].reduce((size, name) => size + (parts.get(name)?.length ?? 0), 0);
-  const visible = cutInvisibleRuns(xml, readStyles(parts.get(stylesPart)?.toString("utf8"), theme), theme, onEveryPage, showsPageColour(settings), defaultTabStop(settings), budget, fonts, numberings(settings, pages), updatesFields(settings), tags);
+  const styles = readStyles(parts.get(stylesPart)?.toString("utf8"), theme);
+  const pass = (resolve: (name: string | undefined) => LaidFont, axes?: Map<string, number>) =>
+    cutInvisibleRuns(xml, styles, theme, onEveryPage, showsPageColour(settings), defaultTabStop(settings), budget, resolve, numberings(settings, pages), updatesFields(settings), tags, axes);
+  const axes = new Map<string, number>();
+  const visible = laidLayouts(xml, tags.count, pass(fonts, axes), axes, fonts, budget, resolve => pass(resolve));
   if (!visible.cut && !linkedNumbering) return { buffer, invisibleText: [], unverifiableText: [] };
   parts.set(mainDocument, Buffer.from(visible.xml, "utf8"));
   return { buffer: storedZip(parts), invisibleText: visible.invisibleText, unverifiableText: visible.unverifiableText };

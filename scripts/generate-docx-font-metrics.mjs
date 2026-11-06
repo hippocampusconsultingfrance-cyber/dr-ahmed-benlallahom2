@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 /**
  * Writes server/docxFontMetrics.ts: the advance widths of the characters of
- * Latin text, and the height of a line, of the fonts a CV names most often,
+ * Latin, Greek and Cyrillic text and their signs (CHARACTERS), and the height
+ * of a line, of the fonts a CV names most often,
  * measured on the fonts themselves or on fonts of the same metrics: Carlito
  * for Calibri, Caladea for Cambria, Liberation Sans, Serif, Mono and Sans
  * Narrow for Arial, Times New Roman, Courier New and Arial Narrow, Gelasio for
@@ -10,8 +11,9 @@
  * the unit), for the fonts Monotype and Linotype drew for Windows to the same
  * advances: P052 for Palatino Linotype and Book Antiqua, C059 for Century
  * Schoolbook, URW Bookman for Bookman Old Style, URW Gothic for Century
- * Gothic (a thousandth more, `rounding`); IPAGothic and IPAMincho for the
- * Latin and Latin-1 letters of MS Gothic and MS Mincho; DejaVu; and the free fonts of
+ * Gothic (a thousandth more, `rounding`), of these and of Gelasio, Caladea
+ * and Selawik their first characters only (`first`); IPAGothic and IPAMincho
+ * for the Latin and Latin-1 letters of MS Gothic and MS Mincho; DejaVu; and the free fonts of
  * Canva, Google Docs and recent Word (Montserrat, Open Sans, Lato…). Fonts of
  * Office and Windows of no free font of their metrics are given the advances
  * their publishers or string-pixel-width publish, character by character
@@ -38,7 +40,9 @@
  * a heavy or wide one, of no bound (UNBOUNDED); a font none of these, Word
  * does not have.
  * Written compactly: a character as wide as its base letter (É as E), or a
- * slanted style as wide as its upright one, in a sign rather than two digits.
+ * slanted style as wide as its upright one, in a sign rather than two digits,
+ * and characters as wide as the one before them (those a font lacks, of 0) in
+ * a sign and their count.
  *
  * Run again after changing the fonts or the characters:
  *   node scripts/generate-docx-font-metrics.mjs [fonts folder]
@@ -90,28 +94,34 @@ import { inflateSync } from "node:zlib";
  * else the taller of its own and single spacing's least (1.15); `latin`: a
  * font of the metrics of the one it stands for in Latin and Latin-1 only
  * (IPAGothic, of MS Gothic's), beyond them never narrower than the bound of
- * an East Asian font (east-asian).
+ * an East Asian font (east-asian); `first`: a font of the advances of the one
+ * it stands for in the first characters only (FIRST_CHARACTERS: Adobe's AFM
+ * files URW's advances were checked on hold no Greek nor Cyrillic; Gelasio,
+ * Caladea and Selawik were drawn to the metrics of Latin text), the others
+ * written as lacking (0): Word's font may draw them otherwise, and the check
+ * bounds them as a character a font lacks; they still count in the widest of
+ * all (SUBSTITUTES).
  */
 const FONTS = [
   { key: "carlito", family: "Carlito", names: ["calibri", "carlito"] },
-  { key: "caladea", family: "Caladea", names: ["cambria", "caladea"] },
+  { key: "caladea", family: "Caladea", names: ["cambria", "caladea"], first: true },
   { key: "liberation-sans", family: "Liberation Sans", names: ["arial", "helvetica", "arimo", "liberation sans"] },
   { key: "liberation-serif", family: "Liberation Serif", names: ["times new roman", "times", "tinos", "liberation serif"] },
   { key: "liberation-mono", family: "Liberation Mono", names: ["courier new", "courier", "cousine", "liberation mono"], widest: false },
   { key: "liberation-sans-narrow", family: "Liberation Sans Narrow", names: ["arial narrow", "liberation sans narrow"] },
   { key: "dejavu-sans", family: "DejaVu Sans", names: ["dejavu sans"] },
   { key: "dejavu-serif", family: "DejaVu Serif", names: ["dejavu serif"] },
-  { key: "gelasio", family: "Gelasio", names: ["georgia", "gelasio"], ownLine: false, published: "georgia" },
+  { key: "gelasio", family: "Gelasio", names: ["georgia", "gelasio"], ownLine: false, published: "georgia", first: true },
   { key: "eb-garamond", family: "EB Garamond", names: ["eb garamond"], ownLine: false },
   { key: "tex-gyre-adventor", family: "TeX Gyre Adventor", names: ["tex gyre adventor"], ownLine: false },
-  { key: "p052", family: "P052", names: ["palatino linotype", "book antiqua", "palatino", "p052"], rounding: 1 },
-  { key: "c059", family: "C059", names: ["century schoolbook", "new century schoolbook", "c059"], rounding: 1 },
-  { key: "urw-bookman", family: "URW Bookman", names: ["bookman old style", "bookman", "urw bookman"], rounding: 1, styles: { regular: ["Light"], bold: ["Demi"], italic: ["Light Italic"], boldItalic: ["Demi Italic"] } },
-  { key: "urw-gothic", family: "URW Gothic", names: ["century gothic", "urw gothic"], rounding: 1, styles: { regular: ["Book"], bold: ["Demi"], italic: ["Book Oblique"], boldItalic: ["Demi Oblique"] } },
-  { key: "selawik", family: "Selawik", names: ["segoe ui", "selawik"], published: "segoe ui" },
-  { key: "selawik-light", family: "Selawik Light", names: ["segoe ui light"], published: "segoe ui", synthetic: true, styles: { regular: ["Light"] } },
-  { key: "selawik-semilight", family: "Selawik Semilight", names: ["segoe ui semilight"], published: "segoe ui", synthetic: true, styles: { regular: ["Semilight"] } },
-  { key: "selawik-semibold", family: "Selawik Semibold", names: ["segoe ui semibold"], published: "segoe ui", synthetic: true, styles: { regular: ["Semibold"] } },
+  { key: "p052", family: "P052", names: ["palatino linotype", "book antiqua", "palatino", "p052"], rounding: 1, first: true },
+  { key: "c059", family: "C059", names: ["century schoolbook", "new century schoolbook", "c059"], rounding: 1, first: true },
+  { key: "urw-bookman", family: "URW Bookman", names: ["bookman old style", "bookman", "urw bookman"], rounding: 1, first: true, styles: { regular: ["Light"], bold: ["Demi"], italic: ["Light Italic"], boldItalic: ["Demi Italic"] } },
+  { key: "urw-gothic", family: "URW Gothic", names: ["century gothic", "urw gothic"], rounding: 1, first: true, styles: { regular: ["Book"], bold: ["Demi"], italic: ["Book Oblique"], boldItalic: ["Demi Oblique"] } },
+  { key: "selawik", family: "Selawik", names: ["segoe ui", "selawik"], published: "segoe ui", first: true },
+  { key: "selawik-light", family: "Selawik Light", names: ["segoe ui light"], published: "segoe ui", synthetic: true, first: true, styles: { regular: ["Light"] } },
+  { key: "selawik-semilight", family: "Selawik Semilight", names: ["segoe ui semilight"], published: "segoe ui", synthetic: true, first: true, styles: { regular: ["Semilight"] } },
+  { key: "selawik-semibold", family: "Selawik Semibold", names: ["segoe ui semibold"], published: "segoe ui", synthetic: true, first: true, styles: { regular: ["Semibold"] } },
   { key: "ipagothic", family: "IPAGothic", names: ["ms gothic", "ｍｓ ゴシック", "ipagothic"], synthetic: true, widest: false, latin: true },
   { key: "ipamincho", family: "IPAMincho", names: ["ms mincho", "ｍｓ 明朝", "ipamincho"], synthetic: true, widest: false, latin: true },
   { key: "montserrat", family: "Montserrat", names: ["montserrat"] },
@@ -134,7 +144,9 @@ const FONTS = [
  * its advance in each style in hundredths of the font's size, rounded; taken
  * as wide as half a hundredth more, the most it may be. A letter beyond Basic
  * Latin as its base letter; another character as the widest of the fonts
- * measured (SUBSTITUTES).
+ * measured (SUBSTITUTES), but a sign beyond the first characters measured
+ * (MORE_CHARACTERS), which the font may lack and Word draw in a symbol font: of
+ * no width given (0).
  */
 const PUBLISHED = [
   { key: "verdana", source: "verdana", names: ["verdana"] },
@@ -185,7 +197,8 @@ const SYNTHETIC_BOLD = 84;
  * Arial, Times New Roman, Verdana and Segoe UI), or of half width (SimSun,
  * SimHei, MingLiU…: those of Basic Latin `basicLatin` wide, in thousandths of
  * the size; the others, which such a font may lack, no narrower, and no
- * narrower than Word draws them instead), or either (one not listed). And
+ * narrower than Word draws them instead, of no width given, 0, where Arial
+ * and Times New Roman lack them too), or either (one not listed). And
  * the bound of a font of Windows or Office of no metrics here (LISTED): the
  * widest of all, `share` thousandths more; of a typewriter one (TYPEWRITER),
  * as Courier New and a twentieth more in Latin-1, which such a font draws all
@@ -193,7 +206,7 @@ const SYNTHETIC_BOLD = 84;
  * another font) never narrower than LISTED, and its bold as its upright one
  * emboldened (`synthetic`: Lucida Console has no bold face), of the taller
  * line of the two; of a symbol font of the reader (SYMBOL), every character as
- * wide as the widest of these (`every`).
+ * wide as the widest of these of Latin text (`every`, FIRST_CHARACTERS).
  */
 const SUBSTITUTES = [
   { key: "sans-or-serif", of: ["liberation-sans", "liberation-serif"] },
@@ -231,7 +244,7 @@ const WORD_FONTS = [
   "bahnschrift light semicondensed", "bahnschrift semilight condensed", "bahnschrift semilight semicondensed", "bahnschrift semibold condensed", "bahnschrift semibold semicondensed",
   "calibri", "calibri light", "cambria", "candara", "candara light", "cascadia code", "cascadia mono", "comic sans ms", "consolas", "constantia", "corbel", "corbel light", "courier new",
   "ebrima", "franklin gothic medium", "gadugi", "georgia", "helvetica", "times", "courier", "impact", "leelawadee ui", "leelawadee ui semilight", "lucida console", "lucida sans unicode",
-  "ms gothic", "ｍｓ ゴシック", "ms mincho", "ｍｓ 明朝",
+  "ms gothic", "ｍｓ ゴシック", "ms mincho", "ｍｓ 明朝", "microsoft himalaya", "sans serif collection",
   "microsoft new tai lue", "microsoft phagspa", "microsoft sans serif", "microsoft tai le", "microsoft yi baiti", "mongolian baiti", "myanmar text", "nirmala ui", "nirmala ui semilight",
   "palatino linotype", "segoe ui", "segoe ui light", "segoe ui semilight", "segoe ui semibold", "segoe ui bold", "segoe ui variable", "segoe ui variable display", "segoe ui variable small",
   "segoe ui variable text", "segoe ui historic", "sitka banner", "sitka display", "sitka heading", "sitka small", "sitka subheading", "sitka text", "sylfaen", "tahoma", "times new roman",
@@ -260,11 +273,13 @@ const WORD_FONTS = [
  * Names of fonts of the reader of no bound known: its display, script,
  * handwriting and symbol fonts, of letters wider than any measured (Wide
  * Latin, Goudy Stout…) or of glyphs of any width; its heavy or wide fonts
- * (Arial Black…), OCR A Extended, a typewriter font wider than any measured;
+ * (Arial Black…), OCR A Extended, a typewriter font wider than any measured,
+ * Perpetua Titling MT, of capitals only, which draws a lowercase letter as
+ * its capital, wider than LISTED gives it;
  * Cambria Math and Gabriola, of lines far taller.
  */
 const UNBOUNDED = [
-  "arial black", "ocr a extended", "aptos black", "aptos extrabold", "segoe ui black", "segoe ui emoji", "segoe ui symbol", "segoe mdl2 assets", "segoe fluent icons", "hololens mdl2 assets",
+  "arial black", "ocr a extended", "perpetua titling mt", "aptos black", "aptos extrabold", "segoe ui black", "segoe ui emoji", "segoe ui symbol", "segoe mdl2 assets", "segoe fluent icons", "hololens mdl2 assets",
   "segoe print", "segoe script", "ink free", "javanese text", "mv boli", "gabriola", "cambria math", "algerian", "bauhaus 93", "berlin sans fb demi", "bernard mt condensed", "blackadder itc",
   "bodoni mt black", "bodoni mt poster compressed", "bradley hand itc", "britannic bold", "broadway", "brush script mt", "castellar", "chiller", "colonna mt", "cooper black",
   "copperplate gothic bold", "copperplate gothic light", "curlz mt", "edwardian script itc", "elephant", "engravers mt", "eras bold itc", "eras demi itc", "eras light itc",
@@ -277,38 +292,76 @@ const UNBOUNDED = [
 ];
 /**
  * The characters measured an East Asian font draws a full em wide when it
- * has them (SimSun's “…”, MS Gothic's ●…): those of an ambiguous East Asian
- * width (A in Unicode's EastAsianWidth.txt, 15.1), accented letters among
- * them, and the minus sign and the check mark, which they draw so too.
+ * has them (SimSun's “…”, MS Gothic's ●, Greek and Cyrillic letters…): those
+ * of an ambiguous East Asian width (A in Unicode's EastAsianWidth.txt, 15.1),
+ * accented letters among them, and the minus sign and the check mark, which
+ * they draw so too.
  */
 const FULL_WIDTH_IN_EAST_ASIAN = new Set([
-  0xa1, 0xa4, 0xa7, 0xa8, 0xaa, 0xad, 0xae, ...range(0xb0, 0xb4), ...range(0xb6, 0xba), ...range(0xbc, 0xbf), 0xc6, 0xd0, 0xd7, 0xd8, ...range(0xde, 0xe1), 0xe6, 0xe8, 0xe9, 0xea, 0xec, 0xed,
-  0xf0, 0xf2, 0xf3, ...range(0xf7, 0xfa), 0xfc, 0xfe, 0x101, 0x111, 0x113, 0x11b, 0x126, 0x127, 0x12b, ...range(0x131, 0x133), 0x138, ...range(0x13f, 0x142), 0x144, ...range(0x148, 0x14b),
-  0x14d, 0x152, 0x153, 0x166, 0x167, 0x16b, 0x2010, ...range(0x2013, 0x2016), 0x2018, 0x2019, 0x201c, 0x201d, ...range(0x2020, 0x2022), ...range(0x2024, 0x2027), 0x2030, 0x2032, 0x2033, 0x20ac,
-  0x2122, ...range(0x2190, 0x2193), 0x2212, 0x2264, 0x2265, 0x25cf, 0x2713,
+  0xa1, 0xa4, ...range(0xa7, 0xa8), 0xaa, ...range(0xad, 0xae), ...range(0xb0, 0xb4), ...range(0xb6, 0xba), ...range(0xbc, 0xbf), 0xc6, 0xd0, ...range(0xd7, 0xd8), ...range(0xde, 0xe1),
+  0xe6, ...range(0xe8, 0xea), ...range(0xec, 0xed), 0xf0, ...range(0xf2, 0xf3), ...range(0xf7, 0xfa), 0xfc, 0xfe, 0x101, 0x111, 0x113, 0x11b, ...range(0x126, 0x127), 0x12b,
+  ...range(0x131, 0x133), 0x138, ...range(0x13f, 0x142), 0x144, ...range(0x148, 0x14b), 0x14d, ...range(0x152, 0x153), ...range(0x166, 0x167), 0x16b, 0x1ce, 0x1d0, 0x1d2, 0x1d4,
+  0x1d6, 0x1d8, 0x1da, 0x1dc, 0x2c4, 0x2c7, ...range(0x2c9, 0x2cb), 0x2cd, 0x2d0, ...range(0x2d8, 0x2db), 0x2dd, 0x2df, ...range(0x391, 0x3a1), ...range(0x3a3, 0x3a9),
+  ...range(0x3b1, 0x3c1), ...range(0x3c3, 0x3c9), 0x401, ...range(0x410, 0x44f), 0x451, 0x2010, ...range(0x2013, 0x2016), ...range(0x2018, 0x2019), ...range(0x201c, 0x201d),
+  ...range(0x2020, 0x2022), ...range(0x2024, 0x2027), 0x2030, ...range(0x2032, 0x2033), 0x2035, 0x203b, 0x203e, 0x2074, 0x207f, ...range(0x2081, 0x2084), 0x20ac, 0x2103, 0x2105,
+  0x2109, 0x2113, 0x2116, ...range(0x2121, 0x2122), 0x2126, 0x212b, ...range(0x2153, 0x2154), ...range(0x215b, 0x215e), ...range(0x2160, 0x216b), ...range(0x2170, 0x2179), 0x2189,
+  ...range(0x2190, 0x2199), ...range(0x21b8, 0x21b9), 0x21d2, 0x21d4, 0x21e7, 0x2200, ...range(0x2202, 0x2203), ...range(0x2207, 0x2208), 0x220b, 0x220f, 0x2211, 0x2212, 0x2215,
+  0x221a, ...range(0x221d, 0x2220), 0x2223, 0x2225, ...range(0x2227, 0x222c), 0x222e, ...range(0x2234, 0x2237), ...range(0x223c, 0x223d), 0x2248, 0x224c, 0x2252,
+  ...range(0x2260, 0x2261), ...range(0x2264, 0x2267), ...range(0x226a, 0x226b), ...range(0x226e, 0x226f), ...range(0x2282, 0x2283), ...range(0x2286, 0x2287), 0x2295, 0x2299, 0x22a5,
+  0x22bf, ...range(0x2460, 0x24e9), ...range(0x24eb, 0x254b), ...range(0x2550, 0x2573), ...range(0x2580, 0x258f), ...range(0x2592, 0x2595), ...range(0x25a0, 0x25a1),
+  ...range(0x25a3, 0x25a9), ...range(0x25b2, 0x25b3), ...range(0x25b6, 0x25b7), ...range(0x25bc, 0x25bd), ...range(0x25c0, 0x25c1), ...range(0x25c6, 0x25c8), 0x25cb,
+  ...range(0x25ce, 0x25d1), ...range(0x25e2, 0x25e5), 0x25ef, ...range(0x2605, 0x2606), 0x2609, ...range(0x260e, 0x260f), 0x261c, 0x261e, 0x2640, 0x2642, ...range(0x2660, 0x2661),
+  ...range(0x2663, 0x2665), ...range(0x2667, 0x266a), ...range(0x266c, 0x266d), 0x266f, ...range(0x269e, 0x269f), 0x26bf, ...range(0x26c6, 0x26cd), ...range(0x26cf, 0x26d3),
+  ...range(0x26d5, 0x26e1), 0x26e3, ...range(0x26e8, 0x26e9), ...range(0x26eb, 0x26f1), 0x26f4, ...range(0x26f6, 0x26f9), ...range(0x26fb, 0x26fc), ...range(0x26fe, 0x26ff), 0x2713,
+  0x273d, ...range(0x2776, 0x277f),
 ]);
 /**
  * Names of East Asian fonts of Windows whose Latin letters are all of half
  * their width (half-width: of a fixed pitch, as SimHei, KaiTi, FangSong and
- * MingLiU too), or proportional (east-asian-latin), as Word writes them:
- * their Japanese names in full-width letters (ＭＳ), which Word does not take
- * for others. Of no free font of their metrics, but MS Gothic and MS Mincho
- * (FONTS).
+ * MingLiU too), or proportional (east-asian-latin), or either (EITHER_WIDTH,
+ * of no pitch known here), as Word writes them: their Japanese names in
+ * full-width letters (ＭＳ), which Word does not take for others; with the
+ * weights, the faces of their extension planes (-ExtB, -ExtG) and of the
+ * interface (UI) Windows installs of each as fonts of their own (Microsoft
+ * Learn, Typography, « Windows 10 font list », « Windows 11 font list », and
+ * their supplemental fonts), as wide as their family. Of no free font of their
+ * metrics, but MS Gothic and MS Mincho (FONTS).
  */
 const HALF_WIDTH = [
-  "SimSun", "NSimSun", "宋体", "新宋体", "SimHei", "黑体", "KaiTi", "楷体", "KaiTi_GB2312", "楷体_GB2312", "FangSong", "仿宋",
-  "FangSong_GB2312", "仿宋_GB2312", "MingLiU", "細明體", "MingLiU_HKSCS", "細明體_HKSCS", "GulimChe", "굴림체", "DotumChe", "돋움체", "BatangChe", "바탕체", "GungsuhChe", "궁서체",
+  "SimSun", "NSimSun", "宋体", "新宋体", "SimSun-ExtB", "SimSun-ExtG", "SimHei", "黑体", "KaiTi", "楷体", "KaiTi_GB2312", "楷体_GB2312", "FangSong", "仿宋",
+  "FangSong_GB2312", "仿宋_GB2312", "MingLiU", "細明體", "MingLiU-ExtB", "細明體-ExtB", "MingLiU_HKSCS", "細明體_HKSCS", "MingLiU_HKSCS-ExtB", "細明體_HKSCS-ExtB",
+  "GulimChe", "굴림체", "DotumChe", "돋움체", "BatangChe", "바탕체", "GungsuhChe", "궁서체",
 ];
 const EAST_ASIAN = [
-  "MS PGothic", "MS PMincho", "MS UI Gothic", "ＭＳ Ｐゴシック", "ＭＳ Ｐ明朝", "Yu Gothic", "Yu Gothic UI", "Yu Mincho", "游ゴシック", "游明朝", "Meiryo", "Meiryo UI", "メイリオ",
-  "Microsoft YaHei", "微软雅黑", "Microsoft JhengHei", "微軟正黑體", "DengXian", "等线", "PMingLiU", "新細明體", "Malgun Gothic", "맑은 고딕", "Gulim", "굴림", "Dotum", "돋움", "Batang", "바탕",
-  "Gungsuh", "궁서",
+  "MS PGothic", "MS PMincho", "MS UI Gothic", "ＭＳ Ｐゴシック", "ＭＳ Ｐ明朝", "Yu Gothic", "Yu Gothic Light", "Yu Gothic Medium", "Yu Gothic UI", "Yu Gothic UI Light",
+  "Yu Gothic UI Semilight", "Yu Gothic UI Semibold", "Yu Mincho", "Yu Mincho Light", "Yu Mincho Demibold", "游ゴシック", "游ゴシック Light", "游ゴシック Medium", "游明朝", "游明朝 Light",
+  "游明朝 Demibold", "Meiryo", "Meiryo UI", "メイリオ", "Microsoft YaHei", "Microsoft YaHei Light", "Microsoft YaHei UI", "Microsoft YaHei UI Light", "微软雅黑", "微软雅黑 Light",
+  "Microsoft JhengHei", "Microsoft JhengHei Light", "Microsoft JhengHei UI", "Microsoft JhengHei UI Light", "微軟正黑體", "微軟正黑體 Light", "DengXian", "DengXian Light", "等线",
+  "等线 Light", "PMingLiU", "新細明體", "PMingLiU-ExtB", "新細明體-ExtB", "Malgun Gothic", "Malgun Gothic Semilight", "맑은 고딕", "맑은 고딕 Semilight", "Gulim", "굴림", "Dotum", "돋움",
+  "Batang", "바탕", "Gungsuh", "궁서",
 ];
-/** Basic Latin, Latin-1 and Latin Extended-A, and the punctuation and signs a CV writes beyond them. */
-const CHARACTERS = [
+/** Japanese fonts of Windows' supplemental fonts, of half-width or proportional Latin letters, which the check does not tell apart. */
+const EITHER_WIDTH = [
+  "BIZ UDGothic", "BIZ UDPGothic", "BIZ UDMincho", "BIZ UDPMincho", "UD Digi Kyokasho N-B", "UD Digi Kyokasho N-R", "UD Digi Kyokasho NK-B", "UD Digi Kyokasho NK-R",
+  "UD Digi Kyokasho NP-B", "UD Digi Kyokasho NP-R", "DFKai-SB", "標楷體",
+];
+/**
+ * Basic Latin, Latin-1 and Latin Extended-A, and the punctuation and signs a CV writes beyond them; then all the characters the fonts
+ * measured may hold of Latin Extended-B and Additional, the spacing modifier letters, Greek, Cyrillic, general punctuation, super- and
+ * subscripts, currency, letterlike signs, number forms, arrows, mathematical operators, enclosed alphanumerics, box drawing and blocks,
+ * geometric shapes, miscellaneous symbols, dingbats and the Latin ligatures (ﬁ, ﬂ…): not those Unicode does not assign, nor marks,
+ * controls and separators, nor those Word draws as emoji (Emoji_Presentation), of no width known.
+ */
+const FIRST_CHARACTERS = [
   ...range(0x20, 0x7e), ...range(0xa0, 0x17f),
   ...range(0x2010, 0x2027), 0x2030, 0x2032, 0x2033, 0x2039, 0x203a, 0x20ac, 0x2122, 0x2190, 0x2191, 0x2192, 0x2193, 0x2212, 0x2264, 0x2265, 0x25cf, 0x2713,
-].map(code => String.fromCodePoint(code)).join("");
+];
+const MORE_CHARACTERS = [
+  ...range(0x180, 0x24f), ...range(0x2b0, 0x2ff), ...range(0x370, 0x3ff), ...range(0x400, 0x52f), ...range(0x1e00, 0x1eff), ...range(0x2000, 0x206f), ...range(0x2070, 0x209f),
+  ...range(0x20a0, 0x20c0), ...range(0x2100, 0x214f), ...range(0x2150, 0x218b), ...range(0x2190, 0x21ff), ...range(0x2200, 0x22ff), ...range(0x2460, 0x24ff), ...range(0x2500, 0x259f),
+  ...range(0x25a0, 0x25ff), ...range(0x2600, 0x26ff), ...range(0x2700, 0x27bf), ...range(0xfb00, 0xfb06),
+].filter(code => !FIRST_CHARACTERS.includes(code) && !/[\p{Cn}\p{M}\p{C}\p{Zl}\p{Zp}\p{Emoji_Presentation}]/u.test(String.fromCodePoint(code)));
+const CHARACTERS = [...FIRST_CHARACTERS, ...MORE_CHARACTERS].map(code => String.fromCodePoint(code)).join("");
 /** Single spacing at its least: of a font whose own line is not known. */
 const LEAST_LINE = 1150;
 
@@ -412,23 +465,33 @@ function advancesOf(files) {
 const AS_BASE = ".";
 /** Written, then a digit (how many, less one), in place of the digits of characters of a slanted style as wide as in its upright one. */
 const AS_UPRIGHT = ",";
+/** Written, then a digit (how many, less one), in place of the digits of characters as wide as the one before them. */
+const AS_BEFORE = "~";
 /** Of each character, where its base letter is among those measured before it; -1 when it has none. */
 const BASES = Array.from(CHARACTERS, (character, at) => {
   const base = CHARACTERS.indexOf(character.normalize("NFD")[0]);
   return base < at ? base : -1;
 });
 
-/** Advances written two digits each, but AS_BASE for a character as wide as its base letter, and AS_UPRIGHT for those as wide as in `upright`. */
+/**
+ * Advances written two digits each, but AS_BASE for a character as wide as its base letter, AS_UPRIGHT for those as wide as in
+ * `upright`, and AS_BEFORE for two or more as wide as the one before them.
+ */
 function digitsOf(advances, upright) {
   let digits = "";
   for (let at = 0; at < advances.length; at += 1) {
     const width = advances[at];
     if (width >= DIGITS.length ** 2) throw new Error(`${CHARACTERS[at]}: ${width}`);
+    let same = 0;
+    while (at > 0 && same < DIGITS.length && advances[at + same] !== undefined && advances[at + same] === advances[at - 1] && upright?.[at + same] !== advances[at + same]) same += 1;
     if (upright?.[at] === width) {
       let count = 1;
       while (count < DIGITS.length && upright[at + count] !== undefined && upright[at + count] === advances[at + count]) count += 1;
       digits += AS_UPRIGHT + DIGITS[count - 1];
       at += count - 1;
+    } else if (same >= 2) {
+      digits += AS_BEFORE + DIGITS[same - 1];
+      at += same - 1;
     } else if (BASES[at] >= 0 && advances[BASES[at]] === width) digits += AS_BASE;
     else digits += DIGITS[Math.floor(width / DIGITS.length)] + DIGITS[width % DIGITS.length];
   }
@@ -509,7 +572,8 @@ for (const { key, source, names } of PUBLISHED) {
   const advances = Object.fromEntries(Object.keys(STYLES).map((style, index) => [style, Array.from(CHARACTERS, (character, at) => {
     const own = published[character] ?? published[character.normalize("NFD")[0]];
     // Its four styles, in string-pixel-width's order: regular, bold, italic, bold italic.
-    return own ? own[[0, 2, 1, 3][index]] * 10 + 5 : widest[style][at];
+    if (own) return own[[0, 2, 1, 3][index]] * 10 + 5;
+    return at >= FIRST_CHARACTERS.length && /\p{S}/u.test(character) ? 0 : widest[style][at];
   })]));
   fonts[key] = { line: publishedLine(source), advances, widest: true };
   for (const name of names) aliases[name] = key;
@@ -524,10 +588,10 @@ for (const { key, of, basicLatin, eastAsian, share, every, latin1, synthetic } o
   const keys = of ?? Object.keys(fonts).filter(font => fonts[font].widest);
   const advances = Object.fromEntries(Object.entries(widestOf(keys)).map(([style, widest]) => [style, widest.map((width, at) => {
     const code = CHARACTERS.charCodeAt(at);
-    if (every) return Math.max(...widest);
+    if (every) return Math.max(...widest.slice(0, FIRST_CHARACTERS.length));
     if (eastAsian && FULL_WIDTH_IN_EAST_ASIAN.has(code)) return 1000;
     if (share) return Math.ceil(width * (1000 + share) / 1000);
-    return basicLatin && code < 0x7f ? basicLatin : Math.max(basicLatin ?? 0, width);
+    return basicLatin && code < 0x7f ? basicLatin : width || at < FIRST_CHARACTERS.length ? Math.max(basicLatin ?? 0, width) : 0;
   })]));
   if (synthetic) for (const [name, { fallback }] of Object.entries(STYLES)) {
     const upright = /bold/i.test(name) && advances[fallback === "bold" ? "italic" : "regular"];
@@ -540,14 +604,20 @@ for (const { key } of FONTS.filter(font => font.latin)) {
   const bound = metrics["east-asian"].advances;
   for (const [style, advances] of Object.entries(metrics[key].advances)) metrics[key].advances[style] = advances.map((width, at) => (CHARACTERS.charCodeAt(at) > 0xff ? Math.max(width, bound[style][at]) : width));
 }
+// Of a font of the advances of another in the first characters only, and of a style standing for one of its, the others as lacking.
+const firstOnly = new Set(FONTS.filter(font => font.first).map(font => font.key));
+for (const key of [...firstOnly, ...STANDING_IN.filter(({ from }) => firstOnly.has(from)).map(({ key }) => key)]) {
+  metrics[key] = { ...metrics[key], advances: Object.fromEntries(Object.entries(metrics[key].advances).map(([style, advances]) => [style, advances.map((width, at) => (at < FIRST_CHARACTERS.length ? width : 0))])) };
+}
 for (const name of HALF_WIDTH) aliases[name.toLowerCase()] = "half-width";
 for (const name of EAST_ASIAN) aliases[name.toLowerCase()] = "east-asian-latin";
+for (const name of EITHER_WIDTH) aliases[name.toLowerCase()] = "east-asian";
 // The reader's fonts: measured, bounded as the widest (LISTED), as the widest character for a symbol font, or of no bound.
 for (const name of SYMBOL) aliases[name] = "symbol";
 for (const name of TYPEWRITER) aliases[name] = "listed-typewriter";
 for (const name of WORD_FONTS) aliases[name] ??= "listed";
 for (const name of UNBOUNDED) aliases[name] = "unbounded";
-const wordFonts = new Set([...WORD_FONTS, ...SYMBOL, ...UNBOUNDED, ...[...HALF_WIDTH, ...EAST_ASIAN].map(name => name.toLowerCase())]);
+const wordFonts = new Set([...WORD_FONTS, ...SYMBOL, ...UNBOUNDED, ...[...HALF_WIDTH, ...EAST_ASIAN, ...EITHER_WIDTH].map(name => name.toLowerCase())]);
 
 /** A font's styles written (digitsOf): its slanted ones only where not as wide as their upright one, as Word draws a slanted style it has. */
 function written({ line, advances }) {
@@ -560,7 +630,7 @@ function written({ line, advances }) {
 
 const output = `// Written by scripts/generate-docx-font-metrics.mjs from the fonts installed (fc-match), a folder of free fonts (fc-scan) and the widths published of others: run it again rather than edit this file.
 
-/** The characters measured, in order: Latin text, its punctuation and common signs. */
+/** The characters measured, in order: Latin text, its punctuation and common signs, then Latin, Greek and Cyrillic letters and signs the fonts measured may hold. */
 export const DOCX_FONT_CHARACTERS = ${JSON.stringify(CHARACTERS)};
 
 /** The digits of the widths of DOCX_FONT_METRICS, two for each character. */
@@ -571,6 +641,9 @@ export const DOCX_FONT_AS_BASE = ${JSON.stringify(AS_BASE)};
 
 /** In the widths of a slanted style, then a digit (how many, less one): characters as wide as in its upright style. */
 export const DOCX_FONT_AS_UPRIGHT = ${JSON.stringify(AS_UPRIGHT)};
+
+/** In the widths of DOCX_FONT_METRICS, then a digit (how many, less one): characters as wide as the one before them. */
+export const DOCX_FONT_AS_BEFORE = ${JSON.stringify(AS_BEFORE)};
 
 /**
  * Of each font measured, or published, and of the fonts Word draws one it
@@ -597,9 +670,6 @@ ${Object.entries(metrics).map(([key, font]) => `  "${key}": {\n${written(font)}\
  * or the name of a font of no bound (\`unbounded\`, of no metrics).
  */
 export const DOCX_SUBSTITUTE_FONTS = { sans: "liberation-sans", serif: "liberation-serif", typewriter: "liberation-mono", unknown: "sans-or-serif", decorative: "widest", eastAsian: "east-asian", proportionalEastAsian: "east-asian-latin", halfWidth: "half-width", listed: "listed", symbol: "symbol", unbounded: "unbounded" } as const;
-
-/** What Word adds to each advance of a font it emboldens, having no bold face of it, in thousandths of the size (a bound). */
-export const DOCX_SYNTHETIC_BOLD = ${SYNTHETIC_BOLD};
 
 /**
  * The font names a document may give (w:rFonts, theme fonts), in lower case, as written otherwise (ＭＳ ゴシック in full-width
