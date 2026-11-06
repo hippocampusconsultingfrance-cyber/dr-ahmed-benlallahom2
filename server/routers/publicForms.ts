@@ -24,42 +24,61 @@ type PublicFormRateLimitPolicy = {
 const DEFAULT_PUBLIC_FORM_BLOCKED_MESSAGE = "Veuillez patienter avant de soumettre une nouvelle demande.";
 export const BOOKING_RATE_LIMIT_MESSAGE = "Trop de tentatives de réservation ont été effectuées. Veuillez réessayer dans une heure ou nous contacter directement.";
 
+/**
+ * Réservations comptées par IP et par heure. L’audit (RES-08) propose 10, les
+ * refus métier ne comptant plus : le seuil reste à 6 tant que le propriétaire
+ * n’a pas validé ce nouveau seuil.
+ */
+const BOOKING_IP_MAX_ATTEMPTS_PER_HOUR = 6;
+
 export const PUBLIC_FORM_RATE_LIMITS = {
   contact: { action: "public_contact_submit", scope: "ip_email", maxAttempts: 5, windowMs: 15 * 60 * 1000, blockMs: 60 * 60 * 1000, reason: "rate_limited" },
   gdpr: { action: "public_gdpr_submit", scope: "ip_email", maxAttempts: 3, windowMs: 24 * 60 * 60 * 1000, blockMs: 24 * 60 * 60 * 1000, reason: "rate_limited" },
   // Chaque réservation bloque un créneau de 30 minutes et ouvre une session
   // Stripe. Le compteur par IP borne un script qui change d’email à chaque
   // appel ; le compteur par email borne une même identité qui change d’IP.
-  bookingIp: { action: "public_booking_create_ip", scope: "ip", maxAttempts: 6, windowMs: 60 * 60 * 1000, blockMs: 60 * 60 * 1000, blockedMessage: BOOKING_RATE_LIMIT_MESSAGE, reason: "rate_limited" },
+  bookingIp: { action: "public_booking_create_ip", scope: "ip", maxAttempts: BOOKING_IP_MAX_ATTEMPTS_PER_HOUR, windowMs: 60 * 60 * 1000, blockMs: 60 * 60 * 1000, blockedMessage: BOOKING_RATE_LIMIT_MESSAGE, reason: "rate_limited" },
   bookingEmail: { action: "public_booking_create_email", scope: "email", maxAttempts: 5, windowMs: 60 * 60 * 1000, blockMs: 60 * 60 * 1000, blockedMessage: BOOKING_RATE_LIMIT_MESSAGE, reason: "rate_limited" },
   // Réservations refusées faute de vérification anti-robot, que les deux
   // compteurs précédents ne retiennent pas (ABUS-02) : bornées à part, bien
   // plus haut. Au-delà, ces refus comptent de nouveau dans les deux compteurs
   // précédents, qui arrêtent un script qui ne la passe jamais avant l’agenda.
-  // Un patient n’en reçoit qu’une par réservation.
+  // Un patient n’en reçoit qu’une par réservation. Le même plafond borne les
+  // essais rendus après un refus métier ou une annulation par le patient
+  // (RES-08).
   bookingChallengeIp: { action: "public_booking_challenge_ip", scope: "ip", maxAttempts: 30, windowMs: 60 * 60 * 1000, blockMs: 60 * 60 * 1000, blockedMessage: BOOKING_RATE_LIMIT_MESSAGE, reason: "rate_limited" },
 } as const satisfies Record<string, PublicFormRateLimitPolicy>;
 
 const NO_ATTEMPT_COUNTED = async () => undefined;
 
-/**
- * Compte un essai et renvoie de quoi le rendre, pour une demande refusée
- * ensuite sans y être pour rien (vérification anti-robot demandée, ABUS-02).
- */
-export async function enforcePublicFormRateLimit(input: {
+type PublicFormRateLimitRequest = {
   kind: keyof typeof PUBLIC_FORM_RATE_LIMITS;
   email: string;
   headers: Record<string, unknown>;
   remoteIp?: string | null;
-}): Promise<() => Promise<void>> {
-  // Les tests d’intégration réemploient volontairement les mêmes adresses dans
-  // plusieurs scénarios indépendants. La protection persistante reste active
-  // dans tous les environnements réels ; ses seuils sont couverts séparément.
-  if (process.env.NODE_ENV === "test" || process.env.VITEST === "true") return NO_ATTEMPT_COUNTED;
+};
 
+// Les tests d’intégration réemploient volontairement les mêmes adresses dans
+// plusieurs scénarios indépendants. La protection persistante reste active
+// dans tous les environnements réels ; ses seuils sont couverts séparément.
+const rateLimitsDisabled = () => process.env.NODE_ENV === "test" || process.env.VITEST === "true";
+
+/** Compteur visé par une demande : politique, empreinte d’IP et sujet (null : rien à compter). */
+function publicFormRateLimitTarget(input: PublicFormRateLimitRequest) {
   const ipHash = requestIpHash(input.headers) ?? (input.remoteIp ? hashSecurityValue(input.remoteIp) : null);
   const { scope, blockedMessage, reason, ...policy }: PublicFormRateLimitPolicy = PUBLIC_FORM_RATE_LIMITS[input.kind];
-  const subject = publicFormRateLimitSubject(scope, ipHash, input.email);
+  return { ipHash, policy, blockedMessage, reason, subject: publicFormRateLimitSubject(scope, ipHash, input.email) };
+}
+
+/**
+ * Compte un essai et renvoie de quoi le rendre, pour une demande refusée
+ * ensuite sans y être pour rien (vérification anti-robot demandée, ABUS-02 ;
+ * refus métier ou paiement indisponible, RES-08).
+ */
+export async function enforcePublicFormRateLimit(input: PublicFormRateLimitRequest): Promise<() => Promise<void>> {
+  if (rateLimitsDisabled()) return NO_ATTEMPT_COUNTED;
+
+  const { ipHash, policy, blockedMessage, reason, subject } = publicFormRateLimitTarget(input);
   if (!subject) return NO_ATTEMPT_COUNTED;
   try {
     await enforcePersistentRateLimit({
@@ -77,6 +96,17 @@ export async function enforcePublicFormRateLimit(input: {
     throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: blockedMessage ?? DEFAULT_PUBLIC_FORM_BLOCKED_MESSAGE, cause: new PublicErrorReason(reason) });
   }
   return () => releasePersistentRateLimitAttempt({ ...policy, subject });
+}
+
+/**
+ * Rend un essai qu’une demande précédente a compté (RES-08 : réservation en
+ * attente annulée par le patient), au même compteur et au même sujet. Un sujet
+ * déjà bloqué le reste (releasePersistentRateLimitAttempt).
+ */
+export async function givePublicFormAttemptBack(input: PublicFormRateLimitRequest): Promise<void> {
+  if (rateLimitsDisabled()) return;
+  const { policy, subject } = publicFormRateLimitTarget(input);
+  if (subject) await releasePersistentRateLimitAttempt({ ...policy, subject });
 }
 
 export const PUBLIC_FORM_SECURITY_CHECK_FAILED_MESSAGE = "La vérification anti-robot a échoué. Rechargez la page, puis renvoyez votre demande.";

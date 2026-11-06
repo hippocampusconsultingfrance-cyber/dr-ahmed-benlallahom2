@@ -73,7 +73,7 @@ export function isBookingRefusalReason(value: unknown): value is BookingRefusalR
 
 export const BOOKING_TOO_SOON_MESSAGE = `Ce créneau n’est plus réservable : les consultations se réservent au moins ${BOOKING_MIN_LEAD_TIME_HOURS} heures à l’avance. Veuillez choisir un créneau plus tardif.`;
 export const BOOKING_TOO_FAR_MESSAGE = `Les consultations se réservent au plus ${BOOKING_HORIZON_DAYS} jours à l’avance. Veuillez choisir une date plus proche.`;
-export const BOOKING_INVALID_PHONE_MESSAGE = "Saisissez un numéro de téléphone valide (8 à 15 chiffres, indicatif international accepté, ex. +33 6 12 34 56 78).";
+export const BOOKING_INVALID_PHONE_MESSAGE = "Saisissez un numéro de téléphone valide, avec l’indicatif du pays précédé de + ou 00 (8 à 15 chiffres, ex. +33 6 12 34 56 78).";
 export const BOOKING_INVALID_NAME_MESSAGE = "Saisissez votre nom complet : il doit comporter au moins une lettre ou un chiffre.";
 
 const VISIBLE_LETTER_OR_DIGIT = new RegExp("(?!\\p{Default_Ignorable_Code_Point})[\\p{L}\\p{N}]", "u");
@@ -90,13 +90,38 @@ export function hasVisibleNameCharacter(value: string): boolean {
   return VISIBLE_LETTER_OR_DIGIT.test(value.trim().normalize("NFKC"));
 }
 
+const ARABIC_INDIC_DIGITS = /[\u0660-\u0669\u06F0-\u06F9]/g;
+const NO_BREAK_SPACES = /[\u00A0\u2007\u202F]/g;
+// Marques de direction que les répertoires Android et iOS en arabe ajoutent au
+// copier-coller (LRM, RLM, ALM, LRE…PDF, LRO, RLO, LRI…PDI).
+const DIRECTION_MARKS = /[\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069]/g;
+
 /**
- * Plausible international phone number: optional leading "+", digits with
- * spaces, dots, dashes or parentheses as separators, 8 to 15 digits (E.164).
+ * Phone number as typed or pasted, read the way the booking checks and stores
+ * it (INTL-09): compatibility form (NFKC: full-width digits and "＋"), Arabic
+ * and Persian digits as 0-9, no-break spaces as plain spaces, without the
+ * direction marks around a pasted number. Trimmed; nothing else changes.
+ */
+export function normalizePhoneInput(value: string): string {
+  return value
+    .normalize("NFKC")
+    .replace(ARABIC_INDIC_DIGITS, digit => String((digit.charCodeAt(0) & 0xf)))
+    .replace(NO_BREAK_SPACES, " ")
+    .replace(DIRECTION_MARKS, "")
+    .trim();
+}
+
+/**
+ * Plausible international phone number, once normalized (normalizePhoneInput):
+ * the country code first, after "+" or "00", then digits with spaces, dots,
+ * dashes or parentheses as separators, 8 to 15 digits (E.164). A number
+ * without its country code ("06 12 34 56 78") is refused: the doctor could not
+ * tell which country to call.
  */
 export function isPlausiblePhoneNumber(value: string): boolean {
   const trimmed = value.trim();
-  if (!/^\+?[0-9][0-9 ().-]*[0-9]$/.test(trimmed) && !/^\+?\([0-9][0-9 ().-]*[0-9]$/.test(trimmed)) return false;
-  const digits = trimmed.replace(/\D/g, "");
+  const prefix = /^\(?(\+|00)/.exec(trimmed)?.[1];
+  if (!prefix || !/^\(?(\+|00)[0-9 ().-]*[0-9]$/.test(trimmed)) return false;
+  const digits = trimmed.replace(/\D/g, "").slice(prefix === "00" ? 2 : 0);
   return digits.length >= 8 && digits.length <= 15;
 }

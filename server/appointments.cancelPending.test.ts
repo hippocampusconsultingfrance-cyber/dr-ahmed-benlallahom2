@@ -1,16 +1,33 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { appRouter } from "./routers";
+import { appRouter, PUBLIC_FORM_RATE_LIMITS } from "./routers";
 import type { TrpcContext } from "./_core/context";
 import { appointments } from "../drizzle/schema";
+import { hashSecurityValue } from "./candidateSecurity";
 import { createInMemoryDrizzle } from "./testSupport/inMemoryDrizzle";
 
 const mocks = vi.hoisted(() => ({
   getDb: vi.fn(),
   stripeRetrieve: vi.fn(),
   stripeExpire: vi.fn(),
+  // Compteurs persistants simulés (RES-08) : un essai compté, puis rendu, par action et par sujet.
+  attempts: new Map<string, number>(),
+  enforcePersistentRateLimit: vi.fn(async ({ action, subject, maxAttempts }: { action: string; subject: string; maxAttempts: number }) => {
+    const count = (mocks.attempts.get(`${action}|${subject}`) ?? 0) + 1;
+    mocks.attempts.set(`${action}|${subject}`, count);
+    if (count > maxAttempts) throw new Error("candidate_security_rate_limited");
+  }),
+  releasePersistentRateLimitAttempt: vi.fn(async ({ action, subject }: { action: string; subject: string }) => {
+    mocks.attempts.set(`${action}|${subject}`, Math.max((mocks.attempts.get(`${action}|${subject}`) ?? 0) - 1, 0));
+  }),
 }));
 
 vi.mock("./db", () => ({ getDb: mocks.getDb }));
+vi.mock("./candidateSecurity", async importOriginal => ({
+  ...await importOriginal<typeof import("./candidateSecurity")>(),
+  enforcePersistentRateLimit: mocks.enforcePersistentRateLimit,
+  releasePersistentRateLimitAttempt: mocks.releasePersistentRateLimitAttempt,
+  logSecurityEvent: vi.fn(async () => undefined),
+}));
 vi.mock("stripe", () => ({
   default: vi.fn().mockImplementation(() => ({
     checkout: { sessions: { create: vi.fn(), retrieve: mocks.stripeRetrieve, expire: mocks.stripeExpire } },
@@ -111,6 +128,37 @@ describe("appointments.cancelPending — créneau libéré dans la base", () => 
     await expect(cancel()).resolves.toEqual({ success: true, cancelled: true });
 
     expect(held).toMatchObject({ appointmentStatus: "cancelled", slotKey: null, holdExpiresAt: null, cancelledAt: expect.any(Date) });
+  });
+
+  it("rend au patient qui annule l’essai de réservation compté pour son IP, une fois, dans la limite du plafond des essais rendus (RES-08)", async () => {
+    // Le limiteur, neutralisé sous Vitest, est rétabli comme en production.
+    vi.stubEnv("VITEST", "false");
+    vi.stubEnv("NODE_ENV", "production");
+    const ip = "203.0.113.42";
+    const bookingIp = `${PUBLIC_FORM_RATE_LIMITS.bookingIp.action}|ip:${hashSecurityValue(ip)}`;
+    const givenBack = `${PUBLIC_FORM_RATE_LIMITS.bookingChallengeIp.action}|ip:${hashSecurityValue(ip)}`;
+    const cancelFrom = (sessionId = "cs_test_back") => appRouter.createCaller({ ...publicContext(), req: { protocol: "https", headers: {}, ip } as unknown as TrpcContext["req"] }).appointments.cancelPending({ sessionId });
+    mocks.attempts.clear();
+    mocks.attempts.set(bookingIp, 3);
+    const db = createInMemoryDrizzle();
+    mocks.getDb.mockResolvedValue(db);
+    seed(db, { trackingId: "APT-42", stripeSessionId: "cs_test_back", appointmentStatus: "held", slotKey: "2026-11-05T17:00:00.000Z", holdExpiresAt: new Date("2026-10-26T10:30:00.000Z") });
+    mocks.stripeRetrieve.mockResolvedValue(checkoutSession());
+
+    await expect(cancelFrom()).resolves.toEqual({ success: true, cancelled: true });
+    expect(mocks.attempts.get(bookingIp)).toBe(2);
+    expect(mocks.attempts.get(givenBack)).toBe(1);
+
+    // Déjà annulée : rien n’est rendu une seconde fois.
+    await expect(cancelFrom()).resolves.toEqual({ success: true, cancelled: false });
+    expect(mocks.attempts.get(bookingIp)).toBe(2);
+
+    // Plafond des essais rendus atteint : l’annulation aboutit, l’essai reste compté.
+    seed(db, { trackingId: "APT-43", stripeSessionId: "cs_test_back2", appointmentStatus: "held", slotKey: "2026-11-05T17:30:00.000Z", holdExpiresAt: new Date("2026-10-26T10:30:00.000Z") });
+    mocks.stripeRetrieve.mockResolvedValue(checkoutSession({ id: "cs_test_back2", metadata: { trackingId: "APT-43" } }));
+    mocks.attempts.set(givenBack, PUBLIC_FORM_RATE_LIMITS.bookingChallengeIp.maxAttempts);
+    await expect(cancelFrom("cs_test_back2")).resolves.toEqual({ success: true, cancelled: true });
+    expect(mocks.attempts.get(bookingIp)).toBe(2);
   });
 
   it("ne libère jamais un rendez-vous déjà confirmé, même encore marqué en attente de paiement", async () => {

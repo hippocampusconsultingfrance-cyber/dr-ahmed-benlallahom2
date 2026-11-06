@@ -1,10 +1,11 @@
 import { NeonDbError } from "@neondatabase/serverless";
 import { fetchRequestHandler } from "@trpc/server/adapters/fetch";
-import { DrizzleQueryError } from "drizzle-orm";
+import { DrizzleQueryError, type SQL } from "drizzle-orm";
+import { PgDialect } from "drizzle-orm/pg-core";
 import superjson from "superjson";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { TrpcContext } from "./_core/context";
-import { BOOKING_INVALID_NAME_MESSAGE, BOOKING_REFUSAL_REASONS, BOOKING_TOO_SOON_MESSAGE } from "../shared/bookingPolicy";
+import { BOOKING_INVALID_NAME_MESSAGE, BOOKING_INVALID_PHONE_MESSAGE, BOOKING_REFUSAL_REASONS, BOOKING_TOO_SOON_MESSAGE } from "../shared/bookingPolicy";
 
 // EN-06 — refus de réservation : un motif stable accompagne le message français
 // jusqu'au navigateur, pour que la page affiche son propre texte traduit.
@@ -15,12 +16,16 @@ const mocks = vi.hoisted(() => ({
   stripeCreate: vi.fn(),
   stripeRetrieve: vi.fn(),
   enforcePersistentRateLimit: vi.fn(),
+  releasePersistentRateLimitAttempt: vi.fn(async (_policy: { action: string; subject: string }) => undefined),
+  // Compteurs persistants simulés (RES-08) : un essai compté, puis rendu, par action et par sujet.
+  attempts: new Map<string, number>(),
 }));
 
 vi.mock("./db", () => ({ getDb: mocks.getDb }));
 vi.mock("./candidateSecurity", async importOriginal => ({
   ...await importOriginal<typeof import("./candidateSecurity")>(),
   enforcePersistentRateLimit: mocks.enforcePersistentRateLimit,
+  releasePersistentRateLimitAttempt: mocks.releasePersistentRateLimitAttempt,
   logSecurityEvent: vi.fn(async () => undefined),
 }));
 vi.mock("./appointmentHolds", async importOriginal => ({
@@ -35,7 +40,7 @@ vi.mock("stripe", () => ({
   })),
 }));
 
-import { ACTIVE_APPOINTMENT_HOLDS_LIMIT_MESSAGE, appRouter, BOOKING_PAYMENT_UNAVAILABLE_MESSAGE, BOOKING_RATE_LIMIT_MESSAGE } from "./routers";
+import { ACTIVE_APPOINTMENT_HOLDS_LIMIT_MESSAGE, appRouter, BOOKING_PAYMENT_UNAVAILABLE_MESSAGE, BOOKING_RATE_LIMIT_MESSAGE, PUBLIC_FORM_RATE_LIMITS } from "./routers";
 
 /**
  * Error of the INSERT as drizzle-orm 0.45 throws it with neon-http: a
@@ -258,5 +263,114 @@ describe("appointments.create — motifs de refus stables (EN-06)", () => {
     mocks.getDb.mockResolvedValue(fakeDb());
     expect(await postCreate(booking(inThreeDays()))).toBeNull();
     expect(await postCreate(booking(inThreeDays(), { language: "it" }))).toMatchObject({ data: { code: "BAD_REQUEST" } });
+  });
+});
+
+/** Essais encore comptés pour une action (« public_booking_create_ip »…), tous sujets confondus. */
+const counted = (action: string) => Array.from(mocks.attempts.entries()).filter(([key]) => key.startsWith(`${action}|`)).reduce((total, [, count]) => total + count, 0);
+
+describe("appointments.create — un refus métier ne consomme pas d’essai (RES-08)", () => {
+  const bookingIp = PUBLIC_FORM_RATE_LIMITS.bookingIp;
+  const bookingEmail = PUBLIC_FORM_RATE_LIMITS.bookingEmail;
+
+  beforeEach(() => {
+    // Les compteurs par IP et par email, neutralisés sous Vitest, sont rétablis comme en production.
+    vi.stubEnv("VITEST", "false");
+    vi.stubEnv("NODE_ENV", "production");
+    mocks.attempts.clear();
+    mocks.enforcePersistentRateLimit.mockImplementation(async ({ action, subject, maxAttempts }: { action: string; subject: string; maxAttempts: number }) => {
+      const count = (mocks.attempts.get(`${action}|${subject}`) ?? 0) + 1;
+      mocks.attempts.set(`${action}|${subject}`, count);
+      if (count > maxAttempts) throw new Error("candidate_security_rate_limited");
+    });
+    mocks.releasePersistentRateLimitAttempt.mockImplementation(async ({ action, subject }) => {
+      mocks.attempts.set(`${action}|${subject}`, Math.max((mocks.attempts.get(`${action}|${subject}`) ?? 0) - 1, 0));
+    });
+  });
+
+  it("rend l’essai par IP et par email de chaque refus métier et d’un paiement indisponible", async () => {
+    const refusals: Array<[string, Parameters<typeof fakeDb>[0]]> = [
+      ["too_many_holds", { activeHolds: 2 }],
+      ["date_blocked", { blocked: [{ id: 1 }] }],
+      ["outside_schedule", { slots: Array.from({ length: 7 }, (_, dayOfWeek) => ({ dayOfWeek, startTime: "10:15", endTime: "10:45" })) }],
+      ["no_availability", { slots: [] }],
+      ["slot_taken", { overlapping: [{ id: 7 }] }],
+      // Course perdue sur l’index unique du créneau.
+      ["slot_taken", { insertError: failedInsert("23505", 'duplicate key value violates unique constraint "appointments_active_slot_unique"', "appointments_active_slot_unique") }],
+    ];
+    for (const [reason, db] of refusals) {
+      mocks.getDb.mockResolvedValue(fakeDb(db));
+      expect(await postCreate(booking(inThreeDays())), reason).toMatchObject({ data: { reason } });
+      expect(counted(bookingIp.action), reason).toBe(0);
+      expect(counted(bookingEmail.action), reason).toBe(0);
+    }
+
+    mocks.getDb.mockResolvedValue(fakeDb());
+    mocks.stripeCreate.mockRejectedValueOnce(Object.assign(new Error("connection to Stripe failed"), { name: "StripeConnectionError" }));
+    expect(await postCreate(booking(inThreeDays()))).toMatchObject({ data: { reason: "payment_unavailable" } });
+    expect(counted(bookingIp.action)).toBe(0);
+    expect(counted(bookingEmail.action)).toBe(0);
+
+    // Une réservation qui aboutit compte toujours son essai.
+    mocks.getDb.mockResolvedValue(fakeDb());
+    expect(await postCreate(booking(inThreeDays()))).toBeNull();
+    expect(counted(bookingIp.action)).toBe(1);
+    expect(counted(bookingEmail.action)).toBe(1);
+  });
+
+  it("ne bloque pas un patient après sept créneaux pris d’affilée", async () => {
+    mocks.getDb.mockImplementation(async () => fakeDb({ overlapping: [{ id: 7 }] }));
+    for (let attempt = 1; attempt <= bookingIp.maxAttempts + 1; attempt += 1) {
+      expect(await postCreate(booking(inThreeDays())), `essai ${attempt}`).toMatchObject({ data: { code: "CONFLICT", reason: "slot_taken" } });
+    }
+
+    // Le créneau libre qu’il choisit ensuite se réserve normalement.
+    mocks.getDb.mockImplementation(async () => fakeDb());
+    expect(await postCreate(booking(inThreeDays()))).toBeNull();
+    expect(mocks.stripeCreate).toHaveBeenCalledTimes(1);
+  });
+
+  it("garde l’essai compté au-delà du plafond des essais rendus, sans changer le refus", async () => {
+    const { action, maxAttempts } = PUBLIC_FORM_RATE_LIMITS.bookingChallengeIp;
+    mocks.getDb.mockImplementation(async () => fakeDb({ overlapping: [{ id: 7 }] }));
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) await postCreate(booking(inThreeDays(), { customerEmail: `patient${attempt}@example.com` }));
+    expect(counted(action)).toBe(maxAttempts);
+    expect(counted(bookingIp.action)).toBe(0);
+
+    expect(await postCreate(booking(inThreeDays(), { customerEmail: "patient-next@example.com" }))).toMatchObject({ data: { code: "CONFLICT", reason: "slot_taken" } });
+    expect(counted(bookingIp.action)).toBe(1);
+    expect(counted(bookingEmail.action)).toBe(1);
+  });
+});
+
+describe("appointments.create — téléphone saisi ou collé depuis un répertoire étranger (INTL-09)", () => {
+  /** Numéro enregistré par l’INSERT du rendez-vous (4ᵉ valeur). */
+  const storedPhone = (db: ReturnType<typeof fakeDb>) => new PgDialect().sqlToQuery((db.execute.mock.calls as unknown as Array<[SQL]>)[0][0]).params[3];
+
+  it("accepte les chiffres arabes, persans ou pleine chasse et les marques de direction, et enregistre le numéro en chiffres 0-9", async () => {
+    const pasted = {
+      "\u202A+٩٧١ ٥٠ ١٢٣ ٤٥٦٧\u202C": "+971 50 123 4567",
+      "\u200E+۹۷۱\u00A0۵۰\u00A0۱۲۳\u00A0۴۵۶۷\u200F": "+971 50 123 4567",
+      "＋８６ １３８ ００１３ ８０００": "+86 138 0013 8000",
+      "\u2066+33\u202F6\u202F12\u202F34\u202F56\u202F78\u2069": "+33 6 12 34 56 78",
+    };
+    for (const [customerPhone, expected] of Object.entries(pasted)) {
+      const db = fakeDb();
+      mocks.getDb.mockResolvedValue(db);
+      expect(await postCreate(booking(inThreeDays(), { customerPhone })), JSON.stringify(customerPhone)).toBeNull();
+      expect(storedPhone(db)).toBe(expected);
+    }
+  });
+
+  it("refuse un numéro sans indicatif de pays, avant toute réservation", async () => {
+    for (const customerPhone of ["0612345678", "06 12 34 56 78", "٠٥٠١٢٣٤٥٦٧"]) {
+      const db = fakeDb();
+      mocks.getDb.mockResolvedValue(db);
+      const refused = await postCreate(booking(inThreeDays(), { customerPhone }));
+      expect(refused, customerPhone).toMatchObject({ data: { code: "BAD_REQUEST" } });
+      expect(refused?.message).toContain(BOOKING_INVALID_PHONE_MESSAGE);
+      expect(db.execute).not.toHaveBeenCalled();
+    }
+    expect(mocks.stripeCreate).not.toHaveBeenCalled();
   });
 });

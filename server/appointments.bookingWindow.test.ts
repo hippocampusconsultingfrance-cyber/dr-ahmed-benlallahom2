@@ -106,11 +106,12 @@ describe("règles partagées de fenêtre de réservation", () => {
     expect(getBookingWindowIssue(new Date(now + BOOKING_HORIZON_MS + 1), now)).toBe("too_far");
   });
 
-  it("valide un numéro de téléphone plausible", () => {
-    for (const valid of ["+33 6 12 34 56 78", "06.12.34.56.78", "0612345678", "+1 (415) 555-0100", "+971 50 123 4567"]) {
+  it("valide un numéro de téléphone plausible, avec son indicatif de pays (INTL-09)", () => {
+    for (const valid of ["+33 6 12 34 56 78", "0033 6 12 34 56 78", "+33 (0)6 12 34 56 78", "+1 (415) 555-0100", "+971 50 123 4567"]) {
       expect(isPlausiblePhoneNumber(valid), valid).toBe(true);
     }
-    for (const invalid of ["abc", "123", "+33 6 12 34 56 78 90 12 34", "06 12 34 56 78 ext", "++33612345678", "-0612345678"]) {
+    // Sans indicatif (« 06 12 34 56 78 ») : le médecin ne saurait pas quel pays appeler.
+    for (const invalid of ["abc", "123", "+33 6 12 34 56 78 90 12 34", "06 12 34 56 78 ext", "++33612345678", "-0612345678", "06.12.34.56.78", "0612345678", "00", "+"]) {
       expect(isPlausiblePhoneNumber(invalid), invalid).toBe(false);
     }
   });

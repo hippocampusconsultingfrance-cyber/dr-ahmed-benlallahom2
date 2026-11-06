@@ -241,7 +241,10 @@ describe("appointments.create — limitation de débit persistante", () => {
     await expect(appRouter.createCaller(publicContext(headers)).appointments.create(bookingInput()))
       .rejects.toMatchObject({ code: "TOO_MANY_REQUESTS", message: ACTIVE_APPOINTMENT_HOLDS_LIMIT_MESSAGE });
 
-    expect(mocks.enforcePersistentRateLimit).toHaveBeenCalledTimes(2);
+    // Puis, ce refus métier rendant ses essais (RES-08), le plafond par IP des essais rendus.
+    expect(mocks.enforcePersistentRateLimit).toHaveBeenCalledTimes(3);
+    expect(mocks.enforcePersistentRateLimit.mock.invocationCallOrder[1]).toBeLessThan(db.select.mock.invocationCallOrder[0]);
+    expect(mocks.enforcePersistentRateLimit).toHaveBeenNthCalledWith(3, expect.objectContaining({ action: "public_booking_challenge_ip", subject: `ip:${requestIpHash(headers)}` }));
     expect(mocks.enforcePersistentRateLimit).toHaveBeenNthCalledWith(1, {
       action: "public_booking_create_ip",
       subject: `ip:${requestIpHash(headers)}`,
@@ -294,8 +297,10 @@ describe("appointments.create — limitation de débit persistante", () => {
     mocks.getDb.mockResolvedValue(fakeDb(MAX_ACTIVE_APPOINTMENT_HOLDS_PER_EMAIL));
 
     await expect(appRouter.createCaller(publicContext({}, "192.0.2.10")).appointments.create(bookingInput())).rejects.toThrow();
-    expect(mocks.enforcePersistentRateLimit).toHaveBeenCalledTimes(2);
+    // Par IP, par email, puis le plafond par IP des essais rendus après ce refus métier (RES-08).
+    expect(mocks.enforcePersistentRateLimit).toHaveBeenCalledTimes(3);
     expect(mocks.enforcePersistentRateLimit.mock.calls[0][0].subject).toMatch(/^ip:[0-9a-f]{64}$/);
+    expect(mocks.enforcePersistentRateLimit.mock.calls[2][0].subject).toBe(mocks.enforcePersistentRateLimit.mock.calls[0][0].subject);
 
     mocks.enforcePersistentRateLimit.mockClear();
     mocks.getDb.mockResolvedValue(fakeDb(MAX_ACTIVE_APPOINTMENT_HOLDS_PER_EMAIL));
