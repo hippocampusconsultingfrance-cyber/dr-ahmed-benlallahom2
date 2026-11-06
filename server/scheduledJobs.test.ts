@@ -84,6 +84,18 @@ describe("envoi des rappels", () => {
     expect(memory.rows(appointments).map(row => row.reminder_sent)).toEqual([1, 1, 1, 0]);
   });
 
+  it("n’envoie pas le rappel d’une réservation faite moins de 12 h avant le passage, qui vient d’en recevoir la confirmation (RES-12)", async () => {
+    // For tomorrow 09:00 UTC; the run is at 16:45 UTC.
+    seedAppointment(1, { createdAt: "2026-10-07 15:00:00.000", updatedAt: "2026-10-07 15:00:00.000" });
+    seedAppointment(2, { createdAt: "2026-10-07 04:46:00.000", updatedAt: "2026-10-07 04:46:00.000" });
+    seedAppointment(3, { createdAt: "2026-10-07 04:45:00.000", updatedAt: "2026-10-07 04:45:00.000" });
+
+    expect(await sendDueAppointmentReminders(DAILY_REMINDER_WINDOW, NOW)).toEqual({ reminded: 1, sent: 1, failed: 0 });
+
+    expect(remindedTrackingIds()).toEqual(["APT-3"]);
+    expect(memory.rows(appointments).map(row => row.reminder_sent)).toEqual([0, 0, 1]);
+  });
+
   it("envoie le rappel en anglais pour une réservation faite dans une autre langue que le français (EN-01)", async () => {
     seedAppointment(4, { language: "zh" });
 

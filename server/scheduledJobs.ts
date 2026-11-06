@@ -21,6 +21,14 @@ function safeErrorName(error: unknown) {
   return error instanceof Error ? error.name : "UnknownError";
 }
 
+/**
+ * A booking made this recently has just received its confirmation (RES-12):
+ * the daily run, at a fixed hour, would otherwise send its reminder right
+ * after it, for a consultation booked the day before. Read from the booking's
+ * creation, a few minutes before its payment: no column dates the payment.
+ */
+export const REMINDER_MIN_BOOKING_AGE_MS = 12 * HOUR_MS;
+
 export function reminderWindowBounds(window: ReminderWindow, now = new Date()) {
   return { from: new Date(now.getTime() + window.fromMs), to: new Date(now.getTime() + window.toMs) };
 }
@@ -45,7 +53,9 @@ export const REMINDER_RESERVATION_RETAKE_LIMIT_MS = 23 * HOUR_MS;
  * reserved before its email (the hourly Heartbeat and the daily cron never both
  * send it) and marked sent after (DATA-02). A reservation a stopped run left
  * behind, without its email recorded as sent, is taken back by a later run,
- * under the same idempotency key; `onlyReserved` takes back those alone.
+ * under the same idempotency key; `onlyReserved` takes back those alone. A
+ * booking made less than REMINDER_MIN_BOOKING_AGE_MS before the run gets no
+ * reminder (RES-12).
  */
 export async function sendDueAppointmentReminders(window: ReminderWindow, now = new Date(), options: { onlyReserved?: boolean } = {}) {
   const db = await getDb();
@@ -63,7 +73,8 @@ export async function sendDueAppointmentReminders(window: ReminderWindow, now = 
       eq(appointments.appointmentStatus, "confirmed"),
       options.onlyReserved ? staleReservation : or(eq(appointments.reminderSent, 0), staleReservation),
       gte(appointments.appointmentDate, from),
-      lte(appointments.appointmentDate, to)
+      lte(appointments.appointmentDate, to),
+      lte(appointments.createdAt, new Date(now.getTime() - REMINDER_MIN_BOOKING_AGE_MS)),
     )
   );
 
