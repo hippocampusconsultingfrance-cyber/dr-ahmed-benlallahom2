@@ -301,14 +301,26 @@ export function getCandidateInvitationToken(search: string): string | null {
   return getCandidateInvitationEntry(search).token;
 }
 
+/**
+ * Address to send a new activation link to, when the page is opened from a
+ * refused or expired activation link (?mode=activation&email=, REC-17): the
+ * form opens in that mode with the address filled in. Null otherwise.
+ */
+export function getCandidateActivationResendEmail(search: string): string | null {
+  const params = new URLSearchParams(search);
+  if (params.get("mode") !== "activation") return null;
+  return params.get("email")?.trim().slice(0, 320) ?? "";
+}
+
 export default function CandidateAccessPage() {
   const [, navigate] = useLocation();
   const { language } = useLanguage();
   const copy = candidateAccessCopy[(language in candidateAccessCopy ? language : "fr") as CandidateLanguage];
   const [invitationEntry] = useState(() => getCandidateInvitationEntry(typeof window === "undefined" ? "" : window.location.search));
   const invitationToken = invitationEntry.token;
-  const [mode, setMode] = useState<Mode>(() => invitationToken || invitationEntry.legacyEmail ? "register" : "login");
-  const [email, setEmail] = useState(() => invitationEntry.legacyEmail || "");
+  const [activationResendEmail] = useState(() => getCandidateActivationResendEmail(typeof window === "undefined" ? "" : window.location.search));
+  const [mode, setMode] = useState<Mode>(() => invitationToken || invitationEntry.legacyEmail ? "register" : activationResendEmail !== null ? "activation" : "login");
+  const [email, setEmail] = useState(() => invitationEntry.legacyEmail || activationResendEmail || "");
   const [password, setPassword] = useState("");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");

@@ -111,6 +111,31 @@ describe("activation de l’espace candidat", () => {
     expect(view.detailsInputs.some(call => call.options.enabled && !(call.input as { token: string }).token)).toBe(false);
   });
 
+  it.each(["fr", "en", "de", "zh"] as const)("propose un nouveau lien d’activation, l’adresse du lien refusé déjà saisie (%s, REC-17)", language => {
+    view.language = language;
+    const copy = candidateAccountCopy[language];
+    const requestNewLink = () => elementsOf(render()).find(element => element.type === Button && element.props.children === copy.requestNewLink);
+    for (const [search, details, destination] of [
+      [LINK, { isLoading: false, isError: true }, "/candidate/access?mode=activation&email=vera%40example.test"],
+      ["?email=vera%40example.test", READY, "/candidate/access?mode=activation&email=vera%40example.test"],
+      ["?token=activation-token-0123456789", READY, "/candidate/access?mode=activation"],
+    ] as const) {
+      resetStatefulHooks();
+      openLink(search);
+      view.details = details;
+      view.navigations = [];
+      expect(html(), search).toContain(copy.requestNewLink);
+      (requestNewLink()!.props.onClick as () => void)();
+      expect(view.navigations, search).toEqual([destination]);
+    }
+
+    // A valid link shows the activation form, not the button.
+    resetStatefulHooks();
+    openLink(LINK);
+    view.details = READY;
+    expect(requestNewLink()).toBeUndefined();
+  });
+
   it("n’envoie rien si les deux mots de passe diffèrent, puis annonce le refus du serveur sur la page", () => {
     const copy = candidateAccountCopy.fr;
     render();

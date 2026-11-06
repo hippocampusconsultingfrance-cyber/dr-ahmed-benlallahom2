@@ -12,6 +12,11 @@ import CandidateLegalFooter from "@/components/CandidateLegalFooter";
 import LanguageMenu from "@/components/LanguageMenu";
 import { candidateAccountCopy, candidateAccountNotice, CandidateAccountLanguage } from "./candidateAccountCopy";
 
+/** The access page asking for a new activation link, with the address of the refused link already filled in (REC-17). */
+export function candidateActivationResendPath(email: string) {
+  return `/candidate/access?${new URLSearchParams(email ? { mode: "activation", email } : { mode: "activation" })}`;
+}
+
 /**
  * Activation page opened from the emailed link. The password is chosen here,
  * after the link has proven ownership of the mailbox, and the account is
@@ -70,7 +75,7 @@ export default function CandidateVerifyPage() {
         <Button type="submit" className="mt-6 w-full bg-cyan-500 text-slate-950 hover:bg-cyan-400" disabled={verification.isPending}>{verification.isPending && <Loader2 className="animate-spin" aria-hidden="true" />}{copy.activate}</Button>
       </form>}
       {verification.isSuccess && <div className="text-center" role="status"><CheckCircle2 className="mx-auto text-emerald-400" size={46} aria-hidden="true" /><h1 className="mt-5 text-2xl font-semibold">{copy.verifiedTitle}</h1><p className="mt-3 text-slate-400">{copy.verifiedDescription}</p></div>}
-      {failed && <div className="text-center"><ShieldAlert className="mx-auto text-amber-400" size={46} aria-hidden="true" /><h1 className="mt-5 text-2xl font-semibold">{copy.invalidTitle}</h1><p className="mt-3 text-slate-400">{copy.invalidDescription}</p><button type="button" onClick={() => navigate("/candidate/access")} className="mt-6 text-cyan-300">{copy.backToAccess}</button></div>}
+      {failed && <div className="text-center"><ShieldAlert className="mx-auto text-amber-400" size={46} aria-hidden="true" /><h1 className="mt-5 text-2xl font-semibold">{copy.invalidTitle}</h1><p className="mt-3 text-slate-400">{copy.invalidDescription}</p><Button type="button" onClick={() => navigate(candidateActivationResendPath(input.email))} className="mt-6 w-full bg-cyan-500 text-slate-950 hover:bg-cyan-400">{copy.requestNewLink}</Button><button type="button" onClick={() => navigate("/candidate/access")} className="mt-4 text-cyan-300">{copy.backToAccess}</button></div>}
     </div>
     <CandidateLegalFooter />
   </main></>;
