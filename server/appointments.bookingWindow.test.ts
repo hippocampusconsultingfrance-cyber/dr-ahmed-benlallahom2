@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { z } from "zod";
 import { appRouter, parseAppointmentDate } from "./routers";
 import type { TrpcContext } from "./_core/context";
 import {
@@ -8,7 +9,9 @@ import {
   BOOKING_TOO_FAR_MESSAGE,
   BOOKING_TOO_SOON_MESSAGE,
   getBookingWindowIssue,
+  isBookingEmailAddress,
   isPlausiblePhoneNumber,
+  toE164PhoneNumber,
 } from "../shared/bookingPolicy";
 
 // M2 — BOOK-LEADTIME / BOOK-NO-HORIZON / BOOK-INVALIDCAL / BOOK-STRIPE-EXPIRY-MARGIN.
@@ -106,14 +109,32 @@ describe("règles partagées de fenêtre de réservation", () => {
     expect(getBookingWindowIssue(new Date(now + BOOKING_HORIZON_MS + 1), now)).toBe("too_far");
   });
 
-  it("valide un numéro de téléphone plausible, avec son indicatif de pays (INTL-09)", () => {
-    for (const valid of ["+33 6 12 34 56 78", "0033 6 12 34 56 78", "+33 (0)6 12 34 56 78", "+1 (415) 555-0100", "+971 50 123 4567"]) {
-      expect(isPlausiblePhoneNumber(valid), valid).toBe(true);
+  it("valide un numéro de téléphone plausible, avec son indicatif de pays, et le donne au format E.164 (INTL-09)", () => {
+    const valid = {
+      "+33 6 12 34 56 78": "+33612345678",
+      "+ 33 6 12 34 56 78": "+33612345678",
+      "0033 6 12 34 56 78": "+33612345678",
+      "+33 (0)6 12 34 56 78": "+33612345678",
+      "(+33) 6.12.34.56.78": "+33612345678",
+      "+1 (415) 555-0100": "+14155550100",
+      "+971 50 123 4567": "+971501234567",
+    };
+    for (const [number, e164] of Object.entries(valid)) {
+      expect(isPlausiblePhoneNumber(number), number).toBe(true);
+      expect(toE164PhoneNumber(number), number).toBe(e164);
     }
-    // Sans indicatif (« 06 12 34 56 78 ») : le médecin ne saurait pas quel pays appeler.
-    for (const invalid of ["abc", "123", "+33 6 12 34 56 78 90 12 34", "06 12 34 56 78 ext", "++33612345678", "-0612345678", "06.12.34.56.78", "0612345678", "00", "+"]) {
+    // Sans indicatif (« 06 12 34 56 78 ») ou avec un « indicatif » commençant par 0 (« +06… ») :
+    // le médecin ne saurait pas quel pays appeler.
+    for (const invalid of ["abc", "123", "+33 6 12 34 56 78 90 12 34", "06 12 34 56 78 ext", "++33612345678", "-0612345678", "06.12.34.56.78", "0612345678", "00", "+", "+0612345678", "+ 06 12 34 56 78", "0006 12 34 56 78", "+(0)6 12 34 56 78"]) {
       expect(isPlausiblePhoneNumber(invalid), invalid).toBe(false);
+      expect(toE164PhoneNumber(invalid), invalid).toBeNull();
     }
+  });
+
+  it("lit l’adresse email par la règle de z.string().email(), la même sur la page et au serveur (RES-10)", () => {
+    const addresses = ["jean@gmail.com", "jean.dupont+rdv@exemple.co.uk", "o'brien@example.ie", "patient@gmail", "jean@gmail.c0m", "jean@gmail.com1", "jean.@exemple.fr", ".jean@exemple.fr", "jean..x@exemple.fr", "jean@-exemple.fr", "jean@exemple.f", "jean @exemple.fr", "é@exemple.fr"];
+    for (const address of addresses) expect(isBookingEmailAddress(address), address).toBe(z.string().email().safeParse(address).success);
+    expect(addresses.filter(isBookingEmailAddress)).toEqual(["jean@gmail.com", "jean.dupont+rdv@exemple.co.uk", "o'brien@example.ie"]);
   });
 });
 
@@ -174,6 +195,9 @@ describe("appointments.create — délai, horizon, téléphone et expiration Str
     await expect(caller.appointments.create(booking(slotStartAfter(3 * 24 * 60 * 60 * 1000).toISOString(), { customerPhone: "abc" })))
       .rejects.toMatchObject({ code: "BAD_REQUEST", message: expect.stringContaining(BOOKING_INVALID_PHONE_MESSAGE) });
     await expect(caller.appointments.create(booking("2027-02-30T10:00")))
+      .rejects.toMatchObject({ code: "BAD_REQUEST" });
+    // Faute de frappe que la page refuse aussi sous le champ (RES-10).
+    await expect(caller.appointments.create(booking(slotStartAfter(3 * 24 * 60 * 60 * 1000).toISOString(), { customerEmail: "patient@gmail.c0m" })))
       .rejects.toMatchObject({ code: "BAD_REQUEST" });
     expect(mocks.stripeCreate).not.toHaveBeenCalled();
   });

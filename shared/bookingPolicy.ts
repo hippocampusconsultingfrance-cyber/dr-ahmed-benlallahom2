@@ -93,35 +93,61 @@ export function hasVisibleNameCharacter(value: string): boolean {
 const ARABIC_INDIC_DIGITS = /[\u0660-\u0669\u06F0-\u06F9]/g;
 const NO_BREAK_SPACES = /[\u00A0\u2007\u202F]/g;
 // Marques de direction que les répertoires Android et iOS en arabe ajoutent au
-// copier-coller (LRM, RLM, ALM, LRE…PDF, LRO, RLO, LRI…PDI).
-const DIRECTION_MARKS = /[\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069]/g;
+// copier-coller (LRM, RLM, ALM, LRE…PDF, LRO, RLO, LRI…PDI), et caractères
+// invisibles de largeur nulle qu’un numéro copié emporte aussi (ZWSP, ZWNJ,
+// ZWJ, WJ, BOM).
+const INVISIBLE_MARKS = /[\u061C\u200B-\u200F\u202A-\u202E\u2060\u2066-\u2069\uFEFF]/g;
 
 /**
- * Phone number as typed or pasted, read the way the booking checks and stores
- * it (INTL-09): compatibility form (NFKC: full-width digits and "＋"), Arabic
+ * Phone number as typed or pasted, read the way the booking checks it
+ * (INTL-09): compatibility form (NFKC: full-width digits and "＋"), Arabic
  * and Persian digits as 0-9, no-break spaces as plain spaces, without the
- * direction marks around a pasted number. Trimmed; nothing else changes.
+ * direction marks and zero-width characters around a pasted number. Trimmed;
+ * nothing else changes.
  */
 export function normalizePhoneInput(value: string): string {
   return value
     .normalize("NFKC")
     .replace(ARABIC_INDIC_DIGITS, digit => String((digit.charCodeAt(0) & 0xf)))
     .replace(NO_BREAK_SPACES, " ")
-    .replace(DIRECTION_MARKS, "")
+    .replace(INVISIBLE_MARKS, "")
     .trim();
 }
 
 /**
- * Plausible international phone number, once normalized (normalizePhoneInput):
- * the country code first, after "+" or "00", then digits with spaces, dots,
- * dashes or parentheses as separators, 8 to 15 digits (E.164). A number
- * without its country code ("06 12 34 56 78") is refused: the doctor could not
+ * Phone number in E.164 form, once normalized (normalizePhoneInput), or null
+ * when it is not plausible: the country code first, after "+" or "00" (no
+ * country code starts with 0), then digits with spaces, dots, dashes or
+ * parentheses as separators, 8 to 15 digits. Stored as "+" and the digits
+ * alone, the national "(0)" written after the country code dropped
+ * ("0033 (0)6 12 34 56 78" → "+33612345678"). A number without its country
+ * code ("06 12 34 56 78", "+06 12 34 56 78") is refused: the doctor could not
  * tell which country to call.
  */
-export function isPlausiblePhoneNumber(value: string): boolean {
+export function toE164PhoneNumber(value: string): string | null {
   const trimmed = value.trim();
-  const prefix = /^\(?(\+|00)/.exec(trimmed)?.[1];
-  if (!prefix || !/^\(?(\+|00)[0-9 ().-]*[0-9]$/.test(trimmed)) return false;
-  const digits = trimmed.replace(/\D/g, "").slice(prefix === "00" ? 2 : 0);
-  return digits.length >= 8 && digits.length <= 15;
+  const prefix = /^\(?(\+|00)\s*\(?[1-9]/.exec(trimmed)?.[1];
+  if (!prefix || !/^\(?(\+|00)[0-9 ().-]*[0-9]$/.test(trimmed)) return null;
+  const digits = trimmed.replace(/\(\s*0\s*\)/g, "").replace(/\D/g, "").slice(prefix === "00" ? 2 : 0);
+  return digits.length >= 8 && digits.length <= 15 ? `+${digits}` : null;
+}
+
+/** Plausible international phone number (toE164PhoneNumber). */
+export function isPlausiblePhoneNumber(value: string): boolean {
+  return toE164PhoneNumber(value) !== null;
+}
+
+// La règle de z.string().email() (zod 4), que le serveur appliquait jusque-là.
+const BOOKING_EMAIL_ADDRESS = /^(?:[A-Za-z0-9_'+\-]+\.)*[A-Za-z0-9_'+\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\-]*\.)+[A-Za-z]{2,}$/;
+
+/**
+ * Address the confirmation and the invoice can reach (RES-10): one rule for
+ * the page and the server (booking, correction from the dashboard), so that
+ * the page refuses under the field what the server would refuse
+ * ("patient@gmail", "jean@gmail.c0m", "jean..x@exemple.fr"). A dot-separated
+ * local part of letters, digits and _ ' + -, a domain with an extension of
+ * two letters at least.
+ */
+export function isBookingEmailAddress(value: string): boolean {
+  return BOOKING_EMAIL_ADDRESS.test(value);
 }

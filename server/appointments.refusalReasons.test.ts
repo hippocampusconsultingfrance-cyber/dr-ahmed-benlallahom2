@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   releaseExpiredAppointmentHolds: vi.fn(),
   stripeCreate: vi.fn(),
   stripeRetrieve: vi.fn(),
+  stripeExpire: vi.fn(),
   enforcePersistentRateLimit: vi.fn(),
   releasePersistentRateLimitAttempt: vi.fn(async (_policy: { action: string; subject: string }) => undefined),
   // Compteurs persistants simulés (RES-08) : un essai compté, puis rendu, par action et par sujet.
@@ -36,7 +37,7 @@ vi.mock("./appointmentHolds", async importOriginal => ({
 vi.mock("./appointmentHoldAbuse", () => ({ bookingChallengeRequired: vi.fn(async () => false), recordBookingHold: vi.fn(async () => undefined) }));
 vi.mock("stripe", () => ({
   default: vi.fn().mockImplementation(() => ({
-    checkout: { sessions: { create: mocks.stripeCreate, retrieve: mocks.stripeRetrieve } },
+    checkout: { sessions: { create: mocks.stripeCreate, retrieve: mocks.stripeRetrieve, expire: mocks.stripeExpire } },
   })),
 }));
 
@@ -71,7 +72,8 @@ function fakeDb({ activeHolds = 0, blocked = [] as unknown[], slots = ALL_DAY_SL
       if (insertError) throw insertError;
       return { rowCount: 1 };
     }),
-    update: vi.fn(() => ({ set: () => ({ where: async () => ({ rowCount: 1 }) }) })),
+    // UPDATE … WHERE, attendu tel quel ou suivi de RETURNING (annulation par le patient).
+    update: vi.fn(() => ({ set: () => ({ where: () => Object.assign(Promise.resolve({ rowCount: 1 }), { returning: async () => [{ customerEmail: "Patient@Example.com" }] }) }) })),
   };
 }
 
@@ -330,8 +332,26 @@ describe("appointments.create — un refus métier ne consomme pas d’essai (RE
     expect(mocks.stripeCreate).toHaveBeenCalledTimes(1);
   });
 
-  it("garde l’essai compté au-delà du plafond des essais rendus, sans changer le refus", async () => {
-    const { action, maxAttempts } = PUBLIC_FORM_RATE_LIMITS.bookingChallengeIp;
+  it("ne bloque pas le patient indécis qui réserve puis annule son paiement en attente plusieurs fois avec le même email", async () => {
+    const session = { id: "cs_test_reasons", status: "open", payment_status: "unpaid", metadata: { trackingId: "APTUNDECIDED01" } };
+    mocks.stripeRetrieve.mockResolvedValue(session);
+    mocks.stripeExpire.mockResolvedValue({ ...session, status: "expired" });
+    mocks.getDb.mockImplementation(async () => fakeDb());
+    // Plus de cycles que n’en admet le compteur par email (5 par heure), le plus bas des deux.
+    for (let cycle = 1; cycle <= bookingIp.maxAttempts; cycle += 1) {
+      expect(await postCreate(booking(inThreeDays())), `réservation ${cycle}`).toBeNull();
+      expect(await postCreate({ sessionId: session.id }, "appointments.cancelPending"), `annulation ${cycle}`).toBeNull();
+    }
+
+    // Chaque annulation a rendu l’essai par IP et par email : le créneau choisi ensuite se réserve.
+    expect(await postCreate(booking(inThreeDays()))).toBeNull();
+    expect(mocks.stripeCreate).toHaveBeenCalledTimes(bookingIp.maxAttempts + 1);
+    expect(counted(bookingIp.action)).toBe(1);
+    expect(counted(bookingEmail.action)).toBe(1);
+  });
+
+  it("garde l’essai compté au-delà du plafond des essais rendus, sans changer le refus ni entamer celui des refus anti-robot", async () => {
+    const { action, maxAttempts } = PUBLIC_FORM_RATE_LIMITS.bookingGiveBackIp;
     mocks.getDb.mockImplementation(async () => fakeDb({ overlapping: [{ id: 7 }] }));
     for (let attempt = 1; attempt <= maxAttempts; attempt += 1) await postCreate(booking(inThreeDays(), { customerEmail: `patient${attempt}@example.com` }));
     expect(counted(action)).toBe(maxAttempts);
@@ -340,6 +360,8 @@ describe("appointments.create — un refus métier ne consomme pas d’essai (RE
     expect(await postCreate(booking(inThreeDays(), { customerEmail: "patient-next@example.com" }))).toMatchObject({ data: { code: "CONFLICT", reason: "slot_taken" } });
     expect(counted(bookingIp.action)).toBe(1);
     expect(counted(bookingEmail.action)).toBe(1);
+    // La vérification anti-robot (ABUS-02) reste demandée normalement à cette IP.
+    expect(counted(PUBLIC_FORM_RATE_LIMITS.bookingChallengeIp.action)).toBe(0);
   });
 });
 
@@ -347,12 +369,18 @@ describe("appointments.create — téléphone saisi ou collé depuis un réperto
   /** Numéro enregistré par l’INSERT du rendez-vous (4ᵉ valeur). */
   const storedPhone = (db: ReturnType<typeof fakeDb>) => new PgDialect().sqlToQuery((db.execute.mock.calls as unknown as Array<[SQL]>)[0][0]).params[3];
 
-  it("accepte les chiffres arabes, persans ou pleine chasse et les marques de direction, et enregistre le numéro en chiffres 0-9", async () => {
+  it("accepte les chiffres arabes, persans ou pleine chasse, les marques de direction et les caractères de largeur nulle, et enregistre le numéro au format E.164", async () => {
     const pasted = {
-      "\u202A+٩٧١ ٥٠ ١٢٣ ٤٥٦٧\u202C": "+971 50 123 4567",
-      "\u200E+۹۷۱\u00A0۵۰\u00A0۱۲۳\u00A0۴۵۶۷\u200F": "+971 50 123 4567",
-      "＋８６ １３８ ００１３ ８０００": "+86 138 0013 8000",
-      "\u2066+33\u202F6\u202F12\u202F34\u202F56\u202F78\u2069": "+33 6 12 34 56 78",
+      "\u202A+٩٧١ ٥٠ ١٢٣ ٤٥٦٧\u202C": "+971501234567",
+      "\u200E+۹۷۱\u00A0۵۰\u00A0۱۲۳\u00A0۴۵۶۷\u200F": "+971501234567",
+      "＋８６ １３８ ００１３ ８０００": "+8613800138000",
+      "\u2066+33\u202F6\u202F12\u202F34\u202F56\u202F78\u2069": "+33612345678",
+      "+33 6 12 34 56 78\u200B": "+33612345678",
+      "\uFEFF+33612345678\u2060": "+33612345678",
+      // Indicatif écrit 00, « (0) » national après l’indicatif : le même numéro.
+      "0033 6 12 34 56 78": "+33612345678",
+      "+33 (0)6 12 34 56 78": "+33612345678",
+      "+1 (415) 555-0100": "+14155550100",
     };
     for (const [customerPhone, expected] of Object.entries(pasted)) {
       const db = fakeDb();
@@ -363,7 +391,8 @@ describe("appointments.create — téléphone saisi ou collé depuis un réperto
   });
 
   it("refuse un numéro sans indicatif de pays, avant toute réservation", async () => {
-    for (const customerPhone of ["0612345678", "06 12 34 56 78", "٠٥٠١٢٣٤٥٦٧"]) {
+    // Aucun indicatif ne commence par 0 : « +06… » est un numéro français auquel on a ajouté « + ».
+    for (const customerPhone of ["0612345678", "06 12 34 56 78", "٠٥٠١٢٣٤٥٦٧", "+0612345678", "00 06 12 34 56 78"]) {
       const db = fakeDb();
       mocks.getDb.mockResolvedValue(db);
       const refused = await postCreate(booking(inThreeDays(), { customerPhone }));

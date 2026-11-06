@@ -244,7 +244,7 @@ describe("appointments.create — limitation de débit persistante", () => {
     // Puis, ce refus métier rendant ses essais (RES-08), le plafond par IP des essais rendus.
     expect(mocks.enforcePersistentRateLimit).toHaveBeenCalledTimes(3);
     expect(mocks.enforcePersistentRateLimit.mock.invocationCallOrder[1]).toBeLessThan(db.select.mock.invocationCallOrder[0]);
-    expect(mocks.enforcePersistentRateLimit).toHaveBeenNthCalledWith(3, expect.objectContaining({ action: "public_booking_challenge_ip", subject: `ip:${requestIpHash(headers)}` }));
+    expect(mocks.enforcePersistentRateLimit).toHaveBeenNthCalledWith(3, expect.objectContaining({ action: "public_booking_give_back_ip", subject: `ip:${requestIpHash(headers)}` }));
     expect(mocks.enforcePersistentRateLimit).toHaveBeenNthCalledWith(1, {
       action: "public_booking_create_ip",
       subject: `ip:${requestIpHash(headers)}`,

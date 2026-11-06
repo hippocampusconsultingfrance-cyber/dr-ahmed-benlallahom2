@@ -43,10 +43,13 @@ export const PUBLIC_FORM_RATE_LIMITS = {
   // compteurs précédents ne retiennent pas (ABUS-02) : bornées à part, bien
   // plus haut. Au-delà, ces refus comptent de nouveau dans les deux compteurs
   // précédents, qui arrêtent un script qui ne la passe jamais avant l’agenda.
-  // Un patient n’en reçoit qu’une par réservation. Le même plafond borne les
-  // essais rendus après un refus métier ou une annulation par le patient
-  // (RES-08).
+  // Un patient n’en reçoit qu’une par réservation.
   bookingChallengeIp: { action: "public_booking_challenge_ip", scope: "ip", maxAttempts: 30, windowMs: 60 * 60 * 1000, blockMs: 60 * 60 * 1000, blockedMessage: BOOKING_RATE_LIMIT_MESSAGE, reason: "rate_limited" },
+  // Essais rendus après un refus métier, un paiement indisponible ou une
+  // annulation par le patient (RES-08) : bornés par IP, au-delà l’essai reste
+  // compté. À part des refus anti-robot : une série de créneaux pris ne change
+  // jamais la vérification demandée (ABUS-02) en blocage d’une heure.
+  bookingGiveBackIp: { action: "public_booking_give_back_ip", scope: "ip", maxAttempts: 30, windowMs: 60 * 60 * 1000, blockMs: 60 * 60 * 1000, blockedMessage: BOOKING_RATE_LIMIT_MESSAGE, reason: "rate_limited" },
 } as const satisfies Record<string, PublicFormRateLimitPolicy>;
 
 const NO_ATTEMPT_COUNTED = async () => undefined;
@@ -107,6 +110,15 @@ export async function givePublicFormAttemptBack(input: PublicFormRateLimitReques
   if (rateLimitsDisabled()) return;
   const { policy, subject } = publicFormRateLimitTarget(input);
   if (subject) await releasePersistentRateLimitAttempt({ ...policy, subject });
+}
+
+/**
+ * Plafond par IP des essais de réservation rendus (RES-08) : vrai tant qu’il
+ * n’est pas atteint, l’essai rendu y étant alors compté ; faux au-delà, ou si
+ * le compteur ne répond pas (l’essai reste alors compté).
+ */
+export function withinBookingGiveBackCap(request: Omit<PublicFormRateLimitRequest, "kind">): Promise<boolean> {
+  return enforcePublicFormRateLimit({ kind: "bookingGiveBackIp", ...request }).then(() => true, () => false);
 }
 
 export const PUBLIC_FORM_SECURITY_CHECK_FAILED_MESSAGE = "La vérification anti-robot a échoué. Rechargez la page, puis renvoyez votre demande.";

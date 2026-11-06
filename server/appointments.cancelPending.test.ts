@@ -43,7 +43,7 @@ function publicContext(): TrpcContext {
 }
 
 function fakeDb() {
-  const db = { update: vi.fn(() => ({ set: () => ({ where: async () => ({ rowCount: 1 }) }) })) };
+  const db = { update: vi.fn(() => ({ set: () => ({ where: () => ({ returning: async () => [{ customerEmail: "patient@example.test" }] }) }) })) };
   mocks.getDb.mockResolvedValue(db);
   return db;
 }
@@ -130,35 +130,43 @@ describe("appointments.cancelPending — créneau libéré dans la base", () => 
     expect(held).toMatchObject({ appointmentStatus: "cancelled", slotKey: null, holdExpiresAt: null, cancelledAt: expect.any(Date) });
   });
 
-  it("rend au patient qui annule l’essai de réservation compté pour son IP, une fois, dans la limite du plafond des essais rendus (RES-08)", async () => {
+  it("rend au patient qui annule l’essai de réservation compté pour son IP et pour son email, une fois, dans la limite du plafond des essais rendus (RES-08)", async () => {
     // Le limiteur, neutralisé sous Vitest, est rétabli comme en production.
     vi.stubEnv("VITEST", "false");
     vi.stubEnv("NODE_ENV", "production");
     const ip = "203.0.113.42";
     const bookingIp = `${PUBLIC_FORM_RATE_LIMITS.bookingIp.action}|ip:${hashSecurityValue(ip)}`;
-    const givenBack = `${PUBLIC_FORM_RATE_LIMITS.bookingChallengeIp.action}|ip:${hashSecurityValue(ip)}`;
+    const bookingEmail = `${PUBLIC_FORM_RATE_LIMITS.bookingEmail.action}|email:patient@example.test`;
+    const givenBack = `${PUBLIC_FORM_RATE_LIMITS.bookingGiveBackIp.action}|ip:${hashSecurityValue(ip)}`;
     const cancelFrom = (sessionId = "cs_test_back") => appRouter.createCaller({ ...publicContext(), req: { protocol: "https", headers: {}, ip } as unknown as TrpcContext["req"] }).appointments.cancelPending({ sessionId });
     mocks.attempts.clear();
     mocks.attempts.set(bookingIp, 3);
+    mocks.attempts.set(bookingEmail, 3);
     const db = createInMemoryDrizzle();
     mocks.getDb.mockResolvedValue(db);
-    seed(db, { trackingId: "APT-42", stripeSessionId: "cs_test_back", appointmentStatus: "held", slotKey: "2026-11-05T17:00:00.000Z", holdExpiresAt: new Date("2026-10-26T10:30:00.000Z") });
+    // Adresse enregistrée telle que saisie : le compteur, lui, la lit en minuscules.
+    seed(db, { trackingId: "APT-42", stripeSessionId: "cs_test_back", customerEmail: "Patient@Example.test", appointmentStatus: "held", slotKey: "2026-11-05T17:00:00.000Z", holdExpiresAt: new Date("2026-10-26T10:30:00.000Z") });
     mocks.stripeRetrieve.mockResolvedValue(checkoutSession());
 
     await expect(cancelFrom()).resolves.toEqual({ success: true, cancelled: true });
     expect(mocks.attempts.get(bookingIp)).toBe(2);
+    expect(mocks.attempts.get(bookingEmail)).toBe(2);
     expect(mocks.attempts.get(givenBack)).toBe(1);
+    // Le plafond des refus anti-robot (ABUS-02) n’est pas entamé.
+    expect(mocks.attempts.has(`${PUBLIC_FORM_RATE_LIMITS.bookingChallengeIp.action}|ip:${hashSecurityValue(ip)}`)).toBe(false);
 
     // Déjà annulée : rien n’est rendu une seconde fois.
     await expect(cancelFrom()).resolves.toEqual({ success: true, cancelled: false });
     expect(mocks.attempts.get(bookingIp)).toBe(2);
+    expect(mocks.attempts.get(bookingEmail)).toBe(2);
 
-    // Plafond des essais rendus atteint : l’annulation aboutit, l’essai reste compté.
+    // Plafond des essais rendus atteint : l’annulation aboutit, les essais restent comptés.
     seed(db, { trackingId: "APT-43", stripeSessionId: "cs_test_back2", appointmentStatus: "held", slotKey: "2026-11-05T17:30:00.000Z", holdExpiresAt: new Date("2026-10-26T10:30:00.000Z") });
     mocks.stripeRetrieve.mockResolvedValue(checkoutSession({ id: "cs_test_back2", metadata: { trackingId: "APT-43" } }));
-    mocks.attempts.set(givenBack, PUBLIC_FORM_RATE_LIMITS.bookingChallengeIp.maxAttempts);
+    mocks.attempts.set(givenBack, PUBLIC_FORM_RATE_LIMITS.bookingGiveBackIp.maxAttempts);
     await expect(cancelFrom("cs_test_back2")).resolves.toEqual({ success: true, cancelled: true });
     expect(mocks.attempts.get(bookingIp)).toBe(2);
+    expect(mocks.attempts.get(bookingEmail)).toBe(2);
   });
 
   it("ne libère jamais un rendez-vous déjà confirmé, même encore marqué en attente de paiement", async () => {

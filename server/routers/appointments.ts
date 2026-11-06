@@ -18,12 +18,14 @@ import {
   BOOKING_TOO_SOON_MESSAGE,
   getBookingWindowIssue,
   hasVisibleNameCharacter,
+  isBookingEmailAddress,
   isPlausiblePhoneNumber,
   normalizePhoneInput,
+  toE164PhoneNumber,
   type BookingRefusalReason,
 } from "../../shared/bookingPolicy";
 import { getSafeCheckoutOrigin } from "./publicOrigin";
-import { enforcePublicFormRateLimit, givePublicFormAttemptBack } from "./publicForms";
+import { enforcePublicFormRateLimit, givePublicFormAttemptBack, withinBookingGiveBackCap } from "./publicForms";
 import { parisDateKey, parseAppointmentDate, isNightRateForParis, isBookableAppointmentTime } from "./parisTime";
 
 let stripeClient: Stripe | undefined;
@@ -92,8 +94,11 @@ export function occupiesSlot() {
 const NO_CONTROL_CHARACTERS = /^[^\u0000-\u001F\u007F]*$/;
 const NO_CONTROL_CHARACTERS_EXCEPT_NEWLINES = /^[^\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]*$/;
 
-/** Adresse du patient : la même règle à la réservation et à sa correction depuis l’administration (EXPL-02). */
-export const bookingCustomerEmail = z.string().email().max(320);
+/**
+ * Adresse du patient : la même règle à la réservation et à sa correction depuis
+ * l’administration (EXPL-02), et sur la page de réservation (RES-10).
+ */
+export const bookingCustomerEmail = z.string().max(320).refine(isBookingEmailAddress, "Adresse email invalide");
 
 /** Libellé de la ligne Stripe Checkout, visible sur la page de paiement et le reçu. */
 export function consultationCheckoutProductData(trackingId: string) {
@@ -137,9 +142,10 @@ export const appointmentsRouter = router({
       z.object({
         customerName: z.string().min(1).max(255).regex(NO_CONTROL_CHARACTERS, "Caractères non autorisés"),
         customerEmail: bookingCustomerEmail,
-        // Lu et enregistré comme la page le vérifie : chiffres arabes, persans
-        // ou pleine chasse en 0-9, sans marques de direction (INTL-09).
-        customerPhone: z.string().transform(normalizePhoneInput).pipe(z.string().min(1).max(50).refine(isPlausiblePhoneNumber, BOOKING_INVALID_PHONE_MESSAGE)),
+        // Lu comme la page le vérifie (chiffres arabes, persans ou pleine
+        // chasse en 0-9, sans marques de direction), puis enregistré au format
+        // E.164 : « + », l’indicatif et les chiffres seuls (INTL-09).
+        customerPhone: z.string().transform(normalizePhoneInput).pipe(z.string().min(1).max(50).refine(isPlausiblePhoneNumber, BOOKING_INVALID_PHONE_MESSAGE)).transform(phone => toE164PhoneNumber(phone) ?? phone),
         appointmentDate: appointmentDateInput,
         // Objet de la demande, sans information médicale (minimisation) :
         // conservé pour le tableau de bord, jamais recopié dans un email.
@@ -182,12 +188,11 @@ export const appointmentsRouter = router({
       // RES-08 : refus métier (créneau pris entre-temps, date fermée, hors
       // horaires, créneaux déjà retenus) ou paiement indisponible : le patient
       // n’y est pour rien et choisit un autre créneau sans perdre d’essai. Ces
-      // essais rendus partagent le plafond par IP des refus anti-robot : au-delà,
-      // l’essai reste compté (le refus, lui, ne change pas), et le compteur par
-      // IP arrête un script qui viserait en boucle des créneaux pris.
+      // essais rendus ont leur plafond par IP : au-delà, l’essai reste compté
+      // (le refus, lui, ne change pas), et le compteur par IP arrête un script
+      // qui viserait en boucle des créneaux pris.
       const refusedWithoutAttempt = async (refusal: TRPCError) => {
-        const withinCap = await enforcePublicFormRateLimit({ kind: "bookingChallengeIp", ...rateLimitRequest }).then(() => true, () => false);
-        if (withinCap) await giveBackAttempts();
+        if (await withinBookingGiveBackCap(rateLimitRequest)) await giveBackAttempts();
         return refusal;
       };
 
@@ -519,7 +524,7 @@ export const appointmentsRouter = router({
         }
       }
 
-      const result = await db
+      const [cancelledBooking] = await db
         .update(appointments)
         .set({ appointmentStatus: "cancelled", slotKey: null, holdExpiresAt: null, cancelledAt: new Date() })
         .where(
@@ -529,21 +534,23 @@ export const appointmentsRouter = router({
             eq(appointments.paymentStatus, "pending"),
             eq(appointments.appointmentStatus, "held")
           )
-        );
-      const cancelled = Number(result.rowCount ?? 0) > 0;
+        )
+        .returning({ customerEmail: appointments.customerEmail });
 
       // RES-08 : le patient qui annule lui-même sa réservation en attente pour
-      // choisir un autre créneau retrouve l’essai qu’elle a compté pour son IP,
-      // dans la limite du plafond des essais rendus (voir appointments.create).
-      if (cancelled) {
-        const rateLimitRequest = { email: "", headers: ctx.req.headers as Record<string, unknown>, remoteIp: ctx.req.ip };
-        const withinCap = await enforcePublicFormRateLimit({ kind: "bookingChallengeIp", ...rateLimitRequest }).then(() => true, () => false);
-        if (withinCap) {
-          await givePublicFormAttemptBack({ kind: "bookingIp", ...rateLimitRequest })
-            .catch(error => console.error("Booking attempt could not be given back:", error instanceof Error ? error.name : "UnknownError"));
+      // choisir un autre créneau retrouve l’essai qu’elle a compté pour son IP
+      // et pour son email (le plus bas des deux seuils), dans la limite du
+      // plafond des essais rendus (voir appointments.create).
+      if (cancelledBooking) {
+        const rateLimitRequest = { email: cancelledBooking.customerEmail.trim().toLowerCase(), headers: ctx.req.headers as Record<string, unknown>, remoteIp: ctx.req.ip };
+        if (await withinBookingGiveBackCap(rateLimitRequest)) {
+          await Promise.all([
+            givePublicFormAttemptBack({ kind: "bookingIp", ...rateLimitRequest }),
+            givePublicFormAttemptBack({ kind: "bookingEmail", ...rateLimitRequest }),
+          ]).catch(error => console.error("Booking attempt could not be given back:", error instanceof Error ? error.name : "UnknownError"));
         }
       }
 
-      return { success: true, cancelled };
+      return { success: true, cancelled: Boolean(cancelledBooking) };
     }),
 });
