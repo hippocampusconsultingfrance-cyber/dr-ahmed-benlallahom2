@@ -6,9 +6,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Documents candidats montés par React dans un DOM, avec un faux tRPC :
 // « Refuser » et « Archiver » demandent la note interne saisie (aucun texte mis
-// à la place de l’administrateur) puis une confirmation qui la rappelle
-// (ADM-11) ; un coffre qui n’a pas pu être lu le dit, avec « Réessayer », au
-// lieu de paraître vide (ADM-10).
+// à la place de l’administrateur, ni le texte générique laissé par un
+// « Valider ») puis une confirmation qui la rappelle (ADM-11) ; un coffre qui
+// n’a pas pu être lu le dit, avec « Réessayer », au lieu de paraître vide
+// (ADM-10).
 
 type Document = Record<string, unknown> & { id: number };
 const view = vi.hoisted(() => ({
@@ -106,6 +107,25 @@ describe("refus et archivage d’un document (ADM-11)", () => {
     expect(view.toasts).toEqual([["success", "Revue du document enregistrée"]]);
   });
 
+  it.each([
+    ["fr", "Refuser", "Document vérifié par revue humaine.", "Saisissez la note interne : elle est obligatoire pour refuser ou archiver un document."],
+    // The generic text saved in another language is not a note either.
+    ["en", "Archive", "Dokument durch manuelle Prüfung bestätigt.", "Enter the internal note: it is required to reject or archive a document."],
+  ] as const)("en %s, « %s » ne prend pas pour note le texte générique d’une validation antérieure : il est sélectionné, à remplacer", (language, name, saved, error) => {
+    view.language = language;
+    view.list.data = [diploma({ status: "reviewed", reviewNotes: saved })];
+    mount();
+    expect(note().value).toBe(saved);
+
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    fireEvent.click(screen.getByRole("button", { name }));
+    expect(view.toasts).toEqual([["error", error]]);
+    expect(document.activeElement).toBe(note());
+    expect([note().selectionStart, note().selectionEnd]).toEqual([0, saved.length]);
+    expect(confirm).not.toHaveBeenCalled();
+    expect(view.reviews).toEqual([]);
+  });
+
   it("archive dans la langue de l’administrateur, avec la note déjà enregistrée affichée dans le champ", async () => {
     view.language = "en";
     view.list.data = [diploma({ status: "reviewed", reviewNotes: "Original checked $& kept on file." })];
@@ -126,7 +146,8 @@ describe("coffre illisible (ADM-10)", () => {
     mount();
 
     const alert = screen.getByRole("alert");
-    expect(alert.textContent).toContain("Impossible de charger les documents candidats");
+    // Under the tab's h2 « Revue humaine des documents ».
+    expect(within(alert).getByRole("heading", { level: 3 }).textContent).toBe("Impossible de charger les documents candidats");
     expect(alert.textContent).toContain("Le coffre documentaire est temporairement indisponible.");
     expect(screen.queryByText("Aucun document ne correspond à ce filtre.")).toBeNull();
 
@@ -136,7 +157,9 @@ describe("coffre illisible (ADM-10)", () => {
 
   it("garde « Réessayer » inactif pendant le nouvel essai, dans la langue de l’administrateur", () => {
     view.language = "de";
-    view.list = { data: undefined, isLoading: false, error: { message: "Zeitüberschreitung" }, refetch: vi.fn(), isFetching: true };
+    // A list already read whose reload failed: React Query keeps its rows and its error while it fetches again
+    // (without rows, it goes back to loading and shows the skeleton).
+    view.list = { data: [diploma()], isLoading: false, error: { message: "Zeitüberschreitung" }, refetch: vi.fn(), isFetching: true };
     mount();
 
     const retry = within(screen.getByRole("alert")).getByRole("button", { name: "Erneut versuchen" }) as HTMLButtonElement;

@@ -96,7 +96,8 @@ describe("listes et actions en échec (ADM-10)", () => {
     mount();
 
     const alert = screen.getByRole("alert");
-    expect(alert.textContent).toContain("Impossible de charger ces données");
+    // Under the section's h3 « Créneaux hebdomadaires », never above it.
+    expect(within(alert).getByRole("heading", { level: 4 }).textContent).toBe("Impossible de charger ces données");
     expect(alert.textContent).toContain("Délai dépassé");
     expect(screen.queryByText("Aucun créneau configuré")).toBeNull();
     // The other list, loaded, is still shown.
@@ -111,6 +112,7 @@ describe("listes et actions en échec (ADM-10)", () => {
     mount();
 
     const alert = screen.getByRole("alert");
+    expect(within(alert).getByRole("heading", { level: 4 }).textContent).toBe("Impossible de charger ces données");
     expect(alert.textContent).toContain("Base indisponible");
     expect(screen.queryByText("Aucune date bloquée")).toBeNull();
     fireEvent.click(within(alert).getByRole("button", { name: "Réessayer" }));

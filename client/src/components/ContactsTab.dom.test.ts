@@ -1,14 +1,16 @@
 // @vitest-environment happy-dom
 import { createElement } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // ADM-10 — Messages de l’administration montés par React dans un DOM, avec un
 // faux tRPC : « Lu » refusé (session de sécurité expirée juste avant le clic,
-// comme dans l’audit) le dit au lieu de ne rien afficher.
+// comme dans l’audit) le dit au lieu de ne rien afficher ; une liste qui n’a
+// pas pu être chargée le dit, avec « Réessayer ».
 
-const view = vi.hoisted(() => ({ refusal: null as null | string, marked: [] as unknown[], toasts: [] as Array<[string, string]> }));
+type Page = { data: unknown; isLoading: boolean; isFetching: boolean; error: { message: string } | null; refetch: ReturnType<typeof vi.fn> };
+const view = vi.hoisted(() => ({ refusal: null as null | string, marked: [] as unknown[], toasts: [] as Array<[string, string]>, firstPage: null as null | Page }));
 
 vi.mock("@/lib/trpc", async () => {
   const { useMutation } = await import("@tanstack/react-query");
@@ -18,7 +20,7 @@ vi.mock("@/lib/trpc", async () => {
       useUtils: () => ({ admin: { contacts: { list: { invalidate: vi.fn() } }, stats: { invalidate: vi.fn() } } }),
       useQueries: (build: (t: unknown) => unknown[]) => {
         const t = { admin: { contacts: { list: (input: unknown) => input } } };
-        return build(t).map(() => ({ data: { items: [message], total: 1 }, isLoading: false, error: null, refetch: vi.fn() }));
+        return build(t).map(() => view.firstPage ?? { data: { items: [message], total: 1 }, isLoading: false, error: null, refetch: vi.fn() });
       },
       admin: {
         contacts: {
@@ -41,6 +43,7 @@ function mount() {
 }
 
 beforeEach(() => {
+  view.firstPage = null;
   view.refusal = null;
   view.marked = [];
   view.toasts = [];
@@ -62,5 +65,24 @@ describe("ADM-10 — « Lu » sur un message", () => {
     fireEvent.click(screen.getByRole("button", { name: "Lu" }));
 
     await waitFor(() => expect(view.toasts).toEqual([["success", "Marqué comme lu"]]));
+  });
+});
+
+describe("ADM-10 — liste des messages illisible", () => {
+  it("dit que les messages n’ont pas pu être chargés, les recharge avec « Réessayer » et le garde inactif pendant l’essai", () => {
+    view.firstPage = { data: undefined, isLoading: false, isFetching: false, error: { message: "Validation de sécurité administrateur requise (10003)" }, refetch: vi.fn() };
+    const { rerender } = mount();
+
+    const alert = screen.getByRole("alert");
+    expect(alert.textContent).toContain("Impossible de charger ces données");
+    expect(alert.textContent).toContain("Validation de sécurité administrateur requise (10003)");
+    // The filters and the search stay on screen.
+    expect(screen.getByRole("button", { name: "Non lus" })).toBeTruthy();
+    fireEvent.click(within(alert).getByRole("button", { name: "Réessayer" }));
+    expect(view.firstPage.refetch).toHaveBeenCalledTimes(1);
+
+    view.firstPage = { ...view.firstPage, data: { items: [], total: 0 }, isFetching: true };
+    rerender(createElement(QueryClientProvider, { client: new QueryClient() }, createElement(ContactsTab)));
+    expect((within(screen.getByRole("alert")).getByRole("button", { name: "Réessayer" }) as HTMLButtonElement).disabled).toBe(true);
   });
 });

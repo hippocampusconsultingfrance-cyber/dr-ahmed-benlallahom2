@@ -5,6 +5,7 @@ import { trpc } from "@/lib/trpc";
 import PublicContentSkeleton from "@/components/PublicContentSkeleton";
 import AdminLoadMore from "@/components/AdminLoadMore";
 import AdminSearchField from "@/components/AdminSearchField";
+import { AdminErrorState } from "@/components/AdminStatePanel";
 import { adminListCount, adminPageOffsets, ADMIN_PAGE_SIZE, mergeAdminPages, updateAdminPageItem, useAdminPageCount } from "@/components/adminPagination";
 import { adminSearchStatus, useAdminSearch } from "@/components/adminSearch";
 import { Button } from "@/components/ui/button";
@@ -176,7 +177,7 @@ export default function RecruitmentTab() {
   // ADM-01: 50 dossiers, then « Charger plus » (offset + 50), back to the first page when a filter or the search changes.
   const { pageCount, loadMore } = useAdminPageCount(JSON.stringify(filters));
   const pages = trpc.useQueries(t => adminPageOffsets(pageCount).map(offset => t.admin.recruitment.list({ ...filters, limit: ADMIN_PAGE_SIZE, offset })));
-  const { items: applications, total, isLoading, isLoadingMore, error, loadMoreError, retryLoadMore } = mergeAdminPages(pages);
+  const { items: applications, total, isLoading, isLoadingMore, error, loadMoreError, retryLoadMore, retry, retrying } = mergeAdminPages(pages);
   // Set by the server when a matching profile could only be checked on the first dossiers of the list.
   const profileScanLimit = pages[0]?.data?.profileScanLimit;
   // With a score threshold, the dossiers without a verified score are listed apart, not dropped (INTL-02).
@@ -403,7 +404,7 @@ export default function RecruitmentTab() {
 
       {error ? (
         // Below the filters, so that a search can still be changed or cleared.
-        <div className="py-8 text-center text-red-400">Erreur de chargement : {error.message}</div>
+        <AdminErrorState description={error.message} onRetry={retry} retrying={retrying} headingLevel={3} />
       ) : isLoading ? (
         <PublicContentSkeleton label="Chargement des candidatures" />
       ) : (

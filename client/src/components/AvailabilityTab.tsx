@@ -119,7 +119,7 @@ export default function AvailabilityTab() {
         )}
 
         {/* ADM-10: a list that could not be loaded is not shown as an empty one. */}
-        {slotsError ? <AdminErrorState description={slotsError.message} onRetry={() => void refetchSlots()} retrying={slotsFetching} /> : (
+        {slotsError ? <AdminErrorState description={slotsError.message} onRetry={() => void refetchSlots()} retrying={slotsFetching} headingLevel={4} /> : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
           {slots?.map((slot) => (
             <div key={slot.id} className="bg-card border border-border rounded-lg p-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -186,7 +186,7 @@ export default function AvailabilityTab() {
           </div>
         )}
 
-        {blockedError ? <AdminErrorState description={blockedError.message} onRetry={() => void refetchBlockedDates()} retrying={blockedFetching} /> : (
+        {blockedError ? <AdminErrorState description={blockedError.message} onRetry={() => void refetchBlockedDates()} retrying={blockedFetching} headingLevel={4} /> : (
         <div className="space-y-2">
           {blockedDates?.map((bd) => {
             const dateLabel = new Date(bd.date + "T00:00:00").toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" });

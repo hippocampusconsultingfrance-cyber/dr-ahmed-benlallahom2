@@ -24,7 +24,7 @@ export default function AppointmentsTab() {
   // ADM-01: 50 rows, then « Charger plus » (offset + 50), back to the first page when the filter or the search changes.
   const { pageCount, loadMore } = useAdminPageCount(JSON.stringify({ status: statusFilter, search }));
   const pages = trpc.useQueries(t => adminPageOffsets(pageCount).map(offset => t.admin.appointments.list({ status: statusFilter, search, limit: ADMIN_PAGE_SIZE, offset })));
-  const { items, total, isLoading, isLoadingMore, error, loadMoreError, retryLoadMore } = mergeAdminPages(pages);
+  const { items, total, isLoading, isLoadingMore, error, loadMoreError, retryLoadMore, retry, retrying } = mergeAdminPages(pages);
   const [unconfirmedSessionId, setUnconfirmedSessionId] = useState("");
   const updateStatus = trpc.admin.appointments.updateStatus.useMutation({
     onSuccess: () => {
@@ -94,7 +94,7 @@ export default function AppointmentsTab() {
   );
 
   if (error) {
-    return <div>{toolbar}<AdminErrorState description={error.message} /></div>;
+    return <div>{toolbar}<AdminErrorState description={error.message} onRetry={retry} retrying={retrying} /></div>;
   }
 
   const statusColors: Record<string, string> = {

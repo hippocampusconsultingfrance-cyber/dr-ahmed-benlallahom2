@@ -29,12 +29,14 @@ export function AdminEmptyState({ icon: Icon, title, description }: { icon: Icon
 /**
  * A list that could not be loaded, never shown as an empty one (ADM-10). With
  * `onRetry`, a « Réessayer » button reloads it, disabled while `retrying`.
+ * `headingLevel` keeps the title below the heading of the section it sits in.
  */
-export function AdminErrorState({ description, title = "Impossible de charger ces données", onRetry, retrying = false, retryLabel = "Réessayer" }: { description: string; title?: string; onRetry?: () => void; retrying?: boolean; retryLabel?: string }) {
+export function AdminErrorState({ description, title = "Impossible de charger ces données", onRetry, retrying = false, retryLabel = "Réessayer", headingLevel = 2 }: { description: string; title?: string; onRetry?: () => void; retrying?: boolean; retryLabel?: string; headingLevel?: 2 | 3 | 4 }) {
+  const Heading = `h${headingLevel}` as "h2" | "h3" | "h4";
   return (
     <section className={`rounded-xl border p-6 text-center ${getAdminStatePanelClassName("error")}`} role="alert">
       <AlertTriangle className="mx-auto mb-3 h-6 w-6 text-destructive" aria-hidden={true} />
-      <h2 className="font-semibold text-foreground">{title}</h2>
+      <Heading className="font-semibold text-foreground">{title}</Heading>
       <p className="mx-auto mt-1 max-w-md text-sm text-muted-foreground">{description}</p>
       {onRetry && (
         <Button type="button" variant="outline" size="sm" className="mt-4 min-h-10 sm:min-h-0" onClick={onRetry} disabled={retrying}>

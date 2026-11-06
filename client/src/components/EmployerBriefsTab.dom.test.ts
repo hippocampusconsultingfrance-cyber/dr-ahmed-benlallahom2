@@ -13,12 +13,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // de suite, sans nouvel essai, avec un message, et la liste est relue sans
 // elle ; une candidature effacée fait relire les candidats de la mission ;
 // une écriture refusée par une contrainte de la base est dite dans la langue
-// de l’administration.
+// de l’administration ; une liste de missions qui n’a pas pu être lue le dit,
+// avec « Réessayer » (ADM-10).
 
 type Brief = { id: number; briefId: string; organizationName: string; specialtyNeeded: string; country: string; targetEnvironment: string; status: string; timeline: null; createdAt: string };
 const server = vi.hoisted(() => ({
   language: "fr" as "fr" | "en" | "de" | "zh",
   briefs: [] as Brief[],
+  briefsRefusal: null as null | Error,
   candidates: new Map<number, Array<{ id: number; firstName: string; lastName: string }>>(),
   associate: vi.fn(),
   updateStatus: vi.fn(),
@@ -61,7 +63,7 @@ vi.mock("@/lib/trpc", async () => {
       },
       admin: {
         clientBriefs: {
-          list: { useQuery: () => useQuery({ queryKey: ["clientBriefs.list"], queryFn: async () => server.briefs.map(brief => ({ ...brief })) }) },
+          list: { useQuery: () => useQuery({ queryKey: ["clientBriefs.list"], queryFn: async () => { if (server.briefsRefusal) throw server.briefsRefusal; return server.briefs.map(brief => ({ ...brief })); } }) },
           candidates: { useQuery: (input: { briefId: number }, options: { enabled: boolean }) => useQuery({ queryKey: ["clientBriefs.candidates", input], queryFn: () => readCandidates(input), ...options }) },
           updateStatus: { useMutation: (options: object) => useMutation({ mutationFn: (input: { id: number; status: string }) => server.updateStatus(input), ...options }) },
           associateCandidate: { useMutation: (options: object) => useMutation({ mutationFn: (input: { briefId: number; applicationId: number }) => server.associate(input), ...options }) },
@@ -93,6 +95,7 @@ const shortlistButtons = () => screen.queryAllByRole("button", { name: "Shortlis
 beforeEach(() => {
   server.language = "fr";
   server.briefs = [brief(1, "Clinique du Nord"), brief(7, "Hôpital du Golfe")];
+  server.briefsRefusal = null;
   server.candidates = new Map([[1, [{ id: 13, firstName: "Jean", lastName: "Martin" }]], [7, [{ id: 11, firstName: "Amal", lastName: "Haddad" }, { id: 12, firstName: "Lina", lastName: "Saleh" }]]]);
   server.associate = vi.fn(async () => ({ success: true }));
   server.updateStatus = vi.fn(async () => ({ success: true }));
@@ -290,5 +293,22 @@ describe("écriture refusée par une contrainte de la base, dans la langue de l�
     server.associate = vi.fn(async () => { throw refusal("BAD_REQUEST", "something_else"); });
     fireEvent.click(screen.getAllByRole("button", { name: "Shortlist" })[0]!);
     await waitFor(() => expect(server.toasts).toEqual([["error", "Refus du serveur (something_else)."]]));
+  });
+});
+
+describe("liste des missions illisible (ADM-10)", () => {
+  it("dit que les missions n’ont pas pu être lues, dans la langue de l’administration, et les relit avec « Réessayer »", async () => {
+    server.language = "en";
+    server.briefsRefusal = refusal("FORBIDDEN");
+    mount();
+
+    const alert = await screen.findByRole("alert");
+    expect(within(alert).getByRole("heading").textContent).toBe("Loading error");
+    expect(alert.textContent).toContain("Refus du serveur (FORBIDDEN).");
+
+    server.briefsRefusal = null;
+    fireEvent.click(within(alert).getByRole("button", { name: "Try again" }));
+    expect(await screen.findByText("Clinique du Nord")).toBeTruthy();
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 });

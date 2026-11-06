@@ -72,7 +72,7 @@ async function auditQuestion(input: { questionId: number; actorOpenId?: string |
  */
 export const MEDICAL_RESPONSE_KEY_RETRY_WINDOW_MS = 23 * 60 * 60 * 1000;
 
-function auditMetadata(metadata: string | null): { idempotencyKey?: unknown; attempt?: unknown } {
+function auditMetadata(metadata: string | null): { idempotencyKey?: unknown; attempt?: unknown; reason?: unknown } {
   try {
     return metadata ? JSON.parse(metadata) : {};
   } catch {
@@ -106,7 +106,18 @@ async function requireMfa(ctx: { req: Parameters<typeof isAdminMfaVerified>[0]; 
 const draftInput = z.object({ id: z.number().int().positive(), adminResponse: z.string().trim().min(1).max(5000), publicQuestion: z.string().trim().max(1000).optional().default(""), publicResponse: z.string().trim().max(5000).optional().default("") });
 const responseInput = draftInput.extend({ adminResponse: z.string().trim().min(20).max(5000), publish: z.boolean().default(false), resend: z.boolean().default(false) });
 /** Why a question is filed away (ADM-23), written in its journal only: the patient is not emailed. */
-const rejectionReason = z.enum(["hors_champ", "urgence_redirigee", "doublon", "autre"]);
+const rejectionReason = z.enum(["hors_champ", "urgence_redirigee", "doublon", "abusif", "autre"]);
+
+/** The reason given the last time the question was filed away, read back from its journal (ADM-23). */
+async function lastRejectionReason(db: Awaited<ReturnType<typeof requireDb>>, questionId: number) {
+  const [entry] = await db.select({ metadata: medicalQuestionAuditLogs.metadata })
+    .from(medicalQuestionAuditLogs)
+    .where(and(eq(medicalQuestionAuditLogs.medicalQuestionId, questionId), eq(medicalQuestionAuditLogs.action, "rejected")))
+    .orderBy(desc(medicalQuestionAuditLogs.createdAt), desc(medicalQuestionAuditLogs.id))
+    .limit(1);
+  const reason = rejectionReason.safeParse(auditMetadata(entry?.metadata ?? null).reason);
+  return reason.success ? reason.data : null;
+}
 
 export const medicalQuestionsRouter = router({
   submit: publicProcedure.input(privateQuestionInput).mutation(async ({ input, ctx }) => {
@@ -224,7 +235,7 @@ export const medicalQuestionsRouter = router({
       const db = await requireDb();
       const [question] = await db.select().from(medicalQuestions).where(eq(medicalQuestions.id, input.id)).limit(1);
       if (!question) throw new TRPCError({ code: "NOT_FOUND", message: "Question introuvable." });
-      return question;
+      return { ...question, rejectionReason: question.status === "rejected" ? await lastRejectionReason(db, question.id) : null };
     }),
     saveDraft: adminProcedure.input(draftInput).mutation(async ({ input, ctx }) => {
       await requireMfa(ctx);

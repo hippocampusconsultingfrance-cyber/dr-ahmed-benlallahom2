@@ -6,7 +6,8 @@ import type { TrpcContext } from "./_core/context";
 // ADM-23 — questions santé de l’administration : un brouillon s’enregistre
 // quelle que soit sa longueur (jamais vide), les 20 caractères restant exigés
 // pour l’envoi ; « Classer sans suite » garde un motif facultatif dans le
-// journal de la question, sans email au patient.
+// journal de la question, sans email au patient, et la question classée le
+// montre.
 
 const state = vi.hoisted(() => ({ memory: null as null | { db: unknown }, responseEmails: 0 }));
 
@@ -97,5 +98,20 @@ describe("ADM-23 — classement sans suite avec un motif", () => {
 
     await admin().reject({ id });
     expect(journal()).toEqual([{ action: "rejected", metadata: { previousStatus: "submitted" } }]);
+  });
+
+  it("montre sur la question classée le motif de son dernier classement, et aucun une fois remise à traiter", async () => {
+    const id = seedQuestion();
+    await admin().reject({ id, reason: "abusif" });
+    await expect(admin().get({ id })).resolves.toMatchObject({ status: "rejected", rejectionReason: "abusif" });
+
+    // Back in the queue by a draft: the reason of the earlier filing is no longer shown.
+    await admin().saveDraft({ id, adminResponse: "À revoir" });
+    await expect(admin().get({ id })).resolves.toMatchObject({ status: "drafting", rejectionReason: null });
+
+    // Filed again without a reason: the earlier one does not come back.
+    await admin().reject({ id });
+    await expect(admin().get({ id })).resolves.toMatchObject({ status: "rejected", rejectionReason: null });
+    expect(journal().map(entry => entry.action)).toEqual(["rejected", "draft_saved", "rejected"]);
   });
 });

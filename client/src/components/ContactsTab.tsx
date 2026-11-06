@@ -17,7 +17,7 @@ export default function ContactsTab() {
   const { text: searchText, search, setText: setSearchText, clear: clearSearch } = useAdminSearch();
   const { pageCount, loadMore } = useAdminPageCount(JSON.stringify({ unreadOnly, search }));
   const pages = trpc.useQueries(t => adminPageOffsets(pageCount).map(offset => t.admin.contacts.list({ unreadOnly, search, limit: ADMIN_PAGE_SIZE, offset })));
-  const { items, total, isLoading, isLoadingMore, error, loadMoreError, retryLoadMore } = mergeAdminPages(pages);
+  const { items, total, isLoading, isLoadingMore, error, loadMoreError, retryLoadMore, retry, retrying } = mergeAdminPages(pages);
   const markRead = trpc.admin.contacts.markRead.useMutation({
     onSuccess: () => {
       toast.success("Marqué comme lu");
@@ -58,7 +58,7 @@ export default function ContactsTab() {
   );
 
   if (error) {
-    return <div>{toolbar}<AdminErrorState description={error.message} /></div>;
+    return <div>{toolbar}<AdminErrorState description={error.message} onRetry={retry} retrying={retrying} /></div>;
   }
 
   if (isLoading) {
